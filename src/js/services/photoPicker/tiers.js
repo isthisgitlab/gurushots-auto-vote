@@ -1,3 +1,4 @@
+// @ts-check
 /**
  * Photo picker — the ranking tiers: each candidate's tier values, the theme
  * comparison, the enrichment set, and the final sort that applies them. This
@@ -55,6 +56,8 @@
  * effectively the whole library. The popularity path is the majority path for
  * such challenges, not an edge case.
  */
+
+/** @import { PickerPhoto, ScoredCandidate, SemanticScore, SemanticScoreMap, ThemeTiers } from '../../types/photoPicker' */
 
 /**
  * Below this the semantic tier is treated as "no match at all" (see
@@ -129,7 +132,7 @@ const NO_SEMANTIC = Object.freeze({ semantic: 0, semanticSupport: 0 });
  * here is what keeps every caller in between shape-agnostic: the map is passed
  * through autoFill and joinChallenges untouched.
  *
- * @param {Map<string, {score: number, support: number}|number>|null} semanticScores
+ * @param {SemanticScoreMap|null} semanticScores
  * @param {string|number} id
  * @returns {{semantic: number, semanticSupport: number}}
  */
@@ -138,15 +141,16 @@ const semanticTiersOf = (semanticScores, id) => {
     const entry = semanticScores.get(String(id));
     const raw = typeof entry === 'number' ? entry : entry && entry.score;
     if (!Number.isFinite(raw)) return NO_SEMANTIC;
-    const bucket = Math.round(Math.max(0, Math.min(1, raw)) * 100);
+    const bucket = Math.round(Math.max(0, Math.min(1, /** @type {number} */ (raw))) * 100);
     // Sub-floor: no label cleared the floor, so there is nothing to support
     // either. Returning zero for BOTH keeps a hand-built map that pairs a
     // sub-floor score with a support count from smuggling that count past the
     // floor and pre-empting a genuine lexical hit on the tier below.
     if (bucket < SEMANTIC_MATCH_FLOOR) return NO_SEMANTIC;
-    const rawSupport = entry && entry.support;
+    // A bare-number entry has no `support` (reads undefined → no support).
+    const rawSupport = entry && /** @type {SemanticScore} */ (entry).support;
     const semanticSupport = Number.isFinite(rawSupport)
-        ? Math.max(0, Math.min(SEMANTIC_SUPPORT_CAP, Math.floor(rawSupport)))
+        ? Math.max(0, Math.min(SEMANTIC_SUPPORT_CAP, Math.floor(/** @type {number} */ (rawSupport))))
         : 0;
     return { semantic: bucket, semanticSupport };
 };
@@ -156,9 +160,14 @@ const semanticTiersOf = (semanticScores, id) => {
 // icon URLs and would bloat a persisted cache for a value only ever read as a
 // length). Falls back to counting a raw `achievements` array so mocks, tests and
 // any future payload that inlines the array keep working.
+/**
+ * @param {PickerPhoto} photo
+ * @returns {number}
+ */
 const achievementCountOf = (photo) => {
-    if (Number.isFinite(photo.achievementCount) && photo.achievementCount >= 0) {
-        return Math.floor(photo.achievementCount);
+    const count = /** @type {number} */ (photo.achievementCount);
+    if (Number.isFinite(count) && count >= 0) {
+        return Math.floor(count);
     }
     return Array.isArray(photo.achievements) ? photo.achievements.length : 0;
 };
@@ -166,17 +175,40 @@ const achievementCountOf = (photo) => {
 // Tier 5. True only when photoStats.js actually resolved this photo's real
 // numbers; see the "NOTE on tier 5" in the file header for why unknown must not
 // collapse into votes:0.
+/**
+ * @param {PickerPhoto} photo
+ * @returns {boolean}
+ */
 const statsKnownOf = (photo) => photo.statsKnown === true;
 
-const votesOf = (photo) => (Number.isFinite(photo.votes) ? photo.votes : 0);
+// The three readers below return the field only once Number.isFinite has
+// vouched for it, hence the casts.
+/**
+ * @param {PickerPhoto} photo
+ * @returns {number}
+ */
+const votesOf = (photo) => (Number.isFinite(photo.votes) ? /** @type {number} */ (photo.votes) : 0);
 
-const viewsOf = (photo) => (Number.isFinite(photo.views) ? photo.views : 0);
+/**
+ * @param {PickerPhoto} photo
+ * @returns {number}
+ */
+const viewsOf = (photo) => (Number.isFinite(photo.views) ? /** @type {number} */ (photo.views) : 0);
 
-const uploadDateOf = (photo) => (Number.isFinite(photo.upload_date) ? photo.upload_date : 0);
+/**
+ * @param {PickerPhoto} photo
+ * @returns {number}
+ */
+const uploadDateOf = (photo) => (Number.isFinite(photo.upload_date) ? /** @type {number} */ (photo.upload_date) : 0);
 
 // The theme tiers, highest-priority first. A photo's standing on these is what
 // the enrichment set is derived from — they are the tiers that a stat lookup
 // can NEVER change, so anything they already separate is settled.
+/**
+ * @param {ThemeTiers} a
+ * @param {ThemeTiers} b
+ * @returns {number}
+ */
 const compareTheme = (a, b) => {
     if (b.shouldMatchCount !== a.shouldMatchCount) return b.shouldMatchCount - a.shouldMatchCount;
     if (b.semantic !== a.semantic) return b.semantic - a.semantic;
@@ -187,6 +219,10 @@ const compareTheme = (a, b) => {
     return b.score - a.score;
 };
 
+/**
+ * @param {ThemeTiers} a
+ * @param {ThemeTiers} b
+ */
 const sameTheme = (a, b) => compareTheme(a, b) === 0;
 
 /**
@@ -204,7 +240,7 @@ const sameTheme = (a, b) => compareTheme(a, b) === 0;
  * enforceable — see the file header), so "matched something" is exactly "any
  * tier is above zero".
  *
- * @param {{shouldMatchCount: number, semantic: number, semanticSupport: number, score: number}} entry
+ * @param {ThemeTiers} entry
  * @returns {boolean}
  */
 const hasThemeMatch = (entry) =>
@@ -227,9 +263,9 @@ const hasThemeMatch = (entry) =>
  * theme alone; candidates strictly BELOW it can never reach it. Only the ones
  * sharing the boundary's theme tuple are still competing, so only they matter.
  *
- * @param {Array<object>} scored - from buildScoredCandidates
+ * @param {ScoredCandidate[]} scored - from buildScoredCandidates
  * @param {number} slotsToFill
- * @returns {Array<object>} the photo objects to enrich ([] when nothing is contested)
+ * @returns {PickerPhoto[]} the photo objects to enrich ([] when nothing is contested)
  */
 const selectEnrichmentSet = (scored, slotsToFill) => {
     if (!Array.isArray(scored) || scored.length === 0) return [];
@@ -254,7 +290,7 @@ const selectEnrichmentSet = (scored, slotsToFill) => {
  * zero. That is the governing rule ("a theme match always beats popularity")
  * and it is enforced by this ordering, so do not reorder these.
  *
- * @param {Array<object>} scored
+ * @param {ScoredCandidate[]} scored
  * @param {number} slotsToFill
  * @returns {Array<string>}
  */

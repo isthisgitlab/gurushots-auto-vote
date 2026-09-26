@@ -1,16 +1,31 @@
+// @ts-check
 /**
  * Auto-fill — the local challenge object as the fill paths see it: entry and
  * free-slot reads, reflecting a submit or a boost/turbo apply locally, and the
  * pre-submit live re-fetch that merges fresh member state in place.
  */
 
+/** @import { Challenge, ChallengeMember, RankingEntry } from '../../types/gurushots' */
+/** @import { AdoptableMember, ErrorLike, FillLogger, RankDeps } from '../../types/autoFill' */
+
+/**
+ * @param {Partial<Challenge> | null | undefined} challenge
+ * @returns {RankingEntry[]}
+ */
 const getEntries = (challenge) => {
     const entries = challenge?.member?.ranking?.entries;
     return Array.isArray(entries) ? entries : [];
 };
 
+/**
+ * @param {Partial<Challenge> | null | undefined} challenge
+ * @returns {number}
+ */
 const getSlotsRemaining = (challenge) => {
-    const max = Number.isFinite(challenge?.max_photo_submits) ? challenge.max_photo_submits : 0;
+    // Number.isFinite vouches for the value the cast reads.
+    const max = Number.isFinite(challenge?.max_photo_submits)
+        ? /** @type {number} */ (challenge?.max_photo_submits)
+        : 0;
     return Math.max(0, max - getEntries(challenge).length);
 };
 
@@ -23,6 +38,9 @@ const getSlotsRemaining = (challenge) => {
  * could over-submit, and a due turbo/boost couldn't act on the new entry. The
  * minimal shape carries the conflict flags that boost/turbo entry selection reads
  * (boosted/turbo).
+ *
+ * @param {Partial<Challenge> | null | undefined} challenge
+ * @param {string | number | null | undefined} imageId
  */
 const reflectNewEntry = (challenge, imageId) => {
     const ranking = challenge?.member?.ranking;
@@ -43,7 +61,7 @@ const reflectNewEntry = (challenge, imageId) => {
  * the same entry. GuruShots allows one boost and one turbo per challenge but on *different*
  * entries, so the second action was silently wasted.
  *
- * @param {any} challenge
+ * @param {Partial<Challenge> | null | undefined} challenge
  * @param {string|number} imageId - entry the action was applied to
  * @param {'turbo'|'boosted'} field - conflict flag to raise
  */
@@ -62,6 +80,9 @@ const reflectEntryFlag = (challenge, imageId, field) => {
  * ranking.exposure (evaluateVotingDecision reads .exposure_factor off it
  * unguarded). A partial payload would otherwise crash the whole voting pass, not
  * just this challenge — stale beats crashed.
+ *
+ * @param {ChallengeMember | undefined} member
+ * @returns {member is AdoptableMember}
  */
 const isAdoptableMember = (member) =>
     Boolean(member) &&
@@ -79,6 +100,9 @@ const isAdoptableMember = (member) =>
  * count, which errs toward fewer submits. An id-less prev entry (malformed) can't
  * be matched, so it is kept — again the fewer-submits direction. Mutates
  * `freshEntries`.
+ *
+ * @param {RankingEntry[]} prevEntries
+ * @param {RankingEntry[]} freshEntries
  */
 const mergeLocalEntries = (prevEntries, freshEntries) => {
     const freshIds = new Set(
@@ -98,9 +122,11 @@ const mergeLocalEntries = (prevEntries, freshEntries) => {
 
 /**
  * Id → raised boost/turbo flags for every id-bearing entry that has either set.
+ * @param {RankingEntry[]} entries
  * @returns {Map<string, {turbo: boolean, boosted: boolean}>}
  */
 const collectRaisedEntryFlags = (entries) => {
+    /** @type {Map<string, {turbo: boolean, boosted: boolean}>} */
     const flags = new Map();
     for (const entry of entries) {
         if (!entry || entry.id == null) continue;
@@ -123,6 +149,9 @@ const collectRaisedEntryFlags = (entries) => {
  * entry is taken, treat it as taken. That errs toward using a different entry, which is the
  * safe direction: boost and turbo may both be spent, but never on the same entry. Mutates
  * `freshEntries`.
+ *
+ * @param {RankingEntry[]} prevEntries
+ * @param {RankingEntry[]} freshEntries
  */
 const carryLocalEntryFlags = (prevEntries, freshEntries) => {
     const localFlags = collectRaisedEntryFlags(prevEntries);
@@ -156,9 +185,9 @@ const carryLocalEntryFlags = (prevEntries, freshEntries) => {
  * looks like. Treating it as 'gone' would silently skip legitimate fills on
  * every API hiccup.
  *
- * @param {object} challenge
+ * @param {Challenge} challenge
  * @param {string} token
- * @param {{getActiveChallenges?: function, logger: object}} deps
+ * @param {Pick<RankDeps, 'getActiveChallenges'> & {logger: FillLogger}} deps
  * @param {string} label - calling flow (autoFill/emergencyFill/fillNew)
  * @returns {Promise<'refreshed'|'gone'|'unavailable'>}
  */
@@ -167,6 +196,7 @@ const refreshChallengeState = async (challenge, token, { getActiveChallenges, lo
     const log = logger.withCategory('autoFill');
     // Collapse CR/LF in the cause before interpolation (same forgery guard
     // challengeTag applies): the message can carry server-influenced text.
+    /** @param {unknown} cause */
     const staleWarning = (cause) =>
         log.warning(
             `${label}: could not refresh live challenge state for ${logger.challengeTag(challenge)}${cause ? ` (${String(cause).replace(/[\r\n]+/g, ' ')})` : ''}; ` +
@@ -177,7 +207,7 @@ const refreshChallengeState = async (challenge, token, { getActiveChallenges, lo
     try {
         response = await getActiveChallenges(token);
     } catch (error) {
-        staleWarning((error && error.message) || error);
+        staleWarning((error && /** @type {ErrorLike} */ (error).message) || error);
         return 'unavailable';
     }
     if (!Array.isArray(response?.challenges) || response.challenges.length === 0) {

@@ -1,3 +1,4 @@
+// @ts-check
 import { app, BrowserWindow, dialog, ipcMain, powerMonitor } from 'electron';
 import { appPath } from './appPaths';
 import * as settings from './settings';
@@ -47,17 +48,22 @@ if (!gotSingleInstanceLock) {
 // ensureExit (force-exit safety net) lives in windows/lifecycle.js.
 
 // Keep a global reference of the windows to prevent them from being garbage collected
+/** @type {BrowserWindow | null} */
 let loginWindow = null;
+/** @type {BrowserWindow | null} */
 let mainWindow = null;
 
 // Settings file watcher (created per main window by watchSettingsFile;
 // the debounce timeout lives in windows/settingsWatcher.js)
+/** @type {import('node:fs').FSWatcher | null} */
 let settingsWatcher = null;
 
 // Global AutoUpdater instance
+/** @type {AutoUpdater | null} */
 let autoUpdater = null;
 
 // Track main window creation time to prevent reload during login
+/** @type {number | null} */
 let mainWindowCreatedTime = null;
 
 // Register IPC handlers from their focused modules. Each module
@@ -67,7 +73,7 @@ let mainWindowCreatedTime = null;
 logIpc.register(ipcMain);
 updateIpc.register(ipcMain, {
     getAutoUpdater: () => autoUpdater,
-    setAutoUpdater: (v) => {
+    setAutoUpdater: (/** @type {AutoUpdater} */ v) => {
         autoUpdater = v;
     },
     getMainWindow: () => mainWindow,
@@ -85,6 +91,10 @@ scenariosIpc.register(ipcMain);
 
 // Hold a quit or main-window close that would forfeit an open boost window
 // and ask first; `proceed` re-issues it once confirmed. See windows/quitGuard.js.
+/**
+ * @param {{ preventDefault: () => void }} event
+ * @param {() => void} proceed
+ */
 function holdForOpenBoosts(event, proceed) {
     return holdQuitForOpenBoosts(event, {
         autovoteRunning: settings.getSetting('autovoteRunning') === true,
@@ -126,21 +136,24 @@ function createLoginWindow() {
     // Open DevTools in development mode (optional)
     // loginWindow.webContents.openDevTools();
 
+    // The listeners below read the module-level reference at event time; only
+    // this window's own 'closed' event nulls it, hence the non-null casts.
+
     // Ensure window is visible on screen
     loginWindow.once('ready-to-show', () => {
-        if (!loginWindow.isVisible()) {
-            loginWindow.center();
+        if (!(/** @type {BrowserWindow} */ (loginWindow).isVisible())) {
+            /** @type {BrowserWindow} */ (loginWindow).center();
         }
     });
 
     // Save window bounds when window is moved or resized
     loginWindow.on('resize', () => {
-        const newBounds = loginWindow.getBounds();
+        const newBounds = /** @type {BrowserWindow} */ (loginWindow).getBounds();
         settings.saveWindowBounds('login', newBounds);
     });
 
     loginWindow.on('move', () => {
-        const newBounds = loginWindow.getBounds();
+        const newBounds = /** @type {BrowserWindow} */ (loginWindow).getBounds();
         settings.saveWindowBounds('login', newBounds);
     });
 
@@ -193,21 +206,24 @@ function createMainWindow() {
         autoUpdater.setMainWindow(mainWindow);
     }
 
+    // The listeners below read the module-level reference at event time; only
+    // this window's own 'closed' event nulls it, hence the non-null casts.
+
     // Ensure window is visible on screen
     mainWindow.once('ready-to-show', () => {
-        if (!mainWindow.isVisible()) {
-            mainWindow.center();
+        if (!(/** @type {BrowserWindow} */ (mainWindow).isVisible())) {
+            /** @type {BrowserWindow} */ (mainWindow).center();
         }
     });
 
     // Save window bounds when window is moved or resized
     mainWindow.on('resize', () => {
-        const newBounds = mainWindow.getBounds();
+        const newBounds = /** @type {BrowserWindow} */ (mainWindow).getBounds();
         settings.saveWindowBounds('main', newBounds);
     });
 
     mainWindow.on('move', () => {
-        const newBounds = mainWindow.getBounds();
+        const newBounds = /** @type {BrowserWindow} */ (mainWindow).getBounds();
         settings.saveWindowBounds('main', newBounds);
     });
 
@@ -352,7 +368,8 @@ if (gotSingleInstanceLock) {
             // lets an update-check failure break app startup.
             const safeCheckForUpdates = async () => {
                 try {
-                    await autoUpdater.checkForUpdates(false);
+                    // Set just above; update.handlers may replace it, never with null.
+                    await /** @type {AutoUpdater} */ (autoUpdater).checkForUpdates(false);
                 } catch (error) {
                     logger.withCategory('update').error('Error during update check:', error);
                 }

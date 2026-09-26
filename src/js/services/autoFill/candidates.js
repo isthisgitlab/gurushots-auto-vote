@@ -1,3 +1,4 @@
+// @ts-check
 /**
  * Auto-fill — what a fill ranks: the on-theme eligible-photo fetch (server-side
  * search, tag-resolution retry, unfiltered fallback), the per-challenge
@@ -10,6 +11,10 @@ import * as lexicon from '../semantic/lexicon';
 import { resolveTermsToTags } from '../tagResolver';
 import { resolveMemberId } from './memberIdentity';
 
+/** @import { Challenge } from '../../types/gurushots' */
+/** @import { IgnoreWords, PickerPhoto, SemanticScore, TagOptions } from '../../types/photoPicker' */
+/** @import { ErrorLike, FillLogger, FillSettings, RankDeps } from '../../types/autoFill' */
+
 /**
  * Semantic match scores for an eligible set, computed once per fill and reused
  * across every picker call in that fill (the emergency path picks twice).
@@ -20,10 +25,10 @@ import { resolveMemberId } from './memberIdentity';
  * (`deps.getSemanticScores`, defaulting to the real module) is injectable so
  * tests can stub it. Never throws.
  *
- * @param {object} challenge
- * @param {Array<object>} eligible
- * @param {{getSemanticScores?: function}} deps
- * @returns {Promise<Map<string, {score: number, support: number}>|null>}
+ * @param {Challenge} challenge
+ * @param {PickerPhoto[]} eligible
+ * @param {Pick<RankDeps, 'getSemanticScores'> & {ignoreWords?: IgnoreWords}} deps
+ * @returns {Promise<Map<string, SemanticScore>|null>}
  */
 const resolveSemanticScores = async (challenge, eligible, deps) => {
     const scorer = (deps && deps.getSemanticScores) || getSemanticScores;
@@ -44,8 +49,8 @@ const resolveSemanticScores = async (challenge, eligible, deps) => {
  * everywhere except the shared runner. runFillAttempt already receives
  * `settings` in deps, so one lookup here covers every fill path at once.
  *
- * @param {object} settings - the settings facade from deps
- * @param {object} challenge
+ * @param {FillSettings | null | undefined} settings - the settings facade from deps
+ * @param {Challenge} challenge
  * @returns {Array<string>|null}
  */
 const resolveIgnoreWords = (settings, challenge) => {
@@ -64,8 +69,13 @@ const resolveIgnoreWords = (settings, challenge) => {
  * theme). Never throws — the caller falls back exactly as it did before.
  *
  * @param {Array<string>} terms
- * @param {object} challenge
- * @param {object} opts
+ * @param {Challenge} challenge
+ * @param {Pick<RankDeps, 'searchTagAutocomplete' | 'getCurrentMemberProfile'> & {
+ *   token: string,
+ *   logger: FillLogger,
+ *   logLabel: string,
+ *   ignoreWords?: IgnoreWords,
+ * }} opts
  * @returns {Promise<Array<string>>}
  */
 const resolveTagsForTerms = async (terms, challenge, opts) => {
@@ -85,7 +95,10 @@ const resolveTagsForTerms = async (terms, challenge, opts) => {
     } catch (error) {
         logger
             .withCategory(logLabel)
-            .debug(`${logLabel}: tag resolution unavailable: ${(error && error.message) || error}`, null);
+            .debug(
+                `${logLabel}: tag resolution unavailable: ${(error && /** @type {ErrorLike} */ (error).message) || error}`,
+                null,
+            );
         return [];
     }
 };
@@ -125,11 +138,11 @@ const THEMED_SEARCH_MIN_BUDGET_MS = 1500;
  * The returned set is fed unchanged into pickPhotosForChallenge, so the
  * must/should/fillWithoutTagMatch ranking semantics are preserved.
  *
- * @param {object} challenge - challenge with id and (optional) title
+ * @param {Challenge} challenge - challenge with id and (optional) title
  * @param {string} token
- * @param {{mustIncludeTags?: string[]|null, shouldIncludeTags?: string[]|null}} tagOpts
- * @param {{getEligiblePhotos: function, logger: object, logLabel?: string,
- *   searchTagAutocomplete?: function, getCurrentMemberProfile?: function}} deps
+ * @param {TagOptions | null} tagOpts
+ * @param {Pick<RankDeps, 'getEligiblePhotos' | 'searchTagAutocomplete' | 'getCurrentMemberProfile' | 'logger'> & {
+ *   logLabel?: string, usage?: string}} deps
  *   logLabel: the calling flow ('autoFill' default, or 'join') — used as the log
  *   category and message prefix so a join's messages aren't attributed to auto-fill.
  *   searchTagAutocomplete / getCurrentMemberProfile: OPTIONAL. Supplying both
@@ -138,7 +151,7 @@ const THEMED_SEARCH_MIN_BUDGET_MS = 1500;
  *   is what keeps every existing caller and test valid.
  *   usage: 'submit' (default) or 'swap' — which server-side eligibility view the
  *   library reads (a swap replaces an entry instead of adding one).
- * @returns {Promise<Array<object>>}
+ * @returns {Promise<PickerPhoto[]>}
  */
 const fetchCandidatesForChallenge = async (
     challenge,
@@ -220,6 +233,10 @@ const fetchCandidatesForChallenge = async (
     // One search per term, unioned by id. A shared helper so the resolution retry
     // below runs the identical fetch/dedupe/fault-tolerance path rather than a
     // second copy of it.
+    /**
+     * @param {string[]} searchTerms
+     * @returns {Promise<PickerPhoto[]>}
+     */
     const searchUnion = async (searchTerms) => {
         // Run the per-term searches concurrently — they're independent reads and
         // serialising them would add a round-trip of latency per extra term to
@@ -250,14 +267,15 @@ const fetchCandidatesForChallenge = async (
                 }),
             ),
         );
+        /** @type {Map<string, PickerPhoto>} */
         const byId = new Map();
         settled.forEach((result, i) => {
             if (result.status === 'rejected') {
-                const reason = result.reason;
+                const reason = /** @type {unknown} */ (result.reason);
                 logger
                     .withCategory(logLabel)
                     .debug(
-                        `${logLabel}: search "${searchTerms[i]}" failed for ${logger.challengeTag(challenge)}: ${(reason && reason.message) || reason}`,
+                        `${logLabel}: search "${searchTerms[i]}" failed for ${logger.challengeTag(challenge)}: ${(reason && /** @type {ErrorLike} */ (reason).message) || reason}`,
                         null,
                     );
                 return;
@@ -276,6 +294,7 @@ const fetchCandidatesForChallenge = async (
         });
         return Array.from(byId.values());
     };
+    /** @param {PickerPhoto[]} list */
     const hasEligible = (list) => list.some((p) => p && p.permission && p.permission.allowed === true && p.id);
 
     if (terms.length > 0) {

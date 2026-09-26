@@ -1,3 +1,4 @@
+// @ts-check
 /**
  * Keeps the Electron main process schedulable while auto-vote is running.
  *
@@ -34,6 +35,7 @@ import * as logger from '../logger';
 // The single held assertion id, or null when nothing is held. Module-level for
 // the same reason settingsWatcher's debounce handle is: there is exactly one
 // main process and exactly one auto-vote session in it.
+/** @type {number | null} */
 let blockerId = null;
 
 /**
@@ -76,7 +78,10 @@ const syncBackgroundActivity = (running) => {
         blockerId = null;
         logger
             .withCategory('voting')
-            .warning(`backgroundActivity: power-save blocker unavailable: ${error?.message || error}`, null);
+            .warning(
+                `backgroundActivity: power-save blocker unavailable: ${/** @type {{ message?: unknown } | null | undefined} */ (error)?.message || error}`,
+                null,
+            );
         return false;
     }
 };

@@ -1,6 +1,8 @@
+// @ts-check
 // Block service worker registration
 (() => {
-    const C = globalThis.ServiceWorkerContainer;
+    // Absent in some hosts, whatever the DOM typings claim.
+    const C = /** @type {typeof ServiceWorkerContainer | undefined} */ (globalThis.ServiceWorkerContainer);
     if (C?.prototype?.register) {
         Object.defineProperty(C.prototype, 'register', {
             value: function () {
@@ -19,16 +21,17 @@ import { invokeChannels, aliases, sendMethods, eventMethods, kebabToCamel } from
 // (ipc/manifest.js) so it can never silently drift from the Capacitor
 // bridge or the main-process handler set (tests/ipc/manifest.test.js
 // enforces the latter). Adding a channel = one manifest entry.
+/** @type {Record<string, (...args: never[]) => unknown>} */
 const api = {};
 
 // invoke methods: api.getSettings = (...) => ipcRenderer.invoke('get-settings', ...)
 for (const channel of invokeChannels) {
-    api[kebabToCamel(channel)] = (...args) => ipcRenderer.invoke(channel, ...args);
+    api[kebabToCamel(channel)] = (/** @type {unknown[]} */ ...args) => ipcRenderer.invoke(channel, ...args);
 }
 
 // Friendlier aliases over invoke channels (applyBoost / applyTurbo).
 for (const [method, channel] of Object.entries(aliases)) {
-    api[method] = (...args) => ipcRenderer.invoke(channel, ...args);
+    api[method] = (/** @type {unknown[]} */ ...args) => ipcRenderer.invoke(channel, ...args);
 }
 
 // Send-style window-control hints (login-success / logout).
@@ -40,7 +43,8 @@ for (const [method, channel] of Object.entries(sendMethods)) {
 // (UpdateContext, useLogStream, settings sync) can drop the handler on
 // unmount; without it, every remount stacks another ipcRenderer listener.
 for (const [method, channel] of Object.entries(eventMethods)) {
-    api[method] = (callback) => {
+    api[method] = (/** @type {(...args: unknown[]) => void} */ callback) => {
+        /** @type {(event: import('electron').IpcRendererEvent, ...args: unknown[]) => void} */
         const handler = (_event, ...args) => callback(...args);
         ipcRenderer.on(channel, handler);
         return () => ipcRenderer.removeListener(channel, handler);

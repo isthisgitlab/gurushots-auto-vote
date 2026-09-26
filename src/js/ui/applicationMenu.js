@@ -1,3 +1,4 @@
+// @ts-check
 import { appPath } from '../appPaths';
 import { Menu, dialog, app, BrowserWindow } from 'electron';
 import * as logger from '../logger';
@@ -5,22 +6,28 @@ import { translationManager } from '../translations/index';
 import { AutoUpdater } from '../services/AutoUpdater';
 import * as packageInfo from '../../../package.json';
 
+/** @import { MenuItemConstructorOptions } from 'electron' */
+
 /**
  * Application Menu Module
  * Handles creation and management of the native application menu
  */
 
 // Translated text in the main process's current language.
+/** @param {string} key */
 const t = (key) => translationManager.t(key);
 
 // Create application menu
 function createApplicationMenu() {
     const isMac = process.platform === 'darwin';
 
+    // Each conditional spread is typed on its own: the checker does not carry
+    // the template's element type into a spread's array literal.
+    /** @type {MenuItemConstructorOptions[]} */
     const template = [
         // macOS app menu
         ...(isMac
-            ? [
+            ? /** @type {MenuItemConstructorOptions[]} */ ([
                   {
                       label: app.getName(),
                       submenu: [
@@ -35,7 +42,7 @@ function createApplicationMenu() {
                           { role: 'quit' },
                       ],
                   },
-              ]
+              ])
             : []),
 
         // Edit menu - essential for clipboard operations
@@ -65,7 +72,9 @@ function createApplicationMenu() {
                 },
                 {
                     label: t('menu.selectAll'),
-                    role: 'selectall',
+                    // Electron lower-cases a role before looking it up; its typings
+                    // spell this one only as 'selectAll'.
+                    role: /** @type {MenuItemConstructorOptions['role']} */ (/** @type {string} */ ('selectall')),
                 },
             ],
         },
@@ -73,12 +82,12 @@ function createApplicationMenu() {
         // File menu - simplified for this app
         ...(isMac
             ? []
-            : [
+            : /** @type {MenuItemConstructorOptions[]} */ ([
                   {
                       label: t('menu.file'),
                       submenu: [{ role: 'quit' }],
                   },
-              ]),
+              ])),
 
         // View menu - relevant items for this app
         {
@@ -109,7 +118,7 @@ function createApplicationMenu() {
                     role: 'minimize',
                 },
                 ...(isMac
-                    ? [
+                    ? /** @type {MenuItemConstructorOptions[]} */ ([
                           {
                               label: t('menu.zoom'),
                               role: 'zoom',
@@ -119,13 +128,13 @@ function createApplicationMenu() {
                               label: t('menu.bringAllToFront'),
                               role: 'front',
                           },
-                      ]
-                    : [
+                      ])
+                    : /** @type {MenuItemConstructorOptions[]} */ ([
                           {
                               label: t('menu.close'),
                               role: 'close',
                           },
-                      ]),
+                      ])),
             ],
         },
 
@@ -135,7 +144,9 @@ function createApplicationMenu() {
             submenu: [
                 {
                     label: t('menu.checkForUpdates'),
-                    click: () => checkForUpdatesFromMenu(),
+                    // Electron ignores the returned promise, which never rejects:
+                    // checkForUpdatesFromMenu reports every failure itself.
+                    click: /** @type {() => void} */ (() => checkForUpdatesFromMenu()),
                 },
                 { type: 'separator' },
                 {
@@ -182,7 +193,7 @@ async function checkForUpdatesFromMenu() {
             type: 'error',
             title: t('menu.updateError'),
             message: t('menu.updateErrorMessage'),
-            detail: error?.message,
+            detail: /** @type {{ message?: string } | null | undefined} */ (error)?.message,
             buttons: [t('common.ok')],
         });
     }

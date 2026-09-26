@@ -1,3 +1,4 @@
+// @ts-check
 /**
  * Settings-file watcher for the Electron main process. Watches the
  * settings.json the facade owns and, on change, logs the diff, reloads the
@@ -15,22 +16,28 @@ import * as fs from 'node:fs';
 import * as settings from '../settings';
 import * as logger from '../logger';
 
+/** @import { AppSettings } from '../types/settings' */
+/** @typedef {{ key: string, oldValue: string, newValue: string }} SettingChange */
+
 // Debounce timeout shared across successive watchSettingsFile calls (the
 // main window can be torn down and re-created on logout/login): a new
 // watcher's first change event clears a still-pending reload scheduled by
 // the previous watcher.
+/** @type {NodeJS.Timeout | null} */
 let settingsReloadTimeout = null;
 
 /**
  * Compare two settings objects and return array of changes
- * @param {Object} oldSettings - Previous settings object
- * @param {Object} newSettings - New settings object
- * @returns {Array} Array of change objects with key, oldValue, newValue
+ * @param {unknown} oldSettings - Previous settings object
+ * @param {unknown} newSettings - New settings object
+ * @returns {SettingChange[]} Array of change objects with key, oldValue, newValue
  */
 function compareSettings(oldSettings, newSettings) {
+    /** @type {SettingChange[]} */
     const changes = [];
 
     // Function to safely stringify values for comparison and logging
+    /** @param {unknown} value */
     const stringify = (value) => {
         if (value === null || value === undefined) return 'null';
         if (typeof value === 'object') return JSON.stringify(value);
@@ -38,6 +45,11 @@ function compareSettings(oldSettings, newSettings) {
     };
 
     // Recursive function to compare nested objects
+    /**
+     * @param {unknown} oldObj
+     * @param {unknown} newObj
+     * @param {string} [path]
+     */
     const compareRecursive = (oldObj, newObj, path = '') => {
         // Handle null/undefined cases
         if (oldObj === null || oldObj === undefined || newObj === null || newObj === undefined) {
@@ -62,8 +74,8 @@ function compareSettings(oldSettings, newSettings) {
 
             for (const key of allKeys) {
                 const newPath = path ? `${path}.${key}` : key;
-                const oldValue = oldObj[key];
-                const newValue = newObj[key];
+                const oldValue = /** @type {Record<string, unknown>} */ (oldObj)[key];
+                const newValue = /** @type {Record<string, unknown>} */ (newObj)[key];
 
                 compareRecursive(oldValue, newValue, newPath);
             }
@@ -92,7 +104,7 @@ function compareSettings(oldSettings, newSettings) {
  * @param {{
  *   getMainWindow: () => (import('electron').BrowserWindow|null),
  *   getMainWindowCreatedTime: () => (number|null),
- *   onSettingsChanged?: ((settings: Object) => void)|null,
+ *   onSettingsChanged?: ((settings: AppSettings) => void)|null,
  * }} deps - accessors for the window state index.js owns; read at
  *   event time so the watcher always sees the current window/creation time.
  *   `onSettingsChanged` is an OPTIONAL side-channel fired with a freshly
@@ -115,6 +127,7 @@ function compareSettings(oldSettings, newSettings) {
  */
 function watchSettingsFile({ getMainWindow, getMainWindowCreatedTime, onSettingsChanged = null }) {
     const settingsPath = settings.getSettingsPath();
+    /** @type {AppSettings | null} */
     let previousSettings = null;
 
     if (!fs.existsSync(settingsPath)) {
@@ -125,7 +138,9 @@ function watchSettingsFile({ getMainWindow, getMainWindowCreatedTime, onSettings
     try {
         previousSettings = settings.loadSettings();
     } catch (error) {
-        logger.withCategory('settings').error('Failed to load initial settings for comparison:', error.message);
+        logger
+            .withCategory('settings')
+            .error('Failed to load initial settings for comparison:', /** @type {Error} */ (error).message);
     }
 
     // Hand the observer a snapshot the caller already loaded. Never throws: a
@@ -133,12 +148,17 @@ function watchSettingsFile({ getMainWindow, getMainWindowCreatedTime, onSettings
     // their broadcast. A falsy snapshot is a no-op — the load-failure path
     // below already logs the read error, and re-reporting it here as an
     // "observer failed" would name the wrong culprit.
+    /** @param {AppSettings | undefined} snapshot */
     const notifyObserver = (snapshot) => {
         if (!onSettingsChanged || !snapshot) return;
         try {
             onSettingsChanged(snapshot);
         } catch (error) {
-            logger.withCategory('settings').warning(`Settings observer failed: ${error?.message || error}`);
+            logger
+                .withCategory('settings')
+                .warning(
+                    `Settings observer failed: ${/** @type {{ message?: unknown } | null | undefined} */ (error)?.message || error}`,
+                );
         }
     };
 
@@ -168,7 +188,8 @@ function watchSettingsFile({ getMainWindow, getMainWindowCreatedTime, onSettings
             // Reload after a short delay to avoid rapid reloads
             settingsReloadTimeout = setTimeout(() => {
                 // Prevent reload if main window was just created (during login)
-                const timeSinceCreation = Date.now() - getMainWindowCreatedTime();
+                // An unknown (null) creation time coerces to 0 — it never suppresses a reload.
+                const timeSinceCreation = Date.now() - /** @type {number} */ (getMainWindowCreatedTime());
                 if (timeSinceCreation < 2000) {
                     // 2 second window
                     logger
@@ -187,6 +208,7 @@ function watchSettingsFile({ getMainWindow, getMainWindowCreatedTime, onSettings
                 }
 
                 // Load new settings and compare with previous
+                /** @type {AppSettings | undefined} */
                 let newSettings;
                 let shouldReload = false;
                 let hasChanges = false;
@@ -236,7 +258,9 @@ function watchSettingsFile({ getMainWindow, getMainWindowCreatedTime, onSettings
                     // Update previous settings for next comparison
                     previousSettings = newSettings;
                 } catch (error) {
-                    logger.withCategory('settings').error('Failed to load new settings for comparison:', error.message);
+                    logger
+                        .withCategory('settings')
+                        .error('Failed to load new settings for comparison:', /** @type {Error} */ (error).message);
                     logger.withCategory('settings').info('🔄 Settings file changed, reloading main window...');
                     shouldReload = true;
                 }

@@ -1,3 +1,4 @@
+// @ts-check
 /**
  * Automatic prize claiming — a pre-step in fetchChallengesAndVote, shared by the
  * real and mock strategies (the endpoints arrive via `deps`).
@@ -17,6 +18,28 @@ import * as logger from '../logger';
 import * as settings from '../settings';
 import * as cancellation from '../voting/cancellation';
 
+/**
+ * @import { CompletedChallenge, Mission } from '../types/gurushots'
+ */
+
+/**
+ * The endpoints the claim pass calls (api/rewards.js, or the mock mirror).
+ *
+ * @typedef {object} ClaimDeps
+ * @property {(token: string, start?: number, limit?: number) => Promise<CompletedChallenge[]>} getMyCompletedChallenges
+ * @property {(challengeId: string|number, token: string) => Promise<boolean>} claimChallengeResources
+ * @property {(token: string) => Promise<Mission[]>} getMyMissions
+ * @property {(missionId: string|number, token: string) => Promise<boolean>} claimMissionPrize
+ */
+
+/**
+ * One claimable item: a finished challenge or a mission.
+ *
+ * @typedef {{ id: string|number, name?: string, title?: string }} ClaimItem
+ */
+
+/** @typedef {{ kind: string, id: string|number, claimed: boolean }} ClaimResult */
+
 const CLAIM_INTERVAL_MS = 60 * 60 * 1000;
 const CLAIMABLE = 'CLAIM';
 // get_my_completed_challenges page size (what the web app requests) and a cap
@@ -34,16 +57,29 @@ const getAutoClaimStatus = () => ({
 
 const cat = () => logger.withCategory('claim');
 
+/**
+ * A challenge's reward resources carry `value`, a mission's prizes `amount`.
+ *
+ * @param {ReadonlyArray<{ type?: string, amount?: number, value?: number }> | null | undefined} prizes
+ * @returns {string}
+ */
 const describePrizes = (prizes) =>
     (Array.isArray(prizes) ? prizes : []).map((p) => `${p?.amount ?? p?.value} ${p?.type}`).join(', ') ||
     'no listed prizes';
 
+/**
+ * @param {CompletedChallenge} challenge
+ */
 const challengePrizes = (challenge) =>
     challenge?.member?.rewards_by_section?.sections?.find((s) => s?.type === 'TOTAL')?.resources;
 
 /**
  * Reads completed challenges page by page (stopping at a short page) and keeps
  * the claimable ones.
+ *
+ * @param {string} token
+ * @param {ClaimDeps} deps
+ * @returns {Promise<CompletedChallenge[]>}
  */
 const listClaimableChallenges = async (token, deps) => {
     const claimable = [];
@@ -62,7 +98,12 @@ const listClaimableChallenges = async (token, deps) => {
  * Claims each item sequentially, stopping early on cancellation. A throw on one
  * item is logged and recorded; the rest are still attempted.
  *
- * @returns {Promise<Array<{kind:string, id:*, claimed:boolean}>>}
+ * @template {ClaimItem} T
+ * @param {string} kind
+ * @param {T[]} items
+ * @param {(id: string|number) => Promise<boolean>} claim
+ * @param {(item: T) => string} describe
+ * @returns {Promise<ClaimResult[]>}
  */
 const claimEach = async (kind, items, claim, describe) => {
     const results = [];
@@ -75,7 +116,10 @@ const claimEach = async (kind, items, claim, describe) => {
         try {
             claimed = (await claim(item.id)) === true;
         } catch (error) {
-            cat().warning(`${kind} ${item.id} claim errored: ${error?.message || error}`, null);
+            cat().warning(
+                `${kind} ${item.id} claim errored: ${/** @type {{ message?: unknown } | null | undefined} */ (error)?.message || error}`,
+                null,
+            );
         }
         if (claimed) {
             cat().success(`🎁 Claimed ${kind} "${item?.name ?? item?.title ?? item.id}": ${describe(item)}`, null);
@@ -90,13 +134,23 @@ const claimEach = async (kind, items, claim, describe) => {
 /**
  * Runs one half of the pass (challenges or missions) so a failure listing one
  * kind never blocks claiming the other.
+ *
+ * @template {ClaimItem} T
+ * @param {string} kind
+ * @param {() => Promise<T[]>} list
+ * @param {(id: string|number) => Promise<boolean>} claim
+ * @param {(item: T) => string} describe
+ * @returns {Promise<ClaimResult[]>}
  */
 const runHalf = async (kind, list, claim, describe) => {
     let items;
     try {
         items = await list();
     } catch (error) {
-        cat().warning(`could not list claimable ${kind}s: ${error?.message || error}`, null);
+        cat().warning(
+            `could not list claimable ${kind}s: ${/** @type {{ message?: unknown } | null | undefined} */ (error)?.message || error}`,
+            null,
+        );
         return [];
     }
     return claimEach(kind, items, claim, describe);
@@ -105,9 +159,9 @@ const runHalf = async (kind, list, claim, describe) => {
 /**
  * @param {string} token
  * @param {number} now epoch ms — the throttle clock
- * @param {object} deps getMyCompletedChallenges / claimChallengeResources /
+ * @param {ClaimDeps} deps getMyCompletedChallenges / claimChallengeResources /
  *   getMyMissions / claimMissionPrize
- * @returns {Promise<{ran:boolean, challengesClaimed:number, missionsClaimed:number, results:Array<object>}>}
+ * @returns {Promise<{ran:boolean, challengesClaimed:number, missionsClaimed:number, results:ClaimResult[]}>}
  */
 const runClaimPass = async (token, now, deps) => {
     const skipped = { ran: false, challengesClaimed: 0, missionsClaimed: 0, results: [] };

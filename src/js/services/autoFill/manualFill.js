@@ -1,3 +1,4 @@
+// @ts-check
 /**
  * Auto-fill — the manual "Fill Now" path: one or all missing slots in a single
  * request, ignoring the autoFill toggle and the schedule.
@@ -7,6 +8,9 @@ import { resetPassState as resetPhotoStatsPassState } from '../photoStats';
 import { getSlotsRemaining } from './challengeState';
 import { runFillAttempt } from './pipeline';
 
+/** @import { Challenge } from '../../types/gurushots' */
+/** @import { ErrorLike, FillDeps } from '../../types/autoFill' */
+
 /**
  * Manual fill (GUI button). Submits one or all missing slots in a
  * single request. Ignores the autoFill toggle and the spacing math,
@@ -14,15 +18,10 @@ import { runFillAttempt } from './pipeline';
  * rules mean the same thing whether triggered by the user or the
  * scheduler.
  *
- * @param {object} challenge
+ * @param {Challenge} challenge
  * @param {string} token
  * @param {'one'|'all'} mode
- * @param {{
- *   settings?: object,
- *   logger: object,
- *   getEligiblePhotos: function,
- *   submitToChallenge: function,
- * }} deps - settings is required in production (the IPC handler always
+ * @param {FillDeps} deps - settings is required in production (the IPC handler always
  *   passes it); it is optional only so failure-path unit tests can omit it,
  *   in which case tag rules degrade to "no filter".
  * @returns {Promise<{success: boolean, submitted: number, skipped: number, error?: string}>}
@@ -99,11 +98,12 @@ const fillChallengeNow = async (challenge, token, mode, deps) => {
             success: false,
             submitted: 0,
             skipped: slotsRemaining,
-            error: attempt.error.message || 'Failed to fetch photos',
+            error: /** @type {ErrorLike | null | undefined} */ (attempt.error)?.message || 'Failed to fetch photos',
         };
     }
     if (attempt.status === 'no-pick') {
-        return { success: false, submitted: 0, skipped: slotsRemaining, error: attempt.detail };
+        // onEmptyPick above always answers with a string.
+        return { success: false, submitted: 0, skipped: slotsRemaining, error: /** @type {string} */ (attempt.detail) };
     }
     if (attempt.status === 'submit-rejected') {
         return {
@@ -120,7 +120,9 @@ const fillChallengeNow = async (challenge, token, mode, deps) => {
             success: false,
             submitted: 0,
             skipped: slotsRemaining,
-            error: attempt.error.message || 'Submit failed',
+            error:
+                /** @type {ErrorLike | null | undefined} */ (/** @type {{error: unknown}} */ (attempt).error)
+                    ?.message || 'Submit failed',
         };
     }
 

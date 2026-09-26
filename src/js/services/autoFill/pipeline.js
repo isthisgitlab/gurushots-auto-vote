@@ -1,3 +1,4 @@
+// @ts-check
 /**
  * Auto-fill — the shared fill pipeline: load and score candidates, enrich the
  * contested ones, visually verify the pick, and submit (runFillAttempt), plus
@@ -11,13 +12,34 @@ import { resolveSemanticScores, resolveIgnoreWords, fetchCandidatesForChallenge 
 import { refreshChallengeState } from './challengeState';
 import { describeSubmitFailure, makeFallbackLogger, logPopularityPick } from './fillLogging';
 
+/** @import { Challenge } from '../../types/gurushots' */
+/** @import { IgnoreWords, PickerPhoto, ScoredCandidate, SemanticScoreMap } from '../../types/photoPicker' */
+/**
+ * @import {
+ *   ErrorLike,
+ *   FetchErrorResult,
+ *   FillAttemptParams,
+ *   FillAttemptResult,
+ *   RankDeps,
+ * } from '../../types/autoFill'
+ */
+
 /**
  * First half of the fill pipeline: fetch the candidate library for a challenge
  * and score it semantically. Shared by runFillAttempt and
  * rankCandidatesForChallenge so a swap ranks photos exactly the way a fill
  * does.
  *
- * @returns {Promise<{status: 'fetch-error', error: *} | {status: 'loaded', eligible: Array<object>, semanticScores: *, ignoreWords: *}>}
+ * @param {{
+ *   label: string,
+ *   challenge: Challenge,
+ *   token: string,
+ *   deps: RankDeps,
+ *   mustIncludeTags: readonly string[] | null,
+ *   shouldIncludeTags: readonly string[] | null,
+ *   usage?: string,
+ * }} params
+ * @returns {Promise<FetchErrorResult | {status: 'loaded', eligible: PickerPhoto[], semanticScores: SemanticScoreMap | null, ignoreWords: IgnoreWords}>}
  */
 const loadFillCandidates = async ({ label, challenge, token, deps, mustIncludeTags, shouldIncludeTags, usage }) => {
     const { logger, getEligiblePhotos, searchTagAutocomplete, getCurrentMemberProfile } = deps;
@@ -42,7 +64,7 @@ const loadFillCandidates = async ({ label, challenge, token, deps, mustIncludeTa
         logger
             .withCategory('autoFill')
             .warning(
-                `${label}: failed to fetch eligible photos for ${logger.challengeTag(challenge)}: ${error.message || error}`,
+                `${label}: failed to fetch eligible photos for ${logger.challengeTag(challenge)}: ${/** @type {ErrorLike | null | undefined} */ (error)?.message || error}`,
                 null,
             );
         return { status: 'fetch-error', error };
@@ -60,7 +82,20 @@ const loadFillCandidates = async ({ label, challenge, token, deps, mustIncludeTa
  * the contested ones with real stats. Returns the FULL scored pool —
  * finalizePick (which truncates to wantCount) is the caller's job.
  *
- * @returns {Promise<{scored: Array<object>, contested: Array<object>, contestedIds: Set<string>}>}
+ * @param {{
+ *   label: string,
+ *   challenge: Challenge,
+ *   token: string,
+ *   deps: RankDeps,
+ *   eligible: PickerPhoto[],
+ *   semanticScores: SemanticScoreMap | null,
+ *   ignoreWords: IgnoreWords,
+ *   wantCount: number,
+ *   mustIncludeTags: readonly string[] | null,
+ *   shouldIncludeTags: readonly string[] | null,
+ *   fillWithoutTagMatch: boolean | undefined,
+ * }} params
+ * @returns {Promise<{scored: ScoredCandidate[], contested: PickerPhoto[], contestedIds: Set<string>}>}
  */
 const scoreFillCandidates = async ({
     label,
@@ -101,9 +136,9 @@ const scoreFillCandidates = async ({
             if (entry.statsKnown) {
                 // enrichCandidates only marks statsKnown on entries whose three
                 // fields it has already coerced to finite non-negative integers.
-                entry.votes = fresh.votes;
-                entry.views = fresh.views;
-                entry.achievementCount = fresh.achievementCount;
+                entry.votes = /** @type {number} */ (fresh.votes);
+                entry.views = /** @type {number} */ (fresh.views);
+                entry.achievementCount = /** @type {number} */ (fresh.achievementCount);
             }
         }
     }
@@ -113,6 +148,15 @@ const scoreFillCandidates = async ({
 // Visual re-rank of the tag pick (see services/visionVerifier.js). The picked
 // ids lead the shortlist so a model that abstains returns exactly them; the
 // rest of the tag ranking follows as alternatives it may promote.
+/**
+ * @param {Challenge} challenge
+ * @param {ScoredCandidate[]} scored
+ * @param {PickerPhoto[]} eligible
+ * @param {string[]} picked
+ * @param {IgnoreWords} ignoreWords
+ * @param {RankDeps} deps
+ * @returns {Promise<string[]>}
+ */
 const verifyFillPick = async (challenge, scored, eligible, picked, ignoreWords, deps) => {
     const ranked = finalizePick(scored, Math.max(12, picked.length));
     const selected = new Set(picked.map(String));
@@ -124,7 +168,10 @@ const verifyFillPick = async (challenge, scored, eligible, picked, ignoreWords, 
     } catch (error) {
         deps.logger
             .withCategory('autoFill')
-            .warning(`Visual check failed for ${deps.logger.challengeTag(challenge)}: ${error.message || error}`, null);
+            .warning(
+                `Visual check failed for ${deps.logger.challengeTag(challenge)}: ${/** @type {ErrorLike | null | undefined} */ (error)?.message || error}`,
+                null,
+            );
         return picked;
     }
 };
@@ -135,12 +182,13 @@ const verifyFillPick = async (challenge, scored, eligible, picked, ignoreWords, 
  * enrichment — finalizePick truncates after sorting, so filtering afterwards
  * could discard every valid alternative when the top picks are excluded.
  *
- * @param {object} challenge
+ * @param {Challenge} challenge
  * @param {string} token
- * @param {object} deps - same shape as the fill deps
+ * @param {RankDeps} deps - same shape as the fill deps
  * @param {{label?: string, usage?: 'submit'|'swap', excludeIds?: Set<string>, wantCount?: number,
- *   mustIncludeTags?: string[]|null, shouldIncludeTags?: string[]|null, fillWithoutTagMatch?: *}} [opts]
- * @returns {Promise<{status: 'fetch-error', error: *} | {status: 'ranked', picked: Array<object>}>}
+ *   mustIncludeTags?: readonly string[]|null, shouldIncludeTags?: readonly string[]|null,
+ *   fillWithoutTagMatch?: boolean}} [opts]
+ * @returns {Promise<FetchErrorResult | {status: 'ranked', picked: PickerPhoto[]}>}
  *   picked: the top `wantCount` candidate photo records (with id + member_id), best first
  */
 const rankCandidatesForChallenge = async (challenge, token, deps, opts = {}) => {
@@ -188,7 +236,7 @@ const rankCandidatesForChallenge = async (challenge, token, deps, opts = {}) => 
         loaded.ignoreWords,
         deps,
     );
-    const picked = pickedIds.map((id) => byId.get(String(id))).filter(Boolean);
+    const picked = /** @type {PickerPhoto[]} */ (pickedIds.map((id) => byId.get(String(id))).filter(Boolean));
     return { status: 'ranked', picked };
 };
 
@@ -234,29 +282,8 @@ const rankCandidatesForChallenge = async (challenge, token, deps, opts = {}) => 
  *     count), or null to proceed. When the hook is absent the live
  *     re-check is skipped entirely (manual fill).
  *
- * @param {{
- *   label: 'autoFill'|'emergencyFill'|'manualFill'|'fillNew',
- *   challenge: object,
- *   token: string,
- *   deps: object,
- *   wantCount: number,
- *   mustIncludeTags: string[]|null,
- *   shouldIncludeTags: string[]|null,
- *   fillWithoutTagMatch: *,
- *   probeStandDown?: (function({eligible: Array<object>, semanticScores: Map<string, {score: number, support: number}>|null}): boolean)|null,
- *   onEmptyPick?: (function(Array<object>): *)|null,
- *   onRefreshed?: (function(Array<string>): ({standDown?: boolean, picked?: Array<string>}|null))|null,
- * }} params
- * @returns {Promise<
- *   {status: 'fetch-error', error: *}
- *   | {status: 'probe-stand-down'}
- *   | {status: 'no-pick', detail: *}
- *   | {status: 'gone'}
- *   | {status: 'refresh-stand-down'}
- *   | {status: 'submitted', picked: Array<string>}
- *   | {status: 'submit-rejected', reason: string}
- *   | {status: 'submit-threw', error: *}
- * >}
+ * @param {FillAttemptParams} params
+ * @returns {Promise<FillAttemptResult>}
  */
 const runFillAttempt = async ({
     label,
@@ -355,7 +382,10 @@ const runFillAttempt = async ({
     } catch (error) {
         logger
             .withCategory('autoFill')
-            .warning(`${label}: submit threw for ${logger.challengeTag(challenge)}: ${error.message || error}`, null);
+            .warning(
+                `${label}: submit threw for ${logger.challengeTag(challenge)}: ${/** @type {ErrorLike | null | undefined} */ (error)?.message || error}`,
+                null,
+            );
         return { status: 'submit-threw', error };
     }
 };

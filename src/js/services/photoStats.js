@@ -1,3 +1,4 @@
+// @ts-check
 /**
  * GuruShots Auto Voter - Photo Stats Enrichment
  *
@@ -42,6 +43,15 @@
 import * as logger from './../logger';
 import { oneLine } from '../format/logSafe';
 import { createJsonStore } from '../settings/storage';
+
+/** @import { PickerPhoto } from '../types/photoPicker' */
+/** @import { ErrorLike, FillLogger, RankDeps } from '../types/autoFill' */
+
+/**
+ * One photo's cached ranking signals.
+ *
+ * @typedef {{votes: number, views: number, achievementCount: number, fetchedAt: number}} PhotoStatsEntry
+ */
 
 // Newly fetched photos per fill. Cache hits do not count against this — a
 // fully-cached candidate set enriches completely with zero requests.
@@ -91,7 +101,7 @@ const MAX_ENRICH_PER_PASS = 200;
 
 const statsStore = createJsonStore({ fileName: 'photo-stats.json', prefKey: 'gurushots-photo-stats' });
 
-/** @type {Map<string, {votes: number, views: number, achievementCount: number, fetchedAt: number}>|null} */
+/** @type {Map<string, PhotoStatsEntry>|null} */
 let cache = null;
 let cacheDirty = false;
 
@@ -104,11 +114,19 @@ let passCapLogged = false;
 // Only ids short enough to be safe cache keys are persisted; see
 // MAX_PHOTO_ID_LENGTH. Both callers pass an already-stringified id (a persisted
 // Object.keys key, or String(photo.id)). Returns null for anything unusable.
+/**
+ * @param {string} id
+ * @returns {string | null}
+ */
 const cacheKeyFor = (id) => {
     if (id === '' || id.length > MAX_PHOTO_ID_LENGTH) return null;
     return id;
 };
 
+/**
+ * @param {unknown} value
+ * @returns {number}
+ */
 const nonNegInt = (value) => {
     const n = Number(value);
     if (!Number.isFinite(n) || n < 0) return 0;
@@ -118,6 +136,9 @@ const nonNegInt = (value) => {
 /**
  * Extract the three ranking signals from an untrusted get_image_data payload.
  * Everything else in the response is discarded.
+ *
+ * @param {{votes?: unknown, views?: unknown, achievements?: unknown} | null | undefined} payload
+ * @returns {{votes: number, views: number, achievementCount: number}}
  */
 const toStats = (payload) => ({
     votes: nonNegInt(payload?.votes),
@@ -128,6 +149,10 @@ const toStats = (payload) => ({
     ),
 });
 
+/**
+ * @param {PhotoStatsEntry | undefined} entry
+ * @param {number} now
+ */
 const isFresh = (entry, now) =>
     entry && Number.isFinite(entry.fetchedAt) && now - entry.fetchedAt >= 0 && now - entry.fetchedAt < STATS_TTL_MS;
 
@@ -135,6 +160,8 @@ const isFresh = (entry, now) =>
  * Hydrate the in-memory cache from the persistent store. Any corruption is
  * treated as an empty cache — stats are a re-fetchable optimisation, never
  * something worth failing a fill over.
+ *
+ * @returns {Map<string, PhotoStatsEntry>}
  */
 const loadCache = () => {
     if (cache) return cache;
@@ -162,7 +189,10 @@ const loadCache = () => {
     } catch (error) {
         logger
             .withCategory('autoFill')
-            .debug(`photoStats: could not read the stats cache: ${error?.message || error}`, null);
+            .debug(
+                `photoStats: could not read the stats cache: ${/** @type {ErrorLike | null | undefined} */ (error)?.message || error}`,
+                null,
+            );
         cache = new Map();
     }
     return cache;
@@ -188,7 +218,10 @@ const persistCache = () => {
     } catch (error) {
         logger
             .withCategory('autoFill')
-            .debug(`photoStats: could not persist the stats cache: ${error?.message || error}`, null);
+            .debug(
+                `photoStats: could not persist the stats cache: ${/** @type {ErrorLike | null | undefined} */ (error)?.message || error}`,
+                null,
+            );
     }
 };
 
@@ -211,6 +244,10 @@ const breakerOpen = () => consecutiveFailures >= FAILURE_BREAKER_THRESHOLD || fe
  * Run `worker` over `items` at most ENRICH_CONCURRENCY at a time, for its side
  * effects only. allSettled keeps one item's rejection from aborting the rest
  * of its chunk.
+ *
+ * @template T
+ * @param {T[]} items
+ * @param {(item: T) => Promise<unknown>} worker
  */
 const forEachChunked = async (items, worker) => {
     for (let i = 0; i < items.length; i += ENRICH_CONCURRENCY) {
@@ -228,10 +265,10 @@ const forEachChunked = async (items, worker) => {
  * untouched with `statsKnown: false`. The input objects are never mutated —
  * they flow on to the submit path.
  *
- * @param {Array<object>} photos - candidates to enrich
+ * @param {PickerPhoto[]} photos - candidates to enrich
  * @param {string} token
- * @param {{getImageData: function, logger?: object}} deps
- * @returns {Promise<Array<object>>}
+ * @param {Pick<RankDeps, 'getImageData'> & {logger?: FillLogger}} deps
+ * @returns {Promise<PickerPhoto[]>}
  */
 const enrichCandidates = async (photos, token, deps) => {
     const log = (deps && deps.logger) || logger;
@@ -265,8 +302,11 @@ const enrichCandidates = async (photos, token, deps) => {
     // queue permanently, coverage still reaches every candidate; views only
     // affects how soon. What must never happen is views DECIDING the submission;
     // consulting views for the reading order is harmless.
+    /** @type {Array<{photo: PickerPhoto, everMeasured: boolean}>} */
     const needFetch = [];
+    /** @type {Map<string, PhotoStatsEntry>} */
     const resolved = new Map();
+    /** @type {Set<string>} */
     const seen = new Set();
     for (const photo of photos) {
         const id = photo && photo.id !== undefined && photo.id !== null ? String(photo.id) : null;
@@ -284,6 +324,7 @@ const enrichCandidates = async (photos, token, deps) => {
         }
     }
 
+    /** @type {PickerPhoto[]} */
     let fetchList = [];
     if (!breakerOpen()) {
         fetchList = needFetch
@@ -313,7 +354,7 @@ const enrichCandidates = async (photos, token, deps) => {
                 payload = await getImageData(id, token);
             } catch (error) {
                 log.withCategory('autoFill').debug(
-                    `photoStats: get_image_data failed for photo ${oneLine(id)}: ${oneLine(error?.message || error)}`,
+                    `photoStats: get_image_data failed for photo ${oneLine(id)}: ${oneLine(/** @type {ErrorLike | null | undefined} */ (error)?.message || error)}`,
                     null,
                 );
                 payload = null;

@@ -1,3 +1,4 @@
+// @ts-check
 /**
  * Readline-based interactive prompts for the CLI host. Pure I/O —
  * no settings, no auth, no business logic. Each helper takes the
@@ -10,12 +11,32 @@
 
 import * as readline from 'node:readline';
 
-const createReadlineInterface = () =>
-    readline.createInterface({
-        input: process.stdin,
-        output: process.stdout,
-    });
+/**
+ * readline's Interface plus the undocumented members askSecret relies on:
+ * the `_writeToOutput` hook, the configured `output` stream, and the
+ * `stdoutMuted` flag this module stores on the instance.
+ *
+ * @typedef {readline.Interface & {
+ *     _writeToOutput?: (s: string) => void,
+ *     output: NodeJS.WritableStream,
+ *     stdoutMuted?: boolean,
+ * }} PromptInterface
+ */
 
+/** @returns {PromptInterface} */
+const createReadlineInterface = () =>
+    /** @type {PromptInterface} */ (
+        readline.createInterface({
+            input: process.stdin,
+            output: process.stdout,
+        })
+    );
+
+/**
+ * @param {string} question
+ * @param {readline.Interface} rl
+ * @returns {Promise<boolean>}
+ */
 const askYesNo = async (question, rl) =>
     new Promise((resolve) => {
         rl.question(`${question} (y/n): `, (answer) => {
@@ -24,6 +45,11 @@ const askYesNo = async (question, rl) =>
         });
     });
 
+/**
+ * @param {string} question
+ * @param {readline.Interface} rl
+ * @returns {Promise<string>}
+ */
 const askInput = async (question, rl) =>
     new Promise((resolve) => {
         rl.question(question, (answer) => {
@@ -46,6 +72,10 @@ const askInput = async (question, rl) =>
  * out. The submitted password is unaffected; correcting + re-typing
  * still produces the right value. Acceptable trade for "no echo at all"
  * vs. the more complex stty-style raw-mode path.
+ *
+ * @param {string} question
+ * @param {PromptInterface} rl
+ * @returns {Promise<string>}
  */
 const askSecret = async (question, rl) =>
     new Promise((resolve) => {

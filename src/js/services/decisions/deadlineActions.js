@@ -9,11 +9,8 @@
 
 import * as settings from '../../settings';
 // Single source of truth for the auto-fill schedule threshold math (no import
-// cycle: autoFill.js does not require VotingLogic). Cast to any at the
-// boundary: autoFill.js isn't `// @ts-check`ed yet, so its inferred
-// signatures are looser than this checked module accepts.
-import * as autoFillModule from '../autoFill';
-const { getNextScheduleThresholdSec, evaluateEmergencyFill, getSlotsRemaining } = /** @type {any} */ (autoFillModule);
+// cycle: autoFill.js does not require VotingLogic).
+import { getNextScheduleThresholdSec, evaluateEmergencyFill, getSlotsRemaining } from '../autoFill';
 import { boostApplyThreshold } from '../../voting/boostWindow';
 import { getEffectiveBoostTime, getEffectiveKeyUnlockedBoostTime, getEffectiveTurboTime } from './thresholds';
 import { isBoostWindowOpen } from './boostTurbo';

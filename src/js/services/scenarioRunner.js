@@ -1,3 +1,4 @@
+// @ts-check
 /**
  * Runs a challenge's user-defined scenario inside the voting pass: evaluates
  * it (scenarios/evaluate.js), executes the chosen rule's actions over the
@@ -47,14 +48,80 @@ import { selectEntry, entriesOf } from '../scenarios/selectors';
 import { recordVoteSample } from '../scenarios/speed';
 import { initialState } from '../scenarioStateStore';
 
+/** @import { BoostState, Challenge, ChallengeMember, MemberRanking, RankingEntry } from '../types/gurushots' */
+/** @import { ScenarioFiredRecord, ScenarioState } from '../types/stores' */
+/** @import { ScenarioStateLedger } from '../types/votingPass' */
+/** @import { CurrencyPassDeps } from './currencyAuto' */
+/** @import { SpendOutcome } from './currencyActions' */
+/** @import { ScenarioDocument } from '../settings/scenarioSchema' */
+/** @import { PassContext } from './votingOrchestrator' */
+
+/**
+ * @typedef {NonNullable<ScenarioDocument['phases'][string]['rules']>[number]} ScenarioRule
+ * @typedef {ScenarioRule & { id: string }} ValidatedRule - validateScenario gives every rule an id
+ * @typedef {ScenarioRule['do'][number]} ScenarioAction
+ * @typedef {ScenarioAction['type']} ActionType
+ * @typedef {'swap'|'unlockBoost'|'fillExposure'} SpendAction
+ * @typedef {'swaps'|'keys'|'fills'} SpendKind
+ * @typedef {{ id: string, member_id: string }} SwapPhoto
+ */
+
+/**
+ * The pass as the runner reads it: every host that runs scenarios also passes
+ * the currency endpoints.
+ *
+ * @typedef {PassContext & { currency: CurrencyPassDeps }} ScenarioPass
+ */
+
+/**
+ * @typedef {{
+ *   challenge: Challenge,
+ *   challengeId: string,
+ *   scenario: ScenarioDocument,
+ *   timezone: string,
+ *   pass: ScenarioPass,
+ *   ledger: ScenarioStateLedger,
+ * }} RunnerContext
+ */
+
+/**
+ * A challenge an action has just acted on: the action's own reads (the entry
+ * it picked, the boost/turbo state it checked) or the spend that landed on it
+ * establish the member tree the local reflect-writes touch.
+ *
+ * @typedef {Challenge & { member: ChallengeMember & { ranking: MemberRanking & { entries: RankingEntry[] } } }} ActedChallenge
+ */
+
+/**
+ * What an action did: its effects on the scenario state when done, or why not.
+ *
+ * @typedef {{ remember?: Record<string, string>, forget?: string, spent?: SpendKind, goto?: string, notice?: string }} ActionEffects
+ * @typedef {{ status: 'done' } & ActionEffects} DoneOutcome
+ * @typedef {{ status: 'skipped'|'failed'|'deferred', message: string }} NotDoneOutcome
+ * @typedef {DoneOutcome | NotDoneOutcome} ActionOutcome
+ */
+
+/**
+ * @template {ScenarioAction} A
+ * @typedef {(action: A, ctx: RunnerContext, state: ScenarioState) => Promise<ActionOutcome>} ActionHandler
+ */
+
 const log = () => logger.withCategory('scenario');
 
 const LABEL = 'scenario';
 
-/** Boost states in which a boost can be applied to an entry. */
+/**
+ * Boost states in which a boost can be applied to an entry.
+ *
+ * @type {ReadonlySet<BoostState | undefined>}
+ */
 const BOOST_APPLICABLE = new Set(['AVAILABLE', 'AVAILABLE_KEY']);
 
-/** Currency each spending action draws on, and its `limits` / `spent` key. */
+/**
+ * Currency each spending action draws on, and its `limits` / `spent` key.
+ *
+ * @type {Record<SpendAction, { action: 'swap'|'key'|'fill', limit: SpendKind }>}
+ */
 const SPEND = {
     swap: { action: 'swap', limit: 'swaps' },
     unlockBoost: { action: 'key', limit: 'keys' },
@@ -63,12 +130,20 @@ const SPEND = {
 
 const nowSec = () => Math.floor(Date.now() / 1000);
 
+/** @param {ActionEffects} [effects] @returns {DoneOutcome} */
 const done = (effects = {}) => ({ status: 'done', ...effects });
+/** @param {string} message @returns {NotDoneOutcome} */
 const skipped = (message) => ({ status: 'skipped', message });
+/** @param {string} message @returns {NotDoneOutcome} */
 const failed = (message) => ({ status: 'failed', message });
 
-/** True when any rule of the scenario compares a currency balance. */
+/**
+ * True when any rule of the scenario compares a currency balance.
+ *
+ * @param {ScenarioDocument} scenario
+ */
 const usesBalance = (scenario) => {
+    /** @param {ScenarioRule['if']} conditions @returns {boolean} */
     const walk = (conditions) =>
         (conditions ?? []).some(
             (item) =>
@@ -83,6 +158,8 @@ const usesBalance = (scenario) => {
  * Re-read the challenge live (merged into the pass object in place). Returns
  * false only when the challenge left the active list; an unavailable fetch
  * proceeds on the data at hand, as the fill paths do.
+ *
+ * @param {RunnerContext} ctx
  */
 const refreshLive = async (ctx) =>
     (await refreshChallengeState(
@@ -95,6 +172,11 @@ const refreshLive = async (ctx) =>
 /**
  * Shared gate for the currency spends: the scenario's own limit, then the
  * user's reserve.
+ *
+ * @param {SpendAction} actionType
+ * @param {RunnerContext} ctx
+ * @param {ScenarioState} state
+ * @returns {Promise<string|null>} why the spend is blocked, or null when allowed
  */
 const spendAllowed = async (actionType, ctx, state) => {
     const spend = SPEND[actionType];
@@ -108,14 +190,25 @@ const spendAllowed = async (actionType, ctx, state) => {
         : `the ${spend.limit} reserve would be crossed`;
 };
 
-/** Spend outcomes worth retrying; every other refusal (no balance, no alternative photo, the entry moved on) is a skip. */
+/**
+ * Spend outcomes worth retrying; every other refusal (no balance, no alternative photo, the entry moved on) is a skip.
+ *
+ * @type {ReadonlySet<string>}
+ */
 const TRANSIENT_OUTCOMES = new Set([
     CURRENCY_OUTCOME.apiFailed,
     CURRENCY_OUTCOME.balanceUnknown,
     CURRENCY_OUTCOME.busy,
 ]);
 
-/** Runs a currency spend under the shared lock; `deferred` when another spend holds it. */
+/**
+ * Runs a currency spend under the shared lock; `deferred` when another spend holds it.
+ *
+ * @param {SpendAction} actionType
+ * @param {RunnerContext} ctx
+ * @param {() => Promise<SpendOutcome>} spend
+ * @returns {Promise<NotDoneOutcome|null>} null when the spend went through
+ */
 const lockedCurrencySpend = async (actionType, ctx, spend) => {
     const result = await lockedSpend(SPEND[actionType].action, ctx.challenge, spend, LABEL);
     if (result === null) return { status: 'deferred', message: 'another spend is in progress' };
@@ -125,19 +218,33 @@ const lockedCurrencySpend = async (actionType, ctx, spend) => {
     return result.outcome === undefined || TRANSIENT_OUTCOMES.has(result.outcome) ? failed(message) : skipped(message);
 };
 
+/** @param {RunnerContext} ctx */
 const currencyDeps = (ctx) => ({ strategy: ctx.pass.currency.strategy, logger, settings });
 
-/** What entry selectors read: remembered photos, and vote history for `fastest`. */
+/**
+ * What entry selectors read: remembered photos, and vote history for `fastest`.
+ *
+ * @param {ScenarioState} state
+ */
 const selectContext = (state) => ({ memory: state.memory, history: state.history, now: nowSec() });
 
-/** The photo a `with` / `photo` source names: a remembered id, or null for "best". */
+/**
+ * The photo a `with` / `photo` source names: a remembered id, or null for "best".
+ * undefined when the memory slot is empty.
+ *
+ * @param {'best' | { memory: string }} source
+ * @param {ScenarioState} state
+ * @returns {string|null|undefined}
+ */
 const rememberedPhoto = (source, state) => (source === 'best' ? null : (state.memory[source.memory] ?? undefined));
 
+/** @type {{ [K in ActionType]: ActionHandler<Extract<ScenarioAction, { type: K }>> }} */
 const ACTIONS = {
     enterPhoto: async (action, ctx, state) => {
         const { challenge, pass } = ctx;
         const photoId = rememberedPhoto(action.photo, state);
-        if (photoId === undefined) return skipped(`memory slot "${action.photo.memory}" is empty`);
+        if (photoId === undefined)
+            return skipped(`memory slot "${/** @type {{ memory: string }} */ (action.photo).memory}" is empty`);
         let enteredId = photoId;
         if (photoId === null) {
             // The fill path re-reads the challenge live and checks the free slots itself.
@@ -157,13 +264,16 @@ const ACTIONS = {
             if (!result?.ok) return failed(`photo ${photoId} could not be entered`);
         }
         reflectNewEntry(challenge, enteredId);
-        return done({ remember: action.remember ? { [action.remember]: enteredId } : {} });
+        // Both paths above leave a photo id here.
+        const entered = /** @type {string} */ (enteredId);
+        return done({ remember: action.remember ? { [action.remember]: entered } : {} });
     },
 
     swap: async (action, ctx, state) => {
         const { challenge, pass } = ctx;
         const newPhoto = rememberedPhoto(action.with, state);
-        if (newPhoto === undefined) return skipped(`memory slot "${action.with.memory}" is empty`);
+        if (newPhoto === undefined)
+            return skipped(`memory slot "${/** @type {{ memory: string }} */ (action.with).memory}" is empty`);
         if (!(await refreshLive(ctx))) return skipped('the challenge is no longer active');
         const target = selectEntry(action.entry, challenge, selectContext(state));
         if (!target) return skipped('no entry matches the swap target');
@@ -173,6 +283,7 @@ const ACTIONS = {
         const blocked = await spendAllowed('swap', ctx, state);
         if (blocked) return skipped(blocked);
 
+        /** @type {SwapPhoto|null} */
         let replacement = newPhoto === null ? null : { id: newPhoto, member_id: String(target.member_id ?? '') };
         const refused = await lockedCurrencySpend('swap', ctx, async () => {
             if (replacement === null) {
@@ -183,7 +294,8 @@ const ACTIONS = {
                     currencyDeps(ctx),
                 );
                 if (!preview?.ok) return preview;
-                replacement = preview.candidate;
+                // An ok preview always carries its candidate.
+                replacement = /** @type {SwapPhoto} */ (preview.candidate);
             }
             return currencyActions.swapEntry(challenge.id, target.id, replacement.id, pass.token, {
                 ...currencyDeps(ctx),
@@ -191,14 +303,17 @@ const ACTIONS = {
             });
         });
         if (refused) return refused;
+        // The spend went through, so the replacement was given or previewed.
+        const added = /** @type {SwapPhoto} */ (replacement);
 
-        const entries = challenge.member.ranking.entries;
-        entries[entries.indexOf(target)] = { id: replacement.id, member_id: replacement.member_id };
-        const ranking = challenge.member.ranking;
+        const entries = /** @type {ActedChallenge} */ (challenge).member.ranking.entries;
+        entries[entries.indexOf(target)] = { id: added.id, member_id: added.member_id };
+        const ranking = /** @type {ActedChallenge} */ (challenge).member.ranking;
         ranking.swaps = [...(Array.isArray(ranking.swaps) ? ranking.swaps : []), { id: String(target.id) }];
+        /** @type {Record<string, string>} */
         const remember = {};
         if (action.rememberRemoved) remember[action.rememberRemoved] = String(target.id);
-        if (action.rememberAdded) remember[action.rememberAdded] = String(replacement.id);
+        if (action.rememberAdded) remember[action.rememberAdded] = String(added.id);
         return done({ remember, spent: 'swaps' });
     },
 
@@ -213,7 +328,8 @@ const ACTIONS = {
         const response = await pass.api.applyBoostToEntry(challenge.id, String(target.id), pass.token);
         if (!response) return failed(`the boost on entry ${target.id} was refused`);
         reflectEntryFlag(challenge, target.id, 'boosted');
-        challenge.member.boost = { ...challenge.member.boost, state: 'USED' };
+        const member = /** @type {ActedChallenge} */ (challenge).member;
+        member.boost = { ...member.boost, state: 'USED' };
         return done();
     },
 
@@ -228,7 +344,8 @@ const ACTIONS = {
         const result = await pass.api.applyTurbo(challenge.id, String(target.id), pass.token);
         if (!result?.ok) return failed(`the turbo on entry ${target.id} was refused`);
         reflectEntryFlag(challenge, target.id, 'turbo');
-        challenge.member.turbo = { ...challenge.member.turbo, state: 'USED' };
+        const member = /** @type {ActedChallenge} */ (challenge).member;
+        member.turbo = { ...member.turbo, state: 'USED' };
         return done();
     },
 
@@ -239,7 +356,8 @@ const ACTIONS = {
             currencyActions.unlockBoostWithKey(ctx.challenge.id, ctx.pass.token, currencyDeps(ctx)),
         );
         if (refused) return refused;
-        ctx.challenge.member.boost = { ...ctx.challenge.member.boost, state: 'AVAILABLE_KEY', timeout: null };
+        const member = /** @type {ActedChallenge} */ (ctx.challenge).member;
+        member.boost = { ...member.boost, state: 'AVAILABLE_KEY', timeout: null };
         return done({ spent: 'keys' });
     },
 
@@ -250,7 +368,7 @@ const ACTIONS = {
             currencyActions.fillExposure(ctx.challenge.id, ctx.pass.token, currencyDeps(ctx)),
         );
         if (refused) return refused;
-        const ranking = ctx.challenge.member.ranking;
+        const ranking = /** @type {ActedChallenge} */ (ctx.challenge).member.ranking;
         ranking.exposure = { ...ranking.exposure, exposure_factor: 100 };
         return done({ spent: 'fills' });
     },
@@ -280,14 +398,28 @@ const ACTIONS = {
 const OUTBOX_LIMIT = 20;
 const OUTBOX_KEEP_SEC = 24 * 3600;
 
-/** State with a notice appended to its outbox (services/scenarioNotifications.js delivers it). */
+/**
+ * State with a notice appended to its outbox (services/scenarioNotifications.js delivers it).
+ *
+ * @param {ScenarioState} state
+ * @param {string} message
+ * @param {number} at - unix seconds
+ * @returns {ScenarioState}
+ */
 const withNotice = (state, message, at) => {
     const kept = (state.outbox ?? []).filter((item) => at - item.at <= OUTBOX_KEEP_SEC);
     const id = `${at}-${kept.length}-${Math.random().toString(36).slice(2, 8)}`;
     return { ...state, outbox: [...kept, { id, at, message }].slice(-OUTBOX_LIMIT) };
 };
 
-/** State after one action's effects. */
+/**
+ * State after one action's effects.
+ *
+ * @param {ScenarioState} before
+ * @param {ActionEffects} effects
+ * @param {number} at - unix seconds
+ * @returns {ScenarioState}
+ */
 const applyEffects = (before, effects, at) => {
     const state = effects.notice ? withNotice(before, effects.notice, at) : before;
     const memory = { ...state.memory, ...effects.remember };
@@ -301,17 +433,25 @@ const applyEffects = (before, effects, at) => {
 /**
  * Execute one rule from `startIndex`. Returns the new state and whether the
  * rule finished (its actions all went through or were passed over).
+ *
+ * @param {{ ruleId: string, rule: ValidatedRule, startIndex: number }} fire
+ * @param {RunnerContext} ctx
+ * @param {ScenarioState} startState
+ * @returns {Promise<{ state: ScenarioState, completed: boolean }>}
  */
 const runRule = async (fire, ctx, startState) => {
     const { rule, startIndex } = fire;
     const tag = logger.challengeTag(ctx.challenge);
     let state = startState;
     let committed = startIndex > 0;
+    /** @type {string|null} */
     let gotoPhase = null;
+    /** @type {{ at: number, message: string }|null} */
     let skippedStep = null;
     for (let index = startIndex; index < rule.do.length; index++) {
         const action = rule.do[index];
-        const result = await ACTIONS[action.type](action, ctx, state);
+        // ACTIONS pairs each type with its handler; the union call needs the widened view.
+        const result = await /** @type {ActionHandler<ScenarioAction>} */ (ACTIONS[action.type])(action, ctx, state);
         const at = nowSec();
         if (result.status !== 'done') {
             const message = `${rule.label ?? rule.id} → ${action.type}: ${result.message}`;
@@ -344,7 +484,14 @@ const runRule = async (fire, ctx, startState) => {
         inFlight: null,
         // A step passed over in this firing stays visible as the last problem.
         lastError: skippedStep,
-        fired: { ...state.fired, [rule.id]: firedRecord(startState, at, ctx.timezone) },
+        // firedRecord's `day` is the local-midnight instant (a number); ScenarioFiredRecord
+        // declares it a string, so the record is cast until that declaration is corrected.
+        fired: {
+            ...state.fired,
+            [rule.id]: /** @type {ScenarioFiredRecord} */ (
+                /** @type {unknown} */ (firedRecord(startState, at, ctx.timezone))
+            ),
+        },
     };
     // A phase change takes effect when the rule finishes, so an interrupted
     // rule always resumes in the phase it belongs to.
@@ -359,6 +506,10 @@ const runRule = async (fire, ctx, startState) => {
 /**
  * The challenge's state for `scenario`, starting it (at the start phase) when
  * it has none or was running a different scenario. Null when unreadable.
+ *
+ * @param {RunnerContext} ctx
+ * @param {number} now - unix seconds
+ * @returns {ScenarioState|null}
  */
 const loadState = (ctx, now) => {
     const { corrupt, state } = ctx.ledger.get(ctx.challengeId);
@@ -384,9 +535,9 @@ const loadState = (ctx, now) => {
  * scenario deps, the host defers scenarios to another loop, or the
  * challenge has no (known) scenario.
  *
- * @param {object} challenge
+ * @param {Challenge} challenge
  * @param {number} now - unix seconds
- * @param {object} pass - the voting pass context (token, api, fillDeps, currency, scenarios)
+ * @param {PassContext} pass - the voting pass context (token, api, fillDeps, currency, scenarios)
  */
 const runScenarioStep = async (challenge, now, pass) => {
     const deps = pass.scenarios;
@@ -404,25 +555,30 @@ const runScenarioStep = async (challenge, now, pass) => {
             return;
         }
         const timezone = settings.getSetting('timezone') || DEFAULT_TIMEZONE;
-        const ctx = { challenge, challengeId, scenario, timezone, pass, ledger: deps.ledger };
+        // Every host that runs scenarios passes the currency endpoints too.
+        const scenarioPass = /** @type {ScenarioPass} */ (pass);
+        /** @type {RunnerContext} */
+        const ctx = { challenge, challengeId, scenario, timezone, pass: scenarioPass, ledger: deps.ledger };
         let state = loadState(ctx, now);
         if (!state) return;
         // One vote sample per pass feeds the speed conditions (scenarios/speed.js).
         state = { ...state, history: recordVoteSample(state.history, entriesOf(challenge), now) };
         ctx.ledger.set(challengeId, state);
 
+        /** @type {Set<string>} */
         const firedThisPass = new Set();
         const visited = new Set([state.phase]);
         const needsBankroll = usesBalance(scenario);
         for (;;) {
-            const bankroll = needsBankroll ? await pass.currency.strategy.getBankroll(pass.token) : null;
+            const bankroll = needsBankroll ? await scenarioPass.currency.strategy.getBankroll(pass.token) : null;
             const decision = evaluateScenario({
                 scenario,
                 state,
                 challenge,
                 now: nowSec(),
                 timezone,
-                bankroll,
+                // The normalized Bankroll is a currency → number map.
+                bankroll: /** @type {Record<string, number>|null} */ (bankroll),
                 skipRuleIds: firedThisPass,
             });
             if (decision.halted) {
@@ -446,7 +602,7 @@ const runScenarioStep = async (challenge, now, pass) => {
             if (!outcome.completed) return;
             if (!visited.has(state.phase)) {
                 visited.add(state.phase);
-            } else if (decision.fire.rule.do.some((action) => action.type === 'goto')) {
+            } else if (decision.fire.rule.do.some((/** @type {ScenarioAction} */ action) => action.type === 'goto')) {
                 log().warning(
                     `${logger.challengeTag(challenge)} scenario "${scenario.name}" came back to phase ${state.phase} in one pass — continuing next pass`,
                     null,
@@ -455,7 +611,10 @@ const runScenarioStep = async (challenge, now, pass) => {
             }
         }
     } catch (error) {
-        log().error(`${logger.challengeTag(challenge)} scenario step failed: ${error?.message || error}`, null);
+        log().error(
+            `${logger.challengeTag(challenge)} scenario step failed: ${/** @type {{ message?: unknown } | null | undefined} */ (error)?.message || error}`,
+            null,
+        );
     }
 };
 

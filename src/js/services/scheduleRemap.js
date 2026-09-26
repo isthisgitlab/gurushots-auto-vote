@@ -1,3 +1,4 @@
+// @ts-check
 /**
  * End-alignment remap for the autoFillSchedule rows.
  *
@@ -30,6 +31,7 @@ const MAX_SCHEDULE_COUNT = 4;
 // must not walk in full per keystroke.
 const MAX_ROWS_READ = 100;
 
+/** @param {*} c - an untrusted row count @returns {c is number} */
 const isSaneCount = (c) => Number.isInteger(c) && c >= 2 && c <= MAX_SCHEDULE_COUNT;
 
 /**

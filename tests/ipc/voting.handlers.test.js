@@ -24,6 +24,7 @@ const cancellation = require('../../src/js/voting/cancellation');
 const manualVote = require('../../src/js/services/manualVote');
 const { buildHandlers } = require('../../src/js/ipc/voting.handlers');
 const { buildChallenge: buildBaseChallenge } = require('../helpers/challengeFixtures');
+const { logCategories } = require('../helpers/logCategories');
 
 const buildChallenge = ({ id, title = 'C', startInPast = true } = {}) => {
     const now = Math.floor(Date.now() / 1000);
@@ -418,6 +419,33 @@ describe('vote-all-challenges-manual progress callback', () => {
         } finally {
             logger.withCategory.mockImplementation(originalImpl);
         }
+    });
+});
+
+describe('vote-on-challenge log categories', () => {
+    beforeEach(() => jest.clearAllMocks());
+
+    test('logs the request under voting and the lookup under challenges', async () => {
+        setToken('tok');
+        stubStrategy([buildChallenge({ id: 123, title: 'C' })]);
+        manualVote.submitVotesForChallenge.mockResolvedValue({ outcome: 'no-images' });
+
+        await buildHandlers()['vote-on-challenge']({}, '123', 'C');
+
+        expect(logCategories('info', '🔄 Vote on challenge request: ID=123, Title="C"', null)).toEqual(['voting']);
+        expect(logCategories('debug', '🎯 Challenge found: ID=123, Title="C"', null)).toEqual(['challenges']);
+    });
+
+    test('logs a missing challenge under challenges', async () => {
+        setToken('tok');
+        stubStrategy([buildChallenge({ id: 999 })]);
+
+        await buildHandlers()['vote-on-challenge']({}, '123', 'Missing');
+
+        expect(logCategories('debug', '🎯 Challenge found: NOT FOUND', null)).toEqual(['challenges']);
+        expect(
+            logCategories('warning', '❌ Challenge not found:', { challengeId: '123', challengeTitle: 'Missing' }),
+        ).toEqual(['challenges']);
     });
 });
 

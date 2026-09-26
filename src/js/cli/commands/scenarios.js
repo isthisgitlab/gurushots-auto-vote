@@ -1,3 +1,4 @@
+// @ts-check
 /**
  * CLI scenario commands — list, template, import (with the same preview and
  * --yes confirmation the GUI's import dialog has), export, rename, delete,
@@ -14,21 +15,38 @@ import { VOCABULARY_REFERENCE } from '../../scenarios/vocabulary';
 
 // Built lazily so requiring this module (e.g. for `help`) does not construct
 // the handler set or pull in its transitive dependencies.
+/** @import { NullEventHandlers } from '../../types/cli' */
+/** @import { ScenarioIssue } from '../../settings/scenarioSchema' */
+/** @typedef {NullEventHandlers<ReturnType<typeof import('../../ipc/scenarios.handlers').buildHandlers>>} ScenarioHandlers */
+/** @type {ScenarioHandlers | undefined} */
 let _handlers;
+/** @returns {ScenarioHandlers} */
 const handlers = () => (_handlers ??= require('../../ipc/scenarios.handlers').buildHandlers());
 
 const ui = () => logger.withCategory('ui');
 
-const at = (sec) => (Number.isFinite(sec) ? formatDateTime(new Date(sec * 1000)) : 'nothing time-based pending');
+/** @param {number | null | undefined} sec - unix seconds */
+const at = (sec) =>
+    Number.isFinite(sec) ? formatDateTime(new Date(/** @type {number} */ (sec) * 1000)) : 'nothing time-based pending';
 
-/** Print a failed result — its issues when validation failed — and yield exit code 1. */
+/**
+ * Print a failed result — its issues when validation failed — and yield exit code 1.
+ *
+ * @param {{ success?: boolean, error?: unknown, issues?: ScenarioIssue[] }} result
+ * @param {string} what
+ */
 const reportFailure = (result, what) => {
     ui().error(`${what}: ${result.error}`);
     for (const issue of result.issues ?? []) ui().error(`  ${issue.path || '(document)'}: ${issue.message}`);
     return 1;
 };
 
-/** Write `text` to `file`, or print it when no file is given. */
+/**
+ * Write `text` to `file`, or print it when no file is given.
+ *
+ * @param {string} text
+ * @param {string | null | undefined} file
+ */
 const output = (text, file) => {
     if (!file) {
         ui().info(text);
@@ -39,7 +57,7 @@ const output = (text, file) => {
         ui().success(`Written to ${file}`);
         return 0;
     } catch (error) {
-        ui().error(`Could not write ${file}: ${error.message}`);
+        ui().error(`Could not write ${file}: ${/** @type {Error} */ (error).message}`);
         return 1;
     }
 };
@@ -58,6 +76,10 @@ const listScenarios = async () => {
     return 0;
 };
 
+/**
+ * @param {string} id
+ * @param {string} [file]
+ */
 const scenarioTemplate = async (id, file) => {
     const template = SCENARIO_TEMPLATES.find((t) => t.id === id);
     if (!template) {
@@ -67,6 +89,7 @@ const scenarioTemplate = async (id, file) => {
     return output(`${JSON.stringify(template.scenario, null, 2)}\n`, file);
 };
 
+/** @param {{ preview: ReturnType<typeof import('../../settings').describeScenario>, exists: boolean }} imported */
 const printPreview = ({ preview, exists }) => {
     ui().info(`Scenario "${preview.name}" — starts in phase "${preview.start}"`);
     if (preview.description) ui().info(`  ${preview.description}`);
@@ -85,12 +108,16 @@ const printPreview = ({ preview, exists }) => {
     if (exists) ui().warning(`  A scenario named "${preview.name}" already exists — importing needs --overwrite.`);
 };
 
+/**
+ * @param {string} file
+ * @param {{ overwrite?: boolean, yes?: boolean }} [opts]
+ */
 const importScenarioCmd = async (file, { overwrite = false, yes = false } = {}) => {
     let text;
     try {
         text = fs.readFileSync(file, 'utf8');
     } catch (error) {
-        ui().error(`Could not read ${file}: ${error.message}`);
+        ui().error(`Could not read ${file}: ${/** @type {Error} */ (error).message}`);
         return 1;
     }
     const preview = await handlers()['preview-scenario-import'](null, text);
@@ -108,12 +135,21 @@ const importScenarioCmd = async (file, { overwrite = false, yes = false } = {}) 
     return 0;
 };
 
+/**
+ * @param {string} name
+ * @param {string} [file]
+ */
 const exportScenarioCmd = async (name, file) => {
     const result = await handlers()['export-scenario'](null, name);
     if (!result.success) return reportFailure(result, `Could not export "${name}"`);
-    return output(result.json, file);
+    // A successful export always carries its JSON text.
+    return output(/** @type {string} */ (result.json), file);
 };
 
+/**
+ * @param {string} oldName
+ * @param {string} newName
+ */
 const renameScenarioCmd = async (oldName, newName) => {
     const result = await handlers()['rename-scenario'](null, oldName, newName);
     if (!result.success) return reportFailure(result, `Could not rename "${oldName}"`);
@@ -121,6 +157,7 @@ const renameScenarioCmd = async (oldName, newName) => {
     return 0;
 };
 
+/** @param {string} name */
 const deleteScenarioCmd = async (name) => {
     const result = await handlers()['delete-scenario'](null, name);
     if (!result.success) return reportFailure(result, `Could not delete "${name}"`);
@@ -128,6 +165,7 @@ const deleteScenarioCmd = async (name) => {
     return 0;
 };
 
+/** @param {string} challengeId */
 const scenarioStatusCmd = async (challengeId) => {
     const status = await handlers()['get-scenario-status'](null, challengeId);
     if (!status.success) return reportFailure(status, 'Could not read the scenario status');
@@ -165,6 +203,7 @@ const scenarioStatusCmd = async (challengeId) => {
     return 0;
 };
 
+/** @param {string} challengeId */
 const scenarioResetCmd = async (challengeId) => {
     const result = await handlers()['reset-scenario-state'](null, challengeId);
     if (!result.success) return reportFailure(result, 'Could not reset the scenario');
@@ -174,6 +213,7 @@ const scenarioResetCmd = async (challengeId) => {
     return 0;
 };
 
+/** @param {string} challengeId */
 const scenarioDryRunCmd = async (challengeId) => {
     const result = await handlers()['dry-run-scenario'](null, challengeId);
     if (!result.success) return reportFailure(result, 'Dry run failed');
@@ -192,6 +232,7 @@ const scenarioDryRunCmd = async (challengeId) => {
     return 0;
 };
 
+/** @type {Record<string, string>} */
 const STOP_REASONS = {
     closed: 'the challenge closes',
     idle: 'nothing more is time-based — the plan now waits on live data (votes, rank, boost) the simulation holds still',
@@ -199,8 +240,13 @@ const STOP_REASONS = {
     limit: 'the timeline is long — only the first steps are shown',
 };
 
+/** @param {string} challengeId */
 const scenarioSimulateCmd = async (challengeId) => {
-    const result = await handlers()['simulate-scenario'](null, challengeId);
+    // The CLI simulates the assigned scenario, so it passes no draft.
+    const result =
+        await /** @type {(event: null, challengeId: string) => ReturnType<ScenarioHandlers['simulate-scenario']>} */ (
+            handlers()['simulate-scenario']
+        )(null, challengeId);
     if (!result.success) return reportFailure(result, 'Simulation failed');
     ui().info(`Scenario "${result.scenario}" from phase ${result.startPhase}, assuming every step succeeds:`);
     if (result.events.length === 0) ui().info('  Nothing would run.');

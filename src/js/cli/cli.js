@@ -1,4 +1,5 @@
 #!/usr/bin/env node
+// @ts-check
 
 /**
  * GuruShots Auto Voter - CLI Entry Point
@@ -60,14 +61,26 @@ import {
 import { showLogs } from './commands/logs';
 import * as scenarioCommands from './commands/scenarios';
 
+/**
+ * A command handler: argv after the command name → exit code, or undefined to
+ * leave the process running (continuous mode).
+ *
+ * @typedef {(argv: string[]) => Promise<number | undefined>} CommandHandler
+ */
+
 const args = process.argv.slice(2);
 const command = args[0];
 
 // Pull --challenge=<id> (or --challenge <id>) out of an arg list and return
 // the remaining positional args, so per-challenge settings commands accept
 // the flag in any position (mirrors `run --challenge=<id>`).
+/**
+ * @param {string[]} argv
+ * @returns {{ challengeId: string | null, rest: string[] }}
+ */
 const extractChallenge = (argv) => {
     const challengeId = parseChallengeFlag(argv);
+    /** @type {string[]} */
     const rest = [];
     for (let i = 0; i < argv.length; i++) {
         if (argv[i] === '--challenge') {
@@ -173,45 +186,75 @@ Note: You must login first before you can vote, boost, turbo, or submit.
     `);
 };
 
-/** Log a usage error (one error line, then any usage/help lines) and yield exit code 1. */
+/**
+ * Log a usage error (one error line, then any usage/help lines) and yield exit code 1.
+ *
+ * @param {string} message
+ * @param {...string} usage
+ * @returns {number}
+ */
 const usageError = (message, ...usage) => {
     logger.withCategory('ui').error(message);
     for (const line of usage) logger.withCategory('ui').info(line);
     return 1;
 };
 
-/** A command that only runs `fn` and then exits 0. */
+/**
+ * A command that only runs `fn` and then exits 0.
+ *
+ * @param {() => unknown} fn
+ * @returns {CommandHandler}
+ */
 const exitsZero = (fn) => async () => {
     await fn();
     return 0;
 };
 
-/** Exit code for a command reporting `false` on failure. */
+/**
+ * Exit code for a command reporting `false` on failure.
+ *
+ * @param {unknown} ok
+ */
 const exitCodeOf = (ok) => (ok === false ? 1 : 0);
 
 /**
  * A per-challenge action: pull --challenge out of argv, require it (printing
  * `usage` otherwise), then `run(challengeId, rest)` → exit code.
+ *
+ * @param {string} usage
+ * @param {(challengeId: string, rest: string[]) => number | Promise<number>} run
+ * @returns {CommandHandler}
  */
 const challengeCommand = (usage, run) => async (argv) => {
     const { challengeId, rest } = extractChallenge(argv);
     requireChallenge({ challengeId }, usage);
-    return run(challengeId, rest);
+    // requireChallenge exits the process when the id is missing.
+    return run(/** @type {string} */ (challengeId), rest);
 };
 
-/** A profile command: resolve the profile name via requireProfileArgs, then `run(name, challengeId)`. */
+/**
+ * A profile command: resolve the profile name via requireProfileArgs, then `run(name, challengeId)`.
+ *
+ * @param {string} name
+ * @param {(name: string, challengeId: string) => void} run
+ * @param {[opts?: Parameters<typeof requireProfileArgs>[2]]} options
+ * @returns {CommandHandler}
+ */
 const profileCommand =
     (name, run, ...options) =>
     async (argv) => {
         const parsed = extractChallenge(argv);
         const profile = requireProfileArgs(name, parsed, ...options);
-        run(profile, parsed.challengeId);
+        // requireProfileArgs exits when a needsChallenge command lacks the id;
+        // the commands that don't need one ignore it.
+        run(profile, /** @type {string} */ (parsed.challengeId));
         return 0;
     };
 
 // --challenge scopes to a single-challenge manual vote; bare `vote` votes
 // every challenge to 100%. A present-but-empty --challenge is rejected rather
 // than silently voting everything.
+/** @type {CommandHandler} */
 const runVote = async (argv) => {
     const challengeId = parseChallengeFlag(argv);
     const hasChallengeFlag = argv.some((a) => a === '--challenge' || a.startsWith('--challenge='));
@@ -229,6 +272,7 @@ const runVote = async (argv) => {
     return 0;
 };
 
+/** @type {Record<string, string>} */
 const LOG_CATEGORY_FLAGS = {
     '--error': 'error',
     '--api': 'api',
@@ -236,19 +280,23 @@ const LOG_CATEGORY_FLAGS = {
     '--lexicon': 'lexicon',
 };
 
+/** @type {CommandHandler} */
 const runLogs = async (argv) => {
-    const category = LOG_CATEGORY_FLAGS[argv.find((arg) => Object.hasOwn(LOG_CATEGORY_FLAGS, arg))] || 'app';
+    const category =
+        LOG_CATEGORY_FLAGS[/** @type {string} */ (argv.find((arg) => Object.hasOwn(LOG_CATEGORY_FLAGS, arg)))] || 'app';
     const linesArg = argv.find((a) => a.startsWith('--lines='));
     const lines = linesArg ? parseInt(linesArg.slice('--lines='.length), 10) || 100 : 100;
     showLogs({ category, lines });
     return 0;
 };
 
+/** @type {CommandHandler} */
 const runRun = async (argv) => {
     await runVotingCycle(1, { isManual: false, challengeId: parseChallengeFlag(argv) });
     return 0;
 };
 
+/** @type {CommandHandler} */
 const runJoin = async (argv) => {
     const yes = argv.includes('--yes');
     const id = argv.find((a) => !a.startsWith('--'));
@@ -256,6 +304,10 @@ const runJoin = async (argv) => {
     return 0;
 };
 
+/**
+ * @param {string} challengeId
+ * @param {string[]} rest
+ */
 const runBoost = async (challengeId, rest) => {
     const imageArg = rest.find((a) => a.startsWith('--image='));
     const imageId = imageArg ? imageArg.slice('--image='.length) || null : null;
@@ -263,17 +315,29 @@ const runBoost = async (challengeId, rest) => {
     return 0;
 };
 
+/**
+ * @param {string} challengeId
+ * @param {string[]} rest
+ */
 const runSwapBack = async (challengeId, rest) => {
     const { imageId, yes } = parseSwapFlags(rest);
     return exitCodeOf(await swapBackCmd(challengeId, { imageId, yes }));
 };
 
-/** A per-challenge action taking only a `{ [option]: flagPresent }` bag, then exiting 0. */
+/**
+ * A per-challenge action taking only a `{ [option]: flagPresent }` bag, then exiting 0.
+ *
+ * @param {(challengeId: string, opts: Record<string, boolean>) => Promise<unknown>} fn
+ * @param {string} option
+ * @param {string} flag
+ * @returns {(challengeId: string, rest: string[]) => Promise<number>}
+ */
 const flagAction = (fn, option, flag) => async (challengeId, rest) => {
     await fn(challengeId, { [option]: rest.includes(flag) });
     return 0;
 };
 
+/** @type {CommandHandler} */
 const runGetSetting = async (argv) => {
     const { challengeId, rest } = extractChallenge(argv);
     if (!rest[0]) return usageError('Please specify a setting key', 'Usage: get-setting <key> [--challenge=<id>]');
@@ -281,6 +345,7 @@ const runGetSetting = async (argv) => {
     return 0;
 };
 
+/** @type {CommandHandler} */
 const runSetSetting = async (argv) => {
     const { challengeId, rest } = extractChallenge(argv);
     if (!rest[0] || rest[1] === undefined) {
@@ -290,12 +355,14 @@ const runSetSetting = async (argv) => {
     return 0;
 };
 
+/** @type {CommandHandler} */
 const runResetSetting = async (argv) => {
     const { challengeId, rest } = extractChallenge(argv);
     if (!rest[0]) return usageError('Please specify a setting key', 'Usage: reset-setting <key> [--challenge=<id>]');
     return resetSetting(rest[0], challengeId) ? 0 : 1;
 };
 
+/** @type {CommandHandler} */
 const runSetGlobalDefault = async ([key, value]) => {
     if (!key || !value) {
         return usageError(
@@ -308,6 +375,7 @@ const runSetGlobalDefault = async ([key, value]) => {
     return 0;
 };
 
+/** @type {CommandHandler} */
 const runListProfiles = async (argv) => {
     const { rest } = extractChallenge(argv);
     if (rest.length > 0) return usageError(`Unexpected arguments: ${rest.join(' ')}`, 'Usage: list-profiles');
@@ -318,6 +386,12 @@ const runListProfiles = async (argv) => {
 /**
  * A scenario command taking positional arguments (quoted names, file paths)
  * and flags: requires `count` positionals, then `run(positionals, flags)`.
+ *
+ * @param {string} usage
+ * @param {number} count
+ * @param {(positionals: string[], flags: Set<string>) => number | Promise<number>} run
+ * @param {number} [maxPositionals]
+ * @returns {CommandHandler}
  */
 const scenarioCommand =
     (usage, count, run, maxPositionals = count) =>
@@ -333,6 +407,8 @@ const scenarioCommand =
  * Command table: name → `(argv) => exitCode`, where argv is everything after
  * the command name. A handler resolving `undefined` leaves the process
  * running (continuous mode).
+ *
+ * @type {Record<string, CommandHandler>}
  */
 const COMMANDS = {
     login: exitsZero(handleLogin),
@@ -432,6 +508,11 @@ const COMMANDS = {
     '-h': exitsZero(showHelp),
 };
 
+/**
+ * @param {string | undefined} name
+ * @param {string[]} argv
+ * @returns {number | Promise<number | undefined>}
+ */
 const dispatch = (name, argv) => {
     if (!name) {
         logger.withCategory('ui').info('No command specified. Use "help" to see available commands');

@@ -302,6 +302,7 @@ describe('maybeAutoFillChallenge — staggered auto-fill', () => {
     test.each([
         ['rejects with an Error', () => Promise.reject(new Error('model crashed')), 'model crashed'],
         ['rejects with a bare value', () => Promise.reject('bare failure'), 'bare failure'],
+        ['rejects with null', () => Promise.reject(null), 'null'],
         ['returns a non-array', () => Promise.resolve(null), null],
         ['returns the wrong number of ids', () => Promise.resolve([]), null],
     ])('a verifier that %s keeps the tag pick', async (_name, verifier, warning) => {
@@ -837,12 +838,15 @@ describe('maybeAutoFillChallenge — staggered auto-fill', () => {
         expect(submitToChallenge).toHaveBeenCalledWith('c1', ['preferred'], 'tok');
     });
 
-    test('error path handles thrown non-Error gracefully (no .message)', async () => {
+    test.each([
+        ['a bare value', 'string-not-error'],
+        ['null', null],
+    ])('error path handles a thrown non-Error (%s) gracefully', async (_name, thrown) => {
         const challenge = makeChallenge({ maxSubmits: 4, entries: [], closeIn: 5 * 60 });
         const fetchResult = await maybeAutoFillChallenge(challenge, 'tok', NOW, {
             settings: makeSettings({ autoFill: true }),
             logger: makeLogger(),
-            getEligiblePhotos: jest.fn().mockRejectedValue('string-not-error'),
+            getEligiblePhotos: jest.fn().mockRejectedValue(thrown),
             submitToChallenge: jest.fn(),
         });
         expect(fetchResult).toBe('error');
@@ -851,7 +855,7 @@ describe('maybeAutoFillChallenge — staggered auto-fill', () => {
             settings: makeSettings({ autoFill: true }),
             logger: makeLogger(),
             getEligiblePhotos: jest.fn().mockResolvedValue([allowedPhoto('p1')]),
-            submitToChallenge: jest.fn().mockRejectedValue('also-not-error'),
+            submitToChallenge: jest.fn().mockRejectedValue(thrown),
         });
         expect(submitResult).toBe('error');
     });
@@ -1389,27 +1393,30 @@ describe('fillChallengeNow — manual fill', () => {
         expect(result.error).toBe('network down');
     });
 
-    test('getEligiblePhotos throws non-Error → uses fallback message', async () => {
+    test.each([[{}], [null]])('getEligiblePhotos throws non-Error %p → uses fallback message', async (thrown) => {
         const challenge = makeChallenge({ maxSubmits: 2, entries: [], closeIn: 86400 });
         const result = await fillChallengeNow(challenge, 'tok', 'one', {
             logger: makeLogger(),
-            getEligiblePhotos: jest.fn().mockRejectedValue({}),
+            getEligiblePhotos: jest.fn().mockRejectedValue(thrown),
             submitToChallenge: jest.fn(),
         });
         expect(result.success).toBe(false);
         expect(result.error).toBe('Failed to fetch photos');
     });
 
-    test('submitToChallenge throws non-Error → uses fallback "Submit failed"', async () => {
-        const challenge = makeChallenge({ maxSubmits: 2, entries: [], closeIn: 86400 });
-        const result = await fillChallengeNow(challenge, 'tok', 'one', {
-            logger: makeLogger(),
-            getEligiblePhotos: jest.fn().mockResolvedValue([allowedPhoto('p1')]),
-            submitToChallenge: jest.fn().mockRejectedValue({}),
-        });
-        expect(result.success).toBe(false);
-        expect(result.error).toBe('Submit failed');
-    });
+    test.each([[{}], [null]])(
+        'submitToChallenge throws non-Error %p → uses fallback "Submit failed"',
+        async (thrown) => {
+            const challenge = makeChallenge({ maxSubmits: 2, entries: [], closeIn: 86400 });
+            const result = await fillChallengeNow(challenge, 'tok', 'one', {
+                logger: makeLogger(),
+                getEligiblePhotos: jest.fn().mockResolvedValue([allowedPhoto('p1')]),
+                submitToChallenge: jest.fn().mockRejectedValue(thrown),
+            });
+            expect(result.success).toBe(false);
+            expect(result.error).toBe('Submit failed');
+        },
+    );
 
     test('mustIncludeTags gates manual fill when fillWithoutTagMatch is off', async () => {
         const challenge = makeChallenge({ maxSubmits: 4, entries: [], closeIn: 86400 });

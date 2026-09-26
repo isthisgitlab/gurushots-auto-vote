@@ -1,3 +1,4 @@
+// @ts-check
 /**
  * CLI `logs` command. Prints the tail of one of the on-disk log files so CLI
  * users get the after-the-fact log access the Electron Logs page provides.
@@ -9,6 +10,7 @@ import * as logger from '../../logger';
 import { diagnostics } from '../../services/semantic/diagnostics';
 
 // category flag → logger path getter. Defaults to the app log.
+/** @type {Record<string, () => string | null>} */
 const LOG_FILE_GETTERS = {
     app: () => logger.getLogFile(),
     error: () => logger.getErrorLogFile(),
@@ -18,6 +20,7 @@ const LOG_FILE_GETTERS = {
 
 const showLexiconReport = () => {
     const report = diagnostics.read();
+    /** @param {Record<string, number>} words */
     const top = (words) =>
         Object.entries(words)
             .sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0]))
@@ -37,6 +40,7 @@ const showLexiconReport = () => {
     }
 };
 
+/** @param {{ category?: string, lines?: number }} [opts] */
 const showLogs = ({ category = 'app', lines = 100 } = {}) => {
     if (category === 'lexicon') return showLexiconReport();
     const getPath = LOG_FILE_GETTERS[category] || LOG_FILE_GETTERS.app;

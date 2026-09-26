@@ -1,3 +1,4 @@
+// @ts-check
 /**
  * Capacitor bridge — populates window.api with the same surface that
  * preload.js exposes on Electron, but consumes the IPC handlers
@@ -42,17 +43,47 @@ import * as androidUpdateInstaller from '../services/AndroidUpdateInstaller';
 import { hasBundledModel } from '../services/visionVerifier';
 import * as pkg from '../../../package.json';
 
+/**
+ * @import { IpcHandler } from '../ipc/registerHandlers'
+ * @import { CapacitorGlobals } from '../types/capacitor'
+ * @import { GuiLogSink } from '../logger'
+ */
+
+/**
+ * @typedef {{
+ *   currentVersion: string,
+ *   latestVersion: string | null,
+ *   releaseNotes: string,
+ *   releaseDate: string | null,
+ *   isPrerelease: boolean,
+ *   downloadUrl: string | null,
+ * }} BridgeUpdateInfo
+ */
+
+/** @typedef {(payload: unknown) => void} BridgeListener */
+
 // Cached result of the most recent check-for-updates call. download-update
 // reads this so the React UI does not need to thread the URL through.
+/** @type {BridgeUpdateInfo | null} */
 let lastUpdateInfo = null;
 
 // Tiny in-process pub/sub. Replaces webContents.send broadcasts.
+/** @type {Map<string, Set<BridgeListener>>} */
 const listeners = new Map();
+/**
+ * @param {string} channel
+ * @param {BridgeListener} fn
+ * @returns {() => boolean | undefined} unsubscribe
+ */
 const subscribe = (channel, fn) => {
     if (!listeners.has(channel)) listeners.set(channel, new Set());
-    listeners.get(channel).add(fn);
+    /** @type {Set<BridgeListener>} */ (listeners.get(channel)).add(fn);
     return () => listeners.get(channel)?.delete(fn);
 };
+/**
+ * @param {string} channel
+ * @param {unknown} [payload]
+ */
 const emit = (channel, payload) => {
     const set = listeners.get(channel);
     if (!set) return;
@@ -73,8 +104,8 @@ import { kebabToCamel, aliases, sendMethods, eventMethods } from '../ipc/manifes
 // renderer can call it as (...args). The first parameter (event) is
 // passed as null since there is no IPC event on Capacitor.
 const wrap =
-    (impl) =>
-    (...args) =>
+    (/** @type {IpcHandler} */ impl) =>
+    (/** @type {unknown[]} */ ...args) =>
         Promise.resolve(impl(null, ...args));
 
 const buildAllHandlers = () => {
@@ -82,7 +113,7 @@ const buildAllHandlers = () => {
     // mutating passthroughs) broadcasts through the local pub/sub so React's
     // onSettingsChanged subscribers fire.
     const settingsDeps = {
-        broadcastSettingsChange: (newSettings) => emit('settings-changed', newSettings),
+        broadcastSettingsChange: (/** @type {object} */ newSettings) => emit('settings-changed', newSettings),
     };
 
     // Update channels: check-for-updates uses the shared UpdateChecker
@@ -143,7 +174,8 @@ const buildAllHandlers = () => {
             const result = await androidUpdateInstaller.downloadAndInstall({
                 downloadUrl: lastUpdateInfo.downloadUrl,
                 version: lastUpdateInfo.latestVersion,
-                onProgress: (progress) => emit('update-download-progress', progress),
+                onProgress: (/** @type {{ percent?: number }} */ progress) =>
+                    emit('update-download-progress', progress),
             });
             if (result.success) {
                 // The browser is now downloading. The user finishes
@@ -202,6 +234,7 @@ const installBridge = () => {
         logger.withCategory('settings').warning('Intent profile seeding failed (non-fatal):', err);
     }
     const handlers = buildAllHandlers();
+    /** @type {Record<string, (...args: never[]) => unknown>} */
     const api = {};
 
     // Map every handler to a window.api method using kebab → camel
@@ -238,13 +271,14 @@ const installBridge = () => {
     // (useLogStream → onLogMessage) receives live entries. Electron does
     // the equivalent in log.handlers.register() by setting
     // global.sendLogToGUI; the WebView has no `global`, so use globalThis.
-    globalThis.sendLogToGUI = (entry) => emit('log-message', entry);
+    /** @type {typeof globalThis & { sendLogToGUI?: GuiLogSink }} */ (globalThis).sendLogToGUI = (entry) =>
+        emit('log-message', entry);
 
     // Event listeners, generated from the shared manifest. Each returns
     // subscribe()'s unsubscribe, matching the Electron preload contract so
     // React code does not branch per platform.
     for (const [method, channel] of Object.entries(eventMethods)) {
-        api[method] = (cb) => subscribe(channel, cb);
+        api[method] = (/** @type {BridgeListener} */ cb) => subscribe(channel, cb);
     }
 
     // Window controls the React app sometimes asks for. On mobile,
@@ -257,7 +291,7 @@ const installBridge = () => {
         return Promise.resolve({ success: true });
     };
     api.refreshMenu = () => Promise.resolve({ success: true }); // no menu on mobile
-    api.openExternalUrl = (url) => {
+    api.openExternalUrl = (/** @type {unknown} */ url) => {
         // Same https-only scheme gate as the Electron handler (shared via
         // format/urlSafe) — the two platforms must not diverge on this
         // security control. Without it the Android path would open any
@@ -270,21 +304,22 @@ const installBridge = () => {
         // to window.open. Loaded lazily so non-Capacitor paths never
         // resolve @capacitor/browser.
         try {
-            const Cap = globalThis.Capacitor;
+            const Cap = /** @type {CapacitorGlobals} */ (globalThis).Capacitor;
             if (Cap?.Plugins?.Browser?.open) {
-                return Cap.Plugins.Browser.open({ url });
+                // isSafeExternalUrl only passes a string.
+                return Cap.Plugins.Browser.open({ url: /** @type {string} */ (url) });
             }
         } catch {
             // fall through
         }
         if (typeof globalThis.open === 'function') {
-            globalThis.open(url, '_blank');
+            globalThis.open(/** @type {string} */ (url), '_blank');
         }
         return Promise.resolve({ success: true });
     };
 
     // Expose
-    globalThis.api = api;
+    /** @type {typeof globalThis & { api?: object }} */ (globalThis).api = api;
     return api;
 };
 

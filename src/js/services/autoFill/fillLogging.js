@@ -1,3 +1,4 @@
+// @ts-check
 /**
  * Auto-fill — the user-facing explanations of a fill: why a submit was
  * rejected, why a hard filter relaxed to the full library, and why popularity
@@ -7,6 +8,10 @@
 import { hasThemeMatch } from '../photoPicker';
 import { oneLine } from '../../format/logSafe';
 
+/** @import { Challenge } from '../../types/gurushots' */
+/** @import { PickFallbackInfo, ScoredCandidate } from '../../types/photoPicker' */
+/** @import { FillLogger } from '../../types/autoFill' */
+
 /**
  * Extract a concise, human-readable reason from a failed submit_to_challenge
  * response so the ok=false warning is diagnosable instead of opaque. The server
@@ -15,20 +20,23 @@ import { oneLine } from '../../format/logSafe';
  * strip tags and fall back to a truncated dump of whatever shape it is, since
  * the exact field name varies and an empty message is worse than raw JSON.
  *
- * @param {object|null} raw - the submitToChallenge `raw` response
+ * @param {unknown} raw - the submitToChallenge `raw` response
  * @returns {string}
  */
 const describeSubmitFailure = (raw) => {
     if (!raw || typeof raw !== 'object') return 'no response body';
+    /** @type {{message?: unknown, error?: unknown, error_message?: unknown, errors?: unknown}} */
+    const body = raw;
+    /** @param {unknown} s */
     const stripHtml = (s) =>
         String(s)
             .replace(/<[^>]*>/g, ' ')
             .replace(/\s+/g, ' ')
             .trim();
     // Common shapes: a top-level message/error, or a per-image errors map/array.
-    const direct = raw.message || raw.error || raw.error_message;
+    const direct = body.message || body.error || body.error_message;
     if (typeof direct === 'string' && direct.trim()) return stripHtml(direct);
-    const firstErr = Array.isArray(raw.errors) ? raw.errors[0] : null;
+    const firstErr = Array.isArray(body.errors) ? body.errors[0] : null;
     if (typeof firstErr === 'string' && firstErr.trim()) return stripHtml(firstErr);
     return stripHtml(JSON.stringify(raw)).slice(0, 300);
 };
@@ -42,6 +50,11 @@ const describeSubmitFailure = (raw) => {
  * fillNew) so the line reads like that flow's other logs. Dry-run picks (the
  * emergency-fill probe) must NOT pass this: a probe never submits, so it must
  * never warn.
+ *
+ * @param {string} prefix
+ * @param {Challenge} challenge
+ * @param {FillLogger} logger
+ * @returns {(info: PickFallbackInfo) => void}
  */
 const makeFallbackLogger = (prefix, challenge, logger) => {
     return ({ letterPrefix, mustStems, excludedStems }) => {
@@ -95,6 +108,13 @@ const makeFallbackLogger = (prefix, challenge, logger) => {
  * votes were fetched can be ranked on them, and the per-fill fetch budget means
  * a large library is measured over several fills. Saying "12 of 340" turns that
  * from a silent limitation into something the user can see and wait out.
+ *
+ * @param {string} prefix
+ * @param {Challenge} challenge
+ * @param {ScoredCandidate[]} scored
+ * @param {Set<string>} contestedIds
+ * @param {string[]} picked
+ * @param {FillLogger} logger
  */
 const logPopularityPick = (prefix, challenge, scored, contestedIds, picked, logger) => {
     // Only the SUBMITTED photos that were actually in the contested group belong
@@ -104,9 +124,11 @@ const logPopularityPick = (prefix, challenge, scored, contestedIds, picked, logg
     // popularity, and naming that first photo would claim "nothing matched the
     // theme" about a photo that did — while leaving the photos that really were
     // chosen blind unexplained.
-    const explained = picked
-        .map((id) => scored.find((entry) => String(entry.id) === String(id)))
-        .filter((entry) => entry && contestedIds.has(String(entry.id)));
+    const explained = /** @type {ScoredCandidate[]} */ (
+        picked
+            .map((id) => scored.find((entry) => String(entry.id) === String(id)))
+            .filter((entry) => entry && contestedIds.has(String(entry.id)))
+    );
     if (explained.length === 0) return;
 
     // Coverage is read off the SCORED entries, not the photo objects handed to
@@ -124,6 +146,7 @@ const logPopularityPick = (prefix, challenge, scored, contestedIds, picked, logg
     // exists to remove, so say so instead of showing a number we do not have.
     // Photo ids come from the API: collapse CR/LF before interpolating, or a
     // crafted value could forge log lines (CWE-117).
+    /** @param {ScoredCandidate} entry */
     const describe = (entry) =>
         entry.statsKnown === true
             ? `${oneLine(entry.id)} (${entry.votes} votes, ${entry.achievementCount} achievements, ${entry.views} views)`

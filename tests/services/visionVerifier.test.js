@@ -240,6 +240,7 @@ describe('rankVisually', () => {
     test.each([
         [new Error('onnx missing'), 'onnx missing'],
         ['bare failure', 'bare failure'],
+        [null, 'null'],
     ])('a model load failure (%p) keeps the tag order and warns', async (failure, detail) => {
         mockTransformers.pipeline.mockRejectedValueOnce(failure);
         const logger = makeLogger();

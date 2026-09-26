@@ -1,3 +1,4 @@
+// @ts-check
 /**
  * CLI update check. Reuses the shared GitHub Releases poller
  * (services/UpdateChecker) — the same "is there a newer version?" answer the
@@ -30,6 +31,7 @@ const cliAssetSuffix = async () => {
 // whole point — we strip them so they can't reach the terminal.
 // eslint-disable-next-line no-control-regex
 const CONTROL_CHARS = new RegExp('[\\u0000-\\u001f\\u007f-\\u009f]', 'g');
+/** @param {unknown} s */
 const plain = (s) => String(s ?? '').replace(CONTROL_CHARS, '');
 
 const checkUpdates = async () => {
@@ -47,7 +49,9 @@ const checkUpdates = async () => {
             assetSuffix: await cliAssetSuffix(),
         });
     } catch (err) {
-        ui.error(`Update check failed: ${plain(err?.message || String(err))}`);
+        ui.error(
+            `Update check failed: ${plain(/** @type {{ message?: unknown } | null | undefined} */ (err)?.message || String(err))}`,
+        );
         ui.info(`Check manually: ${updateChecker.getReleasesUrl()}`);
         return;
     }

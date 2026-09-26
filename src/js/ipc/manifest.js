@@ -1,3 +1,4 @@
+// @ts-check
 /**
  * The window.api channel manifest — single source of truth for the surface
  * both platform shells expose to the renderer:
@@ -159,7 +160,12 @@ const eventMethods = /** @type {const} */ ({
 });
 
 // Shared kebab-case → camelCase (both shells must agree on this mapping).
-const kebabToCamel = (channel) => channel.replace(/-([a-z0-9])/g, (_, c) => c.toUpperCase());
+/**
+ * @param {string} channel
+ * @returns {string}
+ */
+const kebabToCamel = (channel) =>
+    channel.replace(/-([a-z0-9])/g, (/** @type {string} */ _, /** @type {string} */ c) => c.toUpperCase());
 
 // The full invoke-channel set including alias targets — what the main
 // process must actually register handlers for.

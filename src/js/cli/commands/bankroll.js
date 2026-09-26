@@ -1,3 +1,4 @@
+// @ts-check
 /**
  * CLI bankroll command: prints the account currency balances
  * (keys/swaps/fills/coins). Reuses the shared IPC handler so the
@@ -9,7 +10,11 @@ import { ensureAuthenticated } from '../guards';
 
 // Lazily built, invoked with a null event (same reuse pattern as
 // commands/actions.js / commands/voting.js).
+/** @import { NullEventHandlers } from '../../types/cli' */
+/** @typedef {NullEventHandlers<ReturnType<typeof import('../../ipc/actions.handlers').buildHandlers>>} ActionHandlers */
+/** @type {ActionHandlers | undefined} */
 let _handlers;
+/** @returns {ActionHandlers} */
 const handlers = () => (_handlers ??= require('../../ipc/actions.handlers').buildHandlers());
 
 const showBankroll = async () => {

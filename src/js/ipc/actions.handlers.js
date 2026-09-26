@@ -1,3 +1,4 @@
+// @ts-check
 /**
  * IPC handlers for direct user-triggered actions: authenticate,
  * play-auto-turbo, apply-turbo-to-entry, apply-boost-to-entry, and
@@ -21,19 +22,44 @@ import { getAutoClaimStatus } from '../services/autoClaim';
 import { findActiveChallenge } from '../services/findActiveChallenge';
 import { rememberChallenges } from '../windows/quitGuard';
 
+/**
+ * @import { IpcMain } from 'electron'
+ * @import { IpcHandlerMap, IpcReplyFn } from './registerHandlers'
+ * @import { ApiStrategy } from '../apiFactory'
+ * @import { joinChallengeSingle } from '../services/joinChallenges'
+ * @import { ActiveChallengesResponse, Bankroll, Challenge, TurboMiniGameResult } from '../types/gurushots'
+ */
+
+/**
+ * applyTurbo's `{ ok, raw }` as this module reads it: `raw` is the untrusted
+ * upstream body, of which only a redacted summary is ever logged or returned.
+ *
+ * @typedef {{ ok?: boolean, raw?: { success?: unknown, error_code?: unknown, message?: unknown } | null }} ApplyTurboResult
+ */
+
 // In-process guard that prevents two simultaneous mini-game runs on
 // the same challenge — defends against double-click and against an
 // autovote cycle racing with a manual click.
+/** @type {Set<string>} */
 const turboMiniGameInFlight = new Set();
 
 const sanitizeForLog = logger.sanitizeLogString;
 
-/** Re-fetch the active list and resolve one challenge from it (null when it is gone). */
+/**
+ * Re-fetch the active list and resolve one challenge from it (null when it is gone).
+ *
+ * @param {ApiStrategy} strategy
+ * @param {string} token
+ * @param {string | number} challengeId
+ * @returns {Promise<Challenge | null>}
+ */
 const fetchLiveChallenge = async (strategy, token, challengeId) => {
+    /** @type {ActiveChallengesResponse | null} */
     const challengesResponse = await strategy.getActiveChallenges(token);
     return findActiveChallenge(challengesResponse?.challenges, challengeId);
 };
 
+/** @satisfies {IpcReplyFn} */
 const handleGetAutoClaimStatus = async () => {
     try {
         return { success: true, ...getAutoClaimStatus() };
@@ -43,11 +69,18 @@ const handleGetAutoClaimStatus = async () => {
     }
 };
 
+/**
+ * @param {unknown} event
+ * @param {string} token
+ * @returns {Promise<ActiveChallengesResponse>}
+ * @satisfies {IpcReplyFn}
+ */
 const handleGetActiveChallenges = async (event, token) => {
     try {
         logger.withCategory('api').debug('=== IPC get-active-challenges ===', null);
         logger.withCategory('api').debug(`Token received: ${!!token}`, null);
         const strategy = apiFactory.getApiStrategy();
+        /** @type {ActiveChallengesResponse} */
         const result = await strategy.getActiveChallenges(token);
         // Feeds the quit confirmation. A failed fetch keeps the previous
         // list — an empty one would wave through a quit mid-boost-window.
@@ -64,14 +97,17 @@ const handleGetActiveChallenges = async (event, token) => {
     }
 };
 
+/**
+ * @param {unknown} event
+ * @param {string} username
+ * @param {string} password
+ * @param {boolean} isMock
+ * @satisfies {IpcReplyFn}
+ */
 const handleAuthenticate = async (event, username, password, isMock) => {
     logger
-        .withCategory('general')
-        .info(
-            `🔐 Authentication request received - Mock: ${isMock}, Username: ${username}`,
-            null,
-            logger.CATEGORIES.AUTHENTICATION,
-        );
+        .withCategory(logger.CATEGORIES.AUTHENTICATION)
+        .info(`🔐 Authentication request received - Mock: ${isMock}, Username: ${username}`, null);
     try {
         // Route through the factory (no direct api/mock imports) and the
         // shared token normalizer. The explicit isMock arg from the login
@@ -100,6 +136,10 @@ const handleAuthenticate = async (event, username, password, isMock) => {
  * declined (null when it may). Bypasses the autoTurbo setting check — the
  * user is explicitly opting in by clicking — but still requires an open
  * challenge and a playable turbo state.
+ *
+ * @param {Challenge} liveChallenge
+ * @param {number} now - Unix seconds
+ * @returns {string | null}
  */
 const turboUnplayableError = (liveChallenge, now) => {
     const turboState = liveChallenge.member?.turbo?.state;
@@ -119,6 +159,8 @@ const turboUnplayableError = (liveChallenge, now) => {
  * Whitelist the fields returned to the renderer so any future expansion of
  * runTurboMiniGame's internal result shape never accidentally leaks new data
  * over IPC.
+ *
+ * @param {TurboMiniGameResult | null | undefined} result
  */
 const toSafeTurboResult = (result) =>
     result
@@ -131,7 +173,12 @@ const toSafeTurboResult = (result) =>
           }
         : null;
 
-/** Map a mini-game summary to the handler's `{success, error?, result}` reply. */
+/**
+ * Map a mini-game summary to the handler's `{success, error?, result}` reply.
+ *
+ * @param {TurboMiniGameResult | null | undefined} result
+ * @satisfies {IpcReplyFn}
+ */
 const turboRunResponse = (result) => {
     const safeResult = toSafeTurboResult(result);
     if (result?.played === 0) {
@@ -143,7 +190,14 @@ const turboRunResponse = (result) => {
     return { success: true, result: safeResult };
 };
 
-/** The live-fetch, playability check and mini-game run, inside the in-flight slot. */
+/**
+ * The live-fetch, playability check and mini-game run, inside the in-flight slot.
+ *
+ * @param {string | number} challengeId
+ * @param {string} safeTitle
+ * @param {string} token
+ * @satisfies {IpcReplyFn}
+ */
 const runManualTurbo = async (challengeId, safeTitle, token) => {
     const strategy = apiFactory.getApiStrategy();
     const liveChallenge = await fetchLiveChallenge(strategy, token, challengeId);
@@ -156,6 +210,7 @@ const runManualTurbo = async (challengeId, safeTitle, token) => {
         if (unplayable) return { success: false, error: unplayable };
     }
 
+    /** @type {TurboMiniGameResult | null} */
     const result = await strategy.runTurboMiniGame(
         { id: liveChallenge.id, title: liveChallenge.title || safeTitle },
         token,
@@ -166,6 +221,12 @@ const runManualTurbo = async (challengeId, safeTitle, token) => {
 // Manual run of the Turbo mini-game on a single challenge.
 // Independent of autovote — gives the user a way to earn a Turbo on
 // demand without enabling continuous voting.
+/**
+ * @param {unknown} event
+ * @param {string | number} challengeId
+ * @param {string} challengeTitle
+ * @satisfies {IpcReplyFn}
+ */
 const handlePlayAutoTurbo = async (event, challengeId, challengeTitle) => {
     const safeId = sanitizeForLog(challengeId);
     const safeTitle = sanitizeForLog(challengeTitle) || `challenge ${safeId}`;
@@ -195,6 +256,12 @@ const handlePlayAutoTurbo = async (event, challengeId, challengeTitle) => {
     }
 };
 
+/**
+ * @param {unknown} event
+ * @param {string | number} challengeId
+ * @param {string} imageId
+ * @satisfies {IpcReplyFn}
+ */
 const handleApplyTurboToEntry = async (event, challengeId, imageId) => {
     const safeChallengeId = sanitizeForLog(challengeId);
     const safeImageId = sanitizeForLog(imageId);
@@ -205,6 +272,7 @@ const handleApplyTurboToEntry = async (event, challengeId, imageId) => {
         const guard = auth.requireAuthToken('turbo apply');
         if (!guard.ok) return guard.response;
         const strategy = apiFactory.getApiStrategy();
+        /** @type {ApplyTurboResult | null} */
         const result = await strategy.applyTurbo(challengeId, imageId, guard.token);
 
         if (result?.ok) {
@@ -227,7 +295,11 @@ const handleApplyTurboToEntry = async (event, challengeId, imageId) => {
     }
 };
 
-/** Map a fillChallengeNow result to the handler's reply. */
+/**
+ * Map a fillChallengeNow result to the handler's reply.
+ *
+ * @param {{ success: boolean, submitted: number, skipped: number, error?: string }} result
+ */
 const fillResponse = (result) => ({
     success: result.success === true,
     submitted: result.submitted,
@@ -240,6 +312,12 @@ const fillResponse = (result) => ({
 // a single slot with the best-ranked eligible photo; mode = 'all' fills
 // every empty slot in one batch. Bypasses both the autoFill toggle and
 // the spacing math — manual click is explicit user intent.
+/**
+ * @param {unknown} event
+ * @param {string | number} challengeId
+ * @param {unknown} mode - `'all'`, anything else means `'one'`.
+ * @satisfies {IpcReplyFn}
+ */
 const handleFillChallengeNow = async (event, challengeId, mode) => {
     const safeChallengeId = sanitizeForLog(challengeId);
     const safeMode = mode === 'all' ? 'all' : 'one';
@@ -272,8 +350,15 @@ const handleFillChallengeNow = async (event, challengeId, mode) => {
     }
 };
 
-const logBoostRequest = (message) => logger.withCategory('general').info(message, null, logger.CATEGORIES.VOTING);
+/** @param {string} message */
+const logBoostRequest = (message) => logger.withCategory(logger.CATEGORIES.VOTING).info(message, null);
 
+/**
+ * @param {unknown} event
+ * @param {string | number} challengeId
+ * @param {string} imageId
+ * @satisfies {IpcReplyFn}
+ */
 const handleApplyBoostToEntry = async (event, challengeId, imageId) => {
     // Sanitize before logging (matches the sibling turbo/fill handlers) —
     // these args can be arbitrary user input via the CLI `boost --image=`.
@@ -305,11 +390,13 @@ const handleApplyBoostToEntry = async (event, challengeId, imageId) => {
 // Account currency balances (keys/swaps/fills/coins). success:false means
 // the balance could not be read — the renderer/CLI must NOT render 0 in that
 // case (0 would wrongly imply an empty balance).
+/** @satisfies {IpcReplyFn} */
 const handleGetBankroll = async () => {
     try {
         const guard = auth.requireAuthToken('bankroll');
         if (!guard.ok) return guard.response;
         const strategy = apiFactory.getApiStrategy();
+        /** @type {Bankroll | null} */
         const bankroll = await strategy.getBankroll(guard.token);
         if (!bankroll) {
             return { success: false, error: 'Could not read your balance right now' };
@@ -330,6 +417,7 @@ const handleGetBankroll = async () => {
 
 // Whether auto-join is armed (master on OR a title profile enables it) —
 // drives the header "auto-join" indicator. Settings-only, no auth needed.
+/** @satisfies {IpcReplyFn} */
 const handleGetAutoJoinActive = async () => {
     try {
         return { success: true, active: isAutoJoinActive() === true };
@@ -340,11 +428,17 @@ const handleGetAutoJoinActive = async () => {
 };
 
 // List un-joined ("open") challenges for the Discover view / CLI.
+/**
+ * @param {unknown} [event]
+ * @param {string} [filter] - Server-side filter; defaults to 'open'.
+ * @satisfies {IpcReplyFn}
+ */
 const handleGetMemberChallenges = async (event, filter) => {
     try {
         const guard = auth.requireAuthToken('member challenges');
         if (!guard.ok) return guard.response;
         const strategy = apiFactory.getApiStrategy();
+        /** @type {Challenge[] | null} */
         const items = await strategy.getMemberChallenges(guard.token, filter === undefined ? 'open' : filter);
         return { success: true, items: Array.isArray(items) ? items : [] };
     } catch (error) {
@@ -357,6 +451,12 @@ const handleGetMemberChallenges = async (event, filter) => {
 // service returns status 'needs-confirm' and nothing is charged. The
 // service re-fetches the live candidate and holds a shared in-flight lock,
 // so this handler stays thin.
+/**
+ * @param {unknown} event
+ * @param {string | number} challengeId
+ * @param {boolean} [spendCoins] - Only `true` authorizes a paid join.
+ * @satisfies {IpcReplyFn}
+ */
 const handleJoinChallenge = async (event, challengeId, spendCoins) => {
     const safeId = sanitizeForLog(challengeId);
     try {
@@ -366,6 +466,7 @@ const handleJoinChallenge = async (event, challengeId, spendCoins) => {
         const guard = auth.requireAuthToken('join');
         if (!guard.ok) return guard.response;
         const strategy = apiFactory.getApiStrategy();
+        /** @type {Awaited<ReturnType<typeof joinChallengeSingle>> | null} */
         const outcome = await strategy.joinChallenge(challengeId, spendCoins === true, guard.token);
         return {
             success: outcome?.status === 'joined',
@@ -380,20 +481,22 @@ const handleJoinChallenge = async (event, challengeId, spendCoins) => {
     }
 };
 
-const buildHandlers = () => ({
-    'get-auto-claim-status': handleGetAutoClaimStatus,
-    'get-active-challenges': handleGetActiveChallenges,
-    authenticate: handleAuthenticate,
-    'play-auto-turbo': handlePlayAutoTurbo,
-    'apply-turbo-to-entry': handleApplyTurboToEntry,
-    'fill-challenge-now': handleFillChallengeNow,
-    'apply-boost-to-entry': handleApplyBoostToEntry,
-    'get-bankroll': handleGetBankroll,
-    'get-auto-join-active': handleGetAutoJoinActive,
-    'get-member-challenges': handleGetMemberChallenges,
-    'join-challenge': handleJoinChallenge,
-});
+const buildHandlers = () =>
+    /** @satisfies {IpcHandlerMap} */ ({
+        'get-auto-claim-status': handleGetAutoClaimStatus,
+        'get-active-challenges': handleGetActiveChallenges,
+        authenticate: handleAuthenticate,
+        'play-auto-turbo': handlePlayAutoTurbo,
+        'apply-turbo-to-entry': handleApplyTurboToEntry,
+        'fill-challenge-now': handleFillChallengeNow,
+        'apply-boost-to-entry': handleApplyBoostToEntry,
+        'get-bankroll': handleGetBankroll,
+        'get-auto-join-active': handleGetAutoJoinActive,
+        'get-member-challenges': handleGetMemberChallenges,
+        'join-challenge': handleJoinChallenge,
+    });
 
+/** @param {IpcMain} ipcMain */
 const register = (ipcMain) => {
     registerHandlers(ipcMain, buildHandlers());
 };

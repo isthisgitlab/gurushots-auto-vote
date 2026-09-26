@@ -1,3 +1,4 @@
+// @ts-check
 /**
  * Where a challenge is in its assigned scenario — one read shared by the
  * Node-side scheduler resolver (scheduling/nodeResolvers.js), the
@@ -9,6 +10,10 @@ import * as settings from '../settings';
 import { DEFAULT_TIMEZONE } from '../settings/uiDefaults';
 import { scenarioStateLedger, mockScenarioStateLedger } from '../scenarioStateStore';
 
+/** @import { ScenarioState } from '../types/stores' */
+/** @import { ScenarioDocument } from '../settings/scenarioSchema' */
+/** @import { ScenarioStateLedger } from '../types/votingPass' */
+
 /**
  * Mock mode keeps scenario state in memory — the same process-wide ledger the
  * mock voting pass writes.
@@ -17,8 +22,8 @@ const ledgerForMode = () => (settings.getSetting('mock') === true ? mockScenario
 
 /**
  * @param {string|number} challengeId
- * @param {object} [ledger] - defaults to the ledger for the current mode
- * @returns {{assigned: string, scenario: object|null, state: object|null, corrupt: boolean, timezone: string}}
+ * @param {ScenarioStateLedger} [ledger] - defaults to the ledger for the current mode
+ * @returns {{assigned: string, scenario: ScenarioDocument|null, state: ScenarioState|null, corrupt: boolean, timezone: string}}
  *   `assigned` is the challenge's `scenario` setting ('' = none); `scenario`
  *   is null when that name is unknown; `state` is null until the plan starts
  *   (or when it belongs to another scenario); `corrupt` means unreadable state.
@@ -38,7 +43,7 @@ const getScenarioStatus = (challengeId, ledger = ledgerForMode()) => {
  * The input the scheduler's scenario boundary needs, or null when nothing can
  * run for this challenge (no known scenario, or unreadable state).
  *
- * @param {{scenario: object|null, state: object|null, corrupt: boolean, timezone: string}} status
+ * @param {{scenario: ScenarioDocument|null, state: ScenarioState|null, corrupt: boolean, timezone: string}} status
  */
 const scenarioWakeInput = ({ scenario, state, corrupt, timezone }) =>
     scenario && !corrupt ? { scenario, state, timezone } : null;

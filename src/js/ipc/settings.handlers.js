@@ -1,3 +1,4 @@
+// @ts-check
 /**
  * IPC handlers for everything settings-shaped: load/save, schema,
  * boost thresholds, per-challenge overrides, and the bulk-registered
@@ -12,6 +13,7 @@
 // BrowserWindow is only used by the Electron register() path. Lazy-
 // require so this module can be bundled into the Capacitor renderer
 // without esbuild trying to resolve electron.
+/** @type {typeof import('electron').BrowserWindow | null} */
 let BrowserWindow = null;
 try {
     BrowserWindow = require('electron').BrowserWindow;
@@ -25,9 +27,32 @@ import * as logger from '../logger';
 import * as apiFactory from '../apiFactory';
 import * as metadata from '../metadata';
 
+/**
+ * @import { IpcMain } from 'electron'
+ * @import { IpcHandlerMap } from './registerHandlers'
+ * @import { IpcHandler } from './registerHandlers'
+ * @import { SettingsSchemaEntry } from '../settings/schema'
+ * @import { AppSettings } from '../types/settings'
+ */
+
+/**
+ * The renderer-facing projection of one schema entry (no validators).
+ *
+ * @typedef {Pick<SettingsSchemaEntry,
+ *   'type' | 'default' | 'perChallenge' | 'group' | 'label' | 'description' | 'helpKey' | 'min' | 'max' | 'unit'>
+ *   & { challengeOnly: boolean }} SerializableSchemaEntry
+ */
+
+/**
+ * A settings write listener: receives the settings to broadcast to every
+ * renderer after a successful user-facing write.
+ *
+ * @typedef {(settings: object) => void} BroadcastSettingsChange
+ */
+
 // Channels that just delegate to settings.<method>(...args). Each
 // entry: [channel, method-name, fallback-on-error, verb-for-log].
-const THIN_HANDLERS = [
+const THIN_HANDLERS = /** @type {const} */ ([
     ['get-validation-error', 'getValidationError', 'Validation error', 'getting validation error'],
     ['get-global-default', 'getGlobalDefault', null, 'getting global default'],
     ['set-global-default', 'setGlobalDefault', false, 'setting global default'],
@@ -53,7 +78,19 @@ const THIN_HANDLERS = [
     ['reset-all-settings', 'resetAllSettings', false, 'resetting all settings'],
     ['is-setting-modified', 'isSettingModified', false, 'checking if setting is modified'],
     ['is-global-default-modified', 'isGlobalDefaultModified', false, 'checking if global default is modified'],
-];
+]);
+
+/**
+ * Each thin channel as a handler: the facade method's arguments, resolving to
+ * its result or the row's fallback on error.
+ *
+ * @typedef {{
+ *   [E in (typeof THIN_HANDLERS)[number] as E[0]]: (
+ *     event: unknown,
+ *     ...args: Parameters<(typeof settings)[E[1]]>
+ *   ) => Promise<ReturnType<(typeof settings)[E[1]]> | E[2]>
+ * }} ThinHandlers
+ */
 
 // Capacitor has no filesystem watcher to rebroadcast settings mutations, and
 // Electron's watcher reloads only the main window for reload-required keys.
@@ -76,8 +113,9 @@ const CHANGE_BROADCAST_CHANNELS = new Set([
     'reset-all-settings',
 ]);
 
+/** @param {{ broadcastSettingsChange?: BroadcastSettingsChange }} [deps] */
 const buildHandlers = ({ broadcastSettingsChange } = {}) => {
-    const handlers = {
+    const handlers = /** @satisfies {IpcHandlerMap} */ ({
         'get-settings': async () => {
             try {
                 return settings.loadSettings();
@@ -87,7 +125,7 @@ const buildHandlers = ({ broadcastSettingsChange } = {}) => {
             }
         },
 
-        'get-setting': async (event, key) => {
+        'get-setting': async (/** @type {unknown} */ event, /** @type {unknown} */ key) => {
             try {
                 if (typeof key !== 'string') {
                     throw new Error('Invalid key type, expected string');
@@ -95,12 +133,19 @@ const buildHandlers = ({ broadcastSettingsChange } = {}) => {
                 return settings.getSetting(key);
             } catch (error) {
                 logger.withCategory('settings').error(`Error handling get-setting request for key "${key}":`, error);
-                const defaultSettings = settings.getDefaultSettings();
-                return defaultSettings[key] !== undefined ? defaultSettings[key] : null;
+                // A non-string key reaches here too; indexing coerces it like any
+                // property access (and misses, falling back to null).
+                const defaultSettings = /** @type {Record<string, unknown>} */ (settings.getDefaultSettings());
+                const k = /** @type {string} */ (key);
+                return defaultSettings[k] !== undefined ? defaultSettings[k] : null;
             }
         },
 
-        'set-setting': async (event, key, value) => {
+        'set-setting': async (
+            /** @type {unknown} */ event,
+            /** @type {unknown} */ key,
+            /** @type {unknown} */ value,
+        ) => {
             try {
                 if (typeof key !== 'string') {
                     throw new Error('Invalid key type, expected string');
@@ -116,12 +161,13 @@ const buildHandlers = ({ broadcastSettingsChange } = {}) => {
             }
         },
 
-        'save-settings': async (event, newSettings) => {
+        'save-settings': async (/** @type {unknown} */ event, /** @type {unknown} */ newSettings) => {
             try {
                 if (typeof newSettings !== 'object' || newSettings === null) {
                     throw new Error('Invalid settings type, expected object');
                 }
-                const result = settings.saveSettings(newSettings);
+                // Only the object shape is checked here; the facade validates each key.
+                const result = settings.saveSettings(/** @type {Partial<AppSettings>} */ (newSettings));
                 if (result && typeof broadcastSettingsChange === 'function') {
                     broadcastSettingsChange(newSettings);
                 }
@@ -159,7 +205,7 @@ const buildHandlers = ({ broadcastSettingsChange } = {}) => {
             }
         },
 
-        'get-boost-threshold': async (event, challengeId) => {
+        'get-boost-threshold': async (/** @type {unknown} */ event, /** @type {string | number} */ challengeId) => {
             try {
                 return settings.getEffectiveSetting('boostTime', challengeId);
             } catch (error) {
@@ -168,7 +214,11 @@ const buildHandlers = ({ broadcastSettingsChange } = {}) => {
             }
         },
 
-        'set-boost-threshold': async (event, challengeId, threshold) => {
+        'set-boost-threshold': async (
+            /** @type {unknown} */ event,
+            /** @type {string | number} */ challengeId,
+            /** @type {number} */ threshold,
+        ) => {
             try {
                 settings.setChallengeOverride('boostTime', challengeId.toString(), threshold);
                 return { success: true };
@@ -178,7 +228,7 @@ const buildHandlers = ({ broadcastSettingsChange } = {}) => {
             }
         },
 
-        'set-default-boost-threshold': async (event, threshold) => {
+        'set-default-boost-threshold': async (/** @type {unknown} */ event, /** @type {number} */ threshold) => {
             try {
                 settings.setGlobalDefault('boostTime', threshold);
                 return { success: true };
@@ -190,8 +240,11 @@ const buildHandlers = ({ broadcastSettingsChange } = {}) => {
 
         'get-settings-schema': async () => {
             try {
+                /** @type {Record<string, SettingsSchemaEntry>} */
                 const schema = settings.SETTINGS_SCHEMA;
+                /** @type {Record<string, SerializableSchemaEntry>} */
                 const serializableSchema = {};
+                /** @type {Record<string, unknown>} */
                 const defaults = {};
                 Object.keys(schema).forEach((key) => {
                     serializableSchema[key] = {
@@ -228,7 +281,7 @@ const buildHandlers = ({ broadcastSettingsChange } = {}) => {
             }
         },
 
-        'cleanup-stale-metadata': async (event, activeChallengeIds) => {
+        'cleanup-stale-metadata': async (/** @type {unknown} */ event, /** @type {string[]} */ activeChallengeIds) => {
             try {
                 return metadata.cleanupStaleMetadata(activeChallengeIds);
             } catch (error) {
@@ -236,12 +289,15 @@ const buildHandlers = ({ broadcastSettingsChange } = {}) => {
                 return false;
             }
         },
-    };
+    });
 
+    // The thin rows are added in place; ThinHandlers types them on the result.
+    const thinHandlers = /** @type {Record<string, IpcHandler>} */ (/** @type {unknown} */ (handlers));
     THIN_HANDLERS.forEach(([channel, method, fallback, verb]) => {
-        handlers[channel] = async (event, ...args) => {
+        thinHandlers[channel] = async (event, ...args) => {
             try {
-                const result = settings[method](...args);
+                // Dynamic dispatch over the table's facade methods.
+                const result = /** @type {(...a: unknown[]) => unknown} */ (settings[method])(...args);
                 if (result && CHANGE_BROADCAST_CHANNELS.has(channel) && typeof broadcastSettingsChange === 'function') {
                     broadcastSettingsChange(settings.loadSettings());
                 }
@@ -253,14 +309,17 @@ const buildHandlers = ({ broadcastSettingsChange } = {}) => {
         };
     });
 
-    return handlers;
+    return /** @type {typeof handlers & ThinHandlers} */ (handlers);
 };
 
+/** @param {IpcMain} ipcMain */
 const register = (ipcMain) => {
+    /** @type {BroadcastSettingsChange} */
     const broadcastSettingsChange = (newSettings) => {
         // A window closing mid-save must not turn a landed write into a
-        // reported failure (a send to a destroyed window throws).
-        BrowserWindow.getAllWindows().forEach((win) => {
+        // reported failure (a send to a destroyed window throws). register()
+        // only runs under Electron, where BrowserWindow resolved.
+        /** @type {typeof import('electron').BrowserWindow} */ (BrowserWindow).getAllWindows().forEach((win) => {
             if (!win.isDestroyed()) win.webContents.send('settings-changed', newSettings);
         });
     };

@@ -1,3 +1,4 @@
+// @ts-check
 /**
  * Semantic match scorer - the autofill picker's "meaning" signal.
  *
@@ -64,12 +65,16 @@ import * as lexicon from './lexicon';
 import { diagnostics, shouldCollect } from './diagnostics';
 import { buildThemeAlternatives, labelStemGroups, SEMANTIC_MATCH_FLOOR, SEMANTIC_SUPPORT_CAP } from '../photoPicker';
 
+/** @import { ChallengeText, IgnoreWords, PickerPhoto, SemanticScore } from '../../types/photoPicker' */
+
+/** @param {number} n */
 const clamp01 = (n) => Math.max(0, Math.min(1, n));
 
 // Bucket to whole percent before comparing, exactly as photoPicker's semantic
 // tier does with the headline score. Same quantity, same floor, same rounding -
 // so a label that counts as on-theme here is one the picker would also call
 // on-theme, with no half-percent disagreement at the boundary.
+/** @param {number} sim */
 const clearsFloor = (sim) => Math.round(clamp01(sim) * 100) >= SEMANTIC_MATCH_FLOOR;
 
 /**
@@ -77,13 +82,14 @@ const clearsFloor = (sim) => Math.round(clamp01(sim) * 100) >= SEMANTIC_MATCH_FL
  * ranks on: the MAX across labels (the headline score) and the COUNT of labels
  * clearing the floor (its support). Both come off the same single pass.
  *
- * @param {Array<number>} challengeVec - the pooled theme vector
+ * @param {ArrayLike<number>} challengeVec - the pooled theme vector
  * @param {Array<Array<string>>} groups - word stems, grouped per label
- * @param {function(Array<string>): (Array<number>|null)} embed
- * @returns {{score: number, support: number}|null} null when NO label was in
+ * @param {(tokens: string[]) => (ArrayLike<number>|null)} embed
+ * @returns {SemanticScore|null} null when NO label was in
  *   vocabulary — no signal, which is distinct from a measured miss at 0.
  */
 const poolLabels = (challengeVec, groups, embed) => {
+    /** @type {number | null} */
     let best = null;
     let support = 0;
     for (const tokens of groups) {
@@ -107,14 +113,19 @@ const poolLabels = (challengeVec, groups, embed) => {
 // challenge themes repeat across fill cycles, so this keeps scoring near-free.
 // Cleared wholesale on overflow - a coarse bound is enough.
 const MAX_CACHE = 4000;
+/** @type {Map<string, Float64Array | null>} */
 const vecCache = new Map();
 
+/**
+ * @param {string[]} tokens
+ * @returns {Float64Array | null}
+ */
 const embedCached = (tokens) => {
     // Sorted JSON key: mean-pooling is order-independent, so token order must
     // not split the cache; the array form also avoids cross-token collisions
     // (e.g. ['ca','t'] vs ['c','at']).
     const key = JSON.stringify([...tokens].sort());
-    if (vecCache.has(key)) return vecCache.get(key);
+    if (vecCache.has(key)) return /** @type {Float64Array | null} */ (vecCache.get(key));
     const vec = lexicon.embed(tokens) || null;
     if (vecCache.size >= MAX_CACHE) vecCache.clear();
     vecCache.set(key, vec);
@@ -123,10 +134,18 @@ const embedCached = (tokens) => {
 
 // Observe only the words the scorer actually considers. No challenge IDs,
 // titles, photo IDs, or full labels are written to the diagnostics store.
+/**
+ * @param {ChallengeText | null | undefined} challenge
+ * @param {string[]} keywords
+ * @param {PickerPhoto[]} photos
+ * @param {Map<string, SemanticScore> | null} scores - non-null whenever hasThemeVector is true
+ * @param {boolean} hasThemeVector
+ */
 const observeVocabulary = (challenge, keywords, photos, scores, hasThemeVector) => {
     try {
         if (!shouldCollect()) return;
         const themeWords = keywords.filter((word) => !lexicon.hasVector(word));
+        /** @type {Set<string>} */
         const labelWords = new Set();
         let hasLabelVector = false;
         for (const photo of photos) {
@@ -142,7 +161,11 @@ const observeVocabulary = (challenge, keywords, photos, scores, hasThemeVector) 
             labelWords: [...labelWords],
             noThemeVector: !hasThemeVector,
             noLabelVectors: !hasLabelVector,
-            noOnThemeScore: hasThemeVector && ![...scores.values()].some((entry) => clearsFloor(entry.score)),
+            noOnThemeScore:
+                hasThemeVector &&
+                ![.../** @type {Map<string, SemanticScore>} */ (scores).values()].some((entry) =>
+                    clearsFloor(entry.score),
+                ),
         });
     } catch {
         // Observation must never disable semantic ranking.
@@ -150,9 +173,10 @@ const observeVocabulary = (challenge, keywords, photos, scores, hasThemeVector) 
 };
 
 /**
- * @param {object} challenge - challenge object (url/title/welcome_message used)
- * @param {Array<object>} photos - eligible candidates with `id` and `labels`
- * @returns {Promise<Map<string, {score: number, support: number}>|null>}
+ * @param {ChallengeText | null | undefined} challenge - challenge object (url/title/welcome_message used)
+ * @param {PickerPhoto[]} photos - eligible candidates with `id` and `labels`
+ * @param {IgnoreWords} [ignoreWords]
+ * @returns {Promise<Map<string, SemanticScore>|null>}
  *   per-photo best-label similarity in 0..1 plus its count of on-theme labels
  *   (0..SEMANTIC_SUPPORT_CAP), or null when the lexicon is unavailable / the
  *   challenge has no usable theme text.
@@ -167,12 +191,13 @@ const getSemanticScores = async (challenge, photos, ignoreWords = null) => {
         const alternatives = buildThemeAlternatives(challenge, ignoreWords);
         const keywords = alternatives.flat();
         if (!keywords || keywords.length === 0) return null;
-        const challengeVecs = alternatives.map(embedCached).filter(Boolean);
+        const challengeVecs = /** @type {Float64Array[]} */ (alternatives.map(embedCached).filter(Boolean));
         if (challengeVecs.length === 0) {
             observeVocabulary(challenge, keywords, photos, null, false);
             return null;
         }
 
+        /** @type {Map<string, SemanticScore>} */
         const scores = new Map();
         for (const photo of photos) {
             const id = photo && photo.id;
@@ -183,10 +208,9 @@ const getSemanticScores = async (challenge, photos, ignoreWords = null) => {
             // stems each label while keeping them separate, which is what lets
             // the max below be taken over labels rather than words.
             const groups = labelStemGroups(photo);
-            const pooled = challengeVecs
-                .map((challengeVec) => poolLabels(challengeVec, groups, embedCached))
-                .filter(Boolean)
-                .sort((a, b) => b.score - a.score)[0];
+            const pooled = /** @type {SemanticScore[]} */ (
+                challengeVecs.map((challengeVec) => poolLabels(challengeVec, groups, embedCached)).filter(Boolean)
+            ).sort((a, b) => b.score - a.score)[0];
             // Every label out of vocabulary -> no signal. That is
             // distinct from "scored 0", which is a measured miss.
             if (pooled) scores.set(String(id), pooled);

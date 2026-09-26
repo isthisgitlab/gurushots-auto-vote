@@ -1,3 +1,4 @@
+// @ts-check
 /**
  * CLI voting commands: per-cycle vote runs (manual + strategy),
  * continuous-mode entry point with signal handlers, and the status
@@ -21,7 +22,12 @@ import { clearTokenUnlessStayingLoggedIn } from '../../services/auth';
 // bypassing thresholds). Built lazily on first use so loading this module for
 // status/scheduling commands doesn't construct the handler set; invoked with
 // a null event.
+/** @import { NullEventHandlers } from '../../types/cli' */
+/** @import { Challenge } from '../../types/gurushots' */
+/** @typedef {NullEventHandlers<ReturnType<typeof import('../../ipc/voting.handlers').buildHandlers>>} VotingHandlers */
+/** @type {VotingHandlers | undefined} */
 let _votingHandlers;
+/** @returns {VotingHandlers} */
 const votingHandlers = () => (_votingHandlers ??= require('../../ipc/voting.handlers').buildHandlers());
 
 /**
@@ -30,7 +36,9 @@ const votingHandlers = () => (_votingHandlers ??= require('../../ipc/voting.hand
  * {challengeId} to scope a strategy cycle to a single challenge —
  * ignored when isManual is true.
  *
- * @returns {Promise<{success:boolean, challenges:Array|null}>} `challenges` is the
+ * @param {number} [cycleNumber]
+ * @param {{ isManual?: boolean, challengeId?: string | null }} [opts]
+ * @returns {Promise<{success:boolean, challenges:Challenge[]|null}>} `challenges` is the
  *   full active list the strategy cycle fetched (null for the manual path or any
  *   failure), letting the scheduler reuse it for threshold scheduling.
  */
@@ -58,6 +66,7 @@ const runVotingCycle = async (cycleNumber = 1, { isManual = false, challengeId =
         // Capture the strategy cycle's challenge list so the scheduler can hand it
         // to the threshold step (avoids a duplicate getActiveChallenges fetch). The
         // manual path votes-to-100% and surfaces no list.
+        /** @type {Challenge[] | null} */
         let challenges = null;
         let success = true;
         if (isManual) {
@@ -93,6 +102,7 @@ const runVotingCycle = async (cycleNumber = 1, { isManual = false, challengeId =
  * vote-on-challenge-manual handler; resolves the challenge title first
  * because that handler validates a non-empty title.
  *
+ * @param {string} challengeId
  * @returns {Promise<{success:boolean, message?:string, error?:string}>}
  */
 const voteChallengeManual = async (challengeId) => {
@@ -103,14 +113,18 @@ const voteChallengeManual = async (challengeId) => {
     let title;
     try {
         const resp = await getMiddleware().getActiveChallenges();
-        const challenge = findActiveChallenge(resp?.challenges, challengeId);
+        const challenge = findActiveChallenge(/** @type {Challenge[] | undefined} */ (resp?.challenges), challengeId);
         if (!challenge) {
             logger.withCategory('challenges').error(`Challenge ${challengeId} not found among active challenges`);
             return { success: false, error: `Challenge ${challengeId} not found` };
         }
         title = challenge.title;
     } catch (err) {
-        logger.withCategory('challenges').error(`Failed to fetch challenges: ${err?.message || err}`);
+        logger
+            .withCategory('challenges')
+            .error(
+                `Failed to fetch challenges: ${/** @type {{ message?: unknown } | null | undefined} */ (err)?.message || err}`,
+            );
         return { success: false, error: 'Failed to fetch challenges' };
     }
 
@@ -123,14 +137,24 @@ const voteChallengeManual = async (challengeId) => {
         }
         return result;
     } catch (err) {
-        logger.withCategory('voting').error(`Failed to vote on "${title}": ${err?.message || err}`);
-        return { success: false, error: err?.message || 'Failed to vote' };
+        logger
+            .withCategory('voting')
+            .error(
+                `Failed to vote on "${title}": ${/** @type {{ message?: unknown } | null | undefined} */ (err)?.message || err}`,
+            );
+        return {
+            success: false,
+            error: /** @type {{ message?: string } | null | undefined} */ (err)?.message || 'Failed to vote',
+        };
     }
 };
 
 /**
  * Pull a `--challenge=<id>` or `--challenge <id>` flag value from
  * the remaining argv tail. Returns null when absent.
+ *
+ * @param {string[]} argv
+ * @returns {string | null}
  */
 const parseChallengeFlag = (argv) => {
     for (let i = 0; i < argv.length; i++) {
@@ -263,7 +287,11 @@ const showStatus = async () => {
                 });
             }
         } catch (err) {
-            logger.withCategory('ui').info(`  (unavailable — ${err?.message || err})`);
+            logger
+                .withCategory('ui')
+                .info(
+                    `  (unavailable — ${/** @type {{ message?: unknown } | null | undefined} */ (err)?.message || err})`,
+                );
         }
     }
 

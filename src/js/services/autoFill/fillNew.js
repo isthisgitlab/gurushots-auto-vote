@@ -1,3 +1,4 @@
+// @ts-check
 /**
  * Auto-fill — the boost/turbo "fill new" submit: one new photo whose id the
  * caller then acts on.
@@ -5,6 +6,9 @@
 
 import { getSlotsRemaining } from './challengeState';
 import { runFillAttempt } from './pipeline';
+
+/** @import { Challenge } from '../../types/gurushots' */
+/** @import { SettingsFillDeps } from '../../types/autoFill' */
 
 /**
  * Submit exactly one new photo into a challenge and return its id, so the
@@ -17,15 +21,9 @@ import { runFillAttempt } from './pipeline';
  * Never submits when the challenge is already full (getSlotsRemaining guard),
  * so callers can safely fall back to acting on an existing entry.
  *
- * @param {object} challenge - challenge with member.ranking.entries
+ * @param {Challenge} challenge - challenge with member.ranking.entries
  * @param {string} token
- * @param {{
- *   settings: object,
- *   logger: object,
- *   getEligiblePhotos: function,
- *   submitToChallenge: function,
- *   getActiveChallenges?: function,
- * }} deps - getActiveChallenges enables the pre-submit live re-check; when
+ * @param {SettingsFillDeps} deps - getActiveChallenges enables the pre-submit live re-check; when
  *   absent the fill proceeds on pass-start data.
  * @returns {Promise<{ok: boolean, imageId: string|null, reason: string}>}
  *   reason ∈ 'submitted'|'no-slots'|'challenge-gone'|'no-eligible'|'fetch-error'|'submit-failed'|'invalid-challenge'

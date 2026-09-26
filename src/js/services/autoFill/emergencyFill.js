@@ -1,3 +1,4 @@
+// @ts-check
 /**
  * Auto-fill — the near-deadline safety net that fills every remaining slot in
  * one batch, and the state-only stand-down check it shares with the deadline view.
@@ -6,6 +7,9 @@
 import { pickPhotosForChallenge } from '../photoPicker';
 import { getSlotsRemaining, reflectNewEntry } from './challengeState';
 import { runFillAttempt } from './pipeline';
+
+/** @import { Challenge } from '../../types/gurushots' */
+/** @import { FillSettings, SettingsFillDeps } from '../../types/autoFill' */
 
 /**
  * Whether emergency fill stands down on LIVE STATE alone, independent of timing.
@@ -42,13 +46,14 @@ import { runFillAttempt } from './pipeline';
  * because this module takes the facade via `deps` while VotingLogic requires it
  * directly.
  *
- * @param {object} challenge
+ * @param {Challenge} challenge
  * @param {string|number|null|undefined} challengeId raw id; do not normalise it
- * @param {{getEffectiveSetting: function, getEffectiveTagSetting: function}} settings
- * @returns {{standDown: boolean, autoFillEnabled: boolean, mustIncludeTags: unknown}}
+ * @param {FillSettings} settings
+ * @returns {{standDown: boolean, autoFillEnabled: boolean, mustIncludeTags: string[] | null}}
  *   standDown true = would do nothing, so never advertise it as upcoming
  */
 const evaluateEmergencyFill = (challenge, challengeId, settings) => {
+    /** @type {{standDown: boolean, autoFillEnabled: boolean, mustIncludeTags: string[] | null}} */
     const inert = { standDown: true, autoFillEnabled: false, mustIncludeTags: null };
     if (challengeId === undefined || challengeId === null) return inert;
     if (getSlotsRemaining(challenge) <= 0) return inert;
@@ -75,16 +80,10 @@ const evaluateEmergencyFill = (challenge, challengeId, settings) => {
  * already handle the challenge, it returns 'skipped' so it never
  * double-fills.
  *
- * @param {object} challenge - challenge with member.ranking.entries
+ * @param {Challenge} challenge - challenge with member.ranking.entries
  * @param {string} token
  * @param {number} now - unix seconds
- * @param {{
- *   settings: object,
- *   logger: object,
- *   getEligiblePhotos: function,
- *   submitToChallenge: function,
- *   getActiveChallenges?: function,
- * }} deps - getActiveChallenges enables the pre-submit live re-check; when
+ * @param {SettingsFillDeps} deps - getActiveChallenges enables the pre-submit live re-check; when
  *   absent the fill proceeds on pass-start data.
  * @returns {Promise<'submitted'|'skipped'|'disabled'|'no-eligible-photos'|'error'>}
  */

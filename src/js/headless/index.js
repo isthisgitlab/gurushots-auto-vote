@@ -1,3 +1,4 @@
+// @ts-check
 /**
  * Headless background entry point (Android foreground service).
  *
@@ -33,6 +34,15 @@ import {
 } from '../scheduling/nodeResolvers';
 import { DEFAULT_TIMEZONE } from '../settings/uiDefaults';
 
+/**
+ * @import { ActiveChallengesResponse, Challenge } from '../types/gurushots'
+ * @import { HeadlessGlobals } from '../types/capacitor'
+ */
+
+/**
+ * @param {string} msg
+ * @param {unknown} [data]
+ */
 const log = (msg, data) => logger.withCategory('voting').info(`[headless] ${msg}`, data);
 
 /**
@@ -50,15 +60,21 @@ const log = (msg, data) => logger.withCategory('voting').info(`[headless] ${msg}
  * full (possibly very long) normal cadence. This mirrors the cadence chain's
  * offline-retry cap; the headless loop schedules its own AlarmManager ticks but
  * must recover on the same beat.
+ *
+ * @param {string} token
+ * @param {Challenge[] | null} [prefetched]
+ * @returns {Promise<number>}
  */
 const computeNextDelayMs = async (token, prefetched = null) => {
     const userSettings = settings.loadSettings();
     try {
+        /** @type {Challenge[]} */
         let list;
         let fetchFailedNow = false;
         if (Array.isArray(prefetched)) {
             list = prefetched;
         } else {
+            /** @type {ActiveChallengesResponse | null} */
             const fetched = await apiFactory.getApiStrategy().getActiveChallenges(token);
             list = fetched?.challenges || [];
             fetchFailedNow = fetched?.fetchFailed === true;
@@ -86,16 +102,20 @@ const computeNextDelayMs = async (token, prefetched = null) => {
         }
         return delayMs;
     } catch (err) {
-        log('next-delay computation failed; using normal cadence', err?.message ?? String(err));
+        log(
+            'next-delay computation failed; using normal cadence',
+            /** @type {{ message?: string } | null | undefined} */ (err)?.message ?? String(err),
+        );
         return getRandomCheckFrequencyMs(userSettings);
     }
 };
 
+/** @param {object} payload */
 const reportComplete = (payload) => {
     try {
-        globalThis.AndroidHeadlessBridge?.onCycleComplete(JSON.stringify(payload));
+        /** @type {HeadlessGlobals} */ (globalThis).AndroidHeadlessBridge?.onCycleComplete(JSON.stringify(payload));
     } catch (err) {
-        log('onCycleComplete failed', err.message);
+        log('onCycleComplete failed', /** @type {Error} */ (err).message);
     }
 };
 
@@ -114,6 +134,7 @@ const runOneCycle = async () => {
         }
 
         log('cycle starting');
+        /** @type {{ success?: boolean, message?: string, error?: string, challenges?: Challenge[] } | null} */
         const result = await apiFactory.getApiStrategy().fetchChallengesAndVote(token);
         const ok = result ? result.success !== false : false;
         // Only reuse the cycle's list when it succeeded. On an outage the
@@ -125,12 +146,17 @@ const runOneCycle = async () => {
         log('cycle complete', { ok, nextDelayMs });
         reportComplete({ ok, message: (result && (result.message || result.error)) || null, nextDelayMs });
     } catch (err) {
-        log('cycle threw', err && err.message);
-        reportComplete({ ok: false, error: (err && err.message) || 'cycle-failed', nextDelayMs: fallbackDelay() });
+        const thrown = /** @type {{ message?: string } | null | undefined} */ (err);
+        log('cycle threw', thrown && thrown.message);
+        reportComplete({
+            ok: false,
+            error: (thrown && thrown.message) || 'cycle-failed',
+            nextDelayMs: fallbackDelay(),
+        });
     }
 };
 
-globalThis.GS = { runOneCycle };
+/** @type {HeadlessGlobals} */ (globalThis).GS = { runOneCycle };
 log('headless bundle loaded');
 
 export { runOneCycle, computeNextDelayMs };

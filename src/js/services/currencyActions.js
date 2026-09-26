@@ -1,3 +1,4 @@
+// @ts-check
 /**
  * Bankroll-currency actions on an entered challenge: spend a KEY to unlock a
  * locked boost, a SWAP to replace an entered photo, a FILL to top exposure up
@@ -20,6 +21,34 @@ import { findActiveChallenge } from './findActiveChallenge';
 import { rankCandidatesForChallenge, resolveMemberId } from './autoFill';
 import { resetPassState as resetPhotoStatsPassState } from './photoStats';
 import { CURRENCY_OUTCOME, blockedOutcome, swapExcludedIds } from '../voting/currencyActions';
+
+/**
+ * @import { Challenge, RankingEntry } from '../types/gurushots'
+ */
+
+/** @typedef {typeof import('../logger')} Logger */
+/** @typedef {typeof import('../settings')} SettingsFacade */
+/** @typedef {ReturnType<typeof import('../swapBackStore').createLedger>} SwapBackLedger */
+/** @typedef {'key'|'swap'|'fill'} CurrencyAction */
+
+/**
+ * The endpoints a spend reads off the strategy (the real or mock surface).
+ *
+ * @typedef {object} CurrencyStrategy
+ * @property {typeof import('../strategies/real/activeChallenges').getActiveChallenges} getActiveChallenges
+ * @property {typeof import('../api/join').getBankroll} getBankroll
+ * @property {typeof import('../api/currency').keyUnlock} keyUnlock
+ * @property {typeof import('../api/currency').swapPhoto} swapPhoto
+ * @property {typeof import('../api/currency').exposureAutofill} exposureAutofill
+ * @property {typeof import('../api/submissions').getEligiblePhotos} getEligiblePhotos
+ * @property {typeof import('../api/submissions').getImageData} getImageData
+ * @property {typeof import('../api/tags').searchTagAutocomplete} searchTagAutocomplete
+ * @property {typeof import('../api/tags').getCurrentMemberProfile} getCurrentMemberProfile
+ */
+
+/** @typedef {typeof CURRENCY_OUTCOME[keyof typeof CURRENCY_OUTCOME]} CurrencyOutcome */
+/** @typedef {{ok: boolean, outcome: string}} SpendOutcome */
+/** @typedef {{id: string, member_id: string}} SwapCandidate */
 
 const nowSec = () => Math.floor(Date.now() / 1000);
 
@@ -47,12 +76,17 @@ const withSpendLock = async (spend) => {
     }
 };
 
+/** @param {Logger} logger */
 const cat = (logger) => logger.withCategory('currency');
 
 /**
  * Reads the live challenge and bankroll. A missing challenge is reported as
  * notAvailable; an unreadable bankroll is left null for blockedOutcome to map
  * onto balanceUnknown.
+ *
+ * @param {string|number} challengeId
+ * @param {string} token
+ * @param {CurrencyStrategy} strategy
  */
 const loadLive = async (challengeId, token, strategy) => {
     const [challengesResponse, bankroll] = await Promise.all([
@@ -62,11 +96,20 @@ const loadLive = async (challengeId, token, strategy) => {
     return { challenge: findActiveChallenge(challengesResponse?.challenges, challengeId), bankroll };
 };
 
+/**
+ * @param {Challenge} challenge
+ * @returns {RankingEntry[]}
+ */
 const entriesOf = (challenge) =>
     Array.isArray(challenge?.member?.ranking?.entries) ? challenge.member.ranking.entries : [];
 
+/**
+ * @param {Challenge} challenge
+ * @param {string|number} imageId
+ */
 const findEntry = (challenge, imageId) => entriesOf(challenge).find((entry) => String(entry?.id) === String(imageId));
 
+/** @param {Challenge} challenge */
 const entryIds = (challenge) =>
     new Set(
         entriesOf(challenge)
@@ -76,6 +119,7 @@ const entryIds = (challenge) =>
     );
 
 // Every photo swapped out of the challenge so far (the API's swap history).
+/** @param {Challenge} challenge */
 const swappedOutIds = (challenge) =>
     new Set(
         (Array.isArray(challenge?.member?.ranking?.swaps) ? challenge.member.ranking.swaps : []).map((s) =>
@@ -86,13 +130,28 @@ const swappedOutIds = (challenge) =>
 /**
  * Live re-check shared by every action. Returns the blocking outcome, or null
  * with the live challenge when the spend may go ahead.
+ *
+ * @param {CurrencyAction} action
+ * @param {string|number} challengeId
+ * @param {string} token
+ * @param {CurrencyStrategy} strategy
+ * @returns {Promise<{blocked: CurrencyOutcome, challenge: null} | {blocked: CurrencyOutcome|null, challenge: Challenge}>}
  */
 const checkLive = async (action, challengeId, token, strategy) => {
     const { challenge, bankroll } = await loadLive(challengeId, token, strategy);
     if (!challenge) return { blocked: CURRENCY_OUTCOME.notAvailable, challenge: null };
-    return { blocked: blockedOutcome(action, challenge, bankroll, nowSec()), challenge };
+    // blockedOutcome only ever answers a CURRENCY_OUTCOME value or null.
+    const blocked = /** @type {CurrencyOutcome|null} */ (blockedOutcome(action, challenge, bankroll, nowSec()));
+    return { blocked, challenge };
 };
 
+/**
+ * @param {Logger} logger
+ * @param {string} label
+ * @param {Challenge} challenge
+ * @param {{ok?: boolean} | null | undefined} result
+ * @returns {SpendOutcome}
+ */
 const spendResult = (logger, label, challenge, result) => {
     if (result?.ok) {
         cat(logger).info(`${label}: done for ${logger.challengeTag(challenge)}`, null);
@@ -108,8 +167,8 @@ const spendResult = (logger, label, challenge, result) => {
  *
  * @param {string|number} challengeId
  * @param {string} token
- * @param {{strategy: object, logger: object}} deps
- * @returns {Promise<{ok: boolean, outcome: string}>}
+ * @param {{strategy: CurrencyStrategy, logger: Logger}} deps
+ * @returns {Promise<SpendOutcome>}
  */
 const unlockBoostWithKey = async (challengeId, token, { strategy, logger }) => {
     const { blocked, challenge } = await checkLive('key', challengeId, token, strategy);
@@ -128,9 +187,9 @@ const unlockBoostWithKey = async (challengeId, token, { strategy, logger }) => {
  * @param {string|number} challengeId
  * @param {string} imageId - the entered photo to replace
  * @param {string} token
- * @param {{strategy: object, logger: object, settings: object}} deps
+ * @param {{strategy: CurrencyStrategy, logger: Logger, settings: SettingsFacade}} deps
  * @param {{excludeSwapped?: boolean}} [options]
- * @returns {Promise<{ok: boolean, outcome: string, candidate?: {id: string, member_id: string}}>}
+ * @returns {Promise<{ok: false, outcome: string} | {ok: true, outcome: string, candidate: SwapCandidate}>}
  */
 const previewSwap = async (
     challengeId,
@@ -178,7 +237,8 @@ const previewSwap = async (
     if (ranked.status !== 'ranked') {
         return { ok: false, outcome: CURRENCY_OUTCOME.apiFailed };
     }
-    const best = ranked.picked[0];
+    // The pipeline's picks are library photo records (id, and usually member_id).
+    const best = /** @type {{id: string|number, member_id?: string} | undefined} */ (ranked.picked[0]);
     if (!best) {
         cat(logger).info(`swap: no different photo available for ${logger.challengeTag(challenge)}`, null);
         return { ok: false, outcome: CURRENCY_OUTCOME.noAlternative };
@@ -204,10 +264,10 @@ const previewSwap = async (
  * @param {string} imageId
  * @param {string} newImageId
  * @param {string} token
- * @param {{strategy: object, logger: object, ledger?: object}} deps - ledger: the swap-back
+ * @param {{strategy: CurrencyStrategy, logger: Logger, ledger?: SwapBackLedger|null}} deps - ledger: the swap-back
  *   ledger (swapBackStore.js), told about every successful swap so a swapped-out
  *   boosted/turbo'd photo can be swapped back later
- * @returns {Promise<{ok: boolean, outcome: string}>}
+ * @returns {Promise<SpendOutcome>}
  */
 const swapEntry = async (challengeId, imageId, newImageId, token, { strategy, logger, ledger = null }) => {
     const { blocked, challenge } = await checkLive('swap', challengeId, token, strategy);
@@ -238,8 +298,8 @@ const swapEntry = async (challengeId, imageId, newImageId, token, { strategy, lo
  * @param {string|number} challengeId
  * @param {string} currentImageId - the replacement now in the slot
  * @param {string} token
- * @param {{strategy: object, logger: object, ledger: object}} deps
- * @returns {Promise<{ok: boolean, outcome: string}>}
+ * @param {{strategy: CurrencyStrategy, logger: Logger, ledger: SwapBackLedger}} deps
+ * @returns {Promise<SpendOutcome>}
  */
 const swapBack = async (challengeId, currentImageId, token, { strategy, logger, ledger }) => {
     const record = ledger.list(challengeId).find((r) => r.currentId === String(currentImageId));
@@ -268,8 +328,8 @@ const swapBack = async (challengeId, currentImageId, token, { strategy, logger, 
  *
  * @param {string|number} challengeId
  * @param {string} token
- * @param {{strategy: object, logger: object}} deps
- * @returns {Promise<{ok: boolean, outcome: string}>}
+ * @param {{strategy: CurrencyStrategy, logger: Logger}} deps
+ * @returns {Promise<SpendOutcome>}
  */
 const fillExposure = async (challengeId, token, { strategy, logger }) => {
     const { blocked, challenge } = await checkLive('fill', challengeId, token, strategy);

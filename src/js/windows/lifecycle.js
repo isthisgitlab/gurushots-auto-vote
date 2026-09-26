@@ -1,3 +1,4 @@
+// @ts-check
 /**
  * Process-exit safety net and window/quit lifecycle helpers. Electron
  * sometimes lingers after the last window closes — this gives the main
@@ -7,13 +8,17 @@
 
 import * as logger from '../logger';
 
+/** @import { BrowserWindow } from 'electron' */
+
 // Long enough for Chromium to flush LevelDB storage (a 1s window could
 // kill it mid-write and leave stale locks), short enough to stay a firm
 // ceiling on "the app must die now".
 const FORCE_EXIT_GRACE_MS = 3000;
 
+/** @type {NodeJS.Timeout | null} */
 let forceExitTimeout = null;
 
+/** @param {string} reason */
 const ensureExit = (reason) => {
     // Clear any existing timeout to prevent multiple force exits.
     if (forceExitTimeout) {
@@ -37,6 +42,7 @@ const ensureExit = (reason) => {
     forceExitTimeout.unref?.();
 };
 
+/** @param {BrowserWindow | null | undefined} win */
 const focusExistingWindow = (win) => {
     // isDestroyed() must be checked first — any other method on a
     // destroyed BrowserWindow throws.
@@ -56,6 +62,10 @@ const focusExistingWindow = (win) => {
 // Quit-time token cleanup, gated on holding the single-instance lock: a
 // losing second instance shares settings.json with the running primary
 // and must not even read it, or it could wipe the primary's session.
+/**
+ * @param {boolean} hasLock
+ * @param {Pick<typeof import('../settings'), 'loadSettings' | 'setSetting'>} settingsFacade
+ */
 const clearTokenOnQuit = (hasLock, settingsFacade) => {
     if (!hasLock) {
         return;

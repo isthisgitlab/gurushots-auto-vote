@@ -1,3 +1,4 @@
+// @ts-check
 /**
  * Photo picker — the photo side of matching: label stems (whole-label and
  * word-level, bounded against untrusted label data) and the per-photo match
@@ -5,6 +6,13 @@
  */
 
 import { MAX_TOKENISE_CHARS, stem, tokenise, matches } from './stemming';
+
+/**
+ * A photo as the label readers see it: `labels` is untrusted API data, so each
+ * entry is type-checked before use.
+ *
+ * @typedef {{ labels?: unknown } | null | undefined} LabelledPhoto
+ */
 
 // Bounds on tokenised label data. Photo labels are untrusted strings from the
 // GuruShots API, and splitting them into words (rather than keeping one stem per
@@ -31,6 +39,9 @@ const MAX_LABELS_PER_PHOTO = 64;
  * a deliberate decision (see pickPhotosForChallenge). Do not reach for this
  * anywhere else: comparing a whole-label stem against a single-word keyword
  * mismatches ("sea life" matching "life"). For matching, use labelWordStems.
+ *
+ * @param {LabelledPhoto} photo
+ * @returns {string[]}
  */
 const wholeLabelStems = (photo) => {
     if (!Array.isArray(photo?.labels)) return [];
@@ -60,9 +71,13 @@ const wholeLabelStems = (photo) => {
  * must-tag "sea life" has to be able to match the label "Sea Life" on both
  * words. Deduping matters — a photo carrying both "Sea" and "Sea Life" must not
  * count "sea" twice.
+ *
+ * @param {LabelledPhoto} photo
+ * @returns {string[]}
  */
 const labelWordStems = (photo) => {
     if (!Array.isArray(photo?.labels)) return [];
+    /** @type {Set<string>} */
     const out = new Set();
     for (const label of photo.labels.slice(0, MAX_LABELS_PER_PHOTO)) {
         if (typeof label !== 'string' && typeof label !== 'number') continue;
@@ -91,10 +106,15 @@ const labelWordStems = (photo) => {
  * the embedding cost twice, and groups are truncated to keep the total stem
  * count at or under MAX_STEMS_PER_PHOTO — the same ceiling the flat helper
  * enforces, so a photo cannot cost more work here than there.
+ *
+ * @param {LabelledPhoto} photo
+ * @returns {string[][]}
  */
 const labelStemGroups = (photo) => {
     if (!Array.isArray(photo?.labels)) return [];
+    /** @type {string[][]} */
     const groups = [];
+    /** @type {Set<string>} */
     const seen = new Set();
     let stems = 0;
     for (const label of photo.labels.slice(0, MAX_LABELS_PER_PHOTO)) {
@@ -121,9 +141,19 @@ const labelStemGroups = (photo) => {
 // Precondition: targetStems is non-empty — the only caller skips this filter
 // when there are no required tags, so the vacuous-true `[].every(...)` case
 // (which would pass every photo) is never reached.
+/**
+ * @param {string[]} labelStems
+ * @param {readonly string[]} targetStems
+ * @returns {boolean}
+ */
 const photoMatchesAllStems = (labelStems, targetStems) =>
     targetStems.every((target) => labelStems.some((labelStem) => matches(labelStem, target)));
 
+/**
+ * @param {string[]} labelStems
+ * @param {readonly string[]} shouldStems
+ * @returns {number}
+ */
 const countShouldMatches = (labelStems, shouldStems) => {
     if (shouldStems.length === 0 || labelStems.length === 0) return 0;
     let matched = 0;
@@ -138,6 +168,12 @@ const countShouldMatches = (labelStems, shouldStems) => {
     return matched;
 };
 
+/**
+ * @param {LabelledPhoto} photo
+ * @param {string[]} keywords
+ * @param {string[] | null} [precomputedLabelStems]
+ * @returns {number}
+ */
 const scorePhoto = (photo, keywords, precomputedLabelStems = null) => {
     if (keywords.length === 0) return 0;
     const labelStems = precomputedLabelStems || labelWordStems(photo);

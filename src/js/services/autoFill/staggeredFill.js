@@ -1,3 +1,4 @@
+// @ts-check
 /**
  * Auto-fill — the cycle-driven, schedule-based fill: at most one photo per
  * scheduler cycle, spaced by the user's autoFillSchedule.
@@ -8,22 +9,19 @@ import { getValidScheduleRows, resolveScheduleTarget } from './schedule';
 import { getEntries, getSlotsRemaining, reflectNewEntry } from './challengeState';
 import { runFillAttempt } from './pipeline';
 
+/** @import { Challenge } from '../../types/gurushots' */
+/** @import { SettingsFillDeps } from '../../types/autoFill' */
+
 /**
  * Cycle-driven, schedule-based auto-fill. Submits at most one photo per
  * call; the next call (next scheduler cycle) will see the updated
  * entries.length and either skip (target met) or submit again — so a
  * challenge behind schedule catches up one photo per cycle.
  *
- * @param {object} challenge - challenge with member.ranking.entries
+ * @param {Challenge} challenge - challenge with member.ranking.entries
  * @param {string} token
  * @param {number} now - unix seconds
- * @param {{
- *   settings: object,
- *   logger: object,
- *   getEligiblePhotos: function,
- *   submitToChallenge: function,
- *   getActiveChallenges?: function,
- * }} deps - getActiveChallenges enables the pre-submit live re-check; when
+ * @param {SettingsFillDeps} deps - getActiveChallenges enables the pre-submit live re-check; when
  *   absent the fill proceeds on pass-start data.
  * @returns {Promise<'submitted'|'skipped'|'disabled'|'no-schedule'|'no-eligible-photos'|'error'>}
  */
@@ -56,7 +54,7 @@ const maybeAutoFillChallenge = async (challenge, token, now, deps) => {
         // builds — see makeFallbackLogger) so a real user has a trace for why
         // those slots stay empty until emergency fill.
         // Finite: the slotsRemaining > 0 guard above is false for a non-finite max.
-        const max = challenge.max_photo_submits;
+        const max = /** @type {number} */ (challenge.max_photo_submits);
         // Highest target the schedule can ever demand = the target as time
         // runs out (secondsRemaining → 0 matches every row), so reuse
         // resolveScheduleTarget instead of re-deriving the clamp-and-max here.

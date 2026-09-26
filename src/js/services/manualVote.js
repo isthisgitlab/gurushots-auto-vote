@@ -1,3 +1,4 @@
+// @ts-check
 /**
  * Manual-vote helpers shared by CLI (BaseMiddleware.cliVoteManual) and
  * Electron IPC (voting.handlers.js). The rule is "vote a challenge to 100%
@@ -9,6 +10,9 @@
 
 import * as votingLogic from './VotingLogic';
 import * as logger from '../logger';
+
+/** @import { ApiStrategy } from '../apiFactory' */
+/** @import { Challenge } from '../types/gurushots' */
 
 /**
  * Spacing between successful manual votes within a single cycle. Both
@@ -25,13 +29,17 @@ const STAGGER_MS = 1000;
  *   { outcome: 'not-eligible', errorMessage }
  *   { outcome: 'no-images',    targetExposure }
  *   { outcome: 'voted',        targetExposure, imageCount }
+ *
+ * @param {Challenge} challenge
+ * @param {ApiStrategy} strategy - API strategy (real or mock)
+ * @param {string} token
+ * @param {number} now - Unix seconds
  */
 const submitVotesForChallenge = async (challenge, strategy, token, now) => {
-    const { shouldAllowVoting, errorMessage, targetExposure } = votingLogic.evaluateManualVotingToHundred(
-        challenge,
-        now,
-        challenge.title,
-    );
+    const { shouldAllowVoting, errorMessage, targetExposure } =
+        /** @type {{ shouldAllowVoting: boolean, errorMessage: string, targetExposure: number }} */ (
+            votingLogic.evaluateManualVotingToHundred(challenge, now, challenge.title)
+        );
     if (!shouldAllowVoting) {
         return { outcome: 'not-eligible', errorMessage };
     }
@@ -52,11 +60,11 @@ const submitVotesForChallenge = async (challenge, strategy, token, now) => {
  * (BaseMiddleware.cliVoteManual) and the IPC vote-all handler so the loop
  * semantics can never drift between shells.
  *
- * @param {Array} challenges
- * @param {object} strategy - API strategy (real or mock)
+ * @param {Challenge[]} challenges
+ * @param {ApiStrategy} strategy - API strategy (real or mock)
  * @param {string} token
  * @param {object} [opts]
- * @param {(current:number, total:number, challenge:object)=>void} [opts.onProgress]
+ * @param {(current:number, total:number, challenge:Challenge)=>void} [opts.onProgress]
  * @param {number} [opts.staggerMs] - Override for tests; production callers keep STAGGER_MS.
  * @returns {Promise<{voted:number, skipped:number, total:number}>}
  */

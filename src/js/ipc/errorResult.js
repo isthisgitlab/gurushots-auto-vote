@@ -1,3 +1,4 @@
+// @ts-check
 /**
  * Shared catch-path result for IPC handlers: `{ success: false, error }`.
  *

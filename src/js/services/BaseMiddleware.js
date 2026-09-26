@@ -1,3 +1,4 @@
+// @ts-check
 /**
  * BaseMiddleware
  *
@@ -14,6 +15,9 @@ import * as cancellation from '../voting/cancellation';
 import { extractAuthResult, clearAuthToken } from './auth';
 import { voteAllChallengesManual } from './manualVote';
 
+/** @import { ApiStrategy } from '../apiFactory' */
+/** @import { Challenge } from '../types/gurushots' */
+
 const requireToken = () => {
     const token = settings.getSetting('token');
     if (!token) throw new Error('No authentication token found');
@@ -21,10 +25,15 @@ const requireToken = () => {
 };
 
 class BaseMiddleware {
+    /** @param {ApiStrategy} apiStrategy */
     constructor(apiStrategy) {
         this.apiStrategy = apiStrategy;
     }
 
+    /**
+     * @param {string} email
+     * @param {string} password
+     */
     async _login(email, password) {
         const response = await this.apiStrategy.authenticate(email, password);
         // Token extraction is shared with the GUI IPC handler via
@@ -38,6 +47,10 @@ class BaseMiddleware {
         return { ok: false, token: null, response };
     }
 
+    /**
+     * @param {string} email
+     * @param {string} password
+     */
     async cliLogin(email, password) {
         logger.withCategory('authentication').info('=== GuruShots Auto Voter - CLI Login ===', null);
         logger.withCategory('authentication').startOperation('cli-login', 'CLI Authentication');
@@ -56,16 +69,25 @@ class BaseMiddleware {
         }
     }
 
+    /**
+     * @param {string} email
+     * @param {string} password
+     */
     async guiLogin(email, password) {
         try {
             const { ok, token, response } = await this._login(email, password);
             if (ok) return { success: true, token, data: response };
             return { success: false, error: 'Invalid credentials' };
         } catch (error) {
-            return { success: false, error: error?.message || 'Authentication failed' };
+            return {
+                success: false,
+                error:
+                    /** @type {{ message?: string } | null | undefined} */ (error)?.message || 'Authentication failed',
+            };
         }
     }
 
+    /** @param {string|number|null} [challengeId] */
     async _runVote(challengeId = null) {
         const token = settings.getSetting('token');
         if (!token) {
@@ -84,6 +106,8 @@ class BaseMiddleware {
      * strategy, and returns `{ success, message } | { success: false, error }`
      * matching what the renderer expects. `challengeId` is optional; null/undefined
      * means run the full active set.
+     *
+     * @param {string|number|null} [challengeId]
      */
     async runVotingCycle(challengeId = null) {
         cancellation.reset();
@@ -122,6 +146,7 @@ class BaseMiddleware {
         return token;
     }
 
+    /** @param {string|number|null} [challengeId] */
     async cliVote(challengeId = null) {
         const scopeLabel = challengeId == null ? '' : ` (challenge ${challengeId})`;
         logger.withCategory('voting').info(`=== GuruShots Auto Voter - CLI Voting${scopeLabel} ===`, null);
@@ -210,6 +235,7 @@ class BaseMiddleware {
         return this.apiStrategy.getActiveChallenges(requireToken());
     }
 
+    /** @param {Challenge} challenge */
     applyBoost(challenge) {
         return this.apiStrategy.applyBoost(challenge, requireToken());
     }

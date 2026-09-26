@@ -1,3 +1,4 @@
+// @ts-check
 /**
  * CLI string-to-value coercion shared between the in-app CLI
  * (`src/js/cli/cli.js`) and the standalone `scripts/settings-cli.js`.
@@ -12,11 +13,16 @@
  * the parsing layer is shared.
  */
 
+/**
+ * @param {string} raw - the argv token
+ * @returns {unknown} the parsed JSON value, a number, or `raw` itself
+ */
 function parseSettingValue(raw) {
     try {
         return JSON.parse(raw);
     } catch {
-        if (!isNaN(raw) && !isNaN(parseFloat(raw))) return parseFloat(raw);
+        // isNaN() coerces with Number() itself; the explicit call only types the argument.
+        if (!isNaN(Number(raw)) && !isNaN(parseFloat(raw))) return parseFloat(raw);
         return raw;
     }
 }

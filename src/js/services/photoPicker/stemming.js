@@ -1,3 +1,4 @@
+// @ts-check
 /**
  * Photo picker — the text normalisation every matcher shares: the photography
  * stopword list, the light stemmer, the bounded tokeniser, stem equivalence
@@ -210,6 +211,7 @@ const STOPWORDS = new Set([
     'tales',
 ]);
 
+/** @param {string} token */
 const isPureDigit = (token) => /^\d+$/.test(token);
 
 // Bases that take '-es' rather than a bare '-s'. 'ss' is listed explicitly
@@ -237,6 +239,9 @@ const SIBILANT_ES_RE = /(?:x|z|ch|sh|ss)$/;
  * zero candidates, fell back to the whole library) AND missed the lexicon,
  * which has 'lighthouse' but no 'lighthous'. Both failures disappear with the
  * correct stem.
+ *
+ * @param {string} word
+ * @returns {string}
  */
 const stem = (word) => {
     if (typeof word !== 'string' || word.length < 4) return word || '';
@@ -277,6 +282,16 @@ const MAX_TOKENISE_CHARS = 4096;
 // is full of boilerplate ("shots", "best", "good luck") that drowns out the
 // real subject, so the keyword path filters it. But a user who explicitly
 // types those words as a tag means them literally — honor the input.
+/**
+ * @typedef {object} TokeniseOptions
+ * @property {boolean} [keepStopwords]
+ * @property {Iterable<unknown> | null} [ignoreWords] Raw words to drop; only a Set or an array is honoured.
+ */
+
+/**
+ * @param {Iterable<unknown> | null | undefined} words
+ * @returns {Set<unknown> | null}
+ */
 const toIgnoreSet = (words) => {
     if (words instanceof Set) return words.size > 0 ? words : null;
     if (!Array.isArray(words) || words.length === 0) return null;
@@ -289,6 +304,11 @@ const toIgnoreSet = (words) => {
     return out.size > 0 ? out : null;
 };
 
+/**
+ * @param {unknown} text
+ * @param {TokeniseOptions} [opts]
+ * @returns {string[]}
+ */
 const rawTokenise = (text, { keepStopwords = false, ignoreWords = null } = {}) => {
     if (typeof text !== 'string' || text.length === 0) return [];
     // Matched against the RAW word, before stemming — same as STOPWORDS — so a
@@ -313,6 +333,11 @@ const rawTokenise = (text, { keepStopwords = false, ignoreWords = null } = {}) =
 // The surface words above, stemmed. Split from rawTokenise because term
 // ORDERING needs to see the original spelling — the stemmer erases the '-ing'
 // that marks a participle (see buildSearchTerms).
+/**
+ * @param {unknown} text
+ * @param {TokeniseOptions} [opts]
+ * @returns {string[]}
+ */
 const tokenise = (text, opts) => rawTokenise(text, opts).map(stem);
 
 // Minimum stem length for the fuzzy (prefix) branch of matches(). Below this a
@@ -347,6 +372,10 @@ const MAX_STEM_PREFIX_DELTA = 2;
  * lexicon (pretrained GloVe embeddings, with the curated clusters in
  * scripts/lexicon-concepts.json retrofitted in) can, so those compounds get
  * caught by the semantic tier instead.
+ *
+ * @param {string} labelStem
+ * @param {string} keywordStem
+ * @returns {boolean}
  */
 const matches = (labelStem, keywordStem) => {
     if (labelStem === keywordStem) return true;
@@ -371,6 +400,9 @@ const MIN_USER_TAG_STEM_LENGTH = 3;
  * kept (a user typing "shot" means it), but stems shorter than
  * MIN_USER_TAG_STEM_LENGTH are dropped to avoid spurious substring matches.
  * Empty/non-array input → [].
+ *
+ * @param {unknown} tags
+ * @returns {string[]}
  */
 const tokeniseTagList = (tags) => {
     if (!Array.isArray(tags) || tags.length === 0) return [];

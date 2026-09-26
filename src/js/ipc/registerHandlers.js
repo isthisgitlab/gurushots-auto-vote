@@ -1,3 +1,4 @@
+// @ts-check
 /**
  * Shared ipcMain registration for the handler modules (log, misc, settings,
  * voting, actions, update). Each module exports buildHandlers(deps) →
@@ -14,6 +15,42 @@
 
 import * as logger from '../logger';
 
+/**
+ * @import { IpcMain, IpcMainEvent, IpcMainInvokeEvent } from 'electron'
+ */
+
+/**
+ * One handler as registered: `(event, ...args) => result`; `event` is null
+ * when the CLI or the Capacitor bridge calls the handler directly. The rest args are
+ * `any[]` because this is the heterogeneous registration map — each handler
+ * declares (and validates) its own renderer-supplied argument types, which a
+ * narrower element type here would reject under strict function-type checks.
+ *
+ * @typedef {(event: IpcMainInvokeEvent | null, ...args: any[]) => unknown} IpcHandler
+ */
+
+/**
+ * What a handler may resolve to. `{ success?: boolean }` is listed so that,
+ * used as a contextual type (`@satisfies {IpcReplyFn}` / `{IpcHandlerMap}`),
+ * a returned `success: true`/`false` keeps its literal type and the renderer
+ * can discriminate a result on it; the other members admit plain values.
+ *
+ * @typedef {{ success?: boolean } | object | string | number | boolean | bigint | symbol | null | undefined} IpcReturn
+ */
+
+/**
+ * A handler, or a helper producing a handler's reply. `never` parameters
+ * accept any declared parameter types, so only the result is constrained.
+ *
+ * @typedef {(...args: never[]) => IpcReturn | Promise<IpcReturn>} IpcReplyFn
+ * @typedef {Record<string, IpcReplyFn>} IpcHandlerMap
+ */
+
+/**
+ * @param {IpcMainInvokeEvent | IpcMainEvent | null | undefined} event - Null/undefined on a
+ *   direct (non-Electron) invocation.
+ * @returns {boolean}
+ */
 const isTrustedSender = (event) => {
     try {
         // Read senderFrame inside the try: Electron's getter throws when the sending frame
@@ -23,13 +60,17 @@ const isTrustedSender = (event) => {
         const frame = event?.senderFrame;
         // Direct invocation without an Electron event (tests, internal reuse).
         if (!frame) return true;
-        if (event.sender?.mainFrame && frame !== event.sender.mainFrame) return false;
+        if (event?.sender?.mainFrame && frame !== event.sender.mainFrame) return false;
         return typeof frame.url !== 'string' || frame.url.startsWith('file://');
     } catch {
         return false;
     }
 };
 
+/**
+ * @param {IpcMain} ipcMain
+ * @param {Record<string, IpcHandler>} handlers
+ */
 const registerHandlers = (ipcMain, handlers) => {
     for (const [channel, impl] of Object.entries(handlers)) {
         ipcMain.handle(channel, (event, ...args) => {

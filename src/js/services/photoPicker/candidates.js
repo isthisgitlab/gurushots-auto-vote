@@ -1,3 +1,4 @@
+// @ts-check
 /**
  * Photo picker — candidate filtering and scoring: the hard filters
  * (must-include tags, letter prefix), the negated-subject exclusion, the
@@ -18,8 +19,23 @@ import {
     finalizePick,
 } from './tiers';
 
+/** @import { ChallengeText, PickerPhoto, PickFallbackInfo, PickOptions, ScoredCandidate } from '../../types/photoPicker' */
+
+/**
+ * A photo with its labels stemmed both ways (see buildScoredCandidates).
+ *
+ * @typedef {object} StemmedPhoto
+ * @property {PickerPhoto} photo
+ * @property {string[]} wordStems
+ * @property {string[]} wholeStems
+ */
+
 // Same "never throws" contract as resolveSemanticScores: a buggy callback must
 // not turn a fill that would succeed into a crash.
+/**
+ * @param {PickOptions} opts
+ * @param {PickFallbackInfo} info
+ */
 const notifyFallback = (opts, info) => {
     if (typeof opts.onFallback !== 'function') return;
     try {
@@ -32,10 +48,10 @@ const notifyFallback = (opts, info) => {
 /**
  * Picks photos to submit to a challenge.
  *
- * @param {object} challenge - challenge object (url, title, welcome_message all optional)
- * @param {Array<object>} eligiblePhotos - candidates from getEligiblePhotos
+ * @param {ChallengeText | null | undefined} challenge - challenge object (url, title, welcome_message all optional)
+ * @param {PickerPhoto[]} eligiblePhotos - candidates from getEligiblePhotos
  * @param {number} slotsToFill - how many photos to return at most
- * @param {{mustIncludeTags?: string[], shouldIncludeTags?: string[], fillWithoutTagMatch?: boolean, semanticScores?: Map<string, {score: number, support: number}|number>, onFallback?: function}} [opts]
+ * @param {PickOptions} [opts]
  *   mustIncludeTags: hard filter — keep only photos whose labels match
  *   every distinct tag stem (ALL semantics). Tags are deduped to stems
  *   first, so "larch, larches" collapses to one requirement. A photo
@@ -85,7 +101,11 @@ const pickPhotosForChallenge = (challenge, eligiblePhotos, slotsToFill, opts = {
  * gets filled (off-theme best performer) — unless the caller opted out with
  * fillWithoutTagMatch:false, or no hard filter was set at all.
  *
- * @returns {Array<object>|null} the surviving stemmed photos, or null for "pick nothing"
+ * @param {StemmedPhoto[]} withStems
+ * @param {string[]} mustStems
+ * @param {string | null} letterPrefix
+ * @param {PickOptions} opts
+ * @returns {StemmedPhoto[]|null} the surviving stemmed photos, or null for "pick nothing"
  */
 const applyHardFilters = (withStems, mustStems, letterPrefix, opts) => {
     let filtered = withStems;
@@ -110,7 +130,10 @@ const applyHardFilters = (withStems, mustStems, letterPrefix, opts) => {
  * remaining photo shows it does the picker relax (or return null under
  * fillWithoutTagMatch:false). A photo with no labels cannot be judged and is kept.
  *
- * @returns {Array<object>|null} the surviving stemmed photos, or null for "pick nothing"
+ * @param {StemmedPhoto[]} filtered
+ * @param {ChallengeText | null | undefined} challenge
+ * @param {PickOptions} opts
+ * @returns {StemmedPhoto[]|null} the surviving stemmed photos, or null for "pick nothing"
  */
 const applyExcludedSubjectFilter = (filtered, challenge, opts) => {
     const excluded = excludedSubjectOf(challenge, opts.ignoreWords || null);
@@ -132,10 +155,10 @@ const applyExcludedSubjectFilter = (filtered, challenge, opts) => {
  * the hot loop of every fill on every scheduler cycle — including the
  * battery-constrained Android headless service.
  *
- * @param {object} challenge
- * @param {Array<object>} eligiblePhotos
- * @param {object} [opts] - same shape as pickPhotosForChallenge's opts
- * @returns {Array<object>} scored entries (unsorted); [] when nothing qualifies
+ * @param {ChallengeText | null | undefined} challenge
+ * @param {PickerPhoto[]} eligiblePhotos
+ * @param {PickOptions} [opts] - same shape as pickPhotosForChallenge's opts
+ * @returns {ScoredCandidate[]} scored entries (unsorted); [] when nothing qualifies
  */
 const buildScoredCandidates = (challenge, eligiblePhotos, opts = {}) => {
     if (!Array.isArray(eligiblePhotos) || eligiblePhotos.length === 0) return [];

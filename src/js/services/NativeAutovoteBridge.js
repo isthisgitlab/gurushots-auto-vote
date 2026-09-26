@@ -1,3 +1,4 @@
+// @ts-check
 /**
  * Bridge to the custom Capacitor plugin (AutoVoteBackground) that
  * runs the voting cycle natively via a Foreground Service +
@@ -13,19 +14,27 @@
 import * as runtime from '../runtime';
 import * as logger from '../logger';
 
+/** @import { AutoVoteBackgroundPlugin, CapacitorGlobals } from '../types/capacitor' */
+
+/** @type {AutoVoteBackgroundPlugin | null} */
 let pluginInstance = null;
 const getPlugin = () => {
     if (!runtime.isCapacitor()) return null;
     if (pluginInstance) return pluginInstance;
     try {
-        const cap = globalThis.Capacitor;
+        const cap = /** @type {CapacitorGlobals} */ (globalThis).Capacitor;
         pluginInstance = cap?.Plugins?.AutoVoteBackground || null;
         if (!pluginInstance) {
             logger.withCategory('voting').warning('AutoVoteBackground plugin not registered on this build');
         }
         return pluginInstance;
     } catch (err) {
-        logger.withCategory('voting').warning('NativeAutovoteBridge.getPlugin failed', err?.message);
+        logger
+            .withCategory('voting')
+            .warning(
+                'NativeAutovoteBridge.getPlugin failed',
+                /** @type {{ message?: string } | null | undefined} */ (err)?.message,
+            );
         return null;
     }
 };
@@ -38,7 +47,11 @@ const start = async () => {
         return { ...result, available: true };
     } catch (err) {
         logger.withCategory('voting').error('AutoVoteBackground.start failed', err);
-        return { running: false, available: true, error: err?.message };
+        return {
+            running: false,
+            available: true,
+            error: /** @type {{ message?: string } | null | undefined} */ (err)?.message,
+        };
     }
 };
 
@@ -50,7 +63,11 @@ const stop = async () => {
         return { ...result, available: true };
     } catch (err) {
         logger.withCategory('voting').error('AutoVoteBackground.stop failed', err);
-        return { running: false, available: true, error: err?.message };
+        return {
+            running: false,
+            available: true,
+            error: /** @type {{ message?: string } | null | undefined} */ (err)?.message,
+        };
     }
 };
 
@@ -61,7 +78,11 @@ const getStatus = async () => {
         const result = await plugin.getStatus();
         return { ...result, available: true };
     } catch (err) {
-        return { running: false, available: true, error: err?.message };
+        return {
+            running: false,
+            available: true,
+            error: /** @type {{ message?: string } | null | undefined} */ (err)?.message,
+        };
     }
 };
 

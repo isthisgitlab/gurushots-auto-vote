@@ -1,3 +1,4 @@
+// @ts-check
 /**
  * Thin wrapper around @capawesome-team/capacitor-android-foreground-service.
  *
@@ -24,6 +25,9 @@
 import * as runtime from '../runtime';
 import * as logger from '../logger';
 
+/** @import { ForegroundServicePlugin } from '@capawesome-team/capacitor-android-foreground-service' */
+
+/** @type {ForegroundServicePlugin | null} */
 let plugin = null;
 const NOTIFICATION_ID = 27782; // arbitrary stable id
 const APP_NAME = 'GuruShots Auto Vote';
@@ -35,7 +39,9 @@ const getPlugin = () => {
         plugin = require('@capawesome-team/capacitor-android-foreground-service').ForegroundService;
         return plugin;
     } catch (err) {
-        logger.withCategory('voting').warning('ForegroundService plugin unavailable', err.message);
+        logger
+            .withCategory('voting')
+            .warning('ForegroundService plugin unavailable', /** @type {Error} */ (err).message);
         return null;
     }
 };
@@ -48,7 +54,9 @@ const requestPermissions = async () => {
         if (status?.display === 'granted') return status;
         return await fs.requestPermissions();
     } catch (err) {
-        logger.withCategory('voting').warning('ForegroundService permission check failed', err.message);
+        logger
+            .withCategory('voting')
+            .warning('ForegroundService permission check failed', /** @type {Error} */ (err).message);
         return { display: 'denied' };
     }
 };
@@ -56,6 +64,8 @@ const requestPermissions = async () => {
 /**
  * Start the foreground service with a "running" notification.
  * Safe to call multiple times — the plugin updates if already running.
+ *
+ * @param {{ title?: string, body?: string }} [opts]
  */
 const start = async ({ title = APP_NAME, body = 'Auto-vote running' } = {}) => {
     const fs = getPlugin();
@@ -72,7 +82,7 @@ const start = async ({ title = APP_NAME, body = 'Auto-vote running' } = {}) => {
         });
         return true;
     } catch (err) {
-        logger.withCategory('voting').error('startForegroundService failed', err.message);
+        logger.withCategory('voting').error('startForegroundService failed', /** @type {Error} */ (err).message);
         return false;
     }
 };
@@ -80,6 +90,8 @@ const start = async ({ title = APP_NAME, body = 'Auto-vote running' } = {}) => {
 /**
  * Update the notification text (e.g. last cycle time, next cycle ETA).
  * Cheap on Android — no permission re-prompt.
+ *
+ * @param {{ title?: string, body?: string }} opts
  */
 const update = async ({ title = APP_NAME, body }) => {
     const fs = getPlugin();
@@ -93,7 +105,7 @@ const update = async ({ title = APP_NAME, body }) => {
         });
     } catch (err) {
         // updateForegroundService throws if the service isn't running yet — ignore.
-        logger.withCategory('voting').debug('updateForegroundService skipped', err.message);
+        logger.withCategory('voting').debug('updateForegroundService skipped', /** @type {Error} */ (err).message);
     }
 };
 
@@ -106,7 +118,7 @@ const stop = async () => {
     try {
         await fs.stopForegroundService();
     } catch (err) {
-        logger.withCategory('voting').error('stopForegroundService failed', err.message);
+        logger.withCategory('voting').error('stopForegroundService failed', /** @type {Error} */ (err).message);
     }
 };
 

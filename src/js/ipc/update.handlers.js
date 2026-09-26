@@ -1,3 +1,4 @@
+// @ts-check
 /**
  * IPC handlers for the auto-updater. The AutoUpdater instance and the
  * main BrowserWindow reference live in index.js; we receive
@@ -15,6 +16,19 @@ import { errorResult } from './errorResult';
 import { AutoUpdater } from '../services/AutoUpdater';
 import { getReleasesUrl } from '../services/UpdateChecker';
 
+/**
+ * @import { BrowserWindow, IpcMain } from 'electron'
+ * @import { IpcHandlerMap } from './registerHandlers'
+ */
+
+/**
+ * @typedef {object} UpdateHandlerDeps
+ * @property {() => AutoUpdater | null} getAutoUpdater
+ * @property {(autoUpdater: AutoUpdater) => void} setAutoUpdater
+ * @property {() => BrowserWindow | null} getMainWindow
+ */
+
+/** @param {UpdateHandlerDeps} deps */
 const buildHandlers = (deps) => {
     const { getAutoUpdater, setAutoUpdater, getMainWindow } = deps;
 
@@ -32,15 +46,18 @@ const buildHandlers = (deps) => {
 
     // Guard for handlers that must NOT lazily construct: yields either the
     // existing instance or the standard "not initialized" failure result.
+    /**
+     * @returns {{ autoUpdater: AutoUpdater, failure: null }
+     *   | { autoUpdater: null, failure: { success: false, error: string } }}
+     */
     const requireUpdater = () => {
         const autoUpdater = getAutoUpdater();
-        return {
-            autoUpdater,
-            failure: autoUpdater ? null : { success: false, error: 'AutoUpdater not initialized' },
-        };
+        return autoUpdater
+            ? { autoUpdater, failure: null }
+            : { autoUpdater: null, failure: { success: false, error: 'AutoUpdater not initialized' } };
     };
 
-    return {
+    return /** @satisfies {IpcHandlerMap} */ ({
         'check-for-updates': async () => {
             try {
                 const updateInfo = await ensureUpdater().checkForUpdates(true);
@@ -121,9 +138,13 @@ const buildHandlers = (deps) => {
             }
             return { success: false, canAutoUpdate: false };
         },
-    };
+    });
 };
 
+/**
+ * @param {IpcMain} ipcMain
+ * @param {UpdateHandlerDeps} deps
+ */
 const register = (ipcMain, deps) => {
     registerHandlers(ipcMain, buildHandlers(deps));
 };

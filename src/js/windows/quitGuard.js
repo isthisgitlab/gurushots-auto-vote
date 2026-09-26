@@ -1,3 +1,4 @@
+// @ts-check
 /**
  * "Are you sure?" gate on quitting (or closing the main window) while
  * auto-vote is running and is about to boost a challenge.
@@ -30,18 +31,30 @@ import * as votingLogic from '../services/VotingLogic';
 import { openBoostWindows } from '../voting/boostWindow';
 import { formatDuration } from '../format/duration';
 
+/** @import { BrowserWindow, Dialog, MessageBoxOptions } from 'electron' */
+/** @import { Challenge } from '../types/gurushots' */
+
+/**
+ * describeDeadlineActions' shape, as far as the guard reads it.
+ *
+ * @typedef {(challenge: Challenge, now: number) => { actions?: Array<{ action: string, dueAt: number | null }> } | null | undefined} DescribeDeadlineActions
+ */
+
 const QUIT_WARN_HORIZON_SEC = 60 * 60;
 // A bypass is for the quit already under way; if that quit never lands (a
 // cancelled OS shutdown, a failed update install) the guard comes back.
 const BYPASS_TTL_MS = 30_000;
 
 // Last successful challenge list from get-active-challenges.
+/** @type {Challenge[]} */
 let lastChallenges = [];
 let bypassed = false;
+/** @type {NodeJS.Timeout | null} */
 let bypassTimer = null;
 // A second Cmd+Q while the dialog is up must not stack another dialog.
 let prompting = false;
 
+/** @param {unknown} challenges - the get-active-challenges list (ignored unless an array) */
 const rememberChallenges = (challenges) => {
     if (Array.isArray(challenges)) lastChallenges = challenges;
 };
@@ -73,19 +86,26 @@ const resetQuitGuard = () => {
  * soonest first.
  *
  * @param {number} now - Unix seconds
- * @param {(challenge: object, now: number) => {actions: Array<{action: string, dueAt: number|null}>}} describe
+ * @param {DescribeDeadlineActions} describe
  * @returns {Array<{title: string, dueIn: number}>}
  */
 const imminentBoosts = (now, describe) => {
     const open = new Set(openBoostWindows(lastChallenges, now).map((w) => w.id));
     return lastChallenges
         .filter((c) => open.has(c.id))
-        .map((c) => ({ title: c.title, dueAt: describe(c, now)?.actions?.find((a) => a.action === 'boost')?.dueAt }))
+        .map((c) => ({
+            title: c.title,
+            dueAt: describe(c, now)?.actions?.find((a) => a.action === 'boost')?.dueAt,
+        }))
         .filter((b) => typeof b.dueAt === 'number' && b.dueAt - now <= QUIT_WARN_HORIZON_SEC)
-        .map((b) => ({ title: b.title, dueIn: b.dueAt - now }))
+        .map((b) => ({ title: b.title, dueIn: /** @type {number} */ (b.dueAt) - now }))
         .sort((a, b) => a.dueIn - b.dueIn);
 };
 
+/**
+ * @param {{ title: string, dueIn: number }} b
+ * @param {(key: string) => string} t
+ */
 const describeBoost = (b, t) =>
     `• ${b.title} — ${b.dueIn <= 0 ? t('quitGuard.dueNow') : t('quitGuard.dueIn').replace('{time}', formatDuration(b.dueIn))}`;
 
@@ -95,12 +115,12 @@ const describeBoost = (b, t) =>
  * @param {{ preventDefault: () => void }} event - the before-quit / close event
  * @param {object} deps
  * @param {boolean} deps.autovoteRunning - nothing is lost when auto-vote is stopped
- * @param {{ showMessageBox: Function }} deps.dialog - Electron dialog
- * @param {object|null} deps.parent - window to attach the dialog to, if still alive
+ * @param {Pick<Dialog, 'showMessageBox'>} deps.dialog - Electron dialog
+ * @param {BrowserWindow|null} deps.parent - window to attach the dialog to, if still alive
  * @param {(key: string) => string} deps.t - translator
  * @param {() => void} deps.proceed - re-issues the quit/close once confirmed
  * @param {number} [deps.now] - Unix seconds
- * @param {Function} [deps.describeDeadlineActions] - test seam
+ * @param {DescribeDeadlineActions} [deps.describeDeadlineActions] - test seam
  * @returns {boolean} true when the event was held
  */
 const holdQuitForOpenBoosts = (
@@ -130,6 +150,7 @@ const holdQuitForOpenBoosts = (
     if (prompting) return true;
     prompting = true;
 
+    /** @type {MessageBoxOptions} */
     const options = {
         type: 'warning',
         buttons: [t('quitGuard.keepRunning'), t('quitGuard.quitAnyway')],

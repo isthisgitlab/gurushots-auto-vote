@@ -1,3 +1,4 @@
+// @ts-check
 /**
  * Small one-off IPC handlers: open-external-url, reload-window,
  * refresh-menu. They don't share much beyond living in the same
@@ -12,11 +13,23 @@ import { updateMenuTranslations } from '../ui/applicationMenu';
 import { translationManager } from '../translations/index';
 import { isSafeExternalUrl } from '../format/urlSafe';
 
+/**
+ * @import { BrowserWindow, IpcMain } from 'electron'
+ * @import { IpcHandlerMap } from './registerHandlers'
+ */
+
+/**
+ * @typedef {object} MiscHandlerDeps
+ * @property {() => BrowserWindow | null} getMainWindow
+ * @property {() => BrowserWindow | null} getLoginWindow
+ */
+
+/** @param {MiscHandlerDeps} deps */
 const buildHandlers = (deps) => {
     const { getMainWindow, getLoginWindow } = deps;
 
-    return {
-        'open-external-url': async (event, url) => {
+    return /** @satisfies {IpcHandlerMap} */ ({
+        'open-external-url': async (/** @type {unknown} */ event, /** @type {unknown} */ url) => {
             try {
                 // Scheme allow-list (shared with the Capacitor bridge via
                 // format/urlSafe): every legitimate call site opens an https
@@ -27,7 +40,8 @@ const buildHandlers = (deps) => {
                     logger.withCategory('api').warning(`Refused open-external-url for non-https URL: ${url}`, null);
                     return { success: false, error: 'Only https:// URLs can be opened' };
                 }
-                await shell.openExternal(url);
+                // isSafeExternalUrl only passes a string.
+                await shell.openExternal(/** @type {string} */ (url));
                 return { success: true };
             } catch (error) {
                 logger.withCategory('ui').error('Error opening external URL:', error);
@@ -66,9 +80,13 @@ const buildHandlers = (deps) => {
                 return errorResult(error, 'Failed to refresh menu');
             }
         },
-    };
+    });
 };
 
+/**
+ * @param {IpcMain} ipcMain
+ * @param {MiscHandlerDeps} deps
+ */
 const register = (ipcMain, deps) => {
     registerHandlers(ipcMain, buildHandlers(deps));
 };

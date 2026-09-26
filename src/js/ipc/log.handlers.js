@@ -1,3 +1,4 @@
+// @ts-check
 /**
  * IPC handlers for the log channel.
  *
@@ -15,10 +16,18 @@ import * as logger from '../logger';
 import { registerHandlers } from './registerHandlers';
 import { errorResult } from './errorResult';
 
+/**
+ * @import { IpcMain, IpcMainInvokeEvent, WebContents } from 'electron'
+ * @import { IpcHandlerMap } from './registerHandlers'
+ * @import { GuiLogEntry, GuiLogSink } from '../logger'
+ */
+
+/** @type {Set<WebContents>} */
 const logStreamWindows = new Set();
 
 // logger.js calls this with a full entry object: { seq, level, context,
 // category, timestamp, message }. We forward as-is to renderers.
+/** @param {GuiLogEntry} entry */
 const sendLogToGUI = (entry) => {
     logStreamWindows.forEach((webContents) => {
         if (!webContents.isDestroyed()) {
@@ -27,75 +36,89 @@ const sendLogToGUI = (entry) => {
     });
 };
 
-const buildHandlers = () => ({
-    'log-debug': async (event, message, data) => {
-        logger.setContext('GUI');
-        logger.withCategory('ui').debug(message, data);
-        logger.clearContext();
-        return { success: true };
-    },
-
-    'log-error': async (event, message, data) => {
-        logger.setContext('GUI');
-        logger.withCategory('ui').error(message, data);
-        logger.clearContext();
-        return { success: true };
-    },
-
-    'log-warning': async (event, message, data) => {
-        logger.setContext('GUI');
-        logger.withCategory('ui').warning(message, data);
-        logger.clearContext();
-        return { success: true };
-    },
-
-    'log-api': async (event, message, data) => {
-        logger.setContext('GUI');
-        logger.withCategory('api').api(message, data);
-        logger.clearContext();
-        return { success: true };
-    },
-
-    'get-log-file': async () => logger.getLogFile(),
-    'get-error-log-file': async () => logger.getErrorLogFile(),
-    'get-api-log-file': async () => logger.getApiLogFile(),
-
-    'get-log-backlog': async () => logger.getRecentLogs(),
-
-    'start-log-stream': async (event) => {
-        try {
-            // Capacitor passes no IPC event (single-process WebView): there
-            // is no webContents to register. Delivery is handled by the
-            // bridge wiring globalThis.sendLogToGUI → in-process emitter, so
-            // just acknowledge and let the renderer fetch its backlog.
-            if (!event?.sender) return { success: true };
-            logStreamWindows.add(event.sender);
-            event.sender.on('destroyed', () => {
-                logStreamWindows.delete(event.sender);
-            });
+const buildHandlers = () =>
+    /** @satisfies {IpcHandlerMap} */ ({
+        'log-debug': async (
+            /** @type {unknown} */ event,
+            /** @type {string} */ message,
+            /** @type {unknown} */ data,
+        ) => {
+            logger.setContext('GUI');
+            logger.withCategory('ui').debug(message, data);
+            logger.clearContext();
             return { success: true };
-        } catch (error) {
-            logger.withCategory('ui').error('Error starting log stream:', error);
-            return errorResult(error, 'Failed to start log stream');
-        }
-    },
+        },
 
-    'stop-log-stream': async (event) => {
-        try {
-            if (event?.sender) logStreamWindows.delete(event.sender);
+        'log-error': async (
+            /** @type {unknown} */ event,
+            /** @type {string} */ message,
+            /** @type {unknown} */ data,
+        ) => {
+            logger.setContext('GUI');
+            logger.withCategory('ui').error(message, data);
+            logger.clearContext();
             return { success: true };
-        } catch (error) {
-            logger.withCategory('ui').error('Error stopping log stream:', error);
-            return errorResult(error, 'Failed to stop log stream');
-        }
-    },
-});
+        },
 
+        'log-warning': async (
+            /** @type {unknown} */ event,
+            /** @type {string} */ message,
+            /** @type {unknown} */ data,
+        ) => {
+            logger.setContext('GUI');
+            logger.withCategory('ui').warning(message, data);
+            logger.clearContext();
+            return { success: true };
+        },
+
+        'log-api': async (/** @type {unknown} */ event, /** @type {string} */ message, /** @type {unknown} */ data) => {
+            logger.setContext('GUI');
+            logger.withCategory('api').api(message, data);
+            logger.clearContext();
+            return { success: true };
+        },
+
+        'get-log-file': async () => logger.getLogFile(),
+        'get-error-log-file': async () => logger.getErrorLogFile(),
+        'get-api-log-file': async () => logger.getApiLogFile(),
+
+        'get-log-backlog': async () => logger.getRecentLogs(),
+
+        'start-log-stream': async (/** @type {IpcMainInvokeEvent | null | undefined} */ event) => {
+            try {
+                // Capacitor passes no IPC event (single-process WebView): there
+                // is no webContents to register. Delivery is handled by the
+                // bridge wiring globalThis.sendLogToGUI → in-process emitter, so
+                // just acknowledge and let the renderer fetch its backlog.
+                if (!event?.sender) return { success: true };
+                logStreamWindows.add(event.sender);
+                event.sender.on('destroyed', () => {
+                    logStreamWindows.delete(event.sender);
+                });
+                return { success: true };
+            } catch (error) {
+                logger.withCategory('ui').error('Error starting log stream:', error);
+                return errorResult(error, 'Failed to start log stream');
+            }
+        },
+
+        'stop-log-stream': async (/** @type {IpcMainInvokeEvent | null | undefined} */ event) => {
+            try {
+                if (event?.sender) logStreamWindows.delete(event.sender);
+                return { success: true };
+            } catch (error) {
+                logger.withCategory('ui').error('Error stopping log stream:', error);
+                return errorResult(error, 'Failed to stop log stream');
+            }
+        },
+    });
+
+/** @param {IpcMain} ipcMain */
 const register = (ipcMain) => {
     registerHandlers(ipcMain, buildHandlers());
     // logger.js looks up this function via the global to push log
     // events from any module without a back-reference.
-    global.sendLogToGUI = sendLogToGUI;
+    /** @type {typeof globalThis & { sendLogToGUI?: GuiLogSink }} */ (global).sendLogToGUI = sendLogToGUI;
 };
 
 export { register, buildHandlers, sendLogToGUI };

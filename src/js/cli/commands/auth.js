@@ -1,3 +1,4 @@
+// @ts-check
 /**
  * CLI auth commands: `login` — interactive credential prompt that mutes the
  * password echo and refuses non-TTY invocation (piped stdin would let the

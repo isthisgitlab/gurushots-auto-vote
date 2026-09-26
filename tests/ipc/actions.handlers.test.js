@@ -24,6 +24,7 @@ const auth = require('../../src/js/services/auth');
 const votingLogic = require('../../src/js/services/VotingLogic');
 const autoFill = require('../../src/js/services/autoFill');
 const { rememberChallenges } = require('../../src/js/windows/quitGuard');
+const { logCategories } = require('../helpers/logCategories');
 
 // The handler routes auth through the factory surfaces + the shared
 // extractAuthResult normalizer; exercise the real normalizer rather than a stub
@@ -840,6 +841,32 @@ describe('join-challenge — guard and errors', () => {
             success: false,
             error: expected,
         });
+    });
+});
+
+describe('log categories', () => {
+    test('authenticate logs the request under authentication', async () => {
+        auth.extractAuthResult = realExtractAuthResult;
+        settings.setSetting = jest.fn();
+        apiFactory.getApiStrategy = jest.fn(() => ({ authenticate: jest.fn().mockResolvedValue({ token: 't' }) }));
+
+        await buildHandlers().authenticate({}, 'user', 'pw', true);
+
+        expect(logCategories('info', '🔐 Authentication request received - Mock: true, Username: user', null)).toEqual([
+            'authentication',
+        ]);
+    });
+
+    test('apply-boost-to-entry logs both request lines under voting', async () => {
+        stubAuthGuardOk();
+        stubStrategy({ applyBoostToEntry: jest.fn().mockResolvedValue(true) });
+
+        await buildHandlers()['apply-boost-to-entry']({}, '123', 'i1');
+
+        expect(logCategories('info', '🚀 Apply boost to entry request: Challenge=123, Image=i1', null)).toEqual([
+            'voting',
+        ]);
+        expect(logCategories('info', '🚀 Applying boost to entry: Challenge=123, Image=i1', null)).toEqual(['voting']);
     });
 });
 

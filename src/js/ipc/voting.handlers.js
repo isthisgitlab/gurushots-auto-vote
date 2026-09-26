@@ -1,3 +1,4 @@
+// @ts-check
 /**
  * Voting-cycle IPC handlers. Covers the entry points the renderer
  * uses to drive a voting pass:
@@ -21,15 +22,28 @@ import * as cancellation from '../voting/cancellation';
 import { submitVotesForChallenge, voteAllChallengesManual } from '../services/manualVote';
 import { findActiveChallenge } from '../services/findActiveChallenge';
 
+/**
+ * @import { IpcMain } from 'electron'
+ * @import { IpcHandlerMap, IpcReplyFn } from './registerHandlers'
+ * @import { ActiveChallengesResponse } from '../types/gurushots'
+ */
+
 // Run one full strategy pass — global when challengeId is null, scoped
 // to a single card otherwise. Delegates to BaseMiddleware so the
 // auth-check, cancellation-reset, and IPC-envelope shape live in one
 // place that the gui-vote handler also reaches via guiVote().
+/** @param {string | number | null} challengeId */
 const runStrategyOnceViaMiddleware = (challengeId) => apiFactory.getMiddleware().runVotingCycle(challengeId);
 
 // Single-target vote entry shared by vote-on-challenge and
 // vote-on-challenge-manual. The two channels differ only in log wording;
 // the `manual` flag flips those wording bits.
+/**
+ * @param {unknown} challengeId - Renderer-supplied; validated below.
+ * @param {unknown} challengeTitle - Renderer-supplied; validated below.
+ * @param {{ manual: boolean }} opts
+ * @satisfies {IpcReplyFn}
+ */
 const voteOnSingleChallenge = async (challengeId, challengeTitle, { manual }) => {
     // IPC boundary — validate inputs from the renderer. Without these
     // checks, parseInt(undefined) below returns NaN and the find() call
@@ -40,11 +54,13 @@ const voteOnSingleChallenge = async (challengeId, challengeTitle, { manual }) =>
     if (typeof challengeTitle !== 'string' || challengeTitle.length === 0) {
         return { success: false, error: 'Challenge title is required' };
     }
+    // Validated above: present and numeric.
+    const id = /** @type {string | number} */ (challengeId);
 
     const requestPrefix = manual ? '🔄 Manual vote on challenge request' : '🔄 Vote on challenge request';
     logger
-        .withCategory('general')
-        .info(`${requestPrefix}: ID=${challengeId}, Title="${challengeTitle}"`, null, logger.CATEGORIES.VOTING);
+        .withCategory(logger.CATEGORIES.VOTING)
+        .info(`${requestPrefix}: ID=${challengeId}, Title="${challengeTitle}"`, null);
 
     const userSettings = settings.loadSettings();
     if (!userSettings.token) {
@@ -54,6 +70,7 @@ const voteOnSingleChallenge = async (challengeId, challengeTitle, { manual }) =>
     }
 
     const strategy = apiFactory.getApiStrategy();
+    /** @type {ActiveChallengesResponse | null} */
     const challengesResponse = await strategy.getActiveChallenges(userSettings.token);
 
     if (!challengesResponse || !challengesResponse.challenges) {
@@ -72,19 +89,18 @@ const voteOnSingleChallenge = async (challengeId, challengeTitle, { manual }) =>
     // String-to-String comparison via the shared helper — the API is not
     // consistent about the id type, and parseInt-based equality misses
     // string ids entirely.
-    const challenge = findActiveChallenge(challengesResponse.challenges, challengeId);
+    const challenge = findActiveChallenge(challengesResponse.challenges, id);
     logger
-        .withCategory('general')
+        .withCategory(logger.CATEGORIES.CHALLENGES)
         .debug(
             `🎯 Challenge found: ${challenge ? `ID=${challenge.id}, Title="${challenge.title}"` : 'NOT FOUND'}`,
             null,
-            logger.CATEGORIES.CHALLENGES,
         );
 
     if (!challenge) {
         logger
-            .withCategory('general')
-            .warning('❌ Challenge not found:', { challengeId, challengeTitle }, logger.CATEGORIES.CHALLENGES);
+            .withCategory(logger.CATEGORIES.CHALLENGES)
+            .warning('❌ Challenge not found:', { challengeId, challengeTitle });
         return { success: false, error: `Challenge "${challengeTitle}" not found` };
     }
 
@@ -126,117 +142,140 @@ const voteOnSingleChallenge = async (challengeId, challengeTitle, { manual }) =>
     return { success: true, message: successReturnMsg };
 };
 
-const buildHandlers = () => ({
-    'gui-vote': async () => {
-        try {
-            const userSettings = settings.loadSettings();
-            if (!userSettings.token) {
-                return { success: false, error: 'No authentication token found' };
+const buildHandlers = () =>
+    /** @satisfies {IpcHandlerMap} */ ({
+        'gui-vote': async () => {
+            try {
+                const userSettings = settings.loadSettings();
+                if (!userSettings.token) {
+                    return { success: false, error: 'No authentication token found' };
+                }
+                const middleware = apiFactory.getMiddleware();
+                return await middleware.guiVote();
+            } catch (error) {
+                logger.withCategory('voting').error('Error handling gui-vote request:', error);
+                return errorResult(error, 'Failed to load challenges');
             }
-            const middleware = apiFactory.getMiddleware();
-            return await middleware.guiVote();
-        } catch (error) {
-            logger.withCategory('voting').error('Error handling gui-vote request:', error);
-            return errorResult(error, 'Failed to load challenges');
-        }
-    },
+        },
 
-    'run-voting-cycle': async () => {
-        try {
-            logger.withCategory('voting').info('🔄 Starting voting cycle...', null);
-            return await runStrategyOnceViaMiddleware(null);
-        } catch (error) {
-            logger.withCategory('voting').error('Error handling run-voting-cycle request:', error);
-            return errorResult(error, 'Failed to run voting cycle');
-        }
-    },
-
-    'run-voting-cycle-for-challenge': async (_event, challengeId) => {
-        try {
-            if (challengeId == null || challengeId === '') {
-                return { success: false, error: 'challengeId is required' };
+        'run-voting-cycle': async () => {
+            try {
+                logger.withCategory('voting').info('🔄 Starting voting cycle...', null);
+                return await runStrategyOnceViaMiddleware(null);
+            } catch (error) {
+                logger.withCategory('voting').error('Error handling run-voting-cycle request:', error);
+                return errorResult(error, 'Failed to run voting cycle');
             }
-            logger.withCategory('voting').info(`🔄 Starting single-challenge cycle: ${challengeId}`, null);
-            return await runStrategyOnceViaMiddleware(challengeId);
-        } catch (error) {
-            logger.withCategory('voting').error('Error handling run-voting-cycle-for-challenge request:', error);
-            return errorResult(error, 'Failed to run voting cycle');
-        }
-    },
+        },
 
-    'vote-all-challenges-manual': async () => {
-        try {
-            logger.withCategory('voting').info('🔄 Starting manual vote all challenges (bypass thresholds)...', null);
-
-            const userSettings = settings.loadSettings();
-            if (!userSettings.token) {
-                logger.withCategory('authentication').warning('❌ No token found for manual voting', null);
-                return { success: false, error: 'No authentication token found' };
+        'run-voting-cycle-for-challenge': async (
+            /** @type {unknown} */ _event,
+            /** @type {string | number} */ challengeId,
+        ) => {
+            try {
+                if (challengeId == null || challengeId === '') {
+                    return { success: false, error: 'challengeId is required' };
+                }
+                logger.withCategory('voting').info(`🔄 Starting single-challenge cycle: ${challengeId}`, null);
+                return await runStrategyOnceViaMiddleware(challengeId);
+            } catch (error) {
+                logger.withCategory('voting').error('Error handling run-voting-cycle-for-challenge request:', error);
+                return errorResult(error, 'Failed to run voting cycle');
             }
+        },
 
-            const strategy = apiFactory.getApiStrategy();
+        'vote-all-challenges-manual': async () => {
+            try {
+                logger
+                    .withCategory('voting')
+                    .info('🔄 Starting manual vote all challenges (bypass thresholds)...', null);
 
-            const challengesResponse = await strategy.getActiveChallenges(userSettings.token);
-            if (!challengesResponse || !challengesResponse.challenges) {
-                logger.withCategory('challenges').warning('❌ Failed to fetch challenges for manual vote all', null);
-                return { success: false, error: 'Failed to fetch challenges' };
-            }
+                const userSettings = settings.loadSettings();
+                if (!userSettings.token) {
+                    logger.withCategory('authentication').warning('❌ No token found for manual voting', null);
+                    return { success: false, error: 'No authentication token found' };
+                }
 
-            const challenges = challengesResponse.challenges;
+                const strategy = apiFactory.getApiStrategy();
 
-            logger.withCategory('voting').info(`📋 Found ${challenges.length} challenges to process`, null);
-
-            const { voted, skipped, total } = await voteAllChallengesManual(challenges, strategy, userSettings.token, {
-                onProgress: (current, totalCount, challenge) =>
+                /** @type {ActiveChallengesResponse | null} */
+                const challengesResponse = await strategy.getActiveChallenges(userSettings.token);
+                if (!challengesResponse || !challengesResponse.challenges) {
                     logger
-                        .withCategory('voting')
-                        .progress(
-                            `Processing challenge ${current}/${totalCount}: ${challenge.title}`,
-                            current,
-                            totalCount,
-                        ),
-            });
+                        .withCategory('challenges')
+                        .warning('❌ Failed to fetch challenges for manual vote all', null);
+                    return { success: false, error: 'Failed to fetch challenges' };
+                }
 
-            const message = `Manual vote all completed: ${voted} voted, ${skipped} skipped out of ${total} challenges`;
-            logger.withCategory('voting').success(message, null);
+                const challenges = challengesResponse.challenges;
 
-            return {
-                success: true,
-                message,
-                stats: { total, voted, skipped },
-            };
-        } catch (error) {
-            logger.withCategory('voting').error('Error handling vote-all-challenges-manual request:', error);
-            return errorResult(error, 'Failed to vote on all challenges manually');
-        }
-    },
+                logger.withCategory('voting').info(`📋 Found ${challenges.length} challenges to process`, null);
 
-    'should-cancel-voting': () => cancellation.isCancelled(),
+                const { voted, skipped, total } = await voteAllChallengesManual(
+                    challenges,
+                    strategy,
+                    userSettings.token,
+                    {
+                        onProgress: (current, totalCount, challenge) =>
+                            logger
+                                .withCategory('voting')
+                                .progress(
+                                    `Processing challenge ${current}/${totalCount}: ${challenge.title}`,
+                                    current,
+                                    totalCount,
+                                ),
+                    },
+                );
 
-    'set-cancel-voting': (event, shouldCancel) => {
-        cancellation.setCancelled(shouldCancel);
-        return cancellation.isCancelled();
-    },
+                const message = `Manual vote all completed: ${voted} voted, ${skipped} skipped out of ${total} challenges`;
+                logger.withCategory('voting').success(message, null);
 
-    'vote-on-challenge': async (event, challengeId, challengeTitle) => {
-        try {
-            return await voteOnSingleChallenge(challengeId, challengeTitle, { manual: false });
-        } catch (error) {
-            logger.withCategory('voting').error('Error handling vote-on-challenge request:', error);
-            return errorResult(error, 'Failed to vote on challenge');
-        }
-    },
+                return {
+                    success: true,
+                    message,
+                    stats: { total, voted, skipped },
+                };
+            } catch (error) {
+                logger.withCategory('voting').error('Error handling vote-all-challenges-manual request:', error);
+                return errorResult(error, 'Failed to vote on all challenges manually');
+            }
+        },
 
-    'vote-on-challenge-manual': async (event, challengeId, challengeTitle) => {
-        try {
-            return await voteOnSingleChallenge(challengeId, challengeTitle, { manual: true });
-        } catch (error) {
-            logger.withCategory('voting').error('Error handling vote-on-challenge-manual request:', error);
-            return errorResult(error, 'Failed to vote on challenge manually');
-        }
-    },
-});
+        'should-cancel-voting': () => cancellation.isCancelled(),
 
+        'set-cancel-voting': (/** @type {unknown} */ event, /** @type {boolean} */ shouldCancel) => {
+            cancellation.setCancelled(shouldCancel);
+            return cancellation.isCancelled();
+        },
+
+        'vote-on-challenge': async (
+            /** @type {unknown} */ event,
+            /** @type {unknown} */ challengeId,
+            /** @type {unknown} */ challengeTitle,
+        ) => {
+            try {
+                return await voteOnSingleChallenge(challengeId, challengeTitle, { manual: false });
+            } catch (error) {
+                logger.withCategory('voting').error('Error handling vote-on-challenge request:', error);
+                return errorResult(error, 'Failed to vote on challenge');
+            }
+        },
+
+        'vote-on-challenge-manual': async (
+            /** @type {unknown} */ event,
+            /** @type {unknown} */ challengeId,
+            /** @type {unknown} */ challengeTitle,
+        ) => {
+            try {
+                return await voteOnSingleChallenge(challengeId, challengeTitle, { manual: true });
+            } catch (error) {
+                logger.withCategory('voting').error('Error handling vote-on-challenge-manual request:', error);
+                return errorResult(error, 'Failed to vote on challenge manually');
+            }
+        },
+    });
+
+/** @param {IpcMain} ipcMain */
 const register = (ipcMain) => {
     registerHandlers(ipcMain, buildHandlers());
 };

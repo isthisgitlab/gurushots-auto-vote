@@ -1,3 +1,4 @@
+// @ts-check
 /**
  * Auth helpers shared between IPC handlers that need an early-return
  * when the user is not logged in.
@@ -12,6 +13,22 @@ import * as settings from '../settings';
 import * as logger from '../logger';
 
 /**
+ * @import { AppSettings } from '../types/settings'
+ */
+
+/**
+ * A raw authentication response: every token key and error field GuruShots
+ * has been seen to return across versions.
+ *
+ * @typedef {object} RawAuthResponse
+ * @property {string} [token]
+ * @property {string} [access_token]
+ * @property {string} [auth_token]
+ * @property {string} [error]
+ * @property {string} [message]
+ */
+
+/**
  * Loads settings and verifies a token is present. On miss, logs a
  * warning under the authentication category and returns an
  * early-return response that the IPC handler can pass straight back
@@ -19,7 +36,7 @@ import * as logger from '../logger';
  *
  * @param {string} actionLabel - free-text action identifier used only
  *   in the warning log message (e.g. 'turbo apply', 'boost').
- * @returns {{ ok: true, token: string, settings: object }
+ * @returns {{ ok: true, token: string, settings: AppSettings }
  *         | { ok: false, response: { success: false, error: string } }}
  */
 const requireAuthToken = (actionLabel) => {
@@ -45,7 +62,7 @@ const requireAuthToken = (actionLabel) => {
  * 'success'` without a token still resolves to a failure (there is nothing to
  * persist), matching the prior handler behaviour.
  *
- * @param {object|null|undefined} response - Raw response from apiStrategy.authenticate.
+ * @param {RawAuthResponse|null|undefined} response - Raw response from apiStrategy.authenticate.
  * @returns {{ ok: true, token: string, error: null }
  *         | { ok: false, token: null, error: string }}
  */

@@ -1,3 +1,4 @@
+// @ts-check
 /**
  * Shared GitHub Releases poller. Decides *whether* an update is
  * available; each platform's installer decides *how* to deliver it.
@@ -15,10 +16,25 @@
 
 import axios from 'axios';
 
+/**
+ * The subset of a GitHub release (REST `releases` payload) this module reads.
+ *
+ * @typedef {{ name?: unknown, browser_download_url?: string }} GithubReleaseAsset
+ * @typedef {{
+ *   tag_name?: string,
+ *   html_url?: string,
+ *   prerelease?: boolean,
+ *   body?: string,
+ *   published_at?: string,
+ *   assets?: GithubReleaseAsset[],
+ * }} GithubRelease
+ */
+
 const REPO_OWNER = 'isthisgitlab';
 const REPO_NAME = 'gurushots-auto-vote';
 
 const releasesLatestUrl = () => `https://api.github.com/repos/${REPO_OWNER}/${REPO_NAME}/releases/latest`;
+/** @param {number} perPage */
 const releasesListUrl = (perPage) =>
     `https://api.github.com/repos/${REPO_OWNER}/${REPO_NAME}/releases?per_page=${perPage}`;
 
@@ -26,8 +42,13 @@ const releasesListUrl = (perPage) =>
  * Compare two dotted-numeric versions optionally followed by -beta.N etc.
  * Returns -1, 0, or 1 in the usual way. Pre-release suffixes sort below
  * the same base version (1.0.0-beta.1 < 1.0.0).
+ *
+ * @param {string} a
+ * @param {string} b
+ * @returns {-1 | 0 | 1}
  */
 const compareSemver = (a, b) => {
+    /** @param {string} v */
     const parse = (v) => {
         const cleaned = v.replace(/^v/, '');
         const [base, pre] = cleaned.split('-', 2);
@@ -52,12 +73,17 @@ const compareSemver = (a, b) => {
  * E.g. '.apk' for Android, '.dmg' for macOS DMG, '-lite.apk' for the lite
  * Android build. Lite assets share each release with the full ones, so a
  * plain suffix never matches them.
+ *
+ * @param {GithubRelease | null | undefined} release
+ * @param {string} suffix
+ * @returns {GithubReleaseAsset | null}
  */
 const pickAsset = (release, suffix) => {
     if (!release?.assets) return null;
     const liteSuffix = suffix.startsWith('-lite') ? null : `-lite${suffix}`;
     return (
         release.assets.find(
+            /** @param {GithubReleaseAsset} a */
             (a) =>
                 typeof a.name === 'string' && a.name.endsWith(suffix) && !(liteSuffix && a.name.endsWith(liteSuffix)),
         ) || null
@@ -67,10 +93,11 @@ const pickAsset = (release, suffix) => {
 /**
  * Fetch latest release information and compare against currentVersion.
  *
- * @param {Object} opts
- * @param {string} opts.currentVersion - Current app version (without leading 'v').
+ * @param {Object} [opts]
+ * @param {string} [opts.currentVersion] - Current app version (without leading 'v'); required — a
+ *   missing value resolves to the empty result carrying an `error`.
  * @param {boolean} [opts.isBetaChannel] - When true, picks the newest prerelease instead of the production latest.
- * @param {string} [opts.assetSuffix] - File suffix to pick from release assets (e.g. '.apk'). If omitted,
+ * @param {string | null} [opts.assetSuffix] - File suffix to pick from release assets (e.g. '.apk'). If omitted,
  *   downloadUrl falls back to the release HTML page so the user can download manually.
  * @returns {Promise<{
  *   updateAvailable: boolean,
@@ -95,11 +122,12 @@ const checkForUpdates = async ({ currentVersion, isBetaChannel = false, assetSuf
         return { ...empty, error: 'currentVersion is required' };
     }
     try {
+        /** @type {GithubRelease | null} */
         let release = null;
         if (isBetaChannel) {
             const { data } = await axios.get(releasesListUrl(10));
             // Newest matching prerelease (sorted by published_at descending in GitHub API).
-            release = (data || []).find((r) => r.prerelease) || null;
+            release = (data || []).find((/** @type {GithubRelease} */ r) => r.prerelease) || null;
         } else {
             const { data } = await axios.get(releasesLatestUrl());
             release = data || null;
@@ -121,7 +149,12 @@ const checkForUpdates = async ({ currentVersion, isBetaChannel = false, assetSuf
             releaseDate: release.published_at || null,
         };
     } catch (error) {
-        return { ...empty, error: error?.message || 'Failed to check for updates' };
+        return {
+            ...empty,
+            error:
+                /** @type {{ message?: string } | null | undefined} */ (error)?.message ||
+                'Failed to check for updates',
+        };
     }
 };
 

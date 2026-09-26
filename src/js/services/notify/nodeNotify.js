@@ -1,3 +1,4 @@
+// @ts-check
 /**
  * Node-host delivery for the deadline-action OS notifications (the CLI's
  * continuous scheduler). Injected into the shared cadence chain as its
@@ -33,6 +34,11 @@ import { createTranslator } from '../../translations/translator';
 import { createScenarioNotifier } from '../scenarioNotifications';
 import { getScenarioStatus } from '../scenarioStatus';
 
+/**
+ * @import { Challenge } from '../../types/gurushots'
+ * @import { OutboxItem } from '../scenarioNotifications'
+ */
+
 const notifyTranslator = createTranslator();
 
 /**
@@ -53,11 +59,13 @@ const nodeTranslate = (key) => {
 };
 
 // AppleScript string-literal escape: backslash first, then double-quote.
+/** @param {unknown} value */
 const escapeAppleScript = (value) => String(value).replace(/\\/g, '\\\\').replace(/"/g, '\\"');
 
 // notify-send renders a limited Pango markup subset in the body; escape the
 // markup-significant chars so a crafted title can't inject markup. (The
 // decision module already stripped control chars / RTL.)
+/** @param {unknown} value */
 const escapePango = (value) => String(value).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
 
 /**
@@ -90,11 +98,11 @@ const deliverOsNotification = ({ title, body }) => {
  * so create ONE instance per scheduler and reuse it across cycles.
  *
  * @param {Object} [deps] - injectable seams (defaults wire the real facade)
- * @param {(challenge:Object, now:number)=>{actions:Array}} [deps.describeDeadlineActions]
+ * @param {(challenge: Challenge, now: number) => {actions: unknown[]}} [deps.describeDeadlineActions]
  * @param {(key:string)=>*} [deps.getSetting]
  * @param {(key:string)=>string} [deps.translate]
  * @param {(n:{title:string, body:string})=>void} [deps.deliver]
- * @returns {(challenges:Array, now:number)=>Promise<void>}
+ * @returns {(challenges: Challenge[] | null | undefined, now: number) => Promise<void>}
  */
 const createNodeDeadlineNotifier = (deps = {}) => {
     const describeDeadlineActions = deps.describeDeadlineActions || votingLogic.describeDeadlineActions;
@@ -133,7 +141,12 @@ const createNodeDeadlineNotifier = (deps = {}) => {
             if (notification) deliver(notification);
         } catch (error) {
             // Best-effort: notifications must never disturb voting.
-            logger.withCategory('voting').debug('deadline notification cycle failed', error?.message ?? String(error));
+            logger
+                .withCategory('voting')
+                .debug(
+                    'deadline notification cycle failed',
+                    /** @type {{ message?: string } | null | undefined} */ (error)?.message ?? String(error),
+                );
         } finally {
             running = false;
         }
@@ -147,10 +160,10 @@ const createNodeDeadlineNotifier = (deps = {}) => {
  *
  * @param {Object} [deps] - injectable seams (defaults wire the real facade)
  * @param {(key:string)=>*} [deps.getSetting]
- * @param {(challengeId:string)=>{state: {outbox?: Array}|null}} [deps.getStatus]
+ * @param {(challengeId: string) => {state: {outbox?: OutboxItem[]} | null}} [deps.getStatus]
  * @param {(key:string)=>string} [deps.translate]
  * @param {(n:{title:string, body:string})=>void} [deps.deliver]
- * @returns {(challenges:Array)=>Promise<void>}
+ * @returns {(challenges: Challenge[]) => Promise<void>}
  */
 const createNodeScenarioNotifier = (deps = {}) => {
     const getSetting = deps.getSetting || ((key) => settings.getGlobalDefault(key));

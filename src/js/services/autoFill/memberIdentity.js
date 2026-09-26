@@ -1,6 +1,16 @@
+// @ts-check
 /**
  * Auto-fill — the member id tag resolution needs, memoised per session token.
  * This module owns the identity cache; __resetMemberIdCache clears it.
+ */
+
+/** @import { ErrorLike, FillLogger, RankDeps } from '../../types/autoFill' */
+
+/**
+ * A memoised lookup: the shared promise, and when a null answer expires (null =
+ * never, for a resolved id or a lookup still in flight).
+ *
+ * @typedef {{promise: Promise<string|null>, expiresAt: number | null}} MemberIdCacheEntry
  */
 
 // Member identity for tag resolution, memoised per token.
@@ -10,6 +20,7 @@
 // this the identity lookup would repeat on each one. Keyed by token so a
 // re-login naturally misses; bounded because an unbounded map keyed by a
 // credential is a leak waiting to happen, and one entry is the realistic case.
+/** @type {Map<string, MemberIdCacheEntry>} */
 const memberIdCache = new Map();
 const MAX_MEMBER_ID_CACHE = 4;
 
@@ -32,7 +43,9 @@ const NEGATIVE_IDENTITY_TTL_MS = 60_000;
  * ("Couldn't find username"). The profile's own id is what it accepts.
  *
  * @param {string} token
- * @param {function} getCurrentMemberProfile
+ * @param {NonNullable<RankDeps['getCurrentMemberProfile']>} getCurrentMemberProfile
+ * @param {FillLogger | null} [logger]
+ * @param {string} [logLabel]
  * @returns {Promise<string|null>}
  */
 const resolveMemberId = async (token, getCurrentMemberProfile, logger, logLabel) => {
@@ -55,7 +68,7 @@ const resolveMemberId = async (token, getCurrentMemberProfile, logger, logLabel)
                 logger
                     .withCategory(logLabel || 'autoFill')
                     .debug(
-                        `${logLabel || 'autoFill'}: identity lookup failed: ${(error && error.message) || error}`,
+                        `${logLabel || 'autoFill'}: identity lookup failed: ${(error && /** @type {ErrorLike} */ (error).message) || error}`,
                         null,
                     );
             }
@@ -64,6 +77,7 @@ const resolveMemberId = async (token, getCurrentMemberProfile, logger, logLabel)
     })();
 
     if (memberIdCache.size >= MAX_MEMBER_ID_CACHE) memberIdCache.clear();
+    /** @type {MemberIdCacheEntry} */
     const entry = { promise, expiresAt: null };
     memberIdCache.set(token, entry);
     // Fire-and-forget by design: the caller awaits `promise` itself, this only

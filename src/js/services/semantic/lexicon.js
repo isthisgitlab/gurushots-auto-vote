@@ -1,3 +1,4 @@
+// @ts-check
 /**
  * Static word-vector lexicon backend.
  *
@@ -17,8 +18,12 @@
 import { loadLexiconAsset } from './assets';
 import { stem } from '../photoPicker/stemming';
 
+/** @import { LexiconTable, RawLexicon } from '../../types/semantic' */
+
 // undefined = not initialized, null = unavailable, { dims, words: Map } = ready
+/** @type {LexiconTable | null | undefined} */
 let table;
+/** @type {Promise<LexiconTable | null> | null} */
 let initPromise = null;
 
 /**
@@ -29,6 +34,9 @@ let initPromise = null;
  * every negative component SILENTLY — tests/services/semantic/lexicon.test.js
  * round-trips known negative values through BOTH branches to pin this down.
  * Returns null for anything malformed.
+ *
+ * @param {unknown} str
+ * @returns {Int8Array | null}
  */
 const decodeBase64Int8 = (str) => {
     if (typeof str !== 'string' || str.length === 0) return null;
@@ -54,18 +62,29 @@ const decodeBase64Int8 = (str) => {
 // (see concreteness below). Optional: an asset without one — or with one that
 // does not fit this table — just leaves concreteness() returning null, which
 // every caller already reads as "no opinion".
+/**
+ * @param {unknown} axis
+ * @param {number} dims
+ * @returns {Float64Array | null}
+ */
 const readAxis = (axis, dims) => {
     if (!Array.isArray(axis) || axis.length !== dims || !axis.every(Number.isFinite)) return null;
     return Float64Array.from(axis);
 };
 
+/**
+ * @param {RawLexicon | null | undefined} raw
+ * @returns {LexiconTable | null}
+ */
 const buildTable = (raw) => {
     if (!raw || typeof raw !== 'object' || raw.version !== 2 || !raw.packed || typeof raw.packed !== 'object') {
         return null;
     }
     if (!Number.isFinite(raw.dims) || !Number.isFinite(raw.scale)) return null;
-    const dims = raw.dims;
-    const scale = raw.scale;
+    // Both checked finite just above.
+    const dims = /** @type {number} */ (raw.dims);
+    const scale = /** @type {number} */ (raw.scale);
+    /** @type {Map<string, Float32Array>} */
     const words = new Map();
     for (const key of Object.keys(raw.packed)) {
         const bytes = decodeBase64Int8(raw.packed[key]);
@@ -90,7 +109,7 @@ const buildTable = (raw) => {
 
 /**
  * Load the lexicon once. Idempotent; concurrent callers share the load.
- * @returns {Promise<{dims:number, words:Map<string,Float32Array>}|null>}
+ * @returns {Promise<LexiconTable | null>}
  */
 const init = () => {
     if (table !== undefined) return Promise.resolve(table);
@@ -105,6 +124,10 @@ const init = () => {
 
 const isAvailable = async () => (await init()) != null;
 
+/**
+ * @param {unknown} t
+ * @returns {string}
+ */
 const stemToken = (t) => stem(String(t).toLowerCase());
 
 /**
@@ -125,6 +148,7 @@ const stemToken = (t) => stem(String(t).toLowerCase());
  * hit first). Regenerating the 1.2 MB asset would need a network fetch of the
  * source vectors; this is the offline-safe equivalent.
  *
+ * @param {Pick<LexiconTable, 'words'>} tbl
  * @param {string} tok
  * @returns {Float32Array|undefined}
  */
@@ -172,6 +196,7 @@ const embedIn = (tbl, tokens) => {
  * @returns {Float64Array|null}
  */
 const embed = (tokens) => embedIn(table, tokens);
+/** @param {string} token */
 const hasVector = (token) => Boolean(table && vectorFor(table, token));
 
 const MAX_RELATED_SEARCH_TERMS = 6;
@@ -198,13 +223,20 @@ const CONTRASTING_SEARCH_TERMS = new Map([
     ['below', ['above']],
 ]);
 
+/**
+ * @param {string} term
+ * @returns {string[]}
+ */
 const nearestSearchTerms = (term) => {
     const query = embed([term]);
     if (!query) return [];
+    // embed() only returns a vector from a loaded table.
+    const loaded = /** @type {LexiconTable} */ (table);
     const termStem = stemToken(term);
     const contrasting = CONTRASTING_SEARCH_TERMS.get(termStem) || [];
+    /** @type {Array<{word: string, score: number}>} */
     const matches = [];
-    for (const [key, vec] of table.words) {
+    for (const [key, vec] of loaded.words) {
         if (key === termStem || contrasting.includes(key)) continue;
         let dot = 0;
         let norm = 0;
@@ -214,7 +246,7 @@ const nearestSearchTerms = (term) => {
         }
         const score = dot / Math.sqrt(norm);
         if (score >= GENERIC_SEARCH_FLOOR) {
-            matches.push({ word: Object.hasOwn(table.surfaces, key) ? table.surfaces[key] : key, score });
+            matches.push({ word: Object.hasOwn(loaded.surfaces, key) ? loaded.surfaces[key] : key, score });
         }
     }
     return matches
@@ -223,6 +255,11 @@ const nearestSearchTerms = (term) => {
         .map(({ word }) => word);
 };
 
+/**
+ * @param {string[][]} groups
+ * @param {string[]} terms
+ * @returns {string[]}
+ */
 const interleaveSearchTerms = (groups, terms) => {
     const seen = new Set(terms.map(stemToken));
     const related = [];
@@ -239,11 +276,16 @@ const interleaveSearchTerms = (groups, terms) => {
     return related;
 };
 
+/**
+ * @param {unknown} terms
+ * @returns {string[]}
+ */
 const relatedSearchTerms = (terms) => {
     if (!table || !Array.isArray(terms)) return [];
+    const loaded = table;
     const groups = terms.map((term) => {
         const curated = interleaveSearchTerms(
-            table.searchGroups
+            loaded.searchGroups
                 .filter((group) => group.triggers.some((word) => stemToken(word) === stemToken(term)))
                 .map((group) => group.words),
             [term],
@@ -258,6 +300,11 @@ const relatedSearchTerms = (terms) => {
 
 // Cosine similarity. Both inputs come from embed() and are already unit
 // vectors, so the dot product is the cosine.
+/**
+ * @param {ArrayLike<number> | null | undefined} a
+ * @param {ArrayLike<number> | null | undefined} b
+ * @returns {number}
+ */
 const cosine = (a, b) => {
     if (!a || !b || a.length !== b.length) return 0;
     let dot = 0;

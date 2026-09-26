@@ -1,3 +1,4 @@
+// @ts-check
 /**
  * GuruShots Auto Voter - Challenge term -> real tag resolution
  *
@@ -33,6 +34,9 @@
 
 import { buildThemeKeywords, matches, stem, tokenise, SEMANTIC_MATCH_FLOOR } from './photoPicker';
 import * as lexicon from './semantic/lexicon';
+
+/** @import { ChallengeText, IgnoreWords } from '../types/photoPicker' */
+/** @import { FillLogger } from '../types/autoFill' */
 
 // The server returns nothing under 3 characters, so backing off past it only
 // burns round-trips. Two steps covers the realistic gap between a stemmed title
@@ -106,13 +110,14 @@ const themeBucketOf = (challengeVec, tag) => {
  * Resolve derived search terms into tags the member's library actually uses.
  *
  * @param {Array<string>} terms - terms from buildSearchTerms (already stemmed)
- * @param {object} challenge - the challenge, for theme validation
+ * @param {ChallengeText | null | undefined} challenge - the challenge, for theme validation
  * @param {object} deps
  * @param {string} deps.token
  * @param {string} deps.memberId - member id or user_name (never an email)
  * @param {(token: string, term: string, memberId: string) => Promise<Array<string>>} deps.searchTagAutocomplete
- * @param {object} [deps.logger]
+ * @param {FillLogger} [deps.logger]
  * @param {string} [deps.logLabel]
+ * @param {IgnoreWords} [deps.ignoreWords]
  * @returns {Promise<Array<string>>} resolved tags (<= MAX_RESOLVED_TAGS), or []
  *   when nothing survived — caller then proceeds without resolution.
  */
@@ -152,6 +157,7 @@ const resolveTermsToTags = async (terms, challenge, deps) => {
                 const probe = term.slice(0, term.length - step);
                 if (probe.length < MIN_TERM_LENGTH) break;
 
+                /** @type {unknown} */
                 let items;
                 try {
                     items = await searchTagAutocomplete(token, probe, memberId);
@@ -173,7 +179,9 @@ const resolveTermsToTags = async (terms, challenge, deps) => {
 
     // Accept in TERM order, not completion order, so the result is deterministic
     // regardless of which request happened to land first.
+    /** @type {string[]} */
     const resolved = [];
+    /** @type {Set<string>} */
     const seen = new Set();
     for (const chain of chains) {
         if (!chain) continue;

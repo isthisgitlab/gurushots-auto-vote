@@ -1,9 +1,12 @@
+// @ts-check
 /**
  * Auto-fill — schedule-row validation and the end-aligned threshold math that
  * the staggered fill trigger and the scheduler cadence share.
  */
 
 import { remapScheduleRows } from '../scheduleRemap';
+
+const MAX_SCHEDULE_ROWS_READ = 100;
 
 /**
  * Rows of an autoFillSchedule value that are actually usable. The value comes
@@ -18,10 +21,9 @@ import { remapScheduleRows } from '../scheduleRemap';
  * generous read cap can only come from a corrupted blob and would otherwise
  * be iterated every scheduler cycle per challenge.
  *
- * @param {*} schedule
+ * @param {unknown} schedule
  * @returns {Array<{count: number, seconds: number}>}
  */
-const MAX_SCHEDULE_ROWS_READ = 100;
 const getValidScheduleRows = (schedule) =>
     Array.isArray(schedule)
         ? schedule
@@ -38,8 +40,8 @@ const getValidScheduleRows = (schedule) =>
  * header for the rule). Both threshold computations below MUST go through
  * this so the fill trigger and the scheduler cadence always agree.
  *
- * @param {*} schedule - persisted autoFillSchedule value (untrusted shape)
- * @param {*} maxPhotoSubmits - challenge.max_photo_submits (untrusted shape)
+ * @param {unknown} schedule - persisted autoFillSchedule value (untrusted shape)
+ * @param {unknown} maxPhotoSubmits - challenge.max_photo_submits (untrusted shape)
  * @returns {Array<{count: number, seconds: number}>}
  */
 const getEffectiveScheduleRows = (schedule, maxPhotoSubmits) =>
@@ -55,13 +57,13 @@ const getEffectiveScheduleRows = (schedule, maxPhotoSubmits) =>
  * a non-finite max (never NaN — a NaN would poison orderDeadlineActions'
  * sort downstream).
  *
- * @param {*} schedule - persisted autoFillSchedule value (untrusted shape)
+ * @param {unknown} schedule - persisted autoFillSchedule value (untrusted shape)
  * @param {number} secondsRemaining
- * @param {*} maxPhotoSubmits - challenge.max_photo_submits (untrusted shape)
+ * @param {unknown} maxPhotoSubmits - challenge.max_photo_submits (untrusted shape)
  * @returns {number}
  */
 const resolveScheduleTarget = (schedule, secondsRemaining, maxPhotoSubmits) => {
-    const max = Number.isFinite(maxPhotoSubmits) ? maxPhotoSubmits : 0;
+    const max = Number.isFinite(maxPhotoSubmits) ? /** @type {number} */ (maxPhotoSubmits) : 0;
     if (!Number.isFinite(secondsRemaining)) return 0;
     let target = 0;
     for (const row of getEffectiveScheduleRows(schedule, maxPhotoSubmits)) {
@@ -81,14 +83,15 @@ const resolveScheduleTarget = (schedule, secondsRemaining, maxPhotoSubmits) => {
  * fills sort against boost/turbo/emergency correctly; the same defensive
  * rules as resolveScheduleTarget apply.
  *
- * @param {*} schedule - persisted autoFillSchedule value (untrusted shape)
- * @param {*} entryCount - current number of entries (untrusted shape)
- * @param {*} maxPhotoSubmits - challenge.max_photo_submits (untrusted shape)
+ * @param {unknown} schedule - persisted autoFillSchedule value (untrusted shape)
+ * @param {unknown} entryCount - current number of entries (untrusted shape)
+ * @param {unknown} maxPhotoSubmits - challenge.max_photo_submits (untrusted shape)
  * @returns {number}
  */
 const getNextScheduleThresholdSec = (schedule, entryCount, maxPhotoSubmits) => {
-    const max = Number.isFinite(maxPhotoSubmits) ? maxPhotoSubmits : 0;
-    const count = Number.isFinite(entryCount) ? entryCount : 0;
+    // Number.isFinite vouches for both casts.
+    const max = Number.isFinite(maxPhotoSubmits) ? /** @type {number} */ (maxPhotoSubmits) : 0;
+    const count = Number.isFinite(entryCount) ? /** @type {number} */ (entryCount) : 0;
     let threshold = 0;
     for (const row of getEffectiveScheduleRows(schedule, maxPhotoSubmits)) {
         if (Math.min(row.count, max) > count) {

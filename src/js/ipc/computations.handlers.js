@@ -1,3 +1,4 @@
+// @ts-check
 /**
  * IPC handlers for read-only, main-side computations the renderer can't run
  * itself because they need the settings facade (services/VotingLogic is
@@ -19,30 +20,41 @@ import { registerHandlers } from './registerHandlers';
 import * as logger from '../logger';
 import * as votingLogic from '../services/VotingLogic';
 
-const buildHandlers = () => ({
-    'get-deadline-actions': async (event, challenge) => {
-        try {
-            if (!challenge || typeof challenge !== 'object' || Array.isArray(challenge)) {
-                return { success: false, error: 'invalid challenge' };
-            }
-            // Defense-in-depth on the renderer-supplied id (used downstream as a
-            // per-challenge override lookup key): only a string/number is a valid
-            // challenge id. Rejects e.g. an object/array id before it reaches the
-            // settings facade.
-            const idType = typeof challenge.id;
-            if (idType !== 'string' && idType !== 'number') {
-                return { success: false, error: 'invalid challenge id' };
-            }
-            const now = Math.floor(Date.now() / 1000);
-            const { actions, boostBlocked } = votingLogic.describeDeadlineActions(challenge, now);
-            return { success: true, actions, boostBlocked };
-        } catch (error) {
-            logger.withCategory('voting').error('Error computing deadline actions:', error);
-            return { success: false, error: 'Failed to compute deadline actions' };
-        }
-    },
-});
+/**
+ * @import { IpcMain } from 'electron'
+ * @import { IpcHandlerMap } from './registerHandlers'
+ * @import { Challenge } from '../types/gurushots'
+ */
 
+const buildHandlers = () =>
+    /** @satisfies {IpcHandlerMap} */ ({
+        'get-deadline-actions': async (/** @type {unknown} */ event, /** @type {unknown} */ challenge) => {
+            try {
+                if (!challenge || typeof challenge !== 'object' || Array.isArray(challenge)) {
+                    return { success: false, error: 'invalid challenge' };
+                }
+                // Defense-in-depth on the renderer-supplied id (used downstream as a
+                // per-challenge override lookup key): only a string/number is a valid
+                // challenge id. Rejects e.g. an object/array id before it reaches the
+                // settings facade.
+                const idType = typeof (/** @type {{ id?: unknown }} */ (challenge).id);
+                if (idType !== 'string' && idType !== 'number') {
+                    return { success: false, error: 'invalid challenge id' };
+                }
+                const now = Math.floor(Date.now() / 1000);
+                const { actions, boostBlocked } = votingLogic.describeDeadlineActions(
+                    /** @type {Challenge} */ (challenge),
+                    now,
+                );
+                return { success: true, actions, boostBlocked };
+            } catch (error) {
+                logger.withCategory('voting').error('Error computing deadline actions:', error);
+                return { success: false, error: 'Failed to compute deadline actions' };
+            }
+        },
+    });
+
+/** @param {IpcMain} ipcMain */
 const register = (ipcMain) => {
     registerHandlers(ipcMain, buildHandlers());
 };

@@ -1,3 +1,4 @@
+// @ts-check
 /**
  * IPC handlers for user-defined scenarios (settings/scenarios.js,
  * services/scenarioRunner.js). Every handler returns `{success, error}` —
@@ -34,20 +35,67 @@ import { simulateScenario } from '../scenarios/simulate';
 import { SCENARIO_TEMPLATES } from '../scenarios/templates';
 import { refreshScenarioStateAsync } from '../scenarioStateStore';
 
+/**
+ * @import { IpcMain } from 'electron'
+ * @import { IpcHandlerMap } from './registerHandlers'
+ * @import { ScenarioDocument, ScenarioIssue } from '../settings/scenarioSchema'
+ * @import { ActiveChallengesResponse, Challenge } from '../types/gurushots'
+ */
+
+/**
+ * A facade `{ok, ...}` result mapped onto the IPC `{success, ...}` shape.
+ *
+ * @template R
+ * @typedef {R extends { ok: false }
+ *   ? { success: false, error: string, issues: ScenarioIssue[] }
+ *   : Omit<R, 'ok'> & { success: true }} FromResult
+ */
+
+/** @typedef {ReturnType<typeof getScenarioStatus>} ScenarioStatus */
+
 const log = () => logger.withCategory('scenario');
 
+/**
+ * @param {unknown} value
+ * @returns {value is string | number}
+ */
 const isIdArg = (value) => (typeof value === 'string' && value.trim() !== '') || Number.isFinite(value);
+/**
+ * @param {unknown} value
+ * @returns {value is string}
+ */
 const isName = (value) => typeof value === 'string' && value.trim() !== '';
 
-const invalidArgs = { success: false, error: 'invalid-args' };
+const invalidArgs = { success: /** @type {const} */ (false), error: 'invalid-args' };
 
-/** A facade `{ok, issues}` result as an IPC result. */
+/**
+ * A facade `{ok, issues}` result as an IPC result.
+ *
+ * A failed result always carries `issues` (every facade failure path does).
+ *
+ * @template {{ ok: boolean, issues?: ScenarioIssue[] }} R
+ * @param {R} r
+ * @returns {FromResult<R>}
+ */
 const fromResult = ({ ok, ...result }) =>
-    ok
-        ? { success: true, ...result }
-        : { success: false, error: result.issues[0]?.message ?? 'Invalid scenario', issues: result.issues };
+    /** @type {FromResult<R>} */ (
+        ok
+            ? { success: true, ...result }
+            : {
+                  success: false,
+                  error: /** @type {{ issues: ScenarioIssue[] }} */ (result).issues[0]?.message ?? 'Invalid scenario',
+                  issues: /** @type {{ issues: ScenarioIssue[] }} */ (result).issues,
+              }
+    );
 
-/** Runs a handler body, turning a throw into an error result. */
+/**
+ * Runs a handler body, turning a throw into an error result.
+ *
+ * @template T
+ * @param {string} label
+ * @param {() => T | Promise<T>} body
+ * @returns {Promise<T | { success: false, error: string }>}
+ */
 const safely = async (label, body) => {
     try {
         return await body();
@@ -57,6 +105,10 @@ const safely = async (label, body) => {
     }
 };
 
+/**
+ * @param {ScenarioDocument} scenario
+ * @param {number} now - Unix seconds
+ */
 const startState = (scenario, now) => ({
     phase: scenario.start,
     phaseEnteredAt: now,
@@ -70,8 +122,28 @@ const startState = (scenario, now) => ({
  * status, the live challenge, its state (or a start state) and the bankroll.
  * `draft` replaces the assigned scenario with an unsaved document, which then
  * starts from its start phase.
+ *
+ * @param {string} label
+ * @param {string | number} challengeId
+ * @param {unknown} [draft]
+ * @returns {Promise<
+ *   | { ok: false, response: { success: false, error: string, issues?: ScenarioIssue[] } }
+ *   | {
+ *       ok: true,
+ *       status: Omit<ScenarioStatus, 'scenario'> & { scenario: ScenarioDocument },
+ *       challenge: Challenge,
+ *       now: number,
+ *       state: NonNullable<ScenarioStatus['state']> | ReturnType<typeof startState>,
+ *       bankroll: Record<string, number> | null,
+ *     }
+ * >}
  */
 const loadLiveScenario = async (label, challengeId, draft = null) => {
+    /**
+     * @param {string} error
+     * @param {{ issues?: ScenarioIssue[] }} [extra]
+     * @returns {{ ok: false, response: { success: false, error: string, issues?: ScenarioIssue[] } }}
+     */
     const refuse = (error, extra = {}) => ({ ok: false, response: { success: false, error, ...extra } });
     const guard = auth.requireAuthToken(label);
     if (!guard.ok) return { ok: false, response: guard.response };
@@ -85,13 +157,15 @@ const loadLiveScenario = async (label, challengeId, draft = null) => {
     if (!status.scenario) return refuse(status.assigned ? 'unknown-scenario' : 'no-scenario');
     if (status.corrupt) return refuse('state-unreadable');
     const strategy = apiFactory.getApiStrategy();
+    /** @type {ActiveChallengesResponse | null} */
     const response = await strategy.getActiveChallenges(guard.token);
     const challenge = findActiveChallenge(response?.challenges, challengeId);
     if (!challenge) return refuse('challenge-not-found');
     const now = Math.floor(Date.now() / 1000);
     return {
         ok: true,
-        status,
+        // The guard above returned when status.scenario was null.
+        status: /** @type {Omit<ScenarioStatus, 'scenario'> & { scenario: ScenarioDocument }} */ (status),
         challenge,
         now,
         state: status.state ?? startState(status.scenario, now),
@@ -99,123 +173,147 @@ const loadLiveScenario = async (label, challengeId, draft = null) => {
     };
 };
 
-const buildHandlers = () => ({
-    'get-scenarios': async () =>
-        safely('get-scenarios', () => ({
-            success: true,
-            scenarios: settings.getScenarios(),
-            templates: SCENARIO_TEMPLATES,
-        })),
-
-    'check-scenario': async (event, doc) =>
-        safely('check-scenario', () => {
-            const result = settings.checkScenario(doc);
-            return result.ok ? { success: true } : fromResult(result);
-        }),
-
-    'save-scenario': async (event, doc, options) =>
-        safely('save-scenario', () =>
-            fromResult(settings.saveScenario(doc, { overwrite: options?.overwrite !== false })),
-        ),
-
-    'rename-scenario': async (event, oldName, newName) => {
-        if (!isName(oldName) || typeof newName !== 'string') return invalidArgs;
-        return safely('rename-scenario', () => fromResult(settings.renameScenario(oldName, newName)));
-    },
-
-    'delete-scenario': async (event, name) => {
-        if (!isName(name)) return invalidArgs;
-        return safely('delete-scenario', () =>
-            settings.deleteScenario(name) ? { success: true } : { success: false, error: 'not-found' },
-        );
-    },
-
-    'preview-scenario-import': async (event, text) =>
-        safely('preview-scenario-import', () => fromResult(settings.previewScenarioImport(text))),
-
-    'import-scenario': async (event, text, options) =>
-        safely('import-scenario', () =>
-            fromResult(settings.importScenario(text, { overwrite: options?.overwrite === true })),
-        ),
-
-    'export-scenario': async (event, name) => {
-        if (!isName(name)) return invalidArgs;
-        return safely('export-scenario', () => {
-            const json = settings.exportScenario(name);
-            return json === null ? { success: false, error: 'not-found' } : { success: true, json };
-        });
-    },
-
-    'get-scenario-status': async (event, challengeId) => {
-        if (!isIdArg(challengeId)) return invalidArgs;
-        return safely('get-scenario-status', async () => {
-            await refreshScenarioStateAsync();
-            return { success: true, ...getScenarioStatus(challengeId) };
-        });
-    },
-
-    'reset-scenario-state': async (event, challengeId) => {
-        if (!isIdArg(challengeId)) return invalidArgs;
-        return safely('reset-scenario-state', async () => {
-            await refreshScenarioStateAsync();
-            ledgerForMode().remove(String(challengeId));
-            log().info(`Scenario progress reset for challenge ${logger.sanitizeLogString(String(challengeId))}`, null);
-            return { success: true };
-        });
-    },
-
-    'dry-run-scenario': async (event, challengeId) => {
-        if (!isIdArg(challengeId)) return invalidArgs;
-        return safely('dry-run-scenario', async () => {
-            const loaded = await loadLiveScenario('scenario dry run', challengeId);
-            if (!loaded.ok) return loaded.response;
-            const { status, challenge, state, now, bankroll } = loaded;
-            const decision = evaluateScenario({
-                scenario: status.scenario,
-                state,
-                challenge,
-                now,
-                timezone: status.timezone,
-                bankroll,
-            });
-            return {
+const buildHandlers = () =>
+    /** @satisfies {IpcHandlerMap} */ ({
+        'get-scenarios': async () =>
+            safely('get-scenarios', () => ({
                 success: true,
-                scenario: status.scenario.name,
-                phase: decision.phase,
-                started: status.state !== null,
-                halted: decision.halted,
-                fire: decision.fire
-                    ? {
-                          ruleId: decision.fire.ruleId,
-                          startIndex: decision.fire.startIndex,
-                          actions: decision.fire.rule.do.map((action) => action.type),
-                      }
-                    : null,
-                explain: decision.explain,
-                nextWakeAt: decision.nextWakeAt,
-            };
-        });
-    },
+                scenarios: settings.getScenarios(),
+                templates: SCENARIO_TEMPLATES,
+            })),
 
-    'simulate-scenario': async (event, challengeId, draft) => {
-        if (!isIdArg(challengeId)) return invalidArgs;
-        return safely('simulate-scenario', async () => {
-            const loaded = await loadLiveScenario('scenario simulation', challengeId, draft ?? null);
-            if (!loaded.ok) return loaded.response;
-            const { status, challenge, state, now, bankroll } = loaded;
-            const timeline = simulateScenario({
-                scenario: status.scenario,
-                state,
-                challenge,
-                now,
-                timezone: status.timezone,
-                bankroll,
+        'check-scenario': async (/** @type {unknown} */ event, /** @type {unknown} */ doc) =>
+            safely('check-scenario', () => {
+                const result = settings.checkScenario(doc);
+                return result.ok ? { success: true } : fromResult(result);
+            }),
+
+        'save-scenario': async (
+            /** @type {unknown} */ event,
+            /** @type {unknown} */ doc,
+            /** @type {{ overwrite?: boolean } | null | undefined} */ options,
+        ) =>
+            safely('save-scenario', () =>
+                fromResult(settings.saveScenario(doc, { overwrite: options?.overwrite !== false })),
+            ),
+
+        'rename-scenario': async (
+            /** @type {unknown} */ event,
+            /** @type {unknown} */ oldName,
+            /** @type {unknown} */ newName,
+        ) => {
+            if (!isName(oldName) || typeof newName !== 'string') return invalidArgs;
+            return safely('rename-scenario', () => fromResult(settings.renameScenario(oldName, newName)));
+        },
+
+        'delete-scenario': async (/** @type {unknown} */ event, /** @type {unknown} */ name) => {
+            if (!isName(name)) return invalidArgs;
+            return safely('delete-scenario', () =>
+                settings.deleteScenario(name) ? { success: true } : { success: false, error: 'not-found' },
+            );
+        },
+
+        'preview-scenario-import': async (/** @type {unknown} */ event, /** @type {unknown} */ text) =>
+            safely('preview-scenario-import', () => fromResult(settings.previewScenarioImport(text))),
+
+        'import-scenario': async (
+            /** @type {unknown} */ event,
+            /** @type {unknown} */ text,
+            /** @type {{ overwrite?: boolean } | null | undefined} */ options,
+        ) =>
+            safely('import-scenario', () =>
+                fromResult(settings.importScenario(text, { overwrite: options?.overwrite === true })),
+            ),
+
+        'export-scenario': async (/** @type {unknown} */ event, /** @type {unknown} */ name) => {
+            if (!isName(name)) return invalidArgs;
+            return safely('export-scenario', () => {
+                const json = settings.exportScenario(name);
+                return json === null ? { success: false, error: 'not-found' } : { success: true, json };
             });
-            return { success: true, scenario: status.scenario.name, startPhase: state.phase, now, ...timeline };
-        });
-    },
-});
+        },
 
+        'get-scenario-status': async (/** @type {unknown} */ event, /** @type {unknown} */ challengeId) => {
+            if (!isIdArg(challengeId)) return invalidArgs;
+            return safely('get-scenario-status', async () => {
+                await refreshScenarioStateAsync();
+                return { success: true, ...getScenarioStatus(challengeId) };
+            });
+        },
+
+        'reset-scenario-state': async (/** @type {unknown} */ event, /** @type {unknown} */ challengeId) => {
+            if (!isIdArg(challengeId)) return invalidArgs;
+            return safely('reset-scenario-state', async () => {
+                await refreshScenarioStateAsync();
+                ledgerForMode().remove(String(challengeId));
+                log().info(
+                    `Scenario progress reset for challenge ${logger.sanitizeLogString(String(challengeId))}`,
+                    null,
+                );
+                return { success: true };
+            });
+        },
+
+        'dry-run-scenario': async (/** @type {unknown} */ event, /** @type {unknown} */ challengeId) => {
+            if (!isIdArg(challengeId)) return invalidArgs;
+            return safely('dry-run-scenario', async () => {
+                const loaded = await loadLiveScenario('scenario dry run', challengeId);
+                if (!loaded.ok) return loaded.response;
+                const { status, challenge, state, now, bankroll } = loaded;
+                const decision = evaluateScenario({
+                    scenario: status.scenario,
+                    state,
+                    challenge,
+                    now,
+                    timezone: status.timezone,
+                    bankroll,
+                });
+                return {
+                    success: true,
+                    scenario: status.scenario.name,
+                    phase: decision.phase,
+                    started: status.state !== null,
+                    halted: decision.halted,
+                    fire: decision.fire
+                        ? {
+                              ruleId: decision.fire.ruleId,
+                              startIndex: decision.fire.startIndex,
+                              // `rule` is untyped in scenarios/evaluate; a validated rule's `do` is its action list.
+                              actions: /** @type {Array<{ type: string }>} */ (decision.fire.rule.do).map(
+                                  (action) => action.type,
+                              ),
+                          }
+                        : null,
+                    explain: decision.explain,
+                    nextWakeAt: decision.nextWakeAt,
+                };
+            });
+        },
+
+        'simulate-scenario': async (
+            /** @type {unknown} */ event,
+            /** @type {unknown} */ challengeId,
+            /** @type {unknown} */ draft,
+        ) => {
+            if (!isIdArg(challengeId)) return invalidArgs;
+            return safely('simulate-scenario', async () => {
+                const loaded = await loadLiveScenario('scenario simulation', challengeId, draft ?? null);
+                if (!loaded.ok) return loaded.response;
+                const { status, challenge, state, now, bankroll } = loaded;
+                const timeline = simulateScenario({
+                    scenario: status.scenario,
+                    state,
+                    challenge,
+                    now,
+                    timezone: status.timezone,
+                    bankroll,
+                });
+                return { success: true, scenario: status.scenario.name, startPhase: state.phase, now, ...timeline };
+            });
+        },
+    });
+
+/** @param {IpcMain} ipcMain */
 const register = (ipcMain) => registerHandlers(ipcMain, buildHandlers());
 
 export { register, buildHandlers };

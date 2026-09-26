@@ -1,3 +1,4 @@
+// @ts-check
 import { app } from 'electron';
 import { autoUpdater } from 'electron-updater';
 import * as logger from '../logger';
@@ -6,6 +7,29 @@ import * as settings from '../settings';
 import { getReleasesUrl as releasesPageUrl } from './UpdateChecker';
 import { hasBundledModel } from './visionVerifier';
 import { bypassQuitGuard } from '../windows/quitGuard';
+
+/**
+ * @import { BrowserWindow } from 'electron'
+ * @import { UpdateInfo } from 'electron-updater'
+ */
+
+/**
+ * The update info shape sent to the renderer (and returned by the
+ * check-for-updates IPC channel).
+ *
+ * @typedef {{
+ *   currentVersion: string,
+ *   latestVersion: string,
+ *   releaseNotes: string,
+ *   releaseDate: string,
+ *   isPrerelease: boolean,
+ *   files: Array<{ url: string, size: number | undefined }>,
+ * }} FormattedUpdateInfo
+ */
+
+/**
+ * @typedef {{ percent: number, bytesPerSecond: number, transferred: number, total: number }} DownloadProgress
+ */
 
 /**
  * One-shot skip-version migration: the canonical store is the settings blob
@@ -44,9 +68,12 @@ const migrateLegacySkipVersion = () => {
  * skip-version integration, and rate limiting
  */
 class AutoUpdater {
+    /** @param {BrowserWindow | null} [mainWindow] */
     constructor(mainWindow = null) {
         this.mainWindow = mainWindow;
+        /** @type {FormattedUpdateInfo | null} */
         this.updateInfo = null;
+        /** @type {DownloadProgress | null} */
         this.downloadProgress = null;
         this.isDownloading = false;
         this.isUpdateDownloaded = false;
@@ -67,7 +94,7 @@ class AutoUpdater {
 
     /**
      * Set the main window reference (for sending IPC events)
-     * @param {BrowserWindow} window
+     * @param {BrowserWindow | null} window
      */
     setMainWindow(window) {
         this.mainWindow = window;
@@ -76,7 +103,7 @@ class AutoUpdater {
     /**
      * Send event to renderer process
      * @param {string} channel
-     * @param {*} data
+     * @param {unknown} data
      */
     sendToRenderer(channel, data) {
         if (this.mainWindow && !this.mainWindow.isDestroyed()) {
@@ -143,8 +170,8 @@ class AutoUpdater {
 
     /**
      * Format update info for renderer
-     * @param {Object} info - Update info from electron-updater
-     * @returns {Object} - Formatted update info
+     * @param {UpdateInfo} info - Update info from electron-updater
+     * @returns {FormattedUpdateInfo} - Formatted update info
      */
     formatUpdateInfo(info) {
         return {
@@ -163,7 +190,7 @@ class AutoUpdater {
 
     /**
      * Parse release notes (can be string or array of objects)
-     * @param {string|Array} releaseNotes
+     * @param {UpdateInfo['releaseNotes']} releaseNotes
      * @returns {string}
      */
     parseReleaseNotes(releaseNotes) {
@@ -212,7 +239,7 @@ class AutoUpdater {
     /**
      * Check for updates with rate limiting
      * @param {boolean} force - Bypass rate limiting
-     * @returns {Promise<Object|null>} - Update info or null
+     * @returns {Promise<FormattedUpdateInfo | null>} - Update info or null
      */
     async checkForUpdates(force = false) {
         try {
@@ -250,7 +277,9 @@ class AutoUpdater {
 
             return null;
         } catch (error) {
-            logger.withCategory('update').error('Error checking for updates:', error.message);
+            logger
+                .withCategory('update')
+                .error('Error checking for updates:', /** @type {{ message?: string } | null} */ (error)?.message);
             // Don't throw - return null to indicate no update found
             return null;
         }
@@ -283,7 +312,9 @@ class AutoUpdater {
             return true;
         } catch (error) {
             this.isDownloading = false;
-            logger.withCategory('update').error('Download failed:', error.message);
+            logger
+                .withCategory('update')
+                .error('Download failed:', /** @type {{ message?: string } | null} */ (error)?.message);
             throw error;
         }
     }
@@ -305,7 +336,7 @@ class AutoUpdater {
 
     /**
      * Skip the current version
-     * @param {string} version - Version to skip (optional, uses current update)
+     * @param {string | null} [version] - Version to skip (optional, uses current update)
      */
     skipVersion(version = null) {
         const versionToSkip = version || this.updateInfo?.latestVersion;
@@ -330,7 +361,7 @@ class AutoUpdater {
 
     /**
      * Get current update info
-     * @returns {Object|null}
+     * @returns {FormattedUpdateInfo | null}
      */
     getUpdateInfo() {
         return this.updateInfo;
@@ -338,7 +369,7 @@ class AutoUpdater {
 
     /**
      * Get download progress
-     * @returns {Object|null}
+     * @returns {DownloadProgress | null}
      */
     getDownloadProgress() {
         return this.downloadProgress;

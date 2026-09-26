@@ -1,3 +1,4 @@
+// @ts-check
 /**
  * Photo picker — what a challenge title says about its subject: title words
  * that are abstract rather than the subject, the series subject segment,
@@ -7,6 +8,8 @@
 
 import { MAX_TOKENISE_CHARS, stem, rawTokenise, tokenise, matches } from './stemming';
 import * as lexicon from '../semantic/lexicon';
+
+/** @import { ChallengeText, ExcludedSubject, IgnoreWords, Negation } from '../../types/photoPicker' */
 
 // Bounds for abstractTitleWords, on the lexicon's concreteness cosine. Pinned by
 // the `concreteness.cases` gate in scripts/validate-lexicon.js (real titles, run
@@ -18,6 +21,7 @@ import * as lexicon from '../semantic/lexicon';
 const CONCRETE_SUBJECT_MIN = 0.15;
 const ABSTRACT_WORD_MAX = -0.1;
 
+/** @param {string} word */
 const lexiconConcreteness = (word) => lexicon.concreteness(word);
 
 /**
@@ -40,19 +44,24 @@ const lexiconConcreteness = (word) => lexicon.concreteness(word);
  * @returns {Set<string>} a subset of `words`; never all of them
  */
 const abstractTitleWords = (words, concretenessOf = lexiconConcreteness) => {
+    /** @type {Set<string>} */
     const abstract = new Set();
     if (!Array.isArray(words) || words.length < 2) return abstract;
     const scores = words.map((word) => concretenessOf(word));
-    const known = scores.filter((score) => Number.isFinite(score));
+    const known = /** @type {number[]} */ (scores.filter((score) => Number.isFinite(score)));
     if (!(Math.max(...known) >= CONCRETE_SUBJECT_MIN)) return abstract;
     words.forEach((word, i) => {
-        if (Number.isFinite(scores[i]) && scores[i] <= ABSTRACT_WORD_MAX) abstract.add(word);
+        if (Number.isFinite(scores[i]) && /** @type {number} */ (scores[i]) <= ABSTRACT_WORD_MAX) abstract.add(word);
     });
     return abstract;
 };
 
 // A title's subject stems with abstractTitleWords' demotions removed. Safe to
 // apply blindly: the result is never empty for a non-empty input.
+/**
+ * @param {string[]} stems
+ * @returns {string[]}
+ */
 const withoutAbstract = (stems) => {
     const abstract = abstractTitleWords(stems);
     return abstract.size > 0 ? stems.filter((s) => !abstract.has(s)) : stems;
@@ -80,6 +89,11 @@ const withoutAbstract = (stems) => {
 // Falls back to the whole title when the tail carries no usable word, so
 // "Mountains: A Tribute" keeps "mountains" instead of collapsing to nothing.
 const SERIES_SEPARATOR_RE = /[:\u2013\u2014]|\s-\s/;
+/**
+ * @param {unknown} title
+ * @param {IgnoreWords} [ignoreWords]
+ * @returns {string}
+ */
 const titleSubject = (title, ignoreWords) => {
     if (typeof title !== 'string') return '';
     const match = SERIES_SEPARATOR_RE.exec(title);
@@ -119,13 +133,15 @@ const NO_NEGATION = Object.freeze({ positiveTitle: '', stems: Object.freeze([]),
 /**
  * Split a title into its positive text and the stems it says to leave out.
  *
- * @param {string} title
- * @param {Iterable<string>|null} [ignoreWords]
- * @returns {{positiveTitle: string, stems: string[], active: boolean}}
+ * @param {unknown} title
+ * @param {IgnoreWords} [ignoreWords]
+ * @returns {Negation}
  */
 const parseNegation = (title, ignoreWords = null) => {
     if (typeof title !== 'string' || title === '') return NO_NEGATION;
+    /** @type {Set<string>} */
     const stems = new Set();
+    /** @param {string} text */
     const addWords = (text) => {
         const words = rawTokenise(text, { ignoreWords });
         for (const word of words) stems.add(stem(word));
@@ -146,6 +162,11 @@ const parseNegation = (title, ignoreWords = null) => {
 };
 
 // Remove negated subjects and the negation markers from a keyword list.
+/**
+ * @param {string[]} keywords
+ * @param {Negation} negation
+ * @returns {string[]}
+ */
 const dropNegated = (keywords, negation) => {
     if (!negation.active) return keywords;
     const negated = new Set(negation.stems);
@@ -197,9 +218,9 @@ const PEOPLE_LABEL_STEMS = new Set(
  * What the challenge title says to leave out, in the shape the exclusion filter
  * reads, or null when the title negates nothing.
  *
- * @param {object} challenge
- * @param {Iterable<string>|null} ignoreWords
- * @returns {{stems: string[], concept: Set<string>|null}|null}
+ * @param {ChallengeText | null | undefined} challenge
+ * @param {IgnoreWords} ignoreWords
+ * @returns {ExcludedSubject | null}
  */
 const excludedSubjectOf = (challenge, ignoreWords) => {
     const { stems, active } = parseNegation(challenge?.title, ignoreWords);
@@ -207,6 +228,11 @@ const excludedSubjectOf = (challenge, ignoreWords) => {
     return { stems, concept: stems.some((s) => PEOPLE_LABEL_STEMS.has(s)) ? PEOPLE_LABEL_STEMS : null };
 };
 
+/**
+ * @param {string[]} labelStems
+ * @param {ExcludedSubject} excluded
+ * @returns {boolean}
+ */
 const photoShowsExcluded = (labelStems, excluded) =>
     labelStems.some(
         (labelStem) =>
@@ -259,6 +285,10 @@ const LETTER_IS_FOR_RE = /(?:^|\s)([a-z])\s+is\s+for\b/i;
 // because the curly pairs differ on each side (U+2018/U+2019, U+201C/U+201D);
 // a mismatched pair is accepted since this parses messy titles, not validates.
 const LETTER_NAMED_RE = /\bletters?\s*:?\s*(?:['"‘“]\s*([a-z])\s*['"’”]|([a-z])(?=\s*(?:[-–—:;,.!?|]|$)))/i;
+/**
+ * @param {unknown} title
+ * @returns {string | null}
+ */
 const detectLetterPrefix = (title) => {
     if (typeof title !== 'string' || title.length > 200) return null;
     const m = title.match(LETTER_CHALLENGE_RE) || title.match(LETTER_IS_FOR_RE) || title.match(LETTER_NAMED_RE);
