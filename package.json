@@ -254,17 +254,44 @@
                     "<rootDir>/tests/setup.js"
                 ],
                 "testMatch": [
-                    "**/__tests__/**/*.js",
-                    "**/?(*.)+(spec|test).js"
+                    "**/__tests__/**/*.[jt]s",
+                    "**/?(*.)+(spec|test).[jt]s"
                 ],
                 "transform": {
-                    "\\.[jt]sx?$": [
+                    "\\.jsx?$": [
                         "@swc/jest",
                         {
                             "jsc": {
                                 "parser": {
                                     "syntax": "ecmascript",
                                     "jsx": true
+                                },
+                                "transform": {
+                                    "react": {
+                                        "runtime": "automatic",
+                                        "importSource": "preact"
+                                    }
+                                }
+                            }
+                        }
+                    ],
+                    "\\.ts$": [
+                        "@swc/jest",
+                        {
+                            "jsc": {
+                                "parser": {
+                                    "syntax": "typescript"
+                                }
+                            }
+                        }
+                    ],
+                    "\\.tsx$": [
+                        "@swc/jest",
+                        {
+                            "jsc": {
+                                "parser": {
+                                    "syntax": "typescript",
+                                    "tsx": true
                                 },
                                 "transform": {
                                     "react": {
@@ -305,17 +332,44 @@
                     "<rootDir>/tests/react/helpers/setup.js"
                 ],
                 "testMatch": [
-                    "**/?(*.)+(spec|test).js",
-                    "**/?(*.)+(spec|test).jsx"
+                    "**/?(*.)+(spec|test).[jt]s",
+                    "**/?(*.)+(spec|test).[jt]sx"
                 ],
                 "transform": {
-                    "\\.[jt]sx?$": [
+                    "\\.jsx?$": [
                         "@swc/jest",
                         {
                             "jsc": {
                                 "parser": {
                                     "syntax": "ecmascript",
                                     "jsx": true
+                                },
+                                "transform": {
+                                    "react": {
+                                        "runtime": "automatic",
+                                        "importSource": "preact"
+                                    }
+                                }
+                            }
+                        }
+                    ],
+                    "\\.ts$": [
+                        "@swc/jest",
+                        {
+                            "jsc": {
+                                "parser": {
+                                    "syntax": "typescript"
+                                }
+                            }
+                        }
+                    ],
+                    "\\.tsx$": [
+                        "@swc/jest",
+                        {
+                            "jsc": {
+                                "parser": {
+                                    "syntax": "typescript",
+                                    "tsx": true
                                 },
                                 "transform": {
                                     "react": {
@@ -339,8 +393,9 @@
         ],
         "collectCoverage": false,
         "collectCoverageFrom": [
-            "src/js/**/*.{js,jsx}",
-            "scripts/**/*.js"
+            "src/js/**/*.{js,jsx,ts,tsx}",
+            "!src/js/**/*.d.ts",
+            "scripts/**/*.{js,ts}"
         ],
         "coverageDirectory": "coverage",
         "coverageReporters": [
