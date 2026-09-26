@@ -9,34 +9,47 @@
  * settings/limits.js.
  */
 
-const COMPARISON_OPS = ['<', '<=', '=', '!=', '>=', '>'];
+const COMPARISON_OPS = /** @type {const} */ (['<', '<=', '=', '!=', '>=', '>']);
 
-const REPEAT_MODES = ['always', 'once', 'oncePerPhase', 'oncePerDay'];
+const REPEAT_MODES = /** @type {const} */ (['always', 'once', 'oncePerPhase', 'oncePerDay']);
 
 /** Time conditions whose instants the engine can predict (scheduler wake-ups). */
-const RANGE_TIME_CONDITIONS = ['beforeEnd', 'afterStart', 'inPhaseFor'];
+const RANGE_TIME_CONDITIONS = /** @type {const} */ (['beforeEnd', 'afterStart', 'inPhaseFor']);
 
 /** Challenge-level numbers compared with `{op, value}`. */
-const NUMERIC_CONDITIONS = ['entries', 'freeSlots', 'exposure', 'challengeRank', 'challengeVotes'];
+const NUMERIC_CONDITIONS = /** @type {const} */ ([
+    'entries',
+    'freeSlots',
+    'exposure',
+    'challengeRank',
+    'challengeVotes',
+]);
 
-const STATE_CONDITIONS = ['boostState', 'turboState'];
+const STATE_CONDITIONS = /** @type {const} */ (['boostState', 'turboState']);
 
-const CURRENCIES = ['keys', 'swaps', 'fills', 'coins'];
+const CURRENCIES = /** @type {const} */ (['keys', 'swaps', 'fills', 'coins']);
 
-const NUMERIC_ENTRY_FIELDS = ['votes', 'rank', 'votesPerHour', 'speedRatio'];
+const NUMERIC_ENTRY_FIELDS = /** @type {const} */ (['votes', 'rank', 'votesPerHour', 'speedRatio']);
 
 /** Entry fields measured over a time window (the optional `window` duration). */
-const SPEED_ENTRY_FIELDS = ['votesPerHour', 'speedRatio'];
-const BOOLEAN_ENTRY_FIELDS = ['boosted', 'turbo', 'boosting'];
+const SPEED_ENTRY_FIELDS = /** @type {const} */ (['votesPerHour', 'speedRatio']);
+const BOOLEAN_ENTRY_FIELDS = /** @type {const} */ (['boosted', 'turbo', 'boosting']);
 
 /** Selectors that pick an entry by comparing entries; `slot`, `memory` and `fastest` take an argument. */
-const RANKING_SELECTORS = ['mostVotes', 'fewestVotes', 'bestRank', 'worstRank', 'boosted', 'turbo'];
+const RANKING_SELECTORS = /** @type {const} */ ([
+    'mostVotes',
+    'fewestVotes',
+    'bestRank',
+    'worstRank',
+    'boosted',
+    'turbo',
+]);
 
 /** Actions that spend currency or a one-per-challenge power — listed in the import preview. */
-const SPENDING_ACTIONS = ['swap', 'unlockBoost', 'fillExposure', 'boost', 'turbo'];
+const SPENDING_ACTIONS = /** @type {const} */ (['swap', 'unlockBoost', 'fillExposure', 'boost', 'turbo']);
 
 /** Currency caps a scenario may set on itself (`limits`). */
-const LIMIT_KEYS = ['swaps', 'keys', 'fills'];
+const LIMIT_KEYS = /** @type {const} */ (['swaps', 'keys', 'fills']);
 
 const SCENARIO_CAPS = {
     scenarios: 50,
@@ -98,7 +111,67 @@ const VOCABULARY_REFERENCE = [
     ['rule', 'duration', 'seconds or "5d", "90m", "1d 6h"'],
 ];
 
+/** @import { ScenarioAction } from '../settings/scenarioSchema' */
+/** @import { ScenarioSelector } from '../types/scenario' */
+
+/**
+ * The memory slots an action reads (an entry or photo it looks up by slot)
+ * and writes (a photo it remembers).
+ *
+ * @param {ScenarioAction} action
+ * @returns {{reads: string[], writes: string[]}}
+ */
+const actionMemory = (action) => {
+    /** @type {string[]} */
+    const reads = [];
+    /** @type {string[]} */
+    const writes = [];
+    /** @param {ScenarioSelector} entry */
+    const readEntry = (entry) => {
+        if (entry.by === 'memory') reads.push(entry.slot);
+    };
+    /** @param {'best' | {memory: string}} photo */
+    const readPhoto = (photo) => {
+        if (photo !== 'best') reads.push(photo.memory);
+    };
+    switch (action.type) {
+        case 'enterPhoto':
+            readPhoto(action.photo);
+            if (action.remember) writes.push(action.remember);
+            break;
+        case 'swap':
+            readEntry(action.entry);
+            readPhoto(action.with);
+            if (action.rememberRemoved) writes.push(action.rememberRemoved);
+            if (action.rememberAdded) writes.push(action.rememberAdded);
+            break;
+        case 'remember':
+            readEntry(action.entry);
+            writes.push(action.slot);
+            break;
+        case 'boost':
+        case 'turbo':
+            readEntry(action.entry);
+            break;
+        default:
+            break;
+    }
+    return { reads, writes };
+};
+
+/**
+ * Whether `value` is one of the vocabulary list's entries.
+ *
+ * @template {string} T
+ * @param {readonly T[]} list
+ * @param {unknown} value
+ * @returns {value is T}
+ */
+const isOneOf = (list, value) => /** @type {readonly unknown[]} */ (list).includes(value);
+
 export {
+    actionMemory,
+    isOneOf,
     COMPARISON_OPS,
     REPEAT_MODES,
     RANGE_TIME_CONDITIONS,

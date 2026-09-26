@@ -4,6 +4,8 @@ import { z } from 'zod';
 // keep this module's public surface unchanged.
 import { MAX_SCHEDULED_FILL_ENTRIES, MAX_VOTING_PAUSE_MINUTES } from './limits';
 
+/** @import { SettingValueOf } from '../types/settings' */
+
 /**
  * Centralized Settings Schema
  *
@@ -23,16 +25,16 @@ import { MAX_SCHEDULED_FILL_ENTRIES, MAX_VOTING_PAUSE_MINUTES } from './limits';
  *
  * @typedef {object} SettingsSchemaEntry
  * @property {string} [type]
- * @property {*} [default]
+ * @property {unknown} [default]
  * @property {boolean} [perChallenge]
  * @property {boolean} [challengeOnly] - Only settable on a challenge or a profile: the key
  *   has NO global value. Hidden from the global settings modal, refused by
  *   setGlobalDefault, and a stored global value is ignored — the schema default applies
  *   until a challenge override or profile sets it. Implies `perChallenge`. Used for the
  *   settings that require an explicit per-challenge or per-profile choice.
- * @property {import('zod').ZodType} [validation]
- * @property {(value: any, allSettings: any, challengeId?: any) => boolean} [contextValidation]
- * @property {(value: any, allSettings: any, challengeId?: any) => string} [getContextError]
+ * @property {import('zod').ZodType} validation
+ * @property {(value: unknown, allSettings: Record<string, unknown>, challengeId?: string | number | null) => boolean} [contextValidation]
+ * @property {(value: unknown, allSettings: Record<string, unknown>, challengeId?: string | number | null) => string} [getContextError]
  * @property {string[]} [dependsOn]
  * @property {number} [validationOrder]
  * @property {string} [group]
@@ -49,13 +51,13 @@ import { MAX_SCHEDULED_FILL_ENTRIES, MAX_VOTING_PAUSE_MINUTES } from './limits';
  */
 
 /**
- * Helper to read schema defaults at runtime. Defined ahead of
- * SETTINGS_SCHEMA so the contextValidation closures inside the schema
- * can resolve sibling defaults without forward-referencing the constant
- * literal during construction.
+ * A key's schema default. Defined ahead of SETTINGS_SCHEMA so the
+ * contextValidation closures inside the schema can resolve sibling defaults;
+ * untyped because those closures are part of the schema's own type. Outside
+ * the schema, use the typed `schemaDefault`.
  *
  * @param {string} key
- * @returns {*}
+ * @returns {unknown}
  */
 const getSchemaDefault = (key) => schemaEntry(key)?.default;
 
@@ -65,15 +67,23 @@ const getSchemaDefault = (key) => schemaEntry(key)?.default;
  * otherwise the schema default. Shared by the exposureTarget and
  * finalWindowExposure context validators/error builders.
  *
- * @param {any} allSettings
+ * @param {Record<string, unknown>} allSettings
  * @returns {number}
  */
 const effectiveExposureOf = (allSettings) => {
     const exposureValue = allSettings.exposure;
     return typeof exposureValue === 'number' && exposureValue >= 1 && exposureValue <= 100
         ? exposureValue
-        : getSchemaDefault('exposure');
+        : Number(getSchemaDefault('exposure'));
 };
+
+/**
+ * A context validator's value: validateSetting only calls contextValidation
+ * after the key's zod check passed, so a percentage key's value is a number.
+ *
+ * @param {unknown} value
+ */
+const validatedNumber = (value) => /** @type {number} */ (value);
 
 // Reusable zod validators. Each SETTINGS_SCHEMA entry's `validation` field
 // holds one of these schemas; validateSetting / getValidationError run it via
@@ -273,13 +283,11 @@ const pauseDurationMinutes = z.number().int().min(5).max(MAX_VOTING_PAUSE_MINUTE
  * when the input already conforms or isn't an array at all. Keeps strict
  * 'HH:MM' strings, dedupes (first wins), sorts (lexicographic == chronological
  * for zero-padded 24h times) and THEN caps, so with >MAX entries the earliest
- * survive deterministically rather than storage order. Deliberately unhealed
- * gap (same accepted-risk class the scalar era carried): a value that is
- * neither string, number, nor array (`true`/`{}`/null from a hand edit) is
- * left as-is — the modal's resubmit path rejects it with the zod message
- * rather than saving.
+ * survive deterministically rather than storage order. A value that is not an
+ * array (`true`/`{}`/null from a hand edit) is left to load-time validation
+ * (settings/persistence.js), which drops it so the default applies.
  *
- * @param {*} value
+ * @param {unknown} value
  * @returns {string[]|null}
  */
 const sanitizeTimeOfDayList = (value) => {
@@ -374,7 +382,7 @@ const SETTINGS_SCHEMA = {
         unit: 'app.unitPercent',
         contextValidation: (value, allSettings) => {
             if (value === 0) return true; // sentinel — always ok
-            return value >= effectiveExposureOf(allSettings);
+            return validatedNumber(value) >= effectiveExposureOf(allSettings);
         },
         getContextError: (value, allSettings) =>
             `VALIDATION_GREATER_OR_EQUAL|app.exposure|${effectiveExposureOf(allSettings)}`,
@@ -934,7 +942,7 @@ const SETTINGS_SCHEMA = {
         unit: 'app.unitPercent',
         // If exposure is not set or invalid, effectiveExposureOf falls back to
         // the exposure default for comparison.
-        contextValidation: (value, allSettings) => value <= effectiveExposureOf(allSettings),
+        contextValidation: (value, allSettings) => validatedNumber(value) <= effectiveExposureOf(allSettings),
         // Return a string that the UI will translate
         getContextError: (value, allSettings) =>
             `VALIDATION_LESS_OR_EQUAL|app.exposure|${effectiveExposureOf(allSettings)}`,
@@ -959,15 +967,15 @@ const SETTINGS_SCHEMA = {
             const effectiveTrigger =
                 typeof triggerValue === 'number' && triggerValue >= 1 && triggerValue <= 100
                     ? triggerValue
-                    : getSchemaDefault('finalWindowExposure');
-            return value >= effectiveTrigger;
+                    : Number(getSchemaDefault('finalWindowExposure'));
+            return validatedNumber(value) >= effectiveTrigger;
         },
         getContextError: (value, allSettings) => {
             const triggerValue = allSettings.finalWindowExposure;
             const effectiveTrigger =
                 typeof triggerValue === 'number' && triggerValue >= 1 && triggerValue <= 100
                     ? triggerValue
-                    : getSchemaDefault('finalWindowExposure');
+                    : Number(getSchemaDefault('finalWindowExposure'));
             return `VALIDATION_GREATER_OR_EQUAL|app.finalWindowExposure|${effectiveTrigger}`;
         },
         dependsOn: ['finalWindowExposure'],
@@ -1610,6 +1618,16 @@ const SETTINGS_SCHEMA = {
 const schemaEntry = (key) => /** @type {Record<string, SettingsSchemaEntry | undefined>} */ (SETTINGS_SCHEMA)[key];
 
 /**
+ * A key's schema default, typed as that key's value: every default passes its
+ * own validation (tests/settings/schema-defaults.test.js).
+ *
+ * @template {string} K
+ * @param {K} key
+ * @returns {SettingValueOf<K>}
+ */
+const schemaDefault = (key) => /** @type {SettingValueOf<K>} */ (getSchemaDefault(key));
+
+/**
  * Ordered tiers the groups below are rendered under. A tier is presentation
  * only — nothing branches on it — but the order encodes the rule the section
  * list follows: settings a user always touches come before ones that only
@@ -1738,6 +1756,7 @@ export {
     SETTINGS_GROUPS,
     SETTINGS_TIERS,
     getSchemaDefault,
+    schemaDefault,
     validateSetting,
     getValidationError,
     getSettingsSchema,

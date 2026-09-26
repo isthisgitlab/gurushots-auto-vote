@@ -650,10 +650,16 @@ describe('play-auto-turbo — manual bypass and result shaping', () => {
         const handlers = buildHandlers();
 
         await handlers['play-auto-turbo']({}, '123', 'Caller Title');
-        expect(strategy.runTurboMiniGame).toHaveBeenLastCalledWith({ id: 123, title: 'Caller Title' }, 'tok');
+        expect(strategy.runTurboMiniGame).toHaveBeenLastCalledWith(
+            expect.objectContaining({ id: 123, title: 'Caller Title' }),
+            'tok',
+        );
 
         await handlers['play-auto-turbo']({}, '123', undefined);
-        expect(strategy.runTurboMiniGame).toHaveBeenLastCalledWith({ id: 123, title: 'challenge 123' }, 'tok');
+        expect(strategy.runTurboMiniGame).toHaveBeenLastCalledWith(
+            expect.objectContaining({ id: 123, title: 'challenge 123' }),
+            'tok',
+        );
     });
 
     test('a null mini-game result is reported as not earned with a null result', async () => {

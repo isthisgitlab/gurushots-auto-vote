@@ -1,4 +1,5 @@
 /** @import { Challenge, RankingEntry } from '../types/gurushots' */
+/** @import { RankingSelectorName, ScenarioSelector } from '../types/scenario' */
 /**
  * Entry selectors: which of the member's entries a scenario condition or
  * action means. Entries are matched by id (as strings), never by where they
@@ -16,7 +17,7 @@ import { votesPerHour, DEFAULT_WINDOW_SEC } from './speed';
 
 /**
  * @param {Challenge} challenge
- * @returns {any[]}
+ * @returns {RankingEntry[]}
  */
 const entriesOf = (challenge) =>
     Array.isArray(challenge?.member?.ranking?.entries) ? challenge.member.ranking.entries.filter(Boolean) : [];
@@ -34,8 +35,10 @@ const rankOf = (entry) => {
  * The entry with the best `score` (strictly greater wins, so ties keep the
  * first). Entries scoring null are skipped.
  *
- * @param {any[]} entries
- * @param {(entry: any) => number|null} score
+ * @template T
+ * @param {readonly T[]} entries
+ * @param {(entry: T) => number|null} score
+ * @returns {T|null}
  */
 const bestBy = (entries, score) => {
     let best = null;
@@ -50,12 +53,15 @@ const bestBy = (entries, score) => {
     return best;
 };
 
-/** @type {Record<string, (entries: any[]) => any>} */
+/** @type {Record<RankingSelectorName, (entries: RankingEntry[]) => RankingEntry|null>} */
 const RANKING = {
     mostVotes: (entries) => bestBy(entries, votesOf),
     fewestVotes: (entries) => bestBy(entries, (entry) => -votesOf(entry)),
     bestRank: (entries) =>
-        bestBy(entries, (entry) => (rankOf(entry) === null ? null : -(/** @type {number} */ (rankOf(entry))))),
+        bestBy(entries, (entry) => {
+            const rank = rankOf(entry);
+            return rank === null ? null : -rank;
+        }),
     worstRank: (entries) => bestBy(entries, rankOf),
     boosted: (entries) => entries.find((entry) => entry.boosted === true || entry.boosting === true) ?? null,
     turbo: (entries) => entries.find((entry) => entry.turbo === true) ?? null,
@@ -78,10 +84,10 @@ const windowOf = (value) => (value === undefined ? DEFAULT_WINDOW_SEC : /** @typ
 /**
  * The entry a selector picks, or null when none qualifies.
  *
- * @param {any} selector - a validated selector ({by, …})
+ * @param {ScenarioSelector} selector
  * @param {Challenge} challenge
  * @param {SelectContext} [context]
- * @returns {any|null}
+ * @returns {RankingEntry|null}
  */
 const selectEntry = (selector, challenge, context = {}) => {
     const entries = entriesOf(challenge);

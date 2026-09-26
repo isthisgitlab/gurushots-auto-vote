@@ -24,6 +24,7 @@
 /** @import { RawJsonStore, SwapBackRecord } from './types/stores' */
 import * as logger from './logger';
 import { createJsonStore } from './settings/storage';
+import { isPlainObject } from './plainObject';
 
 const swapBackStore = createJsonStore({ fileName: 'swapBacks.json', prefKey: 'gs_swap_backs' });
 
@@ -31,11 +32,11 @@ const swapBackStore = createJsonStore({ fileName: 'swapBacks.json', prefKey: 'gs
 const MAX_AGE_MS = 30 * 24 * 60 * 60 * 1000;
 
 /**
- * @param {any} r - an untrusted parsed-JSON value
+ * @param {unknown} r - an untrusted parsed-JSON value
  * @returns {r is SwapBackRecord}
  */
 const isRecord = (r) =>
-    r &&
+    isPlainObject(r) &&
     typeof r.currentId === 'string' &&
     typeof r.previousId === 'string' &&
     (r.kind === 'boost' || r.kind === 'turbo');

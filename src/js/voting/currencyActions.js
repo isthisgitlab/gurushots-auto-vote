@@ -1,4 +1,4 @@
-/** @import { Challenge } from '../types/gurushots' */
+/** @import { Bankroll, Challenge } from '../types/gurushots' */
 /**
  * Availability predicates for the three bankroll-currency actions a member can
  * spend on a challenge — KEYS (unlock a locked boost), SWAPS (replace an entered
@@ -44,7 +44,7 @@ const isRunning = (challenge, nowSec) => {
 };
 
 /**
- * @param {any} bankroll
+ * @param {Bankroll | null | undefined} bankroll
  * @param {'key'|'swap'|'fill'} action
  * @returns {boolean}
  */
@@ -73,7 +73,7 @@ const challengeAllows = (action, challenge, nowSec) => {
 
 /**
  * @param {Challenge} challenge
- * @param {any} bankroll
+ * @param {Bankroll | null | undefined} bankroll
  * @param {number} nowSec
  */
 const canKeyUnlock = (challenge, bankroll, nowSec) =>
@@ -81,7 +81,7 @@ const canKeyUnlock = (challenge, bankroll, nowSec) =>
 
 /**
  * @param {Challenge} challenge
- * @param {any} bankroll
+ * @param {Bankroll | null | undefined} bankroll
  * @param {number} nowSec
  */
 const canSwapEntry = (challenge, bankroll, nowSec) =>
@@ -89,7 +89,7 @@ const canSwapEntry = (challenge, bankroll, nowSec) =>
 
 /**
  * @param {Challenge} challenge
- * @param {any} bankroll
+ * @param {Bankroll | null | undefined} bankroll
  * @param {number} nowSec
  */
 const canFillExposure = (challenge, bankroll, nowSec) =>
@@ -124,7 +124,7 @@ const swapExcludedIds = (challenge) => {
  *
  * @param {'key'|'swap'|'fill'} action
  * @param {Challenge} challenge
- * @param {any} bankroll
+ * @param {Bankroll | null | undefined} bankroll
  * @param {number} nowSec
  * @returns {string|null}
  */

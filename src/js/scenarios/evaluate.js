@@ -10,17 +10,21 @@
  */
 
 import { occurrencesOf } from '../scheduling/wallClock';
+
+/** @import { Bankroll, Challenge } from '../types/gurushots' */
+/** @import { ScenarioEngineState } from '../types/scenario' */
+/** @import { ScenarioDocument, ScenarioRule } from '../settings/scenarioSchema' */
 import { firstFailing } from './conditions';
 import { nextWakeAt } from './nextWake';
 
 /**
  * @typedef {object} EvaluateInput
- * @property {any} scenario - a validated scenario document
- * @property {any} state - the challenge's runtime state (scenarioStateStore record)
- * @property {any} challenge
+ * @property {ScenarioDocument} scenario
+ * @property {ScenarioEngineState} state
+ * @property {Challenge} challenge
  * @property {number} now - unix seconds
  * @property {string} timezone
- * @property {Record<string, number>|null} [bankroll]
+ * @property {Bankroll|null} [bankroll]
  * @property {Set<string>} [skipRuleIds] - rules already fired in this pass
  */
 
@@ -36,8 +40,8 @@ const localDayOf = (now, timezone) => /** @type {{prev: number}} */ (occurrences
 /**
  * Why a rule's `repeat` mode keeps it from firing now, or null when it may.
  *
- * @param {any} rule
- * @param {any} state
+ * @param {ScenarioRule} rule
+ * @param {ScenarioEngineState} state
  * @param {number} now
  * @param {string} timezone
  */
@@ -59,7 +63,7 @@ const repeatBlock = (rule, state, now, timezone) => {
 /**
  * The record kept when a rule finishes firing.
  *
- * @param {any} state
+ * @param {ScenarioEngineState} state
  * @param {number} now
  * @param {string} timezone
  */
@@ -74,7 +78,7 @@ const firedRecord = (state, now, timezone) => ({
  * @returns {{
  *   phase: string,
  *   halted: string|null,
- *   fire: {ruleId: string, rule: any, startIndex: number}|null,
+ *   fire: {ruleId: string, rule: ScenarioRule, startIndex: number}|null,
  *   explain: Array<{ruleId: string, label: string, status: 'ready'|'blocked'|'waiting', reason: string}>,
  *   nextWakeAt: number|null,
  * }}
@@ -90,7 +94,7 @@ const evaluateScenario = (input) => {
     const rules = phase.rules ?? [];
 
     if (state.inFlight) {
-        const rule = rules.find((/** @type {any} */ candidate) => candidate.id === state.inFlight.ruleId);
+        const rule = rules.find((candidate) => candidate.id === state.inFlight?.ruleId);
         if (!rule || state.inFlight.actionIndex >= rule.do.length) {
             return {
                 ...base,
@@ -115,7 +119,7 @@ const evaluateScenario = (input) => {
     }
 
     const ctx = { challenge: input.challenge, state, now, timezone, bankroll: input.bankroll ?? null };
-    /** @type {{ruleId: string, rule: any, startIndex: number}|null} */
+    /** @type {{ruleId: string, rule: ScenarioRule, startIndex: number}|null} */
     let fire = null;
     const explain = [];
     for (const rule of rules) {
@@ -125,9 +129,10 @@ const evaluateScenario = (input) => {
             explain.push({ ruleId: rule.id, label, status: /** @type {const} */ ('blocked'), reason: blocked });
             continue;
         }
-        const failing = firstFailing(rule.if, ctx);
+        const conditions = rule.if ?? [];
+        const failing = firstFailing(conditions, ctx);
         if (failing !== -1) {
-            const reason = `condition ${failing + 1} (${rule.if[failing].type}) does not hold`;
+            const reason = `condition ${failing + 1} (${conditions[failing].type}) does not hold`;
             explain.push({ ruleId: rule.id, label, status: /** @type {const} */ ('waiting'), reason });
             continue;
         }

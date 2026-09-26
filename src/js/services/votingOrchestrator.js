@@ -54,8 +54,8 @@ import { formatDuration } from '../format/duration';
 import { failureText } from '../format/logSafe';
 import { sleep } from '../timing';
 
-/** @import { Challenge, MemberBoost } from '../types/gurushots' */
-/** @import { PassVotePool, VotingPassApi, VotingPassDeps, VotingPassResult, ScenarioDeps } from '../types/votingPass' */
+/** @import { Challenge, MemberBoost, VoteImagesResponse } from '../types/gurushots' */
+/** @import { VotingPassApi, VotingPassDeps, VotingPassResult, ScenarioDeps } from '../types/votingPass' */
 /** @import { CurrencyPassDeps } from './currencyAuto' */
 /** @import { EntryTracker } from './newEntryTracker' */
 /** @import { EntryAgeLedger } from '../types/stores' */
@@ -700,7 +700,7 @@ const recordEntrySnapshot = (entryTracker, entry, decision, voteThrew) => {
  * Submit votes from an already-fetched pool, then pace before the next challenge.
  *
  * @param {Challenge} challenge
- * @param {PassVotePool} voteImages
+ * @param {VoteImagesResponse} voteImages
  * @param {number} targetExposure
  * @param {PassContext} pass
  * @param {() => void} onVoteLanded - records the snapshot when a cancel follows a landed vote
@@ -736,7 +736,7 @@ const submitVoteImages = async (challenge, voteImages, targetExposure, pass, onV
     return null;
 };
 
-/** @typedef {{cancelled: (VotingPassResult|null), voteThrew: boolean, votePool: (PassVotePool|null|undefined)}} VoteOutcome */
+/** @typedef {{cancelled: (VotingPassResult|null), voteThrew: boolean, votePool: (VoteImagesResponse|null|undefined)}} VoteOutcome */
 
 /**
  * Vote on the challenge when the decision says so.

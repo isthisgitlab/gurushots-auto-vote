@@ -6,21 +6,30 @@
  * Dependency-free: renderer-safe.
  */
 
+import { isPlainObject } from '../plainObject';
+
+/** @import { ScenarioDraft, ScenarioDraftRule } from '../types/scenarioBuilder' */
+
 /** @typedef {Array<string|number>} Path */
 
 /**
  * A copy of `target` with the value at `path` replaced; `undefined` removes
  * the key (an optional field left empty), or the item from an array.
  *
- * @param {any} target
+ * The result keeps `target`'s type: the path and value are the caller's
+ * claim, and the draft is validated on save like every other edit.
+ *
+ * @template T
+ * @param {T} target
  * @param {Path} path
  * @param {unknown} value
- * @returns {any}
+ * @returns {T}
  */
 const setIn = (target, path, value) => {
-    if (path.length === 0) return value;
+    if (path.length === 0) return /** @type {T} */ (value);
     const [head, ...rest] = path;
-    const copy = Array.isArray(target) ? [...target] : { ...target };
+    // A shallow copy of whatever container the path steps into.
+    const copy = /** @type {Record<string | number, unknown>} */ (Array.isArray(target) ? [...target] : { ...target });
     const next = rest.length ? setIn(copy[head] ?? (typeof rest[0] === 'number' ? [] : {}), rest, value) : value;
     if (next === undefined && rest.length === 0) {
         if (Array.isArray(copy)) copy.splice(/** @type {number} */ (head), 1);
@@ -28,7 +37,7 @@ const setIn = (target, path, value) => {
     } else {
         copy[head] = next;
     }
-    return copy;
+    return /** @type {T} */ (copy);
 };
 
 /**
@@ -50,14 +59,15 @@ const moveItem = (list, index, delta) => {
 };
 
 /** A new, empty scenario. @param {string} name */
-const newScenario = (name) => ({ name, version: 1, start: 'main', phases: { main: { rules: [] } } });
+const newScenario = (name) =>
+    /** @type {ScenarioDraft} */ ({ name, version: 1, start: 'main', phases: { main: { rules: [] } } });
 
 /**
  * The first `${base}${n}` not already taken, counting from `first` — 2 for a
  * phase (it follows `main`), 1 for a rule (the phase's first rule is `-1`).
  *
  * @param {string} base
- * @param {Iterable<string>} taken
+ * @param {Iterable<string | undefined>} taken - rule ids, some possibly unset
  * @param {number} [first]
  */
 const freeKey = (base, taken, first = 2) => {
@@ -67,7 +77,12 @@ const freeKey = (base, taken, first = 2) => {
     return `${base}${n}`;
 };
 
-/** The draft with a new empty phase at the end. @param {any} doc */
+/**
+ * The draft with a new empty phase at the end.
+ *
+ * @param {ScenarioDraft} doc
+ * @returns {ScenarioDraft}
+ */
 const addPhase = (doc) => ({
     ...doc,
     phases: { ...doc.phases, [freeKey('phase', Object.keys(doc.phases))]: { rules: [] } },
@@ -77,18 +92,19 @@ const addPhase = (doc) => ({
  * Rename a phase, keeping its place, and follow the rename in `start` and in
  * every `goto` — the builder's one cross-reference edit.
  *
- * @param {any} doc
+ * @param {ScenarioDraft} doc
  * @param {string} from
  * @param {string} to
+ * @returns {ScenarioDraft}
  */
 const renamePhase = (doc, from, to) => {
     if (from === to || !to || Object.prototype.hasOwnProperty.call(doc.phases, to)) return doc;
-    const retarget = (/** @type {any} */ action) =>
-        action.type === 'goto' && action.phase === from ? { ...action, phase: to } : action;
-    /** @type {Record<string, any>} */
+    const retarget = (/** @type {unknown} */ action) =>
+        isPlainObject(action) && action.type === 'goto' && action.phase === from ? { ...action, phase: to } : action;
+    /** @type {ScenarioDraft['phases']} */
     const phases = {};
     for (const [name, phase] of Object.entries(doc.phases)) {
-        const rules = phase.rules?.map((/** @type {any} */ rule) => ({ ...rule, do: rule.do.map(retarget) }));
+        const rules = phase.rules?.map((rule) => ({ ...rule, do: rule.do.map(retarget) }));
         phases[name === from ? to : name] = rules ? { ...phase, rules } : phase;
     }
     return { ...doc, start: doc.start === from ? to : doc.start, phases };
@@ -99,8 +115,9 @@ const renamePhase = (doc, from, to) => {
  * phase if it pointed at the removed one. Gotos into it are left for the
  * validator to report.
  *
- * @param {any} doc
+ * @param {ScenarioDraft} doc
  * @param {string} name
+ * @returns {ScenarioDraft}
  */
 const removePhase = (doc, name) => {
     const names = Object.keys(doc.phases);
@@ -115,22 +132,18 @@ const removePhase = (doc, name) => {
  * a once-only notification: a fresh rule has no conditions, so an `always`
  * default would notify on every voting pass if saved unedited.
  *
- * @param {any} doc
+ * @param {ScenarioDraft} doc
  * @param {string} phase
+ * @returns {ScenarioDraftRule}
  */
 const newRule = (doc, phase) => {
-    const ids = Object.values(doc.phases).flatMap((/** @type {any} */ p) =>
-        (p.rules ?? []).map((/** @type {any} */ r) => r.id),
-    );
+    const ids = Object.values(doc.phases).flatMap((p) => (p.rules ?? []).map((r) => r.id));
     return {
         id: freeKey(`${phase}-`, ids, 1),
         repeat: 'once',
         do: [{ type: 'notify', message: 'Check the challenge' }],
     };
 };
-
-/** @param {unknown} value */
-const isPlainObject = (value) => Boolean(value) && typeof value === 'object' && !Array.isArray(value);
 
 /**
  * True when a document (typically hand-edited JSON) has the shape the builder
@@ -139,10 +152,11 @@ const isPlainObject = (value) => Boolean(value) && typeof value === 'object' && 
  * rendering something it cannot.
  *
  * @param {unknown} value
+ * @returns {value is ScenarioDraft}
  */
 const isEditableDraft = (value) => {
     if (!isPlainObject(value)) return false;
-    const { phases } = /** @type {any} */ (value);
+    const { phases } = value;
     if (!isPlainObject(phases)) return false;
     return Object.values(phases).every(
         (phase) =>
@@ -151,7 +165,7 @@ const isEditableDraft = (value) => {
             (phase.rules === undefined ||
                 (Array.isArray(phase.rules) &&
                     phase.rules.every(
-                        (/** @type {any} */ rule) =>
+                        (/** @type {unknown} */ rule) =>
                             isPlainObject(rule) &&
                             Array.isArray(rule.do) &&
                             (rule.if === undefined || Array.isArray(rule.if)),

@@ -214,7 +214,7 @@ describe('_autoFillScheduleBoundsV1 sanitizer pass in loadSettings', () => {
         expect(secondWrites).toBe(firstWrites); // no new migration writes
     });
 
-    test('does not re-sanitize when the flag is already true', () => {
+    test('does not re-sanitize when the flag is already true; load validation drops the stale value', () => {
         const stale = [{ count: 7, seconds: 600 }];
         setSettingsFile({
             challengeSettings: {
@@ -231,9 +231,13 @@ describe('_autoFillScheduleBoundsV1 sanitizer pass in loadSettings', () => {
             _challengeRulesOrderedV1: true,
         });
 
+        const writesBefore = fs.writeFileSync.mock.calls.length;
         const loaded = settings.loadSettings();
 
-        expect(loaded.challengeSettings.globalDefaults.autoFillSchedule).toEqual(stale);
+        // The one-time sanitizer does not run again (nothing is written);
+        // load validation drops the out-of-bounds value instead.
+        expect(fs.writeFileSync.mock.calls.length).toBe(writesBefore);
+        expect(loaded.challengeSettings.globalDefaults.autoFillSchedule).toBeUndefined();
     });
 
     test('composition: legacy interval + no flags runs migration then sanitizer in one load', () => {

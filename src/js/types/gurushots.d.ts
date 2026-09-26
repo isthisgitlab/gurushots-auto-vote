@@ -151,10 +151,17 @@ export interface VoteImage {
     ratio?: number;
 }
 
-/** get_vote_images. */
+/** The challenge as get_vote_images echoes it. */
+export interface VoteChallenge {
+    id: number | string;
+    title: string;
+    url?: string;
+}
+
+/** get_vote_images: the pool to vote on, with the challenge's current exposure. */
 export interface VoteImagesResponse {
-    challenge?: Challenge;
-    voting?: { exposure?: RankingExposure };
+    challenge: VoteChallenge;
+    voting: { exposure: RankingExposure & { exposure_factor: number } };
     images: VoteImage[];
 }
 
@@ -178,12 +185,6 @@ export interface ActionResult {
 /** rest_mobile/signup. */
 export interface LoginResponse {
     token?: string;
-}
-
-/** A get_vote_images response submitVotes can vote on: the challenge and its current exposure are present. */
-export interface VoteSubmission extends VoteImagesResponse {
-    challenge: Challenge;
-    voting: { exposure: RankingExposure & { exposure_factor: number } };
 }
 
 /** get_member_challenges: the challenges the member has not joined yet. */

@@ -13,6 +13,11 @@
  */
 
 import { evaluateScenario, firedRecord } from './evaluate';
+import { actionMemory } from './vocabulary';
+
+/** @import { Bankroll, Challenge } from '../types/gurushots' */
+/** @import { ScenarioEngineState } from '../types/scenario' */
+/** @import { ScenarioDocument, ScenarioRule } from '../settings/scenarioSchema' */
 import { nextWakeAt } from './nextWake';
 
 const MAX_EVENTS = 50;
@@ -30,19 +35,17 @@ const FAR_FUTURE_SEC = 100 * 365 * 86400;
  * memory it would write (a placeholder id — the real photo is unknown), and
  * its goto.
  *
- * @param {any} state
- * @param {any} rule
+ * @param {ScenarioEngineState} state
+ * @param {ScenarioRule} rule
  * @param {number} at
  * @param {string} timezone
  */
 const afterFiring = (state, rule, at, timezone) => {
     const memory = { ...state.memory };
+    /** @type {string | null} */
     let toPhase = null;
     for (const action of rule.do) {
-        for (const slot of [action.remember, action.rememberRemoved, action.rememberAdded]) {
-            if (typeof slot === 'string') memory[slot] = '(simulated)';
-        }
-        if (action.type === 'remember') memory[action.slot] = '(simulated)';
+        for (const slot of actionMemory(action).writes) memory[slot] = '(simulated)';
         if (action.type === 'forget') delete memory[action.slot];
         if (action.type === 'goto') toPhase = action.phase;
     }
@@ -52,18 +55,20 @@ const afterFiring = (state, rule, at, timezone) => {
         inFlight: null,
         fired: { ...state.fired, [rule.id]: firedRecord(state, at, timezone) },
     };
-    const moved = toPhase !== null && toPhase !== state.phase;
-    return { state: moved ? { ...next, phase: toPhase, phaseEnteredAt: at } : next, toPhase: moved ? toPhase : null };
+    if (toPhase !== null && toPhase !== state.phase) {
+        return { state: { ...next, phase: toPhase, phaseEnteredAt: at }, toPhase };
+    }
+    return { state: next, toPhase: null };
 };
 
 /**
  * @param {object} input
- * @param {any} input.scenario - a validated scenario document
- * @param {any} input.state - the challenge's runtime state (or a start state)
- * @param {any} input.challenge - the live challenge
+ * @param {ScenarioDocument} input.scenario
+ * @param {ScenarioEngineState} input.state - the challenge's runtime state (or a start state)
+ * @param {Challenge} input.challenge - the live challenge
  * @param {number} input.now - unix seconds
  * @param {string} input.timezone
- * @param {Record<string, number>|null} [input.bankroll]
+ * @param {Bankroll|null} [input.bankroll]
  * @returns {{events: SimulatedEvent[], stoppedBecause: StopReason, stoppedAt: number, halted: string|null}}
  */
 const simulateScenario = ({ scenario, state: startState, challenge, now, timezone, bankroll = null }) => {
@@ -98,7 +103,7 @@ const simulateScenario = ({ scenario, state: startState, challenge, now, timezon
                 phase: fromPhase,
                 ruleId: rule.id,
                 label: rule.label ?? rule.id,
-                actions: rule.do.map((/** @type {any} */ action) => action.type),
+                actions: rule.do.map((action) => action.type),
                 toPhase: fired.toPhase,
             });
             if (events.length >= MAX_EVENTS) return { events, stoppedBecause: 'limit', stoppedAt: at, halted: null };

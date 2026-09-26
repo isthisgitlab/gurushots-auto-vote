@@ -1,4 +1,5 @@
-/** @import { Challenge } from '../types/gurushots' */
+/** @import { Bankroll, Challenge } from '../types/gurushots' */
+/** @import { ComparisonOp, EntryCondition, NumericConditionType, ScenarioCondition } from '../types/scenario' */
 /**
  * Evaluates a scenario rule's conditions against the live challenge. Pure:
  * everything comes in through `ctx`.
@@ -15,20 +16,20 @@ import { votesPerHour, speedRatio } from './speed';
 
 /**
  * @typedef {object} ConditionContext
- * @property {any} challenge
+ * @property {Challenge} challenge
  * @property {{phaseEnteredAt: number, memory: Record<string, string>, history?: import('./speed').VoteHistory}} state
  * @property {number} now - unix seconds
  * @property {string} timezone - IANA zone for dailyWindow
- * @property {Record<string, number>|null} [bankroll] - {keys, swaps, fills, coins}
+ * @property {Bankroll|null} [bankroll]
  */
 
 /**
  * Numbers compare with every op; booleans (entry flags) only with = / !=,
  * which the validator enforces.
  *
- * @param {any} a
- * @param {string} op
- * @param {any} b
+ * @param {number | boolean} a
+ * @param {ComparisonOp} op
+ * @param {number | boolean} b
  * @returns {boolean}
  */
 const compare = (a, op, b) => {
@@ -70,7 +71,7 @@ const numberBound = (bound) => (bound === undefined ? null : bound);
 /**
  * The challenge-level numbers `{op, value}` conditions compare.
  *
- * @type {Record<string, (challenge: any) => number|null>}
+ * @type {Record<NumericConditionType, (challenge: Challenge) => number|null>}
  */
 const CHALLENGE_NUMBERS = {
     entries: (challenge) => entriesOf(challenge).length,
@@ -127,7 +128,7 @@ const inDailyWindow = ({ from, to }, timezone, now) =>
     /** @type {{prev: number}} */ (occurrencesOf(to, timezone, now)).prev;
 
 /**
- * @param {any} condition - a validated condition
+ * @param {ScenarioCondition} condition
  * @param {ConditionContext} ctx
  * @returns {boolean}
  */
@@ -162,9 +163,9 @@ const evaluateCondition = (condition, ctx) => {
         case 'entry':
             return evaluateEntryCondition(condition, ctx);
         case 'all':
-            return condition.of.every((/** @type {any} */ item) => evaluateCondition(item, ctx));
+            return condition.of.every((item) => evaluateCondition(item, ctx));
         case 'any':
-            return condition.of.some((/** @type {any} */ item) => evaluateCondition(item, ctx));
+            return condition.of.some((item) => evaluateCondition(item, ctx));
         case 'not':
             return !evaluateCondition(condition.condition, ctx);
         default: {
@@ -175,7 +176,7 @@ const evaluateCondition = (condition, ctx) => {
 };
 
 /**
- * @param {any} condition
+ * @param {EntryCondition} condition
  * @param {ConditionContext} ctx
  */
 const evaluateEntryCondition = (condition, ctx) => {
@@ -201,7 +202,7 @@ const evaluateEntryCondition = (condition, ctx) => {
 /**
  * True when every condition in the list holds (an empty list always holds).
  *
- * @param {any[]|undefined} conditions
+ * @param {readonly ScenarioCondition[]|undefined} conditions
  * @param {ConditionContext} ctx
  */
 const allHold = (conditions, ctx) => (conditions ?? []).every((condition) => evaluateCondition(condition, ctx));
@@ -209,7 +210,7 @@ const allHold = (conditions, ctx) => (conditions ?? []).every((condition) => eva
 /**
  * Index of the first condition in the list that does not hold, or -1.
  *
- * @param {any[]|undefined} conditions
+ * @param {readonly ScenarioCondition[]|undefined} conditions
  * @param {ConditionContext} ctx
  */
 const firstFailing = (conditions, ctx) =>

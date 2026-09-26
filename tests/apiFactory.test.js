@@ -234,30 +234,9 @@ describe('apiFactory', () => {
 
     describe('real/mock surface parity', () => {
         test('mockApi exposes exactly the realApi key set', () => {
-            // Parity is a construction-time invariant (mockApi is built from
-            // realApi's key list, with a throwing guard for missing mock
-            // counterparts) — this pins it so a rename/removal on either side
-            // fails loudly here, since typecheck cannot see through the
-            // Object.fromEntries construction.
+            // Typecheck holds mockApi to realApi's type; this pins the runtime
+            // surface too.
             expect(Object.keys(mockApi).sort()).toEqual(Object.keys(realApi).sort());
-        });
-
-        test('module load fails fast when mockApiClient lacks a realApi method', () => {
-            // Explicit jest.mock factories are shared with isolated registries, so
-            // temporarily drop the method from the shared mock client and re-load
-            // only apiFactory in isolation.
-            const { mockApiClient } = require('../src/js/mock');
-            const saved = mockApiClient.keyUnlock;
-            delete mockApiClient.keyUnlock;
-            try {
-                jest.isolateModules(() => {
-                    expect(() => require('../src/js/apiFactory')).toThrow(
-                        "mockApiClient is missing a 'keyUnlock' implementation for the realApi surface",
-                    );
-                });
-            } finally {
-                mockApiClient.keyUnlock = saved;
-            }
         });
     });
 

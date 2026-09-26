@@ -25,9 +25,9 @@ import { keyUnlock, swapPhoto, exposureAutofill } from './endpoints/currency';
 import { createMockStrategy } from './strategy';
 
 /**
- * Mock API client that can be used for testing
+ * The mock endpoints the mock strategy composes over.
  */
-const mockApiClient = {
+const endpoints = {
     authenticate,
     getActiveChallenges,
     getVoteImages,
@@ -53,6 +53,9 @@ const mockApiClient = {
     exposureAutofill,
 };
 
-Object.assign(mockApiClient, createMockStrategy(mockApiClient));
+/** @typedef {typeof endpoints} MockEndpoints */
+
+// Same object, now also carrying the strategy methods.
+const mockApiClient = Object.assign(endpoints, createMockStrategy(endpoints));
 
 export { mockApiClient };

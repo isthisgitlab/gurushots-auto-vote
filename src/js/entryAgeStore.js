@@ -22,6 +22,7 @@
 /** @import { Challenge } from './types/gurushots' */
 import * as logger from './logger';
 import { createJsonStore } from './settings/storage';
+import { isPlainObject } from './plainObject';
 
 const entryAgeStore = createJsonStore({ fileName: 'entryAges.json', prefKey: 'gs_entry_ages' });
 
@@ -31,11 +32,10 @@ const entryAgeStore = createJsonStore({ fileName: 'entryAges.json', prefKey: 'gs
 const PENDING_GRACE_SEC = 600;
 
 /**
- * @param {any} r - an untrusted parsed-JSON value
+ * @param {unknown} r - an untrusted parsed-JSON value
  * @returns {r is EntryAgeRecord}
  */
-const isRecord = (r) =>
-    r && Number.isFinite(r.closeTime) && r.entered && typeof r.entered === 'object' && !Array.isArray(r.entered);
+const isRecord = (r) => isPlainObject(r) && Number.isFinite(r.closeTime) && isPlainObject(r.entered);
 
 /** @param {Challenge} challenge @returns {string[]} */
 const entryIdsOf = (challenge) =>

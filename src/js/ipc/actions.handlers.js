@@ -211,7 +211,7 @@ const runManualTurbo = async (challengeId, safeTitle, token) => {
 
     /** @type {TurboMiniGameResult | null} */
     const result = await strategy.runTurboMiniGame(
-        { id: liveChallenge.id, title: liveChallenge.title || safeTitle },
+        { ...liveChallenge, title: liveChallenge.title || safeTitle },
         token,
     );
     return turboRunResponse(result);

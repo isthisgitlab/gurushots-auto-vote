@@ -21,7 +21,7 @@ import { createMemoryEntryAgeLedger } from '../entryAgeStore';
 import { mockScenarioStateLedger } from '../scenarioStateStore';
 import { mockMethod } from './simulate';
 
-/** @import { mockApiClient } from './apiClient' */
+/** @import { MockEndpoints } from './apiClient' */
 
 // Module-level so snapshots survive across mock cycles within a run — a per-call
 // tracker would look like "first sight" every cycle and never detect anything.
@@ -93,7 +93,7 @@ const pickEndpoints = (client, names) =>
     /** @type {Pick<C, K>} */ (Object.fromEntries(names.map((name) => [name, client[name]])));
 
 /**
- * @param {typeof mockApiClient} client - the assembled mock endpoints
+ * @param {MockEndpoints} client - the assembled mock endpoints
  */
 const createMockStrategy = (client) => {
     // Join deps over the mock endpoints. joinStateStore is null — mock mode must
@@ -108,9 +108,7 @@ const createMockStrategy = (client) => {
      * runs (services/joinChallenges.js) over the mock endpoints, with a null
      * join-state store (no real state touched).
      *
-     * @type {(challengeId: string|number, spendCoins: boolean, token: string) => Promise<
-     *   Awaited<ReturnType<typeof joinChallengeSingle>> | { status: string, challengeId: null, cost: number }
-     * >}
+     * @type {typeof import('../strategies/real').joinChallenge}
      */
     const joinChallenge = mockMethod(
         {
@@ -121,7 +119,7 @@ const createMockStrategy = (client) => {
                     .withCategory('challenges')
                     .debug(`Join challenge ID: ${challengeId}, spendCoins: ${!!spendCoins}`, null);
             },
-            onNoToken: () => ({ status: 'not-authenticated', challengeId: null, cost: 0 }),
+            onNoToken: (challengeId) => ({ status: 'not-authenticated', challengeId, cost: 0 }),
         },
         async (challengeId, spendCoins, token) =>
             joinChallengeSingle(challengeId, token, mockJoinDeps(), { spendCoins: spendCoins === true }),

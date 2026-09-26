@@ -14,6 +14,10 @@
 import { occurrencesOf } from '../scheduling/wallClock';
 import { finite, durationBound } from './conditions';
 
+/** @import { Challenge } from '../types/gurushots' */
+/** @import { ScenarioCondition, ScenarioEngineState } from '../types/scenario' */
+/** @import { ScenarioDocument } from '../settings/scenarioSchema' */
+
 /**
  * The next occurrence of a validated HH:MM time (occurrencesOf only returns
  * null for an unparsable time).
@@ -50,8 +54,8 @@ const rangeInstants = (origin, min, max, reversed = false) => {
 /**
  * Every instant a condition (and the conditions nested in it) can flip.
  *
- * @param {any} condition
- * @param {{challenge: any, state: any, now: number, timezone: string}} ctx
+ * @param {ScenarioCondition} condition
+ * @param {{challenge: Challenge, state: ScenarioEngineState, now: number, timezone: string}} ctx
  * @param {number[]} into
  */
 const collectInstants = (condition, ctx, into) => {
@@ -93,7 +97,7 @@ const collectInstants = (condition, ctx, into) => {
 };
 
 /**
- * @param {{scenario: any, state: any, challenge: any, now: number, timezone: string}} input
+ * @param {{scenario: ScenarioDocument, state: ScenarioEngineState, challenge: Challenge, now: number, timezone: string}} input
  * @returns {number|null}
  */
 const nextWakeAt = ({ scenario, state, challenge, now, timezone }) => {

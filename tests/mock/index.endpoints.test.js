@@ -72,7 +72,7 @@ describe('no-token contract for every endpoint not covered elsewhere', () => {
         [
             'joinChallenge',
             () => mockApiClient.joinChallenge(1, true, null),
-            { status: 'not-authenticated', challengeId: null, cost: 0 },
+            { status: 'not-authenticated', challengeId: 1, cost: 0 },
         ],
     ])('%s resolves its failure shape and logs the auth error', async (_name, call, expected) => {
         await expect(call()).resolves.toEqual(expected);

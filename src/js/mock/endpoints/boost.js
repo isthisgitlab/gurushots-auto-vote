@@ -12,10 +12,10 @@ import { simulateApiResponse, simulateApiError, mockMethod } from '../simulate';
 /** @import { Challenge, MemberBoost, SuccessResponse } from '../../types/gurushots' */
 
 /**
- * Simulate applying boost. Reads the boost state off the challenge, which
- * every mock challenge carries.
+ * Simulate applying boost from the boost state the challenge carries; a
+ * challenge without one reads as boost not available.
  *
- * @type {(challenge: Challenge & { member: { boost: MemberBoost } }, token: string) => Promise<SuccessResponse | null>}
+ * @type {typeof import('../../strategies/real/applyBoost').applyBoost}
  */
 const applyBoost = mockMethod(
     {
@@ -23,14 +23,14 @@ const applyBoost = mockMethod(
         tokenArg: 1,
         debug: (challenge, token) => {
             logger.withCategory('challenges').debug(`Challenge: ${challenge.title}`, null);
-            logger.withCategory('voting').debug(`Boost state: ${challenge.member.boost.state}`, null);
+            logger.withCategory('voting').debug(`Boost state: ${challenge.member?.boost?.state}`, null);
             logger.withCategory('api').debug(`Token provided: ${!!token}`, null);
         },
         // Real applyBoost resolves null on failure
         onNoToken: () => null,
     },
     async (challenge) => {
-        const boostState = challenge.member.boost.state;
+        const boostState = challenge.member?.boost?.state;
         if (boostState === 'AVAILABLE' || boostState === 'AVAILABLE_KEY') {
             logger.withCategory('voting').debug('Applying boost successfully', null);
             // Mirror the real surface's side effect: resolve the same entry via the

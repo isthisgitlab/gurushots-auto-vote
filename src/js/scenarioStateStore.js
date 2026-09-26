@@ -35,17 +35,12 @@
 /** @import { RawJsonStore, ScenarioState } from './types/stores' */
 import * as logger from './logger';
 import { createJsonStore } from './settings/storage';
+import { isPlainObject } from './plainObject';
 
 const scenarioStateStore = createJsonStore({ fileName: 'scenarioState.json', prefKey: 'gs_scenario_state' });
 
 // Challenges run for days, not months; anything older is a finished challenge.
 const MAX_AGE_MS = 30 * 24 * 60 * 60 * 1000;
-
-/**
- * @param {unknown} value
- * @returns {value is Record<string, unknown>}
- */
-const isPlainObject = (value) => Boolean(value) && typeof value === 'object' && !Array.isArray(value);
 
 /**
  * @param {unknown} value

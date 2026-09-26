@@ -12,6 +12,7 @@
  */
 
 const settings = require('../../src/js/settings');
+const { schemaDefault } = require('../../src/js/settings/schema');
 
 jest.mock('../../src/js/logger', () => ({
     info: jest.fn(),
@@ -232,15 +233,16 @@ describe('scheduled-fill list bounds pass', () => {
         expect(merged.challengeSettings.globalDefaults.scheduledFillTime).toEqual(['21:30', '09:00']);
     });
 
-    test('post-flag, a hand-edited non-array value is left as-is (documented gap — write path rejects it)', () => {
+    test('post-flag, a hand-edited non-array value is dropped on load and the default applies', () => {
         // Both flags already set: neither migration runs again, and the
-        // sanitizer's non-array contract returns null (untouched). This is
-        // the accepted-risk class the sanitizer comment documents.
+        // sanitizer's non-array contract leaves the value to load-time
+        // validation, which drops it.
         seed(
             { globalDefaults: { scheduledFillTime: true } },
             { _scheduledFillListsMigratedV1: true, _scheduledFillListBoundsV1: true },
         );
         const merged = settings.loadSettings();
-        expect(merged.challengeSettings.globalDefaults.scheduledFillTime).toBe(true);
+        expect(merged.challengeSettings.globalDefaults.scheduledFillTime).not.toBe(true);
+        expect(settings.getGlobalDefault('scheduledFillTime')).toEqual(schemaDefault('scheduledFillTime'));
     });
 });

@@ -235,7 +235,8 @@ describe('settings facade — class conditions and the rule cascade', () => {
             seed(
                 base({
                     profiles: { P: { exposure: 70 } },
-                    perChallenge: { c1: 5 },
+                    // A manual target below the profile's trigger: the pair is invalid.
+                    perChallenge: { c1: { exposureTarget: 60 } },
                 }),
             );
             settings.rememberChallengeTitles([{ id: 'c1', ...challenge() }]);

@@ -13,6 +13,8 @@
 
 import { sanitizeNotificationText, interpolate } from './deadlineNotifications';
 
+/** @import { Challenge } from '../types/gurushots' */
+
 /** Longest notification body; a scenario notice is itself capped at 120 characters. */
 const MAX_BODY = 240;
 
@@ -87,12 +89,12 @@ const formatScenarioNotification = (notices, translate) => {
  *
  * @param {object} deps
  * @param {() => boolean|Promise<boolean>} deps.isEnabled - the notifyOnScenario setting
- * @param {(challenge: any) => OutboxItem[]|null|undefined|Promise<OutboxItem[]|null|undefined>} deps.readOutbox
+ * @param {(challenge: Challenge) => OutboxItem[]|null|undefined|Promise<OutboxItem[]|null|undefined>} deps.readOutbox
  * @param {(key: string) => string} deps.translate
  * @param {(n: {title: string, body: string}) => void} deps.deliver
  * @param {(message: string) => void} [deps.log]
  * @param {number} [deps.startedAt] - unix seconds (default: now)
- * @returns {(challenges: any) => Promise<void>}
+ * @returns {(challenges: readonly Challenge[]) => Promise<void>}
  */
 const createScenarioNotifier = ({ isEnabled, readOutbox, translate, deliver, log, startedAt }) => {
     const tracker = createNoticeTracker(startedAt ?? Math.floor(Date.now() / 1000));
@@ -104,7 +106,7 @@ const createScenarioNotifier = ({ isEnabled, readOutbox, translate, deliver, log
             if (!(await isEnabled())) return;
             /** @type {ChallengeOutbox[]} */
             const outboxes = [];
-            for (const challenge of Array.isArray(challenges) ? challenges : []) {
+            for (const challenge of challenges) {
                 const outbox = await readOutbox(challenge);
                 if (Array.isArray(outbox) && outbox.length) {
                     outboxes.push({
@@ -118,7 +120,9 @@ const createScenarioNotifier = ({ isEnabled, readOutbox, translate, deliver, log
             if (notification) deliver(notification);
         } catch (error) {
             try {
-                log?.(`scenario notification cycle failed: ${/** @type {any} */ (error)?.message ?? error}`);
+                log?.(
+                    `scenario notification cycle failed: ${/** @type {{ message?: unknown } | null | undefined} */ (error)?.message ?? error}`,
+                );
             } catch {
                 /* the diagnostic sink itself is best-effort */
             }

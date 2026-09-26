@@ -73,7 +73,8 @@ export type EntryAgeLedger = ReturnType<typeof import('../entryAgeStore').create
 /** A scenario rule that finished firing. */
 export interface ScenarioFiredRecord {
     at: number;
-    day?: string;
+    /** the local day it fired: that day's midnight, unix seconds */
+    day?: number;
     phaseEnteredAt?: number;
 }
 

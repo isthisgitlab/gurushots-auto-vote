@@ -21,6 +21,8 @@ import { schemaEntry, validateSetting, getValidationError } from './schema';
 import { challengeValueSetIsValid } from './defaults';
 import { RESERVED_PROFILE_NAMES } from './profileStore';
 
+/** @import { ScenarioCondition } from '../types/scenario' */
+
 /** @typedef {{path: string, message: string}} ScenarioIssue */
 
 const { SCENARIO_CAPS } = vocabulary;
@@ -41,8 +43,13 @@ const PHASE_FORBIDDEN_KEYS = new Set(['scenario']);
 
 const isReserved = (/** @type {string} */ value) => RESERVED_PROFILE_NAMES.has(value.trim().toLowerCase());
 
-/** z.enum over one of the vocabulary's plain string lists. */
-const oneOf = (/** @type {string[]} */ values) => z.enum(/** @type {[string, ...string[]]} */ (values));
+/**
+ * z.enum over one of the vocabulary's lists.
+ *
+ * @template {string} T
+ * @param {readonly [T, ...T[]]} values
+ */
+const oneOf = (values) => z.enum(values);
 
 /**
  * Free text shown in logs, the CLI and the GUI (rule labels, descriptions).
@@ -98,7 +105,11 @@ const checkRange =
         }
     };
 
-const durationRange = (/** @type {string} */ type) =>
+/**
+ * @template {string} T
+ * @param {T} type
+ */
+const durationRange = (type) =>
     z
         .strictObject({ type: z.literal(type), min: duration.optional(), max: duration.optional() })
         .superRefine(checkRange(parseDuration));
@@ -124,14 +135,14 @@ const entryCondition = z
         window: duration.optional(),
     })
     .superRefine((value, ctx) => {
-        if (value.window !== undefined && !vocabulary.SPEED_ENTRY_FIELDS.includes(value.field)) {
+        if (value.window !== undefined && !vocabulary.isOneOf(vocabulary.SPEED_ENTRY_FIELDS, value.field)) {
             ctx.addIssue({
                 code: 'custom',
                 path: ['window'],
                 message: `window only applies to ${vocabulary.SPEED_ENTRY_FIELDS.join(' and ')}`,
             });
         }
-        if (vocabulary.BOOLEAN_ENTRY_FIELDS.includes(value.field)) {
+        if (vocabulary.isOneOf(vocabulary.BOOLEAN_ENTRY_FIELDS, value.field)) {
             if (typeof value.value !== 'boolean') {
                 ctx.addIssue({
                     code: 'custom',
@@ -147,7 +158,7 @@ const entryCondition = z
         }
     });
 
-/** @type {z.ZodType<any>} */
+/** @type {z.ZodType<ScenarioCondition>} */
 const condition = z.lazy(() =>
     z.discriminatedUnion('type', [
         z
@@ -241,10 +252,25 @@ const scenarioDocument = z.strictObject({
 });
 
 /**
- * A validated scenario document: the zod-parsed shape, every rule carrying an
- * id once validateScenario has run.
+ * A scenario document as zod parses it; rule ids are still optional.
  *
- * @typedef {z.infer<typeof scenarioDocument>} ScenarioDocument
+ * @typedef {z.infer<typeof scenarioDocument>} ParsedScenarioDocument
+ */
+
+/**
+ * A validated rule: validateScenario gives every rule an id.
+ *
+ * @typedef {z.infer<typeof rule> & { id: string }} ScenarioRule
+ */
+
+/** @typedef {ScenarioRule['do'][number]} ScenarioAction */
+
+/** @typedef {Omit<z.infer<typeof phase>, 'rules'> & { rules?: ScenarioRule[] }} ScenarioPhase */
+
+/**
+ * A validated scenario document: names trimmed, every rule carrying an id.
+ *
+ * @typedef {Omit<ParsedScenarioDocument, 'phases'> & { phases: Record<string, ScenarioPhase> }} ScenarioDocument
  */
 
 /**
@@ -263,7 +289,7 @@ const formatPath = (path) =>
 /**
  * Nesting depth of a condition list (a flat list is depth 1).
  *
- * @param {any[]} conditions
+ * @param {readonly ScenarioCondition[]} conditions
  * @returns {number}
  */
 const conditionDepth = (conditions) => {
@@ -279,7 +305,7 @@ const conditionDepth = (conditions) => {
 /**
  * Every memory slot a condition list reads.
  *
- * @param {any[]} conditions
+ * @param {readonly ScenarioCondition[]} conditions
  * @param {Set<string>} into
  */
 const collectConditionReads = (conditions, into) => {
@@ -289,26 +315,6 @@ const collectConditionReads = (conditions, into) => {
         if (item.type === 'not') collectConditionReads([item.condition], into);
         if (item.type === 'any' || item.type === 'all') collectConditionReads(item.of, into);
     }
-};
-
-/**
- * Memory slots an action reads and writes.
- *
- * @param {any} item
- * @returns {{reads: string[], writes: string[]}}
- */
-const actionMemory = (item) => {
-    const reads = [];
-    const writes = [];
-    if (item.entry?.by === 'memory') reads.push(item.entry.slot);
-    for (const source of [item.photo, item.with]) {
-        if (source && typeof source === 'object') reads.push(source.memory);
-    }
-    for (const key of ['remember', 'rememberRemoved', 'rememberAdded']) {
-        if (typeof item[key] === 'string') writes.push(item[key]);
-    }
-    if (item.type === 'remember') writes.push(item.slot);
-    return { reads, writes };
 };
 
 /**
@@ -351,29 +357,39 @@ const phaseSettingsIssues = (values, basePath, globalDefaults) => {
  * Rule ids unique across the scenario (the engine keys its "already fired"
  * records by them). Missing ids are generated as `<phase>-<n>`.
  *
- * @param {any} doc - a parsed scenario document (mutated)
+ * @param {ParsedScenarioDocument} doc
+ * @returns {ScenarioDocument}
  */
 const assignRuleIds = (doc) => {
     const taken = new Set();
     for (const phaseDoc of Object.values(doc.phases)) {
         for (const item of phaseDoc.rules ?? []) if (item.id) taken.add(item.id);
     }
-    for (const [phaseName, phaseDoc] of Object.entries(doc.phases)) {
-        (phaseDoc.rules ?? []).forEach((/** @type {any} */ item, /** @type {number} */ index) => {
-            if (item.id) return;
-            let id = `${phaseName}-${index + 1}`.slice(0, 40);
-            for (let n = 2; taken.has(id); n++) id = `${phaseName}-${index + 1}-${n}`.slice(0, 40);
-            taken.add(id);
-            item.id = id;
-        });
+    /** @param {string} phaseName @param {number} index */
+    const freshId = (phaseName, index) => {
+        let id = `${phaseName}-${index + 1}`.slice(0, 40);
+        for (let n = 2; taken.has(id); n++) id = `${phaseName}-${index + 1}-${n}`.slice(0, 40);
+        taken.add(id);
+        return id;
+    };
+    /** @type {Record<string, ScenarioPhase>} */
+    const phases = {};
+    for (const [phaseName, { rules, ...phaseDoc }] of Object.entries(doc.phases)) {
+        phases[phaseName] = rules
+            ? {
+                  ...phaseDoc,
+                  rules: rules.map((item, index) => ({ ...item, id: item.id || freshId(phaseName, index) })),
+              }
+            : phaseDoc;
     }
+    return { ...doc, phases };
 };
 
 /**
  * Checks the zod shape cannot express: references, unique rule ids, nesting
  * depth, and the phase settings overlays.
  *
- * @param {any} doc - a zod-parsed scenario document
+ * @param {ParsedScenarioDocument} doc
  * @param {Record<string, unknown>} globalDefaults
  * @returns {ScenarioIssue[]}
  */
@@ -390,7 +406,7 @@ const semanticIssues = (doc, globalDefaults) => {
         const phasePath = `phases.${phaseName}`;
         if (phaseDoc.settings)
             issues.push(...phaseSettingsIssues(phaseDoc.settings, `${phasePath}.settings`, globalDefaults));
-        (phaseDoc.rules ?? []).forEach((/** @type {any} */ item, /** @type {number} */ ruleIndex) => {
+        (phaseDoc.rules ?? []).forEach((item, ruleIndex) => {
             const rulePath = `${phasePath}.rules[${ruleIndex}]`;
             if (item.id) {
                 if (ruleIds.has(item.id))
@@ -407,12 +423,12 @@ const semanticIssues = (doc, globalDefaults) => {
             const conditionReads = new Set();
             collectConditionReads(conditions, conditionReads);
             for (const slot of conditionReads) reads.push({ slot, path: `${rulePath}.if` });
-            item.do.forEach((/** @type {any} */ step, /** @type {number} */ stepIndex) => {
+            item.do.forEach((step, stepIndex) => {
                 const stepPath = `${rulePath}.do[${stepIndex}]`;
                 if (step.type === 'goto' && !phaseNames.has(step.phase)) {
                     issues.push({ path: `${stepPath}.phase`, message: `No phase named "${step.phase}"` });
                 }
-                const memory = actionMemory(step);
+                const memory = vocabulary.actionMemory(step);
                 for (const slot of memory.reads) reads.push({ slot, path: stepPath });
                 for (const slot of memory.writes) writes.add(slot);
             });
@@ -444,8 +460,7 @@ const validateScenario = (input, globalDefaults) => {
     const doc = parsed.data;
     const issues = semanticIssues(doc, globalDefaults);
     if (issues.length) return { ok: false, issues };
-    assignRuleIds(doc);
-    return { ok: true, scenario: doc };
+    return { ok: true, scenario: assignRuleIds(doc) };
 };
 
 /**

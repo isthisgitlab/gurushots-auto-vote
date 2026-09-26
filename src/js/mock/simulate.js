@@ -64,7 +64,7 @@ const simulateApiError = (error, delay = 500) => {
  * @param {number} spec.tokenArg - index of the token in the call args
  * @param {(...args: Parameters<F>) => void} [spec.debug] - extra per-method debug logging (gets the raw args)
  * @param {string} [spec.noTokenMessage] - authentication error line
- * @param {() => Awaited<ReturnType<F>>} spec.onNoToken - produces the no-token return value
+ * @param {(...args: Parameters<F>) => Awaited<ReturnType<F>>} spec.onNoToken - produces the no-token return value
  * @param {(...args: Parameters<F>) => ReturnType<F>} fn - the method body
  * @returns {F}
  */
@@ -85,7 +85,7 @@ const mockMethod = (
         if (debug) debug(...args);
         if (!args[tokenArg]) {
             logger.withCategory('authentication').error(noTokenMessage, null);
-            return onNoToken();
+            return onNoToken(...args);
         }
         return fn(...args);
     };

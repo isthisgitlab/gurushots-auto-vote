@@ -30,19 +30,11 @@ import type { createStateLedger as CreateScenarioStateLedger } from '../scenario
 import type { EntryTracker } from '../services/newEntryTracker';
 import type { EntryAgeLedger } from './stores';
 
-/**
- * A get_vote_images pool as the pass handles it: `images` is read, then the
- * pool goes as fetched to submitVotes and the fill shortfall check. The mock's
- * pool carries a trimmed `challenge`.
- */
-export type PassVotePool = Omit<VoteImagesResponse, 'challenge'> & { challenge?: Partial<Challenge> };
-
 /** The endpoint set runVotingPass reads off `deps.api`. */
 export interface VotingPassApi {
     getActiveChallenges(...args: Parameters<typeof GetActiveChallenges>): ReturnType<typeof GetActiveChallenges>;
-    getVoteImages(...args: Parameters<typeof GetVoteImages>): Promise<PassVotePool | null>;
-    /** Takes the pool getVoteImages returned, as fetched. */
-    submitVotes(voteImages: PassVotePool, token: string, targetExposure?: number): ReturnType<typeof SubmitVotes>;
+    getVoteImages(...args: Parameters<typeof GetVoteImages>): ReturnType<typeof GetVoteImages>;
+    submitVotes(...args: Parameters<typeof SubmitVotes>): ReturnType<typeof SubmitVotes>;
     applyBoost(...args: Parameters<typeof ApplyBoost>): ReturnType<typeof ApplyBoost>;
     applyBoostToEntry(...args: Parameters<typeof ApplyBoostToEntry>): ReturnType<typeof ApplyBoostToEntry>;
     applyTurbo(...args: Parameters<typeof ApplyTurbo>): ReturnType<typeof ApplyTurbo>;

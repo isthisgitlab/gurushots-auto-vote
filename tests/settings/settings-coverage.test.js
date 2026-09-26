@@ -146,7 +146,7 @@ describe('settings facade — edge cases', () => {
             expect(cat.error).toHaveBeenCalledWith('Invalid setting key: noSuchKey', null);
         });
 
-        test('setGlobalDefault rebuilds a missing challengeSettings / globalDefaults container', () => {
+        test('setGlobalDefault saves into a blob stored without challengeSettings or its globalDefaults', () => {
             seed({ challengeSettings: null });
             expect(settings.setGlobalDefault('exposure', 80)).toBe(true);
             expect(saved().challengeSettings.globalDefaults.exposure).toBe(80);
@@ -154,7 +154,7 @@ describe('settings facade — edge cases', () => {
 
             seed({ challengeSettings: { perChallenge: {} } });
             expect(settings.setGlobalDefault('exposure', 60)).toBe(true);
-            expect(saved().challengeSettings.globalDefaults).toEqual({ exposure: 60 });
+            expect(saved().challengeSettings.globalDefaults.exposure).toBe(60);
         });
 
         test('resetGlobalDefault restores the schema default and rejects unknown keys', () => {
@@ -451,7 +451,7 @@ describe('settings facade — edge cases', () => {
             expect(store.write).not.toHaveBeenCalled();
         });
 
-        test('profile/override composition: missing, suppressed, unrelated and corrupt overrides', () => {
+        test('profile/override composition: missing, suppressed, unrelated and conflicting overrides', () => {
             const base = {
                 globalDefaults: {},
                 profiles: { P: { exposure: 70 } },
@@ -461,16 +461,23 @@ describe('settings facade — edge cases', () => {
             seed({ challengeSettings: { ...base, perChallenge: null } });
             expect(settings.setTitleRules([{ title: 'Alpha', profile: 'P' }])).toBe(true);
 
-            // A corrupt (non-object) override on a challenge the rule applies to fails closed.
-            seed({ challengeSettings: { ...base, perChallenge: { c1: 5 } } });
+            // A conflicting override on a challenge the rule applies to fails closed.
+            const conflicting = { exposureTarget: 60 };
+            seed({ challengeSettings: { ...base, perChallenge: { c1: conflicting } } });
             expect(settings.setTitleRules([{ title: 'Alpha', profile: 'P' }])).toBe(false);
 
             // ...unless that challenge suppresses its title profile.
-            seed({ challengeSettings: { ...base, perChallenge: { c1: 5 }, titleProfileSuppressions: { c1: true } } });
+            seed({
+                challengeSettings: {
+                    ...base,
+                    perChallenge: { c1: conflicting },
+                    titleProfileSuppressions: { c1: true },
+                },
+            });
             expect(settings.setTitleRules([{ title: 'Alpha', profile: 'P' }])).toBe(true);
 
             // Overrides on a challenge the rule does not reach are not checked.
-            seed({ challengeSettings: { ...base, perChallenge: { c9: 5 } } });
+            seed({ challengeSettings: { ...base, perChallenge: { c9: conflicting } } });
             expect(settings.setTitleRules([{ title: 'Alpha', profile: 'P' }])).toBe(true);
         });
 
@@ -506,11 +513,11 @@ describe('settings facade — edge cases', () => {
     });
 
     describe('effective tag / ignore-word lists', () => {
-        test('rule tags union onto the base list, skipping non-string base entries', () => {
+        test('rule tags union onto the base list, skipping non-string entries', () => {
             seed({
                 challengeSettings: {
-                    globalDefaults: { mustIncludeTags: ['a', 5, 'b'] },
-                    titleRules: [{ title: 'Alpha', mustIncludeTags: ['b', 'c'], shouldIncludeTags: [] }],
+                    globalDefaults: { mustIncludeTags: ['a', 'b'] },
+                    titleRules: [{ title: 'Alpha', mustIncludeTags: ['b', 5, 'c'], shouldIncludeTags: [] }],
                 },
             });
             expect(settings.getEffectiveTagSetting('mustIncludeTags', { title: 'Alpha' })).toEqual(['a', 'b', 'c']);
@@ -520,7 +527,7 @@ describe('settings facade — edge cases', () => {
             expect(settings.getEffectiveTagSetting('exposure', { title: 'Alpha' })).toBe(100);
         });
 
-        test('a null base (no filter) still yields a real array when a rule contributes', () => {
+        test('a stored null tag list is dropped on load; the rule tags still come through', () => {
             seed({
                 challengeSettings: {
                     globalDefaults: { mustIncludeTags: null },
@@ -992,9 +999,8 @@ describe('settings facade — edge cases', () => {
             expect(fs.writeFileSync).toHaveBeenCalledTimes(1);
         });
 
-        test('seedIntentProfiles survives a null challengeSettings when every write fails', () => {
-            const blob = migratedBlob({ challengeSettings: null });
-            expect(JSON.parse(blob).challengeSettings).toBeNull();
+        test('seedIntentProfiles reports the skipped profiles when every write fails', () => {
+            const blob = migratedBlob({});
             useFailingDisk(blob);
             expect(settings.seedIntentProfiles()).toBe(false);
             expect(cat.warning).toHaveBeenCalledWith(expect.stringContaining('Skipped seeding intent profile'));

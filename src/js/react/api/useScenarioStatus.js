@@ -73,7 +73,13 @@ function summarize(status, challenge) {
     if (!status.scenario) return { name: status.assigned, missing: true };
     if (status.corrupt) return { name: status.scenario.name, corrupt: true };
     const now = Math.floor(Date.now() / 1000);
-    const state = status.state ?? { phase: status.scenario.start, phaseEnteredAt: now, fired: {}, memory: {} };
+    const state = status.state ?? {
+        phase: status.scenario.start,
+        phaseEnteredAt: now,
+        fired: {},
+        memory: {},
+        inFlight: null,
+    };
     return {
         name: status.scenario.name,
         phase: state.phase,

@@ -133,15 +133,13 @@ const titleProfileComposesWithKnownOverrides = (settings, rule, rawProfileValues
     const profileValues = sanitizeProfileValues(rawProfileValues, true, globalValues);
     if (profileValues === null) return false;
 
-    const perChallenge = settings.challengeSettings?.perChallenge || {};
-    return Object.entries(perChallenge).every(([challengeId, overrides]) => {
+    return Object.entries(settings.challengeSettings.perChallenge).every(([challengeId, overrides]) => {
         if (isTitleProfileSuppressed(settings, challengeId)) return true;
         // Applicability must use the REAL matcher, not an exact title compare:
         // a contains/starts or class-keyed rule reaches challenges whose title
         // is not the rule's own, and skipping those would let a conflicting
         // profile+override combination save unvalidated.
         if (matchingRules([rule], challengeTargetForId(settings, challengeId)).length === 0) return true;
-        if (!overrides || typeof overrides !== 'object' || Array.isArray(overrides)) return false;
         const effective = { ...globalValues, ...profileValues, ...overrides };
         return challengeValueSetIsValid(effective, { ...profileValues, ...overrides }, challengeId);
     });

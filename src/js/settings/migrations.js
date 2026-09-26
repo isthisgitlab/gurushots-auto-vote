@@ -607,16 +607,10 @@ const pruneObsoleteSettings = (settings) => {
         hasChanges = true;
     }
 
-    const challengeSettings = settings.challengeSettings;
-    if (challengeSettings) {
-        const validSchemaKeys = Object.keys(SETTINGS_SCHEMA);
-        if (challengeSettings.globalDefaults) {
-            hasChanges = _pruneGlobalDefaultKeys(challengeSettings.globalDefaults, validSchemaKeys) || hasChanges;
-        }
-        if (challengeSettings.perChallenge) {
-            hasChanges = _prunePerChallengeKeys(challengeSettings.perChallenge, validSchemaKeys) || hasChanges;
-        }
-    }
+    const { globalDefaults, perChallenge } = settings.challengeSettings;
+    const validSchemaKeys = Object.keys(SETTINGS_SCHEMA);
+    hasChanges = _pruneGlobalDefaultKeys(globalDefaults, validSchemaKeys) || hasChanges;
+    hasChanges = _prunePerChallengeKeys(perChallenge, validSchemaKeys) || hasChanges;
 
     return hasChanges;
 };

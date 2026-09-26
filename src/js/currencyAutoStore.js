@@ -18,6 +18,7 @@
 /** @import { AutoSpendRecord, RawJsonStore } from './types/stores' */
 import * as logger from './logger';
 import { createJsonStore } from './settings/storage';
+import { isPlainObject } from './plainObject';
 
 const autoSpendStore = createJsonStore({ fileName: 'autoSpends.json', prefKey: 'gs_auto_spends' });
 
@@ -25,10 +26,10 @@ const autoSpendStore = createJsonStore({ fileName: 'autoSpends.json', prefKey: '
 const MAX_AGE_MS = 30 * 24 * 60 * 60 * 1000;
 
 /**
- * @param {any} r - an untrusted parsed-JSON value
+ * @param {unknown} r - an untrusted parsed-JSON value
  * @returns {r is AutoSpendRecord}
  */
-const isRecord = (r) => r && Number.isInteger(r.fills) && r.fills >= 0 && Number.isFinite(r.at);
+const isRecord = (r) => isPlainObject(r) && Number.isInteger(r.fills) && Number(r.fills) >= 0 && Number.isFinite(r.at);
 
 /**
  * Ledger over a raw-JSON store ({readRaw, writeRaw}). An unreadable or corrupt

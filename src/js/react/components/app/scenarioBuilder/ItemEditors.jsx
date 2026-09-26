@@ -12,7 +12,7 @@ import {
     defaultSelector,
     defaultFieldValue,
 } from '../../../../scenarios/builderSpec';
-import { COMPARISON_OPS, CURRENCIES, BOOLEAN_ENTRY_FIELDS } from '../../../../scenarios/vocabulary';
+import { COMPARISON_OPS, CURRENCIES, BOOLEAN_ENTRY_FIELDS, isOneOf } from '../../../../scenarios/vocabulary';
 import { moveItem } from '../../../../scenarios/builderModel';
 
 /**
@@ -276,7 +276,7 @@ function FieldInput({ field, value, onChange, item, phases, label }) {
                 </select>
             );
         case 'entryValue':
-            return BOOLEAN_ENTRY_FIELDS.includes(/** @type {string} */ (item.field)) ? (
+            return isOneOf(BOOLEAN_ENTRY_FIELDS, item.field) ? (
                 <select
                     aria-label={label}
                     className={SELECT}
@@ -356,10 +356,9 @@ const withField = (item, field, next) => {
     else updated[field.key] = next;
     if (
         field.kind === 'entryField' &&
-        BOOLEAN_ENTRY_FIELDS.includes(/** @type {string} */ (next)) !==
-            BOOLEAN_ENTRY_FIELDS.includes(/** @type {string} */ (item.field))
+        isOneOf(BOOLEAN_ENTRY_FIELDS, next) !== isOneOf(BOOLEAN_ENTRY_FIELDS, item.field)
     ) {
-        const toBoolean = BOOLEAN_ENTRY_FIELDS.includes(/** @type {string} */ (next));
+        const toBoolean = isOneOf(BOOLEAN_ENTRY_FIELDS, next);
         updated.op = toBoolean ? '=' : '>=';
         updated.value = toBoolean ? true : defaultFieldValue({ key: 'value', kind: 'entryValue' });
         if (toBoolean) delete updated.window;

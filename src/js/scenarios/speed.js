@@ -21,6 +21,8 @@ const MIN_SPAN_SEC = 10 * 60;
 /** Speed window when a condition or selector does not name one. */
 const DEFAULT_WINDOW_SEC = 3600;
 
+/** @import { RankingEntry } from '../types/gurushots' */
+
 /** @typedef {Record<string, Array<[number, number]>>} VoteHistory */
 
 /** @param {number | null | undefined} value */
@@ -34,7 +36,7 @@ const votesOf = (value) =>
  * a photo swapped out for a day still has its history when it comes back.
  *
  * @param {VoteHistory|undefined} history
- * @param {any[]} entries
+ * @param {readonly RankingEntry[]} entries
  * @param {number} now
  * @returns {VoteHistory}
  */
@@ -62,7 +64,7 @@ const recordVoteSample = (history, entries, now) => {
  * shorter but at least MIN_SPAN_SEC), from the entry's live vote count.
  *
  * @param {VoteHistory|undefined} history
- * @param {any} entry
+ * @param {RankingEntry} entry
  * @param {number} now
  * @param {number} [windowSec]
  * @returns {number|null}
@@ -86,8 +88,8 @@ const votesPerHour = (history, entry, now, windowSec = DEFAULT_WINDOW_SEC) => {
  * null when there is nothing to compare with.
  *
  * @param {VoteHistory|undefined} history
- * @param {any[]} entries
- * @param {any} entry
+ * @param {readonly RankingEntry[]} entries
+ * @param {RankingEntry} entry
  * @param {number} now
  * @param {number} [windowSec]
  * @returns {number|null}

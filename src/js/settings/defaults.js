@@ -9,7 +9,7 @@ import { SETTINGS_SCHEMA, schemaEntry, validateSetting } from './schema';
 import { getUiDefaultSettings } from './uiDefaults';
 import { getDefaultMockSetting } from './storage';
 
-/** @import { AppSettings, ChallengeSettings, ChallengeValues } from '../types/settings' */
+/** @import { AppSettings, ChallengeValues } from '../types/settings' */
 
 /**
  * Default settings with environment-aware mock setting
@@ -61,20 +61,6 @@ const getDefaultSettings = () => {
 };
 
 /**
- * Ensure a loaded settings object carries a challengeSettings container
- * (a hand-edited or legacy blob may lack one) and return it.
- *
- * @param {AppSettings} settings
- * @returns {ChallengeSettings}
- */
-const ensureChallengeSettings = (settings) => {
-    if (!settings.challengeSettings) {
-        settings.challengeSettings = getDefaultSettings().challengeSettings;
-    }
-    return settings.challengeSettings;
-};
-
-/**
  * Value equality for settings comparisons. JSON-based so reference types
  * (arrays like mustIncludeTags, plain objects) compare by content — a bare
  * !== would treat every array override as "differs from default" forever.
@@ -97,7 +83,7 @@ const globalChallengeValues = (settings) => {
     /** @type {ChallengeValues} */
     const values = {
         ...getDefaultSettings().challengeSettings.globalDefaults,
-        ...(settings.challengeSettings?.globalDefaults || {}),
+        ...settings.challengeSettings.globalDefaults,
     };
     for (const key of Object.keys(SETTINGS_SCHEMA)) {
         const entry = schemaEntry(key);
@@ -152,4 +138,4 @@ const challengeValueSetIsValid = (values, candidates, challengeId = null) => {
     });
 };
 
-export { getDefaultSettings, ensureChallengeSettings, valuesEqual, globalChallengeValues, challengeValueSetIsValid };
+export { getDefaultSettings, valuesEqual, globalChallengeValues, challengeValueSetIsValid };

@@ -20,7 +20,7 @@ import { createScenarioNotifier } from '../../services/scenarioNotifications';
  * @param {(key:string)=>string} deps.translate
  * @param {(n:{title:string, body:string})=>void} deps.deliver
  * @param {(message:string)=>void} [deps.log]
- * @returns {(challenges:unknown)=>Promise<void>}
+ * @returns {(challenges: readonly Challenge[]) => Promise<void>}
  */
 export function createRendererScenarioNotifier({ getSetting, getScenarioStatus, translate, deliver, log }) {
     return createScenarioNotifier({

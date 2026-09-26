@@ -576,8 +576,7 @@ const runScenarioStep = async (challenge, now, pass) => {
                 challenge,
                 now: nowSec(),
                 timezone,
-                // The normalized Bankroll is a currency → number map.
-                bankroll: /** @type {Record<string, number>|null} */ (bankroll),
+                bankroll,
                 skipRuleIds: firedThisPass,
             });
             if (decision.halted) {

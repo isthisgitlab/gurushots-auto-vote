@@ -40,7 +40,7 @@ import { _runVotingRules } from './ruleEngine';
  */
 const evaluateVotingDecision = (challenge, now, options = {}) => {
     const r = _runVotingRules(challenge, now, 'auto', options);
-    if (r.skipReason)
+    if (r.skipReason !== null)
         return {
             shouldVote: false,
             voteReason: r.skipReason,
@@ -131,7 +131,7 @@ const evaluateVotingDecision = (challenge, now, options = {}) => {
  */
 const evaluateManualVotingDecision = (challenge, now, challengeTitle) => {
     const r = _runVotingRules(challenge, now, 'manual');
-    if (r.skipReason) {
+    if (r.skipReason !== null) {
         // Manual path uses different phrasing for the only-in-last-minute skip reason.
         const challengeId = challenge.id.toString();
         const lastMinute = settings.getEffectiveSetting('lastMinuteThreshold', challengeId);
@@ -169,7 +169,7 @@ const evaluateManualVotingDecision = (challenge, now, challengeTitle) => {
  * @param {Challenge} challenge - Challenge object
  * @param {number} now - Current time (Unix timestamp)
  * @param {string} challengeTitle - Challenge title for error messages
- * @returns {Object} - Decision with shouldAllowVoting boolean, errorMessage string, and targetExposure number
+ * @returns {ManualVoteDecision}
  */
 const evaluateManualVotingToHundred = (challenge, now, challengeTitle) => {
     // Defensive read — partial API responses (new challenge types, flash

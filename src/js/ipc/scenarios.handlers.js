@@ -38,7 +38,7 @@ import { refreshScenarioStateAsync } from '../scenarioStateStore';
  * @import { IpcMain } from 'electron'
  * @import { IpcHandlerMap } from './registerHandlers'
  * @import { ScenarioDocument, ScenarioIssue } from '../settings/scenarioSchema'
- * @import { ActiveChallengesResponse, Challenge } from '../types/gurushots'
+ * @import { ActiveChallengesResponse, Bankroll, Challenge } from '../types/gurushots'
  */
 
 /**
@@ -136,7 +136,7 @@ const startState = (scenario, now) => ({
  *       challenge: Challenge,
  *       now: number,
  *       state: NonNullable<ScenarioStatus['state']> | ReturnType<typeof startState>,
- *       bankroll: Record<string, number> | null,
+ *       bankroll: Bankroll | null,
  *     }
  * >}
  */

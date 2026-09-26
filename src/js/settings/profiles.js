@@ -8,7 +8,7 @@
 import * as logger from '../logger';
 import { INTENT_PROFILES } from './intentProfiles';
 import { loadSettings, saveSettings } from './persistence';
-import { ensureChallengeSettings, globalChallengeValues } from './defaults';
+import { globalChallengeValues } from './defaults';
 import {
     MAX_CHALLENGE_PROFILES,
     MAX_PROFILE_NAME_LENGTH,
@@ -61,7 +61,7 @@ const getChallengeProfiles = () => {
  * @returns {boolean}
  */
 const _updateAssignedProfileRules = (settings, normalizedName, displayName, values) => {
-    const rules = Array.isArray(settings.challengeSettings.titleRules) ? settings.challengeSettings.titleRules : [];
+    const rules = settings.challengeSettings.titleRules;
     const assigned = rules.filter((rule) => normalizeProfileName(rule?.profile) === normalizedName);
     if (assigned.some((rule) => !titleProfileComposesWithKnownOverrides(settings, rule, values))) {
         logger
@@ -130,7 +130,7 @@ const saveChallengeProfile = (name, values) => {
         return false;
     }
 
-    const challengeSettings = ensureChallengeSettings(settings);
+    const challengeSettings = settings.challengeSettings;
     // Rebuilt via own-property copy: drops prototype-named keys a corrupted
     // blob might carry.
     const { profiles, existed } = _profilesWithout(readProfilesMap(settings), normalized);
@@ -189,14 +189,11 @@ const deleteChallengeProfile = (name) => {
     // A deleted profile cannot remain as an invisible stale assignment. Keep
     // any tags or inline overrides on the same rule; drop the row only when the
     // profile was its sole contribution.
-    const rules = settings.challengeSettings.titleRules;
-    if (Array.isArray(rules)) {
-        settings.challengeSettings.titleRules = rules.flatMap((rule) => {
-            if (normalizeProfileName(rule?.profile) !== normalized) return [rule];
-            const kept = _ruleWithoutProfile(rule);
-            return kept ? [kept] : [];
-        });
-    }
+    settings.challengeSettings.titleRules = settings.challengeSettings.titleRules.flatMap((rule) => {
+        if (normalizeProfileName(rule?.profile) !== normalized) return [rule];
+        const kept = _ruleWithoutProfile(rule);
+        return kept ? [kept] : [];
+    });
     return saveSettings(settings);
 };
 
@@ -333,7 +330,7 @@ const seedIntentProfiles = () => {
     // so re-load fresh before recording the seed markers to avoid clobbering
     // them with this now-stale snapshot.
     const fresh = loadSettings();
-    ensureChallengeSettings(fresh).seededProfiles = Array.from(seededSet);
+    fresh.challengeSettings.seededProfiles = Array.from(seededSet);
     return saveSettings(fresh);
 };
 

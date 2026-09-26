@@ -19,22 +19,51 @@ import { getScheduledFillState, getVotingPauseState } from './triggerWindows';
 import { getBoostPrefillState } from './boostPrefill';
 
 /**
- * Intermediate result from the shared rule engine (`_runVotingRules`); the
- * per-mode wrappers map it onto their caller-facing shapes.
- * @typedef {object} VotingRuleResult
+ * The thresholds a decided rule compared against, for the log wording.
+ * @typedef {object} ThresholdInfo
+ * @property {number} currentExposure
+ * @property {number} trigger
+ * @property {number} effectiveLastMinuteThreshold
+ * @property {number} effectiveThreshold
+ * @property {number} effectiveFinalWindowExposure
+ * @property {number} effectiveExposureTarget
+ * @property {number} effectiveFinalWindowExposureTarget
+ */
+
+/**
+ * A rule that blocked the vote.
+ * @typedef {object} BlockedRuleResult
+ * @property {false} eligible
+ * @property {false} atTarget
+ * @property {string} skipReason
+ * @property {number} targetExposure
+ * @property {null} ruleLabel
+ * @property {null} thresholdInfo
+ * @property {false} forcedByNewEntry
+ * @property {boolean} preservesNewEntryTrigger - Set when the block DEFERS rather than
+ *   cancels: the orchestrator must keep any new-entry trigger armed instead of
+ *   disarming it. Only the voting pause sets it.
+ */
+
+/**
+ * The rule that decided the vote.
+ * @typedef {object} DecidedRuleResult
  * @property {boolean} eligible
  * @property {boolean} atTarget
- * @property {string|null} skipReason
+ * @property {null} skipReason
  * @property {number} targetExposure
- * @property {string|null} ruleLabel
- * @property {*} thresholdInfo
+ * @property {string} ruleLabel
+ * @property {ThresholdInfo} thresholdInfo
  * @property {boolean} forcedByNewEntry - True only when a detected new entry
  *   actually CHANGED the outcome: exposure was at/above the trigger but still
- *   below the target, so the vote happens anyway. False on every blocked path,
- *   once the target is met, and when the challenge was already eligible on its own.
- * @property {boolean} [preservesNewEntryTrigger] - Set on a blocked path that
- *   DEFERS rather than cancels: the orchestrator must keep any new-entry trigger
- *   armed instead of disarming it. Only the voting pause sets it.
+ *   below the target, so the vote happens anyway. False once the target is met,
+ *   and when the challenge was already eligible on its own.
+ */
+
+/**
+ * Intermediate result from the shared rule engine (`_runVotingRules`); the
+ * per-mode wrappers map it onto their caller-facing shapes.
+ * @typedef {BlockedRuleResult | DecidedRuleResult} VotingRuleResult
  */
 
 /**
@@ -113,7 +142,7 @@ const _runVotingRules = (challenge, now, mode, options = {}) => {
     /**
      * @param {string} skipReason
      * @param {boolean} [preservesNewEntryTrigger] - See the field's note below.
-     * @returns {VotingRuleResult}
+     * @returns {BlockedRuleResult}
      */
     const blocked = (skipReason, preservesNewEntryTrigger = false) => ({
         eligible: false,
@@ -143,8 +172,8 @@ const _runVotingRules = (challenge, now, mode, options = {}) => {
      * @param {string} ruleLabel
      * @param {number} trigger
      * @param {number} target
-     * @param {*} thresholdInfo
-     * @returns {VotingRuleResult}
+     * @param {Omit<ThresholdInfo, 'currentExposure' | 'trigger'>} thresholdInfo
+     * @returns {DecidedRuleResult}
      */
     const decided = (ruleLabel, trigger, target, thresholdInfo) => {
         const wouldBeAtTarget = currentExposure >= trigger;

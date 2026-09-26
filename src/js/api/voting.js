@@ -10,7 +10,7 @@ import { ENDPOINTS } from './constants';
 import * as logger from '../logger';
 import { updateChallengeVoteMetadata } from '../metadata';
 
-/** @import { Challenge, SuccessResponse, VoteImagesResponse, VoteSubmission } from '../types/gurushots' */
+/** @import { Challenge, SuccessResponse, VoteImagesResponse } from '../types/gurushots' */
 
 /**
  * Fetches images available for voting in a specific challenge
@@ -55,7 +55,7 @@ const getVoteImages = async (challenge, token) => {
  * 2. Continues voting until the exposure factor reaches the target exposure or all images are used
  * 3. Submits the votes to the GuruShots API
  *
- * @param {VoteSubmission} voteImages - Object containing challenge, voting, and images data
+ * @param {VoteImagesResponse} voteImages - the pool getVoteImages returned
  * @param {string} token - Authentication token
  * @param {number} [targetExposure] - Target exposure percentage (default: 100)
  * @returns {Promise<SuccessResponse|undefined>} - API response or undefined if submission failed

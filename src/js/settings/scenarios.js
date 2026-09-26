@@ -11,9 +11,9 @@
  */
 
 import * as logger from '../logger';
-import { SCENARIO_CAPS, SPENDING_ACTIONS } from '../scenarios/vocabulary';
+import { SCENARIO_CAPS, SPENDING_ACTIONS, isOneOf } from '../scenarios/vocabulary';
 import { loadSettings, saveSettings } from './persistence';
-import { ensureChallengeSettings, globalChallengeValues } from './defaults';
+import { globalChallengeValues } from './defaults';
 import { normalizeProfileName, profileNameForLog, findProfileKey } from './profileStore';
 import { validateScenario, parseScenarioJson } from './scenarioSchema';
 import { sanitizeTitleRuleInline } from './titleRuleSanitize';
@@ -161,7 +161,7 @@ const reassignScenario = (settings, fromName, toName) => {
     const from = normalizeProfileName(fromName);
     /** @param {unknown} value */
     const assigned = (value) => typeof value === 'string' && normalizeProfileName(value) === from;
-    const challengeSettings = ensureChallengeSettings(settings);
+    const challengeSettings = settings.challengeSettings;
     /** @type {Array<ChallengeValues|null|undefined>} */
     const valueMaps = [
         ...Object.values(plainObject(challengeSettings.perChallenge)),
@@ -224,7 +224,7 @@ const storeScenario = (doc, { overwrite, replaces = null, beforeSave = null }) =
         return failure([{ path: '', message: `You already have ${MAX_SCENARIOS} scenarios — delete one first` }]);
     }
     scenarios[scenario.name] = scenario;
-    ensureChallengeSettings(settings).scenarios = scenarios;
+    settings.challengeSettings.scenarios = scenarios;
     if (beforeSave) beforeSave(settings, scenario.name);
     if (!saveSettings(settings)) return failure([{ path: '', message: 'The settings file could not be saved' }]);
     log().info(`Scenario saved: "${profileNameForLog(scenario.name)}"`, null);
@@ -274,7 +274,7 @@ const deleteScenario = (name) => {
     if (key === null) return false;
     const scenarios = { ...stored };
     delete scenarios[key];
-    ensureChallengeSettings(settings).scenarios = scenarios;
+    settings.challengeSettings.scenarios = scenarios;
     reassignScenario(settings, key, '');
     if (!saveSettings(settings)) return false;
     log().info(`Scenario deleted: "${profileNameForLog(key)}"`, null);
@@ -297,7 +297,7 @@ const describeScenario = (scenario) => {
         phases.push({ name: phaseName, settings: Object.keys(phase.settings ?? {}), rules: rules.length });
         for (const rule of rules) {
             for (const action of rule.do) {
-                if (SPENDING_ACTIONS.includes(action.type)) {
+                if (isOneOf(SPENDING_ACTIONS, action.type)) {
                     spending.push({ phase: phaseName, rule: rule.label || rule.id, action: action.type });
                 }
             }

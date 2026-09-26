@@ -8,7 +8,6 @@
 import * as logger from '../logger';
 import { ruleConditions, matchingRules } from './challengeRules';
 import { loadSettings, saveSettings } from './persistence';
-import { ensureChallengeSettings } from './defaults';
 import { readProfilesMap, profileNameForLog } from './profileStore';
 import { factsForChallengeId } from './challengeFacts';
 import { MAX_TITLE_RULES, sanitizeTitleRule, titleRuleKey, ruleLogLabel } from './titleRuleSanitize';
@@ -31,11 +30,9 @@ import { getEffectiveSetting } from './challengeOverrides';
 const TITLE_RULE_TAG_KEYS = ['mustIncludeTags', 'shouldIncludeTags'];
 
 /**
- * Order-preserving union of two tag lists with the base first. A null /
- * non-array base is treated as empty so the result is always a real array
- * when `extra` has entries.
+ * Order-preserving union of two tag lists with the base first.
  *
- * @param {unknown} base
+ * @param {readonly string[]} base
  * @param {unknown[]} extra
  * @returns {string[]}
  */
@@ -43,8 +40,7 @@ const unionTags = (base, extra) => {
     /** @type {string[]} */
     const out = [];
     const seen = new Set();
-    // `extra` is always an array (the caller checks it); only `base` can be null.
-    for (const list of [Array.isArray(base) ? base : [], extra]) {
+    for (const list of [base, extra]) {
         for (const tag of list) {
             if (typeof tag !== 'string') continue;
             if (seen.has(tag)) continue;
@@ -56,17 +52,11 @@ const unionTags = (base, extra) => {
 };
 
 /**
- * Get the saved challenge rules. Tolerates a settings file whose
- * challengeSettings block has no titleRules array (loadSettings shallow-merges
- * challengeSettings whole).
+ * Get the saved challenge rules.
  *
  * @returns {TitleRule[]}
  */
-const getTitleRules = () => {
-    const settings = loadSettings();
-    const rules = settings.challengeSettings?.titleRules;
-    return Array.isArray(rules) ? rules : [];
-};
+const getTitleRules = () => loadSettings().challengeSettings.titleRules;
 
 /**
  * Public per-setting resolver for callers holding a challenge payload (the join
@@ -180,7 +170,7 @@ const setTitleRules = (rules) => {
         }
     }
 
-    ensureChallengeSettings(settings).titleRules = sanitized;
+    settings.challengeSettings.titleRules = sanitized;
     // The list is saved in the order the user gave, which IS the precedence, so
     // the one-time ordering migration must never re-sort it afterwards (a fresh
     // install saves before any file exists for that migration to have flagged).
@@ -244,7 +234,9 @@ const getEffectiveTagSetting = (settingKey, challenge) => {
     );
     if (!rule) return base;
 
-    return /** @type {SettingValueOf<K>} */ (unionTags(base, /** @type {unknown[]} */ (rule[settingKey])));
+    // A tag key's effective value is a tag list: stored values are validated on load.
+    const baseTags = /** @type {string[]} */ (base);
+    return /** @type {SettingValueOf<K>} */ (unionTags(baseTags, /** @type {unknown[]} */ (rule[settingKey])));
 };
 
 /**

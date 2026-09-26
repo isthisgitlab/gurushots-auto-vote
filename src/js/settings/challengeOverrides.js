@@ -7,15 +7,9 @@
  */
 
 import * as logger from '../logger';
-import { SETTINGS_SCHEMA, schemaEntry, getValidationError } from './schema';
+import { SETTINGS_SCHEMA, schemaEntry, schemaDefault, getValidationError } from './schema';
 import { loadSettings, saveSettings } from './persistence';
-import {
-    getDefaultSettings,
-    ensureChallengeSettings,
-    valuesEqual,
-    globalChallengeValues,
-    challengeValueSetIsValid,
-} from './defaults';
+import { valuesEqual, globalChallengeValues, challengeValueSetIsValid } from './defaults';
 import { ruleValuesForChallengeId, isTitleProfileSuppressed } from './ruleResolution';
 import { scenarioPhaseSettings } from './scenarioOverlay';
 
@@ -42,19 +36,15 @@ const trimmedChallengeId = (challengeId) =>
 const getGlobalDefault = (settingKey) => {
     const entry = schemaEntry(settingKey);
     // A challengeOnly key has no global value: the schema default is all there is.
-    if (entry?.challengeOnly) return entry.default;
-    const settings = loadSettings();
-    const challengeSettings = settings.challengeSettings || getDefaultSettings().challengeSettings;
-
-    if (
-        challengeSettings.globalDefaults &&
-        Object.prototype.hasOwnProperty.call(challengeSettings.globalDefaults, settingKey)
-    ) {
-        return /** @type {SettingValueOf<K>} */ (challengeSettings.globalDefaults[settingKey]);
+    if (entry?.challengeOnly) return schemaDefault(settingKey);
+    const { globalDefaults } = loadSettings().challengeSettings;
+    if (Object.prototype.hasOwnProperty.call(globalDefaults, settingKey)) {
+        // Stored values are validated against the schema on load.
+        return /** @type {SettingValueOf<K>} */ (globalDefaults[settingKey]);
     }
 
     // Fallback to schema default if not found in settings
-    return entry?.default;
+    return schemaDefault(settingKey);
 };
 
 /**
@@ -80,7 +70,7 @@ const setGlobalDefault = (settingKey, value) => {
 
     // Get current global defaults for context validation
     const settings = loadSettings();
-    const currentGlobalDefaults = settings.challengeSettings?.globalDefaults || {};
+    const currentGlobalDefaults = settings.challengeSettings.globalDefaults;
     const contextSettings = { ...currentGlobalDefaults, [settingKey]: value };
 
     // Get detailed validation error information
@@ -91,12 +81,7 @@ const setGlobalDefault = (settingKey, value) => {
         return false;
     }
 
-    const challengeSettings = ensureChallengeSettings(settings);
-    if (!challengeSettings.globalDefaults) {
-        challengeSettings.globalDefaults = {};
-    }
-
-    challengeSettings.globalDefaults[settingKey] = value;
+    settings.challengeSettings.globalDefaults[settingKey] = value;
     return saveSettings(settings);
 };
 
@@ -109,15 +94,11 @@ const setGlobalDefault = (settingKey, value) => {
  * @returns {SettingValueOf<K>|null}
  */
 const getChallengeOverride = (settingKey, challengeId) => {
-    const settings = loadSettings();
-    const challengeSettings = settings.challengeSettings || getDefaultSettings().challengeSettings;
-
-    if (
-        challengeSettings.perChallenge &&
-        challengeSettings.perChallenge[challengeId] &&
-        Object.prototype.hasOwnProperty.call(challengeSettings.perChallenge[challengeId], settingKey)
-    ) {
-        return /** @type {SettingValueOf<K>} */ (challengeSettings.perChallenge[challengeId][settingKey]);
+    const { perChallenge } = loadSettings().challengeSettings;
+    const overrides = perChallenge[challengeId];
+    if (overrides && Object.prototype.hasOwnProperty.call(overrides, settingKey)) {
+        // Stored values are validated against the schema on load.
+        return /** @type {SettingValueOf<K>} */ (overrides[settingKey]);
     }
 
     return null;
@@ -132,10 +113,7 @@ const getChallengeOverride = (settingKey, challengeId) => {
  * @returns {ChallengeValues}
  */
 const _ensureChallengeContainer = (settings, challengeId) => {
-    const challengeSettings = ensureChallengeSettings(settings);
-    if (!challengeSettings.perChallenge) {
-        challengeSettings.perChallenge = {};
-    }
+    const challengeSettings = settings.challengeSettings;
     if (!challengeSettings.perChallenge[challengeId]) {
         challengeSettings.perChallenge[challengeId] = {};
     }
@@ -223,9 +201,7 @@ const _challengeOverrideEntries = (overrides) => {
  * @param {boolean} suppressed
  */
 const _writeTitleProfileSuppression = (challengeSettings, challengeId, suppressed) => {
-    const prior = challengeSettings.titleProfileSuppressions;
-    /** @type {Record<string, boolean>} */
-    const next = prior && typeof prior === 'object' && !Array.isArray(prior) ? { ...prior } : {};
+    const next = { ...challengeSettings.titleProfileSuppressions };
     if (suppressed) next[challengeId] = true;
     else delete next[challengeId];
     challengeSettings.titleProfileSuppressions = next;
@@ -263,7 +239,6 @@ const replaceChallengeOverridesInSettings = (settings, challengeId, overrides, s
         if (!valuesEqual(value, inherited[key])) container[key] = value;
     }
     const challengeSettings = settings.challengeSettings;
-    if (!challengeSettings.perChallenge) challengeSettings.perChallenge = {};
     if (Object.keys(container).length) challengeSettings.perChallenge[challengeId] = container;
     else delete challengeSettings.perChallenge[challengeId];
 
@@ -283,7 +258,7 @@ const setChallengeOverrides = (challengeId, overrides) => {
     const id = trimmedChallengeId(challengeId);
     if (!id || !overrides || typeof overrides !== 'object' || Array.isArray(overrides)) return false;
     const settings = loadSettings();
-    const current = ensureChallengeSettings(settings).perChallenge?.[id] || {};
+    const current = settings.challengeSettings.perChallenge?.[id] || {};
     const next = { ...current, ...overrides };
     if (!replaceChallengeOverridesInSettings(settings, id, next, isTitleProfileSuppressed(settings, id))) {
         return false;
@@ -335,21 +310,14 @@ const removeChallengeOverride = (settingKey, challengeId) => {
  * @returns {ChallengeValues}
  */
 const getChallengeOverrides = (challengeId) => {
-    const settings = loadSettings();
-    const perChallenge = settings.challengeSettings?.perChallenge;
+    const { perChallenge } = loadSettings().challengeSettings;
     /** @type {ChallengeValues} */
     const overrides = {};
-    if (
-        perChallenge &&
-        typeof perChallenge === 'object' &&
-        Object.prototype.hasOwnProperty.call(perChallenge, challengeId)
-    ) {
+    if (Object.prototype.hasOwnProperty.call(perChallenge, challengeId)) {
         const stored = perChallenge[challengeId];
-        if (stored && typeof stored === 'object' && !Array.isArray(stored)) {
-            for (const key of Object.keys(stored)) {
-                if (schemaEntry(key)?.perChallenge) {
-                    overrides[key] = stored[key];
-                }
+        for (const key of Object.keys(stored)) {
+            if (schemaEntry(key)?.perChallenge) {
+                overrides[key] = stored[key];
             }
         }
     }
@@ -368,7 +336,7 @@ const replaceChallengeOverrides = (challengeId, overrides, suppressTitleProfile 
     const id = trimmedChallengeId(challengeId);
     if (!id || typeof suppressTitleProfile !== 'boolean') return false;
     const settings = loadSettings();
-    ensureChallengeSettings(settings);
+    settings.challengeSettings;
     if (!replaceChallengeOverridesInSettings(settings, id, overrides, suppressTitleProfile)) return false;
     return saveSettings(settings);
 };
@@ -417,7 +385,7 @@ const getEffectiveSetting = (settingKey, challengeId = null) => {
  * @returns {unknown}
  */
 const _resolveEffectiveSetting = (settings, settingKey, challengeId) => {
-    const challengeSettings = settings.challengeSettings || getDefaultSettings().challengeSettings;
+    const { challengeSettings } = settings;
     const entry = /** @type {import('./schema').SettingsSchemaEntry} */ (schemaEntry(settingKey));
 
     // Explicit id-keyed settings remain the highest-precedence layer.
@@ -440,7 +408,7 @@ const _resolveEffectiveSetting = (settings, settingKey, challengeId) => {
     // an older build): only a challenge override or a profile can turn it on.
     if (entry.challengeOnly) return entry.default;
 
-    return Object.prototype.hasOwnProperty.call(challengeSettings.globalDefaults || {}, settingKey)
+    return Object.prototype.hasOwnProperty.call(challengeSettings.globalDefaults, settingKey)
         ? challengeSettings.globalDefaults[settingKey]
         : entry.default;
 };
@@ -469,13 +437,8 @@ const getExposureResolver = () => (challengeId) => {
  */
 const cleanupStaleChallengeSetting = (activeChallengeIds) => {
     const settings = loadSettings();
-    if (!settings.challengeSettings) {
-        return true; // Nothing to cleanup
-    }
-
     const activeIds = new Set(activeChallengeIds);
-    const perChallenge = settings.challengeSettings.perChallenge || {};
-    const suppressions = settings.challengeSettings.titleProfileSuppressions || {};
+    const { perChallenge, titleProfileSuppressions: suppressions } = settings.challengeSettings;
     const staleChallengeIds = Object.keys(perChallenge).filter((id) => !activeIds.has(id));
     const staleSuppressionIds = Object.keys(suppressions).filter((id) => !activeIds.has(id));
 

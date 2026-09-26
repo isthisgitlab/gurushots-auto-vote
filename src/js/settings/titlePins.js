@@ -9,7 +9,6 @@
 
 import * as logger from '../logger';
 import { loadSettings, saveSettings } from './persistence';
-import { ensureChallengeSettings } from './defaults';
 import { MAX_TITLE_LENGTH } from './titleRuleSanitize';
 
 // Defensive cap on the pin map size so an anomalously large challenge list
@@ -124,7 +123,7 @@ const mergeTitlePins = (adds, removeIds) => {
     if (addEntries.length === 0 && removeList.length === 0) return true;
 
     const settings = loadSettings();
-    const challengeSettings = ensureChallengeSettings(settings);
+    const challengeSettings = settings.challengeSettings;
     const pins = _validPins(challengeSettings.titlePins);
     for (const id of removeList) {
         delete pins[id];

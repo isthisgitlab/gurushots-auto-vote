@@ -6,7 +6,7 @@
 import * as logger from '../logger';
 import { SETTINGS_SCHEMA, schemaEntry } from './schema';
 import { loadSettings, saveSettings, setSetting, cleanupObsoleteSettings } from './persistence';
-import { getDefaultSettings, ensureChallengeSettings, valuesEqual } from './defaults';
+import { getDefaultSettings, valuesEqual } from './defaults';
 import { getGlobalDefault, setGlobalDefault } from './challengeOverrides';
 
 /** @import { AppSettings, ChallengeValues } from '../types/settings' */
@@ -52,7 +52,7 @@ const resetGlobalDefault = (settingKey) => {
  */
 const resetAllGlobalDefaults = () => {
     const settings = loadSettings();
-    const challengeSettings = ensureChallengeSettings(settings);
+    const challengeSettings = settings.challengeSettings;
 
     // Reset all global defaults to schema defaults
     /** @type {ChallengeValues} */

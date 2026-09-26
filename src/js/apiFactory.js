@@ -30,39 +30,6 @@ import { getCurrentMemberProfile, searchTagAutocomplete } from './api/tags';
 import { keyUnlock, swapPhoto, exposureAutofill } from './api/currency';
 import { mockApiClient } from './mock';
 
-/**
- * The API surface that both the real and mock strategies must implement.
- * `realApi` is structurally checked against this typedef by `pnpm typecheck`;
- * `mockApi` mirrors realApi BY CONSTRUCTION (built from its key list below),
- * so real/mock parity is a construction-time invariant enforced by the
- * missing-method guard in the builder plus the key-parity unit test — not by
- * the compiler.
- *
- * @typedef {object} ApiStrategy
- * @property {(...args: any[]) => any} authenticate
- * @property {(...args: any[]) => any} fetchChallengesAndVote
- * @property {(...args: any[]) => any} runTurboMiniGame
- * @property {(...args: any[]) => any} getActiveChallenges
- * @property {(...args: any[]) => any} getVoteImages
- * @property {(...args: any[]) => any} submitVotes
- * @property {(...args: any[]) => any} applyBoost
- * @property {(...args: any[]) => any} applyBoostToEntry
- * @property {(...args: any[]) => any} applyTurbo
- * @property {(...args: any[]) => any} getEligiblePhotos
- * @property {(...args: any[]) => any} getImageData
- * @property {(...args: any[]) => any} submitToChallenge
- * @property {(...args: any[]) => any} getMemberChallenges
- * @property {(...args: any[]) => any} getBankroll
- * @property {(...args: any[]) => any} getCurrentMemberProfile
- * @property {(...args: any[]) => any} searchTagAutocomplete
- * @property {(...args: any[]) => any} joinChallenge
- * @property {(...args: any[]) => any} keyUnlock
- * @property {(...args: any[]) => any} swapPhoto
- * @property {(...args: any[]) => any} exposureAutofill
- * @property {() => string} getStrategyType
- */
-
-/** @type {ApiStrategy} */
 const realApi = {
     authenticate,
     fetchChallengesAndVote,
@@ -88,11 +55,21 @@ const realApi = {
 };
 
 /**
+ * The API surface both strategies implement: the real one's shape. The mock
+ * surface below is checked against it, so a method missing on either side or
+ * a signature that drifts fails `pnpm typecheck`.
+ *
+ * @typedef {typeof realApi} ApiStrategy
+ */
+
+/**
  * Wraps a mock implementation so each call emits a debug log first.
  *
+ * @template {unknown[]} A
+ * @template R
  * @param {string} label
- * @param {(...args: any[]) => any} fn
- * @returns {(...args: any[]) => Promise<any>}
+ * @param {(...args: A) => R | Promise<R>} fn
+ * @returns {(...args: A) => Promise<R>}
  */
 const withMockDebug =
     (label, fn) =>
@@ -102,38 +79,35 @@ const withMockDebug =
     };
 
 /**
- * The mock surface is derived from realApi's key list — every method
- * except getStrategyType is the matching mockApiClient method wrapped
- * in the debug preamble — so the two surfaces can never drift at
- * runtime. (The `authenticate` log label is 'authentication' so log
- * lines keep a stable wording.) The Object.fromEntries construction is opaque to
- * the checker, hence the cast: realApi keeps the typedef lockstep, and
- * mockApi mirrors realApi by construction.
+ * Each method is the matching mockApiClient method behind the debug
+ * preamble. (The `authenticate` log label is 'authentication' so log lines
+ * keep a stable wording.)
+ *
+ * @type {ApiStrategy}
  */
-const mockClient = /** @type {Record<string, (...args: any[]) => any>} */ (/** @type {any} */ (mockApiClient));
-
-/** @type {ApiStrategy} */
-const mockApi = /** @type {any} */ ({
-    ...Object.fromEntries(
-        Object.keys(realApi)
-            .filter((name) => name !== 'getStrategyType')
-            .map((name) => {
-                if (typeof mockClient[name] !== 'function') {
-                    // Fail fast with a self-diagnosing message: a new realApi
-                    // method needs a same-named mockApiClient counterpart.
-                    throw new Error(`mockApiClient is missing a '${name}' implementation for the realApi surface`);
-                }
-                return [
-                    name,
-                    withMockDebug(
-                        name === 'authenticate' ? 'authentication' : name,
-                        mockClient[name].bind(mockApiClient),
-                    ),
-                ];
-            }),
-    ),
+const mockApi = {
+    authenticate: withMockDebug('authentication', mockApiClient.authenticate),
+    fetchChallengesAndVote: withMockDebug('fetchChallengesAndVote', mockApiClient.fetchChallengesAndVote),
+    runTurboMiniGame: withMockDebug('runTurboMiniGame', mockApiClient.runTurboMiniGame),
+    getActiveChallenges: withMockDebug('getActiveChallenges', mockApiClient.getActiveChallenges),
+    getVoteImages: withMockDebug('getVoteImages', mockApiClient.getVoteImages),
+    submitVotes: withMockDebug('submitVotes', mockApiClient.submitVotes),
+    applyBoost: withMockDebug('applyBoost', mockApiClient.applyBoost),
+    applyBoostToEntry: withMockDebug('applyBoostToEntry', mockApiClient.applyBoostToEntry),
+    applyTurbo: withMockDebug('applyTurbo', mockApiClient.applyTurbo),
+    getEligiblePhotos: withMockDebug('getEligiblePhotos', mockApiClient.getEligiblePhotos),
+    getImageData: withMockDebug('getImageData', mockApiClient.getImageData),
+    submitToChallenge: withMockDebug('submitToChallenge', mockApiClient.submitToChallenge),
+    getMemberChallenges: withMockDebug('getMemberChallenges', mockApiClient.getMemberChallenges),
+    getBankroll: withMockDebug('getBankroll', mockApiClient.getBankroll),
+    getCurrentMemberProfile: withMockDebug('getCurrentMemberProfile', mockApiClient.getCurrentMemberProfile),
+    searchTagAutocomplete: withMockDebug('searchTagAutocomplete', mockApiClient.searchTagAutocomplete),
+    joinChallenge: withMockDebug('joinChallenge', mockApiClient.joinChallenge),
+    keyUnlock: withMockDebug('keyUnlock', mockApiClient.keyUnlock),
+    swapPhoto: withMockDebug('swapPhoto', mockApiClient.swapPhoto),
+    exposureAutofill: withMockDebug('exposureAutofill', mockApiClient.exposureAutofill),
     getStrategyType: () => 'MockAPI',
-});
+};
 
 /** @type {ApiStrategy | null} */
 let currentStrategy = null;
