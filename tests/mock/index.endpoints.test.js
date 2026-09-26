@@ -308,7 +308,7 @@ describe('fetchChallengesAndVote — join pre-step', () => {
     });
 
     test('a single-challenge run skips the join pass', async () => {
-        await mockApiClient.fetchChallengesAndVote('tok', null, 7);
+        await mockApiClient.fetchChallengesAndVote('tok', 7);
         expect(runJoinPass).not.toHaveBeenCalled();
         expect(runVotingPass).toHaveBeenCalledWith('tok', 7, expect.any(Object));
     });

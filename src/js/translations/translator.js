@@ -9,6 +9,7 @@
  * and react/contexts/TranslationContext.jsx (renderer: window.api).
  */
 
+import { isPlainObject } from '../plainObject';
 import * as english from './english';
 import * as latvian from './latvian';
 
@@ -35,14 +36,14 @@ const resolveLanguage = (language) => (isSupportedLanguage(language) ? language 
  * Walk a dotted key through a table. Empty strings count as missing so they
  * fall back like an absent key.
  *
- * @param {any} table
+ * @param {unknown} table
  * @param {string[]} keys
- * @returns {any} the value, or undefined when any segment is missing
+ * @returns {unknown} the value, or undefined when any segment is missing
  */
 function lookup(table, keys) {
     let value = table;
     for (const k of keys) {
-        if (!value?.[k]) return undefined;
+        if (!isPlainObject(value) || !value[k]) return undefined;
         value = value[k];
     }
     return value;
@@ -54,11 +55,12 @@ function lookup(table, keys) {
  *
  * @param {string} key
  * @param {string | undefined} language
- * @returns {any}
+ * @returns {string}
  */
 function translate(key, language) {
     const keys = key.split('.');
-    return lookup(TABLES[resolveLanguage(language)], keys) ?? lookup(TABLES[DEFAULT_LANGUAGE], keys) ?? key;
+    const found = lookup(TABLES[resolveLanguage(language)], keys) ?? lookup(TABLES[DEFAULT_LANGUAGE], keys);
+    return typeof found === 'string' ? found : key;
 }
 
 /**

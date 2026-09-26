@@ -24,7 +24,7 @@ beforeEach(() => jest.clearAllMocks());
 
 test('re-reads the scenario state before the pass when the background service owns scenarios', async () => {
     backgroundServiceOwnsScenarios.mockReturnValue(true);
-    await fetchChallengesAndVote('tok', null, '7');
+    await fetchChallengesAndVote('tok', '7');
     expect(refreshScenarioStateAsync).toHaveBeenCalledTimes(1);
     expect(refreshScenarioStateAsync.mock.invocationCallOrder[0]).toBeLessThan(
         runVotingPass.mock.invocationCallOrder[0],
@@ -34,7 +34,7 @@ test('re-reads the scenario state before the pass when the background service ow
 
 test('elsewhere the pass starts straight away and owns scenarios', async () => {
     backgroundServiceOwnsScenarios.mockReturnValue(false);
-    await fetchChallengesAndVote('tok', null, '7');
+    await fetchChallengesAndVote('tok', '7');
     expect(refreshScenarioStateAsync).not.toHaveBeenCalled();
     expect(runVotingPass.mock.calls[0][2].scenarios.enabled()).toBe(true);
 });

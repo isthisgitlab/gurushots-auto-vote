@@ -92,11 +92,7 @@ class BaseMiddleware {
         if (!token) {
             return { ok: false, error: 'No authentication token found. Please login first.' };
         }
-        const result = await this.apiStrategy.fetchChallengesAndVote(
-            token,
-            settings.getExposureResolver(),
-            challengeId,
-        );
+        const result = await this.apiStrategy.fetchChallengesAndVote(token, challengeId);
         return { ok: true, result };
     }
 
@@ -156,11 +152,7 @@ class BaseMiddleware {
             // Return the strategy result so the scheduler can reuse its
             // already-fetched challenge list for threshold scheduling instead
             // of issuing a second getActiveChallenges request.
-            const result = await this.apiStrategy.fetchChallengesAndVote(
-                token,
-                settings.getExposureResolver(),
-                challengeId,
-            );
+            const result = await this.apiStrategy.fetchChallengesAndVote(token, challengeId);
             // Reflect the actual outcome in the operation log — a non-error
             // failure (e.g. cancelled, or a filtered challenge that isn't active)
             // must not be reported as a success.

@@ -50,8 +50,7 @@ const notifyTranslator = createTranslator();
  */
 const nodeTranslate = (key) => {
     try {
-        const resolved = notifyTranslator.t(String(key), settings.getSetting('language'));
-        return typeof resolved === 'string' ? resolved : key;
+        return notifyTranslator.t(key, settings.getSetting('language'));
     } catch {
         return key;
     }
@@ -98,7 +97,7 @@ const deliverOsNotification = ({ title, body }) => {
  *
  * @param {Object} [deps] - injectable seams (defaults wire the real facade)
  * @param {(challenge: Challenge, now: number) => {actions: unknown[]}} [deps.describeDeadlineActions]
- * @param {(key:string)=>*} [deps.getSetting]
+ * @param {(key:string)=>unknown} [deps.getSetting]
  * @param {(key:string)=>string} [deps.translate]
  * @param {(n:{title:string, body:string})=>void} [deps.deliver]
  * @returns {(challenges: Challenge[] | null | undefined, now: number) => Promise<void>}
@@ -158,7 +157,7 @@ const createNodeDeadlineNotifier = (deps = {}) => {
  * delivery. Create ONE per scheduler.
  *
  * @param {Object} [deps] - injectable seams (defaults wire the real facade)
- * @param {(key:string)=>*} [deps.getSetting]
+ * @param {(key:string)=>unknown} [deps.getSetting]
  * @param {(challengeId: string) => {state: {outbox?: OutboxItem[]} | null}} [deps.getStatus]
  * @param {(key:string)=>string} [deps.translate]
  * @param {(n:{title:string, body:string})=>void} [deps.deliver]

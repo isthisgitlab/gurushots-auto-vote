@@ -29,8 +29,10 @@
  * @returns {WindowApi[M]}
  */
 const forward = (method) =>
-    /** @type {any} */ (
-        (/** @type {unknown[]} */ ...args) => /** @type {BridgeCalls<M>} */ (window.api)[method](...args)
+    /** @type {WindowApi[M]} */ (
+        /** @type {unknown} */ (
+            (/** @type {unknown[]} */ ...args) => /** @type {BridgeCalls<M>} */ (window.api)[method](...args)
+        )
     );
 
 /**
@@ -42,9 +44,11 @@ const forward = (method) =>
  * @returns {(...args: Parameters<WindowApi[M]>) => ReturnType<WindowApi[M]> | undefined}
  */
 const forwardOptional = (method) =>
-    /** @type {any} */ (
-        (/** @type {unknown[]} */ ...args) =>
-            /** @type {Partial<BridgeCalls<M>> | undefined} */ (window.api)?.[method]?.(...args)
+    /** @type {(...args: Parameters<WindowApi[M]>) => ReturnType<WindowApi[M]> | undefined} */ (
+        /** @type {unknown} */ (
+            (/** @type {unknown[]} */ ...args) =>
+                /** @type {Partial<BridgeCalls<M>> | undefined} */ (window.api)?.[method]?.(...args)
+        )
     );
 
 const ignore = () => {};

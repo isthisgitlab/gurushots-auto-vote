@@ -156,10 +156,9 @@ const _triggerWindowState = (challenge, challengeId, now, keys) => {
  * own one-shot window, all sharing scheduledFillWindowMinutes, all OR'd. See
  * _triggerWindowState for the entry semantics.
  *
- * The whole body is wrapped in try/catch returning the inactive state — the
- * same posture (and reason) as getExposureResolver in settings.js: a corrupt
- * hand-edited override must degrade this one challenge's scheduled fill to
- * "off" rather than take the whole evaluation down. The `replaces` read is
+ * The whole body is wrapped in try/catch returning the inactive state: a
+ * failure here must degrade this one challenge's scheduled fill to "off"
+ * rather than take the whole evaluation down. The `replaces` read is
  * INSIDE the try for that same reason. The catch LOGS: the orchestrator's
  * per-challenge catch reports the errors it sees, so swallowing one silently
  * here would make this the least visible failure in the pass.

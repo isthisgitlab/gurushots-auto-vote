@@ -27,7 +27,7 @@ type KebabToCamel<S extends string> = S extends `${infer Head}-${infer Tail}`
     : S;
 
 /** A handler `(event, ...args) => result` as the renderer calls it. */
-type Invoke<F> = F extends (event: any, ...args: infer A) => infer R ? (...args: A) => Promise<Awaited<R>> : never;
+type Invoke<F> = F extends (event: never, ...args: infer A) => infer R ? (...args: A) => Promise<Awaited<R>> : never;
 
 type InvokeChannel = (typeof invokeChannels)[number];
 
@@ -38,7 +38,7 @@ export type WindowApi = { [C in InvokeChannel as KebabToCamel<C>]: Invoke<Handle
     // flushes the cleared token before navigating), so callers may await it.
     [M in keyof typeof sendMethods]: () => void | Promise<void>;
 } & {
-    [M in keyof typeof eventMethods]: (callback: (...args: any[]) => void) => () => void;
+    [M in keyof typeof eventMethods]: (callback: (...args: never[]) => void) => () => void;
 };
 
 declare global {

@@ -20,7 +20,7 @@
  * break — vertical tab, form feed, NEL (U+0085), and the Unicode line/paragraph
  * separators (U+2028/U+2029) — not just \r\n.
  *
- * @param {*} value
+ * @param {unknown} value
  * @returns {string}
  */
 const oneLine = (value) => String(value).replace(/[\r\n\v\f\u0085\u2028\u2029]+/g, ' ');

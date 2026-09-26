@@ -8,7 +8,6 @@
 jest.mock('../../src/js/settings', () => ({
     getSetting: jest.fn(),
     setSetting: jest.fn(),
-    getExposureResolver: jest.fn(() => 'resolver'),
 }));
 
 jest.mock('../../src/js/services/auth', () => ({
@@ -111,7 +110,7 @@ describe('runVotingCycle', () => {
         const mw = make({ fetchChallengesAndVote });
         await expect(mw.runVotingCycle(7)).resolves.toEqual({ success: true, message: 'done', challenges });
         expect(cancellation.reset).toHaveBeenCalled();
-        expect(fetchChallengesAndVote).toHaveBeenCalledWith('tok', 'resolver', 7);
+        expect(fetchChallengesAndVote).toHaveBeenCalledWith('tok', 7);
     });
 
     test('defaults to the whole active set and a stock success message', async () => {
@@ -122,7 +121,7 @@ describe('runVotingCycle', () => {
             message: 'Voting cycle completed successfully',
             challenges: undefined,
         });
-        expect(fetchChallengesAndVote).toHaveBeenCalledWith('tok', 'resolver', null);
+        expect(fetchChallengesAndVote).toHaveBeenCalledWith('tok', null);
     });
 
     test('no token → login-first error without calling the strategy', async () => {
@@ -172,7 +171,7 @@ describe('cliVote', () => {
         const result = { success: true, challenges: [] };
         const fetchChallengesAndVote = jest.fn(async () => result);
         await expect(make({ fetchChallengesAndVote }).cliVote()).resolves.toBe(result);
-        expect(fetchChallengesAndVote).toHaveBeenCalledWith('tok', 'resolver', null);
+        expect(fetchChallengesAndVote).toHaveBeenCalledWith('tok', null);
         expect(cat.info).toHaveBeenCalledWith('=== GuruShots Auto Voter - CLI Voting ===', null);
         expect(cat.startOperation).toHaveBeenCalledWith('cli-vote', 'CLI Voting Process');
         expect(cat.endOperation).toHaveBeenCalledWith('cli-vote', 'Voting process completed successfully');
@@ -181,7 +180,7 @@ describe('cliVote', () => {
     test('a single-challenge run labels its logs with the challenge id', async () => {
         const fetchChallengesAndVote = jest.fn(async () => null);
         await expect(make({ fetchChallengesAndVote }).cliVote(42)).resolves.toBeNull();
-        expect(fetchChallengesAndVote).toHaveBeenCalledWith('tok', 'resolver', 42);
+        expect(fetchChallengesAndVote).toHaveBeenCalledWith('tok', 42);
         expect(cat.startOperation).toHaveBeenCalledWith('cli-vote', 'CLI Voting Process (challenge 42)');
         expect(cat.endOperation).toHaveBeenCalledWith('cli-vote', 'Voting process completed successfully');
     });
@@ -247,7 +246,7 @@ describe('guiVote', () => {
             success: true,
             data: 'Voting process completed successfully!',
         });
-        expect(fetchChallengesAndVote).toHaveBeenCalledWith('tok', 'resolver', null);
+        expect(fetchChallengesAndVote).toHaveBeenCalledWith('tok', null);
     });
 
     test('no token → login-first error', async () => {

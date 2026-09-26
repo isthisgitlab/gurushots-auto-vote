@@ -17,7 +17,7 @@
  * startsWith('https://') check passes that, but the browser navigates to the
  * host AFTER the `@`, so userinfo is a lookalike-host redirect vector.
  *
- * @param {*} url
+ * @param {unknown} url
  * @returns {boolean} true only for a well-formed https:// URL with no credentials.
  */
 const isSafeExternalUrl = (url) => {

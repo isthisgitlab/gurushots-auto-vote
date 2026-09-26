@@ -62,8 +62,8 @@ describe('createTranslator', () => {
         expect(translator.t('logs.title', 'de')).toBe(english.logs.title);
     });
 
-    test('a nested key resolves to the subtree', () => {
-        expect(translator.t('logs')).toBe(english.logs);
+    test('a key naming a group of strings, not one string, returns the key itself', () => {
+        expect(translator.t('logs')).toBe('logs');
     });
 
     test('a missing key returns the key itself', () => {

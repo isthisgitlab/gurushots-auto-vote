@@ -11,6 +11,7 @@ import { SettingHintList } from './SettingHints';
  * @import { SerializableSchemaEntry } from '../../../ipc/settings.handlers'
  * @import { useChallengeOverrides } from '@/hooks/useChallengeOverrides'
  * @import { Challenge } from '../../../types/gurushots'
+ * @import { FillSchedule } from '../../../services/scheduleRemap'
  * @import { HintsFor } from '../../../types/settingsEditor'
  */
 
@@ -60,8 +61,11 @@ function ValueSourceBadge({ hasOverride, hasProfileValue }) {
 function scheduleShiftOf(key, value, challenge) {
     if (key !== 'autoFillSchedule') return 0;
     const max = challenge?.max_photo_submits;
-    // Number.isInteger does not narrow: an integer here is a number.
-    return Number.isInteger(max) && /** @type {number} */ (max) >= 2 ? getScheduleShift(value, max) : 0;
+    // Number.isInteger does not narrow: an integer here is a number. The form
+    // holds this key's value, a schedule.
+    return Number.isInteger(max) && /** @type {number} */ (max) >= 2
+        ? getScheduleShift(/** @type {FillSchedule} */ (value), max)
+        : 0;
 }
 
 /**

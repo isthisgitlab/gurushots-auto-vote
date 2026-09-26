@@ -57,7 +57,7 @@ const simulateApiError = (error, delay = 500) => {
  * types the `debug` and `fn` parameters and holds `onNoToken` to the same
  * resolved shape.
  *
- * @template {(...args: any[]) => Promise<unknown>} F
+ * @template {(...args: never[]) => Promise<unknown>} F
  * @param {object} spec
  * @param {string} spec.name - method name for the "Mock <name>" preamble
  * @param {string} [spec.category] - preamble logger category (default 'api')

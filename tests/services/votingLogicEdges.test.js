@@ -14,6 +14,7 @@ jest.mock('../../src/js/settings');
 const NOW = 1_700_000_000;
 
 const DEFAULTS = {
+    autoFillSchedule: [],
     onlyBoost: false,
     voteOnlyInLastMinute: false,
     exposure: 50,

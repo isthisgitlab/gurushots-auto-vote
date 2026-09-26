@@ -285,7 +285,7 @@ describe('fetchChallengesAndVote', () => {
     });
 
     test('skips the claim pre-step for a single-challenge run', async () => {
-        await fetchChallengesAndVote('tok', null, 99);
+        await fetchChallengesAndVote('tok', 99);
 
         expect(runClaimPass).not.toHaveBeenCalled();
     });
@@ -323,7 +323,7 @@ describe('fetchChallengesAndVote', () => {
     });
 
     test('skips the join pre-step for a single-challenge run', async () => {
-        await fetchChallengesAndVote('tok', null, 99);
+        await fetchChallengesAndVote('tok', 99);
 
         expect(runJoinPass).not.toHaveBeenCalled();
         expect(runVotingPass).toHaveBeenCalledWith('tok', 99, expect.any(Object));

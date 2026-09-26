@@ -7,7 +7,7 @@
  */
 
 import * as logger from '../logger';
-import { SETTINGS_SCHEMA, schemaEntry, schemaDefault, getValidationError } from './schema';
+import { schemaEntry, schemaDefault, getValidationError } from './schema';
 import { loadSettings, saveSettings } from './persistence';
 import { valuesEqual, globalChallengeValues, challengeValueSetIsValid } from './defaults';
 import { ruleValuesForChallengeId, isTitleProfileSuppressed } from './ruleResolution';
@@ -414,22 +414,6 @@ const _resolveEffectiveSetting = (settings, settingKey, challengeId) => {
 };
 
 /**
- * Returns a per-challenge exposure-threshold resolver. Falls back to the
- * schema default if a corrupt override would otherwise stall the cycle.
- * Single source so the IPC handlers and middleware agree.
- *
- * @returns {(challengeId: ChallengeIdInput) => number}
- */
-const getExposureResolver = () => (challengeId) => {
-    try {
-        return getEffectiveSetting('exposure', challengeId);
-    } catch (error) {
-        logger.withCategory('settings').warning(`Error getting exposure setting for challenge ${challengeId}:`, error);
-        return SETTINGS_SCHEMA.exposure.default;
-    }
-};
-
-/**
  * Cleanup stale challenge settings for challenges that no longer exist
  *
  * @param {Iterable<string>} activeChallengeIds
@@ -471,7 +455,6 @@ export {
     replaceChallengeOverrides,
     replaceChallengeOverridesInSettings,
     getEffectiveSetting,
-    getExposureResolver,
     cleanupStaleChallengeSetting,
     trimmedChallengeId,
 };

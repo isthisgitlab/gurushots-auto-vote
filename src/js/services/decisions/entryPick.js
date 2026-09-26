@@ -1,4 +1,4 @@
-/** @import { Challenge } from '../../types/gurushots' */
+/** @import { Challenge, RankingEntry } from '../../types/gurushots' */
 /**
  * Boost/turbo entry selection: which entry a boost or turbo lands on, never
  * sharing one, and how a boost sources its entry when every candidate is
@@ -21,10 +21,10 @@ import { resolveEntryIndex } from '../../voting/entrySlot';
  * is always sufficient — unless the challenge has only one entry and that
  * one is already in the conflicting state, in which case returns null.
  *
- * @param {*} entries
- * @param {*} requestedIndex
- * @param {string} conflictField
- * @returns {*}
+ * @param {readonly RankingEntry[] | null | undefined} entries
+ * @param {number | null | undefined} requestedIndex
+ * @param {'turbo' | 'boosted'} conflictField
+ * @returns {RankingEntry | null}
  */
 const pickEntryAvoidingConflict = (entries, requestedIndex, conflictField) => {
     if (!Array.isArray(entries) || entries.length === 0) return null;

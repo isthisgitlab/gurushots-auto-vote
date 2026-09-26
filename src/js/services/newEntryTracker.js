@@ -32,9 +32,9 @@ import * as logger from '../logger';
 // broken import can reach this (both values are static literals in metadata), so it
 // also warns — a silent degrade here would be invisible until it mattered.
 const FALLBACK_ENTRY_ID_CAP = 64;
-/** @param {*} value @param {string} name @returns {number} */
+/** @param {unknown} value @param {string} name @returns {number} */
 const finiteCap = (value, name) => {
-    if (Number.isFinite(value)) return value;
+    if (typeof value === 'number' && Number.isFinite(value)) return value;
     logger
         .withCategory('challenges')
         .warning(`metadata.${name} is not a finite number; falling back to ${FALLBACK_ENTRY_ID_CAP}`, null);

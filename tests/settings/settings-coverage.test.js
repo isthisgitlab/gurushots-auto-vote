@@ -259,32 +259,6 @@ describe('settings facade — edge cases', () => {
             expect(settings.getEffectiveSetting('exposure', 'c1')).toBe(100);
         });
 
-        test('getExposureResolver falls back to the schema default when resolution throws', () => {
-            seed({});
-            const entry = settings.SETTINGS_SCHEMA.exposure;
-            const original = Object.getOwnPropertyDescriptor(entry, 'perChallenge');
-            let armed = true;
-            Object.defineProperty(entry, 'perChallenge', {
-                configurable: true,
-                get() {
-                    if (armed) {
-                        armed = false;
-                        throw new Error('corrupt');
-                    }
-                    return true;
-                },
-            });
-            try {
-                expect(settings.getExposureResolver()('c1')).toBe(100);
-                expect(cat.warning).toHaveBeenCalledWith(
-                    'Error getting exposure setting for challenge c1:',
-                    expect.any(Error),
-                );
-            } finally {
-                Object.defineProperty(entry, 'perChallenge', original);
-            }
-        });
-
         test('getChallengeOverrides filters unknown keys and ignores non-object containers', () => {
             seed({
                 challengeSettings: {

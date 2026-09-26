@@ -147,4 +147,20 @@ const evaluateScenario = (input) => {
     return { ...base, halted: null, fire, explain, nextWakeAt: nextWakeAt(input) };
 };
 
-export { evaluateScenario, firedRecord, localDayOf };
+/**
+ * The state a challenge has before its scenario starts: at the start phase,
+ * entered now, nothing remembered or fired.
+ *
+ * @param {ScenarioDocument} scenario
+ * @param {number} now - unix seconds
+ * @returns {ScenarioEngineState}
+ */
+const startState = (scenario, now) => ({
+    phase: scenario.start,
+    phaseEnteredAt: now,
+    memory: {},
+    fired: {},
+    inFlight: null,
+});
+
+export { evaluateScenario, firedRecord, localDayOf, startState };

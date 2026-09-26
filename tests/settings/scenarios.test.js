@@ -344,20 +344,6 @@ describe('settings facade — scenarios when the save fails', () => {
         expect(scenarios.saveScenario(simple()).issues[0].message).toContain('could not be saved');
     });
 
-    test('delete tolerates a non-list rules container', () => {
-        jest.isolateModules(() => {
-            jest.doMock('../../src/js/settings/persistence', () => {
-                const actual = jest.requireActual('../../src/js/settings/persistence');
-                const blob = actual.loadSettings();
-                blob.challengeSettings.scenarios = { Plan: simple() };
-                blob.challengeSettings.titleRules = 'not a list';
-                return { ...actual, loadSettings: () => structuredClone(blob), saveSettings: () => true };
-            });
-            const isolated = require('../../src/js/settings/scenarios');
-            expect(isolated.deleteScenario('Plan')).toBe(true);
-        });
-    });
-
     test('delete reports false when the save fails', () => {
         jest.isolateModules(() => {
             jest.doMock('../../src/js/settings/persistence', () => {

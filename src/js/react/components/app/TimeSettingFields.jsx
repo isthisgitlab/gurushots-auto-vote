@@ -7,6 +7,7 @@ import { SettingResetButton } from './SettingResetButton';
 /**
  * @import { ComponentChildren } from 'preact'
  * @import { SettingFieldProps, SettingResetHandler, Translate } from '../../../types/settingsEditor'
+ * @import { FillSchedule } from '../../../services/scheduleRemap'
  */
 
 /**
@@ -137,14 +138,11 @@ export function TimeField({ id, settingKey, config, value, onChange, onReset, di
 }
 
 /**
- * @param {any[]} rows - The stored schedule rows: untrusted shape, every read below is guarded.
+ * @param {FillSchedule} rows
  * @param {number} count
  * @returns {number}
  */
-const scheduleSecondsFor = (rows, count) => {
-    const row = rows.find((r) => r && typeof r === 'object' && r.count === count);
-    return Number.isFinite(row?.seconds) ? row.seconds : 0;
-};
+const scheduleSecondsFor = (rows, count) => rows.find((row) => row.count === count)?.seconds ?? 0;
 
 /**
  * A row is dead when another ACTIVE row reaches at least the same count no
@@ -177,7 +175,8 @@ const isDominated = (activeRows, count, seconds) =>
  */
 export function ScheduleField({ settingKey, value, onChange, onReset, disabled }) {
     const { t } = useTranslation();
-    const rows = Array.isArray(value) ? value : [];
+    // The field holds this key's value, a schedule.
+    const rows = /** @type {FillSchedule} */ (Array.isArray(value) ? value : []);
     const slots = SCHEDULE_COUNTS.map((count) => ({ count, seconds: scheduleSecondsFor(rows, count) }));
     const activeRows = slots.filter((row) => row.seconds > 0);
 

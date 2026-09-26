@@ -138,10 +138,9 @@ const createMockStrategy = (client) => {
      * metadata.
      *
      * @param {string} token
-     * @param {number|Function|null} [_exposureThreshold]
      * @param {string|number|null} [challengeIdFilter]
      */
-    const fetchChallengesAndVote = async (token, _exposureThreshold = null, challengeIdFilter = null) => {
+    const fetchChallengesAndVote = async (token, challengeIdFilter = null) => {
         logger.withCategory('voting').api('Mock fetchChallengesAndVote', null);
         logger.withCategory('api').debug(`Token provided: ${!!token}`, null);
         if (!token) {

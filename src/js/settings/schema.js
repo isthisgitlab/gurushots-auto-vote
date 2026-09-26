@@ -192,10 +192,10 @@ const fillSchedule = z
  * until repaired — this heals such data on load instead. Keeps only strict
  * { count, seconds } rows within bounds, dedupes by count (first wins), and
  * sorts by count. Returns the sanitized array when anything changed, or null
- * when the input already conforms (or isn't an array at all — non-array
- * corruption is the read path's concern, mirroring getValidScheduleRows).
+ * when the input already conforms or isn't an array at all (load-time
+ * validation drops a non-array value).
  *
- * @param {*} value
+ * @param {unknown} value
  * @returns {Array<{count: number, seconds: number}>|null}
  */
 const sanitizeFillSchedule = (value) => {
@@ -311,7 +311,7 @@ const sanitizeTimeOfDayList = (value) => {
  * 1..MAX_BEFORE_END_SECONDS, dedupe, sort ascending, then cap (smallest
  * offsets — the windows closest to the deadline — survive deterministically).
  *
- * @param {*} value
+ * @param {unknown} value
  * @returns {number[]|null}
  */
 const sanitizeBeforeEndList = (value) => {
@@ -1686,8 +1686,8 @@ const SETTINGS_GROUPS = [
  * source of validation rules for per-challenge tunables.
  *
  * @param {string} key
- * @param {*} value
- * @param {Record<string, any>|null} [allSettings]
+ * @param {unknown} value
+ * @param {Record<string, unknown>|null} [allSettings]
  * @param {string|number|null} [challengeId]
  * @returns {boolean}
  */
@@ -1709,8 +1709,8 @@ const validateSetting = (key, value, allSettings = null, challengeId = null) => 
  * across both validation paths.
  *
  * @param {string} settingKey
- * @param {*} value
- * @param {Record<string, any>|null} [allSettings]
+ * @param {unknown} value
+ * @param {Record<string, unknown>|null} [allSettings]
  * @param {string|number|null} [challengeId]
  * @returns {string|null}
  */

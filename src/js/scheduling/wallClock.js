@@ -78,7 +78,7 @@ const partsOf = (epochSec, timeZone) => {
 /**
  * Strict 'HH:MM' 24-hour parser.
  *
- * @param {*} str - Candidate value; anything but a strict 'HH:MM' string yields null.
+ * @param {unknown} str - Candidate value; anything but a strict 'HH:MM' string yields null.
  * @returns {{hours: number, minutes: number}|null}
  */
 const parseTimeOfDay = (str) => {
@@ -182,7 +182,7 @@ const computeOccurrences = (timeOfDay, timeZone, nowSec) => {
  * `nowSec`: `prev` is the latest occurrence <= now (today or yesterday),
  * `next` the earliest occurrence > now (today or tomorrow).
  *
- * @param {*} timeHHMM - 'HH:MM' string; anything unparsable yields null.
+ * @param {unknown} timeHHMM - 'HH:MM' string; anything unparsable yields null.
  * @param {string} timeZone - IANA zone name; unknown zones fall back to 'UTC'.
  * @param {number} nowSec - Unix timestamp (seconds)
  * @returns {{prev: number, next: number}|null}

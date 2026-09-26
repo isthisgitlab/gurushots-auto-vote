@@ -17,6 +17,7 @@ import { globalChallengeValues } from './defaults';
 import { normalizeProfileName, profileNameForLog, findProfileKey } from './profileStore';
 import { validateScenario, parseScenarioJson } from './scenarioSchema';
 import { sanitizeTitleRuleInline } from './titleRuleSanitize';
+import { isPlainObject } from '../plainObject';
 
 /** @import { AppSettings, ChallengeValues, TitleRule } from '../types/settings' */
 /** @import { ScenarioDocument, ScenarioIssue } from './scenarioSchema' */
@@ -129,9 +130,9 @@ const failure = (issues) => ({ ok: false, issues });
 
 /**
  * @param {unknown} value
- * @returns {object}
+ * @returns {Record<string, unknown>}
  */
-const plainObject = (value) => (value && typeof value === 'object' && !Array.isArray(value) ? value : {});
+const plainObject = (value) => (isPlainObject(value) ? value : {});
 
 // A rule keeps its row only while it still contributes something: a profile,
 // tags, or a valid inline value.
@@ -162,25 +163,23 @@ const reassignScenario = (settings, fromName, toName) => {
     /** @param {unknown} value */
     const assigned = (value) => typeof value === 'string' && normalizeProfileName(value) === from;
     const challengeSettings = settings.challengeSettings;
-    /** @type {Array<ChallengeValues|null|undefined>} */
+    // Overrides are validated on load; stored profiles are checked here.
     const valueMaps = [
-        ...Object.values(plainObject(challengeSettings.perChallenge)),
+        ...Object.values(challengeSettings.perChallenge),
         ...Object.values(plainObject(challengeSettings.profiles)),
     ];
     for (const values of valueMaps) {
-        if (!values || !assigned(values.scenario)) continue;
+        if (!isPlainObject(values) || !assigned(values.scenario)) continue;
         if (toName) values.scenario = toName;
         else delete values.scenario;
     }
-    if (Array.isArray(challengeSettings.titleRules)) {
-        challengeSettings.titleRules = challengeSettings.titleRules.flatMap((rule) => {
-            if (!assigned(rule?.scenario)) return [rule];
-            if (toName) return [{ ...rule, scenario: toName }];
-            const kept = { ...rule };
-            delete kept.scenario;
-            return ruleHasBehaviour(kept) ? [kept] : [];
-        });
-    }
+    challengeSettings.titleRules = challengeSettings.titleRules.flatMap((rule) => {
+        if (!assigned(rule?.scenario)) return [rule];
+        if (toName) return [{ ...rule, scenario: toName }];
+        const kept = { ...rule };
+        delete kept.scenario;
+        return ruleHasBehaviour(kept) ? [kept] : [];
+    });
 };
 
 /**

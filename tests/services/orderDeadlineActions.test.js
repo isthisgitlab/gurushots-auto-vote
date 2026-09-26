@@ -134,22 +134,11 @@ describe('orderDeadlineActions', () => {
         expect(order(buildChallenge())).toEqual(['turbo', 'autoFill', 'emergencyFill', 'boost']);
     });
 
-    describe('malformed autoFillSchedule flows through without throwing', () => {
-        test.each([
-            ['a string', 'garbage'],
-            ['rows without count/seconds', [{ bad: true }]],
-            ['null', null],
-        ])('%s → finite autoFill thresholdSec of 0', (_label, schedule) => {
-            mockSettings({ autoFillSchedule: schedule, turboTime: 720, emergencyFill: 300 });
-            let result;
-            expect(() => {
-                result = VotingLogic.orderDeadlineActions(buildChallenge());
-            }).not.toThrow();
-            const autoFill = result.find((a) => a.action === 'autoFill');
-            expect(autoFill.thresholdSec).toBe(0);
-            expect(Number.isFinite(autoFill.thresholdSec)).toBe(true);
-            // The 0 threshold sorts below the real windows, above the absent boost.
-            expect(result.map((a) => a.action)).toEqual(['turbo', 'emergencyFill', 'autoFill', 'boost']);
-        });
+    test('an empty autoFillSchedule gives autoFill a threshold of 0', () => {
+        mockSettings({ autoFillSchedule: [], turboTime: 720, emergencyFill: 300 });
+        const result = VotingLogic.orderDeadlineActions(buildChallenge());
+        expect(result.find((a) => a.action === 'autoFill').thresholdSec).toBe(0);
+        // The 0 threshold sorts below the real windows, above the absent boost.
+        expect(result.map((a) => a.action)).toEqual(['turbo', 'emergencyFill', 'autoFill', 'boost']);
     });
 });

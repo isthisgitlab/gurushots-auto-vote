@@ -97,9 +97,9 @@ const isProtectedEntry = (entry) => entry?.boosted === true || entry?.boosting =
  *   - allowProtected: when false, boosted/turbo'd entries are never picked.
  *   - maxVotes > 0: the picked entry must have fewer votes than this.
  *
- * @param {any} entries
+ * @param {readonly RankingEntry[] | null | undefined} entries
  * @param {{imageIndex?: number, lowestVotes?: boolean, allowProtected?: boolean, maxVotes?: number}} options
- * @returns {any|null}
+ * @returns {RankingEntry|null}
  */
 const pickSwapTarget = (entries, { imageIndex = 0, lowestVotes = false, allowProtected = false, maxVotes = 0 }) => {
     if (!Array.isArray(entries) || entries.length === 0) return null;

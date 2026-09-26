@@ -33,20 +33,9 @@ describe('getScheduleShift — how far the schedule end-aligns', () => {
         expect(getScheduleShift([{ count: 2, seconds: 1800 }], 2)).toBe(0);
     });
 
-    test('out-of-band counts cannot inflate the shift', () => {
-        const poisoned = [{ count: 999999, seconds: 1800 }, ...DEFAULT_SCHEDULE];
-        expect(getScheduleShift(poisoned, 2)).toBe(2);
-    });
-
-    test('garbage input → 0, never throws', () => {
-        expect(getScheduleShift(null, 2)).toBe(0);
-        expect(getScheduleShift(undefined, 2)).toBe(0);
-        expect(getScheduleShift('garbage', 2)).toBe(0);
-        expect(getScheduleShift([null, 42, { count: 1.5, seconds: 100 }], 2)).toBe(0);
-        // Non-finite max coerces to 0 → every row shifts below count 2 and the
-        // schedule goes inert — fail closed.
-        expect(getScheduleShift(DEFAULT_SCHEDULE, NaN)).toBe(4);
-        expect(remapScheduleRows(DEFAULT_SCHEDULE, NaN)).toEqual([]);
+    test('a missing max shifts every row away, so the schedule goes inert', () => {
+        expect(getScheduleShift(DEFAULT_SCHEDULE, undefined)).toBe(4);
+        expect(remapScheduleRows(DEFAULT_SCHEDULE, undefined)).toEqual([]);
     });
 });
 
@@ -85,18 +74,5 @@ describe('remapScheduleRows — the schedule as it applies to one challenge', ()
             { count: 2, seconds: 0 },
             { count: 3, seconds: 600 },
         ]);
-    });
-
-    test('out-of-band counts are dropped even at shift 0', () => {
-        const poisoned = [{ count: 999999, seconds: 1800 }, ...DEFAULT_SCHEDULE];
-        expect(remapScheduleRows(poisoned, 4)).toEqual(DEFAULT_SCHEDULE);
-        expect(remapScheduleRows(poisoned, 2)).toEqual([{ count: 2, seconds: 600 }]);
-    });
-
-    test('garbage input → empty array, never throws', () => {
-        expect(remapScheduleRows(null, 2)).toEqual([]);
-        expect(remapScheduleRows(undefined, 2)).toEqual([]);
-        expect(remapScheduleRows('garbage', 2)).toEqual([]);
-        expect(remapScheduleRows([null, 42, { count: '2', seconds: 600 }], 2)).toEqual([]);
     });
 });

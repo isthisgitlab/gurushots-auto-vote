@@ -5,46 +5,20 @@
 
 import { remapScheduleRows } from '../scheduleRemap';
 
-const MAX_SCHEDULE_ROWS_READ = 100;
+/** @import { FillSchedule } from '../scheduleRemap' */
 
 /**
- * Rows of an autoFillSchedule value that are actually usable. The value comes
- * straight off the persisted settings blob via getEffectiveSetting — no zod
- * re-validation happens on read — and these helpers run for every challenge on
- * every voting pass, so a throw here would skip that challenge's remaining
- * actions on every pass for as long as the blob stays corrupted. Anything that
- * isn't an array of { count, seconds } objects with finite numbers is silently
- * dropped (mirrors getSlotsRemaining's Number.isFinite convention). Length is
- * capped as defense-in-depth: the write path (zod) allows at most
- * MAX_SCHEDULE_ROWS = 3 rows (see settings/schema.js), so anything past a
- * generous read cap can only come from a corrupted blob and would otherwise
- * be iterated every scheduler cycle per challenge.
- *
- * @param {unknown} schedule
- * @returns {Array<{count: number, seconds: number}>}
- */
-const getValidScheduleRows = (schedule) =>
-    Array.isArray(schedule)
-        ? schedule
-              .slice(0, MAX_SCHEDULE_ROWS_READ)
-              .filter(
-                  (row) => row && typeof row === 'object' && Number.isFinite(row.count) && Number.isFinite(row.seconds),
-              )
-        : [];
-
-/**
- * The schedule as it effectively applies to one challenge: valid rows,
+ * The schedule as it effectively applies to one challenge: its rows
  * end-aligned to the challenge's photo limit by scheduleRemap (a 2-image
  * challenge fills its 2nd photo at the Image-4 row's time — see that module's
  * header for the rule). Both threshold computations below MUST go through
  * this so the fill trigger and the scheduler cadence always agree.
  *
- * @param {unknown} schedule - persisted autoFillSchedule value (untrusted shape)
+ * @param {FillSchedule} schedule - the challenge's effective autoFillSchedule
  * @param {number | undefined} maxPhotoSubmits - challenge.max_photo_submits
  * @returns {Array<{count: number, seconds: number}>}
  */
-const getEffectiveScheduleRows = (schedule, maxPhotoSubmits) =>
-    remapScheduleRows(getValidScheduleRows(schedule), maxPhotoSubmits);
+const getEffectiveScheduleRows = (schedule, maxPhotoSubmits) => remapScheduleRows(schedule, maxPhotoSubmits);
 
 /**
  * Target entry count implied by the schedule for the time remaining: the
@@ -56,7 +30,7 @@ const getEffectiveScheduleRows = (schedule, maxPhotoSubmits) =>
  * a non-finite max (never NaN — a NaN would poison orderDeadlineActions'
  * sort downstream).
  *
- * @param {unknown} schedule - persisted autoFillSchedule value (untrusted shape)
+ * @param {FillSchedule} schedule - the challenge's effective autoFillSchedule
  * @param {number} secondsRemaining
  * @param {number | undefined} maxPhotoSubmits - challenge.max_photo_submits
  * @returns {number}
@@ -82,7 +56,7 @@ const resolveScheduleTarget = (schedule, secondsRemaining, maxPhotoSubmits) => {
  * fills sort against boost/turbo/emergency correctly; the same defensive
  * rules as resolveScheduleTarget apply.
  *
- * @param {unknown} schedule - persisted autoFillSchedule value (untrusted shape)
+ * @param {FillSchedule} schedule - the challenge's effective autoFillSchedule
  * @param {number} entryCount - current number of entries
  * @param {number | undefined} maxPhotoSubmits - challenge.max_photo_submits
  * @returns {number}
@@ -100,4 +74,4 @@ const getNextScheduleThresholdSec = (schedule, entryCount, maxPhotoSubmits) => {
     return threshold;
 };
 
-export { getValidScheduleRows, resolveScheduleTarget, getNextScheduleThresholdSec };
+export { resolveScheduleTarget, getNextScheduleThresholdSec };

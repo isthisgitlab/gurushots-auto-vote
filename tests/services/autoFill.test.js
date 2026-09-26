@@ -2333,20 +2333,8 @@ describe('resolveScheduleTarget — target entry count for the time remaining', 
         expect(resolveScheduleTarget(DEFAULT_SCHEDULE, Infinity, 4)).toBe(0);
     });
 
-    test('empty or invalid schedule shapes → 0, never throws', () => {
+    test('an empty schedule → 0', () => {
         expect(resolveScheduleTarget([], 300, 4)).toBe(0);
-        expect(resolveScheduleTarget('garbage', 300, 4)).toBe(0);
-        expect(resolveScheduleTarget({ count: 2, seconds: 600 }, 300, 4)).toBe(0);
-        expect(resolveScheduleTarget(null, 300, 4)).toBe(0);
-        expect(resolveScheduleTarget(undefined, 300, 4)).toBe(0);
-    });
-
-    test('rows missing fields or with non-numeric fields are dropped, not counted', () => {
-        expect(resolveScheduleTarget([{ count: 2 }, { seconds: 600 }], 300, 4)).toBe(0);
-        expect(resolveScheduleTarget([{ count: '2', seconds: '600' }], 300, 4)).toBe(0);
-        expect(resolveScheduleTarget([null, 42, 'row'], 300, 4)).toBe(0);
-        // A valid row still wins even when surrounded by junk.
-        expect(resolveScheduleTarget([{ count: 'x' }, { count: 3, seconds: 600 }], 300, 4)).toBe(3);
     });
 
     test('row order is irrelevant', () => {
@@ -2402,19 +2390,6 @@ describe('getNextScheduleThresholdSec — when the next fill becomes due', () =>
         expect(resolveScheduleTarget(sparse, 500, 3)).toBe(3);
     });
 
-    test('an out-of-band corrupted count neither inflates the shift nor fires itself', () => {
-        // The count:999999 row must be dropped entirely: were it kept, the
-        // Math.min clamp downstream would let it fire at its own 1800s; were it
-        // counted into the span, the shift would wipe the legitimate rows (0).
-        const poisoned = [
-            { count: 999999, seconds: 1800 },
-            { count: 2, seconds: 1800 },
-            { count: 3, seconds: 1200 },
-            { count: 4, seconds: 600 },
-        ];
-        expect(getNextScheduleThresholdSec(poisoned, 1, 2)).toBe(600);
-    });
-
     test('unordered rows: still picks the largest applicable threshold', () => {
         const unordered = [
             { count: 4, seconds: 600 },
@@ -2424,12 +2399,8 @@ describe('getNextScheduleThresholdSec — when the next fill becomes due', () =>
         expect(getNextScheduleThresholdSec(unordered, 1, 4)).toBe(1800);
     });
 
-    test('empty / invalid schedules → 0, never NaN', () => {
+    test('an empty schedule → 0', () => {
         expect(getNextScheduleThresholdSec([], 0, 4)).toBe(0);
-        expect(getNextScheduleThresholdSec('garbage', 0, 4)).toBe(0);
-        expect(getNextScheduleThresholdSec(null, 0, 4)).toBe(0);
-        expect(getNextScheduleThresholdSec([{ bad: true }], 0, 4)).toBe(0);
-        expect(Number.isFinite(getNextScheduleThresholdSec(undefined, 0, 4))).toBe(true);
     });
 
     test('non-finite entryCount / max are coerced to 0, result stays finite', () => {

@@ -15,13 +15,13 @@
  *   - 0 → last entry slot (sentinel)
  *   - positives → clamped to [0, entries.length - 1]
  *
- * @param {*} entries
- * @param {*} requestedIndex
+ * @param {readonly unknown[] | null | undefined} entries
+ * @param {number | null | undefined} requestedIndex
  * @returns {number|null}
  */
 const resolveEntryIndex = (entries, requestedIndex) => {
     if (!Array.isArray(entries) || entries.length === 0) return null;
-    if (!Number.isInteger(requestedIndex) || requestedIndex < 0) return 0;
+    if (typeof requestedIndex !== 'number' || !Number.isInteger(requestedIndex) || requestedIndex < 0) return 0;
     if (requestedIndex === 0) return entries.length - 1;
     return Math.min(entries.length - 1, requestedIndex - 1);
 };

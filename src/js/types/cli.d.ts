@@ -8,5 +8,5 @@
  * out where the handler ignores it), then the handler's own arguments.
  */
 export type NullEventHandlers<H> = {
-    [K in keyof H]: H[K] extends (event: any, ...args: infer A) => infer R ? (event?: null, ...args: A) => R : never;
+    [K in keyof H]: H[K] extends (event: never, ...args: infer A) => infer R ? (event?: null, ...args: A) => R : never;
 };

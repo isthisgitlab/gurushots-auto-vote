@@ -64,6 +64,7 @@ const SETTING_DEFAULTS = {
     scheduledFillBeforeEnd: [],
     scheduledFillWindowMinutes: 60,
     autoFill: false,
+    autoFillSchedule: [],
     emergencyFill: 0,
     autoBoost: false,
     useTurbo: false,

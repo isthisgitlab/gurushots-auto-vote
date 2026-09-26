@@ -164,7 +164,7 @@ const computeDueNotifications = (perChallengeActions, now, opts) => {
  * this to a persisted/shared store without re-litigating the tradeoff, or a
  * stale key could permanently suppress a real warning.
  *
- * @returns {{ filterNew: (due: Array<{fireKey:string}>) => Array<any> }}
+ * @returns {{ filterNew: <T extends {fireKey: string}>(due: readonly T[]) => T[] }}
  */
 const createDedupe = () => {
     /** @type {Set<string>} */
@@ -230,7 +230,7 @@ const formatNotification = (entries, translate) => {
  * map and lead window in seconds. `anyEnabled` lets a host early-exit before any
  * per-challenge work when the whole feature is off (the default).
  *
- * @param {(key:string)=>*} getSetting
+ * @param {(key:string)=>unknown} getSetting
  * @returns {{leadSec:number, enabled:Record<string, boolean>, anyEnabled:boolean}}
  */
 const readNotificationConfig = (getSetting) => {

@@ -81,7 +81,7 @@ describe('mock fetchChallengesAndVote claim pre-step', () => {
     });
 
     test('is skipped for a single-challenge run', async () => {
-        await mockApiClient.fetchChallengesAndVote('tok', null, 5);
+        await mockApiClient.fetchChallengesAndVote('tok', 5);
         expect(runClaimPass).not.toHaveBeenCalled();
         expect(runVotingPass).toHaveBeenCalledTimes(1);
     });

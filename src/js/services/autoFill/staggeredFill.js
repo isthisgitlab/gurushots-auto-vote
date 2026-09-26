@@ -4,7 +4,7 @@
  */
 
 import { getScheduleShift } from '../scheduleRemap';
-import { getValidScheduleRows, resolveScheduleTarget } from './schedule';
+import { resolveScheduleTarget } from './schedule';
 import { getEntries, getSlotsRemaining, reflectNewEntry } from './challengeState';
 import { runFillAttempt } from './pipeline';
 
@@ -118,7 +118,7 @@ const maybeAutoFillChallenge = async (challenge, token, now, deps) => {
     // the top already proved max_photo_submits is a finite number (a malformed
     // value — e.g. a string with newlines — returns 'skipped' there).
     const maxSubmits = challenge.max_photo_submits;
-    const shift = getScheduleShift(getValidScheduleRows(schedule), maxSubmits);
+    const shift = getScheduleShift(schedule, maxSubmits);
     const shiftNote =
         shift > 0
             ? `; ${maxSubmits}-image challenge — the target of ${desired} entries follows the Image ${desired + shift} time`

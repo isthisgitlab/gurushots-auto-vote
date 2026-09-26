@@ -29,7 +29,7 @@ import { registerHandlers } from './registerHandlers';
 import { errorResult } from './errorResult';
 import { getScenarioStatus, ledgerForMode } from '../services/scenarioStatus';
 import { findActiveChallenge } from '../services/findActiveChallenge';
-import { evaluateScenario } from '../scenarios/evaluate';
+import { evaluateScenario, startState } from '../scenarios/evaluate';
 import { simulateScenario } from '../scenarios/simulate';
 import { SCENARIO_TEMPLATES } from '../scenarios/templates';
 import { refreshScenarioStateAsync } from '../scenarioStateStore';
@@ -106,18 +106,6 @@ const safely = async (label, body) => {
         return errorResult(error, `The ${label} request failed`);
     }
 };
-
-/**
- * @param {ScenarioDocument} scenario
- * @param {number} now - Unix seconds
- */
-const startState = (scenario, now) => ({
-    phase: scenario.start,
-    phaseEnteredAt: now,
-    memory: {},
-    fired: {},
-    inFlight: null,
-});
 
 /**
  * What the dry run and the simulation both need: the challenge's scenario

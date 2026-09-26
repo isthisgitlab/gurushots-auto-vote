@@ -26,8 +26,11 @@ import { soonestScheduledStart, eligibleChallenges } from './scheduledFill';
 import { boostApplyThreshold } from '../voting/boostWindow';
 import { ruleOpensAt } from '../voting/currencyAuto';
 import { nextWakeAt } from '../scenarios/nextWake';
+import { startState } from '../scenarios/evaluate';
 
 /** @import { Challenge } from '../types/gurushots' */
+/** @import { ScenarioEngineState } from '../types/scenario' */
+/** @import { ScenarioDocument } from '../settings/scenarioSchema' */
 /** @import { ResolveScheduledFill, ScheduledStart } from './scheduledFill' */
 
 /**
@@ -308,7 +311,11 @@ async function soonestCurrencyRuleStart(challenges, now, resolveCurrencyAuto) {
 }
 
 /**
- * @typedef {(challengeId: string) => ({scenario: any, state: any|null, timezone: string}|null|Promise<{scenario: any, state: any|null, timezone: string}|null>)} ResolveScenarioWake
+ * @typedef {{scenario: ScenarioDocument, state: ScenarioEngineState|null, timezone: string}} ScenarioWakeInput
+ */
+
+/**
+ * @typedef {(challengeId: string) => (ScenarioWakeInput|null|Promise<ScenarioWakeInput|null>)} ResolveScenarioWake
  *   The challenge's assigned scenario and its runtime state (null state = the
  *   plan has not started yet), or null when no scenario can run for it.
  */
@@ -334,7 +341,7 @@ async function soonestScenarioWake(challenges, now, resolveScenarioWake) {
     for (let i = 0; i < open.length; i++) {
         const input = inputs[i];
         if (!input) continue;
-        const state = input.state ?? { phase: input.scenario.start, phaseEnteredAt: now, fired: {}, memory: {} };
+        const state = input.state ?? startState(input.scenario, now);
         const startTime = nextWakeAt({
             scenario: input.scenario,
             state,

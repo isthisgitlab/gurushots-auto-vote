@@ -175,14 +175,13 @@ const runTurboMiniGame = async (challenge, token) => {
  * effect.
  *
  * @param {string} token - Authentication token
- * @param {number|function|null} [_getExposureThreshold] - Optional exposure-threshold resolver accepted from callers that pass one; unused internally (the voting-logic service reads settings directly).
  * @param {string|number|null} [challengeIdFilter] - When set, restricts the strategy pass to a single challenge (per-card "Run"). Stale-metadata cleanup still runs against the full active list before filtering.
  * @returns {Promise<{success:boolean, message?:string, error?:string, challenges?:Challenge[]}>}
  *   `challenges` is the *full* active list this cycle fetched (not the per-challenge
  *   filtered subset), so callers can reuse it for threshold scheduling instead of
  *   re-fetching. Absent only when the fetch itself threw before a list was obtained.
  */
-const fetchChallengesAndVote = async (token, _getExposureThreshold = null, challengeIdFilter = null) => {
+const fetchChallengesAndVote = async (token, challengeIdFilter = null) => {
     // Auto-join pre-step (gated by the default-off `autoJoin` setting inside
     // runJoinPass). Skipped for a single-challenge "Run" (challengeIdFilter set)
     // and never allowed to abort voting — a join failure is logged, not thrown.
