@@ -1,4 +1,3 @@
-// @ts-check
 /**
  * The scenario phase-settings overlay: while a challenge is in a phase of its
  * assigned scenario, that phase's `settings` win over every other layer for

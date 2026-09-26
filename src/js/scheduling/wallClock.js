@@ -1,4 +1,3 @@
-// @ts-check
 /**
  * Pure wall-clock ↔ epoch math for the scheduled-fill feature.
  *

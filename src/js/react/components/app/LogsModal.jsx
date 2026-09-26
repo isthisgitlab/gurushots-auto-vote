@@ -1,4 +1,3 @@
-// @ts-check
 import { useTranslation } from '@/contexts/TranslationContext';
 import { Modal } from '@/components/ui/Modal';
 import { useLogStream } from '@/hooks/useLogStream';

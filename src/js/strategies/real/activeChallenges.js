@@ -1,4 +1,3 @@
-// @ts-check
 /**
  * Real-strategy active-challenge read: the api/challenges fetch plus
  * first-seen title pinning, with concurrent calls coalesced per token.

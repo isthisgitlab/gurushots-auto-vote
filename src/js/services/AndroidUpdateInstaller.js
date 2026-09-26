@@ -1,4 +1,3 @@
-// @ts-check
 /**
  * Android-side updater. Prefers an in-app download + system-installer flow
  * via the native `ApkInstaller` Capacitor plugin (AndroidManifest already

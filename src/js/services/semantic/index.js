@@ -1,4 +1,3 @@
-// @ts-check
 /**
  * Semantic match scorer - the autofill picker's "meaning" signal.
  *

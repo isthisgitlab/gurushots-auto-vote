@@ -1,4 +1,3 @@
-// @ts-check
 import { useTranslation } from '@/contexts/TranslationContext';
 import { useUpdate, UPDATE_STATES } from '@/contexts/UpdateContext';
 import { Modal } from '@/components/ui/Modal';

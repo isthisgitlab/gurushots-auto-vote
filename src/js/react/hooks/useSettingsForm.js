@@ -1,4 +1,3 @@
-// @ts-check
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { getUiDefaultSettings } from '../../settings/uiDefaults';
 import * as ipc from '@/api/ipc';

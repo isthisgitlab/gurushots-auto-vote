@@ -1,4 +1,3 @@
-// @ts-check
 /**
  * A what-if timeline of a scenario: from now until the challenge closes,
  * which rules would fire when, and which phase the plan would be in. It

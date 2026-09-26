@@ -1,4 +1,3 @@
-// @ts-check
 /**
  * Shared ipcMain registration for the handler modules (log, misc, settings,
  * voting, actions, update). Each module exports buildHandlers(deps) →

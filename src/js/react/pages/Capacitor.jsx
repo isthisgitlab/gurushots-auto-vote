@@ -1,5 +1,3 @@
-// @ts-check
-/** @import { RendererGlobals } from '../../types/capacitor' */
 /**
  * Capacitor entry point. Defers React mount until the bridge is
  * installed (so it exists when the first useSettings hook
@@ -10,6 +8,8 @@
  * file produces, not app-bundle.js. Electron is unaffected; it never
  * loads this entry.
  */
+
+/** @import { RendererGlobals } from '../../types/capacitor' */
 
 // Tell App.jsx not to auto-mount when imported below. The import
 // must happen after this assignment.

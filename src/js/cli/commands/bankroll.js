@@ -1,4 +1,3 @@
-// @ts-check
 /**
  * CLI bankroll command: prints the account currency balances
  * (keys/swaps/fills/coins). Reuses the shared IPC handler so the

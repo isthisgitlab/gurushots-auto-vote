@@ -1,4 +1,3 @@
-// @ts-check
 /**
  * Mock counterpart to api/submissions.js: the photo library, the per-photo
  * record, and the challenge submit.

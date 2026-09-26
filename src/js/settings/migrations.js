@@ -1,4 +1,3 @@
-// @ts-check
 /**
  * Load-time migrations of the persisted settings blob, plus the prune of
  * keys the schema no longer knows. Every function here mutates the merged

@@ -1,4 +1,3 @@
-// @ts-check
 /** @import { Challenge } from '../../types/gurushots' */
 /**
  * Per-challenge deadline actions (auto-fill, emergency fill, boost, turbo):

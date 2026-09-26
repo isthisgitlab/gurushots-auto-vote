@@ -1,4 +1,3 @@
-// @ts-check
 /** @typedef {'xs'|'sm'|'md'|'lg'} SpinnerSize */
 
 /**

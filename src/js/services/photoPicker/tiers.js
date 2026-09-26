@@ -1,4 +1,3 @@
-// @ts-check
 /**
  * Photo picker — the ranking tiers: each candidate's tier values, the theme
  * comparison, the enrichment set, and the final sort that applies them. This

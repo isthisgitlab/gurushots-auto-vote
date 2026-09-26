@@ -1,4 +1,3 @@
-// @ts-check
 /**
  * The page's translator (Electron window or Capacitor WebView). Its language
  * is owned by TranslationProvider (react/contexts/TranslationContext.jsx),

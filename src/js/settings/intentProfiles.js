@@ -1,4 +1,3 @@
-// @ts-check
 /**
  * Curated "intent" presets, seeded into the named-profiles system on first
  * run (see settings.js `seedIntentProfiles`). Deliberately free of any

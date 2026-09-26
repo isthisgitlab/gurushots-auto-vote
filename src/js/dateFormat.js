@@ -1,4 +1,3 @@
-// @ts-check
 /** @param {number} n */
 const pad = (n) => String(n).padStart(2, '0');
 

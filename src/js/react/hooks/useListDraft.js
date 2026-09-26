@@ -1,4 +1,3 @@
-// @ts-check
 import { useEffect, useState } from 'react';
 import { useLatestRef } from '@/hooks/useLatestRef';
 

@@ -1,4 +1,3 @@
-// @ts-check
 /**
  * Settings-file watcher for the Electron main process. Watches the
  * settings.json the facade owns and, on change, logs the diff, reloads the

@@ -1,4 +1,3 @@
-// @ts-check
 /**
  * CLI `logs` command. Prints the tail of one of the on-disk log files so CLI
  * users get the after-the-fact log access the Electron Logs page provides.

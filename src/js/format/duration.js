@@ -1,4 +1,3 @@
-// @ts-check
 /**
  * Canonical "seconds → human duration" formatter, shared by every platform
  * shell (CLI status, the renderer boost-window banner + challenge countdown,

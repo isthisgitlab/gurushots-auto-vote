@@ -1,4 +1,3 @@
-// @ts-check
 /**
  * When the scenario engine next needs to look at a challenge: the soonest
  * instant after `now` at which a time condition in the current phase can

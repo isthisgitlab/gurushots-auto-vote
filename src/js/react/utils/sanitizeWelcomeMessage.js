@@ -1,4 +1,3 @@
-// @ts-check
 // Sanitises challenge `welcome_message` strings before they are rendered.
 // The GuruShots API occasionally returns medium-editor WYSIWYG toolbar markup
 // leaked into the description (rows of `<button data-action="bold">B</button>`

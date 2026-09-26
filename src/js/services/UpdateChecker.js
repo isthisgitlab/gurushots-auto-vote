@@ -1,4 +1,3 @@
-// @ts-check
 /**
  * Shared GitHub Releases poller. Decides *whether* an update is
  * available; each platform's installer decides *how* to deliver it.

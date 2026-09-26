@@ -1,4 +1,3 @@
-// @ts-check
 /**
  * Node-host delivery for the deadline-action OS notifications (the CLI's
  * continuous scheduler). Injected into the shared cadence chain as its

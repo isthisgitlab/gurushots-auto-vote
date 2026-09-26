@@ -1,4 +1,3 @@
-// @ts-check
 /**
  * Local image/text check for the highest-ranked fill candidates of ANY
  * challenge. The prompts come from the challenge itself — its title subject

@@ -1,4 +1,3 @@
-// @ts-check
 /**
  * Shared last-minute threshold math for both voting schedulers.
  *

@@ -1,4 +1,3 @@
-// @ts-check
 /**
  * Voting-cycle IPC handlers. Covers the entry points the renderer
  * uses to drive a voting pass:

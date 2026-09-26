@@ -1,4 +1,3 @@
-// @ts-check
 import { deriveWindowHints } from '@/utils/windowHints';
 import { formatSecondsAsHoursMinutes } from '@/utils/timeFieldUnits';
 import { MAX_VOTING_PAUSE_MINUTES } from '../../../settings/limits';

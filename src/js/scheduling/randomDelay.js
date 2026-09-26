@@ -1,4 +1,3 @@
-// @ts-check
 /**
  * Shared between the React renderer (`AutovoteContext.jsx`) and the
  * CLI scheduler (`cli/cli.js`) so the same min/max range produces the

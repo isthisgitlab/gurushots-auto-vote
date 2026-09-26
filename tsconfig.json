@@ -1,8 +1,8 @@
 {
     // TypeScript is used here as a CHECKER ONLY — never as a compiler (noEmit).
-    // checkJs is false, so `tsc` only checks files that opt in with a
-    // `// @ts-check` comment at the top. This keeps the typecheck gate green
-    // from day one and lets the shared core be typed incrementally via JSDoc.
+    // checkJs is on: every .js/.jsx file in the program is strictly
+    // type-checked through its JSDoc, and the .d.ts files under src/js/types
+    // carry the shared shapes.
     "compilerOptions": {
         "target": "es2025",
         // One program covers the core and the renderer: the renderer bundles
@@ -24,7 +24,7 @@
         },
         "types": ["node"],
         "allowJs": true,
-        "checkJs": false,
+        "checkJs": true,
         "noEmit": true,
         "strict": true,
         "esModuleInterop": true,

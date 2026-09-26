@@ -1,4 +1,3 @@
-// @ts-check
 /** @import { Challenge } from '../../types/gurushots' */
 /**
  * Smooth-scroll the ChallengeCard with the given id into view. Cards carry

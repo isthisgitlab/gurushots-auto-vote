@@ -1,4 +1,3 @@
-// @ts-check
 /** @import { Challenge } from '../types/gurushots' */
 /**
  * Availability predicates for the three bankroll-currency actions a member can

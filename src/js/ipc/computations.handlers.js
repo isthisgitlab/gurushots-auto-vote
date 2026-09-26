@@ -1,4 +1,3 @@
-// @ts-check
 /**
  * IPC handlers for read-only, main-side computations the renderer can't run
  * itself because they need the settings facade (services/VotingLogic is

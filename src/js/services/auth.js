@@ -1,4 +1,3 @@
-// @ts-check
 /**
  * Auth helpers shared between IPC handlers that need an early-return
  * when the user is not logged in.

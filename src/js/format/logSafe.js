@@ -1,4 +1,3 @@
-// @ts-check
 /**
  * Log-safety formatting for untrusted values.
  *

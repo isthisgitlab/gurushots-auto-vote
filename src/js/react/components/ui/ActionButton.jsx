@@ -1,4 +1,3 @@
-// @ts-check
 const VARIANT_CLASSES = {
     accent: 'btn-accent',
     info: 'btn-info',

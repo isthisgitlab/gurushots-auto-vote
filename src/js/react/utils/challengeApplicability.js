@@ -1,4 +1,3 @@
-// @ts-check
 /** @import { Challenge, ChallengeMember } from '../../types/gurushots' */
 /**
  * Per-challenge settings applicability.

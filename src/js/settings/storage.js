@@ -1,4 +1,3 @@
-// @ts-check
 /**
  * Persistence transport + path / runtime detection helpers.
  *

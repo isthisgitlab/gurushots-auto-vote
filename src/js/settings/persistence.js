@@ -1,4 +1,3 @@
-// @ts-check
 /**
  * Load/save mechanics of the settings blob over the storage adapter: read +
  * merge over defaults + load-time migrations, the once-per-process obsolete

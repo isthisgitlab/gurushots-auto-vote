@@ -1,4 +1,3 @@
-// @ts-check
 /**
  * Reset helpers (single top-level key, one or all global defaults, the whole
  * blob minus essential user data) and the "modified from default" checks.

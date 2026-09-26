@@ -1,4 +1,3 @@
-// @ts-check
 import { useState, useCallback, useEffect, useRef } from 'react';
 
 /** @import { Dispatch, SetStateAction } from 'react' */

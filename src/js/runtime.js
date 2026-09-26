@@ -1,4 +1,3 @@
-// @ts-check
 /**
  * Runtime mode, platform detection, and OS-path resolution. The single
  * allowed reader of process.env so the rest of the codebase isn't

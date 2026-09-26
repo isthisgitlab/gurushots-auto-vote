@@ -1,4 +1,3 @@
-// @ts-check
 /** @import { SerializableSchemaEntry } from '../../ipc/settings.handlers' */
 
 /**

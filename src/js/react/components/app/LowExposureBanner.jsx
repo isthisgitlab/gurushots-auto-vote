@@ -1,4 +1,3 @@
-// @ts-check
 /** @import { Challenge } from '../../../types/gurushots' */
 import { useTranslation } from '@/contexts/TranslationContext';
 import { lowExposureChallenges } from '@/utils/challengeAlerts';

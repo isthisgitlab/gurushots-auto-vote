@@ -1,4 +1,3 @@
-// @ts-check
 import { createContext, useContext, useEffect, useMemo } from 'react';
 import { useActiveChallenges } from '@/api/useActiveChallenges';
 

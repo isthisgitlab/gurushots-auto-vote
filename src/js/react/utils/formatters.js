@@ -1,4 +1,3 @@
-// @ts-check
 /**
  * @import { MemberBoost, MemberTurbo, RankingEntry } from '../../types/gurushots'
  * @import { SerializableSchemaEntry } from '../../ipc/settings.handlers'

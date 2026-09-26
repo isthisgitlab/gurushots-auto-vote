@@ -1,4 +1,3 @@
-// @ts-check
 /**
  * Real-strategy auto-cycle boost: chooses which entry to boost, posts it over
  * the api/boost transport, and marks the entry as boosted on success.

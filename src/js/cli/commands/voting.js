@@ -1,4 +1,3 @@
-// @ts-check
 /**
  * CLI voting commands: per-cycle vote runs (manual + strategy),
  * continuous-mode entry point with signal handlers, and the status

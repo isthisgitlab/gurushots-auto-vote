@@ -1,4 +1,3 @@
-// @ts-check
 /** @import { ComponentChildren } from 'preact' */
 /** @import { Bankroll } from '../../../types/gurushots' */
 import { useTranslation } from '@/contexts/TranslationContext';

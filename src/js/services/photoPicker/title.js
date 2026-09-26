@@ -1,4 +1,3 @@
-// @ts-check
 /**
  * Photo picker — what a challenge title says about its subject: title words
  * that are abstract rather than the subject, the series subject segment,

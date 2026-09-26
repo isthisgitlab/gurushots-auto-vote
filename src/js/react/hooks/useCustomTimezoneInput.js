@@ -1,4 +1,3 @@
-// @ts-check
 import { useState, useEffect, useRef, useCallback } from 'react';
 import { DEFAULT_TIMEZONE } from '../../settings/uiDefaults';
 

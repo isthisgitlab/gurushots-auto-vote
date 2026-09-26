@@ -1,4 +1,3 @@
-// @ts-check
 /**
  * CLI update check. Reuses the shared GitHub Releases poller
  * (services/UpdateChecker) — the same "is there a newer version?" answer the

@@ -1,4 +1,3 @@
-// @ts-check
 /**
  * API Header Randomizer
  *

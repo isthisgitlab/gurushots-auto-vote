@@ -1,4 +1,3 @@
-// @ts-check
 /** @import { Challenge } from '../types/gurushots' */
 /**
  * New-entry detection for the `voteOnNewEntry` setting.

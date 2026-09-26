@@ -1,4 +1,3 @@
-// @ts-check
 /**
  * Process-exit safety net and window/quit lifecycle helpers. Electron
  * sometimes lingers after the last window closes — this gives the main

@@ -1,4 +1,3 @@
-// @ts-check
 /**
  * End-alignment remap for the autoFillSchedule rows.
  *

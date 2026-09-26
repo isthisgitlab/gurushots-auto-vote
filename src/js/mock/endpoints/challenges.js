@@ -1,4 +1,3 @@
-// @ts-check
 /**
  * Mock counterpart to the active-challenge read (strategies/real/activeChallenges.js
  * over api/challenges.js): session-stable generated challenges.

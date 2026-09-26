@@ -1,4 +1,3 @@
-// @ts-check
 /**
  * Renderer-side scenario notifier: the notices a user's scenarios left
  * (services/scenarioNotifications.js holds the logic), read over the

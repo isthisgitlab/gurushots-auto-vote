@@ -1,4 +1,3 @@
-// @ts-check
 /**
  * Manual-vote helpers shared by CLI (BaseMiddleware.cliVoteManual) and
  * Electron IPC (voting.handlers.js). The rule is "vote a challenge to 100%

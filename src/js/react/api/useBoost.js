@@ -1,4 +1,3 @@
-// @ts-check
 import { useNamedIpcAction } from './useAsyncIpcAction';
 
 // The apply-boost-to-entry handler takes (challengeId, imageId) only.

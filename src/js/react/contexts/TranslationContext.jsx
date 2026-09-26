@@ -1,4 +1,3 @@
-// @ts-check
 import { createContext, useContext, useCallback, useEffect, useMemo } from 'react';
 import { rendererTranslator } from '../../translations/renderer';
 import { DEFAULT_LANGUAGE, isSupportedLanguage, resolveLanguage } from '../../translations/translator';

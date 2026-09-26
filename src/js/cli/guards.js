@@ -1,4 +1,3 @@
-// @ts-check
 /**
  * Small CLI guard helpers shared across commands: the auth gate every
  * networked command starts with, the profile-argument validation the

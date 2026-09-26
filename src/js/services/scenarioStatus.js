@@ -1,4 +1,3 @@
-// @ts-check
 /**
  * Where a challenge is in its assigned scenario — one read shared by the
  * Node-side scheduler resolver (scheduling/nodeResolvers.js), the

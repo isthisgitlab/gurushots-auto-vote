@@ -1,4 +1,3 @@
-// @ts-check
 /**
  * Schema-based challenge settings: global defaults, id-keyed per-challenge
  * overrides (single-key and batch writes, profile-mode suppression), effective

@@ -1,4 +1,3 @@
-// @ts-check
 /**
  * Capacitor bridge — populates window.api with the same surface that
  * preload.js exposes on Electron, but consumes the IPC handlers

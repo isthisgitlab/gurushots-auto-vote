@@ -1,4 +1,3 @@
-// @ts-check
 /**
  * Mock counterpart to api/login.js: accepts any non-empty credentials.
  */

@@ -1,4 +1,3 @@
-// @ts-check
 /**
  * Automatic prize claiming — a pre-step in fetchChallengesAndVote, shared by the
  * real and mock strategies (the endpoints arrive via `deps`).

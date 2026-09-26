@@ -1,4 +1,3 @@
-// @ts-check
 /** @import { Challenge } from '../../types/gurushots' */
 /**
  * Pre-boost fill window: the vote-to-100% stretch ahead of an auto-applied

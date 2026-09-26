@@ -1,4 +1,3 @@
-// @ts-check
 /**
  * The window.api channel manifest — single source of truth for the surface
  * both platform shells expose to the renderer:

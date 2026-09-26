@@ -1,4 +1,3 @@
-// @ts-check
 /**
  * Cadence-side scheduled-fill math (issue #26).
  *

@@ -1,4 +1,3 @@
-// @ts-check
 /**
  * Mock counterpart to api/join.js: open (un-joined) challenges, the
  * bankroll, and the coin unlock.

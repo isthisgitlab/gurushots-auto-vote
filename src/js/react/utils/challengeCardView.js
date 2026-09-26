@@ -1,4 +1,3 @@
-// @ts-check
 /**
  * @import { Bankroll, Challenge } from '../../types/gurushots'
  * @import { RankedChallenge } from '../../types/rendererUtils'

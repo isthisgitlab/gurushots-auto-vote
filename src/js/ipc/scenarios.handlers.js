@@ -1,4 +1,3 @@
-// @ts-check
 /**
  * IPC handlers for user-defined scenarios (settings/scenarios.js,
  * services/scenarioRunner.js). Every handler returns `{success, error}` —

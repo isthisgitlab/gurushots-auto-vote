@@ -1,4 +1,3 @@
-// @ts-check
 /** @import { Challenge } from '../../../types/gurushots' */
 import { useTranslation } from '@/contexts/TranslationContext';
 import { IconActionButton } from '@/components/ui/IconActionButton';

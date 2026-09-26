@@ -1,4 +1,3 @@
-// @ts-check
 import { app } from 'electron';
 import { autoUpdater } from 'electron-updater';
 import * as logger from '../logger';

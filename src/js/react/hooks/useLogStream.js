@@ -1,4 +1,3 @@
-// @ts-check
 import { useState, useEffect, useRef } from 'react';
 import * as ipc from '@/api/ipc';
 

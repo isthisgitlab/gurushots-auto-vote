@@ -1,4 +1,3 @@
-// @ts-check
 /**
  * Auto-fill — the member id tag resolution needs, memoised per session token.
  * This module owns the identity cache; __resetMemberIdCache clears it.

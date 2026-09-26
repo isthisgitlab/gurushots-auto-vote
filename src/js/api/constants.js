@@ -1,4 +1,3 @@
-// @ts-check
 /**
  * GuruShots API constants — base URLs, endpoint paths, and shared
  * content types. Single source so the mobile and web header profiles

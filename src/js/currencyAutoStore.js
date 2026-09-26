@@ -1,4 +1,3 @@
-// @ts-check
 /**
  * Automatic-spend counter: how many exposure FILLS the currency automation has
  * spent on each challenge, so `autoExposureFillMax` caps them.

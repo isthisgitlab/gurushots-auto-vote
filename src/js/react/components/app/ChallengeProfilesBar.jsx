@@ -1,4 +1,3 @@
-// @ts-check
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { useTranslation } from '@/contexts/TranslationContext';
 import { getIntentByName, intentValuesMatch } from '../../../settings/intentProfiles';

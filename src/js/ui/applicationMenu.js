@@ -1,4 +1,3 @@
-// @ts-check
 import { appPath } from '../appPaths';
 import { Menu, dialog, app, BrowserWindow } from 'electron';
 import * as logger from '../logger';

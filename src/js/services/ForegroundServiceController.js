@@ -1,4 +1,3 @@
-// @ts-check
 /**
  * Thin wrapper around @capawesome-team/capacitor-android-foreground-service.
  *

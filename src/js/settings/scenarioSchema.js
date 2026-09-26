@@ -1,4 +1,3 @@
-// @ts-check
 /**
  * Validation of a user-defined scenario document (see scenarios/vocabulary.js
  * for the pieces). A scenario may come from another player's shared file, so

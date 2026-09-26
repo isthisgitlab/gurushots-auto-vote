@@ -1,4 +1,3 @@
-// @ts-check
 /**
  * Auto-fill — the near-deadline safety net that fills every remaining slot in
  * one batch, and the state-only stand-down check it shares with the deadline view.

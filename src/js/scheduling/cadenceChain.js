@@ -1,4 +1,3 @@
-// @ts-check
 /**
  * Shared autovote cadence chain — the recursive "decide delay → arm timer →
  * run cycle → re-arm" loop both schedulers run (runScheduler.js for

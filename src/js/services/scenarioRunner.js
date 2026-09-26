@@ -1,4 +1,3 @@
-// @ts-check
 /**
  * Runs a challenge's user-defined scenario inside the voting pass: evaluates
  * it (scenarios/evaluate.js), executes the chosen rule's actions over the

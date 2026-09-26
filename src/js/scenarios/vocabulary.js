@@ -1,4 +1,3 @@
-// @ts-check
 /**
  * The scenario vocabulary — every condition, entry selector, action and rule
  * mode a user-defined scenario may use, plus the document caps. The single

@@ -1,4 +1,3 @@
-// @ts-check
 /**
  * Bankroll-currency actions on an entered challenge: spend a KEY to unlock a
  * locked boost, a SWAP to replace an entered photo, a FILL to top exposure up

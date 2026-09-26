@@ -1,4 +1,3 @@
-// @ts-check
 /**
  * Headless background entry point (Android foreground service).
  *

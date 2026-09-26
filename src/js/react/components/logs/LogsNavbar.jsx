@@ -1,4 +1,3 @@
-// @ts-check
 import { useTranslation } from '@/contexts/TranslationContext';
 import { ConnectionBadge } from '@/components/ui/StatusBadge';
 

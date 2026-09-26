@@ -1,4 +1,3 @@
-// @ts-check
 import { useEffect, useCallback, useRef, useId } from 'react';
 import { rendererTranslator } from '../../../translations/renderer';
 import { StrokeIcon, ICON_PATHS } from './StrokeIcon';

@@ -1,4 +1,3 @@
-// @ts-check
 /**
  * Auto-fill — the shared fill pipeline: load and score candidates, enrich the
  * contested ones, visually verify the pick, and submit (runFillAttempt), plus

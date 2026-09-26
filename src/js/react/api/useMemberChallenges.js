@@ -1,4 +1,3 @@
-// @ts-check
 import { useIpcResultQuery } from './useIpcQuery';
 
 /** @import { Challenge } from '../../types/gurushots' */

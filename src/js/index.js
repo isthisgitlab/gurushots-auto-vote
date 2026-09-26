@@ -1,4 +1,3 @@
-// @ts-check
 import { app, BrowserWindow, dialog, ipcMain, powerMonitor } from 'electron';
 import { appPath } from './appPaths';
 import * as settings from './settings';

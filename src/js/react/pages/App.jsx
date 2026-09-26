@@ -1,4 +1,3 @@
-// @ts-check
 /**
  * @import { Challenge } from '../../types/gurushots'
  * @import { RendererGlobals } from '../../types/capacitor'

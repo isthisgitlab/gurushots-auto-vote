@@ -1,4 +1,3 @@
-// @ts-check
 /**
  * Single source of truth for the voting-cancellation flag, shared by
  * real-api, mock, and the Electron main process.

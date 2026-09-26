@@ -1,4 +1,3 @@
-// @ts-check
 /**
  * Pure auto-join decision for one un-joined challenge: type/tag scope, the
  * join-timing window, and the coin caps. No I/O and no settings reads — the

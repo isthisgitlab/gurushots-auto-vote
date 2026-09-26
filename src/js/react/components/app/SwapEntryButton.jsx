@@ -1,4 +1,3 @@
-// @ts-check
 /**
  * @import { Bankroll, Challenge, RankingEntry } from '../../../types/gurushots'
  * @import { SwapBackRecord } from '../../../types/stores'

@@ -1,4 +1,3 @@
-// @ts-check
 /**
  * User-defined scenarios (see scenarios/vocabulary.js): list, save, rename,
  * delete, and the JSON import/export players use to share them. Stored in the

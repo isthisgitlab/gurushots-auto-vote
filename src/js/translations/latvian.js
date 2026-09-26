@@ -1,4 +1,3 @@
-// @ts-check
 // Latvian translations for GuruShots Auto Vote
 // Common/shared translations
 export const common = {

@@ -1,4 +1,3 @@
-// @ts-check
 /**
  * Bridge to the custom Capacitor plugin (AutoVoteBackground) that
  * runs the voting cycle natively via a Foreground Service +

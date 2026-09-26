@@ -1,4 +1,3 @@
-// @ts-check
 /**
  * Fills `{name}` placeholders in a translated string — t() has no
  * interpolation. Missing / null values render as an empty string.

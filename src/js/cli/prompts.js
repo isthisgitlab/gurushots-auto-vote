@@ -1,4 +1,3 @@
-// @ts-check
 /**
  * Readline-based interactive prompts for the CLI host. Pure I/O —
  * no settings, no auth, no business logic. Each helper takes the

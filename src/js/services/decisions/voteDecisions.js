@@ -1,4 +1,3 @@
-// @ts-check
 /** @import { Challenge } from '../../types/gurushots' */
 /**
  * Caller-facing vote decisions: the auto-vote and manual-vote evaluators that

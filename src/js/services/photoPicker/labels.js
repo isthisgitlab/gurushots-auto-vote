@@ -1,4 +1,3 @@
-// @ts-check
 /**
  * Photo picker — the photo side of matching: label stems (whole-label and
  * word-level, bounded against untrusted label data) and the per-photo match

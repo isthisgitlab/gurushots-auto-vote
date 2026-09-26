@@ -1,4 +1,3 @@
-// @ts-check
 /**
  * Node-side resolvers for the shared cadence math (./thresholdWindow).
  *

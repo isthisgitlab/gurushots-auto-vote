@@ -1,4 +1,3 @@
-// @ts-check
 /**
  * Trigger-window derivation for the settings-modal hints.
  *

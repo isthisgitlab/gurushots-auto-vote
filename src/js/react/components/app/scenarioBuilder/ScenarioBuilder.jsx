@@ -1,4 +1,3 @@
-// @ts-check
 import { useState } from 'react';
 import { useTranslation } from '@/contexts/TranslationContext';
 import { useSettingsSchema } from '@/api/useSettingsSchema';

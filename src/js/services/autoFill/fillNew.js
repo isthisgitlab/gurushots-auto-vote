@@ -1,4 +1,3 @@
-// @ts-check
 /**
  * Auto-fill — the boost/turbo "fill new" submit: one new photo whose id the
  * caller then acts on.

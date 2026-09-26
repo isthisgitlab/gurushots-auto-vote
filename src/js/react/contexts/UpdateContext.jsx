@@ -1,4 +1,3 @@
-// @ts-check
 import { createContext, useContext, useReducer, useCallback, useEffect } from 'react';
 import * as ipc from '../api/ipc';
 

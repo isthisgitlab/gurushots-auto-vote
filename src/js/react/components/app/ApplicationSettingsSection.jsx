@@ -1,4 +1,3 @@
-// @ts-check
 import { Fragment } from 'react';
 import { useTranslation } from '@/contexts/TranslationContext';
 import { SETTINGS_GRID_CLASS, SETTING_CELL_CLASS } from '@/utils/groupSettings';

@@ -1,4 +1,3 @@
-// @ts-check
 /**
  * Auto-fill — what a fill ranks: the on-theme eligible-photo fetch (server-side
  * search, tag-resolution retry, unfiltered fallback), the per-challenge

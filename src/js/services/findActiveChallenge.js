@@ -1,4 +1,3 @@
-// @ts-check
 /**
  * Shared challenge lookup for the active-challenges list.
  *

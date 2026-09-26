@@ -1,4 +1,3 @@
-// @ts-check
 /**
  * Swap-back ledger: which entry slots currently hold a replacement for a photo
  * that was swapped out while boosted or turbo'd.

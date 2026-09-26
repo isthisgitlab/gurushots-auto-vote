@@ -1,4 +1,3 @@
-// @ts-check
 import { useAsyncIpcAction } from './useAsyncIpcAction';
 
 // Every spend passes confirmed=true: these hooks are only invoked from the

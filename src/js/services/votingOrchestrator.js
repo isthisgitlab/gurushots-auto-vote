@@ -1,4 +1,3 @@
-// @ts-check
 /**
  * The voting-pass orchestration shared by BOTH API strategies
  * (strategies/real and mock/strategy.js): the mock runs the identical strategy

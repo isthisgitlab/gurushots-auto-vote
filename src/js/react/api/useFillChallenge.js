@@ -1,4 +1,3 @@
-// @ts-check
 import { useNamedIpcAction } from './useAsyncIpcAction';
 
 /**

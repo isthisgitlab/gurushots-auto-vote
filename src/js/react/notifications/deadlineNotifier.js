@@ -1,4 +1,3 @@
-// @ts-check
 /**
  * Renderer-side driver for the deadline-action OS notifications.
  *

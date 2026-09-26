@@ -1,4 +1,3 @@
-// @ts-check
 /** @import { Bankroll, Challenge, RankingEntry } from '../../../types/gurushots' */
 /** @import { SwapBackOffer } from './SwapEntryButton' */
 import { useTranslation } from '@/contexts/TranslationContext';

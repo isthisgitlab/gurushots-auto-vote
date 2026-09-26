@@ -1,4 +1,3 @@
-// @ts-check
 /**
  * GUI-side (WebView) resolvers for the shared cadence math
  * (src/js/scheduling/thresholdWindow.js), the async-IPC counterpart of

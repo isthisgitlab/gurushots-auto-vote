@@ -1,4 +1,3 @@
-// @ts-check
 /**
  * Challenge rules as a persisted, rotation-proof settings layer: reading and
  * saving the ordered rule list, and the rule-aware resolvers callers use —

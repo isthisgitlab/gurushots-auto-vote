@@ -1,4 +1,3 @@
-// @ts-check
 /**
  * GuruShots Auto Voter - Mock API client
  *

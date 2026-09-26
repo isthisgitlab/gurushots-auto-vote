@@ -1,4 +1,3 @@
-// @ts-check
 /**
  * CLI one-shot action commands — the parity of the GUI's per-card
  * buttons (boost / turbo / fill). Each reuses the exact code path the GUI

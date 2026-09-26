@@ -1,4 +1,3 @@
-// @ts-check
 /**
  * Absolute paths to the app's own files (HTML pages, the preload bundle,
  * assets, the dev model cache), resolved from the app root — the directory

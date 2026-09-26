@@ -195,7 +195,7 @@ jobs:
                   key: ttsc-plugins-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('pnpm-lock.yaml') }}
                   restore-keys: ttsc-plugins-${{ runner.os }}-${{ runner.arch }}-
 
-            # ttsc runs the type-check (JSDoc + checkJs opt-in) AND the
+            # ttsc runs the strict type-check (JSDoc, checkJs) AND the
             # @ttsc/lint pass (lint.config.ts) in one compile — a red run here
             # can be either a type error or an error-severity lint rule. The
             # band hint lives in the step name because Actions never shows

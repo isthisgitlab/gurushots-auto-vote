@@ -1,4 +1,3 @@
-// @ts-check
 /** @import { Challenge, RankingEntry, VoteImagesResponse } from '../types/gurushots' */
 /**
  * Rule math for the currency automation (automatic KEY unlock, photo SWAP and

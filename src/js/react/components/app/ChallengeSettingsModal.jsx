@@ -1,4 +1,3 @@
-// @ts-check
 import { useTranslation } from '@/contexts/TranslationContext';
 import { useSettingsSchema } from '@/api/useSettingsSchema';
 import { useIpcQuery } from '@/api/useIpcQuery';

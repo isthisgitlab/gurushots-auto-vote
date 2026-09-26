@@ -1,4 +1,3 @@
-// @ts-check
 /**
  * Auto-fill — the local challenge object as the fill paths see it: entry and
  * free-slot reads, reflecting a submit or a boost/turbo apply locally, and the

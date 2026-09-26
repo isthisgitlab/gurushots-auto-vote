@@ -1,4 +1,3 @@
-// @ts-check
 /**
  * Pure helpers over the named challenge-settings profiles map
  * (`challengeSettings.profiles`): caps, name normalization and lookup, and

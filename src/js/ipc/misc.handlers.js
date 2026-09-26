@@ -1,4 +1,3 @@
-// @ts-check
 /**
  * Small one-off IPC handlers: open-external-url, reload-window,
  * refresh-menu. They don't share much beyond living in the same

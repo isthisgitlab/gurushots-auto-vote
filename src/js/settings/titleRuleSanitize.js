@@ -1,4 +1,3 @@
-// @ts-check
 /**
  * Write-side sanitization of challenge rules (the persisted `titleRules`
  * list): the size caps, the inline-override allowlist, per-rule validation of

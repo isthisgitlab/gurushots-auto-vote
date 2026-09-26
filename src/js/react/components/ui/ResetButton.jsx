@@ -1,4 +1,3 @@
-// @ts-check
 import { StrokeIcon, ICON_PATHS } from './StrokeIcon';
 
 /**

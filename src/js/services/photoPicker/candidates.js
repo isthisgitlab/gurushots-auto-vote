@@ -1,4 +1,3 @@
-// @ts-check
 /**
  * Photo picker — candidate filtering and scoring: the hard filters
  * (must-include tags, letter prefix), the negated-subject exclusion, the

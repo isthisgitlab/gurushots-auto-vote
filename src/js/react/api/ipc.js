@@ -1,4 +1,3 @@
-// @ts-check
 /**
  * The renderer's one-shot calls and event subscriptions over the shell bridge
  * (`window.api`, generated from src/js/ipc/manifest.js by both the Electron

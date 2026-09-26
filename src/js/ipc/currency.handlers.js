@@ -1,4 +1,3 @@
-// @ts-check
 /**
  * IPC handlers for the bankroll-currency spends on an entered challenge:
  * key-unlock-boost, preview-swap-photo, swap-entry-photo, get-swap-backs,

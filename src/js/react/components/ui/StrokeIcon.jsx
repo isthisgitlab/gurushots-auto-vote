@@ -1,4 +1,3 @@
-// @ts-check
 /**
  * Outline-icon path data (Heroicons v1 outline, 24x24) for the glyphs drawn
  * with StrokeIcon. One `d` per glyph so a shape is never copy-pasted.

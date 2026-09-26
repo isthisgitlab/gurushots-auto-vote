@@ -1,4 +1,3 @@
-// @ts-check
 /**
  * Process-local cache of the latest active-challenge list: id -> title and
  * id -> match facts (tags, type, photo count, start/close time). Sole owner of

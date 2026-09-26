@@ -1,4 +1,3 @@
-// @ts-check
 /**
  * IPC handlers for direct user-triggered actions: authenticate,
  * play-auto-turbo, apply-turbo-to-entry, apply-boost-to-entry, and

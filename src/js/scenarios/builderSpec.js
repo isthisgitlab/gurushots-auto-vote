@@ -1,4 +1,3 @@
-// @ts-check
 /**
  * The scenario builder's form description: for every condition, action and
  * entry selector, which fields it has and what kind of input each needs. The

@@ -1,4 +1,3 @@
-// @ts-check
 /**
  * Auto-fill — the manual "Fill Now" path: one or all missing slots in a single
  * request, ignoring the autoFill toggle and the schedule.

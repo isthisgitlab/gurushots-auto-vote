@@ -1,4 +1,3 @@
-// @ts-check
 /**
  * Scenario runtime state: where each challenge is in its user-defined
  * scenario (settings/scenarios.js) — current phase, remembered photos, which

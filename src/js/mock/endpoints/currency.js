@@ -1,4 +1,3 @@
-// @ts-check
 /**
  * Mock counterpart to api/currency.js: the three bankroll spends
  * (/rest/key_unlock, /rest/swap, /rest/exposure_autofill). Stateless;

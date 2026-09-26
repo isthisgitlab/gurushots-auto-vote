@@ -1,4 +1,3 @@
-// @ts-check
 /**
  * @import { ComponentChildren } from 'preact'
  * @import { Challenge } from '../../../types/gurushots'

@@ -1,4 +1,3 @@
-// @ts-check
 /** @import { ChallengeMetadataEntry, MetadataFile, UpdateCheckData } from './types/stores' */
 import * as logger from './logger';
 import { formatTimeHMS } from './dateFormat';

@@ -1,4 +1,3 @@
-// @ts-check
 /**
  * Persisted first-seen challenge-title pins (`challengeSettings.titlePins`,
  * `{ [id]: title }`): an internal, automatically-maintained cache that defeats

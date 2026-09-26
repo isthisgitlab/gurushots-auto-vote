@@ -1,4 +1,3 @@
-// @ts-check
 /**
  * @import { ComponentChildren } from 'preact'
  * @import { Bankroll, Challenge, RankingTotal } from '../../../types/gurushots'

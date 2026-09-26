@@ -1,4 +1,3 @@
-// @ts-check
 /**
  * Mock counterpart to the auto-cycle boost (strategies/real/applyBoost.js)
  * and api/boost.js's entry-targeted boost.

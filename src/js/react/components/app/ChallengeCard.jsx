@@ -1,4 +1,3 @@
-// @ts-check
 /**
  * @import { Signal } from '@preact/signals'
  * @import { Bankroll, Challenge } from '../../../types/gurushots'

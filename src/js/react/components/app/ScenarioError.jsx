@@ -1,4 +1,3 @@
-// @ts-check
 import { useTranslation } from '@/contexts/TranslationContext';
 
 /** @import { ScenarioIssue } from '../../../settings/scenarioSchema' */

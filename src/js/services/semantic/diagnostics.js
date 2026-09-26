@@ -1,4 +1,3 @@
-// @ts-check
 import { createJsonStore } from '../../settings/storage';
 import * as runtime from '../../runtime';
 import * as settings from '../../settings';

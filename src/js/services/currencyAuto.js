@@ -1,4 +1,3 @@
-// @ts-check
 /**
  * Automatic spending of the bankroll currencies during a voting pass — the
  * automated counterpart of the card's manual Key / Swap / Fill buttons.

@@ -1,4 +1,3 @@
-// @ts-check
 /**
  * Mock counterpart to api/rewards.js: the finished-challenge and mission
  * prize reads and their claims.

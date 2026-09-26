@@ -1,4 +1,3 @@
-// @ts-check
 /**
  * CLI scenario commands — list, template, import (with the same preview and
  * --yes confirmation the GUI's import dialog has), export, rename, delete,

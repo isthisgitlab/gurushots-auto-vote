@@ -1,4 +1,3 @@
-// @ts-check
 /**
  * @import { Challenge } from '../../../types/gurushots'
  * @import { ChallengeCardView } from './ChallengeCard'

@@ -1,4 +1,3 @@
-// @ts-check
 /**
  * Pure helpers for the `type: 'time'` setting input. Stored value is seconds;
  * the GUI exposes hours+minutes fields. These helpers keep the conversion in

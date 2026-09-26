@@ -1,4 +1,3 @@
-// @ts-check
 /**
  * When each entry of a challenge entered it, so a boost can wait until its target
  * photo has been in the challenge for `boostFreshEntryWait` (a boost spent on a

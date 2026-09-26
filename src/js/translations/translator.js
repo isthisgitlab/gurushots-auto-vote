@@ -1,4 +1,3 @@
-// @ts-check
 /**
  * Translator core shared by every platform: the language tables, the key
  * lookup behind `t()`, and a per-context "current language".

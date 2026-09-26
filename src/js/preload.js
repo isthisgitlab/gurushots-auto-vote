@@ -1,4 +1,3 @@
-// @ts-check
 // Block service worker registration
 (() => {
     // Absent in some hosts, whatever the DOM typings claim.

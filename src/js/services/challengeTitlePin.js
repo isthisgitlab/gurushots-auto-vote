@@ -1,4 +1,3 @@
-// @ts-check
 /**
  * First-seen challenge-title pinning.
  *
@@ -63,9 +62,7 @@ const pinChallengeTitles = (challenges) => {
         return challenges;
     }
 
-    // Boundary cast: settings.js is not yet `// @ts-check`-typed, so its
-    // inferred return type is too narrow (see CLAUDE.md typing policy).
-    const pins = /** @type {Record<string, string>} */ (settings.getTitlePins());
+    const pins = settings.getTitlePins();
     /** @type {Record<string, string>} */
     const adds = {};
     const activeIds = new Set();

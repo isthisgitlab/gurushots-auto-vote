@@ -1,4 +1,3 @@
-// @ts-check
 /**
  * CLI string-to-value coercion shared between the in-app CLI
  * (`src/js/cli/cli.js`) and the standalone `scripts/settings-cli.js`.

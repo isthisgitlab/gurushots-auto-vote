@@ -1,4 +1,3 @@
-// @ts-check
 /**
  * State machine behind AutovoteContext. Pulled out so the React tree stays
  * a thin shell over a transition table and tests/inspection can target the

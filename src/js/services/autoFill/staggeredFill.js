@@ -1,4 +1,3 @@
-// @ts-check
 /**
  * Auto-fill — the cycle-driven, schedule-based fill: at most one photo per
  * scheduler cycle, spaced by the user's autoFillSchedule.

@@ -1,4 +1,3 @@
-// @ts-check
 /**
  * Persisted state for the paid-join flow, plus a cross-process unlock lock.
  *

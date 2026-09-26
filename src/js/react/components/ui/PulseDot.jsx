@@ -1,4 +1,3 @@
-// @ts-check
 /**
  * Small coloured status dot (DaisyUI `status`), optionally with a ping halo so
  * it catches the eye in a long list — used to mark an open boost (info) and

@@ -1,4 +1,3 @@
-// @ts-check
 import { AsyncActionButton } from './AsyncActionButton';
 import { StrokeIcon } from './StrokeIcon';
 

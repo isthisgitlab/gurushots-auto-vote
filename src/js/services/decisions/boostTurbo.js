@@ -1,4 +1,3 @@
-// @ts-check
 /** @import { Challenge } from '../../types/gurushots' */
 /**
  * Boost and turbo apply decisions, including the Emergency Fill override.

@@ -1,4 +1,3 @@
-// @ts-check
 /**
  * OS notifications for user-defined scenarios: the notices a scenario's
  * `notify` action (and a halt) leave in the challenge's scenario state

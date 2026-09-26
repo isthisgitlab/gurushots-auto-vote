@@ -1,4 +1,3 @@
-// @ts-check
 /** @import { Challenge, RankingEntry } from '../types/gurushots' */
 /**
  * Entry selectors: which of the member's entries a scenario condition or

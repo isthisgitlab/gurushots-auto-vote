@@ -1,4 +1,3 @@
-// @ts-check
 /**
  * Photo picker — the challenge-side word lists: lexical keywords, the pooled
  * semantic theme, the image model's subject words, and the server-side search

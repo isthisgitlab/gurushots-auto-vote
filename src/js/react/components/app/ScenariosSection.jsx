@@ -1,4 +1,3 @@
-// @ts-check
 import { useCallback, useEffect, useState } from 'react';
 import { useTranslation } from '@/contexts/TranslationContext';
 import { useScenarios } from '@/api/useScenarios';

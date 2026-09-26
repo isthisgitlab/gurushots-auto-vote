@@ -1,4 +1,3 @@
-// @ts-check
 /**
  * Pure, immutable edits of a scenario draft for the GUI builder. The builder
  * keeps the draft as a plain document and never validates it itself — the

@@ -1,4 +1,3 @@
-// @ts-check
 /**
  * Mock counterpart to api/turbo.js's apply and the real strategy's Turbo
  * mini-game (strategies/real/index.js#runTurboMiniGame).

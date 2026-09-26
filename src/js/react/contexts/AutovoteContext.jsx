@@ -1,4 +1,3 @@
-// @ts-check
 import { createContext, useContext, useReducer, useCallback, useEffect, useMemo, useRef } from 'react';
 import { createCadenceChain, DECISION_ERROR_MESSAGE, formatOversleptMessage } from '../../scheduling/cadenceChain';
 import * as foregroundService from '../../services/ForegroundServiceController';

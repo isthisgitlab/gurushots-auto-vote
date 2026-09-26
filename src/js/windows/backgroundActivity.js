@@ -1,4 +1,3 @@
-// @ts-check
 /**
  * Keeps the Electron main process schedulable while auto-vote is running.
  *

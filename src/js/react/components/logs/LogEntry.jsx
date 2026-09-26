@@ -1,4 +1,3 @@
-// @ts-check
 /** @import { GuiLogEntry } from '../../../logger' */
 /**
  * Severity → text color. Strict 4-value set matches logger.js.

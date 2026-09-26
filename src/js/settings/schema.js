@@ -1,4 +1,3 @@
-// @ts-check
 import { z } from 'zod';
 // Bounds live in the dependency-free limits.js so renderer-reachable modules
 // can read them without pulling zod in through this file. Re-exported below to

@@ -1,4 +1,3 @@
-// @ts-check
 /**
  * Auto-fill — schedule-row validation and the end-aligned threshold math that
  * the staggered fill trigger and the scheduler cadence share.

@@ -1,4 +1,3 @@
-// @ts-check
 /**
  * Per-challenge threshold and window resolution: the exposure triggers and
  * targets (with their `0`/null = "follow the trigger" sentinel), the

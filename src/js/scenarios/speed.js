@@ -1,4 +1,3 @@
-// @ts-check
 /**
  * Vote speed: how fast each entry is collecting votes, from the vote counts
  * the scenario runner samples once per pass into the challenge's scenario

@@ -1,4 +1,3 @@
-// @ts-check
 /**
  * Named challenge-settings profiles ("save this tactic, recall it later"):
  * list, save/overwrite, delete, apply to a challenge, and first-run seeding of

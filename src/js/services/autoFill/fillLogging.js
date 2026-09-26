@@ -1,4 +1,3 @@
-// @ts-check
 /**
  * Auto-fill — the user-facing explanations of a fill: why a submit was
  * rejected, why a hard filter relaxed to the full library, and why popularity

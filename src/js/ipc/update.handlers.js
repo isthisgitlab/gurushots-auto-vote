@@ -1,4 +1,3 @@
-// @ts-check
 /**
  * IPC handlers for the auto-updater. The AutoUpdater instance and the
  * main BrowserWindow reference live in index.js; we receive

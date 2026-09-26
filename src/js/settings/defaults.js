@@ -1,4 +1,3 @@
-// @ts-check
 /**
  * Default settings blob and the small value helpers every settings submodule
  * shares: the environment-aware default blob, the challengeSettings container

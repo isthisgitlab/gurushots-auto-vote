@@ -1,4 +1,3 @@
-// @ts-check
 /**
  * Prize-claim API calls (WEB profile), captured from the web app:
  *

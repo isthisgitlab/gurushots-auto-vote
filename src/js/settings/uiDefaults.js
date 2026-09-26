@@ -1,4 +1,3 @@
-// @ts-check
 /**
  * Defaults for the app-level (non-schema) settings the GUI's Settings
  * form edits. These keys live outside SETTINGS_SCHEMA (they are not

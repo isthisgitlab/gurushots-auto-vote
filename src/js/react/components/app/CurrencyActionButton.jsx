@@ -1,4 +1,3 @@
-// @ts-check
 /** @import { Bankroll, Challenge } from '../../../types/gurushots' */
 /**
  * A bankroll spend hook's state envelope (useKeyUnlock / useFillExposure).

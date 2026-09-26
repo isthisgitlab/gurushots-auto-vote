@@ -1,4 +1,3 @@
-// @ts-check
 import { useIpcQuery } from './useIpcQuery';
 
 /** @import { WindowApi } from '../../types/ipc' */

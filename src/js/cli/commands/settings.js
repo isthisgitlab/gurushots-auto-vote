@@ -1,4 +1,3 @@
-// @ts-check
 /**
  * CLI settings commands. Each function is a thin shell around the
  * settings facade; the CLI host (cli.js) handles argv parsing and

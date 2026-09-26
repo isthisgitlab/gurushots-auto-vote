@@ -1,4 +1,3 @@
-// @ts-check
 /**
  * Pure decision layer for the "deadline action coming up" OS notifications.
  *

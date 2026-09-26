@@ -1,4 +1,3 @@
-// @ts-check
 import { signal } from '@preact/signals';
 import { useRef, useEffect, useMemo } from 'react';
 import { formatTimeRemaining } from '@/utils/formatters';

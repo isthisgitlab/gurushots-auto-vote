@@ -1,4 +1,3 @@
-// @ts-check
 /**
  * Read-side resolution of challenge rules against a loaded settings object:
  * which rules match a challenge, the one profile they apply, the sparse value

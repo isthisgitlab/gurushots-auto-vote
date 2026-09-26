@@ -1,4 +1,3 @@
-// @ts-check
 /**
  * "Are you sure?" gate on quitting (or closing the main window) while
  * auto-vote is running and is about to boost a challenge.

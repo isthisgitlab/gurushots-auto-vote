@@ -1,4 +1,3 @@
-// @ts-check
 import { useEffect, useState } from 'react';
 import { nextWakeAt } from '../../scenarios/nextWake';
 import { useLatestRef } from '../hooks/useLatestRef';

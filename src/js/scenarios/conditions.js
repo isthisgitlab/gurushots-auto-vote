@@ -1,4 +1,3 @@
-// @ts-check
 /** @import { Challenge } from '../types/gurushots' */
 /**
  * Evaluates a scenario rule's conditions against the live challenge. Pure:

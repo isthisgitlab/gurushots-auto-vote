@@ -1,4 +1,3 @@
-// @ts-check
 /**
  * One upcoming deadline action, as useDeadlineActions returns it.
  *

@@ -1,4 +1,3 @@
-// @ts-check
 /**
  * IPC handlers for the log channel.
  *

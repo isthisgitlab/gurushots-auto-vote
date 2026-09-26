@@ -1,4 +1,3 @@
-// @ts-check
 /** @import { LogLine } from './LogEntry' */
 import { useTranslation } from '@/contexts/TranslationContext';
 import { LogEntry, LogsEmptyState } from '@/components/logs/LogEntry';

@@ -1,4 +1,3 @@
-// @ts-check
 /** @import { Bankroll, Challenge } from '../../../types/gurushots' */
 import { useState, useCallback, useEffect } from 'react';
 import { useTranslation } from '@/contexts/TranslationContext';

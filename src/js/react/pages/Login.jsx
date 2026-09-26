@@ -1,4 +1,3 @@
-// @ts-check
 /** @import { RendererGlobals } from '../../types/capacitor' */
 import { createRoot } from 'react-dom/client';
 import { useState, useEffect, useCallback } from 'react';

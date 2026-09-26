@@ -1,4 +1,3 @@
-// @ts-check
 /**
  * The scenario decision: given a validated scenario, a challenge's runtime
  * state and the live challenge, which rule (if any) fires now, from which

@@ -1,4 +1,3 @@
-// @ts-check
 /**
  * CLI join commands: `discover` lists un-joined ("open") challenges, and
  * `join <id> [--yes]` joins one. Paid joins (join_coins > 0) print the coin

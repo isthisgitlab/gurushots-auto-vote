@@ -1,4 +1,3 @@
-// @ts-check
 /**
  * Entry-slot addressing shared by every "which of my entries" setting
  * (turboImageIndex, boostImageIndex, autoSwapImageIndex). Pure and

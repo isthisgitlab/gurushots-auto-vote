@@ -1,4 +1,3 @@
-// @ts-check
 /** @import { RankingEntry } from '../../../types/gurushots' */
 import { useState } from 'react';
 import { useTranslation } from '@/contexts/TranslationContext';

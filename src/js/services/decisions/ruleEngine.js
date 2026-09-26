@@ -1,4 +1,3 @@
-// @ts-check
 /** @import { Challenge } from '../../types/gurushots' */
 /**
  * The shared voting-rule engine behind the auto- and manual-vote evaluators.

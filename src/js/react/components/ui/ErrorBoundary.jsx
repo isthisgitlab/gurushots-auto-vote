@@ -1,4 +1,3 @@
-// @ts-check
 import { Component } from 'react';
 import { rendererTranslator } from '../../../translations/renderer';
 import * as ipc from '@/api/ipc';

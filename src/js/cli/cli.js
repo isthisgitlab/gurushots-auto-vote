@@ -1,5 +1,4 @@
 #!/usr/bin/env node
-// @ts-check
 
 /**
  * GuruShots Auto Voter - CLI Entry Point

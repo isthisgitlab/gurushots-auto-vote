@@ -1,4 +1,3 @@
-// @ts-check
 /**
  * Challenge rules: condition matching and the default rule order.
  *

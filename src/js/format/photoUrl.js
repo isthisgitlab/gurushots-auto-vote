@@ -1,4 +1,3 @@
-// @ts-check
 /**
  * GuruShots photo CDN URL builder.
  *

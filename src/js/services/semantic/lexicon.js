@@ -1,4 +1,3 @@
-// @ts-check
 /**
  * Static word-vector lexicon backend.
  *

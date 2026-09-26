@@ -1,4 +1,3 @@
-// @ts-check
 /**
  * Scenario durations: plain seconds (a non-negative integer) or a string of
  * `<number><unit>` parts — `"90m"`, `"5d"`, `"1d 6h"`, `"4m 30s"` — so a

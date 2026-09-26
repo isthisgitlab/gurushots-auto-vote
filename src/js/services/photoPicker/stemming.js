@@ -1,4 +1,3 @@
-// @ts-check
 /**
  * Photo picker — the text normalisation every matcher shares: the photography
  * stopword list, the light stemmer, the bounded tokeniser, stem equivalence

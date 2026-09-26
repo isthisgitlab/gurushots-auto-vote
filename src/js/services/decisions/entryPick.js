@@ -1,4 +1,3 @@
-// @ts-check
 /** @import { Challenge } from '../../types/gurushots' */
 /**
  * Boost/turbo entry selection: which entry a boost or turbo lands on, never

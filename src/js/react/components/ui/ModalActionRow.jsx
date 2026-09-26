@@ -1,4 +1,3 @@
-// @ts-check
 import { useTranslation } from '@/contexts/TranslationContext';
 import { ResetIcon } from './ResetButton';
 import { StrokeIcon, ICON_PATHS } from './StrokeIcon';

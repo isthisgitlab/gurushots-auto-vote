@@ -1,4 +1,3 @@
-// @ts-check
 /**
  * Mock counterpart to api/tags.js: the member identity read and tag
  * autocomplete over the mock library's tags.

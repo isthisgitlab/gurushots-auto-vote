@@ -1,4 +1,3 @@
-// @ts-check
 import { useCallback } from 'react';
 import { useIpcQuery } from './useIpcQuery';
 import * as ipc from './ipc';

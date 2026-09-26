@@ -1,4 +1,3 @@
-// @ts-check
 /**
  * IPC handlers for everything settings-shaped: load/save, schema,
  * boost thresholds, per-challenge overrides, and the bulk-registered
