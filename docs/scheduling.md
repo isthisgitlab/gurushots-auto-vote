@@ -14,7 +14,7 @@ re-introducing a separate boundary-switch timer per host.
 lastMinuteCheckMinutes, minGapMs, resolveScheduledFill?, resolveFinalWindowTopUp?,
 resolveBoostPrefill?, resolveCurrencyAuto?, resolveScenarioWake?, timezone? })` returns
 `{ delayMs, mode, nextEntry, nextScheduled, nextFinalWindowTopUp, nextBoostPrefill,
-nextCurrencyRule, nextScenarioWake }`:
+nextCurrencyRule, nextScenarioWake, nextBoostHold }`:
 
 - **last-minute**: a challenge is already inside its `lastMinuteThreshold`
   window → fixed `lastMinuteCheckMinutes` cadence.
@@ -31,6 +31,14 @@ nextCurrencyRule, nextScenarioWake }`:
 - **pre-boost**: the soonest upcoming pre-boost fill window start (see below)
   is closer than the random delay and every other cap → wait is capped to that
   start so a cycle lands when the fill opens, while the Boost is still unspent.
+- **boost-hold**: a boost the voting pass held for a fresh photo
+  (`boostFreshEntryWait`) becomes due. The pass marks the release instant on
+  the challenge (`boostHoldUntil`) in the list it returns, and the chain hands
+  that list to the decision, so no resolver is involved. This is the one cap
+  that also shortens the **last-minute** cadence, because a hold is usually
+  released inside the final stretch. A list the chain fetched fresh (the pass
+  returned none) carries no holds; the boost then goes on the next ordinary
+  cycle.
 - **currency-rule**: the soonest opening of an enabled automatic key / swap /
   fill rule (`voting/currencyAuto.js` `ruleOpensAt`) → wait is capped to it.
   Unlike the modes above it considers every still-open challenge, flash

@@ -54,6 +54,8 @@ const mockVotingLogic = {
     shouldApplyBoost: jest.fn(),
     resolveBoostFillNewMode: jest.fn(() => 'no'),
     getEffectiveBoostTime: jest.fn(),
+    pickBoostEntry: jest.fn(() => null),
+    getBoostHoldUntil: jest.fn(() => null),
     evaluateVotingDecision: jest.fn(),
     shouldPlayAutoTurbo: jest.fn(() => false),
     shouldApplyTurbo: jest.fn(() => ({ apply: false, imageId: null, reason: 'mocked' })),

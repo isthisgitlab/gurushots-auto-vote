@@ -161,6 +161,9 @@ export const app = {
         'Atsevišķs logs Boost, kas atvērts ar atslēgu — tam nav sava taimera. Tā kā tas nebeidzas, to pielieto tikai tad, kad līdz izaicinājuma beigām atlicis šis laiks, lai tas nostrādātu pēc iespējas vēlāk. Iestatījums “Boost laiks” uz šiem neattiecas. 0 = izslēgts.',
     keyUnlockedBoostTimeHelp:
         'Attiecas tikai uz Boost, kas atvērts ar atslēgu (bez sava taimera). Iestati 0, lai to nekad automātiski nepielietotu. Šis ir atsevišķs pulkstenis no “Boost laiks” — tie viens otru neaizvieto. Tāpat kā citos laika iestatījumos, 0 nozīmē “izslēgts”.',
+    boostFreshEntryWait: 'Gaidīt pirms jauna foto Boost',
+    boostFreshEntryWaitDesc:
+        'Boost tiek aizturēts, līdz foto, uz kuru tas nonāks, ir izaicinājumā vismaz šo laiku, jo Boost uzreiz pēc foto iesniegšanas lielākoties aiziet zudumā. Ja ieslēgts “Boost jaunam iesniegtam foto”, foto tiek iesniegts vispirms un saņem Boost, kad šis laiks pagājis. Boost nekad netiek aizturēts pēc tā termiņa. 0 = Boost uzreiz.',
     voteBeforeBoost: 'Uzpildīt redzamību pirms Boost',
     voteBeforeBoostDesc:
         'Īsu brīdi pirms Boost automātiskās pielietošanas nobalso šo izaicinājumu līdz 100% redzamībai, lai Boost nostrādātu uz pilnībā redzama foto, nevis uz tāda, kura redzamība jau sarukusi.',

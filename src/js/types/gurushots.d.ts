@@ -131,6 +131,12 @@ export interface Challenge {
     swap_locked?: boolean;
     top_photo_enable?: boolean;
     member?: ChallengeMember;
+    /**
+     * App-set, never from the API: the instant (Unix seconds) a boost the voting
+     * pass held for a fresh photo becomes due. Rides the pass's returned list into
+     * the cadence decision so the next cycle lands on it.
+     */
+    boostHoldUntil?: UnixSeconds;
 }
 
 /** get_my_active_challenges. `fetchFailed` marks a failed request (empty list). */

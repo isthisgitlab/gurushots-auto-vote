@@ -15,6 +15,8 @@ jest.mock('../../src/js/services/VotingLogic', () => ({
     orderDeadlineActions: jest.fn(() => []),
     shouldApplyBoost: jest.fn(() => false),
     resolveBoostFillNewMode: jest.fn(() => 'no'),
+    pickBoostEntry: jest.fn(() => null),
+    getBoostHoldUntil: jest.fn(() => null),
     shouldApplyTurbo: jest.fn(() => ({ apply: false })),
     getEffectiveBoostTime: jest.fn(() => 600),
     getEffectiveKeyUnlockedBoostTime: jest.fn(() => 900),
@@ -41,6 +43,7 @@ const votingLogic = require('../../src/js/services/VotingLogic');
 const autoFill = require('../../src/js/services/autoFill');
 const { runVotingPass } = require('../../src/js/services/votingOrchestrator');
 const { buildChallenge } = require('../helpers/challengeFixtures');
+const { createMemoryEntryAgeLedger } = require('../../src/js/entryAgeStore');
 
 const NOW = Math.floor(Date.now() / 1000);
 
@@ -85,6 +88,8 @@ beforeEach(() => {
     votingLogic.orderDeadlineActions.mockReturnValue([]);
     votingLogic.shouldApplyBoost.mockReturnValue(false);
     votingLogic.resolveBoostFillNewMode.mockReturnValue('no');
+    votingLogic.pickBoostEntry.mockReturnValue(null);
+    votingLogic.getBoostHoldUntil.mockReturnValue(null);
     votingLogic.shouldApplyTurbo.mockReturnValue({ apply: false });
     votingLogic.shouldPlayAutoTurbo.mockReturnValue(false);
     votingLogic.evaluateVotingDecision.mockReturnValue({
@@ -189,10 +194,24 @@ describe('runBoost — fill-new fallbacks', () => {
         const api = makeApi([withBoost({ state: 'AVAILABLE', timeout: NOW + 60 })]);
         await run(api);
         expect(api.applyBoost).not.toHaveBeenCalled();
-        expect(log.endOperation).toHaveBeenCalledWith(
-            'boost-101',
-            null,
-            'boost fill-new unavailable (no-eligible); only entry already has Turbo — boost skipped',
+        expect(log.startOperation).not.toHaveBeenCalledWith('boost-101', expect.anything());
+        expect(messages('info')).toEqual(
+            expect.arrayContaining([
+                expect.stringContaining(
+                    'boost fill-new unavailable (no-eligible); only entry already has Turbo — boost skipped',
+                ),
+            ]),
+        );
+    });
+
+    test('a challenge that left the active list skips the boost', async () => {
+        votingLogic.resolveBoostFillNewMode.mockReturnValue('always');
+        autoFill.submitNewEntryForAction.mockResolvedValue({ ok: false, reason: 'challenge-gone' });
+        const api = makeApi([withBoost({ state: 'AVAILABLE', timeout: NOW + 60 })]);
+        await run(api);
+        expect(api.applyBoost).not.toHaveBeenCalled();
+        expect(messages('info')).toEqual(
+            expect.arrayContaining([expect.stringContaining('challenge left the active list — boost skipped')]),
         );
     });
 
@@ -207,6 +226,69 @@ describe('runBoost — fill-new fallbacks', () => {
                 expect.stringContaining('boost fill-new unavailable (no-slots); boosting existing entry'),
             ]),
         );
+    });
+});
+
+describe('runBoost — fresh-entry hold', () => {
+    const withEntries = (ids) =>
+        withBoost(
+            { state: 'AVAILABLE_KEY' },
+            { member: { boost: { state: 'AVAILABLE_KEY' }, ranking: { entries: ids.map((id) => ({ id })) } } },
+        );
+
+    beforeEach(() => {
+        votingLogic.orderDeadlineActions.mockReturnValue([{ action: 'boost' }]);
+        votingLogic.shouldApplyBoost.mockReturnValue(true);
+    });
+
+    test('holds a boost whose target entered too recently and marks the release instant for the scheduler', async () => {
+        const entryAges = createMemoryEntryAgeLedger();
+        entryAges.observe(withEntries(['old']), NOW - 600);
+        votingLogic.pickBoostEntry.mockReturnValue({ id: 'fresh' });
+        votingLogic.getBoostHoldUntil.mockReturnValue(NOW + 150);
+        const api = makeApi([withEntries(['old', 'fresh'])]);
+        const result = await run(api, { entryAges });
+        expect(votingLogic.getBoostHoldUntil).toHaveBeenCalledWith(expect.anything(), NOW, NOW);
+        expect(api.applyBoost).not.toHaveBeenCalled();
+        expect(result.challenges[0].boostHoldUntil).toBe(NOW + 150);
+        expect(messages('info')).toEqual(
+            expect.arrayContaining([
+                expect.stringMatching(/Boost held .* photo fresh entered the challenge too recently/),
+            ]),
+        );
+    });
+
+    test('fill-new submits once, holds, then boosts that same photo on a later pass', async () => {
+        const entryAges = createMemoryEntryAgeLedger();
+        votingLogic.resolveBoostFillNewMode.mockReturnValue('always');
+        autoFill.submitNewEntryForAction.mockResolvedValue({ ok: true, imageId: 'new1', reason: 'submitted' });
+        votingLogic.getBoostHoldUntil.mockReturnValue(NOW + 150);
+        const first = makeApi([withEntries(['e1'])]);
+        await run(first, { entryAges });
+        expect(first.applyBoostToEntry).not.toHaveBeenCalled();
+        expect(entryAges.pending('101')).toBe('new1');
+
+        // The listing lags the submit: the pending photo is missing from one poll.
+        autoFill.submitNewEntryForAction.mockClear();
+        await run(makeApi([withEntries(['e1'])]), { entryAges });
+        expect(autoFill.submitNewEntryForAction).not.toHaveBeenCalled();
+        expect(entryAges.pending('101')).toBe('new1');
+
+        votingLogic.getBoostHoldUntil.mockReturnValue(null);
+        const second = makeApi([withEntries(['e1', 'new1'])]);
+        await run(second, { entryAges });
+        expect(autoFill.submitNewEntryForAction).not.toHaveBeenCalled();
+        expect(second.applyBoostToEntry).toHaveBeenCalledWith('101', 'new1', 'tok');
+        expect(entryAges.pending('101')).toBeNull();
+    });
+
+    test('no target entry, or no ledger, never holds', async () => {
+        votingLogic.getBoostHoldUntil.mockReturnValue(NOW + 150);
+        const api = makeApi([withEntries(['e1'])]);
+        await run(api, { entryAges: createMemoryEntryAgeLedger() });
+        await run(api);
+        expect(votingLogic.getBoostHoldUntil).not.toHaveBeenCalled();
+        expect(api.applyBoost).toHaveBeenCalledTimes(2);
     });
 });
 

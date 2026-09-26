@@ -33,7 +33,7 @@ import { nextWakeAt } from '../scenarios/nextWake';
 
 /**
  * Which boundary (if any) decided the next cycle's delay.
- * @typedef {'last-minute'|'approaching'|'scheduled'|'pre-final-window'|'pre-boost'|'currency-rule'|'scenario'|'normal'} CadenceMode
+ * @typedef {'last-minute'|'approaching'|'scheduled'|'pre-final-window'|'pre-boost'|'boost-hold'|'currency-rule'|'scenario'|'normal'} CadenceMode
  */
 
 /**
@@ -52,6 +52,10 @@ import { nextWakeAt } from '../scenarios/nextWake';
 
 /**
  * @typedef {{challengeId: Challenge['id'], challengeTitle: string, startTime: number, phase: string}} ScenarioWakeStart
+ */
+
+/**
+ * @typedef {{challengeId: Challenge['id'], challengeTitle: string, startTime: number}} BoostHoldEnd
  */
 
 /**
@@ -347,6 +351,30 @@ async function soonestScenarioWake(challenges, now, resolveScenarioWake) {
 }
 
 /**
+ * Soonest instant after `now` at which a boost the voting pass held for a fresh
+ * photo becomes due (`boostHoldUntil`, set by the pass on the list it returns),
+ * across every still-open challenge. Needs no resolver: the hold is live pass
+ * state, not a setting. A list fetched fresh by the scheduler carries no holds,
+ * so the held boost then goes on the next ordinary cycle.
+ *
+ * @param {Challenge[]} challenges
+ * @param {number} now - Unix timestamp (seconds)
+ * @returns {BoostHoldEnd|null}
+ */
+function soonestBoostHoldEnd(challenges, now) {
+    /** @type {BoostHoldEnd|null} */
+    let best = null;
+    for (const challenge of Array.isArray(challenges) ? challenges : []) {
+        const startTime = Number(challenge?.boostHoldUntil);
+        if (!Number.isFinite(startTime) || Number(challenge.close_time) <= now) continue;
+        if (isSoonerUpcomingStart(startTime, now, best)) {
+            best = { challengeId: challenge.id, challengeTitle: challengeLabel(challenge), startTime };
+        }
+    }
+    return best;
+}
+
+/**
  * Resolve each eligible challenge's per-challenge threshold ONCE. Every
  * threshold question (in-window? next entry? next delay?) is then answered from
  * this single resolved snapshot — important because on the WebView each
@@ -443,6 +471,7 @@ async function isAnyChallengeInThresholdWindow(challenges, now, resolveThreshold
  * @property {LeadWindowStart|null} nextBoostPrefill
  * @property {CurrencyRuleStart|null} nextCurrencyRule
  * @property {ScenarioWakeStart|null} nextScenarioWake
+ * @property {BoostHoldEnd|null} nextBoostHold
  */
 
 /**
@@ -527,17 +556,24 @@ async function computeNextCycleDelayMs(
     },
 ) {
     const { eligible, thresholds } = await resolveEligibleThresholds(challenges, now, resolveThreshold);
+    // A held boost caps even the last-minute cadence: it is typically released
+    // inside the final stretch, where one fast tick late still wastes boost time.
+    const nextBoostHold = soonestBoostHoldEnd(challenges, now);
 
     if (anyInWindow(eligible, thresholds, now)) {
+        /** @type {{delayMs: number, mode: CadenceMode}} */
+        const fast = { delayMs: Math.max(minGapMs, lastMinuteCheckMinutes * 60_000), mode: 'last-minute' };
+        if (nextBoostHold) capCadenceToBoundary(fast, nextBoostHold.startTime, now, minGapMs, 'boost-hold');
         return {
-            delayMs: Math.max(minGapMs, lastMinuteCheckMinutes * 60_000),
-            mode: 'last-minute',
+            delayMs: fast.delayMs,
+            mode: fast.mode,
             nextEntry: null,
             nextScheduled: null,
             nextFinalWindowTopUp: null,
             nextBoostPrefill: null,
             nextCurrencyRule: null,
             nextScenarioWake: null,
+            nextBoostHold,
         };
     }
 
@@ -567,6 +603,7 @@ async function computeNextCycleDelayMs(
         ? await soonestBoostPrefillStart(eligible, now, resolveBoostPrefill)
         : null;
     if (nextBoostPrefill) capTo(nextBoostPrefill.startTime, 'pre-boost');
+    if (nextBoostHold) capTo(nextBoostHold.startTime, 'boost-hold');
 
     // Currency rules consider every still-open challenge (flash included), not
     // just the threshold-eligible set.
@@ -590,6 +627,7 @@ async function computeNextCycleDelayMs(
         nextBoostPrefill,
         nextCurrencyRule,
         nextScenarioWake,
+        nextBoostHold,
     };
 }
 
@@ -601,4 +639,5 @@ export {
     soonestBoostPrefillStart,
     soonestCurrencyRuleStart,
     soonestScenarioWake,
+    soonestBoostHoldEnd,
 };

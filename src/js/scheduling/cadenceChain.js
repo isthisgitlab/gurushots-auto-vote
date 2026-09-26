@@ -156,6 +156,8 @@ const describeBoundaryCadence = (decision, waitMs) => {
             return `⏰ Approaching scheduled fill for "${decision.nextScheduled?.challengeTitle}" (${decision.nextScheduled?.form}) — ${inSeconds}`;
         case 'pre-boost':
             return `⏰ Approaching pre-boost fill for "${decision.nextBoostPrefill?.challengeTitle}" — ${inSeconds} (capped to the ${decision.nextBoostPrefill?.leadMin}m pre-boost boundary)`;
+        case 'boost-hold':
+            return `⏰ Held boost for "${decision.nextBoostHold?.challengeTitle}" becomes due — ${inSeconds}`;
         case 'currency-rule':
             return `⏰ Approaching automatic ${decision.nextCurrencyRule?.action} rule for "${decision.nextCurrencyRule?.challengeTitle}" — ${inSeconds}`;
         case 'scenario':
@@ -299,7 +301,7 @@ const decideNextWaitOrFallBack = async (deps, prefetched, previousCycleStartMs) 
  * @param {Object} deps.log - host log adapter
  * @param {(mode:CadenceMode, message:string)=>(void|Promise<void>)} deps.log.cadence -
  *   receives every cadence decision line (modes: normal / last-minute /
- *   scheduled / pre-final-window / pre-boost / currency-rule / scenario /
+ *   scheduled / pre-final-window / pre-boost / boost-hold / currency-rule / scenario /
  *   approaching); a host may drop
  *   modes it never logged
  * @param {(error:unknown)=>(void|Promise<void>)} deps.log.decisionError - decision

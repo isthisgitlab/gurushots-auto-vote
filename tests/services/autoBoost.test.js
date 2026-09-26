@@ -238,3 +238,44 @@ describe('shouldApplyBoost — key-unlocked window', () => {
         expect(VotingLogic.shouldApplyBoost(timerBased, now)).toBe(true);
     });
 });
+
+describe('getBoostHoldUntil — fresh-entry wait', () => {
+    const now = 1_800_000_000;
+    const keyChallenge = (closeIn = 900) =>
+        buildChallenge({ id: '777', close_time: now + closeIn, member: { boost: { state: 'AVAILABLE_KEY' } } });
+
+    beforeEach(() => mockSettings({ boostFreshEntryWait: 180 }));
+
+    test('holds until the target has been in the challenge the configured time', () => {
+        expect(VotingLogic.getBoostHoldUntil(keyChallenge(), now - 30, now)).toBe(now + 150);
+    });
+
+    test('boosts now once the wait has passed, or when the entry time is unknown', () => {
+        expect(VotingLogic.getBoostHoldUntil(keyChallenge(), now - 180, now)).toBeNull();
+        expect(VotingLogic.getBoostHoldUntil(keyChallenge(), 0, now)).toBeNull();
+        expect(VotingLogic.getBoostHoldUntil(keyChallenge(), null, now)).toBeNull();
+    });
+
+    test('0 (or an unusable value) turns the wait off', () => {
+        mockSettings({ boostFreshEntryWait: 0 });
+        expect(VotingLogic.getBoostHoldUntil(keyChallenge(), now, now)).toBeNull();
+        mockSettings({ boostFreshEntryWait: undefined });
+        expect(VotingLogic.getBoostHoldUntil(keyChallenge(), now, now)).toBeNull();
+    });
+
+    test('never holds a key-unlocked boost past a minute before close', () => {
+        expect(VotingLogic.getBoostHoldUntil(keyChallenge(240), now, now)).toBe(now + 180);
+        expect(VotingLogic.getBoostHoldUntil(keyChallenge(239), now, now)).toBeNull();
+    });
+
+    test('never holds a timer boost past a minute before its own timeout', () => {
+        const timer = (timeout) =>
+            buildChallenge({
+                id: '777',
+                close_time: now + 7200,
+                member: { boost: { state: 'AVAILABLE', timeout: now + timeout } },
+            });
+        expect(VotingLogic.getBoostHoldUntil(timer(240), now, now)).toBe(now + 180);
+        expect(VotingLogic.getBoostHoldUntil(timer(200), now, now)).toBeNull();
+    });
+});

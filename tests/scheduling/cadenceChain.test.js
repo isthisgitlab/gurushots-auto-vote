@@ -409,6 +409,19 @@ describe('createCadenceChain', () => {
         expect(deps.log.cadence).toHaveBeenCalledWith('pre-boost', expect.stringContaining('15m pre-boost boundary'));
     });
 
+    test('boost-hold mode lands the next cycle on a held boost and says so', async () => {
+        const deps = makeDeps();
+        const chain = createCadenceChain(deps);
+        const now = Math.floor(Date.now() / 1000);
+        await chain.scheduleNext([
+            { id: 9, title: 'Held Boost', type: 'regular', close_time: now + 7200, boostHoldUntil: now + 100 },
+        ]);
+        expect(deps.log.cadence).toHaveBeenCalledWith(
+            'boost-hold',
+            expect.stringContaining('Held boost for "Held Boost" becomes due'),
+        );
+    });
+
     test('decision error → decisionError log + fallback to the plain random cadence', async () => {
         const deps = makeDeps();
         const boom = new Error('decision boom');

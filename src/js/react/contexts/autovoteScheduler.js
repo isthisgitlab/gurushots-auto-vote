@@ -110,7 +110,7 @@ export const resolveScenarioWake = async (challengeId) => {
  * @param {Array} challenges
  * @param {number} now - Unix timestamp (seconds)
  * @param {{normalDelayMs:number, lastMinuteCheckMinutes:number, minGapMs:number, timezone?:(string|null)}} opts
- * @returns {Promise<{delayMs:number, mode:'last-minute'|'approaching'|'scheduled'|'pre-final-window'|'pre-boost'|'currency-rule'|'scenario'|'normal', nextEntry:(object|null), nextScheduled:(object|null), nextFinalWindowTopUp:(object|null), nextBoostPrefill:(object|null), nextCurrencyRule:(object|null), nextScenarioWake:(object|null)}>}
+ * @returns {Promise<{delayMs:number, mode:'last-minute'|'approaching'|'scheduled'|'pre-final-window'|'pre-boost'|'boost-hold'|'currency-rule'|'scenario'|'normal', nextEntry:(object|null), nextScheduled:(object|null), nextFinalWindowTopUp:(object|null), nextBoostPrefill:(object|null), nextCurrencyRule:(object|null), nextScenarioWake:(object|null), nextBoostHold:(object|null)}>}
  */
 export async function computeNextCycleDelayMs(
     challenges,

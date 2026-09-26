@@ -505,6 +505,19 @@ const SETTINGS_SCHEMA = {
         description: 'app.keyUnlockedBoostTimeDesc',
         helpKey: 'app.keyUnlockedBoostTimeHelp',
     },
+    // A boost spent on a photo the moment it enters the challenge gets few votes, so the
+    // boost waits until its target has been in the challenge this long. Measured from when
+    // the app first saw the photo (its own submit, or the first poll after a manual one).
+    boostFreshEntryWait: {
+        type: 'time', // hours/minutes input, stored as seconds
+        default: 180, // 3 minutes in seconds
+        perChallenge: true,
+        validation: nonNegNumber,
+        validationOrder: 1,
+        group: 'boost',
+        label: 'app.boostFreshEntryWait',
+        description: 'app.boostFreshEntryWaitDesc',
+    },
     boostImageIndex: {
         type: 'number',
         default: 1,

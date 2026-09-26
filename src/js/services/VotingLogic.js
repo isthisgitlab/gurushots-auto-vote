@@ -51,6 +51,7 @@ export const pickBoostEntry = entryPick.pickBoostEntry;
 export const resolveBoostFillNewMode = entryPick.resolveBoostFillNewMode;
 export const isWithinEmergencyWindow = boostTurbo.isWithinEmergencyWindow;
 export const shouldApplyBoost = boostTurbo.shouldApplyBoost;
+export const getBoostHoldUntil = boostTurbo.getBoostHoldUntil;
 export const isBoostWindowOpen = boostTurbo.isBoostWindowOpen;
 export const getEffectiveTurboTime = thresholds.getEffectiveTurboTime;
 export const shouldPlayAutoTurbo = boostTurbo.shouldPlayAutoTurbo;

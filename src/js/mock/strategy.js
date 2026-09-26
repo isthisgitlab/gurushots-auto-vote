@@ -18,6 +18,7 @@ import { runJoinPass, joinChallengeSingle } from '../services/joinChallenges';
 import { runClaimPass } from '../services/autoClaim';
 import { mockSwapBackLedger } from '../swapBackStore';
 import { createMemoryAutoSpendLedger } from '../currencyAutoStore';
+import { createMemoryEntryAgeLedger } from '../entryAgeStore';
 import { mockScenarioStateLedger } from '../scenarioStateStore';
 import { mockMethod } from './simulate';
 
@@ -29,6 +30,7 @@ const mockEntryTracker = createMemoryEntryTracker();
 
 // In-memory automatic-fill counter for the mock pass (process lifetime).
 const mockAutoSpendLedger = createMemoryAutoSpendLedger();
+const mockEntryAgeLedger = createMemoryEntryAgeLedger();
 
 // Endpoints runVotingPass reads off `api`.
 const VOTING_PASS_ENDPOINTS = /** @type {const} */ ([
@@ -184,6 +186,8 @@ const createMockStrategy = (client) => {
             // never match real ones, so persisting mock entry snapshots would
             // accumulate junk in the user's real metadata.json that nothing prunes.
             entryTracker: mockEntryTracker,
+            // In-memory: mock mode must never touch the real entryAges file.
+            entryAges: mockEntryAgeLedger,
             // Short fixed spacing — mock cycles should stay fast.
             interChallengeDelay: () => 500,
             // Mock spends over the mock endpoints, with in-memory ledgers — mock

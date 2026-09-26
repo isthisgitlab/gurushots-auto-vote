@@ -104,6 +104,43 @@ const shouldApplyBoost = (challenge, now, options = {}) => {
 };
 
 /**
+ * Seconds before the boost's deadline by which a held boost must have been
+ * released: one last-minute poll, so the cycle that releases it still lands
+ * before the boost expires (timer boost) or the challenge closes (key-unlocked).
+ */
+const BOOST_HOLD_MARGIN_SEC = 60;
+
+/**
+ * When a due boost must wait for its target photo: the instant that photo has
+ * been in the challenge `boostFreshEntryWait` seconds, or null to boost now.
+ * A boost spent on a photo the moment it is entered gets few votes.
+ *
+ * Never holds a boost it could lose: when the wait would not end
+ * BOOST_HOLD_MARGIN_SEC before the boost's own deadline (its timeout for a timer
+ * boost, the close time for a key-unlocked one), the boost goes now. An unknown
+ * entry time (null, or 0 = already there when the app first saw the challenge)
+ * never holds.
+ * @param {Challenge} challenge
+ * @param {number|null} enteredAt - when the target entry entered (Unix seconds)
+ * @param {number} now - Unix timestamp in seconds
+ * @returns {number|null}
+ */
+const getBoostHoldUntil = (challenge, enteredAt, now) => {
+    const waitSec = settings.getEffectiveSetting('boostFreshEntryWait', challenge.id.toString());
+    if (!Number.isFinite(waitSec) || waitSec <= 0 || !Number.isFinite(enteredAt) || Number(enteredAt) <= 0) {
+        return null;
+    }
+    const holdUntil = Number(enteredAt) + waitSec;
+    if (holdUntil <= now) return null;
+    const timeout = challenge.member?.boost?.timeout;
+    const deadline =
+        challenge.member?.boost?.state === 'AVAILABLE' && typeof timeout === 'number' && timeout > 0
+            ? timeout
+            : Number(challenge.close_time);
+    return holdUntil <= deadline - BOOST_HOLD_MARGIN_SEC ? holdUntil : null;
+};
+
+/**
  * Returns true while the boost window is currently usable (state AVAILABLE
  * with an active timer, or AVAILABLE_KEY / AVAILABLE without timeout).
  * Used by shouldApplyBoost (its emergency path) and describeDeadlineActions
@@ -222,4 +259,11 @@ const shouldApplyTurbo = (challenge, now, options = {}) => {
     return { apply: true, imageId: existingImageId, fillNew: false, reason: 'eligible' };
 };
 
-export { isWithinEmergencyWindow, shouldApplyBoost, isBoostWindowOpen, shouldPlayAutoTurbo, shouldApplyTurbo };
+export {
+    isWithinEmergencyWindow,
+    shouldApplyBoost,
+    getBoostHoldUntil,
+    isBoostWindowOpen,
+    shouldPlayAutoTurbo,
+    shouldApplyTurbo,
+};

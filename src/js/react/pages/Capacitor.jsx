@@ -19,6 +19,7 @@ import { initializeMetadataAsync, flushMetadataWrites } from '../../metadata';
 import { initializeJoinStateAsync, flushJoinStateWrites } from '../../joinStateStore';
 import { initializeSwapBackAsync, flushSwapBackWrites } from '../../swapBackStore';
 import { initializeAutoSpendAsync, flushAutoSpendWrites } from '../../currencyAutoStore';
+import { initializeEntryAgesAsync, flushEntryAgeWrites } from '../../entryAgeStore';
 import { initializeScenarioStateAsync, flushScenarioStateWrites } from '../../scenarioStateStore';
 import { initializeDiagnosticsAsync, flushDiagnosticsWrites } from '../../services/semantic/diagnostics';
 import { isCapacitor } from '../../runtime';
@@ -65,6 +66,8 @@ const bootstrap = async () => {
         await initializeSwapBackAsync();
         // Automatic exposure-fill counts (the per-challenge fill cap).
         await initializeAutoSpendAsync();
+        // When each entry entered its challenge (the boost fresh-entry wait).
+        await initializeEntryAgesAsync();
         // Where each challenge is in its user-defined scenario (phase, memory).
         await initializeScenarioStateAsync();
         await initializeDiagnosticsAsync();
@@ -80,6 +83,7 @@ const bootstrap = async () => {
                 void flushJoinStateWrites();
                 void flushSwapBackWrites();
                 void flushAutoSpendWrites();
+                void flushEntryAgeWrites();
                 void flushScenarioStateWrites();
                 void flushDiagnosticsWrites();
             } catch {

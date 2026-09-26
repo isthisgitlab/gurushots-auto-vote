@@ -22,6 +22,7 @@ import { keyUnlock, swapPhoto, exposureAutofill } from '../../api/currency';
 import { cleanupStaleMetadata } from '../../metadata';
 import { swapBackLedger } from '../../swapBackStore';
 import { autoSpendLedger } from '../../currencyAutoStore';
+import { entryAgeLedger } from '../../entryAgeStore';
 import { scenarioStateLedger, refreshScenarioStateAsync } from '../../scenarioStateStore';
 import { backgroundServiceOwnsScenarios } from '../../services/scenarioRunner';
 import { sleep, getRandomDelay } from '../../timing';
@@ -234,6 +235,8 @@ const fetchChallengesAndVote = async (token, _getExposureThreshold = null, chall
         // Real mode persists new-entry snapshots to metadata.json, where
         // cleanupStaleMetadata prunes them alongside their challenge.
         entryTracker: metadataEntryTracker,
+        // When each entry entered its challenge, for the boost's fresh-entry wait.
+        entryAges: entryAgeLedger,
         // Random 2-5s spacing between challenges to mimic human behavior.
         interChallengeDelay: () => getRandomDelay(2000, 5000),
         // Automatic key / swap / fill spends; the ledgers are the persisted ones

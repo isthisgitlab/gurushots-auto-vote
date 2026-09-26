@@ -57,6 +57,19 @@ export interface AutoSpendRecord {
     at: number;
 }
 
+/** When each of one challenge's entries entered it (entryAgeStore). */
+export interface EntryAgeRecord {
+    /** The challenge's close time (Unix seconds), for pruning. */
+    closeTime: number;
+    /** Unix seconds each entry id was first seen; 0 = already there on the first sighting. */
+    entered: Record<string, number>;
+    /** The photo a boost fill-new submitted and is waiting to boost. */
+    pending: string | null;
+}
+
+/** The entry-age ledger a voting pass reads and writes (entryAgeStore). */
+export type EntryAgeLedger = ReturnType<typeof import('../entryAgeStore').createEntryAgeLedger>;
+
 /** A scenario rule that finished firing. */
 export interface ScenarioFiredRecord {
     at: number;

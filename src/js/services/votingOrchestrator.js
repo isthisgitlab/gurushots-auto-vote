@@ -37,6 +37,7 @@
  *   cleanupStaleMetadata: (Function|null),
  *   interChallengeDelay: () => number,
  *   entryTracker?: ({get: Function, set: Function}|null),
+ *   entryAges?: (Object|null),
  *   currency?: ({strategy: Object, swapLedger: Object, spendLedger: Object}|null),
  * }} deps
  *   `entryTracker` backs the voteOnNewEntry feature. Real mode passes a
@@ -44,6 +45,9 @@
  *   it passes cleanupStaleMetadata: null — the metadata store is shared and
  *   un-namespaced, and mock challenge ids would accumulate there unpruned. Omitting
  *   it entirely makes the feature inert.
+ *   `entryAges` records when each entry entered its challenge, for the boost's
+ *   fresh-entry wait (boostFreshEntryWait). Real mode persists it; mock passes an
+ *   in-memory one. Omitting it means a boost is never held.
  *   `currency` backs the automatic key / swap / fill spends (services/currencyAuto.js):
  *   `strategy` is the endpoint set the spend services take (the same shape the manual
  *   currency handlers pass), `swapLedger` the swap-back ledger and `spendLedger` the
@@ -79,6 +83,7 @@ import { sleep } from '../timing';
  *   now: number,
  *   api: Object,
  *   fillDeps: Object,
+ *   entryAges: (Object|null),
  * }} ActionContext
  */
 
@@ -107,14 +112,13 @@ const endBoostOperation = (challenge, reason) => {
 };
 
 /**
- * Boost the entry fill-new just submitted. applyBoost raises the `boosted` flag
+ * Boost the entry fill-new submitted. applyBoost raises the `boosted` flag
  * itself (it owns the entry pick); the explicit-entry call cannot, so reflect it
  * here.
  *
  * @returns {Promise<*>} the boost result; falsy once the operation is closed
  */
 const boostFreshEntry = async ({ challenge, token, api }, cid, imageId) => {
-    autoFill.reflectNewEntry(challenge, imageId);
     const boostResult = await api.applyBoostToEntry(cid, imageId, token);
     if (boostResult) {
         autoFill.reflectEntryFlag(challenge, imageId, 'boosted');
@@ -127,70 +131,69 @@ const boostFreshEntry = async ({ challenge, token, api }, cid, imageId) => {
     return boostResult;
 };
 
-/**
- * Fill-new could not submit a fresh photo: skip, or fall back to boosting an
- * existing entry.
- *
- * @returns {Promise<*>} the boost result; null when the boost was skipped
- */
-const boostAfterFillMiss = async ({ challenge, token, api }, fillMode, reason) => {
-    if (reason === 'challenge-gone') {
-        // The live re-check confirmed the challenge left the
-        // active list — boosting an existing entry on it would
-        // just be a second failing call and a confusing log.
-        endBoostOperation(challenge, 'challenge left the active list — boost skipped');
-        return null;
-    }
-    if (fillMode === 'conflict') {
-        // On-conflict mode only fires when the single existing entry is
-        // already turboed, so there is no valid fallback target — an
-        // applyBoost here would just fail with "only entry already has
-        // Turbo". Skip instead of making the pointless call.
-        endBoostOperation(
-            challenge,
-            `boost fill-new unavailable (${reason}); only entry already has Turbo — boost skipped`,
-        );
-        return null;
-    }
-    // 'always' mode falls back to the configured Boost Entry when
-    // no fresh photo can be submitted (full / none / failed).
-    logger
-        .withCategory('boost')
-        .info(
-            `${logger.challengeTag(challenge)} boost fill-new unavailable (${reason}); boosting existing entry`,
-            null,
-        );
-    return api.applyBoost(challenge, token);
+/** @param {Object} challenge @param {string} message */
+const logBoostTarget = (challenge, message) => {
+    logger.withCategory('boost').info(`${logger.challengeTag(challenge)} ${message}`, null);
 };
 
 /**
- * Apply the boost to the entry the fill-new mode selects.
+ * The entry a due boost lands on: the photo an earlier fill-new submitted and the
+ * boost is still waiting on; else, with fill-new on, a fresh photo submitted now
+ * (remembered as pending, so a held boost reuses it instead of submitting
+ * another); else the configured Boost Entry.
  *
  * @param {ActionContext} ctx
- * @returns {Promise<*>} the boost result; falsy when the boost failed or was
- *   skipped (either way the operation is already closed)
+ * @returns {Promise<{imageId: (string|null), fresh: boolean}|null>} null when
+ *   fill-new found no valid target and the boost is skipped (already logged)
  */
-const boostSelectedEntry = async (ctx) => {
-    const { challenge, token, api, fillDeps } = ctx;
+const resolveBoostTarget = async (ctx) => {
+    const { challenge, token, now, fillDeps, entryAges } = ctx;
     const cid = challenge.id.toString();
+    const pending = entryAges?.pending(cid);
+    if (pending) return { imageId: pending, fresh: true };
+    const existing = () => ({ imageId: votingLogic.pickBoostEntry(challenge, cid)?.id ?? null, fresh: false });
     // 'always' = boostFillNew; 'conflict' = boostFillNewOnConflict when
     // the only existing entry is turboed; 'no' = boost an existing entry.
     const fillMode = votingLogic.resolveBoostFillNewMode(challenge, cid);
-    if (fillMode === 'no') return api.applyBoost(challenge, token);
-    // Fill-new: submit a fresh photo and boost that entry instead
-    // of an existing one.
+    if (fillMode === 'no') return existing();
     const filled = await autoFill.submitNewEntryForAction(challenge, token, fillDeps);
-    if (filled.ok) return boostFreshEntry(ctx, cid, filled.imageId);
-    return boostAfterFillMiss(ctx, fillMode, filled.reason);
+    if (filled.ok) {
+        // An ok fill always carries the submitted imageId.
+        const imageId = String(filled.imageId);
+        autoFill.reflectNewEntry(challenge, imageId);
+        entryAges?.markPending(challenge, imageId, now);
+        return { imageId, fresh: true };
+    }
+    if (filled.reason === 'challenge-gone') {
+        // The live re-check confirmed the challenge left the active list —
+        // boosting an existing entry on it would just be a second failing call.
+        logBoostTarget(challenge, 'challenge left the active list — boost skipped');
+        return null;
+    }
+    if (fillMode === 'conflict') {
+        // On-conflict mode only fires when the single existing entry is already
+        // turboed, so there is no valid fallback target — skip instead of an
+        // applyBoost that would fail with "only entry already has Turbo".
+        logBoostTarget(
+            challenge,
+            `boost fill-new unavailable (${filled.reason}); only entry already has Turbo — boost skipped`,
+        );
+        return null;
+    }
+    // 'always' mode falls back to the configured Boost Entry when no fresh
+    // photo can be submitted (full / none / failed).
+    logBoostTarget(challenge, `boost fill-new unavailable (${filled.reason}); boosting existing entry`);
+    return existing();
 };
 
 /**
  * @param {ActionContext} ctx
+ * @param {{imageId: (string|null), fresh: boolean}} target - from resolveBoostTarget
  * @param {boolean} isTimerBasedAvailable
  * @param {number} timeUntilDisplayBase - seconds to the boost timeout (timer-based) or challenge end
  */
-const applyAvailableBoost = async (ctx, isTimerBasedAvailable, timeUntilDisplayBase) => {
-    const { challenge } = ctx;
+const applyAvailableBoost = async (ctx, target, isTimerBasedAvailable, timeUntilDisplayBase) => {
+    const { challenge, token, api } = ctx;
     // Surface the override so an applied boost on a challenge with
     // Auto-Apply Boost off is explained rather than looking like a bug.
     if (!settings.getEffectiveSetting('autoBoost', challenge.id.toString())) {
@@ -209,8 +212,11 @@ const applyAvailableBoost = async (ctx, isTimerBasedAvailable, timeUntilDisplayB
     logger.withCategory('boost').startOperation(`boost-${challenge.id}`, applyingMsg);
 
     try {
-        const boostResult = await boostSelectedEntry(ctx);
+        const boostResult = target.fresh
+            ? await boostFreshEntry(ctx, challenge.id.toString(), target.imageId)
+            : await api.applyBoost(challenge, token);
         if (boostResult) {
+            ctx.entryAges?.clearPending(challenge.id, ctx.now);
             const successSuffix = isTimerBasedAvailable
                 ? `${timeDisplay} remaining`
                 : `${timeDisplay} until challenge ends`;
@@ -219,8 +225,8 @@ const applyAvailableBoost = async (ctx, isTimerBasedAvailable, timeUntilDisplayB
                 .endOperation(`boost-${challenge.id}`, `Boost applied successfully (${successSuffix})`);
         }
         // On null/falsy result the operation is already closed with the failure
-        // reason (by applyBoost itself, or by the fill-new skip paths) — no
-        // caller-side fallback log needed (mirrors the turbo handling shape).
+        // reason (by applyBoost itself, or by boostFreshEntry) — no caller-side
+        // fallback log needed (mirrors the turbo handling shape).
     } catch (error) {
         endBoostOperation(challenge, failureText(error));
     }
@@ -243,9 +249,33 @@ const logBoostNotReady = (challenge, isTimerBasedAvailable, timeUntilDisplayBase
     logger.withCategory('voting').info(`${logger.challengeTag(challenge)} Boost not ready - ${reason}`, null);
 };
 
+/**
+ * Hold a due boost while its target photo is newer than `boostFreshEntryWait`
+ * (VotingLogic.getBoostHoldUntil). The release instant goes on the challenge so
+ * the cadence decision lands the next cycle on it.
+ *
+ * @param {ActionContext} ctx
+ * @param {(string|null)} imageId - the entry the boost would land on
+ * @returns {boolean} true when the boost waits this pass
+ */
+const holdBoostForFreshEntry = ({ challenge, now, entryAges }, imageId) => {
+    if (!imageId || !entryAges) return false;
+    const holdUntil = votingLogic.getBoostHoldUntil(challenge, entryAges.enteredAt(challenge.id, imageId), now);
+    if (holdUntil === null) return false;
+    challenge.boostHoldUntil = holdUntil;
+    logBoostTarget(
+        challenge,
+        `Boost held ${formatDuration(holdUntil - now)} — photo ${imageId} entered the challenge too recently to be boosted yet`,
+    );
+    return true;
+};
+
 /** @param {ActionContext} ctx */
 const runBoost = async (ctx) => {
     const { challenge, now } = ctx;
+    // Every pass, so an entry's first-seen time is as close to its real entry
+    // time as the cadence allows — including entries this pass just reflected.
+    ctx.entryAges?.observe(challenge, now);
     const { boost, isTimerBasedAvailable, isKeyUnlockedAvailable } = readBoostAvailability(challenge);
     if (!isTimerBasedAvailable && !isKeyUnlockedAvailable) return;
 
@@ -259,11 +289,13 @@ const runBoost = async (ctx) => {
     // For timer-based availability use boost.timeout; for key-unlocked use challenge end time
     const timeUntilDisplayBase = isTimerBasedAvailable ? boost.timeout - now : challenge.close_time - now;
 
-    if (shouldApplyBoost) {
-        await applyAvailableBoost(ctx, isTimerBasedAvailable, timeUntilDisplayBase);
-    } else {
+    if (!shouldApplyBoost) {
         logBoostNotReady(challenge, isTimerBasedAvailable, timeUntilDisplayBase, effectiveBoostTime);
+        return;
     }
+    const target = await resolveBoostTarget(ctx);
+    if (!target || holdBoostForFreshEntry(ctx, target.imageId)) return;
+    await applyAvailableBoost(ctx, target, isTimerBasedAvailable, timeUntilDisplayBase);
 };
 
 /**
@@ -443,6 +475,7 @@ const buildFillDeps = (api) => ({
  *   fillDeps: Object,
  *   interChallengeDelay: () => number,
  *   entryTracker: ({get: Function, set: Function}|null),
+ *   entryAges: (Object|null),
  *   currency: (Object|null),
  *   scenarios: ({ledger: Object, enabled?: () => boolean}|null),
  *   allChallenges: Array,
@@ -549,7 +582,14 @@ const playAutoTurbo = async (challenge, now, { api, token }) => {
  * @returns {Promise<Object|null>} the cancelled-pass result, or null to continue
  */
 const runDeadlineActions = async (challenge, now, pass) => {
-    const actionCtx = { challenge, token: pass.token, now, api: pass.api, fillDeps: pass.fillDeps };
+    const actionCtx = {
+        challenge,
+        token: pass.token,
+        now,
+        api: pass.api,
+        fillDeps: pass.fillDeps,
+        entryAges: pass.entryAges,
+    };
     for (const { action } of votingLogic.orderDeadlineActions(challenge)) {
         // Honor cancellation between actions, same as the per-challenge guard.
         if (cancellation.isCancelled()) {
@@ -813,6 +853,7 @@ const runVotingPass = async (token, challengeIdFilter, deps) => {
         cleanupStaleMetadata,
         interChallengeDelay,
         entryTracker = null,
+        entryAges = null,
         currency = null,
         scenarios = null,
     } = deps;
@@ -850,7 +891,17 @@ const runVotingPass = async (token, challengeIdFilter, deps) => {
         const { challenges } = scope;
 
         /** @type {PassContext} */
-        const pass = { token, api, fillDeps, interChallengeDelay, entryTracker, currency, scenarios, allChallenges };
+        const pass = {
+            token,
+            api,
+            fillDeps,
+            interChallengeDelay,
+            entryTracker,
+            entryAges,
+            currency,
+            scenarios,
+            allChallenges,
+        };
 
         // Process each challenge
         let processedCount = 0;
