@@ -54,18 +54,18 @@
  *   filtered subset) so callers can reuse it for threshold scheduling.
  */
 
-const logger = require('../logger');
-const settings = require('../settings');
-const votingLogic = require('./VotingLogic');
-const autoFill = require('./autoFill');
-const photoStats = require('./photoStats');
-const newEntryTracker = require('./newEntryTracker');
-const currencyAuto = require('./currencyAuto');
-const { runScenarioStep } = require('./scenarioRunner');
-const cancellation = require('../voting/cancellation');
-const { formatDuration } = require('../format/duration');
-const { failureText } = require('../format/logSafe');
-const { sleep } = require('../timing');
+import * as logger from '../logger';
+import * as settings from '../settings';
+import * as votingLogic from './VotingLogic';
+import * as autoFill from './autoFill';
+import * as photoStats from './photoStats';
+import * as newEntryTracker from './newEntryTracker';
+import * as currencyAuto from './currencyAuto';
+import { runScenarioStep } from './scenarioRunner';
+import * as cancellation from '../voting/cancellation';
+import { formatDuration } from '../format/duration';
+import { failureText } from '../format/logSafe';
+import { sleep } from '../timing';
 
 /**
  * Per-challenge context threaded to every deadline-action runner. All of a
@@ -897,4 +897,4 @@ const runVotingPass = async (token, challengeIdFilter, deps) => {
     }
 };
 
-module.exports = { runVotingPass };
+export { runVotingPass };

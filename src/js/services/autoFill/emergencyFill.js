@@ -3,9 +3,9 @@
  * one batch, and the state-only stand-down check it shares with the deadline view.
  */
 
-const { pickPhotosForChallenge } = require('../photoPicker');
-const { getSlotsRemaining, reflectNewEntry } = require('./challengeState');
-const { runFillAttempt } = require('./pipeline');
+import { pickPhotosForChallenge } from '../photoPicker';
+import { getSlotsRemaining, reflectNewEntry } from './challengeState';
+import { runFillAttempt } from './pipeline';
 
 /**
  * Whether emergency fill stands down on LIVE STATE alone, independent of timing.
@@ -181,7 +181,4 @@ const maybeEmergencyFillChallenge = async (challenge, token, now, deps) => {
     return 'submitted';
 };
 
-module.exports = {
-    evaluateEmergencyFill,
-    maybeEmergencyFillChallenge,
-};
+export { evaluateEmergencyFill, maybeEmergencyFillChallenge };

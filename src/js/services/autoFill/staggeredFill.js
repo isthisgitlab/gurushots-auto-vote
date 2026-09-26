@@ -3,10 +3,10 @@
  * scheduler cycle, spaced by the user's autoFillSchedule.
  */
 
-const { getScheduleShift } = require('../scheduleRemap');
-const { getValidScheduleRows, resolveScheduleTarget } = require('./schedule');
-const { getEntries, getSlotsRemaining, reflectNewEntry } = require('./challengeState');
-const { runFillAttempt } = require('./pipeline');
+import { getScheduleShift } from '../scheduleRemap';
+import { getValidScheduleRows, resolveScheduleTarget } from './schedule';
+import { getEntries, getSlotsRemaining, reflectNewEntry } from './challengeState';
+import { runFillAttempt } from './pipeline';
 
 /**
  * Cycle-driven, schedule-based auto-fill. Submits at most one photo per
@@ -138,6 +138,4 @@ const maybeAutoFillChallenge = async (challenge, token, now, deps) => {
     return 'submitted';
 };
 
-module.exports = {
-    maybeAutoFillChallenge,
-};
+export { maybeAutoFillChallenge };

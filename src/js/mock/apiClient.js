@@ -7,22 +7,22 @@
  * this same object so it calls whatever is on the client at call time.
  */
 
-const { authenticate } = require('./endpoints/login');
-const { getActiveChallenges } = require('./endpoints/challenges');
-const { getVoteImages, submitVotes } = require('./endpoints/voting');
-const { applyBoost, applyBoostToEntry } = require('./endpoints/boost');
-const { applyTurbo, runTurboMiniGame } = require('./endpoints/turbo');
-const { getEligiblePhotos, getImageData, submitToChallenge } = require('./endpoints/submissions');
-const { getMemberChallenges, getBankroll, coinsUnlock } = require('./endpoints/join');
-const {
+import { authenticate } from './endpoints/login';
+import { getActiveChallenges } from './endpoints/challenges';
+import { getVoteImages, submitVotes } from './endpoints/voting';
+import { applyBoost, applyBoostToEntry } from './endpoints/boost';
+import { applyTurbo, runTurboMiniGame } from './endpoints/turbo';
+import { getEligiblePhotos, getImageData, submitToChallenge } from './endpoints/submissions';
+import { getMemberChallenges, getBankroll, coinsUnlock } from './endpoints/join';
+import {
     getMyCompletedChallenges,
     claimChallengeResources,
     getMyMissions,
     claimMissionPrize,
-} = require('./endpoints/rewards');
-const { getCurrentMemberProfile, searchTagAutocomplete } = require('./endpoints/tags');
-const { keyUnlock, swapPhoto, exposureAutofill } = require('./endpoints/currency');
-const { createMockStrategy } = require('./strategy');
+} from './endpoints/rewards';
+import { getCurrentMemberProfile, searchTagAutocomplete } from './endpoints/tags';
+import { keyUnlock, swapPhoto, exposureAutofill } from './endpoints/currency';
+import { createMockStrategy } from './strategy';
 
 /**
  * Mock API client that can be used for testing
@@ -55,4 +55,4 @@ const mockApiClient = {
 
 Object.assign(mockApiClient, createMockStrategy(mockApiClient));
 
-module.exports = { mockApiClient };
+export { mockApiClient };

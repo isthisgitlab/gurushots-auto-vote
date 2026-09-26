@@ -4,13 +4,13 @@
  * "miscellaneous UI plumbing" bucket.
  */
 
-const { shell } = require('electron');
-const { registerHandlers } = require('./registerHandlers');
-const { errorResult } = require('./errorResult');
-const logger = require('../logger');
-const { updateMenuTranslations } = require('../ui/applicationMenu');
-const { translationManager } = require('../translations/index');
-const { isSafeExternalUrl } = require('../format/urlSafe');
+import { shell } from 'electron';
+import { registerHandlers } from './registerHandlers';
+import { errorResult } from './errorResult';
+import * as logger from '../logger';
+import { updateMenuTranslations } from '../ui/applicationMenu';
+import { translationManager } from '../translations/index';
+import { isSafeExternalUrl } from '../format/urlSafe';
 
 const buildHandlers = (deps) => {
     const { getMainWindow, getLoginWindow } = deps;
@@ -73,4 +73,4 @@ const register = (ipcMain, deps) => {
     registerHandlers(ipcMain, buildHandlers(deps));
 };
 
-module.exports = { register, buildHandlers };
+export { register, buildHandlers };

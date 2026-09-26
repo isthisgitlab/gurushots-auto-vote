@@ -5,10 +5,10 @@
  * to the GuruShots API.
  */
 
-const { makePostRequest, createCommonHeaders, FORM_CONTENT_TYPE } = require('./api-client');
-const { ENDPOINTS } = require('./constants');
-const logger = require('../logger');
-const { updateChallengeVoteMetadata } = require('../metadata');
+import { makePostRequest, createCommonHeaders, FORM_CONTENT_TYPE } from './api-client';
+import { ENDPOINTS } from './constants';
+import * as logger from '../logger';
+import { updateChallengeVoteMetadata } from '../metadata';
 
 /**
  * Fetches images available for voting in a specific challenge
@@ -206,7 +206,4 @@ const submitVotes = async (voteImages, token, targetExposure = 100) => {
     return response;
 };
 
-module.exports = {
-    getVoteImages,
-    submitVotes,
-};
+export { getVoteImages, submitVotes };

@@ -38,8 +38,4 @@ const mockBoostAlreadyUsed = {
     message: 'You have already used your boost for this challenge',
 };
 
-module.exports = {
-    mockBoostSuccess,
-    mockBoostFailure,
-    mockBoostAlreadyUsed,
-};
+export { mockBoostSuccess, mockBoostFailure, mockBoostAlreadyUsed };

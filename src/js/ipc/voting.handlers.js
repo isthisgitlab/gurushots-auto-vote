@@ -12,14 +12,14 @@
  *     read/write, delegated to voting/cancellation.js
  */
 
-const settings = require('../settings');
-const { registerHandlers } = require('./registerHandlers');
-const { errorResult } = require('./errorResult');
-const logger = require('../logger');
-const apiFactory = require('../apiFactory');
-const cancellation = require('../voting/cancellation');
-const { submitVotesForChallenge, voteAllChallengesManual } = require('../services/manualVote');
-const { findActiveChallenge } = require('../services/findActiveChallenge');
+import * as settings from '../settings';
+import { registerHandlers } from './registerHandlers';
+import { errorResult } from './errorResult';
+import * as logger from '../logger';
+import * as apiFactory from '../apiFactory';
+import * as cancellation from '../voting/cancellation';
+import { submitVotesForChallenge, voteAllChallengesManual } from '../services/manualVote';
+import { findActiveChallenge } from '../services/findActiveChallenge';
 
 // Run one full strategy pass — global when challengeId is null, scoped
 // to a single card otherwise. Delegates to BaseMiddleware so the
@@ -241,4 +241,4 @@ const register = (ipcMain) => {
     registerHandlers(ipcMain, buildHandlers());
 };
 
-module.exports = { register, buildHandlers };
+export { register, buildHandlers };

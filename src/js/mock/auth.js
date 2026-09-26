@@ -56,9 +56,4 @@ const mockTokenInvalid = {
     code: 'TOKEN_INVALID',
 };
 
-module.exports = {
-    mockLoginSuccess,
-    mockLoginFailure,
-    mockTokenValid,
-    mockTokenInvalid,
-};
+export { mockLoginSuccess, mockLoginFailure, mockTokenValid, mockTokenInvalid };

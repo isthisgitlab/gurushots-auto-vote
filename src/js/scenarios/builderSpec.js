@@ -16,7 +16,7 @@
  * Dependency-free: renderer-safe.
  */
 
-const vocabulary = require('./vocabulary');
+import * as vocabulary from './vocabulary';
 
 /** @typedef {{key: string, kind: string, optional?: boolean, options?: string[], labels?: string}} FieldSpec */
 
@@ -177,16 +177,16 @@ const defaultAction = (type, context) => defaultOf(ACTION_FIELDS, 'type', type, 
 /** @param {string} by */
 const defaultSelector = (by) => defaultOf(SELECTOR_FIELDS, 'by', by);
 
-module.exports = {
+export const CONDITION_TYPES = Object.keys(CONDITION_FIELDS);
+export const ACTION_TYPES = Object.keys(ACTION_FIELDS);
+export const SELECTOR_TYPES = Object.keys(SELECTOR_FIELDS);
+export {
     CONDITION_FIELDS,
     ACTION_FIELDS,
     SELECTOR_FIELDS,
     ENTRY_FIELDS,
     BOOST_STATES,
     TURBO_STATES,
-    CONDITION_TYPES: Object.keys(CONDITION_FIELDS),
-    ACTION_TYPES: Object.keys(ACTION_FIELDS),
-    SELECTOR_TYPES: Object.keys(SELECTOR_FIELDS),
     defaultFieldValue,
     defaultCondition,
     defaultAction,

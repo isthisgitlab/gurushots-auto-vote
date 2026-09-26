@@ -10,26 +10,29 @@
 // and its `challengeId = null` defaults make TS infer param types too narrow
 // (null) to accept the string IDs passed here. Drop the cast once settings.js
 // is typed.
-const settings = /** @type {any} */ (require('../../settings'));
+import * as settingsModule from '../../settings';
+const settings = /** @type {any} */ (settingsModule);
 // Pure wall-clock math for the scheduled-fill feature (no import cycle:
 // wallClock.js imports nothing). Cast for the same boundary reason as
 // settings above — wallClock.js isn't `// @ts-check`ed yet.
-const { occurrencesOf } = /** @type {any} */ (require('../../scheduling/wallClock'));
-const { DEFAULT_TIMEZONE } = require('../../settings/uiDefaults');
+import * as wallClockModule from '../../scheduling/wallClock';
+const { occurrencesOf } = /** @type {any} */ (wallClockModule);
+import { DEFAULT_TIMEZONE } from '../../settings/uiDefaults';
 // From settings/limits (not settings/schema) — keeps zod out of any bundle
 // that reaches this module. No `any` cast needed: limits.js exports a plain
 // number literal, so inference is already exact.
-const { MAX_SCHEDULED_FILL_ENTRIES, MAX_VOTING_PAUSE_MINUTES } = require('../../settings/limits');
+import { MAX_SCHEDULED_FILL_ENTRIES, MAX_VOTING_PAUSE_MINUTES } from '../../settings/limits';
 // Cast at the boundary for the same reason as settings above — logger.js
 // isn't `// @ts-check`ed yet. Used only on the corrupt-config paths below,
 // which must not stay silent: the orchestrator's per-challenge catch logs its
 // own errors, so a swallowed one here would be strictly less visible.
-const logger = /** @type {any} */ (require('../../logger'));
+import * as loggerModule from '../../logger';
+const logger = /** @type {any} */ (loggerModule);
 // CR/LF-collapse API-sourced values before they reach a log message (CWE-117).
 // Imported directly rather than off the logger, matching newEntryTracker.js —
 // the logger is mocked across much of the test suite, and its own oneLine() on
 // the finished message is a backstop, not the first line of defence.
-const { oneLine: oneLineId } = require('../../format/logSafe');
+import { oneLine as oneLineId } from '../../format/logSafe';
 
 /**
  * Shared trigger-window evaluation for the two features built on the same pair
@@ -259,7 +262,4 @@ const getVotingPauseState = (challenge, challengeId, now) => {
     }
 };
 
-module.exports = {
-    getScheduledFillState,
-    getVotingPauseState,
-};
+export { getScheduledFillState, getVotingPauseState };

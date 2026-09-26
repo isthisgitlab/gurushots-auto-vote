@@ -4,9 +4,9 @@
  * This module handles applying boosts to photos in challenges.
  */
 
-const { makePostRequest, createCommonHeaders, FORM_CONTENT_TYPE } = require('./api-client');
-const { ENDPOINTS } = require('./constants');
-const logger = require('../logger');
+import { makePostRequest, createCommonHeaders, FORM_CONTENT_TYPE } from './api-client';
+import { ENDPOINTS } from './constants';
+import * as logger from '../logger';
 
 /**
  * POST the GuruShots boost-photo endpoint. Concentrates the form-encoded
@@ -84,7 +84,4 @@ const applyBoostToEntry = async (challengeId, imageId, token) => {
     return response;
 };
 
-module.exports = {
-    boostImage,
-    applyBoostToEntry,
-};
+export { boostImage, applyBoostToEntry };

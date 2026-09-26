@@ -11,17 +11,17 @@
 // and its `challengeId = null` defaults make TS infer param types too narrow
 // (null) to accept the string IDs passed here. Drop the cast once settings.js
 // is typed.
-const settings = /** @type {any} */ (require('../../settings'));
+import * as settingsModule from '../../settings';
+const settings = /** @type {any} */ (settingsModule);
 // Single source of truth for the auto-fill schedule threshold math (no import
 // cycle: autoFill.js does not require VotingLogic). Cast for the same
 // boundary reason as settings above — autoFill.js isn't `// @ts-check`ed yet.
-const { getNextScheduleThresholdSec, evaluateEmergencyFill, getSlotsRemaining } = /** @type {any} */ (
-    require('../autoFill')
-);
-const { boostApplyThreshold } = require('../../voting/boostWindow');
-const { getEffectiveBoostTime, getEffectiveKeyUnlockedBoostTime, getEffectiveTurboTime } = require('./thresholds');
-const { isBoostWindowOpen } = require('./boostTurbo');
-const { pickBoostEntry, resolveBoostFillNewMode } = require('./entryPick');
+import * as autoFillModule from '../autoFill';
+const { getNextScheduleThresholdSec, evaluateEmergencyFill, getSlotsRemaining } = /** @type {any} */ (autoFillModule);
+import { boostApplyThreshold } from '../../voting/boostWindow';
+import { getEffectiveBoostTime, getEffectiveKeyUnlockedBoostTime, getEffectiveTurboTime } from './thresholds';
+import { isBoostWindowOpen } from './boostTurbo';
+import { pickBoostEntry, resolveBoostFillNewMode } from './entryPick';
 
 /**
  * Effective seconds-before-close at which the next auto-fill becomes due:
@@ -231,7 +231,7 @@ const describeDeadlineActions = (challenge, now) => {
     return { actions, boostBlocked };
 };
 
-module.exports = {
+export {
     getAutoFillThresholdSec,
     getEmergencyFillThresholdSec,
     getBoostThresholdSec,

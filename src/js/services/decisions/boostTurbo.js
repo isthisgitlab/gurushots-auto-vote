@@ -9,10 +9,11 @@
 // and its `challengeId = null` defaults make TS infer param types too narrow
 // (null) to accept the string IDs passed here. Drop the cast once settings.js
 // is typed.
-const settings = /** @type {any} */ (require('../../settings'));
-const { isBoostWindowOpen: boostWindowOpen } = require('../../voting/boostWindow');
-const { getEffectiveBoostTime, getEffectiveKeyUnlockedBoostTime, getEffectiveTurboTime } = require('./thresholds');
-const { pickEntryAvoidingConflict } = require('./entryPick');
+import * as settingsModule from '../../settings';
+const settings = /** @type {any} */ (settingsModule);
+import { isBoostWindowOpen as boostWindowOpen } from '../../voting/boostWindow';
+import { getEffectiveBoostTime, getEffectiveKeyUnlockedBoostTime, getEffectiveTurboTime } from './thresholds';
+import { pickEntryAvoidingConflict } from './entryPick';
 
 /**
  * @typedef {object} TurboDecision
@@ -226,10 +227,4 @@ const shouldApplyTurbo = (challenge, now, options = {}) => {
     return { apply: true, imageId: existingImageId, fillNew: false, reason: 'eligible' };
 };
 
-module.exports = {
-    isWithinEmergencyWindow,
-    shouldApplyBoost,
-    isBoostWindowOpen,
-    shouldPlayAutoTurbo,
-    shouldApplyTurbo,
-};
+export { isWithinEmergencyWindow, shouldApplyBoost, isBoostWindowOpen, shouldPlayAutoTurbo, shouldApplyTurbo };

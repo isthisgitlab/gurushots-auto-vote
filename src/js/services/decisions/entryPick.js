@@ -10,9 +10,10 @@
 // and its `challengeId = null` defaults make TS infer param types too narrow
 // (null) to accept the string IDs passed here. Drop the cast once settings.js
 // is typed.
-const settings = /** @type {any} */ (require('../../settings'));
+import * as settingsModule from '../../settings';
+const settings = /** @type {any} */ (settingsModule);
 // 0 = last / 1-4 = slot addressing, shared with the swap automation.
-const { resolveEntryIndex } = require('../../voting/entrySlot');
+import { resolveEntryIndex } from '../../voting/entrySlot';
 
 /**
  * Pick the entry at the configured 1-indexed slot, falling back to the
@@ -91,8 +92,4 @@ const resolveBoostFillNewMode = (challenge, challengeId) => {
     return 'no';
 };
 
-module.exports = {
-    pickEntryAvoidingConflict,
-    pickBoostEntry,
-    resolveBoostFillNewMode,
-};
+export { pickEntryAvoidingConflict, pickBoostEntry, resolveBoostFillNewMode };

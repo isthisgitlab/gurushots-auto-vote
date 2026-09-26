@@ -10,12 +10,12 @@
  * Every channel returns a {success, ...} envelope and never throws.
  */
 
-jest.mock('../../src/js/services/AutoUpdater', () => jest.fn());
+jest.mock('../../src/js/services/AutoUpdater', () => ({ AutoUpdater: jest.fn() }));
 jest.mock('../../src/js/services/UpdateChecker', () => ({
     getReleasesUrl: jest.fn(() => 'https://github.com/example/releases'),
 }));
 
-const AutoUpdater = require('../../src/js/services/AutoUpdater');
+const { AutoUpdater } = require('../../src/js/services/AutoUpdater');
 const { buildHandlers, register } = require('../../src/js/ipc/update.handlers');
 
 const makeUpdater = (overrides = {}) => ({

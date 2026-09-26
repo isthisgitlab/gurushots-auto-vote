@@ -5,11 +5,11 @@
  * profileStore.js; this module owns the load-modify-save around them.
  */
 
-const logger = require('../logger');
-const { INTENT_PROFILES } = require('./intentProfiles');
-const { loadSettings, saveSettings } = require('./persistence');
-const { ensureChallengeSettings, globalChallengeValues } = require('./defaults');
-const {
+import * as logger from '../logger';
+import { INTENT_PROFILES } from './intentProfiles';
+import { loadSettings, saveSettings } from './persistence';
+import { ensureChallengeSettings, globalChallengeValues } from './defaults';
+import {
     MAX_CHALLENGE_PROFILES,
     MAX_PROFILE_NAME_LENGTH,
     RESERVED_PROFILE_NAMES,
@@ -18,10 +18,10 @@ const {
     readProfilesMap,
     findProfileKey,
     sanitizeProfileValues,
-} = require('./profileStore');
-const { sanitizeTitleRuleInline } = require('./titleRuleSanitize');
-const { titleProfileComposesWithKnownOverrides } = require('./ruleResolution');
-const { replaceChallengeOverridesInSettings, trimmedChallengeId } = require('./challengeOverrides');
+} from './profileStore';
+import { sanitizeTitleRuleInline } from './titleRuleSanitize';
+import { titleProfileComposesWithKnownOverrides } from './ruleResolution';
+import { replaceChallengeOverridesInSettings, trimmedChallengeId } from './challengeOverrides';
 
 const _isReservedName = (name) => RESERVED_PROFILE_NAMES.has(normalizeProfileName(name));
 
@@ -299,7 +299,7 @@ const seedIntentProfiles = () => {
     return saveSettings(fresh);
 };
 
-module.exports = {
+export {
     getChallengeProfiles,
     saveChallengeProfile,
     deleteChallengeProfile,

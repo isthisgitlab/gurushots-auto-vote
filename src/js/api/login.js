@@ -5,9 +5,9 @@
  * It's designed to work with both CLI and GUI interfaces.
  */
 
-const { makePostRequest, createCommonHeaders, FORM_CONTENT_TYPE } = require('./api-client');
-const { ENDPOINTS } = require('./constants');
-const logger = require('../logger');
+import { makePostRequest, createCommonHeaders, FORM_CONTENT_TYPE } from './api-client';
+import { ENDPOINTS } from './constants';
+import * as logger from '../logger';
 
 /**
  * Authenticates with GuruShots and obtains an authentication token
@@ -48,6 +48,4 @@ const authenticate = async (email, password) => {
     return responseData;
 };
 
-module.exports = {
-    authenticate,
-};
+export { authenticate };

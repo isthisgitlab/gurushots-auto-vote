@@ -11,7 +11,7 @@ const { getMiddleware, getApiStrategy } = require('../../src/js/apiFactory');
 const realApi = getApiStrategy({ mock: false });
 const mockApi = getApiStrategy({ mock: true });
 const settings = require('../../src/js/settings');
-const BaseMiddleware = require('../../src/js/services/BaseMiddleware');
+const { BaseMiddleware } = require('../../src/js/services/BaseMiddleware');
 
 // Mock the API client for testing
 jest.mock('../../src/js/api/api-client', () => ({

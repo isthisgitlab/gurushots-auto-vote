@@ -165,4 +165,4 @@ const kebabToCamel = (channel) => channel.replace(/-([a-z0-9])/g, (_, c) => c.to
 // process must actually register handlers for.
 const allInvokeChannels = () => [...new Set([...invokeChannels, ...Object.values(aliases)])];
 
-module.exports = { invokeChannels, aliases, sendMethods, eventMethods, kebabToCamel, allInvokeChannels };
+export { invokeChannels, aliases, sendMethods, eventMethods, kebabToCamel, allInvokeChannels };

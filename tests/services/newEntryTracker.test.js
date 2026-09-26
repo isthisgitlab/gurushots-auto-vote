@@ -18,7 +18,7 @@ const {
 const metadata = require('../../src/js/metadata');
 const logger = require('../../src/js/logger');
 
-jest.mock('../../src/js/logger', () => ({ ...jest.requireActual('../../src/js/logger') }));
+jest.mock('../../src/js/logger', () => ({ __esModule: true, ...jest.requireActual('../../src/js/logger') }));
 jest.mock('../../src/js/metadata');
 
 const challengeWithEntries = (entries) => ({ member: { ranking: { entries } } });

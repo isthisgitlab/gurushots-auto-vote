@@ -18,4 +18,4 @@
 const findActiveChallenge = (challenges, challengeId) =>
     (Array.isArray(challenges) ? challenges : []).find((c) => String(c.id) === String(challengeId)) ?? null;
 
-module.exports = { findActiveChallenge };
+export { findActiveChallenge };

@@ -6,8 +6,8 @@
  * load/save around it.
  */
 
-const { validateSetting } = require('./schema');
-const {
+import { validateSetting } from './schema';
+import {
     TITLE_MATCH_MODES,
     normalizeTitle,
     normalizeTag,
@@ -15,8 +15,8 @@ const {
     normalizeRuleHours,
     titleRuleTitles,
     ruleConditions,
-} = require('./challengeRules');
-const { normalizeProfileName, findProfileKey } = require('./profileStore');
+} from './challengeRules';
+import { normalizeProfileName, findProfileKey } from './profileStore';
 
 // Defensive caps on renderer-supplied rule input. The rules share the single
 // settings JSON blob with every platform, so bound both the count and the
@@ -210,7 +210,7 @@ const sanitizeTitleRule = (rule, storedProfiles) => {
     return { valid: true, rule: sanitized };
 };
 
-module.exports = {
+export {
     MAX_TITLE_RULES,
     MAX_TITLE_LENGTH,
     TITLE_RULE_INLINE_KEYS,

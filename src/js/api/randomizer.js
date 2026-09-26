@@ -6,8 +6,8 @@
  * Keeps app version and build number the same for consistency.
  */
 
-const settings = require('../settings');
-const logger = require('../logger');
+import * as settings from '../settings';
+import * as logger from '../logger';
 
 // Current app version - update this when releasing new versions
 const CURRENT_APP_VERSION = '2.41.9';
@@ -144,7 +144,7 @@ const generateRandomHeaders = (token) => {
     };
 };
 
-module.exports = {
+export {
     generateRandomHeaders,
     initializeHeaders,
     IPHONE_MODELS,

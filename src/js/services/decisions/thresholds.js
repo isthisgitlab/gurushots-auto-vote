@@ -11,7 +11,8 @@
 // and its `challengeId = null` defaults make TS infer param types too narrow
 // (null) to accept the string IDs passed here. Drop the cast once settings.js
 // is typed.
-const settings = /** @type {any} */ (require('../../settings'));
+import * as settingsModule from '../../settings';
+const settings = /** @type {any} */ (settingsModule);
 
 /**
  * Check if a challenge is within its final window (the configurable stretch
@@ -143,7 +144,7 @@ const getEffectiveTurboTime = (challengeId) => {
     return settings.getEffectiveSetting('turboTime', challengeId);
 };
 
-module.exports = {
+export {
     isWithinFinalWindow,
     getEffectiveLastMinuteThreshold,
     isWithinLastMinuteThreshold,

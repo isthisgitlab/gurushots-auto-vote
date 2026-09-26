@@ -200,4 +200,4 @@ const occurrencesOf = (timeHHMM, timeZone, nowSec) => {
     }
 };
 
-module.exports = { parseTimeOfDay, tzOffsetSeconds, epochForWallTime, occurrencesOf };
+export { parseTimeOfDay, tzOffsetSeconds, epochForWallTime, occurrencesOf };

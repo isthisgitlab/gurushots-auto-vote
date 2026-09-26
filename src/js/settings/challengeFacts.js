@@ -5,7 +5,7 @@
  * any of those facts.
  */
 
-const { MAX_TITLE_RULES, MAX_TITLE_LENGTH } = require('./titleRuleSanitize');
+import { MAX_TITLE_RULES, MAX_TITLE_LENGTH } from './titleRuleSanitize';
 
 // Current id→title observations are process-local. Real API responses also
 // persist first-seen title pins, but this cache is what lets the same resolver
@@ -102,8 +102,4 @@ const challengeTargetForId = (settings, challengeId) => ({
     title: _titleForChallengeId(settings, challengeId),
 });
 
-module.exports = {
-    rememberChallengeTitles,
-    factsForChallengeId,
-    challengeTargetForId,
-};
+export { rememberChallengeTitles, factsForChallengeId, challengeTargetForId };

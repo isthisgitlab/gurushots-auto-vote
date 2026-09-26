@@ -7,8 +7,8 @@
  * isPackaged() and only when isElectron() is already true.
  */
 
-const path = require('node:path');
-const os = require('node:os');
+import * as path from 'node:path';
+import * as os from 'node:os';
 
 const hasNode = typeof process !== 'undefined' && process.versions != null;
 const getCapacitor = () => globalThis.Capacitor;
@@ -173,7 +173,7 @@ const getAppUserDataPath = () => {
     return userDataPath;
 };
 
-module.exports = {
+export {
     isElectron,
     isCapacitor,
     isHeadlessService,

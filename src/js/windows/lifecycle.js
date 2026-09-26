@@ -5,7 +5,7 @@
  * doesn't keep the app alive.
  */
 
-const logger = require('../logger');
+import * as logger from '../logger';
 
 // Long enough for Chromium to flush LevelDB storage (a 1s window could
 // kill it mid-write and leave stale locks), short enough to stay a firm
@@ -66,4 +66,4 @@ const clearTokenOnQuit = (hasLock, settingsFacade) => {
     }
 };
 
-module.exports = { ensureExit, focusExistingWindow, clearTokenOnQuit, FORCE_EXIT_GRACE_MS };
+export { ensureExit, focusExistingWindow, clearTokenOnQuit, FORCE_EXIT_GRACE_MS };

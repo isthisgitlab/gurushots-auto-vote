@@ -7,12 +7,12 @@
  * helpers; only logger category and return shape differ.
  */
 
-const settings = require('../settings');
-const logger = require('../logger');
-const { failureText } = require('../format/logSafe');
-const cancellation = require('../voting/cancellation');
-const { extractAuthResult, clearAuthToken } = require('./auth');
-const { voteAllChallengesManual } = require('./manualVote');
+import * as settings from '../settings';
+import * as logger from '../logger';
+import { failureText } from '../format/logSafe';
+import * as cancellation from '../voting/cancellation';
+import { extractAuthResult, clearAuthToken } from './auth';
+import { voteAllChallengesManual } from './manualVote';
 
 const requireToken = () => {
     const token = settings.getSetting('token');
@@ -215,4 +215,4 @@ class BaseMiddleware {
     }
 }
 
-module.exports = BaseMiddleware;
+export { BaseMiddleware };

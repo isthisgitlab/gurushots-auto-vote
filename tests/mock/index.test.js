@@ -7,21 +7,25 @@
 const mockIndex = require('../../src/js/mock/index');
 const cancellation = require('../../src/js/voting/cancellation');
 
-jest.mock('../../src/js/metadata', () => ({ ...jest.requireActual('../../src/js/metadata') }));
-jest.mock('../../src/js/settings', () => ({ ...jest.requireActual('../../src/js/settings') }));
+jest.mock('../../src/js/metadata', () => ({ __esModule: true, ...jest.requireActual('../../src/js/metadata') }));
+jest.mock('../../src/js/settings', () => ({ __esModule: true, ...jest.requireActual('../../src/js/settings') }));
 
-// Mock the individual mock modules
+// Mock the individual mock modules. mock/index.js re-exports each one as a
+// namespace; `__esModule` makes that namespace the factory object itself.
 jest.mock('../../src/js/mock/auth', () => ({
+    __esModule: true,
     mockLoginSuccess: { token: 'mock-auth-token', success: true },
     mockLoginFailure: { error: 'Invalid credentials', success: false },
 }));
 
 jest.mock('../../src/js/mock/challenges', () => ({
+    __esModule: true,
     mockActiveChallenges: { challenges: [{ id: '1', title: 'Test Challenge' }] },
     generateMockChallenges: jest.fn(() => ({ challenges: [{ id: '2', title: 'Generated Challenge' }] })),
 }));
 
 jest.mock('../../src/js/mock/voting', () => ({
+    __esModule: true,
     mockVoteImagesByChallenge: {
         'challenge-1': { images: [{ id: 'img1', ratio: 25 }] },
     },
@@ -32,12 +36,14 @@ jest.mock('../../src/js/mock/voting', () => ({
 }));
 
 jest.mock('../../src/js/mock/boost', () => ({
+    __esModule: true,
     mockBoostSuccess: { success: true, boost_applied: true },
     mockBoostFailure: { error: 'Boost failed' },
     mockBoostAlreadyUsed: { error: 'Boost already used' },
 }));
 
 jest.mock('../../src/js/mock/errors', () => ({
+    __esModule: true,
     mockAuthErrors: {
         invalidToken: { error: 'Invalid token', code: 401 },
     },

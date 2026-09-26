@@ -168,15 +168,4 @@ const isEditableDraft = (value) => {
     );
 };
 
-module.exports = {
-    setIn,
-    getIn,
-    moveItem,
-    newScenario,
-    addPhase,
-    renamePhase,
-    removePhase,
-    newRule,
-    freeKey,
-    isEditableDraft,
-};
+export { setIn, getIn, moveItem, newScenario, addPhase, renamePhase, removePhase, newRule, freeKey, isEditableDraft };

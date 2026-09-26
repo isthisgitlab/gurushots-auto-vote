@@ -7,10 +7,10 @@
  * x-api-version: 13).
  */
 
-const logger = require('../logger');
-const { oneLine } = require('../format/logSafe');
-const { makePostRequest } = require('./api-client');
-const { ENDPOINTS, createWebHeaders, makeRequireValue } = require('./constants');
+import * as logger from '../logger';
+import { oneLine } from '../format/logSafe';
+import { makePostRequest } from './api-client';
+import { ENDPOINTS, createWebHeaders, makeRequireValue } from './constants';
 
 const requireValue = makeRequireValue('submissions');
 
@@ -241,10 +241,4 @@ const submitToChallenge = async (challengeId, imageIds, token) => {
     };
 };
 
-module.exports = {
-    getEligiblePhotos,
-    getImageData,
-    submitToChallenge,
-    MAX_LIBRARY_PAGES,
-    PAGINATE_BUDGET_MS,
-};
+export { getEligiblePhotos, getImageData, submitToChallenge, MAX_LIBRARY_PAGES, PAGINATE_BUDGET_MS };

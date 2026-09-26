@@ -3,11 +3,11 @@
  * over api/challenges.js): session-stable generated challenges.
  */
 
-const challenges = require('../challenges');
-const settings = require('../../settings');
-const logger = require('../../logger');
-const { simulateApiResponse, mockMethod } = require('../simulate');
-const { getSessionCache } = require('../sessionCache');
+import * as challenges from '../challenges';
+import * as settings from '../../settings';
+import * as logger from '../../logger';
+import { simulateApiResponse, mockMethod } from '../simulate';
+import { getSessionCache } from '../sessionCache';
 
 /**
  * Simulate getting active challenges
@@ -51,4 +51,4 @@ const getActiveChallenges = mockMethod(
     },
 );
 
-module.exports = { getActiveChallenges };
+export { getActiveChallenges };

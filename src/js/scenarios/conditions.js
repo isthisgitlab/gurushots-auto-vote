@@ -9,10 +9,10 @@
  * rule never fires on data the app could not read.
  */
 
-const { occurrencesOf } = require('../scheduling/wallClock');
-const { parseDuration } = require('./duration');
-const { selectEntry, entriesOf, rankOf, votesOf, windowOf } = require('./selectors');
-const { votesPerHour, speedRatio } = require('./speed');
+import { occurrencesOf } from '../scheduling/wallClock';
+import { parseDuration } from './duration';
+import { selectEntry, entriesOf, rankOf, votesOf, windowOf } from './selectors';
+import { votesPerHour, speedRatio } from './speed';
 
 /**
  * @typedef {object} ConditionContext
@@ -216,4 +216,4 @@ const allHold = (conditions, ctx) => (conditions ?? []).every((condition) => eva
 const firstFailing = (conditions, ctx) =>
     (conditions ?? []).findIndex((condition) => !evaluateCondition(condition, ctx));
 
-module.exports = { evaluateCondition, allHold, firstFailing, compare, finite, durationBound };
+export { evaluateCondition, allHold, firstFailing, compare, finite, durationBound };

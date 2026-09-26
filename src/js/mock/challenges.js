@@ -1688,9 +1688,4 @@ const mockChallengeDetails = {
     },
 };
 
-module.exports = {
-    mockActiveChallenges,
-    mockEmptyChallenges,
-    mockChallengeDetails,
-    generateMockChallenges,
-};
+export { mockActiveChallenges, mockEmptyChallenges, mockChallengeDetails, generateMockChallenges };

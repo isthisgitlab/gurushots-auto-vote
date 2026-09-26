@@ -9,19 +9,21 @@
 // and its `challengeId = null` defaults make TS infer param types too narrow
 // (null) to accept the string IDs passed here. Drop the cast once settings.js
 // is typed.
-const settings = /** @type {any} */ (require('../../settings'));
-const { boostApplyThreshold } = require('../../voting/boostWindow');
-const { getEffectiveBoostTime, getEffectiveKeyUnlockedBoostTime } = require('./thresholds');
+import * as settingsModule from '../../settings';
+const settings = /** @type {any} */ (settingsModule);
+import { boostApplyThreshold } from '../../voting/boostWindow';
+import { getEffectiveBoostTime, getEffectiveKeyUnlockedBoostTime } from './thresholds';
 // Cast at the boundary for the same reason as settings above — logger.js
 // isn't `// @ts-check`ed yet. Used only on the corrupt-config paths below,
 // which must not stay silent: the orchestrator's per-challenge catch logs its
 // own errors, so a swallowed one here would be strictly less visible.
-const logger = /** @type {any} */ (require('../../logger'));
+import * as loggerModule from '../../logger';
+const logger = /** @type {any} */ (loggerModule);
 // CR/LF-collapse API-sourced values before they reach a log message (CWE-117).
 // Imported directly rather than off the logger, matching newEntryTracker.js —
 // the logger is mocked across much of the test suite, and its own oneLine() on
 // the finished message is a backstop, not the first line of defence.
-const { oneLine: oneLineId } = require('../../format/logSafe');
+import { oneLine as oneLineId } from '../../format/logSafe';
 
 /**
  * Lead seconds before the boost-apply instant during which the pre-boost fill
@@ -130,6 +132,4 @@ const getBoostPrefillState = (challenge, challengeId, now) => {
     }
 };
 
-module.exports = {
-    getBoostPrefillState,
-};
+export { getBoostPrefillState };

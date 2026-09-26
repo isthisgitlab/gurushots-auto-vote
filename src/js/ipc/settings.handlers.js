@@ -18,12 +18,12 @@ try {
 } catch {
     // Capacitor / CLI: register() in this module is never reached.
 }
-const settings = require('../settings');
-const { registerHandlers } = require('./registerHandlers');
-const { errorResult } = require('./errorResult');
-const logger = require('../logger');
-const apiFactory = require('../apiFactory');
-const metadata = require('../metadata');
+import * as settings from '../settings';
+import { registerHandlers } from './registerHandlers';
+import { errorResult } from './errorResult';
+import * as logger from '../logger';
+import * as apiFactory from '../apiFactory';
+import * as metadata from '../metadata';
 
 // Channels that just delegate to settings.<method>(...args). Each
 // entry: [channel, method-name, fallback-on-error, verb-for-log].
@@ -267,4 +267,4 @@ const register = (ipcMain) => {
     registerHandlers(ipcMain, buildHandlers({ broadcastSettingsChange }));
 };
 
-module.exports = { register, buildHandlers };
+export { register, buildHandlers };

@@ -17,18 +17,18 @@
  * the host lifecycle (SIGINT on CLI, Service.onDestroy on Android).
  */
 
-const logger = require('../logger');
-const settings = require('../settings');
-const { createCadenceChain, DECISION_ERROR_MESSAGE, formatOversleptMessage } = require('./cadenceChain');
-const {
+import * as logger from '../logger';
+import * as settings from '../settings';
+import { createCadenceChain, DECISION_ERROR_MESSAGE, formatOversleptMessage } from './cadenceChain';
+import {
     resolveThreshold,
     resolveScheduledFill,
     resolveFinalWindowTopUp,
     resolveBoostPrefill,
     resolveCurrencyAuto,
     resolveScenarioWake,
-} = require('./nodeResolvers');
-const { createNodeDeadlineNotifier, createNodeScenarioNotifier } = require('../services/notify/nodeNotify');
+} from './nodeResolvers';
+import { createNodeDeadlineNotifier, createNodeScenarioNotifier } from '../services/notify/nodeNotify';
 
 /**
  * Create a continuous voting scheduler.
@@ -126,4 +126,4 @@ const createScheduler = ({ runVotingCycle, getActiveChallenges }) => {
     };
 };
 
-module.exports = { createScheduler };
+export { createScheduler };

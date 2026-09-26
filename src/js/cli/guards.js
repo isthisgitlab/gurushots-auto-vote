@@ -6,8 +6,8 @@
  * return shape; only the check + user-facing guidance live here.
  */
 
-const logger = require('../logger');
-const { getMiddleware } = require('../apiFactory');
+import * as logger from '../logger';
+import { getMiddleware } from '../apiFactory';
 
 /**
  * True when a token is present. On miss, logs the standard "login first"
@@ -74,4 +74,4 @@ const requireChallenge = ({ challengeId }, usage) => {
     return challengeId;
 };
 
-module.exports = { ensureAuthenticated, requireProfileArgs, requireChallenge };
+export { ensureAuthenticated, requireProfileArgs, requireChallenge };

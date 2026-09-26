@@ -5,9 +5,9 @@
  * cross-field validation of a challenge value set.
  */
 
-const { SETTINGS_SCHEMA, validateSetting } = require('./schema');
-const { getUiDefaultSettings } = require('./uiDefaults');
-const { getDefaultMockSetting } = require('./storage');
+import { SETTINGS_SCHEMA, validateSetting } from './schema';
+import { getUiDefaultSettings } from './uiDefaults';
+import { getDefaultMockSetting } from './storage';
 
 // Default settings with environment-aware mock setting
 const getDefaultSettings = () => {
@@ -126,10 +126,4 @@ const challengeValueSetIsValid = (values, candidates, challengeId = null) => {
     });
 };
 
-module.exports = {
-    getDefaultSettings,
-    ensureChallengeSettings,
-    valuesEqual,
-    globalChallengeValues,
-    challengeValueSetIsValid,
-};
+export { getDefaultSettings, ensureChallengeSettings, valuesEqual, globalChallengeValues, challengeValueSetIsValid };

@@ -1,6 +1,6 @@
-const logger = require('./logger');
-const { formatTimeHMS } = require('./dateFormat');
-const { createJsonStore } = require('./settings/storage');
+import * as logger from './logger';
+import { formatTimeHMS } from './dateFormat';
+import { createJsonStore } from './settings/storage';
 
 // Platform-aware transport (fs on Electron/CLI, @capacitor/preferences on
 // the Android app WebView, in-memory on the headless service); raw fs would
@@ -40,7 +40,7 @@ const MAX_ENTRY_ID_LENGTH = 64;
 // Challenge ids come from the GuruShots API, so collapse CR/LF before interpolating
 // one into a message. These carry a bare id rather than the full `[Challenge …]`
 // tag, so they use the shared helper directly instead of logger.challengeTag.
-const { oneLine: oneLineId } = require('./format/logSafe');
+import { oneLine as oneLineId } from './format/logSafe';
 
 /**
  * Reject the three keys that address Object.prototype instead of creating an own
@@ -611,35 +611,26 @@ const clearLegacySkipVersion = () => {
     return saveMetadata(metadata);
 };
 
-module.exports = {
-    // Core functions
+export const initializeMetadataAsync = metadataStore.initializeAsync;
+export const flushMetadataWrites = metadataStore.flushPendingWrites;
+export {
     loadMetadata,
     saveMetadata,
     getChallengeMetadata,
     setChallengeMetadata,
-
-    // Convenience functions
     updateLastVoteTime,
     updateExposureBump,
     updateChallengeVoteMetadata,
     removeChallengeMetadata,
     cleanupStaleMetadata,
-
-    // Entry-id snapshot (voteOnNewEntry)
     getChallengeEntryIds,
     setChallengeEntryIds,
     MAX_TRACKED_ENTRY_IDS,
     MAX_ENTRY_ID_LENGTH,
-
-    // Update check functions
     getUpdateCheckData,
     setLastUpdateCheck,
     getLegacySkipVersion,
     clearLegacySkipVersion,
-    initializeMetadataAsync: metadataStore.initializeAsync,
-    flushMetadataWrites: metadataStore.flushPendingWrites,
-
-    // Utility functions
     getAllMetadata,
     resetAllMetadata,
     getMetadataPath,

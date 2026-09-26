@@ -12,7 +12,7 @@
  * unaffected.
  */
 
-const logger = require('../logger');
+import * as logger from '../logger';
 
 const isTrustedSender = (event) => {
     try {
@@ -50,4 +50,4 @@ const registerHandlers = (ipcMain, handlers) => {
 // isTrustedSender is exported so the handful of channels registered with ipcMain.on
 // (which carries no return value, so it cannot go through registerHandlers) can apply the
 // same origin check instead of silently having none.
-module.exports = { registerHandlers, isTrustedSender };
+export { registerHandlers, isTrustedSender };

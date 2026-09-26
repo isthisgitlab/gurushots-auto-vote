@@ -4,11 +4,11 @@
  * per-photo tier record, and the one-call pick.
  */
 
-const { MIN_USER_TAG_STEM_LENGTH, tokeniseTagList } = require('./stemming');
-const { detectLetterPrefix, excludedSubjectOf, photoShowsExcluded } = require('./title');
-const { buildChallengeKeywords } = require('./keywords');
-const { wholeLabelStems, labelWordStems, photoMatchesAllStems, countShouldMatches, scorePhoto } = require('./labels');
-const {
+import { MIN_USER_TAG_STEM_LENGTH, tokeniseTagList } from './stemming';
+import { detectLetterPrefix, excludedSubjectOf, photoShowsExcluded } from './title';
+import { buildChallengeKeywords } from './keywords';
+import { wholeLabelStems, labelWordStems, photoMatchesAllStems, countShouldMatches, scorePhoto } from './labels';
+import {
     semanticTiersOf,
     achievementCountOf,
     statsKnownOf,
@@ -16,7 +16,7 @@ const {
     viewsOf,
     uploadDateOf,
     finalizePick,
-} = require('./tiers');
+} from './tiers';
 
 // Same "never throws" contract as resolveSemanticScores: a buggy callback must
 // not turn a fill that would succeed into a crash.
@@ -194,7 +194,4 @@ const buildScoredCandidates = (challenge, eligiblePhotos, opts = {}) => {
     });
 };
 
-module.exports = {
-    pickPhotosForChallenge,
-    buildScoredCandidates,
-};
+export { pickPhotosForChallenge, buildScoredCandidates };

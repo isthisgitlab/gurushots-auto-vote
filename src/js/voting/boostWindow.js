@@ -96,4 +96,4 @@ const boostApplyThreshold = (boost, closeTime, { boostTimeSec, keyUnlockedBoostT
     return { thresholdSec: -Infinity, branch: null };
 };
 
-module.exports = { isBoostWindowOpen, openBoostWindows, boostApplyThreshold };
+export { isBoostWindowOpen, openBoostWindows, boostApplyThreshold };

@@ -12,6 +12,7 @@ jest.mock('../../src/js/settings', () => ({
 }));
 
 jest.mock('../../src/js/services/auth', () => ({
+    __esModule: true,
     ...jest.requireActual('../../src/js/services/auth'),
     clearAuthToken: jest.fn(async () => true),
 }));
@@ -26,7 +27,7 @@ const settings = require('../../src/js/settings');
 const logger = require('../../src/js/logger');
 const cancellation = require('../../src/js/voting/cancellation');
 const { clearAuthToken } = require('../../src/js/services/auth');
-const BaseMiddleware = require('../../src/js/services/BaseMiddleware');
+const { BaseMiddleware } = require('../../src/js/services/BaseMiddleware');
 
 /** One shared category logger so assertions can see every call. */
 let cat;

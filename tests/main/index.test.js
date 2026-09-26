@@ -81,6 +81,9 @@ jest.mock('../../src/js/logger', () => {
 });
 
 jest.mock('../../src/js/settings', () => ({
+    // index.js hands its settings namespace on (clearTokenOnQuit); the marker makes
+    // that namespace this very object, so the assertions can compare identity.
+    __esModule: true,
     getWindowBounds: jest.fn((kind) => ({ width: 800, height: 600, x: kind === 'main' ? 10 : 20, y: 30 })),
     saveWindowBounds: jest.fn(),
     loadSettings: jest.fn(() => ({})),
@@ -92,12 +95,12 @@ jest.mock('../../src/js/settings', () => ({
 }));
 
 jest.mock('../../src/js/api/randomizer', () => ({ initializeHeaders: jest.fn() }));
-jest.mock('../../src/js/services/AutoUpdater', () =>
-    jest.fn().mockImplementation(() => ({
+jest.mock('../../src/js/services/AutoUpdater', () => ({
+    AutoUpdater: jest.fn().mockImplementation(() => ({
         checkForUpdates: jest.fn(() => Promise.resolve(null)),
         setMainWindow: jest.fn(),
     })),
-);
+}));
 jest.mock('../../src/js/services/auth', () => ({ clearAuthToken: jest.fn(() => Promise.resolve()) }));
 for (const mod of ['log', 'update', 'misc', 'settings', 'voting', 'actions', 'computations', 'currency', 'scenarios']) {
     jest.mock(`../../src/js/ipc/${mod}.handlers`, () => ({ register: jest.fn() }));
@@ -143,7 +146,7 @@ function load({ lock = true, whenReady } = {}) {
         logger: require('../../src/js/logger'),
         settings: require('../../src/js/settings'),
         randomizer: require('../../src/js/api/randomizer'),
-        AutoUpdater: require('../../src/js/services/AutoUpdater'),
+        AutoUpdater: require('../../src/js/services/AutoUpdater').AutoUpdater,
         auth: require('../../src/js/services/auth'),
         updateIpc: require('../../src/js/ipc/update.handlers'),
         miscIpc: require('../../src/js/ipc/misc.handlers'),
@@ -274,7 +277,7 @@ describe('startup (whenReady)', () => {
         jest.resetModules();
         const settings = require('../../src/js/settings');
         settings.loadSettings.mockReturnValue({ token: 't', stayLoggedIn: true });
-        const AU = require('../../src/js/services/AutoUpdater');
+        const AU = require('../../src/js/services/AutoUpdater').AutoUpdater;
         const check = jest.fn(
             () =>
                 new Promise((r) => {
@@ -305,7 +308,7 @@ describe('startup (whenReady)', () => {
             throw seedErr;
         });
         const checkErr = new Error('offline');
-        require('../../src/js/services/AutoUpdater').mockImplementation(() => ({
+        require('../../src/js/services/AutoUpdater').AutoUpdater.mockImplementation(() => ({
             checkForUpdates: jest.fn(() => Promise.reject(checkErr)),
             setMainWindow: jest.fn(),
         }));

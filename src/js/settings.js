@@ -22,124 +22,109 @@
  *   reset.js              reset helpers and "modified" checks
  */
 
-const {
+import {
     SETTINGS_SCHEMA,
     SETTINGS_GROUPS,
     SETTINGS_TIERS,
     getValidationError,
     getSettingsSchema,
-} = require('./settings/schema');
-const { titleRuleTitles } = require('./settings/challengeRules');
-const {
+} from './settings/schema';
+import { titleRuleTitles } from './settings/challengeRules';
+import {
     initializeAsync,
     flushPendingWrites,
     getUserDataPath,
     getSettingsPath,
     getEnvironmentInfo,
-} = require('./settings/storage');
-const { getDefaultSettings } = require('./settings/defaults');
-const persistence = require('./settings/persistence');
-const challengeOverrides = require('./settings/challengeOverrides');
-const { rememberChallengeTitles } = require('./settings/challengeFacts');
-const { TITLE_RULE_INLINE_KEYS, MAX_TITLE_LENGTH } = require('./settings/titleRuleSanitize');
-const titleRules = require('./settings/titleRules');
-const profiles = require('./settings/profiles');
-const titlePins = require('./settings/titlePins');
-const scenarios = require('./settings/scenarios');
-const reset = require('./settings/reset');
+} from './settings/storage';
+import { getDefaultSettings } from './settings/defaults';
+import * as persistence from './settings/persistence';
+import * as challengeOverrides from './settings/challengeOverrides';
+import { rememberChallengeTitles } from './settings/challengeFacts';
+import { TITLE_RULE_INLINE_KEYS, MAX_TITLE_LENGTH } from './settings/titleRuleSanitize';
+import * as titleRules from './settings/titleRules';
+import * as profiles from './settings/profiles';
+import * as titlePins from './settings/titlePins';
+import * as scenarios from './settings/scenarios';
+import * as reset from './settings/reset';
 
-module.exports = {
+export const loadSettings = persistence.loadSettings;
+export const saveSettings = persistence.saveSettings;
+export const getSetting = persistence.getSetting;
+export const setSetting = persistence.setSetting;
+export const isReloadRequired = persistence.isReloadRequired;
+export const saveWindowBounds = persistence.saveWindowBounds;
+export const getWindowBounds = persistence.getWindowBounds;
+// Challenge-specific settings
+export const getGlobalDefault = challengeOverrides.getGlobalDefault;
+export const setGlobalDefault = challengeOverrides.setGlobalDefault;
+export const getChallengeOverride = challengeOverrides.getChallengeOverride;
+export const setChallengeOverride = challengeOverrides.setChallengeOverride;
+export const setChallengeOverrides = challengeOverrides.setChallengeOverrides;
+export const removeChallengeOverride = challengeOverrides.removeChallengeOverride;
+export const getEffectiveSetting = challengeOverrides.getEffectiveSetting;
+export const getExposureResolver = challengeOverrides.getExposureResolver;
+// Challenge rules (survive challenge rotation)
+export const getTitleRules = titleRules.getTitleRules;
+export const setTitleRules = titleRules.setTitleRules;
+export const resolveRuleSetting = titleRules.resolveRuleSetting;
+export const hasRuleJoinOptIn = titleRules.hasRuleJoinOptIn;
+export const getEffectiveTagSetting = titleRules.getEffectiveTagSetting;
+export const getEffectiveIgnoreTitleWords = titleRules.getEffectiveIgnoreTitleWords;
+export const getTitleProfile = titleRules.getTitleProfile;
+// Named challenge-settings profiles (survive challenge rotation).
+// The caps are exported so tests and the get-settings-schema handler
+// share the same literals the facade enforces.
+export const getChallengeOverrides = challengeOverrides.getChallengeOverrides;
+export const replaceChallengeOverrides = challengeOverrides.replaceChallengeOverrides;
+export const getChallengeProfiles = profiles.getChallengeProfiles;
+export const saveChallengeProfile = profiles.saveChallengeProfile;
+export const deleteChallengeProfile = profiles.deleteChallengeProfile;
+export const applyChallengeProfile = profiles.applyChallengeProfile;
+export const seedIntentProfiles = profiles.seedIntentProfiles;
+export const MAX_CHALLENGE_PROFILES = profiles.MAX_CHALLENGE_PROFILES;
+export const MAX_PROFILE_NAME_LENGTH = profiles.MAX_PROFILE_NAME_LENGTH;
+// User-defined scenarios (survive challenge rotation) and their JSON
+// import/export. Results are {ok, name} / {ok: false, issues}.
+export const getScenarios = scenarios.getScenarios;
+export const getScenario = scenarios.getScenario;
+export const saveScenario = scenarios.saveScenario;
+export const renameScenario = scenarios.renameScenario;
+export const deleteScenario = scenarios.deleteScenario;
+export const describeScenario = scenarios.describeScenario;
+export const checkScenario = scenarios.checkScenario;
+export const previewScenarioImport = scenarios.previewScenarioImport;
+export const importScenario = scenarios.importScenario;
+export const exportScenario = scenarios.exportScenario;
+export const MAX_SCENARIOS = scenarios.MAX_SCENARIOS;
+// First-seen challenge-title pins (internal cache — no IPC wiring).
+// MAX_TITLE_LENGTH is exported so challengeTitlePin.js bounds incoming
+// titles with the same cap mergeTitlePins accepts.
+export const getTitlePins = titlePins.getTitlePins;
+export const mergeTitlePins = titlePins.mergeTitlePins;
+// Cleanup functions
+export const cleanupStaleChallengeSetting = challengeOverrides.cleanupStaleChallengeSetting;
+export const cleanupObsoleteSettings = persistence.cleanupObsoleteSettings;
+// Reset functions
+export const resetSetting = reset.resetSetting;
+export const resetGlobalDefault = reset.resetGlobalDefault;
+export const resetAllGlobalDefaults = reset.resetAllGlobalDefaults;
+export const resetAllSettings = reset.resetAllSettings;
+export const isSettingModified = reset.isSettingModified;
+export const isGlobalDefaultModified = reset.isGlobalDefaultModified;
+export {
     initializeAsync,
     flushPendingWrites,
-    loadSettings: persistence.loadSettings,
-    saveSettings: persistence.saveSettings,
-    getSetting: persistence.getSetting,
-    setSetting: persistence.setSetting,
-    isReloadRequired: persistence.isReloadRequired,
     getDefaultSettings,
     getUserDataPath,
     getSettingsPath,
-    saveWindowBounds: persistence.saveWindowBounds,
-    getWindowBounds: persistence.getWindowBounds,
-
-    // Environment detection functions
     getEnvironmentInfo,
-
-    // Challenge-specific settings
-    getGlobalDefault: challengeOverrides.getGlobalDefault,
-    setGlobalDefault: challengeOverrides.setGlobalDefault,
-    getChallengeOverride: challengeOverrides.getChallengeOverride,
-    setChallengeOverride: challengeOverrides.setChallengeOverride,
-    setChallengeOverrides: challengeOverrides.setChallengeOverrides,
-    removeChallengeOverride: challengeOverrides.removeChallengeOverride,
-    getEffectiveSetting: challengeOverrides.getEffectiveSetting,
-    getExposureResolver: challengeOverrides.getExposureResolver,
-
-    // Challenge rules (survive challenge rotation)
-    getTitleRules: titleRules.getTitleRules,
     titleRuleTitles,
-    setTitleRules: titleRules.setTitleRules,
-    resolveRuleSetting: titleRules.resolveRuleSetting,
-    hasRuleJoinOptIn: titleRules.hasRuleJoinOptIn,
     TITLE_RULE_INLINE_KEYS,
-    getEffectiveTagSetting: titleRules.getEffectiveTagSetting,
-    getEffectiveIgnoreTitleWords: titleRules.getEffectiveIgnoreTitleWords,
-    getTitleProfile: titleRules.getTitleProfile,
     rememberChallengeTitles,
-
-    // Named challenge-settings profiles (survive challenge rotation).
-    // The caps are exported so tests and the get-settings-schema handler
-    // share the same literals the facade enforces.
-    getChallengeOverrides: challengeOverrides.getChallengeOverrides,
-    replaceChallengeOverrides: challengeOverrides.replaceChallengeOverrides,
-    getChallengeProfiles: profiles.getChallengeProfiles,
-    saveChallengeProfile: profiles.saveChallengeProfile,
-    deleteChallengeProfile: profiles.deleteChallengeProfile,
-    applyChallengeProfile: profiles.applyChallengeProfile,
-    seedIntentProfiles: profiles.seedIntentProfiles,
-    MAX_CHALLENGE_PROFILES: profiles.MAX_CHALLENGE_PROFILES,
-    MAX_PROFILE_NAME_LENGTH: profiles.MAX_PROFILE_NAME_LENGTH,
-
-    // User-defined scenarios (survive challenge rotation) and their JSON
-    // import/export. Results are {ok, name} / {ok: false, issues}.
-    getScenarios: scenarios.getScenarios,
-    getScenario: scenarios.getScenario,
-    saveScenario: scenarios.saveScenario,
-    renameScenario: scenarios.renameScenario,
-    deleteScenario: scenarios.deleteScenario,
-    describeScenario: scenarios.describeScenario,
-    checkScenario: scenarios.checkScenario,
-    previewScenarioImport: scenarios.previewScenarioImport,
-    importScenario: scenarios.importScenario,
-    exportScenario: scenarios.exportScenario,
-    MAX_SCENARIOS: scenarios.MAX_SCENARIOS,
-
-    // First-seen challenge-title pins (internal cache — no IPC wiring).
-    // MAX_TITLE_LENGTH is exported so challengeTitlePin.js bounds incoming
-    // titles with the same cap mergeTitlePins accepts.
-    getTitlePins: titlePins.getTitlePins,
-    mergeTitlePins: titlePins.mergeTitlePins,
     MAX_TITLE_LENGTH,
-
-    // Cleanup functions
-    cleanupStaleChallengeSetting: challengeOverrides.cleanupStaleChallengeSetting,
-    cleanupObsoleteSettings: persistence.cleanupObsoleteSettings,
-
-    // Reset functions
-    resetSetting: reset.resetSetting,
-    resetGlobalDefault: reset.resetGlobalDefault,
-    resetAllGlobalDefaults: reset.resetAllGlobalDefaults,
-    resetAllSettings: reset.resetAllSettings,
-
-    // Validation functions
     getValidationError,
-
-    // Utility functions
     getSettingsSchema,
-    isSettingModified: reset.isSettingModified,
-    isGlobalDefaultModified: reset.isGlobalDefaultModified,
-
-    // Schema
     SETTINGS_SCHEMA,
     SETTINGS_GROUPS,
     SETTINGS_TIERS,

@@ -90,4 +90,4 @@ const remapScheduleRows = (rows, maxPhotoSubmits) => {
     return sane.map((r) => ({ count: r.count - shift, seconds: r.seconds })).filter((r) => r.count >= 2);
 };
 
-module.exports = { getScheduleShift, remapScheduleRows };
+export { getScheduleShift, remapScheduleRows };

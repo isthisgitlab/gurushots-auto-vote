@@ -8,7 +8,7 @@
  * `_writeToOutput` hook and is documented inline.
  */
 
-const readline = require('node:readline');
+import * as readline from 'node:readline';
 
 const createReadlineInterface = () =>
     readline.createInterface({
@@ -68,4 +68,4 @@ const askSecret = async (question, rl) =>
         };
     });
 
-module.exports = { createReadlineInterface, askYesNo, askInput, askSecret };
+export { createReadlineInterface, askYesNo, askInput, askSecret };

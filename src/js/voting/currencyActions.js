@@ -136,7 +136,7 @@ const blockedOutcome = (action, challenge, bankroll, nowSec) => {
     return null;
 };
 
-module.exports = {
+export {
     CURRENCY_OUTCOME,
     CURRENCY_FIELD,
     isRunning,

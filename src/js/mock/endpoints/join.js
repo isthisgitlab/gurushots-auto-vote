@@ -3,8 +3,8 @@
  * bankroll, and the coin unlock.
  */
 
-const logger = require('../../logger');
-const { simulateApiResponse, mockMethod } = require('../simulate');
+import * as logger from '../../logger';
+import { simulateApiResponse, mockMethod } from '../simulate';
 
 /**
  * Simulate /rest/get_member_challenges (un-joined "open" challenges).
@@ -122,4 +122,4 @@ const coinsUnlock = mockMethod(
     },
 );
 
-module.exports = { getMemberChallenges, getBankroll, coinsUnlock };
+export { getMemberChallenges, getBankroll, coinsUnlock };

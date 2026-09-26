@@ -3,8 +3,8 @@
  * caller then acts on.
  */
 
-const { getSlotsRemaining } = require('./challengeState');
-const { runFillAttempt } = require('./pipeline');
+import { getSlotsRemaining } from './challengeState';
+import { runFillAttempt } from './pipeline';
 
 /**
  * Submit exactly one new photo into a challenge and return its id, so the
@@ -96,6 +96,4 @@ const submitNewEntryForAction = async (challenge, token, deps) => {
     return { ok: true, imageId, reason: 'submitted' };
 };
 
-module.exports = {
-    submitNewEntryForAction,
-};
+export { submitNewEntryForAction };

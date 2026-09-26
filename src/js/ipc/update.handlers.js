@@ -9,11 +9,11 @@
  * `autoUpdater.setMainWindow`.
  */
 
-const logger = require('../logger');
-const { registerHandlers } = require('./registerHandlers');
-const { errorResult } = require('./errorResult');
-const AutoUpdater = require('../services/AutoUpdater');
-const { getReleasesUrl } = require('../services/UpdateChecker');
+import * as logger from '../logger';
+import { registerHandlers } from './registerHandlers';
+import { errorResult } from './errorResult';
+import { AutoUpdater } from '../services/AutoUpdater';
+import { getReleasesUrl } from '../services/UpdateChecker';
 
 const buildHandlers = (deps) => {
     const { getAutoUpdater, setAutoUpdater, getMainWindow } = deps;
@@ -128,4 +128,4 @@ const register = (ipcMain, deps) => {
     registerHandlers(ipcMain, buildHandlers(deps));
 };
 
-module.exports = { register, buildHandlers };
+export { register, buildHandlers };

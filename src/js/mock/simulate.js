@@ -5,7 +5,7 @@
  * endpoint (mock/endpoints/*) is built from.
  */
 
-const logger = require('../logger');
+import * as logger from '../logger';
 
 /**
  * Helper function to simulate API responses with delays
@@ -83,4 +83,4 @@ const mockMethod = (
     };
 };
 
-module.exports = { simulateApiResponse, simulateApiError, mockMethod };
+export { simulateApiResponse, simulateApiError, mockMethod };

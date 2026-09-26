@@ -4,12 +4,12 @@
  * the submit-free ranking the swap flow uses (rankCandidatesForChallenge).
  */
 
-const { buildScoredCandidates, selectEnrichmentSet, finalizePick } = require('../photoPicker');
-const { rankVisually } = require('../visionVerifier');
-const { enrichCandidates } = require('../photoStats');
-const { resolveSemanticScores, resolveIgnoreWords, fetchCandidatesForChallenge } = require('./candidates');
-const { refreshChallengeState } = require('./challengeState');
-const { describeSubmitFailure, makeFallbackLogger, logPopularityPick } = require('./fillLogging');
+import { buildScoredCandidates, selectEnrichmentSet, finalizePick } from '../photoPicker';
+import { rankVisually } from '../visionVerifier';
+import { enrichCandidates } from '../photoStats';
+import { resolveSemanticScores, resolveIgnoreWords, fetchCandidatesForChallenge } from './candidates';
+import { refreshChallengeState } from './challengeState';
+import { describeSubmitFailure, makeFallbackLogger, logPopularityPick } from './fillLogging';
 
 /**
  * First half of the fill pipeline: fetch the candidate library for a challenge
@@ -360,7 +360,4 @@ const runFillAttempt = async ({
     }
 };
 
-module.exports = {
-    rankCandidatesForChallenge,
-    runFillAttempt,
-};
+export { rankCandidatesForChallenge, runFillAttempt };

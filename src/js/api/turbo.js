@@ -8,8 +8,8 @@
  * via x-token works the same as the mobile flow.
  */
 
-const { makePostRequest } = require('./api-client');
-const { ENDPOINTS, createWebHeaders, makeRequireValue } = require('./constants');
+import { makePostRequest } from './api-client';
+import { ENDPOINTS, createWebHeaders, makeRequireValue } from './constants';
 
 const TURBO_SELECTION_DELAY_MS = 1200;
 
@@ -94,9 +94,4 @@ const applyTurbo = async (challengeId, imageId, token) => {
     };
 };
 
-module.exports = {
-    getChallengeTurbo,
-    submitTurboSelection,
-    applyTurbo,
-    TURBO_SELECTION_DELAY_MS,
-};
+export { getChallengeTurbo, submitTurboSelection, applyTurbo, TURBO_SELECTION_DELAY_MS };

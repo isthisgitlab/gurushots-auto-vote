@@ -3,9 +3,9 @@
  * record, and the challenge submit.
  */
 
-const logger = require('../../logger');
-const { simulateApiResponse, mockMethod } = require('../simulate');
-const { buildLibraryPhotos, buildImageStats } = require('../photoLibrary');
+import * as logger from '../../logger';
+import { simulateApiResponse, mockMethod } from '../simulate';
+import { buildLibraryPhotos, buildImageStats } from '../photoLibrary';
 
 /**
  * Simulate fetching the user's challenge-eligible photo library.
@@ -111,4 +111,4 @@ const submitToChallenge = mockMethod(
     },
 );
 
-module.exports = { getEligiblePhotos, getImageData, submitToChallenge };
+export { getEligiblePhotos, getImageData, submitToChallenge };

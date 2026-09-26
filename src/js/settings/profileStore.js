@@ -11,9 +11,9 @@
  * flows through every profile.
  */
 
-const logger = require('../logger');
-const { SETTINGS_SCHEMA, validateSetting } = require('./schema');
-const { challengeValueSetIsValid } = require('./defaults');
+import * as logger from '../logger';
+import { SETTINGS_SCHEMA, validateSetting } from './schema';
+import { challengeValueSetIsValid } from './defaults';
 
 const MAX_CHALLENGE_PROFILES = 50;
 const MAX_PROFILE_NAME_LENGTH = 60;
@@ -124,7 +124,7 @@ const sanitizeProfileValues = (values, failClosed, globalDefaults, logInvalid = 
     return sanitized;
 };
 
-module.exports = {
+export {
     MAX_CHALLENGE_PROFILES,
     MAX_PROFILE_NAME_LENGTH,
     RESERVED_PROFILE_NAMES,

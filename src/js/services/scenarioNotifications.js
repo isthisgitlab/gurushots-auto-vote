@@ -12,7 +12,7 @@
  * replays old ones.
  */
 
-const { sanitizeNotificationText, interpolate } = require('./deadlineNotifications');
+import { sanitizeNotificationText, interpolate } from './deadlineNotifications';
 
 /** Longest notification body; a scenario notice is itself capped at 120 characters. */
 const MAX_BODY = 240;
@@ -129,4 +129,4 @@ const createScenarioNotifier = ({ isEnabled, readOutbox, translate, deliver, log
     };
 };
 
-module.exports = { createNoticeTracker, formatScenarioNotification, createScenarioNotifier };
+export { createNoticeTracker, formatScenarioNotification, createScenarioNotifier };

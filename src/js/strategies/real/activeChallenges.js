@@ -3,8 +3,8 @@
  * first-seen title pinning, with concurrent calls coalesced per token.
  */
 
-const { fetchActiveChallenges } = require('../../api/challenges');
-const { pinChallengeTitles } = require('../../services/challengeTitlePin');
+import { fetchActiveChallenges } from '../../api/challenges';
+import { pinChallengeTitles } from '../../services/challengeTitlePin';
 
 /**
  * One fetch, then pin first-seen titles onto a successful response. A failed
@@ -55,4 +55,4 @@ const getActiveChallenges = (token) => {
     return request;
 };
 
-module.exports = { getActiveChallenges };
+export { getActiveChallenges };

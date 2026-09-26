@@ -1,9 +1,9 @@
 // @ts-check
-const { z } = require('zod');
+import { z } from 'zod';
 // Bounds live in the dependency-free limits.js so renderer-reachable modules
 // can read them without pulling zod in through this file. Re-exported below to
 // keep this module's public surface unchanged.
-const { MAX_SCHEDULED_FILL_ENTRIES, MAX_VOTING_PAUSE_MINUTES } = require('./limits');
+import { MAX_SCHEDULED_FILL_ENTRIES, MAX_VOTING_PAUSE_MINUTES } from './limits';
 
 /**
  * Centralized Settings Schema
@@ -1720,7 +1720,7 @@ const getValidationError = (settingKey, value, allSettings = null, challengeId =
  */
 const getSettingsSchema = async () => SETTINGS_SCHEMA;
 
-module.exports = {
+export {
     SETTINGS_SCHEMA,
     schemaEntry,
     SETTINGS_GROUPS,

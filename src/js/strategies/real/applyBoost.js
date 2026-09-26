@@ -3,9 +3,9 @@
  * the api/boost transport, and marks the entry as boosted on success.
  */
 
-const { boostImage } = require('../../api/boost');
-const logger = require('../../logger');
-const { pickBoostEntry } = require('../../services/VotingLogic');
+import { boostImage } from '../../api/boost';
+import * as logger from '../../logger';
+import { pickBoostEntry } from '../../services/VotingLogic';
 
 /**
  * Applies a boost to a photo in a challenge.
@@ -54,4 +54,4 @@ const applyBoost = async (challenge, token) => {
     return response;
 };
 
-module.exports = { applyBoost };
+export { applyBoost };

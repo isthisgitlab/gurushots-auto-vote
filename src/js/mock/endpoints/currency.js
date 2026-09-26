@@ -5,7 +5,7 @@
  * exercised in mock mode.
  */
 
-const { simulateApiResponse, mockMethod } = require('../simulate');
+import { simulateApiResponse, mockMethod } from '../simulate';
 
 // Shared body of the mock currency spends: fixture 900004 is the failure sentinel.
 const mockSpendResult = async (challengeId) => {
@@ -31,4 +31,4 @@ const exposureAutofill = mockMethod(
     async (challengeId) => mockSpendResult(challengeId),
 );
 
-module.exports = { keyUnlock, swapPhoto, exposureAutofill };
+export { keyUnlock, swapPhoto, exposureAutofill };

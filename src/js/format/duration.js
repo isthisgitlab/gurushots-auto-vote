@@ -42,4 +42,4 @@ const formatDuration = (seconds, { includeSeconds = false } = {}) => {
     return `${minutes}m`;
 };
 
-module.exports = { formatDuration };
+export { formatDuration };

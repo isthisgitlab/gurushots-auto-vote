@@ -4,11 +4,11 @@
  * ignore-words lookup, and the semantic scores the picker ranks with.
  */
 
-const { buildSearchTerms, detectLetterPrefix, parseNegation } = require('../photoPicker');
-const { getSemanticScores } = require('../semantic');
-const lexicon = require('../semantic/lexicon');
-const { resolveTermsToTags } = require('../tagResolver');
-const { resolveMemberId } = require('./memberIdentity');
+import { buildSearchTerms, detectLetterPrefix, parseNegation } from '../photoPicker';
+import { getSemanticScores } from '../semantic';
+import * as lexicon from '../semantic/lexicon';
+import { resolveTermsToTags } from '../tagResolver';
+import { resolveMemberId } from './memberIdentity';
 
 /**
  * Semantic match scores for an eligible set, computed once per fill and reused
@@ -356,8 +356,4 @@ const fetchCandidatesForChallenge = async (
     return getEligiblePhotos(challengeId, token, { paginate: true, logLabel, ...usageOpt });
 };
 
-module.exports = {
-    resolveSemanticScores,
-    resolveIgnoreWords,
-    fetchCandidatesForChallenge,
-};
+export { resolveSemanticScores, resolveIgnoreWords, fetchCandidatesForChallenge };

@@ -21,4 +21,4 @@ function parseSettingValue(raw) {
     }
 }
 
-module.exports = { parseSettingValue };
+export { parseSettingValue };

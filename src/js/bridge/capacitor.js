@@ -24,23 +24,23 @@
 // behavior that this bridge replaces with Capacitor-native equivalents
 // further down (openExternalUrl via Capacitor.Browser, update channels
 // stubbed pending the AndroidUpdateInstaller).
-const settingsHandlers = require('../ipc/settings.handlers');
-const votingHandlers = require('../ipc/voting.handlers');
-const logHandlers = require('../ipc/log.handlers');
-const actionsHandlers = require('../ipc/actions.handlers');
-const computationsHandlers = require('../ipc/computations.handlers');
-const currencyHandlers = require('../ipc/currency.handlers');
-const scenariosHandlers = require('../ipc/scenarios.handlers');
-const { errorResult } = require('../ipc/errorResult');
+import * as settingsHandlers from '../ipc/settings.handlers';
+import * as votingHandlers from '../ipc/voting.handlers';
+import * as logHandlers from '../ipc/log.handlers';
+import * as actionsHandlers from '../ipc/actions.handlers';
+import * as computationsHandlers from '../ipc/computations.handlers';
+import * as currencyHandlers from '../ipc/currency.handlers';
+import * as scenariosHandlers from '../ipc/scenarios.handlers';
+import { errorResult } from '../ipc/errorResult';
 
-const settings = require('../settings');
-const logger = require('../logger');
-const { isSafeExternalUrl } = require('../format/urlSafe');
-const { clearAuthToken } = require('../services/auth');
-const updateChecker = require('../services/UpdateChecker');
-const androidUpdateInstaller = require('../services/AndroidUpdateInstaller');
-const { hasBundledModel } = require('../services/visionVerifier');
-const pkg = require('../../../package.json');
+import * as settings from '../settings';
+import * as logger from '../logger';
+import { isSafeExternalUrl } from '../format/urlSafe';
+import { clearAuthToken } from '../services/auth';
+import * as updateChecker from '../services/UpdateChecker';
+import * as androidUpdateInstaller from '../services/AndroidUpdateInstaller';
+import { hasBundledModel } from '../services/visionVerifier';
+import * as pkg from '../../../package.json';
 
 // Cached result of the most recent check-for-updates call. download-update
 // reads this so the React UI does not need to thread the URL through.
@@ -67,7 +67,7 @@ const emit = (channel, payload) => {
 
 // kebab-case channel name → camelCase renderer method name — shared with
 // preload.js via the channel manifest so both shells derive identically.
-const { kebabToCamel, aliases, sendMethods, eventMethods } = require('../ipc/manifest');
+import { kebabToCamel, aliases, sendMethods, eventMethods } from '../ipc/manifest';
 
 // Wrap a handler whose signature is (event, ...args) so the
 // renderer can call it as (...args). The first parameter (event) is
@@ -288,4 +288,4 @@ const installBridge = () => {
     return api;
 };
 
-module.exports = { installBridge, subscribe, emit };
+export { installBridge, subscribe, emit };

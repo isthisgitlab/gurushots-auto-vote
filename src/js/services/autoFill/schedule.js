@@ -3,7 +3,7 @@
  * the staggered fill trigger and the scheduler cadence share.
  */
 
-const { remapScheduleRows } = require('../scheduleRemap');
+import { remapScheduleRows } from '../scheduleRemap';
 
 /**
  * Rows of an autoFillSchedule value that are actually usable. The value comes
@@ -98,9 +98,4 @@ const getNextScheduleThresholdSec = (schedule, entryCount, maxPhotoSubmits) => {
     return threshold;
 };
 
-module.exports = {
-    getValidScheduleRows,
-    getEffectiveScheduleRows,
-    resolveScheduleTarget,
-    getNextScheduleThresholdSec,
-};
+export { getValidScheduleRows, getEffectiveScheduleRows, resolveScheduleTarget, getNextScheduleThresholdSec };

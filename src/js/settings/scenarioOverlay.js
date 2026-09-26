@@ -10,9 +10,9 @@
  * has — the engine halts such a challenge, and the settings stay normal.
  */
 
-const { scenarioStateLedger, mockScenarioStateLedger } = require('../scenarioStateStore');
-const { normalizeProfileName } = require('./profileStore');
-const { findStoredScenario, hasStoredScenarios } = require('./scenarios');
+import { scenarioStateLedger, mockScenarioStateLedger } from '../scenarioStateStore';
+import { normalizeProfileName } from './profileStore';
+import { findStoredScenario, hasStoredScenarios } from './scenarios';
 
 // Mock mode keeps scenario state in memory only (it must never touch the real
 // scenarioState.json), so the overlay reads the same ledger the mock pass uses.
@@ -38,4 +38,4 @@ const scenarioPhaseSettings = (settings, challengeId, resolveScenarioName) => {
     return scenario.phases[state.phase]?.settings ?? null;
 };
 
-module.exports = { scenarioPhaseSettings };
+export { scenarioPhaseSettings };

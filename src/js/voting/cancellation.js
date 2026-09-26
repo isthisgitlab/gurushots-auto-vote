@@ -20,8 +20,4 @@ const reset = () => {
     cancelled = false;
 };
 
-module.exports = {
-    isCancelled,
-    setCancelled,
-    reset,
-};
+export { isCancelled, setCancelled, reset };

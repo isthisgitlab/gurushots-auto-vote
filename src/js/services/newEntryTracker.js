@@ -20,8 +20,8 @@
  * force a vote on every cycle.
  */
 
-const metadata = require('../metadata');
-const logger = require('../logger');
+import * as metadata from '../metadata';
+import * as logger from '../logger';
 
 // metadata owns these (it enforces them at persistence time); read them here so the
 // pre-persistence bound can't drift from the write-side one.
@@ -48,7 +48,7 @@ const MAX_ENTRY_ID_LENGTH = finiteCap(metadata.MAX_ENTRY_ID_LENGTH, 'MAX_ENTRY_I
 // CR/LF-collapsed first. Imported from format/logSafe rather than taken off the
 // logger: the logger is mocked in much of the suite, and a sanitizer that vanishes
 // under a mock stops being exercised exactly where it is asserted.
-const { oneLine: oneLineId } = require('../format/logSafe');
+import { oneLine as oneLineId } from '../format/logSafe';
 
 /**
  * Extract the current entry ids from a challenge.
@@ -167,10 +167,4 @@ const createMemoryEntryTracker = () => {
     };
 };
 
-module.exports = {
-    readEntryIds,
-    hasNewEntries,
-    shouldRecordSnapshot,
-    createMetadataEntryTracker,
-    createMemoryEntryTracker,
-};
+export { readEntryIds, hasNewEntries, shouldRecordSnapshot, createMetadataEntryTracker, createMemoryEntryTracker };

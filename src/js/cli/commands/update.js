@@ -6,10 +6,10 @@
  * mirroring Android's system-installer hand-off.
  */
 
-const logger = require('../../logger');
-const updateChecker = require('../../services/UpdateChecker');
-const { hasBundledModel } = require('../../services/visionVerifier');
-const pkg = require('../../../../package.json');
+import * as logger from '../../logger';
+import * as updateChecker from '../../services/UpdateChecker';
+import { hasBundledModel } from '../../services/visionVerifier';
+import * as pkg from '../../../../package.json';
 
 // The release asset this binary ships as (gurucli-v<version>-<target>[-lite],
 // see scripts/build-cli.js), so the download link matches this build's own
@@ -71,4 +71,4 @@ const checkUpdates = async () => {
     ui.info('This CLI does not self-update — download the release and replace the binary manually.');
 };
 
-module.exports = { checkUpdates };
+export { checkUpdates };

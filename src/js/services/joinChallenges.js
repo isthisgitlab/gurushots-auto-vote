@@ -31,13 +31,13 @@
  *   cleanupStaleMetadata:null).
  */
 
-const logger = require('../logger');
-const settings = require('../settings');
-const cancellation = require('../voting/cancellation');
-const { shouldJoinChallenge } = require('./VotingLogic');
-const { fetchCandidatesForChallenge, resolveSemanticScores } = require('./autoFill');
-const { pickPhotosForChallenge } = require('./photoPicker');
-const { rankVisually } = require('./visionVerifier');
+import * as logger from '../logger';
+import * as settings from '../settings';
+import * as cancellation from '../voting/cancellation';
+import { shouldJoinChallenge } from './VotingLogic';
+import { fetchCandidatesForChallenge, resolveSemanticScores } from './autoFill';
+import { pickPhotosForChallenge } from './photoPicker';
+import { rankVisually } from './visionVerifier';
 
 // Shared across the manual handler and the automatic pass IN THIS PROCESS so the
 // two cannot double-spend the same challenge. Module-level = one Set per process;
@@ -716,7 +716,7 @@ const joinChallengeSingle = async (challengeId, token, deps, { spendCoins = fals
     return { status: outcome.status, challengeId, cost, imageId: outcome.imageId };
 };
 
-module.exports = {
+export {
     runJoinPass,
     joinChallengeSingle,
     isAutoJoinActive,

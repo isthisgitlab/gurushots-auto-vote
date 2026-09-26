@@ -10,26 +10,26 @@
  * (strategies/real); the mock surface is mockApiClient (mock/index.js).
  */
 
-const settings = require('./settings');
-const BaseMiddleware = require('./services/BaseMiddleware');
-const logger = require('./logger');
+import * as settings from './settings';
+import { BaseMiddleware } from './services/BaseMiddleware';
+import * as logger from './logger';
 
-const { authenticate } = require('./api/login');
-const {
+import { authenticate } from './api/login';
+import {
     fetchChallengesAndVote,
     getActiveChallenges,
     applyBoost,
     runTurboMiniGame,
     joinChallenge,
-} = require('./strategies/real');
-const { getVoteImages, submitVotes } = require('./api/voting');
-const { applyBoostToEntry } = require('./api/boost');
-const { applyTurbo } = require('./api/turbo');
-const { getEligiblePhotos, getImageData, submitToChallenge } = require('./api/submissions');
-const { getMemberChallenges, getBankroll } = require('./api/join');
-const { getCurrentMemberProfile, searchTagAutocomplete } = require('./api/tags');
-const { keyUnlock, swapPhoto, exposureAutofill } = require('./api/currency');
-const { mockApiClient } = require('./mock');
+} from './strategies/real';
+import { getVoteImages, submitVotes } from './api/voting';
+import { applyBoostToEntry } from './api/boost';
+import { applyTurbo } from './api/turbo';
+import { getEligiblePhotos, getImageData, submitToChallenge } from './api/submissions';
+import { getMemberChallenges, getBankroll } from './api/join';
+import { getCurrentMemberProfile, searchTagAutocomplete } from './api/tags';
+import { keyUnlock, swapPhoto, exposureAutofill } from './api/currency';
+import { mockApiClient } from './mock';
 
 /**
  * The API surface that both the real and mock strategies must implement.
@@ -198,8 +198,4 @@ const refreshApi = () => {
 // The raw surfaces are deliberately NOT exported — every caller selects a
 // surface through getApiStrategy (optionally with the explicit { mock }
 // override) so the factory stays the single swap point.
-module.exports = {
-    getApiStrategy,
-    getMiddleware,
-    refreshApi,
-};
+export { getApiStrategy, getMiddleware, refreshApi };

@@ -22,6 +22,7 @@ jest.mock('fs', () => ({
 // methods (basename, extname, sep, …) keep working — a partial mock here
 // silently returns undefined for anything it omits.
 jest.mock('path', () => ({
+    __esModule: true,
     ...jest.requireActual('path'),
     join: jest.fn((...args) => args.join('/')),
     dirname: jest.fn(),

@@ -379,7 +379,7 @@ const tokeniseTagList = (tags) => {
     return Array.from(new Set(stems));
 };
 
-module.exports = {
+export {
     STOPWORDS,
     MAX_TOKENISE_CHARS,
     MIN_USER_TAG_STEM_LENGTH,

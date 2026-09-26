@@ -6,17 +6,17 @@
  * argument — no persistence.
  */
 
-const { matchingRules } = require('./challengeRules');
-const { challengeTargetForId } = require('./challengeFacts');
-const { globalChallengeValues, challengeValueSetIsValid } = require('./defaults');
-const {
+import { matchingRules } from './challengeRules';
+import { challengeTargetForId } from './challengeFacts';
+import { globalChallengeValues, challengeValueSetIsValid } from './defaults';
+import {
     RESERVED_PROFILE_NAMES,
     normalizeProfileName,
     readProfilesMap,
     findProfileKey,
     sanitizeProfileValues,
-} = require('./profileStore');
-const { sanitizeTitleRuleInline } = require('./titleRuleSanitize');
+} from './profileStore';
+import { sanitizeTitleRuleInline } from './titleRuleSanitize';
 
 /**
  * The profile a matching rule list contributes: the one named by the FIRST
@@ -112,7 +112,7 @@ const titleProfileComposesWithKnownOverrides = (settings, rule, rawProfileValues
     });
 };
 
-module.exports = {
+export {
     profileFromMatches,
     ruleValuesFor,
     ruleValuesForChallengeId,

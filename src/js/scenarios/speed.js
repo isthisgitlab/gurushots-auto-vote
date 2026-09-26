@@ -110,7 +110,7 @@ const speedRatio = (history, entries, entry, now, windowSec = DEFAULT_WINDOW_SEC
     return own > 0 ? Infinity : 0;
 };
 
-module.exports = {
+export {
     recordVoteSample,
     votesPerHour,
     speedRatio,

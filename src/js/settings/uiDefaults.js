@@ -52,4 +52,4 @@ const getUiDefaultSettings = () => ({
     apiRetryBaseDelayMs: 1000, // Base for exponential backoff between retries (ms).
 });
 
-module.exports = { getUiDefaultSettings, DEFAULT_TIMEZONE };
+export { getUiDefaultSettings, DEFAULT_TIMEZONE };

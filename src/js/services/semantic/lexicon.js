@@ -14,8 +14,8 @@
  * with the matcher's own stemmer so lookups line up with the stored stems.
  */
 
-const { loadLexiconAsset } = require('./assets');
-const { stem } = require('../photoPicker/stemming');
+import { loadLexiconAsset } from './assets';
+import { stem } from '../photoPicker/stemming';
 
 // undefined = not initialized, null = unavailable, { dims, words: Map } = ready
 let table;
@@ -294,7 +294,7 @@ const __resetForTests = () => {
     initPromise = null;
 };
 
-module.exports = {
+export {
     init,
     isAvailable,
     embed,

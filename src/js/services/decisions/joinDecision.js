@@ -252,7 +252,4 @@ const shouldJoinChallenge = ({
     return { join: true, needsCoins, reason: 'paid' };
 };
 
-module.exports = {
-    shouldJoinChallenge,
-    resolveJoinWindow,
-};
+export { shouldJoinChallenge, resolveJoinWindow };

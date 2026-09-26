@@ -7,10 +7,10 @@
  * user-facing editor).
  */
 
-const logger = require('../logger');
-const { loadSettings, saveSettings } = require('./persistence');
-const { ensureChallengeSettings } = require('./defaults');
-const { MAX_TITLE_LENGTH } = require('./titleRuleSanitize');
+import * as logger from '../logger';
+import { loadSettings, saveSettings } from './persistence';
+import { ensureChallengeSettings } from './defaults';
+import { MAX_TITLE_LENGTH } from './titleRuleSanitize';
 
 // Defensive cap on the pin map size so an anomalously large challenge list
 // can't bloat the shared settings blob. Real active lists are tens of
@@ -112,7 +112,4 @@ const mergeTitlePins = (adds, removeIds) => {
     return saveSettings(settings);
 };
 
-module.exports = {
-    getTitlePins,
-    mergeTitlePins,
-};
+export { getTitlePins, mergeTitlePins };

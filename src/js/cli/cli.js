@@ -11,24 +11,24 @@
  *   - cli/commands/settings.js get / set / list / reset
  *   - cli/prompts.js           readline I/O helpers (used by auth)
  *
- * Run: node src/js/cli/cli.js <command> [...args]
+ * Run: pnpm cli:<command>, or node --import tsx src/js/cli/cli.js <command> [...args]
  */
 
-const logger = require('../logger');
-const { requireProfileArgs, requireChallenge } = require('./guards');
+import * as logger from '../logger';
+import { requireProfileArgs, requireChallenge } from './guards';
 logger.withCategory('api').debug('CLI module loaded, starting initialization', null);
 
-const settings = require('../settings');
-const { initializeHeaders } = require('../api/randomizer');
-const { handleLogin, handleLogout } = require('./commands/auth');
-const {
+import * as settings from '../settings';
+import { initializeHeaders } from '../api/randomizer';
+import { handleLogin, handleLogout } from './commands/auth';
+import {
     runVotingCycle,
     voteChallengeManual,
     parseChallengeFlag,
     startContinuousVoting,
     showStatus,
-} = require('./commands/voting');
-const {
+} from './commands/voting';
+import {
     boostChallenge,
     turboChallenge,
     fillChallenge,
@@ -39,11 +39,11 @@ const {
     swapBackCmd,
     SWAP_BACK_USAGE,
     fillExposureCmd,
-} = require('./commands/actions');
-const { showBankroll } = require('./commands/bankroll');
-const { showDiscover, joinChallengeCmd } = require('./commands/join');
-const { checkUpdates } = require('./commands/update');
-const {
+} from './commands/actions';
+import { showBankroll } from './commands/bankroll';
+import { showDiscover, joinChallengeCmd } from './commands/join';
+import { checkUpdates } from './commands/update';
+import {
     getSetting,
     setSetting,
     setGlobalDefault,
@@ -56,9 +56,9 @@ const {
     saveProfileFromChallenge,
     applyProfile,
     deleteProfile,
-} = require('./commands/settings');
-const { showLogs } = require('./commands/logs');
-const scenarioCommands = require('./commands/scenarios');
+} from './commands/settings';
+import { showLogs } from './commands/logs';
+import * as scenarioCommands from './commands/scenarios';
 
 const args = process.argv.slice(2);
 const command = args[0];

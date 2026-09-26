@@ -4,9 +4,9 @@
  * This module handles fetching active challenges for the authenticated user.
  */
 
-const { makePostRequest, createCommonHeaders } = require('./api-client');
-const { ENDPOINTS } = require('./constants');
-const logger = require('../logger');
+import { makePostRequest, createCommonHeaders } from './api-client';
+import { ENDPOINTS } from './constants';
+import * as logger from '../logger';
 
 /**
  * Fetches all active challenges for the authenticated user — one request per
@@ -56,6 +56,4 @@ const fetchActiveChallenges = async (token) => {
     return response;
 };
 
-module.exports = {
-    fetchActiveChallenges,
-};
+export { fetchActiveChallenges };

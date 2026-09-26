@@ -241,4 +241,4 @@ const SCENARIO_TEMPLATES = [
     },
 ];
 
-module.exports = { SCENARIO_TEMPLATES };
+export { SCENARIO_TEMPLATES };

@@ -39,9 +39,9 @@
  * each start.
  */
 
-const logger = require('./../logger');
-const { oneLine } = require('../format/logSafe');
-const { createJsonStore } = require('../settings/storage');
+import * as logger from './../logger';
+import { oneLine } from '../format/logSafe';
+import { createJsonStore } from '../settings/storage';
 
 // Newly fetched photos per fill. Cache hits do not count against this — a
 // fully-cached candidate set enriches completely with zero requests.
@@ -368,7 +368,7 @@ const __resetForTests = () => {
     breakerLoggedThisPass = false;
 };
 
-module.exports = {
+export {
     enrichCandidates,
     resetPassState,
     MAX_ENRICH_PER_FILL,

@@ -3,11 +3,11 @@
  * and api/boost.js's entry-targeted boost.
  */
 
-const boost = require('../boost');
-const logger = require('../../logger');
-const votingLogic = require('../../services/VotingLogic');
-const autoFill = require('../../services/autoFill');
-const { simulateApiResponse, simulateApiError, mockMethod } = require('../simulate');
+import * as boost from '../boost';
+import * as logger from '../../logger';
+import * as votingLogic from '../../services/VotingLogic';
+import * as autoFill from '../../services/autoFill';
+import { simulateApiResponse, simulateApiError, mockMethod } from '../simulate';
 
 /**
  * Simulate applying boost
@@ -66,4 +66,4 @@ const applyBoostToEntry = mockMethod(
     },
 );
 
-module.exports = { applyBoost, applyBoostToEntry };
+export { applyBoost, applyBoostToEntry };

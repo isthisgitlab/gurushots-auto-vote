@@ -78,7 +78,4 @@ const resolveMemberId = async (token, getCurrentMemberProfile, logger, logLabel)
 // Test-only: drop the memoised identity between cases.
 const __resetMemberIdCache = () => memberIdCache.clear();
 
-module.exports = {
-    resolveMemberId,
-    __resetMemberIdCache,
-};
+export { resolveMemberId, __resetMemberIdCache };

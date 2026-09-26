@@ -15,9 +15,9 @@
  * ipcMain.handle would bypass it while still passing manifest name-parity.
  */
 
-const { registerHandlers } = require('./registerHandlers');
-const logger = require('../logger');
-const votingLogic = require('../services/VotingLogic');
+import { registerHandlers } from './registerHandlers';
+import * as logger from '../logger';
+import * as votingLogic from '../services/VotingLogic';
 
 const buildHandlers = () => ({
     'get-deadline-actions': async (event, challenge) => {
@@ -47,4 +47,4 @@ const register = (ipcMain) => {
     registerHandlers(ipcMain, buildHandlers());
 };
 
-module.exports = { register, buildHandlers };
+export { register, buildHandlers };

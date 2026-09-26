@@ -10,8 +10,9 @@
 // and its `challengeId = null` defaults make TS infer param types too narrow
 // (null) to accept the string IDs passed here. Drop the cast once settings.js
 // is typed.
-const settings = /** @type {any} */ (require('../../settings'));
-const {
+import * as settingsModule from '../../settings';
+const settings = /** @type {any} */ (settingsModule);
+import {
     isWithinFinalWindow,
     getEffectiveLastMinuteThreshold,
     isWithinLastMinuteThreshold,
@@ -19,9 +20,9 @@ const {
     getEffectiveFinalWindowExposureThreshold,
     getEffectiveExposureTarget,
     getEffectiveFinalWindowExposureTarget,
-} = require('./thresholds');
-const { getScheduledFillState, getVotingPauseState } = require('./triggerWindows');
-const { getBoostPrefillState } = require('./boostPrefill');
+} from './thresholds';
+import { getScheduledFillState, getVotingPauseState } from './triggerWindows';
+import { getBoostPrefillState } from './boostPrefill';
 
 /**
  * Intermediate result from the shared rule engine (`_runVotingRules`); the
@@ -294,6 +295,4 @@ const _runVotingRules = (challenge, now, mode, options = {}) => {
     return decided('normal', effectiveThreshold, effectiveExposureTarget, sharedThresholdInfo);
 };
 
-module.exports = {
-    _runVotingRules,
-};
+export { _runVotingRules };

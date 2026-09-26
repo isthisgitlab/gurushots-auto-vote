@@ -35,4 +35,4 @@ const parseDuration = (value) => {
     return seconds !== null && seconds <= MAX_DURATION_SEC ? seconds : null;
 };
 
-module.exports = { parseDuration, MAX_DURATION_SEC };
+export { parseDuration, MAX_DURATION_SEC };

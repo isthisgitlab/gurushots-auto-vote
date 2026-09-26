@@ -8,33 +8,28 @@
  * is mockApiClient in mock/index.js.
  */
 
-const { getActiveChallenges } = require('./activeChallenges');
-const { applyBoost } = require('./applyBoost');
-const { getVoteImages, submitVotes } = require('../../api/voting');
-const { applyBoostToEntry } = require('../../api/boost');
-const { getChallengeTurbo, submitTurboSelection, applyTurbo, TURBO_SELECTION_DELAY_MS } = require('../../api/turbo');
-const { getEligiblePhotos, getImageData, submitToChallenge } = require('../../api/submissions');
-const { getCurrentMemberProfile, searchTagAutocomplete } = require('../../api/tags');
-const { getMemberChallenges, getBankroll, coinsUnlock } = require('../../api/join');
-const {
-    getMyCompletedChallenges,
-    claimChallengeResources,
-    getMyMissions,
-    claimMissionPrize,
-} = require('../../api/rewards');
-const { keyUnlock, swapPhoto, exposureAutofill } = require('../../api/currency');
-const { cleanupStaleMetadata } = require('../../metadata');
-const { swapBackLedger } = require('../../swapBackStore');
-const { autoSpendLedger } = require('../../currencyAutoStore');
-const { scenarioStateLedger, refreshScenarioStateAsync } = require('../../scenarioStateStore');
-const { backgroundServiceOwnsScenarios } = require('../../services/scenarioRunner');
-const { sleep, getRandomDelay } = require('../../timing');
-const logger = require('../../logger');
-const { runVotingPass } = require('../../services/votingOrchestrator');
-const { createMetadataEntryTracker } = require('../../services/newEntryTracker');
-const { runJoinPass, joinChallengeSingle } = require('../../services/joinChallenges');
-const { runClaimPass } = require('../../services/autoClaim');
-const { joinStateStore, acquireUnlockLock } = require('../../joinStateStore');
+import { getActiveChallenges } from './activeChallenges';
+import { applyBoost } from './applyBoost';
+import { getVoteImages, submitVotes } from '../../api/voting';
+import { applyBoostToEntry } from '../../api/boost';
+import { getChallengeTurbo, submitTurboSelection, applyTurbo, TURBO_SELECTION_DELAY_MS } from '../../api/turbo';
+import { getEligiblePhotos, getImageData, submitToChallenge } from '../../api/submissions';
+import { getCurrentMemberProfile, searchTagAutocomplete } from '../../api/tags';
+import { getMemberChallenges, getBankroll, coinsUnlock } from '../../api/join';
+import { getMyCompletedChallenges, claimChallengeResources, getMyMissions, claimMissionPrize } from '../../api/rewards';
+import { keyUnlock, swapPhoto, exposureAutofill } from '../../api/currency';
+import { cleanupStaleMetadata } from '../../metadata';
+import { swapBackLedger } from '../../swapBackStore';
+import { autoSpendLedger } from '../../currencyAutoStore';
+import { scenarioStateLedger, refreshScenarioStateAsync } from '../../scenarioStateStore';
+import { backgroundServiceOwnsScenarios } from '../../services/scenarioRunner';
+import { sleep, getRandomDelay } from '../../timing';
+import * as logger from '../../logger';
+import { runVotingPass } from '../../services/votingOrchestrator';
+import { createMetadataEntryTracker } from '../../services/newEntryTracker';
+import { runJoinPass, joinChallengeSingle } from '../../services/joinChallenges';
+import { runClaimPass } from '../../services/autoClaim';
+import { joinStateStore, acquireUnlockLock } from '../../joinStateStore';
 
 // One instance for the process: the tracker is stateless (it reads and writes
 // metadata.json on each call), but building it per pass would be pointless churn.
@@ -237,10 +232,4 @@ const fetchChallengesAndVote = async (token, _getExposureThreshold = null, chall
     });
 };
 
-module.exports = {
-    fetchChallengesAndVote,
-    getActiveChallenges,
-    applyBoost,
-    runTurboMiniGame,
-    joinChallenge,
-};
+export { fetchChallengesAndVote, getActiveChallenges, applyBoost, runTurboMiniGame, joinChallenge };

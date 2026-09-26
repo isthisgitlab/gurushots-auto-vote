@@ -32,4 +32,4 @@ const MAX_SCHEDULED_FILL_ENTRIES = 6;
 // schema bound as the same constant so they can never drift apart.
 const MAX_VOTING_PAUSE_MINUTES = 720;
 
-module.exports = { MAX_SCHEDULED_FILL_ENTRIES, MAX_VOTING_PAUSE_MINUTES };
+export { MAX_SCHEDULED_FILL_ENTRIES, MAX_VOTING_PAUSE_MINUTES };

@@ -68,7 +68,7 @@ const anchoredWaitMs = (delayMs, previousCycleStartMs, nowMs = Date.now(), minGa
     return Math.min(delayMs, Math.max(minGapMs, remainingMs));
 };
 
-module.exports = {
+export {
     getRandomCheckFrequencyMs,
     anchoredWaitMs,
     DEFAULT_MINUTES,

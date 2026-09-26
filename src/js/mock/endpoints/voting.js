@@ -3,12 +3,12 @@
  * submit that records the pre-vote exposure in metadata like the real one.
  */
 
-const voting = require('../voting');
-const settings = require('../../settings');
-const logger = require('../../logger');
-const { simulateApiResponse, simulateApiError, mockMethod } = require('../simulate');
-const { getSessionCache } = require('../sessionCache');
-const metadata = require('../../metadata');
+import * as voting from '../voting';
+import * as settings from '../../settings';
+import * as logger from '../../logger';
+import { simulateApiResponse, simulateApiError, mockMethod } from '../simulate';
+import { getSessionCache } from '../sessionCache';
+import * as metadata from '../../metadata';
 
 /**
  * Simulate getting vote images
@@ -127,4 +127,4 @@ const submitVotes = mockMethod(
     },
 );
 
-module.exports = { getVoteImages, submitVotes };
+export { getVoteImages, submitVotes };

@@ -10,10 +10,10 @@
  * lifecycle (index.js closes it when the main window closes).
  */
 
-const { BrowserWindow } = require('electron');
-const fs = require('node:fs');
-const settings = require('../settings');
-const logger = require('../logger');
+import { BrowserWindow } from 'electron';
+import * as fs from 'node:fs';
+import * as settings from '../settings';
+import * as logger from '../logger';
 
 // Debounce timeout shared across successive watchSettingsFile calls (the
 // main window can be torn down and re-created on logout/login): a new
@@ -270,4 +270,4 @@ function watchSettingsFile({ getMainWindow, getMainWindowCreatedTime, onSettings
     });
 }
 
-module.exports = { watchSettingsFile };
+export { watchSettingsFile };

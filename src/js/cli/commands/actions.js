@@ -10,10 +10,10 @@
  * the flag is present.
  */
 
-const logger = require('../../logger');
-const { ensureAuthenticated } = require('../guards');
-const { getMiddleware } = require('../../apiFactory');
-const { findActiveChallenge } = require('../../services/findActiveChallenge');
+import * as logger from '../../logger';
+import { ensureAuthenticated } from '../guards';
+import { getMiddleware } from '../../apiFactory';
+import { findActiveChallenge } from '../../services/findActiveChallenge';
 
 // Built lazily on first use so simply requiring this module (e.g. when the
 // dispatcher loads it for `help` or `logout`) does not construct the handler
@@ -327,7 +327,7 @@ const fillExposureCmd = async (challengeId, { yes = false } = {}) => {
     }
 };
 
-module.exports = {
+export {
     boostChallenge,
     turboChallenge,
     fillChallenge,

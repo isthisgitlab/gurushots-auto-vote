@@ -5,13 +5,13 @@
  * for all API interactions with GuruShots.
  */
 
-const axios = require('axios');
-const logger = require('../logger');
-const { generateRandomHeaders } = require('./randomizer');
-const { sleep } = require('../timing');
-const settings = require('../settings');
-const runtime = require('../runtime');
-const { FORM_CONTENT_TYPE } = require('./constants');
+import axios from 'axios';
+import * as logger from '../logger';
+import { generateRandomHeaders } from './randomizer';
+import { sleep } from '../timing';
+import * as settings from '../settings';
+import * as runtime from '../runtime';
+import { FORM_CONTENT_TYPE } from './constants';
 
 // A custom axios adapter must enforce validateStatus itself — axios does not
 // post-process an adapter's resolved value — so non-2xx responses must reject
@@ -297,8 +297,4 @@ const createCommonHeaders = (token) => {
     return generateRandomHeaders(token);
 };
 
-module.exports = {
-    makePostRequest,
-    createCommonHeaders,
-    FORM_CONTENT_TYPE,
-};
+export { makePostRequest, createCommonHeaders, FORM_CONTENT_TYPE };

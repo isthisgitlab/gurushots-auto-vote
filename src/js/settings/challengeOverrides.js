@@ -6,18 +6,18 @@
  * of overrides for challenges that no longer exist.
  */
 
-const logger = require('../logger');
-const { SETTINGS_SCHEMA, getValidationError } = require('./schema');
-const { loadSettings, saveSettings } = require('./persistence');
-const {
+import * as logger from '../logger';
+import { SETTINGS_SCHEMA, getValidationError } from './schema';
+import { loadSettings, saveSettings } from './persistence';
+import {
     getDefaultSettings,
     ensureChallengeSettings,
     valuesEqual,
     globalChallengeValues,
     challengeValueSetIsValid,
-} = require('./defaults');
-const { ruleValuesForChallengeId, isTitleProfileSuppressed } = require('./ruleResolution');
-const { scenarioPhaseSettings } = require('./scenarioOverlay');
+} from './defaults';
+import { ruleValuesForChallengeId, isTitleProfileSuppressed } from './ruleResolution';
+import { scenarioPhaseSettings } from './scenarioOverlay';
 
 // Trimmed string form of a caller-supplied challenge id ('' when absent).
 const trimmedChallengeId = (challengeId) =>
@@ -400,7 +400,7 @@ const cleanupStaleChallengeSetting = (activeChallengeIds) => {
     return saveSettings(settings);
 };
 
-module.exports = {
+export {
     getGlobalDefault,
     setGlobalDefault,
     getChallengeOverride,

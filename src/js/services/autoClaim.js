@@ -13,9 +13,9 @@
  * only items the server reports as claimable (claim_state === 'CLAIM') are sent.
  */
 
-const logger = require('../logger');
-const settings = require('../settings');
-const cancellation = require('../voting/cancellation');
+import * as logger from '../logger';
+import * as settings from '../settings';
+import * as cancellation from '../voting/cancellation';
 
 const CLAIM_INTERVAL_MS = 60 * 60 * 1000;
 const CLAIMABLE = 'CLAIM';
@@ -145,9 +145,4 @@ const resetClaimThrottle = () => {
     lastClaimAt = 0;
 };
 
-module.exports = {
-    CLAIM_INTERVAL_MS,
-    getAutoClaimStatus,
-    runClaimPass,
-    resetClaimThrottle,
-};
+export { CLAIM_INTERVAL_MS, getAutoClaimStatus, runClaimPass, resetClaimThrottle };

@@ -1,9 +1,9 @@
-const { appPath } = require('../appPaths');
-const { Menu, dialog, app, BrowserWindow } = require('electron');
-const logger = require('../logger');
-const { translationManager } = require('../translations/index');
-const AutoUpdater = require('../services/AutoUpdater');
-const packageInfo = require('../../../package.json');
+import { appPath } from '../appPaths';
+import { Menu, dialog, app, BrowserWindow } from 'electron';
+import * as logger from '../logger';
+import { translationManager } from '../translations/index';
+import { AutoUpdater } from '../services/AutoUpdater';
+import * as packageInfo from '../../../package.json';
 
 /**
  * Application Menu Module
@@ -237,7 +237,4 @@ function openLogsWindow() {
     });
 }
 
-module.exports = {
-    createApplicationMenu,
-    updateMenuTranslations,
-};
+export { createApplicationMenu, updateMenuTranslations };

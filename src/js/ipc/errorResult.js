@@ -15,4 +15,4 @@ const errorResult = (error, fallback) => ({
     error: /** @type {{ message?: string } | null | undefined} */ (error)?.message || fallback,
 });
 
-module.exports = { errorResult };
+export { errorResult };

@@ -1,8 +1,8 @@
-const fs = require('node:fs');
-const path = require('node:path');
-const runtime = require('./runtime');
-const { formatTimeHMS } = require('./dateFormat');
-const { oneLine } = require('./format/logSafe');
+import * as fs from 'node:fs';
+import * as path from 'node:path';
+import * as runtime from './runtime';
+import { formatTimeHMS } from './dateFormat';
+import { oneLine } from './format/logSafe';
 
 // ANSI color codes for CLI output (referenced via bracket notation in formatConsoleMessage)
 const colors = {
@@ -47,13 +47,13 @@ try {
 }
 
 // Check if we're in development mode (not mock)
-const isDevMode = runtime.isDevelopment();
+const devMode = runtime.isDevelopment();
 
 // Check if we're in CLI mode vs GUI mode
 // CLI mode: running directly from cli.js or when electron main process handles CLI commands
 // GUI mode: electron main process handling GUI IPC calls
 const startedViaCli = Boolean(process.argv[1] && process.argv[1].includes('cli.js'));
-const isCliMode = !isElectronApp || startedViaCli;
+const cliMode = !isElectronApp || startedViaCli;
 
 // Get current date in YYYY-MM-DD format
 const getCurrentDate = () => {
@@ -455,126 +455,102 @@ const LOG_CATEGORIES = {
 const apiOrDebugEnabled = () => isSourceCode();
 
 // Export logger functions
-module.exports = {
-    // Category constants
-    CATEGORIES: LOG_CATEGORIES,
-
-    // Basic logging methods
-    error: (message, data, category) => writeLog('ERROR', message, data, category),
-    info: (message, data, category) => writeLog('INFO', message, data, category),
-    debug: (message, data, category) => {
+// Basic logging methods
+export const error = (message, data, category) => writeLog('ERROR', message, data, category);
+export const info = (message, data, category) => writeLog('INFO', message, data, category);
+export const debug = (message, data, category) => {
+    if (apiOrDebugEnabled()) writeLog('DEBUG', message, data, category);
+};
+export const api = (message, data, category = 'api') => {
+    if (apiOrDebugEnabled()) writeLog('INFO', message, data, category);
+};
+// Enhanced logging methods
+export const success = (message, data = null, duration = null, category = null) => {
+    const suffix = duration !== null ? ` (${duration}ms)` : '';
+    writeLog('INFO', `✅ ${message}${suffix}`, data, category);
+};
+export const warning = (message, data = null, category = null) => {
+    writeLog('WARN', `⚠️ ${message}`, data, category);
+};
+export const progress = (message, current = null, total = null) => {
+    writeLog('INFO', buildProgressMessage(message, current, total), null, null);
+};
+// Category logging - creates a logger bound to a category
+export const withCategory = (category) => ({
+    info: (message, data) => writeLog('INFO', message, data, category),
+    error: (message, data) => writeLog('ERROR', message, data, category),
+    debug: (message, data) => {
         if (apiOrDebugEnabled()) writeLog('DEBUG', message, data, category);
     },
-    api: (message, data, category = 'api') => {
+    api: (message, data) => {
         if (apiOrDebugEnabled()) writeLog('INFO', message, data, category);
     },
-
-    // Enhanced logging methods
-    success: (message, data = null, duration = null, category = null) => {
-        const suffix = duration !== null ? ` (${duration}ms)` : '';
-        writeLog('INFO', `✅ ${message}${suffix}`, data, category);
-    },
-    warning: (message, data = null, category = null) => {
-        writeLog('WARN', `⚠️ ${message}`, data, category);
-    },
-    progress: (message, current = null, total = null) => {
-        writeLog('INFO', buildProgressMessage(message, current, total), null, null);
-    },
-
-    // Category logging - creates a logger bound to a category
-    withCategory: (category) => ({
-        info: (message, data) => writeLog('INFO', message, data, category),
-        error: (message, data) => writeLog('ERROR', message, data, category),
-        debug: (message, data) => {
-            if (apiOrDebugEnabled()) writeLog('DEBUG', message, data, category);
-        },
-        api: (message, data) => {
-            if (apiOrDebugEnabled()) writeLog('INFO', message, data, category);
-        },
-        apiRequest: (method, url, duration = null) => {
-            if (!apiOrDebugEnabled()) return;
-            const suffix = duration !== null ? ` (${duration}ms)` : '';
-            writeLog('INFO', `🌐 REQUEST: ${method} ${url}${suffix}`, null, category);
-        },
-        apiResponse: (method, url, status, duration = null) => {
-            if (!apiOrDebugEnabled()) return;
-            const statusEmoji = status >= 200 && status < 300 ? '✅' : '❌';
-            const suffix = duration !== null ? ` (${duration}ms)` : '';
-            writeLog('INFO', `${statusEmoji} RESPONSE: ${method} ${url} → ${status}${suffix}`, null, category);
-        },
-        success: (message, data, duration) => {
-            const suffix = duration !== null && duration !== undefined ? ` (${duration}ms)` : '';
-            writeLog('INFO', `✅ ${message}${suffix}`, data, category);
-        },
-        warning: (message, data) => writeLog('WARN', `⚠️ ${message}`, data, category),
-        progress: (message, current = null, total = null) => {
-            writeLog('INFO', buildProgressMessage(message, current, total), null, category);
-        },
-        startOperation: (operationId, message, level = 'INFO') => startOperation(operationId, message, level, category),
-        endOperation,
-    }),
-
-    // Operation tracking (top-level)
-    startOperation,
-    endOperation,
-
-    // API-specific logging with timing (top-level convenience)
     apiRequest: (method, url, duration = null) => {
         if (!apiOrDebugEnabled()) return;
         const suffix = duration !== null ? ` (${duration}ms)` : '';
-        writeLog('INFO', `🌐 REQUEST: ${method} ${url}${suffix}`, null, 'api');
+        writeLog('INFO', `🌐 REQUEST: ${method} ${url}${suffix}`, null, category);
     },
-
     apiResponse: (method, url, status, duration = null) => {
         if (!apiOrDebugEnabled()) return;
         const statusEmoji = status >= 200 && status < 300 ? '✅' : '❌';
         const suffix = duration !== null ? ` (${duration}ms)` : '';
-        writeLog('INFO', `${statusEmoji} RESPONSE: ${method} ${url} → ${status}${suffix}`, null, 'api');
+        writeLog('INFO', `${statusEmoji} RESPONSE: ${method} ${url} → ${status}${suffix}`, null, category);
     },
-
-    // Ring buffer accessor — drives GUI backlog replay on mount.
-    getRecentLogs: () => recentLogs.slice(),
-
-    // Formats a challenge object as the standard log prefix
-    // `[Challenge {id}: {title}]`. Pass the whole challenge object or
-    // (id, title) directly; missing fields render as 'unknown'.
-    challengeTag: (challengeOrId, title) => {
-        if (challengeOrId && typeof challengeOrId === 'object') {
-            const id = challengeOrId.id ?? 'unknown';
-            const t = challengeOrId.title ?? 'unknown';
-            return `[Challenge ${oneLine(id)}: ${oneLine(t)}]`;
-        }
-        return `[Challenge ${oneLine(challengeOrId ?? 'unknown')}: ${oneLine(title ?? 'unknown')}]`;
+    success: (message, data, duration) => {
+        const suffix = duration !== null && duration !== undefined ? ` (${duration}ms)` : '';
+        writeLog('INFO', `✅ ${message}${suffix}`, data, category);
     },
-
-    // Utility methods
-    getLogFile: () => currentLogFiles.app,
-    getErrorLogFile: () => currentLogFiles.error,
-    getApiLogFile: () => currentLogFiles.api,
-    getSettingsLogFile: () => currentLogFiles.settings,
-    getLogFileForDate: (date) => getLogFilePaths(date),
-    cleanup: cleanupOldLogs,
-
-    // Context helpers
+    warning: (message, data) => writeLog('WARN', `⚠️ ${message}`, data, category),
+    progress: (message, current = null, total = null) => {
+        writeLog('INFO', buildProgressMessage(message, current, total), null, category);
+    },
+    startOperation: (operationId, message, level = 'INFO') => startOperation(operationId, message, level, category),
+    endOperation,
+});
+// API-specific logging with timing (top-level convenience)
+export const apiRequest = (method, url, duration = null) => {
+    if (!apiOrDebugEnabled()) return;
+    const suffix = duration !== null ? ` (${duration}ms)` : '';
+    writeLog('INFO', `🌐 REQUEST: ${method} ${url}${suffix}`, null, 'api');
+};
+export const apiResponse = (method, url, status, duration = null) => {
+    if (!apiOrDebugEnabled()) return;
+    const statusEmoji = status >= 200 && status < 300 ? '✅' : '❌';
+    const suffix = duration !== null ? ` (${duration}ms)` : '';
+    writeLog('INFO', `${statusEmoji} RESPONSE: ${method} ${url} → ${status}${suffix}`, null, 'api');
+};
+// Ring buffer accessor — drives GUI backlog replay on mount.
+export const getRecentLogs = () => recentLogs.slice();
+// Formats a challenge object as the standard log prefix
+// `[Challenge {id}: {title}]`. Pass the whole challenge object or
+// (id, title) directly; missing fields render as 'unknown'.
+export const challengeTag = (challengeOrId, title) => {
+    if (challengeOrId && typeof challengeOrId === 'object') {
+        const id = challengeOrId.id ?? 'unknown';
+        const t = challengeOrId.title ?? 'unknown';
+        return `[Challenge ${oneLine(id)}: ${oneLine(t)}]`;
+    }
+    return `[Challenge ${oneLine(challengeOrId ?? 'unknown')}: ${oneLine(title ?? 'unknown')}]`;
+};
+// Utility methods
+export const getLogFile = () => currentLogFiles.app;
+export const getErrorLogFile = () => currentLogFiles.error;
+export const getApiLogFile = () => currentLogFiles.api;
+export const getSettingsLogFile = () => currentLogFiles.settings;
+export const getLogFileForDate = (date) => getLogFilePaths(date);
+export const isCliMode = () => cliMode;
+export const isDevMode = () => devMode;
+export {
+    LOG_CATEGORIES as CATEGORIES,
+    startOperation,
+    endOperation,
+    cleanupOldLogs as cleanup,
     getContext,
     setContext,
     clearContext,
-    isCliMode: () => isCliMode,
-    isDevMode: () => isDevMode,
-
-    // Runtime detection (canonical home — settings.js re-exports these)
     isSourceCode,
     getAppName,
-
-    // Test seam: redacts sensitive keys before disk write. Exported so the
-    // contract is unit-testable; production callers don't need to call it.
     sanitizeForLog,
-
-    // Bounds an untrusted string (CR/LF/tab-stripped + truncated) before it
-    // reaches a log line. Shared by IPC handlers and core services.
     sanitizeLogString,
-
-    // Test seam: redacts credentials folded into a message string. Applied
-    // automatically by writeLog; exported so the contract is unit-testable.
     redactMessage,
 };

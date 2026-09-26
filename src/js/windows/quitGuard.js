@@ -25,10 +25,10 @@
  * a confirmation or a stale list never outlives the session it was about.
  */
 
-const logger = require('../logger');
-const votingLogic = require('../services/VotingLogic');
-const { openBoostWindows } = require('../voting/boostWindow');
-const { formatDuration } = require('../format/duration');
+import * as logger from '../logger';
+import * as votingLogic from '../services/VotingLogic';
+import { openBoostWindows } from '../voting/boostWindow';
+import { formatDuration } from '../format/duration';
 
 const QUIT_WARN_HORIZON_SEC = 60 * 60;
 // A bypass is for the quit already under way; if that quit never lands (a
@@ -164,7 +164,7 @@ const holdQuitForOpenBoosts = (
     return true;
 };
 
-module.exports = {
+export {
     rememberChallenges,
     bypassQuitGuard,
     resetQuitGuard,

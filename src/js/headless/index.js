@@ -18,20 +18,20 @@
  * rather than re-porting the strategy to Kotlin.
  */
 
-const settings = require('../settings');
-const apiFactory = require('../apiFactory');
-const logger = require('../logger');
-const { getRandomCheckFrequencyMs, MIN_CYCLE_GAP_MS, OFFLINE_RETRY_MS } = require('../scheduling/randomDelay');
-const { computeNextCycleDelayMs } = require('../scheduling/thresholdWindow');
-const {
+import * as settings from '../settings';
+import * as apiFactory from '../apiFactory';
+import * as logger from '../logger';
+import { getRandomCheckFrequencyMs, MIN_CYCLE_GAP_MS, OFFLINE_RETRY_MS } from '../scheduling/randomDelay';
+import { computeNextCycleDelayMs } from '../scheduling/thresholdWindow';
+import {
     resolveThreshold,
     resolveScheduledFill,
     resolveFinalWindowTopUp,
     resolveBoostPrefill,
     resolveCurrencyAuto,
     resolveScenarioWake,
-} = require('../scheduling/nodeResolvers');
-const { DEFAULT_TIMEZONE } = require('../settings/uiDefaults');
+} from '../scheduling/nodeResolvers';
+import { DEFAULT_TIMEZONE } from '../settings/uiDefaults';
 
 const log = (msg, data) => logger.withCategory('voting').info(`[headless] ${msg}`, data);
 
@@ -133,4 +133,4 @@ const runOneCycle = async () => {
 globalThis.GS = { runOneCycle };
 log('headless bundle loaded');
 
-module.exports = { runOneCycle, computeNextDelayMs };
+export { runOneCycle, computeNextDelayMs };

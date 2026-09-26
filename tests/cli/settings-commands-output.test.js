@@ -19,6 +19,9 @@ jest.mock('../../src/js/logger.js', () => {
 });
 
 jest.mock('../../src/js/settings', () => ({
+    // Tests replace entries on this object; the marker makes it the very
+    // namespace commands/settings.js imports rather than a copy.
+    __esModule: true,
     SETTINGS_SCHEMA: {},
     getSetting: jest.fn(),
     setSetting: jest.fn(),

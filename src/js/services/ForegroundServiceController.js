@@ -21,8 +21,8 @@
  *    from battery optimization per-vendor.
  */
 
-const runtime = require('../runtime');
-const logger = require('../logger');
+import * as runtime from '../runtime';
+import * as logger from '../logger';
 
 let plugin = null;
 const NOTIFICATION_ID = 27782; // arbitrary stable id
@@ -110,9 +110,4 @@ const stop = async () => {
     }
 };
 
-module.exports = {
-    start,
-    update,
-    stop,
-    requestPermissions,
-};
+export { start, update, stop, requestPermissions };

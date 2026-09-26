@@ -6,11 +6,11 @@
  * themselves (and Capacitor's write-behind cache) are owned by storage.js.
  */
 
-const logger = require('../logger');
-const { SETTINGS_SCHEMA } = require('./schema');
-const { storage } = require('./storage');
-const { getDefaultSettings } = require('./defaults');
-const { runMigrations, pruneObsoleteSettings } = require('./migrations');
+import * as logger from '../logger';
+import { SETTINGS_SCHEMA } from './schema';
+import { storage } from './storage';
+import { getDefaultSettings } from './defaults';
+import { runMigrations, pruneObsoleteSettings } from './migrations';
 
 // Module-local guards so cleanupObsoleteSettings (which itself calls
 // loadSettings) doesn't recurse and doesn't re-run on every read.
@@ -149,7 +149,7 @@ const getWindowBounds = (windowType) => {
     return settings.windowBounds[windowType];
 };
 
-module.exports = {
+export {
     loadSettings,
     saveSettings,
     cleanupObsoleteSettings,

@@ -7,8 +7,8 @@
  * its own progress output.
  */
 
-const votingLogic = require('./VotingLogic');
-const logger = require('../logger');
+import * as votingLogic from './VotingLogic';
+import * as logger from '../logger';
 
 /**
  * Spacing between successful manual votes within a single cycle. Both
@@ -97,4 +97,4 @@ const voteAllChallengesManual = async (challenges, strategy, token, { onProgress
     return { voted, skipped, total: challenges.length };
 };
 
-module.exports = { submitVotesForChallenge, voteAllChallengesManual, STAGGER_MS };
+export { submitVotesForChallenge, voteAllChallengesManual, STAGGER_MS };

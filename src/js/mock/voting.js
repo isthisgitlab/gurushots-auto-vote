@@ -254,7 +254,7 @@ const mockVoteImagesByChallenge = {
     },
 };
 
-module.exports = {
+export {
     mockVoteImages,
     mockEmptyVoteImages,
     mockVoteSubmissionSuccess,

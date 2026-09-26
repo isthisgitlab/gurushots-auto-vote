@@ -15,12 +15,12 @@
  * `phases.buildup.rules[1].do[0].with`, so the user can find the problem.
  */
 
-const { z } = require('zod');
-const { parseDuration } = require('../scenarios/duration');
-const vocabulary = require('../scenarios/vocabulary');
-const { schemaEntry, validateSetting, getValidationError } = require('./schema');
-const { challengeValueSetIsValid } = require('./defaults');
-const { RESERVED_PROFILE_NAMES } = require('./profileStore');
+import { z } from 'zod';
+import { parseDuration } from '../scenarios/duration';
+import * as vocabulary from '../scenarios/vocabulary';
+import { schemaEntry, validateSetting, getValidationError } from './schema';
+import { challengeValueSetIsValid } from './defaults';
+import { RESERVED_PROFILE_NAMES } from './profileStore';
 
 /** @typedef {{path: string, message: string}} ScenarioIssue */
 
@@ -469,4 +469,4 @@ const parseScenarioJson = (text) => {
     }
 };
 
-module.exports = { validateScenario, parseScenarioJson, formatPath, SETTING_PAIRS };
+export { validateScenario, parseScenarioJson, formatPath, SETTING_PAIRS };

@@ -11,9 +11,9 @@
  * which `logger.js` calls when a log line is emitted.
  */
 
-const logger = require('../logger');
-const { registerHandlers } = require('./registerHandlers');
-const { errorResult } = require('./errorResult');
+import * as logger from '../logger';
+import { registerHandlers } from './registerHandlers';
+import { errorResult } from './errorResult';
 
 const logStreamWindows = new Set();
 
@@ -98,4 +98,4 @@ const register = (ipcMain) => {
     global.sendLogToGUI = sendLogToGUI;
 };
 
-module.exports = { register, buildHandlers, sendLogToGUI };
+export { register, buildHandlers, sendLogToGUI };

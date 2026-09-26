@@ -36,23 +36,18 @@
  *   schedule.js        schedule-row validation and threshold math
  */
 
-const { maybeAutoFillChallenge } = require('./autoFill/staggeredFill');
-const { evaluateEmergencyFill, maybeEmergencyFillChallenge } = require('./autoFill/emergencyFill');
-const { fillChallengeNow } = require('./autoFill/manualFill');
-const { submitNewEntryForAction } = require('./autoFill/fillNew');
-const { rankCandidatesForChallenge } = require('./autoFill/pipeline');
-const { resolveSemanticScores, resolveIgnoreWords, fetchCandidatesForChallenge } = require('./autoFill/candidates');
-const { resolveMemberId, __resetMemberIdCache } = require('./autoFill/memberIdentity');
-const { describeSubmitFailure } = require('./autoFill/fillLogging');
-const {
-    getSlotsRemaining,
-    reflectNewEntry,
-    reflectEntryFlag,
-    refreshChallengeState,
-} = require('./autoFill/challengeState');
-const { getEffectiveScheduleRows, resolveScheduleTarget, getNextScheduleThresholdSec } = require('./autoFill/schedule');
+import { maybeAutoFillChallenge } from './autoFill/staggeredFill';
+import { evaluateEmergencyFill, maybeEmergencyFillChallenge } from './autoFill/emergencyFill';
+import { fillChallengeNow } from './autoFill/manualFill';
+import { submitNewEntryForAction } from './autoFill/fillNew';
+import { rankCandidatesForChallenge } from './autoFill/pipeline';
+import { resolveSemanticScores, resolveIgnoreWords, fetchCandidatesForChallenge } from './autoFill/candidates';
+import { resolveMemberId, __resetMemberIdCache } from './autoFill/memberIdentity';
+import { describeSubmitFailure } from './autoFill/fillLogging';
+import { getSlotsRemaining, reflectNewEntry, reflectEntryFlag, refreshChallengeState } from './autoFill/challengeState';
+import { getEffectiveScheduleRows, resolveScheduleTarget, getNextScheduleThresholdSec } from './autoFill/schedule';
 
-module.exports = {
+export {
     maybeAutoFillChallenge,
     maybeEmergencyFillChallenge,
     fillChallengeNow,

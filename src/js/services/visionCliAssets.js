@@ -1,9 +1,9 @@
-const fs = require('node:fs');
-const path = require('node:path');
-const crypto = require('node:crypto');
-const tar = require('tar');
-const sea = require('node:sea');
-const runtime = require('../runtime');
+import * as fs from 'node:fs';
+import * as path from 'node:path';
+import * as crypto from 'node:crypto';
+import * as tar from 'tar';
+import * as sea from 'node:sea';
+import * as runtime from '../runtime';
 
 const IN_USE_WINDOW_MS = 60 * 60 * 1000;
 
@@ -61,4 +61,4 @@ const extractVisionCliAssets = () => {
     };
 };
 
-module.exports = { extractVisionCliAssets };
+export { extractVisionCliAssets };

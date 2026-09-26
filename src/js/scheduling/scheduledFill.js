@@ -16,12 +16,12 @@
  * @returns {{enabled: boolean, timesOfDay: *, beforeEndSecs: *}|Promise<{enabled: boolean, timesOfDay: *, beforeEndSecs: *}>}
  */
 
-const { occurrencesOf } = require('./wallClock');
+import { occurrencesOf } from './wallClock';
 // From settings/limits (not settings/schema) — schema.js requires zod, and a
 // CJS require of it cannot be tree-shaken out of app-bundle.js, which reaches
 // this module through the cadence chain (AutovoteContext -> cadenceChain ->
 // thresholdWindow) but never otherwise touches the validator.
-const { MAX_SCHEDULED_FILL_ENTRIES } = require('../settings/limits');
+import { MAX_SCHEDULED_FILL_ENTRIES } from '../settings/limits';
 
 // Non-flash challenges that are still open at `now`. Flash challenges never
 // enter last-minute/scheduled-fill mode, and closed ones can't. Shared with
@@ -108,4 +108,4 @@ async function soonestScheduledStart(challenges, now, resolveScheduledFill, time
     return best;
 }
 
-module.exports = { soonestScheduledStart, eligibleChallenges };
+export { soonestScheduledStart, eligibleChallenges };

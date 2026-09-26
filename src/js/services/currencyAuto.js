@@ -19,11 +19,11 @@
  * and the pass moves on.
  */
 
-const logger = require('../logger');
-const settings = require('../settings');
-const currencyActions = require('./currencyActions');
-const { CURRENCY_FIELD, challengeAllows } = require('../voting/currencyActions');
-const { isRuleOpen, pickSwapTarget, votePoolReach, fillBeatsVoting } = require('../voting/currencyAuto');
+import * as logger from '../logger';
+import * as settings from '../settings';
+import * as currencyActions from './currencyActions';
+import { CURRENCY_FIELD, challengeAllows } from '../voting/currencyActions';
+import { isRuleOpen, pickSwapTarget, votePoolReach, fillBeatsVoting } from '../voting/currencyAuto';
 
 const log = () => logger.withCategory('currency');
 
@@ -231,4 +231,4 @@ const runAutoExposureFill = guarded('fill', async (ctx, votePool) => {
     return true;
 });
 
-module.exports = { runAutoKey, runAutoSwap, runAutoExposureFill, reserveAllows, lockedSpend };
+export { runAutoKey, runAutoSwap, runAutoExposureFill, reserveAllows, lockedSpend };

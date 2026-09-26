@@ -10,10 +10,10 @@
  * The Week", "It's all About Balance"), a failed image fetch, or a failed
  * inference leaves the tag order untouched.
  */
-const runtime = require('../runtime');
-const { appPath } = require('../appPaths');
-const { entryPhotoUrl } = require('../format/photoUrl');
-const { visualSubjectWords } = require('./photoPicker');
+import * as runtime from '../runtime';
+import { appPath } from '../appPaths';
+import { entryPhotoUrl } from '../format/photoUrl';
+import { visualSubjectWords } from './photoPicker';
 
 const MAX_IMAGES = 12;
 // Thresholds are on SigLIP's logit scale, measured on live GuruShots
@@ -227,11 +227,4 @@ const __resetForTests = () => {
     cliAssetRoot = undefined;
 };
 
-module.exports = {
-    rankVisually,
-    hasBundledModel,
-    orderByVisualFit,
-    challengePrompts,
-    descriptionLead,
-    __resetForTests,
-};
+export { rankVisually, hasBundledModel, orderByVisualFit, challengePrompts, descriptionLead, __resetForTests };

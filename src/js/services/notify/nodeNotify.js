@@ -19,19 +19,19 @@
  * string-literal escaping, and Pango-markup escaping for notify-send.
  */
 
-const { execFile } = require('node:child_process');
-const votingLogic = require('../VotingLogic');
-const settings = require('../../settings');
-const logger = require('../../logger');
-const {
+import { execFile } from 'node:child_process';
+import * as votingLogic from '../VotingLogic';
+import * as settings from '../../settings';
+import * as logger from '../../logger';
+import {
     computeDueNotifications,
     createDedupe,
     formatNotification,
     readNotificationConfig,
-} = require('../deadlineNotifications');
-const { createTranslator } = require('../../translations/translator');
-const { createScenarioNotifier } = require('../scenarioNotifications');
-const { getScenarioStatus } = require('../scenarioStatus');
+} from '../deadlineNotifications';
+import { createTranslator } from '../../translations/translator';
+import { createScenarioNotifier } from '../scenarioNotifications';
+import { getScenarioStatus } from '../scenarioStatus';
 
 const notifyTranslator = createTranslator();
 
@@ -164,7 +164,7 @@ const createNodeScenarioNotifier = (deps = {}) => {
     });
 };
 
-module.exports = {
+export {
     createNodeDeadlineNotifier,
     createNodeScenarioNotifier,
     deliverOsNotification,

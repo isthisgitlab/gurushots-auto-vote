@@ -8,8 +8,8 @@
  * boost flows.
  */
 
-const settings = require('../settings');
-const logger = require('../logger');
+import * as settings from '../settings';
+import * as logger from '../logger';
 
 /**
  * Loads settings and verifies a token is present. On miss, logs a
@@ -107,4 +107,4 @@ const clearTokenUnlessStayingLoggedIn = async () => {
     return clearAuthToken();
 };
 
-module.exports = { requireAuthToken, extractAuthResult, clearAuthToken, clearTokenUnlessStayingLoggedIn };
+export { requireAuthToken, extractAuthResult, clearAuthToken, clearTokenUnlessStayingLoggedIn };

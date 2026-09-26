@@ -1,6 +1,6 @@
-const { createJsonStore } = require('../../settings/storage');
-const runtime = require('../../runtime');
-const settings = require('../../settings');
+import { createJsonStore } from '../../settings/storage';
+import * as runtime from '../../runtime';
+import * as settings from '../../settings';
 
 const diagnosticsStore = createJsonStore({ fileName: 'lexicon-diagnostics.json', prefKey: 'gs_lexicon_diagnostics' });
 const MAX_WORDS = 200;
@@ -115,10 +115,6 @@ const shouldCollect = () => {
     }
 };
 
-module.exports = {
-    diagnostics,
-    createDiagnostics,
-    shouldCollect,
-    initializeDiagnosticsAsync: diagnosticsStore.initializeAsync,
-    flushDiagnosticsWrites: diagnosticsStore.flushPendingWrites,
-};
+export const initializeDiagnosticsAsync = diagnosticsStore.initializeAsync;
+export const flushDiagnosticsWrites = diagnosticsStore.flushPendingWrites;
+export { diagnostics, createDiagnostics, shouldCollect };

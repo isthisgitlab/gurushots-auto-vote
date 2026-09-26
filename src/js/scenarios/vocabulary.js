@@ -99,7 +99,7 @@ const VOCABULARY_REFERENCE = [
     ['rule', 'duration', 'seconds or "5d", "90m", "1d 6h"'],
 ];
 
-module.exports = {
+export {
     COMPARISON_OPS,
     REPEAT_MODES,
     RANGE_TIME_CONDITIONS,

@@ -14,7 +14,7 @@
 
 const mockPrefSet = jest.fn(() => Promise.resolve());
 const mockPrefGet = jest.fn(() => Promise.resolve({ value: null }));
-jest.mock('../../src/js/runtime', () => ({ ...jest.requireActual('../../src/js/runtime') }));
+jest.mock('../../src/js/runtime', () => ({ __esModule: true, ...jest.requireActual('../../src/js/runtime') }));
 jest.mock(
     '@capacitor/preferences',
     () => ({ Preferences: { set: (...a) => mockPrefSet(...a), get: (...a) => mockPrefGet(...a) } }),

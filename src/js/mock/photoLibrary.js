@@ -133,4 +133,4 @@ const buildImageStats = () => ({
     photo_old_008: { votes: 12400, views: 70, achievements: ['elite', 'top_30', 'top_50', 'top_100'] },
 });
 
-module.exports = { MOCK_LIBRARY_TAGS, buildLibraryPhotos, buildImageStats };
+export { MOCK_LIBRARY_TAGS, buildLibraryPhotos, buildImageStats };

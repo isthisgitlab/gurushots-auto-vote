@@ -16,6 +16,7 @@
         "@/*": ["src/js/react/*"]
     },
     "ignoreDependencies": ["postject", "@ttsc/lint"],
+    "ignoreBinaries": ["osascript", "notify-send"],
     "rules": {
         "exports": "off",
         "nsExports": "off"

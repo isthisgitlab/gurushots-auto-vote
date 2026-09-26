@@ -7,6 +7,7 @@
  */
 
 jest.mock('../../src/js/services/semantic/lexicon', () => ({
+    __esModule: true,
     ...jest.requireActual('../../src/js/services/semantic/lexicon'),
 }));
 const lexicon = require('../../src/js/services/semantic/lexicon');

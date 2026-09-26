@@ -5,11 +5,11 @@
  * caller (persistence.js) owns reading and writing the blob.
  */
 
-const logger = require('../logger');
-const { SETTINGS_SCHEMA, sanitizeFillSchedule, sanitizeTimeOfDayList, sanitizeBeforeEndList } = require('./schema');
-const { ruleConditions, sortRulesByDefaultOrder } = require('./challengeRules');
-const { RESERVED_PROFILE_NAMES, normalizeProfileName, readProfilesMap } = require('./profileStore');
-const { ruleLogLabel } = require('./titleRuleSanitize');
+import * as logger from '../logger';
+import { SETTINGS_SCHEMA, sanitizeFillSchedule, sanitizeTimeOfDayList, sanitizeBeforeEndList } from './schema';
+import { ruleConditions, sortRulesByDefaultOrder } from './challengeRules';
+import { RESERVED_PROFILE_NAMES, normalizeProfileName, readProfilesMap } from './profileStore';
+import { ruleLogLabel } from './titleRuleSanitize';
 
 // Migrate buggy-GUI-encoded time values. Blobs written by
 // v0.7.0 through v0.8.2 hold boostTime / turboTime as
@@ -513,7 +513,4 @@ const pruneObsoleteSettings = (settings) => {
     return hasChanges;
 };
 
-module.exports = {
-    runMigrations,
-    pruneObsoleteSettings,
-};
+export { runMigrations, pruneObsoleteSettings };

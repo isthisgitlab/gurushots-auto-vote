@@ -1,5 +1,5 @@
-jest.mock('../../../src/js/runtime', () => ({ ...jest.requireActual('../../../src/js/runtime') }));
-jest.mock('../../../src/js/settings', () => ({ ...jest.requireActual('../../../src/js/settings') }));
+jest.mock('../../../src/js/runtime', () => ({ __esModule: true, ...jest.requireActual('../../../src/js/runtime') }));
+jest.mock('../../../src/js/settings', () => ({ __esModule: true, ...jest.requireActual('../../../src/js/settings') }));
 const { createDiagnostics, shouldCollect } = require('../../../src/js/services/semantic/diagnostics');
 const runtime = require('../../../src/js/runtime');
 const settings = require('../../../src/js/settings');

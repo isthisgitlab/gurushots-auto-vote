@@ -10,10 +10,10 @@
  * never win a rank comparison.
  */
 
-const { resolveEntryIndex } = require('../voting/entrySlot');
-const { isProtectedEntry } = require('../voting/currencyAuto');
-const { parseDuration } = require('./duration');
-const { votesPerHour, DEFAULT_WINDOW_SEC } = require('./speed');
+import { resolveEntryIndex } from '../voting/entrySlot';
+import { isProtectedEntry } from '../voting/currencyAuto';
+import { parseDuration } from './duration';
+import { votesPerHour, DEFAULT_WINDOW_SEC } from './speed';
 
 /**
  * @param {Challenge} challenge
@@ -104,4 +104,4 @@ const selectEntry = (selector, challenge, context = {}) => {
     return RANKING[selector.by](candidates);
 };
 
-module.exports = { selectEntry, entriesOf, rankOf, votesOf, windowOf };
+export { selectEntry, entriesOf, rankOf, votesOf, windowOf };

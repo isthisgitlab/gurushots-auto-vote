@@ -6,16 +6,16 @@
  * progress logging).
  */
 
-const logger = require('../../logger');
-const { ensureAuthenticated } = require('../guards');
-const settings = require('../../settings');
-const { getMiddleware } = require('../../apiFactory');
-const { createScheduler } = require('../../scheduling/runScheduler');
-const { formatDateTime } = require('../../dateFormat');
-const { formatDuration } = require('../../format/duration');
-const { openBoostWindows } = require('../../voting/boostWindow');
-const { findActiveChallenge } = require('../../services/findActiveChallenge');
-const { clearTokenUnlessStayingLoggedIn } = require('../../services/auth');
+import * as logger from '../../logger';
+import { ensureAuthenticated } from '../guards';
+import * as settings from '../../settings';
+import { getMiddleware } from '../../apiFactory';
+import { createScheduler } from '../../scheduling/runScheduler';
+import { formatDateTime } from '../../dateFormat';
+import { formatDuration } from '../../format/duration';
+import { openBoostWindows } from '../../voting/boostWindow';
+import { findActiveChallenge } from '../../services/findActiveChallenge';
+import { clearTokenUnlessStayingLoggedIn } from '../../services/auth';
 
 // Reuse the GUI's single-challenge manual-vote handler (votes to 100%,
 // bypassing thresholds). Built lazily on first use so loading this module for
@@ -270,4 +270,4 @@ const showStatus = async () => {
     logger.withCategory('ui').info('\nTo change mode, run: login');
 };
 
-module.exports = { runVotingCycle, voteChallengeManual, parseChallengeFlag, startContinuousVoting, showStatus };
+export { runVotingCycle, voteChallengeManual, parseChallengeFlag, startContinuousVoting, showStatus };

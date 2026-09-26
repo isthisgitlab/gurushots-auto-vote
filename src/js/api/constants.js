@@ -80,10 +80,4 @@ const makeRequireValue = (prefix) => (value, label) => {
     return value;
 };
 
-module.exports = {
-    API_BASE,
-    ENDPOINTS,
-    FORM_CONTENT_TYPE,
-    createWebHeaders,
-    makeRequireValue,
-};
+export { API_BASE, ENDPOINTS, FORM_CONTENT_TYPE, createWebHeaders, makeRequireValue };

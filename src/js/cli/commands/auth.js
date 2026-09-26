@@ -4,11 +4,11 @@
  * password through unmuted) — and `logout`, which clears the saved token.
  */
 
-const logger = require('../../logger');
-const settings = require('../../settings');
-const { refreshApi, getMiddleware } = require('../../apiFactory');
-const { clearAuthToken } = require('../../services/auth');
-const { createReadlineInterface, askYesNo, askInput, askSecret } = require('../prompts');
+import * as logger from '../../logger';
+import * as settings from '../../settings';
+import { refreshApi, getMiddleware } from '../../apiFactory';
+import { clearAuthToken } from '../../services/auth';
+import { createReadlineInterface, askYesNo, askInput, askSecret } from '../prompts';
 
 const handleLogin = async () => {
     // askSecret's mute only works on a real terminal — _writeToOutput is
@@ -20,7 +20,7 @@ const handleLogin = async () => {
         logger
             .withCategory('ui')
             .error(
-                'Interactive login requires a terminal. Run `node src/js/cli/cli.js login` directly in a terminal session — piped or redirected stdin is not supported because the password prompt cannot mute echo.',
+                'Interactive login requires a terminal. Run the `login` command directly in a terminal session — piped or redirected stdin is not supported because the password prompt cannot mute echo.',
             );
         return;
     }
@@ -92,4 +92,4 @@ const handleLogout = async () => {
     }
 };
 
-module.exports = { handleLogin, handleLogout };
+export { handleLogin, handleLogout };

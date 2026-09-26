@@ -27,25 +27,25 @@
  *     challenge's lastError for the status line.
  */
 
-const logger = require('../logger');
-const settings = require('../settings');
-const runtime = require('../runtime');
-const nativeAutovote = require('./NativeAutovoteBridge');
-const { DEFAULT_TIMEZONE } = require('../settings/uiDefaults');
-const currencyActions = require('./currencyActions');
-const { reserveAllows, lockedSpend } = require('./currencyAuto');
-const { CURRENCY_OUTCOME } = require('../voting/currencyActions');
-const {
+import * as logger from '../logger';
+import * as settings from '../settings';
+import * as runtime from '../runtime';
+import * as nativeAutovote from './NativeAutovoteBridge';
+import { DEFAULT_TIMEZONE } from '../settings/uiDefaults';
+import * as currencyActions from './currencyActions';
+import { reserveAllows, lockedSpend } from './currencyAuto';
+import { CURRENCY_OUTCOME } from '../voting/currencyActions';
+import {
     submitNewEntryForAction,
     reflectNewEntry,
     reflectEntryFlag,
     refreshChallengeState,
     getSlotsRemaining,
-} = require('./autoFill');
-const { evaluateScenario, firedRecord } = require('../scenarios/evaluate');
-const { selectEntry, entriesOf } = require('../scenarios/selectors');
-const { recordVoteSample } = require('../scenarios/speed');
-const { initialState } = require('../scenarioStateStore');
+} from './autoFill';
+import { evaluateScenario, firedRecord } from '../scenarios/evaluate';
+import { selectEntry, entriesOf } from '../scenarios/selectors';
+import { recordVoteSample } from '../scenarios/speed';
+import { initialState } from '../scenarioStateStore';
 
 const log = () => logger.withCategory('scenario');
 
@@ -467,4 +467,4 @@ const runScenarioStep = async (challenge, now, pass) => {
 const backgroundServiceOwnsScenarios = () =>
     runtime.isCapacitor() && !runtime.isHeadlessService() && nativeAutovote.isAvailable();
 
-module.exports = { runScenarioStep, backgroundServiceOwnsScenarios };
+export { runScenarioStep, backgroundServiceOwnsScenarios };

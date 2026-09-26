@@ -1,11 +1,11 @@
-const { app } = require('electron');
-const { autoUpdater } = require('electron-updater');
-const logger = require('../logger');
-const metadata = require('../metadata');
-const settings = require('../settings');
-const { getReleasesUrl: releasesPageUrl } = require('./UpdateChecker');
-const { hasBundledModel } = require('./visionVerifier');
-const { bypassQuitGuard } = require('../windows/quitGuard');
+import { app } from 'electron';
+import { autoUpdater } from 'electron-updater';
+import * as logger from '../logger';
+import * as metadata from '../metadata';
+import * as settings from '../settings';
+import { getReleasesUrl as releasesPageUrl } from './UpdateChecker';
+import { hasBundledModel } from './visionVerifier';
+import { bypassQuitGuard } from '../windows/quitGuard';
 
 /**
  * One-shot skip-version migration: the canonical store is the settings blob
@@ -361,4 +361,4 @@ class AutoUpdater {
     }
 }
 
-module.exports = AutoUpdater;
+export { AutoUpdater };

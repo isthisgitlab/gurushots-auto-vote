@@ -5,11 +5,11 @@
  * and emits the user-facing logs.
  */
 
-const logger = require('../../logger');
-const settings = require('../../settings');
-const { getDefaultSettings } = require('../../settings');
-const { parseSettingValue } = require('../parseValue');
-const { formatDuration } = require('../../format/duration');
+import * as logger from '../../logger';
+import * as settings from '../../settings';
+import { getDefaultSettings } from '../../settings';
+import { parseSettingValue } from '../parseValue';
+import { formatDuration } from '../../format/duration';
 
 /**
  * Format a settings value for log output, redacting sensitive keys via
@@ -549,7 +549,7 @@ const resetWindows = () => {
     }
 };
 
-module.exports = {
+export {
     formatSettingForLog,
     getSetting,
     setSetting,

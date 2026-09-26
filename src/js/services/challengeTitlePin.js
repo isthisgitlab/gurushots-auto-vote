@@ -16,8 +16,8 @@
  * earlier session already pinned correctly.
  */
 
-const settings = require('../settings');
-const logger = require('../logger');
+import * as settings from '../settings';
+import * as logger from '../logger';
 
 // Bound a server-supplied title before it reaches a log line (CR/LF-stripped
 // and truncated). The sanitizer lives in the core logger — shared with the
@@ -131,7 +131,4 @@ const __resetForTests = () => {
     lastWarnedTitleById = new Map();
 };
 
-module.exports = {
-    pinChallengeTitles,
-    __resetForTests,
-};
+export { pinChallengeTitles, __resetForTests };

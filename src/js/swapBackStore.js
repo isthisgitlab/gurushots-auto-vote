@@ -21,8 +21,8 @@
  * persisted file.
  */
 
-const logger = require('./logger');
-const { createJsonStore } = require('./settings/storage');
+import * as logger from './logger';
+import { createJsonStore } from './settings/storage';
 
 const swapBackStore = createJsonStore({ fileName: 'swapBacks.json', prefKey: 'gs_swap_backs' });
 
@@ -123,11 +123,6 @@ const swapBackLedger = createLedger(swapBackStore);
 // swap-back exactly like a real one.
 const mockSwapBackLedger = createMemoryLedger();
 
-module.exports = {
-    swapBackLedger,
-    mockSwapBackLedger,
-    createLedger,
-    createMemoryLedger,
-    initializeSwapBackAsync: swapBackStore.initializeAsync,
-    flushSwapBackWrites: swapBackStore.flushPendingWrites,
-};
+export const initializeSwapBackAsync = swapBackStore.initializeAsync;
+export const flushSwapBackWrites = swapBackStore.flushPendingWrites;
+export { swapBackLedger, mockSwapBackLedger, createLedger, createMemoryLedger };

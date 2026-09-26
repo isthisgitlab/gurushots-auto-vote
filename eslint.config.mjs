@@ -164,7 +164,7 @@ export default [
                     'ImportDeclaration > Literal.source',
                 ].map((selector) => ({
                     selector: `${selector}[value=/settings\\/(challengeFacts|challengeOverrides|defaults|migrations|persistence|profileStore|profiles|reset|ruleResolution|scenarioOverlay|scenarioSchema|scenarios|titlePins|titleRuleSanitize|titleRules)(\\.js)?$/]`,
-                    message: 'Settings internals are private to the facade — require settings.js instead.',
+                    message: 'Settings internals are private to the facade — import settings.js instead.',
                 })),
             ],
         },

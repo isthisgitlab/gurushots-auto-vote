@@ -10,15 +10,15 @@
  * test spy on mockApiClient) is what the pass and the join actually call.
  */
 
-const logger = require('../logger');
-const { runVotingPass } = require('../services/votingOrchestrator');
-const { createMemoryEntryTracker } = require('../services/newEntryTracker');
-const { runJoinPass, joinChallengeSingle } = require('../services/joinChallenges');
-const { runClaimPass } = require('../services/autoClaim');
-const { mockSwapBackLedger } = require('../swapBackStore');
-const { createMemoryAutoSpendLedger } = require('../currencyAutoStore');
-const { mockScenarioStateLedger } = require('../scenarioStateStore');
-const { mockMethod } = require('./simulate');
+import * as logger from '../logger';
+import { runVotingPass } from '../services/votingOrchestrator';
+import { createMemoryEntryTracker } from '../services/newEntryTracker';
+import { runJoinPass, joinChallengeSingle } from '../services/joinChallenges';
+import { runClaimPass } from '../services/autoClaim';
+import { mockSwapBackLedger } from '../swapBackStore';
+import { createMemoryAutoSpendLedger } from '../currencyAutoStore';
+import { mockScenarioStateLedger } from '../scenarioStateStore';
+import { mockMethod } from './simulate';
 
 // Module-level so snapshots survive across mock cycles within a run — a per-call
 // tracker would look like "first sight" every cycle and never detect anything.
@@ -175,4 +175,4 @@ const createMockStrategy = (client) => {
     return { joinChallenge, fetchChallengesAndVote };
 };
 
-module.exports = { createMockStrategy };
+export { createMockStrategy };

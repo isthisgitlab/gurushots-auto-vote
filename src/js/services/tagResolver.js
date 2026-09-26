@@ -31,8 +31,8 @@
  * empty result as "no resolution available" and proceeds without it.
  */
 
-const { buildThemeKeywords, matches, stem, tokenise, SEMANTIC_MATCH_FLOOR } = require('./photoPicker');
-const lexicon = require('./semantic/lexicon');
+import { buildThemeKeywords, matches, stem, tokenise, SEMANTIC_MATCH_FLOOR } from './photoPicker';
+import * as lexicon from './semantic/lexicon';
 
 // The server returns nothing under 3 characters, so backing off past it only
 // burns round-trips. Two steps covers the realistic gap between a stemmed title
@@ -203,7 +203,7 @@ const resolveTermsToTags = async (terms, challenge, deps) => {
     return resolved;
 };
 
-module.exports = {
+export {
     resolveTermsToTags,
     MAX_BACKOFF_STEPS,
     MAX_RESOLVED_TAGS,

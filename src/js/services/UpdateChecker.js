@@ -13,7 +13,7 @@
  * into the Capacitor renderer.
  */
 
-const axios = require('axios');
+import axios from 'axios';
 
 const REPO_OWNER = 'isthisgitlab';
 const REPO_NAME = 'gurushots-auto-vote';
@@ -127,11 +127,4 @@ const checkForUpdates = async ({ currentVersion, isBetaChannel = false, assetSuf
 
 const getReleasesUrl = () => `https://github.com/${REPO_OWNER}/${REPO_NAME}/releases/latest`;
 
-module.exports = {
-    checkForUpdates,
-    compareSemver,
-    pickAsset,
-    getReleasesUrl,
-    REPO_OWNER,
-    REPO_NAME,
-};
+export { checkForUpdates, compareSemver, pickAsset, getReleasesUrl, REPO_OWNER, REPO_NAME };

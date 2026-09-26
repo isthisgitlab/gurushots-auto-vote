@@ -15,8 +15,8 @@
  * Mock mode uses createMemoryAutoSpendLedger() and never touches the file.
  */
 
-const logger = require('./logger');
-const { createJsonStore } = require('./settings/storage');
+import * as logger from './logger';
+import { createJsonStore } from './settings/storage';
 
 const autoSpendStore = createJsonStore({ fileName: 'autoSpends.json', prefKey: 'gs_auto_spends' });
 
@@ -75,10 +75,6 @@ const createMemoryAutoSpendLedger = () => {
 
 const autoSpendLedger = createAutoSpendLedger(autoSpendStore);
 
-module.exports = {
-    autoSpendLedger,
-    createAutoSpendLedger,
-    createMemoryAutoSpendLedger,
-    initializeAutoSpendAsync: autoSpendStore.initializeAsync,
-    flushAutoSpendWrites: autoSpendStore.flushPendingWrites,
-};
+export const initializeAutoSpendAsync = autoSpendStore.initializeAsync;
+export const flushAutoSpendWrites = autoSpendStore.flushPendingWrites;
+export { autoSpendLedger, createAutoSpendLedger, createMemoryAutoSpendLedger };

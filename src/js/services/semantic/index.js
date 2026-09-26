@@ -60,14 +60,9 @@
  * threshold asks nothing new of the calibration.
  */
 
-const lexicon = require('./lexicon');
-const { diagnostics, shouldCollect } = require('./diagnostics');
-const {
-    buildThemeAlternatives,
-    labelStemGroups,
-    SEMANTIC_MATCH_FLOOR,
-    SEMANTIC_SUPPORT_CAP,
-} = require('../photoPicker');
+import * as lexicon from './lexicon';
+import { diagnostics, shouldCollect } from './diagnostics';
+import { buildThemeAlternatives, labelStemGroups, SEMANTIC_MATCH_FLOOR, SEMANTIC_SUPPORT_CAP } from '../photoPicker';
 
 const clamp01 = (n) => Math.max(0, Math.min(1, n));
 
@@ -208,4 +203,4 @@ const __resetForTests = () => {
     vecCache.clear();
 };
 
-module.exports = { getSemanticScores, __resetForTests };
+export { getSemanticScores, __resetForTests };

@@ -11,8 +11,8 @@
  * can settle as the APK downloads; the browser fallback has no progress.
  */
 
-const runtime = require('../runtime');
-const logger = require('../logger');
+import * as runtime from '../runtime';
+import * as logger from '../logger';
 
 // The native plugin, when this build registered it. Accessed lazily (only
 // after downloadAndInstall's isCapacitor() gate) so non-Capacitor paths never
@@ -84,4 +84,4 @@ const downloadAndInstall = async ({ downloadUrl, version, onProgress }) => {
     return openInBrowser(downloadUrl, version);
 };
 
-module.exports = { downloadAndInstall };
+export { downloadAndInstall };

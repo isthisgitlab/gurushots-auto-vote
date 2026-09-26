@@ -18,8 +18,8 @@
  * the header names it lists.
  */
 
-const { makePostRequest } = require('./api-client');
-const { ENDPOINTS, createWebHeaders, makeRequireValue } = require('./constants');
+import { makePostRequest } from './api-client';
+import { ENDPOINTS, createWebHeaders, makeRequireValue } from './constants';
 
 const requireValue = makeRequireValue('join');
 
@@ -110,8 +110,4 @@ const getBankroll = async (token) => {
     return balances;
 };
 
-module.exports = {
-    getMemberChallenges,
-    coinsUnlock,
-    getBankroll,
-};
+export { getMemberChallenges, coinsUnlock, getBankroll };

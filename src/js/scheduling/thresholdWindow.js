@@ -22,10 +22,10 @@
  * @returns {number|Promise<number>} The effective lastMinuteThreshold (minutes).
  */
 
-const { soonestScheduledStart, eligibleChallenges } = require('./scheduledFill');
-const { boostApplyThreshold } = require('../voting/boostWindow');
-const { ruleOpensAt } = require('../voting/currencyAuto');
-const { nextWakeAt } = require('../scenarios/nextWake');
+import { soonestScheduledStart, eligibleChallenges } from './scheduledFill';
+import { boostApplyThreshold } from '../voting/boostWindow';
+import { ruleOpensAt } from '../voting/currencyAuto';
+import { nextWakeAt } from '../scenarios/nextWake';
 
 /**
  * Resolve each challenge's per-challenge config in parallel, fail-soft: a
@@ -511,7 +511,7 @@ async function computeNextCycleDelayMs(
     };
 }
 
-module.exports = {
+export {
     calculateNextThresholdEntry,
     isAnyChallengeInThresholdWindow,
     computeNextCycleDelayMs,

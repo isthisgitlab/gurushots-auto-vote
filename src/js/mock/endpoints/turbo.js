@@ -3,8 +3,8 @@
  * mini-game (strategies/real/index.js#runTurboMiniGame).
  */
 
-const logger = require('../../logger');
-const { simulateApiResponse, mockMethod } = require('../simulate');
+import * as logger from '../../logger';
+import { simulateApiResponse, mockMethod } from '../simulate';
 
 /**
  * Simulate applying a won Turbo to a specific entry. The shape mirrors
@@ -49,4 +49,4 @@ const runTurboMiniGame = mockMethod(
     },
 );
 
-module.exports = { applyTurbo, runTurboMiniGame };
+export { applyTurbo, runTurboMiniGame };

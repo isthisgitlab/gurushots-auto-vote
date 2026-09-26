@@ -16,8 +16,8 @@
  * so it only guards the header names it lists).
  */
 
-const { makePostRequest } = require('./api-client');
-const { ENDPOINTS, createWebHeaders, makeRequireValue } = require('./constants');
+import { makePostRequest } from './api-client';
+import { ENDPOINTS, createWebHeaders, makeRequireValue } from './constants';
 
 const requireValue = makeRequireValue('rewards');
 
@@ -88,9 +88,4 @@ const claimMissionPrize = async (missionId, token) => {
     return response?.success === true;
 };
 
-module.exports = {
-    getMyCompletedChallenges,
-    claimChallengeResources,
-    getMyMissions,
-    claimMissionPrize,
-};
+export { getMyCompletedChallenges, claimChallengeResources, getMyMissions, claimMissionPrize };

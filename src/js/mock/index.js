@@ -6,14 +6,14 @@
  * the session-cache reset.
  */
 
-const auth = require('./auth');
-const challenges = require('./challenges');
-const voting = require('./voting');
-const boost = require('./boost');
-const errors = require('./errors');
-const { simulateApiResponse, simulateApiError } = require('./simulate');
-const { clearSessionCache } = require('./sessionCache');
-const { mockApiClient } = require('./apiClient');
+import * as auth from './auth';
+import * as challenges from './challenges';
+import * as voting from './voting';
+import * as boost from './boost';
+import * as errors from './errors';
+import { simulateApiResponse, simulateApiError } from './simulate';
+import { clearSessionCache } from './sessionCache';
+import { mockApiClient } from './apiClient';
 
 /**
  * Complete mock data object
@@ -48,7 +48,7 @@ const getMockData = (type, scenario = null) => {
     return mockData[type];
 };
 
-module.exports = {
+export {
     // Individual mock data modules
     auth,
     challenges,

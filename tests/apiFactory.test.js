@@ -8,12 +8,12 @@ jest.mock('../src/js/settings', () => ({
     loadSettings: jest.fn(),
 }));
 
-jest.mock('../src/js/services/BaseMiddleware', () => {
-    return jest.fn().mockImplementation((strategy) => ({
+jest.mock('../src/js/services/BaseMiddleware', () => ({
+    BaseMiddleware: jest.fn().mockImplementation((strategy) => ({
         strategy,
         mockMiddlewareInstance: true,
-    }));
-});
+    })),
+}));
 
 jest.mock('../src/js/api/login', () => ({ authenticate: jest.fn() }));
 jest.mock('../src/js/strategies/real', () => ({
@@ -93,7 +93,7 @@ const { getApiStrategy, getMiddleware, refreshApi } = require('../src/js/apiFact
 const realApi = getApiStrategy({ mock: false });
 const mockApi = getApiStrategy({ mock: true });
 const settings = require('../src/js/settings');
-const BaseMiddleware = require('../src/js/services/BaseMiddleware');
+const { BaseMiddleware } = require('../src/js/services/BaseMiddleware');
 const mockLogger = require('../src/js/logger');
 
 describe('apiFactory', () => {

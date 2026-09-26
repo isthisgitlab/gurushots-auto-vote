@@ -18,11 +18,11 @@
  * so the lock is a no-op there.
  */
 
-const fs = require('fs');
-const path = require('path');
-const runtime = require('./runtime');
-const logger = require('./logger');
-const { createJsonStore, getSettingsPath } = require('./settings/storage');
+import * as fs from 'fs';
+import * as path from 'path';
+import * as runtime from './runtime';
+import * as logger from './logger';
+import { createJsonStore, getSettingsPath } from './settings/storage';
 
 const joinStateStore = createJsonStore({ fileName: 'joinState.json', prefKey: 'gs_join_state' });
 
@@ -84,9 +84,6 @@ const acquireUnlockLock = (id) => {
     }
 };
 
-module.exports = {
-    joinStateStore,
-    initializeJoinStateAsync: joinStateStore.initializeAsync,
-    flushJoinStateWrites: joinStateStore.flushPendingWrites,
-    acquireUnlockLock,
-};
+export const initializeJoinStateAsync = joinStateStore.initializeAsync;
+export const flushJoinStateWrites = joinStateStore.flushPendingWrites;
+export { joinStateStore, acquireUnlockLock };

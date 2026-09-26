@@ -21,18 +21,18 @@
  *                            the assigned scenario or an unsaved draft
  */
 
-const logger = require('../logger');
-const settings = require('../settings');
-const apiFactory = require('../apiFactory');
-const auth = require('../services/auth');
-const { registerHandlers } = require('./registerHandlers');
-const { errorResult } = require('./errorResult');
-const { getScenarioStatus, ledgerForMode } = require('../services/scenarioStatus');
-const { findActiveChallenge } = require('../services/findActiveChallenge');
-const { evaluateScenario } = require('../scenarios/evaluate');
-const { simulateScenario } = require('../scenarios/simulate');
-const { SCENARIO_TEMPLATES } = require('../scenarios/templates');
-const { refreshScenarioStateAsync } = require('../scenarioStateStore');
+import * as logger from '../logger';
+import * as settings from '../settings';
+import * as apiFactory from '../apiFactory';
+import * as auth from '../services/auth';
+import { registerHandlers } from './registerHandlers';
+import { errorResult } from './errorResult';
+import { getScenarioStatus, ledgerForMode } from '../services/scenarioStatus';
+import { findActiveChallenge } from '../services/findActiveChallenge';
+import { evaluateScenario } from '../scenarios/evaluate';
+import { simulateScenario } from '../scenarios/simulate';
+import { SCENARIO_TEMPLATES } from '../scenarios/templates';
+import { refreshScenarioStateAsync } from '../scenarioStateStore';
 
 const log = () => logger.withCategory('scenario');
 
@@ -218,4 +218,4 @@ const buildHandlers = () => ({
 
 const register = (ipcMain) => registerHandlers(ipcMain, buildHandlers());
 
-module.exports = { register, buildHandlers };
+export { register, buildHandlers };

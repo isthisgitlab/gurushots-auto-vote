@@ -27,4 +27,4 @@ const resolveEntryIndex = (entries, requestedIndex) => {
     return Math.min(entries.length - 1, requestedIndex - 1);
 };
 
-module.exports = { resolveEntryIndex };
+export { resolveEntryIndex };

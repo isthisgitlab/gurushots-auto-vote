@@ -3,8 +3,8 @@
  * autocomplete over the mock library's tags.
  */
 
-const { simulateApiResponse, mockMethod } = require('../simulate');
-const { MOCK_LIBRARY_TAGS } = require('../photoLibrary');
+import { simulateApiResponse, mockMethod } from '../simulate';
+import { MOCK_LIBRARY_TAGS } from '../photoLibrary';
 
 /**
  * Simulate /rest/get_current_member_profile — the token-only identity read
@@ -46,4 +46,4 @@ const searchTagAutocomplete = mockMethod(
     },
 );
 
-module.exports = { getCurrentMemberProfile, searchTagAutocomplete };
+export { getCurrentMemberProfile, searchTagAutocomplete };

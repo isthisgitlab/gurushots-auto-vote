@@ -28,8 +28,8 @@
  * the start/stop path.
  */
 
-const { powerSaveBlocker } = require('electron');
-const logger = require('../logger');
+import { powerSaveBlocker } from 'electron';
+import * as logger from '../logger';
 
 // The single held assertion id, or null when nothing is held. Module-level for
 // the same reason settingsWatcher's debounce handle is: there is exactly one
@@ -81,4 +81,4 @@ const syncBackgroundActivity = (running) => {
     }
 };
 
-module.exports = { syncBackgroundActivity };
+export { syncBackgroundActivity };

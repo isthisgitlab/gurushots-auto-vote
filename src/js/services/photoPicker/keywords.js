@@ -4,8 +4,8 @@
  * terms auto-fill narrows the library with.
  */
 
-const { MIN_USER_TAG_STEM_LENGTH, stem, rawTokenise, tokenise } = require('./stemming');
-const {
+import { MIN_USER_TAG_STEM_LENGTH, stem, rawTokenise, tokenise } from './stemming';
+import {
     abstractTitleWords,
     withoutAbstract,
     titleSubject,
@@ -13,7 +13,7 @@ const {
     parseNegation,
     dropNegated,
     detectLetterPrefix,
-} = require('./title');
+} from './title';
 
 // Keyword count is bounded for the same reason the per-photo stem count is (see
 // MAX_STEMS_PER_PHOTO): these keywords are the inner loop of every scorePhoto
@@ -214,10 +214,4 @@ const buildSearchTerms = (challenge, opts = {}) => {
     return Array.from(new Set(terms)).slice(0, SEARCH_TERMS_CAP);
 };
 
-module.exports = {
-    buildChallengeKeywords,
-    buildThemeKeywords,
-    buildThemeAlternatives,
-    visualSubjectWords,
-    buildSearchTerms,
-};
+export { buildChallengeKeywords, buildThemeKeywords, buildThemeAlternatives, visualSubjectWords, buildSearchTerms };

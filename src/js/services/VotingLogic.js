@@ -21,51 +21,51 @@
  *   joinDecision.js     pure auto-join decision
  */
 
-const { resolveEntryIndex } = require('../voting/entrySlot');
-const thresholds = require('./decisions/thresholds');
-const { getScheduledFillState, getVotingPauseState } = require('./decisions/triggerWindows');
-const { getBoostPrefillState } = require('./decisions/boostPrefill');
-const voteDecisions = require('./decisions/voteDecisions');
-const entryPick = require('./decisions/entryPick');
-const boostTurbo = require('./decisions/boostTurbo');
-const deadlineActions = require('./decisions/deadlineActions');
-const { shouldJoinChallenge, resolveJoinWindow } = require('./decisions/joinDecision');
+import { resolveEntryIndex } from '../voting/entrySlot';
+import * as thresholds from './decisions/thresholds';
+import { getScheduledFillState, getVotingPauseState } from './decisions/triggerWindows';
+import { getBoostPrefillState } from './decisions/boostPrefill';
+import * as voteDecisions from './decisions/voteDecisions';
+import * as entryPick from './decisions/entryPick';
+import * as boostTurbo from './decisions/boostTurbo';
+import * as deadlineActions from './decisions/deadlineActions';
+import { shouldJoinChallenge, resolveJoinWindow } from './decisions/joinDecision';
 
 /** @typedef {import('./decisions/ruleEngine').VotingRuleResult} VotingRuleResult */
 /** @typedef {import('./decisions/voteDecisions').AutoVoteDecision} AutoVoteDecision */
 /** @typedef {import('./decisions/voteDecisions').ManualVoteDecision} ManualVoteDecision */
 /** @typedef {import('./decisions/boostTurbo').TurboDecision} TurboDecision */
 
-module.exports = {
+export const isWithinFinalWindow = thresholds.isWithinFinalWindow;
+export const isWithinLastMinuteThreshold = thresholds.isWithinLastMinuteThreshold;
+export const getEffectiveExposureThreshold = thresholds.getEffectiveExposureThreshold;
+export const getEffectiveFinalWindowExposureThreshold = thresholds.getEffectiveFinalWindowExposureThreshold;
+export const getEffectiveExposureTarget = thresholds.getEffectiveExposureTarget;
+export const getEffectiveFinalWindowExposureTarget = thresholds.getEffectiveFinalWindowExposureTarget;
+export const evaluateVotingDecision = voteDecisions.evaluateVotingDecision;
+export const evaluateManualVotingDecision = voteDecisions.evaluateManualVotingDecision;
+export const evaluateManualVotingToHundred = voteDecisions.evaluateManualVotingToHundred;
+export const getEffectiveBoostTime = thresholds.getEffectiveBoostTime;
+export const getEffectiveKeyUnlockedBoostTime = thresholds.getEffectiveKeyUnlockedBoostTime;
+export const pickBoostEntry = entryPick.pickBoostEntry;
+export const resolveBoostFillNewMode = entryPick.resolveBoostFillNewMode;
+export const isWithinEmergencyWindow = boostTurbo.isWithinEmergencyWindow;
+export const shouldApplyBoost = boostTurbo.shouldApplyBoost;
+export const isBoostWindowOpen = boostTurbo.isBoostWindowOpen;
+export const getEffectiveTurboTime = thresholds.getEffectiveTurboTime;
+export const shouldPlayAutoTurbo = boostTurbo.shouldPlayAutoTurbo;
+export const shouldApplyTurbo = boostTurbo.shouldApplyTurbo;
+export const pickEntryAvoidingConflict = entryPick.pickEntryAvoidingConflict;
+export const getAutoFillThresholdSec = deadlineActions.getAutoFillThresholdSec;
+export const getEmergencyFillThresholdSec = deadlineActions.getEmergencyFillThresholdSec;
+export const getBoostThresholdSec = deadlineActions.getBoostThresholdSec;
+export const orderDeadlineActions = deadlineActions.orderDeadlineActions;
+export const describeDeadlineActions = deadlineActions.describeDeadlineActions;
+export {
     shouldJoinChallenge,
     resolveJoinWindow,
-    isWithinFinalWindow: thresholds.isWithinFinalWindow,
-    isWithinLastMinuteThreshold: thresholds.isWithinLastMinuteThreshold,
-    getEffectiveExposureThreshold: thresholds.getEffectiveExposureThreshold,
-    getEffectiveFinalWindowExposureThreshold: thresholds.getEffectiveFinalWindowExposureThreshold,
-    getEffectiveExposureTarget: thresholds.getEffectiveExposureTarget,
-    getEffectiveFinalWindowExposureTarget: thresholds.getEffectiveFinalWindowExposureTarget,
     getScheduledFillState,
     getVotingPauseState,
     getBoostPrefillState,
-    evaluateVotingDecision: voteDecisions.evaluateVotingDecision,
-    evaluateManualVotingDecision: voteDecisions.evaluateManualVotingDecision,
-    evaluateManualVotingToHundred: voteDecisions.evaluateManualVotingToHundred,
-    getEffectiveBoostTime: thresholds.getEffectiveBoostTime,
-    getEffectiveKeyUnlockedBoostTime: thresholds.getEffectiveKeyUnlockedBoostTime,
-    pickBoostEntry: entryPick.pickBoostEntry,
-    resolveBoostFillNewMode: entryPick.resolveBoostFillNewMode,
-    isWithinEmergencyWindow: boostTurbo.isWithinEmergencyWindow,
-    shouldApplyBoost: boostTurbo.shouldApplyBoost,
-    isBoostWindowOpen: boostTurbo.isBoostWindowOpen,
-    getEffectiveTurboTime: thresholds.getEffectiveTurboTime,
-    shouldPlayAutoTurbo: boostTurbo.shouldPlayAutoTurbo,
-    shouldApplyTurbo: boostTurbo.shouldApplyTurbo,
     resolveEntryIndex,
-    pickEntryAvoidingConflict: entryPick.pickEntryAvoidingConflict,
-    getAutoFillThresholdSec: deadlineActions.getAutoFillThresholdSec,
-    getEmergencyFillThresholdSec: deadlineActions.getEmergencyFillThresholdSec,
-    getBoostThresholdSec: deadlineActions.getBoostThresholdSec,
-    orderDeadlineActions: deadlineActions.orderDeadlineActions,
-    describeDeadlineActions: deadlineActions.describeDeadlineActions,
 };

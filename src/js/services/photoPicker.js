@@ -20,26 +20,26 @@
  *   candidates.js  hard and exclusion filters, scored candidates, the one-call pick
  */
 
-const { STOPWORDS, stem, tokenise, matches, tokeniseTagList } = require('./photoPicker/stemming');
-const { abstractTitleWords, detectLetterPrefix, parseNegation } = require('./photoPicker/title');
-const {
+import { STOPWORDS, stem, tokenise, matches, tokeniseTagList } from './photoPicker/stemming';
+import { abstractTitleWords, detectLetterPrefix, parseNegation } from './photoPicker/title';
+import {
     buildChallengeKeywords,
     buildThemeKeywords,
     buildThemeAlternatives,
     visualSubjectWords,
     buildSearchTerms,
-} = require('./photoPicker/keywords');
-const { wholeLabelStems, labelWordStems, labelStemGroups, scorePhoto } = require('./photoPicker/labels');
-const {
+} from './photoPicker/keywords';
+import { wholeLabelStems, labelWordStems, labelStemGroups, scorePhoto } from './photoPicker/labels';
+import {
     SEMANTIC_MATCH_FLOOR,
     SEMANTIC_SUPPORT_CAP,
     hasThemeMatch,
     selectEnrichmentSet,
     finalizePick,
-} = require('./photoPicker/tiers');
-const { pickPhotosForChallenge, buildScoredCandidates } = require('./photoPicker/candidates');
+} from './photoPicker/tiers';
+import { pickPhotosForChallenge, buildScoredCandidates } from './photoPicker/candidates';
 
-module.exports = {
+export {
     pickPhotosForChallenge,
     buildScoredCandidates,
     selectEnrichmentSet,

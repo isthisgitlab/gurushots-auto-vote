@@ -7,8 +7,8 @@
  * react/contexts/autovoteScheduler.js — same shape, different transport.
  */
 
-const settings = require('../settings');
-const { getScenarioStatus, scenarioWakeInput } = require('../services/scenarioStatus');
+import * as settings from '../settings';
+import { getScenarioStatus, scenarioWakeInput } from '../services/scenarioStatus';
 
 // Per-challenge lastMinuteThreshold for the shared threshold math.
 const resolveThreshold = (challengeId) => settings.getEffectiveSetting('lastMinuteThreshold', challengeId);
@@ -79,7 +79,7 @@ const resolveCurrencyAuto = (challengeId) => ({
 // (./thresholdWindow.js computes the instant with the engine's own nextWakeAt).
 const resolveScenarioWake = (challengeId) => scenarioWakeInput(getScenarioStatus(challengeId));
 
-module.exports = {
+export {
     resolveScenarioWake,
     resolveThreshold,
     resolveScheduledFill,

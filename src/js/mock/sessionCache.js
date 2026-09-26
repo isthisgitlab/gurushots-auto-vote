@@ -21,4 +21,4 @@ const clearSessionCache = () => {
     sessionMockCache = createSessionCache();
 };
 
-module.exports = { getSessionCache, clearSessionCache };
+export { getSessionCache, clearSessionCache };

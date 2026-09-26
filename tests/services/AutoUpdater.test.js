@@ -88,7 +88,7 @@ describe('AutoUpdater', () => {
         });
 
         // Re-require AutoUpdater after mocks are set up
-        AutoUpdater = require('../../src/js/services/AutoUpdater');
+        ({ AutoUpdater } = require('../../src/js/services/AutoUpdater'));
         autoUpdater = new AutoUpdater();
     });
 

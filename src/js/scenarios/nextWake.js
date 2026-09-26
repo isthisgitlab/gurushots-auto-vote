@@ -12,8 +12,8 @@
  * so every bound yields a candidate, whichever way it flips.
  */
 
-const { occurrencesOf } = require('../scheduling/wallClock');
-const { finite, durationBound } = require('./conditions');
+import { occurrencesOf } from '../scheduling/wallClock';
+import { finite, durationBound } from './conditions';
 
 /**
  * The next occurrence of a validated HH:MM time (occurrencesOf only returns
@@ -113,4 +113,4 @@ const nextWakeAt = ({ scenario, state, challenge, now, timezone }) => {
     return upcoming.length ? Math.min(...upcoming) : null;
 };
 
-module.exports = { nextWakeAt };
+export { nextWakeAt };

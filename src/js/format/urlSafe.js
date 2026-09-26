@@ -30,4 +30,4 @@ const isSafeExternalUrl = (url) => {
     }
 };
 
-module.exports = { isSafeExternalUrl };
+export { isSafeExternalUrl };

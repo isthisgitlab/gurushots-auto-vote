@@ -5,20 +5,20 @@
  * tag-list / ignore-words effective values.
  */
 
-const logger = require('../logger');
-const { ruleConditions, matchingRules } = require('./challengeRules');
-const { loadSettings, saveSettings } = require('./persistence');
-const { ensureChallengeSettings } = require('./defaults');
-const { readProfilesMap, profileNameForLog } = require('./profileStore');
-const { factsForChallengeId } = require('./challengeFacts');
-const { MAX_TITLE_RULES, sanitizeTitleRule, titleRuleKey, ruleLogLabel } = require('./titleRuleSanitize');
-const {
+import * as logger from '../logger';
+import { ruleConditions, matchingRules } from './challengeRules';
+import { loadSettings, saveSettings } from './persistence';
+import { ensureChallengeSettings } from './defaults';
+import { readProfilesMap, profileNameForLog } from './profileStore';
+import { factsForChallengeId } from './challengeFacts';
+import { MAX_TITLE_RULES, sanitizeTitleRule, titleRuleKey, ruleLogLabel } from './titleRuleSanitize';
+import {
     profileFromMatches,
     ruleValuesFor,
     isTitleProfileSuppressed,
     titleProfileComposesWithKnownOverrides,
-} = require('./ruleResolution');
-const { getEffectiveSetting } = require('./challengeOverrides');
+} from './ruleResolution';
+import { getEffectiveSetting } from './challengeOverrides';
 
 /**
  * Setting keys whose rule contribution is merged as a tag union. Named
@@ -234,7 +234,7 @@ const getEffectiveIgnoreTitleWords = (challenge) => {
     return Array.isArray(words) && words.length > 0 ? words : null;
 };
 
-module.exports = {
+export {
     getTitleRules,
     setTitleRules,
     resolveRuleSetting,

@@ -61,11 +61,10 @@ describe('getJsFiles', () => {
 });
 
 describe('shouldExclude', () => {
-    test('matches exact excluded files and excluded directory prefixes', () => {
-        expect(shouldExclude('src/js/index.js')).toBe(true);
-        expect(shouldExclude(['src', 'js', 'react', 'App.js'].join(path.sep))).toBe(true);
+    test('matches excluded directory prefixes', () => {
         expect(shouldExclude('scripts/site/x.js')).toBe(true);
-        expect(shouldExclude('src/js/settings.js')).toBe(false);
+        expect(shouldExclude(['scripts', 'site', 'x.js'].join(path.sep))).toBe(true);
+        expect(shouldExclude('scripts/build-main.js')).toBe(false);
     });
 });
 
@@ -126,13 +125,13 @@ describe('main', () => {
         expect(exitSpy.mock.calls[0][0]).toBe(1);
     });
 
-    test('defaults to the project roots and skips the ESM/JSX islands', () => {
+    test('defaults to scripts and tests, leaving out src/js and the static site', () => {
         main();
 
         const checked = execFileSync.mock.calls.map(([, [, file]]) => file.split(path.sep).join('/'));
         expect(checked).toContain('scripts/syntax-check.js');
-        expect(checked).not.toContain('src/js/index.js');
-        expect(checked.some((f) => f.startsWith('src/js/react/'))).toBe(false);
+        expect(checked.some((f) => f.startsWith('src/'))).toBe(false);
+        expect(checked.some((f) => f.startsWith('scripts/site/'))).toBe(false);
         expect(exitSpy).toHaveBeenCalledWith(0);
     });
 });

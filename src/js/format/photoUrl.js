@@ -84,4 +84,4 @@ const buildPhotoUrl = (memberId, imageId, options = {}) => {
  */
 const entryPhotoUrl = (entry, options = {}) => buildPhotoUrl(entry?.member_id ?? '', entry?.id ?? '', options);
 
-module.exports = { buildPhotoUrl, entryPhotoUrl };
+export { buildPhotoUrl, entryPhotoUrl };

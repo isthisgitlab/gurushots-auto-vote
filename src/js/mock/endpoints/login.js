@@ -2,9 +2,9 @@
  * Mock counterpart to api/login.js: accepts any non-empty credentials.
  */
 
-const auth = require('../auth');
-const logger = require('../../logger');
-const { simulateApiResponse, simulateApiError } = require('../simulate');
+import * as auth from '../auth';
+import * as logger from '../../logger';
+import { simulateApiResponse, simulateApiError } from '../simulate';
 
 /**
  * Simulate authentication
@@ -24,4 +24,4 @@ const authenticate = async (email, password) => {
     }
 };
 
-module.exports = { authenticate };
+export { authenticate };

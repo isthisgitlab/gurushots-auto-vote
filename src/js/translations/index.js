@@ -7,9 +7,9 @@
  * bundle.
  */
 
-const { createTranslator } = require('./translator');
-const settings = require('../settings');
-const logger = require('../logger');
+import { createTranslator } from './translator';
+import * as settings from '../settings';
+import * as logger from '../logger';
 
 const translator = createTranslator();
 
@@ -28,4 +28,4 @@ const translationManager = {
 
 void translationManager.loadLanguageFromSettings();
 
-module.exports = { translationManager };
+export { translationManager };

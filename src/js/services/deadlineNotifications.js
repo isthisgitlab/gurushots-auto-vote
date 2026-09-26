@@ -249,7 +249,7 @@ const readNotificationConfig = (getSetting) => {
     return { leadSec, enabled, anyEnabled };
 };
 
-module.exports = {
+export {
     ACTION_LABEL_KEY,
     NOTIFY_SETTING_KEYS,
     NOTIFY_CONFIG_KEYS,

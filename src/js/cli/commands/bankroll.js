@@ -4,8 +4,8 @@
  * {success,error} envelope + logging live in one place.
  */
 
-const logger = require('../../logger');
-const { ensureAuthenticated } = require('../guards');
+import * as logger from '../../logger';
+import { ensureAuthenticated } from '../guards';
 
 // Lazily built, invoked with a null event (same reuse pattern as
 // commands/actions.js / commands/voting.js).
@@ -27,4 +27,4 @@ const showBankroll = async () => {
     logger.withCategory('ui').info(`  🪙 Coins: ${result.coins}`);
 };
 
-module.exports = { showBankroll };
+export { showBankroll };

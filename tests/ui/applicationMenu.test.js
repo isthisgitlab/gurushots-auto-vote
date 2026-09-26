@@ -45,12 +45,12 @@ jest.mock('../../src/js/translations/index', () => ({
     translationManager: { t: (k) => mockTranslation.translate(k) },
 }));
 
-jest.mock('../../src/js/services/AutoUpdater', () =>
-    jest.fn().mockImplementation((win) => {
+jest.mock('../../src/js/services/AutoUpdater', () => ({
+    AutoUpdater: jest.fn().mockImplementation((win) => {
         mockAutoUpdaterCtor(win);
         return { checkForUpdates: mockAutoUpdaterCheck };
     }),
-);
+}));
 
 let electron;
 let logger;

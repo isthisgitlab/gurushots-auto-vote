@@ -10,9 +10,9 @@
  * failed, or the app stopped) resumes from that action before anything else.
  */
 
-const { occurrencesOf } = require('../scheduling/wallClock');
-const { firstFailing } = require('./conditions');
-const { nextWakeAt } = require('./nextWake');
+import { occurrencesOf } from '../scheduling/wallClock';
+import { firstFailing } from './conditions';
+import { nextWakeAt } from './nextWake';
 
 /**
  * @typedef {object} EvaluateInput
@@ -143,4 +143,4 @@ const evaluateScenario = (input) => {
     return { ...base, halted: null, fire, explain, nextWakeAt: nextWakeAt(input) };
 };
 
-module.exports = { evaluateScenario, firedRecord, localDayOf };
+export { evaluateScenario, firedRecord, localDayOf };

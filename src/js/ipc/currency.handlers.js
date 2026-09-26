@@ -12,14 +12,14 @@
  * their own wording. Handlers never throw to the renderer.
  */
 
-const settings = require('../settings');
-const { registerHandlers } = require('./registerHandlers');
-const logger = require('../logger');
-const apiFactory = require('../apiFactory');
-const auth = require('../services/auth');
-const currencyActions = require('../services/currencyActions');
-const { CURRENCY_OUTCOME } = require('../voting/currencyActions');
-const { swapBackLedger, mockSwapBackLedger } = require('../swapBackStore');
+import * as settings from '../settings';
+import { registerHandlers } from './registerHandlers';
+import * as logger from '../logger';
+import * as apiFactory from '../apiFactory';
+import * as auth from '../services/auth';
+import * as currencyActions from '../services/currencyActions';
+import { CURRENCY_OUTCOME } from '../voting/currencyActions';
+import { swapBackLedger, mockSwapBackLedger } from '../swapBackStore';
 
 const sanitizeForLog = logger.sanitizeLogString;
 
@@ -204,4 +204,4 @@ const register = (ipcMain) => {
     registerHandlers(ipcMain, buildHandlers());
 };
 
-module.exports = { register, buildHandlers };
+export { register, buildHandlers };

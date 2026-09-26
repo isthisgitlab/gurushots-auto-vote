@@ -6,11 +6,11 @@
  * and the GUI cannot drift. Every command returns its exit code.
  */
 
-const fs = require('node:fs');
-const logger = require('../../logger');
-const { formatDateTime } = require('../../dateFormat');
-const { SCENARIO_TEMPLATES } = require('../../scenarios/templates');
-const { VOCABULARY_REFERENCE } = require('../../scenarios/vocabulary');
+import * as fs from 'node:fs';
+import * as logger from '../../logger';
+import { formatDateTime } from '../../dateFormat';
+import { SCENARIO_TEMPLATES } from '../../scenarios/templates';
+import { VOCABULARY_REFERENCE } from '../../scenarios/vocabulary';
 
 // Built lazily so requiring this module (e.g. for `help`) does not construct
 // the handler set or pull in its transitive dependencies.
@@ -219,7 +219,7 @@ const scenarioVocabulary = async () => {
     return 0;
 };
 
-module.exports = {
+export {
     listScenarios,
     scenarioTemplate,
     importScenarioCmd,

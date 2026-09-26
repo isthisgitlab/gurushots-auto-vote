@@ -13,7 +13,8 @@ const path = jest.requireActual('path');
 
 const CLI_PATH = path.resolve(__dirname, '../../src/js/cli/cli.js');
 
-// Each case cold-spawns a fresh `node` running the full CLI. Inside the full
+// Each case cold-spawns a fresh `node` running the full CLI under the tsx
+// loader (as `pnpm cli:*` does — src/ is import/export). Inside the full
 // parallel jest run every core is busy with workers, so a cold child can take
 // well over the global 10s timeout and get killed (status === null). These are
 // correctness smoke tests, not a perf budget — give the spawn (25s) and the
@@ -22,7 +23,7 @@ const CLI_PATH = path.resolve(__dirname, '../../src/js/cli/cli.js');
 jest.setTimeout(40000);
 
 const runCli = (args) => {
-    const result = spawnSync('node', [CLI_PATH, ...args], {
+    const result = spawnSync('node', ['--import', 'tsx', CLI_PATH, ...args], {
         encoding: 'utf8',
         timeout: 25000,
     });

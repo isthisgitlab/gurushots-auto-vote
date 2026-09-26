@@ -31,8 +31,8 @@
  * both return null on any failure and callers branch on null.
  */
 
-const { makePostRequest } = require('./api-client');
-const { ENDPOINTS, createWebHeaders, makeRequireValue } = require('./constants');
+import { makePostRequest } from './api-client';
+import { ENDPOINTS, createWebHeaders, makeRequireValue } from './constants';
 
 const requireValue = makeRequireValue('tags');
 
@@ -103,8 +103,4 @@ const searchTagAutocomplete = async (token, term, memberId) => {
         .filter((item) => item !== '' && item.length <= MAX_TAG_LENGTH);
 };
 
-module.exports = {
-    getCurrentMemberProfile,
-    searchTagAutocomplete,
-    MIN_AUTOCOMPLETE_CHARS,
-};
+export { getCurrentMemberProfile, searchTagAutocomplete, MIN_AUTOCOMPLETE_CHARS };

@@ -13,8 +13,8 @@
  * only if it already holds. Pure; spends and changes nothing.
  */
 
-const { evaluateScenario, firedRecord } = require('./evaluate');
-const { nextWakeAt } = require('./nextWake');
+import { evaluateScenario, firedRecord } from './evaluate';
+import { nextWakeAt } from './nextWake';
 
 const MAX_EVENTS = 50;
 const MAX_STEPS = 500;
@@ -131,4 +131,4 @@ const simulateScenario = ({ scenario, state: startState, challenge, now, timezon
     return { events, stoppedBecause: 'limit', stoppedAt: at, halted: null };
 };
 
-module.exports = { simulateScenario, MAX_EVENTS };
+export { simulateScenario, MAX_EVENTS };

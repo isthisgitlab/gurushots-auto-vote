@@ -3,9 +3,9 @@
  * request, ignoring the autoFill toggle and the schedule.
  */
 
-const { resetPassState: resetPhotoStatsPassState } = require('../photoStats');
-const { getSlotsRemaining } = require('./challengeState');
-const { runFillAttempt } = require('./pipeline');
+import { resetPassState as resetPhotoStatsPassState } from '../photoStats';
+import { getSlotsRemaining } from './challengeState';
+import { runFillAttempt } from './pipeline';
 
 /**
  * Manual fill (GUI button). Submits one or all missing slots in a
@@ -136,6 +136,4 @@ const fillChallengeNow = async (challenge, token, mode, deps) => {
     };
 };
 
-module.exports = {
-    fillChallengeNow,
-};
+export { fillChallengeNow };

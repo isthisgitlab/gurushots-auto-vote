@@ -19,4 +19,4 @@
  */
 const appPath = (...segments) => require('node:path').join(__dirname, '..', '..', ...segments);
 
-module.exports = { appPath };
+export { appPath };

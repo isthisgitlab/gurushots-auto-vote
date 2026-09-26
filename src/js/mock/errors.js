@@ -37,6 +37,4 @@ const mockAuthErrors = {
     },
 };
 
-module.exports = {
-    mockAuthErrors,
-};
+export { mockAuthErrors };

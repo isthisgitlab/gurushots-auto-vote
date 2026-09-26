@@ -39,4 +39,4 @@ const failureText = (error) => {
     return (message && String(message)) || String(error ?? '') || 'unknown error';
 };
 
-module.exports = { oneLine, failureText };
+export { oneLine, failureText };

@@ -10,13 +10,13 @@
  * document the validator would refuse.
  */
 
-const logger = require('../logger');
-const { SCENARIO_CAPS, SPENDING_ACTIONS } = require('../scenarios/vocabulary');
-const { loadSettings, saveSettings } = require('./persistence');
-const { ensureChallengeSettings, globalChallengeValues } = require('./defaults');
-const { normalizeProfileName, profileNameForLog, findProfileKey } = require('./profileStore');
-const { validateScenario, parseScenarioJson } = require('./scenarioSchema');
-const { sanitizeTitleRuleInline } = require('./titleRuleSanitize');
+import * as logger from '../logger';
+import { SCENARIO_CAPS, SPENDING_ACTIONS } from '../scenarios/vocabulary';
+import { loadSettings, saveSettings } from './persistence';
+import { ensureChallengeSettings, globalChallengeValues } from './defaults';
+import { normalizeProfileName, profileNameForLog, findProfileKey } from './profileStore';
+import { validateScenario, parseScenarioJson } from './scenarioSchema';
+import { sanitizeTitleRuleInline } from './titleRuleSanitize';
 
 const MAX_SCENARIOS = SCENARIO_CAPS.scenarios;
 
@@ -275,7 +275,7 @@ const exportScenario = (name) => {
     return scenario ? `${JSON.stringify(scenario, null, 2)}\n` : null;
 };
 
-module.exports = {
+export {
     MAX_SCENARIOS,
     findStoredScenario,
     hasStoredScenarios,

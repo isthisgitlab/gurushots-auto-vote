@@ -259,7 +259,7 @@
                 ],
                 "transform": {
                     "\\.jsx?$": [
-                        "@swc/jest",
+                        "<rootDir>/tests/helpers/swc-transformer.js",
                         {
                             "jsc": {
                                 "parser": {
@@ -276,7 +276,7 @@
                         }
                     ],
                     "\\.ts$": [
-                        "@swc/jest",
+                        "<rootDir>/tests/helpers/swc-transformer.js",
                         {
                             "jsc": {
                                 "parser": {
@@ -286,7 +286,7 @@
                         }
                     ],
                     "\\.tsx$": [
-                        "@swc/jest",
+                        "<rootDir>/tests/helpers/swc-transformer.js",
                         {
                             "jsc": {
                                 "parser": {
@@ -337,7 +337,7 @@
                 ],
                 "transform": {
                     "\\.jsx?$": [
-                        "@swc/jest",
+                        "<rootDir>/tests/helpers/swc-transformer.js",
                         {
                             "jsc": {
                                 "parser": {
@@ -354,7 +354,7 @@
                         }
                     ],
                     "\\.ts$": [
-                        "@swc/jest",
+                        "<rootDir>/tests/helpers/swc-transformer.js",
                         {
                             "jsc": {
                                 "parser": {
@@ -364,7 +364,7 @@
                         }
                     ],
                     "\\.tsx$": [
-                        "@swc/jest",
+                        "<rootDir>/tests/helpers/swc-transformer.js",
                         {
                             "jsc": {
                                 "parser": {

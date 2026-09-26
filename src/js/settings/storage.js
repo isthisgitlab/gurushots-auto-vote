@@ -14,11 +14,11 @@
  * guards so non-Capacitor bundles never resolve it.
  */
 
-const fs = require('node:fs');
-const path = require('node:path');
-const logger = require('../logger');
+import * as fs from 'node:fs';
+import * as path from 'node:path';
+import * as logger from '../logger';
 const { isSourceCode, getAppName } = logger;
-const runtime = require('../runtime');
+import * as runtime from '../runtime';
 
 // Try to import electron, but don't fail if it's not available (CLI context)
 let electronApp = null;
@@ -315,7 +315,7 @@ const createJsonStore = ({ fileName, prefKey }) => {
     };
 };
 
-module.exports = {
+export {
     storage,
     initializeAsync,
     flushPendingWrites,

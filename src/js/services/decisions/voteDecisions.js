@@ -11,8 +11,9 @@
 // and its `challengeId = null` defaults make TS infer param types too narrow
 // (null) to accept the string IDs passed here. Drop the cast once settings.js
 // is typed.
-const settings = /** @type {any} */ (require('../../settings'));
-const { _runVotingRules } = require('./ruleEngine');
+import * as settingsModule from '../../settings';
+const settings = /** @type {any} */ (settingsModule);
+import { _runVotingRules } from './ruleEngine';
 
 /**
  * @typedef {object} AutoVoteDecision
@@ -216,8 +217,4 @@ const evaluateManualVotingToHundred = (challenge, now, challengeTitle) => {
     return { shouldAllowVoting, errorMessage, targetExposure };
 };
 
-module.exports = {
-    evaluateVotingDecision,
-    evaluateManualVotingDecision,
-    evaluateManualVotingToHundred,
-};
+export { evaluateVotingDecision, evaluateManualVotingDecision, evaluateManualVotingToHundred };

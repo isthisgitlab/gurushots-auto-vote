@@ -8,18 +8,18 @@
  * only their token-presence guard is shared via services/auth.js.
  */
 
-const settings = require('../settings');
-const { registerHandlers } = require('./registerHandlers');
-const { errorResult } = require('./errorResult');
-const logger = require('../logger');
-const apiFactory = require('../apiFactory');
-const auth = require('../services/auth');
-const votingLogic = require('../services/VotingLogic');
-const autoFill = require('../services/autoFill');
-const { isAutoJoinActive } = require('../services/joinChallenges');
-const { getAutoClaimStatus } = require('../services/autoClaim');
-const { findActiveChallenge } = require('../services/findActiveChallenge');
-const { rememberChallenges } = require('../windows/quitGuard');
+import * as settings from '../settings';
+import { registerHandlers } from './registerHandlers';
+import { errorResult } from './errorResult';
+import * as logger from '../logger';
+import * as apiFactory from '../apiFactory';
+import * as auth from '../services/auth';
+import * as votingLogic from '../services/VotingLogic';
+import * as autoFill from '../services/autoFill';
+import { isAutoJoinActive } from '../services/joinChallenges';
+import { getAutoClaimStatus } from '../services/autoClaim';
+import { findActiveChallenge } from '../services/findActiveChallenge';
+import { rememberChallenges } from '../windows/quitGuard';
 
 // In-process guard that prevents two simultaneous mini-game runs on
 // the same challenge — defends against double-click and against an
@@ -398,4 +398,4 @@ const register = (ipcMain) => {
     registerHandlers(ipcMain, buildHandlers());
 };
 
-module.exports = { register, buildHandlers };
+export { register, buildHandlers };

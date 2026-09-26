@@ -99,4 +99,4 @@ const intentValuesMatch = (intent, storedValues) => {
     return true;
 };
 
-module.exports = { INTENT_PROFILES, getIntentByName, intentValuesMatch };
+export { INTENT_PROFILES, getIntentByName, intentValuesMatch };

@@ -5,8 +5,8 @@
  * Reuses the shared IPC handlers so the join safety model lives in one place.
  */
 
-const logger = require('../../logger');
-const { ensureAuthenticated } = require('../guards');
+import * as logger from '../../logger';
+import { ensureAuthenticated } from '../guards';
 
 let _handlers;
 const handlers = () => (_handlers ??= require('../../ipc/actions.handlers').buildHandlers());
@@ -116,4 +116,4 @@ const joinChallengeCmd = async (challengeId, { yes = false } = {}) => {
     reportJoin(confirmed, challengeId);
 };
 
-module.exports = { showDiscover, joinChallengeCmd };
+export { showDiscover, joinChallengeCmd };

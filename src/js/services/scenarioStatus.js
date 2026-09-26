@@ -5,9 +5,9 @@
  * the CLI. Reads only; the runner (scenarioRunner.js) is the only writer.
  */
 
-const settings = require('../settings');
-const { DEFAULT_TIMEZONE } = require('../settings/uiDefaults');
-const { scenarioStateLedger, mockScenarioStateLedger } = require('../scenarioStateStore');
+import * as settings from '../settings';
+import { DEFAULT_TIMEZONE } from '../settings/uiDefaults';
+import { scenarioStateLedger, mockScenarioStateLedger } from '../scenarioStateStore';
 
 /**
  * Mock mode keeps scenario state in memory — the same process-wide ledger the
@@ -43,4 +43,4 @@ const getScenarioStatus = (challengeId, ledger = ledgerForMode()) => {
 const scenarioWakeInput = ({ scenario, state, corrupt, timezone }) =>
     scenario && !corrupt ? { scenario, state, timezone } : null;
 
-module.exports = { getScenarioStatus, scenarioWakeInput, ledgerForMode };
+export { getScenarioStatus, scenarioWakeInput, ledgerForMode };

@@ -3,11 +3,11 @@
  * blob minus essential user data) and the "modified from default" checks.
  */
 
-const logger = require('../logger');
-const { SETTINGS_SCHEMA } = require('./schema');
-const { loadSettings, saveSettings, setSetting, cleanupObsoleteSettings } = require('./persistence');
-const { getDefaultSettings, ensureChallengeSettings, valuesEqual } = require('./defaults');
-const { getGlobalDefault, setGlobalDefault } = require('./challengeOverrides');
+import * as logger from '../logger';
+import { SETTINGS_SCHEMA } from './schema';
+import { loadSettings, saveSettings, setSetting, cleanupObsoleteSettings } from './persistence';
+import { getDefaultSettings, ensureChallengeSettings, valuesEqual } from './defaults';
+import { getGlobalDefault, setGlobalDefault } from './challengeOverrides';
 
 /**
  * Reset a single setting to its default value
@@ -98,7 +98,7 @@ const isGlobalDefaultModified = (settingKey) => {
     return !valuesEqual(getGlobalDefault(settingKey), SETTINGS_SCHEMA[settingKey].default);
 };
 
-module.exports = {
+export {
     resetSetting,
     resetGlobalDefault,
     resetAllGlobalDefaults,

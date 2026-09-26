@@ -12,8 +12,8 @@
     }
 })();
 
-const { contextBridge, ipcRenderer } = require('electron');
-const { invokeChannels, aliases, sendMethods, eventMethods, kebabToCamel } = require('./ipc/manifest');
+import { contextBridge, ipcRenderer } from 'electron';
+import { invokeChannels, aliases, sendMethods, eventMethods, kebabToCamel } from './ipc/manifest';
 
 // The window.api surface is GENERATED from the shared channel manifest
 // (ipc/manifest.js) so it can never silently drift from the Capacitor

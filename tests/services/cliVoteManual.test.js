@@ -18,7 +18,7 @@ jest.mock('../../src/js/services/manualVote', () => ({
 
 const settings = require('../../src/js/settings');
 const { voteAllChallengesManual } = require('../../src/js/services/manualVote');
-const BaseMiddleware = require('../../src/js/services/BaseMiddleware');
+const { BaseMiddleware } = require('../../src/js/services/BaseMiddleware');
 
 const makeMiddleware = (getActiveChallenges) =>
     new BaseMiddleware({

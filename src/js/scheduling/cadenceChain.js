@@ -16,9 +16,9 @@
  * and imported by the esbuild-bundled renderer.
  */
 
-const { getRandomCheckFrequencyMs, anchoredWaitMs, MIN_CYCLE_GAP_MS, OFFLINE_RETRY_MS } = require('./randomDelay');
-const { computeNextCycleDelayMs } = require('./thresholdWindow');
-const { DEFAULT_TIMEZONE } = require('../settings/uiDefaults');
+import { getRandomCheckFrequencyMs, anchoredWaitMs, MIN_CYCLE_GAP_MS, OFFLINE_RETRY_MS } from './randomDelay';
+import { computeNextCycleDelayMs } from './thresholdWindow';
+import { DEFAULT_TIMEZONE } from '../settings/uiDefaults';
 
 /**
  * Canonical warning emitted when deciding the next delay fails and the chain
@@ -411,7 +411,7 @@ const createCadenceChain = ({
     return { scheduleNext };
 };
 
-module.exports = {
+export {
     createCadenceChain,
     DECISION_ERROR_MESSAGE,
     formatOversleptMessage,

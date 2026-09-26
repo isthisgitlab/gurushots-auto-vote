@@ -16,8 +16,8 @@
  * crash. Mirrors the node:sea detection guard already used in logger.js.
  */
 
-const runtime = require('../../runtime');
-const { appPath } = require('../../appPaths');
+import * as runtime from '../../runtime';
+import { appPath } from '../../appPaths';
 
 const ASSET_NAME = 'semantic-vectors.json';
 
@@ -72,4 +72,4 @@ const __resetForTests = () => {
     inflight = null;
 };
 
-module.exports = { loadLexiconAsset, ASSET_NAME, __resetForTests };
+export { loadLexiconAsset, ASSET_NAME, __resetForTests };

@@ -276,7 +276,7 @@ const finalizePick = (scored, slotsToFill) => {
     return ranked.slice(0, slotsToFill).map((p) => p.id);
 };
 
-module.exports = {
+export {
     SEMANTIC_MATCH_FLOOR,
     SEMANTIC_SUPPORT_CAP,
     semanticTiersOf,

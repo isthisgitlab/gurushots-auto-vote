@@ -16,7 +16,7 @@
  * instants and stays open until close_time.
  */
 
-const { resolveEntryIndex } = require('./entrySlot');
+import { resolveEntryIndex } from './entrySlot';
 
 /**
  * @typedef {{afterStartSec?: number, beforeEndSec?: number, afterPercent?: number}} RuleTiming
@@ -174,4 +174,4 @@ const fillBeatsVoting = (exposure, reach, belowPct) => {
     return reachable < threshold;
 };
 
-module.exports = { ruleOpensAt, isRuleOpen, isProtectedEntry, pickSwapTarget, votePoolReach, fillBeatsVoting };
+export { ruleOpensAt, isRuleOpen, isProtectedEntry, pickSwapTarget, votePoolReach, fillBeatsVoting };

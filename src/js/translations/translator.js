@@ -10,8 +10,8 @@
  * and react/contexts/TranslationContext.jsx (renderer: window.api).
  */
 
-const english = require('./english');
-const latvian = require('./latvian');
+import * as english from './english';
+import * as latvian from './latvian';
 
 /** @type {Record<string, object>} */
 const TABLES = { en: english, lv: latvian };
@@ -82,4 +82,4 @@ function createTranslator() {
     };
 }
 
-module.exports = { DEFAULT_LANGUAGE, createTranslator, isSupportedLanguage, resolveLanguage };
+export { DEFAULT_LANGUAGE, createTranslator, isSupportedLanguage, resolveLanguage };

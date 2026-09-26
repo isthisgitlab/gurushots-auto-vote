@@ -5,4 +5,4 @@ const formatTimeHMS = (d = new Date()) => `${pad(d.getHours())}:${pad(d.getMinut
 const formatDateTime = (d = new Date()) =>
     `${pad(d.getDate())}/${pad(d.getMonth() + 1)}/${d.getFullYear()} ${formatTimeHMS(d)}`;
 
-module.exports = { formatTimeHMS, formatDateTime };
+export { formatTimeHMS, formatDateTime };

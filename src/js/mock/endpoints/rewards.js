@@ -3,7 +3,7 @@
  * prize reads and their claims.
  */
 
-const { simulateApiResponse, mockMethod } = require('../simulate');
+import { simulateApiResponse, mockMethod } from '../simulate';
 
 /**
  * Simulate /rest/get_my_completed_challenges: one finished challenge with
@@ -86,4 +86,4 @@ const claimMissionPrize = mockMethod(
     },
 );
 
-module.exports = { getMyCompletedChallenges, claimChallengeResources, getMyMissions, claimMissionPrize };
+export { getMyCompletedChallenges, claimChallengeResources, getMyMissions, claimMissionPrize };

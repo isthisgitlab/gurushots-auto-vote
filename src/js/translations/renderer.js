@@ -6,6 +6,6 @@
  * instance so it always matches the provider.
  */
 
-const { createTranslator } = require('./translator');
+import { createTranslator } from './translator';
 
-module.exports = { rendererTranslator: createTranslator() };
+export const rendererTranslator = createTranslator();

@@ -4,9 +4,9 @@
  * The logger owns the file paths; this command only reads and tails them.
  */
 
-const fs = require('fs');
-const logger = require('../../logger');
-const { diagnostics } = require('../../services/semantic/diagnostics');
+import * as fs from 'fs';
+import * as logger from '../../logger';
+import { diagnostics } from '../../services/semantic/diagnostics';
 
 // category flag → logger path getter. Defaults to the app log.
 const LOG_FILE_GETTERS = {
@@ -55,4 +55,4 @@ const showLogs = ({ category = 'app', lines = 100 } = {}) => {
     }
 };
 
-module.exports = { showLogs };
+export { showLogs };

@@ -10,8 +10,8 @@
  * before any native call is attempted.
  */
 
-const runtime = require('../runtime');
-const logger = require('../logger');
+import * as runtime from '../runtime';
+import * as logger from '../logger';
 
 let pluginInstance = null;
 const getPlugin = () => {
@@ -67,9 +67,4 @@ const getStatus = async () => {
 
 const isAvailable = () => getPlugin() !== null;
 
-module.exports = {
-    start,
-    stop,
-    getStatus,
-    isAvailable,
-};
+export { start, stop, getStatus, isAvailable };

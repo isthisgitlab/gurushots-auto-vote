@@ -4,7 +4,7 @@
  * counters built on them.
  */
 
-const { MAX_TOKENISE_CHARS, stem, tokenise, matches } = require('./stemming');
+import { MAX_TOKENISE_CHARS, stem, tokenise, matches } from './stemming';
 
 // Bounds on tokenised label data. Photo labels are untrusted strings from the
 // GuruShots API, and splitting them into words (rather than keeping one stem per
@@ -155,11 +155,4 @@ const scorePhoto = (photo, keywords, precomputedLabelStems = null) => {
     return score;
 };
 
-module.exports = {
-    wholeLabelStems,
-    labelWordStems,
-    labelStemGroups,
-    photoMatchesAllStems,
-    countShouldMatches,
-    scorePhoto,
-};
+export { wholeLabelStems, labelWordStems, labelStemGroups, photoMatchesAllStems, countShouldMatches, scorePhoto };

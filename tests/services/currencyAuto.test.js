@@ -7,6 +7,7 @@
 
 jest.mock('../../src/js/settings');
 jest.mock('../../src/js/services/currencyActions', () => ({
+    __esModule: true,
     ...jest.requireActual('../../src/js/services/currencyActions'),
     unlockBoostWithKey: jest.fn(),
     previewSwap: jest.fn(),

@@ -4,8 +4,8 @@
  * rather than the theme decided a pick.
  */
 
-const { hasThemeMatch } = require('../photoPicker');
-const { oneLine } = require('../../format/logSafe');
+import { hasThemeMatch } from '../photoPicker';
+import { oneLine } from '../../format/logSafe';
 
 /**
  * Extract a concise, human-readable reason from a failed submit_to_challenge
@@ -171,8 +171,4 @@ const logPopularityPick = (prefix, challenge, scored, contestedIds, picked, logg
     );
 };
 
-module.exports = {
-    describeSubmitFailure,
-    makeFallbackLogger,
-    logPopularityPick,
-};
+export { describeSubmitFailure, makeFallbackLogger, logPopularityPick };

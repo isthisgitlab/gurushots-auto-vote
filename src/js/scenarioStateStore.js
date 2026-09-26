@@ -32,8 +32,8 @@
  * (refreshScenarioStateAsync) before it reads or resets scenario state.
  */
 
-const logger = require('./logger');
-const { createJsonStore } = require('./settings/storage');
+import * as logger from './logger';
+import { createJsonStore } from './settings/storage';
 
 const scenarioStateStore = createJsonStore({ fileName: 'scenarioState.json', prefKey: 'gs_scenario_state' });
 
@@ -156,13 +156,7 @@ const scenarioStateLedger = createStateLedger(scenarioStateStore);
 // and the scenario IPC handlers so a mock run is inspectable like a real one.
 const mockScenarioStateLedger = createMemoryStateLedger();
 
-module.exports = {
-    scenarioStateLedger,
-    mockScenarioStateLedger,
-    createStateLedger,
-    createMemoryStateLedger,
-    initialState,
-    initializeScenarioStateAsync: scenarioStateStore.initializeAsync,
-    refreshScenarioStateAsync: scenarioStateStore.refreshAsync,
-    flushScenarioStateWrites: scenarioStateStore.flushPendingWrites,
-};
+export const initializeScenarioStateAsync = scenarioStateStore.initializeAsync;
+export const refreshScenarioStateAsync = scenarioStateStore.refreshAsync;
+export const flushScenarioStateWrites = scenarioStateStore.flushPendingWrites;
+export { scenarioStateLedger, mockScenarioStateLedger, createStateLedger, createMemoryStateLedger, initialState };

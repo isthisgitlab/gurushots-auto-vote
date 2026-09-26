@@ -16,10 +16,10 @@
  * handlers and the automatic runners (services/currencyAuto.js) share it.
  */
 
-const { findActiveChallenge } = require('./findActiveChallenge');
-const { rankCandidatesForChallenge, resolveMemberId } = require('./autoFill');
-const { resetPassState: resetPhotoStatsPassState } = require('./photoStats');
-const { CURRENCY_OUTCOME, blockedOutcome, swapExcludedIds } = require('../voting/currencyActions');
+import { findActiveChallenge } from './findActiveChallenge';
+import { rankCandidatesForChallenge, resolveMemberId } from './autoFill';
+import { resetPassState as resetPhotoStatsPassState } from './photoStats';
+import { CURRENCY_OUTCOME, blockedOutcome, swapExcludedIds } from '../voting/currencyActions';
 
 const nowSec = () => Math.floor(Date.now() / 1000);
 
@@ -292,4 +292,4 @@ const fillExposure = async (challengeId, token, { strategy, logger }) => {
     );
 };
 
-module.exports = { withSpendLock, unlockBoostWithKey, previewSwap, swapEntry, swapBack, fillExposure };
+export { withSpendLock, unlockBoostWithKey, previewSwap, swapEntry, swapBack, fillExposure };

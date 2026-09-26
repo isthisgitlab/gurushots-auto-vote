@@ -5,8 +5,8 @@
  * letter challenges ("Begins With L").
  */
 
-const { MAX_TOKENISE_CHARS, stem, rawTokenise, tokenise, matches } = require('./stemming');
-const lexicon = require('../semantic/lexicon');
+import { MAX_TOKENISE_CHARS, stem, rawTokenise, tokenise, matches } from './stemming';
+import * as lexicon from '../semantic/lexicon';
 
 // Bounds for abstractTitleWords, on the lexicon's concreteness cosine. Pinned by
 // the `concreteness.cases` gate in scripts/validate-lexicon.js (real titles, run
@@ -271,7 +271,7 @@ const detectLetterPrefix = (title) => {
     return letter.toLowerCase();
 };
 
-module.exports = {
+export {
     abstractTitleWords,
     withoutAbstract,
     titleSubject,

@@ -206,10 +206,4 @@ const refreshChallengeState = async (challenge, token, { getActiveChallenges, lo
     return 'refreshed';
 };
 
-module.exports = {
-    getEntries,
-    getSlotsRemaining,
-    reflectNewEntry,
-    reflectEntryFlag,
-    refreshChallengeState,
-};
+export { getEntries, getSlotsRemaining, reflectNewEntry, reflectEntryFlag, refreshChallengeState };

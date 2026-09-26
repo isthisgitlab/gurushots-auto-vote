@@ -4,8 +4,9 @@
  * Node.js Syntax Check Script
  *
  * Runs `node --check` on every CommonJS .js file in the project by WALKING
- * src/js, scripts, and tests — an explicit exclude list below removes the
- * ES-module/JSX islands.
+ * scripts and tests — an explicit exclude list below removes what is not Node
+ * CommonJS. src/js is import/export throughout, so eslint, esbuild, swc and
+ * ttsc parse it instead.
  */
 
 const fs = require('node:fs');
@@ -21,14 +22,11 @@ const colors = {
 };
 
 // Roots to walk for .js files.
-const includeDirs = ['src/js', 'scripts', 'tests'];
+const includeDirs = ['scripts', 'tests'];
 
-// Excluded paths (relative, forward-slash): ESM/JSX islands and Electron
-// entry points the check has always skipped.
+// Excluded paths (relative, forward-slash): code `node --check` cannot parse as
+// CommonJS.
 const excludePaths = [
-    'src/js/index.js', // Electron main process
-    'src/js/preload.js', // Electron preload
-    'src/js/react/', // renderer tree — ESM/JSX, checked by eslint + esbuild
     'scripts/site/', // static-site sources, not Node CJS
 ];
 
