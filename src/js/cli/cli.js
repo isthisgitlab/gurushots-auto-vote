@@ -212,7 +212,7 @@ const exitsZero = (fn) => async () => {
 /**
  * Exit code for a command reporting `false` on failure.
  *
- * @param {unknown} ok
+ * @param {boolean | undefined} ok
  */
 const exitCodeOf = (ok) => (ok === false ? 1 : 0);
 

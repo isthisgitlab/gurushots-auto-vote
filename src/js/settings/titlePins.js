@@ -66,7 +66,7 @@ const getTitlePins = () => _validPins(loadSettings().challengeSettings?.titlePin
 /**
  * The pinnable `[id, title]` entries of a caller-supplied adds map.
  *
- * @param {unknown} adds
+ * @param {Record<string, string>} adds
  * @returns {Array<[string, string]>}
  */
 const _addEntries = (adds) =>
@@ -114,8 +114,8 @@ const _addPins = (pins, addEntries) => {
  * clobbered) and `removeIds` are deleted. Over-length titles are rejected
  * rather than truncated, preserving exact-match semantics. The map is capped.
  *
- * @param {unknown} adds
- * @param {unknown} removeIds
+ * @param {Record<string, string>} adds
+ * @param {readonly string[]} removeIds
  * @returns {boolean}
  */
 const mergeTitlePins = (adds, removeIds) => {

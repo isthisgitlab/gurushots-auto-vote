@@ -124,7 +124,7 @@ const getClassifier = () => {
  * balloons. Special occasion balloons, hot air balloons…". HTML and the shared
  * rewards text are removed; '' when nothing descriptive is left.
  *
- * @param {unknown} message - challenge.welcome_message
+ * @param {string | undefined} message - challenge.welcome_message
  * @returns {string}
  */
 const descriptionLead = (message) => {

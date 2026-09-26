@@ -205,7 +205,7 @@ function linkifyTextNodes(root, doc) {
 }
 
 /**
- * @param {unknown} input - Raw `welcome_message`; null/undefined render as ''.
+ * @param {string | null | undefined} input - Raw `welcome_message`; null/undefined render as ''.
  * @returns {string} Sanitised HTML, safe for dangerouslySetInnerHTML.
  */
 export function sanitizeWelcomeMessage(input) {

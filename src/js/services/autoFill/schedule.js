@@ -40,7 +40,7 @@ const getValidScheduleRows = (schedule) =>
  * this so the fill trigger and the scheduler cadence always agree.
  *
  * @param {unknown} schedule - persisted autoFillSchedule value (untrusted shape)
- * @param {unknown} maxPhotoSubmits - challenge.max_photo_submits (untrusted shape)
+ * @param {number | undefined} maxPhotoSubmits - challenge.max_photo_submits
  * @returns {Array<{count: number, seconds: number}>}
  */
 const getEffectiveScheduleRows = (schedule, maxPhotoSubmits) =>
@@ -58,7 +58,7 @@ const getEffectiveScheduleRows = (schedule, maxPhotoSubmits) =>
  *
  * @param {unknown} schedule - persisted autoFillSchedule value (untrusted shape)
  * @param {number} secondsRemaining
- * @param {unknown} maxPhotoSubmits - challenge.max_photo_submits (untrusted shape)
+ * @param {number | undefined} maxPhotoSubmits - challenge.max_photo_submits
  * @returns {number}
  */
 const resolveScheduleTarget = (schedule, secondsRemaining, maxPhotoSubmits) => {
@@ -83,8 +83,8 @@ const resolveScheduleTarget = (schedule, secondsRemaining, maxPhotoSubmits) => {
  * rules as resolveScheduleTarget apply.
  *
  * @param {unknown} schedule - persisted autoFillSchedule value (untrusted shape)
- * @param {unknown} entryCount - current number of entries (untrusted shape)
- * @param {unknown} maxPhotoSubmits - challenge.max_photo_submits (untrusted shape)
+ * @param {number} entryCount - current number of entries
+ * @param {number | undefined} maxPhotoSubmits - challenge.max_photo_submits
  * @returns {number}
  */
 const getNextScheduleThresholdSec = (schedule, entryCount, maxPhotoSubmits) => {

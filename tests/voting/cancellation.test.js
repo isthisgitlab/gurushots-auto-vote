@@ -26,15 +26,6 @@ describe('voting/cancellation', () => {
         expect(cancellation.isCancelled()).toBe(false);
     });
 
-    it('coerces truthy/falsy to booleans', () => {
-        cancellation.setCancelled(1);
-        expect(cancellation.isCancelled()).toBe(true);
-        cancellation.setCancelled('');
-        expect(cancellation.isCancelled()).toBe(false);
-        cancellation.setCancelled('cancel');
-        expect(cancellation.isCancelled()).toBe(true);
-    });
-
     it('reset() forces false regardless of prior state', () => {
         cancellation.setCancelled(true);
         cancellation.reset();

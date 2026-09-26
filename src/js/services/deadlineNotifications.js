@@ -65,7 +65,7 @@ const MAX_TEXT_LEN = 120;
  * read as a `--flag`; the result is trimmed and length-capped. Mirrors
  * logger.sanitizeLogString's intent.
  *
- * @param {unknown} value
+ * @param {string | null | undefined} value
  * @param {number} [maxLength]
  * @returns {string}
  */
@@ -89,12 +89,12 @@ const sanitizeNotificationText = (value, maxLength = MAX_TEXT_LEN) =>
  * templates carry `{minutes}` / `{title}` / `{count}` and we substitute here.
  * Unknown tokens are left intact rather than blanked.
  *
- * @param {unknown} template
- * @param {Record<string, unknown>} params
+ * @param {string} template
+ * @param {Record<string, string | number | null | undefined>} params
  * @returns {string}
  */
 const interpolate = (template, params) =>
-    String(template ?? '').replace(/\{(\w+)\}/g, (match, key) => (params[key] != null ? String(params[key]) : match));
+    template.replace(/\{(\w+)\}/g, (match, key) => (params[key] != null ? String(params[key]) : match));
 
 /**
  * Decide which upcoming actions are within the notification lead window.

@@ -12,8 +12,8 @@ import { useIpcQuery } from './useIpcQuery';
 // Refresh when the voting timer is armed/cleared, including after failed cycles:
 // claiming may have run even when the voting step failed.
 /**
- * @param {unknown} nextRunAt - refetch key: the armed voting timer
- * @param {unknown} running - refetch key: whether autovote runs
+ * @param {number | null} nextRunAt - refetch key: the armed voting timer
+ * @param {boolean} running - refetch key: whether autovote runs
  * @returns {AutoClaimStatus | null}
  */
 export function useAutoClaimStatus(nextRunAt, running) {

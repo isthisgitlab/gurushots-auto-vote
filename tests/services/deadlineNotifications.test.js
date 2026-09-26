@@ -243,11 +243,6 @@ describe('readNotificationConfig', () => {
 });
 
 describe('defensive inputs from hosts', () => {
-    test('interpolate treats a missing template as empty text', () => {
-        expect(interpolate(null, { a: 1 })).toBe('');
-        expect(interpolate(undefined, {})).toBe('');
-    });
-
     test('computeDueNotifications with no enabled map fires nothing', () => {
         expect(computeDueNotifications([challenge('1', 'T', [action('boost', 60)])], NOW, { leadSec: 300 })).toEqual(
             [],

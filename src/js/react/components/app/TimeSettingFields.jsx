@@ -70,7 +70,7 @@ const secondsOutOfRange = (seconds) =>
  * the caller's flex row owns the layout.
  *
  * @param {{
- *   seconds: unknown,
+ *   seconds: number,
  *   onChange: (seconds: number) => void,
  *   labelPrefix: string,
  *   widthClass: string,
@@ -124,7 +124,7 @@ export function TimeField({ id, settingKey, config, value, onChange, onReset, di
     return (
         <div className="flex items-center gap-2" role="group" aria-labelledby={`${id}-label`}>
             <HoursMinutesInputs
-                seconds={value}
+                seconds={typeof value === 'number' ? value : 0}
                 onChange={(seconds) => onChange(settingKey, seconds)}
                 // Every schema entry carries a label.
                 labelPrefix={t(/** @type {string} */ (config.label))}

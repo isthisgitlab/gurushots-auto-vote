@@ -703,8 +703,8 @@ export const getRecentLogs = () => recentLogs.slice();
 // `[Challenge {id}: {title}]`. Pass the whole challenge object or
 // (id, title) directly; missing fields render as 'unknown'.
 /**
- * @param {{ id?: unknown, title?: unknown } | string | number | null | undefined} challengeOrId
- * @param {unknown} [title]
+ * @param {{ id?: string | number, title?: string } | string | number | null | undefined} challengeOrId
+ * @param {string | null} [title]
  * @returns {string}
  */
 export const challengeTag = (challengeOrId, title) => {

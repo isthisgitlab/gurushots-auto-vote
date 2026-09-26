@@ -23,7 +23,7 @@ const DEFAULT_WINDOW_SEC = 3600;
 
 /** @typedef {Record<string, Array<[number, number]>>} VoteHistory */
 
-/** @param {unknown} value */
+/** @param {number | null | undefined} value */
 const votesOf = (value) =>
     value !== null && value !== undefined && Number.isFinite(Number(value)) ? Number(value) : null;
 

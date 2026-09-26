@@ -304,7 +304,7 @@ const toIgnoreSet = (words) => {
 };
 
 /**
- * @param {unknown} text
+ * @param {string | null | undefined} text
  * @param {TokeniseOptions} [opts]
  * @returns {string[]}
  */
@@ -333,7 +333,7 @@ const rawTokenise = (text, { keepStopwords = false, ignoreWords = null } = {}) =
 // ORDERING needs to see the original spelling — the stemmer erases the '-ing'
 // that marks a participle (see buildSearchTerms).
 /**
- * @param {unknown} text
+ * @param {string | null | undefined} text
  * @param {TokeniseOptions} [opts]
  * @returns {string[]}
  */
@@ -400,7 +400,7 @@ const MIN_USER_TAG_STEM_LENGTH = 3;
  * MIN_USER_TAG_STEM_LENGTH are dropped to avoid spurious substring matches.
  * Empty/non-array input → [].
  *
- * @param {unknown} tags
+ * @param {readonly string[] | null | undefined} tags
  * @returns {string[]}
  */
 const tokeniseTagList = (tags) => {

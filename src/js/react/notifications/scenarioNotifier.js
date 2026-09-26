@@ -10,11 +10,12 @@
 import { createScenarioNotifier } from '../../services/scenarioNotifications';
 
 /** @import { OutboxItem } from '../../services/scenarioNotifications' */
+/** @import { Challenge } from '../../types/gurushots' */
 
 /**
  * @param {Object} deps
  * @param {(key:string)=>Promise<unknown>} deps.getSetting - the getGlobalDefault IPC
- * @param {(challengeId:unknown)=>Promise<{success: boolean, state?: {outbox?: OutboxItem[]} | null} | null | undefined>} deps.getScenarioStatus -
+ * @param {(challengeId: Challenge['id'])=>Promise<{success: boolean, state?: {outbox?: OutboxItem[]} | null} | null | undefined>} deps.getScenarioStatus -
  *   the getScenarioStatus IPC
  * @param {(key:string)=>string} deps.translate
  * @param {(n:{title:string, body:string})=>void} deps.deliver

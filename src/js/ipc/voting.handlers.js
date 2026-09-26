@@ -38,8 +38,8 @@ const runStrategyOnceViaMiddleware = (challengeId) => apiFactory.getMiddleware()
 // vote-on-challenge-manual. The two channels differ only in log wording;
 // the `manual` flag flips those wording bits.
 /**
- * @param {unknown} challengeId - Renderer-supplied; validated below.
- * @param {unknown} challengeTitle - Renderer-supplied; validated below.
+ * @param {string | number} challengeId - Renderer-supplied; validated below.
+ * @param {string} challengeTitle - Renderer-supplied; validated below.
  * @param {{ manual: boolean }} opts
  * @satisfies {IpcReplyFn}
  */
@@ -53,8 +53,6 @@ const voteOnSingleChallenge = async (challengeId, challengeTitle, { manual }) =>
     if (typeof challengeTitle !== 'string' || challengeTitle.length === 0) {
         return { success: false, error: 'Challenge title is required' };
     }
-    // Validated above: present and numeric.
-    const id = /** @type {string | number} */ (challengeId);
 
     const requestPrefix = manual ? '🔄 Manual vote on challenge request' : '🔄 Vote on challenge request';
     logger
@@ -88,7 +86,7 @@ const voteOnSingleChallenge = async (challengeId, challengeTitle, { manual }) =>
     // String-to-String comparison via the shared helper — the API is not
     // consistent about the id type, and parseInt-based equality misses
     // string ids entirely.
-    const challenge = findActiveChallenge(challengesResponse.challenges, id);
+    const challenge = findActiveChallenge(challengesResponse.challenges, challengeId);
     logger
         .withCategory(logger.CATEGORIES.CHALLENGES)
         .debug(
@@ -243,14 +241,14 @@ const buildHandlers = () =>
         'should-cancel-voting': () => cancellation.isCancelled(),
 
         'set-cancel-voting': (/** @type {unknown} */ event, /** @type {boolean} */ shouldCancel) => {
-            cancellation.setCancelled(shouldCancel);
+            cancellation.setCancelled(shouldCancel === true);
             return cancellation.isCancelled();
         },
 
         'vote-on-challenge': async (
             /** @type {unknown} */ event,
-            /** @type {unknown} */ challengeId,
-            /** @type {unknown} */ challengeTitle,
+            /** @type {string | number} */ challengeId,
+            /** @type {string} */ challengeTitle,
         ) => {
             try {
                 return await voteOnSingleChallenge(challengeId, challengeTitle, { manual: false });
@@ -262,8 +260,8 @@ const buildHandlers = () =>
 
         'vote-on-challenge-manual': async (
             /** @type {unknown} */ event,
-            /** @type {unknown} */ challengeId,
-            /** @type {unknown} */ challengeTitle,
+            /** @type {string | number} */ challengeId,
+            /** @type {string} */ challengeTitle,
         ) => {
             try {
                 return await voteOnSingleChallenge(challengeId, challengeTitle, { manual: true });

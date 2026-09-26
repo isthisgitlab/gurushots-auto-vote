@@ -87,7 +87,7 @@ const createDiagnostics = (store) => {
     return {
         read,
         /**
-         * @param {unknown} challengeKey
+         * @param {string | number | undefined} challengeKey
          * @param {VocabularyObservation} observation
          */
         record: (

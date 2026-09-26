@@ -48,7 +48,7 @@ const compare = (a, op, b) => {
     }
 };
 
-/** @param {unknown} value */
+/** @param {number | null | undefined} value */
 const finite = (value) =>
     value !== null && value !== undefined && Number.isFinite(Number(value)) ? Number(value) : null;
 
@@ -61,11 +61,11 @@ const finite = (value) =>
  */
 const within = (value, min, max) => value !== null && (min === null || value >= min) && (max === null || value <= max);
 
-/** @param {unknown} bound */
+/** @param {string | number | undefined} bound */
 const durationBound = (bound) => (bound === undefined ? null : parseDuration(bound));
 
-/** @param {unknown} bound */
-const numberBound = (bound) => (bound === undefined ? null : /** @type {number} */ (bound));
+/** @param {number | undefined} bound */
+const numberBound = (bound) => (bound === undefined ? null : bound);
 
 /**
  * The challenge-level numbers `{op, value}` conditions compare.

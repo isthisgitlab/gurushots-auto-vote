@@ -180,7 +180,7 @@ const SEARCH_TERMS_CAP = 3;
 const buildSearchTerms = (challenge, opts = {}) => {
     const { mustIncludeTags, shouldIncludeTags, ignoreWords = null } = opts || {};
     /**
-     * @param {unknown} tags
+     * @param {readonly string[] | null | undefined} tags
      * @returns {string[]}
      */
     const fromTags = (tags) =>

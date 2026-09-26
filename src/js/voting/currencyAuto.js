@@ -21,7 +21,7 @@ import { resolveEntryIndex } from './entrySlot';
  * @typedef {{afterStartSec?: number, beforeEndSec?: number, afterPercent?: number}} RuleTiming
  */
 
-/** @param {unknown} value */
+/** @param {number | null | undefined} value */
 const positive = (value) => {
     const n = Number(value);
     return Number.isFinite(n) && n > 0 ? n : 0;

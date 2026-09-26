@@ -5,7 +5,7 @@
  */
 
 /**
- * @param {unknown} totalSeconds - Coerced with Number(); anything non-numeric reads as 0.
+ * @param {number | null | undefined} totalSeconds - null/undefined/NaN read as 0.
  * @returns {{ hours: number, minutes: number }}
  */
 export const secondsToHoursMinutes = (totalSeconds) => {
@@ -17,8 +17,8 @@ export const secondsToHoursMinutes = (totalSeconds) => {
 };
 
 /**
- * @param {unknown} hours - Coerced with Number(); anything non-numeric reads as 0.
- * @param {unknown} minutes - Coerced with Number() and clamped to 0–59.
+ * @param {number} hours - NaN reads as 0.
+ * @param {number} minutes - NaN reads as 0; clamped to 0–59.
  * @returns {number}
  */
 export const hoursMinutesToSeconds = (hours, minutes) => {
@@ -32,7 +32,7 @@ export const hoursMinutesToSeconds = (hours, minutes) => {
 // caller passes translated `app.hours` / `app.minutes`) so it can be reused
 // for read-only hints without importing the translation layer.
 /**
- * @param {unknown} totalSeconds
+ * @param {number | null | undefined} totalSeconds
  * @param {string} hoursLabel
  * @param {string} minutesLabel
  * @returns {string}

@@ -314,7 +314,7 @@ const fillResponse = (result) => ({
 /**
  * @param {unknown} event
  * @param {string | number} challengeId
- * @param {unknown} mode - `'all'`, anything else means `'one'`.
+ * @param {'one' | 'all'} mode - anything other than `'all'` means `'one'`.
  * @satisfies {IpcReplyFn}
  */
 const handleFillChallengeNow = async (event, challengeId, mode) => {

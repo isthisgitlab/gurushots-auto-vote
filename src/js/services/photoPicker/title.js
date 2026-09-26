@@ -89,7 +89,7 @@ const withoutAbstract = (stems) => {
 // "Mountains: A Tribute" keeps "mountains" instead of collapsing to nothing.
 const SERIES_SEPARATOR_RE = /[:\u2013\u2014]|\s-\s/;
 /**
- * @param {unknown} title
+ * @param {string | null | undefined} title
  * @param {IgnoreWords} [ignoreWords]
  * @returns {string}
  */
@@ -132,7 +132,7 @@ const NO_NEGATION = Object.freeze({ positiveTitle: '', stems: Object.freeze([]),
 /**
  * Split a title into its positive text and the stems it says to leave out.
  *
- * @param {unknown} title
+ * @param {string | null | undefined} title
  * @param {IgnoreWords} [ignoreWords]
  * @returns {Negation}
  */
@@ -285,7 +285,7 @@ const LETTER_IS_FOR_RE = /(?:^|\s)([a-z])\s+is\s+for\b/i;
 // a mismatched pair is accepted since this parses messy titles, not validates.
 const LETTER_NAMED_RE = /\bletters?\s*:?\s*(?:['"‘“]\s*([a-z])\s*['"’”]|([a-z])(?=\s*(?:[-–—:;,.!?|]|$)))/i;
 /**
- * @param {unknown} title
+ * @param {string | null | undefined} title
  * @returns {string | null}
  */
 const detectLetterPrefix = (title) => {

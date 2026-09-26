@@ -41,7 +41,7 @@ import { oneLine as oneLineId } from './format/logSafe';
  * Reject the three keys that address Object.prototype instead of creating an own
  * property. Challenge ids are numeric in practice, so this never fires today — but
  * the id is remote-controlled and every write path here uses it as a bracket key.
- * @param {unknown} challengeId
+ * @param {string | number} challengeId
  * @returns {boolean}
  */
 const isUnsafeChallengeKey = (challengeId) =>

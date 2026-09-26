@@ -53,7 +53,7 @@ let bypassTimer = null;
 // A second Cmd+Q while the dialog is up must not stack another dialog.
 let prompting = false;
 
-/** @param {unknown} challenges - the get-active-challenges list (ignored unless an array) */
+/** @param {readonly Challenge[] | null | undefined} challenges - the get-active-challenges list (ignored unless an array) */
 const rememberChallenges = (challenges) => {
     if (Array.isArray(challenges)) lastChallenges = challenges;
 };

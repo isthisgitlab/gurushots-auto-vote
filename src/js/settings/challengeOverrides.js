@@ -26,7 +26,7 @@ import { scenarioPhaseSettings } from './scenarioOverlay';
 /**
  * Trimmed string form of a caller-supplied challenge id ('' when absent).
  *
- * @param {unknown} challengeId
+ * @param {string | number | null | undefined} challengeId
  * @returns {string}
  */
 const trimmedChallengeId = (challengeId) =>

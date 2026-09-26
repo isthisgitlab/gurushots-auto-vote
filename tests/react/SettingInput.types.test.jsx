@@ -102,6 +102,13 @@ describe('SettingInput — time', () => {
         expect(minutes.value).toBe('25');
     });
 
+    test('a stored value that is not a number reads as zero', () => {
+        renderInput(config, '3600');
+        const [hours, minutes] = document.querySelectorAll('input[type="number"]');
+        expect(hours.value).toBe('0');
+        expect(minutes.value).toBe('0');
+    });
+
     test('editing hours or minutes emits the combined seconds', () => {
         const { onChange } = renderInput(config, 3600 + 30 * 60);
         const [hours, minutes] = document.querySelectorAll('input[type="number"]');

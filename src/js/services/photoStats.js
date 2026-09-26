@@ -136,7 +136,7 @@ const nonNegInt = (value) => {
  * Extract the three ranking signals from an untrusted get_image_data payload.
  * Everything else in the response is discarded.
  *
- * @param {{votes?: unknown, views?: unknown, achievements?: unknown} | null | undefined} payload
+ * @param {{votes?: number, views?: number, achievements?: unknown[]} | null | undefined} payload
  * @returns {{votes: number, views: number, achievementCount: number}}
  */
 const toStats = (payload) => ({

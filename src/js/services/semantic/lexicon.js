@@ -124,10 +124,10 @@ const init = () => {
 const isAvailable = async () => (await init()) != null;
 
 /**
- * @param {unknown} t
+ * @param {string} t
  * @returns {string}
  */
-const stemToken = (t) => stem(String(t).toLowerCase());
+const stemToken = (t) => stem(t.toLowerCase());
 
 /**
  * Vector for one token, tolerating the one known spelling divergence between
@@ -276,7 +276,7 @@ const interleaveSearchTerms = (groups, terms) => {
 };
 
 /**
- * @param {unknown} terms
+ * @param {readonly string[]} terms
  * @returns {string[]}
  */
 const relatedSearchTerms = (terms) => {

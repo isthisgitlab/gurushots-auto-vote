@@ -29,6 +29,12 @@ import { DEFAULT_TIMEZONE } from '../settings/uiDefaults';
  */
 
 /**
+ * What a host's voting cycle resolves to: the fetched challenge list, or a
+ * success/failure flag when it has no list (the next decision then fetches).
+ * @typedef {Challenge[] | boolean | null | undefined} CycleResult
+ */
+
+/**
  * The fields of a FRESH settings snapshot the chain reads (hosts hand over their
  * whole settings blob; `token` is what the GUI's fetchChallenges reads off it).
  * @typedef {{timezone?: string, checkFrequencyMin?: unknown, checkFrequencyMax?: unknown, token?: string}} CadenceSettings
@@ -187,7 +193,7 @@ const describeBoundaryCadence = (decision, waitMs) => {
  * completion so the boundary is never undershot.
  *
  * @param {DecisionDeps} deps - the chain's host transport (see createCadenceChain)
- * @param {unknown} prefetched
+ * @param {CycleResult} prefetched
  * @param {(number|null)} previousCycleStartMs
  * @returns {Promise<{waitMs: number, cycleChallenges: Challenge[], cycleNow: number}>}
  *   the wait plus the list/clock snapshot for the onCycleChallenges hook
@@ -243,7 +249,7 @@ const decideNextWait = async (deps, prefetched, previousCycleStartMs) => {
  * computeNextCycleDelayMs, the cadence log) alike.
  *
  * @param {DecisionDeps} deps
- * @param {unknown} prefetched
+ * @param {CycleResult} prefetched
  * @param {(number|null)} previousCycleStartMs
  * @returns {Promise<{waitMs: number, cycleChallenges: Challenge[], cycleNow: number}|{waitMs: number, cycleChallenges: null, cycleNow: null}>}
  */
@@ -293,7 +299,7 @@ const decideNextWaitOrFallBack = async (deps, prefetched, previousCycleStartMs) 
  *   per-challenge currency-automation timing resolver for the shared math
  * @param {import('./thresholdWindow').ResolveScenarioWake|null} [deps.resolveScenarioWake] -
  *   per-challenge scenario resolver for the shared math
- * @param {()=>Promise<unknown>} deps.runCycle - run one voting cycle; the resolved
+ * @param {()=>Promise<CycleResult>} deps.runCycle - run one voting cycle; the resolved
  *   value is handed to the next decision as the prefetched list candidate
  *   (any non-array means "fetch fresh"). A rejection is logged via
  *   `log.cycleError` and never kills the chain.
@@ -324,7 +330,7 @@ const decideNextWaitOrFallBack = async (deps, prefetched, previousCycleStartMs) 
  *   a throw here must never reach the decision `catch`, whose fallback would
  *   discard the boundary-aware cadence for the cycle. Hosts that omit it lose
  *   only the notification opportunity.
- * @returns {{scheduleNext:(prefetched?:unknown, previousCycleStartMs?:(number|null))=>Promise<void>}}
+ * @returns {{scheduleNext:(prefetched?:CycleResult, previousCycleStartMs?:(number|null))=>Promise<void>}}
  */
 const createCadenceChain = ({
     isRunning,
@@ -403,7 +409,7 @@ const createCadenceChain = ({
 
     // Decide how long to wait before the next cycle and arm the single timer.
     /**
-     * @param {unknown} [prefetched]
+     * @param {CycleResult} [prefetched]
      * @param {number|null} [previousCycleStartMs]
      */
     const scheduleNext = async (prefetched = null, previousCycleStartMs = null) => {

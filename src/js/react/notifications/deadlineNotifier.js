@@ -25,6 +25,8 @@
  * ever added, keep that gate so the two paths never both fire.
  */
 
+/** @import { Challenge } from '../../types/gurushots' */
+
 import {
     NOTIFY_CONFIG_KEYS,
     computeDueNotifications,
@@ -42,7 +44,7 @@ import {
 /**
  * The get-deadline-actions IPC: the `{success, actions}` wrapper, never throws.
  *
- * @typedef {(challenge: unknown) => Promise<{success: boolean, actions?: DeadlineActionPreview[]} | null | undefined>} GetDeadlineActions
+ * @typedef {(challenge: Challenge) => Promise<{success: boolean, actions?: DeadlineActionPreview[]} | null | undefined>} GetDeadlineActions
  */
 
 /**
@@ -52,19 +54,17 @@ import {
  * read — the challenge objects belong to the voting pass, so they are treated
  * as read-only.
  *
- * @param {unknown} challenges
+ * @param {readonly Challenge[]} challenges
  * @param {GetDeadlineActions} getDeadlineActions
- * @returns {Promise<Array<{id:unknown, title:unknown, actions:DeadlineActionPreview[]}>>}
+ * @returns {Promise<Array<{id: Challenge['id'], title: string, actions: DeadlineActionPreview[]}>>}
  */
 async function collectDeadlineActions(challenges, getDeadlineActions) {
-    /** @type {Array<{ id?: unknown, title?: unknown } | null | undefined>} */
-    const list = Array.isArray(challenges) ? challenges : [];
-    /** @type {Array<{id:unknown, title:unknown, actions:DeadlineActionPreview[]}>} */
+    /** @type {Array<{id: Challenge['id'], title: string, actions: DeadlineActionPreview[]}>} */
     const perChallengeActions = [];
-    for (const challenge of list) {
+    for (const challenge of challenges) {
         const res = await getDeadlineActions(challenge);
         if (!res || res.success !== true || !Array.isArray(res.actions)) continue;
-        perChallengeActions.push({ id: challenge?.id, title: challenge?.title, actions: res.actions });
+        perChallengeActions.push({ id: challenge.id, title: challenge.title, actions: res.actions });
     }
     return perChallengeActions;
 }
@@ -99,7 +99,7 @@ function logCycleFailure(log, error) {
  * @param {(n:{title:string, body:string})=>void} deps.deliver - platform delivery
  * @param {(message:string)=>void} [deps.log] - optional best-effort diagnostic sink
  *   (e.g. ipc.logRendererDebug); a failure is logged here rather than vanishing.
- * @returns {(challenges:unknown, now:number)=>Promise<void>}
+ * @returns {(challenges: readonly Challenge[], now: number) => Promise<void>}
  */
 export function createDeadlineNotifier({ getSetting, getDeadlineActions, translate, deliver, log }) {
     const dedupe = createDedupe();

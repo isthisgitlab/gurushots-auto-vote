@@ -176,8 +176,9 @@ function ScenarioRow({ name, scenario, onChanged, onError, onEdit }) {
         else onError({ what: 'app.scenarioExportFailed' });
     };
 
-    const runRename = async () => {
-        const result = await ipc.callOrNull(() => ipc.renameScenario(name, renaming));
+    /** @param {string} newName */
+    const runRename = async (newName) => {
+        const result = await ipc.callOrNull(() => ipc.renameScenario(name, newName));
         if (result?.success) {
             setRenaming(null);
             onChanged();
@@ -236,7 +237,7 @@ function ScenarioRow({ name, scenario, onChanged, onError, onEdit }) {
                         value={renaming}
                         onChange={(e) => setRenaming(/** @type {HTMLInputElement} */ (e.target).value)}
                     />
-                    <button type="button" className="btn btn-sm btn-primary" onClick={() => void runRename()}>
+                    <button type="button" className="btn btn-sm btn-primary" onClick={() => void runRename(renaming)}>
                         {t('app.scenarioRenameSave')}
                     </button>
                     <button type="button" className="btn btn-sm btn-ghost" onClick={() => setRenaming(null)}>

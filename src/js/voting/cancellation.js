@@ -12,9 +12,9 @@ let cancelled = false;
 
 const isCancelled = () => cancelled;
 
-/** @param {unknown} value */
+/** @param {boolean} value */
 const setCancelled = (value) => {
-    cancelled = !!value;
+    cancelled = value;
 };
 
 const reset = () => {

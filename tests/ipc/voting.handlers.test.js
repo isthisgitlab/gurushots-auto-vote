@@ -277,6 +277,13 @@ describe('should-cancel-voting and set-cancel-voting', () => {
         expect(cancellation.setCancelled).toHaveBeenCalledWith(true);
         expect(result).toBe(true);
     });
+
+    test('set-cancel-voting treats anything but true from the caller as false', () => {
+        cancellation.setCancelled = jest.fn();
+        const handlers = buildHandlers();
+        for (const value of [1, 'cancel', null, undefined]) handlers['set-cancel-voting']({}, value);
+        expect(cancellation.setCancelled.mock.calls).toEqual([[false], [false], [false], [false]]);
+    });
 });
 
 describe('manual single-challenge vote — manual-only paths', () => {

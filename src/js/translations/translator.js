@@ -53,7 +53,7 @@ function lookup(table, keys) {
  * the key itself. No interpolation — callers substitute placeholders.
  *
  * @param {string} key
- * @param {unknown} language
+ * @param {string | undefined} language
  * @returns {any}
  */
 function translate(key, language) {

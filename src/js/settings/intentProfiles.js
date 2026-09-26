@@ -87,7 +87,7 @@ const INTENT_PROFILES = [
 ];
 
 /**
- * @param {unknown} name
+ * @param {string | null | undefined} name
  * @returns {string}
  */
 const _norm = (name) => (typeof name === 'string' ? name.trim().toLowerCase() : '');
@@ -95,7 +95,7 @@ const _norm = (name) => (typeof name === 'string' ? name.trim().toLowerCase() : 
 /**
  * The intent whose stored name matches `name` (trim+lowercase), or null.
  *
- * @param {unknown} name
+ * @param {string | null | undefined} name
  * @returns {IntentProfile|null}
  */
 const getIntentByName = (name) => {
@@ -110,7 +110,7 @@ const getIntentByName = (name) => {
  * removed key counts as "modified".
  *
  * @param {IntentProfile|null|undefined} intent
- * @param {unknown} storedValues
+ * @param {Record<string, unknown> | null | undefined} storedValues
  * @returns {boolean}
  */
 const intentValuesMatch = (intent, storedValues) => {

@@ -201,33 +201,33 @@ const buildHandlers = () =>
 
         'rename-scenario': async (
             /** @type {unknown} */ event,
-            /** @type {unknown} */ oldName,
-            /** @type {unknown} */ newName,
+            /** @type {string} */ oldName,
+            /** @type {string} */ newName,
         ) => {
             if (!isName(oldName) || typeof newName !== 'string') return invalidArgs;
             return safely('rename-scenario', () => fromResult(settings.renameScenario(oldName, newName)));
         },
 
-        'delete-scenario': async (/** @type {unknown} */ event, /** @type {unknown} */ name) => {
+        'delete-scenario': async (/** @type {unknown} */ event, /** @type {string} */ name) => {
             if (!isName(name)) return invalidArgs;
             return safely('delete-scenario', () =>
                 settings.deleteScenario(name) ? { success: true } : { success: false, error: 'not-found' },
             );
         },
 
-        'preview-scenario-import': async (/** @type {unknown} */ event, /** @type {unknown} */ text) =>
+        'preview-scenario-import': async (/** @type {unknown} */ event, /** @type {string} */ text) =>
             safely('preview-scenario-import', () => fromResult(settings.previewScenarioImport(text))),
 
         'import-scenario': async (
             /** @type {unknown} */ event,
-            /** @type {unknown} */ text,
+            /** @type {string} */ text,
             /** @type {{ overwrite?: boolean } | null | undefined} */ options,
         ) =>
             safely('import-scenario', () =>
                 fromResult(settings.importScenario(text, { overwrite: options?.overwrite === true })),
             ),
 
-        'export-scenario': async (/** @type {unknown} */ event, /** @type {unknown} */ name) => {
+        'export-scenario': async (/** @type {unknown} */ event, /** @type {string} */ name) => {
             if (!isName(name)) return invalidArgs;
             return safely('export-scenario', () => {
                 const json = settings.exportScenario(name);
@@ -235,7 +235,7 @@ const buildHandlers = () =>
             });
         },
 
-        'get-scenario-status': async (/** @type {unknown} */ event, /** @type {unknown} */ challengeId) => {
+        'get-scenario-status': async (/** @type {unknown} */ event, /** @type {string | number} */ challengeId) => {
             if (!isIdArg(challengeId)) return invalidArgs;
             return safely('get-scenario-status', async () => {
                 await refreshScenarioStateAsync();
@@ -243,7 +243,7 @@ const buildHandlers = () =>
             });
         },
 
-        'reset-scenario-state': async (/** @type {unknown} */ event, /** @type {unknown} */ challengeId) => {
+        'reset-scenario-state': async (/** @type {unknown} */ event, /** @type {string | number} */ challengeId) => {
             if (!isIdArg(challengeId)) return invalidArgs;
             return safely('reset-scenario-state', async () => {
                 await refreshScenarioStateAsync();
@@ -256,7 +256,7 @@ const buildHandlers = () =>
             });
         },
 
-        'dry-run-scenario': async (/** @type {unknown} */ event, /** @type {unknown} */ challengeId) => {
+        'dry-run-scenario': async (/** @type {unknown} */ event, /** @type {string | number} */ challengeId) => {
             if (!isIdArg(challengeId)) return invalidArgs;
             return safely('dry-run-scenario', async () => {
                 const loaded = await loadLiveScenario('scenario dry run', challengeId);
@@ -294,7 +294,7 @@ const buildHandlers = () =>
 
         'simulate-scenario': async (
             /** @type {unknown} */ event,
-            /** @type {unknown} */ challengeId,
+            /** @type {string | number} */ challengeId,
             /** @type {unknown} */ draft,
         ) => {
             if (!isIdArg(challengeId)) return invalidArgs;

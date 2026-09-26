@@ -92,7 +92,7 @@ const ruleValuesFor = (settings, target, suppressProfile = false) => {
 
 /**
  * @param {AppSettings} settings
- * @param {unknown} challengeId
+ * @param {string | number | null | undefined} challengeId
  * @returns {boolean}
  */
 const isTitleProfileSuppressed = (settings, challengeId) => {
@@ -112,7 +112,7 @@ const isTitleProfileSuppressed = (settings, challengeId) => {
  * `ruleValuesFor` for an id-only caller, honouring its profile suppression.
  *
  * @param {AppSettings} settings
- * @param {unknown} challengeId
+ * @param {string | number | null | undefined} challengeId
  * @param {boolean} [suppressProfile]
  * @returns {ChallengeValues}
  */

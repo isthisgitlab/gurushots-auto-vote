@@ -8,6 +8,7 @@
 import { MAX_TITLE_RULES, MAX_TITLE_LENGTH } from './titleRuleSanitize';
 
 /** @import { AppSettings, ChallengeFacts, LooseRecord, RuleMatchChallenge } from '../types/settings' */
+/** @import { Challenge } from '../types/gurushots' */
 
 // Current id→title observations are process-local. Real API responses also
 // persist first-seen title pins, but this cache is what lets the same resolver
@@ -26,7 +27,7 @@ const MAX_CHALLENGE_TAGS = 24;
 let activeChallengeFacts = new Map();
 
 /**
- * @param {unknown} value
+ * @param {number | undefined} value
  * @returns {number|null}
  */
 const _finiteOrNull = (value) => (typeof value === 'number' && Number.isFinite(value) ? value : null);
@@ -35,7 +36,7 @@ const _finiteOrNull = (value) => (typeof value === 'number' && Number.isFinite(v
 // The explicit miss keeps a truncated stored pin from being used as an
 // apparently exact fallback.
 /**
- * @param {LooseRecord} challenge
+ * @param {Partial<Challenge>} challenge
  * @returns {string|null}
  */
 const _observedTitle = (challenge) => {
@@ -47,7 +48,7 @@ const _observedTitle = (challenge) => {
 // bounded the same way titles are: an anomalous payload must not park an
 // unbounded array in memory.
 /**
- * @param {LooseRecord} challenge
+ * @param {Partial<Challenge>} challenge
  * @returns {ChallengeFacts}
  */
 const _observedFacts = (challenge) => {
@@ -79,7 +80,7 @@ const _observedFacts = (challenge) => {
  * needed to resolve a rule for a challenge in the current list. An in-memory
  * map costs no settings-file growth and cannot go stale across restarts.
  *
- * @param {unknown} challenges
+ * @param {ReadonlyArray<Partial<Challenge>> | null | undefined} challenges
  * @returns {boolean}
  */
 const rememberChallengeTitles = (challenges) => {
@@ -88,7 +89,7 @@ const rememberChallengeTitles = (challenges) => {
     const next = new Map();
     /** @type {Map<string, ChallengeFacts>} */
     const nextFacts = new Map();
-    for (const challenge of /** @type {LooseRecord[]} */ (challenges.slice(0, MAX_TITLE_RULES))) {
+    for (const challenge of challenges.slice(0, MAX_TITLE_RULES)) {
         if (challenge?.id === null || challenge?.id === undefined) continue;
         const id = String(challenge.id);
         if (!id || next.has(id)) continue;
@@ -101,7 +102,7 @@ const rememberChallengeTitles = (challenges) => {
 };
 
 /**
- * @param {unknown} challengeId
+ * @param {string | number | null | undefined} challengeId
  * @returns {string}
  */
 const _challengeIdKey = (challengeId) => (challengeId === null || challengeId === undefined ? '' : String(challengeId));
@@ -109,7 +110,7 @@ const _challengeIdKey = (challengeId) => (challengeId === null || challengeId ==
 /**
  * The remembered match facts for an id, or an empty-tags object when unknown.
  *
- * @param {unknown} challengeId
+ * @param {string | number | null | undefined} challengeId
  * @returns {ChallengeFacts}
  */
 const factsForChallengeId = (challengeId) => {
@@ -119,7 +120,7 @@ const factsForChallengeId = (challengeId) => {
 
 /**
  * @param {AppSettings} settings
- * @param {unknown} challengeId
+ * @param {string | number | null | undefined} challengeId
  * @returns {string}
  */
 const _titleForChallengeId = (settings, challengeId) => {
@@ -139,7 +140,7 @@ const _titleForChallengeId = (settings, challengeId) => {
  * The rule-match target for an id-only caller: its title plus remembered facts.
  *
  * @param {AppSettings} settings
- * @param {unknown} challengeId
+ * @param {string | number | null | undefined} challengeId
  * @returns {RuleMatchChallenge}
  */
 const challengeTargetForId = (settings, challengeId) => ({

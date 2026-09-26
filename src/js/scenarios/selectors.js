@@ -71,7 +71,7 @@ const RANKING = {
 /**
  * A duration field's seconds, or the default window. Validated upstream.
  *
- * @param {unknown} value
+ * @param {string | number | undefined} value
  */
 const windowOf = (value) => (value === undefined ? DEFAULT_WINDOW_SEC : /** @type {number} */ (parseDuration(value)));
 

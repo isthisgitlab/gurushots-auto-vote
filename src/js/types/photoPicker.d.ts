@@ -5,20 +5,13 @@
  * `/** @import { PickerPhoto } from '../../types/photoPicker' *\/`.
  */
 
-import type { LibraryPhoto } from './gurushots';
+import type { Challenge, LibraryPhoto } from './gurushots';
 
 /**
- * The challenge text the picker reads. Every field comes off the network (or is
- * a `{ title }` stand-in built from one part of a title), so each is checked
- * with `typeof` before use.
+ * The challenge text the picker reads: a challenge, or a `{ title }` stand-in
+ * built from one part of a title.
  */
-export interface ChallengeText {
-    /** Read only as an opaque key (semantic diagnostics). */
-    id?: unknown;
-    title?: unknown;
-    url?: unknown;
-    welcome_message?: unknown;
-}
+export type ChallengeText = Partial<Pick<Challenge, 'id' | 'title' | 'url' | 'welcome_message'>>;
 
 /** Title words the user asked the picker to ignore (the `ignoreTitleWords` setting). */
 export type IgnoreWords = Iterable<string> | null;

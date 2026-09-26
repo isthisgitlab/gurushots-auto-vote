@@ -26,9 +26,9 @@ const describeSubmitFailure = (raw) => {
     if (!raw || typeof raw !== 'object') return 'no response body';
     /** @type {{message?: unknown, error?: unknown, error_message?: unknown, errors?: unknown}} */
     const body = raw;
-    /** @param {unknown} s */
+    /** @param {string} s */
     const stripHtml = (s) =>
-        String(s)
+        s
             .replace(/<[^>]*>/g, ' ')
             .replace(/\s+/g, ' ')
             .trim();

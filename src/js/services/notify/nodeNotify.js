@@ -58,14 +58,14 @@ const nodeTranslate = (key) => {
 };
 
 // AppleScript string-literal escape: backslash first, then double-quote.
-/** @param {unknown} value */
-const escapeAppleScript = (value) => String(value).replace(/\\/g, '\\\\').replace(/"/g, '\\"');
+/** @param {string} value */
+const escapeAppleScript = (value) => value.replace(/\\/g, '\\\\').replace(/"/g, '\\"');
 
 // notify-send renders a limited Pango markup subset in the body; escape the
 // markup-significant chars so a crafted title can't inject markup. (The
 // decision module already stripped control chars / RTL.)
-/** @param {unknown} value */
-const escapePango = (value) => String(value).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+/** @param {string} value */
+const escapePango = (value) => value.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
 
 /**
  * Deliver one notification via the platform's builtin notifier. macOS →

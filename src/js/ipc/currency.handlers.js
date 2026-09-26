@@ -95,8 +95,8 @@ const currencyFailure = (outcome) => ({ success: false, outcome, error: outcome 
  * returns the service's {ok, outcome}. Never throws to the renderer.
  *
  * @param {string} label
- * @param {unknown[]} idArgs
- * @param {unknown} confirmed
+ * @param {ReadonlyArray<string | number>} idArgs
+ * @param {boolean} confirmed
  * @param {(token: string, strategy: ApiStrategy) => Promise<SpendOutcome>} spend
  * @satisfies {IpcReplyFn}
  */
