@@ -17,6 +17,7 @@
  */
 
 const runtime = require('../../runtime');
+const { appPath } = require('../../appPaths');
 
 const ASSET_NAME = 'semantic-vectors.json';
 
@@ -40,10 +41,7 @@ const loadViaNode = () => {
         // node:sea unavailable or not a SEA build — fall through to the fs read.
     }
     const fs = require('node:fs');
-    const path = require('node:path');
-    // From src/js/services/semantic/ up to src/, then into assets/.
-    const assetPath = path.join(__dirname, '..', '..', '..', 'assets', ASSET_NAME);
-    return JSON.parse(fs.readFileSync(assetPath, 'utf8'));
+    return JSON.parse(fs.readFileSync(appPath('src', 'assets', ASSET_NAME), 'utf8'));
 };
 
 /**

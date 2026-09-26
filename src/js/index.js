@@ -1,5 +1,5 @@
 const { app, BrowserWindow, dialog, ipcMain, powerMonitor } = require('electron');
-const path = require('node:path');
+const { appPath } = require('./appPaths');
 const settings = require('./settings');
 const { initializeHeaders } = require('./api/randomizer');
 const logger = require('./logger');
@@ -105,13 +105,13 @@ function createLoginWindow() {
         height: bounds.height,
         x: bounds.x,
         y: bounds.y,
-        icon: path.join(__dirname, '../assets/logo.png'),
+        icon: appPath('src', 'assets', 'logo.png'),
         webPreferences: {
             nodeIntegration: false,
             contextIsolation: true,
             // Bundled by scripts/build-react.js — the sandboxed preload cannot
             // require() the relative channel manifest, so it ships pre-bundled.
-            preload: path.join(__dirname, '..', '..', 'dist', 'preload-bundle.js'),
+            preload: appPath('dist', 'preload-bundle.js'),
             webSecurity: true,
             // Use a custom session partition to isolate storage
             partition: 'persist:gurushots',
@@ -119,7 +119,7 @@ function createLoginWindow() {
     });
 
     // Load the login HTML file
-    loginWindow.loadFile(path.join(__dirname, '../html/login.html')).catch((error) => {
+    loginWindow.loadFile(appPath('src', 'html', 'login.html')).catch((error) => {
         logger.withCategory('ui').error('Failed to load login window content:', error);
     });
 
@@ -163,13 +163,13 @@ function createMainWindow() {
         height: bounds.height,
         x: bounds.x,
         y: bounds.y,
-        icon: path.join(__dirname, '../assets/logo.png'),
+        icon: appPath('src', 'assets', 'logo.png'),
         webPreferences: {
             nodeIntegration: false,
             contextIsolation: true,
             // Bundled by scripts/build-react.js — the sandboxed preload cannot
             // require() the relative channel manifest, so it ships pre-bundled.
-            preload: path.join(__dirname, '..', '..', 'dist', 'preload-bundle.js'),
+            preload: appPath('dist', 'preload-bundle.js'),
             webSecurity: true,
             // The auto-vote cadence chain is a recursive setTimeout living in
             // THIS renderer, and Chromium throttles then freezes timers on a
@@ -184,7 +184,7 @@ function createMainWindow() {
     });
 
     // Load the main application HTML file
-    mainWindow.loadFile(path.join(__dirname, '../html/app.html')).catch((error) => {
+    mainWindow.loadFile(appPath('src', 'html', 'app.html')).catch((error) => {
         logger.withCategory('ui').error('Failed to load main window content:', error);
     });
 

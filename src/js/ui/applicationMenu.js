@@ -1,4 +1,4 @@
-const path = require('node:path');
+const { appPath } = require('../appPaths');
 const { Menu, dialog, app, BrowserWindow } = require('electron');
 const logger = require('../logger');
 const { translationManager } = require('../translations/index');
@@ -223,12 +223,12 @@ function openLogsWindow() {
             // Same bundle as the main windows (scripts/build-react.js): the
             // sandboxed preload cannot require() the relative channel manifest,
             // so the raw src/js/preload.js would leave this window without window.api.
-            preload: path.join(__dirname, '..', '..', '..', 'dist', 'preload-bundle.js'),
+            preload: appPath('dist', 'preload-bundle.js'),
         },
         show: false,
     });
 
-    logsWindow.loadFile(path.join(__dirname, '../../html/logs.html')).catch((error) => {
+    logsWindow.loadFile(appPath('src', 'html', 'logs.html')).catch((error) => {
         logger.withCategory('ui').error('Failed to load logs window content:', error);
     });
 

@@ -11,6 +11,7 @@
  * inference leaves the tag order untouched.
  */
 const runtime = require('../runtime');
+const { appPath } = require('../appPaths');
 const { entryPhotoUrl } = require('../format/photoUrl');
 const { visualSubjectWords } = require('./photoPicker');
 
@@ -40,7 +41,7 @@ const getModelLocation = () => {
     const path = require('node:path');
     if (cliAssetRoot) return `${cliAssetRoot}${path.sep}`;
     if (runtime.isElectron() && runtime.isPackaged()) return `${process.resourcesPath}${path.sep}`;
-    return path.join(__dirname, '..', '..', '..', '.cache') + path.sep;
+    return appPath('.cache') + path.sep;
 };
 
 const isModelBundled = async () => {
