@@ -87,6 +87,18 @@ describe('useAuth transitions', () => {
         });
         expect(result.current.error).toBe('Logout failed');
 
+        mockApi.login.mockRejectedValueOnce(null);
+        await act(async () => {
+            await result.current.login();
+        });
+        expect(result.current.error).toBe('Login transition failed');
+
+        mockApi.logout.mockRejectedValueOnce(null);
+        await act(async () => {
+            await result.current.logout();
+        });
+        expect(result.current.error).toBe('Logout failed');
+
         mockApi.logout.mockRejectedValueOnce(new Error('ipc gone'));
         await act(async () => {
             await result.current.logout();
@@ -147,8 +159,8 @@ describe('useBoost / useTurbo / useFillChallenge', () => {
         expect(result.current.loading).toBe(false);
     });
 
-    test('useFillChallenge forwards the mode and reports its error label', async () => {
-        mockApi.fillChallengeNow.mockRejectedValueOnce({});
+    test.each([[{}], [null]])('useFillChallenge forwards the mode and reports its error label (%p)', async (thrown) => {
+        mockApi.fillChallengeNow.mockRejectedValueOnce(thrown);
         const { result } = renderHook(() => useFillChallenge());
         await act(async () => {
             await result.current.fillNow('c9', 'fill');

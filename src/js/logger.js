@@ -42,9 +42,10 @@ const colors = {
     gray: '\x1b[90m',
 };
 
-// Check if we're actually running in an Electron app context
-// process.type will be 'renderer' or 'browser' (the main process) in Electron apps
-const isElectronApp = process.type === 'renderer' || process.type === 'browser';
+// Whether this is a real Electron process (main or renderer). Decided by
+// process.versions.electron via runtime, not process.type: the WebView
+// bundles' process stub reports type 'browser' too.
+const isElectronApp = runtime.isElectron();
 
 // Runtime owns the single implementation of source-detection, app naming,
 // and user-data resolution — logger re-exports isSourceCode/getAppName

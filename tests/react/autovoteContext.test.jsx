@@ -347,8 +347,8 @@ describe('AutovoteContext', () => {
             expect(await startAndRead()).toMatchObject({ error: 'network down' });
         });
 
-        it('falls back to "Voting error" for a thrown value without a message', async () => {
-            window.api.runVotingCycle.mockRejectedValue({});
+        it.each([[{}], [null]])('falls back to "Voting error" for a thrown %p without a message', async (thrown) => {
+            window.api.runVotingCycle.mockRejectedValue(thrown);
             renderProvider();
             expect(await startAndRead()).toMatchObject({ error: 'Voting error' });
         });

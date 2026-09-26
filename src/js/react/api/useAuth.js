@@ -68,7 +68,9 @@ export function useAuth() {
             await window.api.login();
         } catch (err) {
             clearAuthError();
-            setFlowError(/** @type {Error} */ (err).message || 'Login transition failed');
+            setFlowError(
+                /** @type {{ message?: string } | null | undefined} */ (err)?.message || 'Login transition failed',
+            );
         }
     }, [clearAuthError]);
 
@@ -80,7 +82,7 @@ export function useAuth() {
             await window.api.logout();
         } catch (err) {
             clearAuthError();
-            setFlowError(/** @type {Error} */ (err).message || 'Logout failed');
+            setFlowError(/** @type {{ message?: string } | null | undefined} */ (err)?.message || 'Logout failed');
         }
     }, [clearAuthError]);
 

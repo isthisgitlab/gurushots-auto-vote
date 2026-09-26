@@ -5,7 +5,7 @@
  *
  * Build such a path here, never from a module's own `__dirname`: the Electron
  * main process runs from an esbuild bundle, where every bundled module shares
- * the bundle file's `__dirname`. That bundle is emitted at dist/main/index.js,
+ * the bundle file's `__dirname`. That bundle is emitted at out/main/app.js,
  * the same depth below the app root as this file (src/js/appPaths.js), so
  * `__dirname/../..` is the root either way.
  *

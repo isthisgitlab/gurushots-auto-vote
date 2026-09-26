@@ -159,7 +159,9 @@ function useOverridesSave({ isOpen, challengeId, schema, overrides, suppressed, 
             // scheduled fill takes effect now, not after the current wait.
             await rearmSchedule();
         } catch (err) {
-            await ipc.logRendererError(`Error saving challenge settings: ${/** @type {Error} */ (err).message || err}`);
+            await ipc.logRendererError(
+                `Error saving challenge settings: ${/** @type {{ message?: string } | null | undefined} */ (err)?.message || err}`,
+            );
         } finally {
             setSaving(false);
         }

@@ -24,6 +24,7 @@ const makeRuntime = (overrides = {}) => ({
     getAppUserDataPath: jest.fn(() => '/ud'),
     isDevelopment: jest.fn(() => false),
     isTest: jest.fn(() => true),
+    isElectron: jest.fn(() => false),
     ...overrides,
 });
 
@@ -31,11 +32,14 @@ const makeRuntime = (overrides = {}) => ({
  * Load a fresh copy of the real logger under a controlled environment.
  * Returns the module plus the stubs and the captured process 'exit' handler.
  */
-const loadLogger = ({ processType, argv1, fs = makeFs(), runtime = makeRuntime() } = {}) => {
-    const origType = process.type;
+const loadLogger = ({
+    electron = false,
+    argv1,
+    fs = makeFs(),
+    runtime = makeRuntime({ isElectron: jest.fn(() => electron) }),
+} = {}) => {
     const origArgv = process.argv;
     const onSpy = jest.spyOn(process, 'on').mockImplementation(() => process);
-    process.type = processType;
     process.argv = [origArgv[0], argv1];
     let logger;
     try {
@@ -45,7 +49,6 @@ const loadLogger = ({ processType, argv1, fs = makeFs(), runtime = makeRuntime()
             logger = jest.requireActual('../../src/js/logger.js');
         });
     } finally {
-        process.type = origType;
         process.argv = origArgv;
     }
     const exitCall = onSpy.mock.calls.find(([event]) => event === 'exit');
@@ -170,30 +173,29 @@ describe('cleanupOldLogs', () => {
 });
 
 describe('context detection', () => {
-    test('pure Node (no Electron process.type) is CLI mode', () => {
-        const { logger } = loadLogger({ processType: undefined, argv1: '/x/jest' });
+    test('pure Node (not Electron) is CLI mode', () => {
+        const { logger } = loadLogger({ electron: false, argv1: '/x/jest' });
         expect(logger.getContext()).toBe('CLI');
         expect(logger.isCliMode()).toBe(true);
     });
 
     test('Electron main started via cli.js is CLI mode', () => {
-        const { logger } = loadLogger({ processType: 'browser', argv1: '/app/cli.js' });
+        const { logger } = loadLogger({ electron: true, argv1: '/app/cli.js' });
         expect(logger.getContext()).toBe('CLI');
         expect(logger.isCliMode()).toBe(true);
     });
 
     test('Electron renderer/main without a cli.js entry is GUI mode', () => {
-        // Electron reports its main process as process.type 'browser' (never 'main').
-        const main = loadLogger({ processType: 'browser', argv1: undefined }).logger;
+        const main = loadLogger({ electron: true, argv1: undefined }).logger;
         expect(main.getContext()).toBe('GUI');
         expect(main.isCliMode()).toBe(false);
-        const { logger } = loadLogger({ processType: 'renderer', argv1: '/app/index.js' });
+        const { logger } = loadLogger({ electron: true, argv1: '/app/index.js' });
         expect(logger.getContext()).toBe('GUI');
         expect(logger.isCliMode()).toBe(false);
     });
 
     test('an explicit override wins until cleared', () => {
-        const { logger } = loadLogger({ processType: 'browser', argv1: '/app/index.js' });
+        const { logger } = loadLogger({ electron: true, argv1: '/app/index.js' });
         logger.setContext('IPC');
         expect(logger.getContext()).toBe('IPC');
         logger.info('tagged');
@@ -210,7 +212,7 @@ describe('context detection', () => {
 
 describe('periodic cleanup interval', () => {
     test('Electron app schedules hourly cleanup and clears it on process exit', () => {
-        const { fs, onExit } = loadLogger({ processType: 'browser', argv1: '/app/index.js' });
+        const { fs, onExit } = loadLogger({ electron: true, argv1: '/app/index.js' });
         fs.readdirSync.mockClear();
 
         jest.advanceTimersByTime(60 * 60 * 1000);

@@ -56,7 +56,7 @@ export function useAsyncIpcAction(ipcInvoker, labels = {}) {
                 }
                 return result;
             } catch (err) {
-                const message = /** @type {Error} */ (err).message || errorMessage;
+                const message = /** @type {{ message?: string } | null | undefined} */ (err)?.message || errorMessage;
                 setError(message);
                 return { success: false, error: message };
             } finally {

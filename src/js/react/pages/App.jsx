@@ -210,7 +210,7 @@ function AppContent() {
             await ipc.logout();
         } catch (err) {
             await ipc.logRendererError(
-                `Error during logout: ${/** @type {{ message?: unknown }} */ (err).message || err}`,
+                `Error during logout: ${/** @type {{ message?: unknown } | null | undefined} */ (err)?.message || err}`,
             );
         }
     }, [autovote]);

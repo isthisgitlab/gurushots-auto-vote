@@ -53,7 +53,7 @@ export function AsyncActionButton({
             }
         } catch (err) {
             await ipc.logRendererError(
-                `${errorLogPrefix}: ${/** @type {{ message?: unknown }} */ (err).message || err}`,
+                `${errorLogPrefix}: ${/** @type {{ message?: unknown } | null | undefined} */ (err)?.message || err}`,
             );
         } finally {
             setLoading(false);

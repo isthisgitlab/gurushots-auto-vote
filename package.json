@@ -2,7 +2,7 @@
     "name": "gurushots-auto-vote",
     "version": "1.11.2",
     "description": "GuruShots Auto Vote - An Electron application for automated voting on GuruShots challenges with unified GUI and CLI interfaces (supports both real and mock modes)",
-    "main": "dist/main/index.js",
+    "main": "out/main/index.js",
     "scripts": {
         "build": "cross-env NODE_ENV=production electron-builder",
         "build:all": "pnpm run build:prep && cross-env NODE_ENV=production electron-builder -mwl",
@@ -169,8 +169,7 @@
             "!logs/**",
             "!scripts/**",
             "!**/*.test.js",
-            "!**/*.test.jsx",
-            "dist/main/**"
+            "!**/*.test.jsx"
         ]
     },
     "build": {
@@ -182,6 +181,7 @@
         "removePackageKeywords": true,
         "files": [
             "dist/**/*",
+            "out/main/**/*",
             "src/html/**/*",
             "src/assets/**/*",
             "package.json",

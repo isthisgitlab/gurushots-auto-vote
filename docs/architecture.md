@@ -429,8 +429,10 @@ repeated six times is one that gets forgotten at one of them.
   side** via `globalThis.Capacitor?.isNativePlatform?.() === true` inline, to keep node out of the browser
   bundle.
 - **The Electron main process runs from a bundle.** `scripts/build-main.js` bundles `src/js/index.js` into
-  `dist/main/index.js` (package.json `main`), keeping every package import a runtime require from the
-  shipped `node_modules`; `src/js` itself is not packaged. Inside the bundle every module shares the bundle's
+  `out/main/app.js` with a linked source map, loaded by the `out/main/index.js` stub (package.json `main`)
+  that turns source maps on first so main-process stack traces point at `src/js`. Every package import stays
+  a runtime require from the shipped `node_modules`; `src/js` itself is not packaged, and `out/` stays out of
+  `dist/` (Capacitor's webDir, which ships in the APK). Inside the bundle every module shares the bundle's
   `__dirname`, so paths to the app's own files (HTML pages, preload bundle, assets, the dev model cache) come
   from `appPath(...)` (`appPaths.js`), which resolves the root as `__dirname/../..` — valid because the bundle
   sits at the same depth below the root as `src/js/`.

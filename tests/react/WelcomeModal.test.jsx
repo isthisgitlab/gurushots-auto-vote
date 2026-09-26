@@ -30,6 +30,17 @@ describe('WelcomeModal', () => {
         expect(screen.getByText('onboarding.batteryBody')).toBeTruthy();
     });
 
+    test('a re-render with the same onClose keeps the open modal set up once', () => {
+        const onClose = jest.fn();
+        const addListener = jest.spyOn(document, 'addEventListener');
+        const { rerender } = render(<WelcomeModal isOpen onClose={onClose} />);
+        const keydowns = () => addListener.mock.calls.filter(([type]) => type === 'keydown').length;
+        const attached = keydowns();
+        rerender(<WelcomeModal isOpen onClose={onClose} />);
+        expect(keydowns()).toBe(attached);
+        addListener.mockRestore();
+    });
+
     test('Got it calls onClose', () => {
         const onClose = jest.fn();
         render(<WelcomeModal isOpen onClose={onClose} />);

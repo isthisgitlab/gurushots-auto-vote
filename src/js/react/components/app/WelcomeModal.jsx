@@ -1,3 +1,4 @@
+import { useCallback } from 'react';
 import { useTranslation } from '@/contexts/TranslationContext';
 import { Modal, ModalActions } from '@/components/ui/Modal';
 
@@ -20,7 +21,9 @@ const isCapacitorPlatform = () => /** @type {RendererGlobals} */ (globalThis).Ca
 export function WelcomeModal({ isOpen, onClose }) {
     const { t } = useTranslation();
     const showBatteryGuidance = isCapacitorPlatform();
-    const close = () => void onClose();
+    // Stable across renders: Modal's open effect (focus trap, keydown
+    // listener, scroll lock) re-runs whenever its onClose changes.
+    const close = useCallback(() => void onClose(), [onClose]);
 
     return (
         <Modal isOpen={isOpen} onClose={close} title={t('onboarding.title')} size="md" showCloseButton={false}>

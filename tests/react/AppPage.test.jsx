@@ -188,6 +188,7 @@ describe('App page', () => {
     test.each([
         [new Error('net'), 'Error during logout: net'],
         ['plain', 'Error during logout: plain'],
+        [null, 'Error during logout: null'],
     ])('a failed logout is logged (%p)', async (err, logged) => {
         window.api.logout.mockRejectedValue(err);
         await renderReady();

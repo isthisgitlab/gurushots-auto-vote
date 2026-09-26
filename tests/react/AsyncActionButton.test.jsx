@@ -65,12 +65,15 @@ describe('AsyncActionButton', () => {
         expect(props.onSuccess).not.toHaveBeenCalled();
     });
 
-    test('logs a thrown error with the error prefix', async () => {
-        const { container } = renderButton({ action: jest.fn().mockRejectedValue(new Error('boom')) });
+    test.each([
+        [new Error('boom'), 'Error voting on challenge: boom'],
+        [null, 'Error voting on challenge: null'],
+    ])('logs a thrown %p with the error prefix', async (thrown, logged) => {
+        const { container } = renderButton({ action: jest.fn().mockRejectedValue(thrown) });
 
         fireEvent.click(container.querySelector('button'));
 
-        await waitFor(() => expect(window.api.logError).toHaveBeenCalledWith('Error voting on challenge: boom'));
+        await waitFor(() => expect(window.api.logError).toHaveBeenCalledWith(logged));
         expect(screen.getByText('go')).toBeTruthy(); // back to idle
     });
 

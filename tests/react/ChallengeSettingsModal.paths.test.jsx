@@ -231,6 +231,7 @@ describe('editing and saving', () => {
     test.each([
         ['an Error', new Error('disk'), 'Error saving challenge settings: disk'],
         ['a bare value', 'disk', 'Error saving challenge settings: disk'],
+        ['null', null, 'Error saving challenge settings: null'],
     ])('a thrown save (%s) is logged and the modal stays open', async (_label, rejection, logged) => {
         mockApi.replaceChallengeOverrides.mockRejectedValue(rejection);
         const { onClose } = renderModal();

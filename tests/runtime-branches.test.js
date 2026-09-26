@@ -73,6 +73,15 @@ describe('platform detection', () => {
         expect(rt.getPlatform()).toBe('electron');
     });
 
+    test("the WebView bundles' process stub (type 'browser', no Electron version) is not Electron", () => {
+        process.type = 'browser';
+        try {
+            expect(loadRuntime().isElectron()).toBe(false);
+        } finally {
+            delete process.type;
+        }
+    });
+
     test('Capacitor is detected only when isNativePlatform is a function', () => {
         const rt = loadRuntime();
         globalThis.Capacitor = {};

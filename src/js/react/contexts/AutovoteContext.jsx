@@ -169,7 +169,10 @@ async function runRendererVotingCycle({ runningRef, dispatch, onChallengesRefres
         // list is present so callers fetch fresh.
         return result.challenges ?? true;
     } catch (err) {
-        dispatch({ type: ACTIONS.SET_ERROR, payload: /** @type {Error} */ (err).message || 'Voting error' });
+        dispatch({
+            type: ACTIONS.SET_ERROR,
+            payload: /** @type {{ message?: string } | null | undefined} */ (err)?.message || 'Voting error',
+        });
         return false;
     }
 }
