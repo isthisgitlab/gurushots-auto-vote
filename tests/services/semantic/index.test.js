@@ -27,7 +27,11 @@ jest.mock('../../../src/js/services/semantic/diagnostics', () => ({
 const { getSemanticScores, __resetForTests } = require('../../../src/js/services/semantic');
 const { diagnostics, shouldCollect } = require('../../../src/js/services/semantic/diagnostics');
 const lexicon = require('../../../src/js/services/semantic/lexicon');
-const { SEMANTIC_MATCH_FLOOR, SEMANTIC_SUPPORT_CAP } = require('../../../src/js/services/photoPicker');
+const {
+    SEMANTIC_MATCH_FLOOR,
+    SEMANTIC_SUPPORT_CAP,
+    pickPhotosForChallenge,
+} = require('../../../src/js/services/photoPicker');
 
 const challenge = {
     title: 'Feline Friends',
@@ -103,6 +107,64 @@ describe('getSemanticScores — lexicon backend, end-to-end', () => {
         expect(scores).toBeInstanceOf(Map);
         expect(scores.get('cat').score).toBeGreaterThan(scores.get('car').score);
         expect(scores.get('cat').score).toBeGreaterThan(0.5);
+    });
+
+    test('religious and historical labels outrank incidental modern-art tags', async () => {
+        const challenge = { title: 'History vs Religion' };
+        const photos = [
+            { id: 'church', labels: ['Church', 'Candle', 'Altar'] },
+            { id: 'altar', labels: ['Altar', 'Candle'] },
+            { id: 'history', labels: ['Historical', 'Museum', 'Artifact'] },
+            {
+                id: 'portrait',
+                labels: `Face
+Head
+Person
+Photography
+Portrait
+Clothing
+Hat
+Cap
+Accessories
+Jewelry
+Necklace
+Adult
+Female
+Woman
+Lady
+Body Part
+Neck
+Art
+Painting
+Wood
+Coat
+Jacket
+Costume
+Architecture
+Building
+Wall
+Beanie
+Skin
+Fashion
+Modern Art
+Tattoo
+Baseball Cap`.split('\n'),
+            },
+        ];
+        const scores = await getSemanticScores(challenge, photos);
+        expect(scores.get('church').score).toBeGreaterThan(SEMANTIC_MATCH_FLOOR / 100);
+        expect(scores.get('history').score).toBeGreaterThan(SEMANTIC_MATCH_FLOOR / 100);
+        expect(scores.get('church').score).toBeGreaterThan(scores.get('portrait').score);
+        expect(scores.get('altar').score).toBeGreaterThan(scores.get('portrait').score);
+        expect(scores.get('history').score).toBeGreaterThan(scores.get('portrait').score);
+        expect(
+            pickPhotosForChallenge(
+                challenge,
+                photos.map((photo) => ({ ...photo, permission: { allowed: true } })),
+                3,
+                { semanticScores: scores },
+            ),
+        ).toEqual(['history', 'church', 'altar']);
     });
 
     test('all scores are clamped to 0..1 and support is bounded by the cap', async () => {

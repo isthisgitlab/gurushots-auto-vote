@@ -125,6 +125,7 @@ const buildAsset = (intermediate, concepts) => {
         meanCentered: intermediate ? Boolean(intermediate.meanCentered) : false,
         retrofitBeta: intermediate && Number.isFinite(intermediate.retrofitBeta) ? intermediate.retrofitBeta : 0,
         packed,
+        searchGroups: concepts.concepts.map((concept) => concept.words),
     };
     const axis = buildConcreteAxis(output, concepts, bySurface);
     if (axis.axis) output.concreteAxis = axis.axis;

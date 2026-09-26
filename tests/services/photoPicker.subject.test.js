@@ -23,6 +23,7 @@ const {
     abstractTitleWords,
     buildSearchTerms,
     buildThemeKeywords,
+    buildThemeAlternatives,
     buildChallengeKeywords,
     visualSubjectWords,
 } = require('../../src/js/services/photoPicker');
@@ -75,6 +76,13 @@ describe('title readers with the real lexicon', () => {
             expect(buildThemeKeywords(balloonFun)).toEqual(['balloon']);
             // The slug fallback (a title with no usable word) is read the same way.
             expect(buildThemeKeywords({ title: 'Guru of The Week', url: 'balloon-fun' })).toEqual(['balloon']);
+        });
+
+        test('treats versus titles as alternative subjects', () => {
+            expect(buildThemeAlternatives({ title: 'History vs Religion' })).toEqual([['history'], ['religion']]);
+            expect(buildThemeAlternatives({ title: 'History Versus Religion' })).toEqual([['history'], ['religion']]);
+            expect(buildThemeAlternatives({ title: 'Balloon Fun' })).toEqual([['balloon']]);
+            expect(buildThemeAlternatives({ title: 'of vs the' })).toEqual([[]]);
         });
 
         test('drop the mood word from every lexical source, slug and prose included', () => {

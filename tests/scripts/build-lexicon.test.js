@@ -105,6 +105,7 @@ describe('build-lexicon main', () => {
         expect(exitSpy).not.toHaveBeenCalled();
         const asset = JSON.parse(fs.readFileSync(paths.outAsset, 'utf8'));
         expect(asset).toMatchObject({ version: 2, dims: 4, packed: PACKED });
+        expect(asset.searchGroups).toEqual([['cat', 'kitten']]);
         expect(fs.existsSync(path.join(paths.distDir, 'semantic-vectors.json'))).toBe(false);
         const summary = logSpy.mock.calls[0][0];
         expect(summary).toContain('2 word-stems, 4d');

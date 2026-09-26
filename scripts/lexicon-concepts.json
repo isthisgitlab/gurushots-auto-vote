@@ -53,7 +53,7 @@
     ],
     "concreteness": {
         "$comment": "Title-subject axis (see concreteness() in src/js/services/semantic/lexicon.js). build-lexicon.js ships the unit direction from the mean of `abstractAnchors` to the mean of every concept word outside `excludeParents` (emotions and photographic styles are legitimate themes but not THINGS, so they must not pull the concrete pole). Anchors are a seed for a direction in the vector space, not a stoplist: every anchor must have a vector and must not be an authored concept word, and none of the words the gate cases judge should be an anchor — the cases prove the axis generalises to words it was never told about. `cases` are real challenge titles (tokenised + stemmed like the matcher does) with the exact set of words the subject pass must demote; validate-lexicon.js fails the build on any mismatch.",
-        "excludeParents": ["emotion", "style"],
+        "excludeParents": ["emotion", "style", "history", "religion"],
         "abstractAnchors": [
             "idea",
             "freedom",
@@ -312,7 +312,30 @@
         { "id": "bridge", "parent": "structure", "words": ["bridge", "viaduct", "overpass"] },
         { "id": "house", "parent": "structure", "words": ["house", "home", "cottage", "cabin", "dwelling"] },
         { "id": "window", "parent": "structure", "words": ["window", "doorway", "door"] },
-        { "id": "church", "parent": "structure", "words": ["church", "cathedral", "chapel", "temple", "mosque"] },
+        {
+            "id": "church",
+            "parent": "religion",
+            "words": [
+                "religion",
+                "church",
+                "altar",
+                "temple",
+                "mosque",
+                "cathedral",
+                "chapel",
+                "prayer",
+                "worship",
+                "faith",
+                "sacred",
+                "shrine",
+                "synagogue"
+            ]
+        },
+        {
+            "id": "history",
+            "parent": "history",
+            "words": ["history", "historical", "artifact", "heritage", "historic", "archaeology", "archive"]
+        },
         { "id": "castle", "parent": "structure", "words": ["castle", "palace", "fortress"] },
         { "id": "lighthouse", "parent": "structure", "words": ["lighthouse"] },
         { "id": "statue", "parent": "structure", "words": ["statue", "monument", "sculpture"] },

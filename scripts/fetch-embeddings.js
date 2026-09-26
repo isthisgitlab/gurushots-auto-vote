@@ -66,7 +66,10 @@ const MAX_REDIRECTS = 5;
 const DIMS = 100;
 // Top-N frequency-ranked generic tokens (counted AFTER the filter below, so the
 // stored generic vocab really is ~TOP_N stems, not "top lines minus rejects").
-const TOP_N = 10000;
+const TOP_N = 40000;
+// Center against a stable core so vocabulary growth does not shift the scores
+// that the existing semantic floor was calibrated against.
+const CENTER_TOP_N = 10000;
 const GENERIC_TOKEN_RE = /^[a-z]{2,20}$/;
 // glove.6B.100d.txt is ~347 MB; anything past this is not the file we pinned.
 const MAX_ENTRY_BYTES = 1024 * 1024 * 1024;
@@ -463,7 +466,7 @@ const main = async ({
         if (!isAuthored && (genericKept >= topN || !GENERIC_TOKEN_RE.test(token))) return;
         const row = parseGloveLine(line, DIMS);
         if (!row) return;
-        rows.push({ ...row, isAuthored });
+        rows.push({ ...row, isAuthored, centerBaseline: isAuthored || genericKept < CENTER_TOP_N });
         if (isAuthored) authoredFound.add(token);
         else genericKept++;
     };
@@ -500,8 +503,9 @@ const main = async ({
 
     if (meanCenter) {
         const mean = new Float64Array(DIMS);
-        for (const { vec } of rows) for (let i = 0; i < DIMS; i++) mean[i] += vec[i];
-        for (let i = 0; i < DIMS; i++) mean[i] /= rows.length || 1;
+        const baseline = rows.filter((row) => row.centerBaseline);
+        for (const { vec } of baseline) for (let i = 0; i < DIMS; i++) mean[i] += vec[i];
+        for (let i = 0; i < DIMS; i++) mean[i] /= baseline.length || 1;
         for (const { vec } of rows) for (let i = 0; i < DIMS; i++) vec[i] -= mean[i];
         console.log('ℹ️  Mean-centering applied (anisotropy correction).');
     }

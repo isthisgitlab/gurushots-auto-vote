@@ -26,6 +26,7 @@ jest.mock('../../src/js/services/semantic/assets', () => {
 });
 
 const { fetchCandidatesForChallenge, __resetMemberIdCache } = require('../../src/js/services/autoFill');
+const lexicon = require('../../src/js/services/semantic/lexicon');
 
 const allowed = (id, labels) => ({ id, labels, permission: { allowed: true, message: null } });
 
@@ -54,8 +55,10 @@ const STAIRS = { id: 'c-stairs', title: 'Stairs', url: 'stairs38' };
 
 describe('fetchCandidatesForChallenge — tag resolution', () => {
     beforeEach(() => __resetMemberIdCache());
+    afterEach(() => jest.restoreAllMocks());
 
     test('resolves "stair" to the library tag "staircase" and returns on-theme photos', async () => {
+        jest.spyOn(lexicon, 'relatedSearchTerms').mockReturnValue([]);
         const getEligiblePhotos = makeGetEligiblePhotos();
         const { logger, category } = makeLogger();
         const result = await fetchCandidatesForChallenge(
@@ -82,16 +85,18 @@ describe('fetchCandidatesForChallenge — tag resolution', () => {
         expect(category.info).toHaveBeenCalledWith(expect.stringContaining('"staircase"'), null);
     });
 
-    test('without resolution deps it falls back to the full library, exactly as before', async () => {
+    test('without resolution deps it still finds related tags in the library', async () => {
         const getEligiblePhotos = makeGetEligiblePhotos();
         const { logger, category } = makeLogger();
         const result = await fetchCandidatesForChallenge(STAIRS, 'tok', {}, { getEligiblePhotos, logger });
 
-        // The unresolved baseline: the whole library, ranked by popularity,
-        // off-theme photo included.
-        expect(result).toEqual(LIBRARY);
-        expect(getEligiblePhotos).toHaveBeenCalledWith('c-stairs', 'tok', expect.objectContaining({ paginate: true }));
-        expect(category.warning).toHaveBeenCalledWith(expect.stringContaining('nothing on theme'), null);
+        expect(result.map((p) => p.id).sort()).toEqual(['stairs_1', 'stairs_2']);
+        expect(getEligiblePhotos).toHaveBeenCalledWith(
+            'c-stairs',
+            'tok',
+            expect.objectContaining({ search: 'staircase', paginate: true }),
+        );
+        expect(category.warning).not.toHaveBeenCalled();
     });
 
     test('still falls back — loudly — when a real theme resolves to no tag', async () => {
@@ -109,7 +114,7 @@ describe('fetchCandidatesForChallenge — tag resolution', () => {
             },
         );
         expect(result).toEqual(LIBRARY);
-        expect(category.warning).toHaveBeenCalledWith(expect.stringContaining('nothing on theme'), null);
+        expect(category.warning).toHaveBeenCalledWith(expect.stringContaining('nothing found by tag search'), null);
     });
 
     test('a contest-cadence title has no theme to search and says so', async () => {
@@ -156,7 +161,7 @@ describe('fetchCandidatesForChallenge — tag resolution', () => {
         expect(category.warning).not.toHaveBeenCalledWith(expect.stringContaining('no searchable theme'), null);
     });
 
-    test('a failing identity lookup degrades to the old behavior instead of throwing', async () => {
+    test('a failing identity lookup still allows related-tag search', async () => {
         const getEligiblePhotos = makeGetEligiblePhotos();
         const { logger } = makeLogger();
         const searchTagAutocomplete = jest.fn(async () => ['staircase']);
@@ -171,12 +176,33 @@ describe('fetchCandidatesForChallenge — tag resolution', () => {
                 getCurrentMemberProfile: jest.fn(async () => null),
             },
         );
-        expect(result).toEqual(LIBRARY);
+        expect(result.map((p) => p.id).sort()).toEqual(['stairs_1', 'stairs_2']);
         // No identity means no lookup is even attempted.
         expect(searchTagAutocomplete).not.toHaveBeenCalled();
     });
 
+    test('a failing identity lookup falls back when related tags also miss', async () => {
+        jest.spyOn(lexicon, 'relatedSearchTerms').mockReturnValue([]);
+        const getCurrentMemberProfile = jest.fn(async () => null);
+        const searchTagAutocomplete = jest.fn(async () => ['staircase']);
+        const result = await fetchCandidatesForChallenge(
+            STAIRS,
+            'tok',
+            {},
+            {
+                getEligiblePhotos: makeGetEligiblePhotos(),
+                logger: makeLogger().logger,
+                getCurrentMemberProfile,
+                searchTagAutocomplete,
+            },
+        );
+        expect(result).toEqual(LIBRARY);
+        expect(getCurrentMemberProfile).toHaveBeenCalledTimes(1);
+        expect(searchTagAutocomplete).not.toHaveBeenCalled();
+    });
+
     test('the identity lookup is made once and reused across challenges', async () => {
+        jest.spyOn(lexicon, 'relatedSearchTerms').mockReturnValue([]);
         const getCurrentMemberProfile = jest.fn(async () => ({ id: 'member-hash', userName: 'guru' }));
         const searchTagAutocomplete = jest.fn(async (_t, term) => (term === 'stair' ? ['staircase'] : []));
         const { logger } = makeLogger();

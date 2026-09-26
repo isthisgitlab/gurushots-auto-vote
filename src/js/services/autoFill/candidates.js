@@ -92,15 +92,15 @@ const resolveTagsForTerms = async (terms, challenge, opts) => {
 
 // Wall-clock budget for the THEMED PHASE of one candidate fetch — not for one
 // searchUnion call. The distinction is load-bearing: fetchCandidatesForChallenge
-// can run searchUnion TWICE in sequence (once on the raw terms, then again on
-// the tag-resolver's output when the first missed), so a per-call budget would
-// silently stack to double this before the unfiltered fallback's own
-// PAGINATE_BUDGET_MS even starts. searchUnion therefore spends what is LEFT of
+// can run searchUnion for the raw terms, related concept tags, then the
+// tag-resolver's output after misses. A per-call budget would silently stack
+// before the unfiltered fallback's own PAGINATE_BUDGET_MS even starts.
+// searchUnion therefore spends what is LEFT of
 // this budget, making the whole themed phase bounded by it however many times it
 // runs.
 //
 // Deliberately well under api/submissions.js's PAGINATE_BUDGET_MS default: up to
-// SEARCH_TERMS_CAP walks run concurrently inside one call, and this path can
+// several tag searches run concurrently inside one call, and this path can
 // fire seconds before a challenge closes, where returning fewer candidates
 // always beats missing the close. Page 1 is fetched regardless of the budget —
 // getEligiblePhotos only tests it before fetching a SECOND page — so a term that
@@ -208,8 +208,8 @@ const fetchCandidatesForChallenge = async (
                 null,
             );
     }
-    // Shared deadline for the whole themed phase, so the raw-term searches and
-    // the tag-resolver retry that may follow them split ONE budget instead of
+    // Shared deadline for the whole themed phase, so raw and related searches
+    // and the tag-resolver retry that may follow them split ONE budget instead of
     // each taking a full one (see THEMED_SEARCH_BUDGET_MS). Floored rather than
     // clamped to zero: a resolved search handed 0ms would stop after page 1 and
     // quietly truncate the themed search to the newest page of photos.
@@ -279,20 +279,22 @@ const fetchCandidatesForChallenge = async (
     const hasEligible = (list) => list.some((p) => p && p.permission && p.permission.allowed === true && p.id);
 
     if (terms.length > 0) {
+        const fromUserTags = buildSearchTerms(null, tagOpts).length > 0;
         const union = await searchUnion(terms);
-        if (hasEligible(union)) {
-            return union;
+        const relatedUnion = await searchUnion(fromUserTags ? [] : lexicon.relatedSearchTerms(terms));
+        if (hasEligible(union) || hasEligible(relatedUnion)) {
+            return [...new Map([...union, ...relatedUnion].map((photo) => [photo.id, photo])).values()];
         }
 
-        // The exact-tag search found nothing. Before giving up on the theme
-        // entirely, ask the member's own tag vocabulary what these terms are
+        // Exact and related tag searches found nothing. Before giving up on the
+        // theme entirely, ask the member's own vocabulary what these terms are
         // actually called: get_photos_private matches a tag EXACTLY, so a
         // "Stairs" challenge searching "stair" misses a library full of
         // "staircase". search_autocomplete matches inside a tag and answers
         // "stair" -> ["staircase"], which the search CAN use.
         //
-        // This is strictly a repair of the miss path — on the happy path above
-        // we have already returned, so a fill whose exact-tag search hits pays nothing.
+        // This is strictly a repair of the miss path — title searches above
+        // already included related concepts, but can still miss library-specific tags.
         const resolved = await resolveTagsForTerms(terms, challenge, {
             token,
             searchTagAutocomplete,
@@ -313,11 +315,8 @@ const fetchCandidatesForChallenge = async (
                 return resolvedUnion;
             }
         }
-        // Nothing matched the theme: the exact-tag search missed AND resolving
-        // those terms against the member's own tag vocabulary produced nothing
-        // usable. The fill is about to relax to the full library, where every
-        // candidate ties at zero on theme and popularity alone decides — i.e.
-        // an off-theme photo is about to be submitted.
+        // Server tag searches missed. The full library still gets semantic
+        // ranking; popularity decides only when those scores tie.
         //
         // This warns rather than whispers. Abstract titles can't be matched, but
         // tag resolution gives a concrete subject a real chance of being found,
@@ -331,19 +330,18 @@ const fetchCandidatesForChallenge = async (
         // (its precedence is must -> should -> title), so an empty result proves the
         // terms above came from the title. Reusing it keeps the two in lockstep
         // rather than re-deriving the precedence rule here.
-        const fromUserTags = buildSearchTerms(null, tagOpts).length > 0;
         // what happened -> why -> what next, once each. The searched terms are the
         // STEMMED forms ("stair" for a challenge titled "Stairs"), so say that
         // rather than letting it read like a typo of the user's own title.
         const next = fromUserTags
             ? 'Your Must/Should Include Tags matched none of your photos — widen or clear them to change this.'
-            : 'Tag some of your photos to match this theme to change this.';
+            : 'Review the selected photo; the existing labels did not identify a themed match.';
         logger
             .withCategory(logLabel)
             .warning(
-                `${logLabel}: nothing on theme for ${logger.challengeTag(challenge)} — no photo is tagged ` +
-                    `${terms.map((t) => `"${t}"`).join(' or ')} (matched as word stems) and no similar library tag ` +
-                    `exists, so your most popular eligible photo will be submitted instead. ${next}`,
+                `${logLabel}: nothing found by tag search for ${logger.challengeTag(challenge)} — no photo is tagged ` +
+                    `${terms.map((t) => `"${t}"`).join(' or ')} (matched as word stems) and no related library tag ` +
+                    `was found, so the whole library will be ranked semantically; popularity breaks ties when nothing matches. ${next}`,
                 null,
             );
     }

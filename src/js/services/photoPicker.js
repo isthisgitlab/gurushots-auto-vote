@@ -25,6 +25,7 @@ const { abstractTitleWords, detectLetterPrefix, parseNegation } = require('./pho
 const {
     buildChallengeKeywords,
     buildThemeKeywords,
+    buildThemeAlternatives,
     visualSubjectWords,
     buildSearchTerms,
 } = require('./photoPicker/keywords');
@@ -57,6 +58,7 @@ module.exports = {
     matches,
     buildChallengeKeywords,
     buildThemeKeywords,
+    buildThemeAlternatives,
     visualSubjectWords,
     abstractTitleWords,
     scorePhoto,

@@ -62,7 +62,12 @@
 
 const lexicon = require('./lexicon');
 const { diagnostics, shouldCollect } = require('./diagnostics');
-const { buildThemeKeywords, labelStemGroups, SEMANTIC_MATCH_FLOOR, SEMANTIC_SUPPORT_CAP } = require('../photoPicker');
+const {
+    buildThemeAlternatives,
+    labelStemGroups,
+    SEMANTIC_MATCH_FLOOR,
+    SEMANTIC_SUPPORT_CAP,
+} = require('../photoPicker');
 
 const clamp01 = (n) => Math.max(0, Math.min(1, n));
 
@@ -164,10 +169,11 @@ const getSemanticScores = async (challenge, photos, ignoreWords = null) => {
 
         // Subject words only — a welcome_message would dilute the pooled theme
         // vector off its own subject (see buildThemeKeywords).
-        const keywords = buildThemeKeywords(challenge, ignoreWords);
+        const alternatives = buildThemeAlternatives(challenge, ignoreWords);
+        const keywords = alternatives.flat();
         if (!keywords || keywords.length === 0) return null;
-        const challengeVec = embedCached(keywords);
-        if (!challengeVec) {
+        const challengeVecs = alternatives.map(embedCached).filter(Boolean);
+        if (challengeVecs.length === 0) {
             observeVocabulary(challenge, keywords, photos, null, false);
             return null;
         }
@@ -181,7 +187,11 @@ const getSemanticScores = async (challenge, photos, ignoreWords = null) => {
             // "Sea Life" verbatim is always a miss; labelStemGroups splits and
             // stems each label while keeping them separate, which is what lets
             // the max below be taken over labels rather than words.
-            const pooled = poolLabels(challengeVec, labelStemGroups(photo), embedCached);
+            const groups = labelStemGroups(photo);
+            const pooled = challengeVecs
+                .map((challengeVec) => poolLabels(challengeVec, groups, embedCached))
+                .filter(Boolean)
+                .sort((a, b) => b.score - a.score)[0];
             // Every label out of vocabulary -> no signal. That is
             // distinct from "scored 0", which is a measured miss.
             if (pooled) scores.set(String(id), pooled);

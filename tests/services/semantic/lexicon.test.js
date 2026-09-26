@@ -112,6 +112,23 @@ describe('semantic lexicon backend', () => {
         }
     });
 
+    test('ordinary religious and portrait labels have bundled vectors', async () => {
+        await lexicon.init();
+        for (const word of ['religion', 'church', 'altar', 'shrine', 'prayer', 'tattoo']) {
+            expect(lexicon.embed([word])).not.toBeNull();
+        }
+    });
+
+    test('the bundled concepts offer existing religious and historical tags for a missed title search', async () => {
+        await lexicon.init();
+        const terms = lexicon.relatedSearchTerms(['religion', 'history']);
+        expect(terms).toContain('church');
+        expect(terms).toContain('altar');
+        expect(terms).toContain('historical');
+        expect(terms).toContain('artifact');
+        expect(terms).toHaveLength(6);
+    });
+
     test('embed is deterministic', async () => {
         await lexicon.init();
         expect(Array.from(lexicon.embed(['cat', 'kitten']))).toEqual(Array.from(lexicon.embed(['cat', 'kitten'])));

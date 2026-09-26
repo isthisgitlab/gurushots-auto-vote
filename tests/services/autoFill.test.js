@@ -1819,6 +1819,62 @@ describe('fetchCandidatesForChallenge — theme-narrowed fetch', () => {
         expect(getEligiblePhotos).toHaveBeenCalledWith('c1', 'tok', { paginate: true, logLabel: 'autoFill' }); // unfiltered fallback
     });
 
+    test('searches related existing tags before the truncated whole-library fallback', async () => {
+        const lexicon = require('../../src/js/services/semantic/lexicon');
+        const related = jest.spyOn(lexicon, 'relatedSearchTerms').mockReturnValue(['church', 'altar']);
+        const getEligiblePhotos = jest.fn(async (_id, _tok, opts) =>
+            opts.search === 'church' ? [allowedPhoto('church', ['Church'])] : [],
+        );
+        const out = await fetchCandidatesForChallenge(
+            { id: 'c1', title: 'History vs Religion' },
+            'tok',
+            {},
+            { getEligiblePhotos, logger: makeLogger() },
+        );
+        expect(related).toHaveBeenCalledWith(['religion', 'history']);
+        expect(out.map((p) => p.id)).toEqual(['church']);
+        expect(getEligiblePhotos).not.toHaveBeenCalledWith('c1', 'tok', { paginate: true, logLabel: 'autoFill' });
+        related.mockRestore();
+    });
+
+    test('includes related tags when an exact title tag already has a candidate', async () => {
+        const lexicon = require('../../src/js/services/semantic/lexicon');
+        const related = jest.spyOn(lexicon, 'relatedSearchTerms').mockReturnValue(['church', 'altar']);
+        const getEligiblePhotos = jest.fn(async (_id, _tok, opts) => {
+            if (opts.search === 'history') return [allowedPhoto('history', ['History'])];
+            if (opts.search === 'church') return [allowedPhoto('church', ['Church'])];
+            if (opts.search === 'altar') return [allowedPhoto('church', ['Church', 'Altar'])];
+            return [];
+        });
+        const out = await fetchCandidatesForChallenge(
+            { id: 'c1', title: 'History vs Religion' },
+            'tok',
+            {},
+            { getEligiblePhotos, logger: makeLogger() },
+        );
+        expect(out.map((photo) => photo.id)).toEqual(['history', 'church']);
+        expect(getEligiblePhotos).toHaveBeenCalledWith('c1', 'tok', expect.objectContaining({ search: 'church' }));
+        expect(getEligiblePhotos).not.toHaveBeenCalledWith('c1', 'tok', { paginate: true, logLabel: 'autoFill' });
+        related.mockRestore();
+    });
+
+    test('uses the whole library when related tags also have no eligible photos', async () => {
+        const lexicon = require('../../src/js/services/semantic/lexicon');
+        const related = jest.spyOn(lexicon, 'relatedSearchTerms').mockReturnValue(['church']);
+        const getEligiblePhotos = jest.fn(async (_id, _tok, opts) =>
+            opts.search ? [] : [allowedPhoto('fallback', ['Portrait'])],
+        );
+        const out = await fetchCandidatesForChallenge(
+            { id: 'c1', title: 'History vs Religion' },
+            'tok',
+            {},
+            { getEligiblePhotos, logger: makeLogger() },
+        );
+        expect(out.map((p) => p.id)).toEqual(['fallback']);
+        expect(getEligiblePhotos).toHaveBeenCalledWith('c1', 'tok', { paginate: true, logLabel: 'autoFill' });
+        related.mockRestore();
+    });
+
     // The themed-search-empty fallback is the path that may submit an off-theme
     // photo. How loudly it logs must depend on WHERE the search terms came from:
     // the user's own tags failing to match is actionable and warrants a warning,
@@ -1854,13 +1910,10 @@ describe('fetchCandidatesForChallenge — theme-narrowed fetch', () => {
                 { getEligiblePhotos: emptySearch(), logger },
             );
             expect(category.warning).toHaveBeenCalledWith(
-                expect.stringContaining('nothing on theme for [Challenge c1]'),
+                expect.stringContaining('nothing found by tag search for [Challenge c1]'),
                 null,
             );
-            expect(category.warning).toHaveBeenCalledWith(
-                expect.stringContaining('Tag some of your photos to match this theme'),
-                null,
-            );
+            expect(category.warning).toHaveBeenCalledWith(expect.stringContaining('Review the selected photo'), null);
         });
 
         test("terms from the user's Must Include Tags → warning (their config matches nothing)", async () => {

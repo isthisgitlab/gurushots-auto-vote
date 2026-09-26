@@ -70,14 +70,16 @@ const buildTable = (raw) => {
     for (const key of Object.keys(raw.packed)) {
         const bytes = decodeBase64Int8(raw.packed[key]);
         if (!bytes || bytes.length !== dims) continue;
-        // Float32 on purpose: the values carry int8 precision, and at ~10k
+        // Float32 on purpose: the values carry int8 precision, and at ~32k
         // entries f64 would double the resident table for nothing. embed()
         // still accumulates in f64.
         const vec = new Float32Array(dims);
         for (let i = 0; i < dims; i++) vec[i] = bytes[i] * scale;
         words.set(key, vec);
     }
-    return words.size > 0 ? { dims, words, axis: readAxis(raw.concreteAxis, dims) } : null;
+    return words.size > 0
+        ? { dims, words, axis: readAxis(raw.concreteAxis, dims), searchGroups: raw.searchGroups || [] }
+        : null;
 };
 
 /**
@@ -166,6 +168,28 @@ const embedIn = (tbl, tokens) => {
 const embed = (tokens) => embedIn(table, tokens);
 const hasVector = (token) => Boolean(table && vectorFor(table, token));
 
+const MAX_RELATED_SEARCH_TERMS = 6;
+
+const relatedSearchTerms = (terms) => {
+    if (!table || !Array.isArray(terms)) return [];
+    const groups = terms.flatMap((term) =>
+        table.searchGroups.filter((group) => group.some((word) => stemToken(word) === stemToken(term))),
+    );
+    const seen = new Set(terms.map(stemToken));
+    const related = [];
+    const width = Math.max(0, ...groups.map((group) => group.length));
+    for (let i = 0; i < width && related.length < MAX_RELATED_SEARCH_TERMS; i++) {
+        for (const group of groups) {
+            const word = group[i];
+            if (!word || seen.has(stemToken(word))) continue;
+            seen.add(stemToken(word));
+            related.push(word);
+            if (related.length === MAX_RELATED_SEARCH_TERMS) break;
+        }
+    }
+    return related;
+};
+
 // Cosine similarity. Both inputs come from embed() and are already unit
 // vectors, so the dot product is the cosine.
 const cosine = (a, b) => {
@@ -204,4 +228,15 @@ const __resetForTests = () => {
     initPromise = null;
 };
 
-module.exports = { init, isAvailable, embed, embedIn, hasVector, cosine, concreteness, buildTable, __resetForTests };
+module.exports = {
+    init,
+    isAvailable,
+    embed,
+    embedIn,
+    hasVector,
+    relatedSearchTerms,
+    cosine,
+    concreteness,
+    buildTable,
+    __resetForTests,
+};

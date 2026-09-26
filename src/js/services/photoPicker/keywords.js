@@ -101,6 +101,16 @@ const buildThemeKeywords = (challenge, ignoreWords = null) => {
     return Array.from(new Set(fromUrl)).slice(0, MAX_CHALLENGE_KEYWORDS);
 };
 
+const buildThemeAlternatives = (challenge, ignoreWords = null) => {
+    const title = challenge?.title;
+    const parts = typeof title === 'string' ? title.split(/\s+(?:vs\.?|versus)\s+/i) : [];
+    if (parts.length < 2) return [buildThemeKeywords(challenge, ignoreWords)];
+    const alternatives = parts
+        .map((part) => buildThemeKeywords({ title: part }, ignoreWords))
+        .filter((words) => words.length);
+    return alternatives.length ? alternatives : [buildThemeKeywords(challenge, ignoreWords)];
+};
+
 /**
  * The challenge's subject as readable words, for the image model's prompt:
  * the title subject buildThemeKeywords starts from (series prefix and negated
@@ -207,6 +217,7 @@ const buildSearchTerms = (challenge, opts = {}) => {
 module.exports = {
     buildChallengeKeywords,
     buildThemeKeywords,
+    buildThemeAlternatives,
     visualSubjectWords,
     buildSearchTerms,
 };
