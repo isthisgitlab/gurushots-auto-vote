@@ -209,6 +209,21 @@ describe('TitleTagRulesEditor', () => {
             expect(onChange).toHaveBeenCalledWith([expect.objectContaining({ match: 'contains' })]);
         });
 
+        test('the mode is offered only once the rule names a title; until then it shows exact', () => {
+            const { rerender } = render(
+                <TitleTagRulesEditor
+                    value={rowWith({ title: '', titles: ['  '], match: 'contains', pics: 4 })}
+                    onChange={jest.fn()}
+                />,
+            );
+            const select = () => screen.getByLabelText('app.titleRuleMatch');
+            expect(select().disabled).toBe(true);
+            expect(select().value).toBe('exact');
+            rerender(<TitleTagRulesEditor value={rowWith({ match: 'contains' })} onChange={jest.fn()} />);
+            expect(select().disabled).toBe(false);
+            expect(select().value).toBe('contains');
+        });
+
         test('a saved mode renders back', () => {
             render(<TitleTagRulesEditor value={rowWith({ match: 'starts' })} onChange={jest.fn()} />);
             expect(screen.getByLabelText('app.titleRuleMatch').value).toBe('starts');

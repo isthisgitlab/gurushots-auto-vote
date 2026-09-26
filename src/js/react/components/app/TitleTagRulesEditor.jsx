@@ -372,14 +372,19 @@ const isBroadSpendingRule = (rule) =>
 /** One rule: conditions, then the behaviour it applies to matching challenges. */
 function RuleCard({ index, count, rule, profiles, onPatch, onMove, onRemove }) {
     const { t } = useTranslation();
+    const hasTitle = rulePatterns(rule).length > 0;
     return (
         <div className="rounded-box border border-base-300 p-3 space-y-3">
             <RuleHeader index={index} count={count} onMove={onMove} onRemove={onRemove} />
             <div className="flex items-center gap-2">
+                {/* The mode only shapes how titles compare; the sanitizer saves a
+                    title-less rule as exact, so it shows exact and is not offered
+                    until a title exists. */}
                 <select
                     aria-label={t('app.titleRuleMatch')}
                     className="select select-sm w-32"
-                    value={rule.match ?? 'exact'}
+                    disabled={!hasTitle}
+                    value={hasTitle ? (rule.match ?? 'exact') : 'exact'}
                     onChange={(e) => onPatch({ match: e.target.value })}
                 >
                     <option value="exact">{t('app.titleRuleMatchExact')}</option>
