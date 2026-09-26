@@ -22,6 +22,7 @@ import { DEFAULT_TIMEZONE } from '../settings/uiDefaults';
 
 /** @import { ActiveChallengesResponse, Challenge } from '../types/gurushots' */
 /** @import { CadenceDecision, CadenceMode } from './thresholdWindow' */
+/** @import { AppSettings } from '../types/settings' */
 
 /**
  * The host's single timer-handle slot value.
@@ -37,7 +38,7 @@ import { DEFAULT_TIMEZONE } from '../settings/uiDefaults';
 /**
  * The fields of a FRESH settings snapshot the chain reads (hosts hand over their
  * whole settings blob; `token` is what the GUI's fetchChallenges reads off it).
- * @typedef {{timezone?: string, checkFrequencyMin?: unknown, checkFrequencyMax?: unknown, token?: string}} CadenceSettings
+ * @typedef {Pick<AppSettings, 'timezone' | 'checkFrequencyMin' | 'checkFrequencyMax' | 'token'>} CadenceSettings
  */
 
 /**

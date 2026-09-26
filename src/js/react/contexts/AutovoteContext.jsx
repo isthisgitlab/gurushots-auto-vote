@@ -232,7 +232,7 @@ function createRendererCadenceChain({ runningRef, cycleTimerRef, runVotingCycle,
         },
         loadSettings: () => ipc.getSettings(),
         // loadSettings above is ipc.getSettings, whose token is always a string.
-        fetchChallenges: (settings) => ipc.getActiveChallenges(/** @type {string} */ (settings.token)),
+        fetchChallenges: (settings) => ipc.getActiveChallenges(settings.token),
         // The key-agnostic channel is typed `unknown`; the main process resolves
         // the schema-validated (numeric) effective value.
         resolveLastMinuteCheckMinutes: () =>

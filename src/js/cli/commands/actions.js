@@ -194,8 +194,7 @@ const OUTCOME_TEXT = {
  * @param {{ outcome?: string | null, error?: string | null } | null | undefined} result
  * @returns {string}
  */
-const describeOutcome = (result) =>
-    OUTCOME_TEXT[/** @type {string} */ (result?.outcome)] || result?.error || 'Action failed';
+const describeOutcome = (result) => OUTCOME_TEXT[result?.outcome ?? ''] || result?.error || 'Action failed';
 
 const CURRENCY_LABEL = { keys: 'key', swaps: 'swap', fills: 'fill' };
 

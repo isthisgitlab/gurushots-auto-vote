@@ -96,8 +96,11 @@ const imminentBoosts = (now, describe) => {
             title: c.title,
             dueAt: describe(c, now)?.actions?.find((a) => a.action === 'boost')?.dueAt,
         }))
-        .filter((b) => typeof b.dueAt === 'number' && b.dueAt - now <= QUIT_WARN_HORIZON_SEC)
-        .map((b) => ({ title: b.title, dueIn: /** @type {number} */ (b.dueAt) - now }))
+        .flatMap((b) =>
+            typeof b.dueAt === 'number' && b.dueAt - now <= QUIT_WARN_HORIZON_SEC
+                ? [{ title: b.title, dueIn: b.dueAt - now }]
+                : [],
+        )
         .sort((a, b) => a.dueIn - b.dueIn);
 };
 

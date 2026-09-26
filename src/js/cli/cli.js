@@ -281,8 +281,7 @@ const LOG_CATEGORY_FLAGS = {
 
 /** @type {CommandHandler} */
 const runLogs = async (argv) => {
-    const category =
-        LOG_CATEGORY_FLAGS[/** @type {string} */ (argv.find((arg) => Object.hasOwn(LOG_CATEGORY_FLAGS, arg)))] || 'app';
+    const category = LOG_CATEGORY_FLAGS[argv.find((arg) => Object.hasOwn(LOG_CATEGORY_FLAGS, arg)) ?? ''] || 'app';
     const linesArg = argv.find((a) => a.startsWith('--lines='));
     const lines = linesArg ? parseInt(linesArg.slice('--lines='.length), 10) || 100 : 100;
     showLogs({ category, lines });

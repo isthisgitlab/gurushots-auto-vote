@@ -9,6 +9,7 @@
 import { formatSecondsAsHoursMinutes } from './timeFieldUnits';
 import { formatDuration } from '../../format/duration';
 import { entryPhotoUrl } from '../../format/photoUrl';
+import { finiteOr } from '../../numbers';
 
 // Re-exported from the shared core so the renderer, the CLI, and the voting pass
 // (services/votingOrchestrator.js) all format durations identically — see src/js/format/duration.js.
@@ -136,7 +137,7 @@ export const getBoostStatus = (boost) => {
 
     if (boost.state === 'AVAILABLE' || boost.state === 'AVAILABLE_KEY') {
         const now = Math.floor(Date.now() / 1000);
-        const remaining = /** @type {number} */ (boost.timeout) - now;
+        const remaining = finiteOr(boost.timeout, 0) - now;
         if (remaining > 0) {
             const minutes = Math.floor(remaining / 60);
             return { text: `Available (${minutes}m left)`, colorClass: 'text-blue-500' };

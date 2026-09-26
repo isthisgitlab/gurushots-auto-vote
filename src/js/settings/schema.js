@@ -38,8 +38,8 @@ import { MAX_SCHEDULED_FILL_ENTRIES, MAX_VOTING_PAUSE_MINUTES } from './limits';
  * @property {string[]} [dependsOn]
  * @property {number} [validationOrder]
  * @property {string} [group]
- * @property {string} [label]
- * @property {string} [description]
+ * @property {string} label
+ * @property {string} description
  * @property {string} [helpKey] - Translation key for an optional deeper "explain this"
  *   disclosure shown beside the row (e.g. the two distinct meanings of a `0` sentinel).
  *   Display-only, like `description` — never affects validation. Forwarded by the schema

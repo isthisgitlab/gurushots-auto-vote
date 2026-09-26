@@ -111,8 +111,8 @@ export interface Challenge {
     type?: string;
     badge?: string;
     tags?: string[];
-    entries?: number;
-    players?: number;
+    entries: number;
+    players: number;
     votes?: number;
     max_photo_submits?: number;
     vote_minimum_players?: number;
@@ -166,9 +166,9 @@ export interface VoteImagesResponse {
 }
 
 // ---------------------------------------------------------------------------
-// Transport-layer payloads (src/js/api/*, mirrored by src/js/mock/*). Raw
-// response bodies are what the code reads, every field optional: the body is
-// untrusted and each read is guarded.
+// Transport-layer payloads (src/js/api/*, mirrored by src/js/mock/*): the
+// action endpoints' bodies. A field is optional where a refusal or failure
+// body leaves it out.
 // ---------------------------------------------------------------------------
 
 /** A write endpoint's body; the code only checks `success`. */

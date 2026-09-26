@@ -111,8 +111,7 @@ const getBankroll = async (token) => {
     /** @type {Bankroll} */
     const balances = { keys: 0, swaps: 0, fills: 0, coins: 0 };
     for (const entry of entries) {
-        // An absent type looks up the key "undefined", which no currency uses.
-        const field = BANKROLL_FIELDS[/** @type {string} */ (entry?.type)];
+        const field = BANKROLL_FIELDS[entry?.type ?? ''];
         if (field) {
             const amount = Number(entry?.amount);
             balances[field] = Number.isFinite(amount) ? amount : 0;

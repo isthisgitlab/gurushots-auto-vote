@@ -56,6 +56,8 @@
  * such challenges, not an edge case.
  */
 
+import { finiteOr } from '../../numbers';
+
 /** @import { PickerPhoto, ScoredCandidate, SemanticScore, SemanticScoreMap, ThemeTiers } from '../../types/photoPicker' */
 
 /**
@@ -186,19 +188,19 @@ const statsKnownOf = (photo) => photo.statsKnown === true;
  * @param {PickerPhoto} photo
  * @returns {number}
  */
-const votesOf = (photo) => (Number.isFinite(photo.votes) ? /** @type {number} */ (photo.votes) : 0);
+const votesOf = (photo) => finiteOr(photo.votes, 0);
 
 /**
  * @param {PickerPhoto} photo
  * @returns {number}
  */
-const viewsOf = (photo) => (Number.isFinite(photo.views) ? /** @type {number} */ (photo.views) : 0);
+const viewsOf = (photo) => finiteOr(photo.views, 0);
 
 /**
  * @param {PickerPhoto} photo
  * @returns {number}
  */
-const uploadDateOf = (photo) => (Number.isFinite(photo.upload_date) ? /** @type {number} */ (photo.upload_date) : 0);
+const uploadDateOf = (photo) => finiteOr(photo.upload_date, 0);
 
 // The theme tiers, highest-priority first. A photo's standing on these is what
 // the enrichment set is derived from — they are the tiers that a stat lookup

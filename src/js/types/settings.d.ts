@@ -4,11 +4,13 @@
  * at runtime. JS files pull them in with
  * `/** @import { AppSettings } from '../types/settings' *\/`.
  *
- * The blob is merged over getDefaultSettings() on every load, so the top-level
- * keys and the challengeSettings containers are typed as the defaults write
- * them. Everything a user or an older build can put INSIDE those containers
- * (setting values, rules, profiles, scenarios) is re-validated on read, so it
- * is typed loosely here — `unknown` values the reader narrows.
+ * loadSettings (settings/persistence.js) merges the blob over
+ * getDefaultSettings() and validates it: top-level values of the wrong type,
+ * challengeSettings containers of the wrong kind, and setting values their
+ * schema rejects are dropped for the defaults. So those are typed as the
+ * defaults write them. Rules, profiles and scenarios are validated by the
+ * modules that read them, so their contents are typed loosely here —
+ * `unknown` values the reader narrows.
  */
 
 import type { getUiDefaultSettings } from '../settings/uiDefaults';

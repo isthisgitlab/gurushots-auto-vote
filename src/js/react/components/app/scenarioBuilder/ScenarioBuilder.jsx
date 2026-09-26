@@ -69,9 +69,7 @@ function PhaseSettings({ settings, onChange }) {
                 const config = schema?.[key];
                 return (
                     <div key={key} className="flex items-center gap-2">
-                        <span className="text-xs w-40 shrink-0">
-                            {config ? t(/** @type {string} */ (config.label)) : key}
-                        </span>
+                        <span className="text-xs w-40 shrink-0">{config ? t(config.label) : key}</span>
                         {config && (
                             <SettingInput
                                 settingKey={key}
@@ -107,7 +105,7 @@ function PhaseSettings({ settings, onChange }) {
                     .filter(([key]) => !keys.includes(key))
                     .map(([key, config]) => (
                         <option key={key} value={key}>
-                            {t(/** @type {string} */ (config.label))}
+                            {t(config.label)}
                         </option>
                     ))}
             </select>

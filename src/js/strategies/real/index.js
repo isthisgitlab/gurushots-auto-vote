@@ -97,20 +97,19 @@ const joinChallenge = (challengeId, spendCoins, token) =>
  * pick was correct, whether that took the flip, and whether the game is WON.
  *
  * @param {Challenge} challenge
- * @param {TurboBattle} battle
+ * @param {{firstImageId: string, secondImageId: string}} battle - a battle with both image ids
  * @param {string} token
  * @returns {Promise<{correct: boolean, flipped: boolean, won: boolean}>}
  */
 const playTurboBattle = async (challenge, battle, token) => {
-    // runTurboMiniGame only plays a battle whose two image ids are both present.
-    const first = await submitTurboSelection(challenge.id, /** @type {string} */ (battle.firstImageId), token);
+    const first = await submitTurboSelection(challenge.id, battle.firstImageId, token);
     if (first.ok) {
         return { correct: true, flipped: false, won: first.state === 'WON' };
     }
 
     // First pick lost or errored — flip to the other image.
     await sleep(TURBO_SELECTION_DELAY_MS);
-    const second = await submitTurboSelection(challenge.id, /** @type {string} */ (battle.secondImageId), token);
+    const second = await submitTurboSelection(challenge.id, battle.secondImageId, token);
     if (!second.ok) {
         const code = second.errorCode || first.errorCode;
         if (code) {
@@ -153,7 +152,8 @@ const runTurboMiniGame = async (challenge, token) => {
         }
 
         played++;
-        const outcome = await playTurboBattle(challenge, battle, token);
+        const { firstImageId, secondImageId } = battle;
+        const outcome = await playTurboBattle(challenge, { firstImageId, secondImageId }, token);
         if (outcome.correct) correct++;
         else doubleFailed++;
         if (outcome.flipped) flipped++;

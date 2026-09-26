@@ -23,6 +23,7 @@
 import * as logger from './logger';
 import { createJsonStore } from './settings/storage';
 import { isPlainObject } from './plainObject';
+import { finiteOr } from './numbers';
 
 const entryAgeStore = createJsonStore({ fileName: 'entryAges.json', prefKey: 'gs_entry_ages' });
 
@@ -138,7 +139,7 @@ const createEntryAgeLedger = (store) => {
          */
         enteredAt: (challengeId, imageId) => {
             const at = read()[String(challengeId)]?.entered[String(imageId)];
-            return Number.isFinite(at) ? /** @type {number} */ (at) : null;
+            return finiteOr(at, null);
         },
 
         /**

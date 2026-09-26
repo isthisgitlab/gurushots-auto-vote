@@ -43,6 +43,8 @@ const getMemberChallenges = mockMethod(
                 url: 'mock-free',
                 start_time: nowSec - 5 * 86400,
                 close_time: nowSec + 3 * 3600,
+                entries: 40,
+                players: 25,
             },
             {
                 id: 900002,
@@ -52,6 +54,8 @@ const getMemberChallenges = mockMethod(
                 url: 'mock-flash',
                 start_time: nowSec - 1 * 86400,
                 close_time: nowSec + 2 * 86400,
+                entries: 80,
+                players: 50,
             },
             {
                 id: 900003,
@@ -61,6 +65,8 @@ const getMemberChallenges = mockMethod(
                 url: 'mock-paid',
                 start_time: nowSec - 2 * 86400,
                 close_time: nowSec + 5 * 86400,
+                entries: 120,
+                players: 75,
             },
             {
                 id: 900004,
@@ -70,6 +76,8 @@ const getMemberChallenges = mockMethod(
                 url: 'mock-fail',
                 start_time: nowSec - 3 * 86400,
                 close_time: nowSec + 3 * 86400,
+                entries: 160,
+                players: 100,
             },
             // 900005: unlock succeeds but submit fails → exercises the
             // "coins charged but not joined" (charged-pending-submit) UI/CLI path.
@@ -81,6 +89,8 @@ const getMemberChallenges = mockMethod(
                 url: 'mock-submitfail',
                 start_time: nowSec - 4 * 86400,
                 close_time: nowSec + 4 * 86400,
+                entries: 200,
+                players: 125,
             },
         ];
     },

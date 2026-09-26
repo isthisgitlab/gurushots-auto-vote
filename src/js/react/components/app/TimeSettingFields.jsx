@@ -127,8 +127,7 @@ export function TimeField({ id, settingKey, config, value, onChange, onReset, di
             <HoursMinutesInputs
                 seconds={typeof value === 'number' ? value : 0}
                 onChange={(seconds) => onChange(settingKey, seconds)}
-                // Every schema entry carries a label.
-                labelPrefix={t(/** @type {string} */ (config.label))}
+                labelPrefix={t(config.label)}
                 widthClass="w-20"
                 disabled={disabled}
             />
@@ -323,8 +322,7 @@ function RowListFooter({ kind, settingKey, rowCount, onAdd, onReset, disabled })
  */
 function RowListField({ kind, settingKey, config, value, onChange, onReset, disabled }) {
     const { t } = useTranslation();
-    // Every schema entry carries a label.
-    const label = t(/** @type {string} */ (config.label));
+    const label = t(config.label);
     // The cap slice also bounds rendering: a hand-edited oversized array must
     // not paint hundreds of rows (the write path and load-time bounds pass
     // both enforce the cap already — this is the same defensive posture as

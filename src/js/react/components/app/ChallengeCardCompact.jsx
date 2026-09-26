@@ -104,9 +104,7 @@ export function ChallengeCardCompact({
                     {exposureFactor}%
                 </Stat>
                 <Stat icon="🏆" label={t('app.rank')}>
-                    {hasRank
-                        ? `${rank.toLocaleString()} / ${/** @type {number} */ (challenge.players).toLocaleString()}`
-                        : '—'}
+                    {hasRank ? `${rank.toLocaleString()} / ${challenge.players.toLocaleString()}` : '—'}
                 </Stat>
                 <Stat icon="🖼" label={t('app.yourEntries')}>
                     {entries.length}/{challenge.max_photo_submits}

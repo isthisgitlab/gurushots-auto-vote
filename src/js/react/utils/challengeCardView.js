@@ -5,6 +5,7 @@
 import { formatDuration, getBoostStatus, getTurboStatus, isBoostWindowOpen } from '@/utils/formatters';
 import { isLowExposure } from '@/utils/challengeAlerts';
 import { canKeyUnlock, canSwapEntry, canFillExposure } from '../../voting/currencyActions';
+import { finiteOr } from '../../numbers';
 
 const LEVEL_NAMES = ['', 'POPULAR', 'SKILLED', 'PREMIER', 'ELITE', 'ALL STAR'];
 
@@ -26,7 +27,7 @@ export function getNextLevelInfo(challenge) {
     if (!threshold) return null;
     return {
         nextLevel,
-        votesNeeded: threshold - /** @type {number} */ (userProgress.votes),
+        votesNeeded: threshold - finiteOr(userProgress.votes, 0),
         levelName: LEVEL_NAMES[nextLevel] || `LEVEL ${nextLevel}`,
     };
 }
@@ -78,8 +79,8 @@ export function deriveChallengeCardView(challenge, { now, bankroll, autovoteRunn
         // Time left in a timed boost window, preformatted for the badge; null
         // for a key-unlocked boost, which has no timer. Ticks with `now`.
         boostTimeLeft:
-            boostOpen && member.boost?.state === 'AVAILABLE' && /** @type {number} */ (member.boost.timeout) > 0
-                ? formatDuration(/** @type {number} */ (member.boost.timeout) - now)
+            boostOpen && member.boost?.state === 'AVAILABLE' && finiteOr(member.boost.timeout, 0) > 0
+                ? formatDuration(finiteOr(member.boost.timeout, 0) - now)
                 : null,
         lowExposure,
         exposureClass: lowExposure ? 'text-error font-bold' : '',

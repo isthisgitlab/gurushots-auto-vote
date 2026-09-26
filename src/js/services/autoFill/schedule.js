@@ -4,6 +4,7 @@
  */
 
 import { remapScheduleRows } from '../scheduleRemap';
+import { finiteOr } from '../../numbers';
 
 /** @import { FillSchedule } from '../scheduleRemap' */
 
@@ -36,7 +37,7 @@ const getEffectiveScheduleRows = (schedule, maxPhotoSubmits) => remapScheduleRow
  * @returns {number}
  */
 const resolveScheduleTarget = (schedule, secondsRemaining, maxPhotoSubmits) => {
-    const max = Number.isFinite(maxPhotoSubmits) ? /** @type {number} */ (maxPhotoSubmits) : 0;
+    const max = finiteOr(maxPhotoSubmits, 0);
     if (!Number.isFinite(secondsRemaining)) return 0;
     let target = 0;
     for (const row of getEffectiveScheduleRows(schedule, maxPhotoSubmits)) {
@@ -62,9 +63,8 @@ const resolveScheduleTarget = (schedule, secondsRemaining, maxPhotoSubmits) => {
  * @returns {number}
  */
 const getNextScheduleThresholdSec = (schedule, entryCount, maxPhotoSubmits) => {
-    // Number.isFinite vouches for both casts.
-    const max = Number.isFinite(maxPhotoSubmits) ? /** @type {number} */ (maxPhotoSubmits) : 0;
-    const count = Number.isFinite(entryCount) ? /** @type {number} */ (entryCount) : 0;
+    const max = finiteOr(maxPhotoSubmits, 0);
+    const count = finiteOr(entryCount, 0);
     let threshold = 0;
     for (const row of getEffectiveScheduleRows(schedule, maxPhotoSubmits)) {
         if (Math.min(row.count, max) > count) {

@@ -11,6 +11,7 @@ import * as logger from '../../logger';
 import { formatDateTime } from '../../dateFormat';
 import { SCENARIO_TEMPLATES } from '../../scenarios/templates';
 import { VOCABULARY_REFERENCE } from '../../scenarios/vocabulary';
+import { finiteOr } from '../../numbers';
 
 // Built lazily so requiring this module (e.g. for `help`) does not construct
 // the handler set or pull in its transitive dependencies.
@@ -25,8 +26,10 @@ const handlers = () => (_handlers ??= require('../../ipc/scenarios.handlers').bu
 const ui = () => logger.withCategory('ui');
 
 /** @param {number | null | undefined} sec - unix seconds */
-const at = (sec) =>
-    Number.isFinite(sec) ? formatDateTime(new Date(/** @type {number} */ (sec) * 1000)) : 'nothing time-based pending';
+const at = (sec) => {
+    const seconds = finiteOr(sec, null);
+    return seconds === null ? 'nothing time-based pending' : formatDateTime(new Date(seconds * 1000));
+};
 
 /**
  * Print a failed result — its issues when validation failed — and yield exit code 1.

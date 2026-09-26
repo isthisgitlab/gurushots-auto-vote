@@ -4,6 +4,8 @@
  * pre-submit live re-fetch that merges fresh member state in place.
  */
 
+import { finiteOr } from '../../numbers';
+
 /** @import { Challenge, ChallengeMember, RankingEntry } from '../../types/gurushots' */
 /** @import { AdoptableMember, ErrorLike, FillLogger, RankDeps } from '../../types/autoFill' */
 
@@ -21,10 +23,7 @@ const getEntries = (challenge) => {
  * @returns {number}
  */
 const getSlotsRemaining = (challenge) => {
-    // Number.isFinite vouches for the value the cast reads.
-    const max = Number.isFinite(challenge?.max_photo_submits)
-        ? /** @type {number} */ (challenge?.max_photo_submits)
-        : 0;
+    const max = finiteOr(challenge?.max_photo_submits, 0);
     return Math.max(0, max - getEntries(challenge).length);
 };
 

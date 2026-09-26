@@ -65,17 +65,12 @@ function ChallengeDefaultsSection({
                                 {entries.map(([key, config]) => (
                                     <div key={key} className={SETTING_CELL_CLASS}>
                                         <SettingLabel inputId={`setting-${key}`} type={config.type}>
-                                            {/* Every schema entry carries a label and a description. */}
-                                            <span className="font-medium">
-                                                {t(/** @type {string} */ (config.label))}
-                                            </span>
+                                            <span className="font-medium">{t(config.label)}</span>
                                             <span className="badge badge-ghost badge-sm ml-2">
                                                 {t('app.globalDefault')}
                                             </span>
                                         </SettingLabel>
-                                        <p className="text-xs text-base-content/60 mb-2">
-                                            {t(/** @type {string} */ (config.description))}
-                                        </p>
+                                        <p className="text-xs text-base-content/60 mb-2">{t(config.description)}</p>
                                         <SettingHelp helpKey={config.helpKey} />
                                         <SettingInput
                                             settingKey={key}

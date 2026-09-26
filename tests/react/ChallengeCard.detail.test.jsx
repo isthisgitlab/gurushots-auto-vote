@@ -93,6 +93,14 @@ describe('header', () => {
         expect(onSettingsClick).toHaveBeenCalledWith(101, 'Sunset');
     });
 
+    test('the statistics show the counts, and 0 votes when the challenge carries none', () => {
+        const { unmount } = renderCard(makeChallenge());
+        expect(screen.getByText((2000).toLocaleString())).toBeTruthy();
+        unmount();
+        renderCard(makeChallenge({ votes: undefined }));
+        expect(screen.getByText('0')).toBeTruthy();
+    });
+
     test('flash challenges have no settings button, no URL row without a url', () => {
         renderCard(makeChallenge({ type: 'flash', url: '' }));
         expect(screen.queryByText('app.settings')).toBeNull();

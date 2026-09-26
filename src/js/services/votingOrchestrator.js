@@ -53,6 +53,7 @@ import * as cancellation from '../voting/cancellation';
 import { formatDuration } from '../format/duration';
 import { failureText } from '../format/logSafe';
 import { sleep } from '../timing';
+import { finiteOr } from '../numbers';
 
 /** @import { Challenge, MemberBoost, VoteImagesResponse } from '../types/gurushots' */
 /** @import { VotingPassApi, VotingPassDeps, VotingPassResult, ScenarioDeps } from '../types/votingPass' */
@@ -286,10 +287,7 @@ const runBoost = async (ctx) => {
     const shouldApplyBoost = votingLogic.shouldApplyBoost(challenge, now, { emergency: true });
     const effectiveBoostTime = votingLogic.getEffectiveBoostTime(challenge.id.toString());
     // For timer-based availability use boost.timeout; for key-unlocked use challenge end time
-    // isTimerBasedAvailable implies a numeric, positive boost.timeout.
-    const timeUntilDisplayBase = isTimerBasedAvailable
-        ? /** @type {number} */ (boost.timeout) - now
-        : challenge.close_time - now;
+    const timeUntilDisplayBase = isTimerBasedAvailable ? finiteOr(boost.timeout, 0) - now : challenge.close_time - now;
 
     if (!shouldApplyBoost) {
         logBoostNotReady(challenge, isTimerBasedAvailable, timeUntilDisplayBase, effectiveBoostTime);

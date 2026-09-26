@@ -286,13 +286,13 @@ export function ChallengeCardDetail({
             {/* Challenge Statistics — stacks 2-up on phones, 4-up on tablets+. */}
             <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 text-xs">
                 <StatCell label={t('app.entries')}>
-                    <div>{/** @type {number} */ (challenge.entries).toLocaleString()}</div>
+                    <div>{challenge.entries.toLocaleString()}</div>
                 </StatCell>
                 <StatCell label={t('app.players')}>
-                    <div>{/** @type {number} */ (challenge.players).toLocaleString()}</div>
+                    <div>{challenge.players.toLocaleString()}</div>
                 </StatCell>
                 <StatCell label={t('app.votes')}>
-                    <div>{/** @type {number} */ (challenge.votes).toLocaleString()}</div>
+                    <div>{(challenge.votes ?? 0).toLocaleString()}</div>
                 </StatCell>
                 <StatCell label={t('app.prize')}>
                     <div>{challenge.prizes_worth}</div>

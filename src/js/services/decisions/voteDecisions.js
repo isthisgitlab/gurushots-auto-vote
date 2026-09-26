@@ -76,7 +76,7 @@ const evaluateVotingDecision = (challenge, now, options = {}) => {
             'final-window': 'final window threshold',
             normal: 'normal threshold',
         };
-        const labelText = forcedLabels[/** @type {string} */ (r.ruleLabel)];
+        const labelText = forcedLabels[r.ruleLabel];
         // Exposure sitting exactly on a trigger below its target would read as the
         // tautology "exposure 90% >= 90%", so state it as a level instead.
         const state =
@@ -116,7 +116,7 @@ const evaluateVotingDecision = (challenge, now, options = {}) => {
     };
     return {
         shouldVote: r.eligible,
-        voteReason: reasons[/** @type {string} */ (r.ruleLabel)],
+        voteReason: reasons[r.ruleLabel],
         targetExposure: r.targetExposure,
         forcedByNewEntry: false,
     };
@@ -155,7 +155,7 @@ const evaluateManualVotingDecision = (challenge, now, challengeTitle) => {
         };
         return {
             shouldAllowVoting: false,
-            errorMessage: messages[/** @type {string} */ (r.ruleLabel)],
+            errorMessage: messages[r.ruleLabel],
             targetExposure: r.targetExposure,
         };
     }

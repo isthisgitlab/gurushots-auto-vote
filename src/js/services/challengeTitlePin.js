@@ -24,7 +24,7 @@ import * as logger from '../logger';
 const sanitizeForLog = logger.sanitizeLogString;
 
 // Shared with mergeTitlePins' storage cap.
-const MAX_TITLE_LENGTH = /** @type {number} */ (settings.MAX_TITLE_LENGTH);
+const { MAX_TITLE_LENGTH } = settings;
 
 // Warn once per distinct incoming title per id — repeated confirmations of
 // the same mismatch on every poll stay silent. In-memory only: durability

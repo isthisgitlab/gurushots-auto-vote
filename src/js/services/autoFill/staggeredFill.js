@@ -7,6 +7,7 @@ import { getScheduleShift } from '../scheduleRemap';
 import { resolveScheduleTarget } from './schedule';
 import { getEntries, getSlotsRemaining, reflectNewEntry } from './challengeState';
 import { runFillAttempt } from './pipeline';
+import { finiteOr } from '../../numbers';
 
 /** @import { Challenge } from '../../types/gurushots' */
 /** @import { SettingsFillDeps } from '../../types/autoFill' */
@@ -52,8 +53,7 @@ const maybeAutoFillChallenge = async (challenge, token, now, deps) => {
         // allows. WARNING (not debug/info, which are compiled out of packaged
         // builds — see makeFallbackLogger) so a real user has a trace for why
         // those slots stay empty until emergency fill.
-        // Finite: the slotsRemaining > 0 guard above is false for a non-finite max.
-        const max = /** @type {number} */ (challenge.max_photo_submits);
+        const max = finiteOr(challenge.max_photo_submits, 0);
         // Highest target the schedule can ever demand = the target as time
         // runs out (secondsRemaining → 0 matches every row), so reuse
         // resolveScheduleTarget instead of re-deriving the clamp-and-max here.
