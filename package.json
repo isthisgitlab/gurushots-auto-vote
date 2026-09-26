@@ -2,7 +2,7 @@
     "name": "gurushots-auto-vote",
     "version": "1.11.2",
     "description": "GuruShots Auto Vote - An Electron application for automated voting on GuruShots challenges with unified GUI and CLI interfaces (supports both real and mock modes)",
-    "main": "src/js/index.js",
+    "main": "dist/main/index.js",
     "scripts": {
         "build": "cross-env NODE_ENV=production electron-builder",
         "build:all": "pnpm run build:prep && cross-env NODE_ENV=production electron-builder -mwl",
@@ -16,11 +16,12 @@
         "build:cli:mac:lite": "node scripts/build-cli.js gurucli-mac --lite",
         "build:css": "tailwindcss -i ./src/styles/styles.css -o ./dist/styles.css --minify",
         "build:lexicon": "node scripts/build-lexicon.js",
+        "build:main": "node scripts/build-main.js",
         "fetch:embeddings": "node scripts/fetch-embeddings.js",
         "verify:lexicon": "node scripts/validate-lexicon.js",
         "build:react": "node scripts/build-react.js",
-        "build:prep": "pnpm run build:css && pnpm run build:lexicon && pnpm run build:react",
-        "build:prep:lite": "pnpm run build:css && pnpm run build:lexicon && node scripts/build-react.js --lite",
+        "build:prep": "pnpm run build:css && pnpm run build:lexicon && pnpm run build:react && pnpm run build:main",
+        "build:prep:lite": "pnpm run build:css && pnpm run build:lexicon && node scripts/build-react.js --lite && pnpm run build:main",
         "build:site": "pnpm run build:site:html && pnpm run build:site:css",
         "build:site:html": "node scripts/build-site.js",
         "build:site:css": "tailwindcss -i ./scripts/site/site.css -o ./dist-site/styles.css --minify",
@@ -45,7 +46,7 @@
         "cli:start": "node src/js/cli/cli.js start",
         "cli:status": "node src/js/cli/cli.js status",
         "cli:vote": "node src/js/cli/cli.js vote",
-        "dev": "concurrently --kill-others-on-fail \"pnpm run watch:css\" \"pnpm run watch:react\" \"electronmon .\"",
+        "dev": "pnpm run build:main && concurrently --kill-others-on-fail \"pnpm run watch:css\" \"pnpm run watch:react\" \"pnpm run watch:main\" \"electronmon .\"",
         "dev:no-watch": "concurrently --kill-others \"pnpm run watch:css\" \"pnpm run start\"",
         "format": "prettier --write .",
         "format:check": "prettier --check .",
@@ -69,7 +70,7 @@
         "size": "cross-env NODE_ENV=production pnpm run build:react && node scripts/check-size-delta.js",
         "size:update": "cross-env NODE_ENV=production pnpm run build:react && node scripts/check-size-delta.js --update",
         "size:cli": "node scripts/check-cli-size.js",
-        "start": "electron .",
+        "start": "pnpm run build:main && electron .",
         "tag": "git tag v$(node -p \"require('./package.json').version\")",
         "tag:push": "pnpm run tag && git push origin v$(node -p \"require('./package.json').version\")",
         "test": "jest",
@@ -81,6 +82,7 @@
         "update:readme": "node scripts/readme-version.js",
         "verify:readme": "node scripts/readme-version.js --check",
         "watch:css": "tailwindcss -i ./src/styles/styles.css -o ./dist/styles.css --watch",
+        "watch:main": "node scripts/build-main.js --watch",
         "watch:react": "node scripts/build-react.js --watch"
     },
     "repository": {
@@ -166,7 +168,8 @@
             "!logs/**",
             "!scripts/**",
             "!**/*.test.js",
-            "!**/*.test.jsx"
+            "!**/*.test.jsx",
+            "dist/main/**"
         ]
     },
     "build": {
@@ -179,7 +182,6 @@
         "files": [
             "dist/**/*",
             "src/html/**/*",
-            "src/js/**/*",
             "src/assets/**/*",
             "package.json",
             "!dist/vision-model${/*}",

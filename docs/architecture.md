@@ -428,6 +428,12 @@ repeated six times is one that gets forgotten at one of them.
   `getPlatform()`, `getAppUserDataPath()` — the single path resolver shared with the logger); **renderer-
   side** via `globalThis.Capacitor?.isNativePlatform?.() === true` inline, to keep node out of the browser
   bundle.
+- **The Electron main process runs from a bundle.** `scripts/build-main.js` bundles `src/js/index.js` into
+  `dist/main/index.js` (package.json `main`), keeping every package import a runtime require from the
+  shipped `node_modules`; `src/js` itself is not packaged. Inside the bundle every module shares the bundle's
+  `__dirname`, so paths to the app's own files (HTML pages, preload bundle, assets, the dev model cache) come
+  from `appPath(...)` (`appPaths.js`), which resolves the root as `__dirname/../..` — valid because the bundle
+  sits at the same depth below the root as `src/js/`.
 
 ## 8. Renderer / UI conventions
 

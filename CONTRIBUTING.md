@@ -29,13 +29,13 @@ Thank you for your interest in contributing to GuruShots Auto Vote! We welcome c
     ```bash
     pnpm dev
     ```
-    `pnpm dev` runs Tailwind, esbuild, and `electronmon` together. Stop the session with `Ctrl+C` in the terminal — closing the Electron window restarts the app rather than ending the session.
+    `pnpm dev` runs Tailwind, esbuild, the main-process bundle watcher and `electronmon` together. Stop the session with `Ctrl+C` in the terminal — closing the Electron window restarts the app rather than ending the session.
 
 ## 🛠️ Development
 
 ### Available Scripts
 
-- `pnpm start` - Run the Electron app
+- `pnpm start` - Build the main-process bundle and run the Electron app
 - `pnpm dev` - Development mode with hot reload
 - `pnpm lint` - Check code style
 - `pnpm lint:fix` - Fix code style issues
@@ -85,7 +85,7 @@ scripts/              # Development and build utilities
 
 The same core business logic in `src/js/` runs under three shells: **Electron (GUI)**, **CLI**, and **Capacitor (Android)**. Only the entry points, transport, and storage adapter are platform-specific.
 
-- **Entry points**: Electron `src/js/index.js` · CLI `src/js/cli/cli.js` · Electron preload `src/js/preload.js` · Capacitor bridge `src/js/bridge/capacitor.js`
+- **Entry points**: Electron `src/js/index.js` (bundled into `dist/main/index.js` by `scripts/build-main.js`) · CLI `src/js/cli/cli.js` · Electron preload `src/js/preload.js` · Capacitor bridge `src/js/bridge/capacitor.js`
 - **React renderer** (`src/js/react/`) is shared between Electron and Capacitor
 - **`apiFactory.js`** selects real vs mock API implementations at runtime based on `settings.mock`. All business logic goes through the factory — do not import from `src/js/api/*` or `src/js/mock/*` directly
 - **Settings facade** lives at `src/js/settings.js`. Schema + defaults + validation are in `src/js/settings/schema.js`; persistence transport (fs on Electron/CLI, `@capacitor/preferences` on Android) is in `src/js/settings/storage.js`

@@ -1,6 +1,7 @@
 {
     "$schema": "https://unpkg.com/knip@6/schema.json",
     "entry": [
+        "src/js/index.js",
         "src/js/preload.js",
         "src/js/bridge/capacitor.js",
         "src/js/headless/index.js",
