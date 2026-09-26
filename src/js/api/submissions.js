@@ -119,7 +119,9 @@ const getEligiblePhotos = async (challengeId, token, options = {}) => {
     const budgetMs = Number.isFinite(options.budgetMs) && options.budgetMs > 0 ? options.budgetMs : PAGINATE_BUDGET_MS;
     const startedAt = Date.now();
     // Dedupe across pages: offset pagination over a live, vote-ordered list can
-    // repeat a row when the underlying order shifts between requests.
+    // repeat a row when the underlying order shifts between requests. The same
+    // shift can also skip one (a photo gaining votes mid-walk moves up into a
+    // page already read); the walk takes seconds, so that is accepted.
     const byId = new Map();
     // Prefix the library-walk warnings with the calling flow (auto-fill vs join)
     // so a "10-page limit" message from a join isn't mislabeled as auto-fill.
