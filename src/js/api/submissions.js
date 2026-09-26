@@ -46,10 +46,13 @@ const PAGINATE_BUDGET_MS = 20_000;
  */
 const fetchPhotoPage = async (challengeId, token, { limit, start, search, usage }) => {
     const headers = createWebHeaders(token);
+    // Most-voted first. The items still report `votes: 0` (see getImageData),
+    // but the server sorts by the real count, so whatever a page cap or walk
+    // budget cuts off is the least-voted work rather than the oldest.
     const params = [
         `c_id=${encodeURIComponent(String(challengeId))}`,
         `limit=${encodeURIComponent(String(limit))}`,
-        'order=date',
+        'order=votes',
         'sort=desc',
         `start=${encodeURIComponent(String(start))}`,
         `usage=${encodeURIComponent(String(usage))}`,
@@ -115,8 +118,8 @@ const getEligiblePhotos = async (challengeId, token, options = {}) => {
 
     const budgetMs = Number.isFinite(options.budgetMs) && options.budgetMs > 0 ? options.budgetMs : PAGINATE_BUDGET_MS;
     const startedAt = Date.now();
-    // Dedupe across pages: offset pagination over a live, date-ordered list can
-    // repeat a row when the underlying set shifts between requests.
+    // Dedupe across pages: offset pagination over a live, vote-ordered list can
+    // repeat a row when the underlying order shifts between requests.
     const byId = new Map();
     // Prefix the library-walk warnings with the calling flow (auto-fill vs join)
     // so a "10-page limit" message from a join isn't mislabeled as auto-fill.
@@ -128,7 +131,7 @@ const getEligiblePhotos = async (challengeId, token, options = {}) => {
     for (; page < MAX_LIBRARY_PAGES; page++) {
         if (page > 0 && Date.now() - startedAt >= budgetMs) {
             warn(
-                `reading your photo library took longer than ${Math.round(budgetMs / 1000)}s, so it stopped after ${page} page(s) with ${byId.size} photo(s); older photos were not considered this time`,
+                `reading your photo library took longer than ${Math.round(budgetMs / 1000)}s, so it stopped after ${page} page(s) with ${byId.size} photo(s); less-voted photos were not considered this time`,
             );
             stoppedEarly = true;
             break;
@@ -168,7 +171,7 @@ const getEligiblePhotos = async (challengeId, token, options = {}) => {
 
     if (!stoppedEarly && page === MAX_LIBRARY_PAGES) {
         warn(
-            `stopped reading your photo library at the ${MAX_LIBRARY_PAGES}-page limit with ${byId.size} photo(s); older photos were not considered`,
+            `stopped reading your photo library at the ${MAX_LIBRARY_PAGES}-page limit with ${byId.size} photo(s); less-voted photos were not considered`,
         );
     }
     return Array.from(byId.values());

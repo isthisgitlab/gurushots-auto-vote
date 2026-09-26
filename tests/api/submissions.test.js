@@ -44,7 +44,7 @@ describe('submissions', () => {
                     'x-requested-with': 'XMLHttpRequest',
                 }),
             );
-            expect(body).toBe('c_id=125319&limit=100&order=date&sort=desc&start=0&usage=submit');
+            expect(body).toBe('c_id=125319&limit=100&order=votes&sort=desc&start=0&usage=submit');
             expect(photos).toEqual([{ id: 'p1', labels: ['Pink'], permission: { allowed: true } }]);
         });
 
@@ -52,7 +52,7 @@ describe('submissions', () => {
             makePostRequest.mockResolvedValueOnce({ items: [] });
             await getEligiblePhotos('125319', token, { limit: 25, start: 50 });
             expect(makePostRequest.mock.calls[0][2]).toBe(
-                'c_id=125319&limit=25&order=date&sort=desc&start=50&usage=submit',
+                'c_id=125319&limit=25&order=votes&sort=desc&start=50&usage=submit',
             );
         });
 
@@ -60,13 +60,13 @@ describe('submissions', () => {
             makePostRequest.mockResolvedValueOnce({ items: [] });
             await getEligiblePhotos('125319', token, { search: 'sun hat' });
             expect(makePostRequest.mock.calls[0][2]).toBe(
-                'c_id=125319&limit=100&order=date&sort=desc&start=0&usage=submit&search=sun%20hat',
+                'c_id=125319&limit=100&order=votes&sort=desc&start=0&usage=submit&search=sun%20hat',
             );
         });
 
         test('omits the search param when search is empty/blank/non-string', async () => {
             makePostRequest.mockResolvedValue({ items: [] });
-            const noSearch = 'c_id=1&limit=100&order=date&sort=desc&start=0&usage=submit';
+            const noSearch = 'c_id=1&limit=100&order=votes&sort=desc&start=0&usage=submit';
             await getEligiblePhotos('1', token, { search: '' });
             expect(makePostRequest.mock.calls[0][2]).toBe(noSearch);
             await getEligiblePhotos('1', token, { search: '   ' });
@@ -312,13 +312,13 @@ describe('getEligiblePhotos usage option', () => {
     test("defaults to usage=submit and ignores anything but 'swap'", async () => {
         makePostRequest.mockResolvedValue({ items: [] });
         await getEligiblePhotos(1, token, { usage: 'evil&x=1' });
-        expect(makePostRequest.mock.calls[0][2]).toBe('c_id=1&limit=100&order=date&sort=desc&start=0&usage=submit');
+        expect(makePostRequest.mock.calls[0][2]).toBe('c_id=1&limit=100&order=votes&sort=desc&start=0&usage=submit');
     });
 
     test('usage=swap on a single page', async () => {
         makePostRequest.mockResolvedValue({ items: [] });
         await getEligiblePhotos(1, token, { usage: 'swap' });
-        expect(makePostRequest.mock.calls[0][2]).toBe('c_id=1&limit=100&order=date&sort=desc&start=0&usage=swap');
+        expect(makePostRequest.mock.calls[0][2]).toBe('c_id=1&limit=100&order=votes&sort=desc&start=0&usage=swap');
     });
 
     test('usage=swap is sent on every page of a paginated walk', async () => {

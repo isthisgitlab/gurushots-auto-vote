@@ -212,7 +212,7 @@ const fetchCandidatesForChallenge = async (
     // and the tag-resolver retry that may follow them split ONE budget instead of
     // each taking a full one (see THEMED_SEARCH_BUDGET_MS). Floored rather than
     // clamped to zero: a resolved search handed 0ms would stop after page 1 and
-    // quietly truncate the themed search to the newest page of photos.
+    // quietly truncate the themed search to the most-voted page of photos.
     const themedPhaseStartedAt = Date.now();
     const remainingThemedBudgetMs = () =>
         Math.max(THEMED_SEARCH_MIN_BUDGET_MS, THEMED_SEARCH_BUDGET_MS - (Date.now() - themedPhaseStartedAt));
@@ -230,8 +230,8 @@ const fetchCandidatesForChallenge = async (
             // Paginated, but only where it costs something. getEligiblePhotos
             // stops a walk at the first SHORT page, so a term matching fewer
             // than one page of photos issues exactly ONE request. The walk only
-            // continues when page 1 comes back FULL: the server orders by date
-            // desc, so a single page would silently exclude the older work of a
+            // continues when page 1 comes back FULL: the server orders by votes
+            // desc, so a single page would silently exclude the less-voted work of a
             // member with more than a page of photos under the resolved tag from
             // every themed fill, while the UNFILTERED fallback below walks ten
             // pages — searching harder with no theme than with one.
