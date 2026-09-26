@@ -13,26 +13,24 @@
  * best-effort and never throw.
  */
 
+/** @import { WindowApi } from '../../types/ipc' */
+
 /**
- * @param {string} method - bridge method name
- * @returns {(...args: any[]) => any}
+ * @template {keyof WindowApi} M
+ * @param {M} method - bridge method name
+ * @returns {WindowApi[M]}
  */
-const forward =
-    (method) =>
-    (...args) =>
-        window.api[method](...args);
+const forward = (method) => /** @type {any} */ ((...args) => window.api[method](...args));
 
 /**
  * A bridge method a host may leave out: absent (or no bridge at all) resolves
  * to `undefined` instead of throwing.
  *
- * @param {string} method - bridge method name
- * @returns {(...args: any[]) => any}
+ * @template {keyof WindowApi} M
+ * @param {M} method - bridge method name
+ * @returns {(...args: Parameters<WindowApi[M]>) => ReturnType<WindowApi[M]> | undefined}
  */
-const forwardOptional =
-    (method) =>
-    (...args) =>
-        window.api?.[method]?.(...args);
+const forwardOptional = (method) => /** @type {any} */ ((...args) => window.api?.[method]?.(...args));
 
 const ignore = () => {};
 

@@ -11,8 +11,10 @@
  * set-equality between this manifest's invoke surface and the union of every
  * ipc/*.handlers.js buildHandlers() key plus index.js's direct ipcMain.on
  * registrations — a channel added on either side without the other fails CI.
- * NOTE: that coverage is name-level only; a signature change on a channel
- * kept on both sides is not caught here.
+ * NOTE: that test is name-level only. Signatures are carried by the
+ * `WindowApi` type (src/js/types/ipc.d.ts), derived from these lists and the
+ * handlers' buildHandlers(): a renderer call in a type-checked file is
+ * checked against the handler it reaches.
  *
  * This module must stay DEPENDENCY-FREE (no logger/settings/electron
  * requires): preload.js runs it in the sandboxed preload context, and the
@@ -20,7 +22,7 @@
  */
 
 // Channels exposed as `api[kebabToCamel(channel)] = (...args) => invoke(channel, ...args)`.
-const invokeChannels = [
+const invokeChannels = /** @type {const} */ ([
     // Settings
     'get-settings',
     'get-setting',
@@ -125,27 +127,27 @@ const invokeChannels = [
     // Log streaming
     'start-log-stream',
     'stop-log-stream',
-];
+]);
 
 // Friendlier method names layered over invoke channels. applyTurbo is
 // alias-ONLY: 'apply-turbo-to-entry' is deliberately not in invokeChannels,
 // so no applyTurboToEntry method is generated.
-const aliases = {
+const aliases = /** @type {const} */ ({
     applyBoost: 'apply-boost-to-entry',
     applyTurbo: 'apply-turbo-to-entry',
-};
+});
 
 // Send-style methods (fire-and-forget window-control hints on Electron;
 // local event emissions on Capacitor). Method name → channel.
-const sendMethods = {
+const sendMethods = /** @type {const} */ ({
     login: 'login-success',
     logout: 'logout',
-};
+});
 
 // Event-listener methods. Each `api[method](callback)` subscribes to the
 // channel and returns an unsubscribe. Method name → channel (names are
 // not all mechanically derivable — onDownloadProgress).
-const eventMethods = {
+const eventMethods = /** @type {const} */ ({
     onUpdateChecking: 'update-checking',
     onUpdateAvailable: 'update-available',
     onUpdateNotAvailable: 'update-not-available',
@@ -154,7 +156,7 @@ const eventMethods = {
     onUpdateError: 'update-error',
     onLogMessage: 'log-message',
     onSettingsChanged: 'settings-changed',
-};
+});
 
 // Shared kebab-case → camelCase (both shells must agree on this mapping).
 const kebabToCamel = (channel) => channel.replace(/-([a-z0-9])/g, (_, c) => c.toUpperCase());

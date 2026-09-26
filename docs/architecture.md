@@ -394,8 +394,10 @@ repeated six times is one that gets forgotten at one of them.
   four lists: `invokeChannels`, `aliases`, `sendMethods`, `eventMethods`. Both shells generate from it:
   Electron `preload.js` builds `contextBridge.exposeInMainWorld('api', …)`; Capacitor
   `bridge/capacitor.js` builds the identical surface in-process.
-- **Drift is CI-enforced** by `tests/ipc/manifest.test.js` — but **name-level only**: a changed
-  argument/return _signature_ on a channel present in both shells passes silently.
+- **Drift is CI-enforced** by `tests/ipc/manifest.test.js` at the name level. Signatures travel through the
+  `WindowApi` type (`types/ipc.d.ts`, derived from the manifest lists and every `buildHandlers()`), so a
+  renderer call in a type-checked file is checked against its handler's parameters and result — only as
+  precise as that handler's JSDoc.
 - Handler shape: every `ipc/*.handlers.js` exports `buildHandlers(deps) → {channel: impl}` **and**
   `register(ipcMain)`. **CLI and Capacitor reuse the same handler modules** (`cli/commands/*.js` lazily
   require `buildHandlers()`) — never write a parallel implementation.

@@ -77,7 +77,7 @@ export function useLogStream() {
                 unsubscribeRef.current();
                 unsubscribeRef.current = null;
             }
-            ipc.stopLogStream();
+            void ipc.callOrNull(() => ipc.stopLogStream());
         };
     }, []);
 
