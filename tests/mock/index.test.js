@@ -1,7 +1,7 @@
 /**
  * Tests for mock/index.js
  *
- * Tests the mock data system and API client simulation.
+ * Tests the mock API client and the session-cache reset.
  */
 
 const mockIndex = require('../../src/js/mock/index');
@@ -13,6 +13,8 @@ jest.mock('../../src/js/settings', () => ({ __esModule: true, ...jest.requireAct
 
 // Mock the individual mock modules. The mock endpoints import each one as a
 // namespace; `__esModule` makes that namespace the factory object itself.
+// mockActiveChallenges and mockEmptyVoteImages are not real exports: they are
+// per-test fixtures the generator mocks get pointed at.
 jest.mock('../../src/js/mock/auth', () => ({
     __esModule: true,
     mockLoginSuccess: { token: 'mock-auth-token', success: true },
