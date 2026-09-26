@@ -131,6 +131,31 @@ describe('semantic lexicon backend', () => {
         expect(lexicon.relatedSearchTerms(['candle'])).not.toContain('church');
     });
 
+    test('a title outside authored concepts expands to a related searchable word', async () => {
+        await lexicon.init();
+        expect(lexicon.relatedSearchTerms(['flight'])).toContain('plane');
+        expect(lexicon.relatedSearchTerms(['school'])).toContain('college');
+        expect(lexicon.relatedSearchTerms(['spaceship'])).toContain('spacecraft');
+        expect(lexicon.relatedSearchTerms(['flight', 'school'])).toEqual(expect.arrayContaining(['plane', 'college']));
+        expect(lexicon.relatedSearchTerms(['history', 'flight'])).toEqual(
+            expect.arrayContaining(['historical', 'plane']),
+        );
+        expect(lexicon.relatedSearchTerms(['geology'])).not.toContain('zoology');
+        expect(lexicon.relatedSearchTerms(['unobtainium'])).toEqual([]);
+    });
+
+    test('generic expansion searches the source spelling of a stemmed neighbor', async () => {
+        const original = mockLexicon.surfaces.plane;
+        mockLexicon.surfaces.plane = 'aeroplane';
+        try {
+            await lexicon.init();
+            expect(lexicon.relatedSearchTerms(['flight'])).toContain('aeroplane');
+        } finally {
+            if (original === undefined) delete mockLexicon.surfaces.plane;
+            else mockLexicon.surfaces.plane = original;
+        }
+    });
+
     test('embed is deterministic', async () => {
         await lexicon.init();
         expect(Array.from(lexicon.embed(['cat', 'kitten']))).toEqual(Array.from(lexicon.embed(['cat', 'kitten'])));

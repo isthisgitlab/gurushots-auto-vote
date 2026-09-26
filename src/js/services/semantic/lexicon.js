@@ -78,7 +78,13 @@ const buildTable = (raw) => {
         words.set(key, vec);
     }
     return words.size > 0
-        ? { dims, words, axis: readAxis(raw.concreteAxis, dims), searchGroups: raw.searchGroups || [] }
+        ? {
+              dims,
+              words,
+              surfaces: raw.surfaces || {},
+              axis: readAxis(raw.concreteAxis, dims),
+              searchGroups: raw.searchGroups || [],
+          }
         : null;
 };
 
@@ -169,25 +175,63 @@ const embed = (tokens) => embedIn(table, tokens);
 const hasVector = (token) => Boolean(table && vectorFor(table, token));
 
 const MAX_RELATED_SEARCH_TERMS = 6;
+const GENERIC_SEARCH_FLOOR = 0.76;
 
-const relatedSearchTerms = (terms) => {
-    if (!table || !Array.isArray(terms)) return [];
-    const groups = terms.flatMap((term) =>
-        table.searchGroups.filter((group) => group.triggers.some((word) => stemToken(word) === stemToken(term))),
-    );
+const nearestSearchTerms = (term) => {
+    const query = embed([term]);
+    if (!query) return [];
+    const termStem = stemToken(term);
+    const matches = [];
+    for (const [key, vec] of table.words) {
+        if (key === termStem) continue;
+        let dot = 0;
+        let norm = 0;
+        for (let i = 0; i < vec.length; i++) {
+            dot += query[i] * vec[i];
+            norm += vec[i] * vec[i];
+        }
+        const score = dot / Math.sqrt(norm);
+        if (score >= GENERIC_SEARCH_FLOOR) {
+            matches.push({ word: Object.hasOwn(table.surfaces, key) ? table.surfaces[key] : key, score });
+        }
+    }
+    return matches
+        .sort((a, b) => b.score - a.score)
+        .slice(0, MAX_RELATED_SEARCH_TERMS)
+        .map(({ word }) => word);
+};
+
+const interleaveSearchTerms = (groups, terms) => {
     const seen = new Set(terms.map(stemToken));
     const related = [];
-    const width = Math.max(0, ...groups.map((group) => group.words.length));
+    const width = Math.max(0, ...groups.map((group) => group.length));
     for (let i = 0; i < width && related.length < MAX_RELATED_SEARCH_TERMS; i++) {
         for (const group of groups) {
-            const word = group.words[i];
+            const word = group[i];
             if (!word || seen.has(stemToken(word))) continue;
             seen.add(stemToken(word));
             related.push(word);
-            if (related.length === MAX_RELATED_SEARCH_TERMS) break;
+            if (related.length === MAX_RELATED_SEARCH_TERMS) return related;
         }
     }
     return related;
+};
+
+const relatedSearchTerms = (terms) => {
+    if (!table || !Array.isArray(terms)) return [];
+    const groups = terms.map((term) => {
+        const curated = interleaveSearchTerms(
+            table.searchGroups
+                .filter((group) => group.triggers.some((word) => stemToken(word) === stemToken(term)))
+                .map((group) => group.words),
+            [term],
+        );
+        return curated.length ? curated : nearestSearchTerms(term);
+    });
+    // The authored groups cover common themes. Other words use nearby source
+    // words from the bundled generic vocabulary; interleaving keeps each
+    // title subject represented under the fixed server-search limit.
+    return interleaveSearchTerms(groups, terms);
 };
 
 // Cosine similarity. Both inputs come from embed() and are already unit

@@ -125,6 +125,7 @@ const buildAsset = (intermediate, concepts) => {
         meanCentered: intermediate ? Boolean(intermediate.meanCentered) : false,
         retrofitBeta: intermediate && Number.isFinite(intermediate.retrofitBeta) ? intermediate.retrofitBeta : 0,
         packed,
+        surfaces: intermediate?.surfaces || {},
         searchGroups: concepts.concepts.map((concept) => ({
             triggers: concept.words,
             words: concept.searchWords || concept.words,
@@ -163,7 +164,9 @@ const main = ({
     // file that IS reviewable. A payload edit that doesn't update the sidecar
     // (or vice versa) fails here instead of shipping.
     const expectedSha = fs.readFileSync(embeddingsShaPath, 'utf8').trim();
-    const actualSha = sha256OfString(JSON.stringify(intermediate.packed));
+    const actualSha = sha256OfString(
+        JSON.stringify({ packed: intermediate.packed, surfaces: intermediate.surfaces || {} }),
+    );
     if (actualSha !== expectedSha) {
         console.error('❌ scripts/lexicon-embeddings.json does not match scripts/lexicon-embeddings.sha256:');
         console.error(`   sidecar  ${expectedSha}`);

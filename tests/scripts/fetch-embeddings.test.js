@@ -364,11 +364,19 @@ describe('fetch-embeddings', () => {
                 source: { url: opts.url, zipSha256: opts.expectedZipSha256, entrySha256: opts.expectedEntrySha256 },
             });
             expect(Object.keys(out.packed).sort()).toEqual(['and', 'cat', 'kitten', 'sofa', 'the']);
+            expect(out.surfaces).toEqual({});
             const sidecar = fs.readFileSync(path.join(tmp, 'lexicon-embeddings.sha256'), 'utf8');
-            expect(sidecar).toBe(`${sha(JSON.stringify(out.packed))}\n`);
+            expect(sidecar).toBe(`${sha(JSON.stringify({ packed: out.packed, surfaces: out.surfaces }))}\n`);
             expect(logs()).toContain('Mean-centering applied');
             expect(logs()).toContain('Retrofit (beta=0.5) applied to 2 authored words');
             expect(logs()).not.toContain('worst offenders');
+        });
+
+        test('keeps the source spelling for a stemmed search word', async () => {
+            setup({ concepts: { concepts: [] }, lines: [gloveLine('cats', 1)] });
+            await main(opts);
+            const out = JSON.parse(fs.readFileSync(opts.outPath, 'utf8'));
+            expect(out.surfaces).toEqual({ cat: 'cats' });
         });
 
         test('handles an empty scan and skips centering when disabled', async () => {

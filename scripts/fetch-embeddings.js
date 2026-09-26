@@ -530,6 +530,9 @@ const main = async ({
     }
 
     const { scale, packed } = quantizePack(stems, DIMS);
+    const surfaces = Object.fromEntries(
+        [...stems].filter(([key, row]) => key !== row.token).map(([key, row]) => [key, row.token]),
+    );
     const output = {
         version: 1,
         generator: 'fetch-embeddings.js',
@@ -547,6 +550,7 @@ const main = async ({
         meanCentered: meanCenter,
         retrofitBeta: RETROFIT_BETA,
         packed,
+        surfaces,
     };
     fs.writeFileSync(outPath, JSON.stringify(output));
     // Sidecar payload hash: the intermediate itself is an unreviewable
@@ -554,7 +558,10 @@ const main = async ({
     // diff. This one-line file makes any payload change show up as a
     // human-readable hunk, and build-lexicon.js refuses to build if the
     // committed payload no longer matches it.
-    fs.writeFileSync(`${outPath.replace(/\.json$/, '')}.sha256`, `${sha256OfString(JSON.stringify(packed))}\n`);
+    fs.writeFileSync(
+        `${outPath.replace(/\.json$/, '')}.sha256`,
+        `${sha256OfString(JSON.stringify({ packed, surfaces }))}\n`,
+    );
     const bytes = fs.statSync(outPath).size;
     console.log(
         `✅ Intermediate: ${stems.size} word-stems, ${DIMS}d, ${(bytes / 1024 / 1024).toFixed(2)} MB ` +

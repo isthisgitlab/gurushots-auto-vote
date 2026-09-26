@@ -99,6 +99,37 @@ describe('fetchCandidatesForChallenge — tag resolution', () => {
         expect(category.warning).not.toHaveBeenCalled();
     });
 
+    test('finds an older plane photo for a Flight challenge outside authored concepts', async () => {
+        const getEligiblePhotos = jest.fn(async (_id, _token, options = {}) => {
+            if (options.search === 'plane') return [allowed('plane', ['Plane'])];
+            if (!options.search) return [allowed('portrait', ['Portrait'])];
+            return [];
+        });
+        const result = await fetchCandidatesForChallenge(
+            { id: 'c-flight', title: 'Flight' },
+            'tok',
+            {},
+            { getEligiblePhotos, logger: makeLogger().logger },
+        );
+        expect(result.map((photo) => photo.id)).toEqual(['plane']);
+        expect(getEligiblePhotos.mock.calls.filter(([, , options]) => !options.search)).toEqual([]);
+    });
+
+    test('keeps both authored and generic subjects for a mixed title', async () => {
+        const getEligiblePhotos = jest.fn(async (_id, _token, options = {}) => {
+            if (options.search === 'history') return [allowed('history', ['History'])];
+            if (options.search === 'plane') return [allowed('plane', ['Plane'])];
+            return [];
+        });
+        const result = await fetchCandidatesForChallenge(
+            { id: 'c-mixed', title: 'History vs Flight' },
+            'tok',
+            {},
+            { getEligiblePhotos, logger: makeLogger().logger },
+        );
+        expect(result.map((photo) => photo.id)).toEqual(['history', 'plane']);
+    });
+
     test('still falls back — loudly — when a real theme resolves to no tag', async () => {
         const getEligiblePhotos = makeGetEligiblePhotos();
         const { logger, category } = makeLogger();

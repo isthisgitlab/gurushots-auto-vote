@@ -29,9 +29,12 @@ describe('build-lexicon main', () => {
 
     const PACKED = { cat: 'AAAA', kitten: 'AAAA' };
 
-    const writeFixture = ({ packed = PACKED, sidecar, concepts } = {}) => {
-        fs.writeFileSync(paths.embeddingsPath, JSON.stringify({ dims: 4, scale: 0.01, packed }));
-        fs.writeFileSync(paths.embeddingsShaPath, `${sidecar ?? sha(JSON.stringify(packed))}\n`);
+    const writeFixture = ({ packed = PACKED, surfaces = {}, sidecar, concepts, omitSurfaces = false } = {}) => {
+        fs.writeFileSync(
+            paths.embeddingsPath,
+            JSON.stringify({ dims: 4, scale: 0.01, packed, ...(!omitSurfaces && { surfaces }) }),
+        );
+        fs.writeFileSync(paths.embeddingsShaPath, `${sidecar ?? sha(JSON.stringify({ packed, surfaces }))}\n`);
         fs.writeFileSync(
             paths.conceptsPath,
             JSON.stringify(concepts ?? { concepts: [{ id: 'cat', parent: 'pet', words: ['cat', 'kitten'] }] }),
@@ -79,6 +82,19 @@ describe('build-lexicon main', () => {
         expect(errors()).toContain('sidecar  deadbeef');
     });
 
+    test('fails the tamper check when a search surface changes', () => {
+        writeFixture({ surfaces: { cat: 'cats' }, sidecar: sha(JSON.stringify({ packed: PACKED, surfaces: {} })) });
+        expect(() => main(paths)).toThrow('exit 1');
+        expect(errors()).toContain('does not match scripts/lexicon-embeddings.sha256');
+    });
+
+    test('accepts an older intermediate without search surfaces', () => {
+        writeFixture({ omitSurfaces: true });
+        main(paths);
+        const asset = JSON.parse(fs.readFileSync(paths.outAsset, 'utf8'));
+        expect(asset.surfaces).toEqual({});
+    });
+
     test('fails on a stem claimed by two concepts', () => {
         writeFixture({
             concepts: {
@@ -105,6 +121,7 @@ describe('build-lexicon main', () => {
         expect(exitSpy).not.toHaveBeenCalled();
         const asset = JSON.parse(fs.readFileSync(paths.outAsset, 'utf8'));
         expect(asset).toMatchObject({ version: 2, dims: 4, packed: PACKED });
+        expect(asset.surfaces).toEqual({});
         expect(asset.searchGroups).toEqual([{ triggers: ['cat', 'kitten'], words: ['cat', 'kitten'] }]);
         expect(fs.existsSync(path.join(paths.distDir, 'semantic-vectors.json'))).toBe(false);
         const summary = logSpy.mock.calls[0][0];
