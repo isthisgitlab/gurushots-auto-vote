@@ -1,9 +1,11 @@
+// @ts-check
 import { useCallback, useMemo } from 'react';
 import { useIpcQuery } from '@/api/useIpcQuery';
 import * as ipc from '@/api/ipc';
 
 // Stable empty result so consumers never see a changing identity while the
 // first fetch is in flight (or after a failed one).
+/** @type {Set<string>} */
 const NONE = new Set();
 
 /**
@@ -28,6 +30,7 @@ export function useOverriddenChallengeIds(challenges) {
     // an id that ever contained the separator character cannot smear two ids
     // into one the way a plain join/split would.
     const idsKey = useMemo(() => {
+        /** @type {string[]} */
         const ids = [];
         for (const challenge of challenges) {
             const id = challenge?.id;
@@ -39,7 +42,7 @@ export function useOverriddenChallengeIds(challenges) {
     }, [challenges]);
 
     const queryFn = useCallback(async () => {
-        const ids = JSON.parse(idsKey);
+        const ids = /** @type {string[]} */ (JSON.parse(idsKey));
         if (ids.length === 0) return NONE;
         const maps = await Promise.all(ids.map((id) => ipc.getChallengeOverrides(id)));
         // The handler falls back to null on error — treat that as "no

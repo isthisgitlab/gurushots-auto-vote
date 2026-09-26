@@ -1,7 +1,20 @@
+// @ts-check
 import { useTranslation } from '@/contexts/TranslationContext';
 
 /**
+ * @typedef {'neutral'|'success'|'error'|'warning'|'info'|'ghost'|'primary'|'secondary'|'accent'
+ *   |'popular'|'skilled'|'premier'|'elite'|'allstar'} StatusBadgeVariant
+ */
+
+/**
  * DaisyUI badge component for displaying status
+ *
+ * @param {{
+ *   children?: import('preact').ComponentChildren,
+ *   variant?: StatusBadgeVariant,
+ *   size?: 'xs'|'sm'|'md'|'lg',
+ *   className?: string,
+ * }} props
  */
 export function StatusBadge({ children, variant = 'neutral', size = 'sm', className = '' }) {
     const variantClass =
@@ -36,6 +49,8 @@ export function StatusBadge({ children, variant = 'neutral', size = 'sm', classN
 
 /**
  * Connection status badge for log viewer
+ *
+ * @param {{ connected: boolean }} props
  */
 export function ConnectionBadge({ connected }) {
     const { t } = useTranslation();

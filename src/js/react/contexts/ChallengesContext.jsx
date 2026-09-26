@@ -1,10 +1,26 @@
+// @ts-check
 import { createContext, useContext, useEffect, useMemo } from 'react';
 import { useActiveChallenges } from '@/api/useActiveChallenges';
 
-const ChallengesContext = createContext(null);
+/** @import { ComponentChildren } from 'preact' */
+/** @import { Challenge } from '../../types/gurushots' */
+
+/**
+ * What useChallenges returns: the active challenges sorted by close time.
+ *
+ * @typedef {object} ChallengesContextValue
+ * @property {Challenge[]} challenges
+ * @property {boolean} loading
+ * @property {Error | null} error
+ * @property {(skipCleanup?: boolean) => Promise<void>} refetch
+ */
+
+const ChallengesContext = createContext(/** @type {ChallengesContextValue | null} */ (null));
 
 /**
  * Provider that wraps useActiveChallenges and provides challenge data with auto-refresh
+ *
+ * @param {{ children?: ComponentChildren, autovoteRunning?: boolean }} props
  */
 export function ChallengesProvider({ children, autovoteRunning }) {
     // The running flag is threaded into the hook so its cleanup pass can
@@ -19,7 +35,7 @@ export function ChallengesProvider({ children, autovoteRunning }) {
         if (autovoteRunning) return undefined;
 
         const autoRefresh = setInterval(() => {
-            refetch(true); // Skip cleanup during auto-refresh
+            void refetch(true); // Skip cleanup during auto-refresh; failures land in `error`
         }, 60000);
 
         return () => clearInterval(autoRefresh);
@@ -40,6 +56,8 @@ export function ChallengesProvider({ children, autovoteRunning }) {
 
 /**
  * Hook to access challenges data
+ *
+ * @returns {ChallengesContextValue}
  */
 export function useChallenges() {
     const context = useContext(ChallengesContext);

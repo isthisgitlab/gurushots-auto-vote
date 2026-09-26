@@ -1,4 +1,24 @@
+// @ts-check
 import { useState, useCallback } from 'react';
+
+/**
+ * Fallback messages for a failed action.
+ *
+ * @typedef {{ failureMessage?: string, errorMessage?: string }} IpcActionLabels
+ */
+
+/**
+ * The state envelope useAsyncIpcAction returns. `run` resolves the handler's
+ * own result, or `{ success: false, error }` when the call threw.
+ *
+ * @template {unknown[]} A
+ * @template R
+ * @typedef {object} AsyncIpcAction
+ * @property {(...args: A) => Promise<R | { success: false, error: string }>} run
+ * @property {boolean} loading
+ * @property {string | null} error
+ * @property {() => void} clearError
+ */
 
 /**
  * Generic state envelope for an async IPC call from the renderer.
@@ -8,24 +28,25 @@ import { useState, useCallback } from 'react';
  * `result.error` when `result.success` is falsy, catch thrown errors,
  * and clear loading in finally.
  *
- * @param {(...args: any[]) => Promise<any>} ipcInvoker - bound window.api method
- * @param {{ failureMessage?: string, errorMessage?: string }} [labels]
+ * @template {unknown[]} A
+ * @template {{ success: boolean, error?: string }} R
+ * @param {(...args: A) => Promise<R>} ipcInvoker - bound window.api method
+ * @param {IpcActionLabels} [labels]
  *   - failureMessage: fallback when the IPC returned `{success:false}` without an error string
  *   - errorMessage: fallback when the call threw without a message
- * @returns {{
- *   run: (...args: any[]) => Promise<{success: boolean, error?: string}>,
- *   loading: boolean,
- *   error: string | null,
- *   clearError: () => void,
- * }}
+ * @returns {AsyncIpcAction<A, R>}
  */
 export function useAsyncIpcAction(ipcInvoker, labels = {}) {
     const { failureMessage = 'Action failed', errorMessage = 'Action error' } = labels;
 
     const [loading, setLoading] = useState(false);
-    const [error, setError] = useState(null);
+    const [error, setError] = useState(/** @type {string | null} */ (null));
 
     const run = useCallback(
+        /**
+         * @param {A} args
+         * @returns {Promise<R | { success: false, error: string }>}
+         */
         async (...args) => {
             setLoading(true);
             setError(null);
@@ -36,7 +57,7 @@ export function useAsyncIpcAction(ipcInvoker, labels = {}) {
                 }
                 return result;
             } catch (err) {
-                const message = err.message || errorMessage;
+                const message = /** @type {Error} */ (err).message || errorMessage;
                 setError(message);
                 return { success: false, error: message };
             } finally {
@@ -52,15 +73,27 @@ export function useAsyncIpcAction(ipcInvoker, labels = {}) {
 }
 
 /**
+ * useAsyncIpcAction's envelope with `run` under the name `N`.
+ *
+ * @template {string} N
+ * @template {unknown[]} A
+ * @template R
+ * @typedef {Record<N, AsyncIpcAction<A, R>['run']> & Omit<AsyncIpcAction<A, R>, 'run'>} NamedIpcAction
+ */
+
+/**
  * useAsyncIpcAction with its `run` exposed under a domain name (e.g.
  * `applyBoost`, `fillNow`) — the shape of the single-action IPC hooks.
  *
- * @param {string} runName - key the action's `run` is returned under
- * @param {(...args: any[]) => Promise<any>} ipcInvoker - bound window.api method
- * @param {{ failureMessage?: string, errorMessage?: string }} [labels]
- * @returns {Record<string, any>} `{ [runName]: run, loading, error, clearError }`
+ * @template {string} N
+ * @template {unknown[]} A
+ * @template {{ success: boolean, error?: string }} R
+ * @param {N} runName - key the action's `run` is returned under
+ * @param {(...args: A) => Promise<R>} ipcInvoker - bound window.api method
+ * @param {IpcActionLabels} [labels]
+ * @returns {NamedIpcAction<N, A, R>} `{ [runName]: run, loading, error, clearError }`
  */
 export function useNamedIpcAction(runName, ipcInvoker, labels) {
     const { run, loading, error, clearError } = useAsyncIpcAction(ipcInvoker, labels);
-    return { [runName]: run, loading, error, clearError };
+    return /** @type {NamedIpcAction<N, A, R>} */ ({ [runName]: run, loading, error, clearError });
 }

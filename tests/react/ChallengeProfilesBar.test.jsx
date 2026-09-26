@@ -253,6 +253,7 @@ describe('ChallengeProfilesBar', () => {
     test.each([
         ['an Error', new Error('disk'), 'Error loading challenge profiles: disk'],
         ['a bare value', 'nope', 'Error loading challenge profiles: nope'],
+        ['null', null, 'Error loading challenge profiles: null'],
     ])('a failed profiles load (%s) is logged and shows none', async (_label, rejection, logged) => {
         mockApi.getChallengeProfiles.mockRejectedValue(rejection);
         renderBar();
@@ -263,6 +264,7 @@ describe('ChallengeProfilesBar', () => {
     test.each([
         ['an Error', new Error('io'), 'Error deleting challenge profile: io'],
         ['a bare value', 'io', 'Error deleting challenge profile: io'],
+        ['null', null, 'Error deleting challenge profile: null'],
     ])('a thrown Delete (%s) is logged and re-enables the buttons', async (_label, rejection, logged) => {
         mockApi.getChallengeProfiles.mockResolvedValue({ tactic: {} });
         mockApi.deleteChallengeProfile.mockRejectedValue(rejection);
@@ -291,6 +293,7 @@ describe('ChallengeProfilesBar', () => {
     test.each([
         ['an Error', new Error('full'), 'Error saving challenge profile: full'],
         ['a bare value', 'full', 'Error saving challenge profile: full'],
+        ['null', null, 'Error saving challenge profile: null'],
     ])('a thrown Save (%s) is logged and shows the generic error', async (_label, rejection, logged) => {
         mockApi.saveChallengeProfile.mockRejectedValue(rejection);
         renderBar();

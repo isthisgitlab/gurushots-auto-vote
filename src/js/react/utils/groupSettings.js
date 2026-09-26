@@ -1,3 +1,30 @@
+// @ts-check
+/** @import { SerializableSchemaEntry } from '../../ipc/settings.handlers' */
+
+/**
+ * One settings group as the modals receive it (SETTINGS_GROUPS entry).
+ *
+ * @typedef {{ id: string, label: string, tier?: string }} SettingsGroupDef
+ */
+
+/**
+ * One settings tier as the modals receive it (SETTINGS_TIERS entry).
+ *
+ * @typedef {{ id: string, label: string }} SettingsTierDef
+ */
+
+/**
+ * A rendered settings section: a group and its schema entries.
+ *
+ * @typedef {{ id: string, label: string, tier?: string, entries: Array<[string, SerializableSchemaEntry]> }} SettingsSection
+ */
+
+/**
+ * A rendered tier band; `id`/`label` are null for the trailing untitled band.
+ *
+ * @typedef {{ id: string|null, label: string|null, groups: SettingsSection[] }} SettingsBand
+ */
+
 /**
  * Responsive grid for a settings section. One column on phones (Capacitor)
  * and narrow windows, two from `lg`.
@@ -39,10 +66,10 @@ export const SETTING_CELL_CLASS = 'flex flex-col rounded-box border border-base-
  * - challengeOnly entries have no global value, so the global view (without
  *   perChallengeOnly) drops them; the per-challenge view keeps them.
  *
- * @param {Object|null} schema - serialized schema (key -> config with `group`)
- * @param {Array|null} groups - ordered [{ id, label }]
+ * @param {Record<string, SerializableSchemaEntry>|null|undefined} schema - serialized schema (key -> config with `group`)
+ * @param {readonly SettingsGroupDef[]|null|undefined} groups - ordered [{ id, label }]
  * @param {{ perChallengeOnly?: boolean }} [options]
- * @returns {Array<{ id: string, label: string, entries: Array<[string, Object]> }>}
+ * @returns {SettingsSection[]}
  */
 export function groupSchemaEntries(schema, groups, { perChallengeOnly = false } = {}) {
     if (!schema || !groups) return [];
@@ -71,17 +98,18 @@ export function groupSchemaEntries(schema, groups, { perChallengeOnly = false } 
  * an older main process that predates the `tiers` IPC field — puts every group
  * in that one band, which degrades to exactly the flat list this replaced.
  *
- * @param {Object|null} schema - serialized schema (key -> config with `group`)
- * @param {Array|null} groups - ordered [{ id, label, tier }]
- * @param {Array|null} tiers - ordered [{ id, label }]
+ * @param {Record<string, SerializableSchemaEntry>|null|undefined} schema - serialized schema (key -> config with `group`)
+ * @param {readonly SettingsGroupDef[]|null|undefined} groups - ordered [{ id, label, tier }]
+ * @param {readonly SettingsTierDef[]|null|undefined} tiers - ordered [{ id, label }]
  * @param {{ perChallengeOnly?: boolean }} [options]
- * @returns {Array<{ id: string|null, label: string|null, groups: Array }>}
+ * @returns {SettingsBand[]}
  */
 export function tierSchemaEntries(schema, groups, tiers, { perChallengeOnly = false } = {}) {
     const rendered = groupSchemaEntries(schema, groups, { perChallengeOnly });
     if (!rendered.length) return [];
 
     const order = Array.isArray(tiers) ? tiers : [];
+    /** @type {Set<string|undefined>} */
     const known = new Set(order.map((tier) => tier.id));
     const banded = order
         .map(({ id, label }) => ({ id, label, groups: rendered.filter((group) => group.tier === id) }))

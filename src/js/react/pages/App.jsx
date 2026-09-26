@@ -1,3 +1,8 @@
+// @ts-check
+/**
+ * @import { Challenge } from '../../types/gurushots'
+ * @import { RendererGlobals } from '../../types/capacitor'
+ */
 import { createRoot } from 'react-dom/client';
 import { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import { TranslationProvider, useTranslation } from '@/contexts/TranslationContext';
@@ -26,6 +31,7 @@ import { useDocumentTheme } from '@/hooks/useDocumentTheme';
 import { DEFAULT_TIMEZONE } from '../../settings/uiDefaults';
 import * as ipc from '@/api/ipc';
 
+/** @type {{ id: Challenge['id'] | null, title: string }} */
 const NO_CHALLENGE = { id: null, title: '' };
 
 /**
@@ -34,6 +40,10 @@ const NO_CHALLENGE = { id: null, title: '' };
  * re-runs the effect with the flag still false, and without the ref that would
  * reopen the modal mid-session. Persisted via the settings facade so it stays
  * dismissed across launches/platforms.
+ *
+ * @param {ReturnType<typeof useSettings>['settings']} settings
+ * @param {boolean} settingsLoading
+ * @param {ReturnType<typeof useSettings>['updateSetting']} updateSetting
  */
 function useWelcomeGate(settings, settingsLoading, updateSetting) {
     const [welcomeOpen, setWelcomeOpen] = useState(false);
@@ -55,7 +65,9 @@ function useWelcomeGate(settings, settingsLoading, updateSetting) {
         } catch (err) {
             // Won't reappear this session (ref-gated); log so a persistent
             // write failure (e.g. Android storage I/O) stays diagnosable.
-            await ipc.logRendererError(`Failed to persist onboardingCompleted: ${err?.message || err}`);
+            await ipc.logRendererError(
+                `Failed to persist onboardingCompleted: ${/** @type {{ message?: unknown } | null | undefined} */ (err)?.message || err}`,
+            );
         }
     }, [updateSetting]);
 
@@ -64,6 +76,8 @@ function useWelcomeGate(settings, settingsLoading, updateSetting) {
 
 /**
  * Which challenge the per-challenge settings modal is open for.
+ *
+ * @param {ReturnType<typeof useChallenges>['challenges']} challenges
  */
 function useChallengeSettingsTarget(challenges) {
     const [isOpen, setIsOpen] = useState(false);
@@ -86,6 +100,10 @@ function useChallengeSettingsTarget(challenges) {
     // so the modal's applicability hints stay current without an imperative
     // fetch.
     const open = useCallback(
+        /**
+         * @param {Challenge['id']} challengeId
+         * @param {string} challengeTitle
+         */
         (challengeId, challengeTitle) => {
             if (isOpen && selected.id === challengeId) return;
             setSelected({ id: challengeId, title: challengeTitle });
@@ -104,6 +122,14 @@ function useChallengeSettingsTarget(challenges) {
 
 /**
  * The app's modals and dialogs, each isolated in its own ErrorBoundary.
+ *
+ * @param {{
+ *   settingsModal: ReturnType<typeof useDisclosure>,
+ *   challengeSettings: ReturnType<typeof useChallengeSettingsTarget>,
+ *   logsModal: ReturnType<typeof useDisclosure>,
+ *   welcomeOpen: boolean,
+ *   onWelcomeClose: () => Promise<void>,
+ * }} props
  */
 function AppModals({ settingsModal, challengeSettings, logsModal, welcomeOpen, onWelcomeClose }) {
     return (
@@ -164,8 +190,8 @@ function AppContent() {
 
     // After a join changes state, refresh balances + the active-challenge list.
     const handleJoined = useCallback(() => {
-        refetchBankroll();
-        refetchChallenges();
+        void refetchBankroll();
+        void refetchChallenges();
     }, [refetchBankroll, refetchChallenges]);
 
     // An autovote cycle can spend or earn currency (auto-join, turbos, key
@@ -173,7 +199,7 @@ function AppContent() {
     // by the provider — re-read the balances after every completed cycle too,
     // or the header bankroll stays frozen at its mount-time value.
     useEffect(() => {
-        if (autovote.cycles > 0) refetchBankroll();
+        if (autovote.cycles > 0) void refetchBankroll();
     }, [autovote.cycles, refetchBankroll]);
 
     const handleLogout = useCallback(async () => {
@@ -184,12 +210,22 @@ function AppContent() {
             }
             await ipc.logout();
         } catch (err) {
-            await ipc.logRendererError(`Error during logout: ${err.message || err}`);
+            await ipc.logRendererError(
+                `Error during logout: ${/** @type {{ message?: unknown }} */ (err).message || err}`,
+            );
         }
     }, [autovote]);
 
     const handleAutovoteToggle = useCallback(async () => {
-        await autovote.toggle();
+        try {
+            await autovote.toggle();
+        } catch (err) {
+            // start/stop await bridge calls; a failure there must reach the log
+            // rather than surface as an unhandled rejection from a click.
+            await ipc.logRendererError(
+                `Autovote toggle failed: ${/** @type {{ message?: unknown } | null | undefined} */ (err)?.message || err}`,
+            );
+        }
     }, [autovote]);
 
     // Show loading while initializing
@@ -292,7 +328,8 @@ function AppWithChallenges() {
     // path awaits IPC first, so its running=true event always lands after
     // the listener is attached.
     useEffect(() => {
-        const handler = (e) => setAutovoteRunning(!!e.detail);
+        /** @param {Event} e */
+        const handler = (e) => setAutovoteRunning(!!(/** @type {CustomEvent<unknown>} */ (e).detail));
         window.addEventListener('autovote:running-changed', handler);
         return () => window.removeEventListener('autovote:running-changed', handler);
     }, []);
@@ -334,7 +371,7 @@ export const mountApp = () => {
 // so a synchronous check at module load would see the flag undefined
 // and double-mount on top of Login.jsx, breaking React's reconciler.
 queueMicrotask(() => {
-    if (!globalThis.__capacitorBootstrap) {
+    if (!(/** @type {RendererGlobals} */ (globalThis).__capacitorBootstrap)) {
         mountApp();
     }
 });

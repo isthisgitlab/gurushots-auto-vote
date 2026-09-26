@@ -1,3 +1,4 @@
+// @ts-check
 import { useTranslation } from '@/contexts/TranslationContext';
 import { useUpdate, UPDATE_STATES } from '@/contexts/UpdateContext';
 import { Modal } from '@/components/ui/Modal';
@@ -5,6 +6,9 @@ import { StrokeIcon, ICON_PATHS } from '@/components/ui/StrokeIcon';
 
 /**
  * Format bytes to human-readable string
+ *
+ * @param {number} bytes
+ * @param {number} [decimals]
  */
 function formatBytes(bytes, decimals = 1) {
     if (bytes === 0) return '0 Bytes';
@@ -36,12 +40,13 @@ export function UpdateDialog() {
     } = useUpdate();
 
     const dismissable = state === UPDATE_STATES.AVAILABLE || state === UPDATE_STATES.ERROR;
-    const title = {
+    // No title while idle: the dialog is never visible then.
+    const title = /** @type {Partial<Record<typeof state, string>>} */ ({
         [UPDATE_STATES.AVAILABLE]: t('app.updateAvailable'),
         [UPDATE_STATES.DOWNLOADING]: t('app.downloadingUpdate'),
         [UPDATE_STATES.READY]: t('app.updateReady'),
         [UPDATE_STATES.ERROR]: t('app.updateError'),
-    }[state];
+    })[state];
 
     return (
         <Modal
@@ -105,7 +110,7 @@ export function UpdateDialog() {
             {state === UPDATE_STATES.ERROR && (
                 <div className="alert alert-error">
                     <StrokeIcon className="w-5 h-5" d={ICON_PATHS.xCircle} />
-                    <span>{error.message}</span>
+                    <span>{/** @type {NonNullable<typeof error>} */ (error).message}</span>
                 </div>
             )}
 
@@ -114,13 +119,13 @@ export function UpdateDialog() {
                 {/* Available Buttons */}
                 {state === UPDATE_STATES.AVAILABLE && (
                     <>
-                        <button className="btn btn-outline btn-sm" onClick={skipVersion}>
+                        <button className="btn btn-outline btn-sm" onClick={() => void skipVersion()}>
                             {t('app.skipVersion')}
                         </button>
                         <button className="btn btn-outline btn-sm" onClick={hideDialog}>
                             {t('app.remindLater')}
                         </button>
-                        <button className="btn btn-latvian btn-sm" onClick={startDownload}>
+                        <button className="btn btn-latvian btn-sm" onClick={() => void startDownload()}>
                             {t('app.download')}
                         </button>
                     </>
@@ -139,7 +144,7 @@ export function UpdateDialog() {
                         <button className="btn btn-outline btn-sm" onClick={hideDialog}>
                             {t('app.restartLater')}
                         </button>
-                        <button className="btn btn-latvian btn-sm" onClick={installUpdate}>
+                        <button className="btn btn-latvian btn-sm" onClick={() => void installUpdate()}>
                             {t('app.restartNow')}
                         </button>
                     </>
@@ -151,11 +156,13 @@ export function UpdateDialog() {
                         <button className="btn btn-outline btn-sm" onClick={hideDialog}>
                             {t('app.close')}
                         </button>
-                        {error.canFallbackToBrowser && (
-                            <button className="btn btn-latvian btn-sm" onClick={openBrowserDownload}>
-                                {t('app.downloadInBrowser')}
-                            </button>
-                        )}
+                        {
+                            /** @type {NonNullable<typeof error>} */ (error).canFallbackToBrowser && (
+                                <button className="btn btn-latvian btn-sm" onClick={() => void openBrowserDownload()}>
+                                    {t('app.downloadInBrowser')}
+                                </button>
+                            )
+                        }
                     </>
                 )}
             </div>

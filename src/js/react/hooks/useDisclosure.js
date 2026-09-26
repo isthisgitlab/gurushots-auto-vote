@@ -1,3 +1,4 @@
+// @ts-check
 import { useState, useCallback } from 'react';
 
 /**

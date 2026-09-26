@@ -1,3 +1,10 @@
+// @ts-check
+/** @import { Bankroll, Challenge } from '../../../types/gurushots' */
+/**
+ * A bankroll spend hook's state envelope (useKeyUnlock / useFillExposure).
+ *
+ * @typedef {ReturnType<typeof useKeyUnlock>} CurrencySpendAction
+ */
 import { useState } from 'react';
 import { useTranslation } from '@/contexts/TranslationContext';
 import { useAutoClear } from '@/hooks/useAutoClear';
@@ -18,12 +25,12 @@ const ERROR_DISPLAY_MS = 5000;
  * @param {string} props.label - button text
  * @param {string} props.icon
  * @param {'keys'|'fills'} props.field - which balance this spends
- * @param {object|null} props.bankroll
+ * @param {Bankroll|null} props.bankroll
  * @param {string} props.title - confirm modal title
  * @param {string} props.body - confirm modal explanation
- * @param {{run: function, loading: boolean, error: string|null, clearError: function}} props.action
- * @param {string|number} props.challengeId
- * @param {function} [props.onSpent] - called after a successful spend (refetch balances + challenges)
+ * @param {CurrencySpendAction} props.action
+ * @param {Challenge['id']} props.challengeId
+ * @param {() => void} [props.onSpent] - called after a successful spend (refetch balances + challenges)
  */
 function CurrencyActionButton({ label, icon, field, bankroll, title, body, action, challengeId, onSpent }) {
     const { t } = useTranslation();
@@ -77,6 +84,16 @@ function CurrencyActionButton({ label, icon, field, bankroll, title, body, actio
 
 // Per-cell wiring: which hook spends, which balance it draws on, and the
 // translation keys for the button and its confirm modal.
+/**
+ * @type {Record<'key' | 'fill', {
+ *     useAction: () => CurrencySpendAction,
+ *     icon: string,
+ *     field: 'keys' | 'fills',
+ *     label: string,
+ *     title: string,
+ *     body: string,
+ * }>}
+ */
 const CELL_ACTIONS = {
     key: {
         useAction: useKeyUnlock,
@@ -101,7 +118,7 @@ const CELL_ACTIONS = {
  * `kind="fill"` tops exposure up to 100% (Exposure cell). `kind` is fixed per
  * mounted instance, so the hook it selects is stable across renders.
  *
- * @param {{kind: 'key'|'fill', challenge: object, bankroll: object|null, onSpent?: function}} props
+ * @param {{kind: 'key'|'fill', challenge: Challenge, bankroll: Bankroll|null, onSpent?: () => void}} props
  */
 export function CurrencyCellButton({ kind, challenge, bankroll, onSpent }) {
     const { t } = useTranslation();

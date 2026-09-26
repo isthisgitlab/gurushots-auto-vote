@@ -1,3 +1,4 @@
+// @ts-check
 import { useTranslation } from '@/contexts/TranslationContext';
 import { SETTINGS_GRID_CLASS, SETTING_CELL_CLASS } from '@/utils/groupSettings';
 import { getGroupApplicability } from '@/utils/challengeApplicability';
@@ -7,7 +8,29 @@ import { SettingHelp } from '@/components/ui/SettingHelp';
 import { SettingInput, SettingLabel } from './SettingInput';
 import { SettingHintList } from './SettingHints';
 
-/** Where a setting's shown value comes from: override, title-rule profile, or the global default. */
+/**
+ * @import { SerializableSchemaEntry } from '../../../ipc/settings.handlers'
+ * @import { useChallengeOverrides } from '@/hooks/useChallengeOverrides'
+ * @import { Challenge } from '../../../types/gurushots'
+ * @import { HintsFor } from '../../../types/settingsEditor'
+ */
+
+/**
+ * What every cell of a per-challenge settings group reads: the challenge, the
+ * global defaults, useChallengeOverrides' state and the modal's hint resolver.
+ *
+ * @typedef {object} ChallengeGroupContext
+ * @property {Challenge | null | undefined} challenge
+ * @property {Record<string, unknown> | null | undefined} defaults
+ * @property {ReturnType<typeof useChallengeOverrides>} form
+ * @property {HintsFor} hintsFor
+ */
+
+/**
+ * Where a setting's shown value comes from: override, title-rule profile, or the global default.
+ *
+ * @param {{ hasOverride: boolean, hasProfileValue: boolean }} props
+ */
 function ValueSourceBadge({ hasOverride, hasProfileValue }) {
     const { t } = useTranslation();
     if (hasOverride) return <span className="badge badge-accent badge-sm">{t('app.overridden')}</span>;
@@ -29,13 +52,22 @@ function ValueSourceBadge({ hasOverride, hasProfileValue }) {
  * single-photo challenge every remapped row lands below count 2 and is
  * dropped, so no image time governs anything — a "final photo uses the Image
  * N time" hint would be false.
+ *
+ * @param {string} key
+ * @param {unknown} value
+ * @param {Challenge | null | undefined} challenge
+ * @returns {number}
  */
 function scheduleShiftOf(key, value, challenge) {
     if (key !== 'autoFillSchedule') return 0;
     const max = challenge?.max_photo_submits;
-    return Number.isInteger(max) && max >= 2 ? getScheduleShift(value, max) : 0;
+    // Number.isInteger does not narrow: an integer here is a number.
+    return Number.isInteger(max) && /** @type {number} */ (max) >= 2 ? getScheduleShift(value, max) : 0;
 }
 
+/**
+ * @param {ChallengeGroupContext & { settingKey: string, config: SerializableSchemaEntry, applicable: boolean }} props
+ */
 function ChallengeSettingCell({ settingKey: key, config, applicable, challenge, defaults, form, hintsFor }) {
     const { t } = useTranslation();
     const hasOverride = key in form.overrides;
@@ -43,16 +75,20 @@ function ChallengeSettingCell({ settingKey: key, config, applicable, challenge, 
     const currentValue = hasOverride ? form.overrides[key] : form.inheritedOf(key);
     const scheduleShift = scheduleShiftOf(key, currentValue, challenge);
     const inputId = `challenge-setting-${key}`;
+    // Only read when scheduleShift > 0, i.e. for a challenge with an integer
+    // max_photo_submits ≥ 2 (see scheduleShiftOf).
+    const shiftedChallenge = /** @type {Challenge & { max_photo_submits: number }} */ (challenge);
 
     return (
         <div className={SETTING_CELL_CLASS}>
             <SettingLabel inputId={inputId} type={config.type}>
-                <span className="font-medium">{t(config.label)}</span>
+                {/* Every schema entry carries a label and a description. */}
+                <span className="font-medium">{t(/** @type {string} */ (config.label))}</span>
                 <div className="flex gap-1">
                     <ValueSourceBadge hasOverride={hasOverride} hasProfileValue={hasProfileValue} />
                 </div>
             </SettingLabel>
-            <p className="text-xs text-base-content/60 mb-2">{t(config.description)}</p>
+            <p className="text-xs text-base-content/60 mb-2">{t(/** @type {string} */ (config.description))}</p>
             <SettingHelp helpKey={config.helpKey} />
             <SettingInput
                 id={inputId}
@@ -66,8 +102,8 @@ function ChallengeSettingCell({ settingKey: key, config, applicable, challenge, 
             {scheduleShift > 0 && (
                 <p className="text-xs text-info mt-1">
                     {t('app.autoFillScheduleShiftHint')
-                        .replace('{0}', String(challenge.max_photo_submits))
-                        .replace('{1}', String(challenge.max_photo_submits + scheduleShift))}
+                        .replace('{0}', String(shiftedChallenge.max_photo_submits))
+                        .replace('{1}', String(shiftedChallenge.max_photo_submits + scheduleShift))}
                 </p>
             )}
             <SettingHintList hints={hintsFor(key)} />
@@ -86,6 +122,8 @@ function ChallengeSettingCell({ settingKey: key, config, applicable, challenge, 
  *
  * `form` is useChallengeOverrides' state; `hintsFor(key)` the modal's
  * per-setting hint resolver.
+ *
+ * @param {ChallengeGroupContext & { id: string, label: string, entries: Array<[string, SerializableSchemaEntry]> }} props
  */
 export function ChallengeSettingsGroup({ id, label, entries, challenge, defaults, form, hintsFor }) {
     const { t } = useTranslation();
@@ -116,7 +154,8 @@ export function ChallengeSettingsGroup({ id, label, entries, challenge, defaults
                 push the explanation below WCAG AA contrast. */}
             {!applicable && (
                 <div id={reasonId} className="mb-3">
-                    <p className="text-xs text-base-content/80">{t(reasonKey)}</p>
+                    {/* A not-applicable group always carries its reason key. */}
+                    <p className="text-xs text-base-content/80">{t(/** @type {string} */ (reasonKey))}</p>
                     {/* Reassure that a stored override on this (now-inert) group is
                         not lost — the "Overridden" badge below still shows it. */}
                     <p className="text-xs text-base-content/70 mt-0.5">{t('app.notApplicableHint')}</p>

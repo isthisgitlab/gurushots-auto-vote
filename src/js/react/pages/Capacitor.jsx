@@ -1,3 +1,5 @@
+// @ts-check
+/** @import { RendererGlobals } from '../../types/capacitor' */
 /**
  * Capacitor entry point. Defers React mount until the bridge is
  * installed (so it exists when the first useSettings hook
@@ -11,7 +13,7 @@
 
 // Tell App.jsx not to auto-mount when imported below. The import
 // must happen after this assignment.
-globalThis.__capacitorBootstrap = true;
+/** @type {RendererGlobals} */ (globalThis).__capacitorBootstrap = true;
 
 import { installBridge, subscribe } from '../../bridge/capacitor';
 import { initializeAsync as initSettings, flushPendingWrites, getSetting } from '../../settings';

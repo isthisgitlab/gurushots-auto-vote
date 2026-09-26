@@ -1,7 +1,20 @@
+// @ts-check
 import { useState, useCallback } from 'react';
 import { useAsyncIpcAction } from './useAsyncIpcAction';
 
+/**
+ * What `authenticate` resolves: the handler's result, or the envelope's
+ * `{ success: false, error }` when the call threw.
+ *
+ * @typedef {{ success: true, token: string } | { success: false, error: string }} AuthenticateResult
+ */
+
 // Always called with all three args by `authenticate` below, which owns the default.
+/**
+ * @param {string} username
+ * @param {string} password
+ * @param {boolean} isMock
+ */
 const invokeAuthenticate = (username, password, isMock) => window.api.authenticate(username, password, isMock);
 
 /**
@@ -12,7 +25,14 @@ const invokeAuthenticate = (username, password, isMock) => window.api.authentica
  * toggle `loading`), and the exposed `error` is whichever channel wrote
  * last — matching the original single-error behavior.
  *
- * @returns {{ authenticate: function, login: function, logout: function, loading: boolean, error: string|null, clearError: function }}
+ * @returns {{
+ *   authenticate: (username: string, password: string, isMock?: boolean) => Promise<AuthenticateResult>,
+ *   login: () => Promise<void>,
+ *   logout: () => Promise<void>,
+ *   loading: boolean,
+ *   error: string|null,
+ *   clearError: () => void,
+ * }}
  */
 export function useAuth() {
     const {
@@ -24,16 +44,16 @@ export function useAuth() {
         failureMessage: 'Authentication failed',
         errorMessage: 'Authentication error',
     });
-    const [flowError, setFlowError] = useState(null);
+    const [flowError, setFlowError] = useState(/** @type {string | null} */ (null));
 
-    /**
-     * Authenticate user with username/password
-     * @param {string} username
-     * @param {string} password
-     * @param {boolean} isMock - Whether to use mock authentication
-     * @returns {Promise<{success: boolean, token?: string, error?: string}>}
-     */
     const authenticate = useCallback(
+        /**
+         * Authenticate user with username/password
+         * @param {string} username
+         * @param {string} password
+         * @param {boolean} [isMock] - Whether to use mock authentication
+         * @returns {Promise<AuthenticateResult>}
+         */
         (username, password, isMock = false) => {
             setFlowError(null);
             return run(username, password, isMock);
@@ -49,7 +69,7 @@ export function useAuth() {
             await window.api.login();
         } catch (err) {
             clearAuthError();
-            setFlowError(err.message || 'Login transition failed');
+            setFlowError(/** @type {Error} */ (err).message || 'Login transition failed');
         }
     }, [clearAuthError]);
 
@@ -61,7 +81,7 @@ export function useAuth() {
             await window.api.logout();
         } catch (err) {
             clearAuthError();
-            setFlowError(err.message || 'Logout failed');
+            setFlowError(/** @type {Error} */ (err).message || 'Logout failed');
         }
     }, [clearAuthError]);
 

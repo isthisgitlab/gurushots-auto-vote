@@ -1,3 +1,5 @@
+// @ts-check
+/** @import { Bankroll, Challenge } from '../../../types/gurushots' */
 import { useState, useCallback, useEffect } from 'react';
 import { useTranslation } from '@/contexts/TranslationContext';
 import { useChallenges } from '@/contexts/ChallengesContext';
@@ -74,6 +76,15 @@ function useGlobalCardDensity() {
  * card's `passVersion`: a finished pass can move a scenario on without
  * changing the challenge payload, so the card re-reads its scenario status
  * on this signal rather than waiting for the data to differ.
+ *
+ * @param {object} props
+ * @param {string} props.timezone
+ * @param {boolean} props.autovoteRunning
+ * @param {number} [props.autovoteCycles]
+ * @param {boolean} props.isLoggedIn
+ * @param {(challengeId: Challenge['id'], challengeTitle: string) => void} props.onChallengeSettingsClick
+ * @param {Bankroll | null} [props.bankroll]
+ * @param {() => void | Promise<void>} [props.onBankrollChanged] - called after a spend changed the balance
  */
 export function ChallengesSection({
     timezone,
@@ -100,17 +111,17 @@ export function ChallengesSection({
     // Per-card success path: refresh without holding the card's spinner.
     const handleVoteComplete = useCallback(() => {
         setManualPasses((n) => n + 1);
-        refetch(true);
+        void refetch(true);
     }, [refetch]);
 
     const handleRefresh = useCallback(() => {
-        refetch();
+        void refetch();
     }, [refetch]);
 
     // A key / swap / fill spend changes both the challenge and the balance.
     const handleCurrencySpent = useCallback(() => {
         handleVoteComplete();
-        if (onBankrollChanged) onBankrollChanged();
+        if (onBankrollChanged) void onBankrollChanged();
     }, [handleVoteComplete, onBankrollChanged]);
 
     // Transient-failure banner: a failed fetch (retries exhausted) surfaces

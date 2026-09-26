@@ -1,8 +1,12 @@
+// @ts-check
+/** @import { Challenge } from '../../../types/gurushots' */
 import { useTranslation } from '@/contexts/TranslationContext';
 import { lowExposureChallenges } from '@/utils/challengeAlerts';
 import { ChallengeAlertPanel } from './ChallengeChips';
 
+/** @param {{ exposure: number }} c */
 const pulseAtZero = (c) => c.exposure === 0;
+/** @param {{ exposure: number }} c */
 const exposureDetail = (c) => <span className="font-semibold">· {c.exposure}%</span>;
 
 /**
@@ -12,6 +16,8 @@ const exposureDetail = (c) => <span className="font-semibold">· {c.exposure}%</
  * BoostWindowBanner. No tick: exposure only changes on a challenge refetch.
  * Filled btn-error (error-content on error) rather than soft/outline, which
  * would paint the label in the raw error colour and lose contrast.
+ *
+ * @param {{ challenges: Challenge[] }} props
  */
 export function LowExposureBanner({ challenges }) {
     const { t } = useTranslation();

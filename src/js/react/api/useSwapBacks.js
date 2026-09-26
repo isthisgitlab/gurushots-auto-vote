@@ -1,4 +1,13 @@
+// @ts-check
 import { useEffect, useState } from 'react';
+
+/** @import { Challenge } from '../../types/gurushots' */
+
+/**
+ * A slot whose recorded boosted/turbo'd original can be swapped back in.
+ *
+ * @typedef {{currentId: string, previousId: string, previousMemberId: string, kind: 'boost'|'turbo'}} SwapBackOffer
+ */
 
 /**
  * The challenge's swap-back offers: slots holding a replacement for a photo
@@ -10,11 +19,11 @@ import { useEffect, useState } from 'react';
  * effect reads the challenge id back out of that key, so the key is its only
  * dependency. A failed read is simply no offers.
  *
- * @param {object} challenge
- * @returns {Array<{currentId: string, previousId: string, previousMemberId: string, kind: 'boost'|'turbo'}>}
+ * @param {Challenge | null | undefined} challenge
+ * @returns {SwapBackOffer[]}
  */
 export function useSwapBacks(challenge) {
-    const [items, setItems] = useState([]);
+    const [items, setItems] = useState(/** @type {SwapBackOffer[]} */ ([]));
     const entries = challenge?.member?.ranking?.entries;
     const entryKey = Array.isArray(entries) ? entries.map((e) => e?.id).join(',') : '';
     const requestKey = `${challenge?.id ?? ''}|${entryKey}`;

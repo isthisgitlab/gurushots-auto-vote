@@ -1,15 +1,34 @@
+// @ts-check
 import { createContext, useContext, useCallback, useEffect, useMemo } from 'react';
 import { rendererTranslator } from '../../translations/renderer';
 import { DEFAULT_LANGUAGE, isSupportedLanguage, resolveLanguage } from '../../translations/translator';
 import { useIpcQuery } from '../api/useIpcQuery';
 import * as ipc from '../api/ipc';
 
-const TranslationContext = createContext(null);
+/** @import { ComponentChildren } from 'preact' */
+/** @import { IpcQueryTools } from '../api/useIpcQuery' */
+
+/**
+ * What useTranslation returns.
+ *
+ * @typedef {object} TranslationContextValue
+ * @property {(key: string) => string} t - the key's text in the current language
+ * @property {string} language
+ * @property {(lang: string) => Promise<boolean>} setLanguage - resolves whether the language was saved
+ * @property {() => string} getCurrentLanguage
+ * @property {boolean} ready
+ */
+
+const TranslationContext = createContext(/** @type {TranslationContextValue | null} */ (null));
 
 const fetchLanguage = () => ipc.getSetting('language');
 
 // Hand the saved language to the page translator before publishing it, so
 // hook-less consumers (ErrorBoundary, Modal) render in the same language.
+/**
+ * @param {unknown} saved
+ * @param {Pick<IpcQueryTools<string, Error>, 'setData'>} tools
+ */
 const applyLanguage = (saved, { setData }) => {
     const language = resolveLanguage(saved);
     rendererTranslator.setCurrentLanguage(language);
@@ -17,6 +36,7 @@ const applyLanguage = (saved, { setData }) => {
 };
 
 /** Fire-and-forget: a language that failed to save is logged, never thrown. */
+/** @param {unknown} reason */
 const logLanguageSaveFailure = (reason) => {
     void ipc.logRendererError(`Could not save language to settings: ${reason}`);
 };
@@ -27,6 +47,8 @@ const logLanguageSaveFailure = (reason) => {
  * elsewhere (another window, the CLI) through settings-changed, and exposes
  * `t` bound to the current language. `ready` turns true once the saved
  * language has been read (or the read failed, leaving English).
+ *
+ * @param {{ children?: ComponentChildren }} props
  */
 export function TranslationProvider({ children }) {
     const {
@@ -43,7 +65,7 @@ export function TranslationProvider({ children }) {
     // applying the same language again is a no-op.
     useEffect(
         () =>
-            ipc.onSettingsChanged((changed) => {
+            ipc.onSettingsChanged((/** @type {{ language?: unknown } | null | undefined} */ changed) => {
                 if (changed?.language === undefined) return;
                 applyLanguage(changed.language, { setData });
             }),
@@ -52,7 +74,14 @@ export function TranslationProvider({ children }) {
 
     // A new `t` per language re-renders memoized consumers, so the text
     // always matches `language`.
-    const t = useCallback((key) => rendererTranslator.t(key, language), [language]);
+    const t = useCallback(
+        /**
+         * @param {string} key
+         * @returns {string}
+         */
+        (key) => rendererTranslator.t(key, language),
+        [language],
+    );
 
     // Persist first; the UI switches only once the language is saved. The
     // set-setting handler reports a rejected write as `false` rather than
@@ -61,13 +90,16 @@ export function TranslationProvider({ children }) {
     // translator and native menu (refresh-menu; a no-op stub on Capacitor),
     // best-effort, from this one place.
     const setLanguage = useCallback(
+        /** @param {string} lang */
         async (lang) => {
             if (!isSupportedLanguage(lang)) return false;
             let saved;
             try {
                 saved = await ipc.setSetting('language', lang);
             } catch (error) {
-                logLanguageSaveFailure(error?.message ?? error);
+                logLanguageSaveFailure(
+                    /** @type {{ message?: unknown } | null | undefined} */ (error)?.message ?? error,
+                );
                 return false;
             }
             if (saved === false) {
@@ -94,7 +126,7 @@ export function TranslationProvider({ children }) {
 
 /**
  * Hook to access translation context
- * @returns {{ t: function, language: string, setLanguage: function, getCurrentLanguage: function, ready: boolean }}
+ * @returns {TranslationContextValue}
  */
 export function useTranslation() {
     const context = useContext(TranslationContext);

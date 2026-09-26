@@ -1,3 +1,4 @@
+// @ts-check
 import { useTranslation } from '@/contexts/TranslationContext';
 import { StrokeIcon, ICON_PATHS } from '@/components/ui/StrokeIcon';
 import { TagsField } from './SettingInput';
@@ -5,14 +6,31 @@ import { useScenarios } from '@/api/useScenarios';
 import { interp } from '@/utils/interp';
 import { hasRuleCondition, rulePatterns, sortRulesByDefaultOrder } from '../../../settings/challengeRules';
 
+/** @import { LooseRecord, TitleRule } from '../../../types/settings' */
+
+/**
+ * A rule edit merged over the rule. A cleared field is '' (inherit / any)
+ * until the settings sanitizer drops it on save, so a patch is loose.
+ *
+ * @typedef {(patch: LooseRecord) => void} RulePatchHandler
+ */
+
+/**
+ * The props of one rule-bound field.
+ *
+ * @typedef {{ rule: TitleRule, settingKey: string, labelKey: string, onPatch: RulePatchHandler }} RuleFieldProps
+ */
+
 // Tri-state boolean override. '' = inherit (the key is omitted from the saved
 // rule entirely, so the rule never freezes today's default into storage);
 // 'on'/'off' are explicit. Kept as strings because a <select> value is a string
 // and `false` would otherwise round-trip through '' and read as "inherit".
 const TRISTATE = { true: 'on', false: 'off' };
 
-const triValue = (value) => (value === true || value === false ? TRISTATE[value] : '');
+/** @param {unknown} value @returns {string} */
+const triValue = (value) => (value === true || value === false ? TRISTATE[`${value}`] : '');
 
+/** @param {string} key @param {string} raw @returns {LooseRecord} */
 const triPatch = (key, raw) => ({ [key]: raw === 'on' ? true : raw === 'off' ? false : '' });
 
 /**
@@ -26,6 +44,7 @@ const PICS_CHOICES = [1, 2, 3, 4];
 // the real gate.
 const MAX_RUNTIME_HOURS = 2000;
 
+/** @param {RuleFieldProps} props */
 function TristateSelect({ rule, settingKey, labelKey, onPatch }) {
     const { t } = useTranslation();
     return (
@@ -35,7 +54,7 @@ function TristateSelect({ rule, settingKey, labelKey, onPatch }) {
                 aria-label={t(labelKey)}
                 className="select select-sm w-full"
                 value={triValue(rule[settingKey])}
-                onChange={(event) => onPatch(triPatch(settingKey, event.target.value))}
+                onChange={(event) => onPatch(triPatch(settingKey, event.currentTarget.value))}
             >
                 <option value="">{t('app.titleRuleInherit')}</option>
                 <option value="on">{t('app.titleRuleOn')}</option>
@@ -52,6 +71,8 @@ function TristateSelect({ rule, settingKey, labelKey, onPatch }) {
  * for a runtime condition "any length" — and the settings sanitizer drops it.
  * 0 is the explicit "off" value for an override, so this cannot just coerce
  * with Number().
+ *
+ * @param {RuleFieldProps & { unitKey: string, placeholderKey: string, min: number, max: number }} props
  */
 function RuleNumberField({ rule, settingKey, labelKey, unitKey, placeholderKey, min, max, onPatch }) {
     const { t } = useTranslation();
@@ -70,9 +91,10 @@ function RuleNumberField({ rule, settingKey, labelKey, unitKey, placeholderKey, 
                     className="grow"
                     aria-label={t(labelKey)}
                     placeholder={t(placeholderKey)}
-                    value={raw === null || raw === undefined ? '' : raw}
+                    // A stored number or a draft ''; the DOM coerces either.
+                    value={raw === null || raw === undefined ? '' : /** @type {number | string} */ (raw)}
                     onChange={(event) => {
-                        const next = event.target.value;
+                        const next = event.currentTarget.value;
                         onPatch({ [settingKey]: next === '' ? '' : Number(next) });
                     }}
                 />
@@ -124,6 +146,7 @@ const TAG_FIELDS = [
     { settingKey: 'shouldIncludeTags', labelKey: 'app.shouldIncludeTags' },
 ];
 
+/** @param {{ rule: TitleRule, profiles: Record<string, unknown>, onPatch: RulePatchHandler }} props */
 function RuleProfileSelect({ rule, profiles, onPatch }) {
     const { t } = useTranslation();
     const names = Object.keys(profiles).sort();
@@ -134,7 +157,7 @@ function RuleProfileSelect({ rule, profiles, onPatch }) {
                 aria-label={t('app.titleRuleProfile')}
                 className="select select-sm w-full"
                 value={rule.profile ?? ''}
-                onChange={(event) => onPatch({ profile: event.target.value })}
+                onChange={(event) => onPatch({ profile: event.currentTarget.value })}
             >
                 <option value="">{t('app.none')}</option>
                 {names.map((name) => (
@@ -149,11 +172,13 @@ function RuleProfileSelect({ rule, profiles, onPatch }) {
 
 // The scenario the rule assigns inline ('' = inherit). A name that no longer
 // exists stays listed, marked missing, like the per-challenge picker.
+/** @param {{ rule: TitleRule, onPatch: RulePatchHandler }} props */
 function RuleScenarioSelect({ rule, onPatch }) {
     const { t } = useTranslation();
     const { scenarios } = useScenarios();
     const names = Object.keys(scenarios);
-    const current = rule.scenario ?? '';
+    // The sanitizer stores `scenario` as a name string.
+    const current = /** @type {string} */ (rule.scenario ?? '');
     return (
         <div className="flex flex-col gap-1">
             <span className="text-sm">{t('app.scenario')}</span>
@@ -161,7 +186,7 @@ function RuleScenarioSelect({ rule, onPatch }) {
                 aria-label={t('app.scenario')}
                 className="select select-sm w-full"
                 value={current}
-                onChange={(event) => onPatch({ scenario: event.target.value })}
+                onChange={(event) => onPatch({ scenario: event.currentTarget.value })}
             >
                 <option value="">{t('app.titleRuleInherit')}</option>
                 {names.map((name) => (
@@ -183,6 +208,7 @@ const MAX_TITLES_PER_RULE = 50;
 // The editable title list of a rule. Stored rules carry `titles` only when they
 // list more than one (with `title` mirroring the first). Always at least one row
 // so a fresh rule shows an input.
+/** @param {TitleRule} rule @returns {string[]} */
 const ruleTitleRows = (rule) => {
     if (Array.isArray(rule.titles) && rule.titles.length > 0) return rule.titles;
     return [rule.title ?? ''];
@@ -190,11 +216,14 @@ const ruleTitleRows = (rule) => {
 
 // Patch for a new title list. `title` follows the first row so the saved shape
 // stays readable by single-title code; the sanitizer drops empty rows.
+/** @param {string[]} titles @returns {LooseRecord} */
 const titlesPatch = (titles) => ({ titles, title: titles[0] ?? '' });
 
+/** @param {{ rule: TitleRule, onPatch: RulePatchHandler }} props */
 function RuleTitleList({ rule, onPatch }) {
     const { t } = useTranslation();
     const titles = ruleTitleRows(rule);
+    /** @param {string[]} next */
     const setTitles = (next) => onPatch(titlesPatch(next));
     return (
         <div className="space-y-2">
@@ -207,7 +236,9 @@ function RuleTitleList({ rule, onPatch }) {
                         placeholder={t('app.titleTagRuleTitlePlaceholder')}
                         aria-label={`${t('app.titleTagRuleTitle')} ${titleIndex + 1}`}
                         value={title}
-                        onChange={(e) => setTitles(titles.map((v, i) => (i === titleIndex ? e.target.value : v)))}
+                        onChange={(e) =>
+                            setTitles(titles.map((v, i) => (i === titleIndex ? e.currentTarget.value : v)))
+                        }
                     />
                     {titles.length > 1 && (
                         <button
@@ -234,6 +265,7 @@ function RuleTitleList({ rule, onPatch }) {
     );
 }
 
+/** @param {{ rule: TitleRule, onPatch: RulePatchHandler }} props */
 function RuleClassConditions({ rule, onPatch }) {
     const { t } = useTranslation();
     return (
@@ -246,7 +278,7 @@ function RuleClassConditions({ rule, onPatch }) {
                     placeholder={t('app.titleRuleChallengeTagPlaceholder')}
                     aria-label={t('app.titleRuleChallengeTag')}
                     value={rule.challengeTag ?? ''}
-                    onChange={(e) => onPatch({ challengeTag: e.target.value })}
+                    onChange={(e) => onPatch({ challengeTag: e.currentTarget.value })}
                 />
             </div>
             <div className="flex flex-col gap-1">
@@ -258,7 +290,7 @@ function RuleClassConditions({ rule, onPatch }) {
                     placeholder={t('app.titleRuleTypePlaceholder')}
                     aria-label={t('app.titleRuleType')}
                     value={rule.type ?? ''}
-                    onChange={(e) => onPatch({ type: e.target.value })}
+                    onChange={(e) => onPatch({ type: e.currentTarget.value })}
                 />
             </div>
             <div className="flex flex-col gap-1">
@@ -268,7 +300,7 @@ function RuleClassConditions({ rule, onPatch }) {
                     className="select select-sm w-full"
                     value={String(rule.pics ?? '')}
                     onChange={(event) => {
-                        const next = event.target.value;
+                        const next = event.currentTarget.value;
                         onPatch({ pics: next === '' ? '' : Number(next) });
                     }}
                 >
@@ -289,6 +321,7 @@ function RuleClassConditions({ rule, onPatch }) {
     );
 }
 
+/** @param {{ rule: TitleRule, onPatch: RulePatchHandler }} props */
 function RuleBehaviour({ rule, onPatch }) {
     const { t } = useTranslation();
     return (
@@ -306,6 +339,7 @@ function RuleBehaviour({ rule, onPatch }) {
     );
 }
 
+/** @param {RuleFieldProps & { index: number }} props */
 function RuleTagsField({ index, rule, settingKey, labelKey, onPatch }) {
     const { t } = useTranslation();
     const id = `title-rule-${index}-${settingKey}`;
@@ -325,7 +359,11 @@ function RuleTagsField({ index, rule, settingKey, labelKey, onPatch }) {
     );
 }
 
-/** Position badge plus the reorder / remove controls of one rule card. */
+/**
+ * Position badge plus the reorder / remove controls of one rule card.
+ *
+ * @param {{ index: number, count: number, onMove: (delta: number) => void, onRemove: () => void }} props
+ */
 function RuleHeader({ index, count, onMove, onRemove }) {
     const { t } = useTranslation();
     return (
@@ -366,10 +404,23 @@ function RuleHeader({ index, count, onMove, onRemove }) {
 
 // A rule with conditions but no title reaches a whole class of challenges, so
 // switching joining or auto-submit ON there spends coins / photos broadly.
+/** @param {TitleRule} rule @returns {boolean} */
 const isBroadSpendingRule = (rule) =>
     rulePatterns(rule).length === 0 && hasRuleCondition(rule) && (rule.autoJoin === true || rule.autoFill === true);
 
-/** One rule: conditions, then the behaviour it applies to matching challenges. */
+/**
+ * One rule: conditions, then the behaviour it applies to matching challenges.
+ *
+ * @param {{
+ *   index: number,
+ *   count: number,
+ *   rule: TitleRule,
+ *   profiles: Record<string, unknown>,
+ *   onPatch: RulePatchHandler,
+ *   onMove: (delta: number) => void,
+ *   onRemove: () => void,
+ * }} props
+ */
 function RuleCard({ index, count, rule, profiles, onPatch, onMove, onRemove }) {
     const { t } = useTranslation();
     const hasTitle = rulePatterns(rule).length > 0;
@@ -385,7 +436,7 @@ function RuleCard({ index, count, rule, profiles, onPatch, onMove, onRemove }) {
                     className="select select-sm w-32"
                     disabled={!hasTitle}
                     value={hasTitle ? (rule.match ?? 'exact') : 'exact'}
-                    onChange={(e) => onPatch({ match: e.target.value })}
+                    onChange={(e) => onPatch({ match: e.currentTarget.value })}
                 >
                     <option value="exact">{t('app.titleRuleMatchExact')}</option>
                     <option value="starts">{t('app.titleRuleMatchStarts')}</option>
@@ -441,15 +492,24 @@ function RuleCard({ index, count, rule, profiles, onPatch, onMove, onRemove }) {
  *    autoJoin?: boolean, autoFill?: boolean, autoJoinWithinHoursOfEnd?: number,
  *    autoJoinAfterPercentElapsed?: number }`.
  * `types` feeds the challenge-type suggestions; the field stays free text.
+ *
+ * @param {{
+ *   value: TitleRule[] | null | undefined,
+ *   onChange: (rules: TitleRule[]) => void,
+ *   profiles?: Record<string, unknown>,
+ *   types?: string[],
+ * }} props
  */
 export function TitleTagRulesEditor({ value, onChange, profiles = {}, types = [] }) {
     const { t } = useTranslation();
     const rules = Array.isArray(value) ? value : [];
 
+    /** @param {number} index @param {LooseRecord} patch */
     const updateRule = (index, patch) => {
         onChange(rules.map((rule, i) => (i === index ? { ...rule, ...patch } : rule)));
     };
 
+    /** @param {number} index @param {number} delta */
     const moveRule = (index, delta) => {
         const next = [...rules];
         [next[index], next[index + delta]] = [next[index + delta], next[index]];

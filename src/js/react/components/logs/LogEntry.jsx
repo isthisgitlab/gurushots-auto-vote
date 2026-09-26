@@ -1,3 +1,5 @@
+// @ts-check
+/** @import { GuiLogEntry } from '../../../logger' */
 /**
  * Severity → text color. Strict 4-value set matches logger.js.
  */
@@ -9,8 +11,17 @@ const LEVEL_COLORS = {
 };
 
 /**
+ * The fields a log line renders — a logger ring-buffer entry or a live GUI
+ * fan-out entry both carry them.
+ *
+ * @typedef {Pick<GuiLogEntry, 'level' | 'message' | 'context' | 'timestamp' | 'category'>} LogLine
+ */
+
+/**
  * Single log entry. Three small badges then the message:
  *   [severity] [context] [category] message
+ *
+ * @param {{ entry: LogLine }} props
  */
 export function LogEntry({ entry }) {
     const { level, message, context, timestamp, category } = entry;
@@ -34,6 +45,8 @@ export function LogEntry({ entry }) {
 
 /**
  * Empty state when no logs are present
+ *
+ * @param {{ text: string }} props
  */
 export function LogsEmptyState({ text }) {
     return (

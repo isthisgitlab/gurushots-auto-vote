@@ -1,3 +1,8 @@
+// @ts-check
+/**
+ * @import { MemberBoost, MemberTurbo, RankingEntry } from '../../types/gurushots'
+ * @import { SerializableSchemaEntry } from '../../ipc/settings.handlers'
+ */
 /**
  * Time and display formatting utilities (pure functions only)
  */
@@ -28,8 +33,8 @@ export { entryPhotoUrl };
  * `t` is the translation function, passed in so this stays a pure util with no
  * dependency on the React translation context.
  *
- * @param {*} value - The value to render (seconds, number, boolean, or array)
- * @param {object} config - The setting's schema entry (reads `type` and `unit`)
+ * @param {unknown} value - The value to render (seconds, number, boolean, or array)
+ * @param {Pick<SerializableSchemaEntry, 'type' | 'unit'>|null|undefined} config - The setting's schema entry (reads `type` and `unit`)
  * @param {(key: string) => string} t - Translation lookup
  * @returns {string}
  */
@@ -95,6 +100,7 @@ export const formatTimeRemaining = (endTime) => {
 export const formatEndTime = (endTime, timezone = 'local') => {
     const date = new Date(endTime * 1000);
 
+    /** @type {Intl.DateTimeFormatOptions} */
     const formatOptions = {
         day: '2-digit',
         month: '2-digit',
@@ -121,7 +127,7 @@ export const formatEndTime = (endTime, timezone = 'local') => {
 
 /**
  * Get boost status with display text and color class
- * @param {object} boost - Boost object from API
+ * @param {MemberBoost|null|undefined} boost - Boost object from API
  * @returns {{ text: string, colorClass: string }}
  */
 export const getBoostStatus = (boost) => {
@@ -131,7 +137,7 @@ export const getBoostStatus = (boost) => {
 
     if (boost.state === 'AVAILABLE' || boost.state === 'AVAILABLE_KEY') {
         const now = Math.floor(Date.now() / 1000);
-        const remaining = boost.timeout - now;
+        const remaining = /** @type {number} */ (boost.timeout) - now;
         if (remaining > 0) {
             const minutes = Math.floor(remaining / 60);
             return { text: `Available (${minutes}m left)`, colorClass: 'text-blue-500' };
@@ -160,7 +166,7 @@ export const getBoostStatus = (boost) => {
  * an applied boost with the separate boolean entry.boosted. Reading entry.boost
  * would light the rocket on entries that are merely eligible.
  *
- * @param {object} entry - Entry record from challenge.member.ranking.entries
+ * @param {RankingEntry|null|undefined} entry - Entry record from challenge.member.ranking.entries
  * @returns {{ isBoosted: boolean, isTurboed: boolean, icon: string, className: string, textClass: string }}
  */
 export const getEntryStatus = (entry) => {
@@ -183,7 +189,7 @@ export { isBoostWindowOpen } from '../../voting/boostWindow';
 
 /**
  * Get turbo status with display text and color class
- * @param {object} turbo - Turbo object from API
+ * @param {MemberTurbo|null|undefined} turbo - Turbo object from API
  * @returns {{ text: string, colorClass: string }}
  */
 export const getTurboStatus = (turbo) => {

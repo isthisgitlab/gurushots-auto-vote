@@ -1,3 +1,4 @@
+// @ts-check
 /**
  * Trigger-window derivation for the settings-modal hints.
  *
@@ -33,6 +34,17 @@ import { MAX_SCHEDULED_FILL_ENTRIES } from '../../settings/limits';
  * @property {boolean} active - Enabled AND at least one usable entry in either list.
  * @property {{start: number, source: {kind: 'time', value: string}|{kind: 'beforeEnd', seconds: number}}|null} next
  * @property {boolean} openNow - `next` is a window that has already started.
+ * @property {boolean} coversWholeDay - Active, and the daily windows leave no uncovered moment in a day.
+ */
+
+/**
+ * One feature's duration policy: its fallback, which way a corrupt stored
+ * duration fails, and the optional ceiling (null = none).
+ *
+ * @typedef {object} WindowHintPolicy
+ * @property {number} defaultDurationMin - Fallback when the stored duration is corrupt.
+ * @property {'default'|'off'} onCorruptDuration - A corrupt duration falls back to the default, or turns the feature off.
+ * @property {number|null} maxDurationMin - Clamp ceiling in minutes; null for none.
  */
 
 /**
@@ -42,10 +54,12 @@ import { MAX_SCHEDULED_FILL_ENTRIES } from '../../settings/limits';
  * @param {{enabled: string, times: string, beforeEnd: string, duration: string}} params.keys
  *   The four setting keys this feature stores its config under.
  * @param {number} params.defaultDurationMin - Fallback when the stored duration is corrupt.
- * @param {(key: string) => any} params.effectiveOf - Resolver for the challenge's effective value.
+ * @param {(key: string) => unknown} params.effectiveOf - Resolver for the challenge's effective value.
  * @param {string} params.timezone - App timezone; daily times are read in it, never device-local.
  * @param {number} params.nowSec
  * @param {number} params.closeTime - Challenge close time, or 0 when unknown.
+ * @param {WindowHintPolicy['onCorruptDuration']} params.onCorruptDuration
+ * @param {WindowHintPolicy['maxDurationMin']} params.maxDurationMin
  * @returns {WindowHintState}
  */
 export function deriveWindowHints({
@@ -89,9 +103,9 @@ export function deriveWindowHints({
     // hint source after the first unparseable entry. No try/catch: occurrencesOf
     // returns null for unparseable entries and degrades an unknown zone to UTC
     // itself, so it cannot throw for the Date.now()-derived nowSec callers pass.
-    const timeOccs = times
-        .map((entry) => ({ entry, occ: occurrencesOf(entry, timezone, nowSec) }))
-        .filter((p) => p.occ);
+    const timeOccs = /** @type {WindowHintState['timeOccs']} */ (
+        times.map((entry) => ({ entry, occ: occurrencesOf(entry, timezone, nowSec) })).filter((p) => p.occ)
+    );
     const timeSet = timeOccs.length > 0;
     const active = enabled && (timeSet || beforeEnds.length > 0);
 
@@ -99,6 +113,7 @@ export function deriveWindowHints({
     // occurrence, per before-end entry its one-shot start while the window is
     // still at least partly ahead. Each carries its producing trigger so the
     // hint can name whose window is shown.
+    /** @type {NonNullable<WindowHintState['next']>[]} */
     const candidates = [];
     for (const { entry, occ } of timeOccs) {
         const start = nowSec - occ.prev <= durationSec ? occ.prev : occ.next;
@@ -111,7 +126,10 @@ export function deriveWindowHints({
             candidates.push({ start, source: { kind: 'beforeEnd', seconds: sec } });
         }
     }
-    const next = candidates.reduce((best, c) => (best === null || c.start < best.start ? c : best), null);
+    const next = candidates.reduce(
+        (best, c) => (best === null || c.start < best.start ? c : best),
+        /** @type {WindowHintState['next']} */ (null),
+    );
 
     return {
         times,

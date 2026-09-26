@@ -1,21 +1,29 @@
+// @ts-check
 import { useState, useCallback } from 'react';
 import { useTranslation } from '@/contexts/TranslationContext';
 import { LoadingSpinner } from '@/components/ui/LoadingSpinner';
 
 /**
  * Login form component with validation
+ *
+ * @param {{
+ *   onSubmit: (username: string, password: string) => void | Promise<void>,
+ *   loading?: boolean,
+ *   initialUsername?: string,
+ * }} props - `onSubmit` receives the trimmed username once both fields validate.
  */
 export function LoginForm({ onSubmit, loading = false, initialUsername = '' }) {
     const { t } = useTranslation();
     const [username, setUsername] = useState(initialUsername);
     const [password, setPassword] = useState('');
-    const [errors, setErrors] = useState({});
+    const [errors, setErrors] = useState(/** @type {{ username?: string | null, password?: string | null }} */ ({}));
 
     /**
      * Validate form fields
      * @returns {boolean} - Whether form is valid
      */
     const validateForm = useCallback(() => {
+        /** @type {{ username?: string, password?: string }} */
         const newErrors = {};
 
         if (!username.trim()) {
@@ -34,11 +42,12 @@ export function LoginForm({ onSubmit, loading = false, initialUsername = '' }) {
      * Handle form submission
      */
     const handleSubmit = useCallback(
+        /** @param {import('preact').JSX.TargetedSubmitEvent<HTMLFormElement>} e */
         (e) => {
             e.preventDefault();
 
             if (validateForm()) {
-                onSubmit(username.trim(), password);
+                void onSubmit(username.trim(), password);
             }
         },
         [username, password, validateForm, onSubmit],
@@ -48,8 +57,9 @@ export function LoginForm({ onSubmit, loading = false, initialUsername = '' }) {
      * Clear field error on change
      */
     const handleUsernameChange = useCallback(
+        /** @param {import('preact').JSX.TargetedEvent<HTMLInputElement, Event>} e */
         (e) => {
-            setUsername(e.target.value);
+            setUsername(/** @type {HTMLInputElement} */ (e.target).value);
             if (errors.username) {
                 setErrors((prev) => ({ ...prev, username: null }));
             }
@@ -58,8 +68,9 @@ export function LoginForm({ onSubmit, loading = false, initialUsername = '' }) {
     );
 
     const handlePasswordChange = useCallback(
+        /** @param {import('preact').JSX.TargetedEvent<HTMLInputElement, Event>} e */
         (e) => {
-            setPassword(e.target.value);
+            setPassword(/** @type {HTMLInputElement} */ (e.target).value);
             if (errors.password) {
                 setErrors((prev) => ({ ...prev, password: null }));
             }

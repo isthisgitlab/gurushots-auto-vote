@@ -1,3 +1,12 @@
+// @ts-check
+/**
+ * @import { ComponentChildren } from 'preact'
+ * @import { Challenge } from '../../../types/gurushots'
+ * @import { RankedChallenge } from '../../../types/rendererUtils'
+ * @import { ChallengeCardView } from './ChallengeCard'
+ * @import { ChallengeBadgeRowProps } from './ChallengeBadgeRow'
+ * @import { DeadlineAction } from './DeadlineTimeline'
+ */
 import { useTranslation } from '@/contexts/TranslationContext';
 import { getEntryStatus } from '@/utils/formatters';
 import { ChallengeBadgeRow } from './ChallengeBadgeRow';
@@ -8,6 +17,8 @@ import { ScenarioStatusLine } from './ScenarioStatusLine';
 /**
  * One labelled stat in the compact tile's grid. The emoji is the visual label;
  * the translated name rides on `title` so the cell stays one short line.
+ *
+ * @param {{ icon: string, label: string, className?: string, children: ComponentChildren }} props
  */
 function Stat({ icon, label, className = '', children }) {
     return (
@@ -32,6 +43,22 @@ function Stat({ icon, label, className = '', children }) {
  *
  * All values are derived by the parent ChallengeCard and passed in, so the
  * tile and the detailed card can never disagree about what a state means.
+ *
+ * @param {object} props
+ * @param {Challenge} props.challenge
+ * @param {ChallengeBadgeRowProps} props.badgeRowProps
+ * @param {string} props.timeText
+ * @param {ChallengeCardView['exposureFactor']} props.exposureFactor
+ * @param {ChallengeCardView['exposureClass']} props.exposureClass
+ * @param {ChallengeCardView['boostStatus']} props.boostStatus
+ * @param {ChallengeCardView['turboStatus']} props.turboStatus
+ * @param {ChallengeCardView['entries']} props.entries
+ * @param {boolean} props.hasCompactOverride
+ * @param {() => void | Promise<void>} props.onToggleCompact
+ * @param {boolean} props.boostBlocked
+ * @param {DeadlineAction[]} props.deadlineActions
+ * @param {ReturnType<typeof import('@/api/useScenarioStatus').useScenarioStatus>} props.scenarioStatus
+ * @param {ComponentChildren} props.actions - the optional footer action row
  */
 export function ChallengeCardCompact({
     challenge,
@@ -50,8 +77,9 @@ export function ChallengeCardCompact({
     actions,
 }) {
     const { t } = useTranslation();
-    const progress = challenge.member.ranking.total;
-    const hasRank = progress?.rank > 0;
+    const progress = /** @type {RankedChallenge} */ (challenge).member.ranking.total;
+    const rank = progress?.rank;
+    const hasRank = rank !== undefined && rank > 0;
 
     return (
         <div className="space-y-2">
@@ -77,7 +105,9 @@ export function ChallengeCardCompact({
                     {exposureFactor}%
                 </Stat>
                 <Stat icon="🏆" label={t('app.rank')}>
-                    {hasRank ? `${progress.rank.toLocaleString()} / ${challenge.players.toLocaleString()}` : '—'}
+                    {hasRank
+                        ? `${rank.toLocaleString()} / ${/** @type {number} */ (challenge.players).toLocaleString()}`
+                        : '—'}
                 </Stat>
                 <Stat icon="🖼" label={t('app.yourEntries')}>
                     {entries.length}/{challenge.max_photo_submits}

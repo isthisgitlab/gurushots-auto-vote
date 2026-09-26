@@ -1,8 +1,43 @@
+// @ts-check
 import { useTranslation } from '@/contexts/TranslationContext';
 import { useListDraft, LIST_FINGERPRINT_SEP } from '@/hooks/useListDraft';
 import { secondsToHoursMinutes, hoursMinutesToSeconds } from '@/utils/timeFieldUnits';
 import { MAX_SCHEDULED_FILL_ENTRIES } from '../../../settings/limits';
 import { SettingResetButton } from './SettingResetButton';
+
+/**
+ * @import { ComponentChildren } from 'preact'
+ * @import { SettingFieldProps, SettingResetHandler, Translate } from '../../../types/settingsEditor'
+ */
+
+/**
+ * One row of a variable row-list editor, as RowListField hands it to its
+ * kind's `renderRow`.
+ *
+ * @template R
+ * @typedef {object} RowRenderContext
+ * @property {R} row
+ * @property {number} index
+ * @property {R[]} rows
+ * @property {string} label - The setting's translated label; row inputs are labelled "<label> <n>".
+ * @property {string} hintId
+ * @property {(next: R) => void} setRow
+ * @property {boolean | undefined} disabled
+ * @property {Translate} t
+ */
+
+/**
+ * A row type for RowListField (see its doc comment).
+ *
+ * @template R
+ * @typedef {object} RowKind
+ * @property {(rows: R[]) => R[]} emittedOf
+ * @property {(rows: R[]) => string} draftKeyOf
+ * @property {R} blankRow
+ * @property {string} addLabelKey
+ * @property {string} emptyLabelKey
+ * @property {(ctx: RowRenderContext<R>) => { controls: ComponentChildren, hint: ComponentChildren }} renderRow
+ */
 
 // Single source of truth: settings/limits.js is dependency-free, so importing
 // it here costs the renderer bundle nothing (unlike settings/schema.js, which
@@ -22,6 +57,9 @@ const SCHEDULE_MAX_HOURS = SCHEDULE_MAX_SECONDS / 3600;
  * (secondsToHoursMinutes clamps) yet isn't 0, so without this it would look
  * like an off/draft row instead of being flagged invalid — and the zod
  * validator would reject the save with only the generic banner.
+ *
+ * @param {number} seconds
+ * @returns {boolean}
  */
 const secondsOutOfRange = (seconds) =>
     seconds !== 0 && (!Number.isInteger(seconds) || seconds < 0 || seconds > SCHEDULE_MAX_SECONDS);
@@ -31,6 +69,17 @@ const secondsOutOfRange = (seconds) =>
  * `onChange(seconds)` receives the recombined value; `labelPrefix` names both
  * inputs ("<prefix> hours" / "<prefix> minutes"). Rendered as a fragment so
  * the caller's flex row owns the layout.
+ *
+ * @param {{
+ *   seconds: unknown,
+ *   onChange: (seconds: number) => void,
+ *   labelPrefix: string,
+ *   widthClass: string,
+ *   hoursMax?: number,
+ *   invalid?: boolean,
+ *   describedBy?: string,
+ *   disabled?: boolean,
+ * }} props
  */
 function HoursMinutesInputs({ seconds, onChange, labelPrefix, widthClass, hoursMax, invalid, describedBy, disabled }) {
     const { t } = useTranslation();
@@ -46,7 +95,7 @@ function HoursMinutesInputs({ seconds, onChange, labelPrefix, widthClass, hoursM
                 aria-label={`${labelPrefix} ${t('app.hours')}`}
                 aria-describedby={describedBy}
                 value={hours}
-                onChange={(e) => onChange(hoursMinutesToSeconds(parseInt(e.target.value, 10), minutes))}
+                onChange={(e) => onChange(hoursMinutesToSeconds(parseInt(e.currentTarget.value, 10), minutes))}
                 disabled={disabled}
             />
             <span className="text-sm">{t('app.hours')}</span>
@@ -58,7 +107,7 @@ function HoursMinutesInputs({ seconds, onChange, labelPrefix, widthClass, hoursM
                 aria-label={`${labelPrefix} ${t('app.minutes')}`}
                 aria-describedby={describedBy}
                 value={minutes}
-                onChange={(e) => onChange(hoursMinutesToSeconds(hours, parseInt(e.target.value, 10)))}
+                onChange={(e) => onChange(hoursMinutesToSeconds(hours, parseInt(e.currentTarget.value, 10)))}
                 disabled={disabled}
             />
             <span className="text-sm">{t('app.minutes')}</span>
@@ -66,7 +115,11 @@ function HoursMinutesInputs({ seconds, onChange, labelPrefix, widthClass, hoursM
     );
 }
 
-/** Single duration setting (`type: 'time'`): hours + minutes, stored as seconds. */
+/**
+ * Single duration setting (`type: 'time'`): hours + minutes, stored as seconds.
+ *
+ * @param {SettingFieldProps} props
+ */
 export function TimeField({ id, settingKey, config, value, onChange, onReset, disabled }) {
     const { t } = useTranslation();
     return (
@@ -74,7 +127,8 @@ export function TimeField({ id, settingKey, config, value, onChange, onReset, di
             <HoursMinutesInputs
                 seconds={value}
                 onChange={(seconds) => onChange(settingKey, seconds)}
-                labelPrefix={t(config.label)}
+                // Every schema entry carries a label.
+                labelPrefix={t(/** @type {string} */ (config.label))}
                 widthClass="w-20"
                 disabled={disabled}
             />
@@ -83,6 +137,11 @@ export function TimeField({ id, settingKey, config, value, onChange, onReset, di
     );
 }
 
+/**
+ * @param {any[]} rows - The stored schedule rows: untrusted shape, every read below is guarded.
+ * @param {number} count
+ * @returns {number}
+ */
 const scheduleSecondsFor = (rows, count) => {
     const row = rows.find((r) => r && typeof r === 'object' && r.count === count);
     return Number.isFinite(row?.seconds) ? row.seconds : 0;
@@ -93,6 +152,11 @@ const scheduleSecondsFor = (rows, count) => {
  * later (larger-or-equal threshold): the max-based trigger never needs it.
  * Off rows are excluded entirely — they show only the off hint, never a
  * dominated badge on top (a deliberate off state is not a mistake).
+ *
+ * @param {{ count: number, seconds: number }[]} activeRows
+ * @param {number} count
+ * @param {number} seconds
+ * @returns {boolean}
  */
 const isDominated = (activeRows, count, seconds) =>
     activeRows.some(
@@ -109,6 +173,8 @@ const isDominated = (activeRows, count, seconds) =>
  * the three fixed slots is lossy by design: any stored row not keyed by
  * counts 2/3/4 is dropped on the first edit (the load-time sanitizer in
  * settings/migrations.js removes such rows anyway).
+ *
+ * @param {SettingFieldProps} props
  */
 export function ScheduleField({ settingKey, value, onChange, onReset, disabled }) {
     const { t } = useTranslation();
@@ -116,6 +182,7 @@ export function ScheduleField({ settingKey, value, onChange, onReset, disabled }
     const slots = SCHEDULE_COUNTS.map((count) => ({ count, seconds: scheduleSecondsFor(rows, count) }));
     const activeRows = slots.filter((row) => row.seconds > 0);
 
+    /** @param {number} count @param {number} seconds */
     const emit = (count, seconds) => {
         const next = slots.map((slot) => (slot.count === count ? { count, seconds } : slot));
         onChange(
@@ -173,6 +240,12 @@ export function ScheduleField({ settingKey, value, onChange, onReset, disabled }
 
 // What a time-list draft emits: rows in order, dropping drafts (`isDraft`) and
 // duplicates (first wins).
+/**
+ * @template R
+ * @param {R[]} rowList
+ * @param {(row: R) => boolean} isDraft
+ * @returns {R[]}
+ */
 const emittedRowsOf = (rowList, isDraft) => {
     const seen = new Set();
     return rowList.filter((row) => {
@@ -182,13 +255,29 @@ const emittedRowsOf = (rowList, isDraft) => {
     });
 };
 // A blank time input is a draft; a 0-second (or non-positive) offset is too.
+/** @param {string[]} rowList @returns {string[]} */
 const emittedTimesOf = (rowList) => emittedRowsOf(rowList, (row) => row === '');
+/** @param {number[]} rowList @returns {number[]} */
 const emittedSecondsOf = (rowList) => emittedRowsOf(rowList, (row) => !(row > 0));
+/**
+ * @template R
+ * @param {R[]} arr
+ * @returns {R[]}
+ */
 const copyRows = (arr) => arr.slice();
 
 /**
  * A row list's footer: the add button (disabled at the entry cap), the empty
  * and at-cap status messages, and the setting's reset.
+ *
+ * @param {{
+ *   kind: Pick<RowKind<unknown>, 'addLabelKey' | 'emptyLabelKey'>,
+ *   settingKey: string,
+ *   rowCount: number,
+ *   onAdd: () => void,
+ *   onReset?: SettingResetHandler | null,
+ *   disabled?: boolean,
+ * }} props
  */
 function RowListFooter({ kind, settingKey, rowCount, onAdd, onReset, disabled }) {
     const { t } = useTranslation();
@@ -230,10 +319,14 @@ function RowListFooter({ kind, settingKey, rowCount, onAdd, onReset, disabled })
  * buttons, and a persistent role="status" message at the entry cap (a
  * disabled add button is skipped by Tab, so its reason must be perceivable
  * without hover).
+ *
+ * @template R
+ * @param {SettingFieldProps & { kind: RowKind<R> }} props
  */
 function RowListField({ kind, settingKey, config, value, onChange, onReset, disabled }) {
     const { t } = useTranslation();
-    const label = t(config.label);
+    // Every schema entry carries a label.
+    const label = t(/** @type {string} */ (config.label));
     // The cap slice also bounds rendering: a hand-edited oversized array must
     // not paint hundreds of rows (the write path and load-time bounds pass
     // both enforce the cap already — this is the same defensive posture as
@@ -241,6 +334,7 @@ function RowListField({ kind, settingKey, config, value, onChange, onReset, disa
     const arr = (Array.isArray(value) ? value : []).slice(0, SCHEDULED_FILL_MAX_ENTRIES);
     const [rows, setRows] = useListDraft(arr, copyRows, kind.draftKeyOf);
 
+    /** @param {R[]} nextRows */
     const update = (nextRows) => {
         setRows(nextRows);
         onChange(settingKey, kind.emittedOf(nextRows));
@@ -250,6 +344,7 @@ function RowListField({ kind, settingKey, config, value, onChange, onReset, disa
         <div className="space-y-2">
             {rows.map((row, index) => {
                 const hintId = `${settingKey}-row-${index}-hint`;
+                /** @param {R} next */
                 const setRow = (next) => update(rows.map((r, j) => (j === index ? next : r)));
                 const { controls, hint } = kind.renderRow({ row, index, rows, label, hintId, setRow, disabled, t });
                 return (
@@ -288,6 +383,8 @@ function RowListField({ kind, settingKey, config, value, onChange, onReset, disa
  * is flagged inline. No draft hint, unlike the before-end list: a blank
  * native time input visibly reads as empty, while a 0h 0m pair there looks
  * like a filled, valid value.
+ *
+ * @type {RowKind<string>}
  */
 const TIME_OF_DAY_ROWS = {
     emittedOf: emittedTimesOf,
@@ -305,7 +402,7 @@ const TIME_OF_DAY_ROWS = {
                     aria-label={`${label} ${index + 1}`}
                     aria-describedby={hintId}
                     value={row}
-                    onChange={(e) => setRow(e.target.value)}
+                    onChange={(e) => setRow(e.currentTarget.value)}
                     disabled={disabled}
                 />
             ),
@@ -319,6 +416,8 @@ const TIME_OF_DAY_ROWS = {
  * pair per row, each stored as seconds. 0-second rows stay local drafts
  * (ScheduleField's emit-only-active precedent); duplicates and out-of-range
  * values highlight the offending row.
+ *
+ * @type {RowKind<number>}
  */
 const BEFORE_END_ROWS = {
     emittedOf: emittedSecondsOf,
@@ -354,10 +453,12 @@ const BEFORE_END_ROWS = {
     },
 };
 
+/** @param {SettingFieldProps} props */
 export function TimeOfDayListField(props) {
     return <RowListField kind={TIME_OF_DAY_ROWS} {...props} />;
 }
 
+/** @param {SettingFieldProps} props */
 export function TimeListField(props) {
     return <RowListField kind={BEFORE_END_ROWS} {...props} />;
 }

@@ -49,3 +49,14 @@ test('a successful load clears the failure flag and saves normally', async () =>
     expect(mockApi.replaceChallengeOverrides).toHaveBeenCalledWith('1', { exposure: 50 }, false);
     expect(p.onClose).toHaveBeenCalled();
 });
+
+test('applyProfile() without a schema (its fetch failed) keeps no key instead of throwing', async () => {
+    mockApi.getChallengeOverrides.mockReset().mockResolvedValue({});
+    const p = { ...props(), schema: null };
+    const { result } = renderHook(() => useChallengeOverrides(p));
+
+    act(() => result.current.applyProfile({ exposure: 50 }));
+
+    expect(result.current.overrides).toEqual({});
+    expect(result.current.titleProfile).toEqual({ suppressed: true });
+});

@@ -47,3 +47,13 @@ export type HeadlessGlobals = typeof globalThis & {
     /** The entry point the native service calls on each alarm tick. */
     GS?: { runOneCycle: () => Promise<void> };
 };
+
+/**
+ * `globalThis` as the renderer reads it: the Capacitor runtime's platform
+ * probe (absent on Electron), and the flag pages/Capacitor.jsx sets before
+ * importing App/Login so neither auto-mounts.
+ */
+export type RendererGlobals = typeof globalThis & {
+    Capacitor?: { isNativePlatform?: () => boolean };
+    __capacitorBootstrap?: boolean;
+};

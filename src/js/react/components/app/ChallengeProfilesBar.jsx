@@ -1,13 +1,22 @@
+// @ts-check
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { useTranslation } from '@/contexts/TranslationContext';
 import { getIntentByName, intentValuesMatch } from '../../../settings/intentProfiles';
 import * as ipc from '@/api/ipc';
+
+/**
+ * What a profile save or delete reports to the modal: the profile's name and
+ * either its new values or `deleted`.
+ *
+ * @typedef {{ name: string, values?: Record<string, unknown>, deleted?: boolean }} ProfileChange
+ */
 
 // How long an armed confirm button (delete / overwrite) stays armed before
 // falling back to its idle state.
 const CONFIRM_TIMEOUT_MS = 4000;
 
 // Only ever called with profile-name keys and the trimmed input — always strings.
+/** @param {string} name @returns {string} */
 const normalizeName = (name) => name.trim().toLowerCase();
 
 /**
@@ -22,18 +31,25 @@ const normalizeName = (name) => name.trim().toLowerCase();
  * `profileLimits` comes from the get-settings-schema response so the caps the
  * facade enforces are never duplicated here; when absent the client checks
  * are skipped and the facade's fail-closed save still guards.
+ *
+ * @param {{
+ *   overrides: Record<string, unknown>,
+ *   onApply: (values: Record<string, unknown>) => void,
+ *   onProfilesChanged?: (change: ProfileChange) => void,
+ *   profileLimits?: { maxChallengeProfiles?: number, maxProfileNameLength?: number } | null,
+ * }} props
  */
 export function ChallengeProfilesBar({ overrides, onApply, onProfilesChanged = () => {}, profileLimits }) {
     const { t } = useTranslation();
-    const [profiles, setProfiles] = useState({});
+    const [profiles, setProfiles] = useState(/** @type {Record<string, Record<string, unknown>>} */ ({}));
     const [selectedName, setSelectedName] = useState('');
     const [newName, setNewName] = useState('');
     const [busy, setBusy] = useState(false);
     const [errorText, setErrorText] = useState('');
     const [applied, setApplied] = useState(false);
     // null | 'delete' | 'overwrite' — which destructive action is armed.
-    const [confirming, setConfirming] = useState(null);
-    const confirmTimerRef = useRef(null);
+    const [confirming, setConfirming] = useState(/** @type {null | 'delete' | 'overwrite'} */ (null));
+    const confirmTimerRef = useRef(/** @type {ReturnType<typeof setTimeout> | null} */ (null));
 
     const clearConfirmTimer = useCallback(() => {
         if (confirmTimerRef.current) {
@@ -48,6 +64,7 @@ export function ChallengeProfilesBar({ overrides, onApply, onProfilesChanged = (
     }, [clearConfirmTimer]);
 
     const arm = useCallback(
+        /** @param {'delete' | 'overwrite'} action */
         (action) => {
             clearConfirmTimer();
             setConfirming(action);
@@ -66,7 +83,9 @@ export function ChallengeProfilesBar({ overrides, onApply, onProfilesChanged = (
             const result = await ipc.getChallengeProfiles();
             setProfiles(result && typeof result === 'object' ? result : {});
         } catch (err) {
-            await ipc.logRendererError(`Error loading challenge profiles: ${err.message || err}`);
+            await ipc.logRendererError(
+                `Error loading challenge profiles: ${/** @type {{ message?: unknown } | null | undefined} */ (err)?.message || err}`,
+            );
             setProfiles({});
         }
     }, []);
@@ -80,11 +99,13 @@ export function ChallengeProfilesBar({ overrides, onApply, onProfilesChanged = (
     // Distinguish built-in intent presets from user profiles and edited copies.
     const selectedIntent = getIntentByName(selectedName);
     const selectedIntentModified = selectedIntent ? !intentValuesMatch(selectedIntent, selectedProfile) : false;
+    /** @param {string} name */
     const displayNameOf = (name) => {
         const intent = getIntentByName(name);
         return intent ? t(intent.nameKey) : name;
     };
 
+    /** @param {string} name */
     const handleSelect = (name) => {
         setSelectedName(name);
         setApplied(false);
@@ -94,7 +115,7 @@ export function ChallengeProfilesBar({ overrides, onApply, onProfilesChanged = (
     // Apply and Delete are disabled while no profile is selected, so both
     // handlers can rely on selectedProfile being set.
     const handleApply = () => {
-        onApply(selectedProfile);
+        onApply(/** @type {Record<string, unknown>} */ (selectedProfile));
         setErrorText('');
         setApplied(true);
         disarm();
@@ -118,7 +139,9 @@ export function ChallengeProfilesBar({ overrides, onApply, onProfilesChanged = (
             await refreshProfiles();
             onProfilesChanged({ name: selectedName, deleted: true });
         } catch (err) {
-            await ipc.logRendererError(`Error deleting challenge profile: ${err.message || err}`);
+            await ipc.logRendererError(
+                `Error deleting challenge profile: ${/** @type {{ message?: unknown } | null | undefined} */ (err)?.message || err}`,
+            );
         } finally {
             setBusy(false);
         }
@@ -165,7 +188,9 @@ export function ChallengeProfilesBar({ overrides, onApply, onProfilesChanged = (
                 setErrorText(t('app.profileSaveError'));
             }
         } catch (err) {
-            await ipc.logRendererError(`Error saving challenge profile: ${err.message || err}`);
+            await ipc.logRendererError(
+                `Error saving challenge profile: ${/** @type {{ message?: unknown } | null | undefined} */ (err)?.message || err}`,
+            );
             setErrorText(t('app.profileSaveError'));
         } finally {
             setBusy(false);
@@ -181,7 +206,7 @@ export function ChallengeProfilesBar({ overrides, onApply, onProfilesChanged = (
                     className="select select-sm flex-1 min-w-40"
                     aria-label={t('app.challengeProfiles')}
                     value={selectedName}
-                    onChange={(e) => handleSelect(e.target.value)}
+                    onChange={(e) => handleSelect(e.currentTarget.value)}
                 >
                     <option value="">{names.length === 0 ? t('app.noProfiles') : '—'}</option>
                     {names.map((name) => (
@@ -219,7 +244,7 @@ export function ChallengeProfilesBar({ overrides, onApply, onProfilesChanged = (
                     aria-label={t('app.saveAsProfile')}
                     value={newName}
                     onChange={(e) => {
-                        setNewName(e.target.value);
+                        setNewName(e.currentTarget.value);
                         setErrorText('');
                         if (confirming === 'overwrite') disarm();
                     }}

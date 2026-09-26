@@ -1,3 +1,5 @@
+// @ts-check
+/** @import { Challenge, ChallengeMember } from '../../types/gurushots' */
 /**
  * Per-challenge settings applicability.
  *
@@ -31,7 +33,7 @@
  * challenge, but a fresh challenge prop is re-evaluated every render).
  *
  * @param {string} groupId - One of the SETTINGS_GROUPS ids.
- * @param {object|null} [challenge] - Challenge object (reads challenge.member.*).
+ * @param {Challenge|null} [challenge] - Challenge object (reads challenge.member.*).
  *   When absent (modal closed / unit context) everything is applicable.
  * @returns {{ applicable: boolean, reasonKey: string|null }} reasonKey is a
  *   translation key when not applicable, otherwise null.
@@ -40,6 +42,7 @@ export function getGroupApplicability(groupId, challenge) {
     const applicable = { applicable: true, reasonKey: null };
     if (!challenge) return applicable;
 
+    /** @type {ChallengeMember} */
     const member = challenge.member || {};
     // Slot state. maxSlots drives the boost single-photo check (=== 1) and the
     // autoFill "all full" check; entries feeds slotsFull. Derive once.

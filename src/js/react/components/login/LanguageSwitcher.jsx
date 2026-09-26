@@ -1,3 +1,4 @@
+// @ts-check
 import { useTranslation } from '@/contexts/TranslationContext';
 import { StrokeIcon, ICON_PATHS } from '@/components/ui/StrokeIcon';
 
@@ -21,7 +22,7 @@ export function LanguageSwitcher() {
                     <li>
                         <button
                             type="button"
-                            onClick={() => setLanguage('en')}
+                            onClick={() => void setLanguage('en')}
                             className={language === 'en' ? 'active' : ''}
                             aria-pressed={language === 'en'}
                         >
@@ -31,7 +32,7 @@ export function LanguageSwitcher() {
                     <li>
                         <button
                             type="button"
-                            onClick={() => setLanguage('lv')}
+                            onClick={() => void setLanguage('lv')}
                             className={language === 'lv' ? 'active' : ''}
                             aria-pressed={language === 'lv'}
                         >

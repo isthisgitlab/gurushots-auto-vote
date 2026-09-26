@@ -1,3 +1,5 @@
+// @ts-check
+/** @import { RendererGlobals } from '../../types/capacitor' */
 import { createRoot } from 'react-dom/client';
 import { useState, useEffect, useCallback } from 'react';
 import { TranslationProvider, useTranslation } from '@/contexts/TranslationContext';
@@ -50,6 +52,7 @@ function LoginPageContent() {
 
     // Handle theme change
     const handleThemeChange = useCallback(
+        /** @param {'dark' | 'light'} newTheme */
         async (newTheme) => {
             setTheme(newTheme);
             document.documentElement.setAttribute('data-theme', newTheme);
@@ -60,6 +63,7 @@ function LoginPageContent() {
 
     // Handle stay logged in change
     const handleStayLoggedInChange = useCallback(
+        /** @param {boolean} value */
         async (value) => {
             setStayLoggedIn(value);
             await updateSetting('stayLoggedIn', value);
@@ -74,6 +78,7 @@ function LoginPageContent() {
 
     // Handle mock mode change
     const handleMockModeChange = useCallback(
+        /** @param {boolean} value */
         async (value) => {
             setMockMode(value);
             await updateSetting('mock', value);
@@ -83,6 +88,10 @@ function LoginPageContent() {
 
     // Handle form submission
     const handleSubmit = useCallback(
+        /**
+         * @param {string} username
+         * @param {string} password
+         */
         async (username, password) => {
             const result = await authenticate(username, password, mockMode);
 
@@ -175,7 +184,7 @@ export const mountLogin = () => {
 // ESM import hoisting moves Capacitor.jsx's bootstrap-flag assignment
 // after its imports, so the check has to wait a microtask to see it.
 queueMicrotask(() => {
-    if (!globalThis.__capacitorBootstrap) {
+    if (!(/** @type {RendererGlobals} */ (globalThis).__capacitorBootstrap)) {
         mountLogin();
     }
 });

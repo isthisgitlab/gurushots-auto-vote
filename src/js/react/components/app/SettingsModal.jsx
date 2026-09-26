@@ -1,3 +1,4 @@
+// @ts-check
 import { useState, useCallback, useEffect } from 'react';
 import { useTranslation } from '@/contexts/TranslationContext';
 import { useSettings } from '@/api/useSettings';
@@ -19,12 +20,29 @@ import { TitleTagRulesEditor } from './TitleTagRulesEditor';
 import { ScenariosSection } from './ScenariosSection';
 import * as ipc from '@/api/ipc';
 
+/**
+ * @import { SettingsGroupDef, SettingsTierDef } from '@/utils/groupSettings'
+ * @import { HintsFor, RendererSchema, SettingChangeHandler, SettingResetHandler } from '../../../types/settingsEditor'
+ */
+
 // Challenge types seen on the live API (verified 2026-09-19). Suggestions for
 // the rule type field only — it stays free text, so a type this build has never
 // seen can still be typed in.
 const RULE_TYPE_SUGGESTIONS = ['default', 'exhibition', 'flash', 'speed'];
 
-/** The schema-driven global defaults, grouped into tier bands and static sub-sections. */
+/**
+ * The schema-driven global defaults, grouped into tier bands and static sub-sections.
+ *
+ * @param {{
+ *   schema: RendererSchema | null | undefined,
+ *   groups: readonly SettingsGroupDef[] | null | undefined,
+ *   tiers: readonly SettingsTierDef[] | null | undefined,
+ *   formValues: Record<string, unknown>,
+ *   handleFormChange: SettingChangeHandler,
+ *   handleResetGlobal: SettingResetHandler,
+ *   hintsFor: HintsFor,
+ * }} props
+ */
 function ChallengeDefaultsSection({
     schema,
     groups,
@@ -48,12 +66,17 @@ function ChallengeDefaultsSection({
                                 {entries.map(([key, config]) => (
                                     <div key={key} className={SETTING_CELL_CLASS}>
                                         <SettingLabel inputId={`setting-${key}`} type={config.type}>
-                                            <span className="font-medium">{t(config.label)}</span>
+                                            {/* Every schema entry carries a label and a description. */}
+                                            <span className="font-medium">
+                                                {t(/** @type {string} */ (config.label))}
+                                            </span>
                                             <span className="badge badge-ghost badge-sm ml-2">
                                                 {t('app.globalDefault')}
                                             </span>
                                         </SettingLabel>
-                                        <p className="text-xs text-base-content/60 mb-2">{t(config.description)}</p>
+                                        <p className="text-xs text-base-content/60 mb-2">
+                                            {t(/** @type {string} */ (config.description))}
+                                        </p>
                                         <SettingHelp helpKey={config.helpKey} />
                                         <SettingInput
                                             settingKey={key}
@@ -74,7 +97,11 @@ function ChallengeDefaultsSection({
     );
 }
 
-/** Challenge (title-tag) rules: matched on what survives a challenge's id rotation. */
+/**
+ * Challenge (title-tag) rules: matched on what survives a challenge's id rotation.
+ *
+ * @param {{ titleRules: ReturnType<typeof useTitleRules> }} props
+ */
 function TitleRulesSection({ titleRules }) {
     const { t } = useTranslation();
     return (
@@ -108,6 +135,8 @@ function TitleRulesSection({ titleRules }) {
 
 /**
  * Global settings modal
+ *
+ * @param {{ isOpen: boolean, onClose: () => void }} props
  */
 export function SettingsModal({ isOpen, onClose }) {
     const { t, language, setLanguage } = useTranslation();
@@ -187,7 +216,9 @@ export function SettingsModal({ isOpen, onClose }) {
             // setting takes effect now, not after the current wait elapses.
             await rearmSchedule();
         } catch (err) {
-            await ipc.logRendererError(`Error saving settings: ${err.message || err}`);
+            await ipc.logRendererError(
+                `Error saving settings: ${/** @type {{ message?: unknown } | null | undefined} */ (err)?.message || err}`,
+            );
         }
     }, [commit, persistTitleRules, uiValues.language, language, setLanguage, rearmSchedule, onClose]);
 

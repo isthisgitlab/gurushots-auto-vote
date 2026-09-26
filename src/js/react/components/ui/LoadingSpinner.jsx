@@ -1,5 +1,10 @@
+// @ts-check
+/** @typedef {'xs'|'sm'|'md'|'lg'} SpinnerSize */
+
 /**
  * DaisyUI loading spinner component
+ *
+ * @param {{ size?: SpinnerSize, className?: string }} props
  */
 export function LoadingSpinner({ size = 'md', className = '' }) {
     const sizeClass =
@@ -15,6 +20,8 @@ export function LoadingSpinner({ size = 'md', className = '' }) {
 
 /**
  * Spinner plus optional caption, laid out by the caller's wrapper classes.
+ *
+ * @param {{ className: string, size: SpinnerSize, textClassName: string, text?: string }} props
  */
 function CaptionedSpinner({ className, size, textClassName, text }) {
     return (
@@ -27,6 +34,8 @@ function CaptionedSpinner({ className, size, textClassName, text }) {
 
 /**
  * Full-page loading state with centered spinner and optional text
+ *
+ * @param {{ text?: string }} props
  */
 export function PageLoader({ text }) {
     return (
@@ -41,6 +50,8 @@ export function PageLoader({ text }) {
 
 /**
  * Inline loading state for smaller areas
+ *
+ * @param {{ text?: string }} props
  */
 export function InlineLoader({ text }) {
     return (

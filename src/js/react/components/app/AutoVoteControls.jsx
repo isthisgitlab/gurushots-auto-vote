@@ -1,8 +1,19 @@
+// @ts-check
 import { useTranslation } from '@/contexts/TranslationContext';
 import { StrokeIcon, ICON_PATHS } from '@/components/ui/StrokeIcon';
 
 /**
  * Autovote controls - toggle button, status, last run, cycle count
+ *
+ * @param {{
+ *   running: boolean,
+ *   status: string,
+ *   statusClass: string,
+ *   lastRun: string | null,
+ *   cycles: number,
+ *   onToggle: () => void | Promise<void>,
+ *   autoJoinActive: boolean,
+ * }} props
  */
 export function AutoVoteControls({ running, status, statusClass, lastRun, cycles, onToggle, autoJoinActive }) {
     const { t } = useTranslation();
@@ -12,7 +23,10 @@ export function AutoVoteControls({ running, status, statusClass, lastRun, cycles
             <div className="card-body p-4">
                 <div className="flex flex-wrap items-center justify-between gap-4">
                     {/* Toggle Button */}
-                    <button className={`btn btn-sm ${running ? 'btn-error' : 'btn-latvian'}`} onClick={onToggle}>
+                    <button
+                        className={`btn btn-sm ${running ? 'btn-error' : 'btn-latvian'}`}
+                        onClick={() => void onToggle()}
+                    >
                         {running ? (
                             <>
                                 <StrokeIcon className="w-4 h-4 mr-1" d={ICON_PATHS.close} />

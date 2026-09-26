@@ -1,5 +1,10 @@
+// @ts-check
 import { useNamedIpcAction } from './useAsyncIpcAction';
 
+/**
+ * @param {string | number} challengeId
+ * @param {unknown} mode - the handler validates it
+ */
 const fillNowIpc = (challengeId, mode) => window.api.fillChallengeNow(challengeId, mode);
 const LABELS = { failureMessage: 'Photo submit failed', errorMessage: 'Photo submit error' };
 

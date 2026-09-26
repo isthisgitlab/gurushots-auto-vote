@@ -1,3 +1,5 @@
+// @ts-check
+/** @import { RankingEntry } from '../../../types/gurushots' */
 import { useState } from 'react';
 import { useTranslation } from '@/contexts/TranslationContext';
 import { entryPhotoUrl } from '@/utils/formatters';
@@ -30,7 +32,7 @@ const FULL_PX = 1200;
  * desktop-only convenience layered on top.
  *
  * @param {object} props
- * @param {object} props.entry - Entry record from challenge.member.ranking.entries
+ * @param {RankingEntry} props.entry - Entry record from challenge.member.ranking.entries
  */
 export function EntryPhoto({ entry }) {
     const { t } = useTranslation();
@@ -48,6 +50,8 @@ export function EntryPhoto({ entry }) {
     // nothing rather than a broken-image glyph.
     const showPhoto = useImageLoads(thumbUrl);
 
+    // Past this check every URL below is a string: a null thumbUrl never
+    // loads, and the larger renders are built from the same ids.
     if (!showPhoto) return null;
 
     // Both carry the rank so a screen reader can tell several entries in the
@@ -74,7 +78,7 @@ export function EntryPhoto({ entry }) {
                 {/* Decorative: the button carries the accessible name, so an alt
                     here would make a screen reader announce the photo twice. */}
                 <img
-                    src={thumbUrl}
+                    src={/** @type {string} */ (thumbUrl)}
                     alt=""
                     loading="lazy"
                     referrerPolicy="no-referrer"
@@ -94,7 +98,7 @@ export function EntryPhoto({ entry }) {
                         dimensions vary with the photo, so a fixed box keeps the
                         card from resizing under the cursor as the image lands. */}
                     <img
-                        src={entryPhotoUrl(entry, { size: HOVER_PX, fit: true })}
+                        src={/** @type {string} */ (entryPhotoUrl(entry, { size: HOVER_PX, fit: true }))}
                         alt=""
                         referrerPolicy="no-referrer"
                         className="aspect-square w-full rounded object-contain"
@@ -103,7 +107,7 @@ export function EntryPhoto({ entry }) {
             )}
             <Modal isOpen={fullOpen} onClose={() => setFullOpen(false)} title={photoLabel} size="xl">
                 <img
-                    src={entryPhotoUrl(entry, { size: FULL_PX, fit: true })}
+                    src={/** @type {string} */ (entryPhotoUrl(entry, { size: FULL_PX, fit: true }))}
                     alt={photoLabel}
                     referrerPolicy="no-referrer"
                     className="max-h-[70vh] w-full rounded object-contain"

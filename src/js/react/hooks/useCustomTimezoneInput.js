@@ -1,6 +1,10 @@
+// @ts-check
 import { useState, useEffect, useRef, useCallback } from 'react';
 import { DEFAULT_TIMEZONE } from '../../settings/uiDefaults';
 
+/** @import { UiChangeHandler, UiValues } from '../../types/settingsEditor' */
+
+/** @param {string} tz */
 const isValidTimezone = (tz) => {
     try {
         new Intl.DateTimeFormat(undefined, { timeZone: tz });
@@ -16,6 +20,8 @@ const isValidTimezone = (tz) => {
  * a previous session doesn't carry over. Adding a valid zone stores it in
  * `customTimezones` and selects it; removing drops the selected custom zone
  * and falls back to the default.
+ *
+ * @param {{ isOpen: boolean, uiValues: UiValues, handleUiChange: UiChangeHandler }} options
  */
 export function useCustomTimezoneInput({ isOpen, uiValues, handleUiChange }) {
     const [visible, setVisible] = useState(false);
@@ -23,7 +29,7 @@ export function useCustomTimezoneInput({ isOpen, uiValues, handleUiChange }) {
     const [error, setError] = useState(false);
     // Revealing the input (the "+" button) moves focus into it, so the user
     // can type straight away.
-    const inputRef = useRef(null);
+    const inputRef = useRef(/** @type {HTMLInputElement | null} */ (null));
     useEffect(() => {
         if (visible) inputRef.current?.focus();
     }, [visible]);
@@ -65,6 +71,7 @@ export function useCustomTimezoneInput({ isOpen, uiValues, handleUiChange }) {
         setError(false);
     };
 
+    /** @param {string} next */
     const change = (next) => {
         setValue(next);
         if (error) setError(false);

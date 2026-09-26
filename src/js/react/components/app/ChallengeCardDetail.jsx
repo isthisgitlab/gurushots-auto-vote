@@ -1,3 +1,13 @@
+// @ts-check
+/**
+ * @import { ComponentChildren } from 'preact'
+ * @import { Bankroll, Challenge, RankingTotal } from '../../../types/gurushots'
+ * @import { ChallengeCardView } from './ChallengeCard'
+ * @import { ChallengeCardActionSet } from './ChallengeCardActions'
+ * @import { ChallengeBadgeRowProps } from './ChallengeBadgeRow'
+ * @import { DeadlineAction } from './DeadlineTimeline'
+ */
+/** @typedef {ReturnType<typeof import('@/api/useSwapBacks').useSwapBacks>} SwapBackOffers */
 import { useMemo } from 'react';
 import { useTranslation } from '@/contexts/TranslationContext';
 import { formatEndTime, getLevelStatus } from '@/utils/formatters';
@@ -13,6 +23,8 @@ import * as ipc from '@/api/ipc';
 
 /**
  * One labelled cell of the detailed card's stat grids.
+ *
+ * @param {{ label: string, children: ComponentChildren }} props
  */
 function StatCell({ label, children }) {
     return (
@@ -28,6 +40,14 @@ function StatCell({ label, children }) {
  * header stacks vertically: the title gets the full card width (so it
  * truncates far less), and the action buttons sit on their own row beneath it,
  * wrapping as needed rather than squeezing the title.
+ *
+ * @param {{
+ *     challenge: Challenge,
+ *     badgeRowProps: ChallengeBadgeRowProps,
+ *     actions: ChallengeCardActionSet,
+ *     hasCompactOverride: boolean,
+ *     onToggleCompact: () => void | Promise<void>,
+ * }} props
  */
 function DetailHeader({ challenge, badgeRowProps, actions, hasCompactOverride, onToggleCompact }) {
     const sanitizedWelcome = useMemo(
@@ -76,6 +96,8 @@ function DetailHeader({ challenge, badgeRowProps, actions, hasCompactOverride, o
 /**
  * User progress — full bar + level + next-level info. Rendered only once the
  * member has votes in the challenge.
+ *
+ * @param {{ challenge: Challenge, userProgress: RankingTotal }} props
  */
 function UserProgressPanel({ challenge, userProgress }) {
     const { t } = useTranslation();
@@ -86,7 +108,7 @@ function UserProgressPanel({ challenge, userProgress }) {
             <div className="flex justify-between items-center mb-1">
                 <span className="text-xs font-medium">{t('app.yourProgress')}</span>
                 <span
-                    className={`badge badge-sm ${getLevelStatus(userProgress.level, userProgress.level_name).colorClass}`}
+                    className={`badge badge-sm ${getLevelStatus(/** @type {number} */ (userProgress.level), /** @type {string} */ (userProgress.level_name)).colorClass}`}
                 >
                     {userProgress.level_name} {userProgress.level}
                 </span>
@@ -116,6 +138,15 @@ function UserProgressPanel({ challenge, userProgress }) {
  * 6-cell live-state grid (time, end, exposure, boost, turbo, entries) with the
  * cell-placed actions — stacks 2-up on phones, 3-up on small tablets, 6-up on
  * desktop.
+ *
+ * @param {{
+ *     challenge: Challenge,
+ *     view: ChallengeCardView,
+ *     timeText: string,
+ *     timezone: string,
+ *     actions: ChallengeCardActionSet,
+ *     autovoteRunning: boolean,
+ * }} props
  */
 function StatusCells({ challenge, view, timeText, timezone, actions, autovoteRunning }) {
     const { t } = useTranslation();
@@ -162,6 +193,15 @@ function StatusCells({ challenge, view, timeText, timezone, actions, autovoteRun
 
 /**
  * Entry details — entry-level boost / turbo badges and actions.
+ *
+ * @param {{
+ *     challenge: Challenge,
+ *     view: ChallengeCardView,
+ *     swapBacks: SwapBackOffers,
+ *     bankroll: Bankroll | null,
+ *     onVoteComplete: () => void,
+ *     onCurrencySpent: () => void,
+ * }} props
  */
 function EntryDetails({ challenge, view, swapBacks, bankroll, onVoteComplete, onCurrencySpent }) {
     const { t } = useTranslation();
@@ -194,6 +234,24 @@ function EntryDetails({ challenge, view, swapBacks, bankroll, onVoteComplete, on
  * The detailed challenge card body: every stat and every action. All values
  * are derived by the parent ChallengeCard (see utils/challengeCardView) and
  * passed in, so this layout and the compact tile never disagree.
+ *
+ * @param {object} props
+ * @param {Challenge} props.challenge
+ * @param {ChallengeCardView} props.view
+ * @param {ChallengeBadgeRowProps} props.badgeRowProps
+ * @param {string} props.timeText
+ * @param {string} props.timezone
+ * @param {ChallengeCardActionSet} props.actions
+ * @param {boolean} props.autovoteRunning
+ * @param {boolean} props.hasCompactOverride
+ * @param {() => void | Promise<void>} props.onToggleCompact
+ * @param {boolean} props.boostBlocked
+ * @param {DeadlineAction[]} props.deadlineActions
+ * @param {ReturnType<typeof import('@/api/useScenarioStatus').useScenarioStatus>} props.scenarioStatus
+ * @param {SwapBackOffers} props.swapBacks
+ * @param {Bankroll | null} props.bankroll
+ * @param {() => void} props.onVoteComplete
+ * @param {() => void} props.onCurrencySpent
  */
 export function ChallengeCardDetail({
     challenge,
@@ -229,20 +287,20 @@ export function ChallengeCardDetail({
             {/* Challenge Statistics — stacks 2-up on phones, 4-up on tablets+. */}
             <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 text-xs">
                 <StatCell label={t('app.entries')}>
-                    <div>{challenge.entries.toLocaleString()}</div>
+                    <div>{/** @type {number} */ (challenge.entries).toLocaleString()}</div>
                 </StatCell>
                 <StatCell label={t('app.players')}>
-                    <div>{challenge.players.toLocaleString()}</div>
+                    <div>{/** @type {number} */ (challenge.players).toLocaleString()}</div>
                 </StatCell>
                 <StatCell label={t('app.votes')}>
-                    <div>{challenge.votes.toLocaleString()}</div>
+                    <div>{/** @type {number} */ (challenge.votes).toLocaleString()}</div>
                 </StatCell>
                 <StatCell label={t('app.prize')}>
                     <div>{challenge.prizes_worth}</div>
                 </StatCell>
             </div>
 
-            {userProgress && userProgress.votes > 0 && (
+            {userProgress && (userProgress.votes ?? 0) > 0 && (
                 <UserProgressPanel challenge={challenge} userProgress={userProgress} />
             )}
 

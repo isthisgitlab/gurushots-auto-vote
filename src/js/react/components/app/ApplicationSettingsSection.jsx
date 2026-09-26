@@ -1,3 +1,4 @@
+// @ts-check
 import { Fragment } from 'react';
 import { useTranslation } from '@/contexts/TranslationContext';
 import { SETTINGS_GRID_CLASS, SETTING_CELL_CLASS } from '@/utils/groupSettings';
@@ -5,7 +6,44 @@ import { ResetButton } from '@/components/ui/ResetButton';
 import { DEFAULT_TIMEZONE } from '../../../settings/uiDefaults';
 import { SettingLabel } from './SettingInput';
 
-/** One application (UI) setting: caption with the "UI setting" badge, description, then its controls. */
+/**
+ * @import { ComponentChildren } from 'preact'
+ * @import { useCustomTimezoneInput } from '@/hooks/useCustomTimezoneInput'
+ * @import { UiChangeHandler, UiResetHandler, UiValues } from '../../../types/settingsEditor'
+ */
+
+/** @typedef {ReturnType<typeof useCustomTimezoneInput>} TimezoneInputState */
+
+/**
+ * The UI-values half of useSettingsForm, as every UI setting row takes it.
+ *
+ * @typedef {object} UiFormProps
+ * @property {UiValues} uiValues
+ * @property {UiChangeHandler} handleUiChange
+ * @property {UiResetHandler} handleResetUi
+ */
+
+/** @typedef {'checkFrequencyMin' | 'checkFrequencyMax' | 'apiMaxRetries' | 'apiRetryBaseDelayMs'} UiNumberKey */
+
+/**
+ * One integer input of a multi-value UI setting (see UiNumberInputs).
+ *
+ * @typedef {object} UiNumberField
+ * @property {UiNumberKey} key
+ * @property {string} labelKey
+ * @property {string} widthClass
+ * @property {string} min
+ * @property {string} max
+ * @property {string} [step]
+ * @property {number} fallback
+ * @property {UiNumberKey} [atLeastKey]
+ */
+
+/**
+ * One application (UI) setting: caption with the "UI setting" badge, description, then its controls.
+ *
+ * @param {{ inputId: string, group?: boolean, labelKey: string, descKey: string, children?: ComponentChildren }} props
+ */
 function UiSettingCell({ inputId, group, labelKey, descKey, children }) {
     const { t } = useTranslation();
     return (
@@ -24,6 +62,8 @@ function UiSettingCell({ inputId, group, labelKey, descKey, children }) {
  * Captioned integer inputs for a multi-value UI setting. An unparseable entry
  * falls back to the field's `fallback`; a field with `atLeastKey` is clamped up
  * to that sibling's value once the user leaves it, so a range can never invert.
+ *
+ * @param {{ fields: UiNumberField[], uiValues: UiValues, handleUiChange: UiChangeHandler }} props
  */
 function UiNumberInputs({ fields, uiValues, handleUiChange }) {
     const { t } = useTranslation();
@@ -38,11 +78,11 @@ function UiNumberInputs({ fields, uiValues, handleUiChange }) {
                 step={step}
                 aria-label={t(labelKey)}
                 value={uiValues[key]}
-                onChange={(e) => handleUiChange(key, parseInt(e.target.value, 10) || fallback)}
+                onChange={(e) => handleUiChange(key, parseInt(e.currentTarget.value, 10) || fallback)}
                 onBlur={
                     atLeastKey &&
                     ((e) => {
-                        if ((parseInt(e.target.value, 10) || fallback) < uiValues[atLeastKey]) {
+                        if ((parseInt(e.currentTarget.value, 10) || fallback) < uiValues[atLeastKey]) {
                             handleUiChange(key, uiValues[atLeastKey]);
                         }
                     })
@@ -52,7 +92,17 @@ function UiNumberInputs({ fields, uiValues, handleUiChange }) {
     ));
 }
 
-/** A UI setting made of several number inputs, reset together. `suffix` is an optional trailing unit. */
+/**
+ * A UI setting made of several number inputs, reset together. `suffix` is an optional trailing unit.
+ *
+ * @param {UiFormProps & {
+ *   inputId: string,
+ *   labelKey: string,
+ *   descKey: string,
+ *   fields: UiNumberField[],
+ *   suffix?: ComponentChildren,
+ * }} props
+ */
 function UiNumberGroupCell({ inputId, labelKey, descKey, fields, suffix, uiValues, handleUiChange, handleResetUi }) {
     return (
         <UiSettingCell inputId={inputId} group labelKey={labelKey} descKey={descKey}>
@@ -65,6 +115,7 @@ function UiNumberGroupCell({ inputId, labelKey, descKey, fields, suffix, uiValue
     );
 }
 
+/** @type {UiNumberField[]} */
 const CHECK_FREQUENCY_FIELDS = [
     {
         key: 'checkFrequencyMin',
@@ -85,6 +136,7 @@ const CHECK_FREQUENCY_FIELDS = [
     },
 ];
 
+/** @type {UiNumberField[]} */
 const RELIABILITY_FIELDS = [
     { key: 'apiMaxRetries', labelKey: 'app.apiMaxRetries', widthClass: 'w-20', min: '0', max: '10', fallback: 0 },
     {
@@ -98,7 +150,11 @@ const RELIABILITY_FIELDS = [
     },
 ];
 
-/** The revealed "+" input: Enter or blur adds the typed zone, Escape discards it. */
+/**
+ * The revealed "+" input: Enter or blur adds the typed zone, Escape discards it.
+ *
+ * @param {{ timezoneInput: TimezoneInputState }} props
+ */
 function CustomTimezoneInput({ timezoneInput }) {
     const { t } = useTranslation();
     return (
@@ -109,7 +165,7 @@ function CustomTimezoneInput({ timezoneInput }) {
             placeholder={t('app.timezonePlaceholder')}
             className={`input input-sm mt-2 w-60 ${timezoneInput.error ? 'input-error' : ''}`}
             value={timezoneInput.value}
-            onChange={(e) => timezoneInput.change(e.target.value)}
+            onChange={(e) => timezoneInput.change(e.currentTarget.value)}
             onKeyDown={(e) => {
                 if (e.key === 'Enter') {
                     e.preventDefault();
@@ -123,7 +179,11 @@ function CustomTimezoneInput({ timezoneInput }) {
     );
 }
 
-/** A UI setting whose controls share one row, ending in the setting's reset. */
+/**
+ * A UI setting whose controls share one row, ending in the setting's reset.
+ *
+ * @param {{ inputId: string, labelKey: string, descKey: string, onReset: () => void, children?: ComponentChildren }} props
+ */
 function ResettableUiCell({ inputId, labelKey, descKey, onReset, children }) {
     return (
         <UiSettingCell inputId={inputId} labelKey={labelKey} descKey={descKey}>
@@ -135,6 +195,7 @@ function ResettableUiCell({ inputId, labelKey, descKey, onReset, children }) {
     );
 }
 
+/** @param {UiFormProps} props */
 function ThemeSetting({ uiValues, handleUiChange, handleResetUi }) {
     const { t } = useTranslation();
     return (
@@ -150,13 +211,14 @@ function ThemeSetting({ uiValues, handleUiChange, handleResetUi }) {
                 type="checkbox"
                 className="toggle toggle-sm"
                 checked={uiValues.theme === 'dark'}
-                onChange={(e) => handleUiChange('theme', e.target.checked ? 'dark' : 'light')}
+                onChange={(e) => handleUiChange('theme', e.currentTarget.checked ? 'dark' : 'light')}
             />
             <span className="text-sm">{t('common.dark')}</span>
         </ResettableUiCell>
     );
 }
 
+/** @param {UiFormProps} props */
 function LanguageSetting({ uiValues, handleUiChange, handleResetUi }) {
     const { t } = useTranslation();
     return (
@@ -170,7 +232,7 @@ function LanguageSetting({ uiValues, handleUiChange, handleResetUi }) {
                 id="ui-language"
                 className="select select-sm"
                 value={uiValues.language}
-                onChange={(e) => handleUiChange('language', e.target.value)}
+                onChange={(e) => handleUiChange('language', e.currentTarget.value)}
             >
                 <option value="en">{t('app.english')}</option>
                 <option value="lv">{t('app.latvian')}</option>
@@ -179,6 +241,7 @@ function LanguageSetting({ uiValues, handleUiChange, handleResetUi }) {
     );
 }
 
+/** @param {UiFormProps & { timezoneInput: TimezoneInputState }} props */
 function TimezoneSetting({ uiValues, handleUiChange, handleResetUi, timezoneInput }) {
     const { t } = useTranslation();
     const { timezone, customTimezones } = uiValues;
@@ -189,7 +252,7 @@ function TimezoneSetting({ uiValues, handleUiChange, handleResetUi, timezoneInpu
                     id="ui-timezone"
                     className="select select-sm w-48"
                     value={timezone}
-                    onChange={(e) => handleUiChange('timezone', e.target.value)}
+                    onChange={(e) => handleUiChange('timezone', e.currentTarget.value)}
                 >
                     <option value={DEFAULT_TIMEZONE}>{DEFAULT_TIMEZONE}</option>
                     {customTimezones.map((tz) => (
@@ -229,6 +292,8 @@ function TimezoneSetting({ uiValues, handleUiChange, handleResetUi, timezoneInpu
  * timezone, check frequency and API retry. These are UI settings, edited
  * through useSettingsForm's `uiValues` half; `timezoneInput` is
  * useCustomTimezoneInput's state.
+ *
+ * @param {UiFormProps & { timezoneInput: TimezoneInputState }} props
  */
 export function ApplicationSettingsSection({ uiValues, handleUiChange, handleResetUi, timezoneInput }) {
     const { t } = useTranslation();

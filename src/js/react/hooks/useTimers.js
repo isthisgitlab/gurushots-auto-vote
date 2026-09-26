@@ -1,6 +1,10 @@
+// @ts-check
 import { signal } from '@preact/signals';
 import { useRef, useEffect, useMemo } from 'react';
 import { formatTimeRemaining } from '@/utils/formatters';
+
+/** @import { Signal } from '@preact/signals' */
+/** @import { Challenge } from '../../types/gurushots' */
 
 /**
  * Hook that manages countdown timers for challenges.
@@ -13,13 +17,13 @@ import { formatTimeRemaining } from '@/utils/formatters';
  * challenges section + its action buttons each tick.) Each ChallengeCard reads
  * its own signal's value, so a card that is already re-rendering for other reasons still shows the live countdown.
  *
- * @param {Array} challenges - Array of challenge objects with close_time
+ * @param {Array<Pick<Challenge, 'id' | 'close_time'>>} challenges - Array of challenge objects with close_time
  *   (always an array — ChallengesContext normalises a missing payload to [])
- * @returns {Object<string, import('@preact/signals').Signal<string>>}
+ * @returns {Record<string, Signal<string>>}
  */
 export function useTimers(challenges) {
     // Per-challenge time signals, reused across renders so each card binds once.
-    const signalsRef = useRef(new Map());
+    const signalsRef = useRef(/** @type {Map<string | number, Signal<string>>} */ (new Map()));
 
     // Build/prune the signal map for the current challenge set. Recomputed only
     // when the challenge identities change — not every second. New signals are
@@ -29,6 +33,7 @@ export function useTimers(challenges) {
     const times = useMemo(() => {
         const store = signalsRef.current;
         const present = new Set();
+        /** @type {Record<string, Signal<string>>} */
         const out = {};
         for (const challenge of challenges) {
             present.add(challenge.id);
@@ -54,7 +59,9 @@ export function useTimers(challenges) {
             for (const challenge of challenges) {
                 // The memo above ran for this same `challenges` array, so every
                 // id already has a signal.
-                signalsRef.current.get(challenge.id).value = formatTimeRemaining(challenge.close_time);
+                /** @type {Signal<string>} */ (signalsRef.current.get(challenge.id)).value = formatTimeRemaining(
+                    challenge.close_time,
+                );
             }
         };
         tick();

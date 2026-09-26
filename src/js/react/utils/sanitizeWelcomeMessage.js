@@ -1,3 +1,4 @@
+// @ts-check
 // Sanitises challenge `welcome_message` strings before they are rendered.
 // The GuruShots API occasionally returns medium-editor WYSIWYG toolbar markup
 // leaked into the description (rows of `<button data-action="bold">B</button>`
@@ -71,17 +72,20 @@ const URL_RE = /\bhttps?:\/\/[^\s<]+/g;
 const TRAILING_PUNCT_RE = /[.,;:!?)]+$/;
 const SAFE_HREF_RE = /^(?:https?:\/\/|mailto:)/i;
 
+/** @param {Element} el */
 function isMediumEditorJunk(el) {
     if (el.hasAttribute && el.hasAttribute('data-action')) return true;
     const cls = el.getAttribute && el.getAttribute('class');
     return Boolean(cls && /(^|\s)medium-editor/.test(cls));
 }
 
+/** @param {Element} el */
 function stripAttributes(el) {
     const attrs = Array.from(el.attributes);
     for (const { name } of attrs) el.removeAttribute(name);
 }
 
+/** @param {Element} el */
 function normaliseAnchor(el) {
     const href = el.getAttribute('href') || '';
     stripAttributes(el);
@@ -92,16 +96,19 @@ function normaliseAnchor(el) {
     }
 }
 
+/** @param {Element} el */
 function unwrap(el) {
-    const parent = el.parentNode;
+    const parent = /** @type {ParentNode} */ (el.parentNode);
     while (el.firstChild) parent.insertBefore(el.firstChild, el);
     parent.removeChild(el);
 }
 
+/** @param {Node} node */
 function walk(node) {
     const children = Array.from(node.childNodes);
-    for (const child of children) {
-        if (child.nodeType !== 1 /* ELEMENT_NODE */) continue;
+    for (const childNode of children) {
+        if (childNode.nodeType !== 1 /* ELEMENT_NODE */) continue;
+        const child = /** @type {Element} */ (childNode);
         const tag = child.tagName.toLowerCase();
 
         if (STRIP_WITH_CONTENTS.has(tag) || isMediumEditorJunk(child)) {
@@ -124,11 +131,21 @@ function walk(node) {
     }
 }
 
+/**
+ * @param {string} s
+ * @returns {string}
+ */
 function escapeText(s) {
     return s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
 }
 
+/**
+ * @param {Node} textNode
+ * @param {Node} root
+ * @returns {boolean}
+ */
 function isInsideAnchor(textNode, root) {
+    /** @type {(ParentNode & { tagName?: string }) | null} */
     let p = textNode.parentNode;
     while (p && p !== root) {
         if (p.tagName && p.tagName.toLowerCase() === 'a') return true;
@@ -137,8 +154,14 @@ function isInsideAnchor(textNode, root) {
     return false;
 }
 
+/**
+ * @param {Node} root
+ * @param {Document} doc
+ * @returns {Node[]}
+ */
 function collectTextNodes(root, doc) {
     const walker = doc.createTreeWalker(root, /* NodeFilter.SHOW_TEXT */ 4);
+    /** @type {Node[]} */
     const out = [];
     let n = walker.nextNode();
     while (n) {
@@ -148,9 +171,13 @@ function collectTextNodes(root, doc) {
     return out;
 }
 
+/**
+ * @param {Node} root
+ * @param {Document} doc
+ */
 function linkifyTextNodes(root, doc) {
     for (const textNode of collectTextNodes(root, doc)) {
-        const text = textNode.nodeValue;
+        const text = /** @type {string} */ (textNode.nodeValue);
         const matches = Array.from(text.matchAll(URL_RE));
         if (matches.length === 0) continue;
 
@@ -174,10 +201,14 @@ function linkifyTextNodes(root, doc) {
             last = end;
         }
         if (last < text.length) frag.appendChild(doc.createTextNode(text.slice(last)));
-        textNode.parentNode.replaceChild(frag, textNode);
+        /** @type {ParentNode} */ (textNode.parentNode).replaceChild(frag, textNode);
     }
 }
 
+/**
+ * @param {unknown} input - Raw `welcome_message`; null/undefined render as ''.
+ * @returns {string} Sanitised HTML, safe for dangerouslySetInnerHTML.
+ */
 export function sanitizeWelcomeMessage(input) {
     if (input == null) return '';
     const str = String(input);
@@ -186,14 +217,14 @@ export function sanitizeWelcomeMessage(input) {
     try {
         if (str.indexOf('<') === -1 && str.indexOf('&') === -1) {
             const doc = new DOMParser().parseFromString('<div></div>', 'text/html');
-            const wrap = doc.body.firstChild;
+            const wrap = /** @type {HTMLElement} */ (doc.body.firstChild);
             wrap.appendChild(doc.createTextNode(str));
             linkifyTextNodes(wrap, doc);
             return wrap.innerHTML;
         }
 
         const doc = new DOMParser().parseFromString('<div>' + str + '</div>', 'text/html');
-        const wrap = doc.body.firstChild;
+        const wrap = /** @type {HTMLElement} */ (doc.body.firstChild);
         walk(wrap);
         linkifyTextNodes(wrap, doc);
         return wrap.innerHTML;

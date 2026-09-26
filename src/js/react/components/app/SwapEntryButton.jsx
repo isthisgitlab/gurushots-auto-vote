@@ -1,3 +1,16 @@
+// @ts-check
+/**
+ * @import { Bankroll, Challenge, RankingEntry } from '../../../types/gurushots'
+ * @import { SwapBackRecord } from '../../../types/stores'
+ * @import { SwapCandidate } from '../../../services/currencyActions'
+ * @import { ActionButtonVariant } from '@/components/ui/ActionButton'
+ * @import { CurrencyConfirmModalProps } from './CurrencyConfirmModal'
+ */
+/**
+ * A swap-back offer for one slot: the boosted/turbo'd original to put back.
+ *
+ * @typedef {Pick<SwapBackRecord, 'previousId' | 'previousMemberId' | 'kind'>} SwapBackOffer
+ */
 import { useState } from 'react';
 import { useTranslation } from '@/contexts/TranslationContext';
 import { useSwapPhoto, useSwapBack } from '@/api/useCurrencyActions';
@@ -14,6 +27,8 @@ const PREVIEW_PX = 240;
 /**
  * One side of the swap comparison: the photo plus a visible caption, so the
  * current/replacement distinction never rests on left/right position alone.
+ *
+ * @param {{ photo: Pick<RankingEntry, 'id' | 'member_id'>, caption: string }} props
  */
 function SwapPhoto({ photo, caption }) {
     const url = entryPhotoUrl(photo, { size: PREVIEW_PX, fit: true });
@@ -37,12 +52,20 @@ function SwapPhoto({ photo, caption }) {
 /**
  * The swap trigger button (spinner while busy, red after a failure) plus the
  * inline outcome text of that failure.
+ *
+ * @param {{
+ *     variant: ActionButtonVariant,
+ *     label: string,
+ *     busy: boolean,
+ *     error: string | null,
+ *     onClick: () => void | Promise<void>,
+ * }} props
  */
 function SwapTrigger({ variant, label, busy, error, onClick }) {
     const { t } = useTranslation();
     return (
         <>
-            <ActionButton variant={variant} error={error} onClick={onClick} disabled={busy}>
+            <ActionButton variant={variant} error={error} onClick={() => void onClick()} disabled={busy}>
                 {busy ? <span className="loading loading-spinner loading-xs" /> : label}
             </ActionButton>
             {error && (
@@ -57,6 +80,12 @@ function SwapTrigger({ variant, label, busy, error, onClick }) {
 /**
  * Swap confirm modal: the current photo beside the one that would take its
  * slot (once known), then the caller's explanation.
+ *
+ * @param {Omit<CurrencyConfirmModalProps, 'field'> & {
+ *     current: Pick<RankingEntry, 'id' | 'member_id'>,
+ *     other: Pick<RankingEntry, 'id' | 'member_id'> | null,
+ *     otherCaption: string,
+ * }} props
  */
 function SwapConfirmModal({ current, other, otherCaption, children, ...modalProps }) {
     const { t } = useTranslation();
@@ -78,16 +107,16 @@ function SwapConfirmModal({ current, other, otherCaption, children, ...modalProp
  * (no different photo) is reported inline without opening the modal.
  *
  * @param {object} props
- * @param {object} props.entry - entry record (id, member_id)
+ * @param {RankingEntry} props.entry - entry record (id, member_id)
  * @param {boolean} props.warnActioned - the entry is boosted or turbo'd (its boost/turbo stays with the photo, so the replacement won't get it)
- * @param {string|number} props.challengeId
- * @param {object|null} props.bankroll
- * @param {function} props.onSpent - called after a successful swap
+ * @param {Challenge['id']} props.challengeId
+ * @param {Bankroll|null} props.bankroll
+ * @param {() => void} props.onSpent - called after a successful swap
  */
 export function SwapEntryButton({ entry, challengeId, bankroll, warnActioned, onSpent }) {
     const { t } = useTranslation();
     const { preview, commit } = useSwapPhoto();
-    const [candidate, setCandidate] = useState(null);
+    const [candidate, setCandidate] = useState(/** @type {SwapCandidate | null} */ (null));
     const error = preview.error || commit.error;
 
     useAutoClear(preview.error, preview.clearError, ERROR_DISPLAY_MS);
@@ -100,7 +129,8 @@ export function SwapEntryButton({ entry, challengeId, bankroll, warnActioned, on
     };
 
     const handleConfirm = async () => {
-        const result = await commit.run(challengeId, entry.id, candidate.id);
+        // Only reachable from the confirm modal, which is open only while a candidate is held.
+        const result = await commit.run(challengeId, entry.id, /** @type {SwapCandidate} */ (candidate).id);
         setCandidate(null);
         if (spentOrStale(result)) onSpent();
     };
@@ -138,11 +168,11 @@ export function SwapEntryButton({ entry, challengeId, bankroll, warnActioned, on
  * restores its boost/turbo. The original comes from the main-side ledger.
  *
  * @param {object} props
- * @param {object} props.entry - the entry now in the slot
- * @param {{previousId: string, previousMemberId: string, kind: 'boost'|'turbo'}} props.swapBack
- * @param {string|number} props.challengeId
- * @param {object|null} props.bankroll
- * @param {function} props.onSpent
+ * @param {RankingEntry} props.entry - the entry now in the slot
+ * @param {SwapBackOffer} props.swapBack
+ * @param {Challenge['id']} props.challengeId
+ * @param {Bankroll|null} props.bankroll
+ * @param {() => void} props.onSpent
  */
 export function SwapBackButton({ entry, swapBack, challengeId, bankroll, onSpent }) {
     const { t } = useTranslation();

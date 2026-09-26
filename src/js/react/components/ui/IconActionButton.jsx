@@ -1,3 +1,4 @@
+// @ts-check
 import { AsyncActionButton } from './AsyncActionButton';
 import { StrokeIcon } from './StrokeIcon';
 
@@ -6,9 +7,10 @@ import { StrokeIcon } from './StrokeIcon';
  * the shape of the per-card Vote / Run buttons and the list-wide Vote All /
  * Run buttons. Every other prop passes straight through.
  *
- * @param {object} props
- * @param {string} props.icon            - StrokeIcon path data (ICON_PATHS entry)
- * @param {import('react').ReactNode} props.label - idle label after the icon
+ * @param {Omit<import('./AsyncActionButton').AsyncActionButtonProps, 'idleContent'> & {
+ *   icon: string | string[],
+ *   label: import('preact').ComponentChildren,
+ * }} props - `icon` is StrokeIcon path data (an ICON_PATHS entry); `label` is the idle label after the icon.
  */
 export function IconActionButton({ icon, label, ...buttonProps }) {
     return (

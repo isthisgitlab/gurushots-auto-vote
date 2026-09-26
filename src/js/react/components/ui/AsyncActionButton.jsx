@@ -1,5 +1,21 @@
+// @ts-check
 import { useState } from 'react';
 import * as ipc from '@/api/ipc';
+
+/**
+ * Props of AsyncActionButton.
+ *
+ * @typedef {object} AsyncActionButtonProps
+ * @property {string} className        - full DaisyUI class string for the <button>
+ * @property {string} [title]          - optional tooltip
+ * @property {() => Promise<{success?: boolean, error?: string} | null | undefined>} action
+ * @property {() => unknown} onSuccess - awaited after a successful result (every caller passes one)
+ * @property {string} failureLogPrefix - logError prefix for `{success:false}` results
+ * @property {string} errorLogPrefix   - logError prefix for thrown errors
+ * @property {import('preact').ComponentChildren} loadingLabel - text next to the spinner
+ * @property {import('preact').ComponentChildren} idleContent  - button content when idle
+ * @property {boolean} [disabled]      - extra disable condition (ORed with loading)
+ */
 
 /**
  * Shared envelope for a button that fires an async IPC action: toggles a
@@ -9,16 +25,7 @@ import * as ipc from '@/api/ipc';
  * Vote All / Run buttons in ChallengesSection — each caller supplies its
  * own label, icon, and DaisyUI classes.
  *
- * @param {object} props
- * @param {string} props.className        - full DaisyUI class string for the <button>
- * @param {string} [props.title]          - optional tooltip
- * @param {() => Promise<{success?: boolean, error?: string}>} props.action
- * @param {Function} props.onSuccess      - awaited after a successful result (every caller passes one)
- * @param {string} props.failureLogPrefix - logError prefix for `{success:false}` results
- * @param {string} props.errorLogPrefix   - logError prefix for thrown errors
- * @param {import('react').ReactNode} props.loadingLabel - text next to the spinner
- * @param {import('react').ReactNode} props.idleContent  - button content when idle
- * @param {boolean} [props.disabled]      - extra disable condition (ORed with loading)
+ * @param {AsyncActionButtonProps} props
  */
 export function AsyncActionButton({
     className,
@@ -46,7 +53,9 @@ export function AsyncActionButton({
                 await ipc.logRendererError(`${failureLogPrefix}: ${result?.error || 'Unknown error'}`);
             }
         } catch (err) {
-            await ipc.logRendererError(`${errorLogPrefix}: ${err.message || err}`);
+            await ipc.logRendererError(
+                `${errorLogPrefix}: ${/** @type {{ message?: unknown }} */ (err).message || err}`,
+            );
         } finally {
             setLoading(false);
         }

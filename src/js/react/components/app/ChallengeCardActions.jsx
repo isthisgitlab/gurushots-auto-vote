@@ -1,3 +1,14 @@
+// @ts-check
+/**
+ * @import { Bankroll, Challenge } from '../../../types/gurushots'
+ * @import { ChallengeCardView } from './ChallengeCard'
+ */
+/**
+ * The challenge-level action elements and fill-button props one card shares
+ * between its layouts.
+ *
+ * @typedef {ReturnType<typeof useChallengeCardActions>} ChallengeCardActionSet
+ */
 import { useTranslation } from '@/contexts/TranslationContext';
 import { useTurbo } from '@/api/useTurbo';
 import { useFillChallenge } from '@/api/useFillChallenge';
@@ -14,10 +25,18 @@ const FILL_ERROR_DISPLAY_MS = 5000;
 /**
  * "Earn turbo" mini-game button (detailed turbo cell, compact action row).
  * Locked while a play is in flight.
+ *
+ * @param {{ turboError: string | null, playingTurbo: boolean, onPlay: () => Promise<void>, label: string }} props
  */
 function EarnTurboButton({ turboError, playingTurbo, onPlay, label }) {
     return (
-        <ActionButton variant="info" error={turboError} className="mt-1" onClick={onPlay} disabled={playingTurbo}>
+        <ActionButton
+            variant="info"
+            error={turboError}
+            className="mt-1"
+            onClick={() => void onPlay()}
+            disabled={playingTurbo}
+        >
             {playingTurbo ? <span className="loading loading-spinner loading-xs" /> : <>🎯 {label}</>}
         </ActionButton>
     );
@@ -27,16 +46,24 @@ function EarnTurboButton({ turboError, playingTurbo, onPlay, label }) {
  * "+1" / "+N" submit buttons (detailed entries cell, compact action row). "+N"
  * only appears when more than one slot is open. `icon` prefixes both labels
  * where the entries cell isn't there to say what they add.
+ *
+ * @param {{
+ *     fillError: string | null,
+ *     filling: boolean,
+ *     slotsRemaining: number,
+ *     onFill: (mode: 'one' | 'all') => Promise<void>,
+ *     icon?: string,
+ * }} props
  */
 export function FillButtons({ fillError, filling, slotsRemaining, onFill, icon = '' }) {
     const spinner = <span className="loading loading-spinner loading-xs" />;
     return (
         <>
-            <ActionButton variant="info" error={fillError} onClick={() => onFill('one')} disabled={filling}>
+            <ActionButton variant="info" error={fillError} onClick={() => void onFill('one')} disabled={filling}>
                 {filling ? spinner : `${icon}+1`}
             </ActionButton>
             {slotsRemaining > 1 && (
-                <button className="btn btn-sm btn-warning" onClick={() => onFill('all')} disabled={filling}>
+                <button className="btn btn-sm btn-warning" onClick={() => void onFill('all')} disabled={filling}>
                     {filling ? spinner : `${icon}+${slotsRemaining}`}
                 </button>
             )}
@@ -46,6 +73,8 @@ export function FillButtons({ fillError, filling, slotsRemaining, onFill, icon =
 
 /**
  * Per-challenge settings button (detailed header, compact action row).
+ *
+ * @param {{ onClick: () => void, label: string }} props
  */
 function SettingsButton({ onClick, label }) {
     return (
@@ -64,13 +93,13 @@ function SettingsButton({ onClick, label }) {
  * auto-clearing inline errors.
  *
  * @param {object} args
- * @param {object} args.challenge
- * @param {ReturnType<typeof import('@/utils/challengeCardView').deriveChallengeCardView>} args.view
- * @param {object|null} args.bankroll
+ * @param {Challenge} args.challenge
+ * @param {ChallengeCardView} args.view
+ * @param {Bankroll|null} args.bankroll
  * @param {boolean} args.autovoteRunning
- * @param {Function} args.onVoteComplete
- * @param {Function} args.onSettingsClick
- * @param {Function} [args.onCurrencySpent]
+ * @param {() => void} args.onVoteComplete
+ * @param {(challengeId: Challenge['id'], challengeTitle: string) => void} args.onSettingsClick
+ * @param {() => void} [args.onCurrencySpent]
  */
 export function useChallengeCardActions({
     challenge,
@@ -93,6 +122,7 @@ export function useChallengeCardActions({
         if (result?.success) onVoteComplete();
     };
 
+    /** @param {'one' | 'all'} mode */
     const handleFill = async (mode) => {
         const result = await fillNow(challenge.id, mode);
         if (result?.success) onVoteComplete();
@@ -137,7 +167,7 @@ export function useChallengeCardActions({
  * when the compactCardActions setting is off or nothing is offered right now.
  * [&>.btn]:mt-0 drops the top margin the cell-placed buttons carry.
  *
- * @param {{ actions: ReturnType<typeof useChallengeCardActions>, canFill: boolean, enabled: boolean }} props
+ * @param {{ actions: ChallengeCardActionSet, canFill: boolean, enabled: boolean }} props
  */
 export function buildCompactActionRow({ actions, canFill, enabled }) {
     const { voteButton, runButton, earnTurboButton, fillExposureButton, keyUnlockButton, settingsButton } = actions;

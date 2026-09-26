@@ -1,7 +1,19 @@
+// @ts-check
 import { useEffect, useState } from 'react';
 import { nextWakeAt } from '../../scenarios/nextWake';
 import { useLatestRef } from '../hooks/useLatestRef';
 import * as ipc from './ipc';
+
+/** @import { Challenge } from '../../types/gurushots' */
+/** @import { WindowApi } from '../../types/ipc' */
+
+/**
+ * A challenge's scenario position as the card shows it.
+ *
+ * @typedef {{name: string, missing?: true, corrupt?: true, phase?: string, started?: boolean, lastError?: string|null, nextWakeAt?: number|null}} ScenarioSummary
+ */
+
+/** @typedef {Extract<Awaited<ReturnType<WindowApi['getScenarioStatus']>>, { success: true }>} ScenarioStatus */
 
 /**
  * A card-sized summary of where a challenge is in its scenario, or null when
@@ -14,13 +26,13 @@ import * as ipc from './ipc';
  * phase or send a notice without touching the challenge payload. So it
  * refetches after a pass or an edit, not on every render.
  *
- * @param {any} challenge - the card's challenge (always present)
+ * @param {Challenge} challenge - the card's challenge (always present)
  * @param {number} [settingsVersion]
  * @param {number} [passVersion]
- * @returns {null | {name: string, missing?: true, corrupt?: true, phase?: string, started?: boolean, lastError?: string|null, nextWakeAt?: number|null}}
+ * @returns {ScenarioSummary | null}
  */
 export function useScenarioStatus(challenge, settingsVersion, passVersion) {
-    const [summary, setSummary] = useState(null);
+    const [summary, setSummary] = useState(/** @type {ScenarioSummary | null} */ (null));
     const entries = challenge.member?.ranking?.entries;
     const fingerprint = [
         challenge.id,
@@ -35,6 +47,7 @@ export function useScenarioStatus(challenge, settingsVersion, passVersion) {
         let cancelled = false;
         void (async () => {
             const current = challengeRef.current;
+            /** @type {ScenarioSummary | null} */
             let next = null;
             try {
                 const status = await ipc.getScenarioStatus(current.id);
@@ -52,6 +65,11 @@ export function useScenarioStatus(challenge, settingsVersion, passVersion) {
     return summary;
 }
 
+/**
+ * @param {ScenarioStatus} status - an assigned challenge's status
+ * @param {Challenge} challenge
+ * @returns {ScenarioSummary}
+ */
 function summarize(status, challenge) {
     if (!status.scenario) return { name: status.assigned, missing: true };
     if (status.corrupt) return { name: status.scenario.name, corrupt: true };

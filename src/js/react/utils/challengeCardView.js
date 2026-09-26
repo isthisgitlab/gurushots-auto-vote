@@ -1,3 +1,8 @@
+// @ts-check
+/**
+ * @import { Bankroll, Challenge } from '../../types/gurushots'
+ * @import { RankedChallenge } from '../../types/rendererUtils'
+ */
 import { formatDuration, getBoostStatus, getTurboStatus, isBoostWindowOpen } from '@/utils/formatters';
 import { isLowExposure } from '@/utils/challengeAlerts';
 import { canKeyUnlock, canSwapEntry, canFillExposure } from '../../voting/currencyActions';
@@ -9,11 +14,11 @@ const LEVEL_NAMES = ['', 'POPULAR', 'SKILLED', 'PREMIER', 'ELITE', 'ALL STAR'];
  * the challenge has no level table (flash challenges never do) or the member
  * is already on the top level.
  *
- * @param {object} challenge
+ * @param {Challenge} challenge - An active challenge; its member standing is read unguarded.
  * @returns {{ nextLevel: number, votesNeeded: number, levelName: string } | null}
  */
 export function getNextLevelInfo(challenge) {
-    const userProgress = challenge.member.ranking.total;
+    const userProgress = /** @type {RankedChallenge} */ (challenge).member.ranking.total;
     if (!challenge.ranking_levels || !userProgress || userProgress.level === undefined || challenge.type === 'flash') {
         return null;
     }
@@ -22,7 +27,7 @@ export function getNextLevelInfo(challenge) {
     if (!threshold) return null;
     return {
         nextLevel,
-        votesNeeded: threshold - userProgress.votes,
+        votesNeeded: threshold - /** @type {number} */ (userProgress.votes),
         levelName: LEVEL_NAMES[nextLevel] || `LEVEL ${nextLevel}`,
     };
 }
@@ -32,11 +37,11 @@ export function getNextLevelInfo(challenge) {
  * challenge at one `now` tick: stats, alert flags/classes and the action gates.
  * Pure, so the two layouts can never disagree about what a state means.
  *
- * @param {object} challenge
- * @param {{ now: number, bankroll: object|null, autovoteRunning: boolean, autoFillEnabled: boolean }} context
+ * @param {Challenge} challenge - An active challenge; its member standing is read unguarded.
+ * @param {{ now: number, bankroll: Bankroll|null, autovoteRunning: boolean, autoFillEnabled: boolean }} context
  */
 export function deriveChallengeCardView(challenge, { now, bankroll, autovoteRunning, autoFillEnabled }) {
-    const member = challenge.member;
+    const member = /** @type {RankedChallenge} */ (challenge).member;
     const entries = member.ranking.entries || [];
     const exposureFactor = member.ranking.exposure.exposure_factor;
 
@@ -74,8 +79,8 @@ export function deriveChallengeCardView(challenge, { now, bankroll, autovoteRunn
         // Time left in a timed boost window, preformatted for the badge; null
         // for a key-unlocked boost, which has no timer. Ticks with `now`.
         boostTimeLeft:
-            boostOpen && member.boost?.state === 'AVAILABLE' && member.boost.timeout > 0
-                ? formatDuration(member.boost.timeout - now)
+            boostOpen && member.boost?.state === 'AVAILABLE' && /** @type {number} */ (member.boost.timeout) > 0
+                ? formatDuration(/** @type {number} */ (member.boost.timeout) - now)
                 : null,
         lowExposure,
         exposureClass: lowExposure ? 'text-error font-bold' : '',

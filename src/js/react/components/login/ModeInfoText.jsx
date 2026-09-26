@@ -1,7 +1,10 @@
+// @ts-check
 import { useTranslation } from '@/contexts/TranslationContext';
 
 /**
  * Bottom info text that changes based on mock mode
+ *
+ * @param {{ isMock: boolean }} props
  */
 export function ModeInfoText({ isMock }) {
     const { t } = useTranslation();

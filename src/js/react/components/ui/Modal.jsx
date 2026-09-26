@@ -1,3 +1,4 @@
+// @ts-check
 import { useEffect, useCallback, useRef, useId } from 'react';
 import { rendererTranslator } from '../../../translations/renderer';
 import { StrokeIcon, ICON_PATHS } from './StrokeIcon';
@@ -12,9 +13,25 @@ const FOCUSABLE_SELECTOR =
 const closeLabel = () => rendererTranslator.t('common.closeModal');
 
 /**
+ * Props of Modal. `onClose` is optional: without it Escape, the backdrop and
+ * the close button do nothing (a modal that must not be dismissed).
+ *
+ * @typedef {object} ModalProps
+ * @property {boolean} isOpen
+ * @property {() => void} [onClose]
+ * @property {import('preact').ComponentChildren} [title]
+ * @property {import('preact').ComponentChildren} [children]
+ * @property {'sm'|'md'|'lg'|'xl'|'2xl'} [size]
+ * @property {string} [className]
+ * @property {boolean} [showCloseButton]
+ */
+
+/**
  * DaisyUI modal with accessibility features: role=dialog / aria-modal, Escape
  * to close, a focus trap that keeps Tab / Shift+Tab cycling within the dialog,
  * and focus restoration to the triggering element when the modal closes.
+ *
+ * @param {ModalProps} props
  */
 export function Modal({ isOpen, onClose, title, children, size = 'md', className = '', showCloseButton = true }) {
     // DaisyUI's .modal-box is `width: 91.666667%` capped by its max-width, so a
@@ -33,15 +50,24 @@ export function Modal({ isOpen, onClose, title, children, size = 'md', className
     // are mounted at once (a hardcoded id would make a screen reader announce
     // the wrong dialog title).
     const titleId = useId();
-    const modalBoxRef = useRef(null);
+    const modalBoxRef = useRef(/** @type {HTMLDivElement | null} */ (null));
     // The element focused before the modal opened, restored on close.
-    const previouslyFocusedRef = useRef(null);
+    const previouslyFocusedRef = useRef(/** @type {(Element & Partial<HTMLOrSVGElement>) | null} */ (null));
 
     // Only called while the dialog is mounted and open (the open effect and the
     // keydown listener it owns), so the box ref is always attached here.
-    const getFocusable = useCallback(() => Array.from(modalBoxRef.current.querySelectorAll(FOCUSABLE_SELECTOR)), []);
+    const getFocusable = useCallback(
+        () =>
+            Array.from(
+                /** @type {NodeListOf<HTMLElement>} */ (
+                    /** @type {HTMLDivElement} */ (modalBoxRef.current).querySelectorAll(FOCUSABLE_SELECTOR)
+                ),
+            ),
+        [],
+    );
 
     const handleKeyDown = useCallback(
+        /** @param {KeyboardEvent} e */
         (e) => {
             if (e.key === 'Escape') {
                 if (onClose) onClose();
@@ -138,6 +164,8 @@ export function Modal({ isOpen, onClose, title, children, size = 'md', className
 
 /**
  * Modal action buttons container
+ *
+ * @param {{ children?: import('preact').ComponentChildren, className?: string }} props
  */
 export function ModalActions({ children, className = '' }) {
     return <div className={`modal-action ${className}`}>{children}</div>;

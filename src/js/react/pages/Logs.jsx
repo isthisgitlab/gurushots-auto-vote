@@ -1,3 +1,4 @@
+// @ts-check
 import { createRoot } from 'react-dom/client';
 import { TranslationProvider, useTranslation } from '@/contexts/TranslationContext';
 import { useLogStream } from '@/hooks/useLogStream';

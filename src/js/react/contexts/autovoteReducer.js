@@ -1,18 +1,40 @@
+// @ts-check
 /**
  * State machine behind AutovoteContext. Pulled out so the React tree stays
  * a thin shell over a transition table and tests/inspection can target the
  * reducer directly without spinning up a Provider.
  */
 
-export const ACTIONS = {
+export const ACTIONS = /** @type {const} */ ({
     START: 'START',
     STOP: 'STOP',
     INCREMENT_CYCLE: 'INCREMENT_CYCLE',
     UPDATE_LAST_RUN: 'UPDATE_LAST_RUN',
     SET_ERROR: 'SET_ERROR',
     SET_NEXT_RUN: 'SET_NEXT_RUN',
-};
+});
 
+/**
+ * @typedef {object} AutovoteState
+ * @property {boolean} running
+ * @property {number} cycles
+ * @property {string | null} lastRun - locale time string of the last successful cycle
+ * @property {number | null} nextRunAt
+ * @property {'Stopped' | 'Running' | 'Error'} status
+ * @property {'badge-neutral' | 'badge-success' | 'badge-error'} statusClass
+ * @property {string | null} error
+ */
+
+/**
+ * @typedef {{ type: typeof ACTIONS.START }
+ *   | { type: typeof ACTIONS.STOP }
+ *   | { type: typeof ACTIONS.INCREMENT_CYCLE }
+ *   | { type: typeof ACTIONS.UPDATE_LAST_RUN, payload: string }
+ *   | { type: typeof ACTIONS.SET_ERROR, payload: string }
+ *   | { type: typeof ACTIONS.SET_NEXT_RUN, payload: number | null }} AutovoteAction
+ */
+
+/** @type {AutovoteState} */
 export const initialState = {
     running: false,
     cycles: 0,
@@ -27,6 +49,11 @@ export const initialState = {
     error: null,
 };
 
+/**
+ * @param {AutovoteState} state
+ * @param {AutovoteAction} action
+ * @returns {AutovoteState}
+ */
 export function autovoteReducer(state, action) {
     switch (action.type) {
         case ACTIONS.START:

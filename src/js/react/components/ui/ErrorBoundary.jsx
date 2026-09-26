@@ -1,3 +1,4 @@
+// @ts-check
 import { Component } from 'react';
 import { rendererTranslator } from '../../../translations/renderer';
 import * as ipc from '@/api/ipc';
@@ -7,17 +8,28 @@ import * as ipc from '@/api/ipc';
  * ErrorBoundary is a class (no hooks) and, more importantly, an error boundary
  * must not depend on React context that may itself be part of what broke.
  */
+/** @param {string} key */
 const tr = (key) => rendererTranslator.t(key);
+
+/** @typedef {{ children?: import('preact').ComponentChildren }} ErrorBoundaryProps */
+/** @typedef {{ error: Partial<Error> | null }} ErrorBoundaryState */
 
 /**
  * Catches render/lifecycle errors from descendants and shows a recovery UI
  * instead of letting the React root unmount (which leaves a blank page).
  *
  * Must be a class component — error boundaries have no hook equivalent.
+ *
+ * `error` is whatever a descendant threw — usually an Error, read only for
+ * its `message`/`stack`.
+ *
+ * @extends {Component<ErrorBoundaryProps, ErrorBoundaryState>}
  */
 export class ErrorBoundary extends Component {
+    /** @param {ErrorBoundaryProps} props */
     constructor(props) {
         super(props);
+        /** @type {ErrorBoundaryState} */
         this.state = { error: null };
         // Dedupe key for componentDidCatch. If the user clicks Dismiss on a
         // persistent crash the child re-throws on the next render with a
@@ -28,15 +40,21 @@ export class ErrorBoundary extends Component {
         // two genuinely-different errors that happen to share a message
         // (e.g. two unrelated "Cannot read properties of undefined" throws)
         // collapse into one log entry. Acceptable vs. the original flood.
+        /** @type {string|null} */
         this.loggedErrorKey = null;
         this.handleDismiss = this.handleDismiss.bind(this);
         this.handleReload = this.handleReload.bind(this);
     }
 
+    /** @param {Partial<Error>} error */
     static getDerivedStateFromError(error) {
         return { error };
     }
 
+    /**
+     * @param {Partial<Error> | null | undefined} error
+     * @param {import('preact').ErrorInfo | undefined} info
+     */
     componentDidCatch(error, info) {
         const detail = error?.stack || error?.message || String(error);
         const componentStack = info?.componentStack || '';

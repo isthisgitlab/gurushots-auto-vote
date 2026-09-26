@@ -1,17 +1,32 @@
+// @ts-check
 import { useTranslation } from '@/contexts/TranslationContext';
 import { formatDuration } from '@/utils/formatters';
 import { openBoostWindows } from '../../../voting/boostWindow';
 import { useTick } from '@/hooks/useTick';
 import { lowExposureChallenges } from '@/utils/challengeAlerts';
 
+/**
+ * @import { ComponentChildren } from 'preact'
+ * @import { Bankroll, Challenge, MemberTurbo } from '../../../types/gurushots'
+ */
+
 // A turbo is "available" for this challenge when it's ready to apply (WON) or
 // ready to earn (FREE / in progress / cooldown elapsed).
+/**
+ * @param {MemberTurbo | undefined} turbo
+ * @param {number} now - Unix seconds
+ */
 const isTurboAvailable = (turbo, now) => {
     const state = turbo?.state;
     if (state === 'WON' || state === 'FREE' || state === 'IN_PROGRESS') return true;
     return state === 'TIMER' && typeof turbo?.time_to_open === 'number' && turbo.time_to_open <= now;
 };
 
+/**
+ * One stat of the bar: an icon and either a value + label or custom children.
+ *
+ * @param {{ icon: string, value?: string | number, label?: string, children?: ComponentChildren }} props
+ */
 function HeaderStat({ icon, value, label, children }) {
     return (
         <div className="flex items-baseline gap-1 whitespace-nowrap">
@@ -28,12 +43,15 @@ function HeaderStat({ icon, value, label, children }) {
 
 // Render a balance, or an em-dash when it could not be read — NEVER 0, which
 // would falsely imply an empty balance and mislead a paid-join decision.
+/** @param {number} v */
 const fmtBalance = (v) => (Number.isFinite(v) ? v : '—');
 
 /**
  * Bankroll pills (keys/swaps/fills/coins). Wrapped in its own polite live region
  * — unlike the ambient countdown, a balance change after a join/spend IS worth
  * announcing, and this node has no per-second tick to make that noisy.
+ *
+ * @param {{ bankroll: Bankroll }} props
  */
 function BankrollStats({ bankroll }) {
     const { t } = useTranslation();
@@ -54,6 +72,9 @@ function BankrollStats({ bankroll }) {
  * StatusHeader / AppContent / challenge list (which are deliberately optimized
  * against a 1Hz cascade). The time is advisory: computeNextCycleDelayMs
  * recomputes each cycle, so it is `~`-prefixed like the deadline timeline.
+ *
+ * @typedef {{ nextRunAt: number | null | undefined, running: boolean, titleKey?: string }} CountdownProps
+ * @param {CountdownProps} props
  */
 function NextActionCountdown({ nextRunAt, running, titleKey = 'app.statusHeaderNextApprox' }) {
     const { t } = useTranslation();
@@ -69,6 +90,7 @@ function NextActionCountdown({ nextRunAt, running, titleKey = 'app.statusHeaderN
     );
 }
 
+/** @param {{ icon: string, labelKey: string } & CountdownProps} props */
 function HeaderCountdown({ icon, labelKey, ...countdown }) {
     const { t } = useTranslation();
     return (
@@ -90,6 +112,14 @@ function HeaderCountdown({ icon, labelKey, ...countdown }) {
  * `challenges` array and recompute only when it changes — NO tick here, so the
  * header body never re-renders on the countdown's clock. Responsive: the row
  * wraps on narrow viewports rather than using wide DaisyUI `stat` blocks.
+ *
+ * @param {{
+ *   challenges: Challenge[],
+ *   nextRunAt: number | null,
+ *   running: boolean,
+ *   bankroll: Bankroll | null | undefined,
+ *   autoClaimStatus: { enabled: boolean, nextClaimAt: number } | null,
+ * }} props
  */
 export function StatusHeader({ challenges, nextRunAt, running, bankroll, autoClaimStatus }) {
     const { t } = useTranslation();

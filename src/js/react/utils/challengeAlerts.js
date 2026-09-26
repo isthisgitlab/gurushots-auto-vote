@@ -1,3 +1,8 @@
+// @ts-check
+/**
+ * @import { Challenge } from '../../types/gurushots'
+ * @import { RankedChallenge } from '../../types/rendererUtils'
+ */
 /**
  * At-a-glance "needs attention" predicates for the challenge list, so a user
  * opening the app can spot what matters without reading every card: an open
@@ -17,7 +22,7 @@ export const LOW_EXPOSURE_THRESHOLD = 10;
  * challenges count: before start there is nothing to vote for, and after close
  * a 0% is final rather than actionable.
  *
- * @param {object} challenge - Active challenge from the API
+ * @param {Challenge} challenge - Active challenge from the API
  * @param {number} now - Current time (Unix seconds)
  * @returns {boolean}
  */
@@ -31,12 +36,12 @@ export const isLowExposure = (challenge, now) => {
 /**
  * Challenges with low exposure as display entries, lowest exposure first.
  *
- * @param {Array} challenges - Active challenges from the API
+ * @param {Challenge[]|null|undefined} challenges - Active challenges from the API
  * @param {number} now - Current time (Unix seconds)
- * @returns {Array<{id: *, title: string, exposure: number}>}
+ * @returns {Array<{id: Challenge['id'], title: string, exposure: number}>}
  */
 export const lowExposureChallenges = (challenges, now) =>
     (challenges || [])
-        .filter((c) => isLowExposure(c, now))
+        .filter(/** @returns {c is RankedChallenge} */ (c) => isLowExposure(c, now))
         .map((c) => ({ id: c.id, title: c.title, exposure: c.member.ranking.exposure.exposure_factor }))
         .sort((a, b) => a.exposure - b.exposure);

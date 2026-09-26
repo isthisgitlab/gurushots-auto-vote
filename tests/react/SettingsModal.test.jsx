@@ -773,6 +773,7 @@ describe('SettingsModal — save outcomes', () => {
     test.each([
         [new Error('boom'), 'Error saving settings: boom'],
         ['raw', 'Error saving settings: raw'],
+        [null, 'Error saving settings: null'],
     ])('a throwing save is logged and keeps the modal open (%p)', async (failure, message) => {
         mockFormState.commit = jest.fn().mockRejectedValue(failure);
         const onClose = jest.fn();

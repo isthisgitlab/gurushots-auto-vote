@@ -253,6 +253,18 @@ describe('App page', () => {
         expect(mockChallenges.refetch).toHaveBeenCalledTimes(1);
     });
 
+    test.each([
+        [new Error('bridge down'), 'Autovote toggle failed: bridge down'],
+        [null, 'Autovote toggle failed: null'],
+    ])('a toggle that rejects (%p) is logged, not left unhandled', async (thrown, logged) => {
+        await renderReady();
+        mockAutovote.toggle.mockRejectedValueOnce(thrown);
+        await act(async () => {
+            await mockProps.AutoVoteControls.onToggle();
+        });
+        expect(window.api.logError).toHaveBeenCalledWith(logged);
+    });
+
     test('each completed autovote cycle refreshes the header bankroll', async () => {
         const { rerender } = await renderReady();
         // cycles === 0 on mount: the hook's own mount fetch covers it.

@@ -1,14 +1,42 @@
+// @ts-check
 import { useState, useEffect, useCallback } from 'react';
 import { useSessionLoad } from './useSessionLoad';
 import * as ipc from '@/api/ipc';
 
+/** @import { Dispatch, SetStateAction } from 'react' */
+/** @import { ChallengeValues } from '../../types/settings' */
+/** @import { RendererSchema, SettingChangeHandler, SettingResetHandler } from '../../types/settingsEditor' */
+
+/**
+ * The challenge's title-rule profile as the modal holds it: the matched
+ * profile, `suppressed` once this challenge opts out of it. Falsy = none.
+ *
+ * @typedef {{ name?: string, values?: ChallengeValues, suppressed?: boolean }} TitleProfile
+ * @typedef {TitleProfile | false | null | undefined} TitleProfileState
+ */
+
+/** @typedef {Dispatch<SetStateAction<ChallengeValues>>} SetOverrides */
+/** @typedef {Dispatch<SetStateAction<TitleProfileState>>} SetTitleProfile */
+
+/**
+ * @param {object} obj
+ * @param {string} key
+ */
 const hasOwn = (obj, key) => Object.prototype.hasOwnProperty.call(obj, key);
 
-/** Keep only the keys the schema allows as per-challenge overrides. */
+/**
+ * Keep only the keys the schema allows as per-challenge overrides; without a
+ * schema (its fetch failed) no key is known to be allowed.
+ *
+ * @param {RendererSchema | null | undefined} schema
+ * @param {ChallengeValues | null | undefined} values
+ * @returns {ChallengeValues}
+ */
 const perChallengeOnly = (schema, values) => {
+    /** @type {ChallengeValues} */
     const kept = {};
     for (const [key, value] of Object.entries(values || {})) {
-        if (schema[key]?.perChallenge) kept[key] = value;
+        if (schema?.[key]?.perChallenge) kept[key] = value;
     }
     return kept;
 };
@@ -16,6 +44,10 @@ const perChallengeOnly = (schema, values) => {
 // Single batch IPC call for the overrides (the facade's own-property-safe
 // sparse map) instead of one round-trip per schema key, alongside the
 // challenge's title-rule profile.
+/**
+ * @param {string | number} challengeId
+ * @param {string} challengeTitle
+ */
 const fetchChallengeSession = (challengeId, challengeTitle) =>
     Promise.all([
         ipc.getChallengeOverrides(challengeId.toString()),
@@ -37,19 +69,33 @@ const fetchChallengeSession = (challengeId, challengeTitle) =>
  *      changes before the IPC sequence resolves, so a stale setOverrides can
  *      never land (rapid open/close cycles would otherwise blank the page) —
  *      useSessionLoad supersedes them.
+ *
+ * @param {{
+ *   isOpen: boolean,
+ *   challengeId: string | number | null | undefined,
+ *   challengeTitle: string,
+ *   schema: RendererSchema | null | undefined,
+ *   setOverrides: SetOverrides,
+ *   setTitleProfile: SetTitleProfile,
+ * }} options
  */
 function useOverridesLoad({ isOpen, challengeId, challengeTitle, schema, setOverrides, setTitleProfile }) {
-    const [loadedKey, setLoadedKey] = useState(null);
+    const [loadedKey, setLoadedKey] = useState(/** @type {string | null} */ (null));
     useEffect(() => {
         if (!isOpen) setLoadedKey(null);
     }, [isOpen]);
 
     const loadKey = `${challengeId}\0${challengeTitle}`;
     const load = useCallback(async () => {
-        const [stored, profile] = await fetchChallengeSession(challengeId, challengeTitle);
+        // Enabled only with a challenge id (see `enabled` below).
+        const [stored, profile] = await fetchChallengeSession(
+            /** @type {string | number} */ (challengeId),
+            challengeTitle,
+        );
         return { values: perChallengeOnly(schema, stored), profile, key: loadKey };
     }, [challengeId, challengeTitle, schema, loadKey]);
     const onLoad = useCallback(
+        /** @param {{ values: ChallengeValues, profile: TitleProfile | null, key: string }} loaded */
         ({ values, profile, key }) => {
             setOverrides(values);
             setTitleProfile(profile);
@@ -69,6 +115,17 @@ function useOverridesLoad({ isOpen, challengeId, challengeTitle, schema, setOver
  * Save for the per-challenge settings modal. `saveError` is true when the
  * write was rejected by validation — shown as an alert and the modal stays
  * open so the edit isn't lost. Reset on every open.
+ *
+ * @param {{
+ *   isOpen: boolean,
+ *   challengeId: string | number | null | undefined,
+ *   schema: RendererSchema | null | undefined,
+ *   overrides: ChallengeValues,
+ *   suppressed: boolean,
+ *   loadFailed: boolean,
+ *   rearmSchedule: () => Promise<unknown>,
+ *   onClose: () => void,
+ * }} options
  */
 function useOverridesSave({ isOpen, challengeId, schema, overrides, suppressed, loadFailed, rearmSchedule, onClose }) {
     const [saving, setSaving] = useState(false);
@@ -103,7 +160,7 @@ function useOverridesSave({ isOpen, challengeId, schema, overrides, suppressed, 
             // scheduled fill takes effect now, not after the current wait.
             await rearmSchedule();
         } catch (err) {
-            await ipc.logRendererError(`Error saving challenge settings: ${err.message || err}`);
+            await ipc.logRendererError(`Error saving challenge settings: ${/** @type {Error} */ (err).message || err}`);
         } finally {
             setSaving(false);
         }
@@ -117,9 +174,17 @@ function useOverridesSave({ isOpen, challengeId, schema, overrides, suppressed, 
  * override → profile value (unless suppressed) → global default → schema
  * default. `effectiveOf` / `inheritedOf` expose that chain with and without
  * the override layer.
+ *
+ * @param {{
+ *   isOpen: boolean,
+ *   schema: RendererSchema | null | undefined,
+ *   defaults: Record<string, unknown> | null | undefined,
+ *   overrides: ChallengeValues,
+ *   setOverrides: SetOverrides,
+ * }} options
  */
 function useTitleProfile({ isOpen, schema, defaults, overrides, setOverrides }) {
-    const [titleProfile, setTitleProfile] = useState(null);
+    const [titleProfile, setTitleProfile] = useState(/** @type {TitleProfileState} */ (null));
     // Set when a profile Apply flips scheduledFillReplaces on for a challenge
     // that didn't have it — that one field can silently cost a challenge its
     // fills, so it gets a highlighted warning the generic apply-hint lacks.
@@ -128,9 +193,14 @@ function useTitleProfile({ isOpen, schema, defaults, overrides, setOverrides }) 
         if (isOpen) setProfileReplacesWarning(false);
     }, [isOpen]);
 
-    const profileValues = titleProfile?.suppressed ? {} : (titleProfile?.values ?? {});
+    // `|| undefined` folds a `false` state into "no profile" for the optional chain.
+    const matched = titleProfile || undefined;
+    /** @type {ChallengeValues} */
+    const profileValues = matched?.suppressed ? {} : (matched?.values ?? {});
+    /** @param {string} key */
     const inheritedOf = (key) =>
         hasOwn(profileValues, key) ? profileValues[key] : (defaults?.[key] ?? schema?.[key]?.default);
+    /** @param {string} key */
     const effectiveOf = (key) => (key in overrides ? overrides[key] : inheritedOf(key));
 
     /**
@@ -138,21 +208,29 @@ function useTitleProfile({ isOpen, schema, defaults, overrides, setOverrides }) 
      * belt-and-braces on top of the facade's whitelist) and suppress the
      * challenge's title-rule profile; Save persists it. ChallengeProfilesBar
      * only applies a selected (non-null) profile.
+     *
+     * @param {ChallengeValues} values
      */
     const applyProfile = (values) => {
         const next = perChallengeOnly(schema, values);
         const replacesWasOn = effectiveOf('scheduledFillReplaces') === true;
         setProfileReplacesWarning(next.scheduledFillReplaces === true && !replacesWasOn);
         setOverrides(next);
-        setTitleProfile((profile) => ({ ...profile, suppressed: true }));
+        setTitleProfile((profile) => ({ ...(profile || undefined), suppressed: true }));
     };
 
-    /** Keep the title-rule profile in step when that named profile is edited or deleted. */
+    /**
+     * Keep the title-rule profile in step when that named profile is edited or deleted.
+     *
+     * @param {{ name: string, values?: ChallengeValues, deleted?: boolean }} change
+     */
     const onProfilesChanged = ({ name, values }) => {
-        if (name.toLowerCase() !== titleProfile?.name?.toLowerCase()) return;
-        setTitleProfile((profile) =>
-            values ? { ...profile, name, values } : profile?.suppressed && { suppressed: true },
-        );
+        if (name.toLowerCase() !== (titleProfile || undefined)?.name?.toLowerCase()) return;
+        setTitleProfile((state) => {
+            // Reached only once the name matched, so the state is that profile.
+            const profile = /** @type {TitleProfile} */ (state);
+            return values ? { ...profile, name, values } : profile?.suppressed && { suppressed: true };
+        });
     };
 
     return {
@@ -169,19 +247,25 @@ function useTitleProfile({ isOpen, schema, defaults, overrides, setOverrides }) 
 
 /** The sparse override map and its per-key edits. */
 function useOverrideEdits() {
-    const [overrides, setOverrides] = useState({});
+    const [overrides, setOverrides] = useState(/** @type {ChallengeValues} */ ({}));
 
-    const changeOverride = useCallback((key, value) => {
-        setOverrides((prev) => ({ ...prev, [key]: value }));
-    }, []);
+    const changeOverride = useCallback(
+        /** @type {SettingChangeHandler} */ (key, value) => {
+            setOverrides((prev) => ({ ...prev, [key]: value }));
+        },
+        [],
+    );
 
-    const clearOverride = useCallback((key) => {
-        setOverrides((prev) => {
-            const next = { ...prev };
-            delete next[key];
-            return next;
-        });
-    }, []);
+    const clearOverride = useCallback(
+        /** @type {SettingResetHandler} */ (key) => {
+            setOverrides((prev) => {
+                const next = { ...prev };
+                delete next[key];
+                return next;
+            });
+        },
+        [],
+    );
 
     return { overrides, setOverrides, changeOverride, clearOverride };
 }
@@ -191,6 +275,17 @@ function useOverrideEdits() {
  * override map, the challenge's title-rule profile (and whether this
  * challenge suppresses it), load-on-open, and save. The caller renders; it
  * drives Save / Clear all through `save()` / `clearAll()`.
+ *
+ * @param {{
+ *   isOpen: boolean,
+ *   challengeId: string | number | null | undefined,
+ *   challengeTitle: string,
+ *   schema: RendererSchema | null | undefined,
+ *   defaults: Record<string, unknown> | null | undefined,
+ *   refetchSchema: () => Promise<void>,
+ *   rearmSchedule: () => Promise<unknown>,
+ *   onClose: () => void,
+ * }} options
  */
 export function useChallengeOverrides({
     isOpen,
@@ -207,7 +302,8 @@ export function useChallengeOverrides({
     // Refresh global defaults each time the modal opens so the
     // "Global default: …" hint reflects current persisted state.
     useEffect(() => {
-        if (isOpen) refetchSchema();
+        // The refetch settles its own failure into the schema query's error state.
+        if (isOpen) void refetchSchema();
     }, [isOpen, refetchSchema]);
 
     const { setTitleProfile, ...profile } = useTitleProfile({ isOpen, schema, defaults, overrides, setOverrides });
@@ -224,7 +320,7 @@ export function useChallengeOverrides({
         challengeId,
         schema,
         overrides,
-        suppressed: profile.titleProfile?.suppressed === true,
+        suppressed: (profile.titleProfile || undefined)?.suppressed === true,
         loadFailed,
         rearmSchedule,
         onClose,

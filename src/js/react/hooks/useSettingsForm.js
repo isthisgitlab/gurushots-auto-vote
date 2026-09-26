@@ -1,6 +1,10 @@
+// @ts-check
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { getUiDefaultSettings } from '../../settings/uiDefaults';
 import * as ipc from '@/api/ipc';
+
+/** @import { AppSettings } from '../../types/settings' */
+/** @import { RendererSchema, SettingChangeHandler, SettingResetHandler, UiChangeHandler, UiResetHandler, UiValues } from '../../types/settingsEditor' */
 
 /**
  * Module-scope defaults for the UI settings half of the modal. Sourced
@@ -16,6 +20,11 @@ export const DEFAULT_UI_VALUES = getUiDefaultSettings();
  * and numeric/boolean keys use ?? so an explicit 0 / false from settings
  * is preserved rather than silently replaced by the default.
  */
+/**
+ * @param {unknown} value
+ * @param {unknown} defaultValue
+ * @returns {unknown}
+ */
 const withFallback = (value, defaultValue) => {
     if (Array.isArray(defaultValue)) return Array.isArray(value) ? value : defaultValue;
     if (typeof defaultValue === 'string') return value || defaultValue;
@@ -27,11 +36,20 @@ const withFallback = (value, defaultValue) => {
  * the same JSON comparison settings.js uses, kept local because the renderer
  * must not import settings.js.
  */
+/**
+ * @param {unknown} a
+ * @param {unknown} b
+ */
 const valuesEqual = (a, b) => JSON.stringify(a) === JSON.stringify(b);
 
 /**
  * The global-default half of `defaults`: challengeOnly keys have no global
  * value (setGlobalDefault refuses them), so they never enter the global form.
+ */
+/**
+ * @param {Record<string, unknown>} defaults
+ * @param {RendererSchema | null | undefined} schema
+ * @returns {Record<string, unknown>}
  */
 const globalFormValuesOf = (defaults, schema) =>
     Object.fromEntries(Object.entries(defaults).filter(([key]) => !schema?.[key]?.challengeOnly));
@@ -42,20 +60,31 @@ const globalFormValuesOf = (defaults, schema) =>
  * `commit()` / `revert()` pair the caller drives from its Save / Cancel
  * buttons. The caller stays responsible for the surrounding lifecycle
  * (close, language toggle, threshold-scheduling notify, theme DOM revert).
+ *
+ * @param {{
+ *   isOpen: boolean,
+ *   schema: RendererSchema | null | undefined,
+ *   defaults: Record<string, unknown> | null | undefined,
+ *   settings: AppSettings | null | undefined,
+ *   refetchSettings: () => Promise<void>,
+ *   refetchSchema: () => Promise<void>,
+ *   updateSetting: (key: string, value: unknown) => Promise<void>,
+ * }} options
  */
 export function useSettingsForm({ isOpen, schema, defaults, settings, refetchSettings, refetchSchema, updateSetting }) {
-    const [formValues, setFormValues] = useState({});
+    const [formValues, setFormValues] = useState(/** @type {Record<string, unknown>} */ ({}));
     const [uiValues, setUiValues] = useState(DEFAULT_UI_VALUES);
-    const [originalUiValues, setOriginalUiValues] = useState(null);
-    const [originalFormValues, setOriginalFormValues] = useState(null);
+    const [originalUiValues, setOriginalUiValues] = useState(/** @type {UiValues | null} */ (null));
+    const [originalFormValues, setOriginalFormValues] = useState(/** @type {Record<string, unknown> | null} */ (null));
     const [saving, setSaving] = useState(false);
 
     // Refetch from disk every time the modal opens so we never display
     // a value that another writer (CLI, another window) has since changed.
     useEffect(() => {
         if (isOpen) {
-            refetchSettings();
-            refetchSchema();
+            // Both refetches settle their own failures into the query's error state.
+            void refetchSettings();
+            void refetchSchema();
         }
     }, [isOpen, refetchSettings, refetchSchema]);
 
@@ -69,8 +98,8 @@ export function useSettingsForm({ isOpen, schema, defaults, settings, refetchSet
     // original* snapshots (which revert/Cancel roll back to) so a save that
     // fails partway and keeps the modal open still diffs the retry against
     // what was actually persisted, not against the open-time values.
-    const persistedUiRef = useRef(null);
-    const persistedFormRef = useRef(null);
+    const persistedUiRef = useRef(/** @type {Record<string, unknown> | null} */ (null));
+    const persistedFormRef = useRef(/** @type {Record<string, unknown> | null} */ (null));
     useEffect(() => {
         if (!isOpen) {
             formInitForOpenRef.current = false;
@@ -85,9 +114,13 @@ export function useSettingsForm({ isOpen, schema, defaults, settings, refetchSet
             formInitForOpenRef.current = true;
         }
         if (!uiInitForOpenRef.current && settings) {
-            const initialUiValues = {};
+            // withFallback keeps each key's default shape (see above).
+            const initialUiValues = /** @type {UiValues} */ ({});
             for (const [key, defaultValue] of Object.entries(DEFAULT_UI_VALUES)) {
-                initialUiValues[key] = withFallback(settings[key], defaultValue);
+                /** @type {Record<string, unknown>} */ (initialUiValues)[key] = withFallback(
+                    settings[key],
+                    defaultValue,
+                );
             }
             setUiValues(initialUiValues);
             setOriginalUiValues(initialUiValues);
@@ -96,21 +129,27 @@ export function useSettingsForm({ isOpen, schema, defaults, settings, refetchSet
         }
     }, [isOpen, defaults, schema, settings]);
 
-    const handleFormChange = useCallback((key, value) => {
-        setFormValues((prev) => ({ ...prev, [key]: value }));
-    }, []);
+    const handleFormChange = useCallback(
+        /** @type {SettingChangeHandler} */ (key, value) => {
+            setFormValues((prev) => ({ ...prev, [key]: value }));
+        },
+        [],
+    );
 
-    const handleUiChange = useCallback((key, value) => {
-        setUiValues((prev) => ({ ...prev, [key]: value }));
-        // Theme is the only UI value that touches the DOM live — applying
-        // here keeps the change visible while the user is still editing.
-        if (key === 'theme') {
-            document.documentElement.setAttribute('data-theme', value);
-        }
-    }, []);
+    const handleUiChange = useCallback(
+        /** @type {UiChangeHandler} */ (key, value) => {
+            setUiValues((prev) => ({ ...prev, [key]: value }));
+            // Theme is the only UI value that touches the DOM live — applying
+            // here keeps the change visible while the user is still editing.
+            if (key === 'theme') {
+                document.documentElement.setAttribute('data-theme', /** @type {string} */ (value));
+            }
+        },
+        [],
+    );
 
     const handleResetGlobal = useCallback(
-        (key) => {
+        /** @type {SettingResetHandler} */ (key) => {
             if (schema && schema[key]) {
                 setFormValues((prev) => ({ ...prev, [key]: schema[key].default }));
             }
@@ -118,15 +157,19 @@ export function useSettingsForm({ isOpen, schema, defaults, settings, refetchSet
         [schema],
     );
 
-    const handleResetUi = useCallback((key) => {
-        setUiValues((prev) => ({ ...prev, [key]: DEFAULT_UI_VALUES[key] }));
-        if (key === 'theme') {
-            document.documentElement.setAttribute('data-theme', DEFAULT_UI_VALUES.theme);
-        }
-    }, []);
+    const handleResetUi = useCallback(
+        /** @type {UiResetHandler} */ (key) => {
+            setUiValues((prev) => ({ ...prev, [key]: DEFAULT_UI_VALUES[key] }));
+            if (key === 'theme') {
+                document.documentElement.setAttribute('data-theme', DEFAULT_UI_VALUES.theme);
+            }
+        },
+        [],
+    );
 
     const handleResetAll = useCallback(() => {
         if (schema) {
+            /** @type {Record<string, unknown>} */
             const newFormValues = {};
             for (const [key, config] of Object.entries(schema)) {
                 if (!config.challengeOnly) newFormValues[key] = config.default;
@@ -149,6 +192,7 @@ export function useSettingsForm({ isOpen, schema, defaults, settings, refetchSet
     // the edit. The UI-values channel (updateSetting) has no comparable
     // return contract today, so only schema writes are checked here.
     const commit = useCallback(async () => {
+        /** @type {string[]} */
         const rejectedKeys = [];
         setSaving(true);
         try {

@@ -1,9 +1,19 @@
+// @ts-check
 import { useCallback } from 'react';
 import { useTranslation } from '@/contexts/TranslationContext';
 
 /**
  * Settings toggles section for the login page
  * Contains theme, stay logged in, and mock mode toggles
+ *
+ * @param {{
+ *   theme: string,
+ *   stayLoggedIn: boolean,
+ *   mockMode: boolean,
+ *   onThemeChange: (theme: 'dark' | 'light') => void | Promise<void>,
+ *   onStayLoggedInChange: (value: boolean) => void | Promise<void>,
+ *   onMockModeChange: (value: boolean) => void | Promise<void>,
+ * }} props
  */
 export function SettingsToggles({
     theme,
@@ -16,24 +26,27 @@ export function SettingsToggles({
     const { t } = useTranslation();
 
     const handleThemeToggle = useCallback(
+        /** @param {import('preact').JSX.TargetedEvent<HTMLInputElement, Event>} e */
         (e) => {
-            const isDark = e.target.checked;
+            const isDark = /** @type {HTMLInputElement} */ (e.target).checked;
             const newTheme = isDark ? 'dark' : 'light';
-            onThemeChange(newTheme);
+            void onThemeChange(newTheme);
         },
         [onThemeChange],
     );
 
     const handleStayLoggedInToggle = useCallback(
+        /** @param {import('preact').JSX.TargetedEvent<HTMLInputElement, Event>} e */
         (e) => {
-            onStayLoggedInChange(e.target.checked);
+            void onStayLoggedInChange(/** @type {HTMLInputElement} */ (e.target).checked);
         },
         [onStayLoggedInChange],
     );
 
     const handleMockModeToggle = useCallback(
+        /** @param {import('preact').JSX.TargetedEvent<HTMLInputElement, Event>} e */
         (e) => {
-            onMockModeChange(e.target.checked);
+            void onMockModeChange(/** @type {HTMLInputElement} */ (e.target).checked);
         },
         [onMockModeChange],
     );

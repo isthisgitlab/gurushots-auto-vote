@@ -1,7 +1,47 @@
+// @ts-check
 import { deriveWindowHints } from '@/utils/windowHints';
 import { formatSecondsAsHoursMinutes } from '@/utils/timeFieldUnits';
 import { MAX_VOTING_PAUSE_MINUTES } from '../../../settings/limits';
 import { DEFAULT_TIMEZONE } from '../../../settings/uiDefaults';
+
+/**
+ * @import { WindowHintPolicy, WindowHintState } from '@/utils/windowHints'
+ * @import { Challenge } from '../../../types/gurushots'
+ * @import { AppSettings } from '../../../types/settings'
+ * @import { HintsFor, RendererSchema, SettingHint, Translate } from '../../../types/settingsEditor'
+ */
+
+/** @typedef {(key: string) => unknown} EffectiveOf */
+
+/**
+ * A derived window whose `next` is known to be set (callers check it first).
+ *
+ * @typedef {WindowHintState & { next: NonNullable<WindowHintState['next']> }} PendingWindow
+ */
+
+/**
+ * What the global-defaults hint builders read.
+ *
+ * @typedef {object} GlobalHintContext
+ * @property {Record<string, unknown>} formValues
+ * @property {EffectiveOf} effectiveOf
+ * @property {WindowHintState} votingPause
+ * @property {Translate} t
+ */
+
+/**
+ * What the per-challenge hint builders read.
+ *
+ * @typedef {object} ChallengeHintContext
+ * @property {EffectiveOf} effectiveOf
+ * @property {WindowHintState} fill
+ * @property {WindowHintState} pause
+ * @property {boolean} fillUnreachable
+ * @property {boolean} profileReplacesWarning
+ * @property {string} timezone
+ * @property {number} checkFrequencyMax
+ * @property {Translate} t
+ */
 
 /**
  * Conditional inline hints shown under a setting in the global and
@@ -30,6 +70,7 @@ const VOTING_PAUSE_KEYS = {
 
 // Voting pause's corruption policy. Must match getVotingPauseState's, or a
 // hint would advertise a pause the decision path refuses to open.
+/** @type {WindowHintPolicy} */
 const VOTING_PAUSE_POLICY = {
     defaultDurationMin: 240,
     onCorruptDuration: 'off',
@@ -39,8 +80,16 @@ const VOTING_PAUSE_POLICY = {
 // Scheduled fill's own policy, stated explicitly: substitute the default on
 // corruption, no ceiling (an oversized fill window just means "always fill",
 // which is harmless).
+/** @type {WindowHintPolicy} */
 const SCHEDULED_FILL_POLICY = { defaultDurationMin: 60, onCorruptDuration: 'default', maxDurationMin: null };
 
+/**
+ * @template C
+ * @param {Map<string, (ctx: C) => SettingHint[]>} table
+ * @param {string} key
+ * @param {C} ctx
+ * @returns {SettingHint[]}
+ */
 const lookupHints = (table, key, ctx) => table.get(key)?.(ctx) ?? [];
 
 /**
@@ -48,6 +97,10 @@ const lookupHints = (table, key, ctx) => table.get(key)?.(ctx) ?? [];
  * formatting: the toISOString fallback throws RangeError past ±8.64e15 ms, so
  * an out-of-range input would take the whole modal into the ErrorBoundary
  * rather than degrade to a label.
+ *
+ * @param {number} epochSec
+ * @param {string} timezone
+ * @returns {string}
  */
 function formatClockInTz(epochSec, timezone) {
     const ms = Number(epochSec) * 1000;
@@ -64,12 +117,17 @@ function formatClockInTz(epochSec, timezone) {
     }
 }
 
+/** @param {number} seconds @param {Translate} t @returns {string} */
 const formatOffset = (seconds, t) => formatSecondsAsHoursMinutes(seconds, t('app.hours'), t('app.minutes'));
 
 /**
  * Render a window's producing trigger: a daily 'HH:MM' or an offset label.
  * Only called with a derived `next.source`, which always carries its kind
  * plus `value` (time) or `seconds` (beforeEnd) — see utils/windowHints.
+ *
+ * @param {NonNullable<WindowHintState['next']>['source']} source
+ * @param {Translate} t
+ * @returns {string}
  */
 const sourceLabel = (source, t) =>
     source.kind === 'beforeEnd'
@@ -79,6 +137,11 @@ const sourceLabel = (source, t) =>
 /**
  * The "next window" status line shared by scheduled fill and the voting pause:
  * start–end in the app timezone plus the trigger that opens it.
+ *
+ * @param {string} template
+ * @param {PendingWindow} win
+ * @param {{ timezone: string, t: Translate }} ctx
+ * @returns {string}
  */
 const nextWindowText = (template, { next, durationSec }, { timezone, t }) =>
     template
@@ -94,8 +157,12 @@ const nextWindowText = (template, { next, durationSec }, { timezone, t }) =>
  * voteOnlyInLastMinute blocks above it too. Two settings that each look
  * correct alone silently cancelling out is exactly what an inline warning is
  * for; a per-challenge override is where that pairing typically gets made.
+ *
+ * @param {{ effectiveOf: EffectiveOf, t: Translate }} ctx
+ * @returns {SettingHint[]}
  */
 function boostPrefillHints({ effectiveOf, t }) {
+    /** @type {SettingHint[]} */
     const hints = [];
     if (effectiveOf('voteBeforeBoost') !== true) return hints;
     if (effectiveOf('onlyBoost') === true) {
@@ -115,17 +182,23 @@ function boostPrefillHints({ effectiveOf, t }) {
     return hints;
 }
 
+/** @param {Translate} t @returns {SettingHint} */
 const allDayPauseHint = (t) => ({ tone: 'text-warning font-medium', text: t('app.votingPauseAllDayHint') });
 
 // ---- Global defaults ------------------------------------------------------
 
+/** @type {Map<string, (ctx: GlobalHintContext) => SettingHint[]>} */
 const GLOBAL_HINTS = new Map([
     [
         'useVotingPause',
+        /** @param {GlobalHintContext} ctx */
         ({ formValues, votingPause, t }) => {
+            /** @type {SettingHint[]} */
             const hints = [];
+            // Both trigger keys hold lists (schema defaults []).
             const noTriggers =
-                (formValues.votingPauseTime ?? []).length === 0 && (formValues.votingPauseBeforeEnd ?? []).length === 0;
+                /** @type {unknown[]} */ (formValues.votingPauseTime ?? []).length === 0 &&
+                /** @type {unknown[]} */ (formValues.votingPauseBeforeEnd ?? []).length === 0;
             if (formValues.useVotingPause === true && noTriggers) {
                 hints.push({ tone: 'text-warning', text: t('app.votingPauseNoTimesHint') });
             }
@@ -143,8 +216,12 @@ const GLOBAL_HINTS = new Map([
  * whole day". Only the daily entries can be judged globally — before-end
  * offsets are relative to a specific challenge's deadline, hence closeTime 0,
  * which yields no before-end candidates.
+ *
+ * @param {{ formValues: Record<string, unknown>, schema: RendererSchema | null | undefined, timezone: string, t: Translate }} params
+ * @returns {HintsFor}
  */
 export function globalSettingHints({ formValues, schema, timezone, t }) {
+    /** @type {EffectiveOf} */
     const effectiveOf = (key) => formValues[key] ?? schema?.[key]?.default;
     const votingPause = deriveWindowHints({
         keys: VOTING_PAUSE_KEYS,
@@ -166,6 +243,10 @@ export function globalSettingHints({ formValues, schema, timezone, t }) {
  * challenge? Unreachable means replace mode keeps blocking threshold voting
  * with no fill ever coming (e.g. a "5h before end" profile applied to a
  * challenge with 2h left).
+ *
+ * @param {WindowHintState} fill
+ * @param {{ nowSec: number, closeTime: number }} at
+ * @returns {boolean}
  */
 function isScheduledFillUnreachable(fill, { nowSec, closeTime }) {
     const beforeEndReachable = fill.beforeEnds.some((sec) => nowSec <= closeTime - sec + fill.durationSec);
@@ -178,6 +259,11 @@ function isScheduledFillUnreachable(fill, { nowSec, closeTime }) {
 /**
  * A window shorter than the longest gap between voting cycles can be stepped
  * straight over. Gated on the window being active, and on a known cadence.
+ *
+ * @param {WindowHintState} win
+ * @param {string} templateKey
+ * @param {{ checkFrequencyMax: number, t: Translate }} ctx
+ * @returns {SettingHint[]}
  */
 const shortWindowHints = (win, templateKey, { checkFrequencyMax, t }) =>
     win.active && checkFrequencyMax > 0 && win.durationMin < checkFrequencyMax
@@ -191,20 +277,32 @@ const shortWindowHints = (win, templateKey, { checkFrequencyMax, t }) =>
  * would never see the next-window hint on the daily-times row. It gates on
  * `enabled` like every value-derived hint: a time typed in while the toggle is
  * off must not render an "active schedule" status.
+ *
+ * @param {ChallengeHintContext} ctx
+ * @returns {SettingHint[]}
  */
 function scheduledFillStatusHints(ctx) {
     const { fill, t } = ctx;
+    /** @type {SettingHint[]} */
     const hints = [];
     if (fill.enabled && !fill.timeSet && fill.beforeEnds.length === 0) {
         hints.push({ tone: 'text-warning', text: t('app.scheduledFillNoTimesHint') });
     }
     if (fill.enabled && fill.next) {
-        hints.push({ tone: 'text-info', text: nextWindowText(t('app.scheduledFillNextHint'), fill, ctx) });
+        hints.push({
+            tone: 'text-info',
+            text: nextWindowText(t('app.scheduledFillNextHint'), /** @type {PendingWindow} */ (fill), ctx),
+        });
     }
     return hints;
 }
 
-/** Before-end offsets shorter than the fill window waste part of it. */
+/**
+ * Before-end offsets shorter than the fill window waste part of it.
+ *
+ * @param {{ fill: WindowHintState, t: Translate }} ctx
+ * @returns {SettingHint[]}
+ */
 function wastedFillWindowHints({ fill, t }) {
     if (!fill.enabled) return [];
     const wasted = fill.beforeEnds.filter((sec) => sec < fill.durationSec);
@@ -213,7 +311,12 @@ function wastedFillWindowHints({ fill, t }) {
     return [{ tone: 'text-warning', text: t('app.scheduledFillWastedWindowHint').replace('{0}', offsets) }];
 }
 
+/**
+ * @param {{ profileReplacesWarning: boolean, fillUnreachable: boolean, t: Translate }} ctx
+ * @returns {SettingHint[]}
+ */
 function fillReplacesHints({ profileReplacesWarning, fillUnreachable, t }) {
+    /** @type {SettingHint[]} */
     const hints = [];
     if (profileReplacesWarning) {
         hints.push({ tone: 'text-warning font-medium', text: t('app.scheduledFillProfileReplacesWarning') });
@@ -228,9 +331,13 @@ function fillReplacesHints({ profileReplacesWarning, fillUnreachable, t }) {
  * All pause status sits on the master-toggle row for the same reason
  * scheduled fill's does: a before-end-only config would never see a hint
  * rendered on the daily-times row.
+ *
+ * @param {ChallengeHintContext} ctx
+ * @returns {SettingHint[]}
  */
 function votingPauseStatusHints(ctx) {
     const { pause, timezone, t } = ctx;
+    /** @type {SettingHint[]} */
     const hints = [];
     if (pause.enabled && !pause.timeSet && pause.beforeEnds.length === 0) {
         hints.push({ tone: 'text-warning', text: t('app.votingPauseNoTimesHint') });
@@ -238,13 +345,17 @@ function votingPauseStatusHints(ctx) {
     // A pause open RIGHT NOW is reported as an END time — "voting
     // resumes at …" is what the user actually wants to know.
     if (pause.openNow) {
-        const until = formatClockInTz(pause.next.start + pause.durationSec, timezone);
+        // openNow implies a set `next`.
+        const until = formatClockInTz(/** @type {PendingWindow} */ (pause).next.start + pause.durationSec, timezone);
         hints.push({
             tone: 'text-warning',
             text: t('app.votingPauseActiveHint').replace('{0}', until).replace('{1}', timezone),
         });
     } else if (pause.active && pause.next) {
-        hints.push({ tone: 'text-info', text: nextWindowText(t('app.votingPauseNextHint'), pause, ctx) });
+        hints.push({
+            tone: 'text-info',
+            text: nextWindowText(t('app.votingPauseNextHint'), /** @type {PendingWindow} */ (pause), ctx),
+        });
     }
     // Daily pauses that leave no uncovered moment — outside the
     // last-minute rules such a challenge would never vote automatically.
@@ -252,6 +363,7 @@ function votingPauseStatusHints(ctx) {
     return hints;
 }
 
+/** @type {Map<string, (ctx: ChallengeHintContext) => SettingHint[]>} */
 const CHALLENGE_HINTS = new Map([
     ['useScheduledFill', scheduledFillStatusHints],
     ['scheduledFillBeforeEnd', wastedFillWindowHints],
@@ -274,11 +386,24 @@ const CHALLENGE_HINTS = new Map([
  * lives in utils/windowHints.js, which mirrors _triggerWindowState in
  * services/decisions/triggerWindows.js so a hint can never claim a window the decision
  * path won't open.
+ *
+ * @param {{
+ *   effectiveOf: EffectiveOf,
+ *   appSettings: Pick<Partial<AppSettings>, 'timezone' | 'checkFrequencyMax'> | null | undefined,
+ *   challenge: Challenge | null | undefined,
+ *   profileReplacesWarning: boolean,
+ *   t: Translate,
+ * }} params
+ * @returns {HintsFor}
  */
 export function challengeSettingHints({ effectiveOf, appSettings, challenge, profileReplacesWarning, t }) {
     const timezone = appSettings?.timezone || DEFAULT_TIMEZONE;
     const nowSec = Math.floor(Date.now() / 1000);
     const closeTime = Number(challenge?.close_time) || 0;
+    /**
+     * @param {typeof SCHEDULED_FILL_KEYS} keys
+     * @param {WindowHintPolicy} policy
+     */
     const derive = (keys, policy) => deriveWindowHints({ keys, ...policy, effectiveOf, timezone, nowSec, closeTime });
     const fill = derive(SCHEDULED_FILL_KEYS, SCHEDULED_FILL_POLICY);
     const pause = derive(VOTING_PAUSE_KEYS, VOTING_PAUSE_POLICY);
@@ -287,6 +412,7 @@ export function challengeSettingHints({ effectiveOf, appSettings, challenge, pro
         effectiveOf('scheduledFillReplaces') === true &&
         closeTime > nowSec &&
         isScheduledFillUnreachable(fill, { nowSec, closeTime });
+    /** @type {ChallengeHintContext} */
     const ctx = {
         effectiveOf,
         fill,
@@ -300,7 +426,11 @@ export function challengeSettingHints({ effectiveOf, appSettings, challenge, pro
     return (key) => lookupHints(CHALLENGE_HINTS, key, ctx);
 }
 
-/** Renders a `hintsFor(key)` result under a setting. */
+/**
+ * Renders a `hintsFor(key)` result under a setting.
+ *
+ * @param {{ hints: SettingHint[] }} props
+ */
 export function SettingHintList({ hints }) {
     return hints.map((hint) => (
         <p key={hint.text} className={`text-xs mt-1 ${hint.tone}`}>

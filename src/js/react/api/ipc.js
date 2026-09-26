@@ -1,3 +1,4 @@
+// @ts-check
 /**
  * The renderer's one-shot calls and event subscriptions over the shell bridge
  * (`window.api`, generated from src/js/ipc/manifest.js by both the Electron
@@ -16,11 +17,22 @@
 /** @import { WindowApi } from '../../types/ipc' */
 
 /**
+ * The bridge seen as untyped callables, for the pass-throughs below that only
+ * forward arguments and results (their public signatures come from WindowApi).
+ *
+ * @template {PropertyKey} M
+ * @typedef {Record<M, (...args: unknown[]) => unknown>} BridgeCalls
+ */
+
+/**
  * @template {keyof WindowApi} M
  * @param {M} method - bridge method name
  * @returns {WindowApi[M]}
  */
-const forward = (method) => /** @type {any} */ ((...args) => window.api[method](...args));
+const forward = (method) =>
+    /** @type {any} */ (
+        (/** @type {unknown[]} */ ...args) => /** @type {BridgeCalls<M>} */ (window.api)[method](...args)
+    );
 
 /**
  * A bridge method a host may leave out: absent (or no bridge at all) resolves
@@ -30,7 +42,11 @@ const forward = (method) => /** @type {any} */ ((...args) => window.api[method](
  * @param {M} method - bridge method name
  * @returns {(...args: Parameters<WindowApi[M]>) => ReturnType<WindowApi[M]> | undefined}
  */
-const forwardOptional = (method) => /** @type {any} */ ((...args) => window.api?.[method]?.(...args));
+const forwardOptional = (method) =>
+    /** @type {any} */ (
+        (/** @type {unknown[]} */ ...args) =>
+            /** @type {Partial<BridgeCalls<M>> | undefined} */ (window.api)?.[method]?.(...args)
+    );
 
 const ignore = () => {};
 
@@ -39,13 +55,15 @@ const ignore = () => {};
  * both a synchronous throw and a rejection, so a failing log sink can never
  * mask or replace the failure being logged.
  *
- * @param {string} method - bridge log method name
+ * @param {'logError' | 'logWarning' | 'logDebug'} method - bridge log method name
  * @param {string} message
  * @returns {Promise<void>}
  */
 function logBestEffort(method, message) {
     try {
-        return Promise.resolve(window.api?.[method]?.(message)).then(ignore, ignore);
+        // The renderer sends the message only; the handler's `data` is optional at runtime.
+        const api = /** @type {Partial<BridgeCalls<typeof method>> | undefined} */ (window.api);
+        return Promise.resolve(api?.[method]?.(message)).then(ignore, ignore);
     } catch {
         return Promise.resolve();
     }

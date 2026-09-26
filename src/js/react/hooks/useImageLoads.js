@@ -1,3 +1,4 @@
+// @ts-check
 import { useEffect, useState } from 'react';
 
 /**

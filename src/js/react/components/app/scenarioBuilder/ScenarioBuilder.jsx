@@ -1,3 +1,4 @@
+// @ts-check
 import { useState } from 'react';
 import { useTranslation } from '@/contexts/TranslationContext';
 import { useSettingsSchema } from '@/api/useSettingsSchema';
@@ -5,7 +6,7 @@ import { useActiveChallenges } from '@/api/useActiveChallenges';
 import { interp } from '@/utils/interp';
 import * as ipc from '@/api/ipc';
 import { SettingInput } from '../SettingInput';
-import { ScenarioError } from '../ScenarioError';
+import { ScenarioError, issuesOf } from '../ScenarioError';
 import { ConditionList, ActionList } from './ItemEditors';
 import { REPEAT_MODES, LIMIT_KEYS } from '../../../../scenarios/vocabulary';
 import {
@@ -19,6 +20,20 @@ import {
 } from '../../../../scenarios/builderModel';
 
 /**
+ * @import { ComponentChildren } from 'preact'
+ * @import { WindowApi } from '../../../../types/ipc'
+ * @import { ScenarioDraft, ScenarioDraftPhase, ScenarioDraftRule } from '../../../../types/scenarioBuilder'
+ * @import { RendererSchema } from '../../../../types/settingsEditor'
+ * @import { ScenarioErrorInfo } from '../ScenarioError'
+ */
+
+/**
+ * A successful simulate-scenario: the what-if timeline and why it stopped.
+ *
+ * @typedef {Extract<Awaited<ReturnType<WindowApi['simulateScenario']>>, { success: true }>} SimulationResult
+ */
+
+/**
  * The visual scenario builder: every part of a scenario document as a form —
  * name, start phase and limits; each phase's settings overlay and rules; each
  * rule's conditions and actions — plus the same document as JSON, a what-if
@@ -29,9 +44,18 @@ import {
 
 const CONTROL = 'input input-sm input-bordered w-full';
 
-/** A phase's settings overlay: per-challenge setting keys and their values. */
+/**
+ * A phase's settings overlay: per-challenge setting keys and their values.
+ *
+ * @param {{
+ *   settings: Record<string, unknown> | undefined,
+ *   onChange: (next: Record<string, unknown>) => void,
+ * }} props
+ */
 function PhaseSettings({ settings, onChange }) {
     const { t } = useTranslation();
+    // A failed schema read sends an empty `{}` schema, which is a (keyless) RendererSchema too.
+    /** @type {{ schema: RendererSchema | null }} */
     const { schema } = useSettingsSchema();
     const perChallenge = Object.entries(schema ?? {}).filter(
         ([key, config]) => config.perChallenge && key !== 'scenario',
@@ -46,7 +70,9 @@ function PhaseSettings({ settings, onChange }) {
                 const config = schema?.[key];
                 return (
                     <div key={key} className="flex items-center gap-2">
-                        <span className="text-xs w-40 shrink-0">{config ? t(config.label) : key}</span>
+                        <span className="text-xs w-40 shrink-0">
+                            {config ? t(/** @type {string} */ (config.label)) : key}
+                        </span>
                         {config && (
                             <SettingInput
                                 settingKey={key}
@@ -71,14 +97,18 @@ function PhaseSettings({ settings, onChange }) {
                 className="select select-xs select-bordered"
                 aria-label={t('app.sbAddSetting')}
                 value=""
-                onChange={(e) => onChange({ ...current, [e.target.value]: schema[e.target.value].default })}
+                onChange={(e) => {
+                    const key = /** @type {HTMLSelectElement} */ (e.target).value;
+                    // Only a listed key can be picked, and the list comes from the loaded schema.
+                    onChange({ ...current, [key]: /** @type {RendererSchema} */ (schema)[key].default });
+                }}
             >
                 <option value="">{t('app.sbPickSetting')}</option>
                 {perChallenge
                     .filter(([key]) => !keys.includes(key))
                     .map(([key, config]) => (
                         <option key={key} value={key}>
-                            {t(config.label)}
+                            {t(/** @type {string} */ (config.label))}
                         </option>
                     ))}
             </select>
@@ -86,7 +116,16 @@ function PhaseSettings({ settings, onChange }) {
     );
 }
 
-/** One rule: its name, repeat mode, conditions and actions. */
+/**
+ * One rule: its name, repeat mode, conditions and actions.
+ *
+ * @param {{
+ *   rule: ScenarioDraftRule,
+ *   onChange: (next: ScenarioDraftRule) => void,
+ *   phases: string[],
+ *   controls: ComponentChildren,
+ * }} props
+ */
 function RuleEditor({ rule, onChange, phases, controls }) {
     const { t } = useTranslation();
     return (
@@ -99,7 +138,11 @@ function RuleEditor({ rule, onChange, phases, controls }) {
                         className={CONTROL}
                         value={rule.label ?? ''}
                         placeholder={rule.id}
-                        onChange={(e) => onChange(setIn(rule, ['label'], e.target.value || undefined))}
+                        onChange={(e) =>
+                            onChange(
+                                setIn(rule, ['label'], /** @type {HTMLInputElement} */ (e.target).value || undefined),
+                            )
+                        }
                     />
                 </label>
                 <label className="flex flex-col text-xs gap-1">
@@ -107,7 +150,9 @@ function RuleEditor({ rule, onChange, phases, controls }) {
                     <select
                         className="select select-sm select-bordered"
                         value={rule.repeat ?? 'always'}
-                        onChange={(e) => onChange({ ...rule, repeat: e.target.value })}
+                        onChange={(e) =>
+                            onChange({ ...rule, repeat: /** @type {HTMLSelectElement} */ (e.target).value })
+                        }
                     >
                         {REPEAT_MODES.map((mode) => (
                             <option key={mode} value={mode}>
@@ -129,11 +174,22 @@ function RuleEditor({ rule, onChange, phases, controls }) {
     );
 }
 
-/** One phase: its name, settings overlay and rules. */
+/**
+ * One phase: its name, settings overlay and rules.
+ *
+ * @param {{
+ *   name: string,
+ *   phase: ScenarioDraftPhase,
+ *   draft: ScenarioDraft,
+ *   onDraft: (next: ScenarioDraft) => void,
+ *   phases: string[],
+ * }} props
+ */
 function PhaseEditor({ name, phase, draft, onDraft, phases }) {
     const { t } = useTranslation();
     const [editingName, setEditingName] = useState(name);
     const rules = phase.rules ?? [];
+    /** @param {ScenarioDraftRule[]} next */
     const setRules = (next) => onDraft(setIn(draft, ['phases', name, 'rules'], next));
     return (
         <section className="rounded-lg border border-base-300 p-3 space-y-3">
@@ -144,7 +200,7 @@ function PhaseEditor({ name, phase, draft, onDraft, phases }) {
                         type="text"
                         className={CONTROL}
                         value={editingName}
-                        onChange={(e) => setEditingName(e.target.value)}
+                        onChange={(e) => setEditingName(/** @type {HTMLInputElement} */ (e.target).value)}
                         onBlur={() => {
                             const renamed = renamePhase(draft, name, editingName.trim());
                             if (renamed === draft) setEditingName(name);
@@ -208,7 +264,11 @@ function PhaseEditor({ name, phase, draft, onDraft, phases }) {
     );
 }
 
-/** The scenario's name, description, start phase and spending limits. */
+/**
+ * The scenario's name, description, start phase and spending limits.
+ *
+ * @param {{ draft: ScenarioDraft, onDraft: (next: ScenarioDraft) => void, phases: string[] }} props
+ */
 function ScenarioHeader({ draft, onDraft, phases }) {
     const { t } = useTranslation();
     return (
@@ -219,7 +279,7 @@ function ScenarioHeader({ draft, onDraft, phases }) {
                     type="text"
                     className={CONTROL}
                     value={draft.name}
-                    onChange={(e) => onDraft({ ...draft, name: e.target.value })}
+                    onChange={(e) => onDraft({ ...draft, name: /** @type {HTMLInputElement} */ (e.target).value })}
                 />
             </label>
             <label className="flex flex-col text-xs gap-1">
@@ -227,7 +287,7 @@ function ScenarioHeader({ draft, onDraft, phases }) {
                 <select
                     className="select select-sm select-bordered"
                     value={draft.start}
-                    onChange={(e) => onDraft({ ...draft, start: e.target.value })}
+                    onChange={(e) => onDraft({ ...draft, start: /** @type {HTMLSelectElement} */ (e.target).value })}
                 >
                     {phases.map((phase) => (
                         <option key={phase} value={phase}>
@@ -242,7 +302,15 @@ function ScenarioHeader({ draft, onDraft, phases }) {
                     type="text"
                     className={CONTROL}
                     value={draft.description ?? ''}
-                    onChange={(e) => onDraft(setIn(draft, ['description'], e.target.value || undefined))}
+                    onChange={(e) =>
+                        onDraft(
+                            setIn(
+                                draft,
+                                ['description'],
+                                /** @type {HTMLInputElement} */ (e.target).value || undefined,
+                            ),
+                        )
+                    }
                 />
             </label>
             <fieldset className="sm:col-span-2 text-xs">
@@ -256,15 +324,16 @@ function ScenarioHeader({ draft, onDraft, phases }) {
                                 min={0}
                                 className="input input-sm input-bordered w-24"
                                 value={draft.limits?.[key] ?? ''}
-                                onChange={(e) =>
+                                onChange={(e) => {
+                                    const input = /** @type {HTMLInputElement} */ (e.target);
                                     onDraft(
                                         setIn(
                                             draft,
                                             ['limits', key],
-                                            e.target.value === '' ? undefined : Number(e.target.value),
+                                            input.value === '' ? undefined : Number(input.value),
                                         ),
-                                    )
-                                }
+                                    );
+                                }}
                             />
                         </label>
                     ))}
@@ -274,7 +343,11 @@ function ScenarioHeader({ draft, onDraft, phases }) {
     );
 }
 
-/** The whole draft as JSON; a valid edit replaces the draft. */
+/**
+ * The whole draft as JSON; a valid edit replaces the draft.
+ *
+ * @param {{ draft: ScenarioDraft, onDraft: (next: ScenarioDraft) => void }} props
+ */
 function JsonTab({ draft, onDraft }) {
     const { t } = useTranslation();
     const [text, setText] = useState(() => JSON.stringify(draft, null, 2));
@@ -288,16 +361,18 @@ function JsonTab({ draft, onDraft }) {
                 aria-label={t('app.sbTabJson')}
                 value={text}
                 onChange={(e) => {
-                    setText(e.target.value);
+                    const textarea = /** @type {HTMLTextAreaElement} */ (e.target);
+                    setText(textarea.value);
+                    /** @type {unknown} */
                     let parsed;
                     try {
-                        parsed = JSON.parse(e.target.value);
+                        parsed = JSON.parse(textarea.value);
                     } catch {
                         parsed = undefined;
                     }
                     // Only a document the forms can render replaces the draft.
                     const editable = isEditableDraft(parsed);
-                    if (editable) onDraft(parsed);
+                    if (editable) onDraft(/** @type {ScenarioDraft} */ (parsed));
                     setInvalid(!editable);
                 }}
             />
@@ -310,13 +385,17 @@ function JsonTab({ draft, onDraft }) {
     );
 }
 
-/** A what-if timeline of the draft on one live challenge. */
+/**
+ * A what-if timeline of the draft on one live challenge.
+ *
+ * @param {{ draft: ScenarioDraft }} props
+ */
 function SimulatePanel({ draft }) {
     const { t } = useTranslation();
     const { data: challenges } = useActiveChallenges(false);
     const [challengeId, setChallengeId] = useState('');
-    const [result, setResult] = useState(null);
-    const [error, setError] = useState(null);
+    const [result, setResult] = useState(/** @type {SimulationResult | null} */ (null));
+    const [error, setError] = useState(/** @type {ScenarioErrorInfo | null} */ (null));
 
     const run = async () => {
         const response = await ipc.callOrNull(() => ipc.simulateScenario(challengeId, draft));
@@ -325,7 +404,10 @@ function SimulatePanel({ draft }) {
             setError(null);
         } else {
             setResult(null);
-            setError({ what: 'app.sbSimulateFailed', issues: response?.issues });
+            setError({
+                what: 'app.sbSimulateFailed',
+                issues: issuesOf(response),
+            });
         }
     };
 
@@ -336,7 +418,7 @@ function SimulatePanel({ draft }) {
                     className="select select-sm select-bordered"
                     aria-label={t('app.sbSimulateOn')}
                     value={challengeId}
-                    onChange={(e) => setChallengeId(e.target.value)}
+                    onChange={(e) => setChallengeId(/** @type {HTMLSelectElement} */ (e.target).value)}
                 >
                     <option value="">{t('app.sbSimulatePick')}</option>
                     {challenges.map((challenge) => (
@@ -375,7 +457,7 @@ function SimulatePanel({ draft }) {
 }
 
 /**
- * @param {{initial: object, originalName: string|null, onSaved: Function, onCancel: Function}} props
+ * @param {{initial: ScenarioDraft, originalName: string|null, onSaved: () => void, onCancel: () => void}} props
  *   originalName: the stored name being edited, or null for a new scenario
  */
 export function ScenarioBuilder({ initial, originalName, onSaved, onCancel }) {
@@ -385,7 +467,7 @@ export function ScenarioBuilder({ initial, originalName, onSaved, onCancel }) {
     // through before a refused save must not be attempted again on retry.
     const [storedName, setStoredName] = useState(originalName);
     const [tab, setTab] = useState('builder');
-    const [error, setError] = useState(null);
+    const [error, setError] = useState(/** @type {ScenarioErrorInfo | null} */ (null));
     const phases = Object.keys(draft.phases);
 
     const save = async () => {
@@ -393,21 +475,31 @@ export function ScenarioBuilder({ initial, originalName, onSaved, onCancel }) {
         // Validate before anything is renamed, so a draft with problems changes nothing.
         const checked = await ipc.callOrNull(() => ipc.checkScenario(draft));
         if (!checked?.success) {
-            setError({ what: 'app.sbSaveFailed', issues: checked?.issues });
+            setError({
+                what: 'app.sbSaveFailed',
+                issues: issuesOf(checked),
+            });
             return;
         }
         const renamed = storedName !== null && storedName.toLowerCase() !== String(draft.name).toLowerCase();
         if (renamed) {
             const moved = await ipc.callOrNull(() => ipc.renameScenario(storedName, draft.name));
             if (!moved?.success) {
-                setError({ what: 'app.sbSaveFailed', issues: moved?.issues });
+                setError({
+                    what: 'app.sbSaveFailed',
+                    issues: issuesOf(moved),
+                });
                 return;
             }
             setStoredName(moved.name);
         }
         const result = await ipc.callOrNull(() => ipc.saveScenario(draft, { overwrite: storedName !== null }));
         if (result?.success) onSaved();
-        else setError({ what: 'app.sbSaveFailed', issues: result?.issues });
+        else
+            setError({
+                what: 'app.sbSaveFailed',
+                issues: issuesOf(result),
+            });
     };
 
     return (

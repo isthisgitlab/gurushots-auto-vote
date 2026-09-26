@@ -1,3 +1,5 @@
+// @ts-check
+/** @import { LogLine } from './LogEntry' */
 import { useTranslation } from '@/contexts/TranslationContext';
 import { LogEntry, LogsEmptyState } from '@/components/logs/LogEntry';
 
@@ -5,6 +7,8 @@ import { LogEntry, LogsEmptyState } from '@/components/logs/LogEntry';
  * Scrollable terminal-style log list shared by the Logs window page and
  * the in-app LogsModal. The two hosts only differ in the container
  * height (fixed 600px page vs 60vh modal), passed via `heightClass`.
+ *
+ * @param {{ entries: LogLine[], heightClass: string }} props
  */
 export function LogViewerBody({ entries, heightClass }) {
     const { t } = useTranslation();

@@ -1,3 +1,4 @@
+// @ts-check
 /**
  * Small coloured status dot (DaisyUI `status`), optionally with a ping halo so
  * it catches the eye in a long list — used to mark an open boost (info) and
@@ -11,6 +12,15 @@ const VARIANT_CLASS = {
     success: 'status-success',
 };
 
+/** @typedef {keyof typeof VARIANT_CLASS} PulseDotVariant */
+
+/**
+ * @param {{
+ *   variant?: PulseDotVariant,
+ *   pulse?: boolean,
+ *   size?: 'status-xs'|'status-sm'|'status-md'|'status-lg'|'status-xl',
+ * }} props - `size` is a DaisyUI status size class.
+ */
 export function PulseDot({ variant = 'info', pulse = true, size = 'status-md' }) {
     const colour = VARIANT_CLASS[variant] || VARIANT_CLASS.info;
     return (

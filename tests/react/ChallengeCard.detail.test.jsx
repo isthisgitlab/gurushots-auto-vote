@@ -210,6 +210,11 @@ describe('progress', () => {
         expect(screen.queryByText('app.yourProgress')).toBeNull();
     });
 
+    test('no progress block when the ranking total carries no vote count', () => {
+        renderCard(withTotal({ rank: 1, level: 1, level_name: 'POPULAR', percent: 1 }));
+        expect(screen.queryByText('app.yourProgress')).toBeNull();
+    });
+
     test('progress without ranking_levels shows no next level', () => {
         renderCard(
             makeChallenge({

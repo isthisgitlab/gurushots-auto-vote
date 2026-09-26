@@ -1,3 +1,4 @@
+// @ts-check
 import { useTranslation } from '@/contexts/TranslationContext';
 
 /**
@@ -7,6 +8,8 @@ import { useTranslation } from '@/contexts/TranslationContext';
  * so a deeper explanation — e.g. the two distinct meanings of a `0`
  * sentinel — is one click away without cluttering the row for users who
  * don't need it.
+ *
+ * @param {{ helpKey?: string }} props - translation key of the explanation
  */
 export function SettingHelp({ helpKey }) {
     const { t } = useTranslation();

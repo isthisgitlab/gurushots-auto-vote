@@ -1,3 +1,4 @@
+// @ts-check
 import { useTranslation } from '@/contexts/TranslationContext';
 import { ResetIcon } from './ResetButton';
 import { StrokeIcon, ICON_PATHS } from './StrokeIcon';
@@ -10,12 +11,12 @@ const ROW_ICON_CLASS = 'w-4 h-4 mr-1';
  * and ChallengeSettingsModal once).
  *
  * @param {object} props
- * @param {Function} props.onSave
+ * @param {() => void | Promise<void>} props.onSave
  * @param {boolean} props.saving        - disables Save and shows the spinner
- * @param {Function} props.onSecondary  - warning button handler (Reset All / Clear All)
+ * @param {() => void | Promise<void>} props.onSecondary - warning button handler (Reset All / Clear All)
  * @param {string} props.secondaryLabel - already-translated warning button label
  * @param {'reset'|'trash'} [props.secondaryIcon]
- * @param {Function} props.onCancel
+ * @param {() => void} props.onCancel
  * @param {boolean} [props.bordered]    - adds the top border + padding variant
  */
 export function ModalActionRow({
@@ -31,12 +32,12 @@ export function ModalActionRow({
 
     return (
         <div className={bordered ? 'flex justify-end gap-2 pt-4 border-t border-base-300' : 'flex justify-end gap-2'}>
-            <button className="btn btn-latvian btn-sm" onClick={onSave} disabled={saving}>
+            <button className="btn btn-latvian btn-sm" onClick={() => void onSave()} disabled={saving}>
                 {saving && <span className="loading loading-spinner loading-xs" />}
                 <StrokeIcon d={ICON_PATHS.save} className={ROW_ICON_CLASS} />
                 {t('app.save')}
             </button>
-            <button className="btn btn-warning btn-sm" onClick={onSecondary}>
+            <button className="btn btn-warning btn-sm" onClick={() => void onSecondary()}>
                 {secondaryIcon === 'trash' ? (
                     <StrokeIcon d={ICON_PATHS.trash} className={ROW_ICON_CLASS} />
                 ) : (

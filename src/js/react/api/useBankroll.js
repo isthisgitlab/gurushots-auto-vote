@@ -1,6 +1,13 @@
+// @ts-check
 import { useIpcResultQuery } from './useIpcQuery';
 
+/** @import { Bankroll } from '../../types/gurushots' */
+
 const fetchBankroll = () => window.api.getBankroll();
+/**
+ * @param {Bankroll} result
+ * @returns {Bankroll}
+ */
 const selectBalances = (result) => ({
     keys: result.keys,
     swaps: result.swaps,
@@ -9,6 +16,7 @@ const selectBalances = (result) => ({
 });
 // null (not 0) so the UI shows a "couldn't check" placeholder rather than
 // implying an empty balance.
+/** @returns {{ data: null }} */
 const noBalances = () => ({ data: null });
 
 /**
@@ -20,8 +28,7 @@ const noBalances = () => ({ data: null });
  * is the balances object, or null when the balance could not be read (transport
  * failure) — callers must render a placeholder (never 0) in that case.
  *
- * @returns {{ bankroll: {keys:number,swaps:number,fills:number,coins:number}|null,
- *   loading: boolean, error: Error|null, refetch: function }}
+ * @returns {{ bankroll: Bankroll | null, loading: boolean, error: Error|null, refetch: () => Promise<void> }}
  */
 export function useBankroll() {
     const { data, loading, error, refetch } = useIpcResultQuery(fetchBankroll, {

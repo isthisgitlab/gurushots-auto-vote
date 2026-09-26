@@ -1,3 +1,4 @@
+// @ts-check
 import { useEffect, useState, useCallback, useRef } from 'react';
 import * as ipc from '@/api/ipc';
 
@@ -22,6 +23,10 @@ import * as ipc from '@/api/ipc';
  *
  * `settingsVersion` changes when a settings-changed broadcast arrives; the
  * values are then re-read in place, without remounting the card.
+ *
+ * @param {string | number} challengeId
+ * @param {boolean} [initialCompact]
+ * @param {number} [settingsVersion]
  */
 export function useChallengeSettings(challengeId, initialCompact = false, settingsVersion = 0) {
     const [hasCustomSettings, setHasCustomSettings] = useState(false);

@@ -1,3 +1,4 @@
+// @ts-check
 /**
  * Renderer-side driver for the deadline-action OS notifications.
  *
@@ -34,18 +35,32 @@ import {
 } from '../../services/deadlineNotifications';
 
 /**
+ * One challenge's previewed deadline actions, as get-deadline-actions sends them.
+ *
+ * @typedef {{ action: string, thresholdSec: number, dueAt: number | null }} DeadlineActionPreview
+ */
+
+/**
+ * The get-deadline-actions IPC: the `{success, actions}` wrapper, never throws.
+ *
+ * @typedef {(challenge: unknown) => Promise<{success: boolean, actions?: DeadlineActionPreview[]} | null | undefined>} GetDeadlineActions
+ */
+
+/**
  * Fetch each challenge's deadline actions, one IPC round trip at a time.
  * get-deadline-actions returns {success, actions} | {success:false} and never
  * throws; anything that didn't resolve cleanly is skipped. Only id/title are
  * read — the challenge objects belong to the voting pass, so they are treated
  * as read-only.
  *
- * @param {Array|unknown} challenges
- * @param {(challenge:Object)=>Promise<{success:boolean, actions?:Array}>} getDeadlineActions
- * @returns {Promise<Array<{id:unknown, title:unknown, actions:Array}>>}
+ * @param {unknown} challenges
+ * @param {GetDeadlineActions} getDeadlineActions
+ * @returns {Promise<Array<{id:unknown, title:unknown, actions:DeadlineActionPreview[]}>>}
  */
 async function collectDeadlineActions(challenges, getDeadlineActions) {
+    /** @type {Array<{ id?: unknown, title?: unknown } | null | undefined>} */
     const list = Array.isArray(challenges) ? challenges : [];
+    /** @type {Array<{id:unknown, title:unknown, actions:DeadlineActionPreview[]}>} */
     const perChallengeActions = [];
     for (const challenge of list) {
         const res = await getDeadlineActions(challenge);
@@ -60,11 +75,13 @@ async function collectDeadlineActions(challenges, getDeadlineActions) {
  * itself best-effort: a throwing sink is swallowed too.
  *
  * @param {((message:string)=>void)|undefined} log
- * @param {any} error
+ * @param {unknown} error
  */
 function logCycleFailure(log, error) {
     try {
-        log?.(`deadline notification cycle failed: ${error?.message ?? error}`);
+        log?.(
+            `deadline notification cycle failed: ${/** @type {{ message?: unknown } | null | undefined} */ (error)?.message ?? error}`,
+        );
     } catch {
         /* the diagnostic sink itself is best-effort */
     }
@@ -76,14 +93,14 @@ function logCycleFailure(log, error) {
  * would never dedupe).
  *
  * @param {Object} deps
- * @param {(key:string)=>Promise<any>} deps.getSetting - the getGlobalDefault IPC
- * @param {(challenge:Object)=>Promise<{success:boolean, actions?:Array}>} deps.getDeadlineActions -
+ * @param {(key:string)=>Promise<unknown>} deps.getSetting - the getGlobalDefault IPC
+ * @param {GetDeadlineActions} deps.getDeadlineActions -
  *   the getDeadlineActions IPC (returns the {success, actions} wrapper — never throws)
  * @param {(key:string)=>string} deps.translate - returns a raw i18n template
  * @param {(n:{title:string, body:string})=>void} deps.deliver - platform delivery
  * @param {(message:string)=>void} [deps.log] - optional best-effort diagnostic sink
  *   (e.g. ipc.logRendererDebug); a failure is logged here rather than vanishing.
- * @returns {(challenges:Array, now:number)=>Promise<void>}
+ * @returns {(challenges:unknown, now:number)=>Promise<void>}
  */
 export function createDeadlineNotifier({ getSetting, getDeadlineActions, translate, deliver, log }) {
     const dedupe = createDedupe();

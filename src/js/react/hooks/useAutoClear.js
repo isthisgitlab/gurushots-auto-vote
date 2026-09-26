@@ -1,3 +1,4 @@
+// @ts-check
 import { useEffect } from 'react';
 
 /**
@@ -7,8 +8,8 @@ import { useEffect } from 'react';
  * whenever the value (or the clear callback) changes; falsy values
  * schedule nothing.
  *
- * @param {*} value - when truthy, schedules the clear
- * @param {Function} clear - called after `delayMs`
+ * @param {unknown} value - when truthy, schedules the clear
+ * @param {() => void} clear - called after `delayMs`
  * @param {number} delayMs
  */
 export function useAutoClear(value, clear, delayMs) {

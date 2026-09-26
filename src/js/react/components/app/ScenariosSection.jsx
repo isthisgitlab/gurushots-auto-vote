@@ -1,17 +1,36 @@
+// @ts-check
 import { useCallback, useEffect, useState } from 'react';
 import { useTranslation } from '@/contexts/TranslationContext';
 import { useScenarios } from '@/api/useScenarios';
 import { InlineLoader } from '@/components/ui/LoadingSpinner';
 import { interp } from '@/utils/interp';
 import * as ipc from '@/api/ipc';
-import { ScenarioError } from './ScenarioError';
+import { ScenarioError, issuesOf } from './ScenarioError';
 import { ScenarioBuilder } from './scenarioBuilder/ScenarioBuilder';
 import { newScenario } from '../../../scenarios/builderModel';
+
+/**
+ * @import { WindowApi } from '../../../types/ipc'
+ * @import { ScenarioDraft } from '../../../types/scenarioBuilder'
+ * @import { ScenarioDocument } from '../../../settings/scenarioSchema'
+ * @import { ScenarioErrorInfo } from './ScenarioError'
+ */
+
+/**
+ * A successful preview-scenario-import: the parsed scenario, what it does and
+ * whether importing it would replace a stored one.
+ *
+ * @typedef {Extract<Awaited<ReturnType<WindowApi['previewScenarioImport']>>, { success: true }>} ImportPreviewResult
+ */
 
 // How long an armed delete stays armed before it disarms itself.
 const CONFIRM_TIMEOUT_MS = 4000;
 
-/** What a scenario does before it is imported: its phases, spends and limits. */
+/**
+ * What a scenario does before it is imported: its phases, spends and limits.
+ *
+ * @param {{ preview: ImportPreviewResult['preview'] }} props
+ */
 function ImportPreview({ preview }) {
     const { t } = useTranslation();
     const limits = Object.entries(preview.limits);
@@ -45,13 +64,17 @@ function ImportPreview({ preview }) {
     );
 }
 
-/** Paste shared scenario JSON, see what it does, then import it. */
+/**
+ * Paste shared scenario JSON, see what it does, then import it.
+ *
+ * @param {{ onDone: () => void, onCancel: () => void }} props
+ */
 function ImportPanel({ onDone, onCancel }) {
     const { t } = useTranslation();
     const [text, setText] = useState('');
-    const [preview, setPreview] = useState(null);
+    const [preview, setPreview] = useState(/** @type {ImportPreviewResult | null} */ (null));
     const [overwrite, setOverwrite] = useState(false);
-    const [error, setError] = useState(null);
+    const [error, setError] = useState(/** @type {ScenarioErrorInfo | null} */ (null));
 
     const runPreview = async () => {
         setError(null);
@@ -60,14 +83,21 @@ function ImportPanel({ onDone, onCancel }) {
             setPreview(result);
         } else {
             setPreview(null);
-            setError({ what: 'app.scenarioImportInvalid', issues: result?.issues });
+            setError({
+                what: 'app.scenarioImportInvalid',
+                issues: issuesOf(result),
+            });
         }
     };
 
     const runImport = async () => {
         const result = await ipc.callOrNull(() => ipc.importScenario(text, { overwrite }));
         if (result?.success) onDone();
-        else setError({ what: 'app.scenarioImportFailed', issues: result?.issues });
+        else
+            setError({
+                what: 'app.scenarioImportFailed',
+                issues: issuesOf(result),
+            });
     };
 
     return (
@@ -81,7 +111,7 @@ function ImportPanel({ onDone, onCancel }) {
                 rows={6}
                 value={text}
                 onChange={(e) => {
-                    setText(e.target.value);
+                    setText(/** @type {HTMLTextAreaElement} */ (e.target).value);
                     setPreview(null);
                 }}
             />
@@ -93,7 +123,7 @@ function ImportPanel({ onDone, onCancel }) {
                         type="checkbox"
                         className="checkbox checkbox-sm"
                         checked={overwrite}
-                        onChange={(e) => setOverwrite(e.target.checked)}
+                        onChange={(e) => setOverwrite(/** @type {HTMLInputElement} */ (e.target).checked)}
                     />
                     {interp(t('app.scenarioOverwrite'), { name: preview.preview.name })}
                 </label>
@@ -118,11 +148,21 @@ function ImportPanel({ onDone, onCancel }) {
     );
 }
 
-/** One stored scenario: export, rename and a two-step delete. */
+/**
+ * One stored scenario: export, rename and a two-step delete.
+ *
+ * @param {{
+ *   name: string,
+ *   scenario: ScenarioDocument,
+ *   onChanged: () => void,
+ *   onError: (error: ScenarioErrorInfo) => void,
+ *   onEdit: () => void,
+ * }} props
+ */
 function ScenarioRow({ name, scenario, onChanged, onError, onEdit }) {
     const { t } = useTranslation();
-    const [exported, setExported] = useState(null);
-    const [renaming, setRenaming] = useState(null);
+    const [exported, setExported] = useState(/** @type {string | null} */ (null));
+    const [renaming, setRenaming] = useState(/** @type {string | null} */ (null));
     const [armed, setArmed] = useState(false);
 
     useEffect(() => {
@@ -143,7 +183,10 @@ function ScenarioRow({ name, scenario, onChanged, onError, onEdit }) {
             setRenaming(null);
             onChanged();
         } else {
-            onError({ what: 'app.scenarioRenameFailed', issues: result?.issues });
+            onError({
+                what: 'app.scenarioRenameFailed',
+                issues: issuesOf(result),
+            });
         }
     };
 
@@ -192,7 +235,7 @@ function ScenarioRow({ name, scenario, onChanged, onError, onEdit }) {
                         className="input input-sm flex-1"
                         aria-label={t('app.scenarioRenameLabel')}
                         value={renaming}
-                        onChange={(e) => setRenaming(e.target.value)}
+                        onChange={(e) => setRenaming(/** @type {HTMLInputElement} */ (e.target).value)}
                     />
                     <button type="button" className="btn btn-sm btn-primary" onClick={() => void runRename()}>
                         {t('app.scenarioRenameSave')}
@@ -211,7 +254,7 @@ function ScenarioRow({ name, scenario, onChanged, onError, onEdit }) {
                         readOnly
                         aria-label={interp(t('app.scenarioExportLabel'), { name })}
                         value={exported}
-                        onFocus={(e) => e.target.select()}
+                        onFocus={(e) => /** @type {HTMLTextAreaElement} */ (e.target).select()}
                     />
                     <button type="button" className="btn btn-xs btn-ghost" onClick={() => setExported(null)}>
                         {t('app.scenarioExportClose')}
@@ -222,7 +265,12 @@ function ScenarioRow({ name, scenario, onChanged, onError, onEdit }) {
     );
 }
 
-/** A name for a copy of `base` that no stored scenario uses yet. */
+/**
+ * A name for a copy of `base` that no stored scenario uses yet.
+ *
+ * @param {string} base
+ * @param {string[]} taken
+ */
 const freeName = (base, taken) => {
     const lower = new Set(taken.map((name) => name.toLowerCase()));
     let name = base;
@@ -235,15 +283,19 @@ const freeName = (base, taken) => {
  * export / rename / delete, a copy from an example template, and import of a
  * shared file. Changes here are saved immediately (not with the modal's Save),
  * like the scenario files they are.
+ *
+ * @param {{ isOpen: boolean }} props
  */
 export function ScenariosSection({ isOpen }) {
     const { t } = useTranslation();
     const { scenarios, templates, loading, error: loadError, refetch } = useScenarios(isOpen);
     const [importing, setImporting] = useState(false);
     const [templateId, setTemplateId] = useState('');
-    const [error, setError] = useState(null);
+    const [error, setError] = useState(/** @type {ScenarioErrorInfo | null} */ (null));
     // The scenario open in the builder: {initial, originalName} (null name = new).
-    const [editing, setEditing] = useState(null);
+    const [editing, setEditing] = useState(
+        /** @type {{ initial: ScenarioDraft, originalName: string | null } | null} */ (null),
+    );
 
     const changed = useCallback(() => {
         setError(null);
@@ -251,13 +303,18 @@ export function ScenariosSection({ isOpen }) {
     }, [refetch]);
 
     const addTemplate = async () => {
-        const template = templates.find((item) => item.id === templateId);
+        // The add button is disabled until a template is picked from this list.
+        const template = /** @type {(typeof templates)[number]} */ (templates.find((item) => item.id === templateId));
         const name = freeName(template.scenario.name, Object.keys(scenarios));
         const result = await ipc.callOrNull(() =>
             ipc.saveScenario({ ...template.scenario, name }, { overwrite: false }),
         );
         if (result?.success) changed();
-        else setError({ what: 'app.scenarioTemplateFailed', issues: result?.issues });
+        else
+            setError({
+                what: 'app.scenarioTemplateFailed',
+                issues: issuesOf(result),
+            });
     };
 
     const names = Object.keys(scenarios);
@@ -317,7 +374,7 @@ export function ScenariosSection({ isOpen }) {
                             className="select select-sm"
                             aria-label={t('app.scenarioTemplatePick')}
                             value={templateId}
-                            onChange={(e) => setTemplateId(e.target.value)}
+                            onChange={(e) => setTemplateId(/** @type {HTMLSelectElement} */ (e.target).value)}
                         >
                             <option value="">{t('app.scenarioTemplatePick')}</option>
                             {templates.map((template) => (

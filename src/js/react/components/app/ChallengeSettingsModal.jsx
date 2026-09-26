@@ -1,3 +1,4 @@
+// @ts-check
 import { useTranslation } from '@/contexts/TranslationContext';
 import { useSettingsSchema } from '@/api/useSettingsSchema';
 import { useIpcQuery } from '@/api/useIpcQuery';
@@ -14,6 +15,10 @@ import { ChallengeSettingsGroup } from './ChallengeSettingsGroup';
 import { challengeSettingHints } from './SettingHints';
 import * as ipc from '@/api/ipc';
 
+/**
+ * @import { Challenge } from '../../../types/gurushots'
+ */
+
 // The window hints only read the app settings; an unreadable read falls back
 // to the defaults rather than blocking the modal.
 const fetchAppSettings = async () => {
@@ -24,7 +29,11 @@ const fetchAppSettings = async () => {
     }
 };
 
-/** App settings re-read on every open; a read still in flight at close is dropped. */
+/**
+ * App settings re-read on every open; a read still in flight at close is dropped.
+ *
+ * @param {boolean} isOpen
+ */
 function useAppSettings(isOpen) {
     return useIpcQuery(fetchAppSettings, { enabled: isOpen, latestOnly: true }).data;
 }
@@ -35,6 +44,8 @@ function useAppSettings(isOpen) {
  * default: …" hint shows the comparison value; this is the at-a-glance count
  * so a user doesn't have to scan every group) and which title-rule profile
  * applies.
+ *
+ * @param {{ overrideCount: number, titleProfile: ReturnType<typeof useChallengeOverrides>['titleProfile'] }} props
  */
 function OverridesSummary({ overrideCount, titleProfile }) {
     const { t } = useTranslation();
@@ -47,7 +58,7 @@ function OverridesSummary({ overrideCount, titleProfile }) {
             <p className="text-xs" role="status">
                 {t(overrideCount ? 'app.overridesActiveSummary' : 'app.overridesNoneSummary').replace(
                     '{0}',
-                    overrideCount,
+                    String(overrideCount),
                 )}
                 {titleProfile && !titleProfile.suppressed && (
                     <>
@@ -62,6 +73,14 @@ function OverridesSummary({ overrideCount, titleProfile }) {
 
 /**
  * Per-challenge settings modal
+ *
+ * @param {{
+ *   isOpen: boolean,
+ *   onClose: () => void,
+ *   challengeId: Challenge['id'] | null,
+ *   challengeTitle: string,
+ *   challenge?: Challenge | null,
+ * }} props
  */
 export function ChallengeSettingsModal({ isOpen, onClose, challengeId, challengeTitle, challenge = null }) {
     const { t } = useTranslation();

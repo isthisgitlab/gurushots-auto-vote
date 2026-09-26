@@ -1,3 +1,4 @@
+// @ts-check
 import { useTranslation } from '@/contexts/TranslationContext';
 import { Modal } from '@/components/ui/Modal';
 import { useLogStream } from '@/hooks/useLogStream';
@@ -29,6 +30,8 @@ function LogsViewer() {
  * from the application menu). The Capacitor (Android) build has a single
  * WebView and no menu, so this modal gives it the same live log view. Reached
  * from the Navbar's Logs button, which is itself Capacitor-gated.
+ *
+ * @param {{ isOpen: boolean, onClose: () => void }} props
  */
 export function LogsModal({ isOpen, onClose }) {
     const { t } = useTranslation();

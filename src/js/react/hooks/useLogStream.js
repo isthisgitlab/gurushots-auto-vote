@@ -1,5 +1,8 @@
+// @ts-check
 import { useState, useEffect, useRef } from 'react';
 import * as ipc from '@/api/ipc';
+
+/** @import { GuiLogEntry } from '../../logger' */
 
 const MAX_ENTRIES = 1000;
 
@@ -12,20 +15,22 @@ const MAX_ENTRIES = 1000;
  * during the await — de-duped by monotonic `seq` so identical repeated
  * messages (turbo retries, mock loops) don't collide.
  *
- * @returns {{ entries: Array, connected: boolean }}
+ * @returns {{ entries: GuiLogEntry[], connected: boolean }}
  */
 export function useLogStream() {
-    const [entries, setEntries] = useState([]);
+    const [entries, setEntries] = useState(/** @type {GuiLogEntry[]} */ ([]));
     const [connected, setConnected] = useState(false);
     const mountedRef = useRef(true);
-    const unsubscribeRef = useRef(null);
+    const unsubscribeRef = useRef(/** @type {(() => void) | null} */ (null));
 
     useEffect(() => {
         mountedRef.current = true;
         let seeded = false;
         let maxBacklogSeq = 0;
+        /** @type {GuiLogEntry[]} */
         const liveBuffer = [];
 
+        /** @param {GuiLogEntry} logData */
         const appendEntry = (logData) => {
             setEntries((prev) => {
                 const next = [logData, ...prev];
@@ -42,7 +47,7 @@ export function useLogStream() {
                 if (!result.success || !mountedRef.current) return;
                 setConnected(true);
 
-                unsubscribeRef.current = ipc.onLogMessage((logData) => {
+                unsubscribeRef.current = ipc.onLogMessage((/** @type {GuiLogEntry} */ logData) => {
                     if (!mountedRef.current) return;
                     if (!seeded) {
                         liveBuffer.push(logData);

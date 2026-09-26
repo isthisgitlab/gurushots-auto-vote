@@ -1,3 +1,4 @@
+// @ts-check
 /**
  * Whether a currency-spend result calls for a refresh: the spend went through,
  * or the server reports it is no longer possible (the card is stale).

@@ -1,3 +1,4 @@
+// @ts-check
 import { createContext, useContext, useReducer, useCallback, useEffect, useMemo, useRef } from 'react';
 import { createCadenceChain, DECISION_ERROR_MESSAGE, formatOversleptMessage } from '../../scheduling/cadenceChain';
 import * as foregroundService from '../../services/ForegroundServiceController';
@@ -17,12 +18,36 @@ import { useLatestRef } from '../hooks/useLatestRef';
 import { rendererTranslator } from '../../translations/renderer';
 import * as ipc from '../api/ipc';
 
-const AutovoteContext = createContext(null);
+/** @import { ComponentChildren } from 'preact' */
+/** @import { Dispatch } from 'react' */
+/** @import { Challenge } from '../../types/gurushots' */
+/** @import { RendererGlobals } from '../../types/capacitor' */
+/** @import { TimerHandle } from '../../scheduling/cadenceChain' */
+/** @import { AutovoteAction, AutovoteState } from './autovoteReducer' */
+
+/**
+ * A per-cycle notifier the cadence chain calls with the cycle's challenges.
+ *
+ * @typedef {(challenges: Challenge[], now: number) => unknown} CycleNotifier
+ */
+
+/**
+ * What useAutovote returns: the state machine's state plus its controls.
+ *
+ * @typedef {AutovoteState & {
+ *   start: () => Promise<void>,
+ *   stop: () => Promise<void>,
+ *   toggle: () => Promise<void>,
+ *   rearmSchedule: () => Promise<void>,
+ * }} AutovoteContextValue
+ */
+
+const AutovoteContext = createContext(/** @type {AutovoteContextValue | null} */ (null));
 
 /**
  * Cancel the cadence chain's armed timer, if any, leaving the slot as-is.
  *
- * @param {{ current: any }} timerRef
+ * @param {{ current: TimerHandle | null }} timerRef
  */
 function cancelCycleTimer(timerRef) {
     if (timerRef.current) {
@@ -34,7 +59,7 @@ function cancelCycleTimer(timerRef) {
  * Cancel the armed timer and empty the slot, so the old timeout is stale under
  * the chain's generation guard.
  *
- * @param {{ current: any }} timerRef
+ * @param {{ current: TimerHandle | null }} timerRef
  */
 function clearCycleTimer(timerRef) {
     cancelCycleTimer(timerRef);
@@ -89,7 +114,7 @@ async function stopBackgroundHost() {
  * at a glance when the last cycle ran without opening the app (no-op on
  * Electron).
  *
- * @param {Function} dispatch
+ * @param {Dispatch<AutovoteAction>} dispatch
  */
 function recordCycleSuccess(dispatch) {
     dispatch({ type: ACTIONS.INCREMENT_CYCLE });
@@ -106,9 +131,9 @@ function recordCycleSuccess(dispatch) {
  *
  * @param {object} deps
  * @param {{ current: boolean }} deps.runningRef
- * @param {Function} deps.dispatch
- * @param {Function} [deps.onChallengesRefresh]
- * @returns {Promise<Array|boolean>} The fetched challenge list on success (or
+ * @param {Dispatch<AutovoteAction>} deps.dispatch
+ * @param {() => unknown} [deps.onChallengesRefresh]
+ * @returns {Promise<Challenge[]|boolean>} The fetched challenge list on success (or
  *   `true` when the cycle succeeded without surfacing one), `false` otherwise.
  *   Consumers MUST treat any non-array as "fetch fresh" (Array.isArray guard).
  */
@@ -145,7 +170,7 @@ async function runRendererVotingCycle({ runningRef, dispatch, onChallengesRefres
         // list is present so callers fetch fresh.
         return result.challenges ?? true;
     } catch (err) {
-        dispatch({ type: ACTIONS.SET_ERROR, payload: err.message || 'Voting error' });
+        dispatch({ type: ACTIONS.SET_ERROR, payload: /** @type {Error} */ (err).message || 'Voting error' });
         return false;
     }
 }
@@ -156,16 +181,18 @@ async function runRendererVotingCycle({ runningRef, dispatch, onChallengesRefres
  * foreground service is authoritative — so the notifier is NOT wired there at
  * all (that both avoids a dual-loop double-fire and the per-cycle IPC that
  * would only be discarded). See deadlineNotifier.js header.
+ *
+ * @returns {CycleNotifier | null}
  */
 function createRendererDeadlineNotifier() {
-    const isNativePlatform = globalThis.Capacitor?.isNativePlatform?.() === true;
+    const isNativePlatform = /** @type {RendererGlobals} */ (globalThis).Capacitor?.isNativePlatform?.() === true;
     const deliver = resolveRendererDelivery(isNativePlatform);
     if (!deliver) return null;
     const shared = {
-        getSetting: (key) => ipc.getGlobalDefault(key),
-        translate: (key) => rendererTranslator.t(key),
+        getSetting: (/** @type {string} */ key) => ipc.getGlobalDefault(key),
+        translate: (/** @type {string} */ key) => rendererTranslator.t(key),
         deliver,
-        log: (msg) => ipc.logRendererDebug(msg),
+        log: (/** @type {string} */ msg) => ipc.logRendererDebug(msg),
     };
     const deadlines = createDeadlineNotifier({
         ...shared,
@@ -189,10 +216,10 @@ function createRendererDeadlineNotifier() {
  *
  * @param {object} deps
  * @param {{ current: boolean }} deps.runningRef
- * @param {{ current: any }} deps.cycleTimerRef
- * @param {() => Promise<Array|boolean>} deps.runVotingCycle
- * @param {Function} deps.dispatch
- * @param {Function|null} deps.notifier - per-cycle deadline notifier, or null when not wired
+ * @param {{ current: TimerHandle | null }} deps.cycleTimerRef
+ * @param {() => Promise<Challenge[]|boolean>} deps.runVotingCycle
+ * @param {Dispatch<AutovoteAction>} deps.dispatch
+ * @param {CycleNotifier | null} deps.notifier - per-cycle deadline notifier, or null when not wired
  */
 function createRendererCadenceChain({ runningRef, cycleTimerRef, runVotingCycle, dispatch, notifier }) {
     return createCadenceChain({
@@ -202,8 +229,12 @@ function createRendererCadenceChain({ runningRef, cycleTimerRef, runVotingCycle,
             cycleTimerRef.current = handle;
         },
         loadSettings: () => ipc.getSettings(),
-        fetchChallenges: (settings) => ipc.getActiveChallenges(settings.token),
-        resolveLastMinuteCheckMinutes: () => ipc.getEffectiveSetting('lastMinuteCheckFrequency', 'global'),
+        // loadSettings above is ipc.getSettings, whose token is always a string.
+        fetchChallenges: (settings) => ipc.getActiveChallenges(/** @type {string} */ (settings.token)),
+        // The key-agnostic channel is typed `unknown`; the main process resolves
+        // the schema-validated (numeric) effective value.
+        resolveLastMinuteCheckMinutes: () =>
+            /** @type {Promise<number>} */ (ipc.getEffectiveSetting('lastMinuteCheckFrequency', 'global')),
         resolveThreshold,
         resolveScheduledFill,
         resolveFinalWindowTopUp,
@@ -217,12 +248,18 @@ function createRendererCadenceChain({ runningRef, cycleTimerRef, runVotingCycle,
             // so logging can't abort scheduling). Normal-mode lines stay
             // CLI-only — no IPC spam for the common case.
             cadence: (mode, message) => (mode === 'normal' ? undefined : ipc.logRendererDebug(message)),
-            decisionError: (err) => ipc.logRendererWarning(`${DECISION_ERROR_MESSAGE}: ${err.message || err}`),
+            decisionError: (err) =>
+                ipc.logRendererWarning(
+                    `${DECISION_ERROR_MESSAGE}: ${/** @type {Error | null | undefined} */ (err)?.message || err}`,
+                ),
             // runVotingCycle catches internally and resolves false, so a
             // rejection here is a can't-happen TODAY — but that is an
             // invariant of a different module. Log best-effort instead
             // of swallowing so a future regression can't fail silently.
-            cycleError: (err) => ipc.logRendererWarning(`Voting cycle failed: ${err?.message || err}`),
+            cycleError: (err) =>
+                ipc.logRendererWarning(
+                    `Voting cycle failed: ${/** @type {Error | null | undefined} */ (err)?.message || err}`,
+                ),
             // A renderer timer that fired far late means the page was
             // throttled/frozen or the machine suspended, and every
             // deadline inside that gap went unserved. Warning, not
@@ -281,6 +318,8 @@ function useResumeOnMount(start) {
 
 /**
  * Provider for autovote state machine
+ *
+ * @param {{ children?: ComponentChildren, onChallengesRefresh?: () => unknown }} props
  */
 export function AutovoteProvider({ children, onChallengesRefresh }) {
     const [state, dispatch] = useReducer(autovoteReducer, initialState);
@@ -291,13 +330,13 @@ export function AutovoteProvider({ children, onChallengesRefresh }) {
     // decides its own next delay (fast in-window / capped approaching / normal)
     // via the shared computeNextCycleDelayMs, so there is no separate fast-mode
     // interval or boundary-switch timer to keep in sync.
-    const cycleTimerRef = useRef(null);
+    const cycleTimerRef = useRef(/** @type {TimerHandle | null} */ (null));
 
     // Per-cycle OS deadline-notifier. Created ONCE (a fresh instance each render
     // would never dedupe): it holds the fired-key Set + re-entrancy guard across
     // cycles. `undefined` = not yet initialized; the stored value is the notifier
     // on Electron or `null` on native Android.
-    const notifierRef = useRef(undefined);
+    const notifierRef = useRef(/** @type {CycleNotifier | null | undefined} */ (undefined));
     if (notifierRef.current === undefined) {
         notifierRef.current = createRendererDeadlineNotifier();
     }
@@ -329,7 +368,8 @@ export function AutovoteProvider({ children, onChallengesRefresh }) {
                 cycleTimerRef,
                 runVotingCycle,
                 dispatch,
-                notifier: notifierRef.current,
+                // Initialized during the first render (above), never `undefined` here.
+                notifier: /** @type {CycleNotifier | null} */ (notifierRef.current),
             }),
         [runVotingCycle],
     );
@@ -443,6 +483,8 @@ export function AutovoteProvider({ children, onChallengesRefresh }) {
 
 /**
  * Hook to access autovote state and controls
+ *
+ * @returns {AutovoteContextValue}
  */
 export function useAutovote() {
     const context = useContext(AutovoteContext);

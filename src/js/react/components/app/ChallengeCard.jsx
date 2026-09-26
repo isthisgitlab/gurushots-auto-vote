@@ -1,3 +1,14 @@
+// @ts-check
+/**
+ * @import { Signal } from '@preact/signals'
+ * @import { Bankroll, Challenge } from '../../../types/gurushots'
+ */
+/**
+ * Everything the card derives from its challenge at one tick (see
+ * utils/challengeCardView), shared by the detailed and compact layouts.
+ *
+ * @typedef {ReturnType<typeof deriveChallengeCardView>} ChallengeCardView
+ */
 import { useTranslation } from '@/contexts/TranslationContext';
 import { deriveChallengeCardView } from '@/utils/challengeCardView';
 import { useDeadlineActions } from '@/api/useDeadlineActions';
@@ -17,6 +28,20 @@ import { useChallengeCardActions, buildCompactActionRow } from './ChallengeCardA
  * actions stay in the detailed card. The root element is the grid item in
  * ChallengesSection's #challenges-container: a detailed card spans the full
  * row, compact tiles share one.
+ *
+ * @param {object} props
+ * @param {Challenge} props.challenge
+ * @param {number} [props.settingsVersion]
+ * @param {number} [props.passVersion]
+ * @param {boolean} [props.defaultCompact]
+ * @param {boolean} [props.compactActions]
+ * @param {Signal<string> | string} [props.timeRemaining] - live countdown from useTimers
+ * @param {string} props.timezone
+ * @param {boolean} props.autovoteRunning
+ * @param {() => void} props.onVoteComplete
+ * @param {(challengeId: Challenge['id'], challengeTitle: string) => void} props.onSettingsClick
+ * @param {Bankroll | null} [props.bankroll]
+ * @param {() => void} props.onCurrencySpent - called after a key / swap / fill spend
  */
 export function ChallengeCard({
     challenge,

@@ -1,3 +1,4 @@
+// @ts-check
 import { useTranslation } from '@/contexts/TranslationContext';
 import { useListDraft, LIST_FINGERPRINT_SEP } from '@/hooks/useListDraft';
 import { SettingResetButton } from './SettingResetButton';
@@ -7,9 +8,16 @@ import { interp } from '@/utils/interp';
 
 export { SCHEDULED_FILL_MAX_ENTRIES } from './TimeSettingFields';
 
+/**
+ * @import { ComponentChildren, ComponentType } from 'preact'
+ * @import { SerializableSchemaEntry } from '../../../ipc/settings.handlers'
+ * @import { SettingChangeHandler, SettingFieldProps, SettingResetHandler, Translate } from '../../../types/settingsEditor'
+ */
+
 // Setting types rendered as several controls (each with its own aria-label)
 // rather than one: their caption names a role="group" wrapper instead of
 // pointing a <label> at a single control.
+/** @type {Set<string | undefined>} */
 const GROUP_TYPES = new Set(['time', 'schedule', 'timeOfDayList', 'timeList']);
 
 /**
@@ -18,6 +26,8 @@ const GROUP_TYPES = new Set(['time', 'schedule', 'timeOfDayList', 'timeList']);
  * control by `inputId`; a multi-control one (`group`, derived from the schema
  * `type` for SettingInput) gets a caption whose id `${inputId}-label` names the
  * control group.
+ *
+ * @param {{ inputId: string, type?: string, group?: boolean, children?: ComponentChildren }} props
  */
 export function SettingLabel({ inputId, type, group = GROUP_TYPES.has(type), children }) {
     if (group) {
@@ -34,7 +44,11 @@ export function SettingLabel({ inputId, type, group = GROUP_TYPES.has(type), chi
     );
 }
 
-/** One-line setting control(s) followed by the setting's reset button. */
+/**
+ * One-line setting control(s) followed by the setting's reset button.
+ *
+ * @param {{ settingKey: string, onReset?: SettingResetHandler | null, children?: ComponentChildren }} props
+ */
 function ControlRow({ settingKey, onReset, children }) {
     return (
         <div className="flex items-center gap-2">
@@ -45,12 +59,15 @@ function ControlRow({ settingKey, onReset, children }) {
 }
 
 // Callers pass TagsField's already-normalised array, so no guard is needed here.
+/** @param {unknown[]} arr @returns {string} */
 const tagsArrayToText = (arr) => arr.join(', ');
+/** @param {string} text @returns {string[]} */
 const tagsTextToArray = (text) =>
     text
         .split(',')
         .map((s) => s.trim())
         .filter((s) => s.length > 0);
+/** @param {string} text @returns {string} */
 const tagsDraftKey = (text) => tagsTextToArray(text).join(LIST_FINGERPRINT_SEP);
 
 /**
@@ -58,14 +75,25 @@ const tagsDraftKey = (text) => tagsTextToArray(text).join(LIST_FINGERPRINT_SEP);
  * commas and trailing spaces without the array round-trip eating them
  * mid-keystroke. Re-syncs when the array prop is replaced from outside
  * (reset button, reload).
+ *
+ * @param {{
+ *   id: string,
+ *   settingKey: string,
+ *   value: unknown,
+ *   onChange: SettingChangeHandler,
+ *   onReset?: SettingResetHandler | null,
+ *   placeholder?: string,
+ *   disabled?: boolean,
+ * }} props
  */
 export function TagsField({ id, settingKey, value, onChange, onReset, placeholder, disabled = false }) {
     const arr = Array.isArray(value) ? value : [];
     const [draft, setDraft] = useListDraft(arr, tagsArrayToText, tagsDraftKey);
 
+    /** @param {import('preact').JSX.TargetedEvent<HTMLInputElement, Event>} e */
     const handleChange = (e) => {
-        setDraft(e.target.value);
-        onChange(settingKey, tagsTextToArray(e.target.value));
+        setDraft(e.currentTarget.value);
+        onChange(settingKey, tagsTextToArray(e.currentTarget.value));
     };
 
     return (
@@ -83,7 +111,11 @@ export function TagsField({ id, settingKey, value, onChange, onReset, placeholde
     );
 }
 
-/** A schema `tags` setting: TagsField with the shared placeholder. */
+/**
+ * A schema `tags` setting: TagsField with the shared placeholder.
+ *
+ * @param {SettingFieldProps} props
+ */
 function TagsSetting({ id, settingKey, value, onChange, onReset, disabled }) {
     const { t } = useTranslation();
     return (
@@ -99,6 +131,7 @@ function TagsSetting({ id, settingKey, value, onChange, onReset, disabled }) {
     );
 }
 
+/** @param {SettingFieldProps} props */
 function BooleanField({ id, settingKey, value, onChange, onReset, disabled }) {
     return (
         <ControlRow settingKey={settingKey} onReset={onReset}>
@@ -107,7 +140,7 @@ function BooleanField({ id, settingKey, value, onChange, onReset, disabled }) {
                 type="checkbox"
                 className="checkbox checkbox-sm"
                 checked={!!value}
-                onChange={(e) => onChange(settingKey, e.target.checked)}
+                onChange={(e) => onChange(settingKey, e.currentTarget.checked)}
                 disabled={disabled}
             />
         </ControlRow>
@@ -122,6 +155,10 @@ function BooleanField({ id, settingKey, value, onChange, onReset, disabled }) {
  * border, no message — while Save writes '' straight through to zod, which
  * rejects it with the generic "check the highlighted values" banner and
  * nothing highlighted.
+ *
+ * @param {unknown} value
+ * @param {Pick<SerializableSchemaEntry, 'min' | 'max'>} bounds
+ * @returns {boolean}
  */
 function isNumberInvalid(value, { min, max }) {
     if (value === '' || value === null || value === undefined) return true;
@@ -133,12 +170,17 @@ function isNumberInvalid(value, { min, max }) {
     );
 }
 
+/**
+ * @param {Pick<SerializableSchemaEntry, 'min' | 'max'>} bounds
+ * @param {Translate} t
+ * @returns {string}
+ */
 function numberRangeMessage({ min, max }, t) {
     const hasMin = typeof min === 'number';
     if (hasMin && typeof max === 'number') {
-        return t('app.validationOutOfRange').replace('{min}', min).replace('{max}', max);
+        return t('app.validationOutOfRange').replace('{min}', String(min)).replace('{max}', String(max));
     }
-    return hasMin ? t('app.validationAtLeast').replace('{min}', min) : t('app.validationInvalidValue');
+    return hasMin ? t('app.validationAtLeast').replace('{min}', String(min)) : t('app.validationInvalidValue');
 }
 
 /**
@@ -146,6 +188,9 @@ function numberRangeMessage({ min, max }, t) {
  * rather than writing 0, which zod rejects for min-1 keys like exposure — the
  * range check then explains the blank instead of a save failure for a value
  * the user never typed.
+ *
+ * @param {string} raw
+ * @returns {number | ''}
  */
 function parseNumberInput(raw) {
     if (raw === '') return '';
@@ -153,6 +198,7 @@ function parseNumberInput(raw) {
     return Number.isNaN(parsed) ? '' : parsed;
 }
 
+/** @param {SettingFieldProps} props */
 function NumberField({ id, settingKey, config, value, onChange, onReset, disabled }) {
     const { t } = useTranslation();
     const invalid = isNumberInvalid(value, config);
@@ -165,8 +211,9 @@ function NumberField({ id, settingKey, config, value, onChange, onReset, disable
                     className={`input input-sm w-24 ${invalid ? 'input-error' : ''}`}
                     min={config.min}
                     max={config.max}
-                    value={value}
-                    onChange={(e) => onChange(settingKey, parseNumberInput(e.target.value))}
+                    // A number or '' (SettingInput's normalisation); the DOM coerces either.
+                    value={/** @type {number | string} */ (value)}
+                    onChange={(e) => onChange(settingKey, parseNumberInput(e.currentTarget.value))}
                     disabled={disabled}
                 />
                 {config.unit && <span className="text-sm">{t(config.unit)}</span>}
@@ -176,6 +223,7 @@ function NumberField({ id, settingKey, config, value, onChange, onReset, disable
     );
 }
 
+/** @param {SettingFieldProps} props */
 function TextField({ id, settingKey, value, onChange, onReset, disabled }) {
     return (
         <ControlRow settingKey={settingKey} onReset={onReset}>
@@ -183,8 +231,9 @@ function TextField({ id, settingKey, value, onChange, onReset, disabled }) {
                 id={id}
                 type="text"
                 className="input input-sm"
-                value={value}
-                onChange={(e) => onChange(settingKey, e.target.value)}
+                // A string for every text-typed schema key; the DOM coerces anything else.
+                value={/** @type {string} */ (value)}
+                onChange={(e) => onChange(settingKey, e.currentTarget.value)}
                 disabled={disabled}
             />
         </ControlRow>
@@ -195,6 +244,8 @@ function TextField({ id, settingKey, value, onChange, onReset, disabled }) {
  * The `scenario` assignment: a pick of the stored scenarios ('' = none). A
  * name that no longer exists stays visible — marked as missing — so the user
  * sees the stale assignment instead of it silently reading as "none".
+ *
+ * @param {SettingFieldProps} props
  */
 function ScenarioField({ id, settingKey, value, onChange, onReset, disabled }) {
     const { t } = useTranslation();
@@ -209,7 +260,7 @@ function ScenarioField({ id, settingKey, value, onChange, onReset, disabled }) {
                 id={id}
                 className="select select-sm"
                 value={selected}
-                onChange={(e) => onChange(settingKey, e.target.value)}
+                onChange={(e) => onChange(settingKey, e.currentTarget.value)}
                 disabled={disabled}
             >
                 <option value="">{t('app.scenarioNone')}</option>
@@ -228,6 +279,9 @@ function ScenarioField({ id, settingKey, value, onChange, onReset, disabled }) {
 
 /**
  * Get default value for a config type to prevent uncontrolled inputs
+ *
+ * @param {string | undefined} type
+ * @returns {number | boolean | never[] | string}
  */
 function getDefaultForType(type) {
     switch (type) {
@@ -251,6 +305,7 @@ function getDefaultForType(type) {
 // onReset, disabled }. The timeOfDayList values look device-local but are
 // interpreted in the app timezone setting — the surrounding modal renders a
 // hint naming the zone.
+/** @type {Map<string | undefined, ComponentType<SettingFieldProps>>} */
 const FIELD_BY_TYPE = new Map([
     ['tags', TagsSetting],
     ['schedule', ScheduleField],
@@ -264,12 +319,23 @@ const FIELD_BY_TYPE = new Map([
 
 // Row-list fields render inside a role="group" wrapper named by the
 // SettingLabel caption; TimeField carries that role on its own row.
+/** @type {Set<string | undefined>} */
 const GROUP_WRAPPED_TYPES = new Set(['schedule', 'timeOfDayList', 'timeList']);
 
 /**
  * Schema-driven input renderer for settings. `id` goes on the control a
  * SettingLabel with the same `inputId` points at; multi-control types instead
  * render a role="group" named by that caption (see SettingLabel).
+ *
+ * @param {{
+ *   settingKey: string,
+ *   config?: SerializableSchemaEntry | null,
+ *   value: unknown,
+ *   onChange: SettingChangeHandler,
+ *   onReset?: SettingResetHandler | null,
+ *   disabled?: boolean,
+ *   id?: string,
+ * }} props
  */
 export function SettingInput({
     settingKey,

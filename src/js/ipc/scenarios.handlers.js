@@ -66,7 +66,10 @@ const isIdArg = (value) => (typeof value === 'string' && value.trim() !== '') ||
  */
 const isName = (value) => typeof value === 'string' && value.trim() !== '';
 
-const invalidArgs = { success: /** @type {const} */ (false), error: 'invalid-args' };
+// `issues?: undefined` keeps this arm distinct from the validation failures that
+// do carry issues, so a renderer narrowing on `'issues' in result` keeps them.
+/** @type {{ success: false, error: string, issues?: undefined }} */
+const invalidArgs = { success: false, error: 'invalid-args' };
 
 /**
  * A facade `{ok, issues}` result as an IPC result.
@@ -94,7 +97,7 @@ const fromResult = ({ ok, ...result }) =>
  * @template T
  * @param {string} label
  * @param {() => T | Promise<T>} body
- * @returns {Promise<T | { success: false, error: string }>}
+ * @returns {Promise<T | { success: false, error: string, issues?: undefined }>}
  */
 const safely = async (label, body) => {
     try {

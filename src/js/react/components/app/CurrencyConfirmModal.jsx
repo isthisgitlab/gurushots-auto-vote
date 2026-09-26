@@ -1,3 +1,6 @@
+// @ts-check
+/** @import { ComponentChildren } from 'preact' */
+/** @import { Bankroll } from '../../../types/gurushots' */
 import { useTranslation } from '@/contexts/TranslationContext';
 import { Modal, ModalActions } from '@/components/ui/Modal';
 import { interp } from '@/utils/interp';
@@ -5,6 +8,7 @@ import { interp } from '@/utils/interp';
 // Outcome code (voting/currencyActions CURRENCY_OUTCOME) → translated message.
 // Anything unmapped (auth failure, unexpected string) reads as a generic
 // rejection — never a raw code or status in front of the user.
+/** @type {Partial<Record<string, string>>} */
 const OUTCOME_KEY = {
     'not-available': 'app.currencyOutcomeNotAvailable',
     'no-balance': 'app.currencyOutcomeNoBalance',
@@ -15,8 +19,8 @@ const OUTCOME_KEY = {
 };
 
 /**
- * @param {function} t - translation function
- * @param {string|null} outcome - the failed action's outcome code
+ * @param {(key: string) => string} t - translation function
+ * @param {string} outcome - the failed action's outcome code
  * @returns {string}
  */
 export const currencyOutcomeText = (t, outcome) => t(OUTCOME_KEY[outcome] || 'app.currencyOutcomeFailed');
@@ -29,19 +33,25 @@ const CURRENCY_LABELS = {
 };
 
 /**
+ * Props of CurrencyConfirmModal.
+ *
+ * @typedef {object} CurrencyConfirmModalProps
+ * @property {boolean} isOpen
+ * @property {() => void} onClose
+ * @property {() => void | Promise<void>} onConfirm
+ * @property {string} title
+ * @property {keyof typeof CURRENCY_LABELS} field - which balance this spends
+ * @property {Bankroll | null} bankroll
+ * @property {boolean} spending
+ * @property {ComponentChildren} children - action-specific body
+ */
+
+/**
  * Confirmation before spending one unit of a bankroll currency. Shows the cost
  * and the current → resulting balance; Spend stays disabled with a spinner from
  * the first click until the spend settles, so a double click can't spend twice.
  *
- * @param {object} props
- * @param {boolean} props.isOpen
- * @param {function} props.onClose
- * @param {function} props.onConfirm
- * @param {string} props.title
- * @param {'keys'|'swaps'|'fills'} props.field - which balance this spends
- * @param {object|null} props.bankroll
- * @param {boolean} props.spending
- * @param {import('react').ReactNode} props.children - action-specific body
+ * @param {CurrencyConfirmModalProps} props
  */
 export function CurrencyConfirmModal({ isOpen, onClose, onConfirm, title, field, bankroll, spending, children }) {
     const { t } = useTranslation();
@@ -66,7 +76,7 @@ export function CurrencyConfirmModal({ isOpen, onClose, onConfirm, title, field,
                 <button className="btn btn-outline btn-sm" onClick={onClose} disabled={spending}>
                     {t('app.cancel')}
                 </button>
-                <button className="btn btn-warning btn-sm" onClick={onConfirm} disabled={spending}>
+                <button className="btn btn-warning btn-sm" onClick={() => void onConfirm()} disabled={spending}>
                     {spending ? (
                         <span className="loading loading-spinner loading-xs" />
                     ) : (

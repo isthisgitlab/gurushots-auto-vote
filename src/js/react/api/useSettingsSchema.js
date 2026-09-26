@@ -1,10 +1,26 @@
+// @ts-check
 import { useIpcQuery } from './useIpcQuery';
+
+/** @import { WindowApi } from '../../types/ipc' */
+/** @import { RendererSchema } from '../../types/settingsEditor' */
+
+/** @typedef {Awaited<ReturnType<WindowApi['getSettingsSchema']>>} SettingsSchemaPayload */
+/** @typedef {Extract<SettingsSchemaPayload, { groups: unknown[] }>} FullSettingsSchema */
 
 const fetchSettingsSchema = () => window.api.getSettingsSchema();
 
 /**
  * Hook for fetching settings schema and defaults via IPC
- * @returns {{ schema: Object|null, defaults: Object|null, groups: Array|null, tiers: Array|null, profileLimits: Object|null, loading: boolean, error: Error|null, refetch: function }}
+ * @returns {{
+ *   schema: RendererSchema | null,
+ *   defaults: Record<string, unknown> | null,
+ *   groups: FullSettingsSchema['groups'] | null,
+ *   tiers: FullSettingsSchema['tiers'] | null,
+ *   profileLimits: FullSettingsSchema['profileLimits'] | null,
+ *   loading: boolean,
+ *   error: Error | null,
+ *   refetch: () => Promise<void>,
+ * }}
  */
 export function useSettingsSchema() {
     const { data, loading, error, refetch } = useIpcQuery(fetchSettingsSchema, { subscribe: true });

@@ -1,3 +1,5 @@
+// @ts-check
+/** @import { Challenge } from '../../../types/gurushots' */
 import { useTranslation } from '@/contexts/TranslationContext';
 import { useOverriddenChallengeIds } from '@/hooks/useOverriddenChallengeIds';
 import { ChipListPanel, ChallengeChip, ChipTitle } from './ChallengeChips';
@@ -22,6 +24,8 @@ import { isLowExposure } from '@/utils/challengeAlerts';
  * Each chip also leads with a status dot — pulsing blue for an open boost
  * window, red for low exposure (utils/challengeAlerts) — so the whole
  * situation reads off this one panel. The meaning is repeated in sr-only text.
+ *
+ * @param {{ challenges: Challenge[] | null | undefined }} props
  */
 export function ChallengeNav({ challenges }) {
     const { t } = useTranslation();

@@ -1,3 +1,6 @@
+// @ts-check
+/** @import { Bankroll, Challenge, RankingEntry } from '../../../types/gurushots' */
+/** @import { SwapBackOffer } from './SwapEntryButton' */
 import { useTranslation } from '@/contexts/TranslationContext';
 import { useBoost } from '@/api/useBoost';
 import { useTurbo } from '@/api/useTurbo';
@@ -11,16 +14,16 @@ import { SwapEntryButton, SwapBackButton } from './SwapEntryButton';
  * Entry badge component showing entry details and per-entry action buttons.
  *
  * @param {object} props
- * @param {object} props.entry           - Entry record from challenge.member.ranking.entries
- * @param {string|number} props.challengeId
+ * @param {RankingEntry} props.entry     - Entry record from challenge.member.ranking.entries
+ * @param {Challenge['id']} props.challengeId
  * @param {boolean} props.boostAvailable - Boost is currently usable on the parent challenge
  * @param {boolean} [props.turboAvailable] - A won Turbo is held and unapplied
- * @param {Function} props.onBoostApplied - called after a successful boost
- * @param {Function} props.onTurboApplied - called after a successful turbo
+ * @param {() => void} props.onBoostApplied - called after a successful boost
+ * @param {() => void} props.onTurboApplied - called after a successful turbo
  * @param {boolean} [props.swapAvailable] - A swap can be spent on this challenge (balance + challenge flags)
- * @param {object|null} [props.bankroll] - For the swap confirm modal's balance line
- * @param {Function} [props.onSwapped]
- * @param {object|null} [props.swapBack] - Swap-back offer for this slot (the original was swapped out while boosted/turbo'd)
+ * @param {Bankroll|null} [props.bankroll] - For the swap confirm modal's balance line
+ * @param {() => void} props.onSwapped - called after a swap / swap back spent
+ * @param {SwapBackOffer|null} [props.swapBack] - Swap-back offer for this slot (the original was swapped out while boosted/turbo'd)
  */
 export function EntryBadge({
     entry,
@@ -82,7 +85,7 @@ export function EntryBadge({
                     variant="success"
                     error={boostError}
                     className="ml-1"
-                    onClick={handleBoost}
+                    onClick={() => void handleBoost()}
                     disabled={boosting}
                 >
                     {boosting ? <span className="loading loading-spinner loading-xs" /> : `🚀 ${t('app.boost')}`}
@@ -93,7 +96,7 @@ export function EntryBadge({
                     variant="warning"
                     error={turboError}
                     className="ml-1"
-                    onClick={handleTurbo}
+                    onClick={() => void handleTurbo()}
                     disabled={turboing}
                 >
                     {turboing ? <span className="loading loading-spinner loading-xs" /> : `⚡ ${t('app.turbo')}`}
