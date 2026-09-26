@@ -1,6 +1,9 @@
+const path = require('node:path');
 const { Menu, dialog, app, BrowserWindow } = require('electron');
 const logger = require('../logger');
 const { translationManager } = require('../translations/index');
+const AutoUpdater = require('../services/AutoUpdater');
+const packageInfo = require('../../../package.json');
 
 /**
  * Application Menu Module
@@ -154,8 +157,6 @@ function createApplicationMenu() {
 
 // Check for updates from menu
 async function checkForUpdatesFromMenu() {
-    const AutoUpdater = require('../services/AutoUpdater');
-
     try {
         // Get the main window to send events to
         const mainWindow = BrowserWindow.getAllWindows().find((win) => win.getTitle() !== 'Logs' && !win.isDestroyed());
@@ -189,8 +190,6 @@ async function checkForUpdatesFromMenu() {
 
 // Show About dialog
 function showAbout() {
-    const packageInfo = require('../../../package.json');
-
     void dialog.showMessageBox({
         type: 'info',
         title: t('menu.aboutTitle'),
@@ -207,8 +206,6 @@ function updateMenuTranslations() {
 
 // Open logs window
 function openLogsWindow() {
-    const path = require('node:path');
-
     // Check if logs window already exists
     const existingWindow = BrowserWindow.getAllWindows().find((win) => win.getTitle() === 'Logs');
     if (existingWindow) {

@@ -23,6 +23,7 @@ const { registerHandlers } = require('./registerHandlers');
 const { errorResult } = require('./errorResult');
 const logger = require('../logger');
 const apiFactory = require('../apiFactory');
+const metadata = require('../metadata');
 
 // Channels that just delegate to settings.<method>(...args). Each
 // entry: [channel, method-name, fallback-on-error, verb-for-log].
@@ -229,7 +230,6 @@ const buildHandlers = ({ broadcastSettingsChange } = {}) => {
 
         'cleanup-stale-metadata': async (event, activeChallengeIds) => {
             try {
-                const metadata = require('../metadata');
                 return metadata.cleanupStaleMetadata(activeChallengeIds);
             } catch (error) {
                 logger.withCategory('api').error('Error cleaning up stale metadata:', error);

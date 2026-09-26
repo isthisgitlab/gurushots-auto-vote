@@ -1,5 +1,6 @@
 const { createJsonStore } = require('../../settings/storage');
 const runtime = require('../../runtime');
+const settings = require('../../settings');
 
 const diagnosticsStore = createJsonStore({ fileName: 'lexicon-diagnostics.json', prefKey: 'gs_lexicon_diagnostics' });
 const MAX_WORDS = 200;
@@ -108,7 +109,7 @@ const diagnostics = createDiagnostics(diagnosticsStore);
 const shouldCollect = () => {
     if (runtime.isTest()) return false;
     try {
-        return require('../../settings').getSetting('mock') !== true;
+        return settings.getSetting('mock') !== true;
     } catch {
         return false;
     }

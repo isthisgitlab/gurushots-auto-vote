@@ -8,6 +8,7 @@ const settings = require('../../settings');
 const logger = require('../../logger');
 const { simulateApiResponse, simulateApiError, mockMethod } = require('../simulate');
 const { getSessionCache } = require('../sessionCache');
+const metadata = require('../../metadata');
 
 /**
  * Simulate getting vote images
@@ -71,7 +72,6 @@ const submitVotes = mockMethod(
 
             // Update metadata after successful mock vote submission
             try {
-                const { updateChallengeVoteMetadata } = require('../../metadata');
                 if (voteImages.challenge && voteImages.challenge.id) {
                     // Use the ORIGINAL exposure factor from before voting (the "from what" value)
                     const originalExposure = voteImages.voting?.exposure?.exposure_factor || 50;
@@ -82,7 +82,7 @@ const submitVotes = mockMethod(
                             `About to update mock metadata for challenge ${voteImages.challenge.id}, original exposure: ${Math.round(originalExposure)}%`,
                             null,
                         );
-                    const success = updateChallengeVoteMetadata(
+                    const success = metadata.updateChallengeVoteMetadata(
                         voteImages.challenge.id.toString(),
                         Math.round(originalExposure),
                     );
