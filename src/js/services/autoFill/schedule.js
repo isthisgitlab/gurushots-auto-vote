@@ -100,4 +100,4 @@ const getNextScheduleThresholdSec = (schedule, entryCount, maxPhotoSubmits) => {
     return threshold;
 };
 
-export { getValidScheduleRows, getEffectiveScheduleRows, resolveScheduleTarget, getNextScheduleThresholdSec };
+export { getValidScheduleRows, resolveScheduleTarget, getNextScheduleThresholdSec };

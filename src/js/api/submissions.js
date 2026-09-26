@@ -259,4 +259,4 @@ const submitToChallenge = async (challengeId, imageIds, token) => {
     };
 };
 
-export { getEligiblePhotos, getImageData, submitToChallenge, MAX_LIBRARY_PAGES, PAGINATE_BUDGET_MS };
+export { getEligiblePhotos, getImageData, submitToChallenge, MAX_LIBRARY_PAGES };

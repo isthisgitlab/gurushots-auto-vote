@@ -5,12 +5,13 @@
  */
 
 const mockIndex = require('../../src/js/mock/index');
+const simulate = require('../../src/js/mock/simulate');
 const cancellation = require('../../src/js/voting/cancellation');
 
 jest.mock('../../src/js/metadata', () => ({ __esModule: true, ...jest.requireActual('../../src/js/metadata') }));
 jest.mock('../../src/js/settings', () => ({ __esModule: true, ...jest.requireActual('../../src/js/settings') }));
 
-// Mock the individual mock modules. mock/index.js re-exports each one as a
+// Mock the individual mock modules. The mock endpoints import each one as a
 // namespace; `__esModule` makes that namespace the factory object itself.
 jest.mock('../../src/js/mock/auth', () => ({
     __esModule: true,
@@ -26,9 +27,6 @@ jest.mock('../../src/js/mock/challenges', () => ({
 
 jest.mock('../../src/js/mock/voting', () => ({
     __esModule: true,
-    mockVoteImagesByChallenge: {
-        'challenge-1': { images: [{ id: 'img1', ratio: 25 }] },
-    },
     mockEmptyVoteImages: { images: [] },
     mockVoteSubmissionSuccess: { success: true, votes: 5 },
     mockVoteSubmissionFailure: { error: 'Vote submission failed' },
@@ -40,13 +38,6 @@ jest.mock('../../src/js/mock/boost', () => ({
     mockBoostSuccess: { success: true, boost_applied: true },
     mockBoostFailure: { error: 'Boost failed' },
     mockBoostAlreadyUsed: { error: 'Boost already used' },
-}));
-
-jest.mock('../../src/js/mock/errors', () => ({
-    __esModule: true,
-    mockAuthErrors: {
-        invalidToken: { error: 'Invalid token', code: 401 },
-    },
 }));
 
 // Mock console methods
@@ -102,7 +93,6 @@ describe('mock/index', () => {
     const challenges = require('../../src/js/mock/challenges');
     const voting = require('../../src/js/mock/voting');
     const boost = require('../../src/js/mock/boost');
-    const errors = require('../../src/js/mock/errors');
     const logger = require('../../src/js/logger');
 
     beforeEach(() => {
@@ -116,67 +106,12 @@ describe('mock/index', () => {
         cancellation.setCancelled(false);
     });
 
-    describe('module exports', () => {
-        test('should export individual mock modules', () => {
-            expect(mockIndex.auth).toBe(auth);
-            expect(mockIndex.challenges).toBe(challenges);
-            expect(mockIndex.voting).toBe(voting);
-            expect(mockIndex.boost).toBe(boost);
-            expect(mockIndex.errors).toBe(errors);
-        });
-
-        test('should export mockData object with all modules', () => {
-            expect(mockIndex.mockData).toEqual({
-                auth,
-                challenges,
-                voting,
-                boost,
-                errors,
-            });
-        });
-
-        test('should export utility functions', () => {
-            expect(typeof mockIndex.getMockData).toBe('function');
-            expect(typeof mockIndex.simulateApiResponse).toBe('function');
-            expect(typeof mockIndex.simulateApiError).toBe('function');
-            expect(typeof mockIndex.mockApiClient).toBe('object');
-        });
-    });
-
-    describe('getMockData', () => {
-        test('should return correct mock data by type', () => {
-            const authData = mockIndex.getMockData('auth');
-            const challengesData = mockIndex.getMockData('challenges');
-
-            expect(authData).toBe(auth);
-            expect(challengesData).toBe(challenges);
-        });
-
-        test('should return specific scenario data', () => {
-            auth.specificScenario = { test: 'data' };
-
-            const scenarioData = mockIndex.getMockData('auth', 'specificScenario');
-
-            expect(scenarioData).toEqual({ test: 'data' });
-        });
-
-        test('should throw error for unknown type', () => {
-            expect(() => mockIndex.getMockData('unknown')).toThrow('Unknown mock data type: unknown');
-        });
-
-        test('should throw error for unknown scenario', () => {
-            expect(() => mockIndex.getMockData('auth', 'unknownScenario')).toThrow(
-                'Unknown scenario "unknownScenario" for type "auth"',
-            );
-        });
-    });
-
     describe('simulateApiResponse', () => {
         test('should resolve with data after delay', async () => {
             const testData = { test: 'response' };
             const startTime = Date.now();
 
-            const result = await mockIndex.simulateApiResponse(testData, 100);
+            const result = await simulate.simulateApiResponse(testData, 100);
 
             const endTime = Date.now();
             expect(result).toEqual(testData);
@@ -187,7 +122,7 @@ describe('mock/index', () => {
             const testData = { test: 'response' };
             const startTime = Date.now();
 
-            const result = await mockIndex.simulateApiResponse(testData);
+            const result = await simulate.simulateApiResponse(testData);
 
             const endTime = Date.now();
             expect(result).toEqual(testData);
@@ -200,7 +135,7 @@ describe('mock/index', () => {
             const testError = new Error('Test error');
             const startTime = Date.now();
 
-            await expect(mockIndex.simulateApiError(testError, 100)).rejects.toThrow('Test error');
+            await expect(simulate.simulateApiError(testError, 100)).rejects.toThrow('Test error');
 
             const endTime = Date.now();
             expect(endTime - startTime).toBeGreaterThanOrEqual(90); // Allow 10ms tolerance for CI timing precision
@@ -210,7 +145,7 @@ describe('mock/index', () => {
             const testError = new Error('Test error');
             const startTime = Date.now();
 
-            await expect(mockIndex.simulateApiError(testError)).rejects.toThrow('Test error');
+            await expect(simulate.simulateApiError(testError)).rejects.toThrow('Test error');
 
             const endTime = Date.now();
             expect(endTime - startTime).toBeGreaterThanOrEqual(490); // Allow 10ms tolerance for CI timing precision
@@ -607,7 +542,7 @@ describe('mock/index', () => {
                 return {
                     id: '1',
                     title: 'Fillable',
-                    url: 'no-vote-images-url', // not in mockVoteImagesByChallenge → no vote submit
+                    url: 'no-vote-images-url',
                     close_time: now + 600,
                     max_photo_submits: 4,
                     member: {

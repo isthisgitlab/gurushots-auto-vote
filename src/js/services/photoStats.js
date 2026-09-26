@@ -415,6 +415,5 @@ export {
     MAX_ENRICH_PER_PASS,
     MAX_CACHE_ENTRIES,
     STATS_TTL_MS,
-    FAILURE_BREAKER_THRESHOLD,
     __resetForTests,
 };

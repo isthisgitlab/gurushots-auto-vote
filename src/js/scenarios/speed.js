@@ -117,5 +117,4 @@ export {
     SAMPLE_SPACING_SEC,
     HISTORY_KEEP_SEC,
     MAX_SAMPLES,
-    MIN_SPAN_SEC,
 };

@@ -2,7 +2,7 @@
  * mock/voting.js — generated vote-image payloads for mock mode.
  */
 
-const { generateMockVoteImages, mockVoteImages } = require('../../src/js/mock/voting');
+const { generateMockVoteImages } = require('../../src/js/mock/voting');
 
 afterEach(() => jest.restoreAllMocks());
 
@@ -44,9 +44,5 @@ describe('generateMockVoteImages', () => {
             expect(img.ratio).toBeGreaterThanOrEqual(3);
             expect(img.ratio).toBeLessThanOrEqual(6);
         });
-    });
-
-    test('the module-level default payload is generated for street photography', () => {
-        expect(mockVoteImages.challenge.url).toBe('street-photography-2024');
     });
 });

@@ -212,7 +212,6 @@ const resolveTermsToTags = async (terms, challenge, deps) => {
 
 export {
     resolveTermsToTags,
-    MAX_BACKOFF_STEPS,
     MAX_RESOLVED_TAGS,
     // exported for unit tests
     isLexicalMatch,

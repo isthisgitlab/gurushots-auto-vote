@@ -45,7 +45,7 @@ import { resolveSemanticScores, resolveIgnoreWords, fetchCandidatesForChallenge 
 import { resolveMemberId, __resetMemberIdCache } from './autoFill/memberIdentity';
 import { describeSubmitFailure } from './autoFill/fillLogging';
 import { getSlotsRemaining, reflectNewEntry, reflectEntryFlag, refreshChallengeState } from './autoFill/challengeState';
-import { getEffectiveScheduleRows, resolveScheduleTarget, getNextScheduleThresholdSec } from './autoFill/schedule';
+import { resolveScheduleTarget, getNextScheduleThresholdSec } from './autoFill/schedule';
 
 export {
     maybeAutoFillChallenge,
@@ -60,7 +60,6 @@ export {
     // view and this runner cannot drift on when emergency fill does nothing.
     evaluateEmergencyFill,
     // exported for tests
-    getEffectiveScheduleRows,
     getSlotsRemaining,
     fetchCandidatesForChallenge,
     rankCandidatesForChallenge,

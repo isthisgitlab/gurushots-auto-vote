@@ -88,4 +88,4 @@ const makeRequireValue = (prefix) => (value, label) => {
     return value;
 };
 
-export { API_BASE, ENDPOINTS, FORM_CONTENT_TYPE, createWebHeaders, makeRequireValue };
+export { ENDPOINTS, FORM_CONTENT_TYPE, createWebHeaders, makeRequireValue };

@@ -95,17 +95,10 @@ describe('platform detection', () => {
         const rt = loadRuntime();
         globalThis.Capacitor = capacitor('android');
         expect(rt.getPlatform()).toBe('capacitor');
-        expect(rt.getOs()).toBe('android');
         delete globalThis.Capacitor;
         expect(rt.isElectron()).toBe(false);
         expect(rt.isCli()).toBe(false);
         expect(rt.getPlatform()).toBe('unknown');
-        expect(rt.getOs()).toBe('unknown');
-    });
-
-    test('getOs reports the Node platform outside Capacitor', () => {
-        withProp(process, 'platform', 'linux');
-        expect(loadRuntime().getOs()).toBe('linux');
     });
 });
 
@@ -151,18 +144,6 @@ describe('env flags', () => {
         delete process.env.DEV;
         Object.assign(process.env, env);
         expect(rt.isDevelopment()).toBe(expected);
-    });
-
-    test.each([
-        [{ NODE_ENV: 'production' }, true],
-        [{ NODE_ENV: 'prod' }, true],
-        [{ NODE_ENV: 'x', PROD: 'true' }, true],
-        [{ NODE_ENV: 'x', PROD: '1' }, true],
-        [{ NODE_ENV: 'x', PROD: 'no' }, false],
-    ])('isProduction(%o) -> %s', (env, expected) => {
-        delete process.env.PROD;
-        Object.assign(process.env, env);
-        expect(rt.isProduction()).toBe(expected);
     });
 
     test('isTest and getEnvSnapshot read the live env', () => {

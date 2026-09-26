@@ -475,4 +475,4 @@ const parseScenarioJson = (text) => {
     }
 };
 
-export { validateScenario, parseScenarioJson, formatPath, SETTING_PAIRS };
+export { validateScenario, parseScenarioJson, formatPath };

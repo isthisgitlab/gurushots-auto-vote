@@ -48,6 +48,3 @@ export * from '@testing-library/preact';
 // Override render with our custom render and fireEvent with our patched one
 export { customRender as render };
 export { fireEvent };
-
-// Export providers for cases where custom wrapping is needed
-export { AllProviders };

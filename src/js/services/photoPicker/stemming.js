@@ -410,13 +410,4 @@ const tokeniseTagList = (tags) => {
     return Array.from(new Set(stems));
 };
 
-export {
-    STOPWORDS,
-    MAX_TOKENISE_CHARS,
-    MIN_USER_TAG_STEM_LENGTH,
-    stem,
-    rawTokenise,
-    tokenise,
-    matches,
-    tokeniseTagList,
-};
+export { MAX_TOKENISE_CHARS, MIN_USER_TAG_STEM_LENGTH, stem, rawTokenise, tokenise, matches, tokeniseTagList };

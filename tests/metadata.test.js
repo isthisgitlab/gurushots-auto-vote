@@ -205,26 +205,6 @@ describe('challenge metadata mutators', () => {
         setStoredMetadata({ updateCheck: { lastCheck: null, skipVersion: null } });
         expect(metadata.setChallengeMetadata('777', '2026-05-09T12:00:00Z', -5)).toBe(false);
     });
-
-    test('updateLastVoteTime preserves prior exposureBump', () => {
-        setStoredMetadata({
-            updateCheck: { lastCheck: null, skipVersion: null },
-            777: { lastVoteTime: '2020-01-01T00:00:00Z', exposureBump: 80 },
-        });
-        const writes = captureWrites();
-        metadata.updateLastVoteTime('777', '2026-05-09T12:00:00Z');
-        const lastWrite = writes[writes.length - 1];
-        expect(lastWrite['777'].exposureBump).toBe(80);
-        expect(lastWrite['777'].lastVoteTime).toBe('2026-05-09T12:00:00Z');
-    });
-
-    test('removeChallengeMetadata is a no-op when entry does not exist', () => {
-        setStoredMetadata({ updateCheck: { lastCheck: null, skipVersion: null } });
-        const writes = captureWrites();
-        const result = metadata.removeChallengeMetadata('not-stored');
-        expect(result).toBe(true);
-        expect(writes).toHaveLength(0);
-    });
 });
 
 describe('update-check helpers', () => {
@@ -495,6 +475,17 @@ describe('challenge metadata mutators — write paths', () => {
         expect(writes.at(-1)['900']).toEqual({ lastVoteTime: '2026-05-09T12:00:00Z', exposureBump: 33 });
     });
 
+    test('setChallengeMetadata merges into an existing entry', () => {
+        setStoredMetadata({
+            updateCheck: { lastCheck: null, skipVersion: null },
+            777: { lastVoteTime: '2026-01-01T00:00:00Z', exposureBump: 10 },
+        });
+        const writes = captureWrites();
+
+        expect(metadata.setChallengeMetadata('777', undefined, 120)).toBe(true);
+        expect(writes.at(-1)['777']).toEqual({ lastVoteTime: '2026-01-01T00:00:00Z', exposureBump: 120 });
+    });
+
     test('setChallengeMetadata with neither field writes an empty entry', () => {
         setStoredMetadata({ updateCheck: { lastCheck: null, skipVersion: null } });
         const writes = captureWrites();
@@ -507,38 +498,6 @@ describe('challenge metadata mutators — write paths', () => {
         const writes = captureWrites();
         expect(metadata.setChallengeMetadata('777', undefined, '50')).toBe(false);
         expect(writes).toHaveLength(0);
-    });
-
-    test('updateLastVoteTime defaults the timestamp to now', () => {
-        jest.useFakeTimers({ now: new Date('2026-09-01T10:00:00.000Z') });
-        try {
-            setNoStoredFile();
-            const writes = captureWrites();
-
-            expect(metadata.updateLastVoteTime('555')).toBe(true);
-            expect(writes.at(-1)['555']).toEqual({ lastVoteTime: '2026-09-01T10:00:00.000Z' });
-        } finally {
-            jest.useRealTimers();
-        }
-    });
-
-    test('updateExposureBump preserves the prior lastVoteTime', () => {
-        setStoredMetadata({
-            updateCheck: { lastCheck: null, skipVersion: null },
-            777: { lastVoteTime: '2026-01-01T00:00:00Z', exposureBump: 10 },
-        });
-        const writes = captureWrites();
-
-        expect(metadata.updateExposureBump('777', 120)).toBe(true);
-        expect(writes.at(-1)['777']).toEqual({ lastVoteTime: '2026-01-01T00:00:00Z', exposureBump: 120 });
-    });
-
-    test('updateExposureBump on an unknown challenge stores only the exposure', () => {
-        setNoStoredFile();
-        const writes = captureWrites();
-
-        expect(metadata.updateExposureBump('new', 5)).toBe(true);
-        expect(writes.at(-1).new).toEqual({ exposureBump: 5 });
     });
 
     test('updateChallengeVoteMetadata writes both fields, defaulting the time to now', () => {
@@ -555,19 +514,6 @@ describe('challenge metadata mutators — write paths', () => {
         } finally {
             jest.useRealTimers();
         }
-    });
-
-    test('removeChallengeMetadata deletes an existing entry and persists', () => {
-        setStoredMetadata({
-            updateCheck: { lastCheck: null, skipVersion: null },
-            777: { exposureBump: 1 },
-            888: { exposureBump: 2 },
-        });
-        const writes = captureWrites();
-
-        expect(metadata.removeChallengeMetadata('777')).toBe(true);
-        expect(writes.at(-1)['777']).toBeUndefined();
-        expect(writes.at(-1)['888']).toEqual({ exposureBump: 2 });
     });
 
     test('getChallengeMetadata returns null for an unknown challenge', () => {
@@ -614,20 +560,6 @@ describe('entryIds snapshot — guards', () => {
 });
 
 describe('utility and update-check write paths', () => {
-    test('getAllMetadata returns the validated store contents', () => {
-        setStoredMetadata({ updateCheck: { lastCheck: 5, skipVersion: null }, 1: { exposureBump: 9 } });
-        expect(metadata.getAllMetadata()).toEqual({
-            updateCheck: { lastCheck: 5, skipVersion: null },
-            1: { exposureBump: 9 },
-        });
-    });
-
-    test('resetAllMetadata writes back the default structure only', () => {
-        const writes = captureWrites();
-        expect(metadata.resetAllMetadata()).toBe(true);
-        expect(writes.at(-1)).toEqual({ updateCheck: { lastCheck: null, skipVersion: null } });
-    });
-
     test('setLastUpdateCheck stores a valid timestamp and keeps skipVersion', () => {
         setStoredMetadata({ updateCheck: { lastCheck: 1, skipVersion: '2.0.0' }, 7: { exposureBump: 1 } });
         const writes = captureWrites();
@@ -643,9 +575,5 @@ describe('utility and update-check write paths', () => {
 
         expect(metadata.setLastUpdateCheck(42)).toBe(true);
         expect(writes.at(-1).updateCheck).toEqual({ lastCheck: 42, skipVersion: null });
-    });
-
-    test('getMetadataPath resolves to metadata.json under the user-data dir', () => {
-        expect(metadata.getMetadataPath()).toMatch(/metadata\.json$/);
     });
 });

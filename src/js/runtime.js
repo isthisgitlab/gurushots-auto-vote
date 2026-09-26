@@ -14,7 +14,7 @@ const hasNode = typeof process !== 'undefined' && process.versions != null;
 
 /**
  * The members of the Capacitor runtime global this module reads.
- * @typedef {{ isNativePlatform: () => boolean, getPlatform: () => string }} CapacitorGlobal
+ * @typedef {{ isNativePlatform: () => boolean }} CapacitorGlobal
  */
 
 /**
@@ -60,23 +60,11 @@ const isPackaged = () => {
     return false;
 };
 
-const getOs = () => {
-    if (isCapacitor()) return /** @type {CapacitorGlobal} */ (getCapacitor()).getPlatform();
-    if (hasNode) return process.platform;
-    return 'unknown';
-};
-
 const isDevelopment = () =>
     process.env.NODE_ENV === 'development' ||
     process.env.NODE_ENV === 'dev' ||
     process.env.DEV === 'true' ||
     process.env.DEV === '1';
-
-const isProduction = () =>
-    process.env.NODE_ENV === 'production' ||
-    process.env.NODE_ENV === 'prod' ||
-    process.env.PROD === 'true' ||
-    process.env.PROD === '1';
 
 const isTest = () => process.env.NODE_ENV === 'test';
 
@@ -197,9 +185,7 @@ export {
     isCli,
     getPlatform,
     isPackaged,
-    getOs,
     isDevelopment,
-    isProduction,
     isTest,
     getEnvSnapshot,
     getUserDataDir,

@@ -28,7 +28,7 @@ import * as voteDecisions from './decisions/voteDecisions';
 import * as entryPick from './decisions/entryPick';
 import * as boostTurbo from './decisions/boostTurbo';
 import * as deadlineActions from './decisions/deadlineActions';
-import { shouldJoinChallenge, resolveJoinWindow } from './decisions/joinDecision';
+import { shouldJoinChallenge } from './decisions/joinDecision';
 
 /** @typedef {import('./decisions/ruleEngine').VotingRuleResult} VotingRuleResult */
 /** @typedef {import('./decisions/voteDecisions').AutoVoteDecision} AutoVoteDecision */
@@ -37,8 +37,6 @@ import { shouldJoinChallenge, resolveJoinWindow } from './decisions/joinDecision
 
 export const isWithinFinalWindow = thresholds.isWithinFinalWindow;
 export const isWithinLastMinuteThreshold = thresholds.isWithinLastMinuteThreshold;
-export const getEffectiveExposureThreshold = thresholds.getEffectiveExposureThreshold;
-export const getEffectiveFinalWindowExposureThreshold = thresholds.getEffectiveFinalWindowExposureThreshold;
 export const getEffectiveExposureTarget = thresholds.getEffectiveExposureTarget;
 export const getEffectiveFinalWindowExposureTarget = thresholds.getEffectiveFinalWindowExposureTarget;
 export const evaluateVotingDecision = voteDecisions.evaluateVotingDecision;
@@ -51,21 +49,11 @@ export const resolveBoostFillNewMode = entryPick.resolveBoostFillNewMode;
 export const isWithinEmergencyWindow = boostTurbo.isWithinEmergencyWindow;
 export const shouldApplyBoost = boostTurbo.shouldApplyBoost;
 export const getBoostHoldUntil = boostTurbo.getBoostHoldUntil;
-export const isBoostWindowOpen = boostTurbo.isBoostWindowOpen;
-export const getEffectiveTurboTime = thresholds.getEffectiveTurboTime;
 export const shouldPlayAutoTurbo = boostTurbo.shouldPlayAutoTurbo;
 export const shouldApplyTurbo = boostTurbo.shouldApplyTurbo;
 export const pickEntryAvoidingConflict = entryPick.pickEntryAvoidingConflict;
 export const getAutoFillThresholdSec = deadlineActions.getAutoFillThresholdSec;
-export const getEmergencyFillThresholdSec = deadlineActions.getEmergencyFillThresholdSec;
 export const getBoostThresholdSec = deadlineActions.getBoostThresholdSec;
 export const orderDeadlineActions = deadlineActions.orderDeadlineActions;
 export const describeDeadlineActions = deadlineActions.describeDeadlineActions;
-export {
-    shouldJoinChallenge,
-    resolveJoinWindow,
-    getScheduledFillState,
-    getVotingPauseState,
-    getBoostPrefillState,
-    resolveEntryIndex,
-};
+export { shouldJoinChallenge, getScheduledFillState, getVotingPauseState, getBoostPrefillState, resolveEntryIndex };

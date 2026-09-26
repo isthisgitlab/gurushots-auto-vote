@@ -223,10 +223,4 @@ const describeDeadlineActions = (challenge, now) => {
     return { actions, boostBlocked };
 };
 
-export {
-    getAutoFillThresholdSec,
-    getEmergencyFillThresholdSec,
-    getBoostThresholdSec,
-    orderDeadlineActions,
-    describeDeadlineActions,
-};
+export { getAutoFillThresholdSec, getBoostThresholdSec, orderDeadlineActions, describeDeadlineActions };

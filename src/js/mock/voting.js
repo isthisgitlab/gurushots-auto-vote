@@ -153,29 +153,6 @@ const generateMockVoteImages = (challengeUrl, originalChallenge = null) => {
 };
 
 /**
- * Mock vote images response (now dynamic)
- */
-const mockVoteImages = generateMockVoteImages('street-photography-2024');
-
-/**
- * Mock empty vote images response
- */
-const mockEmptyVoteImages = {
-    challenge: {
-        id: 1001,
-        title: 'Street Photography',
-        url: 'street-photography-2024',
-    },
-    voting: {
-        exposure: {
-            exposure_factor: 100,
-            max_exposure: 100,
-        },
-    },
-    images: [],
-};
-
-/**
  * Mock vote submission success response
  */
 const mockVoteSubmissionSuccess = {
@@ -200,71 +177,4 @@ const mockVoteSubmissionFailure = {
     message: 'Unable to submit votes for this challenge',
 };
 
-/**
- * Mock vote images for different challenges
- */
-const mockVoteImagesByChallenge = {
-    'street-photography-2024': mockVoteImages,
-    'portrait-photography-2024': {
-        challenge: {
-            id: 1002,
-            title: 'Portrait Photography',
-            url: 'portrait-photography-2024',
-        },
-        voting: {
-            exposure: {
-                exposure_factor: 100,
-                max_exposure: 100,
-            },
-        },
-        images: [],
-    },
-    'macro-photography-2024': {
-        challenge: {
-            id: 1004,
-            title: 'Macro Photography',
-            url: 'macro-photography-2024',
-        },
-        voting: {
-            exposure: {
-                exposure_factor: 45,
-                max_exposure: 100,
-            },
-        },
-        images: [
-            {
-                id: 'vote_img_101',
-                image_url: 'https://example.com/macro1.jpg',
-                photographer: 'Macro Master',
-                title: 'Dew Drop',
-                ratio: 4.2,
-                votes: 15,
-            },
-            {
-                id: 'vote_img_102',
-                image_url: 'https://example.com/macro2.jpg',
-                photographer: 'Close Up Pro',
-                title: 'Flower Petals',
-                ratio: 5.8,
-                votes: 27,
-            },
-            {
-                id: 'vote_img_103',
-                image_url: 'https://example.com/macro3.jpg',
-                photographer: 'Detail Hunter',
-                title: 'Insect Eye',
-                ratio: 6.5,
-                votes: 33,
-            },
-        ],
-    },
-};
-
-export {
-    mockVoteImages,
-    mockEmptyVoteImages,
-    mockVoteSubmissionSuccess,
-    mockVoteSubmissionFailure,
-    mockVoteImagesByChallenge,
-    generateMockVoteImages,
-};
+export { mockVoteSubmissionSuccess, mockVoteSubmissionFailure, generateMockVoteImages };

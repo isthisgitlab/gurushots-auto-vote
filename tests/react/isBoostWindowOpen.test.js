@@ -1,7 +1,7 @@
 /**
  * Unit tests for isBoostWindowOpen — the renderer-side predicate that decides
  * whether a challenge's boost window is open right now. It mirrors the voting
- * engine's services/VotingLogic.isBoostWindowOpen but operates on the boost
+ * engine's services/decisions/boostTurbo.isBoostWindowOpen but operates on the boost
  * object + an explicit `now` so it stays a pure util. The BoostWindowBanner and
  * the CLI status command both filter on this rule.
  */

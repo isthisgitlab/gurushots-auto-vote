@@ -34,26 +34,4 @@ const mockLoginFailure = {
     message: 'Email or password is incorrect',
 };
 
-/**
- * Mock token validation response
- */
-const mockTokenValid = {
-    valid: true,
-    user: {
-        id: 12345,
-        email: 'test@example.com',
-        username: 'testuser',
-        display_name: 'Test User',
-    },
-};
-
-/**
- * Mock token invalid response
- */
-const mockTokenInvalid = {
-    valid: false,
-    error: 'Token expired or invalid',
-    code: 'TOKEN_INVALID',
-};
-
-export { mockLoginSuccess, mockLoginFailure, mockTokenValid, mockTokenInvalid };
+export { mockLoginSuccess, mockLoginFailure };

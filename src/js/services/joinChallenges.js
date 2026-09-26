@@ -854,7 +854,6 @@ export {
     isAutoJoinActive,
     // exported for tests
     performJoin,
-    pickJoinPhoto,
     resolveJoinSetting,
     inFlight,
 };

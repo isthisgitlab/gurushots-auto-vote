@@ -4,14 +4,12 @@
 
 const model = require('../../src/js/scenarios/builderModel');
 
-describe('setIn / getIn', () => {
+describe('setIn', () => {
     test('replaces a nested value without mutating the original', () => {
         const doc = { a: { b: [1, 2] } };
         const next = model.setIn(doc, ['a', 'b', 1], 9);
         expect(next).toEqual({ a: { b: [1, 9] } });
         expect(doc).toEqual({ a: { b: [1, 2] } });
-        expect(model.getIn(next, ['a', 'b', 1])).toBe(9);
-        expect(model.getIn(next, ['x', 'y'])).toBeUndefined();
     });
 
     test('creates missing containers, and undefined removes a key or an item', () => {

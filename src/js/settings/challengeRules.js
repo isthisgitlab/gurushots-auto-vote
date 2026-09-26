@@ -326,12 +326,8 @@ const sortRulesByDefaultOrder = (rules) => (Array.isArray(rules) ? [...rules].so
 
 export {
     TITLE_MATCH_MODES,
-    MAX_RULE_PICS,
-    MAX_RULE_RUNTIME_HOURS,
     normalizeTitle,
     normalizeTag,
-    normalizeTagList,
-    ruleMatchMode,
     titleRuleTitles,
     rulePatterns,
     normalizeRulePics,

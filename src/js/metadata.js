@@ -9,12 +9,6 @@ import { createJsonStore } from './settings/storage';
 const metadataStore = createJsonStore({ fileName: 'metadata.json', prefKey: 'gurushots-metadata' });
 
 /**
- * Get the metadata file path (fs platforms; debug/info surfaces).
- * @returns {string} - Path to metadata.json file
- */
-const getMetadataPath = () => metadataStore.getFilePath();
-
-/**
  * Default metadata structure
  * @returns {MetadataFile} - Empty metadata object
  */
@@ -382,33 +376,6 @@ const setChallengeMetadata = (challengeId, lastVoteTime, exposureBump) => {
 };
 
 /**
- * Update last vote time for a challenge
- * @param {string|number} challengeId - Challenge ID
- * @param {string|null} [timestamp] - ISO timestamp (optional, defaults to now)
- * @returns {boolean} - True if successful, false otherwise
- */
-const updateLastVoteTime = (challengeId, timestamp = null) => {
-    const voteTime = timestamp || new Date().toISOString();
-    const existing = getChallengeMetadata(challengeId);
-    const exposureBump = existing?.exposureBump;
-
-    return setChallengeMetadata(challengeId, voteTime, exposureBump);
-};
-
-/**
- * Update exposure bump for a challenge
- * @param {string|number} challengeId - Challenge ID
- * @param {number} exposure - Exposure level
- * @returns {boolean} - True if successful, false otherwise
- */
-const updateExposureBump = (challengeId, exposure) => {
-    const existing = getChallengeMetadata(challengeId);
-    const lastVoteTime = existing?.lastVoteTime;
-
-    return setChallengeMetadata(challengeId, lastVoteTime, exposure);
-};
-
-/**
  * Update both last vote time and exposure bump for a challenge
  * @param {string|number} challengeId - Challenge ID
  * @param {number} exposure - Exposure level
@@ -491,22 +458,6 @@ const setChallengeEntryIds = (challengeId, entryIds) => {
 };
 
 /**
- * Remove metadata for a specific challenge
- * @param {string|number} challengeId - Challenge ID
- * @returns {boolean} - True if successful, false otherwise
- */
-const removeChallengeMetadata = (challengeId) => {
-    const metadata = loadMetadata();
-
-    if (metadata[challengeId]) {
-        delete metadata[challengeId];
-        return saveMetadata(metadata);
-    }
-
-    return true; // Nothing to remove
-};
-
-/**
  * Clean up metadata for challenges that no longer exist
  * @param {string[]} activeChallengeIds - Array of currently active challenge IDs
  * @returns {boolean} - True if cleanup was successful, false otherwise
@@ -561,22 +512,6 @@ const cleanupStaleMetadata = (activeChallengeIds) => {
     });
 
     return saveMetadata(metadata);
-};
-
-/**
- * Get all metadata
- * @returns {MetadataFile} - Complete metadata object
- */
-const getAllMetadata = () => {
-    return loadMetadata();
-};
-
-/**
- * Reset all metadata (clear all entries)
- * @returns {boolean} - True if successful, false otherwise
- */
-const resetAllMetadata = () => {
-    return saveMetadata(getDefaultMetadata());
 };
 
 /**
@@ -637,10 +572,7 @@ export {
     saveMetadata,
     getChallengeMetadata,
     setChallengeMetadata,
-    updateLastVoteTime,
-    updateExposureBump,
     updateChallengeVoteMetadata,
-    removeChallengeMetadata,
     cleanupStaleMetadata,
     getChallengeEntryIds,
     setChallengeEntryIds,
@@ -650,7 +582,4 @@ export {
     setLastUpdateCheck,
     getLegacySkipVersion,
     clearLegacySkipVersion,
-    getAllMetadata,
-    resetAllMetadata,
-    getMetadataPath,
 };

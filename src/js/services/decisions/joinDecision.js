@@ -251,4 +251,4 @@ const shouldJoinChallenge = ({
     return { join: true, needsCoins, reason: 'paid' };
 };
 
-export { shouldJoinChallenge, resolveJoinWindow };
+export { shouldJoinChallenge };

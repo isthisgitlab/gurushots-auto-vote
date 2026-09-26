@@ -32,14 +32,6 @@ const setIn = (target, path, value) => {
 };
 
 /**
- * The value at `path`, or undefined.
- *
- * @param {any} target
- * @param {Path} path
- */
-const getIn = (target, path) => path.reduce((node, key) => (node == null ? undefined : node[key]), target);
-
-/**
  * Move the array item at `index` by `delta` (−1 up, +1 down); out-of-range
  * moves leave the list as it is.
  *
@@ -167,4 +159,4 @@ const isEditableDraft = (value) => {
     );
 };
 
-export { setIn, getIn, moveItem, newScenario, addPhase, renamePhase, removePhase, newRule, freeKey, isEditableDraft };
+export { setIn, moveItem, newScenario, addPhase, renamePhase, removePhase, newRule, isEditableDraft };

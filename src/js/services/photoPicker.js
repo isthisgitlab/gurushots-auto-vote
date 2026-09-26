@@ -20,7 +20,7 @@
  *   candidates.js  hard and exclusion filters, scored candidates, the one-call pick
  */
 
-import { STOPWORDS, stem, tokenise, matches, tokeniseTagList } from './photoPicker/stemming';
+import { stem, tokenise, matches, tokeniseTagList } from './photoPicker/stemming';
 import { abstractTitleWords, detectLetterPrefix, parseNegation } from './photoPicker/title';
 import {
     buildChallengeKeywords,
@@ -64,5 +64,4 @@ export {
     scorePhoto,
     tokeniseTagList,
     wholeLabelStems,
-    STOPWORDS,
 };
