@@ -19,6 +19,8 @@ describe('ChallengeNav', () => {
     beforeEach(() => {
         window.api.getChallengeOverrides.mockReset();
         window.api.getChallengeOverrides.mockResolvedValue({});
+        window.api.getTitleProfile.mockReset();
+        window.api.getTitleProfile.mockResolvedValue(null);
     });
 
     afterEach(() => jest.restoreAllMocks());
@@ -72,6 +74,20 @@ describe('ChallengeNav', () => {
         expect(plain.querySelector('.truncate').getAttribute('title')).toBe('Plain');
     });
 
+    test('marks an automatically profiled challenge without a manual override', async () => {
+        window.api.getTitleProfile.mockImplementation(async (_title, id) =>
+            id === '2' ? { name: '4 pics', values: { exposureTarget: 90 }, suppressed: false } : null,
+        );
+
+        render(<ChallengeNav challenges={[challenge(1, 'Plain'), challenge(2, 'Profiled')]} />);
+
+        const profiled = screen.getByRole('button', { name: /Profiled/ });
+        const plain = screen.getByRole('button', { name: /Plain/ });
+        await waitFor(() => expect(profiled.className).toMatch(/btn-accent/));
+        expect(profiled.textContent).toMatch(/⚙️/);
+        expect(plain.className).not.toMatch(/btn-accent/);
+    });
+
     test('marks nothing when a per-challenge override read fails', async () => {
         // The IPC handler falls back to null on error — a failed read must not
         // light up the chip.
@@ -99,6 +115,21 @@ describe('ChallengeNav', () => {
 
         await waitFor(() => expect(chip.className).toMatch(/btn-accent/));
         expect(chip.textContent).toMatch(/⚙️/);
+    });
+
+    test('picks up a newly assigned automatic profile via settings-changed', async () => {
+        render(<ChallengeNav challenges={[challenge(6, 'Later Profile')]} />);
+
+        const chip = screen.getByRole('button', { name: /Later Profile/ });
+        await waitFor(() => expect(window.api.getTitleProfile).toHaveBeenCalledWith('Later Profile', '6'));
+        expect(chip.className).not.toMatch(/btn-accent/);
+
+        window.api.getTitleProfile.mockResolvedValue({ name: '4 pics', values: {}, suppressed: false });
+        await act(async () => {
+            fireSettingsChanged();
+        });
+
+        await waitFor(() => expect(chip.className).toMatch(/btn-accent/));
     });
 
     test('reads each id once when the list repeats one', async () => {

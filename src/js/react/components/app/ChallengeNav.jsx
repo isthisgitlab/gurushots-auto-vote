@@ -1,6 +1,6 @@
 /** @import { Challenge } from '../../../types/gurushots' */
 import { useTranslation } from '@/contexts/TranslationContext';
-import { useOverriddenChallengeIds } from '@/hooks/useOverriddenChallengeIds';
+import { useCustomizedChallengeIds } from '@/hooks/useCustomizedChallengeIds';
 import { ChipListPanel, ChallengeChip, ChipTitle } from './ChallengeChips';
 import { PulseDot } from '../ui/PulseDot';
 import { isBoostWindowOpen } from '../../../voting/boostWindow';
@@ -13,9 +13,9 @@ import { isLowExposure } from '@/utils/challengeAlerts';
  * user who knows the name can click instead of scrolling. Renders nothing when
  * there are no challenges. Mirrors BoostWindowBanner, but for the full list.
  *
- * Challenges carrying a per-challenge override get an accent fill and a ⚙️
- * prefix — the same signal as the card's "⚙️ custom" badge, so the tuned ones
- * are findable without scrolling the list. Filled rather than `btn-outline`:
+ * Challenges carrying a per-challenge override or an automatic profile get an
+ * accent fill and a ⚙️ prefix, so the tuned ones are findable without scrolling
+ * the list. Filled rather than `btn-outline`:
  * outline paints the label in the raw accent colour, which is 1.9:1 on the
  * light theme's white base-100 (AA wants 4.5:1), while the filled pair
  * accent-content-on-accent is 5.1:1 in both themes.
@@ -30,7 +30,7 @@ export function ChallengeNav({ challenges }) {
     const { t } = useTranslation();
 
     const list = challenges || [];
-    const overridden = useOverriddenChallengeIds(list);
+    const customized = useCustomizedChallengeIds(list);
 
     if (list.length === 0) return null;
 
@@ -40,7 +40,7 @@ export function ChallengeNav({ challenges }) {
     return (
         <ChipListPanel icon="📋" label={t('app.jumpToChallenge')} count={list.length}>
             {list.map((c) => {
-                const custom = overridden.has(String(c?.id));
+                const custom = customized.has(String(c?.id));
                 const boostOpen = isBoostWindowOpen(c?.member?.boost, nowSec);
                 const lowExposure = isLowExposure(c, nowSec);
                 return (

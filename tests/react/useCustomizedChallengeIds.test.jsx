@@ -1,14 +1,14 @@
 /**
- * Tests for useOverriddenChallengeIds — the set of challenge ids that carry at
- * least one per-challenge override, read one getChallengeOverrides call per id.
+ * Tests for useCustomizedChallengeIds — challenge ids with manual overrides
+ * or an active automatic profile.
  */
 
 import { act, render, screen, waitFor } from './helpers/test-utils';
 import { fireSettingsChanged } from './helpers/setup';
-import { useOverriddenChallengeIds } from '@/hooks/useOverriddenChallengeIds';
+import { useCustomizedChallengeIds } from '@/hooks/useCustomizedChallengeIds';
 
 function Probe({ challenges }) {
-    const ids = useOverriddenChallengeIds(challenges);
+    const ids = useCustomizedChallengeIds(challenges);
     return <div data-testid="ids">{[...ids].join(',')}</div>;
 }
 
@@ -18,16 +18,25 @@ beforeEach(() => {
         if (id === '2') return {};
         return null; // handler's error fallback
     });
+    window.api.getTitleProfile = jest.fn().mockResolvedValue(null);
 });
 
 test('marks only ids whose override map is non-empty', async () => {
-    render(<Probe challenges={[{ id: 1 }, { id: 2 }, { id: 3 }]} />);
+    render(
+        <Probe
+            challenges={[
+                { id: 1, title: 'One' },
+                { id: 2, title: 'Two' },
+                { id: 3, title: 'Three' },
+            ]}
+        />,
+    );
     await waitFor(() => expect(screen.getByTestId('ids').textContent).toBe('1'));
     expect(window.api.getChallengeOverrides.mock.calls.map((c) => c[0])).toEqual(['1', '2', '3']);
 });
 
 test('skips missing ids and de-duplicates repeats before querying', async () => {
-    render(<Probe challenges={[null, { id: null }, {}, { id: 1 }, { id: '1' }]} />);
+    render(<Probe challenges={[null, { id: null }, {}, { id: 1, title: 'One' }, { id: '1', title: 'One' }]} />);
     await waitFor(() => expect(screen.getByTestId('ids').textContent).toBe('1'));
     expect(window.api.getChallengeOverrides).toHaveBeenCalledTimes(1);
     expect(window.api.getChallengeOverrides).toHaveBeenCalledWith('1');
@@ -38,6 +47,26 @@ test('an empty list issues no IPC and yields an empty set', async () => {
     // Let the mount fetch settle.
     await waitFor(() => expect(screen.getByTestId('ids').textContent).toBe(''));
     expect(window.api.getChallengeOverrides).not.toHaveBeenCalled();
+    expect(window.api.getTitleProfile).not.toHaveBeenCalled();
+});
+
+test('marks an active automatic profile but not a suppressed one', async () => {
+    window.api.getTitleProfile.mockImplementation(async (_title, id) =>
+        id === '2'
+            ? { name: '4 pics', values: {}, suppressed: false }
+            : { name: '4 pics', values: {}, suppressed: true },
+    );
+    render(
+        <Probe
+            challenges={[
+                { id: 2, title: 'Profiled' },
+                { id: 3, title: 'Suppressed' },
+            ]}
+        />,
+    );
+
+    await waitFor(() => expect(screen.getByTestId('ids').textContent).toBe('2'));
+    expect(window.api.getTitleProfile).toHaveBeenCalledWith('Profiled', '2');
 });
 
 const deferred = () => {
@@ -52,7 +81,7 @@ test('a settings change during a read gets its own read, and the older read cann
         .fn()
         .mockReturnValueOnce(first.promise)
         .mockResolvedValue({ boostTime: 30 });
-    render(<Probe challenges={[{ id: 1 }]} />);
+    render(<Probe challenges={[{ id: 1, title: 'One' }]} />);
     await waitFor(() => expect(window.api.getChallengeOverrides).toHaveBeenCalledTimes(1));
 
     // The override is saved while the first read is still in flight.
@@ -72,10 +101,10 @@ test('a new challenge list during a read is read too', async () => {
     window.api.getChallengeOverrides = jest.fn((id) =>
         id === '1' ? first.promise : Promise.resolve({ boostTime: 5 }),
     );
-    const { rerender } = render(<Probe challenges={[{ id: 1 }]} />);
+    const { rerender } = render(<Probe challenges={[{ id: 1, title: 'One' }]} />);
     await waitFor(() => expect(window.api.getChallengeOverrides).toHaveBeenCalledWith('1'));
 
-    rerender(<Probe challenges={[{ id: 2 }]} />);
+    rerender(<Probe challenges={[{ id: 2, title: 'Two' }]} />);
     await waitFor(() => expect(screen.getByTestId('ids').textContent).toBe('2'));
 
     await act(async () => first.resolve({ boostTime: 1 }));
