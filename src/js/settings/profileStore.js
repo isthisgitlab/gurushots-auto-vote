@@ -1,3 +1,4 @@
+// @ts-check
 /**
  * Pure helpers over the named challenge-settings profiles map
  * (`challengeSettings.profiles`): caps, name normalization and lookup, and
@@ -12,8 +13,10 @@
  */
 
 import * as logger from '../logger';
-import { SETTINGS_SCHEMA, validateSetting } from './schema';
+import { schemaEntry, validateSetting } from './schema';
 import { challengeValueSetIsValid } from './defaults';
+
+/** @import { AppSettings, ChallengeValues } from '../types/settings' */
 
 const MAX_CHALLENGE_PROFILES = 50;
 const MAX_PROFILE_NAME_LENGTH = 60;
@@ -26,10 +29,18 @@ const RESERVED_PROFILE_NAMES = new Set(['__proto__', 'constructor', 'prototype']
 
 // Identity key for a profile name: trimmed + lowercased (the normalizeTitle
 // contract) so "Portrait" and "portrait" are one profile, latest casing wins.
+/**
+ * @param {unknown} name
+ * @returns {string}
+ */
 const normalizeProfileName = (name) => (typeof name === 'string' ? name.trim().toLowerCase() : '');
 
 // Bound a user-supplied profile name before it reaches a log line
 // (log-injection guard, same treatment as setTitleRules' forLog).
+/**
+ * @param {unknown} name
+ * @returns {string}
+ */
 const profileNameForLog = (name) =>
     String(name)
         .replace(/[\r\n\t]/g, ' ')
@@ -38,6 +49,9 @@ const profileNameForLog = (name) =>
 /**
  * Returns the stored profiles map when it is a plain object, else `{}`.
  * Never returns arrays or primitives from a corrupted blob.
+ *
+ * @param {AppSettings} settings
+ * @returns {Record<string, ChallengeValues>}
  */
 const readProfilesMap = (settings) => {
     const stored = settings.challengeSettings?.profiles;
@@ -47,6 +61,10 @@ const readProfilesMap = (settings) => {
 /**
  * Find the stored key of the profile matching a normalized name, skipping
  * reserved/prototype-shaped stored keys. Returns null when absent.
+ *
+ * @param {object} stored
+ * @param {string} normalizedName
+ * @returns {string|null}
  */
 const findProfileKey = (stored, normalizedName) => {
     for (const name of Object.keys(stored)) {
@@ -57,21 +75,39 @@ const findProfileKey = (stored, normalizedName) => {
     return null;
 };
 
+/**
+ * @param {ChallengeValues} values
+ * @returns {ChallengeValues}
+ */
 const _profileSchemaValues = (values) => {
+    /** @type {ChallengeValues} */
     const whitelisted = {};
     for (const key of Object.keys(values)) {
         // Prototype-shaped keys fall out here too: SETTINGS_SCHEMA['__proto__']
         // resolves to Object.prototype, whose .perChallenge is undefined.
-        if (SETTINGS_SCHEMA[key]?.perChallenge) whitelisted[key] = values[key];
+        if (schemaEntry(key)?.perChallenge) whitelisted[key] = values[key];
     }
     return whitelisted;
 };
 
+/**
+ * @param {boolean} logInvalid
+ * @param {string} message
+ * @param {unknown} [value]
+ */
 const _logProfileValidationFailure = (logInvalid, message, value = null) => {
     if (logInvalid) logger.withCategory('settings').error(message, value);
 };
 
+/**
+ * @param {ChallengeValues} whitelisted
+ * @param {ChallengeValues} contextSettings
+ * @param {boolean} failClosed
+ * @param {boolean} logInvalid
+ * @returns {ChallengeValues|null}
+ */
 const _validatedProfileValues = (whitelisted, contextSettings, failClosed, logInvalid) => {
+    /** @type {ChallengeValues} */
     const sanitized = {};
     for (const [key, value] of Object.entries(whitelisted)) {
         if (validateSetting(key, value, contextSettings)) {
@@ -96,6 +132,12 @@ const _validatedProfileValues = (whitelisted, contextSettings, failClosed, logIn
  * that diagnostic so one corrupt stored profile cannot amplify logs every
  * voting cycle. failClosed=false (profile-list display) drops invalid values
  * silently because the schema may have evolved.
+ *
+ * @param {unknown} values
+ * @param {boolean} failClosed
+ * @param {ChallengeValues} globalDefaults
+ * @param {boolean} [logInvalid]
+ * @returns {ChallengeValues|null}
  */
 const sanitizeProfileValues = (values, failClosed, globalDefaults, logInvalid = true) => {
     const rejected = failClosed ? null : {};
@@ -109,7 +151,7 @@ const sanitizeProfileValues = (values, failClosed, globalDefaults, logInvalid = 
         return rejected;
     }
 
-    const whitelisted = _profileSchemaValues(values);
+    const whitelisted = _profileSchemaValues(/** @type {ChallengeValues} */ (values));
     const contextSettings = { ...globalDefaults, ...whitelisted };
     const sanitized = _validatedProfileValues(whitelisted, contextSettings, failClosed, logInvalid);
     if (sanitized === null) return null;

@@ -6,12 +6,7 @@
  * taken. Part of the services/VotingLogic facade.
  */
 
-// Cast to any at the boundary: the settings facade isn't `// @ts-check`ed yet,
-// and its `challengeId = null` defaults make TS infer param types too narrow
-// (null) to accept the string IDs passed here. Drop the cast once settings.js
-// is typed.
-import * as settingsModule from '../../settings';
-const settings = /** @type {any} */ (settingsModule);
+import * as settings from '../../settings';
 // 0 = last / 1-4 = slot addressing, shared with the swap automation.
 import { resolveEntryIndex } from '../../voting/entrySlot';
 

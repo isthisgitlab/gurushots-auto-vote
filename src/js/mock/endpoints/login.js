@@ -1,3 +1,4 @@
+// @ts-check
 /**
  * Mock counterpart to api/login.js: accepts any non-empty credentials.
  */
@@ -8,6 +9,8 @@ import { simulateApiResponse, simulateApiError } from '../simulate';
 
 /**
  * Simulate authentication
+ *
+ * @type {typeof import('../../api/login').authenticate}
  */
 const authenticate = async (email, password) => {
     logger

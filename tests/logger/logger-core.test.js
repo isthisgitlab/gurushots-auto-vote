@@ -177,20 +177,23 @@ describe('context detection', () => {
     });
 
     test('Electron main started via cli.js is CLI mode', () => {
-        const { logger } = loadLogger({ processType: 'main', argv1: '/app/cli.js' });
+        const { logger } = loadLogger({ processType: 'browser', argv1: '/app/cli.js' });
         expect(logger.getContext()).toBe('CLI');
         expect(logger.isCliMode()).toBe(true);
     });
 
     test('Electron renderer/main without a cli.js entry is GUI mode', () => {
-        expect(loadLogger({ processType: 'main', argv1: undefined }).logger.getContext()).toBe('GUI');
+        // Electron reports its main process as process.type 'browser' (never 'main').
+        const main = loadLogger({ processType: 'browser', argv1: undefined }).logger;
+        expect(main.getContext()).toBe('GUI');
+        expect(main.isCliMode()).toBe(false);
         const { logger } = loadLogger({ processType: 'renderer', argv1: '/app/index.js' });
         expect(logger.getContext()).toBe('GUI');
         expect(logger.isCliMode()).toBe(false);
     });
 
     test('an explicit override wins until cleared', () => {
-        const { logger } = loadLogger({ processType: 'main', argv1: '/app/index.js' });
+        const { logger } = loadLogger({ processType: 'browser', argv1: '/app/index.js' });
         logger.setContext('IPC');
         expect(logger.getContext()).toBe('IPC');
         logger.info('tagged');
@@ -207,7 +210,7 @@ describe('context detection', () => {
 
 describe('periodic cleanup interval', () => {
     test('Electron app schedules hourly cleanup and clears it on process exit', () => {
-        const { fs, onExit } = loadLogger({ processType: 'main', argv1: '/app/index.js' });
+        const { fs, onExit } = loadLogger({ processType: 'browser', argv1: '/app/index.js' });
         fs.readdirSync.mockClear();
 
         jest.advanceTimersByTime(60 * 60 * 1000);

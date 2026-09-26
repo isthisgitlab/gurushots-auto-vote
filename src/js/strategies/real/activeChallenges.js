@@ -1,3 +1,4 @@
+// @ts-check
 /**
  * Real-strategy active-challenge read: the api/challenges fetch plus
  * first-seen title pinning, with concurrent calls coalesced per token.
@@ -5,6 +6,8 @@
 
 import { fetchActiveChallenges } from '../../api/challenges';
 import { pinChallengeTitles } from '../../services/challengeTitlePin';
+
+/** @import { ActiveChallengesResponse } from '../../types/gurushots' */
 
 /**
  * One fetch, then pin first-seen titles onto a successful response. A failed
@@ -14,7 +17,7 @@ import { pinChallengeTitles } from '../../services/challengeTitlePin';
  * (see services/challengeTitlePin).
  *
  * @param {string} token
- * @returns {Promise<object>}
+ * @returns {Promise<ActiveChallengesResponse>}
  */
 const fetchAndPin = async (token) => {
     const response = await fetchActiveChallenges(token);
@@ -31,6 +34,7 @@ const fetchAndPin = async (token) => {
 // calls are merged (and pinned once); a later (sequential) call still hits the
 // network for fresh data. No resolved-result caching, so this never serves
 // stale challenge state.
+/** @type {Map<string, Promise<ActiveChallengesResponse>>} */
 const inFlightByToken = new Map();
 
 /**
@@ -38,7 +42,7 @@ const inFlightByToken = new Map();
  * concurrent calls for the same token into one request.
  *
  * @param {string} token - Authentication token
- * @returns {Promise<object>} Response containing array of active challenges
+ * @returns {Promise<ActiveChallengesResponse>} Response containing array of active challenges
  *                   or empty challenges array if request fails
  */
 const getActiveChallenges = (token) => {

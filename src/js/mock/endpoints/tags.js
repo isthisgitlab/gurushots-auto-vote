@@ -1,3 +1,4 @@
+// @ts-check
 /**
  * Mock counterpart to api/tags.js: the member identity read and tag
  * autocomplete over the mock library's tags.
@@ -9,6 +10,8 @@ import { MOCK_LIBRARY_TAGS } from '../photoLibrary';
 /**
  * Simulate /rest/get_current_member_profile — the token-only identity read
  * that supplies member_id for searchTagAutocomplete below.
+ *
+ * @type {typeof import('../../api/tags').getCurrentMemberProfile}
  */
 const getCurrentMemberProfile = mockMethod(
     {
@@ -30,6 +33,8 @@ const getCurrentMemberProfile = mockMethod(
  * point — that one matches a tag exactly, this one matches inside it — so
  * mock mode reproduces the real resolution problem: searching "flow" finds
  * no photos, autocomplete turns it into "flower", and THAT finds photos.
+ *
+ * @type {typeof import('../../api/tags').searchTagAutocomplete}
  */
 const searchTagAutocomplete = mockMethod(
     {

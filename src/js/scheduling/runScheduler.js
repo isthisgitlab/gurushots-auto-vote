@@ -1,3 +1,4 @@
+// @ts-check
 /**
  * Host-agnostic continuous voting scheduler.
  *
@@ -30,17 +31,21 @@ import {
 } from './nodeResolvers';
 import { createNodeDeadlineNotifier, createNodeScenarioNotifier } from '../services/notify/nodeNotify';
 
+/** @import { ActiveChallengesResponse, Challenge } from '../types/gurushots' */
+/** @import { TimerHandle } from './cadenceChain' */
+
 /**
  * Create a continuous voting scheduler.
  *
  * @param {Object} deps
- * @param {(cycleNumber:number)=>Promise<{success:boolean, challenges:Array|null}>} deps.runVotingCycle - one-shot voting cycle; resolves with the active list it fetched (null on failure/manual). A non-array `challenges` (or a plain boolean return) is treated as "no list" and triggers a fresh fetch when deciding the next delay.
- * @param {()=>Promise<{challenges:Array}>} deps.getActiveChallenges - fetcher used only when a cycle didn't hand its list over.
+ * @param {(cycleNumber:number)=>Promise<{success:boolean, challenges:Challenge[]|null}>} deps.runVotingCycle - one-shot voting cycle; resolves with the active list it fetched (null on failure/manual). A non-array `challenges` (or a plain boolean return) is treated as "no list" and triggers a fresh fetch when deciding the next delay.
+ * @param {()=>Promise<ActiveChallengesResponse>} deps.getActiveChallenges - fetcher used only when a cycle didn't hand its list over.
  * @returns {{start:()=>Promise<void>, stop:()=>void, getCycleCount:()=>number, isRunning:()=>boolean}}
  */
 const createScheduler = ({ runVotingCycle, getActiveChallenges }) => {
     let cycleCount = 0;
     let isRunning = false;
+    /** @type {TimerHandle|null} */
     let timer = null;
 
     // One notifier per scheduler (holds the fire-once dedupe + re-entrancy

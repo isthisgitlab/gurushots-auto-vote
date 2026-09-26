@@ -1,3 +1,4 @@
+// @ts-check
 /**
  * Mock counterpart to the active-challenge read (strategies/real/activeChallenges.js
  * over api/challenges.js): session-stable generated challenges.
@@ -11,6 +12,8 @@ import { getSessionCache } from '../sessionCache';
 
 /**
  * Simulate getting active challenges
+ *
+ * @type {typeof import('../../strategies/real/activeChallenges').getActiveChallenges}
  */
 const getActiveChallenges = mockMethod(
     {

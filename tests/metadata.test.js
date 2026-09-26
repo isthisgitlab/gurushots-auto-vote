@@ -383,6 +383,10 @@ describe('validation of stored metadata', () => {
     const logger = require('../src/js/logger');
     const warnings = () =>
         logger.withCategory.mock.results.flatMap((r) => r.value.warning.mock.calls.map((call) => call[0]));
+    const warningCategories = () =>
+        logger.withCategory.mock.calls
+            .filter((_call, i) => logger.withCategory.mock.results[i].value.warning.mock.calls.length > 0)
+            .map(([category]) => category);
 
     test.each([
         ['a null entry', null],
@@ -452,6 +456,7 @@ describe('validation of stored metadata', () => {
         expect(result.updateCheck).toEqual({ lastCheck: null, skipVersion: '1.0.0' });
         expect(writes).toHaveLength(1);
         expect(warnings()).toEqual([`Invalid lastCheck timestamp in metadata: ${desc}, removing`]);
+        expect(warningCategories()).toEqual(['update']);
     });
 
     test.each([
@@ -466,6 +471,7 @@ describe('validation of stored metadata', () => {
         expect(result.updateCheck).toEqual({ lastCheck: 100, skipVersion: null });
         expect(writes).toHaveLength(1);
         expect(warnings()).toEqual([`Invalid skipVersion in metadata: ${desc}, removing`]);
+        expect(warningCategories()).toEqual(['update']);
     });
 
     test('a stripped entryIds snapshot is logged and triggers a rewrite', () => {

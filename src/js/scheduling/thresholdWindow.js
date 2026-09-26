@@ -1,3 +1,4 @@
+// @ts-check
 /**
  * Shared last-minute threshold math for both voting schedulers.
  *
@@ -27,12 +28,38 @@ import { boostApplyThreshold } from '../voting/boostWindow';
 import { ruleOpensAt } from '../voting/currencyAuto';
 import { nextWakeAt } from '../scenarios/nextWake';
 
+/** @import { Challenge } from '../types/gurushots' */
+/** @import { ResolveScheduledFill, ScheduledStart } from './scheduledFill' */
+
+/**
+ * Which boundary (if any) decided the next cycle's delay.
+ * @typedef {'last-minute'|'approaching'|'scheduled'|'pre-final-window'|'pre-boost'|'currency-rule'|'scenario'|'normal'} CadenceMode
+ */
+
+/**
+ * A lead-window boundary (pre-final-window top-up / pre-boost fill).
+ * @typedef {{challengeId: Challenge['id'], challengeTitle: string, startTime: number, leadMin: number}} LeadWindowStart
+ */
+
+/**
+ * The soonest challenge crossing its lastMinuteThreshold.
+ * @typedef {{challengeId: Challenge['id'], challengeTitle: string, entryTime: number, lastMinuteThreshold: number}} ThresholdEntry
+ */
+
+/**
+ * @typedef {{challengeId: Challenge['id'], challengeTitle: string, startTime: number, action: 'key'|'swap'|'fill'}} CurrencyRuleStart
+ */
+
+/**
+ * @typedef {{challengeId: Challenge['id'], challengeTitle: string, startTime: number, phase: string}} ScenarioWakeStart
+ */
+
 /**
  * Resolve each challenge's per-challenge config in parallel, fail-soft: a
  * resolver that throws yields null for that challenge, which the caller skips.
  *
  * @template T
- * @param {Array} challenges
+ * @param {Challenge[]} challenges
  * @param {(challengeId: string) => T|Promise<T>} resolve
  * @returns {Promise<Array<T|null>>}
  */
@@ -48,19 +75,31 @@ const resolveConfigsFailSoft = (challenges, resolve) =>
     );
 
 // Fall back to the id so a missing/empty title never logs as "undefined".
+/** @param {Challenge} challenge */
 const challengeLabel = (challenge) => challenge.title || `challenge ${challenge.id}`;
 
 // 60..3540s == 1..59 min; mirrors VotingLogic's lead-minute clamps (rawLeadMin,
 // getBoostPrefillLeadSec) so a corrupt sub-minute/over-max override falls back
 // to the schema default (15 min) identically here.
+/** @param {number} leadSec */
 const clampLeadSec = (leadSec) => (Number.isFinite(leadSec) && leadSec >= 60 && leadSec <= 3540 ? leadSec : 900);
 
 // Strictly after `now` and sooner than the best boundary found so far (none yet
 // = Infinity, so a non-finite start never wins).
+/**
+ * @param {number} startTime
+ * @param {number} now
+ * @param {{startTime: number}|null} best
+ */
 const isSoonerUpcomingStart = (startTime, now, best) =>
     startTime > now && startTime < (best ? best.startTime : Infinity);
 
-/** @returns {{challengeId, challengeTitle, startTime:number, leadMin:number}} */
+/**
+ * @param {Challenge} challenge
+ * @param {number} startTime
+ * @param {number} leadSec
+ * @returns {LeadWindowStart}
+ */
 const leadWindowStart = (challenge, startTime, leadSec) => ({
     challengeId: challenge.id,
     challengeTitle: challengeLabel(challenge),
@@ -72,11 +111,15 @@ const leadWindowStart = (challenge, startTime, leadSec) => ({
  * Per-challenge pre-final-window-top-up config for the cadence cap.
  * @callback ResolveFinalWindowTopUp
  * @param {string} challengeId - Challenge id as a string.
- * @returns {{enabled: boolean, leadSec: number, durationSec: number}|Promise<{enabled: boolean, leadSec: number, durationSec: number}>}
+ * @returns {FinalWindowTopUpConfig|Promise<FinalWindowTopUpConfig>}
  */
+
+/** @typedef {{enabled: boolean, leadSec: number, durationSec: number}} FinalWindowTopUpConfig */
 
 /**
  * Top-up window start for one challenge, or null when its config is off/unreadable.
+ * @param {Challenge} challenge
+ * @param {FinalWindowTopUpConfig|null} config
  * @returns {{startTime:number, leadSec:number}|null}
  */
 const finalWindowTopUpWindow = (challenge, config) => {
@@ -102,13 +145,14 @@ const finalWindowTopUpWindow = (challenge, config) => {
  * corrupt durationSec (sub-minute or NaN) falls back to the default fixed hour
  * (3600), mirroring VotingLogic's finalWindowSec clamp for the same input.
  *
- * @param {Array} eligible - already-filtered still-open non-flash challenges
+ * @param {Challenge[]} eligible - already-filtered still-open non-flash challenges
  * @param {number} now - Unix timestamp (seconds)
  * @param {ResolveFinalWindowTopUp} resolveFinalWindowTopUp
- * @returns {Promise<{challengeId, challengeTitle, startTime:number, leadMin:number}|null>}
+ * @returns {Promise<LeadWindowStart|null>}
  */
 async function soonestFinalWindowTopUpStart(eligible, now, resolveFinalWindowTopUp) {
     const configs = await resolveConfigsFailSoft(eligible, resolveFinalWindowTopUp);
+    /** @type {LeadWindowStart|null} */
     let best = null;
     for (let i = 0; i < eligible.length; i++) {
         const window = finalWindowTopUpWindow(eligible[i], configs[i]);
@@ -126,11 +170,15 @@ async function soonestFinalWindowTopUpStart(eligible, now, resolveFinalWindowTop
  * the challenge's own live boost state via the shared boostApplyThreshold.
  * @callback ResolveBoostPrefill
  * @param {string} challengeId - Challenge id as a string.
- * @returns {{enabled: boolean, leadSec: number, boostTimeSec: number, keyUnlockedBoostTimeSec: number}|Promise<{enabled: boolean, leadSec: number, boostTimeSec: number, keyUnlockedBoostTimeSec: number}>}
+ * @returns {BoostPrefillConfig|Promise<BoostPrefillConfig>}
  */
+
+/** @typedef {{enabled: boolean, leadSec: number, boostTimeSec: number, keyUnlockedBoostTimeSec: number}} BoostPrefillConfig */
 
 /**
  * Pre-boost fill window start for one challenge, or null when it has none.
+ * @param {Challenge} challenge
+ * @param {BoostPrefillConfig|null} config
  * @returns {{startTime:number, leadSec:number}|null}
  */
 const boostPrefillWindow = (challenge, config) => {
@@ -182,13 +230,14 @@ const boostPrefillWindow = (challenge, config) => {
  * honoured here exactly as the vote rule honours it, so the scheduler never wakes
  * for a fill the rule would then decline to perform.
  *
- * @param {Array} eligible - already-filtered still-open non-flash challenges
+ * @param {Challenge[]} eligible - already-filtered still-open non-flash challenges
  * @param {number} now - Unix timestamp (seconds)
  * @param {ResolveBoostPrefill} resolveBoostPrefill
- * @returns {Promise<{challengeId, challengeTitle, startTime:number, leadMin:number}|null>}
+ * @returns {Promise<LeadWindowStart|null>}
  */
 async function soonestBoostPrefillStart(eligible, now, resolveBoostPrefill) {
     const configs = await resolveConfigsFailSoft(eligible, resolveBoostPrefill);
+    /** @type {LeadWindowStart|null} */
     let best = null;
     for (let i = 0; i < eligible.length; i++) {
         const window = boostPrefillWindow(eligible[i], configs[i]);
@@ -208,6 +257,7 @@ async function soonestBoostPrefillStart(eligible, now, resolveBoostPrefill) {
 // Whether the challenge could still take the action at all — waking for a rule
 // whose action the challenge doesn't offer (or has already used) would no-op.
 // Live state beyond this (balance, exposure, swap caps) is left to the runner.
+/** @type {Record<CurrencyRuleStart['action'], (c: Challenge) => boolean>} */
 const CURRENCY_ACTION_OFFERED = {
     key: (c) => c?.boost_enable === true && c?.member?.boost?.state === 'LOCKED',
     swap: (c) => c?.swap_enable === true && c?.swap_locked !== true,
@@ -223,19 +273,20 @@ const CURRENCY_ACTION_OFFERED = {
  * time instead of up to one normal cadence late. Fail-soft: a challenge whose
  * resolver throws is skipped.
  *
- * @param {Array} challenges
+ * @param {Challenge[]} challenges
  * @param {number} now - Unix timestamp (seconds)
  * @param {ResolveCurrencyAuto} resolveCurrencyAuto
- * @returns {Promise<{challengeId, challengeTitle, startTime:number, action:string}|null>}
+ * @returns {Promise<CurrencyRuleStart|null>}
  */
 async function soonestCurrencyRuleStart(challenges, now, resolveCurrencyAuto) {
     const open = (Array.isArray(challenges) ? challenges : []).filter((c) => Number(c?.close_time) > now);
     const configs = await resolveConfigsFailSoft(open, resolveCurrencyAuto);
 
+    /** @type {CurrencyRuleStart|null} */
     let best = null;
     for (let i = 0; i < open.length; i++) {
         const challenge = open[i];
-        for (const action of ['key', 'swap', 'fill']) {
+        for (const action of /** @type {const} */ (['key', 'swap', 'fill'])) {
             const timing = configs[i]?.[action];
             if (!timing || !CURRENCY_ACTION_OFFERED[action](challenge)) continue;
             const startTime = ruleOpensAt(challenge, timing);
@@ -266,15 +317,16 @@ async function soonestCurrencyRuleStart(challenges, now, resolveCurrencyAuto) {
  * A challenge whose plan has not started yet is judged from its start phase.
  * Fail-soft: a challenge whose resolver throws is skipped.
  *
- * @param {Array} challenges
+ * @param {Challenge[]} challenges
  * @param {number} now - Unix timestamp (seconds)
  * @param {ResolveScenarioWake} resolveScenarioWake
- * @returns {Promise<{challengeId, challengeTitle, startTime:number, phase:string}|null>}
+ * @returns {Promise<ScenarioWakeStart|null>}
  */
 async function soonestScenarioWake(challenges, now, resolveScenarioWake) {
     const open = (Array.isArray(challenges) ? challenges : []).filter((c) => Number(c?.close_time) > now);
     const inputs = await resolveConfigsFailSoft(open, resolveScenarioWake);
 
+    /** @type {ScenarioWakeStart|null} */
     let best = null;
     for (let i = 0; i < open.length; i++) {
         const input = inputs[i];
@@ -302,21 +354,36 @@ async function soonestScenarioWake(challenges, now, resolveScenarioWake) {
  * settings file, so resolving per-question would double the cost and could even
  * read two different `now`s mid-decision.
  *
- * @param {Array} challenges
+ * @param {Challenge[]} challenges
  * @param {number} now - Unix timestamp (seconds)
  * @param {ResolveThreshold} resolveThreshold
- * @returns {Promise<{eligible:Array, thresholds:number[]}>}
+ * @returns {Promise<{eligible: Challenge[], thresholds: number[]}>}
  */
 async function resolveEligibleThresholds(challenges, now, resolveThreshold) {
     const eligible = eligibleChallenges(challenges, now);
-    const thresholds = await Promise.all(eligible.map((c) => resolveThreshold(c.id.toString())));
+    // Promise.resolve is what Promise.all already applies to each element, so
+    // wrapping here is behavior-identical; it only types every element as a
+    // Promise for the await-thenable lint (a resolver may be sync).
+    const thresholds = await Promise.all(eligible.map((c) => Promise.resolve(resolveThreshold(c.id.toString()))));
     return { eligible, thresholds };
 }
 
 // Pure decision helpers over an already-resolved (eligible, thresholds) snapshot.
+/**
+ * @param {Challenge[]} eligible
+ * @param {number[]} thresholds
+ * @param {number} now
+ */
 const anyInWindow = (eligible, thresholds, now) => eligible.some((c, i) => c.close_time - now <= thresholds[i] * 60);
 
+/**
+ * @param {Challenge[]} eligible
+ * @param {number[]} thresholds
+ * @param {number} now
+ * @returns {ThresholdEntry|null}
+ */
 const soonestThresholdEntry = (eligible, thresholds, now) => {
+    /** @type {ThresholdEntry|null} */
     let nextEntry = null;
     let earliestEntryTime = Infinity;
     for (let i = 0; i < eligible.length; i++) {
@@ -340,10 +407,10 @@ const soonestThresholdEntry = (eligible, thresholds, now) => {
  * Find the soonest challenge that will cross its per-challenge
  * `lastMinuteThreshold` boundary after `now`. Returns null when none will.
  *
- * @param {Array} challenges
+ * @param {Challenge[]} challenges
  * @param {number} now - Unix timestamp (seconds)
  * @param {ResolveThreshold} resolveThreshold
- * @returns {Promise<{challengeId, challengeTitle, entryTime, lastMinuteThreshold}|null>}
+ * @returns {Promise<ThresholdEntry|null>}
  */
 async function calculateNextThresholdEntry(challenges, now, resolveThreshold) {
     const { eligible, thresholds } = await resolveEligibleThresholds(challenges, now, resolveThreshold);
@@ -355,7 +422,7 @@ async function calculateNextThresholdEntry(challenges, now, resolveThreshold) {
  * its per-challenge `lastMinuteThreshold` window (inclusive boundary). Used to
  * decide when to leave the fixed last-minute cadence and revert to normal.
  *
- * @param {Array} challenges
+ * @param {Challenge[]} challenges
  * @param {number} now - Unix timestamp (seconds)
  * @param {ResolveThreshold} resolveThreshold
  * @returns {Promise<boolean>}
@@ -366,15 +433,28 @@ async function isAnyChallengeInThresholdWindow(challenges, now, resolveThreshold
 }
 
 /**
+ * The whole per-cycle cadence decision (computeNextCycleDelayMs result).
+ * @typedef {object} CadenceDecision
+ * @property {number} delayMs
+ * @property {CadenceMode} mode
+ * @property {ThresholdEntry|null} nextEntry
+ * @property {ScheduledStart|null} nextScheduled
+ * @property {LeadWindowStart|null} nextFinalWindowTopUp
+ * @property {LeadWindowStart|null} nextBoostPrefill
+ * @property {CurrencyRuleStart|null} nextCurrencyRule
+ * @property {ScenarioWakeStart|null} nextScenarioWake
+ */
+
+/**
  * Cap the cadence so the next cycle lands on `boundarySec` instead of sleeping
  * past it — only when the boundary is sooner than the current delay. Floored at
  * `minGapMs` so a boundary that is already here can't busy-loop. Mutates `cadence`.
  *
- * @param {{delayMs:number, mode:string}} cadence
+ * @param {{delayMs:number, mode:CadenceMode}} cadence
  * @param {number} boundarySec - Unix timestamp (seconds) of the boundary
  * @param {number} now - Unix timestamp (seconds)
  * @param {number} minGapMs
- * @param {string} mode - the mode to report when this boundary wins
+ * @param {CadenceMode} mode - the mode to report when this boundary wins
  */
 const capCadenceToBoundary = (cadence, boundarySec, now, minGapMs, mode) => {
     const msUntilBoundary = (boundarySec - now) * 1000;
@@ -415,20 +495,20 @@ const capCadenceToBoundary = (cadence, boundarySec, now, minGapMs, mode) => {
  * scheduled-fill window floor (5 min), so a window start can slip by at
  * most one fast tick — never be missed.
  *
- * @param {Array} challenges
+ * @param {Challenge[]} challenges
  * @param {number} now - Unix timestamp (seconds)
  * @param {object} opts
  * @param {ResolveThreshold} opts.resolveThreshold
  * @param {number} opts.normalDelayMs - the random delay already rolled by the host
  * @param {number} opts.lastMinuteCheckMinutes - fixed last-minute cadence (minutes)
  * @param {number} opts.minGapMs - hard floor on the returned delay
- * @param {import('./scheduledFill').ResolveScheduledFill|null} [opts.resolveScheduledFill] - per-challenge scheduled-fill config resolver (sync or async)
+ * @param {ResolveScheduledFill|null} [opts.resolveScheduledFill] - per-challenge scheduled-fill config resolver (sync or async)
  * @param {string|null} [opts.timezone] - IANA zone for the time-of-day form
  * @param {ResolveFinalWindowTopUp|null} [opts.resolveFinalWindowTopUp] - per-challenge pre-final-window top-up config resolver (sync or async); when passed, the delay is also capped to the soonest upcoming top-up window start
  * @param {ResolveBoostPrefill|null} [opts.resolveBoostPrefill] - per-challenge pre-boost fill config resolver (sync or async); when passed, the delay is also capped to the soonest upcoming pre-boost window start
  * @param {ResolveCurrencyAuto|null} [opts.resolveCurrencyAuto] - per-challenge currency-automation timing resolver (sync or async); when passed, the delay is also capped to the soonest upcoming key / swap / fill rule opening
  * @param {ResolveScenarioWake|null} [opts.resolveScenarioWake] - per-challenge scenario resolver (sync or async); when passed, the delay is also capped to the soonest instant a scenario time condition can flip
- * @returns {Promise<{delayMs:number, mode:'last-minute'|'approaching'|'scheduled'|'pre-final-window'|'pre-boost'|'currency-rule'|'scenario'|'normal', nextEntry:(object|null), nextScheduled:(object|null), nextFinalWindowTopUp:(object|null), nextBoostPrefill:(object|null), nextCurrencyRule:(object|null), nextScenarioWake:(object|null)}>}
+ * @returns {Promise<CadenceDecision>}
  */
 async function computeNextCycleDelayMs(
     challenges,
@@ -464,7 +544,9 @@ async function computeNextCycleDelayMs(
     // Every boundary below is the same "cap to the soonest upcoming boundary"
     // shape, applied in this fixed order; whichever boundary is sooner wins, and
     // an exact tie keeps the earlier-applied mode.
+    /** @type {{delayMs: number, mode: CadenceMode}} */
     const cadence = { delayMs: normalDelayMs, mode: 'normal' };
+    /** @param {number} boundarySec @param {CadenceMode} mode */
     const capTo = (boundarySec, mode) => capCadenceToBoundary(cadence, boundarySec, now, minGapMs, mode);
 
     const nextEntry = soonestThresholdEntry(eligible, thresholds, now);

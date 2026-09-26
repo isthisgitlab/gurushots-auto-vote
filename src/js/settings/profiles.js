@@ -1,3 +1,4 @@
+// @ts-check
 /**
  * Named challenge-settings profiles ("save this tactic, recall it later"):
  * list, save/overwrite, delete, apply to a challenge, and first-run seeding of
@@ -23,6 +24,12 @@ import { sanitizeTitleRuleInline } from './titleRuleSanitize';
 import { titleProfileComposesWithKnownOverrides } from './ruleResolution';
 import { replaceChallengeOverridesInSettings, trimmedChallengeId } from './challengeOverrides';
 
+/** @import { AppSettings, ChallengeIdInput, ChallengeValues, TitleRule } from '../types/settings' */
+
+/**
+ * @param {unknown} name
+ * @returns {boolean}
+ */
 const _isReservedName = (name) => RESERVED_PROFILE_NAMES.has(normalizeProfileName(name));
 
 /**
@@ -30,19 +37,30 @@ const _isReservedName = (name) => RESERVED_PROFILE_NAMES.has(normalizeProfileNam
  * Defensive copy; values are sanitized drop-silently (stale schema keys and
  * now-invalid values disappear from the view without rewriting storage — the
  * next save of that profile persists the sanitized form).
+ *
+ * @returns {Record<string, ChallengeValues>}
  */
 const getChallengeProfiles = () => {
     const settings = loadSettings();
     const stored = readProfilesMap(settings);
     const globalDefaults = globalChallengeValues(settings);
+    /** @type {Record<string, ChallengeValues>} */
     const profiles = {};
     for (const name of Object.keys(stored)) {
         if (_isReservedName(name)) continue;
-        profiles[name] = sanitizeProfileValues(stored[name], false, globalDefaults);
+        // failClosed=false drops invalid values instead of rejecting, so it never yields null.
+        profiles[name] = /** @type {ChallengeValues} */ (sanitizeProfileValues(stored[name], false, globalDefaults));
     }
     return profiles;
 };
 
+/**
+ * @param {AppSettings} settings
+ * @param {string} normalizedName
+ * @param {string} displayName
+ * @param {ChallengeValues} values
+ * @returns {boolean}
+ */
 const _updateAssignedProfileRules = (settings, normalizedName, displayName, values) => {
     const rules = Array.isArray(settings.challengeSettings.titleRules) ? settings.challengeSettings.titleRules : [];
     const assigned = rules.filter((rule) => normalizeProfileName(rule?.profile) === normalizedName);
@@ -67,8 +85,13 @@ const _updateAssignedProfileRules = (settings, normalizedName, displayName, valu
  * Own-property copy of the stored profiles minus reserved names and minus the
  * profile being saved (so a same-normalized-name save replaces the old casing
  * in place). `existed` reports whether that profile was present.
+ *
+ * @param {Record<string, ChallengeValues>} stored
+ * @param {string} normalized
+ * @returns {{profiles: Record<string, ChallengeValues>, existed: boolean}}
  */
 const _profilesWithout = (stored, normalized) => {
+    /** @type {Record<string, ChallengeValues>} */
     const profiles = {};
     let existed = false;
     for (const existingName of Object.keys(stored)) {
@@ -88,6 +111,10 @@ const _profilesWithout = (stored, normalized) => {
  * name, the profile-count cap (new names only — overwriting an existing name
  * always succeeds), a non-plain-object values payload, or any invalid value.
  * An empty values map is allowed — it's a useful "all global defaults" preset.
+ *
+ * @param {unknown} name
+ * @param {unknown} values
+ * @returns {boolean}
  */
 const saveChallengeProfile = (name, values) => {
     const trimmed = typeof name === 'string' ? name.trim() : '';
@@ -124,6 +151,9 @@ const saveChallengeProfile = (name, values) => {
 /**
  * A rule with its profile assignment removed, or null when the profile was the
  * rule's sole contribution (no tags, no valid inline overrides left).
+ *
+ * @param {TitleRule} rule
+ * @returns {TitleRule|null}
  */
 const _ruleWithoutProfile = (rule) => {
     const withoutProfile = { ...rule };
@@ -139,6 +169,9 @@ const _ruleWithoutProfile = (rule) => {
 /**
  * Delete a profile by name (case-insensitive on the normalized name).
  * Returns false when no such profile exists.
+ *
+ * @param {unknown} name
+ * @returns {boolean}
  */
 const deleteChallengeProfile = (name) => {
     const normalized = normalizeProfileName(name);
@@ -181,6 +214,10 @@ const deleteChallengeProfile = (name) => {
  * loop could observe half-applied. Here every value is validated against
  * {globalDefaults + profile} — the same context the profile was saved under —
  * and nothing is written unless all of it passes.
+ *
+ * @param {unknown} name
+ * @param {ChallengeIdInput} challengeId
+ * @returns {boolean}
  */
 const applyChallengeProfile = (name, challengeId) => {
     const id = trimmedChallengeId(challengeId);
@@ -238,6 +275,8 @@ const applyChallengeProfile = (name, challengeId) => {
  *    they free capacity, rather than being permanently and silently suppressed.
  *
  * Returns true when nothing needed seeding or the seed-marker write succeeded.
+ *
+ * @returns {boolean}
  */
 const seedIntentProfiles = () => {
     const settings = loadSettings();

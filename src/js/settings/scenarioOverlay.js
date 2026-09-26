@@ -1,3 +1,4 @@
+// @ts-check
 /**
  * The scenario phase-settings overlay: while a challenge is in a phase of its
  * assigned scenario, that phase's `settings` win over every other layer for
@@ -14,14 +15,17 @@ import { scenarioStateLedger, mockScenarioStateLedger } from '../scenarioStateSt
 import { normalizeProfileName } from './profileStore';
 import { findStoredScenario, hasStoredScenarios } from './scenarios';
 
+/** @import { AppSettings } from '../types/settings' */
+
 // Mock mode keeps scenario state in memory only (it must never touch the real
 // scenarioState.json), so the overlay reads the same ledger the mock pass uses.
+/** @param {AppSettings} settings */
 const ledgerFor = (settings) => (settings.mock === true ? mockScenarioStateLedger : scenarioStateLedger);
 
 /**
  * The active phase's settings for a challenge, or null.
  *
- * @param {object} settings - the loaded settings blob
+ * @param {AppSettings} settings - the loaded settings blob
  * @param {string} challengeId
  * @param {() => string} resolveScenarioName - the challenge's `scenario` setting,
  *   resolved without the overlay (only called when any scenario is stored)

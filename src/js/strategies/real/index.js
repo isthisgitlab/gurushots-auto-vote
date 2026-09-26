@@ -1,3 +1,4 @@
+// @ts-check
 /**
  * GuruShots Auto Voter - Real API strategy
  *
@@ -30,6 +31,8 @@ import { createMetadataEntryTracker } from '../../services/newEntryTracker';
 import { runJoinPass, joinChallengeSingle } from '../../services/joinChallenges';
 import { runClaimPass } from '../../services/autoClaim';
 import { joinStateStore, acquireUnlockLock } from '../../joinStateStore';
+
+/** @import { Challenge, TurboBattle, TurboMiniGameResult } from '../../types/gurushots' */
 
 // One instance for the process: the tracker is stateless (it reads and writes
 // metadata.json on each call), but building it per pass would be pointless churn.
@@ -92,16 +95,22 @@ const joinChallenge = (challengeId, spendCoins, token) =>
  * Plays one unresolved battle: picks first_image, and on a lost or errored
  * pick flips to second_image (after the selection delay). Resolves whether a
  * pick was correct, whether that took the flip, and whether the game is WON.
+ *
+ * @param {Challenge} challenge
+ * @param {TurboBattle} battle
+ * @param {string} token
+ * @returns {Promise<{correct: boolean, flipped: boolean, won: boolean}>}
  */
 const playTurboBattle = async (challenge, battle, token) => {
-    const first = await submitTurboSelection(challenge.id, battle.firstImageId, token);
+    // runTurboMiniGame only plays a battle whose two image ids are both present.
+    const first = await submitTurboSelection(challenge.id, /** @type {string} */ (battle.firstImageId), token);
     if (first.ok) {
         return { correct: true, flipped: false, won: first.state === 'WON' };
     }
 
     // First pick lost or errored — flip to the other image.
     await sleep(TURBO_SELECTION_DELAY_MS);
-    const second = await submitTurboSelection(challenge.id, battle.secondImageId, token);
+    const second = await submitTurboSelection(challenge.id, /** @type {string} */ (battle.secondImageId), token);
     if (!second.ok) {
         const code = second.errorCode || first.errorCode;
         if (code) {
@@ -118,6 +127,10 @@ const playTurboBattle = async (challenge, battle, token) => {
  * Iterates pair-by-pair (see playTurboBattle), skipping resolved battles and
  * counting malformed ones as double failures, and stops early once a response
  * reports state === 'WON'.
+ *
+ * @param {Challenge} challenge
+ * @param {string} token
+ * @returns {Promise<TurboMiniGameResult>}
  */
 const runTurboMiniGame = async (challenge, token) => {
     const set = await getChallengeTurbo(challenge.id, token);
@@ -162,9 +175,9 @@ const runTurboMiniGame = async (challenge, token) => {
  * effect.
  *
  * @param {string} token - Authentication token
- * @param {number|function} [_getExposureThreshold] - Optional exposure-threshold resolver accepted from callers that pass one; unused internally (the voting-logic service reads settings directly).
- * @param {string|number} [challengeIdFilter] - When set, restricts the strategy pass to a single challenge (per-card "Run"). Stale-metadata cleanup still runs against the full active list before filtering.
- * @returns {Promise<{success:boolean, message?:string, error?:string, challenges?:Array}>}
+ * @param {number|function|null} [_getExposureThreshold] - Optional exposure-threshold resolver accepted from callers that pass one; unused internally (the voting-logic service reads settings directly).
+ * @param {string|number|null} [challengeIdFilter] - When set, restricts the strategy pass to a single challenge (per-card "Run"). Stale-metadata cleanup still runs against the full active list before filtering.
+ * @returns {Promise<{success:boolean, message?:string, error?:string, challenges?:Challenge[]}>}
  *   `challenges` is the *full* active list this cycle fetched (not the per-challenge
  *   filtered subset), so callers can reuse it for threshold scheduling instead of
  *   re-fetching. Absent only when the fetch itself threw before a list was obtained.
@@ -179,7 +192,10 @@ const fetchChallengesAndVote = async (token, _getExposureThreshold = null, chall
         } catch (error) {
             logger
                 .withCategory('join')
-                .warning(`join pass errored (voting continues): ${error?.message || error}`, null);
+                .warning(
+                    `join pass errored (voting continues): ${/** @type {{ message?: unknown } | null | undefined} */ (error)?.message || error}`,
+                    null,
+                );
         }
         // Prize-claim pre-step: gated by the default-off `autoClaimPrizes`
         // setting and throttled to once an hour inside runClaimPass.
@@ -188,7 +204,10 @@ const fetchChallengesAndVote = async (token, _getExposureThreshold = null, chall
         } catch (error) {
             logger
                 .withCategory('claim')
-                .warning(`claim pass errored (voting continues): ${error?.message || error}`, null);
+                .warning(
+                    `claim pass errored (voting continues): ${/** @type {{ message?: unknown } | null | undefined} */ (error)?.message || error}`,
+                    null,
+                );
         }
     }
     // The Android background service advances scenarios in its own JS context;

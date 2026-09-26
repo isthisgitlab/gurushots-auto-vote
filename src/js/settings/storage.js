@@ -1,3 +1,4 @@
+// @ts-check
 /**
  * Persistence transport + path / runtime detection helpers.
  *
@@ -20,20 +21,37 @@ import * as logger from '../logger';
 const { isSourceCode, getAppName } = logger;
 import * as runtime from '../runtime';
 
+/** @import { AndroidHeadlessStore } from '../types/settings' */
+
+/**
+ * The Android headless-service bridge, read at call time (absent everywhere
+ * else).
+ *
+ * @returns {AndroidHeadlessStore | undefined}
+ */
+const headlessStore = () =>
+    /** @type {{ AndroidHeadlessStore?: AndroidHeadlessStore }} */ (/** @type {unknown} */ (globalThis))
+        .AndroidHeadlessStore;
+
 // Try to import electron, but don't fail if it's not available (CLI context)
+/** @type {import('electron').App | null | undefined} */
 let electronApp = null;
 try {
     const electron = require('electron');
     electronApp = electron.app;
 } catch (error) {
     // Electron not available (CLI context), we'll use fallback
-    logger.withCategory('ui').info('Running in CLI context - using fallback userData path:', error.message);
+    logger
+        .withCategory('ui')
+        .info('Running in CLI context - using fallback userData path:', /** @type {Error} */ (error).message);
 }
 
 const SETTINGS_KEY = 'gurushots-settings';
 
 let capacitorInitialized = false;
+/** @type {string | null} */
 let cachedSettingsJson = null;
+/** @type {import('@capacitor/preferences').PreferencesPlugin | null} */
 let capacitorPreferences = null;
 
 // Serializes Capacitor write-behind so concurrent full-blob writes apply
@@ -42,6 +60,7 @@ let capacitorPreferences = null;
 // guarantee durability (e.g. before the WebView is suspended).
 let writeChain = Promise.resolve();
 
+/** @returns {import('@capacitor/preferences').PreferencesPlugin} */
 const getCapacitorPreferences = () => {
     if (capacitorPreferences) return capacitorPreferences;
     capacitorPreferences = require('@capacitor/preferences').Preferences;
@@ -49,13 +68,17 @@ const getCapacitorPreferences = () => {
 };
 
 const storage = {
-    /** Returns the raw settings JSON string, or null if not yet written. */
+    /**
+     * Returns the raw settings JSON string, or null if not yet written.
+     *
+     * @returns {string | null}
+     */
     readRaw: () => {
         if (runtime.isHeadlessService()) {
             // Background WebView: read from the native bridge backed by the
             // same store the app's @capacitor/preferences uses, so the token
             // and settings stay in sync between app and background.
-            const store = globalThis.AndroidHeadlessStore;
+            const store = headlessStore();
             return (store && store.read()) || null;
         }
         if (runtime.isCapacitor()) {
@@ -65,14 +88,18 @@ const storage = {
         if (!fs.existsSync(settingsPath)) return null;
         return fs.readFileSync(settingsPath, 'utf8');
     },
-    /** Writes the raw settings JSON string. Sync on Electron/CLI; cache + async write-behind on Capacitor. */
+    /**
+     * Writes the raw settings JSON string. Sync on Electron/CLI; cache + async write-behind on Capacitor.
+     *
+     * @param {string} data
+     */
     writeRaw: (data) => {
         if (runtime.isHeadlessService()) {
             // Persist through the native bridge to the shared store; the
             // commit is synchronous so a later read() in the same cycle
             // sees the new value.
             try {
-                globalThis.AndroidHeadlessStore?.write(data);
+                headlessStore()?.write(data);
             } catch (err) {
                 logger.withCategory('settings').error('Headless store write failed:', err);
             }
@@ -146,6 +173,7 @@ const flushPendingWrites = () => writeChain;
 // runtime.getAppUserDataPath appends `-dev` to userData. When the two differ
 // (userData basename ≠ package name) the legacy dir may still hold a settings.json.
 let legacyDevDirChecked = false;
+/** @param {string} userDataPath */
 const warnIfLegacyDevDir = (userDataPath) => {
     if (legacyDevDirChecked) return;
     legacyDevDirChecked = true;
@@ -205,6 +233,32 @@ const getEnvironmentInfo = () => {
 };
 
 /**
+ * @param {string} prefKey
+ * @param {string | null} fallback
+ * @returns {string | null}
+ */
+const readHeadlessKey = (prefKey, fallback) => {
+    try {
+        return headlessStore()?.readKey?.(prefKey) ?? fallback;
+    } catch (err) {
+        logger.withCategory('settings').error(`Headless ${prefKey} read failed:`, err);
+        return fallback;
+    }
+};
+
+/**
+ * @param {string} prefKey
+ * @param {string} data
+ */
+const writeHeadlessKey = (prefKey, data) => {
+    try {
+        headlessStore()?.writeKey?.(prefKey, data);
+    } catch (err) {
+        logger.withCategory('settings').error(`Headless ${prefKey} write failed:`, err);
+    }
+};
+
+/**
  * Generic platform-aware JSON store — the same transport pattern the
  * settings store above uses, packaged for other stores (metadata.js).
  *
@@ -218,32 +272,20 @@ const getEnvironmentInfo = () => {
  *
  * @param {{fileName: string, prefKey: string}} opts
  */
-const readHeadlessKey = (prefKey, fallback) => {
-    try {
-        return globalThis.AndroidHeadlessStore?.readKey?.(prefKey) ?? fallback;
-    } catch (err) {
-        logger.withCategory('settings').error(`Headless ${prefKey} read failed:`, err);
-        return fallback;
-    }
-};
-
-const writeHeadlessKey = (prefKey, data) => {
-    try {
-        globalThis.AndroidHeadlessStore?.writeKey?.(prefKey, data);
-    } catch (err) {
-        logger.withCategory('settings').error(`Headless ${prefKey} write failed:`, err);
-    }
-};
-
 const createJsonStore = ({ fileName, prefKey }) => {
     let initialized = false;
+    /** @type {string | null} */
     let cachedJson = null;
     let chain = Promise.resolve();
 
     const filePath = () => path.join(path.dirname(getSettingsPath()), fileName);
 
     return {
-        /** Raw JSON string, or null when never written. */
+        /**
+         * Raw JSON string, or null when never written.
+         *
+         * @returns {string | null}
+         */
         readRaw: () => {
             if (runtime.isHeadlessService()) {
                 return readHeadlessKey(prefKey, cachedJson);
@@ -255,7 +297,11 @@ const createJsonStore = ({ fileName, prefKey }) => {
             if (!fs.existsSync(p)) return null;
             return fs.readFileSync(p, 'utf8');
         },
-        /** Sync on Electron/CLI; cache + ordered write-behind on Capacitor; native keyed bridge on headless. */
+        /**
+         * Sync on Electron/CLI; cache + ordered write-behind on Capacitor; native keyed bridge on headless.
+         *
+         * @param {string} data
+         */
         writeRaw: (data) => {
             if (runtime.isHeadlessService()) {
                 cachedJson = data;

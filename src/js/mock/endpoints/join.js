@@ -1,3 +1,4 @@
+// @ts-check
 /**
  * Mock counterpart to api/join.js: open (un-joined) challenges, the
  * bankroll, and the coin unlock.
@@ -12,6 +13,8 @@ import { simulateApiResponse, mockMethod } from '../simulate';
  * paid id (900004) whose coinsUnlock fails — so the "coins charged but
  * submit failed" / "unlock failed" paths are exercisable without a real
  * account. Id 900005 unlocks but its submit fails (see submitToChallenge).
+ *
+ * @type {typeof import('../../api/join').getMemberChallenges}
  */
 const getMemberChallenges = mockMethod(
     {
@@ -87,6 +90,8 @@ const getMemberChallenges = mockMethod(
 /**
  * Simulate /rest/get_bankroll. Normalized to the flat balance shape the
  * real getBankroll returns.
+ *
+ * @type {typeof import('../../api/join').getBankroll}
  */
 const getBankroll = mockMethod(
     {
@@ -103,6 +108,8 @@ const getBankroll = mockMethod(
 /**
  * Simulate /rest/coins_unlock. Fixture 900004 fails (success:false) so the
  * unlock-failure and charged-pending-submit paths can be tested.
+ *
+ * @type {typeof import('../../api/join').coinsUnlock}
  */
 const coinsUnlock = mockMethod(
     {

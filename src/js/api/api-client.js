@@ -1,3 +1,4 @@
+// @ts-check
 /**
  * GuruShots Auto Voter - Core API Client
  *
@@ -13,15 +14,47 @@ import * as settings from '../settings';
 import * as runtime from '../runtime';
 import { FORM_CONTENT_TYPE } from './constants';
 
+/** @import { AxiosAdapter, AxiosRequestConfig, AxiosResponse } from 'axios' */
+
+/**
+ * Request headers as the api/ modules build them. A value may be undefined
+ * (login sends no token); axios drops it.
+ *
+ * @typedef {Record<string, string | undefined>} RequestHeaders
+ */
+
+/**
+ * What a failed axios call rejects with, as far as the retry layer reads it.
+ *
+ * @typedef {object} RequestFailure
+ * @property {string} [message]
+ * @property {string} [code]
+ * @property {{ status?: number, data?: { retry_after?: unknown }, headers?: Record<string, unknown> }} [response]
+ */
+
+/**
+ * The native bridge globals of the Android headless-service WebView.
+ *
+ * @typedef {object} HeadlessHttpGlobals
+ * @property {(id: number, resultJson: string) => void} [__gsResolveHeadlessHttp]
+ * @property {{ request: (id: number, method: string, url: string, headersJson: string, body: string) => void }} AndroidHeadlessHttp
+ */
+
 // A custom axios adapter must enforce validateStatus itself — axios does not
 // post-process an adapter's resolved value — so non-2xx responses must reject
 // with the response attached. That's what lets makePostRequest's retry/backoff
 // classify 429/5xx as retryable and surface other 4xx (e.g. invalid token) as
 // terminal, instead of handing an error body back to callers as a "success".
 // Shared by both the Capacitor and headless adapters below.
+/**
+ * @param {AxiosResponse} response
+ * @returns {AxiosResponse}
+ */
 const finalizeAdapterResponse = (response) => {
     if (response.status >= 200 && response.status < 300) return response;
-    const err = new Error(`Request failed with status code ${response.status}`);
+    const err = /** @type {Error & { response?: AxiosResponse }} */ (
+        new Error(`Request failed with status code ${response.status}`)
+    );
     err.response = response;
     throw err;
 };
@@ -30,14 +63,16 @@ const finalizeAdapterResponse = (response) => {
 // OkHttp client (Android) so we can set headers that browser fetch can't
 // (host, user-agent, etc. — the iOS-spoof in randomizer.js depends on it).
 // Lazy-loaded so Electron / CLI builds never resolve @capacitor/core.
+/** @type {AxiosAdapter | null} */
 let capacitorAdapter = null;
+/** @returns {AxiosAdapter} */
 const getCapacitorHttpAdapter = () => {
     if (capacitorAdapter) return capacitorAdapter;
     const { CapacitorHttp } = require('@capacitor/core');
     capacitorAdapter = async (config) => {
         const response = await CapacitorHttp.request({
             method: (config.method || 'get').toUpperCase(),
-            url: config.url,
+            url: /** @type {string} */ (config.url),
             headers: config.headers,
             data: config.data,
             connectTimeout: config.timeout,
@@ -67,10 +102,12 @@ const getCapacitorHttpAdapter = () => {
 // by calling globalThis.__gsResolveHeadlessHttp(id, resultJson) — where
 // resultJson is a JSON string { status, body, headers }.
 let headlessReqSeq = 0;
+/** @type {Map<number, (resultJson: string) => void>} */
 const headlessPending = new Map();
+const headlessGlobals = /** @type {typeof globalThis & HeadlessHttpGlobals} */ (globalThis);
 const ensureHeadlessResolver = () => {
-    if (globalThis.__gsResolveHeadlessHttp) return;
-    globalThis.__gsResolveHeadlessHttp = (id, resultJson) => {
+    if (headlessGlobals.__gsResolveHeadlessHttp) return;
+    headlessGlobals.__gsResolveHeadlessHttp = (id, resultJson) => {
         const cb = headlessPending.get(id);
         if (cb) {
             headlessPending.delete(id);
@@ -79,7 +116,9 @@ const ensureHeadlessResolver = () => {
     };
 };
 
+/** @type {AxiosAdapter | null} */
 let headlessAdapter = null;
+/** @returns {AxiosAdapter} */
 const getHeadlessHttpAdapter = () => {
     if (headlessAdapter) return headlessAdapter;
     ensureHeadlessResolver();
@@ -88,6 +127,7 @@ const getHeadlessHttpAdapter = () => {
             const id = ++headlessReqSeq;
             headlessPending.set(id, (resultJson) => {
                 try {
+                    /** @type {{ error?: string, status: number, body: string, headers?: Record<string, string> }} */
                     const parsed = JSON.parse(resultJson);
                     // A transport/network failure on the native side — reject so
                     // the retry layer treats it as a (retryable) no-response error.
@@ -97,6 +137,7 @@ const getHeadlessHttpAdapter = () => {
                     }
                     // The API returns JSON; parse the body so callers get an
                     // object, matching CapacitorHttp/axios. Leave non-JSON as-is.
+                    /** @type {unknown} */
                     let data = parsed.body;
                     try {
                         data = JSON.parse(parsed.body);
@@ -121,10 +162,10 @@ const getHeadlessHttpAdapter = () => {
                 }
             });
             const body = typeof config.data === 'string' ? config.data : config.data ? JSON.stringify(config.data) : '';
-            globalThis.AndroidHeadlessHttp.request(
+            headlessGlobals.AndroidHeadlessHttp.request(
                 id,
                 (config.method || 'get').toUpperCase(),
-                config.url,
+                /** @type {string} */ (config.url),
                 JSON.stringify(config.headers || {}),
                 body,
             );
@@ -147,6 +188,11 @@ const MIN_RETRY_DELAY_MS = 100;
 // retry knobs aren't in the schema, so this is the only guard against a
 // bad `set-setting apiMaxRetries -1` turning the loop into a no-op (or a
 // NaN bound that never terminates).
+/**
+ * @param {unknown} value
+ * @param {number} fallback
+ * @returns {number}
+ */
 const coerceNonNegInt = (value, fallback) => {
     if (value == null) return fallback; // undefined/null → default, not Number(null)===0
     const n = Number(value);
@@ -158,6 +204,9 @@ const coerceNonNegInt = (value, fallback) => {
  * no response (network drop), a client timeout, a 429, or any 5xx —
  * are retryable; every other 4xx (bad request, invalid token, …) is
  * a definitive answer and is not retried.
+ *
+ * @param {RequestFailure | null | undefined} error
+ * @returns {boolean}
  */
 const isRetryableError = (error) => {
     // A TypeError (or similar) means an adapter/programmer bug, not a
@@ -175,6 +224,9 @@ const isRetryableError = (error) => {
  * Server-requested cooldown in ms, read from a `retry_after` body field
  * or a `Retry-After` header (both expressed in seconds), or null when
  * the server didn't ask for one.
+ *
+ * @param {RequestFailure} error
+ * @returns {number | null}
  */
 const getRetryAfterMs = (error) => {
     const fromBody = error.response?.data?.retry_after;
@@ -199,9 +251,11 @@ const getRetryAfterMs = (error) => {
  * failure — callers continue to branch on `null`.
  *
  * @param {string} url - The API endpoint URL
- * @param {object} headers - Request headers including authentication token
- * @param {string} data - URL-encoded form data (default: empty string)
- * @returns {Promise<object|null>} - Response data or null if request failed
+ * @param {RequestHeaders} headers - Request headers including authentication token
+ * @param {string} [data] - URL-encoded form data (default: empty string)
+ * @returns {Promise<unknown>} - The parsed response body, or null if the request
+ *   failed. The body is untrusted: each endpoint wrapper casts it to the shape it
+ *   reads (all fields optional) and guards every read.
  */
 const makePostRequest = async (url, headers, data = '') => {
     const maxRetries = coerceNonNegInt(settings.getSetting('apiMaxRetries'), 3);
@@ -214,6 +268,7 @@ const makePostRequest = async (url, headers, data = '') => {
         logger.withCategory('api').apiRequest('POST', url);
 
         try {
+            /** @type {AxiosRequestConfig} */
             const requestConfig = {
                 method: 'post',
                 url,
@@ -240,7 +295,8 @@ const makePostRequest = async (url, headers, data = '') => {
             });
 
             return response.data;
-        } catch (error) {
+        } catch (caught) {
+            const error = /** @type {RequestFailure | null | undefined} */ (caught);
             const duration = Date.now() - startTime;
             const status = error?.response?.status || 'NO_RESPONSE';
 
@@ -262,7 +318,8 @@ const makePostRequest = async (url, headers, data = '') => {
             // Honor an explicit server cooldown when present, else use
             // exponential backoff with jitter. A cooldown longer than the
             // in-call cap is deferred to the next scheduled cycle.
-            const cooldownMs = getRetryAfterMs(error);
+            // isRetryableError already rejected a null/undefined failure.
+            const cooldownMs = getRetryAfterMs(/** @type {RequestFailure} */ (error));
             let delayMs;
             if (cooldownMs != null) {
                 if (cooldownMs > MAX_RETRY_DELAY_MS) return null;
@@ -290,8 +347,8 @@ const makePostRequest = async (url, headers, data = '') => {
  * These headers mimic an iOS device to ensure compatibility with the API.
  * The x-token header is populated from the provided token parameter.
  *
- * @param {string} token - Authentication token
- * @returns {object} - Headers object for API requests
+ * @param {string | undefined} token - Authentication token (undefined for login)
+ * @returns {RequestHeaders} - Headers object for API requests
  */
 const createCommonHeaders = (token) => {
     return generateRandomHeaders(token);

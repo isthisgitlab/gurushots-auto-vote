@@ -1,3 +1,4 @@
+// @ts-check
 /**
  * GuruShots Auto Voter - Join Module
  *
@@ -21,6 +22,10 @@
 import { makePostRequest } from './api-client';
 import { ENDPOINTS, createWebHeaders, makeRequireValue } from './constants';
 
+/**
+ * @import { ActionResult, Bankroll, BankrollResponse, Challenge, MemberChallengesResponse, SuccessResponse } from '../types/gurushots'
+ */
+
 const requireValue = makeRequireValue('join');
 
 /**
@@ -28,13 +33,15 @@ const requireValue = makeRequireValue('join');
  *
  * @param {string} token
  * @param {string} [filter='open'] server-side filter (the web app uses 'open')
- * @returns {Promise<Array<object>>} the challenge items, or [] on failure
+ * @returns {Promise<Challenge[]>} the challenge items, or [] on failure
  */
 const getMemberChallenges = async (token, filter = 'open') => {
     requireValue(token, 'token');
     const headers = createWebHeaders(token);
     const data = `filter=${encodeURIComponent(String(filter))}`;
-    const response = await makePostRequest(ENDPOINTS.getMemberChallenges, headers, data);
+    const response = /** @type {MemberChallengesResponse | null} */ (
+        await makePostRequest(ENDPOINTS.getMemberChallenges, headers, data)
+    );
     if (!response || !Array.isArray(response.items)) {
         return [];
     }
@@ -50,7 +57,7 @@ const getMemberChallenges = async (token, filter = 'open') => {
  * @param {string|number} challengeId
  * @param {string} token
  * @param {string} [usage='JOIN_CHALLENGE']
- * @returns {Promise<{ok: boolean, raw: object|null}>}
+ * @returns {Promise<ActionResult>}
  */
 const coinsUnlock = async (challengeId, token, usage = 'JOIN_CHALLENGE') => {
     requireValue(challengeId, 'challengeId');
@@ -60,7 +67,9 @@ const coinsUnlock = async (challengeId, token, usage = 'JOIN_CHALLENGE') => {
         `challenge_id=${encodeURIComponent(String(challengeId))}`,
         `usage=${encodeURIComponent(String(usage))}`,
     ].join('&');
-    const response = await makePostRequest(ENDPOINTS.coinsUnlock, headers, data);
+    const response = /** @type {SuccessResponse | null} */ (
+        await makePostRequest(ENDPOINTS.coinsUnlock, headers, data)
+    );
     if (!response) {
         return { ok: false, raw: null };
     }
@@ -68,6 +77,7 @@ const coinsUnlock = async (challengeId, token, usage = 'JOIN_CHALLENGE') => {
 };
 
 // Map the API's currency `type` tokens to our normalized field names.
+/** @type {Record<string, keyof Bankroll>} */
 const BANKROLL_FIELDS = {
     KEYS: 'keys',
     SWAPS: 'swaps',
@@ -84,14 +94,14 @@ const BANKROLL_FIELDS = {
  * renderer/CLI.
  *
  * @param {string} token
- * @returns {Promise<{keys:number, swaps:number, fills:number, coins:number}|null>}
+ * @returns {Promise<Bankroll|null>}
  *   null on transport failure or an unsuccessful/malformed payload (callers must
  *   distinguish this from a genuine zero balance).
  */
 const getBankroll = async (token) => {
     requireValue(token, 'token');
     const headers = createWebHeaders(token);
-    const response = await makePostRequest(ENDPOINTS.getBankroll, headers, '');
+    const response = /** @type {BankrollResponse | null} */ (await makePostRequest(ENDPOINTS.getBankroll, headers, ''));
     if (!response || response.success !== true) {
         return null;
     }
@@ -99,9 +109,11 @@ const getBankroll = async (token) => {
     if (!Array.isArray(entries)) {
         return null;
     }
+    /** @type {Bankroll} */
     const balances = { keys: 0, swaps: 0, fills: 0, coins: 0 };
     for (const entry of entries) {
-        const field = BANKROLL_FIELDS[entry?.type];
+        // An absent type looks up the key "undefined", which no currency uses.
+        const field = BANKROLL_FIELDS[/** @type {string} */ (entry?.type)];
         if (field) {
             const amount = Number(entry?.amount);
             balances[field] = Number.isFinite(amount) ? amount : 0;

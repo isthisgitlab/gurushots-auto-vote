@@ -1,3 +1,4 @@
+// @ts-check
 /**
  * GuruShots Auto Voter - Timing Primitives
  *
@@ -11,7 +12,7 @@
  * Creates a promise that resolves after the specified time
  *
  * @param {number} ms - Milliseconds to sleep
- * @returns {Promise} - Promise that resolves after the specified time
+ * @returns {Promise<void>} - Promise that resolves after the specified time
  */
 const sleep = (ms) =>
     new Promise((resolve) => {

@@ -1,3 +1,4 @@
+// @ts-check
 /**
  * Mock counterpart to api/turbo.js's apply and the real strategy's Turbo
  * mini-game (strategies/real/index.js#runTurboMiniGame).
@@ -9,6 +10,8 @@ import { simulateApiResponse, mockMethod } from '../simulate';
 /**
  * Simulate applying a won Turbo to a specific entry. The shape mirrors
  * the live /rest/set_challenge_turbo response: { ok, raw }.
+ *
+ * @type {typeof import('../../api/turbo').applyTurbo}
  */
 const applyTurbo = mockMethod(
     {
@@ -31,6 +34,8 @@ const applyTurbo = mockMethod(
  * strategies/real runTurboMiniGame result shape ({ played, correct, flipped,
  * doubleFailed, won }) so the manual-turbo IPC handler behaves the same
  * in mock mode instead of reaching the live battle endpoints.
+ *
+ * @type {typeof import('../../strategies/real').runTurboMiniGame}
  */
 const runTurboMiniGame = mockMethod(
     {

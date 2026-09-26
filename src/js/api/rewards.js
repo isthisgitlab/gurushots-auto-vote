@@ -1,3 +1,4 @@
+// @ts-check
 /**
  * Prize-claim API calls (WEB profile), captured from the web app:
  *
@@ -19,6 +20,10 @@
 import { makePostRequest } from './api-client';
 import { ENDPOINTS, createWebHeaders, makeRequireValue } from './constants';
 
+/**
+ * @import { CompletedChallenge, CompletedChallengesResponse, Mission, MissionsResponse, SuccessResponse } from '../types/gurushots'
+ */
+
 const requireValue = makeRequireValue('rewards');
 
 /**
@@ -27,13 +32,15 @@ const requireValue = makeRequireValue('rewards');
  * @param {string} token
  * @param {number} [start=0]
  * @param {number} [limit=20] the page size the web app uses
- * @returns {Promise<Array<object>>} the challenges, or [] on failure
+ * @returns {Promise<CompletedChallenge[]>} the challenges, or [] on failure
  */
 const getMyCompletedChallenges = async (token, start = 0, limit = 20) => {
     requireValue(token, 'token');
     const headers = createWebHeaders(token);
     const data = [`start=${encodeURIComponent(String(start))}`, `limit=${encodeURIComponent(String(limit))}`].join('&');
-    const response = await makePostRequest(ENDPOINTS.getMyCompletedChallenges, headers, data);
+    const response = /** @type {CompletedChallengesResponse | null} */ (
+        await makePostRequest(ENDPOINTS.getMyCompletedChallenges, headers, data)
+    );
     if (!response || !Array.isArray(response.completed_challenges)) {
         return [];
     }
@@ -52,7 +59,9 @@ const claimChallengeResources = async (challengeId, token) => {
     requireValue(token, 'token');
     const headers = createWebHeaders(token);
     const data = `challenge_id=${encodeURIComponent(String(challengeId))}`;
-    const response = await makePostRequest(ENDPOINTS.claimResources, headers, data);
+    const response = /** @type {SuccessResponse | null} */ (
+        await makePostRequest(ENDPOINTS.claimResources, headers, data)
+    );
     return response?.success === true;
 };
 
@@ -60,12 +69,14 @@ const claimChallengeResources = async (challengeId, token) => {
  * Lists the member's current missions.
  *
  * @param {string} token
- * @returns {Promise<Array<object>>} the missions, or [] on failure
+ * @returns {Promise<Mission[]>} the missions, or [] on failure
  */
 const getMyMissions = async (token) => {
     requireValue(token, 'token');
     const headers = createWebHeaders(token);
-    const response = await makePostRequest(ENDPOINTS.getMyMissions, headers, '');
+    const response = /** @type {MissionsResponse | null} */ (
+        await makePostRequest(ENDPOINTS.getMyMissions, headers, '')
+    );
     if (!response || !Array.isArray(response.list)) {
         return [];
     }
@@ -84,7 +95,9 @@ const claimMissionPrize = async (missionId, token) => {
     requireValue(token, 'token');
     const headers = createWebHeaders(token);
     const data = `mission_id=${encodeURIComponent(String(missionId))}`;
-    const response = await makePostRequest(ENDPOINTS.claimMissionPrizes, headers, data);
+    const response = /** @type {SuccessResponse | null} */ (
+        await makePostRequest(ENDPOINTS.claimMissionPrizes, headers, data)
+    );
     return response?.success === true;
 };
 

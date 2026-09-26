@@ -619,6 +619,26 @@ describe('settings facade — edge cases', () => {
             );
         });
 
+        test('a rule without a profile never reads the profile named "undefined"', () => {
+            // The higher rule names no profile, so nothing of its own decides
+            // autoJoin; a stored profile literally called "undefined" must not
+            // stand in for the missing name and swallow the warning.
+            seed({
+                challengeSettings: {
+                    globalDefaults: {},
+                    profiles: { undefined: { autoJoin: false } },
+                    titleRules: [
+                        { title: 'Sea', match: 'contains', mustIncludeTags: ['x'], shouldIncludeTags: [] },
+                        { challengeTag: 'Comm', autoJoin: true, mustIncludeTags: [], shouldIncludeTags: [] },
+                    ],
+                },
+            });
+            expect(cat.warning).toHaveBeenCalledWith(
+                expect.stringContaining('"Comm" may now also turn autoJoin on for challenges matched by "Sea"'),
+                null,
+            );
+        });
+
         test.each([
             [
                 'disjoint exact titles',

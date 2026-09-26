@@ -1,3 +1,4 @@
+// @ts-check
 /**
  * GuruShots Auto Voter - Mock Data Index
  *
@@ -30,22 +31,24 @@ const mockData = {
  * Helper function to get mock data by type and scenario
  *
  * @param {string} type - The type of mock data (auth, challenges, voting, boost, errors)
- * @param {string} scenario - The specific scenario (optional)
- * @returns {object} - The requested mock data
+ * @param {string|null} [scenario] - The specific scenario (optional)
+ * @returns {unknown} - The requested mock data
  */
 const getMockData = (type, scenario = null) => {
-    if (!mockData[type]) {
+    // Looked up by caller-supplied name, so read through a string-keyed view.
+    const byType = /** @type {Record<string, Record<string, unknown>>} */ (mockData);
+    if (!byType[type]) {
         throw new Error(`Unknown mock data type: ${type}`);
     }
 
     if (scenario) {
-        if (!mockData[type][scenario]) {
+        if (!byType[type][scenario]) {
             throw new Error(`Unknown scenario "${scenario}" for type "${type}"`);
         }
-        return mockData[type][scenario];
+        return byType[type][scenario];
     }
 
-    return mockData[type];
+    return byType[type];
 };
 
 export {

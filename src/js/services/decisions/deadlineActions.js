@@ -7,15 +7,11 @@
  * services/VotingLogic facade.
  */
 
-// Cast to any at the boundary: the settings facade isn't `// @ts-check`ed yet,
-// and its `challengeId = null` defaults make TS infer param types too narrow
-// (null) to accept the string IDs passed here. Drop the cast once settings.js
-// is typed.
-import * as settingsModule from '../../settings';
-const settings = /** @type {any} */ (settingsModule);
+import * as settings from '../../settings';
 // Single source of truth for the auto-fill schedule threshold math (no import
-// cycle: autoFill.js does not require VotingLogic). Cast for the same
-// boundary reason as settings above — autoFill.js isn't `// @ts-check`ed yet.
+// cycle: autoFill.js does not require VotingLogic). Cast to any at the
+// boundary: autoFill.js isn't `// @ts-check`ed yet, so its inferred
+// signatures are looser than this checked module accepts.
 import * as autoFillModule from '../autoFill';
 const { getNextScheduleThresholdSec, evaluateEmergencyFill, getSlotsRemaining } = /** @type {any} */ (autoFillModule);
 import { boostApplyThreshold } from '../../voting/boostWindow';

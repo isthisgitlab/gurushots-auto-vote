@@ -1,3 +1,4 @@
+// @ts-check
 /**
  * Write-side sanitization of challenge rules (the persisted `titleRules`
  * list): the size caps, the inline-override allowlist, per-rule validation of
@@ -17,6 +18,9 @@ import {
     ruleConditions,
 } from './challengeRules';
 import { normalizeProfileName, findProfileKey } from './profileStore';
+
+/** @import { ChallengeValues, TitleRule } from '../types/settings' */
+/** @import { RuleLike } from './challengeRules' */
 
 // Defensive caps on renderer-supplied rule input. The rules share the single
 // settings JSON blob with every platform, so bound both the count and the
@@ -51,8 +55,12 @@ const TITLE_RULE_INLINE_KEYS = [
  * whole rule rather than silently persist a value automation would later read.
  * An absent key means "inherit" — it is never written as a default, so a rule
  * cannot freeze today's default into storage.
+ *
+ * @param {RuleLike} rule
+ * @returns {ChallengeValues|null}
  */
 const sanitizeTitleRuleInline = (rule) => {
+    /** @type {ChallengeValues} */
     const out = {};
     for (const key of TITLE_RULE_INLINE_KEYS) {
         if (!rule || !Object.prototype.hasOwnProperty.call(rule, key)) continue;
@@ -66,21 +74,36 @@ const sanitizeTitleRuleInline = (rule) => {
     return out;
 };
 
+/**
+ * @param {string} key
+ * @param {unknown} value
+ * @returns {string[]|null}
+ */
 const _sanitizeTitleRuleTags = (key, value) => {
-    const list = (Array.isArray(value) ? value : [])
+    const list = (Array.isArray(value) ? /** @type {unknown[]} */ (value) : [])
         .filter((tag) => typeof tag === 'string')
         .map((tag) => tag.trim())
         .filter(Boolean);
     return validateSetting(key, list) ? list : null;
 };
 
-// `requested` is the caller's already-trimmed string ('' = no profile).
+/**
+ * `requested` is the caller's already-trimmed string ('' = no profile).
+ *
+ * @param {Record<string, unknown>} storedProfiles
+ * @param {string} requested
+ * @returns {string|null}
+ */
 const _canonicalTitleRuleProfile = (storedProfiles, requested) =>
     requested ? findProfileKey(storedProfiles, normalizeProfileName(requested)) : '';
 
 // Identity of a rule's match condition. "\u0000"/"\u0001" cannot occur in a
 // trimmed title or tag, so they are safe separators no user value can forge.
 // The title list is sorted so the same set in a different order is one rule.
+/**
+ * @param {RuleLike} rule
+ * @returns {string}
+ */
 const titleRuleKey = (rule) => {
     const conditions = ruleConditions(rule);
     return [
@@ -94,9 +117,15 @@ const titleRuleKey = (rule) => {
     ].join('\u0000');
 };
 
-// Trim, drop empties and case-insensitive duplicates (first spelling wins).
+/**
+ * Trim, drop empties and case-insensitive duplicates (first spelling wins).
+ *
+ * @param {RuleLike} rule
+ * @returns {string[]}
+ */
 const _sanitizeRuleTitleList = (rule) => {
     const seen = new Set();
+    /** @type {string[]} */
     const titles = [];
     for (const raw of titleRuleTitles(rule)) {
         const title = raw.trim();
@@ -111,6 +140,11 @@ const _sanitizeRuleTitleList = (rule) => {
 // A numeric condition: null = absent, false = supplied but out of range, else
 // the normalized value. Out of range is a rejection, not a silent drop —
 // dropping it would widen the rule to every challenge.
+/**
+ * @param {unknown} raw
+ * @param {(value: unknown) => number|null} normalize
+ * @returns {number|null|false}
+ */
 const _ruleNumberCondition = (raw, normalize) =>
     raw === null || raw === undefined || raw === '' ? null : (normalize(raw) ?? false);
 
@@ -118,6 +152,9 @@ const _ruleNumberCondition = (raw, normalize) =>
  * The non-title conditions of a rule, sanitized for storage: challenge tag,
  * challenge type, photo count and runtime range. Returns null when any
  * supplied value is invalid.
+ *
+ * @param {RuleLike} rule
+ * @returns {Pick<TitleRule, 'challengeTag'|'type'|'pics'|'minHours'|'maxHours'>|null}
  */
 const _sanitizeRuleClassConditions = (rule) => {
     const challengeTag = typeof rule?.challengeTag === 'string' ? rule.challengeTag.trim() : '';
@@ -129,6 +166,7 @@ const _sanitizeRuleClassConditions = (rule) => {
     if (challengeTag.length > MAX_TITLE_LENGTH || type.length > MAX_TITLE_LENGTH) return null;
     // An inverted range can never match; refuse it rather than store a dead rule.
     if (minHours !== null && maxHours !== null && minHours > maxHours) return null;
+    /** @type {Pick<TitleRule, 'challengeTag'|'type'|'pics'|'minHours'|'maxHours'>} */
     const out = {};
     if (challengeTag) out.challengeTag = challengeTag;
     if (type) out.type = type;
@@ -140,6 +178,11 @@ const _sanitizeRuleClassConditions = (rule) => {
 
 // What a rejected rule is called in the log: its first title, else its tag or
 // type, else a generic marker (a photo-count/runtime-only rule has no name).
+/**
+ * @param {RuleLike} rule
+ * @param {string|undefined} title
+ * @returns {string}
+ */
 const ruleLogLabel = (rule, title) =>
     title ||
     (typeof rule?.challengeTag === 'string' && rule.challengeTag.trim()) ||
@@ -150,6 +193,11 @@ const ruleLogLabel = (rule, title) =>
  * What a rule does when it matches — its tag lists, canonical profile name and
  * inline overrides — or `{ invalid: true, requestedProfile? }` when any part is
  * rejected (`requestedProfile` names an unknown profile reference).
+ *
+ * @param {RuleLike} rule
+ * @param {Record<string, unknown>} storedProfiles
+ * @returns {{invalid: true, requestedProfile?: string}
+ *   | {invalid: false, mustIncludeTags: string[], shouldIncludeTags: string[], profile: string|null, inline: ChallengeValues}}
  */
 const _sanitizeRuleBehaviour = (rule, storedProfiles) => {
     const mustIncludeTags = _sanitizeTitleRuleTags('mustIncludeTags', rule?.mustIncludeTags);
@@ -169,6 +217,10 @@ const _sanitizeRuleBehaviour = (rule, storedProfiles) => {
  * Sanitize one rule for storage. Returns `{ valid: false, title, requestedProfile }`
  * on rejection, `{ valid: true, rule: null }` for a no-op rule to drop, or
  * `{ valid: true, rule }` with the sanitized rule.
+ *
+ * @param {RuleLike} rule
+ * @param {Record<string, unknown>} storedProfiles
+ * @returns {{valid: false, title: string, requestedProfile?: string} | {valid: true, rule: TitleRule|null}}
  */
 const sanitizeTitleRule = (rule, storedProfiles) => {
     const titles = _sanitizeRuleTitleList(rule);
@@ -184,8 +236,9 @@ const sanitizeTitleRule = (rule, storedProfiles) => {
     }
     // An unrecognised mode is a rejection, not a silent fall back to 'exact':
     // quietly narrowing a rule the user meant to widen is the worse failure.
-    const match = rule?.match === undefined || rule?.match === null || rule?.match === '' ? 'exact' : rule.match;
-    if (!TITLE_MATCH_MODES.includes(match)) return { valid: false, title: label };
+    const rawMatch = rule?.match;
+    const match = rawMatch === undefined || rawMatch === null || rawMatch === '' ? 'exact' : rawMatch;
+    if (typeof match !== 'string' || !TITLE_MATCH_MODES.includes(match)) return { valid: false, title: label };
 
     const behaviour = _sanitizeRuleBehaviour(rule, storedProfiles);
     if (behaviour.invalid) return { valid: false, title: label, requestedProfile: behaviour.requestedProfile };
@@ -199,6 +252,7 @@ const sanitizeTitleRule = (rule, storedProfiles) => {
         return { valid: true, rule: null };
     }
 
+    /** @type {TitleRule} */
     const sanitized = { title, mustIncludeTags, shouldIncludeTags, ...inline, ...conditions };
     // `title` mirrors the first entry for single-title readers; the full list is
     // only stored when there is more than one.

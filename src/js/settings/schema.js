@@ -1658,7 +1658,7 @@ const SETTINGS_GROUPS = [
  * @param {string} key
  * @param {*} value
  * @param {Record<string, any>|null} [allSettings]
- * @param {string|null} [challengeId]
+ * @param {string|number|null} [challengeId]
  * @returns {boolean}
  */
 const validateSetting = (key, value, allSettings = null, challengeId = null) => {
@@ -1681,7 +1681,7 @@ const validateSetting = (key, value, allSettings = null, challengeId = null) => 
  * @param {string} settingKey
  * @param {*} value
  * @param {Record<string, any>|null} [allSettings]
- * @param {string|null} [challengeId]
+ * @param {string|number|null} [challengeId]
  * @returns {string|null}
  */
 const getValidationError = (settingKey, value, allSettings = null, challengeId = null) => {

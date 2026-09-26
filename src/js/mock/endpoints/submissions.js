@@ -1,3 +1,4 @@
+// @ts-check
 /**
  * Mock counterpart to api/submissions.js: the photo library, the per-photo
  * record, and the challenge submit.
@@ -16,6 +17,8 @@ import { buildLibraryPhotos, buildImageStats } from '../photoLibrary';
  * library filter by returning only items carrying that exact tag
  * (case-insensitive) — so the auto-fill search path and its
  * unfiltered fallback can both be exercised in mock mode.
+ *
+ * @type {typeof import('../../api/submissions').getEligiblePhotos}
  */
 const getEligiblePhotos = mockMethod(
     {
@@ -47,6 +50,8 @@ const getEligiblePhotos = mockMethod(
  * where the REAL popularity signals live: the library endpoint above
  * returns votes=0 and no achievements for every photo on the live API, so
  * auto-fill enriches candidates from here before ranking them.
+ *
+ * @type {typeof import('../../api/submissions').getImageData}
  */
 const getImageData = mockMethod(
     {
@@ -73,6 +78,8 @@ const getImageData = mockMethod(
 /**
  * Simulate submitting one or more photos to a challenge. Mirrors
  * /rest/submit_to_challenge; returns { ok, raw }.
+ *
+ * @type {typeof import('../../api/submissions').submitToChallenge}
  */
 const submitToChallenge = mockMethod(
     {

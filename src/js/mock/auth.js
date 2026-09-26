@@ -1,3 +1,4 @@
+// @ts-check
 /**
  * GuruShots Auto Voter - Mock Authentication Data
  *

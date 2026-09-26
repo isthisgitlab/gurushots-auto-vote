@@ -1,3 +1,4 @@
+// @ts-check
 /**
  * GuruShots Auto Voter - Boost Module
  *
@@ -7,6 +8,8 @@
 import { makePostRequest, createCommonHeaders, FORM_CONTENT_TYPE } from './api-client';
 import { ENDPOINTS } from './constants';
 import * as logger from '../logger';
+
+/** @import { SuccessResponse } from '../types/gurushots' */
 
 /**
  * POST the GuruShots boost-photo endpoint. Concentrates the form-encoded
@@ -19,6 +22,11 @@ import * as logger from '../logger';
  * encoding (space → `+`, reserved chars percent-encoded). Both callers
  * normalize their ids first (boostImage's caller stringifies and guards the
  * entry id, applyBoostToEntry maps null/undefined to ''), so values arrive as-is.
+ *
+ * @param {string} challengeId
+ * @param {string} imageId
+ * @param {string} token
+ * @returns {Promise<SuccessResponse | null>}
  */
 const _postBoost = async (challengeId, imageId, token) => {
     const data = new URLSearchParams({
@@ -29,7 +37,7 @@ const _postBoost = async (challengeId, imageId, token) => {
         ...createCommonHeaders(token),
         'content-type': FORM_CONTENT_TYPE,
     };
-    return await makePostRequest(ENDPOINTS.boostPhoto, headers, data);
+    return /** @type {SuccessResponse | null} */ (await makePostRequest(ENDPOINTS.boostPhoto, headers, data));
 };
 
 /**
@@ -40,7 +48,7 @@ const _postBoost = async (challengeId, imageId, token) => {
  * @param {string} challengeId - Challenge ID (already stringified)
  * @param {string} boostImageId - Image ID of the chosen entry
  * @param {string} token - Authentication token
- * @returns {Promise<object|null>} - API response or null if boost failed
+ * @returns {Promise<SuccessResponse|null>} - API response or null if boost failed
  */
 const boostImage = async (challengeId, boostImageId, token) => {
     const operationId = `apply-boost-${challengeId}`;
@@ -61,10 +69,10 @@ const boostImage = async (challengeId, boostImageId, token) => {
 /**
  * Applies a boost to a specific photo entry in a challenge
  *
- * @param {number} challengeId - Challenge ID
- * @param {string} imageId - Image ID to boost
+ * @param {number|string|null|undefined} challengeId - Challenge ID
+ * @param {string|null|undefined} imageId - Image ID to boost
  * @param {string} token - Authentication token
- * @returns {Promise<object|null>} - API response or null if boost failed
+ * @returns {Promise<SuccessResponse|null>} - API response or null if boost failed
  */
 const applyBoostToEntry = async (challengeId, imageId, token) => {
     const cid = String(challengeId ?? '');

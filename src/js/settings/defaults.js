@@ -1,3 +1,4 @@
+// @ts-check
 /**
  * Default settings blob and the small value helpers every settings submodule
  * shares: the environment-aware default blob, the challengeSettings container
@@ -5,16 +6,23 @@
  * cross-field validation of a challenge value set.
  */
 
-import { SETTINGS_SCHEMA, validateSetting } from './schema';
+import { SETTINGS_SCHEMA, schemaEntry, validateSetting } from './schema';
 import { getUiDefaultSettings } from './uiDefaults';
 import { getDefaultMockSetting } from './storage';
 
-// Default settings with environment-aware mock setting
+/** @import { AppSettings, ChallengeSettings, ChallengeValues } from '../types/settings' */
+
+/**
+ * Default settings with environment-aware mock setting
+ *
+ * @returns {AppSettings}
+ */
 const getDefaultSettings = () => {
     // Generate global defaults from schema
+    /** @type {ChallengeValues} */
     const globalDefaults = {};
     Object.keys(SETTINGS_SCHEMA).forEach((key) => {
-        globalDefaults[key] = SETTINGS_SCHEMA[key].default;
+        globalDefaults[key] = schemaEntry(key)?.default;
     });
 
     return {
@@ -56,6 +64,9 @@ const getDefaultSettings = () => {
 /**
  * Ensure a loaded settings object carries a challengeSettings container
  * (a hand-edited or legacy blob may lack one) and return it.
+ *
+ * @param {AppSettings} settings
+ * @returns {ChallengeSettings}
  */
 const ensureChallengeSettings = (settings) => {
     if (!settings.challengeSettings) {
@@ -68,6 +79,10 @@ const ensureChallengeSettings = (settings) => {
  * Value equality for settings comparisons. JSON-based so reference types
  * (arrays like mustIncludeTags, plain objects) compare by content — a bare
  * !== would treat every array override as "differs from default" forever.
+ *
+ * @param {unknown} a
+ * @param {unknown} b
+ * @returns {boolean}
  */
 const valuesEqual = (a, b) => JSON.stringify(a) === JSON.stringify(b);
 
@@ -75,14 +90,19 @@ const valuesEqual = (a, b) => JSON.stringify(a) === JSON.stringify(b);
  * Every schema key's effective global value: the stored global default when
  * present, else the schema default. challengeOnly keys always inherit the
  * schema default, never a stored global value (same rule as getEffectiveSetting).
+ *
+ * @param {AppSettings} settings
+ * @returns {ChallengeValues}
  */
 const globalChallengeValues = (settings) => {
+    /** @type {ChallengeValues} */
     const values = {
         ...getDefaultSettings().challengeSettings.globalDefaults,
         ...(settings.challengeSettings?.globalDefaults || {}),
     };
     for (const key of Object.keys(SETTINGS_SCHEMA)) {
-        if (SETTINGS_SCHEMA[key].challengeOnly) values[key] = SETTINGS_SCHEMA[key].default;
+        const entry = schemaEntry(key);
+        if (entry?.challengeOnly) values[key] = entry.default;
     }
     return values;
 };
@@ -91,13 +111,20 @@ const globalChallengeValues = (settings) => {
  * Validate the candidate keys of a challenge value set, plus every perChallenge
  * key that (transitively) depends on one of them, against the full effective
  * `values` as cross-field context.
+ *
+ * @param {ChallengeValues} values
+ * @param {ChallengeValues} candidates
+ * @param {string|number|null} [challengeId]
+ * @returns {boolean}
  */
 const challengeValueSetIsValid = (values, candidates, challengeId = null) => {
     const affected = new Set(Object.keys(candidates));
     let changed = true;
     while (changed) {
         changed = false;
-        for (const [key, config] of Object.entries(SETTINGS_SCHEMA)) {
+        for (const [key, config] of Object.entries(
+            /** @type {Record<string, import('./schema').SettingsSchemaEntry>} */ (SETTINGS_SCHEMA),
+        )) {
             if (affected.has(key) || !config.perChallenge || !config.dependsOn?.some((dep) => affected.has(dep))) {
                 continue;
             }
@@ -114,7 +141,7 @@ const challengeValueSetIsValid = (values, candidates, challengeId = null) => {
     }
 
     return Array.from(affected).every((key) => {
-        const config = SETTINGS_SCHEMA[key];
+        const config = schemaEntry(key);
         if (!config?.perChallenge) return true;
         // A disabled inherited final-window setting is dormant. Explicitly
         // supplied final-window values still validate before being stored.

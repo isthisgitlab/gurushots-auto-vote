@@ -1,3 +1,4 @@
+// @ts-check
 /**
  * Settings facade — the only module callers import. It re-exports the public
  * surface of the internal ./settings/* modules:

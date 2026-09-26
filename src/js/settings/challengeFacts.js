@@ -1,3 +1,4 @@
+// @ts-check
 /**
  * Process-local cache of the latest active-challenge list: id -> title and
  * id -> match facts (tags, type, photo count, start/close time). Sole owner of
@@ -7,10 +8,13 @@
 
 import { MAX_TITLE_RULES, MAX_TITLE_LENGTH } from './titleRuleSanitize';
 
+/** @import { AppSettings, ChallengeFacts, LooseRecord, RuleMatchChallenge } from '../types/settings' */
+
 // Current id→title observations are process-local. Real API responses also
 // persist first-seen title pins, but this cache is what lets the same resolver
 // work in mock mode without writing mock ids into the user's real settings.
 // Replacing the whole map on each successful fetch also drops stale ids.
+/** @type {Map<string, string|null>} */
 let activeChallengeTitles = new Map();
 
 // Parallel id -> match-facts cache (tags, type, photo count, start/close time),
@@ -19,13 +23,22 @@ let activeChallengeTitles = new Map();
 // handful of tags (the live vocabulary is Exhibition / Comm / No comm / Turbo /
 // Magazine / "special N pic" / "N photos").
 const MAX_CHALLENGE_TAGS = 24;
+/** @type {Map<string, ChallengeFacts>} */
 let activeChallengeFacts = new Map();
 
+/**
+ * @param {unknown} value
+ * @returns {number|null}
+ */
 const _finiteOrNull = (value) => (typeof value === 'number' && Number.isFinite(value) ? value : null);
 
 // The usable title of one observation, or null for an unusable/over-length one.
 // The explicit miss keeps a truncated stored pin from being used as an
 // apparently exact fallback.
+/**
+ * @param {LooseRecord} challenge
+ * @returns {string|null}
+ */
 const _observedTitle = (challenge) => {
     const title = typeof challenge?.title === 'string' ? challenge.title.trim() : '';
     return title && title.length <= MAX_TITLE_LENGTH ? title : null;
@@ -34,12 +47,20 @@ const _observedTitle = (challenge) => {
 // The bounded match facts of one observation. The per-challenge tag list is
 // bounded the same way titles are: an anomalous payload must not park an
 // unbounded array in memory.
+/**
+ * @param {LooseRecord} challenge
+ * @returns {ChallengeFacts}
+ */
 const _observedFacts = (challenge) => {
     const type = typeof challenge?.type === 'string' ? challenge.type.trim() : '';
+    const tags = challenge?.tags;
     return {
-        tags: (Array.isArray(challenge?.tags) ? challenge.tags : [])
+        tags: (Array.isArray(tags) ? /** @type {unknown[]} */ (tags) : [])
             .slice(0, MAX_CHALLENGE_TAGS)
-            .filter((tag) => typeof tag === 'string' && tag.trim() !== '' && tag.length <= MAX_TITLE_LENGTH)
+            .filter(
+                /** @returns {tag is string} */
+                (tag) => typeof tag === 'string' && tag.trim() !== '' && tag.length <= MAX_TITLE_LENGTH,
+            )
             .map((tag) => tag.trim()),
         type: type.length <= MAX_TITLE_LENGTH ? type : '',
         max_photo_submits: _finiteOrNull(challenge?.max_photo_submits),
@@ -58,12 +79,17 @@ const _observedFacts = (challenge) => {
  * pin exists to defeat a server-side RENAME mid-challenge, while facts are only
  * needed to resolve a rule for a challenge in the current list. An in-memory
  * map costs no settings-file growth and cannot go stale across restarts.
+ *
+ * @param {unknown} challenges
+ * @returns {boolean}
  */
 const rememberChallengeTitles = (challenges) => {
     if (!Array.isArray(challenges)) return false;
+    /** @type {Map<string, string|null>} */
     const next = new Map();
+    /** @type {Map<string, ChallengeFacts>} */
     const nextFacts = new Map();
-    for (const challenge of challenges.slice(0, MAX_TITLE_RULES)) {
+    for (const challenge of /** @type {LooseRecord[]} */ (challenges.slice(0, MAX_TITLE_RULES))) {
         if (challenge?.id === null || challenge?.id === undefined) continue;
         const id = String(challenge.id);
         if (!id || next.has(id)) continue;
@@ -75,14 +101,28 @@ const rememberChallengeTitles = (challenges) => {
     return true;
 };
 
+/**
+ * @param {unknown} challengeId
+ * @returns {string}
+ */
 const _challengeIdKey = (challengeId) => (challengeId === null || challengeId === undefined ? '' : String(challengeId));
 
-/** The remembered match facts for an id, or an empty-tags object when unknown. */
+/**
+ * The remembered match facts for an id, or an empty-tags object when unknown.
+ *
+ * @param {unknown} challengeId
+ * @returns {ChallengeFacts}
+ */
 const factsForChallengeId = (challengeId) => {
     const id = _challengeIdKey(challengeId);
     return (id && activeChallengeFacts.get(id)) || { tags: [] };
 };
 
+/**
+ * @param {AppSettings} settings
+ * @param {unknown} challengeId
+ * @returns {string}
+ */
 const _titleForChallengeId = (settings, challengeId) => {
     const id = _challengeIdKey(challengeId);
     if (!id) return '';
@@ -96,7 +136,13 @@ const _titleForChallengeId = (settings, challengeId) => {
         : '';
 };
 
-/** The rule-match target for an id-only caller: its title plus remembered facts. */
+/**
+ * The rule-match target for an id-only caller: its title plus remembered facts.
+ *
+ * @param {AppSettings} settings
+ * @param {unknown} challengeId
+ * @returns {RuleMatchChallenge}
+ */
 const challengeTargetForId = (settings, challengeId) => ({
     ...factsForChallengeId(challengeId),
     title: _titleForChallengeId(settings, challengeId),

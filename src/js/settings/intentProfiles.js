@@ -1,3 +1,4 @@
+// @ts-check
 /**
  * Curated "intent" presets, seeded into the named-profiles system on first
  * run (see settings.js `seedIntentProfiles`). Deliberately free of any
@@ -19,6 +20,16 @@
 // Sentinel-family note: exposureTarget / finalWindowExposureTarget are family 2
 // (0 = "follow the trigger", rule still active); every *Time / *Fill value is
 // family 1 (0 = off). These bundles never conflate the two.
+/**
+ * @typedef {object} IntentProfile
+ * @property {string} id
+ * @property {string} name
+ * @property {string} nameKey
+ * @property {string} descKey
+ * @property {Record<string, unknown>} values
+ */
+
+/** @type {IntentProfile[]} */
 const INTENT_PROFILES = [
     {
         id: 'justParticipate',
@@ -76,9 +87,18 @@ const INTENT_PROFILES = [
     },
 ];
 
+/**
+ * @param {unknown} name
+ * @returns {string}
+ */
 const _norm = (name) => (typeof name === 'string' ? name.trim().toLowerCase() : '');
 
-/** The intent whose stored name matches `name` (trim+lowercase), or null. */
+/**
+ * The intent whose stored name matches `name` (trim+lowercase), or null.
+ *
+ * @param {unknown} name
+ * @returns {IntentProfile|null}
+ */
 const getIntentByName = (name) => {
     const n = _norm(name);
     if (!n) return null;
@@ -89,12 +109,17 @@ const getIntentByName = (name) => {
  * True when a stored profile's values still equal the canonical intent bundle,
  * i.e. the user hasn't edited it. Compares the union of keys so an added or
  * removed key counts as "modified".
+ *
+ * @param {IntentProfile|null|undefined} intent
+ * @param {unknown} storedValues
+ * @returns {boolean}
  */
 const intentValuesMatch = (intent, storedValues) => {
     if (!intent || !storedValues || typeof storedValues !== 'object') return false;
-    const keys = new Set([...Object.keys(intent.values), ...Object.keys(storedValues)]);
+    const stored = /** @type {Record<string, unknown>} */ (storedValues);
+    const keys = new Set([...Object.keys(intent.values), ...Object.keys(stored)]);
     for (const key of keys) {
-        if (intent.values[key] !== storedValues[key]) return false;
+        if (intent.values[key] !== stored[key]) return false;
     }
     return true;
 };

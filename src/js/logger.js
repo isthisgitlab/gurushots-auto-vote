@@ -1,8 +1,32 @@
+// @ts-check
 import * as fs from 'node:fs';
 import * as path from 'node:path';
 import * as runtime from './runtime';
 import { formatTimeHMS } from './dateFormat';
 import { oneLine } from './format/logSafe';
+
+/** @typedef {'DEBUG' | 'INFO' | 'WARN' | 'ERROR'} LogLevel */
+/** @typedef {keyof typeof colors} ColorName */
+
+/**
+ * One ring-buffer entry (getRecentLogs). `data` is the sanitized copy.
+ * @typedef {{
+ *   seq: number,
+ *   level: LogLevel,
+ *   context: string,
+ *   category: string,
+ *   timestamp: string,
+ *   message: string,
+ *   data: unknown,
+ * }} LogEntry
+ */
+
+/**
+ * The GUI fan-out payload; `timestamp` is the HH:MM:SS display time.
+ * @typedef {Omit<LogEntry, 'data'>} GuiLogEntry
+ */
+
+/** @typedef {(entry: GuiLogEntry) => void} GuiLogSink */
 
 // ANSI color codes for CLI output (referenced via bracket notation in formatConsoleMessage)
 const colors = {
@@ -20,8 +44,8 @@ const colors = {
 };
 
 // Check if we're actually running in an Electron app context
-// process.type will be 'renderer' or 'main' in Electron apps
-const isElectronApp = process.type === 'renderer' || process.type === 'main';
+// process.type will be 'renderer' or 'browser' (the main process) in Electron apps
+const isElectronApp = process.type === 'renderer' || process.type === 'browser';
 
 // Runtime owns the single implementation of source-detection, app naming,
 // and user-data resolution — logger re-exports isSourceCode/getAppName
@@ -42,7 +66,7 @@ try {
 } catch (err) {
     // Browser / Capacitor context — fs is a require shim. Logger falls
     // back to console output only; in-app log streaming uses sendLogToGUI.
-    console.debug('[logger] fs not available; skipping file-based logging:', err.message);
+    console.debug('[logger] fs not available; skipping file-based logging:', /** @type {Error} */ (err).message);
     logsDir = '';
 }
 
@@ -61,6 +85,10 @@ const getCurrentDate = () => {
 };
 
 // Get log file paths for current date
+/**
+ * @param {string} [date] - YYYY-MM-DD
+ * @returns {{ error: string, app: string, api: string, settings: string }}
+ */
 const getLogFilePaths = (date = getCurrentDate()) => {
     return {
         error: path.join(logsDir, `errors-${date}.log`),
@@ -71,6 +99,7 @@ const getLogFilePaths = (date = getCurrentDate()) => {
 };
 
 // Per-log-prefix retention rules: { days, maxMB }.
+/** @type {Record<string, { days: number, maxMB: number }>} */
 const LOG_RETENTION = {
     errors: { days: 30, maxMB: 10 },
     app: { days: 7, maxMB: 50 },
@@ -79,12 +108,21 @@ const LOG_RETENTION = {
 };
 
 // Parse date from filename (e.g., "errors-2025-07-28.log" -> "2025-07-28")
+/**
+ * @param {string} filename
+ * @returns {string | null}
+ */
 const parseDateFromFilename = (filename) => {
     const match = filename.match(/(errors|app|api|settings)-(\d{4}-\d{2}-\d{2})\.log$/);
     return match ? match[2] : null;
 };
 
 // Check if a date is older than specified days
+/**
+ * @param {string} dateString
+ * @param {number} days
+ * @returns {boolean}
+ */
 const isDateOlderThan = (dateString, days) => {
     const fileDate = new Date(dateString);
     const cutoffDate = new Date();
@@ -146,10 +184,12 @@ const cleanupOldLogs = () => {
 };
 
 // Context override for explicit context setting
+/** @type {string | null} */
 let contextOverride = null;
 
 /**
  * Set explicit context override (for IPC calls from GUI)
+ * @param {string} context
  */
 const setContext = (context) => {
     contextOverride = context;
@@ -164,6 +204,7 @@ const clearContext = () => {
 
 /**
  * Get context identifier (CLI/GUI)
+ * @returns {string}
  */
 const getContext = () => {
     // Use explicit override if set
@@ -188,6 +229,7 @@ const getContext = () => {
 const getTimeString = () => formatTimeHMS();
 
 // Severity colors — strict 4-level set.
+/** @type {Record<LogLevel, ColorName>} */
 const LEVEL_COLORS = {
     DEBUG: 'gray',
     INFO: 'blue',
@@ -198,17 +240,28 @@ const LEVEL_COLORS = {
 // Resolve the GUI fan-out sink. Electron main sets global.sendLogToGUI and
 // the Capacitor bridge sets globalThis.sendLogToGUI; in Node `global` IS
 // `globalThis`, so one lookup covers both surfaces.
-const resolveGuiSink = () => globalThis.sendLogToGUI || null;
+/** @returns {GuiLogSink | null} */
+const resolveGuiSink = () =>
+    /** @type {typeof globalThis & { sendLogToGUI?: GuiLogSink }} */ (globalThis).sendLogToGUI || null;
 
 /**
  * Wrap text in an ANSI color. Only the console line is colored — the GUI
  * sink and the log files receive the plain message.
+ * @param {string} text
+ * @param {ColorName} color
+ * @returns {string}
  */
 const colorize = (text, color) => `${colors[color]}${text}${colors.reset}`;
 
 /**
  * Format console output. Fixed-column order:
  *   [timestamp] [LEVEL] [CONTEXT] [category] message
+ * @param {LogLevel} level
+ * @param {string} message
+ * @param {string} context
+ * @param {string} timestamp
+ * @param {string} category
+ * @returns {string}
  */
 const formatConsoleMessage = (level, message, context, timestamp, category) => {
     const color = LEVEL_COLORS[level] || 'white';
@@ -230,7 +283,27 @@ const SENSITIVE_KEY_RE =
 const REDACTED = '[REDACTED]';
 const MAX_SANITIZE_DEPTH = 6;
 
-const sanitizeForLog = (value, depth = 0, seen = new WeakSet()) => {
+/**
+ * Copy of `value` with sensitive keys redacted, depth-bounded and cycle-safe.
+ * A top-level plain object comes back as a plain object.
+ * @overload
+ * @param {Record<string, unknown>} value
+ * @returns {Record<string, unknown>}
+ */
+/**
+ * @overload
+ * @param {unknown} value
+ * @param {number} [depth]
+ * @param {WeakSet<object>} [seen]
+ * @returns {unknown}
+ */
+/**
+ * @param {unknown} value
+ * @param {number} [depth]
+ * @param {WeakSet<object>} [seen]
+ * @returns {unknown}
+ */
+function sanitizeForLog(value, depth = 0, seen = new WeakSet()) {
     if (value === null || typeof value !== 'object') return value;
     if (depth >= MAX_SANITIZE_DEPTH) return '[Object]';
     if (seen.has(value)) return '[Circular]';
@@ -240,22 +313,29 @@ const sanitizeForLog = (value, depth = 0, seen = new WeakSet()) => {
         return value.map((item) => sanitizeForLog(item, depth + 1, seen));
     }
 
+    /** @type {Record<string, unknown>} */
     const out = {};
-    for (const key of Object.keys(value)) {
+    const record = /** @type {Record<string, unknown>} */ (value);
+    for (const key of Object.keys(record)) {
         if (SENSITIVE_KEY_RE.test(key)) {
             out[key] = REDACTED;
         } else {
-            out[key] = sanitizeForLog(value[key], depth + 1, seen);
+            out[key] = sanitizeForLog(record[key], depth + 1, seen);
         }
     }
     return out;
-};
+}
 
 // Bounds an untrusted string before it is interpolated into a log line:
 // CR/LF/tab collapse to spaces (a newline would otherwise forge a synthetic
 // log line in the plain-text file) and the result is truncated. Shared by the
 // IPC shell (actions.handlers) and the core services (challengeTitlePin) so
 // both sides sanitize identically.
+/**
+ * @param {unknown} value
+ * @param {number} [maxLength]
+ * @returns {string}
+ */
 const sanitizeLogString = (value, maxLength = 200) =>
     String(value ?? '')
         .replace(/[\r\n\t]/g, ' ')
@@ -272,21 +352,41 @@ const sanitizeLogString = (value, maxLength = 200) =>
 const SENSITIVE_MSG_RE =
     /\b(token|auth[_-]?token|access[_-]?token|refresh[_-]?token|bearer|password|api[_-]?key|secret|cookie|authorization|x[_-]?auth[_-]?token|x[_-]?token)\b(\s*[:=]\s*)("[^"]*"|'[^']*'|\S+)/gi;
 
-const redactMessage = (message) => {
+/**
+ * @overload
+ * @param {string} message
+ * @returns {string}
+ */
+/**
+ * @overload
+ * @param {unknown} message
+ * @returns {unknown}
+ */
+/**
+ * @param {unknown} message
+ * @returns {unknown}
+ */
+function redactMessage(message) {
     if (typeof message !== 'string') return message;
     return message.replace(SENSITIVE_MSG_RE, (_match, key, sep) => `${key}${sep}${REDACTED}`);
-};
+}
 
 // Ring buffer of recent log entries — drives the GUI Logs page on mount
 // so users see the backlog since app start instead of "Waiting...". The
 // monotonic seq lets the renderer de-dupe live messages that race the
 // backlog fetch.
 const MAX_RECENT = 1000;
+/** @type {LogEntry[]} */
 const recentLogs = [];
 let nextSeq = 1;
 
 // Routes a log entry to the appropriate disk file. ERROR always wins
 // over category-based routing so errors stay co-located across domains.
+/**
+ * @param {LogLevel} level
+ * @param {string} category
+ * @returns {string}
+ */
 const routeLogFile = (level, category) => {
     if (level === 'ERROR') return currentLogFiles.error;
     if (category === 'api') return currentLogFiles.api;
@@ -300,6 +400,10 @@ const routeLogFile = (level, category) => {
  * Emits to ring buffer, disk (when fs is available), console, and the
  * GUI IPC fan-out (when wired). Sanitizes data for disk; sends raw to
  * the GUI which renders it.
+ * @param {LogLevel} level
+ * @param {string} message
+ * @param {unknown} [data]
+ * @param {string | null} [category]
  */
 const writeLog = (level, message, data = null, category = null) => {
     try {
@@ -370,8 +474,16 @@ const writeLog = (level, message, data = null, category = null) => {
  * the default log). Failures always emit at ERROR regardless of start
  * level — a real bug should never be silently swallowed.
  */
+/** @type {Map<string, { startTime: number, message: string, level: LogLevel, category: string | null }>} */
 const operations = new Map();
 
+/**
+ * @param {string} operationId
+ * @param {string} message
+ * @param {LogLevel} [level]
+ * @param {string | null} [category]
+ * @returns {number} the start time (ms)
+ */
 const startOperation = (operationId, message, level = 'INFO', category = null) => {
     const startTime = Date.now();
     operations.set(operationId, { startTime, message, level, category });
@@ -379,6 +491,12 @@ const startOperation = (operationId, message, level = 'INFO', category = null) =
     return startTime;
 };
 
+/**
+ * @param {string} operationId
+ * @param {string | null} [successMessage]
+ * @param {string | null} [errorMessage] - non-empty marks the operation failed
+ * @returns {number | undefined} the duration (ms), or undefined for an unknown id
+ */
 const endOperation = (operationId, successMessage = null, errorMessage = null) => {
     const operation = operations.get(operationId);
     if (!operation) return;
@@ -397,7 +515,13 @@ const endOperation = (operationId, successMessage = null, errorMessage = null) =
     return duration;
 };
 
-/** Build a progress message with optional [bar] suffix. */
+/**
+ * Build a progress message with optional [bar] suffix.
+ * @param {string} message
+ * @param {number | null} current
+ * @param {number | null} total
+ * @returns {string}
+ */
 const buildProgressMessage = (message, current, total) => {
     if (current === null || total === null) return message;
     const percentage = Math.round((current / total) * 100);
@@ -409,6 +533,7 @@ const buildProgressMessage = (message, current, total) => {
 cleanupOldLogs();
 
 // Set up periodic cleanup (every hour) only in actual application contexts
+/** @type {ReturnType<typeof setInterval> | undefined} */
 let cleanupInterval;
 if (isElectronApp || startedViaCli) {
     cleanupInterval = setInterval(cleanupOldLogs, 60 * 60 * 1000); // 1 hour
@@ -456,26 +581,55 @@ const apiOrDebugEnabled = () => isSourceCode();
 
 // Export logger functions
 // Basic logging methods
+/** @type {(message: string, data?: unknown, category?: string | null) => void} */
 export const error = (message, data, category) => writeLog('ERROR', message, data, category);
+/** @type {(message: string, data?: unknown, category?: string | null) => void} */
 export const info = (message, data, category) => writeLog('INFO', message, data, category);
+/** @type {(message: string, data?: unknown, category?: string | null) => void} */
 export const debug = (message, data, category) => {
     if (apiOrDebugEnabled()) writeLog('DEBUG', message, data, category);
 };
+/** @type {(message: string, data?: unknown, category?: string | null) => void} */
 export const api = (message, data, category = 'api') => {
     if (apiOrDebugEnabled()) writeLog('INFO', message, data, category);
 };
 // Enhanced logging methods
+/** @type {(message: string, data?: unknown, duration?: number | null, category?: string | null) => void} */
 export const success = (message, data = null, duration = null, category = null) => {
     const suffix = duration !== null ? ` (${duration}ms)` : '';
     writeLog('INFO', `✅ ${message}${suffix}`, data, category);
 };
+/** @type {(message: string, data?: unknown, category?: string | null) => void} */
 export const warning = (message, data = null, category = null) => {
     writeLog('WARN', `⚠️ ${message}`, data, category);
 };
+/** @type {(message: string, current?: number | null, total?: number | null) => void} */
 export const progress = (message, current = null, total = null) => {
     writeLog('INFO', buildProgressMessage(message, current, total), null, null);
 };
+
+/**
+ * A logger bound to one category (withCategory).
+ * @typedef {{
+ *   info: (message: string, data?: unknown) => void,
+ *   error: (message: string, data?: unknown) => void,
+ *   debug: (message: string, data?: unknown) => void,
+ *   api: (message: string, data?: unknown) => void,
+ *   apiRequest: (method: string, url: string, duration?: number | null) => void,
+ *   apiResponse: (method: string, url: string, status: number, duration?: number | null) => void,
+ *   success: (message: string, data?: unknown, duration?: number | null) => void,
+ *   warning: (message: string, data?: unknown) => void,
+ *   progress: (message: string, current?: number | null, total?: number | null) => void,
+ *   startOperation: (operationId: string, message: string, level?: LogLevel) => number,
+ *   endOperation: typeof endOperation,
+ * }} CategoryLogger
+ */
+
 // Category logging - creates a logger bound to a category
+/**
+ * @param {string} category
+ * @returns {CategoryLogger}
+ */
 export const withCategory = (category) => ({
     info: (message, data) => writeLog('INFO', message, data, category),
     error: (message, data) => writeLog('ERROR', message, data, category),
@@ -508,11 +662,13 @@ export const withCategory = (category) => ({
     endOperation,
 });
 // API-specific logging with timing (top-level convenience)
+/** @type {(method: string, url: string, duration?: number | null) => void} */
 export const apiRequest = (method, url, duration = null) => {
     if (!apiOrDebugEnabled()) return;
     const suffix = duration !== null ? ` (${duration}ms)` : '';
     writeLog('INFO', `🌐 REQUEST: ${method} ${url}${suffix}`, null, 'api');
 };
+/** @type {(method: string, url: string, status: number, duration?: number | null) => void} */
 export const apiResponse = (method, url, status, duration = null) => {
     if (!apiOrDebugEnabled()) return;
     const statusEmoji = status >= 200 && status < 300 ? '✅' : '❌';
@@ -524,6 +680,11 @@ export const getRecentLogs = () => recentLogs.slice();
 // Formats a challenge object as the standard log prefix
 // `[Challenge {id}: {title}]`. Pass the whole challenge object or
 // (id, title) directly; missing fields render as 'unknown'.
+/**
+ * @param {{ id?: unknown, title?: unknown } | string | number | null | undefined} challengeOrId
+ * @param {unknown} [title]
+ * @returns {string}
+ */
 export const challengeTag = (challengeOrId, title) => {
     if (challengeOrId && typeof challengeOrId === 'object') {
         const id = challengeOrId.id ?? 'unknown';
@@ -537,6 +698,7 @@ export const getLogFile = () => currentLogFiles.app;
 export const getErrorLogFile = () => currentLogFiles.error;
 export const getApiLogFile = () => currentLogFiles.api;
 export const getSettingsLogFile = () => currentLogFiles.settings;
+/** @param {string} date - YYYY-MM-DD */
 export const getLogFileForDate = (date) => getLogFilePaths(date);
 export const isCliMode = () => cliMode;
 export const isDevMode = () => devMode;

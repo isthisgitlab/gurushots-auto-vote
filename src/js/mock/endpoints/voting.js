@@ -1,3 +1,4 @@
+// @ts-check
 /**
  * Mock counterpart to api/voting.js: session-stable vote images and a vote
  * submit that records the pre-vote exposure in metadata like the real one.
@@ -10,8 +11,14 @@ import { simulateApiResponse, simulateApiError, mockMethod } from '../simulate';
 import { getSessionCache } from '../sessionCache';
 import * as metadata from '../../metadata';
 
+/** @import { Challenge } from '../../types/gurushots' */
+
 /**
- * Simulate getting vote images
+ * Simulate getting vote images. The generated set carries only the
+ * challenge's id, title and url, so it is typed as the generator's output
+ * rather than the real VoteImagesResponse.
+ *
+ * @type {(challenge: Challenge, token: string) => Promise<ReturnType<typeof voting.generateMockVoteImages> | null>}
  */
 const getVoteImages = mockMethod(
     {
@@ -26,7 +33,8 @@ const getVoteImages = mockMethod(
     },
     async (challenge) => {
         const sessionMockCache = getSessionCache();
-        const challengeUrl = challenge.url;
+        // Every mock challenge carries a url.
+        const challengeUrl = /** @type {string} */ (challenge.url);
         const cacheKey = `${challengeUrl}-${challenge.id}`;
 
         // Use cached vote images for session stability
@@ -43,7 +51,10 @@ const getVoteImages = mockMethod(
             logger.withCategory('voting').debug(`Using cached vote images for ${challenge.title}`, null);
         }
 
-        const cachedVoteImages = sessionMockCache.voteImages.get(cacheKey);
+        // Present: stored above when it was missing.
+        const cachedVoteImages = /** @type {ReturnType<typeof voting.generateMockVoteImages>} */ (
+            sessionMockCache.voteImages.get(cacheKey)
+        );
         logger.withCategory('voting').debug(`Returning mock vote images: ${cachedVoteImages.images.length}`, null);
         return simulateApiResponse(cachedVoteImages, 1200);
     },
@@ -51,6 +62,8 @@ const getVoteImages = mockMethod(
 
 /**
  * Simulate submitting votes
+ *
+ * @type {typeof import('../../api/voting').submitVotes}
  */
 const submitVotes = mockMethod(
     {
@@ -113,10 +126,12 @@ const submitVotes = mockMethod(
                 logger
                     .withCategory('voting')
                     .debug(
-                        `Error updating mock metadata for challenge ${voteImages.challenge.id}: ${error.message}`,
+                        `Error updating mock metadata for challenge ${voteImages.challenge.id}: ${/** @type {Error} */ (error).message}`,
                         null,
                     );
-                logger.withCategory('voting').error(`Error updating mock metadata: ${error.message}`, null);
+                logger
+                    .withCategory('voting')
+                    .error(`Error updating mock metadata: ${/** @type {Error} */ (error).message}`, null);
             }
 
             return simulateApiResponse(voting.mockVoteSubmissionSuccess, 2000);

@@ -1,3 +1,4 @@
+// @ts-check
 /**
  * Log-safety formatting for untrusted values.
  *
@@ -36,7 +37,7 @@ const oneLine = (value) => String(value).replace(/[\r\n\v\f\u0085\u2028\u2029]+/
  */
 const failureText = (error) => {
     const message = /** @type {{ message?: unknown } | null | undefined} */ (error)?.message;
-    return (message && String(message)) || String(error ?? '') || 'unknown error';
+    return (message ? String(message) : '') || String(error ?? '') || 'unknown error';
 };
 
 export { oneLine, failureText };

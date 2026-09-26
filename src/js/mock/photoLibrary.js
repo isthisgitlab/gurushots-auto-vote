@@ -1,9 +1,12 @@
+// @ts-check
 /**
  * GuruShots Auto Voter - Mock photo library fixtures
  *
  * The member's challenge-eligible library that the mock submissions and tag
  * endpoints (mock/endpoints/submissions.js, mock/endpoints/tags.js) serve.
  */
+
+/** @import { LibraryPhoto } from '../types/gurushots' */
 
 // The mock library's label sets, hoisted so the tag vocabulary below is DERIVED
 // from them instead of hand-maintained alongside them — a second list that must
@@ -40,7 +43,7 @@ const MOCK_LIBRARY_TAGS = Array.from(
  * here too.)
  *
  * @param {number} now - epoch seconds the upload dates are relative to
- * @returns {Array<object>}
+ * @returns {Array<LibraryPhoto & { labels: string[] }>}
  */
 const buildLibraryPhotos = (now) => [
     {

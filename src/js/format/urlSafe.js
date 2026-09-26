@@ -1,3 +1,4 @@
+// @ts-check
 /**
  * Shared external-URL safety gate.
  *

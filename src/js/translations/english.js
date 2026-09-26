@@ -1,3 +1,4 @@
+// @ts-check
 // English translations for GuruShots Auto Vote
 // Common/shared translations
 export const common = {

@@ -242,6 +242,13 @@ const scenarioDocument = z.strictObject({
 });
 
 /**
+ * A validated scenario document: the zod-parsed shape, every rule carrying an
+ * id once validateScenario has run.
+ *
+ * @typedef {z.infer<typeof scenarioDocument>} ScenarioDocument
+ */
+
+/**
  * `['phases', 'buildup', 'rules', 1, 'do', 0]` → `phases.buildup.rules[1].do[0]`.
  *
  * @param {ReadonlyArray<PropertyKey>} path
@@ -425,7 +432,7 @@ const semanticIssues = (doc, globalDefaults) => {
  *
  * @param {unknown} input
  * @param {Record<string, unknown>} globalDefaults - the stored global challenge defaults
- * @returns {{ok: true, scenario: any} | {ok: false, issues: ScenarioIssue[]}}
+ * @returns {{ok: true, scenario: ScenarioDocument} | {ok: false, issues: ScenarioIssue[]}}
  */
 const validateScenario = (input, globalDefaults) => {
     const parsed = scenarioDocument.safeParse(input);

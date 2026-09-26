@@ -1,3 +1,4 @@
+// @ts-check
 /**
  * GuruShots Auto Voter - Authentication Module
  *
@@ -9,6 +10,8 @@ import { makePostRequest, createCommonHeaders, FORM_CONTENT_TYPE } from './api-c
 import { ENDPOINTS } from './constants';
 import * as logger from '../logger';
 
+/** @import { LoginResponse } from '../types/gurushots' */
+
 /**
  * Authenticates with GuruShots and obtains an authentication token
  *
@@ -19,7 +22,7 @@ import * as logger from '../logger';
  *
  * @param {string} email - User's email address
  * @param {string} password - User's password
- * @returns {Promise<object|null>} - Response data containing token or null if login failed
+ * @returns {Promise<LoginResponse|null>} - Response data containing token or null if login failed
  */
 const authenticate = async (email, password) => {
     logger.withCategory('authentication').info('Starting authentication...', null);
@@ -38,7 +41,7 @@ const authenticate = async (email, password) => {
     // Routed through makePostRequest so the CapacitorHttp adapter applies on
     // Android — the iOS-spoof headers in randomizer.js (host, user-agent) are
     // forbidden in browser fetch and only survive via native OkHttp.
-    const responseData = await makePostRequest(ENDPOINTS.signup, headers, data);
+    const responseData = /** @type {LoginResponse | null} */ (await makePostRequest(ENDPOINTS.signup, headers, data));
 
     if (responseData) {
         logger.withCategory('authentication').success('Authentication successful', null, null);

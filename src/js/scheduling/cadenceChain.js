@@ -1,3 +1,4 @@
+// @ts-check
 /**
  * Shared autovote cadence chain — the recursive "decide delay → arm timer →
  * run cycle → re-arm" loop both schedulers run (runScheduler.js for
@@ -19,6 +20,20 @@
 import { getRandomCheckFrequencyMs, anchoredWaitMs, MIN_CYCLE_GAP_MS, OFFLINE_RETRY_MS } from './randomDelay';
 import { computeNextCycleDelayMs } from './thresholdWindow';
 import { DEFAULT_TIMEZONE } from '../settings/uiDefaults';
+
+/** @import { ActiveChallengesResponse, Challenge } from '../types/gurushots' */
+/** @import { CadenceDecision, CadenceMode } from './thresholdWindow' */
+
+/**
+ * The host's single timer-handle slot value.
+ * @typedef {ReturnType<typeof setTimeout>} TimerHandle
+ */
+
+/**
+ * The fields of a FRESH settings snapshot the chain reads (hosts hand over their
+ * whole settings blob; `token` is what the GUI's fetchChallenges reads off it).
+ * @typedef {{timezone?: string, checkFrequencyMin?: unknown, checkFrequencyMax?: unknown, token?: string}} CadenceSettings
+ */
 
 /**
  * Canonical warning emitted when deciding the next delay fails and the chain
@@ -62,6 +77,11 @@ const OVERSLEEP_ALWAYS_MS = 5 * 60_000;
 // constants so the Android headless loop can share it without importing the
 // chain; imported above and re-exported below for callers/tests.
 
+/**
+ * @param {number} waitMs - the delay that was armed
+ * @param {number} actualMs - how long the timer actually took to fire
+ * @returns {number} how late it fired, or 0 when that is within tolerance
+ */
 const oversleptBy = (waitMs, actualMs) => {
     const lateMs = actualMs - waitMs;
     if (lateMs <= OVERSLEEP_ABSOLUTE_MS) return 0;
@@ -93,7 +113,7 @@ const formatOversleptMessage = (lateMs, waitMs) =>
  * synchronous throw and an async rejection are both swallowed, and the hook is
  * never awaited.
  *
- * @param {() => *} hook
+ * @param {() => unknown} hook
  */
 const fireAndForget = (hook) => {
     try {
@@ -123,7 +143,7 @@ const normalWaitMs = (delayMs, previousCycleStartMs, fetchFailed) => {
 /**
  * The cadence log line for a boundary-driven (non-normal) decision.
  *
- * @param {Object} decision - computeNextCycleDelayMs result
+ * @param {CadenceDecision} decision - computeNextCycleDelayMs result
  * @param {number} waitMs
  * @returns {string}
  */
@@ -148,6 +168,11 @@ const describeBoundaryCadence = (decision, waitMs) => {
 };
 
 /**
+ * The slice of the chain's host transport the decision needs.
+ * @typedef {Pick<Parameters<typeof createCadenceChain>[0], 'loadSettings'|'fetchChallenges'|'resolveLastMinuteCheckMinutes'|'resolveThreshold'|'resolveScheduledFill'|'resolveFinalWindowTopUp'|'resolveBoostPrefill'|'resolveCurrencyAuto'|'resolveScenarioWake'|'log'>} DecisionDeps
+ */
+
+/**
  * The one decision point: read fresh settings, resolve the active list, ask
  * computeNextCycleDelayMs how long to wait, and log the cadence line. Throws on
  * any failure — the caller owns the random-cadence fallback.
@@ -160,10 +185,10 @@ const describeBoundaryCadence = (decision, waitMs) => {
  * approaching/last-minute/scheduled mode the wait runs from cycle
  * completion so the boundary is never undershot.
  *
- * @param {Object} deps - the chain's host transport (see createCadenceChain)
- * @param {*} prefetched
+ * @param {DecisionDeps} deps - the chain's host transport (see createCadenceChain)
+ * @param {unknown} prefetched
  * @param {(number|null)} previousCycleStartMs
- * @returns {Promise<{waitMs: number, cycleChallenges: Array, cycleNow: number}>}
+ * @returns {Promise<{waitMs: number, cycleChallenges: Challenge[], cycleNow: number}>}
  *   the wait plus the list/clock snapshot for the onCycleChallenges hook
  */
 const decideNextWait = async (deps, prefetched, previousCycleStartMs) => {
@@ -175,6 +200,7 @@ const decideNextWait = async (deps, prefetched, previousCycleStartMs) => {
     // otherwise decide a full normal-cadence wait indistinguishable from
     // "nothing to vote on". The flag lets the normal branch shorten
     // the wait so the loop re-probes soon after connectivity returns.
+    /** @type {ActiveChallengesResponse|null} */
     const fetched = Array.isArray(prefetched) ? { challenges: prefetched } : await deps.fetchChallenges(settings);
     const challenges = fetched?.challenges || [];
     const fetchFailedNow = fetched?.fetchFailed === true;
@@ -215,10 +241,10 @@ const decideNextWait = async (deps, prefetched, previousCycleStartMs) => {
  * fetch/settings throw and a late one (resolveLastMinuteCheckMinutes,
  * computeNextCycleDelayMs, the cadence log) alike.
  *
- * @param {Object} deps
- * @param {*} prefetched
+ * @param {DecisionDeps} deps
+ * @param {unknown} prefetched
  * @param {(number|null)} previousCycleStartMs
- * @returns {Promise<{waitMs: number, cycleChallenges: (Array|null), cycleNow: (number|null)}>}
+ * @returns {Promise<{waitMs: number, cycleChallenges: Challenge[], cycleNow: number}|{waitMs: number, cycleChallenges: null, cycleNow: null}>}
  */
 const decideNextWaitOrFallBack = async (deps, prefetched, previousCycleStartMs) => {
     try {
@@ -240,13 +266,13 @@ const decideNextWaitOrFallBack = async (deps, prefetched, previousCycleStartMs) 
  *
  * @param {Object} deps - host transport
  * @param {()=>boolean} deps.isRunning - live running flag (ref-backed on React)
- * @param {()=>*} deps.getTimer - read the host's single timer-handle slot; the
+ * @param {()=>(TimerHandle|null)} deps.getTimer - read the host's single timer-handle slot; the
  *   chain uses identity against it as the staleness guard (a host that clears
  *   or replaces the slot makes any in-flight timer/re-arm decline)
- * @param {(handle:*)=>void} deps.setTimer - store/clear the timer-handle slot
- * @param {()=>(Object|Promise<Object>)} deps.loadSettings - FRESH settings
+ * @param {(handle:(TimerHandle|null))=>void} deps.setTimer - store/clear the timer-handle slot
+ * @param {()=>(CadenceSettings|Promise<CadenceSettings>)} deps.loadSettings - FRESH settings
  *   snapshot; called at the top of every decision (and again for the fallback)
- * @param {(settings:Object)=>(Object|Promise<Object>)} deps.fetchChallenges -
+ * @param {(settings:CadenceSettings)=>(ActiveChallengesResponse|null|Promise<ActiveChallengesResponse|null>)} deps.fetchChallenges -
  *   active-challenge fetch (`{challenges, fetchFailed?}` shape) used only when
  *   no prefetched list was handed over. `fetchFailed === true` (an outage:
  *   makePostRequest resolved null after retries) shortens the next normal-mode
@@ -256,7 +282,7 @@ const decideNextWaitOrFallBack = async (deps, prefetched, previousCycleStartMs) 
  *   raw global `lastMinuteCheckFrequency` value (coerced + defaulted here)
  * @param {import('./thresholdWindow').ResolveThreshold} deps.resolveThreshold -
  *   per-challenge threshold resolver for the shared math
- * @param {Function} deps.resolveScheduledFill - per-challenge scheduled-fill
+ * @param {import('./scheduledFill').ResolveScheduledFill} deps.resolveScheduledFill - per-challenge scheduled-fill
  *   resolver for the shared math
  * @param {import('./thresholdWindow').ResolveFinalWindowTopUp} deps.resolveFinalWindowTopUp -
  *   per-challenge pre-final-window top-up resolver for the shared math
@@ -266,19 +292,19 @@ const decideNextWaitOrFallBack = async (deps, prefetched, previousCycleStartMs) 
  *   per-challenge currency-automation timing resolver for the shared math
  * @param {import('./thresholdWindow').ResolveScenarioWake|null} [deps.resolveScenarioWake] -
  *   per-challenge scenario resolver for the shared math
- * @param {()=>Promise<*>} deps.runCycle - run one voting cycle; the resolved
+ * @param {()=>Promise<unknown>} deps.runCycle - run one voting cycle; the resolved
  *   value is handed to the next decision as the prefetched list candidate
  *   (any non-array means "fetch fresh"). A rejection is logged via
  *   `log.cycleError` and never kills the chain.
  * @param {Object} deps.log - host log adapter
- * @param {(mode:string, message:string)=>(void|Promise<void>)} deps.log.cadence -
+ * @param {(mode:CadenceMode, message:string)=>(void|Promise<void>)} deps.log.cadence -
  *   receives every cadence decision line (modes: normal / last-minute /
  *   scheduled / pre-final-window / pre-boost / currency-rule / scenario /
  *   approaching); a host may drop
  *   modes it never logged
- * @param {(error:*)=>(void|Promise<void>)} deps.log.decisionError - decision
+ * @param {(error:unknown)=>(void|Promise<void>)} deps.log.decisionError - decision
  *   failure (chain falls back to the random cadence)
- * @param {(error:*)=>(void|Promise<void>)} deps.log.cycleError - a voting
+ * @param {(error:unknown)=>(void|Promise<void>)} deps.log.cycleError - a voting
  *   cycle rejected
  * @param {((lateMs:number, waitMs:number)=>(void|Promise<void>))} [deps.log.overslept] -
  *   OPTIONAL: the armed timer fired far later than it was scheduled to (OS
@@ -289,7 +315,7 @@ const decideNextWaitOrFallBack = async (deps, prefetched, previousCycleStartMs) 
  *   null when the chain stops arming. Used by the GUI to surface a live
  *   next-action countdown; Node hosts (CLI/Android) omit it, so it is
  *   optional-chained and never required.
- * @param {(challenges:Array, now:number)=>(void|Promise<void>)} [deps.onCycleChallenges] -
+ * @param {(challenges:Challenge[], now:number)=>unknown} [deps.onCycleChallenges] -
  *   OPTIONAL: called once per cycle with the freshly-resolved active-challenge
  *   list and the cycle's `now` (Unix seconds), for hosts that want to react to
  *   the list without re-fetching (the OS deadline-notification layer). Invoked
@@ -297,7 +323,7 @@ const decideNextWaitOrFallBack = async (deps, prefetched, previousCycleStartMs) 
  *   a throw here must never reach the decision `catch`, whose fallback would
  *   discard the boundary-aware cadence for the cycle. Hosts that omit it lose
  *   only the notification opportunity.
- * @returns {{scheduleNext:(prefetched?:*, previousCycleStartMs?:(number|null))=>Promise<void>}}
+ * @returns {{scheduleNext:(prefetched?:unknown, previousCycleStartMs?:(number|null))=>Promise<void>}}
  */
 const createCadenceChain = ({
     isRunning,
@@ -338,6 +364,11 @@ const createCadenceChain = ({
     // The armed timer's callback. A newer chain may have taken over (host
     // re-armed / stopped); only the timer that is still current — identity
     // against the host's slot — may run + reschedule.
+    /**
+     * @param {TimerHandle} timeoutId
+     * @param {number} waitMs
+     * @param {number} armedAtMs
+     */
     const runArmedCycle = async (timeoutId, waitMs, armedAtMs) => {
         if (!isRunning() || getTimer() !== timeoutId) {
             return;
@@ -370,6 +401,10 @@ const createCadenceChain = ({
     };
 
     // Decide how long to wait before the next cycle and arm the single timer.
+    /**
+     * @param {unknown} [prefetched]
+     * @param {number|null} [previousCycleStartMs]
+     */
     const scheduleNext = async (prefetched = null, previousCycleStartMs = null) => {
         if (!isRunning()) {
             stopArming();

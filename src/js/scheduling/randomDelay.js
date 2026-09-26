@@ -1,3 +1,4 @@
+// @ts-check
 /**
  * Shared between the React renderer (`AutovoteContext.jsx`) and the
  * CLI scheduler (`cli/cli.js`) so the same min/max range produces the
@@ -32,12 +33,21 @@ const MIN_CYCLE_GAP_MS = 5_000;
 // which schedules its own alarms but must recover on the same beat.
 const OFFLINE_RETRY_MS = 30_000;
 
+/**
+ * @param {unknown} raw
+ * @param {number} fallback
+ * @returns {number}
+ */
 const coerceMinutes = (raw, fallback) => {
     const n = Number(raw);
     if (!Number.isFinite(n) || n < 1) return fallback;
     return n;
 };
 
+/**
+ * @param {{checkFrequencyMin?: unknown, checkFrequencyMax?: unknown}|null|undefined} settings
+ * @returns {number}
+ */
 const getRandomCheckFrequencyMs = (settings) => {
     const min = coerceMinutes(settings?.checkFrequencyMin, DEFAULT_MINUTES);
     const maxRaw = coerceMinutes(settings?.checkFrequencyMax, min);

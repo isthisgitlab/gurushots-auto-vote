@@ -1,3 +1,4 @@
+// @ts-check
 /**
  * Single source of truth for the voting-cancellation flag, shared by
  * real-api, mock, and the Electron main process.
@@ -12,6 +13,7 @@ let cancelled = false;
 
 const isCancelled = () => cancelled;
 
+/** @param {unknown} value */
 const setCancelled = (value) => {
     cancelled = !!value;
 };

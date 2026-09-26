@@ -1,3 +1,4 @@
+// @ts-check
 /**
  * Load/save mechanics of the settings blob over the storage adapter: read +
  * merge over defaults + load-time migrations, the once-per-process obsolete
@@ -7,10 +8,12 @@
  */
 
 import * as logger from '../logger';
-import { SETTINGS_SCHEMA } from './schema';
+import { schemaEntry } from './schema';
 import { storage } from './storage';
 import { getDefaultSettings } from './defaults';
 import { runMigrations, pruneObsoleteSettings } from './migrations';
+
+/** @import { AppSettings, WindowBounds, WindowType } from '../types/settings' */
 
 // Module-local guards so cleanupObsoleteSettings (which itself calls
 // loadSettings) doesn't recurse and doesn't re-run on every read.
@@ -20,11 +23,14 @@ let cleanupCompleted = false;
 /**
  * Merge parsed persisted settings over the defaults so all properties
  * exist, and resolve the environment-aware mock default.
+ *
+ * @param {unknown} settings - the parsed persisted blob
+ * @returns {AppSettings}
  */
 const mergeWithDefaults = (settings) =>
     // Defaults carry the environment-aware mock value, so a persisted blob
     // without `mock` (JSON never holds `undefined`) inherits it here.
-    ({ ...getDefaultSettings(), ...settings });
+    ({ ...getDefaultSettings(), .../** @type {Partial<AppSettings>} */ (settings) });
 
 // Run obsolete-settings cleanup once per process. The re-entry guard exists
 // because cleanupObsoleteSettings calls back into loadSettings.
@@ -41,14 +47,23 @@ const _cleanupOnce = () => {
     }
 };
 
-// Default settings for a missing or unreadable file, logging which case applied.
+/**
+ * Default settings for a missing or unreadable file, logging which case applied.
+ *
+ * @param {string} message
+ * @returns {AppSettings}
+ */
 const _loadDefaults = (message) => {
     const defaultSettings = getDefaultSettings();
     logger.withCategory('settings').info(`${message}: ${Object.keys(defaultSettings).join(', ')}`);
     return defaultSettings;
 };
 
-// Load settings from the userData directory
+/**
+ * Load settings from the userData directory
+ *
+ * @returns {AppSettings}
+ */
 const loadSettings = () => {
     try {
         // Read via the storage adapter so the Capacitor cache path is exercised
@@ -71,7 +86,12 @@ const loadSettings = () => {
     }
 };
 
-// Save settings to the userData directory
+/**
+ * Save settings to the userData directory
+ *
+ * @param {Partial<AppSettings>} settings
+ * @returns {boolean}
+ */
 const saveSettings = (settings) => {
     try {
         // Merge with existing settings
@@ -105,12 +125,24 @@ const cleanupObsoleteSettings = () => {
     }
 };
 
-// Get a specific setting
+/**
+ * Get a specific setting
+ *
+ * @template {string} K
+ * @param {K} key
+ * @returns {AppSettings[K]}
+ */
 const getSetting = (key) => {
     return loadSettings()[key];
 };
 
-// Set a specific setting
+/**
+ * Set a specific setting
+ *
+ * @param {string} key
+ * @param {unknown} value
+ * @returns {boolean}
+ */
 const setSetting = (key, value) => {
     const settings = loadSettings();
     settings[key] = value;
@@ -119,28 +151,43 @@ const setSetting = (key, value) => {
 
 /**
  * Check if a setting requires app reload when changed
+ *
+ * @param {string} key
+ * @returns {boolean|undefined}
  */
 const isReloadRequired = (key) => {
     // Only these settings require a reload
     const reloadSettings = ['theme', 'language', 'timezone'];
 
     // Check if it's a challenge-specific setting
-    const isChallengeSetting = SETTINGS_SCHEMA[key] && SETTINGS_SCHEMA[key].perChallenge;
+    const entry = schemaEntry(key);
+    const isChallengeSetting = entry && entry.perChallenge;
 
     return reloadSettings.includes(key) || isChallengeSetting;
 };
 
-// Save window bounds for a specific window type
+/**
+ * Save window bounds for a specific window type
+ *
+ * @param {WindowType} windowType
+ * @param {WindowBounds} bounds
+ * @returns {boolean}
+ */
 const saveWindowBounds = (windowType, bounds) => {
     const settings = loadSettings();
     if (!settings.windowBounds) {
-        settings.windowBounds = {};
+        settings.windowBounds = /** @type {AppSettings['windowBounds']} */ ({});
     }
     settings.windowBounds[windowType] = bounds;
     return saveSettings(settings);
 };
 
-// Get window bounds for a specific window type
+/**
+ * Get window bounds for a specific window type
+ *
+ * @param {WindowType} windowType
+ * @returns {WindowBounds}
+ */
 const getWindowBounds = (windowType) => {
     const settings = loadSettings();
     if (!settings.windowBounds || !settings.windowBounds[windowType]) {

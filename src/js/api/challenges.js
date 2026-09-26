@@ -1,3 +1,4 @@
+// @ts-check
 /**
  * GuruShots Auto Voter - Challenges Module
  *
@@ -8,13 +9,15 @@ import { makePostRequest, createCommonHeaders } from './api-client';
 import { ENDPOINTS } from './constants';
 import * as logger from '../logger';
 
+/** @import { ActiveChallengesResponse } from '../types/gurushots' */
+
 /**
  * Fetches all active challenges for the authenticated user — one request per
  * call. Title pinning and in-flight coalescing live in the caller
  * (strategies/real/activeChallenges.js).
  *
  * @param {string} token - Authentication token
- * @returns {Promise<object>} Response containing array of active challenges, or
+ * @returns {Promise<ActiveChallengesResponse>} Response containing array of active challenges, or
  *   `{ challenges: [], fetchFailed: true }` if the request fails
  */
 const fetchActiveChallenges = async (token) => {
@@ -30,7 +33,9 @@ const fetchActiveChallenges = async (token) => {
     });
 
     const headers = createCommonHeaders(token);
-    const response = await makePostRequest(ENDPOINTS.activeChallenges, headers);
+    const response = /** @type {ActiveChallengesResponse | null} */ (
+        await makePostRequest(ENDPOINTS.activeChallenges, headers)
+    );
 
     // Handle failed requests gracefully. The empty list keeps every existing consumer
     // working, but it is flagged so callers can tell "the fetch failed" apart from "you

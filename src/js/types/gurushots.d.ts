@@ -151,3 +151,174 @@ export interface VoteImagesResponse {
     voting?: { exposure?: RankingExposure };
     images: VoteImage[];
 }
+
+// ---------------------------------------------------------------------------
+// Transport-layer payloads (src/js/api/*, mirrored by src/js/mock/*). Raw
+// response bodies are what the code reads, every field optional: the body is
+// untrusted and each read is guarded.
+// ---------------------------------------------------------------------------
+
+/** A write endpoint's body; the code only checks `success`. */
+export interface SuccessResponse {
+    success?: boolean;
+}
+
+/** `{ ok, raw }` from a spend / submit / apply call; `raw` is null when the request failed. */
+export interface ActionResult {
+    ok: boolean;
+    raw: SuccessResponse | null;
+}
+
+/** rest_mobile/signup. */
+export interface LoginResponse {
+    token?: string;
+}
+
+/** A get_vote_images response submitVotes can vote on: the challenge and its current exposure are present. */
+export interface VoteSubmission extends VoteImagesResponse {
+    challenge: Challenge;
+    voting: { exposure: RankingExposure & { exposure_factor: number } };
+}
+
+/** get_member_challenges: the challenges the member has not joined yet. */
+export interface MemberChallengesResponse {
+    items?: Challenge[];
+}
+
+/** get_bankroll, raw. */
+export interface BankrollResponse {
+    success?: boolean;
+    bankroll?: { challenges?: Array<{ type?: string; amount?: number | string } | null> };
+}
+
+/** The account's currency balances, normalized from get_bankroll. */
+export interface Bankroll {
+    keys: number;
+    swaps: number;
+    fills: number;
+    coins: number;
+}
+
+/** One photo of the member's library (get_photos_private items). */
+export interface LibraryPhoto {
+    id: string;
+    labels?: string[];
+    /** Always 0 on the live endpoint; get_image_data carries the real count. */
+    votes?: number;
+    views?: number;
+    upload_date?: UnixSeconds;
+    permission?: { allowed?: boolean; message?: string | null };
+}
+
+/** get_photos_private. */
+export interface PhotosPrivateResponse {
+    items?: LibraryPhoto[];
+}
+
+/** get_image_data `data`: the per-photo popularity record. */
+export interface ImageRecord {
+    id?: string;
+    votes?: number;
+    views?: number;
+    achievements?: string[];
+}
+
+/** get_image_data. */
+export interface ImageDataResponse {
+    success?: boolean;
+    data?: ImageRecord;
+}
+
+/** get_current_member_profile. */
+export interface CurrentMemberProfileResponse {
+    profile?: { id?: string; user_name?: string };
+}
+
+/** The signed-in member's identity, resolved from the session token. */
+export interface MemberIdentity {
+    id: string;
+    userName: string;
+}
+
+/** search_autocomplete. Entries are untrusted and filtered down to strings. */
+export interface SearchAutocompleteResponse {
+    items?: unknown[];
+}
+
+/** get_challenge_turbo. */
+export interface ChallengeTurboResponse {
+    images?: Array<{
+        first_image?: { id?: string };
+        second_image?: { id?: string };
+        /** null while the battle is unresolved. */
+        is_success?: boolean | null;
+    }>;
+    max_selections?: number;
+    required_selections?: number;
+}
+
+/** One Turbo battle pair, normalized from get_challenge_turbo. */
+export interface TurboBattle {
+    firstImageId?: string;
+    secondImageId?: string;
+    isSuccess?: boolean | null;
+}
+
+export interface TurboBattleSet {
+    battles: TurboBattle[];
+    maxSelections?: number;
+    requiredSelections?: number;
+}
+
+/** submit_challenge_turbo_selection. */
+export interface TurboSelectionResponse {
+    success?: boolean;
+    is_successful_selection?: boolean;
+    state?: TurboState;
+    scores?: Record<string, unknown>;
+    error_code?: number;
+}
+
+export interface TurboSelectionResult {
+    ok: boolean;
+    success: boolean;
+    state: TurboState | null;
+    scores: Record<string, unknown> | null;
+    errorCode: number | null;
+    raw: TurboSelectionResponse | null;
+}
+
+/** The outcome of playing one challenge's Turbo mini-game. */
+export interface TurboMiniGameResult {
+    played: number;
+    correct: number;
+    flipped: number;
+    doubleFailed: number;
+    won: boolean;
+}
+
+/** A finished challenge from get_my_completed_challenges. */
+export interface CompletedChallenge {
+    id: number | string;
+    title?: string;
+    member?: ChallengeMember;
+}
+
+/** get_my_completed_challenges. */
+export interface CompletedChallengesResponse {
+    completed_challenges?: CompletedChallenge[];
+}
+
+/** A mission from get_my_missions; claim_state 'CLAIM' once completed and unclaimed. */
+export interface Mission {
+    id: number | string;
+    name?: string;
+    claim_state?: string;
+    progress?: { current?: number; required?: number };
+    prizes?: Array<{ type?: string; amount?: number }>;
+}
+
+/** get_my_missions. */
+export interface MissionsResponse {
+    list?: Mission[];
+}

@@ -1,3 +1,4 @@
+// @ts-check
 /**
  * Mock counterpart to api/rewards.js: the finished-challenge and mission
  * prize reads and their claims.
@@ -9,6 +10,8 @@ import { simulateApiResponse, mockMethod } from '../simulate';
  * Simulate /rest/get_my_completed_challenges: one finished challenge with
  * unclaimed rewards (claim_state CLAIM) and one already claimed, shaped like
  * the captured web payload. A single short page, so paging stops at once.
+ *
+ * @type {typeof import('../../api/rewards').getMyCompletedChallenges}
  */
 const getMyCompletedChallenges = mockMethod(
     {
@@ -18,7 +21,7 @@ const getMyCompletedChallenges = mockMethod(
     },
     async () => {
         await simulateApiResponse({}, 200);
-        const rewards = (claimState) => ({
+        const rewards = (/** @type {string} */ claimState) => ({
             claim_state: claimState,
             sections: [{ type: 'TOTAL', name: 'Total', resources: [{ type: 'COINS', title: 'Coins', value: 60 }] }],
         });
@@ -29,7 +32,11 @@ const getMyCompletedChallenges = mockMethod(
     },
 );
 
-/** Simulate /rest/claim_resources — always confirms. */
+/**
+ * Simulate /rest/claim_resources — always confirms.
+ *
+ * @type {typeof import('../../api/rewards').claimChallengeResources}
+ */
 const claimChallengeResources = mockMethod(
     {
         name: 'claimChallengeResources',
@@ -45,6 +52,8 @@ const claimChallengeResources = mockMethod(
 /**
  * Simulate /rest/get_my_missions: one completed mission (claim_state CLAIM)
  * and one still in progress (DISABLED).
+ *
+ * @type {typeof import('../../api/rewards').getMyMissions}
  */
 const getMyMissions = mockMethod(
     {
@@ -73,7 +82,11 @@ const getMyMissions = mockMethod(
     },
 );
 
-/** Simulate /rest/claim_mission_prizes — always confirms. */
+/**
+ * Simulate /rest/claim_mission_prizes — always confirms.
+ *
+ * @type {typeof import('../../api/rewards').claimMissionPrize}
+ */
 const claimMissionPrize = mockMethod(
     {
         name: 'claimMissionPrize',

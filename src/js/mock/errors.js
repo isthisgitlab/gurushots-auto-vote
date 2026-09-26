@@ -1,3 +1,4 @@
+// @ts-check
 /**
  * GuruShots Auto Voter - Mock Error Data
  *

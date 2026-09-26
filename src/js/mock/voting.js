@@ -1,11 +1,17 @@
+// @ts-check
 /**
  * GuruShots Auto Voter - Mock Voting Data
  *
  * Mock responses for voting operations
  */
 
+/** @import { Challenge } from '../types/gurushots' */
+
 /**
  * Generate dynamic mock vote images for different challenges
+ *
+ * @param {string} challengeUrl
+ * @param {Challenge | null} [originalChallenge]
  */
 const generateMockVoteImages = (challengeUrl, originalChallenge = null) => {
     const photographers = [
@@ -26,6 +32,7 @@ const generateMockVoteImages = (challengeUrl, originalChallenge = null) => {
         'Alex Thompson',
     ];
 
+    /** @type {Record<string, string[]>} */
     const titles = {
         'street-photography-2024': [
             'Urban Life',

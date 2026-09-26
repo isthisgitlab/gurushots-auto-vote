@@ -1,3 +1,4 @@
+// @ts-check
 /**
  * Mock counterpart to the auto-cycle boost (strategies/real/applyBoost.js)
  * and api/boost.js's entry-targeted boost.
@@ -9,8 +10,13 @@ import * as votingLogic from '../../services/VotingLogic';
 import * as autoFill from '../../services/autoFill';
 import { simulateApiResponse, simulateApiError, mockMethod } from '../simulate';
 
+/** @import { Challenge, MemberBoost, SuccessResponse } from '../../types/gurushots' */
+
 /**
- * Simulate applying boost
+ * Simulate applying boost. Reads the boost state off the challenge, which
+ * every mock challenge carries.
+ *
+ * @type {(challenge: Challenge & { member: { boost: MemberBoost } }, token: string) => Promise<SuccessResponse | null>}
  */
 const applyBoost = mockMethod(
     {
@@ -47,6 +53,8 @@ const applyBoost = mockMethod(
 
 /**
  * Simulate applying boost to a specific entry
+ *
+ * @type {typeof import('../../api/boost').applyBoostToEntry}
  */
 const applyBoostToEntry = mockMethod(
     {

@@ -1,3 +1,4 @@
+// @ts-check
 /**
  * Pure wall-clock ↔ epoch math for the scheduled-fill feature.
  *
@@ -30,6 +31,7 @@
 
 // Intl.DateTimeFormat construction is comparatively expensive and the same
 // zone is queried several times per voting cycle — cache one formatter per zone.
+/** @type {Map<string, Intl.DateTimeFormat>} */
 const formatterCache = new Map();
 
 /**
@@ -66,6 +68,7 @@ const getFormatter = (timeZone) => {
  */
 const partsOf = (epochSec, timeZone) => {
     const parts = getFormatter(timeZone).formatToParts(epochSec * 1000);
+    /** @type {Record<string, string>} */
     const byType = {};
     for (const part of parts) {
         byType[part.type] = part.value;

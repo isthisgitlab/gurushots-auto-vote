@@ -1,3 +1,4 @@
+// @ts-check
 /**
  * Node translation manager (Electron main process): the shared translator
  * core plus language persistence through the settings facade.

@@ -1,3 +1,4 @@
+// @ts-check
 /**
  * GuruShots API constants — base URLs, endpoint paths, and shared
  * content types. Single source so the mobile and web header profiles
@@ -61,6 +62,10 @@ const FORM_CONTENT_TYPE = 'application/x-www-form-urlencoded; charset=utf-8';
 
 // WEB header profile for the /rest/ endpoints (turbo + submissions flows).
 // The session token sent via x-token works the same as the mobile flow.
+/**
+ * @param {string} token
+ * @returns {Record<string, string>}
+ */
 const createWebHeaders = (token) => ({
     host: 'api.gurushots.com',
     accept: '*/*',
@@ -73,6 +78,10 @@ const createWebHeaders = (token) => ({
 
 // Builds a module-scoped required-argument guard whose thrown message is
 // prefixed with the calling module's name (e.g. 'turbo: token is required').
+/**
+ * @param {string} prefix
+ * @returns {<T>(value: T, label: string) => T}
+ */
 const makeRequireValue = (prefix) => (value, label) => {
     if (value === null || value === undefined || value === '') {
         throw new Error(`${prefix}: ${label} is required`);

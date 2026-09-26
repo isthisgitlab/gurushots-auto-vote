@@ -6,28 +6,19 @@
  * to vote inside it). Part of the services/VotingLogic facade.
  */
 
-// Cast to any at the boundary: the settings facade isn't `// @ts-check`ed yet,
-// and its `challengeId = null` defaults make TS infer param types too narrow
-// (null) to accept the string IDs passed here. Drop the cast once settings.js
-// is typed.
-import * as settingsModule from '../../settings';
-const settings = /** @type {any} */ (settingsModule);
+import * as settings from '../../settings';
 // Pure wall-clock math for the scheduled-fill feature (no import cycle:
-// wallClock.js imports nothing). Cast for the same boundary reason as
-// settings above — wallClock.js isn't `// @ts-check`ed yet.
-import * as wallClockModule from '../../scheduling/wallClock';
-const { occurrencesOf } = /** @type {any} */ (wallClockModule);
+// wallClock.js imports nothing).
+import { occurrencesOf } from '../../scheduling/wallClock';
 import { DEFAULT_TIMEZONE } from '../../settings/uiDefaults';
 // From settings/limits (not settings/schema) — keeps zod out of any bundle
 // that reaches this module. No `any` cast needed: limits.js exports a plain
 // number literal, so inference is already exact.
 import { MAX_SCHEDULED_FILL_ENTRIES, MAX_VOTING_PAUSE_MINUTES } from '../../settings/limits';
-// Cast at the boundary for the same reason as settings above — logger.js
-// isn't `// @ts-check`ed yet. Used only on the corrupt-config paths below,
-// which must not stay silent: the orchestrator's per-challenge catch logs its
-// own errors, so a swallowed one here would be strictly less visible.
-import * as loggerModule from '../../logger';
-const logger = /** @type {any} */ (loggerModule);
+// Used only on the corrupt-config paths below, which must not stay silent:
+// the orchestrator's per-challenge catch logs its own errors, so a swallowed
+// one here would be strictly less visible.
+import * as logger from '../../logger';
 // CR/LF-collapse API-sourced values before they reach a log message (CWE-117).
 // Imported directly rather than off the logger, matching newEntryTracker.js —
 // the logger is mocked across much of the test suite, and its own oneLine() on

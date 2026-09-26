@@ -1,3 +1,4 @@
+// @ts-check
 /**
  * Automatic-spend counter: how many exposure FILLS the currency automation has
  * spent on each challenge, so `autoExposureFillMax` caps them.
@@ -15,6 +16,7 @@
  * Mock mode uses createMemoryAutoSpendLedger() and never touches the file.
  */
 
+/** @import { AutoSpendRecord, RawJsonStore } from './types/stores' */
 import * as logger from './logger';
 import { createJsonStore } from './settings/storage';
 
@@ -23,34 +25,53 @@ const autoSpendStore = createJsonStore({ fileName: 'autoSpends.json', prefKey: '
 // Challenges run for days, not months; anything older is a finished challenge.
 const MAX_AGE_MS = 30 * 24 * 60 * 60 * 1000;
 
+/**
+ * @param {any} r - an untrusted parsed-JSON value
+ * @returns {r is AutoSpendRecord}
+ */
 const isRecord = (r) => r && Number.isInteger(r.fills) && r.fills >= 0 && Number.isFinite(r.at);
 
 /**
  * Ledger over a raw-JSON store ({readRaw, writeRaw}). An unreadable or corrupt
  * file reads as empty — fail-soft like the swap-back ledger; the per-challenge
  * cap then restarts, which at worst allows `autoExposureFillMax` more fills.
+ * @param {RawJsonStore} store
  */
 const createAutoSpendLedger = (store) => {
+    /** @returns {Record<string, unknown>} */
     const read = () => {
         try {
             const parsed = JSON.parse(store.readRaw() || '{}');
             return parsed && typeof parsed === 'object' && !Array.isArray(parsed) ? parsed : {};
         } catch (error) {
-            logger.withCategory('currency').warning(`auto-spend ledger unreadable: ${error?.message || error}`, null);
+            logger
+                .withCategory('currency')
+                .warning(
+                    `auto-spend ledger unreadable: ${/** @type {Error | undefined} */ (error)?.message || error}`,
+                    null,
+                );
             return {};
         }
     };
 
     return {
-        /** Automatic fills spent on this challenge so far. */
+        /**
+         * Automatic fills spent on this challenge so far.
+         * @param {string|number} challengeId
+         * @returns {number}
+         */
         fills: (challengeId) => {
             const record = read()[String(challengeId)];
             return isRecord(record) ? record.fills : 0;
         },
 
-        /** Count one more automatic fill on this challenge. */
+        /**
+         * Count one more automatic fill on this challenge.
+         * @param {string|number} challengeId
+         */
         addFill: (challengeId) => {
             const cutoff = Date.now() - MAX_AGE_MS;
+            /** @type {Record<string, AutoSpendRecord>} */
             const state = {};
             for (const [id, record] of Object.entries(read())) {
                 if (isRecord(record) && record.at > cutoff) state[id] = record;
@@ -64,6 +85,7 @@ const createAutoSpendLedger = (store) => {
 
 /** Ledger over an in-memory store — mock mode, tests. */
 const createMemoryAutoSpendLedger = () => {
+    /** @type {string | null} */
     let raw = null;
     return createAutoSpendLedger({
         readRaw: () => raw,

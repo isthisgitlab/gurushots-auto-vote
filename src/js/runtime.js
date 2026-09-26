@@ -1,3 +1,4 @@
+// @ts-check
 /**
  * Runtime mode, platform detection, and OS-path resolution. The single
  * allowed reader of process.env so the rest of the codebase isn't
@@ -11,7 +12,19 @@ import * as path from 'node:path';
 import * as os from 'node:os';
 
 const hasNode = typeof process !== 'undefined' && process.versions != null;
-const getCapacitor = () => globalThis.Capacitor;
+
+/**
+ * The members of the Capacitor runtime global this module reads.
+ * @typedef {{ isNativePlatform: () => boolean, getPlatform: () => string }} CapacitorGlobal
+ */
+
+/**
+ * The page globals the platform shells inject (absent in plain Node).
+ * @typedef {typeof globalThis & { Capacitor?: CapacitorGlobal, __GS_HEADLESS__?: unknown }} RuntimeGlobals
+ */
+
+/** @returns {CapacitorGlobal | undefined} */
+const getCapacitor = () => /** @type {RuntimeGlobals} */ (globalThis).Capacitor;
 
 const isElectron = () => hasNode && process.versions.electron != null;
 
@@ -24,7 +37,7 @@ const isCapacitor = () => {
 // Capacitor runtime, and injects this flag so the storage and HTTP layers
 // route through the native @JavascriptInterface bridges instead of
 // @capacitor/preferences / CapacitorHttp.
-const isHeadlessService = () => globalThis.__GS_HEADLESS__ === true;
+const isHeadlessService = () => /** @type {RuntimeGlobals} */ (globalThis).__GS_HEADLESS__ === true;
 
 const isCli = () => hasNode && !isElectron();
 
@@ -44,12 +57,12 @@ const isPackaged = () => {
             return false;
         }
     }
-    if (isCapacitor()) return getCapacitor().isNativePlatform();
+    if (isCapacitor()) return /** @type {CapacitorGlobal} */ (getCapacitor()).isNativePlatform();
     return false;
 };
 
 const getOs = () => {
-    if (isCapacitor()) return getCapacitor().getPlatform();
+    if (isCapacitor()) return /** @type {CapacitorGlobal} */ (getCapacitor()).getPlatform();
     if (hasNode) return process.platform;
     return 'unknown';
 };
@@ -81,6 +94,10 @@ const getEnvSnapshot = () => ({
 // shimmed to undefined when the bundler externalizes 'os'). Code
 // paths that try to actually mkdir/write at this returned path are
 // expected to be wrapped in try/catch so they fail-soft.
+/**
+ * @param {string} appName
+ * @returns {string}
+ */
 const getUserDataDir = (appName) => {
     if (isCapacitor()) return `/${appName}`;
     switch (process.platform) {
@@ -157,7 +174,8 @@ const getAppUserDataPath = () => {
         if (!fs.existsSync(userDataPath)) {
             try {
                 fs.mkdirSync(userDataPath, { recursive: true });
-            } catch (mkdirError) {
+            } catch (error) {
+                const mkdirError = /** @type {NodeJS.ErrnoException} */ (error);
                 console.warn(
                     `[runtime] failed to create userData dir ${userDataPath} (${mkdirError.code || mkdirError.message}); falling back to cwd/userData`,
                 );

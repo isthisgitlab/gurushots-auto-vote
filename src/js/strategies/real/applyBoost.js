@@ -1,3 +1,4 @@
+// @ts-check
 /**
  * Real-strategy auto-cycle boost: chooses which entry to boost, posts it over
  * the api/boost transport, and marks the entry as boosted on success.
@@ -7,6 +8,8 @@ import { boostImage } from '../../api/boost';
 import * as logger from '../../logger';
 import { pickBoostEntry } from '../../services/VotingLogic';
 
+/** @import { Challenge, SuccessResponse } from '../../types/gurushots' */
+
 /**
  * Applies a boost to a photo in a challenge.
  *
@@ -14,9 +17,9 @@ import { pickBoostEntry } from '../../services/VotingLogic';
  * Picks the entry via `boostImageIndex`, walking backward past any
  * turboed entry until a non-turboed one is found.
  *
- * @param {object} challenge - Challenge object containing id and member data
+ * @param {Challenge} challenge - Challenge object containing id and member data
  * @param {string} token - Authentication token
- * @returns {Promise<object|null>} - API response or null if boost failed
+ * @returns {Promise<SuccessResponse|null>} - API response or null if boost failed
  */
 const applyBoost = async (challenge, token) => {
     const { id, member } = challenge;

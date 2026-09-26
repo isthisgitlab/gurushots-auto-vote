@@ -1,3 +1,4 @@
+// @ts-check
 /**
  * GuruShots Auto Voter - Mock session cache
  *
@@ -7,6 +8,18 @@
  * so a clearSessionCache() is seen by all of them.
  */
 
+/**
+ * @import { generateMockChallenges } from './challenges'
+ * @import { generateMockVoteImages } from './voting'
+ */
+
+/**
+ * @typedef {object} MockSessionCache
+ * @property {ReturnType<typeof generateMockChallenges> | null} challenges
+ * @property {Map<string, ReturnType<typeof generateMockVoteImages>>} voteImages
+ */
+
+/** @returns {MockSessionCache} */
 const createSessionCache = () => ({
     challenges: null,
     voteImages: new Map(), // challengeUrl -> voteImages

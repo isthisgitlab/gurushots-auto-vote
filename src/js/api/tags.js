@@ -1,3 +1,4 @@
+// @ts-check
 /**
  * GuruShots Auto Voter - Tag vocabulary lookups
  *
@@ -34,6 +35,10 @@
 import { makePostRequest } from './api-client';
 import { ENDPOINTS, createWebHeaders, makeRequireValue } from './constants';
 
+/**
+ * @import { CurrentMemberProfileResponse, MemberIdentity, SearchAutocompleteResponse } from '../types/gurushots'
+ */
+
 const requireValue = makeRequireValue('tags');
 
 /**
@@ -44,12 +49,14 @@ const requireValue = makeRequireValue('tags');
  * searchTagAutocomplete, while the email the user typed at login is not.
  *
  * @param {string} token - session token
- * @returns {Promise<{id: string, userName: string}|null>} identity, or null
+ * @returns {Promise<MemberIdentity|null>} identity, or null
  *   when the call failed or the payload lacked an id.
  */
 const getCurrentMemberProfile = async (token) => {
     requireValue(token, 'token');
-    const response = await makePostRequest(ENDPOINTS.currentMemberProfile, createWebHeaders(token), '');
+    const response = /** @type {CurrentMemberProfileResponse | null} */ (
+        await makePostRequest(ENDPOINTS.currentMemberProfile, createWebHeaders(token), '')
+    );
     const profile = response && response.profile;
     if (!profile || typeof profile !== 'object') return null;
     const id = profile.id;
@@ -90,7 +97,9 @@ const searchTagAutocomplete = async (token, term, memberId) => {
     if (typeof memberId !== 'string' || memberId === '') return [];
 
     const data = `search=${encodeURIComponent(text)}&member_id=${encodeURIComponent(memberId)}`;
-    const response = await makePostRequest(ENDPOINTS.searchAutocomplete, createWebHeaders(token), data);
+    const response = /** @type {SearchAutocompleteResponse | null} */ (
+        await makePostRequest(ENDPOINTS.searchAutocomplete, createWebHeaders(token), data)
+    );
     if (!response || !Array.isArray(response.items)) return [];
     // The payload is untrusted: keep only non-empty strings, normalise, and
     // bound both the list and each entry (see MAX_TAG_LENGTH), so neither a

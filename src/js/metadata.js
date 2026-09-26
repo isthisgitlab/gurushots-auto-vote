@@ -1,3 +1,5 @@
+// @ts-check
+/** @import { ChallengeMetadataEntry, MetadataFile, UpdateCheckData } from './types/stores' */
 import * as logger from './logger';
 import { formatTimeHMS } from './dateFormat';
 import { createJsonStore } from './settings/storage';
@@ -15,15 +17,15 @@ const getMetadataPath = () => metadataStore.getFilePath();
 
 /**
  * Default metadata structure
- * @returns {Object} - Empty metadata object
+ * @returns {MetadataFile} - Empty metadata object
  */
 const getDefaultMetadata = () => {
-    return {
+    return /** @type {MetadataFile} */ ({
         updateCheck: {
             lastCheck: null,
             skipVersion: null,
         },
-    };
+    });
 };
 
 /**
@@ -46,7 +48,7 @@ import { oneLine as oneLineId } from './format/logSafe';
  * Reject the three keys that address Object.prototype instead of creating an own
  * property. Challenge ids are numeric in practice, so this never fires today — but
  * the id is remote-controlled and every write path here uses it as a bracket key.
- * @param {*} challengeId
+ * @param {unknown} challengeId
  * @returns {boolean}
  */
 const isUnsafeChallengeKey = (challengeId) =>
@@ -54,7 +56,7 @@ const isUnsafeChallengeKey = (challengeId) =>
 
 /**
  * Validate an entryIds snapshot.
- * @param {*} entryIds
+ * @param {unknown} entryIds
  * @returns {string|null} - Failure reason, or null when the value is acceptable
  */
 const entryIdsFailureReason = (entryIds) => {
@@ -88,31 +90,33 @@ const entryIdsFailureReason = (entryIds) => {
  * real voting history. A malformed entryIds is therefore STRIPPED, and the rest of
  * the entry survives.
  *
- * @param {Object} entry - Metadata entry to validate
- * @returns {Object} - {isValid, reason, entry, repairReason} where `entry` is the
- *   (possibly repaired) entry to store and `repairReason` describes a stripped
- *   field, if any
+ * @param {unknown} rawEntry - Metadata entry to validate (untrusted file contents)
+ * @returns {{isValid: boolean, reason: string|null, entry: ChallengeMetadataEntry|null, repairReason: string|null}}
+ *   `entry` is the (possibly repaired) entry to store and `repairReason`
+ *   describes a stripped field, if any
  */
-const validateMetadataEntry = (entry) => {
-    if (typeof entry !== 'object' || entry === null) {
+const validateMetadataEntry = (rawEntry) => {
+    if (typeof rawEntry !== 'object' || rawEntry === null) {
         return { isValid: false, reason: 'Entry is not an object or is null', entry: null, repairReason: null };
     }
+    const entry = /** @type {Record<string, unknown>} */ (rawEntry);
+    const { lastVoteTime } = entry;
 
     // Check lastVoteTime
-    if (entry.lastVoteTime && typeof entry.lastVoteTime !== 'string') {
+    if (lastVoteTime && typeof lastVoteTime !== 'string') {
         return {
             isValid: false,
-            reason: `lastVoteTime is not a string (type: ${typeof entry.lastVoteTime})`,
+            reason: `lastVoteTime is not a string (type: ${typeof lastVoteTime})`,
             entry: null,
             repairReason: null,
         };
     }
-    if (entry.lastVoteTime) {
-        const date = new Date(entry.lastVoteTime);
+    if (typeof lastVoteTime === 'string' && lastVoteTime) {
+        const date = new Date(lastVoteTime);
         if (isNaN(date.getTime())) {
             return {
                 isValid: false,
-                reason: `lastVoteTime "${entry.lastVoteTime}" is not a valid date format`,
+                reason: `lastVoteTime "${lastVoteTime}" is not a valid date format`,
                 entry: null,
                 repairReason: null,
             };
@@ -146,16 +150,28 @@ const validateMetadataEntry = (entry) => {
         if (failure) {
             const repaired = { ...entry };
             delete repaired.entryIds;
-            return { isValid: true, reason: null, entry: repaired, repairReason: failure };
+            // Every field checked above is valid; unknown extra keys are kept as-is.
+            return {
+                isValid: true,
+                reason: null,
+                entry: /** @type {ChallengeMetadataEntry} */ (repaired),
+                repairReason: failure,
+            };
         }
     }
 
-    return { isValid: true, reason: null, entry, repairReason: null };
+    return { isValid: true, reason: null, entry: /** @type {ChallengeMetadataEntry} */ (entry), repairReason: null };
 };
 
 /**
  * The two optional updateCheck fields: a present value that fails `isValid` is
  * reset to null (and logged via `describe`); an absent one stays null.
+ * @type {Array<{
+ *   key: keyof UpdateCheckData,
+ *   label: string,
+ *   isValid: (value: unknown) => boolean,
+ *   describe: (value: unknown) => string,
+ * }>}
  */
 const UPDATE_CHECK_FIELDS = [
     {
@@ -178,37 +194,40 @@ const UPDATE_CHECK_FIELDS = [
 
 /**
  * Validate the updateCheck block.
- * @param {Object|undefined} updateCheck
- * @returns {{updateCheck: Object, changed: boolean}}
+ * @param {unknown} updateCheck - untrusted file contents
+ * @returns {{updateCheck: UpdateCheckData, changed: boolean}}
  */
 const validateUpdateCheck = (updateCheck) => {
     if (!updateCheck) {
         // Add missing updateCheck structure
         return { updateCheck: { lastCheck: null, skipVersion: null }, changed: true };
     }
+    const stored = /** @type {Record<string, unknown>} */ (updateCheck);
+    // Each field is set below — to null or to a value its isValid accepted.
+    /** @type {Partial<Record<keyof UpdateCheckData, unknown>>} */
     const validUpdateCheck = {};
     let changed = false;
     for (const { key, label, isValid, describe } of UPDATE_CHECK_FIELDS) {
-        const value = updateCheck[key];
+        const value = stored[key];
         if (value === null || value === undefined) {
             validUpdateCheck[key] = null;
         } else if (isValid(value)) {
             validUpdateCheck[key] = value;
         } else {
             logger
-                .withCategory('general')
-                .warning(`Invalid ${label} in metadata: ${describe(value)}, removing`, null, logger.CATEGORIES.UPDATE);
+                .withCategory(logger.CATEGORIES.UPDATE)
+                .warning(`Invalid ${label} in metadata: ${describe(value)}, removing`, null);
             validUpdateCheck[key] = null;
             changed = true;
         }
     }
-    return { updateCheck: validUpdateCheck, changed };
+    return { updateCheck: /** @type {UpdateCheckData} */ (validUpdateCheck), changed };
 };
 
 /**
  * Validate every per-challenge entry into `validatedMetadata`.
- * @param {Object} metadata - Raw metadata (its updateCheck key is skipped)
- * @param {Object} validatedMetadata - Receives the kept (possibly repaired) entries
+ * @param {Record<string, unknown>} metadata - Raw metadata (its updateCheck key is skipped)
+ * @param {MetadataFile} validatedMetadata - Receives the kept (possibly repaired) entries
  * @returns {boolean} - True if any entry was dropped or repaired
  */
 const validateChallengeEntries = (metadata, validatedMetadata) => {
@@ -228,7 +247,7 @@ const validateChallengeEntries = (metadata, validatedMetadata) => {
         }
         // validation.entry is the repaired entry — identical to `entry` unless a
         // malformed entryIds snapshot was stripped off it.
-        validatedMetadata[challengeId] = validation.entry;
+        validatedMetadata[challengeId] = /** @type {ChallengeMetadataEntry} */ (validation.entry);
         if (validation.repairReason) {
             logger
                 .withCategory('challenges')
@@ -248,19 +267,19 @@ const validateChallengeEntries = (metadata, validatedMetadata) => {
 
 /**
  * Validate entire metadata object
- * @param {Object} metadata - Metadata object to validate
- * @returns {Object} - {validatedMetadata, hasChanges}
+ * @param {Record<string, unknown>} metadata - Metadata object to validate (untrusted file contents)
+ * @returns {{validatedMetadata: MetadataFile, hasChanges: boolean}}
  */
 const validateMetadata = (metadata) => {
     const { updateCheck, changed: updateCheckChanged } = validateUpdateCheck(metadata.updateCheck);
-    const validatedMetadata = { updateCheck };
+    const validatedMetadata = /** @type {MetadataFile} */ ({ updateCheck });
     const entriesChanged = validateChallengeEntries(metadata, validatedMetadata);
     return { validatedMetadata, hasChanges: updateCheckChanged || entriesChanged };
 };
 
 /**
  * Load metadata from file
- * @returns {Object} - Metadata object
+ * @returns {MetadataFile} - Metadata object
  */
 const loadMetadata = () => {
     try {
@@ -290,7 +309,7 @@ const loadMetadata = () => {
 
 /**
  * Save metadata to file
- * @param {Object} metadata - Metadata object to save
+ * @param {MetadataFile} metadata - Metadata object to save
  * @returns {boolean} - True if successful, false otherwise
  */
 const saveMetadata = (metadata) => {
@@ -308,8 +327,8 @@ const saveMetadata = (metadata) => {
 
 /**
  * Get metadata for a specific challenge
- * @param {string} challengeId - Challenge ID
- * @returns {Object|null} - Metadata entry or null if not found
+ * @param {string|number} challengeId - Challenge ID
+ * @returns {ChallengeMetadataEntry|null} - Metadata entry or null if not found
  */
 const getChallengeMetadata = (challengeId) => {
     const metadata = loadMetadata();
@@ -318,9 +337,9 @@ const getChallengeMetadata = (challengeId) => {
 
 /**
  * Set metadata for a specific challenge
- * @param {string} challengeId - Challenge ID
- * @param {string} lastVoteTime - ISO timestamp of last vote
- * @param {number} exposureBump - Exposure level when vote occurred
+ * @param {string|number} challengeId - Challenge ID
+ * @param {string} [lastVoteTime] - ISO timestamp of last vote
+ * @param {number} [exposureBump] - Exposure level when vote occurred
  * @returns {boolean} - True if successful, false otherwise
  */
 const setChallengeMetadata = (challengeId, lastVoteTime, exposureBump) => {
@@ -329,6 +348,7 @@ const setChallengeMetadata = (challengeId, lastVoteTime, exposureBump) => {
         return false;
     }
 
+    /** @type {ChallengeMetadataEntry} */
     const entry = {};
 
     if (lastVoteTime) {
@@ -364,8 +384,8 @@ const setChallengeMetadata = (challengeId, lastVoteTime, exposureBump) => {
 
 /**
  * Update last vote time for a challenge
- * @param {string} challengeId - Challenge ID
- * @param {string} timestamp - ISO timestamp (optional, defaults to now)
+ * @param {string|number} challengeId - Challenge ID
+ * @param {string|null} [timestamp] - ISO timestamp (optional, defaults to now)
  * @returns {boolean} - True if successful, false otherwise
  */
 const updateLastVoteTime = (challengeId, timestamp = null) => {
@@ -378,7 +398,7 @@ const updateLastVoteTime = (challengeId, timestamp = null) => {
 
 /**
  * Update exposure bump for a challenge
- * @param {string} challengeId - Challenge ID
+ * @param {string|number} challengeId - Challenge ID
  * @param {number} exposure - Exposure level
  * @returns {boolean} - True if successful, false otherwise
  */
@@ -391,9 +411,9 @@ const updateExposureBump = (challengeId, exposure) => {
 
 /**
  * Update both last vote time and exposure bump for a challenge
- * @param {string} challengeId - Challenge ID
+ * @param {string|number} challengeId - Challenge ID
  * @param {number} exposure - Exposure level
- * @param {string} timestamp - ISO timestamp (optional, defaults to now)
+ * @param {string|null} [timestamp] - ISO timestamp (optional, defaults to now)
  * @returns {boolean} - True if successful, false otherwise
  */
 const updateChallengeVoteMetadata = (challengeId, exposure, timestamp = null) => {
@@ -407,7 +427,7 @@ const updateChallengeVoteMetadata = (challengeId, exposure, timestamp = null) =>
  * ranking resort) with no actual membership change, so every comparison on this
  * snapshot is a set comparison — a positional or JSON.stringify compare would
  * read a reorder as a change.
- * @param {string[]|null} a
+ * @param {string[]|null|undefined} a
  * @param {string[]|null} b
  * @returns {boolean}
  */
@@ -473,7 +493,7 @@ const setChallengeEntryIds = (challengeId, entryIds) => {
 
 /**
  * Remove metadata for a specific challenge
- * @param {string} challengeId - Challenge ID
+ * @param {string|number} challengeId - Challenge ID
  * @returns {boolean} - True if successful, false otherwise
  */
 const removeChallengeMetadata = (challengeId) => {
@@ -546,7 +566,7 @@ const cleanupStaleMetadata = (activeChallengeIds) => {
 
 /**
  * Get all metadata
- * @returns {Object} - Complete metadata object
+ * @returns {MetadataFile} - Complete metadata object
  */
 const getAllMetadata = () => {
     return loadMetadata();
@@ -562,7 +582,7 @@ const resetAllMetadata = () => {
 
 /**
  * Get update check data
- * @returns {Object} - {lastCheck: number|null, skipVersion: string|null}
+ * @returns {UpdateCheckData}
  */
 const getUpdateCheckData = () => {
     // loadMetadata() always validates/fills updateCheck, so no fallback needed.

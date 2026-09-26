@@ -1,3 +1,4 @@
+// @ts-check
 /**
  * Example scenarios users can copy and adapt (`scenario-template <id>`, and
  * "New from template" in the GUI). Examples, not built-ins: nothing here is

@@ -5,20 +5,13 @@
  * boost. Part of the services/VotingLogic facade.
  */
 
-// Cast to any at the boundary: the settings facade isn't `// @ts-check`ed yet,
-// and its `challengeId = null` defaults make TS infer param types too narrow
-// (null) to accept the string IDs passed here. Drop the cast once settings.js
-// is typed.
-import * as settingsModule from '../../settings';
-const settings = /** @type {any} */ (settingsModule);
+import * as settings from '../../settings';
 import { boostApplyThreshold } from '../../voting/boostWindow';
 import { getEffectiveBoostTime, getEffectiveKeyUnlockedBoostTime } from './thresholds';
-// Cast at the boundary for the same reason as settings above — logger.js
-// isn't `// @ts-check`ed yet. Used only on the corrupt-config paths below,
-// which must not stay silent: the orchestrator's per-challenge catch logs its
-// own errors, so a swallowed one here would be strictly less visible.
-import * as loggerModule from '../../logger';
-const logger = /** @type {any} */ (loggerModule);
+// Used only on the corrupt-config paths below, which must not stay silent:
+// the orchestrator's per-challenge catch logs its own errors, so a swallowed
+// one here would be strictly less visible.
+import * as logger from '../../logger';
 // CR/LF-collapse API-sourced values before they reach a log message (CWE-117).
 // Imported directly rather than off the logger, matching newEntryTracker.js —
 // the logger is mocked across much of the test suite, and its own oneLine() on

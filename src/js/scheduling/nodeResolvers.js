@@ -1,3 +1,4 @@
+// @ts-check
 /**
  * Node-side resolvers for the shared cadence math (./thresholdWindow).
  *
@@ -10,7 +11,12 @@
 import * as settings from '../settings';
 import { getScenarioStatus, scenarioWakeInput } from '../services/scenarioStatus';
 
+/** @import { ResolveThreshold, ResolveFinalWindowTopUp, ResolveBoostPrefill, ResolveCurrencyAuto, ResolveScenarioWake } from './thresholdWindow' */
+/** @import { ResolveScheduledFill } from './scheduledFill' */
+/** @import { RuleTiming } from '../voting/currencyAuto' */
+
 // Per-challenge lastMinuteThreshold for the shared threshold math.
+/** @type {ResolveThreshold} */
 const resolveThreshold = (challengeId) => settings.getEffectiveSetting('lastMinuteThreshold', challengeId);
 
 // Per-challenge scheduled-fill config for the cadence cap (./scheduledFill.js).
@@ -19,6 +25,7 @@ const resolveThreshold = (challengeId) => settings.getEffectiveSetting('lastMinu
 // here: Number([14400]) happens to work via the single-element-array quirk,
 // but Number([14400, 36000]) is NaN, which would silently kill the cadence
 // cap for exactly the flagship two-offset case.
+/** @type {ResolveScheduledFill} */
 const resolveScheduledFill = (challengeId) => ({
     enabled: settings.getEffectiveSetting('useScheduledFill', challengeId) === true,
     timesOfDay: settings.getEffectiveSetting('scheduledFillTime', challengeId),
@@ -30,6 +37,7 @@ const resolveScheduledFill = (challengeId) => ({
 // rule engine's gate in _runVotingRules (services/decisions/ruleEngine.js). leadSec is minutes → seconds and
 // durationSec is the configurable final-window length; thresholdWindow.js re-guards a
 // non-positive/NaN value for both.
+/** @type {ResolveFinalWindowTopUp} */
 const resolveFinalWindowTopUp = (challengeId) => ({
     enabled:
         settings.getEffectiveSetting('voteBeforeFinalWindow', challengeId) === true &&
@@ -46,6 +54,7 @@ const resolveFinalWindowTopUp = (challengeId) => ({
 // Both boost windows are passed through as numbers because the apply instant depends on
 // the challenge's live boost state, which only thresholdWindow.js sees; it re-guards the
 // `0 = off` sentinel and an out-of-range leadSec.
+/** @type {ResolveBoostPrefill} */
 const resolveBoostPrefill = (challengeId) => ({
     enabled:
         settings.getEffectiveSetting('voteBeforeBoost', challengeId) === true &&
@@ -60,6 +69,12 @@ const resolveBoostPrefill = (challengeId) => ({
 // each ENABLED rule's three timing conditions, null for a rule that is off. The
 // enable keys resolve through global defaults, profiles and challenge overrides.
 // Disabled rules resolve to null and never shorten the wait.
+/**
+ * @param {'autoKeyUnlock'|'autoSwap'|'autoExposureFill'} enableKey
+ * @param {'autoKey'|'autoSwap'|'autoExposureFill'} prefix
+ * @param {string} challengeId
+ * @returns {RuleTiming|null}
+ */
 const currencyTimingOf = (enableKey, prefix, challengeId) =>
     settings.getEffectiveSetting(enableKey, challengeId) === true
         ? {
@@ -69,6 +84,7 @@ const currencyTimingOf = (enableKey, prefix, challengeId) =>
           }
         : null;
 
+/** @type {ResolveCurrencyAuto} */
 const resolveCurrencyAuto = (challengeId) => ({
     key: currencyTimingOf('autoKeyUnlock', 'autoKey', challengeId),
     swap: currencyTimingOf('autoSwap', 'autoSwap', challengeId),
@@ -77,6 +93,7 @@ const resolveCurrencyAuto = (challengeId) => ({
 
 // Per-challenge scenario and runtime state for the scenario boundary
 // (./thresholdWindow.js computes the instant with the engine's own nextWakeAt).
+/** @type {ResolveScenarioWake} */
 const resolveScenarioWake = (challengeId) => scenarioWakeInput(getScenarioStatus(challengeId));
 
 export {

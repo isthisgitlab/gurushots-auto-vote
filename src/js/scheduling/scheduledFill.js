@@ -1,3 +1,4 @@
+// @ts-check
 /**
  * Cadence-side scheduled-fill math (issue #26).
  *
@@ -13,8 +14,21 @@
  *
  * @callback ResolveScheduledFill
  * @param {string} challengeId - Challenge id as a string.
- * @returns {{enabled: boolean, timesOfDay: *, beforeEndSecs: *}|Promise<{enabled: boolean, timesOfDay: *, beforeEndSecs: *}>}
+ * @returns {ScheduledFillConfig|Promise<ScheduledFillConfig>}
  */
+
+/**
+ * Per-challenge scheduled-fill config. Both trigger lists arrive RAW (straight
+ * from settings) and are guarded here.
+ * @typedef {{enabled: boolean, timesOfDay: unknown, beforeEndSecs: unknown}} ScheduledFillConfig
+ */
+
+/**
+ * The soonest upcoming scheduled-fill window start.
+ * @typedef {{challengeId: Challenge['id'], challengeTitle: string, startTime: number, form: 'time-of-day'|'before-end'}} ScheduledStart
+ */
+
+/** @import { Challenge } from '../types/gurushots' */
 
 import { occurrencesOf } from './wallClock';
 // From settings/limits (not settings/schema) — schema.js requires zod, and a
@@ -26,6 +40,11 @@ import { MAX_SCHEDULED_FILL_ENTRIES } from '../settings/limits';
 // Non-flash challenges that are still open at `now`. Flash challenges never
 // enter last-minute/scheduled-fill mode, and closed ones can't. Shared with
 // thresholdWindow.js so the two cadence paths agree on eligibility.
+/**
+ * @param {Challenge[]} challenges
+ * @param {number} now - Unix timestamp (seconds)
+ * @returns {Challenge[]}
+ */
 const eligibleChallenges = (challenges, now) => challenges.filter((c) => c.type !== 'flash' && c.close_time > now);
 
 /**
@@ -43,11 +62,11 @@ const eligibleChallenges = (challenges, now) => challenges.filter((c) => c.type 
  * and lists are sliced to MAX_SCHEDULED_FILL_ENTRIES — the scheduler must
  * keep running on its normal cadence regardless.
  *
- * @param {Array} challenges
+ * @param {Challenge[]} challenges
  * @param {number} now - Unix timestamp (seconds)
  * @param {ResolveScheduledFill} resolveScheduledFill
  * @param {string} timezone - IANA zone for the time-of-day form
- * @returns {Promise<{challengeId, challengeTitle, startTime: number, form: 'time-of-day'|'before-end'}|null>}
+ * @returns {Promise<ScheduledStart|null>}
  */
 async function soonestScheduledStart(challenges, now, resolveScheduledFill, timezone) {
     const eligible = eligibleChallenges(challenges, now);
@@ -63,6 +82,7 @@ async function soonestScheduledStart(challenges, now, resolveScheduledFill, time
         }),
     );
 
+    /** @type {ScheduledStart|null} */
     let best = null;
     for (let i = 0; i < eligible.length; i++) {
         const config = configs[i];
@@ -71,6 +91,7 @@ async function soonestScheduledStart(challenges, now, resolveScheduledFill, time
         const close = Number(challenge.close_time);
 
         let startTime = Infinity;
+        /** @type {ScheduledStart['form']|null} */
         let form = null;
 
         const times = (Array.isArray(config.timesOfDay) ? config.timesOfDay : []).slice(0, MAX_SCHEDULED_FILL_ENTRIES);

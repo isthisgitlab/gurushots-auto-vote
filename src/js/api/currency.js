@@ -1,3 +1,4 @@
+// @ts-check
 /**
  * GuruShots Auto Voter - Currency Module
  *
@@ -22,14 +23,26 @@
 import { makePostRequest } from './api-client';
 import { ENDPOINTS, createWebHeaders, makeRequireValue } from './constants';
 
+/** @import { ActionResult, SuccessResponse } from '../types/gurushots' */
+
 const requireValue = makeRequireValue('currency');
 
+/**
+ * @param {SuccessResponse | null} response
+ * @returns {ActionResult}
+ */
 const toResult = (response) => (response ? { ok: response.success === true, raw: response } : { ok: false, raw: null });
 
+/**
+ * @param {string} url
+ * @param {string} token
+ * @param {Record<string, string>} fields
+ * @returns {Promise<ActionResult>}
+ */
 const post = async (url, token, fields) => {
     const headers = createWebHeaders(token);
     const data = new URLSearchParams(fields).toString();
-    return toResult(await makePostRequest(url, headers, data));
+    return toResult(/** @type {SuccessResponse | null} */ (await makePostRequest(url, headers, data)));
 };
 
 /**
@@ -39,7 +52,7 @@ const post = async (url, token, fields) => {
  * @param {string|number} challengeId
  * @param {string} token
  * @param {string} [usage='EXPOSURE_BOOST']
- * @returns {Promise<{ok: boolean, raw: object|null}>}
+ * @returns {Promise<ActionResult>}
  */
 const keyUnlock = async (challengeId, token, usage = 'EXPOSURE_BOOST') => {
     requireValue(challengeId, 'challengeId');
@@ -55,7 +68,7 @@ const keyUnlock = async (challengeId, token, usage = 'EXPOSURE_BOOST') => {
  * @param {string} oldImageId - the entry being replaced
  * @param {string} newImageId - the replacement photo
  * @param {string} token
- * @returns {Promise<{ok: boolean, raw: object|null}>}
+ * @returns {Promise<ActionResult>}
  */
 const swapPhoto = async (challengeId, oldImageId, newImageId, token) => {
     requireValue(challengeId, 'challengeId');
@@ -77,7 +90,7 @@ const swapPhoto = async (challengeId, oldImageId, newImageId, token) => {
  * @param {string|number} challengeId
  * @param {string} memberId - the member's 32-char id (get_current_member_profile)
  * @param {string} token
- * @returns {Promise<{ok: boolean, raw: object|null}>}
+ * @returns {Promise<ActionResult>}
  */
 const exposureAutofill = async (challengeId, memberId, token) => {
     requireValue(challengeId, 'challengeId');

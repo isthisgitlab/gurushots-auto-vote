@@ -1,3 +1,4 @@
+// @ts-check
 /**
  * GuruShots Auto Voter - Submissions Module
  *
@@ -11,6 +12,10 @@ import * as logger from '../logger';
 import { oneLine } from '../format/logSafe';
 import { makePostRequest } from './api-client';
 import { ENDPOINTS, createWebHeaders, makeRequireValue } from './constants';
+
+/**
+ * @import { ActionResult, ImageDataResponse, ImageRecord, LibraryPhoto, PhotosPrivateResponse, SuccessResponse } from '../types/gurushots'
+ */
 
 const requireValue = makeRequireValue('submissions');
 
@@ -40,7 +45,7 @@ const PAGINATE_BUDGET_MS = 20_000;
  *   usage: the library view the server filters `permission.allowed` for —
  *   'submit' (adding a new entry) or 'swap' (replacing an entry); the caller
  *   always normalizes it to one of the two.
- * @returns {Promise<Array<object>|null>} the page's items, or null when the
+ * @returns {Promise<LibraryPhoto[]|null>} the page's items, or null when the
  *   response was missing/malformed (the caller decides whether that ends a
  *   paginated run or is simply an empty result).
  */
@@ -60,7 +65,9 @@ const fetchPhotoPage = async (challengeId, token, { limit, start, search, usage 
     if (typeof search === 'string' && search.trim() !== '') {
         params.push(`search=${encodeURIComponent(search.trim())}`);
     }
-    const response = await makePostRequest(ENDPOINTS.photosPrivate, headers, params.join('&'));
+    const response = /** @type {PhotosPrivateResponse | null} */ (
+        await makePostRequest(ENDPOINTS.photosPrivate, headers, params.join('&'))
+    );
     if (!response || !Array.isArray(response.items)) {
         return null;
     }
@@ -99,7 +106,7 @@ const fetchPhotoPage = async (challengeId, token, { limit, start, search, usage 
  *
  *   budgetMs: override the wall-clock budget for this walk. Callers running
  *   against a deadline should pass something smaller.
- * @returns {Promise<Array<object>>} list of photo items, or empty array on failure
+ * @returns {Promise<LibraryPhoto[]>} list of photo items, or empty array on failure
  */
 const getEligiblePhotos = async (challengeId, token, options = {}) => {
     requireValue(challengeId, 'challengeId');
@@ -107,8 +114,12 @@ const getEligiblePhotos = async (challengeId, token, options = {}) => {
     // A non-positive limit would break both the offset advance (start never
     // moves) and the short-page test (`0 < 0` is false), turning the walk into
     // MAX_LIBRARY_PAGES redundant requests for the same offset.
-    const limit = Number.isFinite(options.limit) && options.limit > 0 ? options.limit : 100;
-    const start = Number.isFinite(options.start) && options.start >= 0 ? options.start : 0;
+    // (The typeof tests only narrow for the checker: Number.isFinite is already
+    // false for a non-number.)
+    const limit =
+        typeof options.limit === 'number' && Number.isFinite(options.limit) && options.limit > 0 ? options.limit : 100;
+    const start =
+        typeof options.start === 'number' && Number.isFinite(options.start) && options.start >= 0 ? options.start : 0;
     const search = options.search;
     const usage = options.usage === 'swap' ? 'swap' : 'submit';
 
@@ -116,18 +127,22 @@ const getEligiblePhotos = async (challengeId, token, options = {}) => {
         return (await fetchPhotoPage(challengeId, token, { limit, start, search, usage })) || [];
     }
 
-    const budgetMs = Number.isFinite(options.budgetMs) && options.budgetMs > 0 ? options.budgetMs : PAGINATE_BUDGET_MS;
+    const budgetMs =
+        typeof options.budgetMs === 'number' && Number.isFinite(options.budgetMs) && options.budgetMs > 0
+            ? options.budgetMs
+            : PAGINATE_BUDGET_MS;
     const startedAt = Date.now();
     // Dedupe across pages: offset pagination over a live, vote-ordered list can
     // repeat a row when the underlying order shifts between requests. The same
     // shift can also skip one (a photo gaining votes mid-walk moves up into a
     // page already read); the walk takes seconds, so that is accepted.
+    /** @type {Map<string, LibraryPhoto>} */
     const byId = new Map();
     // Prefix the library-walk warnings with the calling flow (auto-fill vs join)
     // so a "10-page limit" message from a join isn't mislabeled as auto-fill.
     const logLabel =
         typeof options.logLabel === 'string' && options.logLabel.trim() ? options.logLabel.trim() : 'autoFill';
-    const warn = (message) => logger.withCategory('api').warning(`${logLabel}: ${message}`, null);
+    const warn = (/** @type {string} */ message) => logger.withCategory('api').warning(`${logLabel}: ${message}`, null);
     let page = 0;
     let stoppedEarly = false;
     for (; page < MAX_LIBRARY_PAGES; page++) {
@@ -143,7 +158,7 @@ const getEligiblePhotos = async (challengeId, token, options = {}) => {
             items = await fetchPhotoPage(challengeId, token, { limit, start: start + page * limit, search, usage });
         } catch (error) {
             warn(
-                `reading page ${page + 1} of your photo library failed (${oneLine(error?.message || error)}); continuing with the ${byId.size} photo(s) already read`,
+                `reading page ${page + 1} of your photo library failed (${oneLine(/** @type {{ message?: unknown } | null | undefined} */ (error)?.message || error)}); continuing with the ${byId.size} photo(s) already read`,
             );
             stoppedEarly = true;
             break;
@@ -192,7 +207,7 @@ const getEligiblePhotos = async (challengeId, token, options = {}) => {
  *
  * @param {string|number} imageId
  * @param {string} token
- * @returns {Promise<object|null>} the photo record, or null when the request
+ * @returns {Promise<ImageRecord|null>} the photo record, or null when the request
  *   failed or the payload was unsuccessful/malformed
  */
 const getImageData = async (imageId, token) => {
@@ -200,7 +215,9 @@ const getImageData = async (imageId, token) => {
     requireValue(token, 'token');
     const headers = createWebHeaders(token);
     const data = `id=${encodeURIComponent(String(imageId))}`;
-    const response = await makePostRequest(ENDPOINTS.imageData, headers, data);
+    const response = /** @type {ImageDataResponse | null} */ (
+        await makePostRequest(ENDPOINTS.imageData, headers, data)
+    );
     if (!response || response.success !== true) {
         return null;
     }
@@ -217,7 +234,7 @@ const getImageData = async (imageId, token) => {
  * @param {string|number} challengeId
  * @param {Array<string>} imageIds - non-empty list of photo ids
  * @param {string} token
- * @returns {Promise<{ok: boolean, raw: object|null}>}
+ * @returns {Promise<ActionResult>}
  */
 const submitToChallenge = async (challengeId, imageIds, token) => {
     requireValue(challengeId, 'challengeId');
@@ -231,7 +248,9 @@ const submitToChallenge = async (challengeId, imageIds, token) => {
         params.push(`image_ids[${index}]=${encodeURIComponent(String(id))}`);
     });
     const data = params.join('&');
-    const response = await makePostRequest(ENDPOINTS.submitToChallenge, headers, data);
+    const response = /** @type {SuccessResponse | null} */ (
+        await makePostRequest(ENDPOINTS.submitToChallenge, headers, data)
+    );
     if (!response) {
         return { ok: false, raw: null };
     }

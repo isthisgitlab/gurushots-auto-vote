@@ -1,3 +1,4 @@
+// @ts-check
 /**
  * Persisted state for the paid-join flow, plus a cross-process unlock lock.
  *
@@ -29,6 +30,10 @@ const joinStateStore = createJsonStore({ fileName: 'joinState.json', prefKey: 'g
 // A held lock older than this is treated as stale (owner crashed) and removed.
 const LOCK_TTL_MS = 60_000;
 
+/**
+ * @param {string|number} id
+ * @returns {string}
+ */
 const lockPathFor = (id) => {
     const safeId = String(id).replace(/[^A-Za-z0-9_-]/g, '_');
     return path.join(path.dirname(getSettingsPath()), `joinlock-${safeId}.lock`);
@@ -71,7 +76,8 @@ const acquireUnlockLock = (id) => {
                 }
             },
         };
-    } catch (error) {
+    } catch (caught) {
+        const error = /** @type {NodeJS.ErrnoException | null | undefined} */ (caught);
         if (error && error.code === 'EEXIST') {
             return { ok: false, release: () => {} };
         }

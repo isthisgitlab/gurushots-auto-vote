@@ -1,3 +1,4 @@
+// @ts-check
 /**
  * Challenge rules as a persisted, rotation-proof settings layer: reading and
  * saving the ordered rule list, and the rule-aware resolvers callers use —
@@ -21,6 +22,10 @@ import {
 import { getEffectiveSetting } from './challengeOverrides';
 
 /**
+ * @import { ChallengeValues, RuleMatchChallenge, SettingValueOf, TitleRule } from '../types/settings'
+ */
+
+/**
  * Setting keys whose rule contribution is merged as a tag union. Named
  * profiles resolve as an inherited settings layer instead.
  */
@@ -30,8 +35,13 @@ const TITLE_RULE_TAG_KEYS = ['mustIncludeTags', 'shouldIncludeTags'];
  * Order-preserving union of two tag lists with the base first. A null /
  * non-array base is treated as empty so the result is always a real array
  * when `extra` has entries.
+ *
+ * @param {unknown} base
+ * @param {unknown[]} extra
+ * @returns {string[]}
  */
 const unionTags = (base, extra) => {
+    /** @type {string[]} */
     const out = [];
     const seen = new Set();
     // `extra` is always an array (the caller checks it); only `base` can be null.
@@ -50,6 +60,8 @@ const unionTags = (base, extra) => {
  * Get the saved challenge rules. Tolerates a settings file whose
  * challengeSettings block has no titleRules array (loadSettings shallow-merges
  * challengeSettings whole).
+ *
+ * @returns {TitleRule[]}
  */
 const getTitleRules = () => {
     const settings = loadSettings();
@@ -64,8 +76,8 @@ const getTitleRules = () => {
  * `ruleValuesFor` in settings/ruleResolution.js), or null when none does.
  *
  * @param {string} key
- * @param {object|string} target
- * @returns {{value: *}|null}
+ * @param {RuleMatchChallenge|string} target
+ * @returns {{value: unknown}|null}
  */
 const resolveRuleSetting = (key, target) => {
     const { values } = ruleValuesFor(loadSettings(), target);
@@ -80,7 +92,7 @@ const resolveRuleSetting = (key, target) => {
  * A profile from a rule keyed only on type / photo count / runtime does not
  * bypass: "every 4-photo challenge votes like this" says how, not whether.
  *
- * @param {object} challenge
+ * @param {RuleMatchChallenge} challenge
  * @returns {boolean}
  */
 const hasRuleJoinOptIn = (challenge) => {
@@ -93,6 +105,10 @@ const hasRuleJoinOptIn = (challenge) => {
 
 // Bound a user-supplied title before it reaches a log line so an oversized
 // value can't produce a huge log event (defense in depth for log shipping).
+/**
+ * @param {string} title
+ * @returns {string}
+ */
 const _titleForLog = (title) => (title.length > 80 ? `${title.slice(0, 80)}…` : title);
 
 /**
@@ -101,11 +117,16 @@ const _titleForLog = (title) => (title.length > 80 ? `${title.slice(0, 80)}…` 
  * no title to key on at all. Last wins within one identical condition, at the
  * first one's position. Returns the rule list, or null (logged) on the first
  * rejected rule.
+ *
+ * @param {unknown[]} rules
+ * @param {Record<string, ChallengeValues>} storedProfiles
+ * @returns {TitleRule[]|null}
  */
 const _sanitizedUniqueRules = (rules, storedProfiles) => {
+    /** @type {Map<string, TitleRule>} */
     const byKey = new Map();
     for (const rule of rules) {
-        const result = sanitizeTitleRule(rule, storedProfiles);
+        const result = sanitizeTitleRule(/** @type {import('./challengeRules').RuleLike} */ (rule), storedProfiles);
         if (!result.valid) {
             const detail = result.requestedProfile
                 ? `unknown profile "${profileNameForLog(result.requestedProfile)}"`
@@ -127,6 +148,9 @@ const _sanitizedUniqueRules = (rules, storedProfiles) => {
  * tag lists against the schema, resolves profile names case-insensitively,
  * drops no-op rules, and de-dupes by the whole match condition (last wins, at
  * the first one's position).
+ *
+ * @param {unknown} rules
+ * @returns {boolean}
  */
 const setTitleRules = (rules) => {
     if (!Array.isArray(rules)) {
@@ -173,11 +197,13 @@ const setTitleRules = (rules) => {
  * on tag / type / photo count / runtime can still resolve when `challengeId` is
  * given, because those facts come from the remembered active-challenge list.
  *
- * @param {object|string} target
+ * @param {RuleMatchChallenge|string} target
  * @param {string|number|null} [challengeId]
+ * @returns {{name: string, values: ChallengeValues, suppressed?: boolean}|null}
  */
 const getTitleProfile = (target, challengeId = null) => {
     const settings = loadSettings();
+    /** @type {Record<string, unknown>} */
     const challenge = typeof target === 'string' ? { title: target } : { ...target };
     const hasId = challengeId !== null && challengeId !== undefined;
     if (hasId) {
@@ -200,6 +226,11 @@ const getTitleProfile = (target, challengeId = null) => {
  *
  * Falls back to plain getEffectiveSetting for any non-tag key, and preserves
  * the null "no filter" sentinel when there is no rule to contribute tags.
+ *
+ * @template {string} K
+ * @param {K} settingKey
+ * @param {RuleMatchChallenge|null|undefined} challenge
+ * @returns {SettingValueOf<K>}
  */
 const getEffectiveTagSetting = (settingKey, challenge) => {
     const challengeId = challenge?.id != null ? String(challenge.id) : null;
@@ -214,7 +245,7 @@ const getEffectiveTagSetting = (settingKey, challenge) => {
     );
     if (!rule) return base;
 
-    return unionTags(base, rule[settingKey]);
+    return /** @type {SettingValueOf<K>} */ (unionTags(base, /** @type {unknown[]} */ (rule[settingKey])));
 };
 
 /**
@@ -225,7 +256,7 @@ const getEffectiveTagSetting = (settingKey, challenge) => {
  * the other. Returns null rather than [] because the picker treats null as
  * "no list" and skips the Set construction entirely.
  *
- * @param {object} challenge
+ * @param {RuleMatchChallenge|null|undefined} challenge
  * @returns {Array<string>|null}
  */
 const getEffectiveIgnoreTitleWords = (challenge) => {

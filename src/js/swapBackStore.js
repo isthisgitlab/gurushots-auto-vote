@@ -1,3 +1,4 @@
+// @ts-check
 /**
  * Swap-back ledger: which entry slots currently hold a replacement for a photo
  * that was swapped out while boosted or turbo'd.
@@ -21,6 +22,7 @@
  * persisted file.
  */
 
+/** @import { RawJsonStore, SwapBackRecord } from './types/stores' */
 import * as logger from './logger';
 import { createJsonStore } from './settings/storage';
 
@@ -29,6 +31,10 @@ const swapBackStore = createJsonStore({ fileName: 'swapBacks.json', prefKey: 'gs
 // Challenges run for days, not months; anything older is a finished challenge.
 const MAX_AGE_MS = 30 * 24 * 60 * 60 * 1000;
 
+/**
+ * @param {any} r - an untrusted parsed-JSON value
+ * @returns {r is SwapBackRecord}
+ */
 const isRecord = (r) =>
     r &&
     typeof r.currentId === 'string' &&
@@ -39,20 +45,29 @@ const isRecord = (r) =>
  * Ledger over a raw-JSON store ({readRaw, writeRaw}). An unreadable or corrupt
  * file reads as empty — losing a swap-back offer is harmless, the original can
  * still be swapped back on gurushots.com.
+ * @param {RawJsonStore} store
  */
 const createLedger = (store) => {
+    /** @returns {Record<string, unknown>} */
     const read = () => {
         try {
             const parsed = JSON.parse(store.readRaw() || '{}');
             return parsed && typeof parsed === 'object' && !Array.isArray(parsed) ? parsed : {};
         } catch (error) {
-            logger.withCategory('currency').warning(`swap-back ledger unreadable: ${error?.message || error}`, null);
+            logger
+                .withCategory('currency')
+                .warning(
+                    `swap-back ledger unreadable: ${/** @type {Error | undefined} */ (error)?.message || error}`,
+                    null,
+                );
             return {};
         }
     };
 
+    /** @param {Record<string, unknown>} state */
     const write = (state) => {
         const cutoff = Date.now() - MAX_AGE_MS;
+        /** @type {Record<string, SwapBackRecord[]>} */
         const pruned = {};
         for (const [challengeId, records] of Object.entries(state)) {
             const kept = (Array.isArray(records) ? records : []).filter((r) => isRecord(r) && r.at > cutoff);
@@ -61,17 +76,31 @@ const createLedger = (store) => {
         store.writeRaw(JSON.stringify(pruned));
     };
 
-    const recordsOf = (state, challengeId) =>
-        (Array.isArray(state[String(challengeId)]) ? state[String(challengeId)] : []).filter(isRecord);
+    /**
+     * @param {Record<string, unknown>} state
+     * @param {string|number} challengeId
+     * @returns {SwapBackRecord[]}
+     */
+    const recordsOf = (state, challengeId) => {
+        const records = state[String(challengeId)];
+        return (Array.isArray(records) ? records : []).filter(isRecord);
+    };
 
     return {
-        /** Swap-back records for one challenge. */
+        /**
+         * Swap-back records for one challenge.
+         * @param {string|number} challengeId
+         * @returns {SwapBackRecord[]}
+         */
         list: (challengeId) => recordsOf(read(), challengeId),
 
         /**
          * Update the ledger after `oldEntry` was swapped for `newId`: a record
          * pointing at the old photo follows the slot to the new one, and a
          * boosted/turbo'd old photo starts a new record.
+         * @param {string|number} challengeId
+         * @param {{ id?: unknown, member_id?: unknown, boosted?: unknown, turbo?: unknown } | null | undefined} oldEntry
+         * @param {string|number} newId
          */
         onSwapped: (challengeId, oldEntry, newId) => {
             const state = read();
@@ -81,6 +110,7 @@ const createLedger = (store) => {
                 .map((r) => (r.currentId === oldId ? { ...r, currentId: String(newId), at: Date.now() } : r))
                 // A plain swap put the original back in its slot: nothing left to swap back.
                 .filter((r) => r.currentId !== r.previousId);
+            /** @type {SwapBackRecord['kind'] | null} */
             const kind = oldEntry?.boosted === true ? 'boost' : oldEntry?.turbo ? 'turbo' : null;
             if (kind) {
                 records.push({
@@ -95,7 +125,11 @@ const createLedger = (store) => {
             write(state);
         },
 
-        /** Drop the record for the slot now holding `currentId` (after a swap back). */
+        /**
+         * Drop the record for the slot now holding `currentId` (after a swap back).
+         * @param {string|number} challengeId
+         * @param {string|number} currentId
+         */
         remove: (challengeId, currentId) => {
             const state = read();
             const key = String(challengeId);
@@ -107,6 +141,7 @@ const createLedger = (store) => {
 
 /** Ledger over an in-memory store — mock mode, tests. */
 const createMemoryLedger = () => {
+    /** @type {string | null} */
     let raw = null;
     return createLedger({
         readRaw: () => raw,

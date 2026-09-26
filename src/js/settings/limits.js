@@ -1,3 +1,4 @@
+// @ts-check
 /**
  * Shared settings bounds, deliberately free of any dependency.
  *
