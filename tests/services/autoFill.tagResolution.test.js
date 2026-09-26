@@ -8,6 +8,10 @@
  * semantic tier under tests written without it.
  */
 
+jest.mock('../../src/js/services/semantic/lexicon', () => ({
+    ...jest.requireActual('../../src/js/services/semantic/lexicon'),
+}));
+
 // See tests/services/tagResolver.test.js — tests/setup.js mocks `fs`, so the
 // loader must go through the real one or every semantic check passes vacuously.
 jest.mock('../../src/js/services/semantic/assets', () => {

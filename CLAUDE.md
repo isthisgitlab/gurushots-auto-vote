@@ -31,6 +31,7 @@
 
 - **Test Organization**: All test files must be placed in the `tests/` directory following proper Jest conventions and structure.
 - **Mock Configuration**: Never use `mock: false` in any Jest or testing commands - use proper mocking strategies instead.
+- **Spying on a src module**: `jest.spyOn` / property assignment works only on a plain object, and a module compiled from `export` syntax exposes non-configurable getters ("Cannot redefine property"). To spy on a real module's export, give it a partial mock first — `jest.mock(p, () => ({ ...jest.requireActual(p) }))` — so every consumer gets a plain copy the spy can replace.
 - **100% coverage gate**: CI fails on anything below 100% — Jest via `coverageThreshold` (all four metrics over `src/js/**` **and** `scripts/**`, `pnpm test:coverage`), Android via `./gradlew jacocoTestCoverageVerification` (zero missed on every JaCoCo counter). New code ships with tests; `istanbul ignore` is only for branches genuinely unreachable under Jest, with a comment saying why. Scripts gate their CLI entry with `runIfMain(require.main, module, main)` (`scripts/lib/run-if-main.js`), never an inline `require.main === module` — that branch can't run under Jest.
 
 ## UI/UX Standards

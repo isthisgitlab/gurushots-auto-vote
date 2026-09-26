@@ -7,6 +7,9 @@
 const mockIndex = require('../../src/js/mock/index');
 const cancellation = require('../../src/js/voting/cancellation');
 
+jest.mock('../../src/js/metadata', () => ({ ...jest.requireActual('../../src/js/metadata') }));
+jest.mock('../../src/js/settings', () => ({ ...jest.requireActual('../../src/js/settings') }));
+
 // Mock the individual mock modules
 jest.mock('../../src/js/mock/auth', () => ({
     mockLoginSuccess: { token: 'mock-auth-token', success: true },

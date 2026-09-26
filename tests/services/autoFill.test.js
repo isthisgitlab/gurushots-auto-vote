@@ -3,6 +3,10 @@
  * (maybeAutoFillChallenge) and the manual GUI entry point (fillChallengeNow).
  */
 
+jest.mock('../../src/js/services/semantic/lexicon', () => ({
+    ...jest.requireActual('../../src/js/services/semantic/lexicon'),
+}));
+
 // photoStats persists its cache through this store; keep it in memory so the
 // suite never touches the real user-data directory.
 let statsStoreData = null;

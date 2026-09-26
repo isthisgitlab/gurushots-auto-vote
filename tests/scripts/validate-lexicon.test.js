@@ -6,6 +6,9 @@
  * fatal path stops exactly where the real process would.
  */
 
+jest.mock('../../src/js/services/semantic/lexicon', () => ({
+    ...jest.requireActual('../../src/js/services/semantic/lexicon'),
+}));
 const lexicon = require('../../src/js/services/semantic/lexicon');
 const { main, checkSubjectCases } = require('../../scripts/validate-lexicon');
 
