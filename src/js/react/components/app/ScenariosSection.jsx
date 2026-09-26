@@ -55,7 +55,7 @@ function ImportPanel({ onDone, onCancel }) {
 
     const runPreview = async () => {
         setError(null);
-        const result = await ipc.previewScenarioImport(text);
+        const result = await ipc.callOrNull(() => ipc.previewScenarioImport(text));
         if (result?.success) {
             setPreview(result);
         } else {
@@ -65,7 +65,7 @@ function ImportPanel({ onDone, onCancel }) {
     };
 
     const runImport = async () => {
-        const result = await ipc.importScenario(text, { overwrite });
+        const result = await ipc.callOrNull(() => ipc.importScenario(text, { overwrite }));
         if (result?.success) onDone();
         else setError({ what: 'app.scenarioImportFailed', issues: result?.issues });
     };
@@ -99,13 +99,13 @@ function ImportPanel({ onDone, onCancel }) {
                 </label>
             )}
             <div className="flex gap-2">
-                <button type="button" className="btn btn-sm" onClick={runPreview} disabled={!text.trim()}>
+                <button type="button" className="btn btn-sm" onClick={() => void runPreview()} disabled={!text.trim()}>
                     {t('app.scenarioPreview')}
                 </button>
                 <button
                     type="button"
                     className="btn btn-sm btn-primary"
-                    onClick={runImport}
+                    onClick={() => void runImport()}
                     disabled={!preview || (preview.exists && !overwrite)}
                 >
                     {t('app.scenarioImportConfirm')}
@@ -132,13 +132,13 @@ function ScenarioRow({ name, scenario, onChanged, onError, onEdit }) {
     }, [armed]);
 
     const runExport = async () => {
-        const result = await ipc.exportScenario(name);
+        const result = await ipc.callOrNull(() => ipc.exportScenario(name));
         if (result?.success) setExported(result.json);
         else onError({ what: 'app.scenarioExportFailed' });
     };
 
     const runRename = async () => {
-        const result = await ipc.renameScenario(name, renaming);
+        const result = await ipc.callOrNull(() => ipc.renameScenario(name, renaming));
         if (result?.success) {
             setRenaming(null);
             onChanged();
@@ -153,7 +153,7 @@ function ScenarioRow({ name, scenario, onChanged, onError, onEdit }) {
             return;
         }
         setArmed(false);
-        const result = await ipc.deleteScenario(name);
+        const result = await ipc.callOrNull(() => ipc.deleteScenario(name));
         if (result?.success) onChanged();
         else onError({ what: 'app.scenarioDeleteFailed' });
     };
@@ -170,13 +170,17 @@ function ScenarioRow({ name, scenario, onChanged, onError, onEdit }) {
                 <button type="button" className="btn btn-xs" onClick={onEdit}>
                     {t('app.sbEdit')}
                 </button>
-                <button type="button" className="btn btn-xs" onClick={runExport}>
+                <button type="button" className="btn btn-xs" onClick={() => void runExport()}>
                     {t('app.scenarioExport')}
                 </button>
                 <button type="button" className="btn btn-xs" onClick={() => setRenaming(name)}>
                     {t('app.scenarioRename')}
                 </button>
-                <button type="button" className={`btn btn-xs ${armed ? 'btn-error' : ''}`} onClick={runDelete}>
+                <button
+                    type="button"
+                    className={`btn btn-xs ${armed ? 'btn-error' : ''}`}
+                    onClick={() => void runDelete()}
+                >
                     {armed ? t('app.scenarioDeleteConfirm') : t('app.scenarioDelete')}
                 </button>
             </div>
@@ -190,7 +194,7 @@ function ScenarioRow({ name, scenario, onChanged, onError, onEdit }) {
                         value={renaming}
                         onChange={(e) => setRenaming(e.target.value)}
                     />
-                    <button type="button" className="btn btn-sm btn-primary" onClick={runRename}>
+                    <button type="button" className="btn btn-sm btn-primary" onClick={() => void runRename()}>
                         {t('app.scenarioRenameSave')}
                     </button>
                     <button type="button" className="btn btn-sm btn-ghost" onClick={() => setRenaming(null)}>
@@ -249,7 +253,9 @@ export function ScenariosSection({ isOpen }) {
     const addTemplate = async () => {
         const template = templates.find((item) => item.id === templateId);
         const name = freeName(template.scenario.name, Object.keys(scenarios));
-        const result = await ipc.saveScenario({ ...template.scenario, name }, { overwrite: false });
+        const result = await ipc.callOrNull(() =>
+            ipc.saveScenario({ ...template.scenario, name }, { overwrite: false }),
+        );
         if (result?.success) changed();
         else setError({ what: 'app.scenarioTemplateFailed', issues: result?.issues });
     };
@@ -320,7 +326,12 @@ export function ScenariosSection({ isOpen }) {
                                 </option>
                             ))}
                         </select>
-                        <button type="button" className="btn btn-sm" onClick={addTemplate} disabled={!templateId}>
+                        <button
+                            type="button"
+                            className="btn btn-sm"
+                            onClick={() => void addTemplate()}
+                            disabled={!templateId}
+                        >
                             {t('app.scenarioAddTemplate')}
                         </button>
                         {!importing && (

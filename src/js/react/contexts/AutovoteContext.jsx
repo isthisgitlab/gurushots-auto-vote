@@ -95,7 +95,7 @@ function recordCycleSuccess(dispatch) {
     dispatch({ type: ACTIONS.INCREMENT_CYCLE });
     const lastRunStr = new Date().toLocaleTimeString('lv-LV');
     dispatch({ type: ACTIONS.UPDATE_LAST_RUN, payload: lastRunStr });
-    foregroundService.update({ body: `Last cycle: ${lastRunStr}` });
+    void foregroundService.update({ body: `Last cycle: ${lastRunStr}` });
 }
 
 /**
@@ -275,7 +275,7 @@ function useResumeOnMount(start) {
                 /* ignore — leave UI in stopped state on failure */
             }
         };
-        maybeResume();
+        void maybeResume();
     }, [startRef]);
 }
 

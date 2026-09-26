@@ -5,13 +5,23 @@
     // from day one and lets the shared core be typed incrementally via JSDoc.
     "compilerOptions": {
         "target": "es2025",
-        "lib": ["es2025"],
-        // nodenext (not commonjs) is deliberate: it honors package.json
-        // "type": "commonjs" and checks these .js files as CommonJS, whereas
-        // "module": "commonjs" pulls in moduleResolution "node10", which
-        // node10 module resolution is deprecated (TS5107). require()/module.exports type-check fine.
-        "module": "nodenext",
-        "moduleResolution": "nodenext",
+        // One program covers the core and the renderer: the renderer bundles
+        // pull shared core modules into the browser, so both halves see the
+        // DOM and Node typings.
+        "lib": ["es2025", "dom", "dom.iterable"],
+        // Bundler resolution matches how the code is loaded: esbuild bundles
+        // the renderer, preload, Capacitor bridge and CLI, and swc compiles the
+        // tests. require()/module.exports and import/export both type-check.
+        "module": "preserve",
+        "moduleResolution": "bundler",
+        "jsx": "preserve",
+        "jsxImportSource": "preact",
+        "paths": {
+            "@/*": ["./src/js/react/*"],
+            "react": ["./node_modules/preact/compat"],
+            "react-dom": ["./node_modules/preact/compat"],
+            "react-dom/client": ["./node_modules/preact/compat/client"]
+        },
         "types": ["node"],
         "allowJs": true,
         "checkJs": false,
@@ -22,6 +32,6 @@
         "skipLibCheck": true,
         "forceConsistentCasingInFileNames": true
     },
-    "include": ["src/js/**/*.js", "lint.config.ts"],
+    "include": ["src/js/**/*.js", "src/js/**/*.jsx", "lint.config.ts"],
     "exclude": ["node_modules", "dist", "build", "coverage", "android", "**/*.test.js"]
 }

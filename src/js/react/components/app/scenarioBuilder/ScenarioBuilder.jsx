@@ -319,7 +319,7 @@ function SimulatePanel({ draft }) {
     const [error, setError] = useState(null);
 
     const run = async () => {
-        const response = await ipc.simulateScenario(challengeId, draft);
+        const response = await ipc.callOrNull(() => ipc.simulateScenario(challengeId, draft));
         if (response?.success) {
             setResult(response);
             setError(null);
@@ -345,7 +345,7 @@ function SimulatePanel({ draft }) {
                         </option>
                     ))}
                 </select>
-                <button type="button" className="btn btn-sm" disabled={!challengeId} onClick={run}>
+                <button type="button" className="btn btn-sm" disabled={!challengeId} onClick={() => void run()}>
                     {t('app.sbSimulate')}
                 </button>
             </div>
@@ -391,21 +391,21 @@ export function ScenarioBuilder({ initial, originalName, onSaved, onCancel }) {
     const save = async () => {
         setError(null);
         // Validate before anything is renamed, so a draft with problems changes nothing.
-        const checked = await ipc.checkScenario(draft);
+        const checked = await ipc.callOrNull(() => ipc.checkScenario(draft));
         if (!checked?.success) {
             setError({ what: 'app.sbSaveFailed', issues: checked?.issues });
             return;
         }
         const renamed = storedName !== null && storedName.toLowerCase() !== String(draft.name).toLowerCase();
         if (renamed) {
-            const moved = await ipc.renameScenario(storedName, draft.name);
+            const moved = await ipc.callOrNull(() => ipc.renameScenario(storedName, draft.name));
             if (!moved?.success) {
                 setError({ what: 'app.sbSaveFailed', issues: moved?.issues });
                 return;
             }
             setStoredName(moved.name);
         }
-        const result = await ipc.saveScenario(draft, { overwrite: storedName !== null });
+        const result = await ipc.callOrNull(() => ipc.saveScenario(draft, { overwrite: storedName !== null }));
         if (result?.success) onSaved();
         else setError({ what: 'app.sbSaveFailed', issues: result?.issues });
     };
@@ -451,7 +451,7 @@ export function ScenarioBuilder({ initial, originalName, onSaved, onCancel }) {
             <SimulatePanel draft={draft} />
             <ScenarioError error={error} />
             <div className="flex gap-2">
-                <button type="button" className="btn btn-sm btn-primary" onClick={save}>
+                <button type="button" className="btn btn-sm btn-primary" onClick={() => void save()}>
                     {t('app.sbSave')}
                 </button>
                 <button type="button" className="btn btn-sm btn-ghost" onClick={onCancel}>

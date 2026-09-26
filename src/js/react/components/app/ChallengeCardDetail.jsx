@@ -36,8 +36,8 @@ function DetailHeader({ challenge, badgeRowProps, actions, hasCompactOverride, o
     );
 
     // Only reachable from the URL row, which renders only when challenge.url is set.
-    const handleOpenUrl = async () => {
-        await ipc.openExternalUrl(`https://gurushots.com/challenge/${challenge.url}`);
+    const handleOpenUrl = () => {
+        void ipc.callOrNull(() => ipc.openExternalUrl(`https://gurushots.com/challenge/${challenge.url}`));
     };
 
     return (

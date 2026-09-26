@@ -82,6 +82,18 @@ describe('onSettingsChanged', () => {
     });
 });
 
+describe('callOrNull', () => {
+    test('resolves with the call result', async () => {
+        await expect(ipc.callOrNull(() => Promise.resolve({ success: true }))).resolves.toEqual({ success: true });
+    });
+
+    test('turns a rejection or a missing bridge into null', async () => {
+        await expect(ipc.callOrNull(() => Promise.reject(new Error('ipc down')))).resolves.toBeNull();
+        window.api = undefined;
+        await expect(ipc.callOrNull(() => ipc.getSettings())).resolves.toBeNull();
+    });
+});
+
 describe('refreshMenu', () => {
     test('forwards to the host menu, or returns undefined without one', async () => {
         await ipc.refreshMenu();

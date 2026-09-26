@@ -53,6 +53,24 @@ function logBestEffort(method, message) {
     }
 }
 
+/**
+ * Run a bridge call and turn a throw or rejection into `null`, so a caller
+ * that branches on `result?.success` takes its failure path instead of
+ * leaking an unhandled rejection. Takes a thunk so a missing bridge (a
+ * synchronous throw) is caught too.
+ *
+ * @template T
+ * @param {() => T | Promise<T>} call
+ * @returns {Promise<T | null>}
+ */
+export const callOrNull = async (call) => {
+    try {
+        return await call();
+    } catch {
+        return null;
+    }
+};
+
 /** @param {string} message @returns {Promise<void>} resolves once the line is handed off; never rejects */
 export const logRendererError = (message) => logBestEffort('logError', message);
 /** @param {string} message @returns {Promise<void>} resolves once the line is handed off; never rejects */

@@ -80,7 +80,7 @@ export function DiscoverSection({ isLoggedIn, bankroll, onJoined }) {
             if (costOf(challenge) > 0) {
                 setConfirm(challenge);
             } else {
-                doJoin(challenge, false);
+                void doJoin(challenge, false);
             }
         },
         [doJoin],
@@ -176,7 +176,7 @@ export function DiscoverSection({ isLoggedIn, bankroll, onJoined }) {
                                                     {outcome.status === 'charged-pending-submit' && (
                                                         <button
                                                             className="btn btn-outline btn-sm ml-2"
-                                                            onClick={() => doJoin(c, true)}
+                                                            onClick={() => void doJoin(c, true)}
                                                             disabled={isBusy}
                                                         >
                                                             {t('app.discoverRetrySubmit')}
@@ -244,7 +244,11 @@ export function DiscoverSection({ isLoggedIn, bankroll, onJoined }) {
                                 <button className="btn btn-outline btn-sm" onClick={() => setConfirm(null)}>
                                     {t('app.cancel')}
                                 </button>
-                                <button className="btn btn-warning btn-sm" onClick={onConfirm} disabled={insufficient}>
+                                <button
+                                    className="btn btn-warning btn-sm"
+                                    onClick={() => void onConfirm()}
+                                    disabled={insufficient}
+                                >
                                     {interp(t('app.discoverConfirmSpend'), { coins: cCost })}
                                 </button>
                             </ModalActions>

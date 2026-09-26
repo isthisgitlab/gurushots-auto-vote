@@ -75,13 +75,13 @@ const bootstrap = async () => {
         // already guarantees order, this just narrows the durability window.
         const flush = () => {
             try {
-                flushPendingWrites();
-                flushMetadataWrites();
-                flushJoinStateWrites();
-                flushSwapBackWrites();
-                flushAutoSpendWrites();
-                flushScenarioStateWrites();
-                flushDiagnosticsWrites();
+                void flushPendingWrites();
+                void flushMetadataWrites();
+                void flushJoinStateWrites();
+                void flushSwapBackWrites();
+                void flushAutoSpendWrites();
+                void flushScenarioStateWrites();
+                void flushDiagnosticsWrites();
             } catch {
                 // never let a teardown handler throw
             }

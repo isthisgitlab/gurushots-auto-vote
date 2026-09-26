@@ -40,9 +40,9 @@ function useGlobalCardDensity() {
                 /* default to false (detailed cards, action-free compact tiles) */
             }
         };
-        sync();
+        void sync();
         const off = ipc.onSettingsChanged(() => {
-            sync();
+            void sync();
             // Bump refreshKey so each ChallengeCard re-reads its effective
             // settings (any per-challenge override + the new global default)
             // in place — cards are not remounted, so an in-flight action
@@ -192,7 +192,7 @@ export function ChallengesSection({
                     ("click to get details"), matching the per-card toggle in
                     ChallengeCard. The icon follows the same rule: it depicts
                     the view you are about to switch TO. */}
-                <button className="btn btn-outline btn-sm sm:ml-auto" onClick={toggleGlobalCompact}>
+                <button className="btn btn-outline btn-sm sm:ml-auto" onClick={() => void toggleGlobalCompact()}>
                     <StrokeIcon
                         d={globalCompact ? ICON_PATHS.listCompact : ICON_PATHS.listDetailed}
                         className="w-4 h-4 mr-1"

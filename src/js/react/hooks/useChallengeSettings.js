@@ -76,7 +76,7 @@ export function useChallengeSettings(challengeId, initialCompact = false, settin
     }, [challengeId]);
 
     useEffect(() => {
-        reload();
+        void reload();
     }, [reload, settingsVersion]);
 
     // First click sets a per-challenge override (opposite of current);

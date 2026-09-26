@@ -234,6 +234,13 @@ describe('import', () => {
         await waitFor(() => expect(screen.getByRole('alert').textContent).toContain('app.scenarioImportFailed'));
     });
 
+    test('a rejected bridge call shows the failure instead of leaking the rejection', async () => {
+        window.api.previewScenarioImport.mockRejectedValueOnce(new Error('ipc down'));
+        await openImport();
+        click('app.scenarioPreview');
+        expect((await screen.findByRole('alert')).textContent).toContain('app.scenarioImportInvalid');
+    });
+
     test('cancel closes the panel', async () => {
         await openImport();
         click('app.cancel');

@@ -72,7 +72,7 @@ export function ChallengeProfilesBar({ overrides, onApply, onProfilesChanged = (
     }, []);
 
     useEffect(() => {
-        refreshProfiles();
+        void refreshProfiles();
     }, [refreshProfiles]);
 
     const names = Object.keys(profiles).sort((a, b) => a.localeCompare(b));
@@ -195,7 +195,7 @@ export function ChallengeProfilesBar({ overrides, onApply, onProfilesChanged = (
                 </button>
                 <button
                     className="btn btn-sm btn-outline btn-error"
-                    onClick={handleDelete}
+                    onClick={() => void handleDelete()}
                     disabled={!selectedProfile || busy}
                 >
                     {confirming === 'delete' ? t('app.confirmDelete') : t('app.deleteProfile')}
@@ -224,7 +224,7 @@ export function ChallengeProfilesBar({ overrides, onApply, onProfilesChanged = (
                         if (confirming === 'overwrite') disarm();
                     }}
                 />
-                <button className="btn btn-sm btn-latvian" onClick={handleSave} disabled={busy}>
+                <button className="btn btn-sm btn-latvian" onClick={() => void handleSave()} disabled={busy}>
                     {busy && <span className="loading loading-spinner loading-xs" />}
                     {confirming === 'overwrite' ? t('app.confirmOverwrite') : t('app.saveAsProfile')}
                 </button>

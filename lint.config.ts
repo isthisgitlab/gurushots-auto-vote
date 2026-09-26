@@ -1,7 +1,7 @@
 // @ttsc/lint configuration — runs inside the `pnpm typecheck` (ttsc --noEmit)
-// pass over the tsconfig program (src/js/**/*.js only). This is an ADDITIONAL
-// gate on the shared core, not an ESLint replacement: ESLint + Prettier keep
-// owning .jsx, scripts/, tests, and all formatting. No `format` block here —
+// pass over the tsconfig program (src/js/**/*.{js,jsx}). This is an ADDITIONAL
+// gate on the core and the renderer, not an ESLint replacement: ESLint +
+// Prettier keep owning scripts/, tests, and all formatting. No `format` block here —
 // its mere presence would enable the formatter and fight Prettier.
 //
 // Scope: EVERY rule below runs over the whole program — including files

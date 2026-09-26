@@ -53,7 +53,7 @@ export function AsyncActionButton({
     };
 
     return (
-        <button className={className} onClick={handleClick} disabled={loading || disabled} title={title}>
+        <button className={className} onClick={() => void handleClick()} disabled={loading || disabled} title={title}>
             {loading ? (
                 <>
                     <span className="loading loading-spinner loading-xs" />
