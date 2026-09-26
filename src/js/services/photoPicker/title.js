@@ -6,6 +6,7 @@
  */
 
 const { MAX_TOKENISE_CHARS, stem, rawTokenise, tokenise, matches } = require('./stemming');
+const lexicon = require('../semantic/lexicon');
 
 // Bounds for abstractTitleWords, on the lexicon's concreteness cosine. Pinned by
 // the `concreteness.cases` gate in scripts/validate-lexicon.js (real titles, run
@@ -17,10 +18,7 @@ const { MAX_TOKENISE_CHARS, stem, rawTokenise, tokenise, matches } = require('./
 const CONCRETE_SUBJECT_MIN = 0.15;
 const ABSTRACT_WORD_MAX = -0.1;
 
-// Lazy on purpose: semantic/lexicon.js requires the photoPicker facade for
-// stem(), and the facade loads this module, so a top-level require would hand
-// it a half-built exports object.
-const lexiconConcreteness = (word) => require('../semantic/lexicon').concreteness(word);
+const lexiconConcreteness = (word) => lexicon.concreteness(word);
 
 /**
  * Which title words are clearly NOT the subject, judged by meaning rather than

@@ -15,7 +15,7 @@
  */
 
 const { loadLexiconAsset } = require('./assets');
-const { stem } = require('../photoPicker');
+const { stem } = require('../photoPicker/stemming');
 
 // undefined = not initialized, null = unavailable, { dims, words: Map } = ready
 let table;
