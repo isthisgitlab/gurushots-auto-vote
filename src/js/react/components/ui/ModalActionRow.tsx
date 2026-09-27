@@ -9,14 +9,10 @@ const ROW_ICON_CLASS = 'w-4 h-4 mr-1';
  * modals (SettingsModal renders it twice — top and bordered bottom —
  * and ChallengeSettingsModal once).
  *
- * @param {object} props
- * @param {() => void | Promise<void>} props.onSave
- * @param {boolean} props.saving        - disables Save and shows the spinner
- * @param {() => void | Promise<void>} props.onSecondary - warning button handler (Reset All / Clear All)
- * @param {string} props.secondaryLabel - already-translated warning button label
- * @param {'reset'|'trash'} [props.secondaryIcon]
- * @param {() => void} props.onCancel
- * @param {boolean} [props.bordered]    - adds the top border + padding variant
+ * @param props.saving        - disables Save and shows the spinner
+ * @param props.onSecondary - warning button handler (Reset All / Clear All)
+ * @param props.secondaryLabel - already-translated warning button label
+ * @param props.bordered    - adds the top border + padding variant
  */
 export function ModalActionRow({
     onSave,
@@ -26,6 +22,14 @@ export function ModalActionRow({
     secondaryIcon = 'reset',
     onCancel,
     bordered = false,
+}: {
+    onSave: () => void | Promise<void>;
+    saving: boolean;
+    onSecondary: () => void | Promise<void>;
+    secondaryLabel: string;
+    secondaryIcon?: 'reset' | 'trash';
+    onCancel: () => void;
+    bordered?: boolean;
 }) {
     const { t } = useTranslation();
 

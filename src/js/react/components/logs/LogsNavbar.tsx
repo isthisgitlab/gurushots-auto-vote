@@ -4,10 +4,8 @@ import { ConnectionBadge } from '@/components/ui/StatusBadge';
 /**
  * Navbar for the Logs page
  * Shows title and connection status
- *
- * @param {{ connected: boolean }} props
  */
-export function LogsNavbar({ connected }) {
+export function LogsNavbar({ connected }: { connected: boolean; }) {
     const { t } = useTranslation();
 
     return (

@@ -4,37 +4,35 @@
  * reducer directly without spinning up a Provider.
  */
 
-export const ACTIONS = /** @type {const} */ ({
+export const ACTIONS = {
     START: 'START',
     STOP: 'STOP',
     INCREMENT_CYCLE: 'INCREMENT_CYCLE',
     UPDATE_LAST_RUN: 'UPDATE_LAST_RUN',
     SET_ERROR: 'SET_ERROR',
     SET_NEXT_RUN: 'SET_NEXT_RUN',
-});
+} as const;
 
-/**
- * @typedef {object} AutovoteState
- * @property {boolean} running
- * @property {number} cycles
- * @property {string | null} lastRun - locale time string of the last successful cycle
- * @property {number | null} nextRunAt
- * @property {'Stopped' | 'Running' | 'Error'} status
- * @property {'badge-neutral' | 'badge-success' | 'badge-error'} statusClass
- * @property {string | null} error
- */
+export interface AutovoteState {
+    running: boolean;
+    cycles: number;
+    /** locale time string of the last successful cycle */
+    lastRun: string | null;
+    nextRunAt: number | null;
+    status: 'Stopped' | 'Running' | 'Error';
+    statusClass: 'badge-neutral' | 'badge-success' | 'badge-error';
+    error: string | null;
+}
 
-/**
- * @typedef {{ type: typeof ACTIONS.START }
- *   | { type: typeof ACTIONS.STOP }
- *   | { type: typeof ACTIONS.INCREMENT_CYCLE }
- *   | { type: typeof ACTIONS.UPDATE_LAST_RUN, payload: string }
- *   | { type: typeof ACTIONS.SET_ERROR, payload: string }
- *   | { type: typeof ACTIONS.SET_NEXT_RUN, payload: number | null }} AutovoteAction
- */
+export type AutovoteAction =
+    | { type: typeof ACTIONS.START }
+    | { type: typeof ACTIONS.STOP }
+    | { type: typeof ACTIONS.INCREMENT_CYCLE }
+    | { type: typeof ACTIONS.UPDATE_LAST_RUN; payload: string }
+    | { type: typeof ACTIONS.SET_ERROR; payload: string }
+    | { type: typeof ACTIONS.SET_NEXT_RUN; payload: number | null };
 
-/** @type {AutovoteState} */
-export const initialState = {
+export const initialState: AutovoteState = {
     running: false,
     cycles: 0,
     lastRun: null,
@@ -48,12 +46,7 @@ export const initialState = {
     error: null,
 };
 
-/**
- * @param {AutovoteState} state
- * @param {AutovoteAction} action
- * @returns {AutovoteState}
- */
-export function autovoteReducer(state, action) {
+export function autovoteReducer(state: AutovoteState, action: AutovoteAction): AutovoteState {
     switch (action.type) {
         case ACTIONS.START:
             return {

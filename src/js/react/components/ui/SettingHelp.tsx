@@ -8,9 +8,9 @@ import { useTranslation } from '@/contexts/TranslationContext';
  * sentinel — is one click away without cluttering the row for users who
  * don't need it.
  *
- * @param {{ helpKey?: string }} props - translation key of the explanation
+ * @param props - translation key of the explanation
  */
-export function SettingHelp({ helpKey }) {
+export function SettingHelp({ helpKey }: { helpKey?: string }) {
     const { t } = useTranslation();
     if (!helpKey) return null;
     return (

@@ -192,7 +192,7 @@ describe('ChallengeSettingsModal group applicability', () => {
             expect(numberInputs().length).toBeGreaterThan(0);
         });
 
-        // Heading outline: h3 is the modal's own title (ui/Modal.jsx), h4 is a
+        // Heading outline: h3 is the modal's own title (ui/Modal.tsx), h4 is a
         // section — the pre-existing "Challenge Profiles" block and each tier
         // band are siblings at that level — and group headings are h5 below.
         // Queried by role and accessible name rather than by tag position, so

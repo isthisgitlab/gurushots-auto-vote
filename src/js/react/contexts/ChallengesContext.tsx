@@ -1,27 +1,31 @@
 import { createContext, useContext, useEffect, useMemo } from 'react';
 import { useActiveChallenges } from '@/api/useActiveChallenges';
 
-/** @import { ComponentChildren } from 'preact' */
-/** @import { Challenge } from '../../types/gurushots' */
+import type { ComponentChildren } from 'preact';
+import type { Challenge } from '../../types/gurushots';
 
 /**
  * What useChallenges returns: the active challenges sorted by close time.
- *
- * @typedef {object} ChallengesContextValue
- * @property {Challenge[]} challenges
- * @property {boolean} loading
- * @property {Error | null} error
- * @property {(skipCleanup?: boolean) => Promise<void>} refetch
  */
+export interface ChallengesContextValue {
+    challenges: Challenge[];
+    loading: boolean;
+    error: Error | null;
+    refetch: (skipCleanup?: boolean) => Promise<void>;
+}
 
-const ChallengesContext = createContext(/** @type {ChallengesContextValue | null} */ (null));
+const ChallengesContext = createContext(null as ChallengesContextValue | null);
 
 /**
  * Provider that wraps useActiveChallenges and provides challenge data with auto-refresh
- *
- * @param {{ children?: ComponentChildren, autovoteRunning?: boolean }} props
  */
-export function ChallengesProvider({ children, autovoteRunning }) {
+export function ChallengesProvider({
+    children,
+    autovoteRunning,
+}: {
+    children?: ComponentChildren;
+    autovoteRunning?: boolean;
+}) {
     // The running flag is threaded into the hook so its cleanup pass can
     // skip stale-settings cleanup while autovote runs — prop wiring, not
     // a window-global side-channel.
@@ -55,10 +59,8 @@ export function ChallengesProvider({ children, autovoteRunning }) {
 
 /**
  * Hook to access challenges data
- *
- * @returns {ChallengesContextValue}
  */
-export function useChallenges() {
+export function useChallenges(): ChallengesContextValue {
     const context = useContext(ChallengesContext);
     if (!context) {
         throw new Error('useChallenges must be used within a ChallengesProvider');

@@ -2,7 +2,7 @@
  * Direct tests for the shared cadence-chain factory
  * (src/js/scheduling/cadenceChain.ts) through a fake transport.
  *
- * Both hosts (runScheduler.ts for CLI/Android, AutovoteContext.jsx for the
+ * Both hosts (runScheduler.ts for CLI/Android, AutovoteContext.tsx for the
  * GUI) are thin adapters over this factory — these tests are the guard that
  * keeps a future edit from passing one host's suite while silently breaking
  * the other's: the loop invariants (fresh settings per decision, prefetched

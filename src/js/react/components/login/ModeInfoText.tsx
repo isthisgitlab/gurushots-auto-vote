@@ -2,10 +2,8 @@ import { useTranslation } from '@/contexts/TranslationContext';
 
 /**
  * Bottom info text that changes based on mock mode
- *
- * @param {{ isMock: boolean }} props
  */
-export function ModeInfoText({ isMock }) {
+export function ModeInfoText({ isMock }: { isMock: boolean }) {
     const { t } = useTranslation();
 
     const text = isMock ? t('login.mockModeInfo') : t('login.loadingModeInfo');

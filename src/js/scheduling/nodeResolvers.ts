@@ -4,7 +4,7 @@
  * On Electron main / CLI / Android headless the settings facade is available
  * synchronously, so per-challenge values come straight from it. The GUI
  * WebView has its own async variants over IPC in
- * react/contexts/autovoteScheduler.js — same shape, different transport.
+ * react/contexts/autovoteScheduler.ts — same shape, different transport.
  */
 
 import * as settings from '../settings';

@@ -1,18 +1,10 @@
 import { useCallback } from 'react';
 import { useTranslation } from '@/contexts/TranslationContext';
+import type { JSX } from 'preact';
 
 /**
  * Settings toggles section for the login page
  * Contains theme, stay logged in, and mock mode toggles
- *
- * @param {{
- *   theme: string,
- *   stayLoggedIn: boolean,
- *   mockMode: boolean,
- *   onThemeChange: (theme: 'dark' | 'light') => void | Promise<void>,
- *   onStayLoggedInChange: (value: boolean) => void | Promise<void>,
- *   onMockModeChange: (value: boolean) => void | Promise<void>,
- * }} props
  */
 export function SettingsToggles({
     theme,
@@ -21,13 +13,19 @@ export function SettingsToggles({
     onThemeChange,
     onStayLoggedInChange,
     onMockModeChange,
+}: {
+    theme: string;
+    stayLoggedIn: boolean;
+    mockMode: boolean;
+    onThemeChange: (theme: 'dark' | 'light') => void | Promise<void>;
+    onStayLoggedInChange: (value: boolean) => void | Promise<void>;
+    onMockModeChange: (value: boolean) => void | Promise<void>;
 }) {
     const { t } = useTranslation();
 
     const handleThemeToggle = useCallback(
-        /** @param {import('preact').JSX.TargetedEvent<HTMLInputElement, Event>} e */
-        (e) => {
-            const isDark = /** @type {HTMLInputElement} */ (e.target).checked;
+        (e: JSX.TargetedEvent<HTMLInputElement, Event>) => {
+            const isDark = (e.target as HTMLInputElement).checked;
             const newTheme = isDark ? 'dark' : 'light';
             void onThemeChange(newTheme);
         },
@@ -35,17 +33,15 @@ export function SettingsToggles({
     );
 
     const handleStayLoggedInToggle = useCallback(
-        /** @param {import('preact').JSX.TargetedEvent<HTMLInputElement, Event>} e */
-        (e) => {
-            void onStayLoggedInChange(/** @type {HTMLInputElement} */ (e.target).checked);
+        (e: JSX.TargetedEvent<HTMLInputElement, Event>) => {
+            void onStayLoggedInChange((e.target as HTMLInputElement).checked);
         },
         [onStayLoggedInChange],
     );
 
     const handleMockModeToggle = useCallback(
-        /** @param {import('preact').JSX.TargetedEvent<HTMLInputElement, Event>} e */
-        (e) => {
-            void onMockModeChange(/** @type {HTMLInputElement} */ (e.target).checked);
+        (e: JSX.TargetedEvent<HTMLInputElement, Event>) => {
+            void onMockModeChange((e.target as HTMLInputElement).checked);
         },
         [onMockModeChange],
     );

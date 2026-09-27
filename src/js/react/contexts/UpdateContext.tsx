@@ -1,71 +1,70 @@
 import { createContext, useContext, useReducer, useCallback, useEffect } from 'react';
 import * as ipc from '../api/ipc';
 
-/** @import { ComponentChildren } from 'preact' */
-/** @import { FormattedUpdateInfo } from '../../services/AutoUpdater' */
+import type { ComponentChildren } from 'preact';
+import type { FormattedUpdateInfo } from '../../services/AutoUpdater';
 
 // Update states
-export const UPDATE_STATES = /** @type {const} */ ({
+export const UPDATE_STATES = {
     IDLE: 'idle',
     AVAILABLE: 'available',
     DOWNLOADING: 'downloading',
     READY: 'ready',
     ERROR: 'error',
-});
+} as const;
 
 // Action types
-const ACTIONS = /** @type {const} */ ({
+const ACTIONS = {
     SET_AVAILABLE: 'SET_AVAILABLE',
     SET_DOWNLOADING: 'SET_DOWNLOADING',
     UPDATE_PROGRESS: 'UPDATE_PROGRESS',
     SET_READY: 'SET_READY',
     SET_ERROR: 'SET_ERROR',
     HIDE_DIALOG: 'HIDE_DIALOG',
-});
+} as const;
 
-/** @typedef {{ percent: number, transferred: number, total: number, bytesPerSecond: number }} DownloadProgress */
-/** @typedef {{ message: string, canFallbackToBrowser: boolean }} UpdateError */
+export type DownloadProgress = { percent: number; transferred: number; total: number; bytesPerSecond: number };
+type UpdateError = { message: string; canFallbackToBrowser: boolean };
 
-/**
- * @typedef {object} UpdateStateFields
- * @property {FormattedUpdateInfo | null} updateInfo
- * @property {DownloadProgress | null} progress
- * @property {boolean} dialogVisible
- */
+interface UpdateStateFields {
+    updateInfo: FormattedUpdateInfo | null;
+    progress: DownloadProgress | null;
+    dialogVisible: boolean;
+}
 
 /**
  * The update state; the `error` state always carries its error.
- *
- * @typedef {UpdateStateFields & (
- *   | { state: Exclude<(typeof UPDATE_STATES)[keyof typeof UPDATE_STATES], typeof UPDATE_STATES.ERROR>, error: UpdateError | null }
- *   | { state: typeof UPDATE_STATES.ERROR, error: UpdateError }
- * )} UpdateState
  */
+type UpdateState = UpdateStateFields &
+    (
+        | {
+              state: Exclude<(typeof UPDATE_STATES)[keyof typeof UPDATE_STATES], typeof UPDATE_STATES.ERROR>;
+              error: UpdateError | null;
+          }
+        | { state: typeof UPDATE_STATES.ERROR; error: UpdateError }
+    );
 
-/**
- * @typedef {{ type: typeof ACTIONS.SET_AVAILABLE, payload: FormattedUpdateInfo }
- *   | { type: typeof ACTIONS.SET_DOWNLOADING }
- *   | { type: typeof ACTIONS.UPDATE_PROGRESS, payload: DownloadProgress }
- *   | { type: typeof ACTIONS.SET_READY }
- *   | { type: typeof ACTIONS.SET_ERROR, payload: UpdateError }
- *   | { type: typeof ACTIONS.HIDE_DIALOG }} UpdateAction
- */
+type UpdateAction =
+    | { type: typeof ACTIONS.SET_AVAILABLE; payload: FormattedUpdateInfo }
+    | { type: typeof ACTIONS.SET_DOWNLOADING }
+    | { type: typeof ACTIONS.UPDATE_PROGRESS; payload: DownloadProgress }
+    | { type: typeof ACTIONS.SET_READY }
+    | { type: typeof ACTIONS.SET_ERROR; payload: UpdateError }
+    | { type: typeof ACTIONS.HIDE_DIALOG };
 
 /**
  * What useUpdate returns: the update state plus its actions.
- *
- * @typedef {UpdateState & {
- *   startDownload: () => Promise<void>,
- *   installUpdate: () => Promise<void>,
- *   skipVersion: () => Promise<void>,
- *   hideDialog: () => void,
- *   openBrowserDownload: () => Promise<void>,
- * }} UpdateContextValue
  */
+export type UpdateContextValue = UpdateState & {
+    startDownload: () => Promise<void>;
+    installUpdate: () => Promise<void>;
+    skipVersion: () => Promise<void>;
+    hideDialog: () => void;
+    openBrowserDownload: () => Promise<void>;
+};
 
 // Initial state
-/** @type {UpdateState} */
-const initialState = {
+const initialState: UpdateState = {
     state: UPDATE_STATES.IDLE,
     updateInfo: null,
     progress: null,
@@ -74,12 +73,7 @@ const initialState = {
 };
 
 // Reducer
-/**
- * @param {UpdateState} state
- * @param {UpdateAction} action
- * @returns {UpdateState}
- */
-function updateReducer(state, action) {
+function updateReducer(state: UpdateState, action: UpdateAction): UpdateState {
     switch (action.type) {
         case ACTIONS.SET_AVAILABLE:
             return {
@@ -121,23 +115,21 @@ function updateReducer(state, action) {
     }
 }
 
-const UpdateContext = createContext(/** @type {UpdateContextValue | null} */ (null));
+const UpdateContext = createContext(null as UpdateContextValue | null);
 
 /**
  * Provider for update dialog state
- *
- * @param {{ children?: ComponentChildren }} props
  */
-export function UpdateProvider({ children }) {
+export function UpdateProvider({ children }: { children?: ComponentChildren }) {
     const [state, dispatch] = useReducer(updateReducer, initialState);
 
     // Setup IPC event listeners
     useEffect(() => {
-        const unsubscribeAvailable = ipc.onUpdateAvailable((/** @type {FormattedUpdateInfo} */ updateInfo) => {
+        const unsubscribeAvailable = ipc.onUpdateAvailable((updateInfo: FormattedUpdateInfo) => {
             dispatch({ type: ACTIONS.SET_AVAILABLE, payload: updateInfo });
         });
 
-        const unsubscribeProgress = ipc.onDownloadProgress((/** @type {DownloadProgress} */ progress) => {
+        const unsubscribeProgress = ipc.onDownloadProgress((progress: DownloadProgress) => {
             dispatch({ type: ACTIONS.UPDATE_PROGRESS, payload: progress });
         });
 
@@ -145,17 +137,15 @@ export function UpdateProvider({ children }) {
             dispatch({ type: ACTIONS.SET_READY });
         });
 
-        const unsubscribeError = ipc.onUpdateError(
-            (/** @type {{ message?: string, canFallbackToBrowser?: boolean }} */ error) => {
-                dispatch({
-                    type: ACTIONS.SET_ERROR,
-                    payload: {
-                        message: error?.message || 'Download failed',
-                        canFallbackToBrowser: error.canFallbackToBrowser !== false,
-                    },
-                });
-            },
-        );
+        const unsubscribeError = ipc.onUpdateError((error: { message?: string; canFallbackToBrowser?: boolean }) => {
+            dispatch({
+                type: ACTIONS.SET_ERROR,
+                payload: {
+                    message: error?.message || 'Download failed',
+                    canFallbackToBrowser: error.canFallbackToBrowser !== false,
+                },
+            });
+        });
 
         return () => {
             // Cleanup listeners if cleanup functions are provided
@@ -194,7 +184,7 @@ export function UpdateProvider({ children }) {
             dispatch({
                 type: ACTIONS.SET_ERROR,
                 payload: {
-                    message: /** @type {Error | null | undefined} */ (err)?.message || 'Download failed',
+                    message: (err as Error | null | undefined)?.message || 'Download failed',
                     canFallbackToBrowser: true,
                 },
             });
@@ -211,7 +201,7 @@ export function UpdateProvider({ children }) {
             dispatch({
                 type: ACTIONS.SET_ERROR,
                 payload: {
-                    message: /** @type {Error | null | undefined} */ (err)?.message || 'Installation failed',
+                    message: (err as Error | null | undefined)?.message || 'Installation failed',
                     canFallbackToBrowser: false,
                 },
             });
@@ -227,7 +217,7 @@ export function UpdateProvider({ children }) {
             dispatch({ type: ACTIONS.HIDE_DIALOG });
         } catch (err) {
             await ipc.logRendererError(
-                `Error skipping update version: ${/** @type {Error | null | undefined} */ (err)?.message || err}`,
+                `Error skipping update version: ${(err as Error | null | undefined)?.message || err}`,
             );
         }
     }, []);
@@ -249,7 +239,7 @@ export function UpdateProvider({ children }) {
             dispatch({ type: ACTIONS.HIDE_DIALOG });
         } catch (err) {
             await ipc.logRendererError(
-                `Error opening download URL: ${/** @type {Error | null | undefined} */ (err)?.message || err}`,
+                `Error opening download URL: ${(err as Error | null | undefined)?.message || err}`,
             );
         }
     }, []);
@@ -268,10 +258,8 @@ export function UpdateProvider({ children }) {
 
 /**
  * Hook to access update state and actions
- *
- * @returns {UpdateContextValue}
  */
-export function useUpdate() {
+export function useUpdate(): UpdateContextValue {
     const context = useContext(UpdateContext);
     if (!context) {
         throw new Error('useUpdate must be used within an UpdateProvider');

@@ -1,5 +1,5 @@
 /**
- * Component tests for ScrollToTopButton.jsx — the floating back-to-top button
+ * Component tests for ScrollToTopButton.tsx — the floating back-to-top button
  * on the window-scrolled main page. Covers:
  *   - hidden while the page is at (or near) the top
  *   - appears once scrolled past the threshold, including when mounted on an

@@ -1,6 +1,6 @@
 /**
  * Unit tests for the React autovote scheduler helpers
- * (src/js/react/contexts/autovoteScheduler.js).
+ * (src/js/react/contexts/autovoteScheduler.ts).
  *
  * These tests import the actual exports rather than re-declaring the logic,
  * so they exercise the real module (including the revert-to-normal-cadence

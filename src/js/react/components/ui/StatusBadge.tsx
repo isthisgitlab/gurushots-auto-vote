@@ -1,21 +1,36 @@
 import { useTranslation } from '@/contexts/TranslationContext';
+import type { ComponentChildren } from 'preact';
 
-/**
- * @typedef {'neutral'|'success'|'error'|'warning'|'info'|'ghost'|'primary'|'secondary'|'accent'
- *   |'popular'|'skilled'|'premier'|'elite'|'allstar'} StatusBadgeVariant
- */
+export type StatusBadgeVariant =
+    | 'neutral'
+    | 'success'
+    | 'error'
+    | 'warning'
+    | 'info'
+    | 'ghost'
+    | 'primary'
+    | 'secondary'
+    | 'accent'
+    | 'popular'
+    | 'skilled'
+    | 'premier'
+    | 'elite'
+    | 'allstar';
 
 /**
  * DaisyUI badge component for displaying status
- *
- * @param {{
- *   children?: import('preact').ComponentChildren,
- *   variant?: StatusBadgeVariant,
- *   size?: 'xs'|'sm'|'md'|'lg',
- *   className?: string,
- * }} props
  */
-export function StatusBadge({ children, variant = 'neutral', size = 'sm', className = '' }) {
+export function StatusBadge({
+    children,
+    variant = 'neutral',
+    size = 'sm',
+    className = '',
+}: {
+    children?: ComponentChildren;
+    variant?: StatusBadgeVariant;
+    size?: 'xs' | 'sm' | 'md' | 'lg';
+    className?: string;
+}) {
     const variantClass =
         {
             neutral: 'badge-neutral',
@@ -48,10 +63,8 @@ export function StatusBadge({ children, variant = 'neutral', size = 'sm', classN
 
 /**
  * Connection status badge for log viewer
- *
- * @param {{ connected: boolean }} props
  */
-export function ConnectionBadge({ connected }) {
+export function ConnectionBadge({ connected }: { connected: boolean }) {
     const { t } = useTranslation();
     return (
         <StatusBadge variant={connected ? 'success' : 'error'}>

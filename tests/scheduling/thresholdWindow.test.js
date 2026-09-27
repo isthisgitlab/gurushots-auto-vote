@@ -1,6 +1,6 @@
 /**
  * Shared last-minute threshold math used by both schedulers (runScheduler.ts
- * for CLI/Android, autovoteScheduler.js for the GUI). The only platform
+ * for CLI/Android, autovoteScheduler.ts for the GUI). The only platform
  * difference is how a per-challenge threshold is resolved — sync
  * settings.getEffectiveSetting on Node vs async window.api.getEffectiveSetting
  * in the WebView — so the core takes a `resolveThreshold` function and works

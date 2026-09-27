@@ -11,16 +11,20 @@ const VARIANT_CLASS = {
     success: 'status-success',
 };
 
-/** @typedef {keyof typeof VARIANT_CLASS} PulseDotVariant */
+export type PulseDotVariant = keyof typeof VARIANT_CLASS;
 
 /**
- * @param {{
- *   variant?: PulseDotVariant,
- *   pulse?: boolean,
- *   size?: 'status-xs'|'status-sm'|'status-md'|'status-lg'|'status-xl',
- * }} props - `size` is a DaisyUI status size class.
+ * @param props - `size` is a DaisyUI status size class.
  */
-export function PulseDot({ variant = 'info', pulse = true, size = 'status-md' }) {
+export function PulseDot({
+    variant = 'info',
+    pulse = true,
+    size = 'status-md',
+}: {
+    variant?: PulseDotVariant;
+    pulse?: boolean;
+    size?: 'status-xs' | 'status-sm' | 'status-md' | 'status-lg' | 'status-xl';
+}) {
     const colour = VARIANT_CLASS[variant] || VARIANT_CLASS.info;
     return (
         <span

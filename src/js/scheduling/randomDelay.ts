@@ -1,5 +1,5 @@
 /**
- * Shared between the React renderer (`AutovoteContext.jsx`) and the
+ * Shared between the React renderer (`AutovoteContext.tsx`) and the
  * CLI scheduler (`cli/cli.ts`) so the same min/max range produces the
  * same distribution on both surfaces. Pure function — no logger, no
  * settings I/O — so it stays bundle-friendly for both runtimes.
@@ -55,7 +55,7 @@ const getRandomCheckFrequencyMs = (
  * longer than the delay — recover after a short pause instead of re-firing
  * immediately); the delayMs ceiling handles a wall-clock jump backward that
  * would otherwise inflate the wait. Shared by the CLI scheduler
- * (runScheduler.ts) and the GUI cadence chain (AutovoteContext.jsx) so the
+ * (runScheduler.ts) and the GUI cadence chain (AutovoteContext.tsx) so the
  * formula cannot drift between the two.
  *
  * @param delayMs - the rolled normal-mode delay

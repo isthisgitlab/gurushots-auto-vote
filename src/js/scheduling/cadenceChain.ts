@@ -1,7 +1,7 @@
 /**
  * Shared autovote cadence chain — the recursive "decide delay → arm timer →
  * run cycle → re-arm" loop both schedulers run (runScheduler.ts for
- * CLI/Android, AutovoteContext.jsx for the GUI).
+ * CLI/Android, AutovoteContext.tsx for the GUI).
  * The MATH is shared in ./thresholdWindow and ./randomDelay; this factory
  * shares the LOOP: guard ordering, fresh-settings read per cycle, prefetched
  * challenge reuse, the normal-vs-threshold wait decision, the cadence log
@@ -11,7 +11,7 @@
  * Hosts inject transport only — how to read settings, fetch challenges,
  * resolve per-challenge values, run a cycle, store the timer handle, and emit
  * a log line — mirroring how ./nodeResolvers.ts vs
- * react/contexts/autovoteScheduler.js split the per-challenge
+ * react/contexts/autovoteScheduler.ts split the per-challenge
  * resolvers by platform. CJS on purpose: required directly by the Node hosts
  * and imported by the esbuild-bundled renderer.
  */

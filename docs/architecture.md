@@ -10,7 +10,7 @@ _secondary hint_ ("around L204"), because this repo has high edit velocity and b
 next unrelated edit. If a number is stale, search by name and update it here.
 
 **Path convention.** Paths are relative to `src/js/`; renderer paths keep their `react/…` segments
-(e.g. `react/components/ui/Modal.jsx`).
+(e.g. `react/components/ui/Modal.tsx`).
 
 **Verified as of commit `e21931f`.** If a symbol has moved, trust the name over the line number and update
 this file.
@@ -452,14 +452,14 @@ repeated six times is one that gets forgotten at one of them.
 - **No router.** "Pages" are separate mount entry points chosen by auth state: `mountApp()` / `mountLogin()`
   (`react/pages/App.jsx`). Electron swaps native windows; Capacitor swaps React trees into `#root`.
 - **No toast library.** Error surfaces are: inline DaisyUI `alert` banners with a translated message; and
-  `react/components/ui/ErrorBoundary.jsx` (an `alert alert-error` with Dismiss/Reload) wrapped around every
+  `react/components/ui/ErrorBoundary.tsx` (an `alert alert-error` with Dismiss/Reload) wrapped around every
   major subtree. Action failures generally log via `ipc.logRendererError` rather than showing a banner.
 - **Error-message content quality (UX).** User-facing error text follows _what happened → why → what to do
   next_, uses a translated string, and **never** dumps raw HTTP status codes or internal result shapes at
   the user — internal detail goes to `logError`, not the UI.
 - **Reuse the `react/components/ui/` primitives** rather than re-rolling: `Modal` (+`ModalActions`),
   `AsyncActionButton`, `StatusBadge` (+`ConnectionBadge`), `LoadingSpinner`,
-  `ResetButton`. New modals **must** go through `ui/Modal.jsx` (around L29–100) — it owns the a11y bar:
+  `ResetButton`. New modals **must** go through `ui/Modal.tsx` (around L29–100) — it owns the a11y bar:
   `role="dialog"` / `aria-modal`, a full Tab/Shift+Tab focus trap, focus-move-in on open and restore on
   close, Escape-to-close, and body-scroll lock.
 - **Theme** = a `data-theme` attribute on `document.documentElement`, sourced from the `theme` setting
@@ -469,7 +469,7 @@ repeated six times is one that gets forgotten at one of them.
   shared per-second wall-clock re-render.
 - The same tree runs under Electron Chromium, the Capacitor WebView, and happy-dom in tests — so code
   deliberately avoids Node-only APIs in favour of `window.api`, `CustomEvent`, and signals (see the note in
-  `react/contexts/AutovoteContext.jsx`), which behave identically across all three.
+  `react/contexts/AutovoteContext.tsx`), which behave identically across all three.
 
 ## 9. i18n
 
@@ -480,7 +480,7 @@ repeated six times is one that gets forgotten at one of them.
 - **Internal / log / error-prefix strings stay English** (not translated) — e.g. the fallback strings
   inside `useAsyncIpcAction.ts` and the action hooks are English literals by design.
 - Non-hook contexts (class components, primitives, the deadline notifier) use the bundled
-  `translations/renderer.ts` translator (`ui/Modal.jsx`, `ui/ErrorBoundary.jsx`), because they can't call
+  `translations/renderer.ts` translator (`ui/Modal.tsx`, `ui/ErrorBoundary.tsx`), because they can't call
   the hook. The dependency-free core is `translations/translator.ts`; the renderer persists the language
   through `window.api`, the Node side (`translations/index.ts`) through the settings facade.
 

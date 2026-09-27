@@ -2,7 +2,7 @@
  * Keeps the Electron main process schedulable while auto-vote is running.
  *
  * WHY THIS EXISTS: the GUI's cadence chain
- * (react/contexts/AutovoteContext.jsx -> scheduling/cadenceChain.ts) is a
+ * (react/contexts/AutovoteContext.tsx -> scheduling/cadenceChain.ts) is a
  * recursive `setTimeout` living in the RENDERER. Two OS/Chromium mechanisms
  * can stop that timer dead while the app is merely in the background, with no
  * error and no log line:

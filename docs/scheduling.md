@@ -51,7 +51,7 @@ nextCurrencyRule, nextScenarioWake, nextBoostHold }`:
   has not started yet is judged from its start phase. Every still-open
   challenge counts, flash included. Resolvers: `nodeResolvers.resolveScenarioWake`
   (over `services/scenarioStatus.ts`) and its IPC twin in
-  `react/contexts/autovoteScheduler.js` (`get-scenario-status`).
+  `react/contexts/autovoteScheduler.ts` (`get-scenario-status`).
 - **normal**: otherwise the random delay in `[checkFrequencyMin,
 checkFrequencyMax]`.
 
@@ -275,12 +275,12 @@ Deliberate semantics and caveats:
 
 ## Electron — UI-driven AutovoteContext
 
-- **Owner**: `src/js/react/contexts/AutovoteContext.jsx`
+- **Owner**: `src/js/react/contexts/AutovoteContext.tsx`
 - **Started by**: the Start / Stop button in the React UI (or auto-
   resume on mount when the persisted `autovoteRunning` flag is true).
 - **Cadence**: a single recursive `setTimeout` chain (`cycleTimerRef` +
   `scheduleNext`) driven by the same `computeNextCycleDelayMs` decision,
-  bound to the async IPC resolver via `autovoteScheduler.js`. No separate
+  bound to the async IPC resolver via `autovoteScheduler.ts`. No separate
   interval/boundary timer.
 - **Lifecycle**: tied to the renderer window. Closing the window stops
   the loop. The persisted `autovoteRunning` flag means a relaunch

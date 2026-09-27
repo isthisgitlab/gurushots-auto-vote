@@ -1,17 +1,17 @@
 import { Component } from 'react';
 import { rendererTranslator } from '../../../translations/renderer';
 import * as ipc from '@/api/ipc';
+import type { ComponentChildren, ErrorInfo } from 'preact';
 
 /**
  * Translate through the page translator rather than the useTranslation hook:
  * ErrorBoundary is a class (no hooks) and, more importantly, an error boundary
  * must not depend on React context that may itself be part of what broke.
  */
-/** @param {string} key */
-const tr = (key) => rendererTranslator.t(key);
+const tr = (key: string) => rendererTranslator.t(key);
 
-/** @typedef {{ children?: import('preact').ComponentChildren }} ErrorBoundaryProps */
-/** @typedef {{ error: Partial<Error> | null }} ErrorBoundaryState */
+export type ErrorBoundaryProps = { children?: ComponentChildren };
+export type ErrorBoundaryState = { error: Partial<Error> | null };
 
 /**
  * Catches render/lifecycle errors from descendants and shows a recovery UI
@@ -21,14 +21,12 @@ const tr = (key) => rendererTranslator.t(key);
  *
  * `error` is whatever a descendant threw — usually an Error, read only for
  * its `message`/`stack`.
- *
- * @extends {Component<ErrorBoundaryProps, ErrorBoundaryState>}
  */
-export class ErrorBoundary extends Component {
-    /** @param {ErrorBoundaryProps} props */
-    constructor(props) {
+export class ErrorBoundary extends Component<ErrorBoundaryProps, ErrorBoundaryState> {
+    loggedErrorKey: string | null;
+
+    constructor(props: ErrorBoundaryProps) {
         super(props);
-        /** @type {ErrorBoundaryState} */
         this.state = { error: null };
         // Dedupe key for componentDidCatch. If the user clicks Dismiss on a
         // persistent crash the child re-throws on the next render with a
@@ -39,22 +37,16 @@ export class ErrorBoundary extends Component {
         // two genuinely-different errors that happen to share a message
         // (e.g. two unrelated "Cannot read properties of undefined" throws)
         // collapse into one log entry. Acceptable vs. the original flood.
-        /** @type {string|null} */
         this.loggedErrorKey = null;
         this.handleDismiss = this.handleDismiss.bind(this);
         this.handleReload = this.handleReload.bind(this);
     }
 
-    /** @param {Partial<Error>} error */
-    static getDerivedStateFromError(error) {
+    static getDerivedStateFromError(error: Partial<Error>) {
         return { error };
     }
 
-    /**
-     * @param {Partial<Error> | null | undefined} error
-     * @param {import('preact').ErrorInfo | undefined} info
-     */
-    componentDidCatch(error, info) {
+    componentDidCatch(error: Partial<Error> | null | undefined, info: ErrorInfo | undefined) {
         const detail = error?.stack || error?.message || String(error);
         const componentStack = info?.componentStack || '';
         const dedupeKey = error?.message || String(error);

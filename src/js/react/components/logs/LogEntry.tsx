@@ -1,4 +1,4 @@
-/** @import { GuiLogEntry } from '../../../logger' */
+import type { GuiLogEntry } from '../../../logger';
 /**
  * Severity → text color. Strict 4-value set matches logger.ts.
  */
@@ -12,17 +12,14 @@ const LEVEL_COLORS = {
 /**
  * The fields a log line renders — a logger ring-buffer entry or a live GUI
  * fan-out entry both carry them.
- *
- * @typedef {Pick<GuiLogEntry, 'level' | 'message' | 'context' | 'timestamp' | 'category'>} LogLine
  */
+export type LogLine = Pick<GuiLogEntry, 'level' | 'message' | 'context' | 'timestamp' | 'category'>;
 
 /**
  * Single log entry. Three small badges then the message:
  *   [severity] [context] [category] message
- *
- * @param {{ entry: LogLine }} props
  */
-export function LogEntry({ entry }) {
+export function LogEntry({ entry }: { entry: LogLine; }) {
     const { level, message, context, timestamp, category } = entry;
     const levelColor = LEVEL_COLORS[level] || 'text-green-400';
 
@@ -44,10 +41,8 @@ export function LogEntry({ entry }) {
 
 /**
  * Empty state when no logs are present
- *
- * @param {{ text: string }} props
  */
-export function LogsEmptyState({ text }) {
+export function LogsEmptyState({ text }: { text: string; }) {
     return (
         <div className="text-gray-500 text-center py-8">
             {text}

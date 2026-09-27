@@ -66,7 +66,7 @@ describe('settings group/tier contract', () => {
     });
 
     // The sub-line the overrides band renders is keyed off the tier id, so the
-    // two must not drift apart silently (see ui/SettingsTierHeading.jsx).
+    // two must not drift apart silently (see ui/SettingsTierHeading.tsx).
     test('the overrides tier exists and its description key resolves', () => {
         expect(SETTINGS_TIERS.map((tier) => tier.id)).toContain('overrides');
         expect(typeof resolveLabel('app.tierOverridesDesc')).toBe('string');

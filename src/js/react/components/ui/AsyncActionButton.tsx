@@ -1,20 +1,29 @@
 import { useState } from 'react';
 import * as ipc from '@/api/ipc';
+import type { ComponentChildren } from 'preact';
 
 /**
  * Props of AsyncActionButton.
- *
- * @typedef {object} AsyncActionButtonProps
- * @property {string} className        - full DaisyUI class string for the <button>
- * @property {string} [title]          - optional tooltip
- * @property {() => Promise<{success?: boolean, error?: string} | null | undefined>} action
- * @property {() => unknown} onSuccess - awaited after a successful result (every caller passes one)
- * @property {string} failureLogPrefix - logError prefix for `{success:false}` results
- * @property {string} errorLogPrefix   - logError prefix for thrown errors
- * @property {import('preact').ComponentChildren} loadingLabel - text next to the spinner
- * @property {import('preact').ComponentChildren} idleContent  - button content when idle
- * @property {boolean} [disabled]      - extra disable condition (ORed with loading)
  */
+export interface AsyncActionButtonProps {
+    /** full DaisyUI class string for the <button> */
+    className: string;
+    /** optional tooltip */
+    title?: string;
+    action: () => Promise<{ success?: boolean; error?: string } | null | undefined>;
+    /** awaited after a successful result (every caller passes one) */
+    onSuccess: () => unknown;
+    /** logError prefix for `{success:false}` results */
+    failureLogPrefix: string;
+    /** logError prefix for thrown errors */
+    errorLogPrefix: string;
+    /** text next to the spinner */
+    loadingLabel: ComponentChildren;
+    /** button content when idle */
+    idleContent: ComponentChildren;
+    /** extra disable condition (ORed with loading) */
+    disabled?: boolean;
+}
 
 /**
  * Shared envelope for a button that fires an async IPC action: toggles a
@@ -23,8 +32,6 @@ import * as ipc from '@/api/ipc';
  * via ipc.logRendererError. Used by VoteButton, RunButton, and the
  * Vote All / Run buttons in ChallengesSection — each caller supplies its
  * own label, icon, and DaisyUI classes.
- *
- * @param {AsyncActionButtonProps} props
  */
 export function AsyncActionButton({
     className,
@@ -36,7 +43,7 @@ export function AsyncActionButton({
     loadingLabel,
     idleContent,
     disabled = false,
-}) {
+}: AsyncActionButtonProps) {
     const [loading, setLoading] = useState(false);
 
     // No useCallback: every caller passes inline `action`/`onSuccess`
@@ -53,7 +60,7 @@ export function AsyncActionButton({
             }
         } catch (err) {
             await ipc.logRendererError(
-                `${errorLogPrefix}: ${/** @type {{ message?: unknown } | null | undefined} */ (err)?.message || err}`,
+                `${errorLogPrefix}: ${(err as { message?: unknown } | null | undefined)?.message || err}`,
             );
         } finally {
             setLoading(false);

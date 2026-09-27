@@ -54,10 +54,16 @@ export const ICON_PATHS = {
  * of them for a multi-path glyph; `className` carries the Tailwind size and
  * spacing. `filled` also fills the shape with `currentColor` (default: outline
  * only). Decorative: the button around it carries the accessible name.
- *
- * @param {{ d: string | string[], className: string, filled?: boolean }} props
  */
-export function StrokeIcon({ d, className, filled = false }) {
+export function StrokeIcon({
+    d,
+    className,
+    filled = false,
+}: {
+    d: string | string[];
+    className: string;
+    filled?: boolean;
+}) {
     const paths = Array.isArray(d) ? d : [d];
     return (
         <svg
