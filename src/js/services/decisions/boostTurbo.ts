@@ -200,11 +200,7 @@ const isTurboEarnSaved = (challenge: Challenge, now: number): boolean => {
  *   challenge is inside the Emergency Fill window, apply a won turbo regardless
  *   of the useTurbo toggle or the turboTime window.
  */
-const shouldApplyTurbo = (
-    challenge: Challenge,
-    now: number,
-    options: { emergency?: boolean } = {},
-): { apply: boolean; imageId: string | null; fillNew: boolean; reason: string } => {
+const shouldApplyTurbo = (challenge: Challenge, now: number, options: { emergency?: boolean } = {}): TurboDecision => {
     const noop = (reason: string): TurboDecision => ({ apply: false, imageId: null, fillNew: false, reason });
     if (!challenge) return noop('no challenge');
     if (challenge.close_time <= now) return noop('challenge ended');
