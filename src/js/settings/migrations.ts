@@ -431,7 +431,7 @@ const _warnAboutSpendingFallThrough = (titleRules: TitleRule[], profiles: Record
  */
 const _categoryRulesAsChallengeRules = (categoryRules: unknown[]): TitleRule[] =>
     categoryRules
-        .filter(/** @returns */ (rule): rule is LooseRecord => Boolean(rule) && typeof rule === 'object')
+        .filter((rule): rule is LooseRecord => Boolean(rule) && typeof rule === 'object')
         .map((rule) => {
             const next: TitleRule = { title: '', mustIncludeTags: [], shouldIncludeTags: [] };
             for (const key of CATEGORY_RULE_KEYS) {
