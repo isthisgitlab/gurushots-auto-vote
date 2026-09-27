@@ -474,8 +474,8 @@ repeated six times is one that gets forgotten at one of them.
 ## 9. i18n
 
 - **User-facing strings are mandatory-translated.** They come from `useTranslation().t('namespace.key')`;
-  raw literals in JSX are effectively absent. Add every new key to **both** `translations/english.js` and
-  `translations/latvian.js`, under the existing namespaces (`common` / `errors` / `onboarding` / `menu` /
+  raw literals in JSX are effectively absent. Add every new key to **both** `translations/english.ts` and
+  `translations/latvian.ts`, under the existing namespaces (`common` / `errors` / `onboarding` / `menu` /
   `login` / `app` / `logs`). Languages: `en` and `lv` only.
 - **Internal / log / error-prefix strings stay English** (not translated) — e.g. the fallback strings
   inside `useAsyncIpcAction.js` and the action hooks are English literals by design.

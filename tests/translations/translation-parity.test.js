@@ -62,7 +62,7 @@ describe('renderer translation keys exist', () => {
         fs.readdirSync(dir, { withFileTypes: true }).flatMap((d) => {
             const full = path.join(dir, d.name);
             if (d.isDirectory()) return listSources(full);
-            return /\.(jsx?|mjs)$/.test(d.name) ? [full] : [];
+            return /\.(jsx?|tsx?|mjs)$/.test(d.name) ? [full] : [];
         });
 
     test('every literal t() key in src/js/react resolves in english.js', () => {

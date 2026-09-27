@@ -13,34 +13,25 @@ import { isPlainObject } from '../plainObject';
 import * as english from './english';
 import * as latvian from './latvian';
 
-/** @type {Record<string, object>} */
-const TABLES = { en: english, lv: latvian };
+const TABLES: Record<string, object> = { en: english, lv: latvian };
 const DEFAULT_LANGUAGE = 'en';
 
-/**
- * @param {unknown} language
- * @returns {language is string}
- */
-const isSupportedLanguage = (language) => typeof language === 'string' && Object.keys(TABLES).includes(language);
+const isSupportedLanguage = (language: unknown): language is string =>
+    typeof language === 'string' && Object.keys(TABLES).includes(language);
 
 /**
  * A supported language code as-is, anything else (null, unknown code) as the
  * default language.
- *
- * @param {unknown} language
- * @returns {string}
  */
-const resolveLanguage = (language) => (isSupportedLanguage(language) ? language : DEFAULT_LANGUAGE);
+const resolveLanguage = (language: unknown): string => (isSupportedLanguage(language) ? language : DEFAULT_LANGUAGE);
 
 /**
  * Walk a dotted key through a table. Empty strings count as missing so they
  * fall back like an absent key.
  *
- * @param {unknown} table
- * @param {string[]} keys
- * @returns {unknown} the value, or undefined when any segment is missing
+ * @returns the value, or undefined when any segment is missing
  */
-function lookup(table, keys) {
+function lookup(table: unknown, keys: string[]): unknown {
     let value = table;
     for (const k of keys) {
         if (!isPlainObject(value) || !value[k]) return undefined;
@@ -52,12 +43,8 @@ function lookup(table, keys) {
 /**
  * Translate a dotted key in `language`, falling back to English and then to
  * the key itself. No interpolation — callers substitute placeholders.
- *
- * @param {string} key
- * @param {string | undefined} language
- * @returns {string}
  */
-function translate(key, language) {
+function translate(key: string, language: string | undefined): string {
     const keys = key.split('.');
     const found = lookup(TABLES[resolveLanguage(language)], keys) ?? lookup(TABLES[DEFAULT_LANGUAGE], keys);
     return typeof found === 'string' ? found : key;
@@ -65,14 +52,12 @@ function translate(key, language) {
 
 /**
  * A translator holding its own current language (default English).
- *
- * @returns {{
- *   t: (key: string, language?: string) => any,
- *   getCurrentLanguage: () => string,
- *   setCurrentLanguage: (language: unknown) => void,
- * }}
  */
-function createTranslator() {
+function createTranslator(): {
+    t: (key: string, language?: string) => string;
+    getCurrentLanguage: () => string;
+    setCurrentLanguage: (language: unknown) => void;
+} {
     let currentLanguage = DEFAULT_LANGUAGE;
     return {
         t: (key, language = currentLanguage) => translate(key, language),
