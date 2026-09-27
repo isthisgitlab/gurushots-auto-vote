@@ -182,7 +182,7 @@ importers:
         specifier: ^8.1.0
         version: 8.1.0(@capacitor/core@8.5.2)
       '@huggingface/transformers':
-        specifier: 4.3.0
+        specifier: ^4.3.0
         version: 4.3.0(@types/node@26.6.3)
       '@preact/signals':
         specifier: ^2.11.2
@@ -273,8 +273,8 @@ importers:
         specifier: ^4.1.4
         version: 4.1.4(marked@18.0.14)
       onnxruntime-web:
-        specifier: 1.31.0-dev.20260914-8d85527a0
-        version: 1.31.0-dev.20260914-8d85527a0
+        specifier: 1.31.0-dev.20260918-bc8e7ed75
+        version: 1.31.0-dev.20260918-bc8e7ed75
       oxlint:
         specifier: ^1.85.0
         version: 1.85.0(oxlint-tsgolint@7.0.2003)
@@ -294,7 +294,7 @@ importers:
         specifier: ^4.23.15
         version: 4.23.15
       typescript:
-        specifier: 7.0.2
+        specifier: ^7.0.2
         version: 7.0.2
       yauzl:
         specifier: ^3.4.0
@@ -3795,6 +3795,9 @@ packages:
 
   onnxruntime-web@1.31.0-dev.20260914-8d85527a0:
     resolution: {integrity: sha512-Iy7rtadoBgxS/LLvDr3QW38DB1PNXRnr0GJMcL0TAt7c9qjgVQl83UlGCVyeAnK2InpmW8Uc3PL8XIuqtDeF6g==}
+
+  onnxruntime-web@1.31.0-dev.20260918-bc8e7ed75:
+    resolution: {integrity: sha512-JpXyyZCZFMJBFFrH+NmIT8vFVAeCBqI/MAlUNmZ+2GfhInOEpEyOjFRl5kB0pqUqQVoRVko0ACg0rtnh1l+71Q==}
 
   open@8.4.2:
     resolution: {integrity: sha512-7x81NCL719oNbsq/3mh+hVrAWmFuEYUqrq/Iw3kUzH8ReypT9QQ0BLoJS7/G9k6N81XjW4qHWtjWwe/9eLy1EQ==}
@@ -8127,6 +8130,15 @@ snapshots:
       onnxruntime-common: 1.30.0
 
   onnxruntime-web@1.31.0-dev.20260914-8d85527a0:
+    dependencies:
+      flatbuffers: 25.9.23
+      guid-typescript: 1.0.9
+      long: 5.3.2
+      onnxruntime-common: 1.31.0-dev.20260911-2a43ec07e
+      platform: 1.3.6
+      protobufjs: 7.6.6
+
+  onnxruntime-web@1.31.0-dev.20260918-bc8e7ed75:
     dependencies:
       flatbuffers: 25.9.23
       guid-typescript: 1.0.9
