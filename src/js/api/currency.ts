@@ -22,38 +22,28 @@
 import { makePostRequest } from './api-client';
 import { ENDPOINTS, createWebHeaders, makeRequireValue } from './constants';
 
-/** @import { ActionResult, SuccessResponse } from '../types/gurushots' */
+import type { ActionResult, SuccessResponse } from '../types/gurushots';
 
 const requireValue = makeRequireValue('currency');
 
-/**
- * @param {SuccessResponse | null} response
- * @returns {ActionResult}
- */
-const toResult = (response) => (response ? { ok: response.success === true, raw: response } : { ok: false, raw: null });
+const toResult = (response: SuccessResponse | null): ActionResult =>
+    response ? { ok: response.success === true, raw: response } : { ok: false, raw: null };
 
-/**
- * @param {string} url
- * @param {string} token
- * @param {Record<string, string>} fields
- * @returns {Promise<ActionResult>}
- */
-const post = async (url, token, fields) => {
+const post = async (url: string, token: string, fields: Record<string, string>): Promise<ActionResult> => {
     const headers = createWebHeaders(token);
     const data = new URLSearchParams(fields).toString();
-    return toResult(/** @type {SuccessResponse | null} */ (await makePostRequest(url, headers, data)));
+    return toResult((await makePostRequest(url, headers, data)) as SuccessResponse | null);
 };
 
 /**
  * Spends a KEY to unlock a LOCKED boost. The boost is only unlocked
  * (state AVAILABLE_KEY) — applying it to a photo is a separate call.
- *
- * @param {string|number} challengeId
- * @param {string} token
- * @param {string} [usage='EXPOSURE_BOOST']
- * @returns {Promise<ActionResult>}
  */
-const keyUnlock = async (challengeId, token, usage = 'EXPOSURE_BOOST') => {
+const keyUnlock = async (
+    challengeId: string | number,
+    token: string,
+    usage: string = 'EXPOSURE_BOOST',
+): Promise<ActionResult> => {
     requireValue(challengeId, 'challengeId');
     requireValue(token, 'token');
     return post(ENDPOINTS.keyUnlock, token, { c_id: String(challengeId), usage: String(usage) });
@@ -63,13 +53,15 @@ const keyUnlock = async (challengeId, token, usage = 'EXPOSURE_BOOST') => {
  * Spends a SWAP to replace an entered photo with another photo from the
  * member's library.
  *
- * @param {string|number} challengeId
- * @param {string} oldImageId - the entry being replaced
- * @param {string} newImageId - the replacement photo
- * @param {string} token
- * @returns {Promise<ActionResult>}
+ * @param oldImageId - the entry being replaced
+ * @param newImageId - the replacement photo
  */
-const swapPhoto = async (challengeId, oldImageId, newImageId, token) => {
+const swapPhoto = async (
+    challengeId: string | number,
+    oldImageId: string,
+    newImageId: string,
+    token: string,
+): Promise<ActionResult> => {
     requireValue(challengeId, 'challengeId');
     requireValue(oldImageId, 'oldImageId');
     requireValue(newImageId, 'newImageId');
@@ -86,12 +78,13 @@ const swapPhoto = async (challengeId, oldImageId, newImageId, token) => {
 /**
  * Spends a FILL to top the challenge exposure up to 100%.
  *
- * @param {string|number} challengeId
- * @param {string} memberId - the member's 32-char id (get_current_member_profile)
- * @param {string} token
- * @returns {Promise<ActionResult>}
+ * @param memberId - the member's 32-char id (get_current_member_profile)
  */
-const exposureAutofill = async (challengeId, memberId, token) => {
+const exposureAutofill = async (
+    challengeId: string | number,
+    memberId: string,
+    token: string,
+): Promise<ActionResult> => {
     requireValue(challengeId, 'challengeId');
     requireValue(memberId, 'memberId');
     requireValue(token, 'token');

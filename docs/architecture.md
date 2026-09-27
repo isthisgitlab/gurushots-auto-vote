@@ -93,10 +93,10 @@ Domain terms used throughout, in reader's terms:
   unusable (explicit `0` still = never).
 - Vote submission votes over a **Fisher-Yates-shuffled, de-duplicated** pool (structural termination — the
   older rejection-sampling could loop forever on duplicate ids) and never posts an empty ballot
-  (`api/voting.js` — around L59, L155).
+  (`api/voting.ts` — around L59, L155).
 - **≤1 boost and ≤1 turbo per challenge, on different entries** — enforced by `pickEntryAvoidingConflict()`
   (`services/decisions/entryPick.js` — around L33) plus a `reflectEntryFlag` marker. Entry-pick logic lives in
-  the shared decision core (behind the `VotingLogic` facade) rather than in `api/boost.js` so mock mode honours the same rule.
+  the shared decision core (behind the `VotingLogic` facade) rather than in `api/boost.ts` so mock mode honours the same rule.
 
 ## 2. Scheduling
 
@@ -201,19 +201,19 @@ Domain terms used throughout, in reader's terms:
 
 ## 3. GuruShots API transport
 
-- **Layering**: `api/` is the transport layer — `api-client.js` plus one thin wrapper per endpoint, importing
-  nothing from `services/` (`api/voting.js` still records vote timestamps in `metadata.ts`). The real-mode strategy composes those wrappers with the services in
+- **Layering**: `api/` is the transport layer — `api-client.ts` plus one thin wrapper per endpoint, importing
+  nothing from `services/` (`api/voting.ts` still records vote timestamps in `metadata.ts`). The real-mode strategy composes those wrappers with the services in
   `strategies/real/`: `index.js` (`fetchChallengesAndVote` with its mission read (`services/missions.js`) and join/claim pre-steps, manual join, the
   Turbo mini-game), `applyBoost.js` (picks the entry via `pickBoostEntry`, posts it through
-  `api/boost.js#boostImage`, flags it `boosted`) and `activeChallenges.js` (coalesces concurrent
+  `api/boost.ts#boostImage`, flags it `boosted`) and `activeChallenges.js` (coalesces concurrent
   `getActiveChallenges` calls per token and pins first-seen titles via `services/challengeTitlePin.js` on a
   successful fetch only). `apiFactory.js` assembles the real surface from these and selects it or
   `mock/index.js#mockApiClient`.
-- All POSTs go through `makePostRequest()` (`api/api-client.js` — around L204). **Contract: it returns the
+- All POSTs go through `makePostRequest()` (`api/api-client.ts` — around L204). **Contract: it returns the
   response body on success and `null` on ultimate failure — it never throws.** Every caller branches on
   `null`, not on a catch.
 - Auth: `authenticate(email, password)` posts form-encoded credentials and returns the token payload
-  (`api/login.js`). The token is then threaded **explicitly** from caller to caller and injected as the
+  (`api/login.ts`). The token is then threaded **explicitly** from caller to caller and injected as the
   `x-token` header — there is no refresh flow.
 - Retry/backoff is centralised: exponential backoff + jitter up to `apiMaxRetries` (default 3). Retryable =
   no-response/network, `ECONNABORTED` timeout, 429, any 5xx; every other 4xx is terminal. Honors a server
@@ -223,7 +223,7 @@ Domain terms used throughout, in reader's terms:
   doesn't post-process adapter results, so otherwise an error body is handed back as "success."
 - `fetchFailed` vs empty: `getActiveChallenges` distinguishes an outage from an empty account so the
   scheduler doesn't re-arm as if all is well (`services/votingOrchestrator.js`).
-- Join/bankroll endpoints (`api/join.js`, WEB profile): `get_member_challenges` (open/un-joined list),
+- Join/bankroll endpoints (`api/join.ts`, WEB profile): `get_member_challenges` (open/un-joined list),
   `coins_unlock` (spends coins to open a paid challenge — **not** known to be idempotent), `get_bankroll`.
   `getBankroll` normalizes the currency array to `{keys,swaps,fills,coins}` and returns **`null` on failure
   — callers must distinguish that from a genuine zero balance** (the UI renders `—`, the handler returns

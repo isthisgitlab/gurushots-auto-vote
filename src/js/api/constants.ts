@@ -8,7 +8,7 @@
 const API_BASE = 'https://api.gurushots.com';
 
 // rest_mobile/* endpoints share the iOS-spoof header profile assembled
-// in randomizer.js. rest/* endpoints use the WEB profile (x-env: WEB,
+// in randomizer.ts. rest/* endpoints use the WEB profile (x-env: WEB,
 // x-api-version: 13) built by createWebHeaders below and shared by
 // turbo.js / submissions.js.
 const ENDPOINTS = {
@@ -35,7 +35,7 @@ const ENDPOINTS = {
     // Bankroll-currency spends on an entered challenge (WEB profile), captured
     // from the web app: keyUnlock spends a KEY to unlock a LOCKED boost (does not
     // apply it), swap spends a SWAP to replace an entered photo, exposureAutofill
-    // spends a FILL to top exposure up to 100%. See api/currency.js.
+    // spends a FILL to top exposure up to 100%. See api/currency.ts.
     keyUnlock: `${API_BASE}/rest/key_unlock`,
     swap: `${API_BASE}/rest/swap`,
     exposureAutofill: `${API_BASE}/rest/exposure_autofill`,
@@ -43,14 +43,14 @@ const ENDPOINTS = {
     // Tag resolution for auto-fill (WEB profile). searchAutocomplete maps a
     // partial word onto the tags that actually exist on the member's own
     // photos; currentMemberProfile supplies the member_id it requires. See
-    // api/tags.js for why the pair exists.
+    // api/tags.ts for why the pair exists.
     searchAutocomplete: `${API_BASE}/rest/search_autocomplete`,
     currentMemberProfile: `${API_BASE}/rest/get_current_member_profile`,
 
     // Prize claiming (WEB profile), captured from the web app: a finished
     // challenge's rewards are claimed with claimResources, a completed mission's
     // with claimMissionPrizes; the two list calls report what is claimable
-    // (claim_state === 'CLAIM'). See api/rewards.js.
+    // (claim_state === 'CLAIM'). See api/rewards.ts.
     getMyCompletedChallenges: `${API_BASE}/rest/get_my_completed_challenges`,
     claimResources: `${API_BASE}/rest/claim_resources`,
     getMyMissions: `${API_BASE}/rest/get_my_missions`,
@@ -61,11 +61,8 @@ const FORM_CONTENT_TYPE = 'application/x-www-form-urlencoded; charset=utf-8';
 
 // WEB header profile for the /rest/ endpoints (turbo + submissions flows).
 // The session token sent via x-token works the same as the mobile flow.
-/**
- * @param {string} token
- * @returns {Record<string, string>}
- */
-const createWebHeaders = (token) => ({
+
+const createWebHeaders = (token: string): Record<string, string> => ({
     host: 'api.gurushots.com',
     accept: '*/*',
     'content-type': FORM_CONTENT_TYPE,
@@ -77,15 +74,14 @@ const createWebHeaders = (token) => ({
 
 // Builds a module-scoped required-argument guard whose thrown message is
 // prefixed with the calling module's name (e.g. 'turbo: token is required').
-/**
- * @param {string} prefix
- * @returns {<T>(value: T, label: string) => T}
- */
-const makeRequireValue = (prefix) => (value, label) => {
-    if (value === null || value === undefined || value === '') {
-        throw new Error(`${prefix}: ${label} is required`);
-    }
-    return value;
-};
+
+const makeRequireValue =
+    (prefix: string): (<T>(value: T, label: string) => T) =>
+    (value, label) => {
+        if (value === null || value === undefined || value === '') {
+            throw new Error(`${prefix}: ${label} is required`);
+        }
+        return value;
+    };
 
 export { ENDPOINTS, FORM_CONTENT_TYPE, createWebHeaders, makeRequireValue };

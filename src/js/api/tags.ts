@@ -34,9 +34,7 @@
 import { makePostRequest } from './api-client';
 import { ENDPOINTS, createWebHeaders, makeRequireValue } from './constants';
 
-/**
- * @import { CurrentMemberProfileResponse, MemberIdentity, SearchAutocompleteResponse } from '../types/gurushots'
- */
+import type { CurrentMemberProfileResponse, MemberIdentity, SearchAutocompleteResponse } from '../types/gurushots';
 
 const requireValue = makeRequireValue('tags');
 
@@ -47,15 +45,17 @@ const requireValue = makeRequireValue('tags');
  * `profile.id` (and `profile.user_name`) are both accepted by
  * searchTagAutocomplete, while the email the user typed at login is not.
  *
- * @param {string} token - session token
- * @returns {Promise<MemberIdentity|null>} identity, or null
+ * @param token - session token
+ * @returns identity, or null
  *   when the call failed or the payload lacked an id.
  */
-const getCurrentMemberProfile = async (token) => {
+const getCurrentMemberProfile = async (token: string): Promise<MemberIdentity | null> => {
     requireValue(token, 'token');
-    const response = /** @type {CurrentMemberProfileResponse | null} */ (
-        await makePostRequest(ENDPOINTS.currentMemberProfile, createWebHeaders(token), '')
-    );
+    const response = (await makePostRequest(
+        ENDPOINTS.currentMemberProfile,
+        createWebHeaders(token),
+        '',
+    )) as CurrentMemberProfileResponse | null;
     const profile = response && response.profile;
     if (!profile || typeof profile !== 'object') return null;
     const id = profile.id;
@@ -82,23 +82,25 @@ const MAX_AUTOCOMPLETE_ITEMS = 25;
 /**
  * Tags in the member's own library whose text CONTAINS `term`.
  *
- * @param {string} token - session token
- * @param {string} term - partial tag text; under MIN_AUTOCOMPLETE_CHARS the
+ * @param token - session token
+ * @param term - partial tag text; under MIN_AUTOCOMPLETE_CHARS the
  *   server always answers empty, so we skip the request and return [].
- * @param {string} memberId - the member's id or user_name (NOT an email)
- * @returns {Promise<Array<string>>} matching tags, or [] on any failure —
+ * @param memberId - the member's id or user_name (NOT an email)
+ * @returns matching tags, or [] on any failure —
  *   this is an optional enhancement to a fill and must never break one.
  */
-const searchTagAutocomplete = async (token, term, memberId) => {
+const searchTagAutocomplete = async (token: string, term: string, memberId: string): Promise<Array<string>> => {
     requireValue(token, 'token');
     const text = typeof term === 'string' ? term.trim() : '';
     if (text.length < MIN_AUTOCOMPLETE_CHARS) return [];
     if (typeof memberId !== 'string' || memberId === '') return [];
 
     const data = `search=${encodeURIComponent(text)}&member_id=${encodeURIComponent(memberId)}`;
-    const response = /** @type {SearchAutocompleteResponse | null} */ (
-        await makePostRequest(ENDPOINTS.searchAutocomplete, createWebHeaders(token), data)
-    );
+    const response = (await makePostRequest(
+        ENDPOINTS.searchAutocomplete,
+        createWebHeaders(token),
+        data,
+    )) as SearchAutocompleteResponse | null;
     if (!response || !Array.isArray(response.items)) return [];
     // The payload is untrusted: keep only non-empty strings, normalise, and
     // bound both the list and each entry (see MAX_TAG_LENGTH), so neither a

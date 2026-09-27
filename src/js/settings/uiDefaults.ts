@@ -37,7 +37,7 @@ const getUiDefaultSettings = (): {
     timezone: DEFAULT_TIMEZONE,
     customTimezones: [],
     stayLoggedIn: false,
-    // Stored as seconds — api-client.js multiplies by 1000 before handing
+    // Stored as seconds — api-client.ts multiplies by 1000 before handing
     // to axios. (A millisecond value like 30000 here would silently
     // corrupt the stored timeout to ~8h on the first Save.)
     apiTimeout: 30, // API request timeout in seconds (default: 30 seconds)

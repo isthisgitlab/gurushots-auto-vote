@@ -12,9 +12,14 @@ import { oneLine } from '../format/logSafe';
 import { makePostRequest } from './api-client';
 import { ENDPOINTS, createWebHeaders, makeRequireValue } from './constants';
 
-/**
- * @import { ActionResult, ImageDataResponse, ImageRecord, LibraryPhoto, PhotosPrivateResponse, SuccessResponse } from '../types/gurushots'
- */
+import type {
+    ActionResult,
+    ImageDataResponse,
+    ImageRecord,
+    LibraryPhoto,
+    PhotosPrivateResponse,
+    SuccessResponse,
+} from '../types/gurushots';
 
 const requireValue = makeRequireValue('submissions');
 
@@ -38,17 +43,19 @@ const PAGINATE_BUDGET_MS = 20_000;
 /**
  * Fetch ONE page of the eligible-photo library.
  *
- * @param {string|number} challengeId
- * @param {string} token
- * @param {{limit: number, start: number, search?: string, usage: string}} opts
+ * @param opts
  *   usage: the library view the server filters `permission.allowed` for —
  *   'submit' (adding a new entry) or 'swap' (replacing an entry); the caller
  *   always normalizes it to one of the two.
- * @returns {Promise<LibraryPhoto[]|null>} the page's items, or null when the
+ * @returns the page's items, or null when the
  *   response was missing/malformed (the caller decides whether that ends a
  *   paginated run or is simply an empty result).
  */
-const fetchPhotoPage = async (challengeId, token, { limit, start, search, usage }) => {
+const fetchPhotoPage = async (
+    challengeId: string | number,
+    token: string,
+    { limit, start, search, usage }: { limit: number; start: number; search?: string; usage: string },
+): Promise<LibraryPhoto[] | null> => {
     const headers = createWebHeaders(token);
     // Most-voted first. The items still report `votes: 0` (see getImageData),
     // but the server sorts by the real count, so whatever a page cap or walk
@@ -64,9 +71,11 @@ const fetchPhotoPage = async (challengeId, token, { limit, start, search, usage 
     if (typeof search === 'string' && search.trim() !== '') {
         params.push(`search=${encodeURIComponent(search.trim())}`);
     }
-    const response = /** @type {PhotosPrivateResponse | null} */ (
-        await makePostRequest(ENDPOINTS.photosPrivate, headers, params.join('&'))
-    );
+    const response = (await makePostRequest(
+        ENDPOINTS.photosPrivate,
+        headers,
+        params.join('&'),
+    )) as PhotosPrivateResponse | null;
     if (!response || !Array.isArray(response.items)) {
         return null;
     }
@@ -79,9 +88,7 @@ const fetchPhotoPage = async (challengeId, token, { limit, start, search, usage 
  * filter via permission.allowed on each item; we still defensively
  * filter again client-side in the picker.
  *
- * @param {string|number} challengeId
- * @param {string} token
- * @param {{limit?: number, start?: number, search?: string, paginate?: boolean, logLabel?: string, usage?: string, budgetMs?: number}} [options]
+ * @param options
  *   usage: 'submit' (default) or 'swap' — forwarded to every page request.
  *   logLabel: prefix for the paginated-walk warnings (default 'autoFill'); the
  *   join flow passes 'join' so its messages aren't attributed to auto-fill.
@@ -105,9 +112,21 @@ const fetchPhotoPage = async (challengeId, token, { limit, start, search, usage 
  *
  *   budgetMs: override the wall-clock budget for this walk. Callers running
  *   against a deadline should pass something smaller.
- * @returns {Promise<LibraryPhoto[]>} list of photo items, or empty array on failure
+ * @returns list of photo items, or empty array on failure
  */
-const getEligiblePhotos = async (challengeId, token, options = {}) => {
+const getEligiblePhotos = async (
+    challengeId: string | number,
+    token: string,
+    options: {
+        limit?: number;
+        start?: number;
+        search?: string;
+        paginate?: boolean;
+        logLabel?: string;
+        usage?: string;
+        budgetMs?: number;
+    } = {},
+): Promise<LibraryPhoto[]> => {
     requireValue(challengeId, 'challengeId');
     requireValue(token, 'token');
     // A non-positive limit would break both the offset advance (start never
@@ -135,13 +154,12 @@ const getEligiblePhotos = async (challengeId, token, options = {}) => {
     // repeat a row when the underlying order shifts between requests. The same
     // shift can also skip one (a photo gaining votes mid-walk moves up into a
     // page already read); the walk takes seconds, so that is accepted.
-    /** @type {Map<string, LibraryPhoto>} */
-    const byId = new Map();
+    const byId: Map<string, LibraryPhoto> = new Map();
     // Prefix the library-walk warnings with the calling flow (auto-fill vs join)
     // so a "10-page limit" message from a join isn't mislabeled as auto-fill.
     const logLabel =
         typeof options.logLabel === 'string' && options.logLabel.trim() ? options.logLabel.trim() : 'autoFill';
-    const warn = (/** @type {string} */ message) => logger.withCategory('api').warning(`${logLabel}: ${message}`, null);
+    const warn = (message: string) => logger.withCategory('api').warning(`${logLabel}: ${message}`, null);
     let page = 0;
     let stoppedEarly = false;
     for (; page < MAX_LIBRARY_PAGES; page++) {
@@ -157,7 +175,7 @@ const getEligiblePhotos = async (challengeId, token, options = {}) => {
             items = await fetchPhotoPage(challengeId, token, { limit, start: start + page * limit, search, usage });
         } catch (error) {
             warn(
-                `reading page ${page + 1} of your photo library failed (${oneLine(/** @type {{ message?: unknown } | null | undefined} */ (error)?.message || error)}); continuing with the ${byId.size} photo(s) already read`,
+                `reading page ${page + 1} of your photo library failed (${oneLine((error as { message?: unknown } | null | undefined)?.message || error)}); continuing with the ${byId.size} photo(s) already read`,
             );
             stoppedEarly = true;
             break;
@@ -204,19 +222,15 @@ const getEligiblePhotos = async (challengeId, token, options = {}) => {
  * endpoint returns the real `votes`, `views` and `achievements`, and is what
  * services/photoStats.js uses to enrich candidates before ranking.
  *
- * @param {string|number} imageId
- * @param {string} token
- * @returns {Promise<ImageRecord|null>} the photo record, or null when the request
+ * @returns the photo record, or null when the request
  *   failed or the payload was unsuccessful/malformed
  */
-const getImageData = async (imageId, token) => {
+const getImageData = async (imageId: string | number, token: string): Promise<ImageRecord | null> => {
     requireValue(imageId, 'imageId');
     requireValue(token, 'token');
     const headers = createWebHeaders(token);
     const data = `id=${encodeURIComponent(String(imageId))}`;
-    const response = /** @type {ImageDataResponse | null} */ (
-        await makePostRequest(ENDPOINTS.imageData, headers, data)
-    );
+    const response = (await makePostRequest(ENDPOINTS.imageData, headers, data)) as ImageDataResponse | null;
     if (!response || response.success !== true) {
         return null;
     }
@@ -230,12 +244,13 @@ const getImageData = async (imageId, token) => {
 /**
  * Submits one or more photos to a challenge.
  *
- * @param {string|number} challengeId
- * @param {Array<string>} imageIds - non-empty list of photo ids
- * @param {string} token
- * @returns {Promise<ActionResult>}
+ * @param imageIds - non-empty list of photo ids
  */
-const submitToChallenge = async (challengeId, imageIds, token) => {
+const submitToChallenge = async (
+    challengeId: string | number,
+    imageIds: Array<string>,
+    token: string,
+): Promise<ActionResult> => {
     requireValue(challengeId, 'challengeId');
     requireValue(token, 'token');
     if (!Array.isArray(imageIds) || imageIds.length === 0) {
@@ -247,9 +262,7 @@ const submitToChallenge = async (challengeId, imageIds, token) => {
         params.push(`image_ids[${index}]=${encodeURIComponent(String(id))}`);
     });
     const data = params.join('&');
-    const response = /** @type {SuccessResponse | null} */ (
-        await makePostRequest(ENDPOINTS.submitToChallenge, headers, data)
-    );
+    const response = (await makePostRequest(ENDPOINTS.submitToChallenge, headers, data)) as SuccessResponse | null;
     if (!response) {
         return { ok: false, raw: null };
     }

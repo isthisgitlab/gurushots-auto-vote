@@ -8,18 +8,18 @@ import { makePostRequest, createCommonHeaders } from './api-client';
 import { ENDPOINTS } from './constants';
 import * as logger from '../logger';
 
-/** @import { ActiveChallengesResponse } from '../types/gurushots' */
+import type { ActiveChallengesResponse } from '../types/gurushots';
 
 /**
  * Fetches all active challenges for the authenticated user — one request per
  * call. Title pinning and in-flight coalescing live in the caller
  * (strategies/real/activeChallenges.js).
  *
- * @param {string} token - Authentication token
- * @returns {Promise<ActiveChallengesResponse>} Response containing array of active challenges, or
+ * @param token - Authentication token
+ * @returns Response containing array of active challenges, or
  *   `{ challenges: [], fetchFailed: true }` if the request fails
  */
-const fetchActiveChallenges = async (token) => {
+const fetchActiveChallenges = async (token: string): Promise<ActiveChallengesResponse> => {
     const operationId = 'get-active-challenges';
     logger.withCategory('api').startOperation(operationId, 'Fetching active challenges', 'DEBUG');
 
@@ -32,9 +32,7 @@ const fetchActiveChallenges = async (token) => {
     });
 
     const headers = createCommonHeaders(token);
-    const response = /** @type {ActiveChallengesResponse | null} */ (
-        await makePostRequest(ENDPOINTS.activeChallenges, headers)
-    );
+    const response = (await makePostRequest(ENDPOINTS.activeChallenges, headers)) as ActiveChallengesResponse | null;
 
     // Handle failed requests gracefully. The empty list keeps every existing consumer
     // working, but it is flagged so callers can tell "the fetch failed" apart from "you

@@ -9,7 +9,7 @@ import { makePostRequest, createCommonHeaders, FORM_CONTENT_TYPE } from './api-c
 import { ENDPOINTS } from './constants';
 import * as logger from '../logger';
 
-/** @import { LoginResponse } from '../types/gurushots' */
+import type { LoginResponse } from '../types/gurushots';
 
 /**
  * Authenticates with GuruShots and obtains an authentication token
@@ -19,11 +19,11 @@ import * as logger from '../logger';
  * 2. Sends authentication request to GuruShots API
  * 3. Returns the response data containing token
  *
- * @param {string} email - User's email address
- * @param {string} password - User's password
- * @returns {Promise<LoginResponse|null>} - Response data containing token or null if login failed
+ * @param email - User's email address
+ * @param password - User's password
+ * @returns Response data containing token or null if login failed
  */
-const authenticate = async (email, password) => {
+const authenticate = async (email: string, password: string): Promise<LoginResponse | null> => {
     logger.withCategory('authentication').info('Starting authentication...', null);
 
     // URLSearchParams encodes BOTH fields RFC-compliantly — a password
@@ -38,9 +38,9 @@ const authenticate = async (email, password) => {
     };
 
     // Routed through makePostRequest so the CapacitorHttp adapter applies on
-    // Android — the iOS-spoof headers in randomizer.js (host, user-agent) are
+    // Android — the iOS-spoof headers in randomizer.ts (host, user-agent) are
     // forbidden in browser fetch and only survive via native OkHttp.
-    const responseData = /** @type {LoginResponse | null} */ (await makePostRequest(ENDPOINTS.signup, headers, data));
+    const responseData = (await makePostRequest(ENDPOINTS.signup, headers, data)) as LoginResponse | null;
 
     if (responseData) {
         logger.withCategory('authentication').success('Authentication successful', null, null);

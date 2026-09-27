@@ -10,16 +10,16 @@ import { ENDPOINTS } from './constants';
 import * as logger from '../logger';
 import { updateChallengeVoteMetadata } from '../metadata';
 
-/** @import { Challenge, SuccessResponse, VoteImagesResponse } from '../types/gurushots' */
+import type { Challenge, SuccessResponse, VoteImagesResponse } from '../types/gurushots';
 
 /**
  * Fetches images available for voting in a specific challenge
  *
- * @param {Challenge} challenge - Challenge object containing title and URL
- * @param {string} token - Authentication token
- * @returns {Promise<VoteImagesResponse|null>} - Response containing images to vote on, or null if request failed
+ * @param challenge - Challenge object containing title and URL
+ * @param token - Authentication token
+ * @returns Response containing images to vote on, or null if request failed
  */
-const getVoteImages = async (challenge, token) => {
+const getVoteImages = async (challenge: Challenge, token: string): Promise<VoteImagesResponse | null> => {
     const operationId = `get-vote-images-${challenge.id}`;
     logger
         .withCategory('api')
@@ -32,9 +32,7 @@ const getVoteImages = async (challenge, token) => {
         'content-type': FORM_CONTENT_TYPE,
     };
 
-    const response = /** @type {VoteImagesResponse | null} */ (
-        await makePostRequest(ENDPOINTS.voteImages, headers, data)
-    );
+    const response = (await makePostRequest(ENDPOINTS.voteImages, headers, data)) as VoteImagesResponse | null;
 
     // No-images is an expected branch (mock-mode, or pool emptied between cycles).
     // The outer voting op reports the user-visible line; we close at DEBUG.
@@ -55,12 +53,16 @@ const getVoteImages = async (challenge, token) => {
  * 2. Continues voting until the exposure factor reaches the target exposure or all images are used
  * 3. Submits the votes to the GuruShots API
  *
- * @param {VoteImagesResponse} voteImages - the pool getVoteImages returned
- * @param {string} token - Authentication token
- * @param {number} [targetExposure] - Target exposure percentage (default: 100)
- * @returns {Promise<SuccessResponse|undefined>} - API response or undefined if submission failed
+ * @param voteImages - the pool getVoteImages returned
+ * @param token - Authentication token
+ * @param targetExposure - Target exposure percentage (default: 100)
+ * @returns API response or undefined if submission failed
  */
-const submitVotes = async (voteImages, token, targetExposure = 100) => {
+const submitVotes = async (
+    voteImages: VoteImagesResponse,
+    token: string,
+    targetExposure: number = 100,
+): Promise<SuccessResponse | undefined> => {
     const { challenge, voting, images } = voteImages;
     const startTime = Date.now();
 
@@ -173,7 +175,7 @@ const submitVotes = async (voteImages, token, targetExposure = 100) => {
     };
 
     // Submit votes to API
-    const response = /** @type {SuccessResponse | null} */ (await makePostRequest(ENDPOINTS.submitVote, headers, data));
+    const response = (await makePostRequest(ENDPOINTS.submitVote, headers, data)) as SuccessResponse | null;
     if (!response) {
         logger.withCategory('voting').error(`${logger.challengeTag(challenge)} Vote submission failed`, null);
         return;

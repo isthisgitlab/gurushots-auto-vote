@@ -62,12 +62,8 @@ const ALAMOFIRE_VERSIONS = ['5.10.2', '5.10.1', '5.10.0', '5.9.1', '5.9.0', '5.8
 
 /**
  * Gets a random item from an array
- *
- * @template T
- * @param {readonly T[]} array
- * @returns {T}
  */
-const getRandomItem = (array) => {
+const getRandomItem = <T>(array: readonly T[]): T => {
     return array[Math.floor(Math.random() * array.length)];
 };
 
@@ -136,11 +132,8 @@ const initializeHeaders = () => {
 /**
  * Generates randomized API headers
  * Ensures headers are initialized and returns them with the current token
- *
- * @param {string | undefined} token
- * @returns {Record<string, string | undefined>}
  */
-const generateRandomHeaders = (token) => {
+const generateRandomHeaders = (token: string | undefined): Record<string, string | undefined> => {
     // Ensure headers are initialized
     const savedHeaders = initializeHeaders();
 
