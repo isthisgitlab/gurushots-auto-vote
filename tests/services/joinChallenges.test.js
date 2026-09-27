@@ -569,6 +569,27 @@ describe('runJoinPass — join window', () => {
         expect(deps.submitToChallenge).toHaveBeenCalledTimes(1);
     });
 
+    test('a join mission lifts the window until it is met, and each join counts it down', async () => {
+        withWindow(24);
+        const far = (id) => ({ id, join_coins: 0, type: 'flash', title: `Far ${id}`, close_time: NOW_SEC + 48 * HOUR });
+        const deps = makeDeps({ getMemberChallenges: jest.fn(async () => [far(1), far(2), far(3)]) });
+        const missions = { join: 2, fill: 0, turbo: 0 };
+        const res = await runJoinPass('tok', NOW_MS, deps, missions);
+        expect(res.results.map((r) => r.status)).toEqual(['joined', 'joined', 'skipped:too-early']);
+        expect(missions.join).toBe(0);
+    });
+
+    test('a met join mission leaves the window in place', async () => {
+        withWindow(24);
+        const deps = makeDeps({
+            getMemberChallenges: jest.fn(async () => [
+                { id: 1, join_coins: 0, type: 'flash', title: 'Far', close_time: NOW_SEC + 48 * HOUR },
+            ]),
+        });
+        const res = await runJoinPass('tok', NOW_MS, deps, { join: 0, fill: 0, turbo: 0 });
+        expect(res.results[0].status).toBe('skipped:too-early');
+    });
+
     test('deferral is per-cycle: the same candidate joins on a later pass', async () => {
         withWindow(24);
         const closeTime = NOW_SEC + 30 * HOUR;

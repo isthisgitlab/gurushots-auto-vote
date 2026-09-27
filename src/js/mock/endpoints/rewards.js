@@ -50,7 +50,8 @@ const claimChallengeResources = mockMethod(
 
 /**
  * Simulate /rest/get_my_missions: one completed mission (claim_state CLAIM)
- * and one still in progress (DISABLED).
+ * and two still in progress (DISABLED) — one a "Win Turbo" mission, so mock
+ * mode exercises the mission-aware turbo earn.
  *
  * @type {typeof import('../../api/rewards').getMyMissions}
  */
@@ -75,6 +76,13 @@ const getMyMissions = mockMethod(
                 name: 'Play 6 Duels',
                 progress: { current: 0, required: 6 },
                 prizes: [{ type: 'COINS', amount: 60 }],
+                claim_state: 'DISABLED',
+            },
+            {
+                id: 900203,
+                name: 'Win Turbo 4 times',
+                progress: { current: 1, required: 4 },
+                prizes: [{ type: 'COINS', amount: 30 }],
                 claim_state: 'DISABLED',
             },
         ];

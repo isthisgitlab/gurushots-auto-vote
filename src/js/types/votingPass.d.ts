@@ -29,6 +29,7 @@ import type { CurrencyPassDeps } from '../services/currencyAuto';
 import type { createStateLedger as CreateScenarioStateLedger } from '../scenarioStateStore';
 import type { EntryTracker } from '../services/newEntryTracker';
 import type { EntryAgeLedger } from './stores';
+import type { MissionNeeds } from '../services/missions';
 
 /** The endpoint set runVotingPass reads off `deps.api`. */
 export interface VotingPassApi {
@@ -71,6 +72,8 @@ export interface VotingPassDeps {
     /** Backs the automatic key / swap / fill spends (services/currencyAuto.js). */
     currency?: CurrencyPassDeps | null;
     scenarios?: ScenarioDeps | null;
+    /** What the active missions still need (services/missions.js); counted down as the pass lands them. */
+    missions?: MissionNeeds | null;
 }
 
 /** What a voting pass resolves with. `challenges` is the full active list this cycle fetched. */

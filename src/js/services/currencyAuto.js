@@ -252,6 +252,17 @@ const runAutoSwap = guarded('swap', async (ctx) => {
 });
 
 /**
+ * Raise the pass's copy of the challenge to the 100% a fill just set, so later
+ * steps see it.
+ *
+ * @param {Challenge} challenge - one whose exposure_factor was read, so member.ranking is present
+ */
+const reflectFill = (challenge) => {
+    const ranking = /** @type {MemberRanking} */ (/** @type {ChallengeMember} */ (challenge.member).ranking);
+    ranking.exposure = { ...ranking.exposure, exposure_factor: 100 };
+};
+
+/**
  * Spend a FILL once the autoExposureFill rule is open, exposure is below
  * autoExposureFillBelow AND the vote pool can't lift it back there — a fill is
  * worth exactly what voting is worth, so it only replaces voting that can't be
@@ -296,10 +307,39 @@ const runAutoExposureFill = guarded('fill', async (ctx, votePool) => {
     );
     if (!result?.ok) return false;
     ledger.addFill(id);
-    // A finite exposure_factor was read above, so member.ranking is present.
-    const ranking = /** @type {MemberRanking} */ (/** @type {ChallengeMember} */ (challenge.member).ranking);
-    ranking.exposure = { ...ranking.exposure, exposure_factor: 100 };
+    reflectFill(challenge);
     return true;
 });
 
-export { runAutoKey, runAutoSwap, runAutoExposureFill, reserveAllows, lockedSpend };
+/**
+ * Spend a FILL toward an active "Use Fill" mission (missionUseFills — the
+ * caller passes what the mission still needs, 0 when none is followed): on a
+ * challenge that can take one (fill offered, exposure below 100%), at most one
+ * per challenge per pass. Keeps the fill reserve and takes the spend lock, but
+ * isn't counted against autoExposureFillMax, which caps only the exposure rule.
+ * Resolves true when a fill was spent.
+ *
+ * @type {(ctx: CurrencyCtx, missionNeed: number) => Promise<boolean>}
+ */
+const runMissionFill = guarded('fill', async (ctx, missionNeed) => {
+    const { challenge, token, now, currency } = ctx;
+    if (!(missionNeed > 0) || !currency?.strategy) return false;
+    if (!challengeAllows('fill', challenge, now)) return false;
+    if (!(await reserveAllows('fill', { challenge, token, currency }, 'mission fill'))) return false;
+
+    log().info(
+        `${logger.challengeTag(challenge)} mission fill: ${missionNeed} more fill(s) needed for the mission`,
+        null,
+    );
+    const result = await lockedSpend(
+        'fill',
+        challenge,
+        () => currencyActions.fillExposure(challenge.id, token, { strategy: currency.strategy, logger }),
+        'mission fill',
+    );
+    if (!result?.ok) return false;
+    reflectFill(challenge);
+    return true;
+});
+
+export { runAutoKey, runAutoSwap, runAutoExposureFill, runMissionFill, reserveAllows, lockedSpend };

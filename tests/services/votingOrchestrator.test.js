@@ -18,6 +18,7 @@ jest.mock('../../src/js/settings', () => ({
 
 jest.mock('../../src/js/services/VotingLogic', () => ({
     shouldPlayAutoTurbo: jest.fn(() => false),
+    isTurboEarnSaved: jest.fn(() => false),
     orderDeadlineActions: jest.fn(() => []),
     shouldApplyBoost: jest.fn(() => false),
     resolveBoostFillNewMode: jest.fn(() => 'no'),
@@ -182,6 +183,38 @@ describe('mock-parity behaviors on the shared path', () => {
         votingLogic.shouldPlayAutoTurbo.mockReturnValue(true);
         await runVotingPass('tok', null, deps(api));
         expect(api.runTurboMiniGame).toHaveBeenCalledTimes(1);
+    });
+
+    test('a turbo saved for a mission is not earned while no turbo mission wants it', async () => {
+        const api = makeApi([makeChallenge()]);
+        votingLogic.shouldPlayAutoTurbo.mockReturnValue(true);
+        votingLogic.isTurboEarnSaved.mockReturnValueOnce(true);
+        const missions = { join: 0, fill: 0, turbo: 0 };
+        await runVotingPass('tok', null, deps(api, { missions }));
+        expect(api.runTurboMiniGame).not.toHaveBeenCalled();
+    });
+
+    test('an active turbo mission earns a saved turbo and a win counts it down', async () => {
+        const api = makeApi([makeChallenge({ id: 1 }), makeChallenge({ id: 2 })]);
+        votingLogic.shouldPlayAutoTurbo.mockReturnValue(true);
+        votingLogic.isTurboEarnSaved.mockReturnValue(true);
+        api.runTurboMiniGame
+            .mockResolvedValueOnce({ played: 6, correct: 5, flipped: 0, doubleFailed: 1, won: false })
+            .mockResolvedValueOnce({ played: 6, correct: 6, flipped: 0, doubleFailed: 0, won: true });
+        const missions = { join: 0, fill: 0, turbo: 1 };
+        await runVotingPass('tok', null, deps(api, { missions }));
+        expect(api.runTurboMiniGame).toHaveBeenCalledTimes(2);
+        expect(missions.turbo).toBe(0);
+        votingLogic.isTurboEarnSaved.mockReturnValue(false);
+    });
+
+    test('a turbo won outside a mission still counts toward one', async () => {
+        const api = makeApi([makeChallenge()]);
+        votingLogic.shouldPlayAutoTurbo.mockReturnValue(true);
+        const missions = { join: 0, fill: 0, turbo: 0 };
+        await runVotingPass('tok', null, deps(api, { missions }));
+        expect(api.runTurboMiniGame).toHaveBeenCalledTimes(1);
+        expect(missions.turbo).toBe(0);
     });
 
     test('auto-fill executes with the injected endpoint pair', async () => {

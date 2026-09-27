@@ -590,6 +590,8 @@ const LOG_CATEGORIES = {
     CURRENCY: 'currency',
     // Automatic challenge/mission prize claiming.
     CLAIM: 'claim',
+    // Mission-aware join / fill / turbo automation.
+    MISSIONS: 'missions',
     // Catch-all for events that don't belong to a domain category —
     // bridge plumbing failures, bootstrap errors, etc. Routes to the
     // shared app-YYYY-MM-DD.log alongside other non-settings categories;

@@ -12,6 +12,7 @@ jest.mock('../../src/js/settings', () => ({
 
 jest.mock('../../src/js/services/VotingLogic', () => ({
     shouldPlayAutoTurbo: jest.fn(() => false),
+    isTurboEarnSaved: jest.fn(() => false),
     orderDeadlineActions: jest.fn(() => []),
     shouldApplyBoost: jest.fn(() => false),
     resolveBoostFillNewMode: jest.fn(() => 'no'),

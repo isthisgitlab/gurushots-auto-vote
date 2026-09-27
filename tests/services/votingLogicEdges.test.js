@@ -175,6 +175,29 @@ describe('shouldPlayAutoTurbo', () => {
     });
 });
 
+describe('isTurboEarnSaved', () => {
+    // turboTime 7200 + the 3600s earn lead: saved while more than 10800s remain.
+    const closingIn = (sec, extra = {}) => regular({ close_time: NOW + sec, ...extra });
+
+    test('never saves while Save Turbos for Missions is off', () => {
+        mockSettings();
+        expect(VotingLogic.isTurboEarnSaved(closingIn(100_000), NOW)).toBe(false);
+    });
+
+    test('saves until an hour before the turbo apply window, then releases', () => {
+        mockSettings({ missionSaveTurbos: true });
+        expect(VotingLogic.isTurboEarnSaved(closingIn(10_801), NOW)).toBe(true);
+        expect(VotingLogic.isTurboEarnSaved(closingIn(10_800), NOW)).toBe(false);
+        expect(settings.getEffectiveSetting).toHaveBeenCalledWith('missionSaveTurbos', null);
+    });
+
+    test('an id-less challenge reads turboTime under the empty id', () => {
+        mockSettings({ missionSaveTurbos: true });
+        expect(VotingLogic.isTurboEarnSaved({ close_time: NOW + 100_000 }, NOW)).toBe(true);
+        expect(settings.getEffectiveSetting).toHaveBeenCalledWith('turboTime', '');
+    });
+});
+
 describe('shouldApplyTurbo defensive paths', () => {
     test('no challenge', () => {
         expect(VotingLogic.shouldApplyTurbo(null, NOW)).toEqual({

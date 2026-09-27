@@ -173,6 +173,30 @@ const shouldPlayAutoTurbo = (challenge, now) => {
     return false;
 };
 
+// A saved turbo is earned this long before its apply window (turboTime). It
+// must cover one full check interval so a cycle is sure to land in between:
+// the settings UI caps the interval at 60 minutes, and no scheduler wake-up
+// backs this (a hand-edited longer interval could reach the apply window with
+// the turbo unearned). Earning doesn't fail, so no retry slack.
+const SAVED_TURBO_EARN_LEAD_SEC = 3600;
+
+/**
+ * Whether an earnable turbo stays unearned this pass: Save Turbos for Missions
+ * is on and the challenge is still more than SAVED_TURBO_EARN_LEAD_SEC ahead of
+ * its turbo apply window. A turbo can be earned only once per challenge, so an
+ * earn held back now is one a later "Win Turbo" mission can still count. The
+ * caller lifts the hold while such a mission is active.
+ *
+ * @param {Challenge} challenge
+ * @param {number} now - Unix timestamp in seconds
+ * @returns {boolean}
+ */
+const isTurboEarnSaved = (challenge, now) => {
+    if (settings.getEffectiveSetting('missionSaveTurbos', null) !== true) return false;
+    const challengeId = challenge.id?.toString?.() || '';
+    return challenge.close_time - now > getEffectiveTurboTime(challengeId) + SAVED_TURBO_EARN_LEAD_SEC;
+};
+
 /**
  * Decides whether to apply a won Turbo to one of the user's entries.
  *
@@ -264,5 +288,6 @@ export {
     getBoostHoldUntil,
     isBoostWindowOpen,
     shouldPlayAutoTurbo,
+    isTurboEarnSaved,
     shouldApplyTurbo,
 };

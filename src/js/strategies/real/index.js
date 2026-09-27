@@ -3,7 +3,7 @@
  *
  * Composes the api/ endpoint wrappers with the shared services into the
  * real-mode strategy surface apiFactory exposes: the voting pass (with its
- * join and prize-claim pre-steps), manual join, the Turbo mini-game, and the
+ * mission read and join and prize-claim pre-steps), manual join, the Turbo mini-game, and the
  * entry-picking boost and title-pinned challenge read. The mock counterpart
  * is mockApiClient in mock/index.js.
  */
@@ -30,6 +30,7 @@ import { runVotingPass } from '../../services/votingOrchestrator';
 import { createMetadataEntryTracker } from '../../services/newEntryTracker';
 import { runJoinPass, joinChallengeSingle } from '../../services/joinChallenges';
 import { runClaimPass } from '../../services/autoClaim';
+import { loadMissionNeeds } from '../../services/missions';
 import { joinStateStore, acquireUnlockLock } from '../../joinStateStore';
 
 /** @import { Challenge, TurboBattle, TurboMiniGameResult } from '../../types/gurushots' */
@@ -182,12 +183,15 @@ const runTurboMiniGame = async (challenge, token) => {
  *   re-fetching. Absent only when the fetch itself threw before a list was obtained.
  */
 const fetchChallengesAndVote = async (token, challengeIdFilter = null) => {
+    // What the active missions still need — read only while a mission setting is
+    // on, shared by the join pre-step and the pass, which count it down.
+    const missions = await loadMissionNeeds(token, Date.now(), { getMyMissions });
     // Auto-join pre-step (gated by the default-off `autoJoin` setting inside
     // runJoinPass). Skipped for a single-challenge "Run" (challengeIdFilter set)
     // and never allowed to abort voting — a join failure is logged, not thrown.
     if (challengeIdFilter === null) {
         try {
-            await runJoinPass(token, Date.now(), joinDeps);
+            await runJoinPass(token, Date.now(), joinDeps, missions);
         } catch (error) {
             logger
                 .withCategory('join')
@@ -249,6 +253,7 @@ const fetchChallengesAndVote = async (token, challengeIdFilter = null) => {
         // alongside the in-app loop, with its own copy of the state), so only
         // one loop ever advances a challenge's plan.
         scenarios: { ledger: scenarioStateLedger, enabled: () => !backgroundServiceOwnsScenarios() },
+        missions,
     });
 };
 

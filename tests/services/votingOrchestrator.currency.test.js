@@ -25,6 +25,7 @@ jest.mock('../../src/js/services/currencyAuto', () => ({
     runAutoKey: jest.fn(async () => false),
     runAutoSwap: jest.fn(async () => false),
     runAutoExposureFill: jest.fn(async () => false),
+    runMissionFill: jest.fn(async () => false),
 }));
 
 jest.mock('../../src/js/services/scenarioRunner', () => ({ runScenarioStep: jest.fn(async () => {}) }));
@@ -133,4 +134,45 @@ test('a vote that threw skips the fill (the pool is unknown)', async () => {
     api.submitVotes.mockRejectedValue(new Error('boom'));
     await run(api);
     expect(currencyAuto.runAutoExposureFill).not.toHaveBeenCalled();
+});
+
+describe('fill missions', () => {
+    const runWithMissions = (missions) =>
+        runVotingPass('tok', null, {
+            api: makeApi(),
+            cleanupStaleMetadata: null,
+            interChallengeDelay: () => 0,
+            currency,
+            missions,
+        });
+
+    test('with no exposure-rule fill, a mission fill gets what the mission still needs and counts it down', async () => {
+        currencyAuto.runMissionFill.mockResolvedValueOnce(true);
+        const missions = { join: 0, fill: 2, turbo: 0 };
+        await runWithMissions(missions);
+        expect(currencyAuto.runMissionFill).toHaveBeenCalledWith(expect.objectContaining({ currency }), 2);
+        expect(currencyAuto.runMissionFill.mock.invocationCallOrder[0]).toBeGreaterThan(
+            currencyAuto.runAutoExposureFill.mock.invocationCallOrder[0],
+        );
+        expect(missions.fill).toBe(1);
+    });
+
+    test('an exposure-rule fill counts toward the mission and skips the mission fill', async () => {
+        currencyAuto.runAutoExposureFill.mockResolvedValueOnce(true);
+        const missions = { join: 0, fill: 2, turbo: 0 };
+        await runWithMissions(missions);
+        expect(currencyAuto.runMissionFill).not.toHaveBeenCalled();
+        expect(missions.fill).toBe(1);
+    });
+
+    test('without missions the mission fill is asked for 0', async () => {
+        await run(makeApi());
+        expect(currencyAuto.runMissionFill).toHaveBeenCalledWith(expect.any(Object), 0);
+    });
+
+    test('a mission fill that spent nothing leaves the mission as it was', async () => {
+        const missions = { join: 0, fill: 2, turbo: 0 };
+        await runWithMissions(missions);
+        expect(missions.fill).toBe(2);
+    });
 });

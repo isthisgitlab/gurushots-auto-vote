@@ -50,6 +50,7 @@ export const isWithinEmergencyWindow = boostTurbo.isWithinEmergencyWindow;
 export const shouldApplyBoost = boostTurbo.shouldApplyBoost;
 export const getBoostHoldUntil = boostTurbo.getBoostHoldUntil;
 export const shouldPlayAutoTurbo = boostTurbo.shouldPlayAutoTurbo;
+export const isTurboEarnSaved = boostTurbo.isTurboEarnSaved;
 export const shouldApplyTurbo = boostTurbo.shouldApplyTurbo;
 export const pickEntryAvoidingConflict = entryPick.pickEntryAvoidingConflict;
 export const getAutoFillThresholdSec = deadlineActions.getAutoFillThresholdSec;

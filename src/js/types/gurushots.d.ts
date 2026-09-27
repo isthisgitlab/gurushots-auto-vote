@@ -320,7 +320,10 @@ export interface CompletedChallengesResponse {
 export interface Mission {
     id: number | string;
     name?: string;
+    description?: string;
     claim_state?: string;
+    /** Unix seconds the mission expires. */
+    expiration_timestamp?: UnixSeconds;
     progress?: { current?: number; required?: number };
     prizes?: Array<{ type?: string; amount?: number }>;
 }

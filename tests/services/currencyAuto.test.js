@@ -17,7 +17,7 @@ jest.mock('../../src/js/services/currencyActions', () => ({
 
 const settings = require('../../src/js/settings');
 const currencyActions = require('../../src/js/services/currencyActions');
-const { runAutoKey, runAutoSwap, runAutoExposureFill } = require('../../src/js/services/currencyAuto');
+const { runAutoKey, runAutoSwap, runAutoExposureFill, runMissionFill } = require('../../src/js/services/currencyAuto');
 const { createMemoryAutoSpendLedger } = require('../../src/js/currencyAutoStore');
 
 const NOW = 1_000_000;
@@ -328,5 +328,46 @@ describe('runAutoExposureFill', () => {
         const ctx = makeCtx();
         expect(await runAutoExposureFill(ctx, null)).toBe(false);
         expect(ctx.currency.spendLedger.fills('555')).toBe(0);
+    });
+});
+
+describe('runMissionFill', () => {
+    test('fills toward the mission regardless of the exposure rule, without touching its cap', async () => {
+        set({ autoExposureFill: false, autoExposureFillBelow: 0 });
+        const ctx = makeCtx({
+            challenge: makeChallenge({ member: { ranking: { exposure: { exposure_factor: 95 } } } }),
+        });
+        expect(await runMissionFill(ctx, 2)).toBe(true);
+        expect(currencyActions.fillExposure).toHaveBeenCalledWith(555, 'tok', expect.any(Object));
+        expect(ctx.challenge.member.ranking.exposure.exposure_factor).toBe(100);
+        expect(ctx.currency.spendLedger.fills('555')).toBe(0);
+    });
+
+    test('nothing to do without a mission need or currency endpoints', async () => {
+        expect(await runMissionFill(makeCtx(), 0)).toBe(false);
+        const ctx = makeCtx();
+        ctx.currency = null;
+        expect(await runMissionFill(ctx, 1)).toBe(false);
+        expect(currencyActions.fillExposure).not.toHaveBeenCalled();
+    });
+
+    test('skips a challenge that cannot take a fill (full exposure, fill locked)', async () => {
+        const full = makeChallenge({ member: { ranking: { exposure: { exposure_factor: 100 } } } });
+        expect(await runMissionFill(makeCtx({ challenge: full }), 1)).toBe(false);
+        expect(await runMissionFill(makeCtx({ challenge: makeChallenge({ fill_locked: true }) }), 1)).toBe(false);
+        expect(currencyActions.fillExposure).not.toHaveBeenCalled();
+    });
+
+    test('keeps the fill reserve', async () => {
+        set({ currencyReserveFills: 3 });
+        expect(await runMissionFill(makeCtx(), 1)).toBe(false);
+        expect(currencyActions.fillExposure).not.toHaveBeenCalled();
+    });
+
+    test('a refused fill leaves the challenge as it was', async () => {
+        currencyActions.fillExposure.mockResolvedValue({ ok: false, outcome: 'api-failed' });
+        const ctx = makeCtx();
+        expect(await runMissionFill(ctx, 1)).toBe(false);
+        expect(ctx.challenge.member.ranking.exposure.exposure_factor).toBe(20);
     });
 });

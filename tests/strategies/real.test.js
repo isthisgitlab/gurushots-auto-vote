@@ -45,6 +45,7 @@ jest.mock('../../src/js/services/joinChallenges', () => ({
     joinChallengeSingle: jest.fn(),
 }));
 jest.mock('../../src/js/services/autoClaim', () => ({ runClaimPass: jest.fn() }));
+jest.mock('../../src/js/services/missions', () => ({ loadMissionNeeds: jest.fn(async () => null) }));
 jest.mock('../../src/js/api/rewards', () => ({
     getMyCompletedChallenges: jest.fn(),
     claimChallengeResources: jest.fn(),
@@ -67,6 +68,7 @@ const { joinStateStore, acquireUnlockLock } = require('../../src/js/joinStateSto
 const { runVotingPass } = require('../../src/js/services/votingOrchestrator');
 const { runJoinPass, joinChallengeSingle } = require('../../src/js/services/joinChallenges');
 const { runClaimPass } = require('../../src/js/services/autoClaim');
+const { loadMissionNeeds } = require('../../src/js/services/missions');
 const rewards = require('../../src/js/api/rewards');
 const main = require('../../src/js/strategies/real');
 
@@ -319,7 +321,23 @@ describe('fetchChallengesAndVote', () => {
             'tok',
             expect.any(Number),
             expect.objectContaining({ joinStateStore }),
+            null,
         );
+    });
+
+    test('reads the missions once and hands the same needs to the join pre-step and the pass', async () => {
+        const needs = { join: 2, fill: 0, turbo: 1 };
+        loadMissionNeeds.mockResolvedValueOnce(needs);
+        runVotingPass.mockResolvedValue({ success: true });
+
+        await fetchChallengesAndVote('tok');
+
+        expect(loadMissionNeeds).toHaveBeenCalledTimes(1);
+        expect(loadMissionNeeds).toHaveBeenCalledWith('tok', expect.any(Number), {
+            getMyMissions: rewards.getMyMissions,
+        });
+        expect(runJoinPass.mock.calls[0][3]).toBe(needs);
+        expect(runVotingPass.mock.calls[0][2].missions).toBe(needs);
     });
 
     test('skips the join pre-step for a single-challenge run', async () => {

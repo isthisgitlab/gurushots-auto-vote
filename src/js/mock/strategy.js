@@ -15,6 +15,7 @@ import { runVotingPass } from '../services/votingOrchestrator';
 import { createMemoryEntryTracker } from '../services/newEntryTracker';
 import { runJoinPass, joinChallengeSingle } from '../services/joinChallenges';
 import { runClaimPass } from '../services/autoClaim';
+import { loadMissionNeeds } from '../services/missions';
 import { mockSwapBackLedger } from '../swapBackStore';
 import { createMemoryAutoSpendLedger } from '../currencyAutoStore';
 import { createMemoryEntryAgeLedger } from '../entryAgeStore';
@@ -149,11 +150,13 @@ const createMockStrategy = (client) => {
             // completes empty. Log the condition but keep the same contract.
             logger.withCategory('authentication').error('No token provided, voting pass will find no challenges', null);
         }
+        // Mission read (only while a mission setting is on), as in real.
+        const missions = await loadMissionNeeds(token, Date.now(), { getMyMissions: client.getMyMissions });
         // Auto-join pre-step (gated by the default-off autoJoin setting), mirroring
         // the real strategy. Skipped for a single-challenge run; never aborts voting.
         if (challengeIdFilter === null) {
             try {
-                await runJoinPass(token, Date.now(), mockJoinDeps());
+                await runJoinPass(token, Date.now(), mockJoinDeps(), missions);
             } catch (error) {
                 logger
                     .withCategory('join')
@@ -197,6 +200,7 @@ const createMockStrategy = (client) => {
             // The Android background service does nothing in mock mode, so the
             // in-app loop always runs mock scenarios.
             scenarios: { ledger: mockScenarioStateLedger },
+            missions,
         });
     };
 

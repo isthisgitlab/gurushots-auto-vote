@@ -38,12 +38,14 @@ import { shouldJoinChallenge } from './VotingLogic';
 import { fetchCandidatesForChallenge, resolveSemanticScores } from './autoFill';
 import { pickPhotosForChallenge } from './photoPicker';
 import { rankVisually } from './visionVerifier';
+import { consumeMission } from './missions';
 
 /**
  * @import { Bankroll, Challenge } from '../types/gurushots'
  * @import { ChallengeValues, TitleRule } from '../types/settings'
  * @import { RawJsonStore } from '../types/stores'
  * @import { PickerPhoto } from '../types/photoPicker'
+ * @import { MissionNeeds } from './missions'
  */
 
 /**
@@ -585,6 +587,7 @@ const performJoin = async (challenge, token, deps, needsCoins) => {
  *   remainingBudget: number,
  *   nowSec: number,
  *   missingCloseTimeLogged: boolean,
+ *   missions: (MissionNeeds|null),
  * }} JoinPassState
  */
 
@@ -624,6 +627,9 @@ const toPassNowSec = (now) => Math.floor((Number.isFinite(now) && now > 0 ? now 
  */
 const decideCandidateJoin = (challenge, pass) => {
     const cfg = resolveCandidateConfig(challenge);
+    // A "Join N challenges" mission (missionJoinEarly) lifts the timing window
+    // until it is met: these would join later anyway, the mission wants them now.
+    const joinEarly = (pass.missions?.join ?? 0) > 0;
     return shouldJoinChallenge({
         challenge,
         bankroll: pass.bankroll,
@@ -634,8 +640,8 @@ const decideCandidateJoin = (challenge, pass) => {
         hasProfileMatch: cfg.hasProfileMatch,
         includeTags: cfg.includeTags,
         excludeTags: cfg.excludeTags,
-        joinWithinSec: cfg.joinWithinSec,
-        joinAfterPercentElapsed: cfg.joinAfterPercentElapsed,
+        joinWithinSec: joinEarly ? 0 : cfg.joinWithinSec,
+        joinAfterPercentElapsed: joinEarly ? 0 : cfg.joinAfterPercentElapsed,
         nowSec: pass.nowSec,
     });
 };
@@ -716,9 +722,12 @@ const joinCandidate = async (challenge, token, deps, pass) => {
  * @param {number} now epoch ms — the clock the join window is measured against
  *   (converted to seconds to match `close_time`); defaults to Date.now()
  * @param {JoinDeps} deps
+ * @param {MissionNeeds|null} [missions] what the active missions still need
+ *   (services/missions.js): while a join mission does, the timing window is
+ *   lifted, and each join counts it down
  * @returns {Promise<{ran:boolean, joined:number, results:Array<{id: (string|number|undefined), status: string}>}>}
  */
-const runJoinPass = async (token, now, deps) => {
+const runJoinPass = async (token, now, deps, missions = null) => {
     const empty = { ran: false, joined: 0, results: [] };
     if (!token) return empty;
     // The master autoJoin is only the default; a title profile can enable joining
@@ -755,6 +764,7 @@ const runJoinPass = async (token, now, deps) => {
         nowSec: toPassNowSec(now),
         // One diagnostic per pass, not per candidate (see warnMissingCloseTime).
         missingCloseTimeLogged: false,
+        missions,
     };
 
     /** @type {Array<{id: (string|number|undefined), status: string}>} */
@@ -766,7 +776,10 @@ const runJoinPass = async (token, now, deps) => {
             break;
         }
         const status = await joinCandidate(challenge, token, deps, pass);
-        if (status === 'joined') joined += 1;
+        if (status === 'joined') {
+            joined += 1;
+            consumeMission(missions, 'join');
+        }
         results.push({ id: challenge?.id, status });
     }
 

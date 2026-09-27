@@ -694,6 +694,15 @@ export const app = {
     autoClaimPrizes: 'Automātiski saņemt balvas',
     autoClaimPrizesDesc:
         'Automātiski saņem balvas no noslēgtajiem izaicinājumiem un izpildītajām misijām (auto-balsošanai jādarbojas). Pārbauda ne biežāk kā reizi stundā. Pēc noklusējuma izslēgts.',
+    missionSaveTurbos: 'Taupīt Turbo misijām',
+    missionSaveTurbosDesc:
+        'Neiegūst katra izaicinājuma Turbo uzreiz, lai "Win Turbo" misijai paliktu, ko iegūt. Pietaupīto Turbo iegūst, kad šī misija ir aktīva, vai stundu pirms tā auto-pielietošanas laika, tāpēc tas joprojām tiek iegūts un pielietots kā parasti. Pēc noklusējuma izslēgts.',
+    missionJoinEarly: 'Pievienoties agrāk misijām',
+    missionJoinEarlyDesc:
+        'Kamēr aktīva "Join challenges" misija, pievienojas izaicinājumiem, negaidot auto-pievienošanās laiku (stundas pirms beigām / % no izaicinājuma), līdz misija izpildīta. Tipa, birku un monētu filtri joprojām darbojas. Pēc noklusējuma izslēgts.',
+    missionUseFills: 'Izmantot uzpildes misijām',
+    missionUseFillsDesc:
+        'Kamēr aktīva "Use Fill" misija, izmanto uzpildes izaicinājumos zem 100% redzamības, līdz misija izpildīta. Uzpilžu rezerve tiek saglabāta. Pēc noklusējuma izslēgts.',
     notifyOnBoost: 'Paziņot pirms Boost',
     notifyOnBoostDesc: 'Brīdina pirms Boost izmantošanas, lai paspētu atstāt lietotni ieslēgtu.',
     notifyOnTurbo: 'Paziņot pirms Turbo',

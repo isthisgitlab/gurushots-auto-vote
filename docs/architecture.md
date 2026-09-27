@@ -203,7 +203,7 @@ Domain terms used throughout, in reader's terms:
 
 - **Layering**: `api/` is the transport layer — `api-client.js` plus one thin wrapper per endpoint, importing
   nothing from `services/` (`api/voting.js` still records vote timestamps in `metadata.js`). The real-mode strategy composes those wrappers with the services in
-  `strategies/real/`: `index.js` (`fetchChallengesAndVote` with its join/claim pre-steps, manual join, the
+  `strategies/real/`: `index.js` (`fetchChallengesAndVote` with its mission read (`services/missions.js`) and join/claim pre-steps, manual join, the
   Turbo mini-game), `applyBoost.js` (picks the entry via `pickBoostEntry`, posts it through
   `api/boost.js#boostImage`, flags it `boosted`) and `activeChallenges.js` (coalesces concurrent
   `getActiveChallenges` calls per token and pins first-seen titles via `services/challengeTitlePin.js` on a

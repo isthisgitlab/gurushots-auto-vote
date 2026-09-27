@@ -1491,6 +1491,44 @@ const SETTINGS_SCHEMA = {
         label: 'app.autoClaimPrizes',
         description: 'app.autoClaimPrizesDesc',
     },
+    // Mission-aware automation (services/missions.js). GLOBAL and default OFF;
+    // each reads the active missions once per voting cycle.
+    // Save turbos: an earnable turbo waits unearned until a "Win Turbo" mission
+    // wants it or its apply window (turboTime) is an hour away.
+    missionSaveTurbos: {
+        type: 'boolean',
+        default: false,
+        perChallenge: false,
+        validation: zBool,
+        validationOrder: 1,
+        group: 'rewards',
+        label: 'app.missionSaveTurbos',
+        description: 'app.missionSaveTurbosDesc',
+    },
+    // Join early: during a "Join N challenges" mission the auto-join timing
+    // window is lifted until the mission is met (the type/tag/coin filters stay).
+    missionJoinEarly: {
+        type: 'boolean',
+        default: false,
+        perChallenge: false,
+        validation: zBool,
+        validationOrder: 1,
+        group: 'rewards',
+        label: 'app.missionJoinEarly',
+        description: 'app.missionJoinEarlyDesc',
+    },
+    // Use fills: during a "Use Fill N times" mission, spend fills (above the
+    // fill reserve) on challenges below 100% exposure until the mission is met.
+    missionUseFills: {
+        type: 'boolean',
+        default: false,
+        perChallenge: false,
+        validation: zBool,
+        validationOrder: 1,
+        group: 'rewards',
+        label: 'app.missionUseFills',
+        description: 'app.missionUseFillsDesc',
+    },
 
     // --- Notifications ---
     // OS desktop/mobile "action coming up" warnings. All GLOBAL (perChallenge:

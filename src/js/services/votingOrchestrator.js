@@ -36,6 +36,9 @@
  *   currency handlers pass), `swapLedger` the swap-back ledger and `spendLedger` the
  *   automatic-fill counter. Mock passes in-memory ledgers for the same reason it passes
  *   cleanupStaleMetadata: null. Omitting it makes the automation inert.
+ *   `missions` is what the active missions still need (services/missions.js): a
+ *   turbo win or a fill this pass counts down its mission. Omitted = no mission
+ *   is followed.
  * @returns {Promise<VotingPassResult>}
  *   `challenges` is the full active list this cycle fetched (not the
  *   filtered subset) so callers can reuse it for threshold scheduling.
@@ -48,6 +51,7 @@ import * as autoFill from './autoFill';
 import * as photoStats from './photoStats';
 import * as newEntryTracker from './newEntryTracker';
 import * as currencyAuto from './currencyAuto';
+import { consumeMission } from './missions';
 import { runScenarioStep } from './scenarioRunner';
 import * as cancellation from '../voting/cancellation';
 import { formatDuration } from '../format/duration';
@@ -61,6 +65,7 @@ import { finiteOr } from '../numbers';
 /** @import { EntryTracker } from './newEntryTracker' */
 /** @import { EntryAgeLedger } from '../types/stores' */
 /** @import { AutoVoteDecision } from './decisions/voteDecisions' */
+/** @import { MissionNeeds } from './missions' */
 
 /**
  * Per-challenge context threaded to every deadline-action runner. All of a
@@ -483,6 +488,7 @@ const buildFillDeps = (api) => ({
  *   entryAges: (EntryAgeLedger|null),
  *   currency: (CurrencyPassDeps|null),
  *   scenarios: (ScenarioDeps|null),
+ *   missions: (MissionNeeds|null),
  *   allChallenges: Challenge[],
  * }} PassContext
  */
@@ -563,19 +569,28 @@ const selectPassChallenges = (allChallenges, challengeIdFilter) => {
  * Auto-earn turbo by playing the mini-game when eligible. This has no
  * close-time threshold (it plays whenever a turbo is winnable), and a turbo
  * earned this cycle can't be applied until the next cycle re-fetches state, so
- * it runs ahead of the timer-ordered deadline actions.
+ * it runs ahead of the timer-ordered deadline actions. With Save Turbos for
+ * Missions on, the earn waits (isTurboEarnSaved) unless a "Win Turbo" mission
+ * still needs wins; every win counts down that mission.
  *
  * @param {Challenge} challenge
  * @param {number} now
  * @param {PassContext} pass
  */
-const playAutoTurbo = async (challenge, now, { api, token }) => {
+const playAutoTurbo = async (challenge, now, { api, token, missions }) => {
     if (!votingLogic.shouldPlayAutoTurbo(challenge, now)) return;
+    const missionWants = (missions?.turbo ?? 0) > 0;
+    if (!missionWants && votingLogic.isTurboEarnSaved(challenge, now)) {
+        logger.withCategory('turbo').debug(`${logger.challengeTag(challenge)} Turbo saved for a mission`, null);
+        return;
+    }
+    const purpose = missionWants ? ` for the turbo mission (${missions?.turbo} to go)` : '';
     logger
         .withCategory('turbo')
-        .startOperation(`turbo-earn-${challenge.id}`, `Playing turbo mini-game on ${challenge.title}`);
+        .startOperation(`turbo-earn-${challenge.id}`, `Playing turbo mini-game on ${challenge.title}${purpose}`);
     try {
         const result = await api.runTurboMiniGame(challenge, token);
+        if (result.won) consumeMission(missions, 'turbo');
         const summary = `played=${result.played} correct=${result.correct} flipped=${result.flipped} doubleFailed=${result.doubleFailed} won=${result.won}`;
         logger.withCategory('turbo').endOperation(`turbo-earn-${challenge.id}`, summary);
     } catch (error) {
@@ -870,7 +885,13 @@ const processChallenge = async (challenge, now, position, total, pass) => {
 
     // Automatic exposure fill, AFTER the vote: a fill is only worth spending
     // when this pass's voting could not lift exposure to the fill threshold.
-    if (!vote.voteThrew) await currencyAuto.runAutoExposureFill(currencyCtx, vote.votePool);
+    // Failing that, a "Use Fill" mission may want one; either counts toward it.
+    if (!vote.voteThrew) {
+        const filled =
+            (await currencyAuto.runAutoExposureFill(currencyCtx, vote.votePool)) ||
+            (await currencyAuto.runMissionFill(currencyCtx, pass.missions?.fill ?? 0));
+        if (filled) consumeMission(pass.missions, 'fill');
+    }
     return null;
 };
 
@@ -891,6 +912,7 @@ const runVotingPass = async (token, challengeIdFilter, deps) => {
         entryAges = null,
         currency = null,
         scenarios = null,
+        missions = null,
     } = deps;
     const fillDeps = buildFillDeps(api);
     // Clear the photo-stats failure breaker so a pass that hit a rate limit does
@@ -935,6 +957,7 @@ const runVotingPass = async (token, challengeIdFilter, deps) => {
             entryAges,
             currency,
             scenarios,
+            missions,
             allChallenges,
         };
 
