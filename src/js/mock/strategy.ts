@@ -72,6 +72,7 @@ const JOIN_ENDPOINTS = [
     'getEligiblePhotos',
     'searchTagAutocomplete',
     'getCurrentMemberProfile',
+    'getActiveChallenges',
 ] as const;
 
 // Endpoints for the hourly prize-claim pre-step (services/autoClaim.ts).

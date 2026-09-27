@@ -54,6 +54,8 @@ const joinDeps = {
     // reverts joins to unfiltered-library behavior.
     getCurrentMemberProfile,
     searchTagAutocomplete,
+    // Counts the turbos a turbo mission can still win (Join Early for Missions).
+    getActiveChallenges,
     joinStateStore,
     acquireUnlockLock,
 };

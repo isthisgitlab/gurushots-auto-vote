@@ -571,7 +571,14 @@ describe('runJoinPass — join window', () => {
 
     describe('Join Early for Missions', () => {
         const far = (id) => ({ id, join_coins: 0, type: 'flash', title: `Far ${id}`, close_time: NOW_SEC + 48 * HOUR });
-        const farDeps = () => makeDeps({ getMemberChallenges: jest.fn(async () => [far(1), far(2), far(3)]) });
+        // `joinedTurbos`: the turbo states of the already-joined challenges.
+        const farDeps = (joinedTurbos = []) =>
+            makeDeps({
+                getMemberChallenges: jest.fn(async () => [far(1), far(2), far(3)]),
+                getActiveChallenges: jest.fn(async () => ({
+                    challenges: joinedTurbos.map((state, i) => ({ id: 100 + i, member: { turbo: { state } } })),
+                })),
+            });
         const withJoinEarly = (on) =>
             settings.getEffectiveSetting.mockImplementation((k) =>
                 k === 'autoJoinWithinHoursOfEnd' ? 24 : k === 'missionJoinEarly' ? on : DEFAULT_SETTINGS[k],
@@ -586,13 +593,58 @@ describe('runJoinPass — join window', () => {
             expect(missions.join).toBe(0);
         });
 
-        test('a turbo mission lifts the window for as many joins as it needs wins', async () => {
+        test('a turbo mission joins early only for the turbos it is short of', async () => {
+            withJoinEarly(true);
+            // 3 wins needed; one joined challenge holds a turbo still to win, two are used or won.
+            const deps = farDeps(['FREE', 'USED', 'WON']);
+            const missions = { join: 0, fill: 0, turbo: 3 };
+            const res = await runJoinPass('tok', NOW_MS, deps, missions);
+            expect(statuses(res)).toEqual(['joined', 'joined', 'skipped:too-early']);
+            // A join is not a turbo win: the turbo mission counts down only when one is won.
+            expect(missions.turbo).toBe(3);
+            expect(deps.getActiveChallenges).toHaveBeenCalledWith('tok');
+        });
+
+        test('turbos waiting in joined challenges (free, playing, on the timer) cover the mission', async () => {
+            withJoinEarly(true);
+            const deps = farDeps(['FREE', 'IN_PROGRESS', 'TIMER']);
+            const res = await runJoinPass('tok', NOW_MS, deps, { join: 0, fill: 0, turbo: 3 });
+            expect(statuses(res)).toEqual(['skipped:too-early', 'skipped:too-early', 'skipped:too-early']);
+        });
+
+        test('a challenge joined for a turbo mission stops the next cycle joining another for it', async () => {
             withJoinEarly(true);
             const missions = { join: 0, fill: 0, turbo: 1 };
-            const res = await runJoinPass('tok', NOW_MS, farDeps(), missions);
-            expect(statuses(res)).toEqual(['joined', 'skipped:too-early', 'skipped:too-early']);
-            // A join is not a turbo win: the turbo mission counts down only when one is won.
-            expect(missions.turbo).toBe(1);
+            const first = await runJoinPass('tok', NOW_MS, farDeps([]), missions);
+            expect(statuses(first)).toEqual(['joined', 'skipped:too-early', 'skipped:too-early']);
+            // Next cycle: the new challenge's turbo is on its timer, the mission still needs 1.
+            const second = await runJoinPass('tok', NOW_MS, farDeps(['TIMER']), missions);
+            expect(statuses(second)).toEqual(['skipped:too-early', 'skipped:too-early', 'skipped:too-early']);
+        });
+
+        test('a joined challenge without turbo data holds no turbo to win', async () => {
+            withJoinEarly(true);
+            const deps = makeDeps({
+                getMemberChallenges: jest.fn(async () => [far(1), far(2)]),
+                getActiveChallenges: jest.fn(async () => ({
+                    challenges: [null, { id: 1 }, { id: 2, member: {} }, { id: 3, member: { turbo: {} } }],
+                })),
+            });
+            const res = await runJoinPass('tok', NOW_MS, deps, { join: 0, fill: 0, turbo: 1 });
+            expect(statuses(res)).toEqual(['joined', 'skipped:too-early']);
+        });
+
+        test('an unreadable active list, or none to read, never joins early for turbo', async () => {
+            withJoinEarly(true);
+            const failed = makeDeps({
+                getMemberChallenges: jest.fn(async () => [far(1)]),
+                getActiveChallenges: jest.fn(async () => ({ challenges: [], fetchFailed: true })),
+            });
+            const none = makeDeps({ getMemberChallenges: jest.fn(async () => [far(1)]) });
+            for (const deps of [failed, none]) {
+                const res = await runJoinPass('tok', NOW_MS, deps, { join: 0, fill: 0, turbo: 2 });
+                expect(statuses(res)).toEqual(['skipped:too-early']);
+            }
         });
 
         test('with both missions active, the larger need sets how many join early', async () => {

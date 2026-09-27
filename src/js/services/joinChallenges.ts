@@ -40,7 +40,7 @@ import { pickPhotosForChallenge } from './photoPicker';
 import { rankVisually } from './visionVerifier';
 import { consumeMission } from './missions';
 
-import type { Bankroll, Challenge } from '../types/gurushots';
+import type { ActiveChallengesResponse, Bankroll, Challenge } from '../types/gurushots';
 import type { ChallengeValues, TitleRule } from '../types/settings';
 import type { RawJsonStore } from '../types/stores';
 import type { PickerPhoto } from '../types/photoPicker';
@@ -61,6 +61,8 @@ interface JoinDeps {
     getEligiblePhotos: typeof submissionsApi.getEligiblePhotos;
     searchTagAutocomplete?: typeof tagsApi.searchTagAutocomplete;
     getCurrentMemberProfile?: typeof tagsApi.getCurrentMemberProfile;
+    /** The joined challenges, to count the turbos a turbo mission can still win (Join Early for Missions). */
+    getActiveChallenges?: (token: string) => Promise<ActiveChallengesResponse>;
     /** null in mock mode */
     joinStateStore?: RawJsonStore | null;
     /** absent in mock mode */
@@ -574,6 +576,33 @@ const readPassBankroll = async (token: string, deps: JoinDeps): Promise<Bankroll
     }
 };
 
+// Turbo states still ahead of a win: earnable now, being played, or on the
+// timer before it opens.
+const PENDING_TURBO_STATES = new Set(['FREE', 'IN_PROGRESS', 'TIMER']);
+
+/**
+ * How many joins a "Win Turbo" mission still needs: its remaining wins minus
+ * the turbos already waiting in joined challenges. A join adds one such turbo,
+ * so the next cycle counts it and stops joining early for it. An unreadable
+ * active list yields 0 — never join early blind.
+ */
+const turboJoinsNeeded = async (token: string, deps: JoinDeps, turboNeed: number): Promise<number> => {
+    if (turboNeed <= 0 || !deps.getActiveChallenges) return 0;
+    const { challenges, fetchFailed } = await deps.getActiveChallenges(token);
+    if (fetchFailed) return 0;
+    const pending = challenges.filter((c) => PENDING_TURBO_STATES.has(c?.member?.turbo?.state ?? '')).length;
+    return Math.max(0, turboNeed - pending);
+};
+
+/**
+ * Joins still to make without the timing window (Join Early for Missions): as
+ * many as a join mission needs, or as a turbo mission is short of turbos.
+ */
+const earlyJoinsFor = async (token: string, deps: JoinDeps, missions: MissionNeeds | null): Promise<number> => {
+    if (settings.getEffectiveSetting('missionJoinEarly', null) !== true) return 0;
+    return Math.max(missions?.join ?? 0, await turboJoinsNeeded(token, deps, missions?.turbo ?? 0));
+};
+
 /**
  * close_time is epoch SECONDS everywhere in this codebase; `now` arrives as
  * epoch ms. A caller that omits it falls back to the wall clock rather than
@@ -675,9 +704,10 @@ const joinCandidate = async (
  *   (converted to seconds to match `close_time`); defaults to Date.now()
  * @param missions what the active missions still need
  *   (services/missions.ts). With missionJoinEarly on, the timing window is
- *   lifted for as many joins as a "Join N challenges" mission needs, or a "Win
- *   Turbo" mission needs wins — a turbo is only winnable in a joined challenge,
- *   so each join brings one. Each join counts the join mission down.
+ *   lifted for as many joins as a "Join N challenges" mission needs, or as a
+ *   "Win Turbo" mission is short of turbos — a turbo is only winnable in a
+ *   joined challenge, so each join brings one (earlyJoinsFor). Each join counts
+ *   the join mission down.
  */
 const runJoinPass = async (
     token: string,
@@ -720,10 +750,7 @@ const runJoinPass = async (
         nowSec: toPassNowSec(now),
         // One diagnostic per pass, not per candidate (see warnMissingCloseTime).
         missingCloseTimeLogged: false,
-        earlyJoins:
-            settings.getEffectiveSetting('missionJoinEarly', null) === true
-                ? Math.max(missions?.join ?? 0, missions?.turbo ?? 0)
-                : 0,
+        earlyJoins: await earlyJoinsFor(token, deps, missions),
     };
 
     const results: Array<{ id: string | number | undefined; status: string }> = [];
