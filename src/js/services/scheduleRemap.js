@@ -12,9 +12,9 @@
  * compresses — a challenge allowing more images than the schedule covers is
  * left untouched.
  *
- * Shared between the voting core (services/autoFill/schedule.js) and the React
+ * Shared between the voting core (services/autoFill/schedule.ts) and the React
  * renderer (the per-challenge settings modal's hint), following the
- * randomDelay.js precedent: pure functions — no logger, no settings I/O —
+ * randomDelay.ts precedent: pure functions — no logger, no settings I/O —
  * so the module stays bundle-friendly for both runtimes.
  */
 

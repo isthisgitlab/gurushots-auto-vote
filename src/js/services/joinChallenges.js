@@ -99,7 +99,7 @@ const cat = () => logger.withCategory('join');
  *
  * Precedence: rules in list order, the first matching rule that sets the key
  * wins — a rule's inline override before the profile it names — then the
- * global default. See `ruleValuesFor` in settings/ruleResolution.js.
+ * global default. See `ruleValuesFor` in settings/ruleResolution.ts.
  *
  * @param {string} key
  * @param {Challenge} challenge
@@ -192,7 +192,7 @@ const isAutoJoinActive = () => {
 
 /**
  * A rule opt-in deliberate enough to bypass the type filters — see
- * `hasRuleJoinOptIn` in settings/titleRules.js: the rules resolve `autoJoin` to true, or
+ * `hasRuleJoinOptIn` in settings/titleRules.ts: the rules resolve `autoJoin` to true, or
  * the applying profile comes from a rule naming a title or challenge tag.
  *
  * An inline WINDOW alone is deliberately not enough — "join this late" says

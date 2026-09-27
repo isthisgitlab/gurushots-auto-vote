@@ -1,5 +1,5 @@
 /**
- * Edge-case coverage for autoFill.js helpers that the main suite exercises
+ * Edge-case coverage for autoFill.ts helpers that the main suite exercises
  * only on the happy path: identity-lookup failure logging and the bounded
  * member-id cache, stale-refresh warnings without a cause, flag carry-over
  * across id-less fresh entries, rankCandidatesForChallenge's fetch-error

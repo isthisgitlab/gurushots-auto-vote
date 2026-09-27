@@ -8,7 +8,7 @@
  *      that landed before the page mounted.
  *
  * The streaming side stashes a fan-out function on `global.sendLogToGUI`
- * which `logger.js` calls when a log line is emitted.
+ * which `logger.ts` calls when a log line is emitted.
  */
 
 import * as logger from '../logger';
@@ -24,7 +24,7 @@ import { errorResult } from './errorResult';
 /** @type {Set<WebContents>} */
 const logStreamWindows = new Set();
 
-// logger.js calls this with a full entry object: { seq, level, context,
+// logger.ts calls this with a full entry object: { seq, level, context,
 // category, timestamp, message }. We forward as-is to renderers.
 /** @param {GuiLogEntry} entry */
 const sendLogToGUI = (entry) => {
@@ -115,7 +115,7 @@ const buildHandlers = () =>
 /** @param {IpcMain} ipcMain */
 const register = (ipcMain) => {
     registerHandlers(ipcMain, buildHandlers());
-    // logger.js looks up this function via the global to push log
+    // logger.ts looks up this function via the global to push log
     // events from any module without a back-reference.
     /** @type {typeof globalThis & { sendLogToGUI?: GuiLogSink }} */ (global).sendLogToGUI = sendLogToGUI;
 };

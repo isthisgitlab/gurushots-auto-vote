@@ -1,5 +1,5 @@
 /**
- * Mock counterpart to api/login.js: accepts any non-empty credentials.
+ * Mock counterpart to api/login.ts: accepts any non-empty credentials.
  */
 
 import * as auth from '../auth';

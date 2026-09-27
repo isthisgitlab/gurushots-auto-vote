@@ -7,8 +7,8 @@ import { resetPassState as resetPhotoStatsPassState } from '../photoStats';
 import { getSlotsRemaining } from './challengeState';
 import { runFillAttempt } from './pipeline';
 
-/** @import { Challenge } from '../../types/gurushots' */
-/** @import { ErrorLike, FillDeps } from '../../types/autoFill' */
+import type { Challenge } from '../../types/gurushots';
+import type { ErrorLike, FillDeps } from '../../types/autoFill';
 
 /**
  * Manual fill (GUI button). Submits one or all missing slots in a
@@ -17,15 +17,16 @@ import { runFillAttempt } from './pipeline';
  * rules mean the same thing whether triggered by the user or the
  * scheduler.
  *
- * @param {Challenge} challenge
- * @param {string} token
- * @param {'one'|'all'} mode
- * @param {FillDeps} deps - settings is required in production (the IPC handler always
+ * @param deps - settings is required in production (the IPC handler always
  *   passes it); it is optional only so failure-path unit tests can omit it,
  *   in which case tag rules degrade to "no filter".
- * @returns {Promise<{success: boolean, submitted: number, skipped: number, error?: string}>}
  */
-const fillChallengeNow = async (challenge, token, mode, deps) => {
+const fillChallengeNow = async (
+    challenge: Challenge,
+    token: string,
+    mode: 'one' | 'all',
+    deps: FillDeps,
+): Promise<{ success: boolean; submitted: number; skipped: number; error?: string }> => {
     const { settings, logger } = deps;
     const challengeId = challenge?.id;
     if (challengeId === undefined || challengeId === null) {
@@ -97,12 +98,12 @@ const fillChallengeNow = async (challenge, token, mode, deps) => {
             success: false,
             submitted: 0,
             skipped: slotsRemaining,
-            error: /** @type {ErrorLike | null | undefined} */ (attempt.error)?.message || 'Failed to fetch photos',
+            error: (attempt.error as ErrorLike | null | undefined)?.message || 'Failed to fetch photos',
         };
     }
     if (attempt.status === 'no-pick') {
         // onEmptyPick above always answers with a string.
-        return { success: false, submitted: 0, skipped: slotsRemaining, error: /** @type {string} */ (attempt.detail) };
+        return { success: false, submitted: 0, skipped: slotsRemaining, error: attempt.detail as string };
     }
     if (attempt.status === 'submit-rejected') {
         return {
@@ -119,9 +120,7 @@ const fillChallengeNow = async (challenge, token, mode, deps) => {
             success: false,
             submitted: 0,
             skipped: slotsRemaining,
-            error:
-                /** @type {ErrorLike | null | undefined} */ (/** @type {{error: unknown}} */ (attempt).error)
-                    ?.message || 'Submit failed',
+            error: ((attempt as { error: unknown }).error as ErrorLike | null | undefined)?.message || 'Submit failed',
         };
     }
 

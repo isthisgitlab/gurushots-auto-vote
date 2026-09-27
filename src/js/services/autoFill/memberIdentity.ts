@@ -3,14 +3,13 @@
  * This module owns the identity cache; __resetMemberIdCache clears it.
  */
 
-/** @import { ErrorLike, FillLogger, RankDeps } from '../../types/autoFill' */
+import type { ErrorLike, FillLogger, RankDeps } from '../../types/autoFill';
 
 /**
  * A memoised lookup: the shared promise, and when a null answer expires (null =
  * never, for a resolved id or a lookup still in flight).
- *
- * @typedef {{promise: Promise<string|null>, expiresAt: number | null}} MemberIdCacheEntry
  */
+type MemberIdCacheEntry = { promise: Promise<string | null>; expiresAt: number | null };
 
 // Member identity for tag resolution, memoised per token.
 //
@@ -19,8 +18,7 @@
 // this the identity lookup would repeat on each one. Keyed by token so a
 // re-login naturally misses; bounded because an unbounded map keyed by a
 // credential is a leak waiting to happen, and one entry is the realistic case.
-/** @type {Map<string, MemberIdCacheEntry>} */
-const memberIdCache = new Map();
+const memberIdCache: Map<string, MemberIdCacheEntry> = new Map();
 const MAX_MEMBER_ID_CACHE = 4;
 
 // How long a FAILED identity lookup stays cached before it is retried.
@@ -40,14 +38,13 @@ const NEGATIVE_IDENTITY_TTL_MS = 60_000;
  * Resolved from the session token rather than the login field on purpose: the
  * app authenticates with an email, and search_autocomplete rejects an email
  * ("Couldn't find username"). The profile's own id is what it accepts.
- *
- * @param {string} token
- * @param {NonNullable<RankDeps['getCurrentMemberProfile']>} getCurrentMemberProfile
- * @param {FillLogger | null} [logger]
- * @param {string} [logLabel]
- * @returns {Promise<string|null>}
  */
-const resolveMemberId = async (token, getCurrentMemberProfile, logger, logLabel) => {
+const resolveMemberId = async (
+    token: string,
+    getCurrentMemberProfile: NonNullable<RankDeps['getCurrentMemberProfile']>,
+    logger?: FillLogger | null,
+    logLabel?: string,
+): Promise<string | null> => {
     const cached = memberIdCache.get(token);
     // A resolved id never expires; a cached null does (see NEGATIVE_IDENTITY_TTL_MS).
     if (cached && (cached.expiresAt === null || cached.expiresAt > Date.now())) return cached.promise;
@@ -67,7 +64,7 @@ const resolveMemberId = async (token, getCurrentMemberProfile, logger, logLabel)
                 logger
                     .withCategory(logLabel || 'autoFill')
                     .debug(
-                        `${logLabel || 'autoFill'}: identity lookup failed: ${(error && /** @type {ErrorLike} */ (error).message) || error}`,
+                        `${logLabel || 'autoFill'}: identity lookup failed: ${(error && (error as ErrorLike).message) || error}`,
                         null,
                     );
             }
@@ -76,8 +73,7 @@ const resolveMemberId = async (token, getCurrentMemberProfile, logger, logLabel)
     })();
 
     if (memberIdCache.size >= MAX_MEMBER_ID_CACHE) memberIdCache.clear();
-    /** @type {MemberIdCacheEntry} */
-    const entry = { promise, expiresAt: null };
+    const entry: MemberIdCacheEntry = { promise, expiresAt: null };
     memberIdCache.set(token, entry);
     // Fire-and-forget by design: the caller awaits `promise` itself, this only
     // stamps the expiry afterwards. `void` because the inner function catches

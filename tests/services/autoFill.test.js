@@ -1,5 +1,5 @@
 /**
- * Tests for autoFill.js — both the staggered scheduler entry point
+ * Tests for autoFill.ts — both the staggered scheduler entry point
  * (maybeAutoFillChallenge) and the manual GUI entry point (fillChallengeNow).
  */
 

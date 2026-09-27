@@ -6,7 +6,7 @@
 import { remapScheduleRows } from '../scheduleRemap';
 import { finiteOr } from '../../numbers';
 
-/** @import { FillSchedule } from '../scheduleRemap' */
+import type { FillSchedule } from '../scheduleRemap';
 
 /**
  * The schedule as it effectively applies to one challenge: its rows
@@ -15,11 +15,13 @@ import { finiteOr } from '../../numbers';
  * header for the rule). Both threshold computations below MUST go through
  * this so the fill trigger and the scheduler cadence always agree.
  *
- * @param {FillSchedule} schedule - the challenge's effective autoFillSchedule
- * @param {number | undefined} maxPhotoSubmits - challenge.max_photo_submits
- * @returns {Array<{count: number, seconds: number}>}
+ * @param schedule - the challenge's effective autoFillSchedule
+ * @param maxPhotoSubmits - challenge.max_photo_submits
  */
-const getEffectiveScheduleRows = (schedule, maxPhotoSubmits) => remapScheduleRows(schedule, maxPhotoSubmits);
+const getEffectiveScheduleRows = (
+    schedule: FillSchedule,
+    maxPhotoSubmits: number | undefined,
+): Array<{ count: number; seconds: number }> => remapScheduleRows(schedule, maxPhotoSubmits);
 
 /**
  * Target entry count implied by the schedule for the time remaining: the
@@ -31,12 +33,14 @@ const getEffectiveScheduleRows = (schedule, maxPhotoSubmits) => remapScheduleRow
  * a non-finite max (never NaN — a NaN would poison orderDeadlineActions'
  * sort downstream).
  *
- * @param {FillSchedule} schedule - the challenge's effective autoFillSchedule
- * @param {number} secondsRemaining
- * @param {number | undefined} maxPhotoSubmits - challenge.max_photo_submits
- * @returns {number}
+ * @param schedule - the challenge's effective autoFillSchedule
+ * @param maxPhotoSubmits - challenge.max_photo_submits
  */
-const resolveScheduleTarget = (schedule, secondsRemaining, maxPhotoSubmits) => {
+const resolveScheduleTarget = (
+    schedule: FillSchedule,
+    secondsRemaining: number,
+    maxPhotoSubmits: number | undefined,
+): number => {
     const max = finiteOr(maxPhotoSubmits, 0);
     if (!Number.isFinite(secondsRemaining)) return 0;
     let target = 0;
@@ -57,12 +61,15 @@ const resolveScheduleTarget = (schedule, secondsRemaining, maxPhotoSubmits) => {
  * fills sort against boost/turbo/emergency correctly; the same defensive
  * rules as resolveScheduleTarget apply.
  *
- * @param {FillSchedule} schedule - the challenge's effective autoFillSchedule
- * @param {number} entryCount - current number of entries
- * @param {number | undefined} maxPhotoSubmits - challenge.max_photo_submits
- * @returns {number}
+ * @param schedule - the challenge's effective autoFillSchedule
+ * @param entryCount - current number of entries
+ * @param maxPhotoSubmits - challenge.max_photo_submits
  */
-const getNextScheduleThresholdSec = (schedule, entryCount, maxPhotoSubmits) => {
+const getNextScheduleThresholdSec = (
+    schedule: FillSchedule,
+    entryCount: number,
+    maxPhotoSubmits: number | undefined,
+): number => {
     const max = finiteOr(maxPhotoSubmits, 0);
     const count = finiteOr(entryCount, 0);
     let threshold = 0;

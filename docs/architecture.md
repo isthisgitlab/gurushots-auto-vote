@@ -86,7 +86,7 @@ Domain terms used throughout, in reader's terms:
     - `boostTime` / `emergencyFill` / `keyUnlockedBoostTime`: `0` means **feature off / never auto-apply**.
       See the explicit comment in `getEffectiveKeyUnlockedBoostTime()` (`services/decisions/thresholds.ts` — around
       L129: _"An explicit 0 means 'never auto-apply', matching the 0-is-off convention boostTime and
-      emergencyFill already use"_), and `maybeEmergencyFillChallenge()` (`services/autoFill/emergencyFill.js` — around
+      emergencyFill already use"_), and `maybeEmergencyFillChallenge()` (`services/autoFill/emergencyFill.ts` — around
       L97: `emergencySeconds <= 0` → `'disabled'`).
 - Magic constants: final-window width defaults to 3600 s — the `finalWindowDuration` setting's default
   (configurable 60 s … 30 d); key-unlock boost default window = 900 s when the setting is
@@ -271,7 +271,7 @@ repeated six times is one that gets forgotten at one of them.
 - `search_autocomplete` needs `member_id`, which is a member identity — the account's `user_name` or its
   opaque id hash. **An email is rejected** (`Couldn't find username`), and the app logs in with one, so the
   login field is not a usable source: identity comes from `get_current_member_profile` (token-only) and is
-  memoised per token in `services/autoFill/memberIdentity.js`.
+  memoised per token in `services/autoFill/memberIdentity.ts`.
 - Resolution is guarded twice because substring matching is blunt: **bounded backoff** (a missing term is
   retried at most `MAX_BACKOFF_STEPS` shorter, never below the server's own 3-char floor) and **mandatory
   validation** — a candidate is kept only if it is a lexical match for the term or the lexicon puts it on
@@ -312,7 +312,7 @@ repeated six times is one that gets forgotten at one of them.
 - `rankVisually()` (`services/visionVerifier.js`) runs a bundled, 8-bit quantized **SigLIP** model
   (`zero-shot-image-classification`, `@huggingface/transformers`) over the **top 12 tag-ranked
   candidates** of every challenge. Like the lexicon it only orders photos — it is never part of the vote
-  decision. One call site feeds every submission path: `verifyFillPick()` in `services/autoFill/pipeline.js` (auto, emergency,
+  decision. One call site feeds every submission path: `verifyFillPick()` in `services/autoFill/pipeline.ts` (auto, emergency,
   manual, and fill-new fills via `runFillAttempt`, plus swaps via `rankCandidatesForChallenge`), and
   `pickJoinPhoto()` for auto-join.
 - **Prompts come from the challenge, never a theme list**: `a photo of <subject>` from

@@ -1,5 +1,5 @@
 /**
- * Mock counterpart to api/tags.js: the member identity read and tag
+ * Mock counterpart to api/tags.ts: the member identity read and tag
  * autocomplete over the mock library's tags.
  */
 

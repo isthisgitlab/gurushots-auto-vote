@@ -1,6 +1,6 @@
 /**
  * Mock counterpart to the auto-cycle boost (strategies/real/applyBoost.js)
- * and api/boost.js's entry-targeted boost.
+ * and api/boost.ts's entry-targeted boost.
  */
 
 import * as boost from '../boost';

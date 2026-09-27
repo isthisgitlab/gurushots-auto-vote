@@ -10,9 +10,9 @@ import * as lexicon from '../semantic/lexicon';
 import { resolveTermsToTags } from '../tagResolver';
 import { resolveMemberId } from './memberIdentity';
 
-/** @import { Challenge } from '../../types/gurushots' */
-/** @import { IgnoreWords, PickerPhoto, SemanticScore, TagOptions } from '../../types/photoPicker' */
-/** @import { ErrorLike, FillLogger, FillSettings, RankDeps } from '../../types/autoFill' */
+import type { Challenge } from '../../types/gurushots';
+import type { IgnoreWords, PickerPhoto, SemanticScore, TagOptions } from '../../types/photoPicker';
+import type { ErrorLike, FillLogger, FillSettings, RankDeps } from '../../types/autoFill';
 
 /**
  * Semantic match scores for an eligible set, computed once per fill and reused
@@ -23,13 +23,12 @@ import { resolveMemberId } from './memberIdentity';
  * which case ranking stays lexical. The scorer
  * (`deps.getSemanticScores`, defaulting to the real module) is injectable so
  * tests can stub it. Never throws.
- *
- * @param {Challenge} challenge
- * @param {PickerPhoto[]} eligible
- * @param {Pick<RankDeps, 'getSemanticScores'> & {ignoreWords?: IgnoreWords}} deps
- * @returns {Promise<Map<string, SemanticScore>|null>}
  */
-const resolveSemanticScores = async (challenge, eligible, deps) => {
+const resolveSemanticScores = async (
+    challenge: Challenge,
+    eligible: PickerPhoto[],
+    deps: Pick<RankDeps, 'getSemanticScores'> & { ignoreWords?: IgnoreWords },
+): Promise<Map<string, SemanticScore> | null> => {
     const scorer = (deps && deps.getSemanticScores) || getSemanticScores;
     try {
         return await scorer(challenge, eligible, (deps && deps.ignoreWords) || null);
@@ -48,11 +47,9 @@ const resolveSemanticScores = async (challenge, eligible, deps) => {
  * everywhere except the shared runner. runFillAttempt already receives
  * `settings` in deps, so one lookup here covers every fill path at once.
  *
- * @param {FillSettings | null | undefined} settings - the settings facade from deps
- * @param {Challenge} challenge
- * @returns {Array<string>|null}
+ * @param settings - the settings facade from deps
  */
-const resolveIgnoreWords = (settings, challenge) => {
+const resolveIgnoreWords = (settings: FillSettings | null | undefined, challenge: Challenge): Array<string> | null => {
     try {
         if (!settings || typeof settings.getEffectiveIgnoreTitleWords !== 'function') return null;
         return settings.getEffectiveIgnoreTitleWords(challenge);
@@ -66,18 +63,17 @@ const resolveIgnoreWords = (settings, challenge) => {
  * Resolve challenge terms to real library tags, or [] when resolution is
  * unavailable for any reason (deps not injected, no identity, nothing on
  * theme). Never throws — the caller falls back exactly as it did before.
- *
- * @param {Array<string>} terms
- * @param {Challenge} challenge
- * @param {Pick<RankDeps, 'searchTagAutocomplete' | 'getCurrentMemberProfile'> & {
- *   token: string,
- *   logger: FillLogger,
- *   logLabel: string,
- *   ignoreWords?: IgnoreWords,
- * }} opts
- * @returns {Promise<Array<string>>}
  */
-const resolveTagsForTerms = async (terms, challenge, opts) => {
+const resolveTagsForTerms = async (
+    terms: Array<string>,
+    challenge: Challenge,
+    opts: Pick<RankDeps, 'searchTagAutocomplete' | 'getCurrentMemberProfile'> & {
+        token: string;
+        logger: FillLogger;
+        logLabel: string;
+        ignoreWords?: IgnoreWords;
+    },
+): Promise<Array<string>> => {
     const { token, searchTagAutocomplete, getCurrentMemberProfile, logger, logLabel } = opts;
     if (typeof searchTagAutocomplete !== 'function' || typeof getCurrentMemberProfile !== 'function') return [];
     try {
@@ -95,7 +91,7 @@ const resolveTagsForTerms = async (terms, challenge, opts) => {
         logger
             .withCategory(logLabel)
             .debug(
-                `${logLabel}: tag resolution unavailable: ${(error && /** @type {ErrorLike} */ (error).message) || error}`,
+                `${logLabel}: tag resolution unavailable: ${(error && (error as ErrorLike).message) || error}`,
                 null,
             );
         return [];
@@ -111,7 +107,7 @@ const resolveTagsForTerms = async (terms, challenge, opts) => {
 // this budget, making the whole themed phase bounded by it however many times it
 // runs.
 //
-// Deliberately well under api/submissions.js's PAGINATE_BUDGET_MS default: up to
+// Deliberately well under api/submissions.ts's PAGINATE_BUDGET_MS default: up to
 // several tag searches run concurrently inside one call, and this path can
 // fire seconds before a challenge closes, where returning fewer candidates
 // always beats missing the close. Page 1 is fetched regardless of the budget —
@@ -137,11 +133,8 @@ const THEMED_SEARCH_MIN_BUDGET_MS = 1500;
  * The returned set is fed unchanged into pickPhotosForChallenge, so the
  * must/should/fillWithoutTagMatch ranking semantics are preserved.
  *
- * @param {Challenge} challenge - challenge with id and (optional) title
- * @param {string} token
- * @param {TagOptions | null} tagOpts
- * @param {Pick<RankDeps, 'getEligiblePhotos' | 'searchTagAutocomplete' | 'getCurrentMemberProfile' | 'logger'> & {
- *   logLabel?: string, usage?: string}} deps
+ * @param challenge - challenge with id and (optional) title
+ * @param deps
  *   logLabel: the calling flow ('autoFill' default, or 'join') — used as the log
  *   category and message prefix so a join's messages aren't attributed to auto-fill.
  *   searchTagAutocomplete / getCurrentMemberProfile: OPTIONAL. Supplying both
@@ -150,12 +143,11 @@ const THEMED_SEARCH_MIN_BUDGET_MS = 1500;
  *   is what keeps every existing caller and test valid.
  *   usage: 'submit' (default) or 'swap' — which server-side eligibility view the
  *   library reads (a swap replaces an entry instead of adding one).
- * @returns {Promise<PickerPhoto[]>}
  */
 const fetchCandidatesForChallenge = async (
-    challenge,
-    token,
-    tagOpts,
+    challenge: Challenge,
+    token: string,
+    tagOpts: TagOptions | null,
     {
         getEligiblePhotos,
         logger,
@@ -163,8 +155,11 @@ const fetchCandidatesForChallenge = async (
         searchTagAutocomplete,
         getCurrentMemberProfile,
         usage = 'submit',
+    }: Pick<RankDeps, 'getEligiblePhotos' | 'searchTagAutocomplete' | 'getCurrentMemberProfile' | 'logger'> & {
+        logLabel?: string;
+        usage?: string;
     },
-) => {
+): Promise<PickerPhoto[]> => {
     const challengeId = challenge.id;
     // Only a swap asks the server for its own eligibility view; every existing
     // caller keeps the exact option shape it always sent (usage defaults to submit).
@@ -232,11 +227,7 @@ const fetchCandidatesForChallenge = async (
     // One search per term, unioned by id. A shared helper so the resolution retry
     // below runs the identical fetch/dedupe/fault-tolerance path rather than a
     // second copy of it.
-    /**
-     * @param {string[]} searchTerms
-     * @returns {Promise<PickerPhoto[]>}
-     */
-    const searchUnion = async (searchTerms) => {
+    const searchUnion = async (searchTerms: string[]): Promise<PickerPhoto[]> => {
         // Run the per-term searches concurrently — they're independent reads and
         // serialising them would add a round-trip of latency per extra term to
         // the fill path (which can run close to a deadline). allSettled keeps the
@@ -266,15 +257,14 @@ const fetchCandidatesForChallenge = async (
                 }),
             ),
         );
-        /** @type {Map<string, PickerPhoto>} */
-        const byId = new Map();
+        const byId: Map<string, PickerPhoto> = new Map();
         settled.forEach((result, i) => {
             if (result.status === 'rejected') {
-                const reason = /** @type {unknown} */ (result.reason);
+                const reason = result.reason as unknown;
                 logger
                     .withCategory(logLabel)
                     .debug(
-                        `${logLabel}: search "${searchTerms[i]}" failed for ${logger.challengeTag(challenge)}: ${(reason && /** @type {ErrorLike} */ (reason).message) || reason}`,
+                        `${logLabel}: search "${searchTerms[i]}" failed for ${logger.challengeTag(challenge)}: ${(reason && (reason as ErrorLike).message) || reason}`,
                         null,
                     );
                 return;
@@ -293,8 +283,8 @@ const fetchCandidatesForChallenge = async (
         });
         return Array.from(byId.values());
     };
-    /** @param {PickerPhoto[]} list */
-    const hasEligible = (list) => list.some((p) => p && p.permission && p.permission.allowed === true && p.id);
+    const hasEligible = (list: PickerPhoto[]) =>
+        list.some((p) => p && p.permission && p.permission.allowed === true && p.id);
 
     if (terms.length > 0) {
         const fromUserTags = buildSearchTerms(null, tagOpts).length > 0;

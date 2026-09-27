@@ -4,7 +4,7 @@
  * to 100%.
  *
  * Every spend first re-reads the LIVE challenge and the LIVE bankroll and
- * re-checks the shared predicate (voting/currencyActions.js). That re-check is
+ * re-checks the shared predicate (voting/currencyActions.ts). That re-check is
  * also the idempotency guard: each spend is a single call whose effect is
  * visible in the challenge (boost AVAILABLE_KEY, entry replaced, exposure 100),
  * so a repeated request finds the state already changed and spends nothing —
@@ -264,7 +264,7 @@ const previewSwap = async (
  * @param {string} newImageId
  * @param {string} token
  * @param {{strategy: CurrencyStrategy, logger: Logger, ledger?: SwapBackLedger|null}} deps - ledger: the swap-back
- *   ledger (swapBackStore.js), told about every successful swap so a swapped-out
+ *   ledger (swapBackStore.ts), told about every successful swap so a swapped-out
  *   boosted/turbo'd photo can be swapped back later
  * @returns {Promise<SpendOutcome>}
  */

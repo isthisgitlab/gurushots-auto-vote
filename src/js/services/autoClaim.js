@@ -22,7 +22,7 @@ import * as cancellation from '../voting/cancellation';
  */
 
 /**
- * The endpoints the claim pass calls (api/rewards.js, or the mock mirror).
+ * The endpoints the claim pass calls (api/rewards.ts, or the mock mirror).
  *
  * @typedef {object} ClaimDeps
  * @property {(token: string, start?: number, limit?: number) => Promise<CompletedChallenge[]>} getMyCompletedChallenges

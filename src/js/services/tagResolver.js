@@ -10,7 +10,7 @@
  * is "staircase"; the exact search returns nothing and auto-fill falls back to
  * an unfiltered library walk ranked by popularity — an off-theme submission.
  * search_autocomplete matches a SUBSTRING and answers "stair" -> ["staircase"],
- * which closes exactly that gap. See api/tags.js for the endpoint contract.
+ * which closes exactly that gap. See api/tags.ts for the endpoint contract.
  *
  * TWO GUARDS, because a substring match is blunt:
  *
@@ -42,7 +42,7 @@ import * as lexicon from './semantic/lexicon';
 // word and a tag ("stairs"->"stair", "lighthouses"->"lighthouse") without
 // walking a long word down to a meaningless prefix.
 const MAX_BACKOFF_STEPS = 2;
-// Must match MIN_AUTOCOMPLETE_CHARS in api/tags.js — both encode the same server
+// Must match MIN_AUTOCOMPLETE_CHARS in api/tags.ts — both encode the same server
 // behavior (nothing is returned below three characters). Kept local rather than
 // imported because business logic does not reach into src/js/api/*; if one
 // moves, move the other.
@@ -149,7 +149,7 @@ const resolveTermsToTags = async (terms, challenge, deps) => {
     // deadline. Sequential chains would stack to SEARCH_TERMS_CAP x
     // (MAX_BACKOFF_STEPS + 1) round-trips end to end; this bounds the wall clock
     // to the slowest single chain, the same reasoning that parallelises
-    // searchUnion in autoFill/candidates.js.
+    // searchUnion in autoFill/candidates.ts.
     const chains = await Promise.all(
         usable.map(async (term) => {
             for (let step = 0; step <= MAX_BACKOFF_STEPS; step++) {
@@ -161,7 +161,7 @@ const resolveTermsToTags = async (terms, challenge, deps) => {
                 try {
                     items = await searchTagAutocomplete(token, probe, memberId);
                 } catch {
-                    // api/tags.js already resolves [] on failure; this is belt-and-
+                    // api/tags.ts already resolves [] on failure; this is belt-and-
                     // braces for an injected dep that rejects. Treat as a miss.
                     items = [];
                 }

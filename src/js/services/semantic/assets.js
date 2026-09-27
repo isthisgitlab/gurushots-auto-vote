@@ -13,7 +13,7 @@
  *
  * Any failure resolves to null (cached), so the caller falls back to
  * lexical-only matching — a missing or unreadable asset is a no-op, never a
- * crash. Mirrors the node:sea detection guard already used in logger.js.
+ * crash. Mirrors the node:sea detection guard already used in logger.ts.
  */
 
 import * as runtime from '../../runtime';

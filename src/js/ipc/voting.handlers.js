@@ -9,7 +9,7 @@
  *     challenge; the two channels carry slightly different log wording
  *     but exercise the same code path
  *   - should-cancel-voting / set-cancel-voting: cancellation-flag
- *     read/write, delegated to voting/cancellation.js
+ *     read/write, delegated to voting/cancellation.ts
  */
 
 import * as settings from '../settings';

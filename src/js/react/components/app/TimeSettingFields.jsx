@@ -39,14 +39,14 @@ import { SettingResetButton } from './SettingResetButton';
  * @property {(ctx: RowRenderContext<R>) => { controls: ComponentChildren, hint: ComponentChildren }} renderRow
  */
 
-// Single source of truth: settings/limits.js is dependency-free, so importing
-// it here costs the renderer bundle nothing (unlike settings/schema.js, which
+// Single source of truth: settings/limits.ts is dependency-free, so importing
+// it here costs the renderer bundle nothing (unlike settings/schema.ts, which
 // requires zod). Re-exported under the local name its consumers already use.
 export const SCHEDULED_FILL_MAX_ENTRIES = MAX_SCHEDULED_FILL_ENTRIES;
 
 // The schedule covers images 2–4: entry 1 always exists (joining a challenge
 // IS submitting a photo) and GuruShots challenges allow at most 4 images.
-// The seconds cap mirrors MAX_SCHEDULE_SECONDS in settings/schema.js.
+// The seconds cap mirrors MAX_SCHEDULE_SECONDS in settings/schema.ts.
 const SCHEDULE_COUNTS = [2, 3, 4];
 const SCHEDULE_MAX_SECONDS = 30 * 24 * 3600;
 const SCHEDULE_MAX_HOURS = SCHEDULE_MAX_SECONDS / 3600;
@@ -168,7 +168,7 @@ const isDominated = (activeRows, count, seconds) =>
  * so "all off" emits [] — the runtime's 'no-schedule' state. Rebuilding from
  * the three fixed slots is lossy by design: any stored row not keyed by
  * counts 2/3/4 is dropped on the first edit (the load-time sanitizer in
- * settings/migrations.js removes such rows anyway).
+ * settings/migrations.ts removes such rows anyway).
  *
  * @param {SettingFieldProps} props
  */

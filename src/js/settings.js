@@ -2,24 +2,24 @@
  * Settings facade — the only module callers import. It re-exports the public
  * surface of the internal ./settings/* modules:
  *
- *   schema.js             keys, defaults, validation, groups/tiers
- *   storage.js            persistence transport + runtime/environment detection
- *   defaults.js           default blob and shared challenge-value helpers
- *   persistence.js        load (merge + migrations + obsolete cleanup) / save,
+ *   schema.ts             keys, defaults, validation, groups/tiers
+ *   storage.ts            persistence transport + runtime/environment detection
+ *   defaults.ts           default blob and shared challenge-value helpers
+ *   persistence.ts        load (merge + migrations + obsolete cleanup) / save,
  *                         top-level keys, window bounds
- *   migrations.js         load-time migrations and obsolete-key prune
- *   challengeOverrides.js global defaults, per-challenge overrides, effective values
- *   challengeFacts.js     process-local cache of the active challenges' titles/facts
- *   titleRuleSanitize.js  write-side validation of challenge rules
- *   ruleResolution.js     read-side rule matching, profile layer, suppression
- *   titleRules.js         persisted challenge rules and rule-aware resolvers
- *   profileStore.js       profile names and value sanitization
- *   profiles.js           named challenge-settings profiles
- *   titlePins.js          persisted first-seen challenge-title pins
- *   scenarioSchema.js     validation of user-defined scenario documents
+ *   migrations.ts         load-time migrations and obsolete-key prune
+ *   challengeOverrides.ts global defaults, per-challenge overrides, effective values
+ *   challengeFacts.ts     process-local cache of the active challenges' titles/facts
+ *   titleRuleSanitize.ts  write-side validation of challenge rules
+ *   ruleResolution.ts     read-side rule matching, profile layer, suppression
+ *   titleRules.ts         persisted challenge rules and rule-aware resolvers
+ *   profileStore.ts       profile names and value sanitization
+ *   profiles.ts           named challenge-settings profiles
+ *   titlePins.ts          persisted first-seen challenge-title pins
+ *   scenarioSchema.ts     validation of user-defined scenario documents
  *   scenarios.js          stored scenarios, JSON import/export
- *   scenarioOverlay.js    the active scenario phase's settings layer
- *   reset.js              reset helpers and "modified" checks
+ *   scenarioOverlay.ts    the active scenario phase's settings layer
+ *   reset.ts              reset helpers and "modified" checks
  */
 
 import {

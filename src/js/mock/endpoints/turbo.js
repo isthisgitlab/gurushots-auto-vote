@@ -1,5 +1,5 @@
 /**
- * Mock counterpart to api/turbo.js's apply and the real strategy's Turbo
+ * Mock counterpart to api/turbo.ts's apply and the real strategy's Turbo
  * mini-game (strategies/real/index.js#runTurboMiniGame).
  */
 

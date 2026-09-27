@@ -8,7 +8,7 @@ import type { Challenge } from '../../types/gurushots';
 
 import * as settings from '../../settings';
 // Single source of truth for the auto-fill schedule threshold math (no import
-// cycle: autoFill.js does not require VotingLogic).
+// cycle: autoFill.ts does not require VotingLogic).
 import { getNextScheduleThresholdSec, evaluateEmergencyFill, getSlotsRemaining } from '../autoFill';
 import { boostApplyThreshold } from '../../voting/boostWindow';
 import { getEffectiveBoostTime, getEffectiveKeyUnlockedBoostTime, getEffectiveTurboTime } from './thresholds';

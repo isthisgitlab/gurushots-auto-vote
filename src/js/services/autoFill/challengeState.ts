@@ -6,23 +6,15 @@
 
 import { finiteOr } from '../../numbers';
 
-/** @import { Challenge, ChallengeMember, RankingEntry } from '../../types/gurushots' */
-/** @import { AdoptableMember, ErrorLike, FillLogger, RankDeps } from '../../types/autoFill' */
+import type { Challenge, ChallengeMember, RankingEntry } from '../../types/gurushots';
+import type { AdoptableMember, ErrorLike, FillLogger, RankDeps } from '../../types/autoFill';
 
-/**
- * @param {Partial<Challenge> | null | undefined} challenge
- * @returns {RankingEntry[]}
- */
-const getEntries = (challenge) => {
+const getEntries = (challenge: Partial<Challenge> | null | undefined): RankingEntry[] => {
     const entries = challenge?.member?.ranking?.entries;
     return Array.isArray(entries) ? entries : [];
 };
 
-/**
- * @param {Partial<Challenge> | null | undefined} challenge
- * @returns {number}
- */
-const getSlotsRemaining = (challenge) => {
+const getSlotsRemaining = (challenge: Partial<Challenge> | null | undefined): number => {
     const max = finiteOr(challenge?.max_photo_submits, 0);
     return Math.max(0, max - getEntries(challenge).length);
 };
@@ -36,11 +28,11 @@ const getSlotsRemaining = (challenge) => {
  * could over-submit, and a due turbo/boost couldn't act on the new entry. The
  * minimal shape carries the conflict flags that boost/turbo entry selection reads
  * (boosted/turbo).
- *
- * @param {Partial<Challenge> | null | undefined} challenge
- * @param {string | number | null | undefined} imageId
  */
-const reflectNewEntry = (challenge, imageId) => {
+const reflectNewEntry = (
+    challenge: Partial<Challenge> | null | undefined,
+    imageId: string | number | null | undefined,
+) => {
     const ranking = challenge?.member?.ranking;
     if (!ranking || !imageId) return;
     if (!Array.isArray(ranking.entries)) ranking.entries = [];
@@ -59,11 +51,14 @@ const reflectNewEntry = (challenge, imageId) => {
  * the same entry. GuruShots allows one boost and one turbo per challenge but on *different*
  * entries, so the second action was silently wasted.
  *
- * @param {Partial<Challenge> | null | undefined} challenge
- * @param {string|number} imageId - entry the action was applied to
- * @param {'turbo'|'boosted'} field - conflict flag to raise
+ * @param imageId - entry the action was applied to
+ * @param field - conflict flag to raise
  */
-const reflectEntryFlag = (challenge, imageId, field) => {
+const reflectEntryFlag = (
+    challenge: Partial<Challenge> | null | undefined,
+    imageId: string | number,
+    field: 'turbo' | 'boosted',
+) => {
     const entries = challenge?.member?.ranking?.entries;
     if (!Array.isArray(entries) || !imageId) return;
     const target = String(imageId);
@@ -78,11 +73,8 @@ const reflectEntryFlag = (challenge, imageId, field) => {
  * ranking.exposure (evaluateVotingDecision reads .exposure_factor off it
  * unguarded). A partial payload would otherwise crash the whole voting pass, not
  * just this challenge — stale beats crashed.
- *
- * @param {ChallengeMember | undefined} member
- * @returns {member is AdoptableMember}
  */
-const isAdoptableMember = (member) =>
+const isAdoptableMember = (member: ChallengeMember | undefined): member is AdoptableMember =>
     Boolean(member) &&
     typeof member === 'object' &&
     Array.isArray(member.ranking?.entries) &&
@@ -98,11 +90,8 @@ const isAdoptableMember = (member) =>
  * count, which errs toward fewer submits. An id-less prev entry (malformed) can't
  * be matched, so it is kept — again the fewer-submits direction. Mutates
  * `freshEntries`.
- *
- * @param {RankingEntry[]} prevEntries
- * @param {RankingEntry[]} freshEntries
  */
-const mergeLocalEntries = (prevEntries, freshEntries) => {
+const mergeLocalEntries = (prevEntries: RankingEntry[], freshEntries: RankingEntry[]) => {
     const freshIds = new Set(
         freshEntries.filter((entry) => entry && entry.id != null).map((entry) => String(entry.id)),
     );
@@ -120,12 +109,9 @@ const mergeLocalEntries = (prevEntries, freshEntries) => {
 
 /**
  * Id → raised boost/turbo flags for every id-bearing entry that has either set.
- * @param {RankingEntry[]} entries
- * @returns {Map<string, {turbo: boolean, boosted: boolean}>}
  */
-const collectRaisedEntryFlags = (entries) => {
-    /** @type {Map<string, {turbo: boolean, boosted: boolean}>} */
-    const flags = new Map();
+const collectRaisedEntryFlags = (entries: RankingEntry[]): Map<string, { turbo: boolean; boosted: boolean }> => {
+    const flags: Map<string, { turbo: boolean; boosted: boolean }> = new Map();
     for (const entry of entries) {
         if (!entry || entry.id == null) continue;
         if (entry.turbo || entry.boosted) {
@@ -147,11 +133,8 @@ const collectRaisedEntryFlags = (entries) => {
  * entry is taken, treat it as taken. That errs toward using a different entry, which is the
  * safe direction: boost and turbo may both be spent, but never on the same entry. Mutates
  * `freshEntries`.
- *
- * @param {RankingEntry[]} prevEntries
- * @param {RankingEntry[]} freshEntries
  */
-const carryLocalEntryFlags = (prevEntries, freshEntries) => {
+const carryLocalEntryFlags = (prevEntries: RankingEntry[], freshEntries: RankingEntry[]) => {
     const localFlags = collectRaisedEntryFlags(prevEntries);
     if (localFlags.size === 0) return;
     for (const entry of freshEntries) {
@@ -183,19 +166,19 @@ const carryLocalEntryFlags = (prevEntries, freshEntries) => {
  * looks like. Treating it as 'gone' would silently skip legitimate fills on
  * every API hiccup.
  *
- * @param {Challenge} challenge
- * @param {string} token
- * @param {Pick<RankDeps, 'getActiveChallenges'> & {logger: FillLogger}} deps
- * @param {string} label - calling flow (autoFill/emergencyFill/fillNew)
- * @returns {Promise<'refreshed'|'gone'|'unavailable'>}
+ * @param label - calling flow (autoFill/emergencyFill/fillNew)
  */
-const refreshChallengeState = async (challenge, token, { getActiveChallenges, logger }, label) => {
+const refreshChallengeState = async (
+    challenge: Challenge,
+    token: string,
+    { getActiveChallenges, logger }: Pick<RankDeps, 'getActiveChallenges'> & { logger: FillLogger },
+    label: string,
+): Promise<'refreshed' | 'gone' | 'unavailable'> => {
     if (typeof getActiveChallenges !== 'function') return 'unavailable';
     const log = logger.withCategory('autoFill');
     // Collapse CR/LF in the cause before interpolation (same forgery guard
     // challengeTag applies): the message can carry server-influenced text.
-    /** @param {unknown} cause */
-    const staleWarning = (cause) =>
+    const staleWarning = (cause: unknown) =>
         log.warning(
             `${label}: could not refresh live challenge state for ${logger.challengeTag(challenge)}${cause ? ` (${String(cause).replace(/[\r\n]+/g, ' ')})` : ''}; ` +
                 'proceeding with pass-start data — a manually submitted entry may not be seen and could be duplicated',
@@ -205,7 +188,7 @@ const refreshChallengeState = async (challenge, token, { getActiveChallenges, lo
     try {
         response = await getActiveChallenges(token);
     } catch (error) {
-        staleWarning((error && /** @type {ErrorLike} */ (error).message) || error);
+        staleWarning((error && (error as ErrorLike).message) || error);
         return 'unavailable';
     }
     if (!Array.isArray(response?.challenges) || response.challenges.length === 0) {

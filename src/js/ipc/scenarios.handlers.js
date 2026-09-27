@@ -1,5 +1,5 @@
 /**
- * IPC handlers for user-defined scenarios (settings/scenarios.js,
+ * IPC handlers for user-defined scenarios (settings/scenarios.ts,
  * services/scenarioRunner.js). Every handler returns `{success, error}` —
  * validation failures also carry `issues: [{path, message}]` — and never
  * throws to the renderer. The CLI reuses these handlers, so both surfaces

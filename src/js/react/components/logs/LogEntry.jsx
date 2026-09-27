@@ -1,6 +1,6 @@
 /** @import { GuiLogEntry } from '../../../logger' */
 /**
- * Severity → text color. Strict 4-value set matches logger.js.
+ * Severity → text color. Strict 4-value set matches logger.ts.
  */
 const LEVEL_COLORS = {
     DEBUG: 'text-gray-400',

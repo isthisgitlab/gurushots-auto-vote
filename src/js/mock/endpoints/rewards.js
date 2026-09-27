@@ -1,5 +1,5 @@
 /**
- * Mock counterpart to api/rewards.js: the finished-challenge and mission
+ * Mock counterpart to api/rewards.ts: the finished-challenge and mission
  * prize reads and their claims.
  */
 

@@ -2,7 +2,7 @@ import { useTranslation } from '@/contexts/TranslationContext';
 
 /**
  * Heading for one tier band in the settings modals (see SETTINGS_TIERS in
- * settings/schema.js). Shared by SettingsModal and ChallengeSettingsModal so
+ * settings/schema.ts). Shared by SettingsModal and ChallengeSettingsModal so
  * the two render identical band chrome from one place.
  *
  * Renders nothing when `label` is null — that is the fallback band

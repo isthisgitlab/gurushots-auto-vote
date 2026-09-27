@@ -1,6 +1,6 @@
 /**
  * Mock counterpart to the active-challenge read (strategies/real/activeChallenges.js
- * over api/challenges.js): session-stable generated challenges.
+ * over api/challenges.ts): session-stable generated challenges.
  */
 
 import * as challenges from '../challenges';

@@ -1,8 +1,8 @@
 /**
  * Runs a challenge's user-defined scenario inside the voting pass: evaluates
- * it (scenarios/evaluate.js), executes the chosen rule's actions over the
+ * it (scenarios/evaluate.ts), executes the chosen rule's actions over the
  * existing primitives, and persists where the challenge now is in its plan
- * (scenarioStateStore.js). Called by processChallenge before the built-in
+ * (scenarioStateStore.ts). Called by processChallenge before the built-in
  * steps, so they then run under the current phase's settings overlay.
  *
  * Contracts:
@@ -560,7 +560,7 @@ const runScenarioStep = async (challenge, now, pass) => {
         const ctx = { challenge, challengeId, scenario, timezone, pass: scenarioPass, ledger: deps.ledger };
         let state = loadState(ctx, now);
         if (!state) return;
-        // One vote sample per pass feeds the speed conditions (scenarios/speed.js).
+        // One vote sample per pass feeds the speed conditions (scenarios/speed.ts).
         state = { ...state, history: recordVoteSample(state.history, entriesOf(challenge), now) };
         ctx.ledger.set(challengeId, state);
 

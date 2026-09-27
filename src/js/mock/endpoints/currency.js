@@ -1,5 +1,5 @@
 /**
- * Mock counterpart to api/currency.js: the three bankroll spends
+ * Mock counterpart to api/currency.ts: the three bankroll spends
  * (/rest/key_unlock, /rest/swap, /rest/exposure_autofill). Stateless;
  * fixture 900004 fails (success:false) so every spend-failure path can be
  * exercised in mock mode.

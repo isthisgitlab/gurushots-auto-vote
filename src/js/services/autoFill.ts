@@ -24,16 +24,16 @@
  * Facade — the only module callers import. It re-exports the public surface of
  * the internal ./autoFill/* modules:
  *
- *   staggeredFill.js   maybeAutoFillChallenge (cycle-driven, schedule-based)
- *   emergencyFill.js   maybeEmergencyFillChallenge + its shared stand-down check
- *   manualFill.js      fillChallengeNow (GUI "Fill Now")
- *   fillNew.js         submitNewEntryForAction (boost/turbo "fill new")
- *   pipeline.js        the shared fill pipeline and the submit-free ranking
- *   candidates.js      on-theme candidate fetch, ignore words, semantic scores
- *   memberIdentity.js  per-token member id cache for tag resolution
- *   fillLogging.js     submit-failure, fallback and popularity-pick explanations
- *   challengeState.js  entry/slot reads, local reflects, live state refresh
- *   schedule.js        schedule-row validation and threshold math
+ *   staggeredFill.ts   maybeAutoFillChallenge (cycle-driven, schedule-based)
+ *   emergencyFill.ts   maybeEmergencyFillChallenge + its shared stand-down check
+ *   manualFill.ts      fillChallengeNow (GUI "Fill Now")
+ *   fillNew.ts         submitNewEntryForAction (boost/turbo "fill new")
+ *   pipeline.ts        the shared fill pipeline and the submit-free ranking
+ *   candidates.ts      on-theme candidate fetch, ignore words, semantic scores
+ *   memberIdentity.ts  per-token member id cache for tag resolution
+ *   fillLogging.ts     submit-failure, fallback and popularity-pick explanations
+ *   challengeState.ts  entry/slot reads, local reflects, live state refresh
+ *   schedule.ts        schedule-row validation and threshold math
  */
 
 import { maybeAutoFillChallenge } from './autoFill/staggeredFill';

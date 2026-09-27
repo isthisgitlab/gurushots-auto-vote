@@ -26,7 +26,7 @@
  * ranking. Only a photo never measured is stats-unknown; the picker ranks it
  * below photos with known stats rather than treating missing data as zero.
  * Enrichment must never turn a fill that would succeed into a failure — same
- * contract as resolveSemanticScores in autoFill/candidates.js.
+ * contract as resolveSemanticScores in autoFill/candidates.ts.
  *
  * Cache scope: process-global and NOT token-scoped, so switching accounts
  * without restarting reuses entries. Accepted: photo ids are platform-unique

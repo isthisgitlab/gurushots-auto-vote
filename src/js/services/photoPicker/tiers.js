@@ -230,7 +230,7 @@ const sameTheme = (a, b) => compareTheme(a, b) === 0;
  * Reads exactly the tiers compareTheme ranks on, and lives here beside them on
  * purpose: this module OWNS the tier list, and a caller that re-states it by
  * hand silently rots the moment a tier is added, renamed or reordered. The one
- * caller (logPopularityPick in services/autoFill/fillLogging.js) uses it to decide whether
+ * caller (logPopularityPick in services/autoFill/fillLogging.ts) uses it to decide whether
  * a tie means "everything matched equally" or "nothing matched" — get that
  * backwards and the app tells a user their fill failed on the fills that
  * worked.

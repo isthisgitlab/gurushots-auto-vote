@@ -7,8 +7,8 @@ import { pickPhotosForChallenge } from '../photoPicker';
 import { getSlotsRemaining, reflectNewEntry } from './challengeState';
 import { runFillAttempt } from './pipeline';
 
-/** @import { Challenge } from '../../types/gurushots' */
-/** @import { FillSettings, SettingsFillDeps } from '../../types/autoFill' */
+import type { Challenge } from '../../types/gurushots';
+import type { FillSettings, SettingsFillDeps } from '../../types/autoFill';
 
 /**
  * Whether emergency fill stands down on LIVE STATE alone, independent of timing.
@@ -38,22 +38,26 @@ import { runFillAttempt } from './pipeline';
  *
  * Returns the two settings it resolved alongside the verdict so the runner can
  * reuse them: every `getEffectiveSetting` is an uncached `readFileSync` +
- * merge + migrate (settings/storage.js readRaw), so re-reading them would add
+ * merge + migrate (settings/storage.ts readRaw), so re-reading them would add
  * real synchronous I/O to a path that runs seconds before a deadline. Nothing is
  * read until after the id and free-slot checks, keeping the stand-down paths
  * cheaper than a caller that resolved them up front. `settings` is a parameter
  * because this module takes the facade via `deps` while VotingLogic requires it
  * directly.
  *
- * @param {Challenge} challenge
- * @param {string|number|null|undefined} challengeId raw id; do not normalise it
- * @param {FillSettings} settings
- * @returns {{standDown: boolean, autoFillEnabled: boolean, mustIncludeTags: string[] | null}}
+ * @param challengeId raw id; do not normalise it
  *   standDown true = would do nothing, so never advertise it as upcoming
  */
-const evaluateEmergencyFill = (challenge, challengeId, settings) => {
-    /** @type {{standDown: boolean, autoFillEnabled: boolean, mustIncludeTags: string[] | null}} */
-    const inert = { standDown: true, autoFillEnabled: false, mustIncludeTags: null };
+const evaluateEmergencyFill = (
+    challenge: Challenge,
+    challengeId: string | number | null | undefined,
+    settings: FillSettings,
+): { standDown: boolean; autoFillEnabled: boolean; mustIncludeTags: string[] | null } => {
+    const inert: { standDown: boolean; autoFillEnabled: boolean; mustIncludeTags: string[] | null } = {
+        standDown: true,
+        autoFillEnabled: false,
+        mustIncludeTags: null,
+    };
     if (challengeId === undefined || challengeId === null) return inert;
     if (getSlotsRemaining(challenge) <= 0) return inert;
 
@@ -79,14 +83,17 @@ const evaluateEmergencyFill = (challenge, challengeId, settings) => {
  * already handle the challenge, it returns 'skipped' so it never
  * double-fills.
  *
- * @param {Challenge} challenge - challenge with member.ranking.entries
- * @param {string} token
- * @param {number} now - unix seconds
- * @param {SettingsFillDeps} deps - getActiveChallenges enables the pre-submit live re-check; when
+ * @param challenge - challenge with member.ranking.entries
+ * @param now - unix seconds
+ * @param deps - getActiveChallenges enables the pre-submit live re-check; when
  *   absent the fill proceeds on pass-start data.
- * @returns {Promise<'submitted'|'skipped'|'disabled'|'no-eligible-photos'|'error'>}
  */
-const maybeEmergencyFillChallenge = async (challenge, token, now, deps) => {
+const maybeEmergencyFillChallenge = async (
+    challenge: Challenge,
+    token: string,
+    now: number,
+    deps: SettingsFillDeps,
+): Promise<'submitted' | 'skipped' | 'disabled' | 'no-eligible-photos' | 'error'> => {
     const { settings, logger } = deps;
     const challengeId = challenge?.id;
     if (challengeId === undefined || challengeId === null) return 'skipped';

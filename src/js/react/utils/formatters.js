@@ -12,12 +12,12 @@ import { entryPhotoUrl } from '../../format/photoUrl';
 import { finiteOr } from '../../numbers';
 
 // Re-exported from the shared core so the renderer, the CLI, and the voting pass
-// (services/votingOrchestrator.js) all format durations identically — see src/js/format/duration.js.
+// (services/votingOrchestrator.js) all format durations identically — see src/js/format/duration.ts.
 export { formatDuration };
 
 // Entry thumbnails. Re-exported here rather than imported straight into the
 // component so the renderer keeps one door onto the shared core, matching
-// formatDuration above — see src/js/format/photoUrl.js for why the URL has to
+// formatDuration above — see src/js/format/photoUrl.ts for why the URL has to
 // be built client-side at all.
 export { entryPhotoUrl };
 
@@ -181,7 +181,7 @@ export const getEntryStatus = (entry) => {
 
 /**
  * Whether a boost window is currently open (boost can be applied right now).
- * Re-exported from the shared predicate (voting/boostWindow.js) that the
+ * Re-exported from the shared predicate (voting/boostWindow.ts) that the
  * voting engine (services/VotingLogic.js) uses too, so the two hosts can
  * never drift on what "open" means.
  */

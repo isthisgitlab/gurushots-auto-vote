@@ -1,5 +1,5 @@
 /**
- * Mock counterpart to api/voting.js: session-stable vote images and a vote
+ * Mock counterpart to api/voting.ts: session-stable vote images and a vote
  * submit that records the pre-vote exposure in metadata like the real one.
  */
 

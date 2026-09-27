@@ -24,7 +24,7 @@ import { moveItem } from '../../../../scenarios/builderModel';
 
 /**
  * The scenario builder's generic form engine: one editor for any condition,
- * action or entry selector, rendered from the scenarios/builderSpec.js table.
+ * action or entry selector, rendered from the scenarios/builderSpec.ts table.
  * Every editor is controlled — `value` in, `onChange(next)` out — and never
  * validates; the real validator runs on save and on simulate.
  */

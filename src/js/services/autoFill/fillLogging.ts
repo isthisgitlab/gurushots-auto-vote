@@ -7,9 +7,9 @@
 import { hasThemeMatch } from '../photoPicker';
 import { oneLine } from '../../format/logSafe';
 
-/** @import { Challenge } from '../../types/gurushots' */
-/** @import { PickFallbackInfo, ScoredCandidate } from '../../types/photoPicker' */
-/** @import { FillLogger } from '../../types/autoFill' */
+import type { Challenge } from '../../types/gurushots';
+import type { PickFallbackInfo, ScoredCandidate } from '../../types/photoPicker';
+import type { FillLogger } from '../../types/autoFill';
 
 /**
  * Extract a concise, human-readable reason from a failed submit_to_challenge
@@ -19,15 +19,12 @@ import { oneLine } from '../../format/logSafe';
  * strip tags and fall back to a truncated dump of whatever shape it is, since
  * the exact field name varies and an empty message is worse than raw JSON.
  *
- * @param {unknown} raw - the submitToChallenge `raw` response
- * @returns {string}
+ * @param raw - the submitToChallenge `raw` response
  */
-const describeSubmitFailure = (raw) => {
+const describeSubmitFailure = (raw: unknown): string => {
     if (!raw || typeof raw !== 'object') return 'no response body';
-    /** @type {{message?: unknown, error?: unknown, error_message?: unknown, errors?: unknown}} */
-    const body = raw;
-    /** @param {string} s */
-    const stripHtml = (s) =>
+    const body: { message?: unknown; error?: unknown; error_message?: unknown; errors?: unknown } = raw;
+    const stripHtml = (s: string) =>
         s
             .replace(/<[^>]*>/g, ' ')
             .replace(/\s+/g, ' ')
@@ -49,13 +46,12 @@ const describeSubmitFailure = (raw) => {
  * fillNew) so the line reads like that flow's other logs. Dry-run picks (the
  * emergency-fill probe) must NOT pass this: a probe never submits, so it must
  * never warn.
- *
- * @param {string} prefix
- * @param {Challenge} challenge
- * @param {FillLogger} logger
- * @returns {(info: PickFallbackInfo) => void}
  */
-const makeFallbackLogger = (prefix, challenge, logger) => {
+const makeFallbackLogger = (
+    prefix: string,
+    challenge: Challenge,
+    logger: FillLogger,
+): ((info: PickFallbackInfo) => void) => {
     return ({ letterPrefix, mustStems, excludedStems }) => {
         const reasons = [];
         if (letterPrefix) {
@@ -100,22 +96,22 @@ const makeFallbackLogger = (prefix, challenge, logger) => {
  * "why did it submit THAT photo?" on a title like "Your Legacy". The on-theme
  * tie is normal, healthy behavior and would be crying wolf as a warning, so it
  * goes out at INFO — which, unlike `debug`, carries no isSourceCode() gate in
- * logger.js and so still reaches a packaged build's log.
+ * logger.ts and so still reaches a packaged build's log.
  *
  * Carries the deciding numbers and the stat coverage, because partial coverage
  * is the one way this can still pick a weaker photo: only photos whose real
  * votes were fetched can be ranked on them, and the per-fill fetch budget means
  * a large library is measured over several fills. Saying "12 of 340" turns that
  * from a silent limitation into something the user can see and wait out.
- *
- * @param {string} prefix
- * @param {Challenge} challenge
- * @param {ScoredCandidate[]} scored
- * @param {Set<string>} contestedIds
- * @param {string[]} picked
- * @param {FillLogger} logger
  */
-const logPopularityPick = (prefix, challenge, scored, contestedIds, picked, logger) => {
+const logPopularityPick = (
+    prefix: string,
+    challenge: Challenge,
+    scored: ScoredCandidate[],
+    contestedIds: Set<string>,
+    picked: string[],
+    logger: FillLogger,
+) => {
     // Only the SUBMITTED photos that were actually in the contested group belong
     // in this message. picked[0] is not a safe proxy: a multi-slot fill
     // (emergency fill and manual fill-all both pass wantCount = slotsRemaining)
@@ -123,11 +119,9 @@ const logPopularityPick = (prefix, challenge, scored, contestedIds, picked, logg
     // popularity, and naming that first photo would claim "nothing matched the
     // theme" about a photo that did — while leaving the photos that really were
     // chosen blind unexplained.
-    const explained = /** @type {ScoredCandidate[]} */ (
-        picked
-            .map((id) => scored.find((entry) => String(entry.id) === String(id)))
-            .filter((entry) => entry && contestedIds.has(String(entry.id)))
-    );
+    const explained = picked
+        .map((id) => scored.find((entry) => String(entry.id) === String(id)))
+        .filter((entry) => entry && contestedIds.has(String(entry.id))) as ScoredCandidate[];
     if (explained.length === 0) return;
 
     // Coverage is read off the SCORED entries, not the photo objects handed to
@@ -145,8 +139,7 @@ const logPopularityPick = (prefix, challenge, scored, contestedIds, picked, logg
     // exists to remove, so say so instead of showing a number we do not have.
     // Photo ids come from the API: collapse CR/LF before interpolating, or a
     // crafted value could forge log lines (CWE-117).
-    /** @param {ScoredCandidate} entry */
-    const describe = (entry) =>
+    const describe = (entry: ScoredCandidate) =>
         entry.statsKnown === true
             ? `${oneLine(entry.id)} (${entry.votes} votes, ${entry.achievementCount} achievements, ${entry.views} views)`
             : `${oneLine(entry.id)} (past performance not looked up yet — ranked below any photo that was)`;

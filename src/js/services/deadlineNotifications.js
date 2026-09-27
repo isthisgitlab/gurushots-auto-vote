@@ -2,18 +2,18 @@
  * Pure decision layer for the "deadline action coming up" OS notifications.
  *
  * Shared by every host (Electron renderer, CLI/Node scheduler, Capacitor
- * foreground, Android headless) exactly like voting/boostWindow.js: NO Node,
+ * foreground, Android headless) exactly like voting/boostWindow.ts: NO Node,
  * NO settings facade, NO zod — so it is safe in the WebView bundle too. Each
  * host feeds it the per-challenge deadline actions it already has
  * (describeDeadlineActions on the Node side, get-deadline-actions over IPC on
  * the renderer side) and owns delivery; this module only decides WHICH actions
  * are due, dedupes them, and formats the text.
  *
- * CJS on purpose (mirrors boostWindow.js / cadenceChain.js): required directly
+ * CJS on purpose (mirrors boostWindow.ts / cadenceChain.ts): required directly
  * by the Node hosts and imported by the esbuild-bundled renderer.
  *
  * Security: the `title` here is the raw GuruShots challenge title
- * (src/js/api/challenges.js) — server-supplied and attacker-influenceable, not
+ * (src/js/api/challenges.ts) — server-supplied and attacker-influenceable, not
  * app-authored. Every string that leaves this module is passed through
  * sanitizeNotificationText first (mirrors logger.sanitizeLogString) so a
  * crafted title cannot forge a multi-line "system" toast, inject notify-send
@@ -85,7 +85,7 @@ const sanitizeNotificationText = (value, maxLength = MAX_TEXT_LEN) =>
 
 /**
  * Fill `{placeholder}` tokens in a translated template. The app's translation
- * layer (translations/translator.js `t()`) does no interpolation of its own, so the
+ * layer (translations/translator.ts `t()`) does no interpolation of its own, so the
  * templates carry `{minutes}` / `{title}` / `{count}` and we substitute here.
  * Unknown tokens are left intact rather than blanked.
  *

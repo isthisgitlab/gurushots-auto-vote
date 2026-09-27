@@ -1,6 +1,6 @@
 /**
  * Where a challenge is in its assigned scenario — one read shared by the
- * Node-side scheduler resolver (scheduling/nodeResolvers.js), the
+ * Node-side scheduler resolver (scheduling/nodeResolvers.ts), the
  * get-scenario-status IPC channel (the GUI's resolver and status line) and
  * the CLI. Reads only; the runner (scenarioRunner.js) is the only writer.
  */

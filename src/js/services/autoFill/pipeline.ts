@@ -11,36 +11,36 @@ import { resolveSemanticScores, resolveIgnoreWords, fetchCandidatesForChallenge 
 import { refreshChallengeState } from './challengeState';
 import { describeSubmitFailure, makeFallbackLogger, logPopularityPick } from './fillLogging';
 
-/** @import { Challenge } from '../../types/gurushots' */
-/** @import { IgnoreWords, PickerPhoto, ScoredCandidate, SemanticScoreMap } from '../../types/photoPicker' */
-/**
- * @import {
- *   ErrorLike,
- *   FetchErrorResult,
- *   FillAttemptParams,
- *   FillAttemptResult,
- *   RankDeps,
- * } from '../../types/autoFill'
- */
+import type { Challenge } from '../../types/gurushots';
+import type { IgnoreWords, PickerPhoto, ScoredCandidate, SemanticScoreMap } from '../../types/photoPicker';
+import type { ErrorLike, FetchErrorResult, FillAttemptParams, FillAttemptResult, RankDeps } from '../../types/autoFill';
 
 /**
  * First half of the fill pipeline: fetch the candidate library for a challenge
  * and score it semantically. Shared by runFillAttempt and
  * rankCandidatesForChallenge so a swap ranks photos exactly the way a fill
  * does.
- *
- * @param {{
- *   label: string,
- *   challenge: Challenge,
- *   token: string,
- *   deps: RankDeps,
- *   mustIncludeTags: readonly string[] | null,
- *   shouldIncludeTags: readonly string[] | null,
- *   usage?: string,
- * }} params
- * @returns {Promise<FetchErrorResult | {status: 'loaded', eligible: PickerPhoto[], semanticScores: SemanticScoreMap | null, ignoreWords: IgnoreWords}>}
  */
-const loadFillCandidates = async ({ label, challenge, token, deps, mustIncludeTags, shouldIncludeTags, usage }) => {
+const loadFillCandidates = async ({
+    label,
+    challenge,
+    token,
+    deps,
+    mustIncludeTags,
+    shouldIncludeTags,
+    usage,
+}: {
+    label: string;
+    challenge: Challenge;
+    token: string;
+    deps: RankDeps;
+    mustIncludeTags: readonly string[] | null;
+    shouldIncludeTags: readonly string[] | null;
+    usage?: string;
+}): Promise<
+    | FetchErrorResult
+    | { status: 'loaded'; eligible: PickerPhoto[]; semanticScores: SemanticScoreMap | null; ignoreWords: IgnoreWords }
+> => {
     const { logger, getEligiblePhotos, searchTagAutocomplete, getCurrentMemberProfile } = deps;
     // One lookup for the whole fill — see resolveIgnoreWords for why it is not
     // threaded in from each caller like the tag settings are.
@@ -63,7 +63,7 @@ const loadFillCandidates = async ({ label, challenge, token, deps, mustIncludeTa
         logger
             .withCategory('autoFill')
             .warning(
-                `${label}: failed to fetch eligible photos for ${logger.challengeTag(challenge)}: ${/** @type {ErrorLike | null | undefined} */ (error)?.message || error}`,
+                `${label}: failed to fetch eligible photos for ${logger.challengeTag(challenge)}: ${(error as ErrorLike | null | undefined)?.message || error}`,
                 null,
             );
         return { status: 'fetch-error', error };
@@ -80,21 +80,6 @@ const loadFillCandidates = async ({ label, challenge, token, deps, mustIncludeTa
  * Second half of the fill pipeline: build the scored candidate list and enrich
  * the contested ones with real stats. Returns the FULL scored pool —
  * finalizePick (which truncates to wantCount) is the caller's job.
- *
- * @param {{
- *   label: string,
- *   challenge: Challenge,
- *   token: string,
- *   deps: RankDeps,
- *   eligible: PickerPhoto[],
- *   semanticScores: SemanticScoreMap | null,
- *   ignoreWords: IgnoreWords,
- *   wantCount: number,
- *   mustIncludeTags: readonly string[] | null,
- *   shouldIncludeTags: readonly string[] | null,
- *   fillWithoutTagMatch: boolean | undefined,
- * }} params
- * @returns {Promise<{scored: ScoredCandidate[], contested: PickerPhoto[], contestedIds: Set<string>}>}
  */
 const scoreFillCandidates = async ({
     label,
@@ -108,7 +93,19 @@ const scoreFillCandidates = async ({
     mustIncludeTags,
     shouldIncludeTags,
     fillWithoutTagMatch,
-}) => {
+}: {
+    label: string;
+    challenge: Challenge;
+    token: string;
+    deps: RankDeps;
+    eligible: PickerPhoto[];
+    semanticScores: SemanticScoreMap | null;
+    ignoreWords: IgnoreWords;
+    wantCount: number;
+    mustIncludeTags: readonly string[] | null;
+    shouldIncludeTags: readonly string[] | null;
+    fillWithoutTagMatch: boolean | undefined;
+}): Promise<{ scored: ScoredCandidate[]; contested: PickerPhoto[]; contestedIds: Set<string> }> => {
     const { logger } = deps;
     const scored = buildScoredCandidates(challenge, eligible, {
         mustIncludeTags,
@@ -135,9 +132,9 @@ const scoreFillCandidates = async ({
             if (entry.statsKnown) {
                 // enrichCandidates only marks statsKnown on entries whose three
                 // fields it has already coerced to finite non-negative integers.
-                entry.votes = /** @type {number} */ (fresh.votes);
-                entry.views = /** @type {number} */ (fresh.views);
-                entry.achievementCount = /** @type {number} */ (fresh.achievementCount);
+                entry.votes = fresh.votes as number;
+                entry.views = fresh.views as number;
+                entry.achievementCount = fresh.achievementCount as number;
             }
         }
     }
@@ -147,16 +144,14 @@ const scoreFillCandidates = async ({
 // Visual re-rank of the tag pick (see services/visionVerifier.js). The picked
 // ids lead the shortlist so a model that abstains returns exactly them; the
 // rest of the tag ranking follows as alternatives it may promote.
-/**
- * @param {Challenge} challenge
- * @param {ScoredCandidate[]} scored
- * @param {PickerPhoto[]} eligible
- * @param {string[]} picked
- * @param {IgnoreWords} ignoreWords
- * @param {RankDeps} deps
- * @returns {Promise<string[]>}
- */
-const verifyFillPick = async (challenge, scored, eligible, picked, ignoreWords, deps) => {
+const verifyFillPick = async (
+    challenge: Challenge,
+    scored: ScoredCandidate[],
+    eligible: PickerPhoto[],
+    picked: string[],
+    ignoreWords: IgnoreWords,
+    deps: RankDeps,
+): Promise<string[]> => {
     const ranked = finalizePick(scored, Math.max(12, picked.length));
     const selected = new Set(picked.map(String));
     const preferred = [...picked, ...ranked.filter((id) => !selected.has(String(id)))];
@@ -168,7 +163,7 @@ const verifyFillPick = async (challenge, scored, eligible, picked, ignoreWords, 
         deps.logger
             .withCategory('autoFill')
             .warning(
-                `Visual check failed for ${deps.logger.challengeTag(challenge)}: ${/** @type {ErrorLike | null | undefined} */ (error)?.message || error}`,
+                `Visual check failed for ${deps.logger.challengeTag(challenge)}: ${(error as ErrorLike | null | undefined)?.message || error}`,
                 null,
             );
         return picked;
@@ -181,16 +176,23 @@ const verifyFillPick = async (challenge, scored, eligible, picked, ignoreWords, 
  * enrichment — finalizePick truncates after sorting, so filtering afterwards
  * could discard every valid alternative when the top picks are excluded.
  *
- * @param {Challenge} challenge
- * @param {string} token
- * @param {RankDeps} deps - same shape as the fill deps
- * @param {{label?: string, usage?: 'submit'|'swap', excludeIds?: Set<string>, wantCount?: number,
- *   mustIncludeTags?: readonly string[]|null, shouldIncludeTags?: readonly string[]|null,
- *   fillWithoutTagMatch?: boolean}} [opts]
- * @returns {Promise<FetchErrorResult | {status: 'ranked', picked: PickerPhoto[]}>}
+ * @param deps - same shape as the fill deps
  *   picked: the top `wantCount` candidate photo records (with id + member_id), best first
  */
-const rankCandidatesForChallenge = async (challenge, token, deps, opts = {}) => {
+const rankCandidatesForChallenge = async (
+    challenge: Challenge,
+    token: string,
+    deps: RankDeps,
+    opts: {
+        label?: string;
+        usage?: 'submit' | 'swap';
+        excludeIds?: Set<string>;
+        wantCount?: number;
+        mustIncludeTags?: readonly string[] | null;
+        shouldIncludeTags?: readonly string[] | null;
+        fillWithoutTagMatch?: boolean;
+    } = {},
+): Promise<FetchErrorResult | { status: 'ranked'; picked: PickerPhoto[] }> => {
     const {
         label = 'rank',
         usage = 'submit',
@@ -235,7 +237,7 @@ const rankCandidatesForChallenge = async (challenge, token, deps, opts = {}) => 
         loaded.ignoreWords,
         deps,
     );
-    const picked = /** @type {PickerPhoto[]} */ (pickedIds.map((id) => byId.get(String(id))).filter(Boolean));
+    const picked = pickedIds.map((id) => byId.get(String(id))).filter(Boolean) as PickerPhoto[];
     return { status: 'ranked', picked };
 };
 
@@ -280,9 +282,6 @@ const rankCandidatesForChallenge = async (challenge, token, deps, opts = {}) => 
  *     replace the batch (emergency fill truncates to the fresh free-slot
  *     count), or null to proceed. When the hook is absent the live
  *     re-check is skipped entirely (manual fill).
- *
- * @param {FillAttemptParams} params
- * @returns {Promise<FillAttemptResult>}
  */
 const runFillAttempt = async ({
     label,
@@ -296,7 +295,7 @@ const runFillAttempt = async ({
     probeStandDown = null,
     onEmptyPick = null,
     onRefreshed = null,
-}) => {
+}: FillAttemptParams): Promise<FillAttemptResult> => {
     const { logger, submitToChallenge } = deps;
     const loaded = await loadFillCandidates({ label, challenge, token, deps, mustIncludeTags, shouldIncludeTags });
     if (loaded.status === 'fetch-error') {
@@ -382,7 +381,7 @@ const runFillAttempt = async ({
         logger
             .withCategory('autoFill')
             .warning(
-                `${label}: submit threw for ${logger.challengeTag(challenge)}: ${/** @type {ErrorLike | null | undefined} */ (error)?.message || error}`,
+                `${label}: submit threw for ${logger.challengeTag(challenge)}: ${(error as ErrorLike | null | undefined)?.message || error}`,
                 null,
             );
         return { status: 'submit-threw', error };

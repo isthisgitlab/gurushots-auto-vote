@@ -9,8 +9,8 @@ import { getEntries, getSlotsRemaining, reflectNewEntry } from './challengeState
 import { runFillAttempt } from './pipeline';
 import { finiteOr } from '../../numbers';
 
-/** @import { Challenge } from '../../types/gurushots' */
-/** @import { SettingsFillDeps } from '../../types/autoFill' */
+import type { Challenge } from '../../types/gurushots';
+import type { SettingsFillDeps } from '../../types/autoFill';
 
 /**
  * Cycle-driven, schedule-based auto-fill. Submits at most one photo per
@@ -18,14 +18,17 @@ import { finiteOr } from '../../numbers';
  * entries.length and either skip (target met) or submit again — so a
  * challenge behind schedule catches up one photo per cycle.
  *
- * @param {Challenge} challenge - challenge with member.ranking.entries
- * @param {string} token
- * @param {number} now - unix seconds
- * @param {SettingsFillDeps} deps - getActiveChallenges enables the pre-submit live re-check; when
+ * @param challenge - challenge with member.ranking.entries
+ * @param now - unix seconds
+ * @param deps - getActiveChallenges enables the pre-submit live re-check; when
  *   absent the fill proceeds on pass-start data.
- * @returns {Promise<'submitted'|'skipped'|'disabled'|'no-schedule'|'no-eligible-photos'|'error'>}
  */
-const maybeAutoFillChallenge = async (challenge, token, now, deps) => {
+const maybeAutoFillChallenge = async (
+    challenge: Challenge,
+    token: string,
+    now: number,
+    deps: SettingsFillDeps,
+): Promise<'submitted' | 'skipped' | 'disabled' | 'no-schedule' | 'no-eligible-photos' | 'error'> => {
     const { settings, logger } = deps;
     const challengeId = challenge?.id;
     if (challengeId === undefined || challengeId === null) return 'skipped';
@@ -108,7 +111,7 @@ const maybeAutoFillChallenge = async (challenge, token, now, deps) => {
     // than the schedule's span), say which row's time governed this fill
     // — the resolved mapping, not a bare shift count. Success-level on
     // purpose: `debug` is compiled out of packaged builds (it is gated on
-    // isSourceCode() in logger.js; `info`, `success` and `warning` are NOT),
+    // isSourceCode() in logger.ts; `info`, `success` and `warning` are NOT),
     // and the remapped timing is exactly what a user checking "why did it fill
     // now?" needs to see. Attribute the TARGET's row (`desired + shift`
     // maps back to the original image number that set the current

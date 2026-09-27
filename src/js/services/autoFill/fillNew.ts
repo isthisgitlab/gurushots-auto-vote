@@ -6,8 +6,8 @@
 import { getSlotsRemaining } from './challengeState';
 import { runFillAttempt } from './pipeline';
 
-/** @import { Challenge } from '../../types/gurushots' */
-/** @import { SettingsFillDeps } from '../../types/autoFill' */
+import type { Challenge } from '../../types/gurushots';
+import type { SettingsFillDeps } from '../../types/autoFill';
 
 /**
  * Submit exactly one new photo into a challenge and return its id, so the
@@ -20,14 +20,16 @@ import { runFillAttempt } from './pipeline';
  * Never submits when the challenge is already full (getSlotsRemaining guard),
  * so callers can safely fall back to acting on an existing entry.
  *
- * @param {Challenge} challenge - challenge with member.ranking.entries
- * @param {string} token
- * @param {SettingsFillDeps} deps - getActiveChallenges enables the pre-submit live re-check; when
+ * @param challenge - challenge with member.ranking.entries
+ * @param deps - getActiveChallenges enables the pre-submit live re-check; when
  *   absent the fill proceeds on pass-start data.
- * @returns {Promise<{ok: boolean, imageId: string|null, reason: string}>}
  *   reason ∈ 'submitted'|'no-slots'|'challenge-gone'|'no-eligible'|'fetch-error'|'submit-failed'|'invalid-challenge'
  */
-const submitNewEntryForAction = async (challenge, token, deps) => {
+const submitNewEntryForAction = async (
+    challenge: Challenge,
+    token: string,
+    deps: SettingsFillDeps,
+): Promise<{ ok: boolean; imageId: string | null; reason: string }> => {
     const { settings, logger } = deps;
     const challengeId = challenge?.id;
     if (challengeId === undefined || challengeId === null) {

@@ -8,16 +8,16 @@
  * Facade — the only module callers import. It re-exports the public surface
  * of the internal ./decisions/* modules:
  *
- *   thresholds.js       exposure triggers/targets, final-window and last-minute
+ *   thresholds.ts       exposure triggers/targets, final-window and last-minute
  *                       windows, boost/turbo timing windows
- *   triggerWindows.js   scheduled-fill and voting-pause window state
- *   boostPrefill.js     pre-boost fill window state
- *   ruleEngine.js       the shared rule engine (_runVotingRules)
- *   voteDecisions.js    auto/manual vote evaluators
- *   entryPick.js        boost/turbo entry selection and boost fill-new mode
- *   boostTurbo.js       boost/turbo apply decisions, Emergency Fill override
- *   deadlineActions.js  deadline-action thresholds, ordering and description
- *   joinDecision.js     pure auto-join decision
+ *   triggerWindows.ts   scheduled-fill and voting-pause window state
+ *   boostPrefill.ts     pre-boost fill window state
+ *   ruleEngine.ts       the shared rule engine (_runVotingRules)
+ *   voteDecisions.ts    auto/manual vote evaluators
+ *   entryPick.ts        boost/turbo entry selection and boost fill-new mode
+ *   boostTurbo.ts       boost/turbo apply decisions, Emergency Fill override
+ *   deadlineActions.ts  deadline-action thresholds, ordering and description
+ *   joinDecision.ts     pure auto-join decision
  */
 
 import { resolveEntryIndex } from '../voting/entrySlot';

@@ -39,7 +39,7 @@ const triPatch = (key, raw) => ({ [key]: raw === 'on' ? true : raw === 'off' ? f
  */
 const PICS_CHOICES = [1, 2, 3, 4];
 
-// Mirrors MAX_RULE_RUNTIME_HOURS in settings/challengeRules.js; the sanitizer is
+// Mirrors MAX_RULE_RUNTIME_HOURS in settings/challengeRules.ts; the sanitizer is
 // the real gate.
 const MAX_RUNTIME_HOURS = 2000;
 
@@ -201,7 +201,7 @@ function RuleScenarioSelect({ rule, onPatch }) {
     );
 }
 
-// Mirrors MAX_TITLES_PER_RULE in settings/titleRuleSanitize.js; the sanitizer is the real gate.
+// Mirrors MAX_TITLES_PER_RULE in settings/titleRuleSanitize.ts; the sanitizer is the real gate.
 const MAX_TITLES_PER_RULE = 50;
 
 // The editable title list of a rule. Stored rules carry `titles` only when they
@@ -472,8 +472,8 @@ function RuleCard({ index, count, rule, profiles, onPatch, onMove, onRemove }) {
  * photo count and its runtime range in hours. Every filled condition must hold.
  *
  * ORDER: the list order is the precedence — for each setting the first matching
- * rule that sets it wins (see `ruleValuesFor` in settings/ruleResolution.js). The user reorders
- * with the arrows or resets to the default order (settings/challengeRules.js
+ * rule that sets it wins (see `ruleValuesFor` in settings/ruleResolution.ts). The user reorders
+ * with the arrows or resets to the default order (settings/challengeRules.ts
  * `sortRulesByDefaultOrder`: title rules, then photos + runtime, photos,
  * runtime).
  *

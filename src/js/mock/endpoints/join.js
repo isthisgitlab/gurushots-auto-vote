@@ -1,5 +1,5 @@
 /**
- * Mock counterpart to api/join.js: open (un-joined) challenges, the
+ * Mock counterpart to api/join.ts: open (un-joined) challenges, the
  * bankroll, and the coin unlock.
  */
 

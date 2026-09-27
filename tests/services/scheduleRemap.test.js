@@ -1,6 +1,6 @@
 /**
  * Unit tests for the pure end-alignment remap helpers. Shared by the voting
- * core (autoFill/schedule.js) and the React renderer (the per-challenge settings hint), so
+ * core (autoFill/schedule.ts) and the React renderer (the per-challenge settings hint), so
  * everything here must hold without any settings/logger plumbing.
  */
 
