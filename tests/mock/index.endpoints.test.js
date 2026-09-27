@@ -16,11 +16,13 @@ jest.mock('../../src/js/services/joinChallenges', () => ({
     runJoinPass: jest.fn(async () => ({ ran: false, joined: 0, results: [] })),
     joinChallengeSingle: jest.fn(async () => ({ status: 'joined' })),
 }));
+jest.mock('../../src/js/services/missions', () => ({ loadMissionNeeds: jest.fn(async () => null) }));
 
 const logger = require('../../src/js/logger');
 const metadata = require('../../src/js/metadata');
 const { runVotingPass } = require('../../src/js/services/votingOrchestrator');
 const { runJoinPass, joinChallengeSingle } = require('../../src/js/services/joinChallenges');
+const { loadMissionNeeds } = require('../../src/js/services/missions');
 const { mockApiClient, clearSessionCache } = require('../../src/js/mock/index');
 
 /** Resolve a promise that is gated on simulated latency. */
@@ -305,6 +307,17 @@ describe('fetchChallengesAndVote — join pre-step', () => {
         runJoinPass.mockRejectedValueOnce(new Error('boom'));
         await mockApiClient.fetchChallengesAndVote('tok');
         expect(cat.warning).toHaveBeenCalledWith('Mock join pass errored: boom', null);
+    });
+
+    test('reads the missions over the mock endpoint and hands the same needs to the join pass and the vote', async () => {
+        const needs = { join: 1, fill: 0, turbo: 2 };
+        loadMissionNeeds.mockResolvedValueOnce(needs);
+        await mockApiClient.fetchChallengesAndVote('tok');
+        expect(loadMissionNeeds).toHaveBeenCalledWith('tok', expect.any(Number), {
+            getMyMissions: expect.any(Function),
+        });
+        expect(runJoinPass.mock.calls.at(-1)[3]).toBe(needs);
+        expect(runVotingPass.mock.calls.at(-1)[2].missions).toBe(needs);
     });
 
     test('a single-challenge run skips the join pass', async () => {
