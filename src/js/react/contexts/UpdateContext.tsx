@@ -127,7 +127,8 @@ const UpdateContext = createContext<UpdateContextValue | null>(null);
  * the failed step; the technical reason goes to the log.
  */
 const failWith = (dispatch: Dispatch<UpdateAction>, kind: UpdateError['kind'], reason: unknown) => {
-    void ipc.logRendererError(`Update ${kind} failed: ${(reason as Error | null | undefined)?.message || reason}`);
+    const step = kind === 'install' ? 'Update install' : 'Update';
+    void ipc.logRendererError(`${step} failed: ${(reason as Error | null | undefined)?.message || reason}`);
     dispatch({ type: ACTIONS.SET_ERROR, payload: { kind } });
 };
 

@@ -248,7 +248,7 @@ describe('UpdateProvider + UpdateDialog', () => {
         // The translated message is shown; the technical reason goes to the log.
         expect(screen.getByText('app.updateFailed')).toBeTruthy();
         expect(screen.queryByText('checksum mismatch')).toBeNull();
-        expect(mockApi.logError).toHaveBeenCalledWith('Update update failed: checksum mismatch');
+        expect(mockApi.logError).toHaveBeenCalledWith('Update failed: checksum mismatch');
 
         await clickAndSettle(screen.getByText('app.downloadInBrowser'));
         expect(mockApi.openExternalUrl).toHaveBeenCalledWith('https://example.test/releases');
@@ -256,8 +256,8 @@ describe('UpdateProvider + UpdateDialog', () => {
     });
 
     it.each([
-        [new Error('offline'), 'Update update failed: offline'],
-        ['bare', 'Update update failed: bare'],
+        [new Error('offline'), 'Update failed: offline'],
+        ['bare', 'Update failed: bare'],
     ])('a thrown download error (%p) shows the update failure and logs "%s"', async (thrown, logged) => {
         mockApi.canAutoUpdate.mockRejectedValue(thrown);
         renderDialog();
@@ -292,7 +292,7 @@ describe('UpdateProvider + UpdateDialog', () => {
         await emit('onUpdateError', { message: 'sig invalid' });
         expect(screen.getByText('app.updateFailed')).toBeTruthy();
         expect(screen.getByText('app.downloadInBrowser')).toBeTruthy();
-        expect(mockApi.logError).toHaveBeenCalledWith('Update update failed: sig invalid');
+        expect(mockApi.logError).toHaveBeenCalledWith('Update failed: sig invalid');
 
         // Error state closes via "Close" and via the backdrop.
         fireEvent.click(screen.getByText('app.close'));
