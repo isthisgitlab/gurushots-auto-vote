@@ -3,11 +3,11 @@
  * before the real validator has seen it. Type-only: nothing here exists at
  * runtime.
  *
- * Looser than ScenarioDocument (settings/scenarioSchema.js), which every
+ * Looser than ScenarioDocument (settings/scenarioSchema.ts), which every
  * stored scenario and newScenario() fit: conditions, actions and selectors are
  * plain records the generic item editors rewrite field by field, and a draft
  * from the JSON tab is only known to pass isEditableDraft (scenarios/
- * builderModel.js) — phases of plain objects, rules with a `do` list. Save and
+ * builderModel.ts) — phases of plain objects, rules with a `do` list. Save and
  * simulate run the validator and report everything else by path.
  */
 

@@ -1,8 +1,8 @@
 /**
  * Shapes the auto-fill photo picker (services/photoPicker/*), the semantic
  * matcher (services/semantic/*) and the auto-fill pipeline pass between each
- * other. Type-only: nothing here exists at runtime. JS files pull them in with
- * `/** @import { PickerPhoto } from '../../types/photoPicker' *\/`.
+ * other. Type-only: nothing here exists at runtime. Modules pull them in with
+ * `import type { PickerPhoto } from '../../types/photoPicker'`.
  */
 
 import type { Challenge, LibraryPhoto } from './gurushots';
@@ -32,14 +32,14 @@ export interface ExcludedSubject {
 
 /**
  * A library photo as the picker ranks it: get_photos_private's item, plus the
- * popularity fields services/photoStats.js merges on once it resolved them.
+ * popularity fields services/photoStats.ts merges on once it resolved them.
  */
 export interface PickerPhoto extends LibraryPhoto {
     /** The owner's member id; library rows usually carry it, and a photo URL needs it. */
     member_id?: string;
-    /** True only when photoStats.js resolved this photo's real numbers. */
+    /** True only when photoStats.ts resolved this photo's real numbers. */
     statsKnown?: boolean;
-    /** The achievements count photoStats.js stores instead of the array. */
+    /** The achievements count photoStats.ts stores instead of the array. */
     achievementCount?: number;
     /** A raw achievements array (mocks, tests, a payload that inlines it). */
     achievements?: unknown[];

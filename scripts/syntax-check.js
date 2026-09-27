@@ -5,8 +5,8 @@
  *
  * Runs `node --check` on every CommonJS .js file in the project by WALKING
  * scripts and tests — an explicit exclude list below removes what is not Node
- * CommonJS. src/js is import/export throughout, so oxlint, esbuild, swc and
- * tsc parse it instead.
+ * CommonJS. src/js is TypeScript, so oxlint, esbuild, swc and tsc parse it
+ * instead.
  */
 
 const fs = require('node:fs');

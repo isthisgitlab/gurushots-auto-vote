@@ -385,7 +385,7 @@
         ],
         "collectCoverage": false,
         "collectCoverageFrom": [
-            "src/js/**/*.{js,jsx,ts,tsx}",
+            "src/js/**/*.{ts,tsx}",
             "!src/js/**/*.d.ts",
             "scripts/**/*.{js,ts}"
         ],

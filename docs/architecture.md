@@ -41,13 +41,13 @@ Domain terms used throughout, in reader's terms:
 
 ## 1. Voting decision engine
 
-- `runVotingPass(token, filter, deps)` (`services/votingOrchestrator.ts` — around L712) is the **one**
+- `runVotingPass(token, filter, deps)` (`services/votingOrchestrator.ts` — around L871) is the **one**
   shared loop for both real and mock strategies. **Never fork it** — a fork re-introduces the real/mock
   drift the shared loop exists to remove. Inject strategy differences via `deps`.
 - The per-challenge action **runners are strictly sequential, never parallelised**: auto-fill mutates the
   shared challenge object (`reflectNewEntry`) so a later turbo/boost in the same cycle sees the new entry
   and the consumed slot.
-- The decision engine is `_runVotingRules()` (`services/decisions/ruleEngine.ts` — around L65). Its precedence
+- The decision engine is `_runVotingRules()` (`services/decisions/ruleEngine.ts` — around L95). Its precedence
   order is load-bearing: onlyBoost → not-started / already-ended → flash (→100) → last-minute window
   (→100) → **pre-boost fill** (→100) → **voting pause** → scheduled-fill window → **pre-final-window top-up** →
   final-window rule → normal threshold. The **pre-boost fill** (`voteBeforeBoost`, default off) votes to
@@ -81,30 +81,30 @@ Domain terms used throughout, in reader's terms:
 - **Trigger ≠ target, and there are two _different_ sentinel families — do not merge them:**
     - `exposureTarget` / `finalWindowExposureTarget`: `0` or null means **"target == trigger"** — the rule
       stays **active**, it simply votes up to the trigger value.
-      `getEffectiveExposureTarget()` (`services/decisions/thresholds.ts` — around L90); schema note in
-      `settings/schema.ts` (around L87).
+      `getEffectiveExposureTarget()` (`services/decisions/thresholds.ts` — around L81); schema note in
+      `settings/schema.ts` (around L86).
     - `boostTime` / `emergencyFill` / `keyUnlockedBoostTime`: `0` means **feature off / never auto-apply**.
       See the explicit comment in `getEffectiveKeyUnlockedBoostTime()` (`services/decisions/thresholds.ts` — around
-      L129: _"An explicit 0 means 'never auto-apply', matching the 0-is-off convention boostTime and
+      L120: _"An explicit 0 means 'never auto-apply', matching the 0-is-off convention boostTime and
       emergencyFill already use"_), and `maybeEmergencyFillChallenge()` (`services/autoFill/emergencyFill.ts` — around
-      L97: `emergencySeconds <= 0` → `'disabled'`).
+      L102: `emergencySeconds <= 0` → `'disabled'`).
 - Magic constants: final-window width defaults to 3600 s — the `finalWindowDuration` setting's default
   (configurable 60 s … 30 d); key-unlock boost default window = 900 s when the setting is
   unusable (explicit `0` still = never).
 - Vote submission votes over a **Fisher-Yates-shuffled, de-duplicated** pool (structural termination — the
   older rejection-sampling could loop forever on duplicate ids) and never posts an empty ballot
-  (`api/voting.ts` — around L59, L155).
+  (`api/voting.ts` — around L61, L160).
 - **≤1 boost and ≤1 turbo per challenge, on different entries** — enforced by `pickEntryAvoidingConflict()`
-  (`services/decisions/entryPick.ts` — around L33) plus a `reflectEntryFlag` marker. Entry-pick logic lives in
+  (`services/decisions/entryPick.ts` — around L24) plus a `reflectEntryFlag` marker. Entry-pick logic lives in
   the shared decision core (behind the `VotingLogic` facade) rather than in `api/boost.ts` so mock mode honours the same rule.
 
 ## 2. Scheduling
 
-- `createCadenceChain()` (`scheduling/cadenceChain.ts` — around L152) is a single recursive `setTimeout`
+- `createCadenceChain()` (`scheduling/cadenceChain.ts` — around L352) is a single recursive `setTimeout`
   chain — **no cron** — shared by CLI, GUI, and Android headless. See `scheduling.md` for the three timer
   engines that drive it per platform.
 - The single cadence decision is `computeNextCycleDelayMs()` (`scheduling/thresholdWindow.ts` — around
-  L390): modes `last-minute` / `approaching` / `scheduled` / `normal`, with the invariant **never sleep
+  L555): modes `last-minute` / `approaching` / `scheduled` / `normal`, with the invariant **never sleep
   past an upcoming boundary**.
 - Double-fire guard: a **stale-timer identity check** (`getTimer() !== timeoutId`) ensures only the
   current timer re-arms, so a re-armed/stopped chain can't double-fire. There is no mutex around a
@@ -209,7 +209,7 @@ Domain terms used throughout, in reader's terms:
   `getActiveChallenges` calls per token and pins first-seen titles via `services/challengeTitlePin.ts` on a
   successful fetch only). `apiFactory.ts` assembles the real surface from these and selects it or
   `mock/index.ts#mockApiClient`.
-- All POSTs go through `makePostRequest()` (`api/api-client.ts` — around L204). **Contract: it returns the
+- All POSTs go through `makePostRequest()` (`api/api-client.ts` — around L237). **Contract: it returns the
   response body on success and `null` on ultimate failure — it never throws.** Every caller branches on
   `null`, not on a catch.
 - Auth: `authenticate(email, password)` posts form-encoded credentials and returns the token payload
@@ -414,7 +414,7 @@ repeated six times is one that gets forgotten at one of them.
 
 ## 7. Persistence & platform detection
 
-- **Don't hand-roll `fs`.** `createJsonStore({fileName, prefKey})` (`settings/storage.ts` — around L239) is
+- **Don't hand-roll `fs`.** `createJsonStore({fileName, prefKey})` (`settings/storage.ts` — around L253) is
   the reusable three-platform JSON store: sync fs at `userData/<fileName>` (mode `0o600`) on Electron/CLI,
   hydrate-once cache + ordered async write-behind to `@capacitor/preferences` on Capacitor, in-memory only
   on the Android headless service. `metadata.ts` and `joinStateStore.ts` (paid-unlock idempotency markers)
@@ -459,7 +459,7 @@ repeated six times is one that gets forgotten at one of them.
   the user — internal detail goes to `logError`, not the UI.
 - **Reuse the `react/components/ui/` primitives** rather than re-rolling: `Modal` (+`ModalActions`),
   `AsyncActionButton`, `StatusBadge` (+`ConnectionBadge`), `LoadingSpinner`,
-  `ResetButton`. New modals **must** go through `ui/Modal.tsx` (around L29–100) — it owns the a11y bar:
+  `ResetButton`. New modals **must** go through `ui/Modal.tsx` (around L34–166) — it owns the a11y bar:
   `role="dialog"` / `aria-modal`, a full Tab/Shift+Tab focus trap, focus-move-in on open and restore on
   close, Escape-to-close, and body-scroll lock.
 - **Theme** = a `data-theme` attribute on `document.documentElement`, sourced from the `theme` setting

@@ -25,7 +25,7 @@
     "ignorePatterns": ["src/js/types/**"],
     // eslint:recommended (Oxlint lacks only no-dupe-args and no-octal, both
     // syntax errors in the strict src/js modules), plus: logging goes through
-    // src/js/logger.js (console.warn/error stay for bootstrap code that runs before
+    // src/js/logger.ts (console.warn/error stay for bootstrap code that runs before
     // the logger exists), and _-prefixed args / catch bindings are deliberately
     // unused. No formatting rules anywhere: Prettier owns formatting.
     "rules": {
@@ -105,9 +105,9 @@
         ]
     },
     "overrides": [
-        // logger.js owns the console, and build/dev scripts print to it.
+        // logger.ts owns the console, and build/dev scripts print to it.
         {
-            "files": ["src/js/logger.js", "src/js/logger.ts", "scripts/**"],
+            "files": ["src/js/logger.ts", "scripts/**"],
             "rules": {
                 "no-console": "off"
             }
@@ -123,7 +123,7 @@
         },
         // src/js/ui (the application menu) is linted with browser and Node globals.
         {
-            "files": ["src/js/ui/**/*.js", "src/js/ui/**/*.ts"],
+            "files": ["src/js/ui/**/*.ts"],
             "env": {
                 "browser": true,
                 "node": true
@@ -132,13 +132,13 @@
                 "no-undef": "off"
             }
         },
-        // Settings facade boundary. settings.js is the only public entry point; the
+        // Settings facade boundary. settings.ts is the only public entry point; the
         // modules behind it under settings/ share mutable state (load-once guards,
         // active-challenge caches) that a direct import would bypass. settings/schema,
         // storage, limits, uiDefaults and challengeRules stay importable.
         {
-            "files": ["src/js/**/*.js", "src/js/**/*.jsx", "src/js/**/*.ts", "src/js/**/*.tsx", "scripts/**/*.js"],
-            "excludeFiles": ["src/js/settings.js", "src/js/settings.ts", "src/js/settings/**"],
+            "files": ["src/js/**/*.ts", "src/js/**/*.tsx", "scripts/**/*.js"],
+            "excludeFiles": ["src/js/settings.ts", "src/js/settings/**"],
             "rules": {
                 "no-restricted-imports": [
                     "error",
@@ -146,7 +146,7 @@
                         "patterns": [
                             {
                                 "regex": "settings/(challengeFacts|challengeOverrides|defaults|migrations|persistence|profileStore|profiles|reset|ruleResolution|scenarioOverlay|scenarioSchema|scenarios|titlePins|titleRuleSanitize|titleRules)(\\.js)?$",
-                                "message": "Settings internals are private to the facade — import settings.js instead.",
+                                "message": "Settings internals are private to the facade — import settings.ts instead.",
                                 "allowTypeImports": true
                             }
                         ]
@@ -157,7 +157,7 @@
         // The type-aware promise rules (via oxlint-tsgolint, over the tsconfig
         // program) and the core rules that went with them.
         {
-            "files": ["src/js/**/*.js", "src/js/**/*.jsx", "src/js/**/*.ts", "src/js/**/*.tsx"],
+            "files": ["src/js/**/*.ts", "src/js/**/*.tsx"],
             "rules": {
                 "no-var": "error",
                 "prefer-const": "error",
@@ -182,7 +182,7 @@
         //   whose text is {t('…')} — every label in this translated UI — so an orphan
         //   <label> would otherwise pass.
         {
-            "files": ["src/js/react/**/*.js", "src/js/react/**/*.jsx", "src/js/react/**/*.ts", "src/js/react/**/*.tsx"],
+            "files": ["src/js/react/**/*.ts", "src/js/react/**/*.tsx"],
             "env": {
                 "browser": true
             },
@@ -208,7 +208,7 @@
                             },
                             {
                                 "regex": "settings/(challengeFacts|challengeOverrides|defaults|migrations|persistence|profileStore|profiles|reset|ruleResolution|scenarioOverlay|scenarioSchema|scenarios|titlePins|titleRuleSanitize|titleRules)(\\.js)?$",
-                                "message": "Settings internals are private to the facade — import settings.js instead.",
+                                "message": "Settings internals are private to the facade — import settings.ts instead.",
                                 "allowTypeImports": true
                             }
                         ]
@@ -325,7 +325,7 @@
         // bridge only through src/js/react/api/, so the bridge surface stays in one
         // place and no component grows per-platform branching.
         {
-            "files": ["src/js/react/**/*.js", "src/js/react/**/*.jsx", "src/js/react/**/*.ts", "src/js/react/**/*.tsx"],
+            "files": ["src/js/react/**/*.ts", "src/js/react/**/*.tsx"],
             "excludeFiles": ["src/js/react/api/**"],
             "rules": {
                 "no-restricted-properties": [

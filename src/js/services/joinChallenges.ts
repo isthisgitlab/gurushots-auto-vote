@@ -336,8 +336,6 @@ const pickJoinPhoto = async (challenge: Challenge, token: string, deps: JoinDeps
     // list", never throw mid-join.
     const ignoreWords = settings.getEffectiveIgnoreTitleWords?.(challenge) ?? null;
 
-    // fetchCandidatesForChallenge / resolveSemanticScores read `ignoreWords` off
-    // their option objects, which their JSDoc does not list yet — hence the casts.
     let eligible;
     try {
         eligible = await fetchCandidatesForChallenge(
@@ -347,7 +345,7 @@ const pickJoinPhoto = async (challenge: Challenge, token: string, deps: JoinDeps
                 mustIncludeTags,
                 shouldIncludeTags,
                 ignoreWords,
-            } as Parameters<typeof fetchCandidatesForChallenge>[2],
+            },
             // logLabel 'join' so photo-library warnings are attributed to the join
             // flow, not auto-fill (the picker is shared).
             {
@@ -368,9 +366,7 @@ const pickJoinPhoto = async (challenge: Challenge, token: string, deps: JoinDeps
         );
         return null;
     }
-    const semanticScores = await resolveSemanticScores(challenge, eligible, { ignoreWords } as Parameters<
-        typeof resolveSemanticScores
-    >[2]);
+    const semanticScores = await resolveSemanticScores(challenge, eligible, { ignoreWords });
     // A shortlist, not one photo, so the visual re-rank a fill applies can
     // promote an on-theme alternative here too.
     // The candidates are library photo records, the shape the picker ranks.

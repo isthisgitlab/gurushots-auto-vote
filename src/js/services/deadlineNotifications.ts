@@ -135,8 +135,8 @@ const computeDueNotifications = (
             const action = entry.action;
             if (enabled[action] !== true) continue;
             const dueAt = Number(entry.dueAt);
-            // null/NaN close_time → dueAt non-finite (see describeDeadlineActions
-            // JSDoc). Expected input, never a throw.
+            // null/NaN close_time → dueAt non-finite (see describeDeadlineActions'
+            // doc comment). Expected input, never a throw.
             if (!Number.isFinite(dueAt)) continue;
             const secondsUntil = dueAt - now;
             // Strictly upcoming and inside the lead window. Past-due (<= 0) is

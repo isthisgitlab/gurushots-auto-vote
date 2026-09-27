@@ -1,7 +1,7 @@
 /**
- * Shapes of the voting pass's injected dependencies (services/votingOrchestrator.js
- * runVotingPass, shared by strategies/real and mock/strategy.js) and of the
- * per-challenge scenario step (services/scenarioRunner.js). Type-only: nothing
+ * Shapes of the voting pass's injected dependencies (services/votingOrchestrator.ts
+ * runVotingPass, shared by strategies/real and mock/strategy.ts) and of the
+ * per-challenge scenario step (services/scenarioRunner.ts). Type-only: nothing
  * here exists at runtime.
  *
  * The endpoint signatures are the real api/* and strategies/real ones; the mock
@@ -69,10 +69,10 @@ export interface VotingPassDeps {
     entryTracker?: EntryTracker | null;
     /** When each entry entered its challenge (the boost fresh-entry wait); omitted = never hold. */
     entryAges?: EntryAgeLedger | null;
-    /** Backs the automatic key / swap / fill spends (services/currencyAuto.js). */
+    /** Backs the automatic key / swap / fill spends (services/currencyAuto.ts). */
     currency?: CurrencyPassDeps | null;
     scenarios?: ScenarioDeps | null;
-    /** What the active missions still need (services/missions.js); counted down as the pass lands them. */
+    /** What the active missions still need (services/missions.ts); counted down as the pass lands them. */
     missions?: MissionNeeds | null;
 }
 

@@ -1,6 +1,6 @@
 /**
  * The recursive scenario condition, written out because zod cannot infer a
- * type through `z.lazy`. settings/scenarioSchema.js types its condition schema
+ * type through `z.lazy`. settings/scenarioSchema.ts types its condition schema
  * with it, so the schema and this type are checked against each other; every
  * other scenario type is inferred from the schema (see ScenarioDocument).
  */

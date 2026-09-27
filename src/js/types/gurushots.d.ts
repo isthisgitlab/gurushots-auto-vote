@@ -1,7 +1,7 @@
 /**
  * Shapes of the GuruShots API payloads the app reads. Type-only: nothing here
- * exists at runtime. JS files pull them in with
- * `/** @import { Challenge } from '../types/gurushots' *\/`.
+ * exists at runtime. Modules pull them in with
+ * `import type { Challenge } from '../types/gurushots'`.
  *
  * Nested objects and most fields are optional on purpose. The data comes off
  * the network, and the code optional-chains every per-challenge read (an

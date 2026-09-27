@@ -184,7 +184,7 @@ jobs:
             - name: Install dependencies
               run: pnpm install --frozen-lockfile
 
-            # Strict JSDoc type-check (tsconfig checkJs) with the native tsc.
+            # Strict type-check of the src/js TypeScript with the native tsc (checker only, noEmit).
             # Lint, including the type-aware promise rules, runs in `pnpm lint`.
             - name: Type-check
               run: pnpm typecheck

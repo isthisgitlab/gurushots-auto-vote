@@ -1,10 +1,10 @@
 /**
  * Shapes of the persisted settings blob (`settings.json` on Electron/CLI, the
  * `gurushots-settings` preference on Android). Type-only: nothing here exists
- * at runtime. JS files pull them in with
- * `/** @import { AppSettings } from '../types/settings' *\/`.
+ * at runtime. Modules pull them in with
+ * `import type { AppSettings } from '../types/settings'`.
  *
- * loadSettings (settings/persistence.js) merges the blob over
+ * loadSettings (settings/persistence.ts) merges the blob over
  * getDefaultSettings() and validates it: top-level values of the wrong type,
  * challengeSettings containers of the wrong kind, and setting values their
  * schema rejects are dropped for the defaults. So those are typed as the

@@ -5,7 +5,7 @@
  */
 
 /**
- * The raw-JSON transport a ledger sits on: settings/storage.js
+ * The raw-JSON transport a ledger sits on: settings/storage.ts
  * createJsonStore(), or an in-memory fake (mock mode, tests).
  */
 export interface RawJsonStore {
@@ -91,7 +91,7 @@ export interface ScenarioState {
     inFlight: { ruleId: string; actionIndex: number } | null;
     /** currency spent, by kind (swaps / keys / fills) */
     spent: Record<string, number>;
-    /** photo id → [[unixSec, votes], …] vote samples (scenarios/speed.js) */
+    /** photo id → [[unixSec, votes], …] vote samples (scenarios/speed.ts) */
     history?: Record<string, Array<[number, number]>>;
     /** notices for the host notifiers */
     outbox?: Array<{ id: string; at: number; message: string }>;
