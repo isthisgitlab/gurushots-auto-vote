@@ -1,0 +1,243 @@
+/**
+ * Capacitor entry (pages/Capacitor.tsx) — runs its bootstrap at module load:
+ * on a native platform installs the bridge and hydrates every write-behind
+ * store, wires flush-on-background, then mounts Login or App by token and
+ * re-mounts on login-success / logout. Each test loads the module in an isolated registry
+ * with its collaborators doMock'ed, so the bootstrap can be driven per case.
+ */
+
+import type { RendererGlobals } from '../../src/js/types/capacitor';
+
+const SRC = '../../src/js';
+
+const flush = async () => {
+    for (let i = 0; i < 20; i += 1) await Promise.resolve();
+};
+
+const GLOBALS = ['__capacitorBootstrap'] as const;
+
+describe('Capacitor entry', () => {
+    let savedGlobals: Record<string, boolean | undefined>;
+    let docListeners: Record<string, () => void>;
+    let winListeners: Record<string, () => void>;
+    let docSpy: jest.SpiedFunction<typeof document.addEventListener>;
+    let winSpy: jest.SpiedFunction<typeof globalThis.addEventListener>;
+
+    beforeEach(() => {
+        savedGlobals = Object.fromEntries(GLOBALS.map((k) => [k, (globalThis as RendererGlobals)[k]]));
+        // Capture (don't attach) the lifecycle listeners so nothing leaks
+        // between isolated module loads.
+        docListeners = {};
+        winListeners = {};
+        docSpy = jest.spyOn(document, 'addEventListener').mockImplementation((type, fn) => {
+            docListeners[type] = fn as () => void;
+        });
+        winSpy = jest.spyOn(globalThis, 'addEventListener').mockImplementation((type, fn) => {
+            winListeners[type] = fn as () => void;
+        });
+    });
+
+    afterEach(() => {
+        docSpy.mockRestore();
+        winSpy.mockRestore();
+        for (const k of GLOBALS) {
+            if (savedGlobals[k] === undefined) delete (globalThis as RendererGlobals)[k];
+            else (globalThis as RendererGlobals)[k] = savedGlobals[k];
+        }
+        document.body.innerHTML = '';
+    });
+
+    /**
+     * Load Capacitor.tsx with mocked collaborators.
+     */
+    const load = ({
+        native = true,
+        token = 'tok',
+        getSettingThrows = false,
+        initSettingsRejects = null,
+    }: { native?: boolean; token?: string; getSettingThrows?: boolean; initSettingsRejects?: Error | null } = {}) => {
+        const m = {
+            subscribers: {} as Record<string, () => void>,
+            installBridge: jest.fn(),
+            subscribe: jest.fn((event: string, cb: () => void): void => {
+                m.subscribers[event] = cb;
+            }),
+            initSettings: initSettingsRejects
+                ? jest.fn().mockRejectedValue(initSettingsRejects)
+                : jest.fn().mockResolvedValue(undefined),
+            flushPendingWrites: jest.fn(),
+            getSetting: jest.fn((): string | undefined => {
+                if (getSettingThrows) throw new Error('not hydrated');
+                return token;
+            }),
+            initializeMetadataAsync: jest.fn().mockResolvedValue(undefined),
+            flushMetadataWrites: jest.fn(),
+            initializeJoinStateAsync: jest.fn().mockResolvedValue(undefined),
+            flushJoinStateWrites: jest.fn(),
+            initializeSwapBackAsync: jest.fn().mockResolvedValue(undefined),
+            flushSwapBackWrites: jest.fn(),
+            initializeAutoSpendAsync: jest.fn().mockResolvedValue(undefined),
+            flushAutoSpendWrites: jest.fn(),
+            initializeEntryAgesAsync: jest.fn().mockResolvedValue(undefined),
+            flushEntryAgeWrites: jest.fn(),
+            initializeScenarioStateAsync: jest.fn().mockResolvedValue(undefined),
+            flushScenarioStateWrites: jest.fn(),
+            initializeDiagnosticsAsync: jest.fn().mockResolvedValue(undefined),
+            flushDiagnosticsWrites: jest.fn(),
+            isCapacitor: jest.fn(() => native),
+            categoryError: jest.fn(),
+            withCategory: jest.fn((): { error: jest.Mock } => ({ error: m.categoryError })),
+            mountApp: jest.fn(),
+            mountLogin: jest.fn(),
+        };
+        jest.isolateModules(() => {
+            jest.doMock(`${SRC}/bridge/capacitor`, () => ({ installBridge: m.installBridge, subscribe: m.subscribe }));
+            jest.doMock(`${SRC}/settings`, () => ({
+                initializeAsync: m.initSettings,
+                flushPendingWrites: m.flushPendingWrites,
+                getSetting: m.getSetting,
+            }));
+            jest.doMock(`${SRC}/metadata`, () => ({
+                initializeMetadataAsync: m.initializeMetadataAsync,
+                flushMetadataWrites: m.flushMetadataWrites,
+            }));
+            jest.doMock(`${SRC}/joinStateStore`, () => ({
+                initializeJoinStateAsync: m.initializeJoinStateAsync,
+                flushJoinStateWrites: m.flushJoinStateWrites,
+            }));
+            jest.doMock(`${SRC}/swapBackStore`, () => ({
+                initializeSwapBackAsync: m.initializeSwapBackAsync,
+                flushSwapBackWrites: m.flushSwapBackWrites,
+            }));
+            jest.doMock(`${SRC}/currencyAutoStore`, () => ({
+                initializeAutoSpendAsync: m.initializeAutoSpendAsync,
+                flushAutoSpendWrites: m.flushAutoSpendWrites,
+            }));
+            jest.doMock(`${SRC}/entryAgeStore`, () => ({
+                initializeEntryAgesAsync: m.initializeEntryAgesAsync,
+                flushEntryAgeWrites: m.flushEntryAgeWrites,
+            }));
+            jest.doMock(`${SRC}/scenarioStateStore`, () => ({
+                initializeScenarioStateAsync: m.initializeScenarioStateAsync,
+                flushScenarioStateWrites: m.flushScenarioStateWrites,
+            }));
+            jest.doMock(`${SRC}/services/semantic/diagnostics`, () => ({
+                initializeDiagnosticsAsync: m.initializeDiagnosticsAsync,
+                flushDiagnosticsWrites: m.flushDiagnosticsWrites,
+            }));
+            jest.doMock(`${SRC}/runtime`, () => ({ isCapacitor: m.isCapacitor }));
+            jest.doMock(`${SRC}/logger`, () => ({ withCategory: m.withCategory }));
+            jest.doMock('@/pages/App', () => ({ mountApp: m.mountApp }));
+            jest.doMock('@/pages/Login', () => ({ mountLogin: m.mountLogin }));
+            require('@/pages/Capacitor');
+        });
+        return m;
+    };
+
+    const addRoot = (...children: string[]) => {
+        const root = document.createElement('div');
+        root.id = 'root';
+        for (const text of children) {
+            const child = document.createElement('span');
+            child.textContent = text;
+            root.appendChild(child);
+        }
+        document.body.appendChild(root);
+        return root;
+    };
+
+    test('native bootstrap: bridge, store hydration in order, then App mount', async () => {
+        const root = addRoot('stale-a', 'stale-b');
+        const m = load();
+        await flush();
+
+        expect((globalThis as RendererGlobals).__capacitorBootstrap).toBe(true);
+
+        const order = [
+            m.installBridge,
+            m.initSettings,
+            m.initializeMetadataAsync,
+            m.initializeJoinStateAsync,
+            m.initializeSwapBackAsync,
+            m.initializeAutoSpendAsync,
+            m.initializeEntryAgesAsync,
+            m.initializeScenarioStateAsync,
+            m.initializeDiagnosticsAsync,
+            m.mountApp,
+        ].map((fn) => fn.mock.invocationCallOrder[0]);
+        expect(order).toEqual([...order].sort((a, b) => a - b));
+        expect(m.mountLogin).not.toHaveBeenCalled();
+        // Stale DOM from a previous tree is cleared before mounting.
+        expect(root.childNodes).toHaveLength(0);
+    });
+
+    test('flushes every store when the page is hidden or torn down, never throwing', async () => {
+        const m = load();
+        await flush();
+        const flushers = [
+            m.flushPendingWrites,
+            m.flushMetadataWrites,
+            m.flushJoinStateWrites,
+            m.flushSwapBackWrites,
+            m.flushAutoSpendWrites,
+            m.flushEntryAgeWrites,
+            m.flushScenarioStateWrites,
+            m.flushDiagnosticsWrites,
+        ];
+
+        const hidden = jest.spyOn(document, 'hidden', 'get').mockReturnValue(false);
+        docListeners.visibilitychange();
+        for (const fn of flushers) expect(fn).not.toHaveBeenCalled();
+
+        hidden.mockReturnValue(true);
+        docListeners.visibilitychange();
+        for (const fn of flushers) expect(fn).toHaveBeenCalledTimes(1);
+        hidden.mockRestore();
+
+        winListeners.pagehide();
+        for (const fn of flushers) expect(fn).toHaveBeenCalledTimes(2);
+
+        m.flushMetadataWrites.mockImplementation(() => {
+            throw new Error('io');
+        });
+        expect(() => winListeners.pagehide()).not.toThrow();
+    });
+
+    test('login-success and logout re-mount by the current token', async () => {
+        const m = load({ token: '' });
+        await flush();
+        expect(m.mountLogin).toHaveBeenCalledTimes(1);
+
+        m.getSetting.mockReturnValue('new-token');
+        m.subscribers['login-success']();
+        expect(m.mountApp).toHaveBeenCalledTimes(1);
+
+        m.getSetting.mockReturnValue(undefined);
+        m.subscribers.logout();
+        expect(m.mountLogin).toHaveBeenCalledTimes(2);
+    });
+
+    test('an unreadable token mounts Login (no #root present)', async () => {
+        const m = load({ getSettingThrows: true });
+        await flush();
+        expect(m.mountLogin).toHaveBeenCalledTimes(1);
+        expect(m.mountApp).not.toHaveBeenCalled();
+    });
+
+    test('off-native skips the bridge and stores but still mounts', async () => {
+        const m = load({ native: false });
+        await flush();
+        expect(m.installBridge).not.toHaveBeenCalled();
+        expect(m.initSettings).not.toHaveBeenCalled();
+        expect(docListeners.visibilitychange).toBeUndefined();
+        expect(m.mountApp).toHaveBeenCalledTimes(1);
+    });
+
+    test('a bootstrap failure is logged and still mounts', async () => {
+        const m = load({ initSettingsRejects: new Error('prefs down') });
+        await flush();
+        expect(m.withCategory).toHaveBeenCalledWith('general');
+        expect(m.categoryError).toHaveBeenCalledWith('Capacitor bootstrap failed', expect.any(Error));
+        expect(m.mountApp).toHaveBeenCalledTimes(1);
+    });
+});

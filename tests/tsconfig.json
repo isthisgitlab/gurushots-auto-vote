@@ -1,0 +1,17 @@
+{
+    // The tests' own program: the app's strict settings plus Jest's globals,
+    // kept out of the src/js program so app code cannot reach for them.
+    "extends": "../tsconfig.json",
+    "compilerOptions": {
+        "types": ["node", "jest"]
+    },
+    "include": [
+        "**/*.ts",
+        "**/*.tsx",
+        "**/*.cts",
+        "../src/js/**/*.ts",
+        "../src/js/**/*.tsx",
+        "../scripts/**/*.ts",
+        "../scripts/**/*.mts"
+    ]
+}

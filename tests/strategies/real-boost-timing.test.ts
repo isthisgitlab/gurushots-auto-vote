@@ -1,0 +1,461 @@
+/**
+ * Tests for boost timing settings
+ *
+ * Tests that the boost timing logic respects user settings instead of hardcoded values.
+ */
+
+import type * as realModule from '../../src/js/strategies/real';
+import type * as loggerModule from '../../src/js/logger';
+import { invalid } from '../helpers/invalid';
+
+// The logger factory below also exports its shared start/endOperation mocks.
+type LoggerMock = typeof loggerModule & { __mockStartOperationFn: jest.Mock; __mockEndOperationFn: jest.Mock };
+
+// Mock the settings module
+const mockSettings = {
+    getEffectiveSetting: jest.fn(),
+    SETTINGS_SCHEMA: {
+        boostTime: {
+            default: 3600, // 1 hour default
+        },
+        exposure: {
+            default: 100, // exposure default
+        },
+    },
+};
+
+jest.mock('../../src/js/settings', () => mockSettings);
+
+// Mock the challenges module
+const mockChallenges = {
+    getActiveChallenges: jest.fn(),
+};
+
+jest.mock('../../src/js/strategies/real/activeChallenges', () => mockChallenges);
+
+// Mock the voting module
+const mockVoting = {
+    getVoteImages: jest.fn(),
+    submitVotes: jest.fn(),
+};
+
+jest.mock('../../src/js/api/voting', () => mockVoting);
+
+// Mock the boost module
+const mockBoost = {
+    applyBoost: jest.fn(),
+};
+
+jest.mock('../../src/js/strategies/real/applyBoost', () => mockBoost);
+
+// Mock the timing module
+const mockUtils = {
+    sleep: jest.fn(),
+    getRandomDelay: jest.fn(),
+};
+
+jest.mock('../../src/js/timing', () => mockUtils);
+
+// Mock the voting logic service
+const mockVotingLogic = {
+    shouldApplyBoost: jest.fn(),
+    resolveBoostFillNewMode: jest.fn(() => 'no'),
+    getEffectiveBoostTime: jest.fn(),
+    pickBoostEntry: jest.fn(() => null),
+    getBoostHoldUntil: jest.fn(() => null),
+    evaluateVotingDecision: jest.fn(),
+    shouldPlayAutoTurbo: jest.fn(() => false),
+    shouldApplyTurbo: jest.fn(() => ({ apply: false, imageId: null, reason: 'mocked' })),
+    // votingOrchestrator dispatches deadline actions in this order; all four are listed so
+    // the boost runner still executes (order is irrelevant to these assertions).
+    orderDeadlineActions: jest.fn(() => [
+        { action: 'boost', thresholdSec: 0 },
+        { action: 'autoFill', thresholdSec: 0 },
+        { action: 'turbo', thresholdSec: 0 },
+        { action: 'emergencyFill', thresholdSec: 0 },
+    ]),
+};
+
+jest.mock('../../src/js/services/VotingLogic', () => mockVotingLogic);
+
+// Mock the turbo module so its imports are not loaded
+jest.mock('../../src/js/api/turbo', () => ({
+    getChallengeTurbo: jest.fn(),
+    submitTurboSelection: jest.fn(),
+    applyTurbo: jest.fn(),
+    TURBO_SELECTION_DELAY_MS: 1200,
+}));
+
+// Mock the metadata module
+const mockMetadata = {
+    cleanupStaleMetadata: jest.fn(),
+};
+
+jest.mock('../../src/js/metadata', () => mockMetadata);
+
+// Mock the logger module
+jest.mock('../../src/js/logger', () => {
+    const mockStartOperationFn = jest.fn();
+    const mockEndOperationFn = jest.fn();
+
+    return {
+        startOperation: jest.fn(),
+        endOperation: jest.fn(),
+        info: jest.fn(),
+        warning: jest.fn(),
+        progress: jest.fn(),
+        error: jest.fn(),
+        success: jest.fn(),
+        debug: jest.fn(),
+        api: jest.fn(),
+        withCategory: jest.fn(() => ({
+            info: jest.fn(),
+            warning: jest.fn(),
+            debug: jest.fn(),
+            error: jest.fn(),
+            api: jest.fn(),
+            apiRequest: jest.fn(),
+            startOperation: mockStartOperationFn,
+            endOperation: mockEndOperationFn,
+            progress: jest.fn(),
+            success: jest.fn(),
+        })),
+        challengeTag: (c: { id?: unknown; title?: unknown } | string | null | undefined, t?: string) =>
+            c && typeof c === 'object'
+                ? `[Challenge ${c.id ?? 'unknown'}: ${c.title ?? 'unknown'}]`
+                : `[Challenge ${c ?? 'unknown'}: ${t ?? 'unknown'}]`,
+        // Export the mock functions for testing
+        __mockStartOperationFn: mockStartOperationFn,
+        __mockEndOperationFn: mockEndOperationFn,
+    };
+});
+
+// Mock console methods
+jest.spyOn(console, 'log').mockImplementation();
+jest.spyOn(console, 'error').mockImplementation();
+
+describe('boost timing settings', () => {
+    const mockToken = 'test-token-123';
+
+    beforeEach(() => {
+        jest.clearAllMocks();
+
+        // Set up default mock responses
+        mockChallenges.getActiveChallenges.mockResolvedValue({
+            challenges: [],
+        });
+
+        mockVoting.getVoteImages.mockResolvedValue([]);
+        mockVoting.submitVotes.mockResolvedValue(undefined);
+        mockBoost.applyBoost.mockResolvedValue({ success: true });
+        mockUtils.sleep.mockResolvedValue(undefined);
+        mockUtils.getRandomDelay.mockReturnValue(3000);
+        mockMetadata.cleanupStaleMetadata.mockReturnValue(true);
+
+        // Set up voting logic defaults
+        mockVotingLogic.shouldApplyBoost.mockReturnValue(false);
+        mockVotingLogic.getEffectiveBoostTime.mockReturnValue(3600); // 1 hour default
+        mockVotingLogic.evaluateVotingDecision.mockReturnValue({
+            shouldVote: false,
+            voteReason: 'No voting needed',
+            targetExposure: 100,
+        });
+    });
+
+    describe('fetchChallengesAndVote', () => {
+        test('should use custom boost time setting instead of hardcoded 1 hour', async () => {
+            jest.resetModules();
+            // Create a challenge with boost available
+            const now = Math.floor(Date.now() / 1000);
+            const challengeWithBoost = {
+                id: '12345',
+                title: 'Test Challenge',
+                start_time: now - 3600, // Started 1 hour ago
+                member: {
+                    boost: {
+                        state: 'AVAILABLE',
+                        timeout: now + 1200, // Available for 20 minutes
+                    },
+                    ranking: {
+                        exposure: {
+                            exposure_factor: 50,
+                        },
+                    },
+                },
+            };
+
+            mockChallenges.getActiveChallenges.mockResolvedValue({
+                challenges: [challengeWithBoost],
+            });
+
+            // Mock voting logic to indicate boost should be applied
+            mockVotingLogic.shouldApplyBoost.mockReturnValue(true);
+            mockVotingLogic.getEffectiveBoostTime.mockReturnValue(1800); // 30 minutes
+            // Ensure boost logic is triggered
+            mockVotingLogic.evaluateVotingDecision.mockReturnValue({
+                shouldVote: false,
+                voteReason: 'No voting needed',
+                targetExposure: 100,
+            });
+
+            // Import the main module
+            const { fetchChallengesAndVote }: typeof realModule = require('../../src/js/strategies/real');
+
+            await fetchChallengesAndVote(mockToken);
+
+            // Verify that voting logic was called for boost decision.
+            // `now` may drift by ±1s between capture and the production call, so match
+            // the challenge exactly but allow any timestamp.
+            expect(mockVotingLogic.shouldApplyBoost).toHaveBeenCalledWith(challengeWithBoost, expect.any(Number), {
+                emergency: true,
+            });
+            expect(mockVotingLogic.getEffectiveBoostTime).toHaveBeenCalledWith('12345');
+
+            // Verify that applyBoost was called (because shouldApplyBoost returned true)
+            expect(mockBoost.applyBoost).toHaveBeenCalledWith(challengeWithBoost, mockToken);
+
+            // Verify that boost operation was started and ended
+            const logger: LoggerMock = invalid(require('../../src/js/logger'));
+            expect(logger.withCategory).toHaveBeenCalledWith('boost');
+            expect(logger.__mockStartOperationFn).toHaveBeenCalledWith(
+                'boost-12345',
+                expect.stringContaining('Applying boost to challenge'),
+            );
+            expect(logger.__mockEndOperationFn).toHaveBeenCalledWith(
+                'boost-12345',
+                expect.stringContaining('Boost applied successfully'),
+            );
+        });
+
+        test('should not apply boost when deadline is outside custom boost time setting', async () => {
+            // Create a challenge with boost available but deadline outside threshold
+            const now = Math.floor(Date.now() / 1000);
+            const challengeWithBoost = {
+                id: '12345',
+                title: 'Test Challenge',
+                start_time: now - 3600, // Started 1 hour ago
+                member: {
+                    boost: {
+                        state: 'AVAILABLE',
+                        timeout: now + 2400, // Available for 40 minutes
+                    },
+                    ranking: {
+                        exposure: {
+                            exposure_factor: 50,
+                        },
+                    },
+                },
+            };
+
+            mockChallenges.getActiveChallenges.mockResolvedValue({
+                challenges: [challengeWithBoost],
+            });
+
+            // Mock voting logic to indicate boost should NOT be applied (deadline is outside threshold)
+            mockVotingLogic.shouldApplyBoost.mockReturnValue(false);
+            mockVotingLogic.getEffectiveBoostTime.mockReturnValue(1800); // 30 minutes
+
+            // Import the main module
+            const { fetchChallengesAndVote }: typeof realModule = require('../../src/js/strategies/real');
+
+            await fetchChallengesAndVote(mockToken);
+
+            // Verify that voting logic was called for boost decision.
+            // `now` may drift by ±1s between capture and the production call, so match
+            // the challenge exactly but allow any timestamp.
+            expect(mockVotingLogic.shouldApplyBoost).toHaveBeenCalledWith(challengeWithBoost, expect.any(Number), {
+                emergency: true,
+            });
+            expect(mockVotingLogic.getEffectiveBoostTime).toHaveBeenCalledWith('12345');
+
+            // Verify that applyBoost was NOT called (because shouldApplyBoost returned false)
+            expect(mockBoost.applyBoost).not.toHaveBeenCalled();
+        });
+
+        test('should use default boost time when no custom setting is provided', async () => {
+            // Mock the default boost time setting (1 hour = 3600 seconds)
+            mockSettings.getEffectiveSetting.mockReturnValue(3600);
+
+            // Create a challenge with boost available and deadline within 1 hour
+            const now = Math.floor(Date.now() / 1000);
+            const challengeWithBoost = {
+                id: '12345',
+                title: 'Test Challenge',
+                start_time: now - 3600, // Started 1 hour ago
+                member: {
+                    boost: {
+                        state: 'AVAILABLE',
+                        timeout: now + 1800, // Available for 30 minutes (within 1-hour default)
+                    },
+                    ranking: {
+                        exposure: {
+                            exposure_factor: 50,
+                        },
+                    },
+                },
+            };
+
+            mockChallenges.getActiveChallenges.mockResolvedValue({
+                challenges: [challengeWithBoost],
+            });
+
+            // Mock voting logic to indicate boost should be applied with default settings
+            mockVotingLogic.shouldApplyBoost.mockReturnValue(true);
+            mockVotingLogic.getEffectiveBoostTime.mockReturnValue(3600); // 1 hour default
+
+            // Import the main module
+            const { fetchChallengesAndVote }: typeof realModule = require('../../src/js/strategies/real');
+
+            await fetchChallengesAndVote(mockToken);
+
+            // Verify that getEffectiveSetting was called with boostTime
+            expect(mockVotingLogic.getEffectiveBoostTime).toHaveBeenCalledWith('12345');
+
+            // Verify that applyBoost was called (because deadline is within 1 hour)
+            expect(mockBoost.applyBoost).toHaveBeenCalledWith(challengeWithBoost, mockToken);
+        });
+
+        test('should handle per-challenge boost time overrides', async () => {
+            // Mock different boost time settings for different challenges
+            mockSettings.getEffectiveSetting
+                .mockReturnValueOnce(1800) // 30 minutes for first challenge
+                .mockReturnValueOnce(7200); // 2 hours for second challenge
+
+            const now = Math.floor(Date.now() / 1000);
+            const challenges = [
+                {
+                    id: '12345',
+                    title: 'Challenge 1',
+                    start_time: now - 3600,
+                    member: {
+                        boost: {
+                            state: 'AVAILABLE',
+                            timeout: now + 1200, // 20 minutes (within 30-minute setting)
+                        },
+                        ranking: {
+                            exposure: {
+                                exposure_factor: 50,
+                            },
+                        },
+                    },
+                },
+                {
+                    id: '67890',
+                    title: 'Challenge 2',
+                    start_time: now - 3600,
+                    member: {
+                        boost: {
+                            state: 'AVAILABLE',
+                            timeout: now + 3600, // 1 hour (within 2-hour setting)
+                        },
+                        ranking: {
+                            exposure: {
+                                exposure_factor: 50,
+                            },
+                        },
+                    },
+                },
+            ];
+
+            mockChallenges.getActiveChallenges.mockResolvedValue({
+                challenges: challenges,
+            });
+
+            // Mock voting logic to indicate boost should be applied for both challenges
+            mockVotingLogic.shouldApplyBoost.mockReturnValue(true);
+            mockVotingLogic.getEffectiveBoostTime
+                .mockReturnValueOnce(1800) // 30 minutes for first challenge
+                .mockReturnValueOnce(7200); // 2 hours for second challenge
+
+            // Import the main module
+            const { fetchChallengesAndVote }: typeof realModule = require('../../src/js/strategies/real');
+
+            await fetchChallengesAndVote(mockToken);
+
+            // Verify that getEffectiveSetting was called for each challenge
+            expect(mockVotingLogic.getEffectiveBoostTime).toHaveBeenCalledWith('12345');
+            expect(mockVotingLogic.getEffectiveBoostTime).toHaveBeenCalledWith('67890');
+
+            // Verify that applyBoost was called for both challenges
+            expect(mockBoost.applyBoost).toHaveBeenCalledTimes(2);
+            expect(mockBoost.applyBoost).toHaveBeenCalledWith(challenges[0], mockToken);
+            expect(mockBoost.applyBoost).toHaveBeenCalledWith(challenges[1], mockToken);
+        });
+
+        test('AVAILABLE_KEY within 10 minutes should apply boost and not crash without timeout', async () => {
+            jest.resetModules();
+            const now = Math.floor(Date.now() / 1000);
+            const keyUnlockedChallenge = {
+                id: 'k1',
+                title: 'Key Unlocked Short',
+                url: 'key-unlocked-short',
+                start_time: now - 3600,
+                close_time: now + 9 * 60, // within 10 minutes window
+                member: {
+                    boost: {
+                        state: 'AVAILABLE_KEY',
+                        timeout: null,
+                    },
+                    ranking: {
+                        exposure: { exposure_factor: 50 },
+                    },
+                },
+            };
+
+            mockChallenges.getActiveChallenges.mockResolvedValue({ challenges: [keyUnlockedChallenge] });
+            // Voting logic decides to apply in this scenario
+            mockVotingLogic.shouldApplyBoost.mockReturnValue(true);
+            mockVotingLogic.getEffectiveBoostTime.mockReturnValue(1800);
+            mockVotingLogic.evaluateVotingDecision.mockReturnValue({
+                shouldVote: false,
+                voteReason: 'No voting needed',
+                targetExposure: 100,
+            });
+
+            const { fetchChallengesAndVote }: typeof realModule = require('../../src/js/strategies/real');
+
+            await expect(fetchChallengesAndVote(mockToken)).resolves.toBeDefined();
+
+            // Ensure applyBoost was called despite no timeout
+            expect(mockBoost.applyBoost).toHaveBeenCalledWith(keyUnlockedChallenge, mockToken);
+        });
+
+        test('AVAILABLE_KEY beyond 10 minutes should NOT apply boost', async () => {
+            jest.resetModules();
+            const now = Math.floor(Date.now() / 1000);
+            const keyUnlockedChallenge = {
+                id: 'k2',
+                title: 'Key Unlocked Long',
+                url: 'key-unlocked-long',
+                start_time: now - 3600,
+                close_time: now + 12 * 60, // outside 10 minutes window
+                member: {
+                    boost: {
+                        state: 'AVAILABLE_KEY',
+                        timeout: null,
+                    },
+                    ranking: {
+                        exposure: { exposure_factor: 50 },
+                    },
+                },
+            };
+
+            mockChallenges.getActiveChallenges.mockResolvedValue({ challenges: [keyUnlockedChallenge] });
+            // Voting logic decides NOT to apply in this scenario
+            mockVotingLogic.shouldApplyBoost.mockReturnValue(false);
+            mockVotingLogic.getEffectiveBoostTime.mockReturnValue(1800);
+            mockVotingLogic.evaluateVotingDecision.mockReturnValue({
+                shouldVote: false,
+                voteReason: 'No voting needed',
+                targetExposure: 100,
+            });
+
+            const { fetchChallengesAndVote }: typeof realModule = require('../../src/js/strategies/real');
+
+            await expect(fetchChallengesAndVote(mockToken)).resolves.toBeDefined();
+
+            // Ensure applyBoost was NOT called
+            expect(mockBoost.applyBoost).not.toHaveBeenCalled();
+        });
+    });
+});

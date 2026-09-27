@@ -12,7 +12,7 @@
         "scripts/*.ts",
         "scripts/afterPack.mts"
     ],
-    "project": ["src/**/*.{ts,tsx,css}", "scripts/**/*.{ts,mts}", "tests/**/*.{js,jsx,ts,tsx}"],
+    "project": ["src/**/*.{ts,tsx,css}", "scripts/**/*.{ts,mts}", "tests/**/*.{ts,tsx,cts}"],
     "paths": {
         "@/*": ["src/js/react/*"]
     },

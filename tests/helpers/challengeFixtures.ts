@@ -1,0 +1,75 @@
+/**
+ * Shared test fixture builders.
+ *
+ * `buildChallenge(overrides)` returns the superset challenge shape the suites
+ * exercise (id/title/close_time plus member.boost, member.turbo and
+ * member.ranking with entries + exposure), deep-merging nested overrides so a
+ * test only spells out what it cares about. Defaults are deliberately neutral
+ * ('NONE' states, empty entries) — equivalent to the key being absent for
+ * every code path under test.
+ *
+ * Suites keep their own per-file defaults (ids, titles, time bases) as tiny
+ * local wrappers around this builder.
+ *
+ * `buildSettingsFixture(overrides)` is the persisted-settings-file shape the
+ * settings migration/sanitizer suites feed through loadSettings.
+ *
+ * NOTE: this directory is not picked up as a test suite — the Jest testMatch
+ * patterns only match *(spec|test).js(x) filenames.
+ */
+
+import type { Challenge } from '../../src/js/types/gurushots';
+import { invalid } from './invalid';
+
+type Plain = Record<string, unknown>;
+
+const isPlainObject = (value: unknown): value is Plain =>
+    value !== null && typeof value === 'object' && !Array.isArray(value);
+
+/**
+ * Deep-merge `overrides` onto `base`. Plain objects merge recursively;
+ * arrays and scalars replace (same semantics as spread, one level at a time).
+ * Keys explicitly present with `undefined` override the base value, matching
+ * object-literal behavior in the original per-file builders.
+ */
+const deepMerge = (base: Plain, overrides: Plain): Plain => {
+    const result: Plain = { ...base };
+    for (const key of Object.keys(overrides)) {
+        const over = overrides[key];
+        const current = result[key];
+        result[key] = isPlainObject(current) && isPlainObject(over) ? deepMerge(current, over) : over;
+    }
+    return result;
+};
+
+// The fixture is a partial Challenge (no start_time / entries / players): the
+// suites that use it never read those.
+const buildChallenge = (overrides: Plain = {}): Challenge =>
+    invalid<Challenge>(
+        deepMerge(
+            {
+                id: 'c1',
+                title: 'Challenge',
+                close_time: 1_000_000,
+                member: {
+                    boost: { state: 'NONE', timeout: 0 },
+                    turbo: { state: 'NONE' },
+                    ranking: {
+                        entries: [],
+                        exposure: { exposure_factor: 50 },
+                    },
+                },
+            },
+            overrides,
+        ),
+    );
+
+const buildSettingsFixture = (overrides: Plain = {}) => ({
+    challengeSettings: {
+        globalDefaults: {},
+        perChallenge: {},
+        ...overrides,
+    },
+});
+
+export { buildChallenge, buildSettingsFixture };

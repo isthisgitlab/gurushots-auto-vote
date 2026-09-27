@@ -19,7 +19,7 @@ import type { WindowApi } from '../../types/ipc';
  * The bridge seen as untyped callables, for the pass-throughs below that only
  * forward arguments and results (their public signatures come from WindowApi).
  */
-export type BridgeCalls<M extends PropertyKey> = Record<M, (...args: unknown[]) => unknown>;
+type BridgeCalls<M extends PropertyKey> = Record<M, (...args: unknown[]) => unknown>;
 
 /**
  * @param method - bridge method name

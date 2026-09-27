@@ -52,9 +52,8 @@
         "format:check": "prettier --check .",
         "gui:refresh": "echo 'If the GUI is running, refresh it manually (Cmd+R / Ctrl+R) to apply CLI settings changes.'",
         "knip": "knip",
-        "lint": "pnpm run syntax:check && oxlint src scripts tests",
+        "lint": "oxlint src scripts tests",
         "lint:fix": "oxlint --fix src scripts tests",
-        "syntax:check": "node --import tsx scripts/syntax-check.ts",
         "preinstall": "node -e \"if(!/^pnpm\\//.test(process.env.npm_config_user_agent||'')){console.error('This repository requires pnpm (see packageManager in package.json); npm and yarn are not supported.');process.exit(1)}if(Number(process.versions.node.split('.')[0])<26){console.error('This repository requires Node.js 26 or newer.');process.exit(1)}\"",
         "prebuild": "pnpm run build:prep",
         "prepare": "cross-env GIT_CONFIG_GLOBAL=/dev/null GIT_CONFIG_COUNT=0 lefthook install",
@@ -76,7 +75,7 @@
         "test": "jest",
         "test:coverage": "jest --coverage",
         "test:watch": "jest --watch",
-        "typecheck": "tsc --noEmit",
+        "typecheck": "tsc --noEmit && tsc --noEmit -p tests",
         "update:readme": "node --import tsx scripts/readme-version.ts",
         "verify:readme": "node --import tsx scripts/readme-version.ts --check",
         "watch:css": "tailwindcss -i ./src/styles/styles.css -o ./dist/styles.css --watch",
@@ -162,8 +161,8 @@
             "!android/**",
             "!logs/**",
             "!scripts/**",
-            "!**/*.test.js",
-            "!**/*.test.jsx"
+            "!**/*.test.ts",
+            "!**/*.test.tsx"
         ]
     },
     "build": {
@@ -245,32 +244,15 @@
                     "<rootDir>/src/js"
                 ],
                 "setupFilesAfterEnv": [
-                    "<rootDir>/tests/setup.js"
+                    "<rootDir>/tests/setup.ts"
                 ],
                 "testMatch": [
-                    "**/__tests__/**/*.[jt]s",
-                    "**/?(*.)+(spec|test).[jt]s"
+                    "**/__tests__/**/*.ts",
+                    "**/?(*.)+(spec|test).ts"
                 ],
                 "transform": {
-                    "\\.jsx?$": [
-                        "<rootDir>/tests/helpers/swc-transformer.js",
-                        {
-                            "jsc": {
-                                "parser": {
-                                    "syntax": "ecmascript",
-                                    "jsx": true
-                                },
-                                "transform": {
-                                    "react": {
-                                        "runtime": "automatic",
-                                        "importSource": "preact"
-                                    }
-                                }
-                            }
-                        }
-                    ],
                     "\\.[mc]?ts$": [
-                        "<rootDir>/tests/helpers/swc-transformer.js",
+                        "<rootDir>/tests/helpers/swc-transformer.cts",
                         {
                             "jsc": {
                                 "parser": {
@@ -280,7 +262,7 @@
                         }
                     ],
                     "\\.tsx$": [
-                        "<rootDir>/tests/helpers/swc-transformer.js",
+                        "<rootDir>/tests/helpers/swc-transformer.cts",
                         {
                             "jsc": {
                                 "parser": {
@@ -322,33 +304,16 @@
                     "<rootDir>/src/js"
                 ],
                 "setupFilesAfterEnv": [
-                    "<rootDir>/tests/setup.js",
-                    "<rootDir>/tests/react/helpers/setup.js"
+                    "<rootDir>/tests/setup.ts",
+                    "<rootDir>/tests/react/helpers/setup.ts"
                 ],
                 "testMatch": [
-                    "**/?(*.)+(spec|test).[jt]s",
-                    "**/?(*.)+(spec|test).[jt]sx"
+                    "**/?(*.)+(spec|test).ts",
+                    "**/?(*.)+(spec|test).tsx"
                 ],
                 "transform": {
-                    "\\.jsx?$": [
-                        "<rootDir>/tests/helpers/swc-transformer.js",
-                        {
-                            "jsc": {
-                                "parser": {
-                                    "syntax": "ecmascript",
-                                    "jsx": true
-                                },
-                                "transform": {
-                                    "react": {
-                                        "runtime": "automatic",
-                                        "importSource": "preact"
-                                    }
-                                }
-                            }
-                        }
-                    ],
                     "\\.[mc]?ts$": [
-                        "<rootDir>/tests/helpers/swc-transformer.js",
+                        "<rootDir>/tests/helpers/swc-transformer.cts",
                         {
                             "jsc": {
                                 "parser": {
@@ -358,7 +323,7 @@
                         }
                     ],
                     "\\.tsx$": [
-                        "<rootDir>/tests/helpers/swc-transformer.js",
+                        "<rootDir>/tests/helpers/swc-transformer.cts",
                         {
                             "jsc": {
                                 "parser": {

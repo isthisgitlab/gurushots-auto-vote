@@ -330,7 +330,7 @@ repeated six times is one that gets forgotten at one of them.
   `scripts/fetch-vision-model.ts`; nothing downloads at runtime (`allowRemoteModels = false`).
     - Electron: `extraResources` → `Resources/vision-model`, native `onnxruntime-node` in `app.asar.unpacked`.
       The Android-only copies under `dist/` and the standalone `onnxruntime-web` package are excluded from
-      the asar, and `scripts/afterPack.ts` deletes other OS/CPU `onnxruntime-node` binaries.
+      the asar, and `scripts/afterPack.mts` deletes other OS/CPU `onnxruntime-node` binaries.
     - CLI: the build embeds a `pnpm deploy --prod` tree + model as a SEA asset (pruned to the host OS/CPU by
       `pruneVisionRuntime`); `services/visionCliAssets.ts` verifies its sha256, extracts it once per version
       into `<userData>/vision/<sha>`, and removes finished copies from earlier versions unless one was marked in use
@@ -394,12 +394,12 @@ repeated six times is one that gets forgotten at one of them.
   four lists: `invokeChannels`, `aliases`, `sendMethods`, `eventMethods`. Both shells generate from it:
   Electron `preload.ts` builds `contextBridge.exposeInMainWorld('api', …)`; Capacitor
   `bridge/capacitor.ts` builds the identical surface in-process.
-- **Drift is CI-enforced** by `tests/ipc/manifest.test.js` at the name level. Signatures travel through the
+- **Drift is CI-enforced** by `tests/ipc/manifest.test.ts` at the name level. Signatures travel through the
   `WindowApi` type (`types/ipc.d.ts`, derived from the manifest lists and every `buildHandlers()`), so a
   renderer call in a type-checked file is checked against its handler's parameters and result — only as
   precise as that handler's type annotations.
 - Handler shape: every `ipc/*.handlers.ts` exports `buildHandlers(deps) → {channel: impl}` **and**
-  `register(ipcMain)`. **CLI and Capacitor reuse the same handler modules** (`cli/commands/*.js` lazily
+  `register(ipcMain)`. **CLI and Capacitor reuse the same handler modules** (`cli/commands/*.ts` lazily
   require `buildHandlers()`) — never write a parallel implementation.
 - **Add a channel end-to-end**: (a) add the channel string to the right list in `manifest.ts`; (b)
   implement it in the matching `ipc/*.handlers.ts` `buildHandlers()`; (c) Electron picks it up

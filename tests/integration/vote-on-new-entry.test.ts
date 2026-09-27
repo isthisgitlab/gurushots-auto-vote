@@ -1,0 +1,187 @@
+/**
+ * End-to-end integration for the `voteOnNewEntry` feature.
+ *
+ * The unit suites each mock the layer below them — tests/services/voteOnNewEntry
+ * mocks settings, and tests/services/votingOrchestrator mocks VotingLogic — so the
+ * seam where the REAL orchestrator, the REAL rule engine and the REAL tracker meet
+ * is only covered here. That seam is where the feature would silently die: the
+ * orchestrator has to pass `hasNewEntry` in the exact shape the rule engine reads,
+ * and hand `forcedByNewEntry` back out in the shape the retry rule reads.
+ *
+ * Only `settings` (to drive the gate) and the API endpoints are stubbed.
+ */
+
+jest.mock('../../src/js/settings');
+
+import settingsModule = require('../../src/js/settings');
+const settings = jest.mocked(settingsModule);
+import type * as votingOrchestratorModule from '../../src/js/services/votingOrchestrator';
+import type * as newEntryTrackerModule from '../../src/js/services/newEntryTracker';
+import type * as challengeFixturesModule from '../helpers/challengeFixtures';
+import type { Challenge } from '../../src/js/types/gurushots';
+import type { VotingPassDeps } from '../../src/js/types/votingPass';
+import type { EntryTracker } from '../../src/js/services/newEntryTracker';
+import { invalid } from '../helpers/invalid';
+const { runVotingPass }: typeof votingOrchestratorModule = require('../../src/js/services/votingOrchestrator');
+const { createMemoryEntryTracker }: typeof newEntryTrackerModule = require('../../src/js/services/newEntryTracker');
+const { buildChallenge }: typeof challengeFixturesModule = require('../helpers/challengeFixtures');
+
+const NOW = Math.floor(Date.now() / 1000);
+
+/** Exposure sits at/above the trigger, so only a new entry can produce a vote. */
+const challengeWith = (entryIds: string[], exposureFactor = 100) =>
+    buildChallenge({
+        id: 4242,
+        title: 'Integration Challenge',
+        type: 'regular',
+        start_time: NOW - 3600,
+        close_time: NOW + 7200,
+        max_photo_submits: 4,
+        member: {
+            boost: { state: 'LOCKED', timeout: 0 },
+            turbo: { state: 'NONE' },
+            ranking: { entries: entryIds.map((id) => ({ id })), exposure: { exposure_factor: exposureFactor } },
+        },
+    });
+
+const makeApi = (challenge: Challenge) => ({
+    getActiveChallenges: jest.fn(async () => ({ challenges: [challenge] })),
+    getVoteImages: jest.fn(async () => ({ images: [{ id: 'i1' }] })),
+    submitVotes: jest.fn(async () => ({ success: true })),
+    applyBoost: jest.fn(async () => ({ success: true })),
+    applyBoostToEntry: jest.fn(async () => ({ success: true })),
+    applyTurbo: jest.fn(async () => ({ ok: true })),
+    getEligiblePhotos: jest.fn(async () => []),
+    submitToChallenge: jest.fn(async () => ({ ok: true })),
+    runTurboMiniGame: jest.fn(async () => ({ played: 0, correct: 0, flipped: 0, doubleFailed: 0, won: false })),
+});
+
+const SETTING_DEFAULTS = {
+    voteOnNewEntry: true,
+    onlyBoost: false,
+    voteOnlyInLastMinute: false,
+    exposure: 90,
+    exposureTarget: 0,
+    lastMinuteThreshold: 10,
+    finalWindowExposure: 40,
+    finalWindowExposureTarget: 0,
+    useFinalWindowExposure: false,
+    useScheduledFill: false,
+    scheduledFillReplaces: false,
+    scheduledFillTime: [],
+    scheduledFillBeforeEnd: [],
+    scheduledFillWindowMinutes: 60,
+    autoFill: false,
+    autoFillSchedule: [],
+    emergencyFill: 0,
+    autoBoost: false,
+    useTurbo: false,
+    autoTurbo: false,
+    boostFillNew: false,
+    turboFillNew: false,
+    boostTime: 3600,
+    turboTime: 3600,
+    timezone: 'UTC',
+};
+
+const mockSettings = (overrides = {}) => {
+    settings.getEffectiveSetting = invalid(jest.fn((key: string) => ({ ...SETTING_DEFAULTS, ...overrides })[key]));
+};
+
+const deps = (api: ReturnType<typeof makeApi>, entryTracker: EntryTracker) =>
+    invalid<VotingPassDeps>({
+        api,
+        cleanupStaleMetadata: null,
+        interChallengeDelay: () => 0,
+        entryTracker,
+    });
+
+beforeEach(() => {
+    jest.clearAllMocks();
+    mockSettings();
+});
+
+describe('voteOnNewEntry end-to-end through the real rule engine', () => {
+    test('first pass baselines silently, second pass votes once on the new entry', async () => {
+        mockSettings({ exposureTarget: 100 });
+        const tracker = createMemoryEntryTracker();
+
+        // Pass 1: exposure 95% is above the 90% trigger, and there is no baseline,
+        // so nothing should vote.
+        const first = makeApi(challengeWith(['a'], 95));
+        await runVotingPass('tok', null, deps(first, tracker));
+        expect(first.submitVotes).not.toHaveBeenCalled();
+
+        // Pass 2: a second entry appeared. Exposure is between the trigger and
+        // target, so ONLY the new-entry rule can produce this top-up.
+        const second = makeApi(challengeWith(['a', 'b'], 95));
+        await runVotingPass('tok', null, deps(second, tracker));
+        expect(second.submitVotes).toHaveBeenCalledTimes(1);
+        expect(second.submitVotes).toHaveBeenCalledWith(expect.anything(), 'tok', 100);
+
+        // Pass 3: nothing new — quiet again.
+        const third = makeApi(challengeWith(['a', 'b'], 95));
+        await runVotingPass('tok', null, deps(third, tracker));
+        expect(third.submitVotes).not.toHaveBeenCalled();
+    });
+
+    test('a new entry at the target does not fetch or submit another vote pool', async () => {
+        mockSettings({ exposureTarget: 100 });
+        const tracker = createMemoryEntryTracker();
+
+        await runVotingPass('tok', null, deps(makeApi(challengeWith(['a'])), tracker));
+        const api = makeApi(challengeWith(['a', 'b']));
+        await runVotingPass('tok', null, deps(api, tracker));
+
+        expect(api.getVoteImages).not.toHaveBeenCalled();
+        expect(api.submitVotes).not.toHaveBeenCalled();
+    });
+
+    test('a failed forced vote is retried on the following pass', async () => {
+        mockSettings({ exposureTarget: 100 });
+        const tracker = createMemoryEntryTracker();
+        await runVotingPass('tok', null, deps(makeApi(challengeWith(['a'], 95)), tracker));
+
+        const failing = makeApi(challengeWith(['a', 'b'], 95));
+        failing.submitVotes.mockRejectedValue(new Error('offline'));
+        await runVotingPass('tok', null, deps(failing, tracker));
+        expect(failing.submitVotes).toHaveBeenCalledTimes(1);
+
+        // Same entries, no new photo — but the trigger is still armed.
+        const retry = makeApi(challengeWith(['a', 'b'], 95));
+        await runVotingPass('tok', null, deps(retry, tracker));
+        expect(retry.submitVotes).toHaveBeenCalledTimes(1);
+
+        // ...and now it is disarmed.
+        const quiet = makeApi(challengeWith(['a', 'b'], 95));
+        await runVotingPass('tok', null, deps(quiet, tracker));
+        expect(quiet.submitVotes).not.toHaveBeenCalled();
+    });
+
+    test('the setting off means a new entry changes nothing', async () => {
+        mockSettings({ voteOnNewEntry: false });
+        const tracker = createMemoryEntryTracker();
+
+        await runVotingPass('tok', null, deps(makeApi(challengeWith(['a'])), tracker));
+        const api = makeApi(challengeWith(['a', 'b']));
+        await runVotingPass('tok', null, deps(api, tracker));
+
+        expect(api.submitVotes).not.toHaveBeenCalled();
+    });
+
+    test('onlyBoost still blocks, and consumes the trigger', async () => {
+        const tracker = createMemoryEntryTracker();
+        await runVotingPass('tok', null, deps(makeApi(challengeWith(['a'])), tracker));
+
+        mockSettings({ onlyBoost: true });
+        const blocked = makeApi(challengeWith(['a', 'b']));
+        await runVotingPass('tok', null, deps(blocked, tracker));
+        expect(blocked.submitVotes).not.toHaveBeenCalled();
+
+        // Trigger consumed: turning onlyBoost back off does not produce a late vote.
+        mockSettings({ onlyBoost: false });
+        const after = makeApi(challengeWith(['a', 'b']));
+        await runVotingPass('tok', null, deps(after, tracker));
+        expect(after.submitVotes).not.toHaveBeenCalled();
+    });
+});

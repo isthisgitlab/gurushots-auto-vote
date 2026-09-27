@@ -1,0 +1,381 @@
+/**
+ * Scenario IPC handlers: {success, error, issues} results, argument checks,
+ * and never a throw to the renderer.
+ */
+
+jest.mock('../../src/js/settings', () => ({
+    checkScenario: jest.fn(),
+    getScenarios: jest.fn(() => ({})),
+    saveScenario: jest.fn(),
+    renameScenario: jest.fn(),
+    deleteScenario: jest.fn(),
+    previewScenarioImport: jest.fn(),
+    importScenario: jest.fn(),
+    exportScenario: jest.fn(),
+}));
+jest.mock('../../src/js/services/scenarioStatus', () => {
+    const ledger = { remove: jest.fn() };
+    return { getScenarioStatus: jest.fn(), ledgerForMode: jest.fn(() => ledger), __ledger: ledger };
+});
+jest.mock('../../src/js/scenarioStateStore', () => ({ refreshScenarioStateAsync: jest.fn(async () => {}) }));
+jest.mock('../../src/js/services/auth', () => ({ requireAuthToken: jest.fn(() => ({ ok: true, token: 'tok' })) }));
+jest.mock('../../src/js/apiFactory', () => ({ getApiStrategy: jest.fn() }));
+jest.mock('../../src/js/logger', () => ({
+    withCategory: jest.fn(() => ({ error: jest.fn(), info: jest.fn() })),
+    sanitizeLogString: (value: string) => value,
+}));
+
+import type { ScenarioDocument } from '../../src/js/settings/scenarioSchema';
+import { invalid } from '../helpers/invalid';
+
+import settingsModule = require('../../src/js/settings');
+const settings = jest.mocked(settingsModule);
+import scenarioStatusModule = require('../../src/js/services/scenarioStatus');
+const scenarioStatus = jest.mocked(scenarioStatusModule);
+const { refreshScenarioStateAsync } = jest.mocked<typeof scenarioStateStoreModule>(
+    require('../../src/js/scenarioStateStore'),
+);
+import authModule = require('../../src/js/services/auth');
+const auth = jest.mocked(authModule);
+import apiFactoryModule = require('../../src/js/apiFactory');
+const apiFactory = jest.mocked(apiFactoryModule);
+import type * as scenarioStateStoreModule from '../../src/js/scenarioStateStore';
+import type * as templatesModule from '../../src/js/scenarios/templates';
+import type * as scenarios_handlersModule from '../../src/js/ipc/scenarios.handlers';
+const { SCENARIO_TEMPLATES }: typeof templatesModule = require('../../src/js/scenarios/templates');
+const { buildHandlers, register }: typeof scenarios_handlersModule = require('../../src/js/ipc/scenarios.handlers');
+
+// A handler called without its trailing optional argument (the signatures spell it `T | undefined`).
+type OmitLast<F> = F extends (...args: [...infer A, never]) => infer R ? (...args: A) => R : never;
+type Handlers = ReturnType<typeof buildHandlers>;
+
+const handlers = buildHandlers();
+const issue = { path: 'start', message: 'No phase named "x"' };
+const NOW = Math.floor(Date.now() / 1000);
+
+const scenario: ScenarioDocument = {
+    name: 'Plan',
+    version: 1,
+    start: 'main',
+    phases: {
+        main: {
+            rules: [
+                { id: 'r1', if: [{ type: 'entries', op: '>', value: 5 }], do: [{ type: 'fillExposure' }] },
+                { id: 'r2', do: [{ type: 'fillExposure' }, { type: 'goto', phase: 'main' }] },
+            ],
+        },
+    },
+};
+
+beforeEach(() => jest.clearAllMocks());
+
+test('get-scenarios returns the stored scenarios and the templates', async () => {
+    settings.getScenarios.mockReturnValue({ Plan: scenario });
+    await expect(handlers['get-scenarios']()).resolves.toEqual({
+        success: true,
+        scenarios: { Plan: scenario },
+        templates: SCENARIO_TEMPLATES,
+    });
+});
+
+describe('save / rename / delete', () => {
+    test('save passes overwrite through and maps issues', async () => {
+        settings.saveScenario.mockReturnValueOnce({ ok: true, name: 'Plan' });
+        await expect(
+            invalid<OmitLast<Handlers['save-scenario']>>(handlers['save-scenario'])(null, scenario),
+        ).resolves.toEqual({ success: true, name: 'Plan' });
+        expect(settings.saveScenario).toHaveBeenCalledWith(scenario, { overwrite: true });
+        settings.saveScenario.mockReturnValueOnce({ ok: false, issues: [issue] });
+        await expect(handlers['save-scenario'](null, scenario, { overwrite: false })).resolves.toEqual({
+            success: false,
+            error: issue.message,
+            issues: [issue],
+        });
+        expect(settings.saveScenario).toHaveBeenLastCalledWith(scenario, { overwrite: false });
+    });
+
+    test('an issue list without entries still yields an error', async () => {
+        settings.saveScenario.mockReturnValueOnce({ ok: false, issues: [] });
+        await expect(
+            invalid<OmitLast<Handlers['save-scenario']>>(handlers['save-scenario'])(null, {}),
+        ).resolves.toEqual(expect.objectContaining({ success: false, error: 'Invalid scenario' }));
+    });
+
+    test('rename checks its arguments', async () => {
+        settings.renameScenario.mockReturnValueOnce({ ok: true, name: 'New' });
+        await expect(handlers['rename-scenario'](null, 'Old', 'New')).resolves.toEqual(
+            expect.objectContaining({ success: true, name: 'New' }),
+        );
+        await expect(handlers['rename-scenario'](null, '', 'New')).resolves.toEqual({
+            success: false,
+            error: 'invalid-args',
+        });
+        await expect(handlers['rename-scenario'](null, 'Old', invalid(5))).resolves.toEqual({
+            success: false,
+            error: 'invalid-args',
+        });
+    });
+
+    test('delete reports a missing scenario', async () => {
+        settings.deleteScenario.mockReturnValueOnce(true).mockReturnValueOnce(false);
+        await expect(handlers['delete-scenario'](null, 'Plan')).resolves.toEqual({ success: true });
+        await expect(handlers['delete-scenario'](null, 'Plan')).resolves.toEqual({
+            success: false,
+            error: 'not-found',
+        });
+        await expect(handlers['delete-scenario'](null, invalid(null))).resolves.toEqual({
+            success: false,
+            error: 'invalid-args',
+        });
+    });
+});
+
+test('check-scenario validates without storing', async () => {
+    settings.checkScenario
+        .mockReturnValueOnce({ ok: true, scenario: invalid({}) })
+        .mockReturnValueOnce({ ok: false, issues: [issue] });
+    await expect(handlers['check-scenario'](null, {})).resolves.toEqual({ success: true });
+    await expect(handlers['check-scenario'](null, {})).resolves.toEqual({
+        success: false,
+        error: issue.message,
+        issues: [issue],
+    });
+});
+
+describe('import / export', () => {
+    test('preview and import', async () => {
+        settings.previewScenarioImport.mockReturnValue({
+            ok: true,
+            scenario,
+            preview: invalid({ name: 'Plan' }),
+            exists: false,
+        });
+        await expect(handlers['preview-scenario-import'](null, '{}')).resolves.toEqual(
+            expect.objectContaining({ success: true, exists: false }),
+        );
+        settings.importScenario.mockReturnValue({ ok: true, name: 'Plan' });
+        await invalid<OmitLast<Handlers['import-scenario']>>(handlers['import-scenario'])(null, '{}');
+        expect(settings.importScenario).toHaveBeenLastCalledWith('{}', { overwrite: false });
+        await handlers['import-scenario'](null, '{}', { overwrite: true });
+        expect(settings.importScenario).toHaveBeenLastCalledWith('{}', { overwrite: true });
+    });
+
+    test('export returns the JSON or not-found', async () => {
+        settings.exportScenario.mockReturnValueOnce('{"name":"Plan"}\n').mockReturnValueOnce(null);
+        await expect(handlers['export-scenario'](null, 'Plan')).resolves.toEqual({
+            success: true,
+            json: '{"name":"Plan"}\n',
+        });
+        await expect(handlers['export-scenario'](null, 'Plan')).resolves.toEqual({
+            success: false,
+            error: 'not-found',
+        });
+        await expect(handlers['export-scenario'](null, '')).resolves.toEqual({ success: false, error: 'invalid-args' });
+    });
+});
+
+describe('status and reset', () => {
+    test('status re-reads the shared state first', async () => {
+        scenarioStatus.getScenarioStatus.mockReturnValue(
+            invalid({ assigned: 'Plan', scenario, state: null, corrupt: false }),
+        );
+        await expect(handlers['get-scenario-status'](null, 7)).resolves.toEqual(
+            expect.objectContaining({ success: true, assigned: 'Plan' }),
+        );
+        expect(refreshScenarioStateAsync).toHaveBeenCalled();
+    });
+
+    test.each([[undefined], [''], ['  '], [Number.NaN], [{}]])('refuses a bad challenge id %p', async (id) => {
+        for (const channel of ['get-scenario-status', 'reset-scenario-state', 'dry-run-scenario'] as const) {
+            await expect(handlers[channel](null, invalid(id))).resolves.toEqual({
+                success: false,
+                error: 'invalid-args',
+            });
+        }
+    });
+
+    test('reset forgets the challenge progress', async () => {
+        await expect(handlers['reset-scenario-state'](null, 7)).resolves.toEqual({ success: true });
+        expect(
+            (scenarioStatus as typeof scenarioStatus & { __ledger: { remove: jest.Mock } }).__ledger.remove,
+        ).toHaveBeenCalledWith('7');
+    });
+
+    test('a throw becomes an error result', async () => {
+        scenarioStatus.getScenarioStatus.mockImplementationOnce(() => {
+            throw new Error('boom');
+        });
+        await expect(handlers['get-scenario-status'](null, '7')).resolves.toEqual({ success: false, error: 'boom' });
+        scenarioStatus.getScenarioStatus.mockImplementationOnce(() => {
+            throw null;
+        });
+        await expect(handlers['get-scenario-status'](null, '7')).resolves.toEqual({
+            success: false,
+            error: 'The get-scenario-status request failed',
+        });
+    });
+});
+
+describe('dry-run-scenario', () => {
+    const strategy = {
+        getActiveChallenges: jest.fn(async () => ({
+            challenges: [{ id: 7, close_time: NOW + 86400, member: { ranking: { entries: [] } } }],
+        })),
+        getBankroll: jest.fn(async () => ({ keys: 1 })),
+    };
+
+    beforeEach(() => {
+        apiFactory.getApiStrategy.mockReturnValue(invalid(strategy));
+        scenarioStatus.getScenarioStatus.mockReturnValue({
+            assigned: 'Plan',
+            scenario,
+            state: null,
+            corrupt: false,
+            timezone: 'UTC',
+        });
+    });
+
+    test('reports what would fire now, from the start phase when the plan has not started', async () => {
+        const result = await handlers['dry-run-scenario'](null, 7);
+        expect(result).toEqual(
+            expect.objectContaining({
+                success: true,
+                scenario: 'Plan',
+                phase: 'main',
+                started: false,
+                halted: null,
+                fire: { ruleId: 'r2', startIndex: 0, actions: ['fillExposure', 'goto'] },
+            }),
+        );
+        expect((result as Extract<typeof result, { success: true }>).explain[0]).toEqual(
+            expect.objectContaining({ ruleId: 'r1', status: 'waiting' }),
+        );
+    });
+
+    test('uses the stored state once started; nothing ready → no fire', async () => {
+        scenarioStatus.getScenarioStatus.mockReturnValue({
+            assigned: 'Plan',
+            scenario: { ...scenario, phases: { main: { rules: [scenario.phases.main.rules![0]] } } },
+            state: invalid({ phase: 'main', phaseEnteredAt: NOW, memory: {}, fired: {}, inFlight: null }),
+            corrupt: false,
+            timezone: 'UTC',
+        });
+        await expect(handlers['dry-run-scenario'](null, 7)).resolves.toEqual(
+            expect.objectContaining({ started: true, fire: null }),
+        );
+    });
+
+    test.each([
+        [{ assigned: '', scenario: null }, 'no-scenario'],
+        [{ assigned: 'Gone', scenario: null }, 'unknown-scenario'],
+        [{ assigned: 'Plan', scenario, corrupt: true }, 'state-unreadable'],
+    ])('refuses %p', async (status, error) => {
+        scenarioStatus.getScenarioStatus.mockReturnValue(invalid(status));
+        await expect(handlers['dry-run-scenario'](null, 7)).resolves.toEqual({ success: false, error });
+    });
+
+    test('needs a token and a live challenge', async () => {
+        auth.requireAuthToken.mockReturnValueOnce({ ok: false, response: { success: false, error: 'no token' } });
+        await expect(handlers['dry-run-scenario'](null, 7)).resolves.toEqual({ success: false, error: 'no token' });
+        await expect(handlers['dry-run-scenario'](null, 8)).resolves.toEqual({
+            success: false,
+            error: 'challenge-not-found',
+        });
+    });
+});
+
+describe('simulate-scenario', () => {
+    const strategy = {
+        getActiveChallenges: jest.fn(async () => ({
+            challenges: [{ id: 7, close_time: NOW + 3600, member: { ranking: { entries: [] } } }],
+        })),
+        getBankroll: jest.fn(async () => ({})),
+    };
+    const timed: ScenarioDocument = {
+        name: 'Draft',
+        version: 1,
+        start: 'main',
+        phases: {
+            main: {
+                rules: [{ id: 't', if: [{ type: 'inPhaseFor', min: '4m' }], do: [{ type: 'notify', message: 'x' }] }],
+            },
+        },
+    };
+
+    beforeEach(() => {
+        apiFactory.getApiStrategy.mockReturnValue(invalid(strategy));
+        scenarioStatus.getScenarioStatus.mockReturnValue({
+            assigned: 'Plan',
+            scenario,
+            state: null,
+            corrupt: false,
+            timezone: 'UTC',
+        });
+    });
+
+    test('simulates the assigned scenario from its current state', async () => {
+        const result = await invalid<OmitLast<Handlers['simulate-scenario']>>(handlers['simulate-scenario'])(null, 7);
+        expect(result).toEqual(
+            expect.objectContaining({
+                success: true,
+                scenario: 'Plan',
+                startPhase: 'main',
+                stoppedBecause: expect.any(String),
+            }),
+        );
+        expect((result as Extract<typeof result, { events: unknown }>).events[0]).toEqual(
+            expect.objectContaining({ ruleId: 'r2' }),
+        );
+    });
+
+    test('simulates an unsaved draft from its start phase, even without an assignment', async () => {
+        scenarioStatus.getScenarioStatus.mockReturnValue({
+            assigned: '',
+            scenario: null,
+            state: null,
+            corrupt: true,
+            timezone: 'UTC',
+        });
+        settings.checkScenario.mockReturnValue({ ok: true, scenario: timed });
+        const result = await handlers['simulate-scenario'](null, 7, timed);
+        expect(settings.checkScenario).toHaveBeenCalledWith(timed);
+        expect((result as Extract<typeof result, { events: unknown }>).events).toEqual([
+            expect.objectContaining({ ruleId: 't', at: expect.any(Number) }),
+        ]);
+    });
+
+    test('an invalid draft reports its issues; a bad id is refused', async () => {
+        settings.checkScenario.mockReturnValueOnce({ ok: false, issues: [{ path: 'start', message: 'No phase' }] });
+        await expect(handlers['simulate-scenario'](null, 7, {})).resolves.toEqual({
+            success: false,
+            error: 'No phase',
+            issues: [{ path: 'start', message: 'No phase' }],
+        });
+        settings.checkScenario.mockReturnValueOnce({ ok: false, issues: [] });
+        await expect(handlers['simulate-scenario'](null, 7, {})).resolves.toEqual(
+            expect.objectContaining({ error: 'Invalid scenario' }),
+        );
+        await expect(
+            invalid<OmitLast<Handlers['simulate-scenario']>>(handlers['simulate-scenario'])(null, ''),
+        ).resolves.toEqual({
+            success: false,
+            error: 'invalid-args',
+        });
+    });
+
+    test('refuses what the dry run refuses', async () => {
+        scenarioStatus.getScenarioStatus.mockReturnValue(invalid({ assigned: '', scenario: null }));
+        await expect(
+            invalid<OmitLast<Handlers['simulate-scenario']>>(handlers['simulate-scenario'])(null, 7),
+        ).resolves.toEqual({
+            success: false,
+            error: 'no-scenario',
+        });
+    });
+});
+
+test('register wires every handler through the trusted-sender wrapper', () => {
+    const ipcMain = { handle: jest.fn() };
+    register(invalid(ipcMain));
+    expect(ipcMain.handle.mock.calls.map(([channel]) => channel)).toEqual(Object.keys(handlers));
+});
