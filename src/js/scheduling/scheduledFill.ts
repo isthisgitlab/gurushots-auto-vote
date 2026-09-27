@@ -12,6 +12,15 @@
  * IPC), resolved once per decision in a single pass.
  */
 
+import type { Challenge } from '../types/gurushots';
+
+import { occurrencesOf } from './wallClock';
+// From settings/limits (not settings/schema) — schema.ts requires zod, and a
+// CJS require of it cannot be tree-shaken out of app-bundle.js, which reaches
+// this module through the cadence chain (AutovoteContext -> cadenceChain ->
+// thresholdWindow) but never otherwise touches the validator.
+import { MAX_SCHEDULED_FILL_ENTRIES } from '../settings/limits';
+
 /**
  * @param challengeId - Challenge id as a string.
  */
@@ -32,15 +41,6 @@ export type ScheduledStart = {
     startTime: number;
     form: 'time-of-day' | 'before-end';
 };
-
-import type { Challenge } from '../types/gurushots';
-
-import { occurrencesOf } from './wallClock';
-// From settings/limits (not settings/schema) — schema.ts requires zod, and a
-// CJS require of it cannot be tree-shaken out of app-bundle.js, which reaches
-// this module through the cadence chain (AutovoteContext -> cadenceChain ->
-// thresholdWindow) but never otherwise touches the validator.
-import { MAX_SCHEDULED_FILL_ENTRIES } from '../settings/limits';
 
 // Non-flash challenges that are still open at `now`. Flash challenges never
 // enter last-minute/scheduled-fill mode, and closed ones can't. Shared with

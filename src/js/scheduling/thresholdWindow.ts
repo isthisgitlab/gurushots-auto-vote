@@ -18,12 +18,6 @@
  * carrying its own boundary-switch timer.
  */
 
-/**
- * @param challengeId - Challenge id as a string.
- * @returns The effective lastMinuteThreshold (minutes).
- */
-export type ResolveThreshold = (challengeId: string) => number | Promise<number>;
-
 import { soonestScheduledStart, eligibleChallenges } from './scheduledFill';
 import { boostApplyThreshold } from '../voting/boostWindow';
 import { ruleOpensAt } from '../voting/currencyAuto';
@@ -35,6 +29,12 @@ import type { RuleTiming } from '../voting/currencyAuto';
 import type { ScenarioEngineState } from '../types/scenario';
 import type { ScenarioDocument } from '../settings/scenarioSchema';
 import type { ResolveScheduledFill, ScheduledStart } from './scheduledFill';
+
+/**
+ * @param challengeId - Challenge id as a string.
+ * @returns The effective lastMinuteThreshold (minutes).
+ */
+export type ResolveThreshold = (challengeId: string) => number | Promise<number>;
 
 /**
  * Which boundary (if any) decided the next cycle's delay.
