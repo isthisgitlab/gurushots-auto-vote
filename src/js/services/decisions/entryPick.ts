@@ -1,4 +1,4 @@
-/** @import { Challenge, RankingEntry } from '../../types/gurushots' */
+import type { Challenge, RankingEntry } from '../../types/gurushots';
 /**
  * Boost/turbo entry selection: which entry a boost or turbo lands on, never
  * sharing one, and how a boost sources its entry when every candidate is
@@ -20,16 +20,15 @@ import { resolveEntryIndex } from '../../voting/entrySlot';
  * the boosted one (conflictField='boosted'). A single-step backward fallback
  * is always sufficient — unless the challenge has only one entry and that
  * one is already in the conflicting state, in which case returns null.
- *
- * @param {readonly RankingEntry[] | null | undefined} entries
- * @param {number | null | undefined} requestedIndex
- * @param {'turbo' | 'boosted'} conflictField
- * @returns {RankingEntry | null}
  */
-const pickEntryAvoidingConflict = (entries, requestedIndex, conflictField) => {
+const pickEntryAvoidingConflict = (
+    entries: readonly RankingEntry[] | null | undefined,
+    requestedIndex: number | null | undefined,
+    conflictField: 'turbo' | 'boosted',
+): RankingEntry | null => {
     if (!Array.isArray(entries) || entries.length === 0) return null;
     // Non-empty array guaranteed above, so resolveEntryIndex returns a number.
-    let slot = /** @type {number} */ (resolveEntryIndex(entries, requestedIndex));
+    let slot = resolveEntryIndex(entries, requestedIndex) as number;
     if (entries[slot]?.[conflictField]) {
         slot = (slot - 1 + entries.length) % entries.length;
     }
@@ -41,17 +40,15 @@ const pickEntryAvoidingConflict = (entries, requestedIndex, conflictField) => {
  * off any entry that already carries turbo. Symmetric to shouldApplyTurbo's own pick, which
  * avoids boosted entries.
  *
- * Lives here rather than privately inside api/boost.js so the mock boost surface resolves the
+ * Lives here rather than privately inside api/boost.ts so the mock boost surface resolves the
  * SAME entry the real one does. Both then raise the conflict flag on it, which is what keeps
  * the same-pass "boost and turbo never share an entry" rule true in mock mode too — the mock
  * runs the identical shared voting pass, so a rule that only held on the real surface would
  * make mock runs quietly diverge.
  *
- * @param {Challenge} challenge
- * @param {string} challengeId
- * @returns {any|null} the entry to boost, or null when every candidate is turboed
+ * @returns the entry to boost, or null when every candidate is turboed
  */
-const pickBoostEntry = (challenge, challengeId) => {
+const pickBoostEntry = (challenge: Challenge, challengeId: string): RankingEntry | null => {
     const entries = challenge?.member?.ranking?.entries;
     if (!Array.isArray(entries) || entries.length === 0) return null;
     const requestedIndex = settings.getEffectiveSetting('boostImageIndex', challengeId);
@@ -70,12 +67,8 @@ const pickBoostEntry = (challenge, challengeId) => {
  * conflict mode only engages when the conflict actually exists — mirroring the
  * `!picked` branch in {@link shouldApplyTurbo}, where picker-null with at least
  * one entry means the single entry carries the other feature's flag.
- *
- * @param {Challenge} challenge
- * @param {string} challengeId
- * @returns {'always'|'conflict'|'no'}
  */
-const resolveBoostFillNewMode = (challenge, challengeId) => {
+const resolveBoostFillNewMode = (challenge: Challenge, challengeId: string): 'always' | 'conflict' | 'no' => {
     if (settings.getEffectiveSetting('boostFillNew', challengeId) === true) return 'always';
     if (settings.getEffectiveSetting('boostFillNewOnConflict', challengeId) === true) {
         const entries = challenge?.member?.ranking?.entries;

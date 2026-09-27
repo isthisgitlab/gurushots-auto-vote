@@ -13,7 +13,7 @@
 
 > Deep reference: **`docs/architecture.md`** (and `docs/scheduling.md` for the timer engines). These are invariants an edit must not violate.
 
-- **Voting pass**: one shared loop `runVotingPass` (`src/js/services/votingOrchestrator.js`) for real+mock — never fork it; inject differences via `deps`. The per-challenge runners are **sequential, never parallelised** (shared challenge-object mutation). Rule precedence in `_runVotingRules` (`src/js/services/decisions/ruleEngine.js`, exported through the `services/VotingLogic.js` facade) is load-bearing.
+- **Voting pass**: one shared loop `runVotingPass` (`src/js/services/votingOrchestrator.js`) for real+mock — never fork it; inject differences via `deps`. The per-challenge runners are **sequential, never parallelised** (shared challenge-object mutation). Rule precedence in `_runVotingRules` (`src/js/services/decisions/ruleEngine.ts`, exported through the `services/VotingLogic.js` facade) is load-bearing.
 - **Two distinct sentinels — don't merge them**: for `exposureTarget`/`lastHourExposureTarget`, `0`/null = "target == trigger" (rule **stays active**); for `boostTime`/`emergencyFill`/`keyUnlockedBoostTime`, `0` = feature **off**.
 - **Scheduler**: single recursive `setTimeout` chain, no cron; one decision point `computeNextCycleDelayMs`; invariant "never sleep past a boundary"; cancellation is a global flag that propagates by `return`, never `throw`.
 - **API transport**: everything POSTs through `makePostRequest` (`src/js/api/api-client.ts`), which returns the body or **`null` — it never throws**. Branch on `null`; keep retry/backoff centralised; custom (Android) adapters must call `finalizeAdapterResponse`.

@@ -90,7 +90,7 @@ migrates to an explicit `[]`, never deleted, so it keeps shadowing a
 configured global default.
 
 The decision side lives in `getScheduledFillState`
-(`src/js/services/decisions/triggerWindows.js`): during a window
+(`src/js/services/decisions/triggerWindows.ts`): during a window
 `[start, start + scheduledFillWindowMinutes]` the challenge votes to
 100/100 like the last-minute rule; with `scheduledFillReplaces` on, the
 normal and final-window threshold rules are blocked outside the windows
@@ -139,7 +139,7 @@ the next round opens. The triggers mirror scheduled fill exactly — daily
 A 01:30–06:00 night pause is `votingPauseTime: ['01:30']` with a duration of 270.
 
 The decision side lives in `getVotingPauseState`
-(`src/js/services/decisions/triggerWindows.js`), which shares `_triggerWindowState` with
+(`src/js/services/decisions/triggerWindows.ts`), which shares `_triggerWindowState` with
 `getScheduledFillState` so the two can never drift on entry/corruption
 semantics. Its branch in `_runVotingRules` sits **below** flash, last-minute
 and the pre-boost fill (a challenge that really closes mid-pause still gets its
@@ -187,7 +187,7 @@ where `finalWindowDuration` is the configurable final-window width (default
 (1–59 min, default 15). Only active when `useFinalWindowExposure` is on.
 
 The decision side lives in `_runVotingRules`
-(`src/js/services/decisions/ruleEngine.js`): its pre-final-window branch sits **above**
+(`src/js/services/decisions/ruleEngine.ts`): its pre-final-window branch sits **above**
 the final-window rule and **below** scheduled-fill/last-minute in the
 load-bearing precedence, so during the lead minutes after the boundary —
 where the top-up and final-window windows overlap — the top-up wins and votes

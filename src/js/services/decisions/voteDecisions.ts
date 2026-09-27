@@ -1,4 +1,4 @@
-/** @import { Challenge } from '../../types/gurushots' */
+import type { Challenge } from '../../types/gurushots';
 /**
  * Caller-facing vote decisions: the auto-vote and manual-vote evaluators that
  * map the rule engine's result onto their shapes and messages, plus the
@@ -9,36 +9,41 @@
 import * as settings from '../../settings';
 import { _runVotingRules } from './ruleEngine';
 
-/**
- * @typedef {object} AutoVoteDecision
- * @property {boolean} shouldVote
- * @property {string} voteReason
- * @property {number} targetExposure
- * @property {boolean} forcedByNewEntry - Surfaced so the orchestrator can tell a
- *   new-entry-forced vote from an organic one without re-deriving the rule. It
- *   only preserves the trigger (skips recording the entry snapshot) when a FORCED
- *   vote throws; an organic vote's eligibility recurs by itself next cycle.
- * @property {boolean} [preservesNewEntryTrigger] - True when the decision was
- *   blocked by something that DEFERS the vote (the voting pause) rather than
- *   cancelling it, so the orchestrator keeps the new-entry trigger armed.
- */
+export interface AutoVoteDecision {
+    shouldVote: boolean;
+    voteReason: string;
+    targetExposure: number;
+    /**
+     * Surfaced so the orchestrator can tell a
+     * new-entry-forced vote from an organic one without re-deriving the rule. It
+     * only preserves the trigger (skips recording the entry snapshot) when a FORCED
+     * vote throws; an organic vote's eligibility recurs by itself next cycle.
+     */
+    forcedByNewEntry: boolean;
+    /**
+     * True when the decision was
+     * blocked by something that DEFERS the vote (the voting pause) rather than
+     * cancelling it, so the orchestrator keeps the new-entry trigger armed.
+     */
+    preservesNewEntryTrigger?: boolean;
+}
 
-/**
- * @typedef {object} ManualVoteDecision
- * @property {boolean} shouldAllowVoting
- * @property {string} errorMessage
- * @property {number} targetExposure
- */
+export interface ManualVoteDecision {
+    shouldAllowVoting: boolean;
+    errorMessage: string;
+    targetExposure: number;
+}
 
 /**
  * Auto-vote evaluator. Returns { shouldVote, voteReason, targetExposure, forcedByNewEntry }.
- * @param {Challenge} challenge
- * @param {number} now
- * @param {{hasNewEntry?: boolean}} [options] - `hasNewEntry` must already be gated
+ * @param options - `hasNewEntry` must already be gated
  *   on the voteOnNewEntry setting by the caller; see `_runVotingRules`.
- * @returns {AutoVoteDecision}
  */
-const evaluateVotingDecision = (challenge, now, options = {}) => {
+const evaluateVotingDecision = (
+    challenge: Challenge,
+    now: number,
+    options: { hasNewEntry?: boolean } = {},
+): AutoVoteDecision => {
     const r = _runVotingRules(challenge, now, 'auto', options);
     if (r.skipReason !== null)
         return {
@@ -66,8 +71,7 @@ const evaluateVotingDecision = (challenge, now, options = {}) => {
     // the log to understand. Any of the labels can be forced, so this branch
     // covers all of them before the map is consulted.
     if (r.forcedByNewEntry) {
-        /** @type {Record<string, string>} */
-        const forcedLabels = {
+        const forcedLabels: Record<string, string> = {
             flash: 'flash type',
             lastminute: `lastminute threshold (${effectiveLastMinuteThreshold}m)`,
             'pre-boost': 'pre-boost fill',
@@ -90,10 +94,9 @@ const evaluateVotingDecision = (challenge, now, options = {}) => {
             forcedByNewEntry: true,
         };
     }
-    /** @param {number} trigger @param {number} target @returns {string} */
-    const targetSuffix = (trigger, target) => (target !== trigger ? ` (vote up to ${target}%)` : '');
-    /** @type {Record<string, string>} */
-    const reasons = {
+    const targetSuffix = (trigger: number, target: number): string =>
+        target !== trigger ? ` (vote up to ${target}%)` : '';
+    const reasons: Record<string, string> = {
         flash: r.atTarget ? 'flash type: exposure already at 100%' : `flash type: exposure ${currentExposure}% < 100%`,
         lastminute: r.atTarget
             ? `lastminute threshold (${effectiveLastMinuteThreshold}m): exposure already at 100%`
@@ -124,12 +127,12 @@ const evaluateVotingDecision = (challenge, now, options = {}) => {
 
 /**
  * Manual-vote evaluator. Returns { shouldAllowVoting, errorMessage, targetExposure }.
- * @param {Challenge} challenge
- * @param {number} now
- * @param {string} challengeTitle
- * @returns {ManualVoteDecision}
  */
-const evaluateManualVotingDecision = (challenge, now, challengeTitle) => {
+const evaluateManualVotingDecision = (
+    challenge: Challenge,
+    now: number,
+    challengeTitle: string,
+): ManualVoteDecision => {
     const r = _runVotingRules(challenge, now, 'manual');
     if (r.skipReason !== null) {
         // Manual path uses different phrasing for the only-in-last-minute skip reason.
@@ -144,8 +147,7 @@ const evaluateManualVotingDecision = (challenge, now, challengeTitle) => {
 
     if (r.atTarget) {
         const { effectiveLastMinuteThreshold, effectiveThreshold, effectiveFinalWindowExposure } = r.thresholdInfo;
-        /** @type {Record<string, string>} */
-        const messages = {
+        const messages: Record<string, string> = {
             flash: `Challenge "${challengeTitle}" already has 100% exposure (flash type)`,
             lastminute: `Challenge "${challengeTitle}" already has 100% exposure (lastminute threshold: ${effectiveLastMinuteThreshold}m)`,
             scheduled: `Challenge "${challengeTitle}" already has 100% exposure (scheduled fill window)`,
@@ -166,12 +168,15 @@ const evaluateManualVotingDecision = (challenge, now, challengeTitle) => {
 /**
  * Evaluate whether manual voting to 100% should be allowed on a challenge
  * (Used for manual vote buttons - bypasses all threshold configurations)
- * @param {Challenge} challenge - Challenge object
- * @param {number} now - Current time (Unix timestamp)
- * @param {string} challengeTitle - Challenge title for error messages
- * @returns {ManualVoteDecision}
+ * @param challenge - Challenge object
+ * @param now - Current time (Unix timestamp)
+ * @param challengeTitle - Challenge title for error messages
  */
-const evaluateManualVotingToHundred = (challenge, now, challengeTitle) => {
+const evaluateManualVotingToHundred = (
+    challenge: Challenge,
+    now: number,
+    challengeTitle: string,
+): ManualVoteDecision => {
     // Defensive read — partial API responses (new challenge types, flash
     // variants, server hiccups) can arrive without a ranking node, and
     // throwing here would dump the whole vote-all loop into the per-

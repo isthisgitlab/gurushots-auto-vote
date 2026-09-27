@@ -1,4 +1,4 @@
-/** @import { Challenge } from '../../types/gurushots' */
+import type { Challenge } from '../../types/gurushots';
 /**
  * The shared voting-rule engine behind the auto- and manual-vote evaluators.
  * Rule precedence in `_runVotingRules` is load-bearing. Part of the
@@ -20,51 +20,60 @@ import { getBoostPrefillState } from './boostPrefill';
 
 /**
  * The thresholds a decided rule compared against, for the log wording.
- * @typedef {object} ThresholdInfo
- * @property {number} currentExposure
- * @property {number} trigger
- * @property {number} effectiveLastMinuteThreshold
- * @property {number} effectiveThreshold
- * @property {number} effectiveFinalWindowExposure
- * @property {number} effectiveExposureTarget
- * @property {number} effectiveFinalWindowExposureTarget
  */
+interface ThresholdInfo {
+    currentExposure: number;
+    trigger: number;
+    effectiveLastMinuteThreshold: number;
+    effectiveThreshold: number;
+    effectiveFinalWindowExposure: number;
+    effectiveExposureTarget: number;
+    effectiveFinalWindowExposureTarget: number;
+}
 
 /**
  * A rule that blocked the vote.
- * @typedef {object} BlockedRuleResult
- * @property {false} eligible
- * @property {false} atTarget
- * @property {string} skipReason
- * @property {number} targetExposure
- * @property {null} ruleLabel
- * @property {null} thresholdInfo
- * @property {false} forcedByNewEntry
- * @property {boolean} preservesNewEntryTrigger - Set when the block DEFERS rather than
- *   cancels: the orchestrator must keep any new-entry trigger armed instead of
- *   disarming it. Only the voting pause sets it.
  */
+interface BlockedRuleResult {
+    eligible: false;
+    atTarget: false;
+    skipReason: string;
+    targetExposure: number;
+    ruleLabel: null;
+    thresholdInfo: null;
+    forcedByNewEntry: false;
+    /**
+     * Set when the block DEFERS rather than
+     * cancels: the orchestrator must keep any new-entry trigger armed instead of
+     * disarming it. Only the voting pause sets it.
+     */
+    preservesNewEntryTrigger: boolean;
+}
 
 /**
  * The rule that decided the vote.
- * @typedef {object} DecidedRuleResult
- * @property {boolean} eligible
- * @property {boolean} atTarget
- * @property {null} skipReason
- * @property {number} targetExposure
- * @property {string} ruleLabel
- * @property {ThresholdInfo} thresholdInfo
- * @property {boolean} forcedByNewEntry - True only when a detected new entry
- *   actually CHANGED the outcome: exposure was at/above the trigger but still
- *   below the target, so the vote happens anyway. False once the target is met,
- *   and when the challenge was already eligible on its own.
  */
+interface DecidedRuleResult {
+    eligible: boolean;
+    atTarget: boolean;
+    skipReason: null;
+    targetExposure: number;
+    ruleLabel: string;
+    thresholdInfo: ThresholdInfo;
+    /**
+     * True only when a detected new entry
+     * actually CHANGED the outcome: exposure was at/above the trigger but still
+     * below the target, so the vote happens anyway. False once the target is met,
+     * and when the challenge was already eligible on its own.
+     */
+    forcedByNewEntry: boolean;
+}
 
 /**
  * Intermediate result from the shared rule engine (`_runVotingRules`); the
  * per-mode wrappers map it onto their caller-facing shapes.
- * @typedef {BlockedRuleResult | DecidedRuleResult} VotingRuleResult
  */
+export type VotingRuleResult = BlockedRuleResult | DecidedRuleResult;
 
 /**
  * Shared rule engine for the auto-vote and manual-vote evaluators.
@@ -78,16 +87,17 @@ import { getBoostPrefillState } from './boostPrefill';
  *     ruleLabel:     string,          // 'flash', 'lastminute', 'scheduled', 'pre-final-window', 'final-window', 'normal'
  *     thresholdInfo: object }         // small bundle of settings the wrapper formats
  *
- * @param {Challenge} challenge
- * @param {number} now
- * @param {'auto'|'manual'} mode
- * @param {{hasNewEntry?: boolean}} [options] - `hasNewEntry` is supplied
+ * @param options - `hasNewEntry` is supplied
  *   ALREADY GATED on the voteOnNewEntry setting by the caller (the orchestrator
  *   owns that read). Deliberately not read here: two reads of the same key in two
  *   layers would drift.
- * @returns {VotingRuleResult}
  */
-const _runVotingRules = (challenge, now, mode, options = {}) => {
+const _runVotingRules = (
+    challenge: Challenge,
+    now: number,
+    mode: 'auto' | 'manual',
+    options: { hasNewEntry?: boolean } = {},
+): VotingRuleResult => {
     const challengeId = challenge.id.toString();
     const hasNewEntry = options.hasNewEntry === true;
 
@@ -115,7 +125,7 @@ const _runVotingRules = (challenge, now, mode, options = {}) => {
     // Clamp to the schema's valid range (1..59). Anything outside — a hand-edited
     // sub-minute value, an over-59 value, or a non-number — falls back to the
     // default (15). The lower bound MUST match soonestFinalWindowTopUpStart's guard
-    // in thresholdWindow.js (>= 60s) so the vote-rule window and the scheduler's
+    // in thresholdWindow.ts (>= 60s) so the vote-rule window and the scheduler's
     // cadence cap can't disagree for the same corrupt input.
     const voteBeforeFinalWindowLeadMin =
         Number.isFinite(rawLeadMin) && rawLeadMin >= 1 && rawLeadMin <= 59 ? rawLeadMin : 15;
@@ -140,11 +150,9 @@ const _runVotingRules = (challenge, now, mode, options = {}) => {
     const currentExposure = challenge?.member?.ranking?.exposure?.exposure_factor ?? 0;
 
     /**
-     * @param {string} skipReason
-     * @param {boolean} [preservesNewEntryTrigger] - See the field's note below.
-     * @returns {BlockedRuleResult}
+     * @param preservesNewEntryTrigger - See the field's note below.
      */
-    const blocked = (skipReason, preservesNewEntryTrigger = false) => ({
+    const blocked = (skipReason: string, preservesNewEntryTrigger: boolean = false): BlockedRuleResult => ({
         eligible: false,
         atTarget: false,
         skipReason,
@@ -168,14 +176,12 @@ const _runVotingRules = (challenge, now, mode, options = {}) => {
     });
     // Eligibility uses the trigger ("vote if below"); the loop ceiling uses the target
     // ("vote up to"). For flash and lastminute they are intentionally both 100.
-    /**
-     * @param {string} ruleLabel
-     * @param {number} trigger
-     * @param {number} target
-     * @param {Omit<ThresholdInfo, 'currentExposure' | 'trigger'>} thresholdInfo
-     * @returns {DecidedRuleResult}
-     */
-    const decided = (ruleLabel, trigger, target, thresholdInfo) => {
+    const decided = (
+        ruleLabel: string,
+        trigger: number,
+        target: number,
+        thresholdInfo: Omit<ThresholdInfo, 'currentExposure' | 'trigger'>,
+    ): DecidedRuleResult => {
         const wouldBeAtTarget = currentExposure >= trigger;
         // A detected new entry may bridge the trigger-to-target gap, but must not
         // defeat the target itself. Otherwise a challenge already full (or past a

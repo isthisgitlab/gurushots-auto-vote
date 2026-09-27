@@ -4,7 +4,7 @@
  * caller resolves both. Part of the services/VotingLogic facade.
  */
 
-// Mirrors MAX_JOIN_PERCENT_ELAPSED in settings/schema.js (which this
+// Mirrors MAX_JOIN_PERCENT_ELAPSED in settings/schema.ts (which this
 // renderer-bundle-safe module cannot import) — change both together.
 const MAX_REACHABLE_PERCENT_ELAPSED = 99;
 
@@ -19,11 +19,13 @@ const MAX_REACHABLE_PERCENT_ELAPSED = 99;
  * exhibition. With percent off, the hours window applies unchanged, so every
  * pre-existing configuration keeps its exact behavior.
  *
- * @param {number} joinWithinSec seconds before close_time to start joining (0 = off)
- * @param {number} percentElapsed percent of the challenge's lifetime that must have run (0 = off)
- * @returns {{mode: 'percent'|'hours'|'off', value: number}}
+ * @param joinWithinSec seconds before close_time to start joining (0 = off)
+ * @param percentElapsed percent of the challenge's lifetime that must have run (0 = off)
  */
-const resolveJoinWindow = (joinWithinSec, percentElapsed) => {
+const resolveJoinWindow = (
+    joinWithinSec: number,
+    percentElapsed: number,
+): { mode: 'percent' | 'hours' | 'off'; value: number } => {
     const percent = Number(percentElapsed);
     if (Number.isFinite(percent) && percent > 0) {
         // Clamp to the latest REACHABLE fraction. 100% is only true once
@@ -56,13 +58,16 @@ const resolveJoinWindow = (joinWithinSec, percentElapsed) => {
  * guessing one would spend the entry at exactly the moment the setting exists
  * to avoid.
  *
- * @param {{close_time?: number, start_time?: number}} challenge
- * @param {number} joinWithinSec seconds before close_time to start joining (0 = off)
- * @param {number} nowSec current time in epoch SECONDS (close_time's unit)
- * @param {number} percentElapsed percent of the challenge's lifetime that must have run (0 = off)
- * @returns {string|null}
+ * @param joinWithinSec seconds before close_time to start joining (0 = off)
+ * @param nowSec current time in epoch SECONDS (close_time's unit)
+ * @param percentElapsed percent of the challenge's lifetime that must have run (0 = off)
  */
-const joinWindowRefusal = (challenge, joinWithinSec, nowSec, percentElapsed) => {
+const joinWindowRefusal = (
+    challenge: { close_time?: number; start_time?: number },
+    joinWithinSec: number,
+    nowSec: number,
+    percentElapsed: number,
+): string | null => {
     const window = resolveJoinWindow(joinWithinSec, percentElapsed);
     if (window.mode === 'off') return null;
 
@@ -99,12 +104,19 @@ const joinWindowRefusal = (challenge, joinWithinSec, nowSec, percentElapsed) => 
  * always subtracts. Types and challenge tags are two independent axes and BOTH
  * must pass.
  *
- * @param {string} type normalized lowercase challenge type ('' = none)
- * @param {string[]} tags normalized lowercase challenge tags
- * @param {{includeTypes: string[], excludeTypes: string[], includeTags: string[], excludeTags: string[]}} filters
- * @returns {string|null}
+ * @param type normalized lowercase challenge type ('' = none)
+ * @param tags normalized lowercase challenge tags
  */
-const joinScopeRefusal = (type, tags, { includeTypes, excludeTypes, includeTags, excludeTags }) => {
+const joinScopeRefusal = (
+    type: string,
+    tags: string[],
+    {
+        includeTypes,
+        excludeTypes,
+        includeTags,
+        excludeTags,
+    }: { includeTypes: string[]; excludeTypes: string[]; includeTags: string[]; excludeTags: string[] },
+): string | null => {
     if (Array.isArray(excludeTypes) && type !== '' && excludeTypes.includes(type)) {
         return 'excluded-type';
     }
@@ -127,13 +139,17 @@ const joinScopeRefusal = (type, tags, { includeTypes, excludeTypes, includeTags,
 /**
  * Why a PAID join (cost > 0) is refused, or null when it may spend.
  *
- * @param {number} needsCoins positive join cost
- * @param {{coins?: number}|null} bankroll live balance, or null if unread
- * @param {number} maxCoins per-challenge coin cap (0 = free only)
- * @param {number} remainingBudget coins still spendable this cycle
- * @returns {string|null}
+ * @param needsCoins positive join cost
+ * @param bankroll live balance, or null if unread
+ * @param maxCoins per-challenge coin cap (0 = free only)
+ * @param remainingBudget coins still spendable this cycle
  */
-const paidJoinRefusal = (needsCoins, bankroll, maxCoins, remainingBudget) => {
+const paidJoinRefusal = (
+    needsCoins: number,
+    bankroll: { coins?: number } | null,
+    maxCoins: number,
+    remainingBudget: number,
+): string | null => {
     if (!Number.isFinite(maxCoins) || maxCoins <= 0) return 'paid-disabled';
     if (needsCoins > maxCoins) return 'over-per-challenge-cap';
     // Fail-safe: unknown balance never spends.
@@ -145,10 +161,11 @@ const paidJoinRefusal = (needsCoins, bankroll, maxCoins, remainingBudget) => {
 };
 
 /**
- * @param {{type?: string, tags?: string[]}|undefined} challenge
- * @returns {{type: string, tags: string[]}} lowercase-trimmed type ('' = none) and string tags
+ * @returns lowercase-trimmed type ('' = none) and string tags
  */
-const normalizeJoinFacets = (challenge) => ({
+const normalizeJoinFacets = (
+    challenge: { type?: string; tags?: string[] } | undefined,
+): { type: string; tags: string[] } => ({
     type: typeof challenge?.type === 'string' ? challenge.type.trim().toLowerCase() : '',
     tags: Array.isArray(challenge?.tags)
         ? challenge.tags.filter((tag) => typeof tag === 'string').map((tag) => tag.trim().toLowerCase())
@@ -193,20 +210,17 @@ const normalizeJoinFacets = (challenge) => ({
  * paid join but still allows free joins. Both coin caps use the `0 = off`
  * sentinel — paid joins require `maxCoins > 0` AND `remainingBudget >= cost`.
  *
- * @param {object} params
- * @param {{id?: string|number, type?: string, join_coins?: number, close_time?: number, tags?: string[]}} params.challenge
- * @param {{coins?: number}|null} params.bankroll live balance, or null if unread
- * @param {number} params.remainingBudget coins still spendable this cycle (0 = paid off)
- * @param {string[]} params.includeTypes normalized lowercase types from `autoJoinTypes`; EMPTY = all types
- * @param {string[]} params.excludeTypes normalized lowercase types from `autoJoinExcludeTypes`; a match vetoes the join (unless a title-profile matches)
- * @param {number} params.maxCoins per-challenge coin cap (0 = free only)
- * @param {boolean} params.hasProfileMatch a title rule/profile matched this title — a deliberate opt-in that bypasses the exclude veto and include narrowing
- * @param {string[]} [params.includeTags] normalized lowercase CHALLENGE tags from `autoJoinChallengeTags`; EMPTY = any
- * @param {string[]} [params.excludeTags] normalized lowercase CHALLENGE tags from `autoJoinExcludeChallengeTags`; any match vetoes the join
- * @param {number} [params.joinWithinSec] join only within this many seconds of `close_time` (0/absent = off)
- * @param {number} [params.nowSec] current time in epoch SECONDS (matches `close_time`'s unit); required when `joinWithinSec` > 0
- * @param {number} [params.joinAfterPercentElapsed] join only once this percent of the candidate's lifetime (`close_time` - `start_time`) has elapsed (0/absent = off); wins over `joinWithinSec` when both are set
- * @returns {{join: boolean, needsCoins: number, reason: string}}
+ * @param params.bankroll live balance, or null if unread
+ * @param params.remainingBudget coins still spendable this cycle (0 = paid off)
+ * @param params.includeTypes normalized lowercase types from `autoJoinTypes`; EMPTY = all types
+ * @param params.excludeTypes normalized lowercase types from `autoJoinExcludeTypes`; a match vetoes the join (unless a title-profile matches)
+ * @param params.maxCoins per-challenge coin cap (0 = free only)
+ * @param params.hasProfileMatch a title rule/profile matched this title — a deliberate opt-in that bypasses the exclude veto and include narrowing
+ * @param params.includeTags normalized lowercase CHALLENGE tags from `autoJoinChallengeTags`; EMPTY = any
+ * @param params.excludeTags normalized lowercase CHALLENGE tags from `autoJoinExcludeChallengeTags`; any match vetoes the join
+ * @param params.joinWithinSec join only within this many seconds of `close_time` (0/absent = off)
+ * @param params.nowSec current time in epoch SECONDS (matches `close_time`'s unit); required when `joinWithinSec` > 0
+ * @param params.joinAfterPercentElapsed join only once this percent of the candidate's lifetime (`close_time` - `start_time`) has elapsed (0/absent = off); wins over `joinWithinSec` when both are set
  */
 const shouldJoinChallenge = ({
     challenge,
@@ -221,7 +235,20 @@ const shouldJoinChallenge = ({
     joinWithinSec = 0,
     nowSec = 0,
     joinAfterPercentElapsed = 0,
-}) => {
+}: {
+    challenge: { id?: string | number; type?: string; join_coins?: number; close_time?: number; tags?: string[] };
+    bankroll: { coins?: number } | null;
+    remainingBudget: number;
+    includeTypes: string[];
+    excludeTypes: string[];
+    maxCoins: number;
+    hasProfileMatch: boolean;
+    includeTags?: string[];
+    excludeTags?: string[];
+    joinWithinSec?: number;
+    nowSec?: number;
+    joinAfterPercentElapsed?: number;
+}): { join: boolean; needsCoins: number; reason: string } => {
     const rawCost = Number(challenge?.join_coins);
     const needsCoins = Number.isFinite(rawCost) && rawCost > 0 ? rawCost : 0;
 

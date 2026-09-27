@@ -1,4 +1,4 @@
-/** @import { Challenge } from '../../types/gurushots' */
+import type { Challenge } from '../../types/gurushots';
 /**
  * Per-challenge deadline actions (auto-fill, emergency fill, boost, turbo):
  * their seconds-before-close thresholds, the order they run in, and the
@@ -26,11 +26,8 @@ import { pickBoostEntry, resolveBoostFillNewMode } from './entryPick';
  * Note: the entry count is read live, so this is a snapshot at call time
  * (orderDeadlineActions is called once per challenge before the runners
  * execute).
- * @param {Challenge} challenge
- * @param {string} challengeId
- * @returns {number}
  */
-const getAutoFillThresholdSec = (challenge, challengeId) => {
+const getAutoFillThresholdSec = (challenge: Challenge, challengeId: string): number => {
     const entries = challenge?.member?.ranking?.entries;
     const entryCount = Array.isArray(entries) ? entries.length : 0;
     const schedule = settings.getEffectiveSetting('autoFillSchedule', challengeId);
@@ -39,10 +36,8 @@ const getAutoFillThresholdSec = (challenge, challengeId) => {
 
 /**
  * Effective seconds-before-close at which emergency fill activates (0 = off).
- * @param {string} challengeId
- * @returns {number}
  */
-const getEmergencyFillThresholdSec = (challengeId) => {
+const getEmergencyFillThresholdSec = (challengeId: string): number => {
     const seconds = settings.getEffectiveSetting('emergencyFill', challengeId);
     return Number.isFinite(seconds) && seconds > 0 ? seconds : 0;
 };
@@ -60,11 +55,8 @@ const getEmergencyFillThresholdSec = (challengeId) => {
  * which only sorts boost later — its handler (shouldApplyBoost) is still the
  * source of truth for whether to actually apply. Returns -Infinity when no boost
  * is available, so the boost action sorts last.
- * @param {Challenge} challenge
- * @param {string} challengeId
- * @returns {number}
  */
-const getBoostThresholdSec = (challenge, challengeId) =>
+const getBoostThresholdSec = (challenge: Challenge, challengeId: string): number =>
     boostApplyThreshold(challenge?.member?.boost, challenge?.close_time, {
         boostTimeSec: getEffectiveBoostTime(challengeId),
         keyUnlockedBoostTimeSec: getEffectiveKeyUnlockedBoostTime(challengeId),
@@ -89,16 +81,13 @@ const getBoostThresholdSec = (challenge, challengeId) =>
  * Tie-break (stable): autoFill → emergencyFill → boost → turbo, so fills and
  * boost precede turbo and a freshly filled (and locally reflected) entry is
  * available when turbo runs on a tie.
- *
- * @param {Challenge} challenge
- * @returns {Array<{action: 'autoFill'|'turbo'|'emergencyFill'|'boost', thresholdSec: number}>}
  */
-const orderDeadlineActions = (challenge) => {
+const orderDeadlineActions = (
+    challenge: Challenge,
+): Array<{ action: 'autoFill' | 'turbo' | 'emergencyFill' | 'boost'; thresholdSec: number }> => {
     const challengeId = challenge?.id?.toString?.() || '';
-    /** @type {Record<string, number>} */
-    const tieOrder = { autoFill: 0, emergencyFill: 1, boost: 2, turbo: 3 };
-    /** @type {Array<{action: 'autoFill'|'turbo'|'emergencyFill'|'boost', thresholdSec: number}>} */
-    const actions = [
+    const tieOrder: Record<string, number> = { autoFill: 0, emergencyFill: 1, boost: 2, turbo: 3 };
+    const actions: Array<{ action: 'autoFill' | 'turbo' | 'emergencyFill' | 'boost'; thresholdSec: number }> = [
         { action: 'autoFill', thresholdSec: getAutoFillThresholdSec(challenge, challengeId) },
         { action: 'turbo', thresholdSec: getEffectiveTurboTime(challengeId) },
         { action: 'emergencyFill', thresholdSec: getEmergencyFillThresholdSec(challengeId) },
@@ -137,11 +126,12 @@ const orderDeadlineActions = (challenge) => {
  * what the runner later sees after a mid-cycle fill — callers must present it
  * as advisory.
  *
- * @param {Challenge} challenge
- * @param {number} now - Unix timestamp in seconds
- * @returns {{actions: Array<{action: string, thresholdSec: number, dueAt: number|null}>, boostBlocked: boolean}}
+ * @param now - Unix timestamp in seconds
  */
-const describeDeadlineActions = (challenge, now) => {
+const describeDeadlineActions = (
+    challenge: Challenge,
+    now: number,
+): { actions: Array<{ action: string; thresholdSec: number; dueAt: number | null }>; boostBlocked: boolean } => {
     const challengeId = challenge?.id?.toString?.() || '';
     const closeTime = Number(challenge?.close_time);
     const boost = challenge?.member?.boost || {};
@@ -174,12 +164,7 @@ const describeDeadlineActions = (challenge, now) => {
         pickBoostEntry(challenge, challengeId) === null &&
         !fillNewWillResolve;
 
-    /**
-     * @param {string} action
-     * @param {number} thresholdSec
-     * @returns {boolean}
-     */
-    const isVisible = (action, thresholdSec) => {
+    const isVisible = (action: string, thresholdSec: number): boolean => {
         if (!Number.isFinite(thresholdSec) || thresholdSec <= 0) return false;
         switch (action) {
             case 'turbo':

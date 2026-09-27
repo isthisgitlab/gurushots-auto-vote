@@ -1,4 +1,4 @@
-/** @import { Challenge } from '../../types/gurushots' */
+import type { Challenge } from '../../types/gurushots';
 /**
  * Trigger-window state for the two features built on the same pair of trigger
  * lists: scheduled fill (vote inside the window) and the voting pause (refuse
@@ -7,11 +7,11 @@
 
 import * as settings from '../../settings';
 // Pure wall-clock math for the scheduled-fill feature (no import cycle:
-// wallClock.js imports nothing).
+// wallClock.ts imports nothing).
 import { occurrencesOf } from '../../scheduling/wallClock';
 import { DEFAULT_TIMEZONE } from '../../settings/uiDefaults';
 // From settings/limits (not settings/schema) — keeps zod out of any bundle
-// that reaches this module. No `any` cast needed: limits.js exports a plain
+// that reaches this module. No `any` cast needed: limits.ts exports a plain
 // number literal, so inference is already exact.
 import { MAX_SCHEDULED_FILL_ENTRIES, MAX_VOTING_PAUSE_MINUTES } from '../../settings/limits';
 // Used only on the corrupt-config paths below, which must not stay silent:
@@ -52,19 +52,27 @@ import { oneLine as oneLineId } from '../../format/logSafe';
  * challenge can't occur there. A future caller feeding a broader list should
  * pre-filter on `close_time > now` (as soonestScheduledStart does).
  *
- * @param {Challenge} challenge
- * @param {string} challengeId
- * @param {number} now - Current time (Unix timestamp, seconds)
- * @param {{enabledKey: string, timesKey: string, beforeEndKey: string,
- *          durationKey: string, defaultDurationMin: number,
- *          onCorruptDuration: 'default'|'off', maxDurationMin: number|null}} keys
+ * @param now - Current time (Unix timestamp, seconds)
+ * @param keys
  *   `onCorruptDuration` and `maxDurationMin` are the per-feature corruption
  *   policy — see the duration block below for why the two features must not
  *   share one. Both are required rather than optional so a future third caller
  *   has to state its direction explicitly instead of inheriting one silently.
- * @returns {{active: boolean, inWindow: boolean}}
  */
-const _triggerWindowState = (challenge, challengeId, now, keys) => {
+const _triggerWindowState = (
+    challenge: Challenge,
+    challengeId: string,
+    now: number,
+    keys: {
+        enabledKey: string;
+        timesKey: string;
+        beforeEndKey: string;
+        durationKey: string;
+        defaultDurationMin: number;
+        onCorruptDuration: 'default' | 'off';
+        maxDurationMin: number | null;
+    },
+): { active: boolean; inWindow: boolean } => {
     if (settings.getEffectiveSetting(keys.enabledKey, challengeId) !== true) {
         return { active: false, inWindow: false };
     }
@@ -163,12 +171,13 @@ const _triggerWindowState = (challenge, challengeId, now, keys) => {
  * per-challenge catch reports the errors it sees, so swallowing one silently
  * here would make this the least visible failure in the pass.
  *
- * @param {Challenge} challenge
- * @param {string} challengeId
- * @param {number} now - Current time (Unix timestamp, seconds)
- * @returns {{active: boolean, inWindow: boolean, replaces: boolean}}
+ * @param now - Current time (Unix timestamp, seconds)
  */
-const getScheduledFillState = (challenge, challengeId, now) => {
+const getScheduledFillState = (
+    challenge: Challenge,
+    challengeId: string,
+    now: number,
+): { active: boolean; inWindow: boolean; replaces: boolean } => {
     const inactive = { active: false, inWindow: false, replaces: false };
     try {
         const state = _triggerWindowState(challenge, challengeId, now, {
@@ -218,12 +227,13 @@ const getScheduledFillState = (challenge, challengeId, now) => {
  *     last-minute rule that would otherwise rescue it also needs that value.
  * Every one of those paths logs; a silent pause is indistinguishable from a bug.
  *
- * @param {Challenge} challenge
- * @param {string} challengeId
- * @param {number} now - Current time (Unix timestamp, seconds)
- * @returns {{active: boolean, inWindow: boolean}}
+ * @param now - Current time (Unix timestamp, seconds)
  */
-const getVotingPauseState = (challenge, challengeId, now) => {
+const getVotingPauseState = (
+    challenge: Challenge,
+    challengeId: string,
+    now: number,
+): { active: boolean; inWindow: boolean } => {
     const notPaused = { active: false, inWindow: false };
     try {
         // A non-finite close_time defeats the deadline rules (last-minute and

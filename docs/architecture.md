@@ -47,7 +47,7 @@ Domain terms used throughout, in reader's terms:
 - The per-challenge action **runners are strictly sequential, never parallelised**: auto-fill mutates the
   shared challenge object (`reflectNewEntry`) so a later turbo/boost in the same cycle sees the new entry
   and the consumed slot.
-- The decision engine is `_runVotingRules()` (`services/decisions/ruleEngine.js` — around L65). Its precedence
+- The decision engine is `_runVotingRules()` (`services/decisions/ruleEngine.ts` — around L65). Its precedence
   order is load-bearing: onlyBoost → not-started / already-ended → flash (→100) → last-minute window
   (→100) → **pre-boost fill** (→100) → **voting pause** → scheduled-fill window → **pre-final-window top-up** →
   final-window rule → normal threshold. The **pre-boost fill** (`voteBeforeBoost`, default off) votes to
@@ -81,10 +81,10 @@ Domain terms used throughout, in reader's terms:
 - **Trigger ≠ target, and there are two _different_ sentinel families — do not merge them:**
     - `exposureTarget` / `finalWindowExposureTarget`: `0` or null means **"target == trigger"** — the rule
       stays **active**, it simply votes up to the trigger value.
-      `getEffectiveExposureTarget()` (`services/decisions/thresholds.js` — around L90); schema note in
+      `getEffectiveExposureTarget()` (`services/decisions/thresholds.ts` — around L90); schema note in
       `settings/schema.ts` (around L87).
     - `boostTime` / `emergencyFill` / `keyUnlockedBoostTime`: `0` means **feature off / never auto-apply**.
-      See the explicit comment in `getEffectiveKeyUnlockedBoostTime()` (`services/decisions/thresholds.js` — around
+      See the explicit comment in `getEffectiveKeyUnlockedBoostTime()` (`services/decisions/thresholds.ts` — around
       L129: _"An explicit 0 means 'never auto-apply', matching the 0-is-off convention boostTime and
       emergencyFill already use"_), and `maybeEmergencyFillChallenge()` (`services/autoFill/emergencyFill.js` — around
       L97: `emergencySeconds <= 0` → `'disabled'`).
@@ -95,7 +95,7 @@ Domain terms used throughout, in reader's terms:
   older rejection-sampling could loop forever on duplicate ids) and never posts an empty ballot
   (`api/voting.ts` — around L59, L155).
 - **≤1 boost and ≤1 turbo per challenge, on different entries** — enforced by `pickEntryAvoidingConflict()`
-  (`services/decisions/entryPick.js` — around L33) plus a `reflectEntryFlag` marker. Entry-pick logic lives in
+  (`services/decisions/entryPick.ts` — around L33) plus a `reflectEntryFlag` marker. Entry-pick logic lives in
   the shared decision core (behind the `VotingLogic` facade) rather than in `api/boost.ts` so mock mode honours the same rule.
 
 ## 2. Scheduling

@@ -1,4 +1,4 @@
-/** @import { Challenge } from '../../types/gurushots' */
+import type { Challenge } from '../../types/gurushots';
 /**
  * Boost and turbo apply decisions, including the Emergency Fill override.
  * Part of the services/VotingLogic facade.
@@ -9,13 +9,12 @@ import { isBoostWindowOpen as boostWindowOpen } from '../../voting/boostWindow';
 import { getEffectiveBoostTime, getEffectiveKeyUnlockedBoostTime, getEffectiveTurboTime } from './thresholds';
 import { pickEntryAvoidingConflict } from './entryPick';
 
-/**
- * @typedef {object} TurboDecision
- * @property {boolean} apply
- * @property {string|null} imageId
- * @property {boolean} fillNew
- * @property {string} reason
- */
+export interface TurboDecision {
+    apply: boolean;
+    imageId: string | null;
+    fillNew: boolean;
+    reason: string;
+}
 
 /**
  * True when the per-challenge Emergency Fill window is enabled (> 0) and the
@@ -27,11 +26,9 @@ import { pickEntryAvoidingConflict } from './entryPick';
  * boost/turbo on a closing challenge is simply wasted. Returns false (no
  * override) when Emergency Fill is disabled, so a user can opt out by setting it
  * to 0.
- * @param {Challenge} challenge
- * @param {number} now - Unix timestamp in seconds
- * @returns {boolean}
+ * @param now - Unix timestamp in seconds
  */
-const isWithinEmergencyWindow = (challenge, now) => {
+const isWithinEmergencyWindow = (challenge: Challenge, now: number): boolean => {
     if (!challenge) return false;
     const challengeId = challenge.id?.toString?.() || '';
     const emergencySeconds = settings.getEffectiveSetting('emergencyFill', challengeId);
@@ -48,14 +45,14 @@ const isWithinEmergencyWindow = (challenge, now) => {
  *   apply when timeUntilBoostExpires <= effectiveBoostTime
  * - Key-unlocked available (state === 'AVAILABLE_KEY' or available with no timeout):
  *   ignore boost timer completely and apply only if challenge ends in next 15 minutes
- * @param {Challenge} challenge - Challenge object
- * @param {number} now - Current time (Unix timestamp)
- * @param {{emergency?: boolean}} [options] - When `emergency` is true and the
+ * @param challenge - Challenge object
+ * @param now - Current time (Unix timestamp)
+ * @param options - When `emergency` is true and the
  *   challenge is inside the Emergency Fill window, apply any available boost
  *   regardless of the autoBoost toggle or the boostTime window.
- * @returns {boolean} - True if boost should be applied
+ * @returns True if boost should be applied
  */
-const shouldApplyBoost = (challenge, now, options = {}) => {
+const shouldApplyBoost = (challenge: Challenge, now: number, options: { emergency?: boolean } = {}): boolean => {
     if (!challenge) return false;
 
     // Never apply if challenge already ended or not started yet
@@ -119,12 +116,10 @@ const BOOST_HOLD_MARGIN_SEC = 60;
  * boost, the close time for a key-unlocked one), the boost goes now. An unknown
  * entry time (null, or 0 = already there when the app first saw the challenge)
  * never holds.
- * @param {Challenge} challenge
- * @param {number|null} enteredAt - when the target entry entered (Unix seconds)
- * @param {number} now - Unix timestamp in seconds
- * @returns {number|null}
+ * @param enteredAt - when the target entry entered (Unix seconds)
+ * @param now - Unix timestamp in seconds
  */
-const getBoostHoldUntil = (challenge, enteredAt, now) => {
+const getBoostHoldUntil = (challenge: Challenge, enteredAt: number | null, now: number): number | null => {
     const waitSec = settings.getEffectiveSetting('boostFreshEntryWait', challenge.id.toString());
     if (!Number.isFinite(waitSec) || waitSec <= 0 || !Number.isFinite(enteredAt) || Number(enteredAt) <= 0) {
         return null;
@@ -144,20 +139,17 @@ const getBoostHoldUntil = (challenge, enteredAt, now) => {
  * with an active timer, or AVAILABLE_KEY / AVAILABLE without timeout).
  * Used by shouldApplyBoost (its emergency path) and describeDeadlineActions
  * (the boost/turbo entry-conflict flag).
- * Predicate itself is shared with the renderer (voting/boostWindow.js).
- * @param {Challenge} challenge
- * @param {number} now - Unix timestamp in seconds
- * @returns {boolean}
+ * Predicate itself is shared with the renderer (voting/boostWindow.ts).
+ * @param now - Unix timestamp in seconds
  */
-const isBoostWindowOpen = (challenge, now) => boostWindowOpen(challenge?.member?.boost, now);
+const isBoostWindowOpen = (challenge: Challenge, now: number): boolean =>
+    boostWindowOpen(challenge?.member?.boost, now);
 
 /**
  * Decides whether to play the Turbo mini-game on a challenge.
- * @param {Challenge} challenge
- * @param {number} now - Unix timestamp in seconds
- * @returns {boolean}
+ * @param now - Unix timestamp in seconds
  */
-const shouldPlayAutoTurbo = (challenge, now) => {
+const shouldPlayAutoTurbo = (challenge: Challenge, now: number): boolean => {
     if (!challenge) return false;
     if (challenge.close_time <= now) return false;
 
@@ -187,11 +179,9 @@ const SAVED_TURBO_EARN_LEAD_SEC = 3600;
  * earn held back now is one a later "Win Turbo" mission can still count. The
  * caller lifts the hold while such a mission is active.
  *
- * @param {Challenge} challenge
- * @param {number} now - Unix timestamp in seconds
- * @returns {boolean}
+ * @param now - Unix timestamp in seconds
  */
-const isTurboEarnSaved = (challenge, now) => {
+const isTurboEarnSaved = (challenge: Challenge, now: number): boolean => {
     if (settings.getEffectiveSetting('missionSaveTurbos', null) !== true) return false;
     const challengeId = challenge.id?.toString?.() || '';
     return challenge.close_time - now > getEffectiveTurboTime(challengeId) + SAVED_TURBO_EARN_LEAD_SEC;
@@ -205,16 +195,17 @@ const isTurboEarnSaved = (challenge, now) => {
  * (fill-new can create the first entry) and `imageId` is returned only as a
  * fallback target for when the fresh submit can't happen.
  *
- * @param {Challenge} challenge
- * @param {number} now - Unix timestamp in seconds
- * @param {{emergency?: boolean}} [options] - When `emergency` is true and the
+ * @param now - Unix timestamp in seconds
+ * @param options - When `emergency` is true and the
  *   challenge is inside the Emergency Fill window, apply a won turbo regardless
  *   of the useTurbo toggle or the turboTime window.
- * @returns {{apply: boolean, imageId: string|null, fillNew: boolean, reason: string}}
  */
-const shouldApplyTurbo = (challenge, now, options = {}) => {
-    /** @param {string} reason @returns {TurboDecision} */
-    const noop = (reason) => ({ apply: false, imageId: null, fillNew: false, reason });
+const shouldApplyTurbo = (
+    challenge: Challenge,
+    now: number,
+    options: { emergency?: boolean } = {},
+): { apply: boolean; imageId: string | null; fillNew: boolean; reason: string } => {
+    const noop = (reason: string): TurboDecision => ({ apply: false, imageId: null, fillNew: false, reason });
     if (!challenge) return noop('no challenge');
     if (challenge.close_time <= now) return noop('challenge ended');
 

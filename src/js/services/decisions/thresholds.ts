@@ -11,13 +11,13 @@ import * as settings from '../../settings';
 /**
  * Check if a challenge is within its final window (the configurable stretch
  * before close during which the final-window exposure rule applies).
- * @param {number} closeTime - Challenge close time (Unix timestamp)
- * @param {number} now - Current time (Unix timestamp)
- * @param {number} [windowSec=3600] - Final-window duration in seconds
+ * @param closeTime - Challenge close time (Unix timestamp)
+ * @param now - Current time (Unix timestamp)
+ * @param windowSec - Final-window duration in seconds
  *   (finalWindowDuration). Defaults to one hour.
- * @returns {boolean} - True if within the final window
+ * @returns True if within the final window
  */
-const isWithinFinalWindow = (closeTime, now, windowSec = 3600) => {
+const isWithinFinalWindow = (closeTime: number, now: number, windowSec: number = 3600): boolean => {
     const timeUntilEnd = closeTime - now;
     return timeUntilEnd <= windowSec && timeUntilEnd > 0;
 };
@@ -36,52 +36,49 @@ const isWithinFinalWindow = (closeTime, now, windowSec = 3600) => {
  * Shared by the gate and by the log/message strings so the two can't disagree:
  * reading it raw for display while gating on the clamped value would print
  * "lastminute threshold (NaNm)" on a rule that had just fired at 10m.
- *
- * @param {string} challengeId
- * @returns {number}
  */
-const getEffectiveLastMinuteThreshold = (challengeId) => {
+const getEffectiveLastMinuteThreshold = (challengeId: string): number => {
     const threshold = Number(settings.getEffectiveSetting('lastMinuteThreshold', challengeId));
     return Number.isFinite(threshold) && threshold >= 1 && threshold <= 59 ? threshold : 10;
 };
 
 /**
  * Check if a challenge is within the last minute threshold
- * @param {number} closeTime - Challenge close time (Unix timestamp)
- * @param {number} now - Current time (Unix timestamp)
- * @param {string} challengeId - Challenge ID for settings lookup
- * @returns {boolean} - True if within last minute threshold
+ * @param closeTime - Challenge close time (Unix timestamp)
+ * @param now - Current time (Unix timestamp)
+ * @param challengeId - Challenge ID for settings lookup
+ * @returns True if within last minute threshold
  */
-const isWithinLastMinuteThreshold = (closeTime, now, challengeId) => {
+const isWithinLastMinuteThreshold = (closeTime: number, now: number, challengeId: string): boolean => {
     const timeUntilEnd = closeTime - now;
     return timeUntilEnd <= getEffectiveLastMinuteThreshold(challengeId) * 60 && timeUntilEnd > 0;
 };
 
 /**
  * Get the effective exposure threshold for a challenge
- * @param {string} challengeId - Challenge ID
- * @returns {number} - Effective exposure threshold
+ * @param challengeId - Challenge ID
+ * @returns Effective exposure threshold
  */
-const getEffectiveExposureThreshold = (challengeId) => {
+const getEffectiveExposureThreshold = (challengeId: string): number => {
     return settings.getEffectiveSetting('exposure', challengeId);
 };
 
 /**
  * Get the effective final-window exposure threshold for a challenge
- * @param {string} challengeId - Challenge ID
- * @returns {number} - Effective final-window exposure threshold
+ * @param challengeId - Challenge ID
+ * @returns Effective final-window exposure threshold
  */
-const getEffectiveFinalWindowExposureThreshold = (challengeId) => {
+const getEffectiveFinalWindowExposureThreshold = (challengeId: string): number => {
     return settings.getEffectiveSetting('finalWindowExposure', challengeId);
 };
 
 /**
  * Resolve the effective normal-rule vote target. The schema sentinel `0` means
  * "follow the exposure trigger" (target == trigger).
- * @param {string} challengeId - Challenge ID
- * @returns {number} - Effective target percentage
+ * @param challengeId - Challenge ID
+ * @returns Effective target percentage
  */
-const getEffectiveExposureTarget = (challengeId) => {
+const getEffectiveExposureTarget = (challengeId: string): number => {
     const raw = settings.getEffectiveSetting('exposureTarget', challengeId);
     // Treat the schema sentinel (0) and missing values (null/undefined from under-mocked
     // callers) the same — both mean "follow the trigger".
@@ -91,20 +88,20 @@ const getEffectiveExposureTarget = (challengeId) => {
 /**
  * Resolve the effective final-window-rule vote target. Sentinel `0` means
  * "follow the finalWindowExposure trigger".
- * @param {string} challengeId - Challenge ID
- * @returns {number} - Effective target percentage
+ * @param challengeId - Challenge ID
+ * @returns Effective target percentage
  */
-const getEffectiveFinalWindowExposureTarget = (challengeId) => {
+const getEffectiveFinalWindowExposureTarget = (challengeId: string): number => {
     const raw = settings.getEffectiveSetting('finalWindowExposureTarget', challengeId);
     return raw === 0 || raw == null ? getEffectiveFinalWindowExposureThreshold(challengeId) : raw;
 };
 
 /**
  * Get effective boost time for a challenge
- * @param {string} challengeId - Challenge ID
- * @returns {number} - Effective boost time in seconds
+ * @param challengeId - Challenge ID
+ * @returns Effective boost time in seconds
  */
-const getEffectiveBoostTime = (challengeId) => {
+const getEffectiveBoostTime = (challengeId: string): number => {
     return settings.getEffectiveSetting('boostTime', challengeId);
 };
 
@@ -115,10 +112,10 @@ const getEffectiveBoostTime = (challengeId) => {
  * own countdown, which a key-unlocked boost does not have. This one is measured against the
  * challenge's close time. Was a hardcoded 15 minutes; the default preserves that.
  *
- * @param {string} challengeId - Challenge ID
- * @returns {number} - Seconds before close within which a key-unlocked boost is applied
+ * @param challengeId - Challenge ID
+ * @returns Seconds before close within which a key-unlocked boost is applied
  */
-const getEffectiveKeyUnlockedBoostTime = (challengeId) => {
+const getEffectiveKeyUnlockedBoostTime = (challengeId: string): number => {
     const value = settings.getEffectiveSetting('keyUnlockedBoostTime', challengeId);
     // An explicit 0 means "never auto-apply", matching the 0-is-off convention boostTime and
     // emergencyFill already use, and it is a value both the schema and the GUI input accept —
@@ -130,11 +127,7 @@ const getEffectiveKeyUnlockedBoostTime = (challengeId) => {
     return Number.isFinite(raw) && raw >= 0 ? raw : 900;
 };
 
-/**
- * @param {string} challengeId
- * @returns {number}
- */
-const getEffectiveTurboTime = (challengeId) => {
+const getEffectiveTurboTime = (challengeId: string): number => {
     return settings.getEffectiveSetting('turboTime', challengeId);
 };
 

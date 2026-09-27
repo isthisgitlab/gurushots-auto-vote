@@ -1,4 +1,4 @@
-/** @import { Challenge } from '../../types/gurushots' */
+import type { Challenge } from '../../types/gurushots';
 /**
  * Pre-boost fill window: the vote-to-100% stretch ahead of an auto-applied
  * boost. Part of the services/VotingLogic facade.
@@ -22,13 +22,12 @@ import { oneLine as oneLineId } from '../../format/logSafe';
  * runs. Clamped to the schema's 1..59 minute range; anything outside it (a
  * hand-edited file, an under-mocked caller, a non-number) falls back to the
  * schema default of 15 minutes. The lower bound MUST match
- * soonestBoostPrefillStart's guard in thresholdWindow.js (>= 60s) so the vote
+ * soonestBoostPrefillStart's guard in thresholdWindow.ts (>= 60s) so the vote
  * rule and the scheduler's cadence cap can't disagree for the same corrupt input.
- * @param {string} challengeId
- * @returns {number} lead in seconds
+ * @returns lead in seconds
  */
-const getBoostPrefillLeadSec = (challengeId) => {
-    // Coerced, not read raw: both cadence resolvers hand thresholdWindow.js a
+const getBoostPrefillLeadSec = (challengeId: string): number => {
+    // Coerced, not read raw: both cadence resolvers hand thresholdWindow.ts a
     // `Number(...) * 60`, so reading the raw value here would let a hand-edited
     // string ("20") clamp to the 15m default on this side while the scheduler
     // capped on 20m. Coercing keeps the two guards genuinely identical.
@@ -71,12 +70,13 @@ const getBoostPrefillLeadSec = (challengeId) => {
  * boost windows), and the cost is a fill that arrives too late rather than a
  * wrong action.
  *
- * @param {Challenge} challenge
- * @param {string} challengeId
- * @param {number} now - Current time (Unix timestamp, seconds)
- * @returns {{active: boolean, inWindow: boolean}}
+ * @param now - Current time (Unix timestamp, seconds)
  */
-const getBoostPrefillState = (challenge, challengeId, now) => {
+const getBoostPrefillState = (
+    challenge: Challenge,
+    challengeId: string,
+    now: number,
+): { active: boolean; inWindow: boolean } => {
     const inactive = { active: false, inWindow: false };
     try {
         if (settings.getEffectiveSetting('voteBeforeBoost', challengeId) !== true) return inactive;
