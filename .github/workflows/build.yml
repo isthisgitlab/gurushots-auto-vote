@@ -259,7 +259,7 @@ jobs:
                   NODE_ENV: production
 
             # Same app without the local vision model and its runtime, for users
-            # who don't want it (scripts/electron-builder-lite.js → build/lite/).
+            # who don't want it (scripts/electron-builder-lite.ts → build/lite/).
             - name: Build lite Electron app
               if: matrix.platform != 'win' || matrix.variant == 'lite'
               run: pnpm build:${{ matrix.platform }}:lite
@@ -319,7 +319,7 @@ jobs:
               with:
                   node-version: '26'
 
-            # Cache the official nodejs.org binary that build-cli.js pulls into
+            # Cache the official nodejs.org binary that build-cli.ts pulls into
             # .cache/node-binaries (see the build-cli-arm job for the rationale).
             - name: Resolve Node version for CLI-binary cache key
               if: matrix.platform != 'win'
@@ -389,7 +389,7 @@ jobs:
               with:
                   node-version: '26'
 
-            # build-cli.js downloads the official nodejs.org binary for
+            # build-cli.ts downloads the official nodejs.org binary for
             # TARGET_NODE_VERSION (= process.versions.node) into
             # .cache/node-binaries. Cache it so each release doesn't re-pull the
             # ~40 MB tarball from nodejs.org. Keyed on the resolved Node version

@@ -11,7 +11,7 @@ export interface SearchGroup {
 
 /**
  * The parsed src/assets/semantic-vectors.json (v2 packed format, written by
- * scripts/build-lexicon.js). It is untrusted until buildTable checks it; the
+ * scripts/build-lexicon.ts). It is untrusted until buildTable checks it; the
  * fields are typed as buildTable reads them.
  */
 export interface RawLexicon {
