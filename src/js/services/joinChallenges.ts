@@ -752,6 +752,10 @@ const runJoinPass = async (
         missingCloseTimeLogged: false,
         earlyJoins: await earlyJoinsFor(token, deps, missions),
     };
+    // Explain up front why joins may land outside the configured timing.
+    if (pass.earlyJoins > 0) {
+        cat().info(`joining up to ${pass.earlyJoins} challenge(s) early for the active missions`, null);
+    }
 
     const results: Array<{ id: string | number | undefined; status: string }> = [];
     let joined = 0;

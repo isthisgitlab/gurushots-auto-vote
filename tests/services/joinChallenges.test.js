@@ -584,6 +584,11 @@ describe('runJoinPass — join window', () => {
                 k === 'autoJoinWithinHoursOfEnd' ? 24 : k === 'missionJoinEarly' ? on : DEFAULT_SETTINGS[k],
             );
         const statuses = (res) => res.results.map((r) => r.status);
+        const earlyNotices = () =>
+            require('../../src/js/logger')
+                .withCategory()
+                .info.mock.calls.map(([msg]) => msg)
+                .filter((msg) => msg.includes('early for the active missions'));
 
         test('a join mission lifts the window until it is met, and each join counts it down', async () => {
             withJoinEarly(true);
@@ -603,6 +608,7 @@ describe('runJoinPass — join window', () => {
             // A join is not a turbo win: the turbo mission counts down only when one is won.
             expect(missions.turbo).toBe(3);
             expect(deps.getActiveChallenges).toHaveBeenCalledWith('tok');
+            expect(earlyNotices()).toEqual(['joining up to 2 challenge(s) early for the active missions']);
         });
 
         test('turbos waiting in joined challenges (free, playing, on the timer) cover the mission', async () => {
@@ -669,6 +675,7 @@ describe('runJoinPass — join window', () => {
             withJoinEarly(true);
             const res = await runJoinPass('tok', NOW_MS, farDeps(), { join: 0, fill: 0, turbo: 0 });
             expect(statuses(res)).toEqual(['skipped:too-early', 'skipped:too-early', 'skipped:too-early']);
+            expect(earlyNotices()).toEqual([]);
         });
     });
 
