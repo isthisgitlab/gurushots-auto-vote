@@ -18,12 +18,23 @@ import type { IpcMain, IpcMainEvent, IpcMainInvokeEvent } from 'electron';
 
 /**
  * One handler as registered: `(event, ...args) => result`; `event` is null
- * when the CLI or the Capacitor bridge calls the handler directly. The rest args are
- * `any[]` because this is the heterogeneous registration map — each handler
- * declares (and validates) its own renderer-supplied argument types, which a
- * narrower element type here would reject under strict function-type checks.
+ * when the CLI or the Capacitor bridge calls the handler directly. The rest args
+ * are `never[]` because this is the heterogeneous registration map: every
+ * handler's own parameter list is assignable to it, whatever renderer-supplied
+ * argument types it declares.
  */
-export type IpcHandler = (event: IpcMainInvokeEvent | null, ...args: any[]) => unknown;
+export type IpcHandler = (event: IpcMainInvokeEvent | null, ...args: never[]) => unknown;
+
+/**
+ * Call a registered handler with what the renderer sent. The arguments are
+ * untrusted by construction; each handler validates its own at runtime, so the
+ * call site does not claim their types.
+ * @param impl - the registered handler
+ * @param event - the IPC event, or null on a direct call
+ * @param args - the renderer's arguments
+ */
+const invokeHandler = (impl: IpcHandler, event: IpcMainInvokeEvent | null, args: unknown[]): unknown =>
+    (impl as (event: IpcMainInvokeEvent | null, ...args: unknown[]) => unknown)(event, ...args);
 
 /**
  * What a handler may resolve to. `{ success?: boolean }` is listed so that,
@@ -73,7 +84,7 @@ const registerHandlers = (ipcMain: IpcMain, handlers: Record<string, IpcHandler>
                     );
                 return { success: false, error: 'Refused: untrusted sender' };
             }
-            return impl(event, ...args);
+            return invokeHandler(impl, event, args);
         });
     }
 };
@@ -81,4 +92,4 @@ const registerHandlers = (ipcMain: IpcMain, handlers: Record<string, IpcHandler>
 // isTrustedSender is exported so the handful of channels registered with ipcMain.on
 // (which carries no return value, so it cannot go through registerHandlers) can apply the
 // same origin check instead of silently having none.
-export { registerHandlers, isTrustedSender };
+export { registerHandlers, invokeHandler, isTrustedSender };

@@ -22,8 +22,8 @@ jest.mock('../../src/js/settings', () => {
     };
     return {
         __state: state,
-        getSetting: jest.fn((key) => state.cached[key]),
-        setSetting: jest.fn((key, value) => {
+        getSetting: jest.fn((key: string) => state.cached[key]),
+        setSetting: jest.fn((key: string, value: unknown) => {
             // Write-behind: only the in-memory cache updates synchronously.
             state.cached[key] = value;
         }),
@@ -38,7 +38,7 @@ jest.mock('../../src/js/settings', () => {
 import settingsModule = require('../../src/js/settings');
 const settings = jest.mocked(settingsModule as typeof settingsModule & { __state: SettingsState });
 import type * as authModule from '../../src/js/services/auth';
-const { clearAuthToken }: typeof authModule = require('../../src/js/services/auth');
+const { clearAuthToken } = require('../../src/js/services/auth') as typeof authModule;
 
 describe('clearAuthToken', () => {
     beforeEach(() => {
@@ -89,7 +89,7 @@ describe('clearAuthToken', () => {
  * Electron-specific.
  */
 describe('clearTokenUnlessStayingLoggedIn', () => {
-    const { clearTokenUnlessStayingLoggedIn }: typeof authModule = require('../../src/js/services/auth');
+    const { clearTokenUnlessStayingLoggedIn } = require('../../src/js/services/auth') as typeof authModule;
 
     beforeEach(() => {
         settings.__state.cached = { token: 'old-token', stayLoggedIn: false };

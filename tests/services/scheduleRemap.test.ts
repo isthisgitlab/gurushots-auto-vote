@@ -6,10 +6,8 @@
 
 import type * as scheduleRemapModule from '../../src/js/services/scheduleRemap';
 
-const {
-    getScheduleShift,
-    remapScheduleRows,
-}: typeof scheduleRemapModule = require('../../src/js/services/scheduleRemap');
+const { getScheduleShift, remapScheduleRows } =
+    require('../../src/js/services/scheduleRemap') as typeof scheduleRemapModule;
 
 const DEFAULT_SCHEDULE = [
     { count: 2, seconds: 1800 },

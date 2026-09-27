@@ -1,5 +1,5 @@
 /**
- * Bundles the Electron main process (src/js/index.js) into out/main/app.js,
+ * Bundles the Electron main process (src/js/index.ts) into out/main/app.js,
  * behind the out/main/index.js loader that package.json `main` points at.
  *
  * Only the app's own modules are bundled. Every package import stays a

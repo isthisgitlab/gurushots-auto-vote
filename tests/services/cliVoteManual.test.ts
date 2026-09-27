@@ -20,8 +20,8 @@ import settingsModule = require('../../src/js/settings');
 const settings = jest.mocked(settingsModule);
 import type * as manualVoteModule from '../../src/js/services/manualVote';
 import type * as BaseMiddlewareModule from '../../src/js/services/BaseMiddleware';
-const { voteAllChallengesManual } = jest.mocked<typeof manualVoteModule>(require('../../src/js/services/manualVote'));
-const { BaseMiddleware }: typeof BaseMiddlewareModule = require('../../src/js/services/BaseMiddleware');
+const { voteAllChallengesManual } = jest.mocked(require('../../src/js/services/manualVote') as typeof manualVoteModule);
+const { BaseMiddleware } = require('../../src/js/services/BaseMiddleware') as typeof BaseMiddlewareModule;
 import { invalid } from '../helpers/invalid';
 
 // A partial API: cliVoteManual only reads the active challenges.

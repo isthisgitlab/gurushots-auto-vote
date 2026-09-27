@@ -5,7 +5,7 @@
  * .cache/vision-model and dist/ are never touched.
  */
 
-// tests/setup.js globally mocks fs and path; this suite needs the real modules.
+// tests/setup.ts globally mocks fs and path; this suite needs the real modules.
 jest.unmock('fs');
 jest.unmock('node:fs');
 jest.unmock('path');
@@ -21,14 +21,8 @@ import type * as fetch_vision_modelModule from '../../scripts/fetch-vision-model
 import { invalid } from '../helpers/invalid';
 import type { VisionModelFile } from '../../scripts/fetch-vision-model';
 
-const {
-    FILES,
-    MODEL_DIR,
-    ensureVisionModel,
-    removeVisionWebAssets,
-    stageVisionWebAssets,
-    main,
-}: typeof fetch_vision_modelModule = require('../../scripts/fetch-vision-model');
+const { FILES, MODEL_DIR, ensureVisionModel, removeVisionWebAssets, stageVisionWebAssets, main } =
+    require('../../scripts/fetch-vision-model') as typeof fetch_vision_modelModule;
 
 const sha = (data: string) => crypto.createHash('sha256').update(data).digest('hex');
 const okResponse = (text: string) => invalid<Response>({ ok: true, status: 200, body: new Response(text).body });

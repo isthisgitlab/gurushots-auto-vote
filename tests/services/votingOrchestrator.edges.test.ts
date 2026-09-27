@@ -51,22 +51,22 @@ import type * as entryAgeStoreModule from '../../src/js/entryAgeStore';
 import type { Challenge } from '../../src/js/types/gurushots';
 import type { VotingPassDeps } from '../../src/js/types/votingPass';
 import { invalid } from '../helpers/invalid';
-const { runVotingPass }: typeof votingOrchestratorModule = require('../../src/js/services/votingOrchestrator');
-const { buildChallenge }: typeof challengeFixturesModule = require('../helpers/challengeFixtures');
-const { createMemoryEntryAgeLedger }: typeof entryAgeStoreModule = require('../../src/js/entryAgeStore');
+const { runVotingPass } = require('../../src/js/services/votingOrchestrator') as typeof votingOrchestratorModule;
+const { buildChallenge } = require('../helpers/challengeFixtures') as typeof challengeFixturesModule;
+const { createMemoryEntryAgeLedger } = require('../../src/js/entryAgeStore') as typeof entryAgeStoreModule;
 
 const NOW = Math.floor(Date.now() / 1000);
 
 // One shared category sink so every log line is assertable.
 const log = {
-    info: jest.fn(),
-    error: jest.fn(),
-    debug: jest.fn(),
-    success: jest.fn(),
-    warning: jest.fn(),
-    startOperation: jest.fn(),
-    endOperation: jest.fn(),
-    progress: jest.fn(),
+    info: jest.fn<void, unknown[]>(),
+    error: jest.fn<void, unknown[]>(),
+    debug: jest.fn<void, unknown[]>(),
+    success: jest.fn<void, unknown[]>(),
+    warning: jest.fn<void, unknown[]>(),
+    startOperation: jest.fn<void, unknown[]>(),
+    endOperation: jest.fn<void, unknown[]>(),
+    progress: jest.fn<void, unknown[]>(),
 };
 const messages = (level: keyof typeof log) =>
     log[level].mock.calls.map((c) => c.filter((a: unknown) => typeof a === 'string').join(' | '));

@@ -23,8 +23,9 @@ import settingsModule = require('../../src/js/settings');
 const settings = jest.mocked(settingsModule);
 import type * as runSchedulerModule from '../../src/js/scheduling/runScheduler';
 import type * as randomDelayModule from '../../src/js/scheduling/randomDelay';
-const { createScheduler }: typeof runSchedulerModule = require('../../src/js/scheduling/runScheduler');
-const { MIN_CYCLE_GAP_MS, MS_PER_MINUTE }: typeof randomDelayModule = require('../../src/js/scheduling/randomDelay');
+const { createScheduler } = require('../../src/js/scheduling/runScheduler') as typeof runSchedulerModule;
+type SchedulerDeps = Parameters<typeof createScheduler>[0];
+const { MIN_CYCLE_GAP_MS, MS_PER_MINUTE } = require('../../src/js/scheduling/randomDelay') as typeof randomDelayModule;
 
 const FIXED_DELAY_MIN = 3;
 const FIXED_DELAY_MS = FIXED_DELAY_MIN * MS_PER_MINUTE;
@@ -40,8 +41,8 @@ const flushMicrotasks = async () => {
 };
 
 describe('createScheduler — normal-mode cycle spacing', () => {
-    let runVotingCycle: jest.Mock;
-    let getActiveChallenges: jest.Mock;
+    let runVotingCycle: jest.MockedFunction<SchedulerDeps['runVotingCycle']>;
+    let getActiveChallenges: jest.MockedFunction<SchedulerDeps['getActiveChallenges']>;
     let scheduler: ReturnType<typeof createScheduler> | null;
 
     beforeEach(() => {
@@ -208,8 +209,8 @@ describe('createScheduler — normal-mode cycle spacing', () => {
 
 describe('createScheduler — threshold-aware cadence', () => {
     const LAST_MINUTE_THRESHOLD = 10; // minutes before close the window opens
-    let runVotingCycle: jest.Mock;
-    let getActiveChallenges: jest.Mock;
+    let runVotingCycle: jest.MockedFunction<SchedulerDeps['runVotingCycle']>;
+    let getActiveChallenges: jest.MockedFunction<SchedulerDeps['getActiveChallenges']>;
     let scheduler: ReturnType<typeof createScheduler> | null;
     let now: number;
     let lastMinuteCheckFrequencyValue: number; // mutable so a test can change it mid-run

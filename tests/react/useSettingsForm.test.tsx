@@ -3,7 +3,7 @@
  * hydrate-once-per-open, per-key fallback semantics, UI vs schema reset
  * handlers, commit() reporting rejected schema writes, and revert().
  * Persistence of global defaults goes through the mocked
- * window.api.setGlobalDefault (helpers/setup.js).
+ * window.api.setGlobalDefault (helpers/setup.ts).
  */
 
 import { renderHook, act, waitFor } from '@testing-library/preact';

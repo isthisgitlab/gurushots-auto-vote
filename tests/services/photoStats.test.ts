@@ -28,12 +28,20 @@ jest.mock('../../src/js/logger', () => {
 
 import photoStats = require('../../src/js/services/photoStats');
 import type { PickerPhoto } from '../../src/js/types/photoPicker';
+import type { RankDeps } from '../../src/js/types/autoFill';
+import type { PhotoStatsFile } from '../../src/js/services/photoStats';
+import type { CategoryLogger } from '../../src/js/logger';
+import { invalid } from '../helpers/invalid';
 const { enrichCandidates, resetPassState, MAX_ENRICH_PER_FILL, MAX_ENRICH_PER_PASS, MAX_CACHE_ENTRIES, STATS_TTL_MS } =
     photoStats;
-const { __level: log }: { __level: LevelMock } = require('../../src/js/logger');
+const { __level: log } = invalid<{ __level: LevelMock }>(require('../../src/js/logger'));
 
 /** The per-category logger double the logger mock above hands out (and exposes as `__level`). */
-type LevelMock = { info: jest.Mock; error: jest.Mock; debug: jest.Mock; success: jest.Mock; warning: jest.Mock };
+type LevelMock = {
+    [K in 'info' | 'error' | 'debug' | 'success' | 'warning']: jest.MockedFunction<CategoryLogger[K]>;
+};
+
+type GetImageData = NonNullable<RankDeps['getImageData']>;
 
 const photo = (id: string, extra: Partial<PickerPhoto> = {}) => ({
     id,
@@ -89,7 +97,7 @@ describe('photoStats.enrichCandidates', () => {
     });
 
     test('a "__proto__" key in the payload cannot pollute Object.prototype', async () => {
-        const evil = JSON.parse('{"votes":5,"views":5,"achievements":[],"__proto__":{"polluted":true}}');
+        const evil = JSON.parse('{"votes":5,"views":5,"achievements":[],"__proto__":{"polluted":true}}') as unknown;
         const getImageData = jest.fn().mockResolvedValue(evil);
         await enrichCandidates([photo('p1')], 'tok', { getImageData });
         expect(({} as { polluted?: unknown }).polluted).toBeUndefined();
@@ -116,7 +124,9 @@ describe('photoStats.enrichCandidates', () => {
     });
 
     test('prefers UNCACHED photos so coverage grows across fills', async () => {
-        const getImageData = jest.fn().mockResolvedValue(payload(1, 1));
+        const getImageData = jest
+            .fn<ReturnType<GetImageData>, Parameters<GetImageData>>()
+            .mockResolvedValue(payload(1, 1));
         const many = Array.from({ length: MAX_ENRICH_PER_FILL * 2 }, (_, i) => photo(`p${i}`));
 
         await enrichCandidates(many, 'tok', { getImageData });
@@ -193,7 +203,7 @@ describe('photoStats.enrichCandidates', () => {
         expect(out[0]).toEqual(
             expect.objectContaining({ votes: 373147, views: 12000, achievementCount: 10, statsKnown: true }),
         );
-        expect(JSON.parse(storeData).photos.portfolio.fetchedAt).toBe(fetchedAt);
+        expect((JSON.parse(storeData) as PhotoStatsFile).photos.portfolio.fetchedAt).toBe(fetchedAt);
     });
 
     test('a failed refresh preserves expired counts, including after the breaker opens', async () => {
@@ -213,7 +223,7 @@ describe('photoStats.enrichCandidates', () => {
         const second = await enrichCandidates(input, 'tok', { getImageData });
         expect(getImageData).not.toHaveBeenCalled();
         expect(second[0]).toEqual(expect.objectContaining({ votes: 100000, statsKnown: true }));
-        expect(JSON.parse(storeData).photos.portfolio.fetchedAt).toBe(fetchedAt);
+        expect((JSON.parse(storeData) as PhotoStatsFile).photos.portfolio.fetchedAt).toBe(fetchedAt);
     });
 
     test('one photo failing leaves only that photo unknown', async () => {
@@ -280,7 +290,9 @@ describe('photoStats.enrichCandidates', () => {
     test('never-measured photos are fetched before merely-stale ones', async () => {
         const now = Date.now();
         const nowSpy = jest.spyOn(Date, 'now').mockReturnValue(now);
-        const getImageData = jest.fn().mockResolvedValue(payload(1, 1));
+        const getImageData = jest
+            .fn<ReturnType<GetImageData>, Parameters<GetImageData>>()
+            .mockResolvedValue(payload(1, 1));
 
         // Measure 'stale' now, then jump past the TTL so it needs re-reading.
         await enrichCandidates([photo('stale', { views: 9999 })], 'tok', { getImageData });
@@ -302,7 +314,9 @@ describe('photoStats.enrichCandidates', () => {
     });
 
     test('within the never-measured group, higher-view photos are read first', async () => {
-        const getImageData = jest.fn().mockResolvedValue(payload(1, 1));
+        const getImageData = jest
+            .fn<ReturnType<GetImageData>, Parameters<GetImageData>>()
+            .mockResolvedValue(payload(1, 1));
         const many = [
             ...Array.from({ length: MAX_ENRICH_PER_FILL }, (_, i) => photo(`low${i}`, { views: 1 })),
             photo('high', { views: 5000 }),
@@ -315,7 +329,9 @@ describe('photoStats.enrichCandidates', () => {
     });
 
     test('a duplicate id does not burn two budget slots', async () => {
-        const getImageData = jest.fn().mockResolvedValue(payload(1, 1));
+        const getImageData = jest
+            .fn<ReturnType<GetImageData>, Parameters<GetImageData>>()
+            .mockResolvedValue(payload(1, 1));
         await enrichCandidates([photo('dup'), photo('dup'), photo('other')], 'tok', { getImageData });
         const fetched = getImageData.mock.calls.map(([id]) => id);
         expect(fetched.filter((id) => id === 'dup')).toHaveLength(1);
@@ -392,7 +408,7 @@ describe('photoStats.enrichCandidates', () => {
         const getImageData = jest.fn().mockResolvedValue(payload(1, 1));
         await enrichCandidates([photo('brand-new')], 'tok', { getImageData });
 
-        const persisted = JSON.parse(storeData).photos;
+        const persisted = (JSON.parse(storeData) as PhotoStatsFile).photos;
         expect(Object.keys(persisted).length).toBeLessThanOrEqual(MAX_CACHE_ENTRIES);
         // Newest survive, oldest are dropped — a flipped comparator would
         // silently invert this and nothing else would notice.

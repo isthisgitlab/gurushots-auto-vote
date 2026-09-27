@@ -45,6 +45,7 @@ import * as pkg from '../../../package.json';
 // preload.ts via the channel manifest so both shells derive identically.
 import { kebabToCamel, aliases, sendMethods, eventMethods } from '../ipc/manifest';
 
+import { invokeHandler } from '../ipc/registerHandlers';
 import type { IpcHandler } from '../ipc/registerHandlers';
 import type { CapacitorGlobals } from '../types/capacitor';
 import type { GuiLogSink } from '../logger';
@@ -98,7 +99,7 @@ const emit = (channel: string, payload?: unknown) => {
 const wrap =
     (impl: IpcHandler) =>
     (...args: unknown[]) =>
-        Promise.resolve(impl(null, ...args));
+        Promise.resolve(invokeHandler(impl, null, args));
 
 const buildAllHandlers = () => {
     // Every successful settings write (save-settings, set-setting and the

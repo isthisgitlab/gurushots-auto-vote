@@ -12,6 +12,7 @@ import { ChallengeSettingsModal } from '@/components/app/ChallengeSettingsModal'
 import { mockApi } from './helpers/setup';
 import type { useSettingsSchema } from '@/api/useSettingsSchema';
 import type { Challenge } from '../../src/js/types/gurushots';
+import type { ChallengeValues } from '../../src/js/types/settings';
 import { invalid } from '../helpers/invalid';
 
 // Belt-and-suspenders: the global setup wires window.api, but the
@@ -67,8 +68,8 @@ describe('ChallengeSettingsModal load cancellation', () => {
     test('discards a stale load when challengeId changes mid-fetch', async () => {
         // Two pending promises: the first call (for challenge "1") never
         // resolves until we say so; the second (for challenge "2") likewise.
-        let resolveForOne: (value: unknown) => void;
-        let resolveForTwo: (value: unknown) => void;
+        let resolveForOne: (value: ChallengeValues | null) => void;
+        let resolveForTwo: (value: ChallengeValues | null) => void;
         mockApi.getChallengeOverrides
             .mockImplementationOnce(
                 () =>
@@ -115,7 +116,7 @@ describe('ChallengeSettingsModal load cancellation', () => {
     });
 
     test('discards a stale load when the modal closes mid-fetch', async () => {
-        let resolveForOne: (value: unknown) => void;
+        let resolveForOne: (value: ChallengeValues | null) => void;
         mockApi.getChallengeOverrides.mockImplementationOnce(
             () =>
                 new Promise((r) => {
@@ -513,7 +514,7 @@ describe('ChallengeSettingsModal scheduled-fill hints', () => {
 
     beforeEach(() => {
         mockApi.getChallengeOverrides.mockReset().mockResolvedValue({});
-        mockApi.getSettings.mockReset().mockResolvedValue({ timezone: 'UTC', checkFrequencyMax: 3 });
+        mockApi.getSettings.mockReset().mockResolvedValue(invalid({ timezone: 'UTC', checkFrequencyMax: 3 }));
         mockApi.getChallengeProfiles.mockReset().mockResolvedValue({});
         for (const [key, extra] of Object.entries(SF_SCHEMA)) {
             mockSchemaState.schema![key] = invalid({
@@ -533,7 +534,7 @@ describe('ChallengeSettingsModal scheduled-fill hints', () => {
             delete mockSchemaState.defaults![key];
         }
         mockSchemaState.groups = mockSchemaState.groups!.filter((g) => g.id !== 'scheduledFill');
-        mockApi.getSettings.mockReset().mockResolvedValue({});
+        mockApi.getSettings.mockReset().mockResolvedValue(invalid({}));
     });
 
     const renderWithChallenge = (
@@ -653,7 +654,7 @@ describe('ChallengeSettingsModal scheduled-fill hints', () => {
     });
 
     test('(d) window shorter than checkFrequencyMax → short-window hint', async () => {
-        mockApi.getSettings.mockResolvedValue({ timezone: 'UTC', checkFrequencyMax: 30 });
+        mockApi.getSettings.mockResolvedValue(invalid({ timezone: 'UTC', checkFrequencyMax: 30 }));
         mockApi.getChallengeOverrides.mockResolvedValue({
             useScheduledFill: true,
             scheduledFillTime: ['21:30'],

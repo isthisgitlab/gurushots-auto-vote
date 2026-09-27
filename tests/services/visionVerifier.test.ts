@@ -36,14 +36,8 @@ const fs = jest.mocked(fsModule);
 import pathModule = require('node:path');
 const path = jest.mocked(pathModule);
 import type * as visionVerifierModule from '../../src/js/services/visionVerifier';
-const {
-    rankVisually,
-    hasBundledModel,
-    orderByVisualFit,
-    challengePrompts,
-    descriptionLead,
-    __resetForTests,
-}: typeof visionVerifierModule = require('../../src/js/services/visionVerifier');
+const { rankVisually, hasBundledModel, orderByVisualFit, challengePrompts, descriptionLead, __resetForTests } =
+    require('../../src/js/services/visionVerifier') as typeof visionVerifierModule;
 
 const hex = (seed: string) => seed.repeat(32).slice(0, 32);
 const photo = (id: string) => ({ id: hex(id), member_id: hex('f') });

@@ -46,18 +46,23 @@ describe('UpdateProvider + UpdateDialog', () => {
     beforeEach(() => {
         window.api = invalid(mockApi);
         events = {};
-        for (const name of ['onUpdateAvailable', 'onDownloadProgress', 'onUpdateDownloaded', 'onUpdateError']) {
+        for (const name of [
+            'onUpdateAvailable',
+            'onDownloadProgress',
+            'onUpdateDownloaded',
+            'onUpdateError',
+        ] as const) {
             mockApi[name].mockImplementation((cb) => {
-                events[name] = cb;
+                events[name] = cb as (payload?: unknown) => void;
                 return jest.fn();
             });
         }
-        mockApi.canAutoUpdate.mockResolvedValue({ canAutoUpdate: true });
-        mockApi.getReleasesUrl.mockResolvedValue({ url: 'https://example.test/releases' });
+        mockApi.canAutoUpdate.mockResolvedValue(invalid({ canAutoUpdate: true }));
+        mockApi.getReleasesUrl.mockResolvedValue(invalid({ url: 'https://example.test/releases' }));
         mockApi.downloadUpdate.mockResolvedValue({ success: true });
         mockApi.installUpdate.mockResolvedValue({ success: true });
-        mockApi.skipUpdateVersion.mockResolvedValue(undefined);
-        mockApi.openExternalUrl.mockResolvedValue(undefined);
+        mockApi.skipUpdateVersion.mockResolvedValue(invalid(undefined));
+        mockApi.openExternalUrl.mockResolvedValue(invalid(undefined));
     });
 
     it('useUpdate throws outside an UpdateProvider', () => {
@@ -74,16 +79,21 @@ describe('UpdateProvider + UpdateDialog', () => {
 
     it('unsubscribes every listener on unmount', () => {
         const { unmount } = renderDialog();
-        const unsubs = ['onUpdateAvailable', 'onDownloadProgress', 'onUpdateDownloaded', 'onUpdateError'].map(
-            (n) => mockApi[n].mock.results[0].value,
-        );
+        const unsubs = (
+            ['onUpdateAvailable', 'onDownloadProgress', 'onUpdateDownloaded', 'onUpdateError'] as const
+        ).map((n) => mockApi[n].mock.results[0].value as jest.Mock<void, []>);
         unmount();
         unsubs.forEach((fn) => expect(fn).toHaveBeenCalledTimes(1));
     });
 
     it('tolerates listeners that return no unsubscribe function', () => {
-        for (const name of ['onUpdateAvailable', 'onDownloadProgress', 'onUpdateDownloaded', 'onUpdateError']) {
-            mockApi[name].mockReturnValue(undefined);
+        for (const name of [
+            'onUpdateAvailable',
+            'onDownloadProgress',
+            'onUpdateDownloaded',
+            'onUpdateError',
+        ] as const) {
+            mockApi[name].mockReturnValue(invalid(undefined));
         }
         const { unmount } = renderDialog();
         expect(() => unmount()).not.toThrow();
@@ -220,7 +230,7 @@ describe('UpdateProvider + UpdateDialog', () => {
     });
 
     it('falls back to the browser when auto-update is unavailable', async () => {
-        mockApi.canAutoUpdate.mockResolvedValue({ canAutoUpdate: false });
+        mockApi.canAutoUpdate.mockResolvedValue(invalid({ canAutoUpdate: false }));
         const { container } = renderDialog();
         await emit('onUpdateAvailable', INFO);
         await clickAndSettle(screen.getByText('app.download'));

@@ -17,13 +17,13 @@ const LOG_METHODS = ['startLogStream', 'stopLogStream', 'onLogMessage', 'getLogB
 describe('useLogStream', () => {
     let originals: Record<string, unknown>;
     let emit: ((entry: FakeEntry) => void) | null;
-    let unsubscribe: jest.Mock;
+    let unsubscribe: jest.Mock<void, []>;
     let resolveBacklog: (entries: FakeEntry[]) => void;
 
     beforeEach(() => {
         originals = Object.fromEntries(LOG_METHODS.map((m) => [m, window.api[m]]));
         emit = null;
-        unsubscribe = jest.fn();
+        unsubscribe = jest.fn<void, []>();
         window.api.startLogStream = jest.fn().mockResolvedValue({ success: true });
         window.api.stopLogStream = jest.fn();
         invalid<{ onLogMessage: unknown }>(window.api).onLogMessage = jest.fn((cb: (entry: FakeEntry) => void) => {

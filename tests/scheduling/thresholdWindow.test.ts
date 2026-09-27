@@ -18,11 +18,8 @@ import { invalid } from '../helpers/invalid';
 type FinalWindowTopUpConfig = Awaited<ReturnType<thresholdWindowModule.ResolveFinalWindowTopUp>>;
 type BoostPrefillConfig = Awaited<ReturnType<thresholdWindowModule.ResolveBoostPrefill>>;
 
-const {
-    calculateNextThresholdEntry,
-    isAnyChallengeInThresholdWindow,
-    computeNextCycleDelayMs,
-}: typeof thresholdWindowModule = require('../../src/js/scheduling/thresholdWindow');
+const { calculateNextThresholdEntry, isAnyChallengeInThresholdWindow, computeNextCycleDelayMs } =
+    require('../../src/js/scheduling/thresholdWindow') as typeof thresholdWindowModule;
 
 // Two resolver shapes: Node (sync return) and WebView (Promise). Both yield 5.
 const resolvers = {

@@ -4,32 +4,32 @@
  */
 
 import type * as manifestModule from '../../../src/js/ipc/manifest';
+import type { WindowApi } from '../../../src/js/types/ipc';
 
-const {
-    invokeChannels,
-    aliases,
-    sendMethods,
-    eventMethods,
-    kebabToCamel,
-}: typeof manifestModule = require('../../../src/js/ipc/manifest');
+const { invokeChannels, aliases, sendMethods, eventMethods, kebabToCamel } =
+    require('../../../src/js/ipc/manifest') as typeof manifestModule;
 
 // Mock window.api for IPC calls. The base surface is GENERATED from the
 // shared channel manifest so every method preload/capacitor would expose
 // exists here too (a hook calling a brand-new channel can never hit
 // `undefined is not a function` in tests). The literal object below then
-// overrides the methods whose tests need tailored resolved values.
-const mockApi: Record<string, jest.Mock> = {};
+// overrides the methods whose tests need tailored resolved values. Each method
+// is typed as the jest mock of the real window.api method.
+type MockApi = { -readonly [K in keyof WindowApi]: jest.MockedFunction<WindowApi[K]> };
+const mockApi = {} as MockApi;
+// Filled by name from the manifest lists, which the checker cannot follow.
+const byName = mockApi as Record<string, unknown>;
 for (const channel of invokeChannels) {
-    mockApi[kebabToCamel(channel)] = jest.fn().mockResolvedValue(undefined);
+    byName[kebabToCamel(channel)] = jest.fn().mockResolvedValue(undefined);
 }
 for (const method of Object.keys(aliases)) {
-    mockApi[method] = jest.fn().mockResolvedValue(undefined);
+    byName[method] = jest.fn().mockResolvedValue(undefined);
 }
 for (const method of Object.keys(sendMethods)) {
-    mockApi[method] = jest.fn().mockResolvedValue(undefined);
+    byName[method] = jest.fn().mockResolvedValue(undefined);
 }
 for (const method of Object.keys(eventMethods)) {
-    mockApi[method] = jest.fn();
+    byName[method] = jest.fn();
 }
 
 Object.assign(mockApi, {
@@ -171,7 +171,7 @@ function fireSettingsChanged(payload?: object) {
 // ErrorBoundary and Modal translate through. `t` returns the key so tests can
 // assert on keys ('app.save'); override it per test with mockImplementation.
 const mockTranslator = {
-    t: jest.fn((key) => key),
+    t: jest.fn((key: string) => key),
     getCurrentLanguage: jest.fn().mockReturnValue('en'),
     setCurrentLanguage: jest.fn(),
 };
@@ -192,7 +192,8 @@ Object.assign(global.window, {
 beforeEach(() => {
     jest.clearAllMocks();
     settingsListeners.clear();
-    mockApi.onSettingsChanged = jest.fn(subscribeSettingsListener);
+    // The registry calls each listener with the new settings, as the shells do.
+    mockApi.onSettingsChanged = jest.fn((callback) => subscribeSettingsListener(callback as SettingsListener));
 });
 
 // Export mocks for use in tests

@@ -21,11 +21,8 @@ jest.mock('../../src/js/logger', () => ({
     })),
 }));
 
-const {
-    focusExistingWindow,
-    clearTokenOnQuit,
-    FORCE_EXIT_GRACE_MS,
-}: typeof lifecycleModule = require('../../src/js/windows/lifecycle');
+const { focusExistingWindow, clearTokenOnQuit, FORCE_EXIT_GRACE_MS } =
+    require('../../src/js/windows/lifecycle') as typeof lifecycleModule;
 
 describe('ensureExit', () => {
     let ensureExit: typeof lifecycleModule.ensureExit;
@@ -35,7 +32,7 @@ describe('ensureExit', () => {
         // The module keeps its pending timer in module-level state; a fresh
         // require per test keeps that state from bleeding across tests.
         jest.resetModules();
-        ({ ensureExit } = require('../../src/js/windows/lifecycle'));
+        ({ ensureExit } = require('../../src/js/windows/lifecycle') as typeof lifecycleModule);
         jest.useFakeTimers();
         processExitSpy = jest.spyOn(process, 'exit').mockImplementation(invalid(() => {}));
         mockApp.exit.mockReset();

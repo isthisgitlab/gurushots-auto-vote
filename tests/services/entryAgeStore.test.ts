@@ -6,11 +6,10 @@
 import logger = require('../../src/js/logger');
 import type * as entryAgeStoreModule from '../../src/js/entryAgeStore';
 import type { Challenge } from '../../src/js/types/gurushots';
+import type { EntryAgeRecord } from '../../src/js/types/stores';
 import { invalid } from '../helpers/invalid';
-const {
-    createEntryAgeLedger,
-    createMemoryEntryAgeLedger,
-}: typeof entryAgeStoreModule = require('../../src/js/entryAgeStore');
+const { createEntryAgeLedger, createMemoryEntryAgeLedger } =
+    require('../../src/js/entryAgeStore') as typeof entryAgeStoreModule;
 
 const NOW = 1_800_000_000;
 
@@ -21,7 +20,7 @@ const rawStore = (initial: string | null) => {
         writeRaw: jest.fn((data: string) => {
             raw = data;
         }),
-        peek: () => JSON.parse(raw!),
+        peek: () => JSON.parse(raw!) as Record<string, EntryAgeRecord>,
     };
     return store;
 };

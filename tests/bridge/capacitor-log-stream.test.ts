@@ -33,7 +33,7 @@ describe('Capacitor bridge — log streaming wiring', () => {
         delete g.api;
         delete g.sendLogToGUI;
         jest.resetModules();
-        const { installBridge }: typeof capacitorModule = require('../../src/js/bridge/capacitor');
+        const { installBridge } = require('../../src/js/bridge/capacitor') as typeof capacitorModule;
         api = installBridge();
     });
 

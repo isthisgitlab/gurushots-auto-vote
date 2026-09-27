@@ -17,18 +17,11 @@ import type * as nodeResolversModule from '../../src/js/scheduling/nodeResolvers
 import type * as scenarioStateStoreModule from '../../src/js/scenarioStateStore';
 import type { ScenarioDocument } from '../../src/js/settings/scenarioSchema';
 import { invalid } from '../helpers/invalid';
-const {
-    getScenarioStatus,
-    scenarioWakeInput,
-    ledgerForMode,
-}: typeof scenarioStatusModule = require('../../src/js/services/scenarioStatus');
-const { resolveScenarioWake }: typeof nodeResolversModule = require('../../src/js/scheduling/nodeResolvers');
-const {
-    createMemoryStateLedger,
-    initialState,
-    scenarioStateLedger,
-    mockScenarioStateLedger,
-}: typeof scenarioStateStoreModule = require('../../src/js/scenarioStateStore');
+const { getScenarioStatus, scenarioWakeInput, ledgerForMode } =
+    require('../../src/js/services/scenarioStatus') as typeof scenarioStatusModule;
+const { resolveScenarioWake } = require('../../src/js/scheduling/nodeResolvers') as typeof nodeResolversModule;
+const { createMemoryStateLedger, initialState, scenarioStateLedger, mockScenarioStateLedger } =
+    require('../../src/js/scenarioStateStore') as typeof scenarioStateStoreModule;
 
 const scenario = invalid<ScenarioDocument>({ name: 'Plan', version: 1, start: 'main', phases: { main: {} } });
 let topLevel: Record<string, unknown>;

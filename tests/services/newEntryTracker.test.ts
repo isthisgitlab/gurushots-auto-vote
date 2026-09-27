@@ -8,13 +8,8 @@
  * positional compare would force a vote on every single cycle.
  */
 
-const {
-    readEntryIds,
-    hasNewEntries,
-    shouldRecordSnapshot,
-    createMemoryEntryTracker,
-    createMetadataEntryTracker,
-}: typeof newEntryTrackerModule = require('../../src/js/services/newEntryTracker');
+const { readEntryIds, hasNewEntries, shouldRecordSnapshot, createMemoryEntryTracker, createMetadataEntryTracker } =
+    require('../../src/js/services/newEntryTracker') as typeof newEntryTrackerModule;
 import metadataModule = require('../../src/js/metadata');
 const metadata = jest.mocked(metadataModule);
 import loggerModule = require('../../src/js/logger');
@@ -187,7 +182,7 @@ describe('createMetadataEntryTracker — persistence outcome logging', () => {
     afterEach(() => jest.restoreAllMocks());
 
     test('warns when metadata refuses the write, stays quiet when it succeeds', () => {
-        const warning = jest.fn();
+        const warning = jest.fn<void, [message: string, data?: unknown]>();
         jest.spyOn(logger, 'withCategory').mockReturnValue({ warning });
         const tracker = createMetadataEntryTracker();
 
@@ -219,7 +214,7 @@ describe('cap fallback when metadata exports are not finite', () => {
     afterEach(() => jest.restoreAllMocks());
 
     test('falls back to 64 for both caps and warns once per cap', () => {
-        const warning = jest.fn();
+        const warning = jest.fn<void, [message: string, data?: unknown]>();
         // The setup-level logger mock is already instantiated in the shared mock
         // registry, so an isolated doMock of it would be ignored — spy instead.
         jest.spyOn(logger, 'withCategory').mockReturnValue({ warning });
@@ -230,7 +225,7 @@ describe('cap fallback when metadata exports are not finite', () => {
         metadata.MAX_ENTRY_ID_LENGTH = invalid(Number.NaN);
         try {
             jest.isolateModules(() => {
-                const isolated: typeof newEntryTrackerModule = require('../../src/js/services/newEntryTracker');
+                const isolated = require('../../src/js/services/newEntryTracker') as typeof newEntryTrackerModule;
 
                 const entries = Array.from({ length: 70 }, (_, i) => ({ id: `e${i}` }));
                 entries[0] = { id: 'x'.repeat(65) }; // over the fallback length cap → dropped

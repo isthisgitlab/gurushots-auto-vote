@@ -31,11 +31,11 @@ const metadata = jest.mocked(metadataModule);
 import apiFactoryModule = require('../../src/js/apiFactory');
 const apiFactory = jest.mocked(apiFactoryModule);
 import type * as settings_handlersModule from '../../src/js/ipc/settings.handlers';
-const { buildHandlers, register }: typeof settings_handlersModule = require('../../src/js/ipc/settings.handlers');
+const { buildHandlers, register } = require('../../src/js/ipc/settings.handlers') as typeof settings_handlersModule;
 
 type ChannelImpl = Parameters<IpcMain['handle']>[1];
 // Rows that address settings methods and handler channels by name.
-type MockTable = Record<string, jest.Mock>;
+type MockTable = Record<string, jest.Mock<never, unknown[]>>;
 type HandlerTable = Record<string, (...args: unknown[]) => unknown>;
 
 const boom = () => {

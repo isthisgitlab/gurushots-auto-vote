@@ -8,17 +8,11 @@ import type * as schemaModule from '../../src/js/settings/schema';
 import type * as intentProfilesModule from '../../src/js/settings/intentProfiles';
 import { invalid } from '../helpers/invalid';
 
-const { z }: typeof zodModule = require('zod');
-const {
-    SETTINGS_SCHEMA,
-    validateSetting,
-    getValidationError,
-}: typeof schemaModule = require('../../src/js/settings/schema');
-const {
-    INTENT_PROFILES,
-    getIntentByName,
-    intentValuesMatch,
-}: typeof intentProfilesModule = require('../../src/js/settings/intentProfiles');
+const { z } = require('zod') as typeof zodModule;
+const { SETTINGS_SCHEMA, validateSetting, getValidationError } =
+    require('../../src/js/settings/schema') as typeof schemaModule;
+const { INTENT_PROFILES, getIntentByName, intentValuesMatch } =
+    require('../../src/js/settings/intentProfiles') as typeof intentProfilesModule;
 
 describe('schema validation fallbacks', () => {
     test('an unknown key is always valid and has no error', () => {

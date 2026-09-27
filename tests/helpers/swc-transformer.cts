@@ -13,9 +13,9 @@
  */
 // CommonJS TypeScript that Node strips natively: Jest loads a transformer by
 // path before any transform runs, so this file cannot rely on one.
-const crypto: typeof import('node:crypto') = require('node:crypto');
-const fs: typeof import('node:fs') = require('node:fs');
-const swcJest: typeof import('@swc/jest') = require('@swc/jest');
+const crypto = require('node:crypto') as typeof import('node:crypto');
+const fs = require('node:fs') as typeof import('node:fs');
+const swcJest = require('@swc/jest') as typeof import('@swc/jest');
 
 // Jest's Sync | Async transformer union; @swc/jest returns the synchronous one,
 // with processAsync and getCacheKey implemented too.

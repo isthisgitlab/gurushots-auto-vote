@@ -55,8 +55,8 @@ jest.mock('../../src/js/settings', () => ({
 jest.mock('../../src/js/api/randomizer', () => ({ initializeHeaders: jest.fn() }));
 
 jest.mock('../../src/js/cli/guards', () => ({
-    requireChallenge: jest.fn(({ challengeId }) => challengeId),
-    requireProfileArgs: jest.fn((command, { rest }) => rest[0]),
+    requireChallenge: jest.fn(({ challengeId }: { challengeId: string | null }) => challengeId),
+    requireProfileArgs: jest.fn((command: string, { rest }: { rest: string[] }) => rest[0]),
 }));
 
 jest.mock('../../src/js/cli/commands/auth', () => ({ handleLogin: jest.fn(), handleLogout: jest.fn() }));
@@ -161,19 +161,19 @@ const run = async (argv: string[], setup?: (mods: Mods) => void) => {
     process.argv = ['node', 'cli.ts', ...argv];
     jest.isolateModules(() => {
         m = invalid<Loaded>({
-            logger: require('../../src/js/logger'),
-            settings: require('../../src/js/settings'),
-            randomizer: require('../../src/js/api/randomizer'),
-            guards: require('../../src/js/cli/guards'),
-            auth: require('../../src/js/cli/commands/auth'),
-            voting: require('../../src/js/cli/commands/voting'),
-            actions: require('../../src/js/cli/commands/actions'),
-            bankroll: require('../../src/js/cli/commands/bankroll'),
-            join: require('../../src/js/cli/commands/join'),
-            update: require('../../src/js/cli/commands/update'),
-            logs: require('../../src/js/cli/commands/logs'),
-            cmd: require('../../src/js/cli/commands/settings'),
-            scenarios: require('../../src/js/cli/commands/scenarios'),
+            logger: require('../../src/js/logger') as typeof loggerModule,
+            settings: require('../../src/js/settings') as typeof settingsModule,
+            randomizer: require('../../src/js/api/randomizer') as typeof randomizerModule,
+            guards: require('../../src/js/cli/guards') as typeof guardsModule,
+            auth: require('../../src/js/cli/commands/auth') as typeof authModule,
+            voting: require('../../src/js/cli/commands/voting') as typeof votingModule,
+            actions: require('../../src/js/cli/commands/actions') as typeof actionsModule,
+            bankroll: require('../../src/js/cli/commands/bankroll') as typeof bankrollModule,
+            join: require('../../src/js/cli/commands/join') as typeof joinModule,
+            update: require('../../src/js/cli/commands/update') as typeof updateModule,
+            logs: require('../../src/js/cli/commands/logs') as typeof logsModule,
+            cmd: require('../../src/js/cli/commands/settings') as typeof settingsCommandsModule,
+            scenarios: require('../../src/js/cli/commands/scenarios') as typeof scenariosModule,
         });
         setup?.(m);
         require('../../src/js/cli/cli');
@@ -288,7 +288,9 @@ describe('simple commands', () => {
         ['reset-windows', 'cmd', 'resetWindows'],
     ])('%s → %s.%s and exits 0', async (command, mod, fn) => {
         const m = await run([command]);
-        expect(invalid<Record<string, Record<string, jest.Mock>>>(m)[mod][fn]).toHaveBeenCalledTimes(1);
+        expect(
+            invalid<Record<string, Record<string, jest.Mock<unknown, unknown[]>>>>(m)[mod][fn],
+        ).toHaveBeenCalledTimes(1);
         expect(m.exitCodes).toEqual([0]);
     });
 

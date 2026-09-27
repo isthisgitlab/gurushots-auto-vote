@@ -15,9 +15,8 @@ import type { WindowApi } from '../../src/js/types/ipc';
 import type { Challenge } from '../../src/js/types/gurushots';
 import { invalid } from '../helpers/invalid';
 
-const {
-    computeNextCycleDelayMs,
-}: typeof autovoteSchedulerModule = require('../../src/js/react/contexts/autovoteScheduler');
+const { computeNextCycleDelayMs } =
+    require('../../src/js/react/contexts/autovoteScheduler') as typeof autovoteSchedulerModule;
 
 describe('autovoteScheduler helpers', () => {
     let getEffectiveSetting: jest.MockedFunction<WindowApi['getEffectiveSetting']>;

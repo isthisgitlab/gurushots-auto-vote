@@ -4,14 +4,11 @@
 
 import type * as submissionsModule from '../../src/js/api/submissions';
 import type * as api_clientModule from '../../src/js/api/api-client';
+import type { CategoryLogger } from '../../src/js/logger';
 import { invalid } from '../helpers/invalid';
 
-const {
-    getEligiblePhotos,
-    getImageData,
-    submitToChallenge,
-    MAX_LIBRARY_PAGES,
-}: typeof submissionsModule = require('../../src/js/api/submissions');
+const { getEligiblePhotos, getImageData, submitToChallenge, MAX_LIBRARY_PAGES } =
+    require('../../src/js/api/submissions') as typeof submissionsModule;
 
 jest.mock('../../src/js/api/api-client', () => ({
     makePostRequest: jest.fn(),
@@ -25,7 +22,7 @@ jest.mock('../../src/js/logger', () => {
 
 describe('submissions', () => {
     const token = 'tok-123';
-    const { makePostRequest } = jest.mocked<typeof api_clientModule>(require('../../src/js/api/api-client'));
+    const { makePostRequest } = jest.mocked(require('../../src/js/api/api-client') as typeof api_clientModule);
 
     beforeEach(() => {
         jest.clearAllMocks();
@@ -94,8 +91,13 @@ describe('submissions', () => {
 
     describe('getEligiblePhotos pagination', () => {
         // The logger factory above also exports its shared level object.
-        const { __level: log }: { __level: Record<'info' | 'error' | 'debug' | 'success' | 'warning', jest.Mock> } =
-            invalid(require('../../src/js/logger'));
+        const {
+            __level: log,
+        }: {
+            __level: {
+                [K in 'info' | 'error' | 'debug' | 'success' | 'warning']: jest.MockedFunction<CategoryLogger[K]>;
+            };
+        } = invalid(require('../../src/js/logger'));
         // limit=2 keeps the page arithmetic readable; a "short" page is <limit.
         const page = (...ids: string[]) => ({ items: ids.map((id) => ({ id })) });
 
@@ -311,7 +313,7 @@ describe('submissions', () => {
 
 describe('getEligiblePhotos usage option', () => {
     const token = 'tok-123';
-    const { makePostRequest } = jest.mocked<typeof api_clientModule>(require('../../src/js/api/api-client'));
+    const { makePostRequest } = jest.mocked(require('../../src/js/api/api-client') as typeof api_clientModule);
 
     beforeEach(() => jest.clearAllMocks());
 

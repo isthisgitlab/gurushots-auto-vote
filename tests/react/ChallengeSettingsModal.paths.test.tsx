@@ -9,6 +9,7 @@ import { ChallengeSettingsModal } from '@/components/app/ChallengeSettingsModal'
 import { mockApi, mockTranslator } from './helpers/setup';
 import type { useSettingsSchema } from '@/api/useSettingsSchema';
 import type { Challenge } from '../../src/js/types/gurushots';
+import type { AppSettings } from '../../src/js/types/settings';
 import { invalid } from '../helpers/invalid';
 
 const field = (group: string, type: string, dflt: unknown) => ({
@@ -84,12 +85,12 @@ beforeEach(() => {
     mockTranslator.t.mockImplementation((key) => TEMPLATES[key] ?? key);
     mockApi.getTitleProfile.mockReset().mockResolvedValue(null);
     mockApi.getChallengeOverrides.mockReset().mockResolvedValue({});
-    mockApi.getSettings.mockReset().mockResolvedValue({ timezone: 'UTC', checkFrequencyMax: 30 });
+    mockApi.getSettings.mockReset().mockResolvedValue(invalid({ timezone: 'UTC', checkFrequencyMax: 30 }));
     mockApi.getChallengeProfiles.mockReset().mockResolvedValue({});
     mockApi.replaceChallengeOverrides.mockReset().mockResolvedValue(true);
     mockApi.saveChallengeProfile.mockReset().mockResolvedValue(true);
     mockApi.deleteChallengeProfile.mockReset().mockResolvedValue(true);
-    mockApi.logError.mockReset().mockResolvedValue(undefined);
+    mockApi.logError.mockReset().mockResolvedValue(invalid(undefined));
 });
 
 afterEach(() => {
@@ -176,7 +177,7 @@ describe('loading', () => {
     });
 
     test('app settings fall back to defaults when unreadable', async () => {
-        mockApi.getSettings.mockResolvedValue(null);
+        mockApi.getSettings.mockResolvedValue(invalid(null));
         const { unmount } = renderModal();
         await loaded();
         unmount();
@@ -187,11 +188,11 @@ describe('loading', () => {
     });
 
     test('app settings that resolve or fail after close are ignored', async () => {
-        let resolve: (value: unknown) => void;
+        let resolve: (value: AppSettings) => void;
         mockApi.getSettings.mockImplementation(() => new Promise((r) => (resolve = r)));
         const { rerender, onClose } = renderModal();
         rerender(<ChallengeSettingsModal isOpen={false} onClose={onClose} challengeId="1" challengeTitle="x" />);
-        await act(async () => resolve({ timezone: 'UTC' }));
+        await act(async () => resolve(invalid({ timezone: 'UTC' })));
 
         let reject: (reason?: unknown) => void;
         mockApi.getSettings.mockImplementation(() => new Promise((_, r) => (reject = r)));
@@ -437,7 +438,7 @@ describe('voting pause hints', () => {
             { timezone: 'UTC', checkFrequencyMax: 30 },
         ],
     ])('no short-pause warning when %s', async (_label, overrides, settings) => {
-        mockApi.getSettings.mockResolvedValue(settings);
+        mockApi.getSettings.mockResolvedValue(invalid(settings));
         mockApi.getChallengeOverrides.mockResolvedValue(overrides);
         renderModal();
         await loaded();
@@ -487,7 +488,7 @@ describe('pre-boost fill hints', () => {
 
 describe('window time formatting', () => {
     test('an unknown app timezone falls back to a UTC HH:MM label', async () => {
-        mockApi.getSettings.mockResolvedValue({ timezone: 'Not/AZone', checkFrequencyMax: 0 });
+        mockApi.getSettings.mockResolvedValue(invalid({ timezone: 'Not/AZone', checkFrequencyMax: 0 }));
         mockApi.getChallengeOverrides.mockResolvedValue({ useScheduledFill: true, scheduledFillBeforeEnd: [600] });
         renderModal();
         await loaded();

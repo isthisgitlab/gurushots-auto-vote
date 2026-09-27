@@ -8,6 +8,7 @@ import { useState } from 'react';
 import { ErrorBoundary } from '@/components/ui/ErrorBoundary';
 import { mockApi } from './helpers/setup';
 import { invalid } from '../helpers/invalid';
+import type { WindowApi } from '../../src/js/types/ipc';
 
 // Pin window.api per-test — the global test setup occasionally loses it
 // across files. Keeps this suite hermetic.
@@ -63,8 +64,10 @@ describe('ErrorBoundary', () => {
         );
 
         expect(mockApi.logError).toHaveBeenCalledTimes(1);
-        expect(mockApi.logError.mock.calls[0][0]).toMatch(/React error boundary caught/);
-        expect(mockApi.logError.mock.calls[0][0]).toMatch(/boom from child/);
+        expect(jest.mocked(mockApi.logError as WindowApi['logError']).mock.calls[0][0]).toMatch(
+            /React error boundary caught/,
+        );
+        expect(jest.mocked(mockApi.logError as WindowApi['logError']).mock.calls[0][0]).toMatch(/boom from child/);
     });
 
     test('dismiss recovers children once the underlying throw is gone', () => {

@@ -17,7 +17,7 @@ const lexicon = jest.mocked(lexiconModule);
 import type * as validate_lexiconModule from '../../scripts/validate-lexicon';
 import type { ConceptsConfig } from '../../scripts/build-lexicon';
 import { invalid } from '../helpers/invalid';
-const { main, checkSubjectCases }: typeof validate_lexiconModule = require('../../scripts/validate-lexicon');
+const { main, checkSubjectCases } = require('../../scripts/validate-lexicon') as typeof validate_lexiconModule;
 
 // Fake lexicon: embed() mean-pools the known words (null when none are known),
 // cosine() is a plain dot product. 'nan' embeds to a non-finite vector so the

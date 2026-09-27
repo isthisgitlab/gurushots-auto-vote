@@ -11,7 +11,7 @@ import type { WindowApi } from '../../src/js/types/ipc';
 import type { UpdateSummary } from '../../src/js/services/AutoUpdater';
 
 let mockSkipStore = '';
-const mockCheck = jest.fn();
+const mockCheck = jest.fn<Promise<unknown>, unknown[]>();
 
 jest.mock('../../src/js/ipc/settings.handlers', () => ({ buildHandlers: () => ({}) }));
 jest.mock('../../src/js/ipc/voting.handlers', () => ({ buildHandlers: () => ({}) }));
@@ -25,7 +25,7 @@ jest.mock('../../src/js/services/UpdateChecker', () => ({
 }));
 jest.mock('../../src/js/settings', () => ({
     getSetting: jest.fn((key) => (key === 'skipUpdateVersion' ? mockSkipStore : undefined)),
-    setSetting: jest.fn((key, value) => {
+    setSetting: jest.fn((key: string, value: string) => {
         if (key === 'skipUpdateVersion') mockSkipStore = value;
     }),
 }));
@@ -45,7 +45,7 @@ describe('Capacitor bridge — update skip', () => {
         // Reset the module registry so the bridge's module-level
         // lastUpdateInfo cache doesn't leak between tests.
         jest.resetModules();
-        const { installBridge }: typeof capacitorModule = require('../../src/js/bridge/capacitor');
+        const { installBridge } = require('../../src/js/bridge/capacitor') as typeof capacitorModule;
         api = installBridge();
     });
 

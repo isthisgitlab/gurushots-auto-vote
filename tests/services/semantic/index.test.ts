@@ -1,6 +1,6 @@
 /**
  * Tests for the semantic scorer orchestrator (getSemanticScores), exercised
- * end-to-end against the real shipped lexicon data. (tests/setup.js mocks
+ * end-to-end against the real shipped lexicon data. (tests/setup.ts mocks
  * fs/path, so the asset loader is mocked to return the real JSON — see
  * lexicon.test.ts for the same pattern.)
  *
@@ -12,7 +12,7 @@ const realFs = jest.requireActual<typeof import('fs')>('fs');
 const realPath = jest.requireActual<typeof import('path')>('path');
 const mockLexicon = JSON.parse(
     realFs.readFileSync(realPath.join(__dirname, '..', '..', '..', 'src', 'assets', 'semantic-vectors.json'), 'utf8'),
-);
+) as RawLexicon;
 
 jest.mock('../../../src/js/services/semantic/assets', () => ({
     loadLexiconAsset: async () => mockLexicon,
@@ -24,20 +24,18 @@ jest.mock('../../../src/js/services/semantic/diagnostics', () => ({
     shouldCollect: jest.fn(() => false),
 }));
 
-const { getSemanticScores, __resetForTests }: typeof semanticModule = require('../../../src/js/services/semantic');
-const { diagnostics, shouldCollect } = jest.mocked<typeof diagnosticsModule>(
-    require('../../../src/js/services/semantic/diagnostics'),
+const { getSemanticScores, __resetForTests } = require('../../../src/js/services/semantic') as typeof semanticModule;
+const { diagnostics, shouldCollect } = jest.mocked(
+    require('../../../src/js/services/semantic/diagnostics') as typeof diagnosticsModule,
 );
 import lexicon = require('../../../src/js/services/semantic/lexicon');
 import type * as semanticModule from '../../../src/js/services/semantic';
 import type * as diagnosticsModule from '../../../src/js/services/semantic/diagnostics';
+import type { RawLexicon } from '../../../src/js/types/semantic';
 import type * as photoPickerModule from '../../../src/js/services/photoPicker';
 import { invalid } from '../../helpers/invalid';
-const {
-    SEMANTIC_MATCH_FLOOR,
-    SEMANTIC_SUPPORT_CAP,
-    pickPhotosForChallenge,
-}: typeof photoPickerModule = require('../../../src/js/services/photoPicker');
+const { SEMANTIC_MATCH_FLOOR, SEMANTIC_SUPPORT_CAP, pickPhotosForChallenge } =
+    require('../../../src/js/services/photoPicker') as typeof photoPickerModule;
 
 const challenge = {
     title: 'Feline Friends',

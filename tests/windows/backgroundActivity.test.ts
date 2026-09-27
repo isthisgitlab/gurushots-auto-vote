@@ -41,7 +41,8 @@ describe('syncBackgroundActivity', () => {
         jest.clearAllMocks();
         mockPowerSaveBlocker.start.mockReturnValue(7);
         mockPowerSaveBlocker.isStarted.mockReturnValue(true);
-        ({ syncBackgroundActivity } = require('../../src/js/windows/backgroundActivity'));
+        ({ syncBackgroundActivity } =
+            require('../../src/js/windows/backgroundActivity') as typeof backgroundActivityModule);
     });
 
     test('starts prevent-app-suspension when auto-vote starts running', () => {
@@ -135,8 +136,8 @@ describe('syncBackgroundActivity', () => {
 
     test('a non-Error throw is still reported in the warning text', () => {
         const warning = jest.fn();
-        jest.mocked<typeof import('../../src/js/logger')>(
-            require('../../src/js/logger'),
+        jest.mocked(
+            require('../../src/js/logger') as typeof import('../../src/js/logger'),
         ).withCategory.mockReturnValueOnce(invalid({ warning }));
         mockPowerSaveBlocker.start.mockImplementationOnce(() => {
             throw 'EPERM';

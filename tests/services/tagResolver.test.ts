@@ -12,7 +12,7 @@ import { invalid } from '../helpers/invalid';
 
 type TagDeps = Parameters<typeof tagResolverModule.resolveTermsToTags>[2];
 
-// tests/setup.js mocks `fs` globally, so the loader's own read comes back
+// tests/setup.ts mocks `fs` globally, so the loader's own read comes back
 // undefined and the lexicon would silently report itself unavailable — which
 // would quietly turn every semantic assertion below into a vacuous pass. Load
 // the shipped asset through the REAL fs instead, so these tests exercise the
@@ -32,11 +32,8 @@ jest.mock('../../src/js/services/semantic/assets', () => {
     };
 });
 
-const {
-    resolveTermsToTags,
-    MAX_RESOLVED_TAGS,
-    isLexicalMatch,
-}: typeof tagResolverModule = require('../../src/js/services/tagResolver');
+const { resolveTermsToTags, MAX_RESOLVED_TAGS, isLexicalMatch } =
+    require('../../src/js/services/tagResolver') as typeof tagResolverModule;
 
 const makeLogger = () => {
     const category = { info: jest.fn(), warning: jest.fn(), debug: jest.fn(), error: jest.fn(), success: jest.fn() };

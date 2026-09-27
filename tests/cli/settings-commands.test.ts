@@ -19,7 +19,7 @@ jest.mock('../../src/js/logger', () => {
     return {
         withCategory: jest.fn(withCategory),
         // formatSettingForLog redacts via this; return a passthrough shape.
-        sanitizeForLog: jest.fn((obj) => obj),
+        sanitizeForLog: jest.fn((obj: unknown) => obj),
     };
 });
 
@@ -36,7 +36,7 @@ const {
     applyProfile,
     deleteProfile,
     formatSettingForLog,
-}: typeof settingsCommandsModule = require('../../src/js/cli/commands/settings');
+} = require('../../src/js/cli/commands/settings') as typeof settingsCommandsModule;
 
 describe('CLI settings commands — per-challenge support', () => {
     beforeEach(() => {

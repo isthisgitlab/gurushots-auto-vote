@@ -15,7 +15,7 @@ import { invalid } from '../helpers/invalid';
  */
 const flattenKeys = (obj: object, prefix: string = ''): string[] => {
     const keys = [];
-    for (const [key, value] of Object.entries(obj)) {
+    for (const [key, value] of Object.entries(obj as Record<string, unknown>)) {
         const path = prefix ? `${prefix}.${key}` : key;
         if (value && typeof value === 'object' && !Array.isArray(value)) {
             keys.push(...flattenKeys(value, path));
@@ -53,9 +53,9 @@ describe('translation parity', () => {
 });
 
 describe('renderer translation keys exist', () => {
-    // fs is mocked globally in tests/setup.js; this test reads real sources.
+    // fs is mocked globally in tests/setup.ts; this test reads real sources.
     const fs = jest.requireActual<typeof fsModule>('fs');
-    const path: typeof pathModule = require('path');
+    const path = require('path') as typeof pathModule;
 
     // Literal t('section.key') calls only — dynamic keys (t(variable)) can't be
     // checked statically. A missing key renders as the raw key string in the

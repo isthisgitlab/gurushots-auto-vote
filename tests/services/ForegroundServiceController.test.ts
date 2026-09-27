@@ -29,7 +29,7 @@ describe('ForegroundServiceController', () => {
 
     beforeEach(() => {
         jest.resetModules();
-        runtime = jest.mocked<typeof RuntimeModule>(require('../../src/js/runtime'));
+        runtime = jest.mocked(require('../../src/js/runtime') as typeof RuntimeModule);
         runtime.isCapacitor.mockReturnValue(true);
         // Happy defaults; individual tests override as needed.
         mockFsPlugin.checkPermissions.mockResolvedValue({ display: 'granted' });
@@ -37,7 +37,7 @@ describe('ForegroundServiceController', () => {
         mockFsPlugin.startForegroundService.mockResolvedValue(undefined);
         mockFsPlugin.updateForegroundService.mockResolvedValue(undefined);
         mockFsPlugin.stopForegroundService.mockResolvedValue(undefined);
-        controller = require('../../src/js/services/ForegroundServiceController');
+        controller = require('../../src/js/services/ForegroundServiceController') as typeof controller;
     });
 
     describe('when not running on Capacitor (no-op)', () => {
@@ -125,14 +125,15 @@ describe('ForegroundServiceController', () => {
             throw new Error('native module missing');
         });
         const warning = jest.fn();
-        jest.mocked<typeof import('../../src/js/logger')>(
-            require('../../src/js/logger'),
+        jest.mocked(
+            require('../../src/js/logger') as typeof import('../../src/js/logger'),
         ).withCategory.mockReturnValueOnce(invalid({ warning }));
-        jest.mocked<typeof import('../../src/js/runtime')>(require('../../src/js/runtime')).isCapacitor.mockReturnValue(
-            true,
-        );
+        jest.mocked(
+            require('../../src/js/runtime') as typeof import('../../src/js/runtime'),
+        ).isCapacitor.mockReturnValue(true);
         try {
-            const isolated: typeof ForegroundServiceControllerModule = require('../../src/js/services/ForegroundServiceController');
+            const isolated =
+                require('../../src/js/services/ForegroundServiceController') as typeof ForegroundServiceControllerModule;
 
             await expect(isolated.start()).resolves.toBe(false);
             expect(mockFsPlugin.startForegroundService).not.toHaveBeenCalled();

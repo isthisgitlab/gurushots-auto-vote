@@ -3,7 +3,7 @@
  * flips Electron fuses. @electron/fuses is mocked so no binary is touched.
  */
 
-// tests/setup.js globally mocks fs and path; this suite needs the real modules.
+// tests/setup.ts globally mocks fs and path; this suite needs the real modules.
 jest.unmock('fs');
 jest.unmock('node:fs');
 jest.unmock('path');
@@ -30,7 +30,7 @@ import type * as fusesModule from '@electron/fuses';
 import type afterPackHook from '../../scripts/afterPack.mts';
 import type { AfterPackContext } from 'electron-builder';
 import { invalid } from '../helpers/invalid';
-const { flipFuses, FuseV1Options } = jest.mocked<typeof fusesModule>(require('@electron/fuses'));
+const { flipFuses, FuseV1Options } = jest.mocked(require('@electron/fuses') as typeof fusesModule);
 const afterPack = (require('../../scripts/afterPack') as { default: typeof afterPackHook }).default;
 
 // A partial context: only the fields afterPack reads.

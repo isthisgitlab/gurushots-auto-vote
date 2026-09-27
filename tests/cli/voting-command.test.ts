@@ -56,30 +56,28 @@ import type * as runSchedulerModule from '../../src/js/scheduling/runScheduler';
 import type * as boostWindowModule from '../../src/js/voting/boostWindow';
 import type * as authModule from '../../src/js/services/auth';
 import type * as votingModule from '../../src/js/cli/commands/voting';
+import type * as votingHandlersModule from '../../src/js/ipc/voting.handlers';
 import { invalid } from '../helpers/invalid';
-const { __mw: mw } = jest.mocked<
-    typeof apiFactoryModule & {
-        __mw: {
-            isAuthenticated: jest.Mock;
-            getActiveChallenges: jest.Mock;
-            cliVote: jest.Mock;
-            cliVoteManual: jest.Mock;
-        };
-    }
->(require('../../src/js/apiFactory'));
-const { createScheduler } = jest.mocked<typeof runSchedulerModule>(require('../../src/js/scheduling/runScheduler'));
-const { openBoostWindows } = jest.mocked<typeof boostWindowModule>(require('../../src/js/voting/boostWindow'));
-const { clearTokenUnlessStayingLoggedIn } = jest.mocked<typeof authModule>(require('../../src/js/services/auth'));
+const { __mw: mw } = jest.mocked(
+    require('../../src/js/apiFactory') as typeof apiFactoryModule & {
+        __mw: jest.Mocked<
+            Pick<
+                ReturnType<typeof apiFactoryModule.getMiddleware>,
+                'isAuthenticated' | 'getActiveChallenges' | 'cliVote' | 'cliVoteManual'
+            >
+        >;
+    },
+);
+const { createScheduler } = jest.mocked(require('../../src/js/scheduling/runScheduler') as typeof runSchedulerModule);
+const { openBoostWindows } = jest.mocked(require('../../src/js/voting/boostWindow') as typeof boostWindowModule);
+const { clearTokenUnlessStayingLoggedIn } = jest.mocked(require('../../src/js/services/auth') as typeof authModule);
 // The handler-module mocks expose their jest.fn table for the assertions.
-type HandlersMock = { __handlers: Record<string, jest.Mock> };
+type HandlersMock = {
+    __handlers: jest.Mocked<Pick<ReturnType<typeof votingHandlersModule.buildHandlers>, 'vote-on-challenge-manual'>>;
+};
 const votingHandlers = invalid<HandlersMock>(require('../../src/js/ipc/voting.handlers')).__handlers;
-const {
-    runVotingCycle,
-    voteChallengeManual,
-    parseChallengeFlag,
-    startContinuousVoting,
-    showStatus,
-}: typeof votingModule = require('../../src/js/cli/commands/voting');
+const { runVotingCycle, voteChallengeManual, parseChallengeFlag, startContinuousVoting, showStatus } =
+    require('../../src/js/cli/commands/voting') as typeof votingModule;
 
 const msgs = (level: string) => logger.__calls.filter((c) => c.level === level).map((c) => String(c.msg));
 
@@ -91,7 +89,7 @@ beforeEach(() => {
         (m) => m.mockReset(),
     );
     mw.isAuthenticated.mockReturnValue(true);
-    mw.getActiveChallenges.mockResolvedValue({ challenges: [{ id: 111, title: 'Sunset' }] });
+    mw.getActiveChallenges.mockResolvedValue(invalid({ challenges: [{ id: 111, title: 'Sunset' }] }));
     settings.loadSettings.mockReturnValue(invalid({ mock: true }));
     openBoostWindows.mockReturnValue([]);
 });
@@ -107,7 +105,7 @@ describe('runVotingCycle', () => {
     });
 
     test('scoped strategy cycle names the challenge', async () => {
-        mw.cliVote.mockResolvedValue(undefined);
+        mw.cliVote.mockResolvedValue(invalid(undefined));
         await expect(runVotingCycle(4, { challengeId: '9' })).resolves.toEqual({ success: true, challenges: null });
         expect(mw.cliVote).toHaveBeenCalledWith('9');
         expect(msgs('info')[0]).toBe('--- Voting Cycle 4 (challenge 9) (MOCK MODE) ---');
@@ -148,7 +146,7 @@ describe('voteChallengeManual fallbacks', () => {
     });
 
     test('a response without a list reports not found', async () => {
-        mw.getActiveChallenges.mockResolvedValue(undefined);
+        mw.getActiveChallenges.mockResolvedValue(invalid(undefined));
         await expect(voteChallengeManual('111')).resolves.toEqual({
             success: false,
             error: 'Challenge 111 not found',
@@ -156,14 +154,14 @@ describe('voteChallengeManual fallbacks', () => {
     });
 
     test('success without a message uses the default wording', async () => {
-        votingHandlers['vote-on-challenge-manual'].mockResolvedValue({ success: true });
+        votingHandlers['vote-on-challenge-manual'].mockResolvedValue(invalid({ success: true }));
         await voteChallengeManual('111');
         expect(votingHandlers['vote-on-challenge-manual']).toHaveBeenCalledWith(null, '111', 'Sunset');
         expect(msgs('success')).toEqual(['Voted on "Sunset"']);
     });
 
     test('failure without an error uses the default wording and returns the result', async () => {
-        votingHandlers['vote-on-challenge-manual'].mockResolvedValue(null);
+        votingHandlers['vote-on-challenge-manual'].mockResolvedValue(invalid(null));
         await expect(voteChallengeManual('111')).resolves.toBeNull();
         expect(msgs('error')).toEqual(['Failed to vote']);
     });
@@ -190,7 +188,7 @@ describe('parseChallengeFlag', () => {
 });
 
 describe('startContinuousVoting', () => {
-    let scheduler: { start: jest.Mock; stop: jest.Mock };
+    let scheduler: jest.Mocked<Pick<ReturnType<typeof createScheduler>, 'start' | 'stop'>>;
     let signalHandlers: Record<string | symbol, (...args: unknown[]) => void>;
     let onSpy: jest.SpiedFunction<typeof process.on>;
     let resumeSpy: jest.SpiedFunction<typeof process.stdin.resume>;
@@ -310,7 +308,7 @@ describe('showStatus', () => {
     });
 
     test('a non-array challenge list is treated as empty', async () => {
-        mw.getActiveChallenges.mockResolvedValue({ challenges: 'bad' });
+        mw.getActiveChallenges.mockResolvedValue(invalid({ challenges: 'bad' }));
         await showStatus();
         expect(openBoostWindows).toHaveBeenCalledWith([], expect.any(Number));
     });

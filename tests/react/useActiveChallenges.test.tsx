@@ -13,19 +13,19 @@ import { invalid } from '../helpers/invalid';
 describe('useActiveChallenges', () => {
     beforeEach(() => {
         window.api = invalid(mockApi);
-        mockApi.getSettings.mockReset().mockResolvedValue({ token: 'tok' });
+        mockApi.getSettings.mockReset().mockResolvedValue(invalid({ token: 'tok' }));
         mockApi.getActiveChallenges.mockReset().mockResolvedValue({ challenges: [] });
     });
 
     test('a null result with a token sets fetch_failed and preserves prior data', async () => {
-        mockApi.getActiveChallenges.mockResolvedValueOnce({ challenges: [{ id: 1 }] });
+        mockApi.getActiveChallenges.mockResolvedValueOnce(invalid({ challenges: [{ id: 1 }] }));
 
         const { result } = renderHook(() => useActiveChallenges());
         await waitFor(() => expect(result.current.loading).toBe(false));
         expect(result.current.data).toEqual([{ id: 1 }]);
         expect(result.current.error).toBeNull();
 
-        mockApi.getActiveChallenges.mockResolvedValueOnce(null);
+        mockApi.getActiveChallenges.mockResolvedValueOnce(invalid(null));
         await act(async () => {
             await result.current.refetch();
         });
@@ -41,7 +41,7 @@ describe('useActiveChallenges', () => {
         // a plain empty list and rendered as "no active challenges", leaving the banner this
         // hook exists to drive permanently dead. The fetchFailed marker is what distinguishes
         // an outage from an account that genuinely has nothing active.
-        mockApi.getActiveChallenges.mockResolvedValueOnce({ challenges: [{ id: 1 }] });
+        mockApi.getActiveChallenges.mockResolvedValueOnce(invalid({ challenges: [{ id: 1 }] }));
 
         const { result } = renderHook(() => useActiveChallenges());
         await waitFor(() => expect(result.current.loading).toBe(false));
@@ -59,7 +59,7 @@ describe('useActiveChallenges', () => {
     test('a genuinely empty list is not treated as a failure', async () => {
         // The other half of the distinction: having no active challenges is a valid state,
         // and must still clear the list rather than showing a stale one behind an error.
-        mockApi.getActiveChallenges.mockResolvedValueOnce({ challenges: [{ id: 1 }] });
+        mockApi.getActiveChallenges.mockResolvedValueOnce(invalid({ challenges: [{ id: 1 }] }));
 
         const { result } = renderHook(() => useActiveChallenges());
         await waitFor(() => expect(result.current.loading).toBe(false));
@@ -74,7 +74,7 @@ describe('useActiveChallenges', () => {
     });
 
     test('a fetchFailed result without a token does NOT raise an error', async () => {
-        mockApi.getSettings.mockResolvedValue({ token: '' });
+        mockApi.getSettings.mockResolvedValue(invalid({ token: '' }));
         mockApi.getActiveChallenges.mockResolvedValue({ challenges: [], fetchFailed: true });
 
         const { result } = renderHook(() => useActiveChallenges());
@@ -84,8 +84,8 @@ describe('useActiveChallenges', () => {
     });
 
     test('a null result without a token does NOT raise an error', async () => {
-        mockApi.getSettings.mockResolvedValue({ token: '' });
-        mockApi.getActiveChallenges.mockResolvedValue(null);
+        mockApi.getSettings.mockResolvedValue(invalid({ token: '' }));
+        mockApi.getActiveChallenges.mockResolvedValue(invalid(null));
 
         const { result } = renderHook(() => useActiveChallenges());
         await waitFor(() => expect(result.current.loading).toBe(false));
@@ -95,12 +95,12 @@ describe('useActiveChallenges', () => {
     });
 
     test('a prior error clears on the next successful fetch', async () => {
-        mockApi.getActiveChallenges.mockResolvedValueOnce(null);
+        mockApi.getActiveChallenges.mockResolvedValueOnce(invalid(null));
 
         const { result } = renderHook(() => useActiveChallenges());
         await waitFor(() => expect(result.current.error).not.toBeNull());
 
-        mockApi.getActiveChallenges.mockResolvedValueOnce({ challenges: [{ id: 2 }] });
+        mockApi.getActiveChallenges.mockResolvedValueOnce(invalid({ challenges: [{ id: 2 }] }));
         await act(async () => {
             await result.current.refetch();
         });

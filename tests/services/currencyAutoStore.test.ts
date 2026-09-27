@@ -5,10 +5,9 @@
 
 import logger = require('../../src/js/logger');
 import type * as currencyAutoStoreModule from '../../src/js/currencyAutoStore';
-const {
-    createAutoSpendLedger,
-    createMemoryAutoSpendLedger,
-}: typeof currencyAutoStoreModule = require('../../src/js/currencyAutoStore');
+const { createAutoSpendLedger, createMemoryAutoSpendLedger } =
+    require('../../src/js/currencyAutoStore') as typeof currencyAutoStoreModule;
+import type { AutoSpendRecord } from '../../src/js/types/stores';
 import { invalid } from '../helpers/invalid';
 
 const rawStore = (initial: string | null) => {
@@ -18,7 +17,7 @@ const rawStore = (initial: string | null) => {
         writeRaw: (data: string) => {
             raw = data;
         },
-        peek: () => JSON.parse(raw!),
+        peek: () => JSON.parse(raw!) as Record<string, AutoSpendRecord>,
     };
 };
 

@@ -11,13 +11,14 @@ import type { IpcMain } from 'electron';
 import { invalid } from '../helpers/invalid';
 
 // The factory below also exposes the per-category loggers it hands out.
-type MockedLogger = jest.MockedObject<typeof loggerModule> & { categories: Record<string, Record<string, jest.Mock>> };
+type CategoryMock = jest.Mocked<Pick<loggerModule.CategoryLogger, 'debug' | 'error' | 'warning' | 'api'>>;
+type MockedLogger = jest.MockedObject<typeof loggerModule> & { categories: Record<string, CategoryMock> };
 type Handlers = ReturnType<typeof logHandlersModule.buildHandlers>;
 type ChannelImpl = Parameters<IpcMain['handle']>[1];
 const g = global as typeof global & { sendLogToGUI?: unknown };
 
 jest.mock('../../src/js/logger', () => {
-    const categories: Record<string, Record<string, jest.Mock>> = {};
+    const categories: Record<string, CategoryMock> = {};
     const withCategory = jest.fn((name: string) => {
         categories[name] = categories[name] || {
             debug: jest.fn(),
@@ -47,7 +48,7 @@ describe('log.handlers — stream lifecycle', () => {
     // empty each time — no registered webContents bleeds across tests.
     beforeEach(() => {
         jest.resetModules();
-        logHandlers = require('../../src/js/ipc/log.handlers');
+        logHandlers = require('../../src/js/ipc/log.handlers') as typeof logHandlers;
         handlers = logHandlers.buildHandlers();
     });
 
@@ -79,7 +80,7 @@ describe('log.handlers — renderer log writes and file lookups', () => {
 
     beforeEach(() => {
         jest.resetModules();
-        logger = require('../../src/js/logger');
+        logger = require('../../src/js/logger') as typeof logger;
         handlers = (
             require('../../src/js/ipc/log.handlers') as typeof import('../../src/js/ipc/log.handlers')
         ).buildHandlers();
@@ -124,8 +125,8 @@ describe('log.handlers — stream edge cases and register', () => {
 
     beforeEach(() => {
         jest.resetModules();
-        logger = require('../../src/js/logger');
-        logHandlers = require('../../src/js/ipc/log.handlers');
+        logger = require('../../src/js/logger') as typeof logger;
+        logHandlers = require('../../src/js/ipc/log.handlers') as typeof logHandlers;
         handlers = logHandlers.buildHandlers();
     });
 

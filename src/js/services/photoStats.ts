@@ -52,6 +52,9 @@ import type { ErrorLike, FillLogger, RankDeps } from '../types/autoFill';
  */
 type PhotoStatsEntry = { votes: number; views: number; achievementCount: number; fetchedAt: number };
 
+/** The persisted stats cache file. */
+export type PhotoStatsFile = { version: number; photos: Record<string, PhotoStatsEntry> };
+
 // Newly fetched photos per fill. Cache hits do not count against this — a
 // fully-cached candidate set enriches completely with zero requests.
 const MAX_ENRICH_PER_FILL = 25;
@@ -196,7 +199,8 @@ const persistCache = () => {
         // Object.keys; this is the matching write-side guard.
         const photos = Object.create(null) as Record<string, PhotoStatsEntry>;
         for (const [id, entry] of cache) photos[id] = entry;
-        statsStore.writeRaw(JSON.stringify({ version: 1, photos }));
+        const file: PhotoStatsFile = { version: 1, photos };
+        statsStore.writeRaw(JSON.stringify(file));
         cacheDirty = false;
     } catch (error) {
         logger

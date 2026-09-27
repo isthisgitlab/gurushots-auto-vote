@@ -20,12 +20,8 @@ const settings = jest.mocked(settingsModule);
 import type * as autoClaimModule from '../../src/js/services/autoClaim';
 import type { RewardsBySection } from '../../src/js/types/gurushots';
 import { invalid } from '../helpers/invalid';
-const {
-    CLAIM_INTERVAL_MS,
-    getAutoClaimStatus,
-    runClaimPass,
-    resetClaimThrottle,
-}: typeof autoClaimModule = require('../../src/js/services/autoClaim');
+const { CLAIM_INTERVAL_MS, getAutoClaimStatus, runClaimPass, resetClaimThrottle } =
+    require('../../src/js/services/autoClaim') as typeof autoClaimModule;
 
 const T0 = 1_790_000_000_000;
 

@@ -9,7 +9,7 @@ import settingsModule = require('../../src/js/settings');
 const settings = jest.mocked(settingsModule);
 import VotingLogic = require('../../src/js/services/VotingLogic');
 import type * as challengeFixturesModule from '../helpers/challengeFixtures';
-const { buildChallenge }: typeof challengeFixturesModule = require('../helpers/challengeFixtures');
+const { buildChallenge } = require('../helpers/challengeFixtures') as typeof challengeFixturesModule;
 import type { Challenge } from '../../src/js/types/gurushots';
 import { invalid } from '../helpers/invalid';
 

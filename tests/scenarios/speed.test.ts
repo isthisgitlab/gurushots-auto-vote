@@ -11,16 +11,10 @@ import type { Challenge } from '../../src/js/types/gurushots';
 import type { ComparisonOp, Duration, EntryCondition, ScenarioCondition } from '../../src/js/types/scenario';
 import { invalid } from '../helpers/invalid';
 
-const {
-    recordVoteSample,
-    votesPerHour,
-    speedRatio,
-    SAMPLE_SPACING_SEC,
-    HISTORY_KEEP_SEC,
-    MAX_SAMPLES,
-}: typeof speedModule = require('../../src/js/scenarios/speed');
-const { selectEntry }: typeof selectorsModule = require('../../src/js/scenarios/selectors');
-const { evaluateCondition }: typeof conditionsModule = require('../../src/js/scenarios/conditions');
+const { recordVoteSample, votesPerHour, speedRatio, SAMPLE_SPACING_SEC, HISTORY_KEEP_SEC, MAX_SAMPLES } =
+    require('../../src/js/scenarios/speed') as typeof speedModule;
+const { selectEntry } = require('../../src/js/scenarios/selectors') as typeof selectorsModule;
+const { evaluateCondition } = require('../../src/js/scenarios/conditions') as typeof conditionsModule;
 
 const NOW = 1_800_000_000;
 const H = 3600;

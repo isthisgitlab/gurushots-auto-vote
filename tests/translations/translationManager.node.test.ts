@@ -15,12 +15,12 @@ const INDEX = '../../src/js/translations/index';
 const load = (getSetting: () => unknown) => {
     jest.resetModules();
     jest.doMock(SETTINGS, () => ({ getSetting: jest.fn(getSetting) }));
-    const logger = jest.mocked<typeof import('../../src/js/logger')>(require(LOGGER));
+    const logger = jest.mocked(require(LOGGER) as typeof import('../../src/js/logger'));
     const log = { warning: jest.fn() };
     logger.withCategory.mockReturnValue(invalid(log));
     return {
         ...(require(INDEX) as typeof import('../../src/js/translations/index')),
-        settings: jest.mocked<typeof import('../../src/js/settings')>(require(SETTINGS)),
+        settings: jest.mocked(require(SETTINGS) as typeof import('../../src/js/settings')),
         logger,
         log,
     };

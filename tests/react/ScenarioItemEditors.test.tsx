@@ -52,7 +52,8 @@ function Probe({
     );
 }
 
-const value = () => JSON.parse(screen.getByTestId('value').textContent);
+/** The editor's current value, as the JSON the Probe shows; `T` names the part a test reads. */
+const value = <T = unknown,>() => JSON.parse(screen.getByTestId('value').textContent) as T;
 // A field's label names both its group and its control; tests want the control.
 const controlIn = (container: HTMLElement, name: string) =>
     within(container)
@@ -85,9 +86,9 @@ describe('ConditionList', () => {
         const up = screen.getAllByRole<HTMLButtonElement>('button', { name: /app\.sbMoveUp/ });
         expect(up[0].disabled).toBe(true);
         fireEvent.click(up[1]);
-        expect(value().map((c: { type: string }) => c.type)).toEqual(['freeSlots', 'entries']);
+        expect(value<{ type: string }[]>().map((c: { type: string }) => c.type)).toEqual(['freeSlots', 'entries']);
         fireEvent.click(screen.getAllByRole('button', { name: /app\.sbMoveDown/ })[0]);
-        expect(value().map((c: { type: string }) => c.type)).toEqual(['entries', 'freeSlots']);
+        expect(value<{ type: string }[]>().map((c: { type: string }) => c.type)).toEqual(['entries', 'freeSlots']);
         fireEvent.click(screen.getAllByRole('button', { name: 'app.sbRemove' })[0]);
         expect(value()).toEqual([{ type: 'freeSlots', op: '>', value: 0 }]);
     });
@@ -141,7 +142,7 @@ describe('field kinds', () => {
             />,
         );
         changeSelect(control('app.sbField_currency'), 'keys');
-        expect(value().currency).toBe('keys');
+        expect(value<{ currency: string }>().currency).toBe('keys');
         second.unmount();
         render(<Probe Editor={ItemEditor} kind="condition" initial={{ type: 'memorySet', slot: 'held' }} />);
         fireEvent.change(control('app.sbField_slot'), { target: { value: 'top' } });
@@ -170,7 +171,7 @@ describe('field kinds', () => {
         changeSelect(control('app.sbField_field'), 'boosted');
         expect(value()).toEqual({ type: 'entry', select: { by: 'bestRank' }, field: 'boosted', op: '=', value: true });
         changeSelect(control('app.sbField_value'), 'false');
-        expect(value().value).toBe(false);
+        expect(value<{ value: unknown }>().value).toBe(false);
         changeSelect(control('app.sbField_field'), 'turbo');
         expect(value()).toEqual(expect.objectContaining({ field: 'turbo', value: false }));
         changeSelect(control('app.sbField_field'), 'rank');
@@ -179,12 +180,12 @@ describe('field kinds', () => {
         const selector = group('app.sbField_select');
         changeSelect(controlIn(selector, 'app.sbPickType'), 'slot');
         changeSelect(controlIn(selector, 'app.sbField_index'), '0');
-        expect(value().select).toEqual({ by: 'slot', index: 0 });
+        expect(value<{ select: unknown }>().select).toEqual({ by: 'slot', index: 0 });
         changeSelect(controlIn(selector, 'app.sbPickType'), 'fastest');
         fireEvent.click(controlIn(selector, 'app.sbField_skipProtected'));
-        expect(value().select).toEqual({ by: 'fastest', skipProtected: true });
+        expect(value<{ select: unknown }>().select).toEqual({ by: 'fastest', skipProtected: true });
         fireEvent.click(controlIn(selector, 'app.sbField_skipProtected'));
-        expect(value().select).toEqual({ by: 'fastest' });
+        expect(value<{ select: unknown }>().select).toEqual({ by: 'fastest' });
     });
 
     test('nested all / any / not', () => {
@@ -198,7 +199,7 @@ describe('field kinds', () => {
         const inner = group('app.sbField_condition');
         changeSelect(controlIn(inner, 'app.sbPickType'), 'any');
         changeSelect(control('app.sbAddCondition'), 'freeSlots');
-        expect(value().condition).toEqual({
+        expect(value<{ condition: unknown }>().condition).toEqual({
             type: 'any',
             of: [
                 { type: 'exposure', op: '<', value: 50 },
@@ -224,14 +225,14 @@ describe('ActionList', () => {
         changeSelect(control('app.sbField_with'), 'memory');
         fireEvent.change(control('app.sbField_slot'), { target: { value: 'held' } });
         fireEvent.change(control('app.sbField_rememberAdded'), { target: { value: 'filler' } });
-        expect(value()[0]).toEqual({
+        expect(value<unknown[]>()[0]).toEqual({
             type: 'swap',
             entry: { by: 'bestRank' },
             with: { memory: 'held' },
             rememberAdded: 'filler',
         });
         changeSelect(control('app.sbField_with'), 'best');
-        expect(value()[0].with).toBe('best');
+        expect(value<{ with: unknown }[]>()[0].with).toBe('best');
 
         changeSelect(control('app.sbAddAction'), 'goto');
         changeSelect(control('app.sbField_phase'), 'later');
@@ -239,7 +240,7 @@ describe('ActionList', () => {
         fireEvent.change(control('app.sbField_message'), { target: { value: 'Boost now' } });
         changeSelect(control('app.sbAddAction'), 'vote');
         fireEvent.change(control('app.sbField_toExposure'), { target: { value: '80' } });
-        expect(value().slice(1)).toEqual([
+        expect(value<unknown[]>().slice(1)).toEqual([
             { type: 'goto', phase: 'later' },
             { type: 'notify', message: 'Boost now' },
             { type: 'vote', toExposure: 80 },

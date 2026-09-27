@@ -70,17 +70,17 @@ import tagsModule = require('../../src/js/api/tags');
 const tags = jest.mocked(tagsModule);
 import submissionsModule = require('../../src/js/api/submissions');
 const submissions = jest.mocked(submissionsModule);
-const { joinStateStore, acquireUnlockLock } = jest.mocked<typeof joinStateStoreModule>(
-    require('../../src/js/joinStateStore'),
+const { joinStateStore, acquireUnlockLock } = jest.mocked(
+    require('../../src/js/joinStateStore') as typeof joinStateStoreModule,
 );
-const { runVotingPass } = jest.mocked<typeof votingOrchestratorModule>(
-    require('../../src/js/services/votingOrchestrator'),
+const { runVotingPass } = jest.mocked(
+    require('../../src/js/services/votingOrchestrator') as typeof votingOrchestratorModule,
 );
-const { runJoinPass, joinChallengeSingle } = jest.mocked<typeof joinChallengesModule>(
-    require('../../src/js/services/joinChallenges'),
+const { runJoinPass, joinChallengeSingle } = jest.mocked(
+    require('../../src/js/services/joinChallenges') as typeof joinChallengesModule,
 );
-const { runClaimPass } = jest.mocked<typeof autoClaimModule>(require('../../src/js/services/autoClaim'));
-const { loadMissionNeeds } = jest.mocked<typeof missionsModule>(require('../../src/js/services/missions'));
+const { runClaimPass } = jest.mocked(require('../../src/js/services/autoClaim') as typeof autoClaimModule);
+const { loadMissionNeeds } = jest.mocked(require('../../src/js/services/missions') as typeof missionsModule);
 import rewardsModule = require('../../src/js/api/rewards');
 const rewards = jest.mocked(rewardsModule);
 import main = require('../../src/js/strategies/real');
@@ -101,7 +101,7 @@ const CHALLENGE = invalid<Challenge>({ id: 42, title: 'Turbo Test' });
 const scopedWarnings = () =>
     jest
         .mocked(logger.withCategory)
-        .mock.results.flatMap((r) => jest.mocked<CategoryLogger>(r.value).warning.mock.calls.map((call) => call[0]));
+        .mock.results.flatMap((r) => jest.mocked(r.value as CategoryLogger).warning.mock.calls.map((call) => call[0]));
 
 const battle = (overrides = {}) => ({ isSuccess: null, firstImageId: 'f1', secondImageId: 's1', ...overrides });
 

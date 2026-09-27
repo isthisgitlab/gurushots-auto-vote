@@ -26,7 +26,7 @@ jest.mock('../../src/js/scheduling/cadenceChain', () => {
     );
     return {
         ...actual,
-        createCadenceChain: jest.fn((opts) => {
+        createCadenceChain: jest.fn((opts: ChainOpts) => {
             mockChainOpts = opts;
             return { scheduleNext: mockScheduleNext };
         }),
@@ -40,10 +40,10 @@ import settingsModule = require('../../src/js/settings');
 const settings = jest.mocked(settingsModule);
 import type * as cadenceChainModule from '../../src/js/scheduling/cadenceChain';
 import type * as runSchedulerModule from '../../src/js/scheduling/runScheduler';
-const { DECISION_ERROR_MESSAGE, formatOversleptMessage } = jest.mocked<typeof cadenceChainModule>(
-    require('../../src/js/scheduling/cadenceChain'),
+const { DECISION_ERROR_MESSAGE, formatOversleptMessage } = jest.mocked(
+    require('../../src/js/scheduling/cadenceChain') as typeof cadenceChainModule,
 );
-const { createScheduler }: typeof runSchedulerModule = require('../../src/js/scheduling/runScheduler');
+const { createScheduler } = require('../../src/js/scheduling/runScheduler') as typeof runSchedulerModule;
 
 // What createScheduler hands the (stubbed) chain; its fetchChallenges ignores the settings argument.
 type ChainOpts = Omit<Parameters<typeof cadenceChainModule.createCadenceChain>[0], 'fetchChallenges'> & {
@@ -156,13 +156,17 @@ describe('lifecycle', () => {
 
 describe('notifications', () => {
     test('each cycle feeds both the deadline and the scenario notifier', async () => {
-        const nodeNotify = jest.mocked<typeof import('../../src/js/services/notify/nodeNotify')>(
-            require('../../src/js/services/notify/nodeNotify'),
+        const nodeNotify = jest.mocked(
+            require('../../src/js/services/notify/nodeNotify') as typeof import('../../src/js/services/notify/nodeNotify'),
         );
-        const { createScheduler }: typeof runSchedulerModule = require('../../src/js/scheduling/runScheduler');
+        const { createScheduler } = require('../../src/js/scheduling/runScheduler') as typeof runSchedulerModule;
         createScheduler({ runVotingCycle: jest.fn(), getActiveChallenges: jest.fn() });
-        const deadlines = nodeNotify.createNodeDeadlineNotifier.mock.results.at(-1)!.value;
-        const scenarios = nodeNotify.createNodeScenarioNotifier.mock.results.at(-1)!.value;
+        const deadlines = nodeNotify.createNodeDeadlineNotifier.mock.results.at(-1)!.value as ReturnType<
+            typeof nodeNotify.createNodeDeadlineNotifier
+        >;
+        const scenarios = nodeNotify.createNodeScenarioNotifier.mock.results.at(-1)!.value as ReturnType<
+            typeof nodeNotify.createNodeScenarioNotifier
+        >;
         await mockChainOpts!.onCycleChallenges!(invalid([{ id: 1 }]), 1000);
         expect(deadlines).toHaveBeenCalledWith([{ id: 1 }], 1000);
         expect(scenarios).toHaveBeenCalledWith([{ id: 1 }]);

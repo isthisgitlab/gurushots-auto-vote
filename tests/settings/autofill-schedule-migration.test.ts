@@ -15,13 +15,15 @@
 
 import type * as schemaModule from '../../src/js/settings/schema';
 import type { SettingValues } from '../../src/js/settings/schema';
+import type { AppSettings } from '../../src/js/types/settings';
 import type * as fsModule from 'node:fs';
 import type * as settingsModule from '../../src/js/settings';
 import type * as challengeFixturesModule from '../helpers/challengeFixtures';
 
-const { validateSetting }: typeof schemaModule = require('../../src/js/settings/schema');
+const { validateSetting } = require('../../src/js/settings/schema') as typeof schemaModule;
 
-const { buildSettingsFixture: buildFixture }: typeof challengeFixturesModule = require('../helpers/challengeFixtures');
+const { buildSettingsFixture: buildFixture } =
+    require('../helpers/challengeFixtures') as typeof challengeFixturesModule;
 
 // Expected conversion for M=15 — deliberately NOT the schema default (M=10),
 // so a regression that substitutes the default for the user's value fails here.
@@ -46,8 +48,8 @@ describe('autoFillIntervalMinutes → autoFillSchedule migration in loadSettings
         // Ensure no autovote-running flag bleeds across tests
         // Re-require fs *after* resetModules so we share the fresh mock
         // instance that settings.ts will see.
-        fs = jest.mocked<typeof fsModule>(require('node:fs'));
-        settings = require('../../src/js/settings');
+        fs = jest.mocked(require('node:fs') as typeof fsModule);
+        settings = require('../../src/js/settings') as typeof settings;
     });
 
     test('converts a global default of 15 minutes and deletes the legacy key', () => {
@@ -263,17 +265,17 @@ describe('autoFillIntervalMinutes → autoFillSchedule migration in loadSettings
         settings.loadSettings();
 
         const calls = fs.writeFileSync.mock.calls;
-        let persisted = null;
+        let persisted: AppSettings | null = null;
         for (let i = calls.length - 1; i >= 0; i -= 1) {
             const [, body] = calls[i];
             if (typeof body === 'string' && body.includes('_autoFillScheduleMigratedV1')) {
-                persisted = JSON.parse(body);
+                persisted = JSON.parse(body) as AppSettings;
                 break;
             }
         }
         expect(persisted).not.toBeNull();
-        expect(persisted._autoFillScheduleMigratedV1).toBe(true);
-        expect(persisted.challengeSettings.globalDefaults.autoFillSchedule).toEqual(SCHEDULE_FOR_15);
-        expect(persisted.challengeSettings.globalDefaults.autoFillIntervalMinutes).toBeUndefined();
+        expect(persisted!._autoFillScheduleMigratedV1).toBe(true);
+        expect(persisted!.challengeSettings.globalDefaults.autoFillSchedule).toEqual(SCHEDULE_FOR_15);
+        expect(persisted!.challengeSettings.globalDefaults.autoFillIntervalMinutes).toBeUndefined();
     });
 });

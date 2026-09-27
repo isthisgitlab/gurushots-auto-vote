@@ -38,7 +38,7 @@ jest.mock(
     { virtual: true },
 );
 
-const { storage, createJsonStore }: typeof storageModule = require('../../src/js/settings/storage');
+const { storage, createJsonStore } = require('../../src/js/settings/storage') as typeof storageModule;
 
 describe('storage — headless service branch', () => {
     let store: HeadlessStoreDouble;
@@ -125,7 +125,7 @@ describe('storage — capacitor write-behind', () => {
         mockPrefGet.mockResolvedValue({ value: null });
         // isCapacitor() keys off globalThis.Capacitor.isNativePlatform.
         g.Capacitor = { isNativePlatform: () => true, getPlatform: () => 'android' };
-        const mod: typeof storageModule = require('../../src/js/settings/storage');
+        const mod = require('../../src/js/settings/storage') as typeof storageModule;
         capStorage = mod.storage;
         flushPendingWrites = mod.flushPendingWrites;
     });
@@ -141,7 +141,7 @@ describe('storage — capacitor write-behind', () => {
 
     test('writes are serialized in issue order — a later write never overtakes an earlier one', async () => {
         const persisted: string[] = [];
-        let releaseFirst;
+        let releaseFirst: (() => void) | undefined;
         const firstGate = new Promise<void>((resolve) => {
             releaseFirst = resolve;
         });

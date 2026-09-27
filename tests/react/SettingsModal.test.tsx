@@ -14,9 +14,13 @@
 import { act, fireEvent, render, screen, waitFor } from './helpers/test-utils';
 import { SettingsModal } from '@/components/app/SettingsModal';
 import type { TitleRule } from '../../src/js/types/settings';
+import type { UiResetHandler } from '../../src/js/types/settingsEditor';
+import type { useSettingsForm } from '@/hooks/useSettingsForm';
+import type { useSettingsSchema } from '@/api/useSettingsSchema';
 import { invalid } from '../helpers/invalid';
 
 // The mocked hooks' state, as these tests drive it.
+type SettingsForm = ReturnType<typeof useSettingsForm>;
 type UiValues = {
     theme: string;
     language: string;
@@ -32,20 +36,20 @@ type MockFormState = {
     uiValues: UiValues;
     saving: boolean;
     originalUiValues: UiValues;
-    handleFormChange: jest.Mock;
-    handleUiChange: jest.Mock;
-    handleResetGlobal: jest.Mock;
-    handleResetUi: jest.Mock;
-    handleResetAll: jest.Mock;
-    commit: jest.Mock;
-    revert: jest.Mock;
+    handleFormChange: jest.MockedFunction<SettingsForm['handleFormChange']>;
+    handleUiChange: jest.MockedFunction<SettingsForm['handleUiChange']>;
+    handleResetGlobal: jest.MockedFunction<SettingsForm['handleResetGlobal']>;
+    handleResetUi: jest.Mock<void, Parameters<UiResetHandler>>;
+    handleResetAll: jest.MockedFunction<SettingsForm['handleResetAll']>;
+    commit: jest.MockedFunction<SettingsForm['commit']>;
+    revert: jest.MockedFunction<SettingsForm['revert']>;
 };
 type MockSchemaState = {
     schema: Record<string, object> | null;
     defaults: Record<string, unknown>;
     groups?: { id: string; label: string; tier: string }[];
     tiers?: { id: string; label: string }[];
-    refetch: jest.Mock;
+    refetch: jest.MockedFunction<ReturnType<typeof useSettingsSchema>['refetch']>;
     loading: boolean;
 };
 
@@ -75,7 +79,7 @@ const mockFormState: MockFormState = {
     handleFormChange: jest.fn(),
     handleUiChange: jest.fn(),
     handleResetGlobal: jest.fn(),
-    handleResetUi: jest.fn(),
+    handleResetUi: jest.fn<void, Parameters<UiResetHandler>>(),
     handleResetAll: jest.fn(),
     commit: jest.fn().mockResolvedValue(undefined),
     revert: jest.fn(),
@@ -125,7 +129,7 @@ const resetHookState = () => {
         handleFormChange: jest.fn(),
         handleUiChange: jest.fn(),
         handleResetGlobal: jest.fn(),
-        handleResetUi: jest.fn(),
+        handleResetUi: jest.fn<void, Parameters<UiResetHandler>>(),
         handleResetAll: jest.fn(),
         commit: jest.fn().mockResolvedValue(undefined),
         revert: jest.fn(),

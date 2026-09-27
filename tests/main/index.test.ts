@@ -8,7 +8,7 @@
  * fresh module registry (module-level window state lives in index.ts).
  */
 
-import type { BrowserWindowConstructorOptions, Rectangle, WebPreferences } from 'electron';
+import type { BrowserWindowConstructorOptions, Dialog, IpcMain, Rectangle, WebPreferences } from 'electron';
 import type * as settingsModule from '../../src/js/settings';
 import type * as loggerModule from '../../src/js/logger';
 import type { CategoryLogger } from '../../src/js/logger';
@@ -69,7 +69,7 @@ interface FakeElectron {
         whenReady: jest.Mock<Promise<void>, []>;
     };
     BrowserWindow: FakeBrowserWindowClass;
-    dialog: { showMessageBox: jest.Mock };
+    dialog: { showMessageBox: jest.MockedFunction<Dialog['showMessageBox']> };
     powerMonitor: { handlers: Record<string, Listener>; on: jest.Mock<void, [string, Listener]> };
     ipcMain: { handlers: Record<string, Listener>; on: jest.Mock<void, [string, Listener]> };
 }
@@ -143,10 +143,10 @@ jest.mock('electron', (): FakeElectron => {
             });
             this.isVisible = jest.fn(() => this.visible);
             this.isDestroyed = jest.fn(() => this.destroyed);
-            this.center = jest.fn();
+            this.center = jest.fn<void, []>();
             this.getBounds = jest.fn(() => this.bounds);
-            this.close = jest.fn();
-            this.focus = jest.fn();
+            this.close = jest.fn<void, []>();
+            this.focus = jest.fn<void, []>();
             windows.push(this);
         }
         static getAllWindows() {
@@ -159,10 +159,10 @@ jest.mock('electron', (): FakeElectron => {
     return {
         app: {
             handlers: appHandlers,
-            commandLine: { appendSwitch: jest.fn() },
+            commandLine: { appendSwitch: jest.fn<void, [string, string?]>() },
             requestSingleInstanceLock: jest.fn(() => true),
-            quit: jest.fn(),
-            show: jest.fn(),
+            quit: jest.fn<void, []>(),
+            show: jest.fn<void, []>(),
             on: jest.fn((ev, cb) => {
                 appHandlers[ev] = cb;
             }),
@@ -246,7 +246,7 @@ let processOnSpy: jest.SpiedFunction<typeof process.on>;
 
 function load({ lock = true, whenReady }: { lock?: boolean; whenReady?: () => Promise<void> } = {}) {
     jest.resetModules();
-    const electron: FakeElectron = require('electron');
+    const electron = require('electron') as FakeElectron;
     electron.app.requestSingleInstanceLock.mockReturnValue(lock);
     if (whenReady) electron.app.whenReady.mockImplementation(whenReady);
     // `cat` is filled in right below, from the logger mock.
@@ -255,21 +255,21 @@ function load({ lock = true, whenReady }: { lock?: boolean; whenReady?: () => Pr
         app: electron.app,
         BrowserWindow: electron.BrowserWindow,
         ipcMain: electron.ipcMain,
-        logger: require('../../src/js/logger'),
-        settings: require('../../src/js/settings'),
-        randomizer: require('../../src/js/api/randomizer'),
+        logger: require('../../src/js/logger') as MockLogger,
+        settings: require('../../src/js/settings') as typeof settingsModule,
+        randomizer: require('../../src/js/api/randomizer') as typeof randomizerModule,
         AutoUpdater: (
             require('../../src/js/services/AutoUpdater') as typeof import('../../src/js/services/AutoUpdater')
         ).AutoUpdater,
-        auth: require('../../src/js/services/auth'),
-        updateIpc: require('../../src/js/ipc/update.handlers'),
-        miscIpc: require('../../src/js/ipc/misc.handlers'),
-        registerHandlers: require('../../src/js/ipc/registerHandlers'),
-        lifecycle: require('../../src/js/windows/lifecycle'),
-        watcher: require('../../src/js/windows/settingsWatcher'),
-        bg: require('../../src/js/windows/backgroundActivity'),
-        quitGuard: require('../../src/js/windows/quitGuard'),
-        menu: require('../../src/js/ui/applicationMenu'),
+        auth: require('../../src/js/services/auth') as typeof authModule,
+        updateIpc: require('../../src/js/ipc/update.handlers') as typeof updateHandlersModule,
+        miscIpc: require('../../src/js/ipc/misc.handlers') as typeof miscHandlersModule,
+        registerHandlers: require('../../src/js/ipc/registerHandlers') as typeof registerHandlersModule,
+        lifecycle: require('../../src/js/windows/lifecycle') as typeof lifecycleModule,
+        watcher: require('../../src/js/windows/settingsWatcher') as typeof settingsWatcherModule,
+        bg: require('../../src/js/windows/backgroundActivity') as typeof backgroundActivityModule,
+        quitGuard: require('../../src/js/windows/quitGuard') as typeof quitGuardModule,
+        menu: require('../../src/js/ui/applicationMenu') as typeof applicationMenuModule,
     });
     m.cat = m.logger.cat;
     require('../../src/js/index');
@@ -279,7 +279,8 @@ function load({ lock = true, whenReady }: { lock?: boolean; whenReady?: () => Pr
 const windowFor = (file: string) => m.BrowserWindow.instances.filter((w) => w.file.endsWith(file)).at(-1);
 const loginWin = () => windowFor('login.html');
 const mainWin = () => windowFor('app.html');
-const autoUpdaterInstance = () => m.AutoUpdater.mock.results.at(-1)!.value;
+const autoUpdaterInstance = () =>
+    m.AutoUpdater.mock.results.at(-1)!.value as jest.Mocked<InstanceType<typeof autoUpdaterModule.AutoUpdater>>;
 
 beforeEach(() => {
     // The no-session startup path arms a 3s update-check timer; keep it fake so
@@ -319,7 +320,10 @@ describe('module bootstrap', () => {
             'currency',
             'scenarios',
         ]) {
-            expect(require(`../../src/js/ipc/${mod}.handlers`).register.mock.calls[0][0]).toBe(m.ipcMain);
+            expect(
+                (require(`../../src/js/ipc/${mod}.handlers`) as { register: jest.Mock<void, [IpcMain]> }).register.mock
+                    .calls[0][0],
+            ).toBe(m.ipcMain);
         }
         expect(Object.keys(m.ipcMain.handlers)).toEqual(['login-success', 'logout']);
         await flush();
@@ -389,10 +393,10 @@ describe('startup (whenReady)', () => {
         let resolveCheck!: (value: unknown) => void;
         // Prime the fresh registry's mocks before the entry point runs.
         jest.resetModules();
-        const settings = jest.mocked<typeof settingsModule>(require('../../src/js/settings'));
+        const settings = jest.mocked(require('../../src/js/settings') as typeof settingsModule);
         settings.loadSettings.mockReturnValue(invalid({ token: 't', stayLoggedIn: true }));
-        const AU = jest.mocked<typeof import('../../src/js/services/AutoUpdater')>(
-            require('../../src/js/services/AutoUpdater'),
+        const AU = jest.mocked(
+            require('../../src/js/services/AutoUpdater') as typeof import('../../src/js/services/AutoUpdater'),
         ).AutoUpdater;
         const check = jest.fn(
             () =>
@@ -401,7 +405,7 @@ describe('startup (whenReady)', () => {
                 }),
         );
         AU.mockImplementation(() => invalid({ checkForUpdates: check, setMainWindow: jest.fn() }));
-        const electron: FakeElectron = require('electron');
+        const electron = require('electron') as FakeElectron;
         require('../../src/js/index');
         await flush();
 
@@ -417,23 +421,23 @@ describe('startup (whenReady)', () => {
 
     it('logs (and survives) a failing update check and a failing intent seed', async () => {
         jest.resetModules();
-        const settings = jest.mocked<typeof settingsModule>(require('../../src/js/settings'));
+        const settings = jest.mocked(require('../../src/js/settings') as typeof settingsModule);
         settings.loadSettings.mockReturnValue(invalid({ token: 't', stayLoggedIn: true }));
         const seedErr = new Error('seed');
         settings.seedIntentProfiles.mockImplementation(() => {
             throw seedErr;
         });
         const checkErr = new Error('offline');
-        jest.mocked<typeof import('../../src/js/services/AutoUpdater')>(
-            require('../../src/js/services/AutoUpdater'),
+        jest.mocked(
+            require('../../src/js/services/AutoUpdater') as typeof import('../../src/js/services/AutoUpdater'),
         ).AutoUpdater.mockImplementation(() =>
             invalid({
                 checkForUpdates: jest.fn(() => Promise.reject(checkErr)),
                 setMainWindow: jest.fn(),
             }),
         );
-        const { cat } = jest.mocked<MockLogger>(require('../../src/js/logger'));
-        const electron: FakeElectron = require('electron');
+        const { cat } = jest.mocked(require('../../src/js/logger') as MockLogger);
+        const electron = require('electron') as FakeElectron;
         require('../../src/js/index');
         await flush();
 
@@ -445,12 +449,12 @@ describe('startup (whenReady)', () => {
     it('logs a bootstrap failure instead of letting it vanish', async () => {
         jest.resetModules();
         const boom = new Error('no userData');
-        jest.mocked<typeof import('../../src/js/settings')>(
-            require('../../src/js/settings'),
+        jest.mocked(
+            require('../../src/js/settings') as typeof import('../../src/js/settings'),
         ).getUserDataPath.mockImplementation(() => {
             throw boom;
         });
-        const { cat } = jest.mocked<MockLogger>(require('../../src/js/logger'));
+        const { cat } = jest.mocked(require('../../src/js/logger') as MockLogger);
         require('../../src/js/index');
         await flush();
 
@@ -660,7 +664,7 @@ describe('main window', () => {
 
         it('on close: releases the watcher and the background assertion, and ignores late callbacks', () => {
             const deps = m.watcher.watchSettingsFile.mock.calls[0][0];
-            const watcher = m.watcher.watchSettingsFile.mock.results[0].value;
+            const watcher = m.watcher.watchSettingsFile.mock.results[0].value as { close: jest.Mock<void, []> };
             m.bg.syncBackgroundActivity.mockClear();
 
             mainWin()!.handlers.closed();

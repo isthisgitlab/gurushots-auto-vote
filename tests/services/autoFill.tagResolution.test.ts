@@ -15,7 +15,7 @@ jest.mock('../../src/js/services/semantic/lexicon', () => ({
     ),
 }));
 
-// See tests/services/tagResolver.test.ts — tests/setup.js mocks `fs`, so the
+// See tests/services/tagResolver.test.ts — tests/setup.ts mocks `fs`, so the
 // loader must go through the real one or every semantic check passes vacuously.
 jest.mock('../../src/js/services/semantic/assets', () => {
     const realFs = jest.requireActual<typeof import('node:fs')>('node:fs');
@@ -32,16 +32,18 @@ jest.mock('../../src/js/services/semantic/assets', () => {
     };
 });
 
-const {
-    fetchCandidatesForChallenge,
-    __resetMemberIdCache,
-}: typeof autoFillModule = require('../../src/js/services/autoFill');
+const { fetchCandidatesForChallenge, __resetMemberIdCache } =
+    require('../../src/js/services/autoFill') as typeof autoFillModule;
 import lexiconModule = require('../../src/js/services/semantic/lexicon');
 const lexicon = jest.mocked(lexiconModule);
 import type * as autoFillModule from '../../src/js/services/autoFill';
+import type * as submissionsModule from '../../src/js/api/submissions';
 import type { Challenge } from '../../src/js/types/gurushots';
 import type { FillLogger } from '../../src/js/types/autoFill';
 import { invalid } from '../helpers/invalid';
+
+// getEligiblePhotos' options bag (its third, defaulted parameter).
+type EligibleOptions = NonNullable<Parameters<typeof submissionsModule.getEligiblePhotos>[2]>;
 
 const allowed = (id: string, labels: string[]) => ({ id, labels, permission: { allowed: true, message: null } });
 
@@ -55,7 +57,7 @@ const LIBRARY = [
 
 // Mirrors the live endpoint: `search` is an EXACT tag match, not a text search.
 const makeGetEligiblePhotos = () =>
-    jest.fn(async (_challengeId, _token, options = {}) => {
+    jest.fn(async (_challengeId: string | number, _token: string, options: EligibleOptions = {}) => {
         const search = typeof options.search === 'string' ? options.search.trim().toLowerCase() : '';
         if (search === '') return LIBRARY;
         return LIBRARY.filter((p) => p.labels.some((l) => l.toLowerCase() === search));
@@ -121,11 +123,13 @@ describe('fetchCandidatesForChallenge — tag resolution', () => {
     });
 
     test('finds an older plane photo for a Flight challenge outside authored concepts', async () => {
-        const getEligiblePhotos = jest.fn(async (_id, _token, options = {}) => {
-            if (options.search === 'plane') return [allowed('plane', ['Plane'])];
-            if (!options.search) return [allowed('portrait', ['Portrait'])];
-            return [];
-        });
+        const getEligiblePhotos = jest.fn(
+            async (_id: string | number, _token: string, options: EligibleOptions = {}) => {
+                if (options.search === 'plane') return [allowed('plane', ['Plane'])];
+                if (!options.search) return [allowed('portrait', ['Portrait'])];
+                return [];
+            },
+        );
         const result = await fetchCandidatesForChallenge(
             invalid({ id: 'c-flight', title: 'Flight' }),
             'tok',
@@ -133,15 +137,17 @@ describe('fetchCandidatesForChallenge — tag resolution', () => {
             { getEligiblePhotos, logger: makeLogger().logger },
         );
         expect(result.map((photo) => photo.id)).toEqual(['plane']);
-        expect(getEligiblePhotos.mock.calls.filter(([, , options]) => !options.search)).toEqual([]);
+        expect(getEligiblePhotos.mock.calls.filter(([, , options]) => !options!.search)).toEqual([]);
     });
 
     test('keeps both authored and generic subjects for a mixed title', async () => {
-        const getEligiblePhotos = jest.fn(async (_id, _token, options = {}) => {
-            if (options.search === 'history') return [allowed('history', ['History'])];
-            if (options.search === 'plane') return [allowed('plane', ['Plane'])];
-            return [];
-        });
+        const getEligiblePhotos = jest.fn(
+            async (_id: string | number, _token: string, options: EligibleOptions = {}) => {
+                if (options.search === 'history') return [allowed('history', ['History'])];
+                if (options.search === 'plane') return [allowed('plane', ['Plane'])];
+                return [];
+            },
+        );
         const result = await fetchCandidatesForChallenge(
             invalid({ id: 'c-mixed', title: 'History vs Flight' }),
             'tok',

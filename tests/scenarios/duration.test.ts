@@ -4,7 +4,7 @@
 
 import type * as durationModule from '../../src/js/scenarios/duration';
 
-const { parseDuration, MAX_DURATION_SEC }: typeof durationModule = require('../../src/js/scenarios/duration');
+const { parseDuration, MAX_DURATION_SEC } = require('../../src/js/scenarios/duration') as typeof durationModule;
 
 describe('parseDuration', () => {
     test.each([

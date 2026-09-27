@@ -23,12 +23,24 @@ jest.mock('../../src/js/logger', () => {
 
 import photoStats = require('../../src/js/services/photoStats');
 import type { PickerPhoto } from '../../src/js/types/photoPicker';
+import type { PhotoStatsFile } from '../../src/js/services/photoStats';
+import type { CategoryLogger } from '../../src/js/logger';
+import type * as submissionsModule from '../../src/js/api/submissions';
 import { invalid } from '../helpers/invalid';
 const { enrichCandidates, resetPassState, MAX_ENRICH_PER_FILL, MAX_ENRICH_PER_PASS, STATS_TTL_MS } = photoStats;
-const { __level: log }: { __level: LevelMock } = require('../../src/js/logger');
+const { __level: log } = invalid<{ __level: LevelMock }>(require('../../src/js/logger'));
 
 /** The per-category logger double the logger mock above hands out (and exposes as `__level`). */
-type LevelMock = { info: jest.Mock; error: jest.Mock; debug: jest.Mock; success: jest.Mock; warning: jest.Mock };
+type LevelMock = {
+    info: jest.MockedFunction<CategoryLogger['info']>;
+    error: jest.MockedFunction<CategoryLogger['error']>;
+    debug: jest.Mock<void, Parameters<CategoryLogger['debug']>>;
+    success: jest.MockedFunction<CategoryLogger['success']>;
+    warning: jest.MockedFunction<CategoryLogger['warning']>;
+};
+/** The `getImageData` dep enrichCandidates calls. */
+type GetImageData = typeof submissionsModule.getImageData;
+/** The stats cache file as photoStats persists it (only the fields these tests read). */
 
 const photo = (id: string, extra: Partial<PickerPhoto> = {}) => ({
     id,
@@ -86,7 +98,9 @@ describe('loading the persisted cache', () => {
                     undated: { votes: 9, views: 9, achievementCount: 0, fetchedAt: 'yesterday' },
                 },
             });
-        const getImageData = jest.fn().mockResolvedValue(payload(2, 2));
+        const getImageData = jest
+            .fn<ReturnType<GetImageData>, Parameters<GetImageData>>()
+            .mockResolvedValue(payload(2, 2));
         const out = await enrichCandidates([photo('good'), photo('scalar'), photo('undated')], 'tok', {
             getImageData,
         });
@@ -95,7 +109,7 @@ describe('loading the persisted cache', () => {
         expect(out[0]).toEqual(expect.objectContaining({ id: 'good', votes: 7, statsKnown: true }));
 
         // The persisted file no longer carries the dropped keys.
-        const persisted = JSON.parse(written!).photos;
+        const persisted = (JSON.parse(written!) as PhotoStatsFile).photos;
         expect(Object.keys(persisted).sort()).toEqual(['good', 'scalar', 'undated']);
         expect(persisted.undated.votes).toBe(2);
     });
@@ -118,7 +132,9 @@ describe('persisting the cache', () => {
 
 describe('candidate shapes', () => {
     test('null and id-less candidates are passed through as stats-unknown without a request', async () => {
-        const getImageData = jest.fn().mockResolvedValue(payload(1, 1));
+        const getImageData = jest
+            .fn<ReturnType<GetImageData>, Parameters<GetImageData>>()
+            .mockResolvedValue(payload(1, 1));
         const out = await enrichCandidates([invalid(null), photo(invalid(null)), photo(''), photo('p1')], 'tok', {
             getImageData,
         });
@@ -130,7 +146,7 @@ describe('candidate shapes', () => {
         const getImageData = jest.fn().mockRejectedValue('timeout\nnow');
         const [out] = await enrichCandidates([photo('p1')], 'tok', { getImageData });
         expect(out.statsKnown).toBe(false);
-        const line = log.debug.mock.calls.find(([m]) => m.includes('get_image_data failed'))[0];
+        const line = log.debug.mock.calls.find(([m]) => m.includes('get_image_data failed'))![0];
         expect(line).toContain('timeout now');
     });
 });
@@ -150,7 +166,9 @@ describe('fetch ordering', () => {
         ['never-measured first', ['never', 'stale']],
     ])('never-measured beats stale regardless of input order (%s)', async (_label, order) => {
         staleCache();
-        const getImageData = jest.fn().mockResolvedValue(payload(1, 1));
+        const getImageData = jest
+            .fn<ReturnType<GetImageData>, Parameters<GetImageData>>()
+            .mockResolvedValue(payload(1, 1));
         // Many never-measured fillers push the stale photo past the per-fill budget.
         const fillers = Array.from({ length: MAX_ENRICH_PER_FILL - 1 }, (_, i) => photo(`f${i}`));
         const input = order.map((id) => photo(id, { views: id === 'stale' ? 1_000_000 : 0 }));

@@ -45,7 +45,7 @@ test('preview spends nothing and shows the labelled current / replacement photos
 });
 
 test('the button spins while the preview is in flight', async () => {
-    let resolve;
+    let resolve: ((value: Awaited<ReturnType<Window['api']['previewSwapPhoto']>>) => void) | undefined;
     window.api.previewSwapPhoto = jest.fn(() => new Promise((r) => (resolve = r)));
     renderButton();
     const button = swapButton();

@@ -13,15 +13,8 @@ import type {
 } from '../../src/js/types/gurushots';
 import { invalid } from '../helpers/invalid';
 
-const {
-    CURRENCY_OUTCOME,
-    isRunning,
-    canKeyUnlock,
-    canSwapEntry,
-    canFillExposure,
-    swapExcludedIds,
-    blockedOutcome,
-}: typeof currencyActionsModule = require('../../src/js/voting/currencyActions');
+const { CURRENCY_OUTCOME, isRunning, canKeyUnlock, canSwapEntry, canFillExposure, swapExcludedIds, blockedOutcome } =
+    require('../../src/js/voting/currencyActions') as typeof currencyActionsModule;
 
 const NOW = 1_790_100_000;
 const FULL = { keys: 3, swaps: 3, fills: 3, coins: 0 };

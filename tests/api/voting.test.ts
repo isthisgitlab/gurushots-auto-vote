@@ -4,7 +4,7 @@
  * Tests the vote images fetching and submission functionality.
  */
 
-const { getVoteImages, submitVotes }: typeof votingModule = require('../../src/js/api/voting');
+const { getVoteImages, submitVotes } = require('../../src/js/api/voting') as typeof votingModule;
 
 // Mock the makePostRequest function
 jest.mock('../../src/js/api/api-client', () => ({
@@ -56,7 +56,7 @@ jest.mock('../../src/js/metadata', () => ({
     updateChallengeVoteMetadata: jest.fn(() => true),
 }));
 
-const { makePostRequest } = jest.mocked<typeof api_clientModule>(require('../../src/js/api/api-client'));
+const { makePostRequest } = jest.mocked(require('../../src/js/api/api-client') as typeof api_clientModule);
 import loggerModule = require('../../src/js/logger');
 const logger = jest.mocked(loggerModule);
 import type * as votingModule from '../../src/js/api/voting';
@@ -64,7 +64,7 @@ import type * as api_clientModule from '../../src/js/api/api-client';
 import type * as metadataModule from '../../src/js/metadata';
 import type { VoteImage } from '../../src/js/types/gurushots';
 import { invalid } from '../helpers/invalid';
-const { updateChallengeVoteMetadata } = jest.mocked<typeof metadataModule>(require('../../src/js/metadata'));
+const { updateChallengeVoteMetadata } = jest.mocked(require('../../src/js/metadata') as typeof metadataModule);
 
 describe('voting', () => {
     beforeEach(() => {

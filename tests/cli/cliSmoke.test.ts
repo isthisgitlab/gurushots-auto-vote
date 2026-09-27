@@ -8,8 +8,8 @@
 
 import type * as node_child_processModule from 'node:child_process';
 
-const { spawnSync }: typeof node_child_processModule = require('node:child_process');
-// tests/setup.js mocks path with stubs that return undefined, which
+const { spawnSync } = require('node:child_process') as typeof node_child_processModule;
+// tests/setup.ts mocks path with stubs that return undefined, which
 // breaks path.resolve. Reach through to the real module.
 const path = jest.requireActual<typeof import('path')>('path');
 
@@ -21,7 +21,7 @@ const CLI_PATH = path.resolve(__dirname, '../../src/js/cli/cli.ts');
 // well over the global 10s timeout and get killed (status === null). These are
 // correctness smoke tests, not a perf budget — give the spawn (25s) and the
 // test (40s, clear headroom over the spawn cap) generous room. Scoped to this
-// file; the global 10s in tests/setup.js stays for everything else.
+// file; the global 10s in tests/setup.ts stays for everything else.
 jest.setTimeout(40000);
 
 const runCli = (args: string[]) => {

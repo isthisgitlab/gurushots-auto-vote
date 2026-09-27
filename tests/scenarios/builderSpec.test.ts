@@ -6,8 +6,8 @@
 
 import spec = require('../../src/js/scenarios/builderSpec');
 import vocabulary = require('../../src/js/scenarios/vocabulary');
-const { validateScenario }: typeof scenarioSchemaModule = require('../../src/js/settings/scenarioSchema');
-const { getDefaultSettings }: typeof defaultsModule = require('../../src/js/settings/defaults');
+const { validateScenario } = require('../../src/js/settings/scenarioSchema') as typeof scenarioSchemaModule;
+const { getDefaultSettings } = require('../../src/js/settings/defaults') as typeof defaultsModule;
 import english = require('../../src/js/translations/english');
 import latvian = require('../../src/js/translations/latvian');
 import type * as scenarioSchemaModule from '../../src/js/settings/scenarioSchema';

@@ -11,14 +11,10 @@ import type { ComparisonOp, EntryCondition, ScenarioCondition, ScenarioSelector 
 import { invalid } from '../helpers/invalid';
 import type { ConditionContext } from '../../src/js/scenarios/conditions';
 
-const {
-    evaluateCondition,
-    allHold,
-    firstFailing,
-    compare,
-}: typeof conditionsModule = require('../../src/js/scenarios/conditions');
-const { selectEntry }: typeof selectorsModule = require('../../src/js/scenarios/selectors');
-const { epochForWallTime }: typeof wallClockModule = require('../../src/js/scheduling/wallClock');
+const { evaluateCondition, allHold, firstFailing, compare } =
+    require('../../src/js/scenarios/conditions') as typeof conditionsModule;
+const { selectEntry } = require('../../src/js/scenarios/selectors') as typeof selectorsModule;
+const { epochForWallTime } = require('../../src/js/scheduling/wallClock') as typeof wallClockModule;
 
 const TZ = 'Europe/Riga';
 const at = (y: number, m: number, d: number, hh: number, mm: number, tz = TZ) => epochForWallTime(y, m, d, hh, mm, tz);

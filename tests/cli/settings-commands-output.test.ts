@@ -398,13 +398,20 @@ describe('profiles', () => {
         expect(msgs('info')).toEqual(['💡 Run "list-settings --challenge=7" to review the applied overrides']);
     });
 
-    test.each([
+    test.each<
+        [
+            string,
+            'getChallengeProfiles' | 'getChallengeOverrides' | 'applyChallengeProfile' | 'deleteChallengeProfile',
+            string[],
+            string,
+        ]
+    >([
         ['listProfiles', 'getChallengeProfiles', [], 'Error listing profiles'],
         ['saveProfileFromChallenge', 'getChallengeOverrides', ['p', '7'], 'Error saving profile'],
         ['applyProfile', 'applyChallengeProfile', ['p', '7'], 'Error applying profile'],
         ['deleteProfile', 'deleteChallengeProfile', ['p'], 'Error deleting profile'],
     ])('%s: a throwing facade is reported, not thrown', (fn, facadeFn, args, message) => {
-        invalid<Record<string, jest.Mock>>(settings)[facadeFn].mockImplementation(boom);
+        settings[facadeFn].mockImplementation(boom);
         expect(() => invalid<Record<string, (...args: string[]) => unknown>>(cmd)[fn](...args)).not.toThrow();
         expect(msgs('error')).toEqual([message]);
     });

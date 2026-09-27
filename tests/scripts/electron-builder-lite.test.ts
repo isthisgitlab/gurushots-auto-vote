@@ -4,7 +4,7 @@
 
 import type * as package_jsonModule from '../../package.json';
 
-const { build }: typeof package_jsonModule = require('../../package.json');
+const { build } = require('../../package.json') as typeof package_jsonModule;
 const lite = (require('../../scripts/electron-builder-lite') as typeof import('../../scripts/electron-builder-lite'))
     .default;
 

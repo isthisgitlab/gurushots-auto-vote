@@ -6,7 +6,11 @@
 
 jest.mock('../../src/js/logger', () => {
     const category = { info: jest.fn(), error: jest.fn(), debug: jest.fn(), warning: jest.fn(), success: jest.fn() };
-    return { withCategory: jest.fn(() => category), challengeTag: jest.fn((c) => `[${c?.id}]`), __category: category };
+    return {
+        withCategory: jest.fn(() => category),
+        challengeTag: jest.fn((c: { id?: string | number } | null | undefined) => `[${c?.id}]`),
+        __category: category,
+    };
 });
 jest.mock('../../src/js/settings', () => ({
     getEffectiveSetting: jest.fn(),
@@ -14,7 +18,7 @@ jest.mock('../../src/js/settings', () => ({
     getSetting: jest.fn(() => 'UTC'),
 }));
 jest.mock('../../src/js/services/currencyActions', () => ({
-    withSpendLock: jest.fn(async (spend) => ({ busy: false, value: await spend() })),
+    withSpendLock: jest.fn(async (spend: () => Promise<unknown>) => ({ busy: false, value: await spend() })),
     previewSwap: jest.fn(),
     swapEntry: jest.fn(),
     unlockBoostWithKey: jest.fn(),
@@ -54,17 +58,19 @@ import type * as scenarioRunnerModule from '../../src/js/services/scenarioRunner
 import type * as scenarioStateStoreModule from '../../src/js/scenarioStateStore';
 import type { Challenge, ChallengeMember, MemberRanking, RankingEntry } from '../../src/js/types/gurushots';
 import type { ScenarioDocument } from '../../src/js/settings/scenarioSchema';
+import type { CategoryLogger } from '../../src/js/logger';
+import type { VotingPassApi } from '../../src/js/types/votingPass';
+import type { CurrencyPassDeps } from '../../src/js/services/currencyAuto';
+import type { SwapBackLedger } from '../../src/js/services/currencyActions';
 import { invalid } from '../helpers/invalid';
-const {
-    runScenarioStep,
-    backgroundServiceOwnsScenarios,
-}: typeof scenarioRunnerModule = require('../../src/js/services/scenarioRunner');
-const {
-    createMemoryStateLedger,
-    initialState,
-}: typeof scenarioStateStoreModule = require('../../src/js/scenarioStateStore');
+const { runScenarioStep, backgroundServiceOwnsScenarios } =
+    require('../../src/js/services/scenarioRunner') as typeof scenarioRunnerModule;
+const { createMemoryStateLedger, initialState } =
+    require('../../src/js/scenarioStateStore') as typeof scenarioStateStoreModule;
 
-type CategoryMock = Record<'info' | 'error' | 'debug' | 'warning' | 'success', jest.Mock>;
+type CategoryMock = {
+    [K in 'info' | 'error' | 'debug' | 'warning' | 'success']: jest.MockedFunction<CategoryLogger[K]>;
+};
 const log = (logger as typeof logger & { __category: CategoryMock }).__category;
 const NOW = Math.floor(Date.now() / 1000);
 
@@ -101,17 +107,22 @@ const single = (actions: object[], extra = {}, scenarioExtra = {}) =>
 
 type TestPass = {
     token: string;
-    api: Record<
-        | 'getActiveChallenges'
-        | 'submitToChallenge'
-        | 'applyBoostToEntry'
-        | 'applyTurbo'
-        | 'getVoteImages'
-        | 'submitVotes',
-        jest.Mock
+    api: jest.Mocked<
+        Pick<
+            VotingPassApi,
+            | 'getActiveChallenges'
+            | 'submitToChallenge'
+            | 'applyBoostToEntry'
+            | 'applyTurbo'
+            | 'getVoteImages'
+            | 'submitVotes'
+        >
     >;
     fillDeps: object;
-    currency: { strategy: { getBankroll: jest.Mock }; swapLedger?: { onSwapped: jest.Mock } };
+    currency: {
+        strategy: jest.Mocked<Pick<CurrencyPassDeps['strategy'], 'getBankroll'>>;
+        swapLedger?: jest.Mocked<Pick<SwapBackLedger, 'onSwapped'>>;
+    };
     scenarios: { ledger: ReturnType<typeof createMemoryStateLedger> };
 };
 
@@ -139,14 +150,34 @@ beforeEach(() => {
         token: 'tok',
         api: {
             getActiveChallenges: jest.fn(),
-            submitToChallenge: jest.fn(async () => ({ ok: true })),
-            applyBoostToEntry: jest.fn(async () => ({ success: true })),
-            applyTurbo: jest.fn(async () => ({ ok: true })),
-            getVoteImages: jest.fn(async () => ({ images: [] })),
-            submitVotes: jest.fn(async () => ({ success: true })),
+            submitToChallenge: jest.fn<
+                ReturnType<VotingPassApi['submitToChallenge']>,
+                Parameters<VotingPassApi['submitToChallenge']>
+            >(async () => invalid({ ok: true })),
+            applyBoostToEntry: jest.fn<
+                ReturnType<VotingPassApi['applyBoostToEntry']>,
+                Parameters<VotingPassApi['applyBoostToEntry']>
+            >(async () => ({ success: true })),
+            applyTurbo: jest.fn<ReturnType<VotingPassApi['applyTurbo']>, Parameters<VotingPassApi['applyTurbo']>>(
+                async () => invalid({ ok: true }),
+            ),
+            getVoteImages: jest.fn<
+                ReturnType<VotingPassApi['getVoteImages']>,
+                Parameters<VotingPassApi['getVoteImages']>
+            >(async () => invalid({ images: [] })),
+            submitVotes: jest.fn<ReturnType<VotingPassApi['submitVotes']>, Parameters<VotingPassApi['submitVotes']>>(
+                async () => ({ success: true }),
+            ),
         },
         fillDeps: {},
-        currency: { strategy: { getBankroll: jest.fn(async () => ({ keys: 5, swaps: 5, fills: 5, coins: 0 })) } },
+        currency: {
+            strategy: {
+                getBankroll: jest.fn<
+                    ReturnType<CurrencyPassDeps['strategy']['getBankroll']>,
+                    Parameters<CurrencyPassDeps['strategy']['getBankroll']>
+                >(async () => ({ keys: 5, swaps: 5, fills: 5, coins: 0 })),
+            },
+        },
         scenarios: { ledger },
     };
 });
@@ -265,7 +296,7 @@ describe('actions', () => {
             setup(single([{ type: 'enterPhoto', photo: { memory: 'held' } }]));
             ledger.set(7, { ...initialState('Plan', 'main', NOW), memory });
             if (mode === 'gone') autoFill.refreshChallengeState.mockResolvedValueOnce('gone');
-            if (mode === 'refused') pass.api.submitToChallenge.mockResolvedValueOnce({ ok: false });
+            if (mode === 'refused') pass.api.submitToChallenge.mockResolvedValueOnce(invalid({ ok: false }));
             const c = challenge();
             if (mode === 'full') c.max_photo_submits = 2;
             await run(c);
@@ -434,7 +465,7 @@ describe('actions', () => {
             }
             if (mode === 'refused') {
                 pass.api.applyBoostToEntry.mockResolvedValueOnce(null);
-                pass.api.applyTurbo.mockResolvedValueOnce({ ok: false });
+                pass.api.applyTurbo.mockResolvedValueOnce(invalid({ ok: false }));
             }
             if (mode === 'gone') autoFill.refreshChallengeState.mockResolvedValueOnce('gone');
             await run(c);
@@ -486,7 +517,8 @@ describe('actions', () => {
             ['no vote images', 'getVoteImages', null, 'vote images could not be loaded'],
             ['a refused submit', 'submitVotes', undefined, 'votes could not be submitted'],
         ])('vote: %s', async (label, method, value, message) => {
-            pass.api[method].mockResolvedValueOnce(value);
+            // The checker cannot pair each row's value with its method's resolved type.
+            pass.api[method].mockResolvedValueOnce(invalid(value));
             setup(single([{ type: 'vote', toExposure: 80 }]));
             await run();
             expect(state().lastError!.message).toContain(message);

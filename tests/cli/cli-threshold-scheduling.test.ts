@@ -11,9 +11,8 @@
 import type * as thresholdWindowModule from '../../src/js/scheduling/thresholdWindow';
 import { invalid } from '../helpers/invalid';
 
-const {
-    calculateNextThresholdEntry,
-}: typeof thresholdWindowModule = require('../../src/js/scheduling/thresholdWindow');
+const { calculateNextThresholdEntry } =
+    require('../../src/js/scheduling/thresholdWindow') as typeof thresholdWindowModule;
 
 // CLI/Node resolver shape: synchronous return (settings.getEffectiveSetting).
 const resolveThreshold = () => 5;

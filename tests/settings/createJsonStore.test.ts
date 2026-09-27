@@ -44,7 +44,7 @@ describe('createJsonStore', () => {
         let store: ReturnType<typeof storageModule.createJsonStore>;
 
         beforeEach(() => {
-            const { createJsonStore }: typeof storageModule = require('../../src/js/settings/storage');
+            const { createJsonStore } = require('../../src/js/settings/storage') as typeof storageModule;
             store = createJsonStore({ fileName: 'metadata.json', prefKey: 'gurushots-metadata' });
         });
 
@@ -79,7 +79,7 @@ describe('createJsonStore', () => {
         beforeEach(() => {
             g.Capacitor = { isNativePlatform: () => true, getPlatform: () => 'android' };
             mockPrefGet.mockResolvedValue({ value: '{"persisted":true}' });
-            const { createJsonStore }: typeof storageModule = require('../../src/js/settings/storage');
+            const { createJsonStore } = require('../../src/js/settings/storage') as typeof storageModule;
             store = createJsonStore({ fileName: 'metadata.json', prefKey: 'gurushots-metadata' });
         });
 
@@ -98,7 +98,7 @@ describe('createJsonStore', () => {
 
         test('writes are serialized in issue order', async () => {
             const persisted: string[] = [];
-            let releaseFirst;
+            let releaseFirst: ((value: void) => void) | undefined;
             const firstGate = new Promise<void>((resolve) => {
                 releaseFirst = resolve;
             });
@@ -122,7 +122,7 @@ describe('createJsonStore', () => {
         });
 
         test("refreshAsync re-reads Preferences after this context's queued writes drain", async () => {
-            let release;
+            let release: ((value: void) => void) | undefined;
             mockPrefSet.mockImplementationOnce(
                 () =>
                     new Promise((resolve) => {
@@ -160,7 +160,7 @@ describe('createJsonStore', () => {
 
         beforeEach(() => {
             g.__GS_HEADLESS__ = true;
-            const { createJsonStore }: typeof storageModule = require('../../src/js/settings/storage');
+            const { createJsonStore } = require('../../src/js/settings/storage') as typeof storageModule;
             store = createJsonStore({ fileName: 'metadata.json', prefKey: 'gurushots-metadata' });
         });
 

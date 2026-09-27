@@ -15,9 +15,9 @@ describe('CI Environment Validation', () => {
 
     test('all required test dependencies should be available', () => {
         // Test that Jest and related packages can be imported
-        expect(() => require('jest')).not.toThrow();
-        expect(() => require('@jest/globals')).not.toThrow();
-        expect(() => require('jest-environment-node')).not.toThrow();
+        expect(() => require('jest') as typeof import('jest')).not.toThrow();
+        expect(() => require('@jest/globals') as typeof import('@jest/globals')).not.toThrow();
+        expect(() => require('jest-environment-node') as typeof import('jest-environment-node')).not.toThrow();
     });
 
     test('test environment is node with NODE_ENV=test', () => {
@@ -25,5 +25,32 @@ describe('CI Environment Validation', () => {
         // value (a `|| 'test'` fallback could never fail).
         expect(process.env.NODE_ENV).toBe('test');
         expect(typeof process.versions.node).toBe('string');
+    });
+});
+
+describe('test typing', () => {
+    // `Mock` without type arguments is `Mock<any, any>`, an `any` the lint rules
+    // cannot see until a value is used; a mock names the function it stands in
+    // for (`jest.fn<R, [Args]>()`, `jest.MockedFunction<typeof fn>`).
+    test('every mock type names the function it stands in for', () => {
+        const fs = jest.requireActual<typeof import('node:fs')>('node:fs');
+        const path = jest.requireActual<typeof import('node:path')>('node:path');
+        const offenders: string[] = [];
+        const walk = (dir: string) => {
+            for (const entry of fs.readdirSync(dir, { withFileTypes: true })) {
+                const full = path.join(dir, entry.name);
+                if (entry.isDirectory()) walk(full);
+                else if (/\.(c?ts|tsx)$/.test(entry.name)) {
+                    fs.readFileSync(full, 'utf8')
+                        .split('\n')
+                        .forEach((line, i) => {
+                            if (/\bjest\.Mock\b(?!<)/.test(line))
+                                offenders.push(`${path.relative(__dirname, full)}:${i + 1}`);
+                        });
+                }
+            }
+        };
+        walk(__dirname);
+        expect(offenders).toEqual([]);
     });
 });

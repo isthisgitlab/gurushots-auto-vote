@@ -22,9 +22,9 @@ import type { Challenge } from '../../src/js/types/gurushots';
 import type { VotingPassDeps } from '../../src/js/types/votingPass';
 import type { EntryTracker } from '../../src/js/services/newEntryTracker';
 import { invalid } from '../helpers/invalid';
-const { runVotingPass }: typeof votingOrchestratorModule = require('../../src/js/services/votingOrchestrator');
-const { createMemoryEntryTracker }: typeof newEntryTrackerModule = require('../../src/js/services/newEntryTracker');
-const { buildChallenge }: typeof challengeFixturesModule = require('../helpers/challengeFixtures');
+const { runVotingPass } = require('../../src/js/services/votingOrchestrator') as typeof votingOrchestratorModule;
+const { createMemoryEntryTracker } = require('../../src/js/services/newEntryTracker') as typeof newEntryTrackerModule;
+const { buildChallenge } = require('../helpers/challengeFixtures') as typeof challengeFixturesModule;
 
 const NOW = Math.floor(Date.now() / 1000);
 

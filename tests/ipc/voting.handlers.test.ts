@@ -34,9 +34,10 @@ import type * as voting_handlersModule from '../../src/js/ipc/voting.handlers';
 import type * as challengeFixturesModule from '../helpers/challengeFixtures';
 import type * as logCategoriesModule from '../helpers/logCategories';
 import type * as loggerModule from '../../src/js/logger';
-const { buildHandlers }: typeof voting_handlersModule = require('../../src/js/ipc/voting.handlers');
-const { buildChallenge: buildBaseChallenge }: typeof challengeFixturesModule = require('../helpers/challengeFixtures');
-const { logCategories }: typeof logCategoriesModule = require('../helpers/logCategories');
+const { buildHandlers } = require('../../src/js/ipc/voting.handlers') as typeof voting_handlersModule;
+const { buildChallenge: buildBaseChallenge } =
+    require('../helpers/challengeFixtures') as typeof challengeFixturesModule;
+const { logCategories } = require('../helpers/logCategories') as typeof logCategoriesModule;
 
 type ProgressOptions = NonNullable<Parameters<typeof manualVoteModule.voteAllChallengesManual>[3]>;
 
@@ -410,10 +411,10 @@ describe('vote-all-challenges-manual progress callback', () => {
     beforeEach(() => jest.clearAllMocks());
 
     test('the forwarded onProgress reports progress through the voting logger', async () => {
-        // logger is the global jest.fn() mock from tests/setup.js; swap its
+        // logger is the global jest.fn() mock from tests/setup.ts; swap its
         // implementation and put the original back (spyOn + mockRestore would
         // strip the setup implementation and break later tests).
-        const logger = jest.mocked<typeof loggerModule>(require('../../src/js/logger'));
+        const logger = jest.mocked(require('../../src/js/logger') as typeof loggerModule);
         const progress = jest.fn();
         const originalImpl = logger.withCategory.getMockImplementation();
         logger.withCategory.mockImplementation(() =>
@@ -483,7 +484,7 @@ describe('vote-on-challenge log categories', () => {
 
 describe('register', () => {
     test('registers every voting channel on ipcMain', () => {
-        const { register }: typeof voting_handlersModule = require('../../src/js/ipc/voting.handlers');
+        const { register } = require('../../src/js/ipc/voting.handlers') as typeof voting_handlersModule;
         const channels = new Map<string, Parameters<IpcMain['handle']>[1]>();
         register(
             invalid({

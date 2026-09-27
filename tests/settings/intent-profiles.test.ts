@@ -22,12 +22,9 @@ import settings = require('../../src/js/settings');
 import type * as intentProfilesModule from '../../src/js/settings/intentProfiles';
 import type * as schemaModule from '../../src/js/settings/schema';
 import type { SettingsSchemaEntry } from '../../src/js/settings/schema';
-const {
-    INTENT_PROFILES,
-    getIntentByName,
-    intentValuesMatch,
-}: typeof intentProfilesModule = require('../../src/js/settings/intentProfiles');
-const { validateSetting }: typeof schemaModule = require('../../src/js/settings/schema');
+const { INTENT_PROFILES, getIntentByName, intentValuesMatch } =
+    require('../../src/js/settings/intentProfiles') as typeof intentProfilesModule;
+const { validateSetting } = require('../../src/js/settings/schema') as typeof schemaModule;
 
 jest.mock('../../src/js/logger', () => {
     const scoped = { info: jest.fn(), error: jest.fn(), debug: jest.fn(), success: jest.fn(), warning: jest.fn() };

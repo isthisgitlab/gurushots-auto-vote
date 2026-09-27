@@ -11,9 +11,8 @@ import runtimeModule = require('../../src/js/runtime');
 const runtime = jest.mocked(runtimeModule);
 import logger = require('../../src/js/logger');
 import type * as AndroidUpdateInstallerModule from '../../src/js/services/AndroidUpdateInstaller';
-const {
-    downloadAndInstall,
-}: typeof AndroidUpdateInstallerModule = require('../../src/js/services/AndroidUpdateInstaller');
+const { downloadAndInstall } =
+    require('../../src/js/services/AndroidUpdateInstaller') as typeof AndroidUpdateInstallerModule;
 import type { ApkInstallerPlugin, CapacitorGlobals } from '../../src/js/types/capacitor';
 import { invalid } from '../helpers/invalid';
 
@@ -80,7 +79,7 @@ describe('AndroidUpdateInstaller', () => {
 
     test('forwards native progress events to onProgress and tolerates a handle without remove()', async () => {
         let listener: Parameters<NonNullable<ApkInstallerPlugin['addListener']>>[1];
-        const addListener = jest.fn(async (_event, cb) => {
+        const addListener = jest.fn(async (_event: 'downloadProgress', cb: typeof listener) => {
             listener = cb;
             return invalid<{ remove: () => Promise<void> }>({});
         });

@@ -41,8 +41,8 @@ describe('TranslationContext', () => {
 
     afterEach(() => {
         mockApi.getSetting.mockResolvedValue(null);
-        mockApi.setSetting.mockResolvedValue(undefined);
-        mockTranslator.t.mockImplementation((key) => key);
+        mockApi.setSetting.mockResolvedValue(invalid(undefined));
+        mockTranslator.t.mockImplementation((key: string) => key);
     });
 
     it('throws when used outside a provider', () => {
@@ -138,7 +138,7 @@ describe('TranslationContext', () => {
             await act(async () => {
                 await expect(ctx.setLanguage('en')).resolves.toBe(true);
             });
-            delete mockApi.refreshMenu;
+            delete invalid<Partial<typeof mockApi>>(mockApi).refreshMenu;
             await act(async () => {
                 await expect(ctx.setLanguage('lv')).resolves.toBe(true);
             });
@@ -214,7 +214,7 @@ describe('TranslationContext', () => {
             await act(async () => {
                 await expect(ctx.setLanguage('en')).resolves.toBe(false);
             });
-            delete mockApi.logError;
+            delete invalid<Partial<typeof mockApi>>(mockApi).logError;
             await act(async () => {
                 await expect(ctx.setLanguage('en')).resolves.toBe(false);
             });
@@ -226,14 +226,14 @@ describe('TranslationContext', () => {
 
     describe('following a language saved elsewhere', () => {
         let fire: (payload?: object) => void;
-        let unsubscribe: jest.Mock;
-        let savedOnSettingsChanged: jest.Mock;
+        let unsubscribe: jest.Mock<void, []>;
+        let savedOnSettingsChanged: typeof mockApi.onSettingsChanged;
 
         beforeEach(() => {
             savedOnSettingsChanged = mockApi.onSettingsChanged;
-            unsubscribe = jest.fn();
+            unsubscribe = jest.fn<void, []>();
             mockApi.onSettingsChanged = jest.fn((cb) => {
-                fire = cb;
+                fire = cb as (payload?: object) => void;
                 return unsubscribe;
             });
         });
@@ -285,7 +285,7 @@ describe('TranslationContext', () => {
         });
 
         it('works without a settings-changed channel', async () => {
-            delete mockApi.onSettingsChanged;
+            delete invalid<Partial<typeof mockApi>>(mockApi).onSettingsChanged;
             const { findByText } = renderProvider();
             expect(await findByText('ready')).toBeTruthy();
             expect(ctx.language).toBe('lv');

@@ -33,7 +33,7 @@ describe('runtime.isHeadlessService', () => {
 // The app-identity/user-data resolution decides where logs AND settings
 // physically live — pin each branch.
 describe('runtime app identity + user-data path (single source of truth)', () => {
-    const fs = jest.mocked<typeof fsModule>(require('fs'));
+    const fs = jest.mocked(require('fs') as typeof fsModule);
 
     beforeEach(() => {
         jest.clearAllMocks();
@@ -88,7 +88,7 @@ describe('runtime app identity + user-data path (single source of truth)', () =>
                 (process.versions as { electron?: string }).electron = '43.0.0';
                 jest.doMock('electron', () => ({ app: appStub }), { virtual: true });
                 try {
-                    fn(require('../src/js/runtime'));
+                    fn(require('../src/js/runtime') as typeof runtime);
                 } finally {
                     delete (process.versions as { electron?: string }).electron;
                     jest.dontMock('electron');

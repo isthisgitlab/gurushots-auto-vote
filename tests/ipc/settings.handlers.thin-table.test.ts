@@ -24,10 +24,10 @@ import { invalid } from '../helpers/invalid';
 import settingsModule = require('../../src/js/settings');
 const settings = jest.mocked(settingsModule);
 import type * as settings_handlersModule from '../../src/js/ipc/settings.handlers';
-const { buildHandlers }: typeof settings_handlersModule = require('../../src/js/ipc/settings.handlers');
+const { buildHandlers } = require('../../src/js/ipc/settings.handlers') as typeof settings_handlersModule;
 
 // The table addresses settings methods and handler channels by name.
-type MockTable = Record<string, jest.Mock>;
+type MockTable = Record<string, jest.Mock<unknown, unknown[]>>;
 type HandlerTable = Record<string, (...args: unknown[]) => unknown>;
 
 // Mirror of the THIN_HANDLERS table in src/js/ipc/settings.handlers.ts.

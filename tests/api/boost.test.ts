@@ -9,8 +9,8 @@ import type * as applyBoostModule from '../../src/js/strategies/real/applyBoost'
 import type * as api_clientModule from '../../src/js/api/api-client';
 import { invalid } from '../helpers/invalid';
 
-const { applyBoostToEntry }: typeof boostModule = require('../../src/js/api/boost');
-const { applyBoost }: typeof applyBoostModule = require('../../src/js/strategies/real/applyBoost');
+const { applyBoostToEntry } = require('../../src/js/api/boost') as typeof boostModule;
+const { applyBoost } = require('../../src/js/strategies/real/applyBoost') as typeof applyBoostModule;
 
 // Mock settings: default boostImageIndex=1 so the picker targets entries[0]
 // and falls back backward (with wrap) past any turboed primary. Other
@@ -25,7 +25,7 @@ jest.mock('../../src/js/settings', () => ({
 // Mock the api-client module
 jest.mock('../../src/js/api/api-client', () => ({
     makePostRequest: jest.fn(),
-    createCommonHeaders: jest.fn((token) => ({
+    createCommonHeaders: jest.fn((token: string | undefined) => ({
         'x-token': token || 'mock-token',
         'user-agent': 'GuruShots/1.0 (iPhone; iOS 16.0; en_US)',
         accept: 'application/json',
@@ -57,8 +57,8 @@ jest.spyOn(console, 'error').mockImplementation();
 
 describe('boost', () => {
     const mockToken = 'test-token-123';
-    const { makePostRequest, createCommonHeaders } = jest.mocked<typeof api_clientModule>(
-        require('../../src/js/api/api-client'),
+    const { makePostRequest, createCommonHeaders } = jest.mocked(
+        require('../../src/js/api/api-client') as typeof api_clientModule,
     );
 
     beforeEach(() => {

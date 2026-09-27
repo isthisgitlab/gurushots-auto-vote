@@ -9,13 +9,8 @@ import type * as photoPickerModule from '../../src/js/services/photoPicker';
 import type { SemanticScore } from '../../src/js/types/photoPicker';
 import { invalid } from '../helpers/invalid';
 
-const {
-    tokenise,
-    parseNegation,
-    labelStemGroups,
-    scorePhoto,
-    buildScoredCandidates,
-}: typeof photoPickerModule = require('../../src/js/services/photoPicker');
+const { tokenise, parseNegation, labelStemGroups, scorePhoto, buildScoredCandidates } =
+    require('../../src/js/services/photoPicker') as typeof photoPickerModule;
 
 const allowed = (id: string, labels: string[]) => ({
     id,

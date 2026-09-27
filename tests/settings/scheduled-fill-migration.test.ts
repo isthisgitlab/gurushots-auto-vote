@@ -13,7 +13,7 @@
 
 import settings = require('../../src/js/settings');
 import type * as schemaModule from '../../src/js/settings/schema';
-const { schemaDefault }: typeof schemaModule = require('../../src/js/settings/schema');
+const { schemaDefault } = require('../../src/js/settings/schema') as typeof schemaModule;
 import type { AndroidHeadlessStore } from '../../src/js/types/settings';
 
 const g = globalThis as typeof globalThis & { __GS_HEADLESS__?: boolean; AndroidHeadlessStore?: AndroidHeadlessStore };

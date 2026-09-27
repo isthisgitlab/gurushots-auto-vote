@@ -11,6 +11,7 @@ import { ChallengeCard } from '@/components/app/ChallengeCard';
 import { buildChallenge } from '../helpers/challengeFixtures';
 import type { Bankroll, Challenge } from '../../src/js/types/gurushots';
 import type { WindowApi } from '../../src/js/types/ipc';
+import type { ComponentProps } from 'preact';
 
 const mockChallengeSettings = {
     hasCustomSettings: false,
@@ -73,7 +74,11 @@ const renderCard = (
         bankroll = FULL,
         autovoteRunning = false,
         onCurrencySpent = jest.fn(),
-    }: { bankroll?: Bankroll | null; autovoteRunning?: boolean; onCurrencySpent?: jest.Mock } = {},
+    }: {
+        bankroll?: Bankroll | null;
+        autovoteRunning?: boolean;
+        onCurrencySpent?: jest.MockedFunction<ComponentProps<typeof ChallengeCard>['onCurrencySpent']>;
+    } = {},
 ) => {
     render(
         <ChallengeCard

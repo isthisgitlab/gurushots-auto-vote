@@ -6,7 +6,7 @@
 
 import type * as uiDefaultsModule from '../../src/js/settings/uiDefaults';
 
-const { getUiDefaultSettings }: typeof uiDefaultsModule = require('../../src/js/settings/uiDefaults');
+const { getUiDefaultSettings } = require('../../src/js/settings/uiDefaults') as typeof uiDefaultsModule;
 
 describe('getUiDefaultSettings', () => {
     test('returns the documented UI-form defaults', () => {

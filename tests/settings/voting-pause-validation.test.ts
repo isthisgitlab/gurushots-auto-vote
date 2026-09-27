@@ -9,11 +9,8 @@
 
 import type * as schemaModule from '../../src/js/settings/schema';
 
-const {
-    validateSetting,
-    getValidationError,
-    SETTINGS_SCHEMA,
-}: typeof schemaModule = require('../../src/js/settings/schema');
+const { validateSetting, getValidationError, SETTINGS_SCHEMA } =
+    require('../../src/js/settings/schema') as typeof schemaModule;
 
 describe('voting pause schema validation', () => {
     test('all four keys exist, are per-challenge, and sit in the votingPause group', () => {

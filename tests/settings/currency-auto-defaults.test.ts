@@ -8,7 +8,7 @@ import type { AndroidHeadlessStore } from '../../src/js/types/settings';
 import settings = require('../../src/js/settings');
 import type * as nodeResolversModule from '../../src/js/scheduling/nodeResolvers';
 import type { SettingsSchemaEntry } from '../../src/js/settings/schema';
-const { resolveCurrencyAuto }: typeof nodeResolversModule = require('../../src/js/scheduling/nodeResolvers');
+const { resolveCurrencyAuto } = require('../../src/js/scheduling/nodeResolvers') as typeof nodeResolversModule;
 
 // The node resolver answers synchronously; its shared type also admits the renderer's async variant.
 

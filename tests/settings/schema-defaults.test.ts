@@ -7,7 +7,7 @@ import type * as schemaModule from '../../src/js/settings/schema';
 import type { SettingKey } from '../../src/js/settings/schema';
 import type * as defaultsModule from '../../src/js/settings/defaults';
 
-const { SETTINGS_SCHEMA, schemaDefault }: typeof schemaModule = require('../../src/js/settings/schema');
+const { SETTINGS_SCHEMA, schemaDefault } = require('../../src/js/settings/schema') as typeof schemaModule;
 
 describe('schema defaults', () => {
     test.each(Object.keys(SETTINGS_SCHEMA) as SettingKey[])('%s: the default passes its own validation', (key) => {
@@ -22,10 +22,8 @@ describe('schema defaults', () => {
 });
 
 describe('challengeValueSetIsValid', () => {
-    const {
-        challengeValueSetIsValid,
-        getDefaultSettings,
-    }: typeof defaultsModule = require('../../src/js/settings/defaults');
+    const { challengeValueSetIsValid, getDefaultSettings } =
+        require('../../src/js/settings/defaults') as typeof defaultsModule;
 
     test('a candidate key the schema does not know is not validated', () => {
         const values = getDefaultSettings().challengeSettings.globalDefaults;

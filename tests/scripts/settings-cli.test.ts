@@ -48,7 +48,7 @@ jest.mock('../../src/js/logger', () => {
 //   'hang'        — never closes (exercises the 2s timeout)
 //   'throw'       — spawn itself throws synchronously
 let mockChildBehavior = 'not-running';
-let mockLastChild: { kill: jest.Mock } | null = null;
+let mockLastChild: { kill: jest.MockedFunction<node_child_processModule.ChildProcess['kill']> } | null = null;
 jest.mock('node:child_process', () => ({
     spawn: jest.fn(() => {
         if (mockChildBehavior === 'throw') throw new Error('spawn EACCES');
@@ -65,7 +65,7 @@ jest.mock('node:child_process', () => ({
     }),
 }));
 
-jest.mock('../../src/js/cli/parseValue', () => ({ parseSettingValue: jest.fn((v) => v) }));
+jest.mock('../../src/js/cli/parseValue', () => ({ parseSettingValue: jest.fn((v: string) => v) }));
 jest.mock('../../src/js/cli/commands/settings', () => ({
     dumpSchema: jest.fn(),
     listGlobalDefaults: jest.fn(),
@@ -83,7 +83,7 @@ const sharedCommands = jest.mocked(sharedCommandsModule);
 import settingsModule = require('../../src/js/settings');
 const settings = jest.mocked(settingsModule);
 import type * as node_child_processModule from 'node:child_process';
-const { spawn } = jest.mocked<typeof node_child_processModule>(require('node:child_process'));
+const { spawn } = jest.mocked(require('node:child_process') as typeof node_child_processModule);
 
 // Optional per-test hooks: `beforeRequire({ exitSpy })` can reshape the
 // process.exit stub; `afterRequire()` runs between loading the script and

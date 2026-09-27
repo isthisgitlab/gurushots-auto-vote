@@ -6,7 +6,7 @@
 
 import type * as errorResultModule from '../../src/js/ipc/errorResult';
 
-const { errorResult }: typeof errorResultModule = require('../../src/js/ipc/errorResult');
+const { errorResult } = require('../../src/js/ipc/errorResult') as typeof errorResultModule;
 
 describe('errorResult', () => {
     test.each([

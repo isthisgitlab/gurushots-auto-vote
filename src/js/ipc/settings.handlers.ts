@@ -275,7 +275,7 @@ const buildHandlers = ({ broadcastSettingsChange }: { broadcastSettingsChange?: 
     } satisfies IpcHandlerMap;
 
     // The thin rows are added in place; ThinHandlers types them on the result.
-    const thinHandlers = handlers as unknown as Record<string, IpcHandler>;
+    const thinHandlers = handlers as Record<string, IpcHandler>;
     THIN_HANDLERS.forEach(([channel, method, fallback, verb]) => {
         thinHandlers[channel] = async (event, ...args: unknown[]) => {
             try {

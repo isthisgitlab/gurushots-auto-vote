@@ -7,12 +7,9 @@
 import type * as scenarioSchemaModule from '../../src/js/settings/scenarioSchema';
 import type * as defaultsModule from '../../src/js/settings/defaults';
 
-const {
-    validateScenario,
-    parseScenarioJson,
-    formatPath,
-}: typeof scenarioSchemaModule = require('../../src/js/settings/scenarioSchema');
-const { getDefaultSettings }: typeof defaultsModule = require('../../src/js/settings/defaults');
+const { validateScenario, parseScenarioJson, formatPath } =
+    require('../../src/js/settings/scenarioSchema') as typeof scenarioSchemaModule;
+const { getDefaultSettings } = require('../../src/js/settings/defaults') as typeof defaultsModule;
 
 const globalDefaults = getDefaultSettings().challengeSettings.globalDefaults;
 

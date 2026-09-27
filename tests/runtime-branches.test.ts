@@ -32,13 +32,13 @@ const withRuntime = (
     jest.isolateModules(() => {
         if (electron !== undefined) jest.doMock('electron', electron, { virtual: true });
         if (sea !== undefined) jest.doMock('node:sea', sea, { virtual: true });
-        fn(require('../src/js/runtime'));
+        fn(require('../src/js/runtime') as typeof runtimeModule);
     });
 };
 const loadRuntime = () => {
     let rt!: typeof runtimeModule;
     jest.isolateModules(() => {
-        rt = require('../src/js/runtime');
+        rt = require('../src/js/runtime') as typeof rt;
     });
     return rt;
 };
@@ -141,7 +141,7 @@ describe('isPackaged', () => {
 });
 
 describe('env flags', () => {
-    const rt: typeof runtimeModule = require('../src/js/runtime');
+    const rt = require('../src/js/runtime') as typeof runtimeModule;
 
     test.each([
         [{ NODE_ENV: 'development' }, true],
@@ -167,8 +167,8 @@ describe('env flags', () => {
 });
 
 describe('getUserDataDir', () => {
-    const os: typeof node_osModule = require('node:os');
-    const rt: typeof runtimeModule = require('../src/js/runtime');
+    const os = require('node:os') as typeof node_osModule;
+    const rt = require('../src/js/runtime') as typeof runtimeModule;
 
     test('Capacitor returns a stub path without touching the OS', () => {
         g.Capacitor = capacitor();

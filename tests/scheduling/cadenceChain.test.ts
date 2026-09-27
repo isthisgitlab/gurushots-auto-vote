@@ -17,14 +17,17 @@ import type { Challenge } from '../../src/js/types/gurushots';
 import { invalid } from '../helpers/invalid';
 
 type RunningToggle = { _setRunning: (value: boolean) => void };
-type FakeLog = { cadence: jest.Mock; decisionError: jest.Mock; cycleError: jest.Mock; overslept?: jest.Mock };
+type ChainLog = Parameters<typeof cadenceChainModule.createCadenceChain>[0]['log'];
+type FakeLog = {
+    cadence: jest.MockedFunction<ChainLog['cadence']>;
+    decisionError: jest.MockedFunction<ChainLog['decisionError']>;
+    cycleError: jest.MockedFunction<ChainLog['cycleError']>;
+    overslept?: jest.MockedFunction<NonNullable<ChainLog['overslept']>>;
+};
 
-const {
-    createCadenceChain,
-    DECISION_ERROR_MESSAGE,
-    OFFLINE_RETRY_MS,
-}: typeof cadenceChainModule = require('../../src/js/scheduling/cadenceChain');
-const { MS_PER_MINUTE, MIN_CYCLE_GAP_MS }: typeof randomDelayModule = require('../../src/js/scheduling/randomDelay');
+const { createCadenceChain, DECISION_ERROR_MESSAGE, OFFLINE_RETRY_MS } =
+    require('../../src/js/scheduling/cadenceChain') as typeof cadenceChainModule;
+const { MS_PER_MINUTE, MIN_CYCLE_GAP_MS } = require('../../src/js/scheduling/randomDelay') as typeof randomDelayModule;
 
 const FIXED_DELAY_MIN = 3;
 const FIXED_DELAY_MS = FIXED_DELAY_MIN * MS_PER_MINUTE;
@@ -538,7 +541,7 @@ describe('createCadenceChain', () => {
 
     test('host clearing the slot mid-cycle blocks the finally re-arm', async () => {
         const deps = makeDeps();
-        let releaseCycle;
+        let releaseCycle: (() => void) | undefined;
         deps.runCycle.mockImplementation(
             () =>
                 new Promise((resolve) => {
@@ -654,7 +657,7 @@ describe('createCadenceChain', () => {
 
         test('a throwing hook still runs the cycle — observability only', async () => {
             const deps = makeDeps();
-            deps.log.overslept = jest.fn(() => {
+            deps.log.overslept = jest.fn<void, [number, number]>(() => {
                 throw new Error('log sink down');
             });
             const chain = createCadenceChain(invalid(deps));
@@ -687,7 +690,7 @@ describe('createCadenceChain', () => {
     // boundary-aware cadence. These are the load-bearing safety guards.
     describe('onCycleChallenges hook', () => {
         test('fires once per cycle with the resolved challenge list and now (seconds)', async () => {
-            const onCycleChallenges = jest.fn();
+            const onCycleChallenges = jest.fn<unknown, [Challenge[], number]>();
             const list = [farChallenge()];
             const deps = makeDeps({ onCycleChallenges });
             const chain = createCadenceChain(invalid(deps));
@@ -792,11 +795,8 @@ describe('createCadenceChain', () => {
 
 // The gate itself, unit-tested away from the timer plumbing.
 describe('oversleptBy', () => {
-    const {
-        oversleptBy,
-        OVERSLEEP_ABSOLUTE_MS,
-        OVERSLEEP_ALWAYS_MS,
-    }: typeof cadenceChainModule = require('../../src/js/scheduling/cadenceChain');
+    const { oversleptBy, OVERSLEEP_ABSOLUTE_MS, OVERSLEEP_ALWAYS_MS } =
+        require('../../src/js/scheduling/cadenceChain') as typeof cadenceChainModule;
 
     test('an on-time (or early) fire is never late', () => {
         expect(oversleptBy(3 * MS_PER_MINUTE, 3 * MS_PER_MINUTE)).toBe(0);
@@ -854,7 +854,7 @@ describe('oversleptBy', () => {
 // One wording, shared by both hosts, because it lands on the GUI's Logs page
 // where a user is trying to work out why a slot went unfilled.
 describe('formatOversleptMessage', () => {
-    const { formatOversleptMessage }: typeof cadenceChainModule = require('../../src/js/scheduling/cadenceChain');
+    const { formatOversleptMessage } = require('../../src/js/scheduling/cadenceChain') as typeof cadenceChainModule;
 
     test('states what happened, why, and what to do next', () => {
         const message = formatOversleptMessage(51 * MS_PER_MINUTE, 3 * MS_PER_MINUTE);

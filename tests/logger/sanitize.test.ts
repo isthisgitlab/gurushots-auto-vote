@@ -111,7 +111,7 @@ describe('sanitizeForLog', () => {
 
     test('does not mutate the input object', () => {
         const input = { token: 'plain', user: { password: 'hunter2' } };
-        const snapshot = JSON.parse(JSON.stringify(input));
+        const snapshot = JSON.parse(JSON.stringify(input)) as typeof input;
         sanitizeForLog(input);
         expect(input).toEqual(snapshot);
     });

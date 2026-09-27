@@ -6,7 +6,7 @@
 
 import type * as formattersModule from '../../src/js/react/utils/formatters';
 
-const { formatDuration }: typeof formattersModule = require('../../src/js/react/utils/formatters');
+const { formatDuration } = require('../../src/js/react/utils/formatters') as typeof formattersModule;
 
 describe('formatDuration', () => {
     test('sub-minute (and zero / negative) reads "<1m", never "0m"', () => {

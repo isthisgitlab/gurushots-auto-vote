@@ -8,14 +8,14 @@ import type * as currencyModule from '../../src/js/api/currency';
 import type * as api_clientModule from '../../src/js/api/api-client';
 import { invalid } from '../helpers/invalid';
 
-const { keyUnlock, swapPhoto, exposureAutofill }: typeof currencyModule = require('../../src/js/api/currency');
+const { keyUnlock, swapPhoto, exposureAutofill } = require('../../src/js/api/currency') as typeof currencyModule;
 
 jest.mock('../../src/js/api/api-client', () => ({
     makePostRequest: jest.fn(),
     FORM_CONTENT_TYPE: 'application/x-www-form-urlencoded; charset=utf-8',
 }));
 
-const { makePostRequest } = jest.mocked<typeof api_clientModule>(require('../../src/js/api/api-client'));
+const { makePostRequest } = jest.mocked(require('../../src/js/api/api-client') as typeof api_clientModule);
 const token = 'tok-123';
 
 beforeEach(() => jest.clearAllMocks());

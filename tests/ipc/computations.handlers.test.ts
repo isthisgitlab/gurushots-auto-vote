@@ -14,10 +14,8 @@ import { invalid } from '../helpers/invalid';
 import votingLogicModule = require('../../src/js/services/VotingLogic');
 const votingLogic = jest.mocked(votingLogicModule);
 import type * as computations_handlersModule from '../../src/js/ipc/computations.handlers';
-const {
-    buildHandlers,
-    register,
-}: typeof computations_handlersModule = require('../../src/js/ipc/computations.handlers');
+const { buildHandlers, register } =
+    require('../../src/js/ipc/computations.handlers') as typeof computations_handlersModule;
 
 let handler: ReturnType<typeof buildHandlers>['get-deadline-actions'];
 
@@ -91,7 +89,7 @@ describe('register', () => {
 
         // An untrusted (remote main frame) sender is refused before the handler runs.
         const frame = { url: 'https://evil.example/' };
-        const result = await channels.get('get-deadline-actions')!(
+        const result: unknown = await channels.get('get-deadline-actions')!(
             invalid({ senderFrame: frame, sender: { mainFrame: frame } }),
             {
                 id: 1,

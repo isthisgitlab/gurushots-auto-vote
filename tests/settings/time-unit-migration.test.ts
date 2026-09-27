@@ -13,9 +13,11 @@
 
 import type * as fsModule from 'node:fs';
 import type * as settingsModule from '../../src/js/settings';
+import type { AppSettings } from '../../src/js/types/settings';
 import type * as challengeFixturesModule from '../helpers/challengeFixtures';
 
-const { buildSettingsFixture: buildFixture }: typeof challengeFixturesModule = require('../helpers/challengeFixtures');
+const { buildSettingsFixture: buildFixture } =
+    require('../helpers/challengeFixtures') as typeof challengeFixturesModule;
 
 describe('time-unit migration in loadSettings', () => {
     let settings: typeof settingsModule;
@@ -31,7 +33,7 @@ describe('time-unit migration in loadSettings', () => {
         for (let i = calls.length - 1; i >= 0; i -= 1) {
             const [, body] = calls[i];
             if (typeof body === 'string' && body.includes('_timeUnitMigratedV1')) {
-                return JSON.parse(body);
+                return JSON.parse(body) as AppSettings;
             }
         }
         return null;
@@ -43,8 +45,8 @@ describe('time-unit migration in loadSettings', () => {
         // Ensure no autovote-running flag bleeds across tests
         // Re-require fs *after* resetModules so we share the fresh mock
         // instance that settings.ts will see.
-        fs = jest.mocked<typeof fsModule>(require('node:fs'));
-        settings = require('../../src/js/settings');
+        fs = jest.mocked(require('node:fs') as typeof fsModule);
+        settings = require('../../src/js/settings') as typeof settings;
     });
 
     test('inflates minute-encoded global defaults by 60', () => {
@@ -117,8 +119,8 @@ describe('time-unit migration in loadSettings', () => {
 
         const persisted = findMigrationWrite();
         expect(persisted).not.toBeNull();
-        expect(persisted._timeUnitMigratedV1).toBe(true);
-        expect(persisted.challengeSettings.globalDefaults.turboTime).toBe(10800);
+        expect(persisted!._timeUnitMigratedV1).toBe(true);
+        expect(persisted!.challengeSettings.globalDefaults.turboTime).toBe(10800);
     });
 
     test('is idempotent: second load with flag set does not re-migrate', () => {
@@ -212,8 +214,8 @@ describe('emergencyFill minute->second migration in loadSettings', () => {
     beforeEach(() => {
         jest.resetModules();
         jest.clearAllMocks();
-        fs = jest.mocked<typeof fsModule>(require('node:fs'));
-        settings = require('../../src/js/settings');
+        fs = jest.mocked(require('node:fs') as typeof fsModule);
+        settings = require('../../src/js/settings') as typeof settings;
     });
 
     test('inflates a minute-encoded global default by 60 (5 -> 300)', () => {

@@ -10,7 +10,7 @@
 import type * as schemaModule from '../../src/js/settings/schema';
 import type { SettingsSchemaEntry } from '../../src/js/settings/schema';
 
-const { SETTINGS_SCHEMA, validateSetting }: typeof schemaModule = require('../../src/js/settings/schema');
+const { SETTINGS_SCHEMA, validateSetting } = require('../../src/js/settings/schema') as typeof schemaModule;
 
 const numberSettings = Object.entries<SettingsSchemaEntry>(SETTINGS_SCHEMA).filter(
     ([, config]) => config.type === 'number',

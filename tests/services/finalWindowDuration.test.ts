@@ -14,12 +14,9 @@
 import type * as VotingLogicModule from '../../src/js/services/VotingLogic';
 import type * as schemaModule from '../../src/js/settings/schema';
 
-const { isWithinFinalWindow }: typeof VotingLogicModule = require('../../src/js/services/VotingLogic');
-const {
-    validateSetting,
-    getSchemaDefault,
-    SETTINGS_SCHEMA,
-}: typeof schemaModule = require('../../src/js/settings/schema');
+const { isWithinFinalWindow } = require('../../src/js/services/VotingLogic') as typeof VotingLogicModule;
+const { validateSetting, getSchemaDefault, SETTINGS_SCHEMA } =
+    require('../../src/js/settings/schema') as typeof schemaModule;
 
 describe('isWithinFinalWindow with a non-default windowSec', () => {
     const now = 1_000_000;

@@ -9,7 +9,7 @@
 
 import type * as schemaModule from '../../src/js/settings/schema';
 
-const { validateSetting }: typeof schemaModule = require('../../src/js/settings/schema');
+const { validateSetting } = require('../../src/js/settings/schema') as typeof schemaModule;
 
 const KEY = 'autoFillSchedule';
 const MAX_SECONDS = 30 * 24 * 3600;

@@ -4,7 +4,7 @@
 
 import type * as timingModule from '../src/js/timing';
 
-const { sleep, getRandomDelay }: typeof timingModule = require('../src/js/timing');
+const { sleep, getRandomDelay } = require('../src/js/timing') as typeof timingModule;
 
 describe('sleep', () => {
     beforeEach(() => jest.useFakeTimers());

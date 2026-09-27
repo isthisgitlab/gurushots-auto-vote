@@ -127,7 +127,7 @@ describe('useAuth transitions', () => {
 
 describe('useBoost / useTurbo / useFillChallenge', () => {
     test('useBoost forwards (challengeId, imageId) and surfaces its failure label', async () => {
-        mockApi.applyBoost.mockResolvedValueOnce({ success: false });
+        mockApi.applyBoost.mockResolvedValueOnce(invalid({ success: false }));
         const { result } = renderHook(() => useBoost());
         await act(async () => {
             await result.current.applyBoost('c1', 'img1');
@@ -140,7 +140,7 @@ describe('useBoost / useTurbo / useFillChallenge', () => {
 
     test('useTurbo runs both actions and merges their errors', async () => {
         mockApi.applyTurbo.mockRejectedValueOnce({});
-        mockApi.playAutoTurbo.mockResolvedValueOnce({ success: false });
+        mockApi.playAutoTurbo.mockResolvedValueOnce(invalid({ success: false }));
         const { result } = renderHook(() => useTurbo());
 
         await act(async () => {
@@ -182,18 +182,18 @@ describe('useDeadlineActions', () => {
     });
 
     test('a success with a non-array actions field yields an empty list', async () => {
-        mockApi.getDeadlineActions.mockResolvedValueOnce({ success: true, actions: 'x', boostBlocked: true });
+        mockApi.getDeadlineActions.mockResolvedValueOnce(invalid({ success: true, actions: 'x', boostBlocked: true }));
         const { result } = renderHook(() => useDeadlineActions(challenge));
         await waitFor(() => expect(result.current.loading).toBe(false));
         expect(result.current).toEqual({ actions: [], boostBlocked: true, loading: false, error: false });
     });
 
     test('an unsuccessful response sets error; a success passes actions through', async () => {
-        mockApi.getDeadlineActions.mockResolvedValueOnce({ success: false });
+        mockApi.getDeadlineActions.mockResolvedValueOnce(invalid({ success: false }));
         const { result, rerender } = renderHook(({ c }) => useDeadlineActions(c), { initialProps: { c: challenge } });
         await waitFor(() => expect(result.current.error).toBe(true));
 
-        mockApi.getDeadlineActions.mockResolvedValueOnce({ success: true, actions: [{ action: 'turbo' }] });
+        mockApi.getDeadlineActions.mockResolvedValueOnce(invalid({ success: true, actions: [{ action: 'turbo' }] }));
         rerender({ c: { ...challenge, close_time: 200 } });
         await waitFor(() => expect(result.current.actions).toEqual([{ action: 'turbo' }]));
         expect(result.current.boostBlocked).toBe(false);
@@ -223,7 +223,7 @@ describe('useDeadlineActions', () => {
         await waitFor(() => expect(result.current.error).toBe(true));
 
         const late = deferred();
-        mockApi.getDeadlineActions.mockReturnValueOnce(late.promise);
+        mockApi.getDeadlineActions.mockReturnValueOnce(invalid(late.promise));
         const second = renderHook(() => useDeadlineActions(invalid({ id: 6 })));
         second.unmount();
         await act(async () => {
@@ -235,7 +235,7 @@ describe('useDeadlineActions', () => {
 
     test('a late success after unmount is ignored', async () => {
         const late = deferred();
-        mockApi.getDeadlineActions.mockReturnValueOnce(late.promise);
+        mockApi.getDeadlineActions.mockReturnValueOnce(invalid(late.promise));
         const { result, unmount } = renderHook(() => useDeadlineActions(null));
         unmount();
         await act(async () => {
@@ -256,19 +256,19 @@ describe('useMemberChallenges', () => {
     });
 
     test('a missing response falls back to fetch_failed; a non-array success is empty', async () => {
-        mockApi.getMemberChallenges.mockResolvedValueOnce(undefined);
+        mockApi.getMemberChallenges.mockResolvedValueOnce(invalid(undefined));
         const { result } = renderHook(() => useMemberChallenges());
         await waitFor(() => expect(result.current.loading).toBe(false));
         expect(result.current.error!.message).toBe('fetch_failed');
 
-        mockApi.getMemberChallenges.mockResolvedValueOnce({ success: true, items: null });
+        mockApi.getMemberChallenges.mockResolvedValueOnce(invalid({ success: true, items: null }));
         await act(async () => {
             await result.current.refetch();
         });
         expect(result.current.items).toEqual([]);
         expect(result.current.error).toBeNull();
 
-        mockApi.getMemberChallenges.mockResolvedValueOnce({ success: true, items: [{ id: 1 }] });
+        mockApi.getMemberChallenges.mockResolvedValueOnce(invalid({ success: true, items: [{ id: 1 }] }));
         await act(async () => {
             await result.current.refetch();
         });
@@ -278,7 +278,7 @@ describe('useMemberChallenges', () => {
 
 describe('useSwapBacks', () => {
     test('a rejected read is no offers', async () => {
-        mockApi.getSwapBacks.mockResolvedValueOnce({ success: true, items: [{ currentId: 'x' }] });
+        mockApi.getSwapBacks.mockResolvedValueOnce(invalid({ success: true, items: [{ currentId: 'x' }] }));
         const challenge = invalid<Challenge>({ id: 3, member: { ranking: { entries: [{ id: 'e1' }] } } });
         const { result, rerender } = renderHook(({ c }) => useSwapBacks(c), { initialProps: { c: challenge } });
         await waitFor(() => expect(result.current).toEqual([{ currentId: 'x' }]));
@@ -296,12 +296,12 @@ describe('useSwapBacks', () => {
         expect(result.current).toEqual([]);
         expect(mockApi.getSwapBacks).not.toHaveBeenCalled();
 
-        mockApi.getSwapBacks.mockResolvedValueOnce({ success: false, items: [{ currentId: 'z' }] });
+        mockApi.getSwapBacks.mockResolvedValueOnce(invalid({ success: false, items: [{ currentId: 'z' }] }));
         rerender({ c: invalid({ id: 8 }) });
         await waitFor(() => expect(mockApi.getSwapBacks).toHaveBeenCalledWith('8'));
         expect(result.current).toEqual([]);
 
-        mockApi.getSwapBacks.mockResolvedValueOnce(undefined);
+        mockApi.getSwapBacks.mockResolvedValueOnce(invalid(undefined));
         rerender({ c: invalid({ id: 9 }) });
         await waitFor(() => expect(mockApi.getSwapBacks).toHaveBeenCalledWith('9'));
         expect(result.current).toEqual([]);
@@ -309,7 +309,7 @@ describe('useSwapBacks', () => {
 
     test('a late rejection after unmount is ignored', async () => {
         const late = deferred();
-        mockApi.getSwapBacks.mockReturnValueOnce(late.promise);
+        mockApi.getSwapBacks.mockReturnValueOnce(invalid(late.promise));
         const { unmount } = renderHook(() => useSwapBacks(invalid({ id: 4 })));
         unmount();
         await act(async () => {
@@ -323,8 +323,8 @@ describe('useSwapBacks', () => {
 describe('useActiveChallenges unserialisable payload', () => {
     test('a payload JSON.stringify cannot encode is treated as changed and still applied', async () => {
         const weird = [{ id: 1, big: 10n }];
-        mockApi.getSettings.mockResolvedValue({ token: 'tok' });
-        mockApi.getActiveChallenges.mockResolvedValue({ challenges: weird });
+        mockApi.getSettings.mockResolvedValue(invalid({ token: 'tok' }));
+        mockApi.getActiveChallenges.mockResolvedValue(invalid({ challenges: weird }));
         const { result } = renderHook(() => useActiveChallenges());
         await waitFor(() => expect(result.current.loading).toBe(false));
         expect(result.current.data).toBe(weird);
@@ -332,7 +332,7 @@ describe('useActiveChallenges unserialisable payload', () => {
         // A second identical-but-unserialisable payload is applied again rather
         // than being deduped against a stale key.
         const weird2 = [{ id: 1, big: 10n }];
-        mockApi.getActiveChallenges.mockResolvedValue({ challenges: weird2 });
+        mockApi.getActiveChallenges.mockResolvedValue(invalid({ challenges: weird2 }));
         await act(async () => {
             await result.current.refetch();
         });
@@ -340,13 +340,13 @@ describe('useActiveChallenges unserialisable payload', () => {
     });
 
     test('an identical payload is deduped: the data reference is kept', async () => {
-        mockApi.getSettings.mockResolvedValue({ token: 'tok' });
-        mockApi.getActiveChallenges.mockResolvedValueOnce({ challenges: [{ id: 1 }] });
+        mockApi.getSettings.mockResolvedValue(invalid({ token: 'tok' }));
+        mockApi.getActiveChallenges.mockResolvedValueOnce(invalid({ challenges: [{ id: 1 }] }));
         const { result } = renderHook(() => useActiveChallenges());
         await waitFor(() => expect(result.current.loading).toBe(false));
         const first = result.current.data;
 
-        mockApi.getActiveChallenges.mockResolvedValueOnce({ challenges: [{ id: 1 }] });
+        mockApi.getActiveChallenges.mockResolvedValueOnce(invalid({ challenges: [{ id: 1 }] }));
         await act(async () => {
             await result.current.refetch();
         });
@@ -354,8 +354,8 @@ describe('useActiveChallenges unserialisable payload', () => {
     });
 
     test('while autovote runs, stale-settings cleanup is skipped but metadata cleanup still runs', async () => {
-        mockApi.getSettings.mockResolvedValue({ token: 'tok' });
-        mockApi.getActiveChallenges.mockResolvedValue({ challenges: [{ id: 7 }] });
+        mockApi.getSettings.mockResolvedValue(invalid({ token: 'tok' }));
+        mockApi.getActiveChallenges.mockResolvedValue(invalid({ challenges: [{ id: 7 }] }));
         const { result } = renderHook(() => useActiveChallenges(true));
         await waitFor(() => expect(mockApi.cleanupStaleMetadata).toHaveBeenCalledWith(['7']));
         expect(result.current.data).toEqual([{ id: 7 }]);

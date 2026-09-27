@@ -8,7 +8,7 @@
 
 import type * as formattersModule from '../../src/js/react/utils/formatters';
 
-const { isBoostWindowOpen }: typeof formattersModule = require('../../src/js/react/utils/formatters');
+const { isBoostWindowOpen } = require('../../src/js/react/utils/formatters') as typeof formattersModule;
 
 describe('isBoostWindowOpen', () => {
     const now = 1_000_000;

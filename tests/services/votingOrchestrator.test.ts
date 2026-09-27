@@ -52,8 +52,8 @@ import type * as settingsModule from '../../src/js/settings';
 import type { Challenge } from '../../src/js/types/gurushots';
 import type { VotingPassDeps } from '../../src/js/types/votingPass';
 import { invalid } from '../helpers/invalid';
-const { runVotingPass }: typeof votingOrchestratorModule = require('../../src/js/services/votingOrchestrator');
-const { buildChallenge }: typeof challengeFixturesModule = require('../helpers/challengeFixtures');
+const { runVotingPass } = require('../../src/js/services/votingOrchestrator') as typeof votingOrchestratorModule;
+const { buildChallenge } = require('../helpers/challengeFixtures') as typeof challengeFixturesModule;
 
 const NOW = Math.floor(Date.now() / 1000);
 
@@ -264,7 +264,7 @@ describe('mock-parity behaviors on the shared path', () => {
     // getActiveChallenges there would silently keep boost/turbo fill-new on
     // stale pass-start data (no pre-submit live re-check).
     test('boost fill-new passes getActiveChallenges for the pre-submit live re-check', async () => {
-        const settings = jest.mocked<typeof settingsModule>(require('../../src/js/settings'));
+        const settings = jest.mocked(require('../../src/js/settings') as typeof settingsModule);
         const challenge = makeChallenge({
             member: {
                 boost: { state: 'AVAILABLE', timeout: NOW + 600 },
@@ -313,7 +313,7 @@ describe('mock-parity behaviors on the shared path', () => {
     // fill-new callers must NOT fire the fallback apply — it is a known-doomed
     // call that would only add a second failure log.
     test('boost fill-new challenge-gone → no fallback applyBoost call', async () => {
-        const settings = jest.mocked<typeof settingsModule>(require('../../src/js/settings'));
+        const settings = jest.mocked(require('../../src/js/settings') as typeof settingsModule);
         const challenge = makeChallenge({
             member: {
                 boost: { state: 'AVAILABLE', timeout: NOW + 600 },
@@ -355,7 +355,7 @@ describe('mock-parity behaviors on the shared path', () => {
     // challenge.member.ranking.entries and corrupting getSlotsRemaining plus
     // boost/turbo entry selection for the rest of the pass.
     test('boost fill-new success → reflectNewEntry called exactly once with the submitted id', async () => {
-        const settings = jest.mocked<typeof settingsModule>(require('../../src/js/settings'));
+        const settings = jest.mocked(require('../../src/js/settings') as typeof settingsModule);
         const challenge = makeChallenge({
             member: {
                 boost: { state: 'AVAILABLE', timeout: NOW + 600 },
@@ -508,7 +508,7 @@ describe('voting path', () => {
 });
 
 describe('voteOnNewEntry — gate, arm, record', () => {
-    const settings = jest.mocked<typeof settingsModule>(require('../../src/js/settings'));
+    const settings = jest.mocked(require('../../src/js/settings') as typeof settingsModule);
 
     /** Minimal in-memory tracker with call spies, matching the deps contract. */
     const makeTracker = (seed: Record<string, string[]> = {}) => {

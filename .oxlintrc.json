@@ -176,12 +176,21 @@
                 "typescript/no-misused-promises": "error"
             }
         },
-        // No `any` leaks: an untyped value (a lazy require, JSON.parse, a
-        // library's loose signature) must be typed before it is used. The one
-        // sanctioned `any` is the IPC handler map's IpcHandler parameter list.
+        // No `any`, written or leaked: an untyped value (a lazy require,
+        // JSON.parse, a library's loose signature, an untyped jest.fn()) must be
+        // typed before it is used, in the app, the scripts and the tests alike.
         {
-            "files": ["src/js/**/*.ts", "src/js/**/*.tsx", "scripts/**/*.ts", "scripts/**/*.mts"],
+            "files": [
+                "src/js/**/*.ts",
+                "src/js/**/*.tsx",
+                "scripts/**/*.ts",
+                "scripts/**/*.mts",
+                "tests/**/*.ts",
+                "tests/**/*.tsx",
+                "tests/**/*.cts"
+            ],
             "rules": {
+                "typescript/no-explicit-any": "error",
                 "typescript/no-unsafe-argument": "error",
                 "typescript/no-unsafe-assignment": "error",
                 "typescript/no-unsafe-call": "error",

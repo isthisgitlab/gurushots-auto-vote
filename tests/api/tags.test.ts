@@ -7,11 +7,8 @@ import type * as tagsModule from '../../src/js/api/tags';
 import type * as api_clientModule from '../../src/js/api/api-client';
 import { invalid } from '../helpers/invalid';
 
-const {
-    getCurrentMemberProfile,
-    searchTagAutocomplete,
-    MIN_AUTOCOMPLETE_CHARS,
-}: typeof tagsModule = require('../../src/js/api/tags');
+const { getCurrentMemberProfile, searchTagAutocomplete, MIN_AUTOCOMPLETE_CHARS } =
+    require('../../src/js/api/tags') as typeof tagsModule;
 
 jest.mock('../../src/js/api/api-client', () => ({
     makePostRequest: jest.fn(),
@@ -20,7 +17,7 @@ jest.mock('../../src/js/api/api-client', () => ({
 
 describe('api/tags', () => {
     const token = 'tok-123';
-    const { makePostRequest } = jest.mocked<typeof api_clientModule>(require('../../src/js/api/api-client'));
+    const { makePostRequest } = jest.mocked(require('../../src/js/api/api-client') as typeof api_clientModule);
 
     beforeEach(() => {
         makePostRequest.mockReset();

@@ -18,7 +18,7 @@ type NotifierDeps = Parameters<typeof createDeadlineNotifier>[0];
 type NotificationInstance = { onclick: (() => void) | null };
 type NotificationStub = jest.Mock<void, [], NotificationInstance> & {
     permission?: string;
-    requestPermission?: jest.Mock;
+    requestPermission?: jest.MockedFunction<typeof Notification.requestPermission>;
 };
 
 const NOW = 1_000_000;
@@ -57,7 +57,7 @@ describe('createDeadlineNotifier', () => {
     });
 
     test('delivers once for an enabled action inside the lead window', async () => {
-        const deliver = jest.fn();
+        const deliver = jest.fn<void, Parameters<NotifierDeps['deliver']>>();
         const notify = makeNotifier({ deliver });
 
         await notify(invalid([{ id: '1', title: 'Sunset' }]), NOW);
@@ -68,7 +68,7 @@ describe('createDeadlineNotifier', () => {
 
     test('skips a {success:false} deadline-actions response without breaking the loop', async () => {
         const deliver = jest.fn();
-        const getDeadlineActions = jest.fn(async (c) =>
+        const getDeadlineActions = jest.fn(async (c: Parameters<GetDeadlineActions>[0]) =>
             c.id === 'bad' ? { success: false, error: 'x' } : okActions(act('boost', 60)),
         );
         const notify = makeNotifier({ getDeadlineActions, deliver });
@@ -98,7 +98,7 @@ describe('createDeadlineNotifier', () => {
 
     test('coalesces multiple simultaneously-due actions into one delivery', async () => {
         const deliver = jest.fn();
-        const getDeadlineActions = jest.fn(async (c) =>
+        const getDeadlineActions = jest.fn(async (c: Parameters<GetDeadlineActions>[0]) =>
             c.id === '1' ? okActions(act('boost', 60)) : okActions(act('boost', 90)),
         );
         const notify = makeNotifier({
@@ -127,7 +127,7 @@ describe('createDeadlineNotifier', () => {
         // The first cycle blocks inside its first setting read; the second call
         // arrives while it is still in flight and must no-op.
         let calls = 0;
-        const getSetting = jest.fn(async (key) => {
+        const getSetting = jest.fn(async (key: string) => {
             calls += 1;
             if (calls === 1) await gate;
             return settingsBoostOn[key];
@@ -155,7 +155,7 @@ describe('createDeadlineNotifier', () => {
         const deliver = jest.fn();
         const log = jest.fn();
         let fail = true;
-        const getSetting = jest.fn(async (key) => {
+        const getSetting = jest.fn(async (key: string) => {
             if (fail) throw new Error('settings down');
             return settingsBoostOn[key];
         });

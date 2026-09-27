@@ -35,8 +35,8 @@ import type * as quitGuardModule from '../../src/js/windows/quitGuard';
 import type * as logCategoriesModule from '../helpers/logCategories';
 import type * as actions_handlersModule from '../../src/js/ipc/actions.handlers';
 import type * as autoClaimModule from '../../src/js/services/autoClaim';
-const { rememberChallenges } = jest.mocked<typeof quitGuardModule>(require('../../src/js/windows/quitGuard'));
-const { logCategories }: typeof logCategoriesModule = require('../helpers/logCategories');
+const { rememberChallenges } = jest.mocked(require('../../src/js/windows/quitGuard') as typeof quitGuardModule);
+const { logCategories } = require('../helpers/logCategories') as typeof logCategoriesModule;
 
 // The handler routes auth through the factory surfaces + the shared
 // extractAuthResult normalizer; exercise the real normalizer rather than a stub
@@ -79,7 +79,7 @@ const stubAuthGuardFail = () => {
 // long as every test awaits the calls it makes, the Set stays empty between
 // tests — no jest.resetModules() needed (and it would defeat module-top
 // jest.mock() bindings anyway by giving the handler fresh mock instances).
-const { buildHandlers }: typeof actions_handlersModule = require('../../src/js/ipc/actions.handlers');
+const { buildHandlers } = require('../../src/js/ipc/actions.handlers') as typeof actions_handlersModule;
 
 type Handlers = ReturnType<typeof buildHandlers>;
 // A zero-parameter handler invoked the way ipcMain does, with the event first.
@@ -134,8 +134,9 @@ describe('authenticate', () => {
     // The handler selects the surface via getApiStrategy({ mock }) — the
     // explicit-override seam — so the test injects both surfaces there
     // (the raw surfaces are not exported).
-    let mockSurface: { authenticate: jest.Mock };
-    let realSurface: { authenticate: jest.Mock };
+    type Surface = { authenticate: jest.MockedFunction<apiFactoryModule.ApiStrategy['authenticate']> };
+    let mockSurface: Surface;
+    let realSurface: Surface;
 
     beforeEach(() => {
         auth.extractAuthResult = invalid(realExtractAuthResult);
@@ -159,11 +160,13 @@ describe('authenticate', () => {
     });
 
     test('real path selects the real surface and persists the token', async () => {
-        realSurface.authenticate.mockResolvedValue({
-            token: 'real-token',
-            member_id: 42,
-            user_name: 'realuser',
-        });
+        realSurface.authenticate.mockResolvedValue(
+            invalid({
+                token: 'real-token',
+                member_id: 42,
+                user_name: 'realuser',
+            }),
+        );
         const handlers = buildHandlers();
         const result = await handlers.authenticate({}, 'user@example.com', 'pw', false);
         expect(apiFactory.getApiStrategy).toHaveBeenCalledWith({ mock: false });
@@ -173,7 +176,7 @@ describe('authenticate', () => {
     });
 
     test('real path accepts a token under access_token (the _login parity fix)', async () => {
-        realSurface.authenticate.mockResolvedValue({ access_token: 'alt-token' });
+        realSurface.authenticate.mockResolvedValue(invalid({ access_token: 'alt-token' }));
         const handlers = buildHandlers();
         const result = await handlers.authenticate({}, 'u', 'p', false);
         expect(result).toEqual({ success: true, token: 'alt-token' });
@@ -188,7 +191,7 @@ describe('authenticate', () => {
     });
 
     test('returns failure when API responds without a token', async () => {
-        realSurface.authenticate.mockResolvedValue({ success: false, error: 'bad creds' });
+        realSurface.authenticate.mockResolvedValue(invalid({ success: false, error: 'bad creds' }));
         const handlers = buildHandlers();
         const result = await handlers.authenticate({}, 'u', 'p', false);
         expect(result).toEqual({ success: false, error: 'bad creds' });
@@ -305,7 +308,7 @@ describe('play-auto-turbo', () => {
         setToken('tok');
         // First call's getActiveChallenges hangs forever — keeps the
         // in-flight slot held so the second call sees it occupied.
-        let releaseFirst;
+        let releaseFirst: ((value: unknown) => void) | undefined;
         const firstHang = new Promise((resolve) => {
             releaseFirst = resolve;
         });
@@ -527,7 +530,7 @@ describe('join-challenge', () => {
 describe('get-auto-claim-status', () => {
     test('exposes the shared claim clock without running a claim', async () => {
         settings.getEffectiveSetting = invalid(jest.fn(() => true));
-        const { resetClaimThrottle }: typeof autoClaimModule = require('../../src/js/services/autoClaim');
+        const { resetClaimThrottle } = require('../../src/js/services/autoClaim') as typeof autoClaimModule;
         resetClaimThrottle();
         await expect(
             invalid<WithEvent<Handlers['get-auto-claim-status']>>(buildHandlers()['get-auto-claim-status'])({}),
@@ -913,7 +916,7 @@ describe('log categories', () => {
 
 describe('register', () => {
     test('registers every action channel on ipcMain', async () => {
-        const { register }: typeof actions_handlersModule = require('../../src/js/ipc/actions.handlers');
+        const { register } = require('../../src/js/ipc/actions.handlers') as typeof actions_handlersModule;
         const channels = new Map<string, Parameters<IpcMain['handle']>[1]>();
         register(
             invalid({

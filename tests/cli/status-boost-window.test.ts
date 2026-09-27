@@ -54,20 +54,26 @@ jest.mock('../../src/js/apiFactory', () => {
 import loggerModule = require('../../src/js/logger');
 const logger = jest.mocked(invalid<typeof loggerModule & { __infoMock: jest.Mock<void, [unknown]> }>(loggerModule));
 import apiFactoryModule = require('../../src/js/apiFactory');
+type Middleware = ReturnType<typeof apiFactoryModule.getMiddleware>;
 const apiFactory = jest.mocked(
-    invalid<typeof apiFactoryModule & { __getActiveChallenges: jest.Mock; __isAuthenticated: jest.Mock }>(
-        apiFactoryModule,
-    ),
+    invalid<
+        typeof apiFactoryModule & {
+            __getActiveChallenges: jest.MockedFunction<Middleware['getActiveChallenges']>;
+            __isAuthenticated: jest.MockedFunction<Middleware['isAuthenticated']>;
+        }
+    >(apiFactoryModule),
 );
 import type * as votingModule from '../../src/js/cli/commands/voting';
 import { invalid } from '../helpers/invalid';
-const { showStatus }: typeof votingModule = require('../../src/js/cli/commands/voting');
+import type { Challenge } from '../../src/js/types/gurushots';
+const { showStatus } = require('../../src/js/cli/commands/voting') as typeof votingModule;
 
-const challenge = (title: string, boost: { state: string; timeout?: number }) => ({
-    id: title,
-    title,
-    member: { boost },
-});
+const challenge = (title: string, boost: { state: string; timeout?: number }) =>
+    invalid<Challenge>({
+        id: title,
+        title,
+        member: { boost },
+    });
 
 const printedLines = () =>
     logger.__infoMock.mock.calls.map((c) => c[0]).filter((s): s is string => typeof s === 'string');
@@ -125,7 +131,7 @@ describe('CLI status — Boost Window Open section', () => {
     });
 
     test('a non-array challenges payload is treated as empty (prints "None")', async () => {
-        apiFactory.__getActiveChallenges.mockResolvedValue({ challenges: null });
+        apiFactory.__getActiveChallenges.mockResolvedValue({ challenges: invalid(null) });
 
         await showStatus();
 

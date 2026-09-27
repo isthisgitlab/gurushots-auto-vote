@@ -9,7 +9,7 @@
  * so the facade's loadSettings/saveSettings round-trip without touching fs.
  */
 
-import type { AndroidHeadlessStore } from '../../src/js/types/settings';
+import type { AndroidHeadlessStore, AppSettings } from '../../src/js/types/settings';
 import settings = require('../../src/js/settings');
 
 jest.mock('../../src/js/logger', () => ({
@@ -70,7 +70,7 @@ describe('settings facade — resetAllSettings', () => {
         const ok = settings.resetAllSettings();
         expect(ok).toBe(true);
 
-        const after = JSON.parse(store.value!);
+        const after = JSON.parse(store.value!) as AppSettings;
         // Essential user data survives the reset.
         expect(after.token).toBe('secret-token');
         expect(after.mock).toBe(true);

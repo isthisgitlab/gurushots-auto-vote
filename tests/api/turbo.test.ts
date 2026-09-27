@@ -5,7 +5,7 @@
 import type * as turboModule from '../../src/js/api/turbo';
 import type * as api_clientModule from '../../src/js/api/api-client';
 
-const { getChallengeTurbo, submitTurboSelection, applyTurbo }: typeof turboModule = require('../../src/js/api/turbo');
+const { getChallengeTurbo, submitTurboSelection, applyTurbo } = require('../../src/js/api/turbo') as typeof turboModule;
 
 jest.mock('../../src/js/api/api-client', () => ({
     makePostRequest: jest.fn(),
@@ -14,7 +14,7 @@ jest.mock('../../src/js/api/api-client', () => ({
 
 describe('turbo', () => {
     const mockToken = 'test-token-123';
-    const { makePostRequest } = jest.mocked<typeof api_clientModule>(require('../../src/js/api/api-client'));
+    const { makePostRequest } = jest.mocked(require('../../src/js/api/api-client') as typeof api_clientModule);
 
     beforeEach(() => {
         jest.clearAllMocks();

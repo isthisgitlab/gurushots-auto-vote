@@ -9,7 +9,10 @@ import type * as loggerModule from '../../src/js/logger';
 import { invalid } from '../helpers/invalid';
 
 // The logger factory below also exports its shared start/endOperation mocks.
-type LoggerMock = typeof loggerModule & { __mockStartOperationFn: jest.Mock; __mockEndOperationFn: jest.Mock };
+type LoggerMock = typeof loggerModule & {
+    __mockStartOperationFn: jest.MockedFunction<loggerModule.CategoryLogger['startOperation']>;
+    __mockEndOperationFn: jest.MockedFunction<loggerModule.CategoryLogger['endOperation']>;
+};
 
 // Mock the settings module
 const mockSettings = {
@@ -199,7 +202,7 @@ describe('boost timing settings', () => {
             });
 
             // Import the main module
-            const { fetchChallengesAndVote }: typeof realModule = require('../../src/js/strategies/real');
+            const { fetchChallengesAndVote } = require('../../src/js/strategies/real') as typeof realModule;
 
             await fetchChallengesAndVote(mockToken);
 
@@ -256,7 +259,7 @@ describe('boost timing settings', () => {
             mockVotingLogic.getEffectiveBoostTime.mockReturnValue(1800); // 30 minutes
 
             // Import the main module
-            const { fetchChallengesAndVote }: typeof realModule = require('../../src/js/strategies/real');
+            const { fetchChallengesAndVote } = require('../../src/js/strategies/real') as typeof realModule;
 
             await fetchChallengesAndVote(mockToken);
 
@@ -304,7 +307,7 @@ describe('boost timing settings', () => {
             mockVotingLogic.getEffectiveBoostTime.mockReturnValue(3600); // 1 hour default
 
             // Import the main module
-            const { fetchChallengesAndVote }: typeof realModule = require('../../src/js/strategies/real');
+            const { fetchChallengesAndVote } = require('../../src/js/strategies/real') as typeof realModule;
 
             await fetchChallengesAndVote(mockToken);
 
@@ -368,7 +371,7 @@ describe('boost timing settings', () => {
                 .mockReturnValueOnce(7200); // 2 hours for second challenge
 
             // Import the main module
-            const { fetchChallengesAndVote }: typeof realModule = require('../../src/js/strategies/real');
+            const { fetchChallengesAndVote } = require('../../src/js/strategies/real') as typeof realModule;
 
             await fetchChallengesAndVote(mockToken);
 
@@ -412,7 +415,7 @@ describe('boost timing settings', () => {
                 targetExposure: 100,
             });
 
-            const { fetchChallengesAndVote }: typeof realModule = require('../../src/js/strategies/real');
+            const { fetchChallengesAndVote } = require('../../src/js/strategies/real') as typeof realModule;
 
             await expect(fetchChallengesAndVote(mockToken)).resolves.toBeDefined();
 
@@ -450,7 +453,7 @@ describe('boost timing settings', () => {
                 targetExposure: 100,
             });
 
-            const { fetchChallengesAndVote }: typeof realModule = require('../../src/js/strategies/real');
+            const { fetchChallengesAndVote } = require('../../src/js/strategies/real') as typeof realModule;
 
             await expect(fetchChallengesAndVote(mockToken)).resolves.toBeDefined();
 

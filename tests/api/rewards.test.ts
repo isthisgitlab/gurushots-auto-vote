@@ -8,18 +8,14 @@ import type * as rewardsModule from '../../src/js/api/rewards';
 import type * as api_clientModule from '../../src/js/api/api-client';
 import { invalid } from '../helpers/invalid';
 
-const {
-    getMyCompletedChallenges,
-    claimChallengeResources,
-    getMyMissions,
-    claimMissionPrize,
-}: typeof rewardsModule = require('../../src/js/api/rewards');
+const { getMyCompletedChallenges, claimChallengeResources, getMyMissions, claimMissionPrize } =
+    require('../../src/js/api/rewards') as typeof rewardsModule;
 
 jest.mock('../../src/js/api/api-client', () => ({
     makePostRequest: jest.fn(),
 }));
 
-const { makePostRequest } = jest.mocked<typeof api_clientModule>(require('../../src/js/api/api-client'));
+const { makePostRequest } = jest.mocked(require('../../src/js/api/api-client') as typeof api_clientModule);
 const token = 'tok-123';
 
 beforeEach(() => jest.clearAllMocks());

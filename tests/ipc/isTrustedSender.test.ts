@@ -16,15 +16,13 @@
 
 import type * as registerHandlersModule from '../../src/js/ipc/registerHandlers';
 import type * as loggerModule from '../../src/js/logger';
-import type { IpcMain, IpcMainInvokeEvent } from 'electron';
+import type { IpcMainInvokeEvent } from 'electron';
 import { invalid } from '../helpers/invalid';
 
-const {
-    isTrustedSender,
-    registerHandlers,
-}: typeof registerHandlersModule = require('../../src/js/ipc/registerHandlers');
+const { isTrustedSender, registerHandlers } =
+    require('../../src/js/ipc/registerHandlers') as typeof registerHandlersModule;
 
-type ChannelImpl = Parameters<IpcMain['handle']>[1];
+type ChannelImpl = (event: IpcMainInvokeEvent, ...args: unknown[]) => unknown;
 
 const mainFrame = (url: string | undefined) => {
     const frame = { url };
@@ -124,7 +122,7 @@ describe('registerHandlers applies the check to every channel', () => {
 
 describe('registerHandlers refusal logging', () => {
     test('refuses a non-main frame that has no url (logged as <unknown>)', async () => {
-        const logger = jest.mocked<typeof loggerModule>(require('../../src/js/logger'));
+        const logger = jest.mocked(require('../../src/js/logger') as typeof loggerModule);
         const warning = jest.fn();
         // Swap (then restore) the setup-mock implementation rather than spyOn +
         // mockRestore, which would strip it for every later test.

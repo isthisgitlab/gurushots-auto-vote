@@ -7,7 +7,7 @@ import type * as swapBackStoreModule from '../../src/js/swapBackStore';
 import type * as loggerModule from '../../src/js/logger';
 import { invalid } from '../helpers/invalid';
 
-const { createLedger, createMemoryLedger }: typeof swapBackStoreModule = require('../../src/js/swapBackStore');
+const { createLedger, createMemoryLedger } = require('../../src/js/swapBackStore') as typeof swapBackStoreModule;
 
 const boosted = { id: 'A', member_id: 'm', boosted: true };
 const turboed = { id: 'A', member_id: 'm', turbo: true };
@@ -83,7 +83,7 @@ test('a corrupt store reads as empty instead of throwing', () => {
 });
 
 describe('defensive reads and writes', () => {
-    const logger: typeof loggerModule = require('../../src/js/logger');
+    const logger = require('../../src/js/logger') as typeof loggerModule;
 
     test.each([['[]'], ['null'], ['5'], ['"str"']])('a non-object JSON root (%s) reads as empty', (raw) => {
         const ledger = createLedger({ readRaw: () => raw, writeRaw: jest.fn() });
@@ -116,7 +116,7 @@ describe('defensive reads and writes', () => {
         });
         expect(ledger.list(7)).toEqual([]);
         ledger.onSwapped(9, plain, 'B');
-        expect(Object.keys(JSON.parse(raw))).toEqual(['8']);
+        expect(Object.keys(JSON.parse(raw) as Record<string, unknown>)).toEqual(['8']);
     });
 
     test('only the record on the swapped slot moves; others are untouched', () => {

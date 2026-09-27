@@ -1,4 +1,4 @@
-// tests/setup.js mocks `fs` (and path.join/dirname/resolve) globally, so this
+// tests/setup.ts mocks `fs` (and path.join/dirname/resolve) globally, so this
 // suite reaches for the real modules to read its own source off disk.
 const realFs = jest.requireActual<typeof import('fs')>('fs');
 const realPath = jest.requireActual<typeof import('path')>('path');

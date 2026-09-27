@@ -10,11 +10,8 @@ import type * as manualVoteModule from '../../src/js/services/manualVote';
 import type { Challenge } from '../../src/js/types/gurushots';
 import { invalid } from '../helpers/invalid';
 
-const {
-    submitVotesForChallenge,
-    voteAllChallengesManual,
-    STAGGER_MS,
-}: typeof manualVoteModule = require('../../src/js/services/manualVote');
+const { submitVotesForChallenge, voteAllChallengesManual, STAGGER_MS } =
+    require('../../src/js/services/manualVote') as typeof manualVoteModule;
 
 jest.mock('../../src/js/settings');
 

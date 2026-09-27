@@ -9,8 +9,8 @@ const {
     getTurboStatus,
     getLevelStatus,
     getEntryStatus,
-}: typeof formattersModule = require('../../src/js/react/utils/formatters');
-const { interp }: typeof interpModule = require('../../src/js/react/utils/interp');
+} = require('../../src/js/react/utils/formatters') as typeof formattersModule;
+const { interp } = require('../../src/js/react/utils/interp') as typeof interpModule;
 
 const t = (key: string) =>
     (({ 'app.none': '(none)', 'app.hours': 'h', 'app.minutes': 'm' }) as Record<string, string>)[key] ?? key;
@@ -161,7 +161,7 @@ describe('getEntryStatus', () => {
 
 describe('re-exports from the shared core', () => {
     test('formatters exposes the same functions the core modules define', () => {
-        const fm: typeof formattersModule = require('../../src/js/react/utils/formatters');
+        const fm = require('../../src/js/react/utils/formatters') as typeof formattersModule;
         expect(fm.formatDuration).toBe(
             (require('../../src/js/format/duration') as typeof import('../../src/js/format/duration')).formatDuration,
         );

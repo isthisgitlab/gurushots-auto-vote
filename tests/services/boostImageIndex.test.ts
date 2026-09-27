@@ -22,11 +22,9 @@
 
 import settingsModule = require('../../src/js/settings');
 const settings = jest.mocked(settingsModule);
-const { applyBoost }: typeof applyBoostModule = require('../../src/js/strategies/real/applyBoost');
-const {
-    resolveEntryIndex,
-    pickEntryAvoidingConflict,
-}: typeof VotingLogicModule = require('../../src/js/services/VotingLogic');
+const { applyBoost } = require('../../src/js/strategies/real/applyBoost') as typeof applyBoostModule;
+const { resolveEntryIndex, pickEntryAvoidingConflict } =
+    require('../../src/js/services/VotingLogic') as typeof VotingLogicModule;
 import apiClientModule = require('../../src/js/api/api-client');
 const apiClient = jest.mocked(apiClientModule);
 import type * as applyBoostModule from '../../src/js/strategies/real/applyBoost';
@@ -35,7 +33,8 @@ import type * as challengeFixturesModule from '../helpers/challengeFixtures';
 import type * as autoFillModule from '../../src/js/services/autoFill';
 import type { Challenge, RankingEntry } from '../../src/js/types/gurushots';
 import { invalid } from '../helpers/invalid';
-const { buildChallenge: buildBaseChallenge }: typeof challengeFixturesModule = require('../helpers/challengeFixtures');
+const { buildChallenge: buildBaseChallenge } =
+    require('../helpers/challengeFixtures') as typeof challengeFixturesModule;
 
 jest.mock('../../src/js/settings', () => ({
     getEffectiveSetting: jest.fn(),
@@ -292,7 +291,7 @@ describe('same-pass boost/turbo conflict reflection', () => {
     });
 
     test('reflectEntryFlag marks a turboed entry so a later boost avoids it', () => {
-        const { reflectEntryFlag }: typeof autoFillModule = require('../../src/js/services/autoFill');
+        const { reflectEntryFlag } = require('../../src/js/services/autoFill') as typeof autoFillModule;
         const challenge = buildChallenge([{ id: 'e1' }, { id: 'e2' }]);
 
         reflectEntryFlag(challenge, 'e1', 'turbo');
@@ -303,7 +302,7 @@ describe('same-pass boost/turbo conflict reflection', () => {
     });
 
     test('reflectEntryFlag is a no-op for an unknown id or a missing entry list', () => {
-        const { reflectEntryFlag }: typeof autoFillModule = require('../../src/js/services/autoFill');
+        const { reflectEntryFlag } = require('../../src/js/services/autoFill') as typeof autoFillModule;
         const challenge = buildChallenge([{ id: 'e1' }]);
 
         expect(() => reflectEntryFlag(challenge, 'nope', 'turbo')).not.toThrow();

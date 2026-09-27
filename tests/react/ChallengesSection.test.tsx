@@ -54,7 +54,8 @@ const EARLY = invalid<Challenge>({ id: 1, title: 'Early', close_time: now + 3000
 
 describe('ChallengesProvider + ChallengesSection', () => {
     let hookState: ReturnType<typeof useActiveChallenges>;
-    let refetch: jest.Mock;
+    type Refetch = ReturnType<typeof useActiveChallenges>['refetch'];
+    let refetch: jest.MockedFunction<Refetch>;
 
     const setHook = (patch: Partial<typeof hookState>) => {
         hookState = { ...hookState, ...patch };
@@ -83,13 +84,13 @@ describe('ChallengesProvider + ChallengesSection', () => {
 
     beforeEach(() => {
         window.api = invalid(mockApi);
-        refetch = jest.fn();
+        refetch = jest.fn<ReturnType<Refetch>, Parameters<Refetch>>();
         hookState = { data: [LATE, EARLY], loading: false, error: null, refetch };
         jest.mocked(useActiveChallenges).mockImplementation(() => hookState);
         mockApi.getGlobalDefault.mockResolvedValue(false);
-        mockApi.setGlobalDefault.mockResolvedValue(undefined);
-        mockApi.voteAllChallengesManual.mockResolvedValue({ success: true });
-        mockApi.runVotingCycle.mockResolvedValue({ success: true });
+        mockApi.setGlobalDefault.mockResolvedValue(invalid(undefined));
+        mockApi.voteAllChallengesManual.mockResolvedValue(invalid({ success: true }));
+        mockApi.runVotingCycle.mockResolvedValue(invalid({ success: true }));
     });
 
     afterEach(() => {
@@ -378,14 +379,14 @@ describe('ChallengesProvider + ChallengesSection', () => {
 
         it('unsubscribes from settings-changed on unmount', () => {
             const view = renderSection();
-            const off = mockApi.onSettingsChanged.mock.results[0].value;
+            const off = mockApi.onSettingsChanged.mock.results[0].value as jest.Mock<void, []>;
             view.unmount();
             expect(off).toHaveBeenCalledTimes(1);
         });
 
         it('works on a host without settings-change events', () => {
             const saved = mockApi.onSettingsChanged;
-            delete mockApi.onSettingsChanged;
+            delete invalid<Partial<typeof mockApi>>(mockApi).onSettingsChanged;
             try {
                 const view = renderSection();
                 expect(screen.getAllByTestId('card')).toHaveLength(2);

@@ -33,10 +33,10 @@ import type * as applyBoostModule from '../../src/js/strategies/real/applyBoost'
 import type { Challenge, VoteImagesResponse } from '../../src/js/types/gurushots';
 import { invalid } from '../helpers/invalid';
 const realBoost: typeof boostModule & typeof applyBoostModule = {
-    ...require('../../src/js/api/boost'),
-    ...require('../../src/js/strategies/real/applyBoost'),
+    ...(require('../../src/js/api/boost') as typeof boostModule),
+    ...(require('../../src/js/strategies/real/applyBoost') as typeof applyBoostModule),
 };
-const { mockApiClient }: typeof indexModule = require('../../src/js/mock/index');
+const { mockApiClient } = require('../../src/js/mock/index') as typeof indexModule;
 
 // Contract table: [name, real call, mock call, expected resolve shape check]
 const challengeArg = invalid<Challenge>({

@@ -7,14 +7,14 @@
 import type * as joinModule from '../../src/js/api/join';
 import type * as api_clientModule from '../../src/js/api/api-client';
 
-const { getMemberChallenges, coinsUnlock, getBankroll }: typeof joinModule = require('../../src/js/api/join');
+const { getMemberChallenges, coinsUnlock, getBankroll } = require('../../src/js/api/join') as typeof joinModule;
 
 jest.mock('../../src/js/api/api-client', () => ({
     makePostRequest: jest.fn(),
     FORM_CONTENT_TYPE: 'application/x-www-form-urlencoded; charset=utf-8',
 }));
 
-const { makePostRequest } = jest.mocked<typeof api_clientModule>(require('../../src/js/api/api-client'));
+const { makePostRequest } = jest.mocked(require('../../src/js/api/api-client') as typeof api_clientModule);
 const token = 'tok-123';
 
 beforeEach(() => jest.clearAllMocks());

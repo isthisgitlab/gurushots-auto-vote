@@ -35,7 +35,7 @@ const storage = jest.mocked(storageModule);
 import joinState = require('../src/js/joinStateStore');
 import { invalid } from './helpers/invalid';
 
-// Captured at require time: tests/setup.js clears every mock before each test.
+// Captured at require time: tests/setup.ts clears every mock before each test.
 const createJsonStoreCalls = [...storage.createJsonStore.mock.calls];
 
 const enoent = () => Object.assign(new Error('no such file'), { code: 'ENOENT' });

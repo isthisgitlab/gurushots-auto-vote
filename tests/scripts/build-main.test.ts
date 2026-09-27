@@ -3,7 +3,7 @@
  * is mocked, so nothing is written to dist/.
  */
 
-// tests/setup.js globally mocks path; the depth check needs the real module.
+// tests/setup.ts globally mocks path; the depth check needs the real module.
 jest.unmock('path');
 jest.unmock('node:path');
 
@@ -15,15 +15,15 @@ jest.mock('esbuild', () => ({
 
 import pathModule = require('node:path');
 const path = jest.mocked(pathModule);
-const { build, context } = jest.mocked<typeof esbuildModule>(require('esbuild'));
+const { build, context } = jest.mocked(require('esbuild') as typeof esbuildModule);
 import fsModule = require('node:fs');
 const fs = jest.mocked(fsModule);
 import type * as esbuildModule from 'esbuild';
 import type * as build_mainModule from '../../scripts/build-main';
 import type * as package_jsonModule from '../../package.json';
 import type * as capacitor_config_jsonModule from '../../capacitor.config.json';
-const { OPTIONS, LOADER, LOADER_SOURCE, main }: typeof build_mainModule = require('../../scripts/build-main');
-const { main: packageMain }: typeof package_jsonModule = require('../../package.json');
+const { OPTIONS, LOADER, LOADER_SOURCE, main } = require('../../scripts/build-main') as typeof build_mainModule;
+const { main: packageMain } = require('../../package.json') as typeof package_jsonModule;
 
 const ROOT = path.join(__dirname, '..', '..');
 
@@ -45,7 +45,7 @@ test('keeps every package import a runtime require', () => {
 });
 
 test("stays out of dist/, Capacitor's webDir that ships in the APK", () => {
-    const { webDir }: typeof capacitor_config_jsonModule = require('../../capacitor.config.json');
+    const { webDir } = require('../../capacitor.config.json') as typeof capacitor_config_jsonModule;
     expect(path.relative(path.join(ROOT, webDir), OPTIONS.outfile!).startsWith('..')).toBe(true);
 });
 

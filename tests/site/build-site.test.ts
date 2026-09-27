@@ -5,7 +5,7 @@
 // main() itself is exercised against a temp repo tree under os.tmpdir(); the
 // real dist-site/ is never written.
 
-// The shared tests/setup.js mocks `path` and `fs` globally (no `.posix`); this
+// The shared tests/setup.ts mocks `path` and `fs` globally (no `.posix`); this
 // suite tests real path resolution and real temp-dir rendering, so restore the
 // actual modules for this file only.
 jest.unmock('node:path');
@@ -56,20 +56,10 @@ import nodePathModule = require('node:path');
 const nodePath = jest.mocked(nodePathModule);
 import type * as marked_gfm_heading_idModule from 'marked-gfm-heading-id';
 import type * as build_siteModule from '../../scripts/build-site';
-const { resetHeadings } = jest.mocked<typeof marked_gfm_heading_idModule>(require('marked-gfm-heading-id'));
+const { resetHeadings } = jest.mocked(require('marked-gfm-heading-id') as typeof marked_gfm_heading_idModule);
 
-const {
-    hasScheme,
-    srcDirOf,
-    toRepoPath,
-    rewriteLink,
-    rewriteImage,
-    render,
-    buildNav,
-    PAGES,
-    main,
-    runCli,
-}: typeof build_siteModule = require('../../scripts/build-site');
+const { hasScheme, srcDirOf, toRepoPath, rewriteLink, rewriteImage, render, buildNav, PAGES, main, runCli } =
+    require('../../scripts/build-site') as typeof build_siteModule;
 
 const pageBySrc = (src: string) => PAGES.find((p) => p.src === src);
 

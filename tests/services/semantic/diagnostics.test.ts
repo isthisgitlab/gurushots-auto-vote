@@ -6,10 +6,8 @@ jest.mock('../../../src/js/settings', () => ({
     __esModule: true,
     ...jest.requireActual<typeof import('../../../src/js/settings')>('../../../src/js/settings'),
 }));
-const {
-    createDiagnostics,
-    shouldCollect,
-}: typeof diagnosticsModule = require('../../../src/js/services/semantic/diagnostics');
+const { createDiagnostics, shouldCollect } =
+    require('../../../src/js/services/semantic/diagnostics') as typeof diagnosticsModule;
 import runtimeModule = require('../../../src/js/runtime');
 const runtime = jest.mocked(runtimeModule);
 import settingsModule = require('../../../src/js/settings');

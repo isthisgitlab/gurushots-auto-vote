@@ -32,11 +32,14 @@ import fsModule = require('node:fs');
 const fs = jest.mocked(fsModule);
 import loggerModule = require('../../src/js/logger');
 const logger = jest.mocked(invalid<typeof loggerModule & { __calls: { level: string; msg: string }[] }>(loggerModule));
-const { __handlers: h } = jest.mocked<typeof scenarios_handlersModule & { __handlers: Record<string, jest.Mock> }>(
-    require('../../src/js/ipc/scenarios.handlers'),
+type Handlers = ReturnType<typeof scenarios_handlersModule.buildHandlers>;
+type Resolved<K extends keyof Handlers> = Awaited<ReturnType<Handlers[K]>>;
+const { __handlers: h } = jest.mocked(
+    invalid<typeof scenarios_handlersModule & { __handlers: Handlers }>(require('../../src/js/ipc/scenarios.handlers')),
 );
 import cmd = require('../../src/js/cli/commands/scenarios');
 import type * as scenarios_handlersModule from '../../src/js/ipc/scenarios.handlers';
+import type { ScenarioIssue } from '../../src/js/settings/scenarioSchema';
 import { invalid } from '../helpers/invalid';
 
 const lines = (level?: string) => logger.__calls.filter((c) => !level || c.level === level).map((c) => c.msg);
@@ -47,7 +50,7 @@ beforeEach(() => {
     jest.clearAllMocks();
 });
 
-const failure = {
+const failure: { success: false; error: string; issues: ScenarioIssue[] } = {
     success: false,
     error: 'bad',
     issues: [
@@ -58,13 +61,15 @@ const failure = {
 
 describe('list-scenarios', () => {
     test('lists scenarios with their phases and the templates', async () => {
-        h['get-scenarios'].mockResolvedValue({
-            success: true,
-            scenarios: {
-                Plan: { start: 'main', description: 'Mine', phases: { main: {}, done: {} } },
-                Bare: { start: 'a', phases: { a: {} } },
-            },
-        });
+        h['get-scenarios'].mockResolvedValue(
+            invalid({
+                success: true,
+                scenarios: {
+                    Plan: { start: 'main', description: 'Mine', phases: { main: {}, done: {} } },
+                    Bare: { start: 'a', phases: { a: {} } },
+                },
+            }),
+        );
         await expect(cmd.listScenarios()).resolves.toBe(0);
         expect(text()).toContain('Plan — 2 phase(s), starts in "main"');
         expect(text()).toContain('Mine');
@@ -72,10 +77,10 @@ describe('list-scenarios', () => {
     });
 
     test('an empty list and a failure', async () => {
-        h['get-scenarios'].mockResolvedValueOnce({ success: true, scenarios: {} });
+        h['get-scenarios'].mockResolvedValueOnce(invalid({ success: true, scenarios: {} }));
         await cmd.listScenarios();
         expect(text()).toContain('No scenarios yet.');
-        h['get-scenarios'].mockResolvedValueOnce(failure);
+        h['get-scenarios'].mockResolvedValueOnce(invalid(failure));
         await expect(cmd.listScenarios()).resolves.toBe(1);
         expect(text('error')).toContain('start: No phase');
         expect(text('error')).toContain('(document): Root');
@@ -101,22 +106,23 @@ describe('scenario-template', () => {
 });
 
 describe('import-scenario', () => {
-    const preview = (overrides = {}) => ({
-        success: true,
-        exists: false,
-        preview: {
-            name: 'Plan',
-            start: 'main',
-            description: 'Mine',
-            phases: [
-                { name: 'main', rules: 2, settings: ['exposure', 'exposureTarget'] },
-                { name: 'done', rules: 0, settings: [] },
-            ],
-            spending: [{ action: 'swap', phase: 'main', rule: 'Hold it' }],
-            limits: { swaps: 3 },
-            ...overrides,
-        },
-    });
+    const preview = (overrides = {}) =>
+        invalid<Resolved<'preview-scenario-import'>>({
+            success: true,
+            exists: false,
+            preview: {
+                name: 'Plan',
+                start: 'main',
+                description: 'Mine',
+                phases: [
+                    { name: 'main', rules: 2, settings: ['exposure', 'exposureTarget'] },
+                    { name: 'done', rules: 0, settings: [] },
+                ],
+                spending: [{ action: 'swap', phase: 'main', rule: 'Hold it' }],
+                limits: { swaps: 3 },
+                ...overrides,
+            },
+        });
 
     beforeEach(() => fs.readFileSync.mockReturnValue('{"name":"Plan"}'));
 
@@ -131,10 +137,12 @@ describe('import-scenario', () => {
     });
 
     test('a scenario that spends nothing and replaces an existing one', async () => {
-        h['preview-scenario-import'].mockResolvedValue({
-            ...preview({ spending: [], limits: {}, description: '' }),
-            exists: true,
-        });
+        h['preview-scenario-import'].mockResolvedValue(
+            invalid({
+                ...preview({ spending: [], limits: {}, description: '' }),
+                exists: true,
+            }),
+        );
         await cmd.importScenarioCmd('plan.json', { overwrite: true });
         expect(text()).toContain('Spends nothing.');
         expect(text()).toContain('No spending limits.');
@@ -189,14 +197,15 @@ describe('export / rename / delete', () => {
 });
 
 describe('scenario-status', () => {
-    const status = (overrides?: Record<string, unknown>) => ({
-        success: true,
-        assigned: 'Plan',
-        scenario: { name: 'Plan', start: 'main' },
-        corrupt: false,
-        state: null,
-        ...overrides,
-    });
+    const status = (overrides?: Record<string, unknown>) =>
+        invalid<Resolved<'get-scenario-status'>>({
+            success: true,
+            assigned: 'Plan',
+            scenario: { name: 'Plan', start: 'main' },
+            corrupt: false,
+            state: null,
+            ...overrides,
+        });
 
     test('no scenario, an unknown one, unreadable state, not started', async () => {
         h['get-scenario-status'].mockResolvedValueOnce(status({ assigned: '' }));
@@ -258,22 +267,26 @@ describe('scenario-status', () => {
 
 describe('scenario-reset / dry-run / vocabulary', () => {
     test('reset', async () => {
-        h['reset-scenario-state'].mockResolvedValueOnce({ success: true }).mockResolvedValueOnce(failure);
+        h['reset-scenario-state'].mockResolvedValueOnce({ success: true }).mockResolvedValueOnce(invalid(failure));
         await expect(cmd.scenarioResetCmd('7')).resolves.toBe(0);
         await expect(cmd.scenarioResetCmd('7')).resolves.toBe(1);
     });
 
     test('dry run explains every rule and what would run', async () => {
-        h['dry-run-scenario'].mockResolvedValueOnce({
-            success: true,
-            scenario: 'Plan',
-            phase: 'main',
-            started: false,
-            halted: null,
-            explain: [{ status: 'waiting', label: 'Morning entry', reason: 'condition 1 (dailyWindow) does not hold' }],
-            fire: { ruleId: 'r2', startIndex: 1, actions: ['swap', 'boost', 'goto'] },
-            nextWakeAt: 1_800_000_000,
-        });
+        h['dry-run-scenario'].mockResolvedValueOnce(
+            invalid({
+                success: true,
+                scenario: 'Plan',
+                phase: 'main',
+                started: false,
+                halted: null,
+                explain: [
+                    { status: 'waiting', label: 'Morning entry', reason: 'condition 1 (dailyWindow) does not hold' },
+                ],
+                fire: { ruleId: 'r2', startIndex: 1, actions: ['swap', 'boost', 'goto'] },
+                nextWakeAt: 1_800_000_000,
+            }),
+        );
         await expect(cmd.scenarioDryRunCmd('7')).resolves.toBe(0);
         expect(text()).toContain('phase main (not started yet)');
         expect(text()).toContain('[waiting] Morning entry');
@@ -281,44 +294,62 @@ describe('scenario-reset / dry-run / vocabulary', () => {
     });
 
     test('dry run: nothing ready, halted, or failed', async () => {
-        h['dry-run-scenario'].mockResolvedValueOnce({
-            success: true,
-            scenario: 'Plan',
-            phase: 'main',
-            started: true,
-            halted: null,
-            explain: [],
-            fire: null,
-            nextWakeAt: null,
-        });
+        h['dry-run-scenario'].mockResolvedValueOnce(
+            invalid({
+                success: true,
+                scenario: 'Plan',
+                phase: 'main',
+                started: true,
+                halted: null,
+                explain: [],
+                fire: null,
+                nextWakeAt: null,
+            }),
+        );
         await cmd.scenarioDryRunCmd('7');
         expect(text()).toContain('Nothing would run now.');
         expect(text()).toContain('nothing time-based pending');
-        h['dry-run-scenario'].mockResolvedValueOnce({
-            success: true,
-            scenario: 'Plan',
-            phase: 'x',
-            started: true,
-            halted: 'Phase gone',
-        });
+        h['dry-run-scenario'].mockResolvedValueOnce(
+            invalid({
+                success: true,
+                scenario: 'Plan',
+                phase: 'x',
+                started: true,
+                halted: 'Phase gone',
+            }),
+        );
         await expect(cmd.scenarioDryRunCmd('7')).resolves.toBe(1);
         h['dry-run-scenario'].mockResolvedValueOnce({ success: false, error: 'no-scenario' });
         await expect(cmd.scenarioDryRunCmd('7')).resolves.toBe(1);
     });
 
     test('simulate prints the timeline and why it stops', async () => {
-        h['simulate-scenario'].mockResolvedValueOnce({
-            success: true,
-            scenario: 'Plan',
-            startPhase: 'main',
-            events: [
-                { at: 1_800_000_000, phase: 'main', label: 'Morning entry', actions: ['enterPhoto'], toPhase: null },
-                { at: 1_800_000_600, phase: 'main', label: 'Hold it', actions: ['swap', 'goto'], toPhase: 'holding' },
-            ],
-            stoppedBecause: 'idle',
-            stoppedAt: 1_800_000_600,
-            halted: null,
-        });
+        h['simulate-scenario'].mockResolvedValueOnce(
+            invalid({
+                success: true,
+                scenario: 'Plan',
+                startPhase: 'main',
+                events: [
+                    {
+                        at: 1_800_000_000,
+                        phase: 'main',
+                        label: 'Morning entry',
+                        actions: ['enterPhoto'],
+                        toPhase: null,
+                    },
+                    {
+                        at: 1_800_000_600,
+                        phase: 'main',
+                        label: 'Hold it',
+                        actions: ['swap', 'goto'],
+                        toPhase: 'holding',
+                    },
+                ],
+                stoppedBecause: 'idle',
+                stoppedAt: 1_800_000_600,
+                halted: null,
+            }),
+        );
         await expect(cmd.scenarioSimulateCmd('7')).resolves.toBe(0);
         expect(text()).toContain('[main] Morning entry: enterPhoto');
         expect(text()).toContain('Hold it: swap, goto → phase holding');
@@ -326,15 +357,17 @@ describe('scenario-reset / dry-run / vocabulary', () => {
     });
 
     test('simulate: an empty or halted timeline, and a failure', async () => {
-        h['simulate-scenario'].mockResolvedValueOnce({
-            success: true,
-            scenario: 'Plan',
-            startPhase: 'x',
-            events: [],
-            stoppedBecause: 'halted',
-            stoppedAt: 1,
-            halted: 'Phase gone',
-        });
+        h['simulate-scenario'].mockResolvedValueOnce(
+            invalid({
+                success: true,
+                scenario: 'Plan',
+                startPhase: 'x',
+                events: [],
+                stoppedBecause: 'halted',
+                stoppedAt: 1,
+                halted: 'Phase gone',
+            }),
+        );
         await cmd.scenarioSimulateCmd('7');
         expect(text()).toContain('Nothing would run.');
         expect(text('warning')).toContain('Phase gone');

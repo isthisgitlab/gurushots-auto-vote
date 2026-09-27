@@ -31,14 +31,14 @@ import { invalid } from '../helpers/invalid';
 
 /** The mock autocomplete called without a member id, as the no-token / term tests do. */
 type TwoArgAutocomplete = (token: string | null, term: unknown) => Promise<string[]>;
-const { runVotingPass } = jest.mocked<typeof votingOrchestratorModule>(
-    require('../../src/js/services/votingOrchestrator'),
+const { runVotingPass } = jest.mocked(
+    require('../../src/js/services/votingOrchestrator') as typeof votingOrchestratorModule,
 );
-const { runJoinPass, joinChallengeSingle } = jest.mocked<typeof joinChallengesModule>(
-    require('../../src/js/services/joinChallenges'),
+const { runJoinPass, joinChallengeSingle } = jest.mocked(
+    require('../../src/js/services/joinChallenges') as typeof joinChallengesModule,
 );
-const { loadMissionNeeds } = jest.mocked<typeof missionsModule>(require('../../src/js/services/missions'));
-const { mockApiClient, clearSessionCache }: typeof indexModule = require('../../src/js/mock/index');
+const { loadMissionNeeds } = jest.mocked(require('../../src/js/services/missions') as typeof missionsModule);
+const { mockApiClient, clearSessionCache } = require('../../src/js/mock/index') as typeof indexModule;
 
 /** Resolve a promise that is gated on simulated latency. */
 const settle = async <T>(promise: Promise<T>): Promise<T> => {
@@ -54,7 +54,11 @@ const settle = async <T>(promise: Promise<T>): Promise<T> => {
     return promise;
 };
 
-let cat: Record<'api' | 'debug' | 'info' | 'success' | 'warning' | 'error', jest.Mock>;
+let cat: {
+    [K in 'api' | 'debug' | 'info' | 'success' | 'warning' | 'error']: jest.MockedFunction<
+        loggerModule.CategoryLogger[K]
+    >;
+};
 beforeEach(() => {
     jest.useFakeTimers();
     cat = {

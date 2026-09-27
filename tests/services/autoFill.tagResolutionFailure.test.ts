@@ -6,6 +6,7 @@
 
 import type * as tagResolverModule from '../../src/js/services/tagResolver';
 import type * as autoFillModule from '../../src/js/services/autoFill';
+import type * as submissionsModule from '../../src/js/api/submissions';
 import type { Challenge, MemberIdentity } from '../../src/js/types/gurushots';
 import type { FillLogger } from '../../src/js/types/autoFill';
 import { invalid } from '../helpers/invalid';
@@ -14,11 +15,9 @@ jest.mock('../../src/js/services/tagResolver', () => ({
     resolveTermsToTags: jest.fn(),
 }));
 
-const { resolveTermsToTags } = jest.mocked<typeof tagResolverModule>(require('../../src/js/services/tagResolver'));
-const {
-    fetchCandidatesForChallenge,
-    __resetMemberIdCache,
-}: typeof autoFillModule = require('../../src/js/services/autoFill');
+const { resolveTermsToTags } = jest.mocked(require('../../src/js/services/tagResolver') as typeof tagResolverModule);
+const { fetchCandidatesForChallenge, __resetMemberIdCache } =
+    require('../../src/js/services/autoFill') as typeof autoFillModule;
 
 const allowed = (id: string, labels: string[]) => ({ id, labels, permission: { allowed: true, message: null } });
 const LIBRARY = [allowed('a', ['Yoga']), allowed('b', ['Misc'])];
@@ -33,7 +32,11 @@ const makeLogger = () => {
 };
 
 // Exact-tag search, like the live endpoint: nothing is tagged "zeppelin".
-const getEligiblePhotos = jest.fn(async (_id, _tok, opts = {}) => (opts.search ? [] : LIBRARY));
+// getEligiblePhotos' options bag (its third, defaulted parameter).
+type EligibleOptions = NonNullable<Parameters<typeof submissionsModule.getEligiblePhotos>[2]>;
+const getEligiblePhotos = jest.fn(async (_id: string | number, _tok: string, opts: EligibleOptions = {}) =>
+    opts.search ? [] : LIBRARY,
+);
 
 beforeEach(() => {
     __resetMemberIdCache();

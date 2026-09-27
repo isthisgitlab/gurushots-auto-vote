@@ -2,7 +2,7 @@
  * The settings IPC hooks: useSettings (optimistic update + error refetch),
  * useEnvironmentInfo (optional garnish, tolerant of failure) and
  * useSettingsSchema (null-safe projection of the schema payload). All go
- * through the mocked window.api from helpers/setup.js; per-test resolved
+ * through the mocked window.api from helpers/setup.ts; per-test resolved
  * values use the *Once variants so nothing leaks between tests.
  */
 

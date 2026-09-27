@@ -29,8 +29,8 @@ import cancellationModule = require('../../src/js/voting/cancellation');
 const cancellation = jest.mocked(cancellationModule);
 import type * as authModule from '../../src/js/services/auth';
 import type * as BaseMiddlewareModule from '../../src/js/services/BaseMiddleware';
-const { clearAuthToken } = jest.mocked<typeof authModule>(require('../../src/js/services/auth'));
-const { BaseMiddleware }: typeof BaseMiddlewareModule = require('../../src/js/services/BaseMiddleware');
+const { clearAuthToken } = jest.mocked(require('../../src/js/services/auth') as typeof authModule);
+const { BaseMiddleware } = require('../../src/js/services/BaseMiddleware') as typeof BaseMiddlewareModule;
 import type { CategoryLogger } from '../../src/js/logger';
 import { invalid } from '../helpers/invalid';
 

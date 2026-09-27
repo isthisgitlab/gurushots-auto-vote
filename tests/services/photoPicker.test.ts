@@ -26,7 +26,7 @@ const {
     wholeLabelStems,
     SEMANTIC_MATCH_FLOOR,
     SEMANTIC_SUPPORT_CAP,
-}: typeof photoPickerModule = require('../../src/js/services/photoPicker');
+} = require('../../src/js/services/photoPicker') as typeof photoPickerModule;
 
 const allowed = (id: string, labels: string[], uploadDate = 1000, extras: Partial<PickerPhoto> = {}) => ({
     id,

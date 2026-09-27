@@ -11,7 +11,7 @@ const {
     mockScenarioStateLedger,
     initializeScenarioStateAsync,
     flushScenarioStateWrites,
-}: typeof scenarioStateStoreModule = require('../src/js/scenarioStateStore');
+} = require('../src/js/scenarioStateStore') as typeof scenarioStateStoreModule;
 import loggerModule = require('../src/js/logger');
 const logger = jest.mocked(loggerModule);
 import type * as scenarioStateStoreModule from '../src/js/scenarioStateStore';
@@ -128,7 +128,7 @@ describe('createStateLedger', () => {
         );
         const ledger = createStateLedger(store);
         ledger.set(8, state());
-        expect(Object.keys(JSON.parse(store.raw!))).toEqual(['8']);
+        expect(Object.keys(JSON.parse(store.raw!) as Record<string, unknown>)).toEqual(['8']);
     });
 
     test('parses once per stored text', () => {

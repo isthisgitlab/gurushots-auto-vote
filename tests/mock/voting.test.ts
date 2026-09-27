@@ -7,7 +7,7 @@ import type * as votingModule from '../../src/js/mock/voting';
 import type { Challenge } from '../../src/js/types/gurushots';
 import { invalid } from '../helpers/invalid';
 
-const { generateMockVoteImages }: typeof votingModule = require('../../src/js/mock/voting');
+const { generateMockVoteImages } = require('../../src/js/mock/voting') as typeof votingModule;
 
 afterEach(() => jest.restoreAllMocks());
 

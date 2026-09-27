@@ -32,7 +32,12 @@ type ElectronAppDouble = Pick<App, 'getPath' | 'isPackaged'>;
 type StorageCtx = {
     mod: typeof storageModule;
     fs: jest.MockedObject<typeof node_fsModule>;
-    categoryLogger: { info: jest.Mock; error: jest.Mock; debug: jest.Mock; warning: jest.Mock };
+    categoryLogger: {
+        info: jest.Mock<void, Parameters<loggerModule.CategoryLogger['info']>>;
+        error: jest.Mock<void, Parameters<loggerModule.CategoryLogger['error']>>;
+        debug: jest.Mock<void, Parameters<loggerModule.CategoryLogger['debug']>>;
+        warning: jest.Mock<void, Parameters<loggerModule.CategoryLogger['warning']>>;
+    };
     runtime: typeof runtimeModule;
 };
 
@@ -70,18 +75,18 @@ const loadStorage = ({
             if (noElectron) throw new Error('Cannot find module electron');
             return electronApp ? { app: electronApp } : {};
         });
-        const fs = jest.mocked<typeof node_fsModule>(require('node:fs'));
-        const path = jest.mocked<typeof node_pathModule>(require('node:path'));
+        const fs = jest.mocked(require('node:fs') as typeof node_fsModule);
+        const path = jest.mocked(require('node:path') as typeof node_pathModule);
         const actualPath = jest.requireActual<typeof node_pathModule>('node:path');
         path.dirname.mockImplementation(actualPath.dirname);
         path.join.mockImplementation(actualPath.join);
-        const logger = jest.mocked<typeof loggerModule>(require('../../src/js/logger'));
+        const logger = jest.mocked(require('../../src/js/logger') as typeof loggerModule);
         const categoryLogger = { info: jest.fn(), error: jest.fn(), debug: jest.fn(), warning: jest.fn() };
         logger.withCategory.mockReturnValue(invalid(categoryLogger));
         logger.isSourceCode.mockReturnValue(sourceCode);
-        const runtime: typeof runtimeModule = require('../../src/js/runtime');
+        const runtime = require('../../src/js/runtime') as typeof runtimeModule;
         jest.spyOn(runtime, 'getAppUserDataPath').mockReturnValue(USER_DATA);
-        const mod: typeof storageModule = require('../../src/js/settings/storage');
+        const mod = require('../../src/js/settings/storage') as typeof storageModule;
         ctx = { mod, fs, categoryLogger, runtime };
     });
     return ctx!;

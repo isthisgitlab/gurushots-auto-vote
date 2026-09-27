@@ -5,7 +5,7 @@
  * stubbed to throw so a fatal path stops exactly where the real process would.
  */
 
-// tests/setup.js globally mocks fs and path; this suite needs the real modules.
+// tests/setup.ts globally mocks fs and path; this suite needs the real modules.
 jest.unmock('fs');
 jest.unmock('node:fs');
 jest.unmock('path');
@@ -18,8 +18,11 @@ import pathModule = require('node:path');
 const path = jest.mocked(pathModule);
 import crypto = require('node:crypto');
 import type * as build_lexiconModule from '../../scripts/build-lexicon';
+import type { LexiconAsset } from '../../scripts/build-lexicon';
 
-const { main }: typeof build_lexiconModule = require('../../scripts/build-lexicon');
+const { main } = require('../../scripts/build-lexicon') as typeof build_lexiconModule;
+
+// The asset main() writes, as buildAsset produces it.
 
 const sha = (s: string) => crypto.createHash('sha256').update(s).digest('hex');
 
@@ -106,7 +109,7 @@ describe('build-lexicon main', () => {
     test('accepts an older intermediate without search surfaces', () => {
         writeFixture({ omitSurfaces: true });
         main(paths);
-        const asset = JSON.parse(fs.readFileSync(paths.outAsset, 'utf8'));
+        const asset = JSON.parse(fs.readFileSync(paths.outAsset, 'utf8')) as LexiconAsset;
         expect(asset.surfaces).toEqual({});
     });
 
@@ -134,12 +137,12 @@ describe('build-lexicon main', () => {
         writeFixture();
         main(paths);
         expect(exitSpy).not.toHaveBeenCalled();
-        const asset = JSON.parse(fs.readFileSync(paths.outAsset, 'utf8'));
+        const asset = JSON.parse(fs.readFileSync(paths.outAsset, 'utf8')) as LexiconAsset;
         expect(asset).toMatchObject({ version: 2, dims: 4, packed: PACKED });
         expect(asset.surfaces).toEqual({});
         expect(asset.searchGroups).toEqual([{ triggers: ['cat', 'kitten'], words: ['cat', 'kitten'] }]);
         expect(fs.existsSync(path.join(paths.distDir, 'semantic-vectors.json'))).toBe(false);
-        const summary = logSpy.mock.calls[0][0];
+        const summary = logSpy.mock.calls[0][0] as string;
         expect(summary).toContain('2 word-stems, 4d');
         expect(summary).not.toContain('dist copy');
     });
@@ -153,7 +156,7 @@ describe('build-lexicon main', () => {
             },
         });
         main(paths);
-        const asset = JSON.parse(fs.readFileSync(paths.outAsset, 'utf8'));
+        const asset = JSON.parse(fs.readFileSync(paths.outAsset, 'utf8')) as LexiconAsset;
         expect(asset.searchGroups).toEqual([{ triggers: ['cat', 'kitten'], words: ['cat', 'kitten', 'candle'] }]);
         expect(Object.keys(asset.packed)).toEqual(['cat', 'kitten']);
     });

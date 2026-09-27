@@ -18,9 +18,11 @@
 
 import type * as fsModule from 'node:fs';
 import type * as settingsModule from '../../src/js/settings';
+import type { AppSettings } from '../../src/js/types/settings';
 import type * as challengeFixturesModule from '../helpers/challengeFixtures';
 
-const { buildSettingsFixture: buildFixture }: typeof challengeFixturesModule = require('../helpers/challengeFixtures');
+const { buildSettingsFixture: buildFixture } =
+    require('../helpers/challengeFixtures') as typeof challengeFixturesModule;
 
 // Every migration flag set, so a fully-migrated on-disk file triggers no
 // further writes (used by the idempotency / already-migrated cases).
@@ -47,8 +49,8 @@ describe('last-hour → final-window key rename migration in loadSettings', () =
     beforeEach(() => {
         jest.resetModules();
         jest.clearAllMocks();
-        fs = jest.mocked<typeof fsModule>(require('node:fs'));
-        settings = require('../../src/js/settings');
+        fs = jest.mocked(require('node:fs') as typeof fsModule);
+        settings = require('../../src/js/settings') as typeof settings;
     });
 
     test('renames every legacy key in globalDefaults, deletes the old keys, sets the flag', () => {
@@ -190,17 +192,17 @@ describe('last-hour → final-window key rename migration in loadSettings', () =
         settings.loadSettings();
 
         const calls = fs.writeFileSync.mock.calls;
-        let persisted = null;
+        let persisted: AppSettings | null = null;
         for (let i = calls.length - 1; i >= 0; i -= 1) {
             const [, body] = calls[i];
             if (typeof body === 'string' && body.includes('_finalWindowExposureRenamedV1')) {
-                persisted = JSON.parse(body);
+                persisted = JSON.parse(body) as AppSettings;
                 break;
             }
         }
         expect(persisted).not.toBeNull();
-        expect(persisted._finalWindowExposureRenamedV1).toBe(true);
-        expect(persisted.challengeSettings.globalDefaults.finalWindowExposure).toBe(70);
-        expect(persisted.challengeSettings.globalDefaults.lastHourExposure).toBeUndefined();
+        expect(persisted!._finalWindowExposureRenamedV1).toBe(true);
+        expect(persisted!.challengeSettings.globalDefaults.finalWindowExposure).toBe(70);
+        expect(persisted!.challengeSettings.globalDefaults.lastHourExposure).toBeUndefined();
     });
 });

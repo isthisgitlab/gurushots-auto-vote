@@ -48,7 +48,7 @@ import { recordVoteSample } from '../scenarios/speed';
 import { initialState } from '../scenarioStateStore';
 
 import type { BoostState, Challenge, ChallengeMember, MemberRanking, RankingEntry } from '../types/gurushots';
-import type { ScenarioFiredRecord, ScenarioState } from '../types/stores';
+import type { ScenarioState } from '../types/stores';
 import type { ScenarioStateLedger } from '../types/votingPass';
 import type { CurrencyPassDeps } from './currencyAuto';
 import type { SpendOutcome } from './currencyActions';
@@ -465,12 +465,7 @@ const runRule = async (
         inFlight: null,
         // A step passed over in this firing stays visible as the last problem.
         lastError: skippedStep,
-        // firedRecord's `day` is the local-midnight instant (a number); ScenarioFiredRecord
-        // declares it a string, so the record is cast until that declaration is corrected.
-        fired: {
-            ...state.fired,
-            [rule.id]: firedRecord(startState, at, ctx.timezone) as unknown as ScenarioFiredRecord,
-        },
+        fired: { ...state.fired, [rule.id]: firedRecord(startState, at, ctx.timezone) },
     };
     // A phase change takes effect when the rule finishes, so an interrupted
     // rule always resumes in the phase it belongs to.

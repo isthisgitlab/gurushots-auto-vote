@@ -7,7 +7,8 @@
 
 import type * as findActiveChallengeModule from '../../src/js/services/findActiveChallenge';
 
-const { findActiveChallenge }: typeof findActiveChallengeModule = require('../../src/js/services/findActiveChallenge');
+const { findActiveChallenge } =
+    require('../../src/js/services/findActiveChallenge') as typeof findActiveChallengeModule;
 import { invalid } from '../helpers/invalid';
 
 describe('findActiveChallenge', () => {

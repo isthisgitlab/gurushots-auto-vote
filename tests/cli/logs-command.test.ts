@@ -24,14 +24,12 @@ jest.mock('../../src/js/logger', () => {
 import fsModule = require('fs');
 const fs = jest.mocked(fsModule);
 import loggerModule = require('../../src/js/logger');
-const logger = jest.mocked(
-    invalid<typeof loggerModule & { __infoMock: jest.Mock<(line: string) => void> }>(loggerModule),
-);
+const logger = jest.mocked(invalid<typeof loggerModule & { __infoMock: jest.Mock<void, [string]> }>(loggerModule));
 import type * as diagnosticsModule from '../../src/js/services/semantic/diagnostics';
 import type * as logsModule from '../../src/js/cli/commands/logs';
 import { invalid } from '../helpers/invalid';
-const { diagnostics } = jest.mocked<typeof diagnosticsModule>(require('../../src/js/services/semantic/diagnostics'));
-const { showLogs }: typeof logsModule = require('../../src/js/cli/commands/logs');
+const { diagnostics } = jest.mocked(require('../../src/js/services/semantic/diagnostics') as typeof diagnosticsModule);
+const { showLogs } = require('../../src/js/cli/commands/logs') as typeof logsModule;
 
 describe('CLI logs command', () => {
     beforeEach(() => jest.clearAllMocks());

@@ -1,10 +1,7 @@
 import { invalid } from '../helpers/invalid';
 import type * as timeFieldUnitsModule from '../../src/js/react/utils/timeFieldUnits';
-const {
-    secondsToHoursMinutes,
-    hoursMinutesToSeconds,
-    formatSecondsAsHoursMinutes,
-}: typeof timeFieldUnitsModule = require('../../src/js/react/utils/timeFieldUnits');
+const { secondsToHoursMinutes, hoursMinutesToSeconds, formatSecondsAsHoursMinutes } =
+    require('../../src/js/react/utils/timeFieldUnits') as typeof timeFieldUnitsModule;
 
 describe('timeFieldUnits', () => {
     describe('secondsToHoursMinutes', () => {

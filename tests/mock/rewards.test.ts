@@ -31,14 +31,16 @@ import type * as autoClaimModule from '../../src/js/services/autoClaim';
 import type * as votingOrchestratorModule from '../../src/js/services/votingOrchestrator';
 import type * as indexModule from '../../src/js/mock/index';
 import { invalid } from '../helpers/invalid';
-const { runClaimPass } = jest.mocked<typeof autoClaimModule>(require('../../src/js/services/autoClaim'));
-const { runVotingPass } = jest.mocked<typeof votingOrchestratorModule>(
-    require('../../src/js/services/votingOrchestrator'),
+const { runClaimPass } = jest.mocked(require('../../src/js/services/autoClaim') as typeof autoClaimModule);
+const { runVotingPass } = jest.mocked(
+    require('../../src/js/services/votingOrchestrator') as typeof votingOrchestratorModule,
 );
-const { mockApiClient }: typeof indexModule = require('../../src/js/mock/index');
+const { mockApiClient } = require('../../src/js/mock/index') as typeof indexModule;
 
 /** The shared category logger this file's logger mock hands out. */
-type LoggerMock = { __level: Record<'info' | 'error' | 'debug' | 'success' | 'warning' | 'api', jest.Mock> };
+type LoggerMock = {
+    __level: jest.Mocked<Pick<loggerModule.CategoryLogger, 'info' | 'error' | 'debug' | 'success' | 'warning' | 'api'>>;
+};
 
 beforeEach(() => {
     jest.clearAllMocks();

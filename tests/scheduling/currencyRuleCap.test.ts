@@ -10,10 +10,8 @@ import type { Challenge } from '../../src/js/types/gurushots';
 import type { RuleTiming } from '../../src/js/voting/currencyAuto';
 import { invalid } from '../helpers/invalid';
 
-const {
-    soonestCurrencyRuleStart,
-    computeNextCycleDelayMs,
-}: typeof thresholdWindowModule = require('../../src/js/scheduling/thresholdWindow');
+const { soonestCurrencyRuleStart, computeNextCycleDelayMs } =
+    require('../../src/js/scheduling/thresholdWindow') as typeof thresholdWindowModule;
 
 const NOW = 1_000_000;
 const H = 3600;

@@ -9,10 +9,8 @@ import type { ScenarioDocument } from '../../src/js/settings/scenarioSchema';
 import type { ScenarioEngineState } from '../../src/js/types/scenario';
 import { invalid } from '../helpers/invalid';
 
-const {
-    soonestScenarioWake,
-    computeNextCycleDelayMs,
-}: typeof thresholdWindowModule = require('../../src/js/scheduling/thresholdWindow');
+const { soonestScenarioWake, computeNextCycleDelayMs } =
+    require('../../src/js/scheduling/thresholdWindow') as typeof thresholdWindowModule;
 
 const NOW = 1_800_000_000;
 

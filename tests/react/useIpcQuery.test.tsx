@@ -8,6 +8,7 @@
 
 import { renderHook, waitFor, act } from '@testing-library/preact';
 import { useIpcQuery } from '@/api/useIpcQuery';
+import type { IpcQueryTools } from '@/api/useIpcQuery';
 import { invalid } from '../helpers/invalid';
 
 describe('useIpcQuery', () => {
@@ -145,7 +146,7 @@ describe('useIpcQuery', () => {
 
     test('apply takes over result application and clearErrorOnStart:false keeps a prior error', async () => {
         const queryFn = jest.fn().mockResolvedValue('raw');
-        const apply = jest.fn((result, { setData, setError }) => {
+        const apply = jest.fn((result: string, { setData, setError }: IpcQueryTools<string, Error>) => {
             setError(new Error('derived'));
             setData(`applied:${result}`);
         });
@@ -268,7 +269,7 @@ describe('useIpcQuery', () => {
         test('a call that settled current keeps its outcome when superseded during apply', async () => {
             let finishApply!: () => void;
             const apply = jest.fn(
-                (value, { setData }) =>
+                (value: string, { setData }: IpcQueryTools<string, Error>) =>
                     new Promise<void>((resolve) => {
                         finishApply = () => {
                             setData(value);

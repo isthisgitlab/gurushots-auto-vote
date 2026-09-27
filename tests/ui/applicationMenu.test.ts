@@ -12,19 +12,19 @@ import { invalid } from '../helpers/invalid';
 /** The mocked electron's view of a menu template entry (what the tests read back). */
 type MenuEntry = { label?: string; role?: string; submenu?: MenuEntry[]; click?: () => unknown };
 /** A window the tests push into `BrowserWindow.getAllWindows()`. */
-type ListedWindow = { getTitle: () => string; isDestroyed?: () => boolean; focus?: jest.Mock };
+type ListedWindow = { getTitle: () => string; isDestroyed?: () => boolean; focus?: jest.Mock<void, []> };
 /** A window constructed through the mocked `new BrowserWindow(...)`. */
 type CreatedWindow = {
     opts: BrowserWindowConstructorOptions;
     handlers: Record<string, () => void>;
     loadFile: jest.Mock<Promise<void>, [string]>;
-    show: jest.Mock;
+    show: jest.Mock<void, []>;
 };
 /** Shape of the `electron` mock factory below. */
 type ElectronMock = {
     Menu: {
         buildFromTemplate: jest.Mock<{ tpl: MenuEntry[] }, [MenuEntry[]]>;
-        setApplicationMenu: jest.Mock;
+        setApplicationMenu: jest.Mock<void, [{ tpl: MenuEntry[] } | null]>;
     };
     dialog: { showMessageBox: jest.Mock<Promise<{ response: number }>, [MessageBoxOptions]> };
     app: { getName: jest.Mock<string, []> };
@@ -41,8 +41,8 @@ jest.mock('electron', () => {
         declare handlers: Record<string, () => void>;
         declare loadFile: jest.Mock<Promise<void>, [string]>;
         declare once: jest.Mock<void, [string, () => void]>;
-        declare show: jest.Mock;
-        declare focus: jest.Mock;
+        declare show: jest.Mock<void, []>;
+        declare focus: jest.Mock<void, []>;
         declare getTitle: () => string | undefined;
         declare isDestroyed: () => boolean;
         declare static created: BrowserWindow[];
@@ -55,8 +55,8 @@ jest.mock('electron', () => {
             this.once = jest.fn((ev, cb) => {
                 this.handlers[ev] = cb;
             });
-            this.show = jest.fn();
-            this.focus = jest.fn();
+            this.show = jest.fn<void, []>();
+            this.focus = jest.fn<void, []>();
             this.getTitle = () => opts.title;
             this.isDestroyed = () => false;
             BrowserWindow.created.push(this);
@@ -69,7 +69,7 @@ jest.mock('electron', () => {
     BrowserWindow.windows = windows;
     BrowserWindow.nextLoadResult = null;
     return {
-        Menu: { buildFromTemplate: jest.fn((tpl) => ({ tpl })), setApplicationMenu: jest.fn() },
+        Menu: { buildFromTemplate: jest.fn((tpl: MenuEntry[]) => ({ tpl })), setApplicationMenu: jest.fn() },
         dialog: { showMessageBox: jest.fn(() => Promise.resolve({ response: 0 })) },
         app: { getName: jest.fn(() => 'GuruShots Auto Voter') },
         BrowserWindow,
@@ -102,9 +102,9 @@ let menuModule: typeof MenuModule;
 
 function loadMenu() {
     jest.resetModules();
-    electron = require('electron');
-    logger = jest.mocked<typeof LoggerModule>(require('../../src/js/logger'));
-    menuModule = require('../../src/js/ui/applicationMenu');
+    electron = require('electron') as typeof electron;
+    logger = jest.mocked(require('../../src/js/logger') as typeof LoggerModule);
+    menuModule = require('../../src/js/ui/applicationMenu') as typeof menuModule;
 }
 
 function builtTemplate() {

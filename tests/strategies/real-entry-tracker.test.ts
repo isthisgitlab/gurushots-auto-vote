@@ -45,8 +45,8 @@ jest.mock('../../src/js/services/autoFill', () => ({
 }));
 jest.mock('../../src/js/settings', () => ({ getEffectiveSetting: jest.fn(() => false) }));
 
-const { getActiveChallenges } = jest.mocked<typeof activeChallengesModule>(
-    require('../../src/js/strategies/real/activeChallenges'),
+const { getActiveChallenges } = jest.mocked(
+    require('../../src/js/strategies/real/activeChallenges') as typeof activeChallengesModule,
 );
 import metadataModule = require('../../src/js/metadata');
 const metadata = jest.mocked(metadataModule);
@@ -57,8 +57,8 @@ const votingLogic = jest.mocked(votingLogicModule);
 import type * as activeChallengesModule from '../../src/js/strategies/real/activeChallenges';
 import type * as realModule from '../../src/js/strategies/real';
 import type * as challengeFixturesModule from '../helpers/challengeFixtures';
-const { fetchChallengesAndVote }: typeof realModule = require('../../src/js/strategies/real');
-const { buildChallenge }: typeof challengeFixturesModule = require('../helpers/challengeFixtures');
+const { fetchChallengesAndVote } = require('../../src/js/strategies/real') as typeof realModule;
+const { buildChallenge } = require('../helpers/challengeFixtures') as typeof challengeFixturesModule;
 
 const NOW = Math.floor(Date.now() / 1000);
 

@@ -22,7 +22,7 @@ import currencyActionsModule = require('../../src/js/services/currencyActions');
 const currencyActions = jest.mocked(currencyActionsModule);
 import type * as currency_handlersModule from '../../src/js/ipc/currency.handlers';
 import type * as swapBackStoreModule from '../../src/js/swapBackStore';
-const { buildHandlers }: typeof currency_handlersModule = require('../../src/js/ipc/currency.handlers');
+const { buildHandlers } = require('../../src/js/ipc/currency.handlers') as typeof currency_handlersModule;
 
 const OK = { ok: true, outcome: 'ok' };
 // The handlers as the tests read them: every result is an envelope whose `outcome` the
@@ -107,7 +107,9 @@ describe('argument validation', () => {
 
 describe('spend lock', () => {
     test('a second spend while one is in flight gets busy, across channels', async () => {
-        let release;
+        let release:
+            | ((value: Awaited<ReturnType<typeof currencyActionsModule.unlockBoostWithKey>>) => void)
+            | undefined;
         currencyActions.unlockBoostWithKey.mockReturnValue(new Promise((r) => (release = r)));
         const first = handlers['key-unlock-boost'](null, 10, true);
         expect((await handlers['fill-exposure'](null, 11, true)).outcome).toBe('busy');
@@ -247,7 +249,7 @@ describe('swap back channels', () => {
     });
 
     test('mock mode uses an in-memory ledger, never the real one', async () => {
-        const { swapBackLedger }: typeof swapBackStoreModule = require('../../src/js/swapBackStore');
+        const { swapBackLedger } = require('../../src/js/swapBackStore') as typeof swapBackStoreModule;
         await handlers['swap-back-entry-photo'](null, 10, 'repl', true);
         expect(currencyActions.swapBack.mock.calls[0][3].ledger).not.toBe(swapBackLedger);
     });
@@ -327,7 +329,7 @@ describe('get-swap-backs listing', () => {
 
 describe('register', () => {
     test('registers every currency channel on ipcMain', async () => {
-        const { register }: typeof currency_handlersModule = require('../../src/js/ipc/currency.handlers');
+        const { register } = require('../../src/js/ipc/currency.handlers') as typeof currency_handlersModule;
         const channels = new Map<string, Parameters<IpcMain['handle']>[1]>();
         register(
             invalid({
@@ -335,6 +337,8 @@ describe('register', () => {
             }),
         );
         expect([...channels.keys()].sort()).toEqual(Object.keys(handlers).sort());
-        expect((await channels.get('fill-exposure')!(invalid(undefined), 10, false)).outcome).toBe('needs-confirm');
+        expect(((await channels.get('fill-exposure')!(invalid(undefined), 10, false)) as Envelope).outcome).toBe(
+            'needs-confirm',
+        );
     });
 });

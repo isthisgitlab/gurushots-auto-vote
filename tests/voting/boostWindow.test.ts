@@ -12,11 +12,8 @@
 
 import type * as boostWindowModule from '../../src/js/voting/boostWindow';
 
-const {
-    isBoostWindowOpen,
-    openBoostWindows,
-    boostApplyThreshold,
-}: typeof boostWindowModule = require('../../src/js/voting/boostWindow');
+const { isBoostWindowOpen, openBoostWindows, boostApplyThreshold } =
+    require('../../src/js/voting/boostWindow') as typeof boostWindowModule;
 import { invalid } from '../helpers/invalid';
 
 const NOW = 1_700_000_000;

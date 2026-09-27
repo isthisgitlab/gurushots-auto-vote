@@ -10,10 +10,8 @@ import type * as thresholdWindowModule from '../../src/js/scheduling/thresholdWi
 import type { Challenge } from '../../src/js/types/gurushots';
 import { invalid } from '../helpers/invalid';
 
-const {
-    soonestBoostHoldEnd,
-    computeNextCycleDelayMs,
-}: typeof thresholdWindowModule = require('../../src/js/scheduling/thresholdWindow');
+const { soonestBoostHoldEnd, computeNextCycleDelayMs } =
+    require('../../src/js/scheduling/thresholdWindow') as typeof thresholdWindowModule;
 
 const NOW = 1_000_000;
 

@@ -8,17 +8,22 @@ import type * as activeChallengesModule from '../../src/js/strategies/real/activ
 import type * as api_clientModule from '../../src/js/api/api-client';
 import type * as challengeTitlePinModule from '../../src/js/services/challengeTitlePin';
 import type * as loggerModule from '../../src/js/logger';
+import type { CategoryLogger } from '../../src/js/logger';
 import { invalid } from '../helpers/invalid';
 
 // The logger factory below also exports its shared debug/endOperation mocks.
-type LoggerMock = typeof loggerModule & { __mockDebugFn: jest.Mock; __mockEndOperationFn: jest.Mock };
+type LoggerMock = typeof loggerModule & {
+    __mockDebugFn: jest.MockedFunction<CategoryLogger['debug']>;
+    __mockEndOperationFn: jest.MockedFunction<CategoryLogger['endOperation']>;
+};
 
-const { getActiveChallenges }: typeof activeChallengesModule = require('../../src/js/strategies/real/activeChallenges');
+const { getActiveChallenges } =
+    require('../../src/js/strategies/real/activeChallenges') as typeof activeChallengesModule;
 
 // Mock the api-client module
 jest.mock('../../src/js/api/api-client', () => ({
     makePostRequest: jest.fn(),
-    createCommonHeaders: jest.fn((token) => ({
+    createCommonHeaders: jest.fn((token: string | undefined) => ({
         'x-token': token || 'mock-token',
         'user-agent': 'GuruShots/1.0 (iPhone; iOS 16.0; en_US)',
         accept: 'application/json',
@@ -30,7 +35,7 @@ jest.mock('../../src/js/api/api-client', () => ({
 // in tests/services/challengeTitlePin.test.ts). Wiring is still asserted:
 // success responses must reach the pin hook, failed fetches must not.
 jest.mock('../../src/js/services/challengeTitlePin', () => ({
-    pinChallengeTitles: jest.fn((challenges) => challenges),
+    pinChallengeTitles: jest.fn((challenges: unknown) => challenges),
 }));
 
 // Mock the logger module
@@ -63,11 +68,11 @@ jest.mock('../../src/js/logger', () => {
 
 describe('challenges', () => {
     const mockToken = 'test-token-123';
-    const { makePostRequest, createCommonHeaders } = jest.mocked<typeof api_clientModule>(
-        require('../../src/js/api/api-client'),
+    const { makePostRequest, createCommonHeaders } = jest.mocked(
+        require('../../src/js/api/api-client') as typeof api_clientModule,
     );
-    const { pinChallengeTitles } = jest.mocked<typeof challengeTitlePinModule>(
-        require('../../src/js/services/challengeTitlePin'),
+    const { pinChallengeTitles } = jest.mocked(
+        require('../../src/js/services/challengeTitlePin') as typeof challengeTitlePinModule,
     );
     const logger: LoggerMock = invalid(require('../../src/js/logger'));
 
@@ -244,7 +249,7 @@ describe('challenges', () => {
         });
 
         test('coalesces concurrent calls for the same token into a single request', async () => {
-            let resolveRequest;
+            let resolveRequest: ((value: unknown) => void) | undefined;
             makePostRequest.mockReturnValueOnce(
                 new Promise((resolve) => {
                     resolveRequest = resolve;

@@ -4,7 +4,7 @@
  * fs work happens under os.tmpdir(); the real logs/ is never touched.
  */
 
-// tests/setup.js mocks fs/path globally; this suite needs the real modules
+// tests/setup.ts mocks fs/path globally; this suite needs the real modules
 // to exercise real deletion in a temp dir.
 jest.unmock('fs');
 jest.unmock('node:fs');
@@ -23,7 +23,7 @@ jest.mock('../../src/js/runtime', () => ({
     getAppUserDataPath: () => mockUserDataPath,
 }));
 
-const { cleanupLogs }: typeof cleanup_logsModule = require('../../scripts/cleanup-logs');
+const { cleanupLogs } = require('../../scripts/cleanup-logs') as typeof cleanup_logsModule;
 
 describe('cleanup-logs', () => {
     let tmp: string;

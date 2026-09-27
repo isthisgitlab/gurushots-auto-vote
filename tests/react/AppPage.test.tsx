@@ -16,7 +16,7 @@ import type { Challenge } from '../../src/js/types/gurushots';
 import type { RendererGlobals } from '../../src/js/types/capacitor';
 import type { WindowApi } from '../../src/js/types/ipc';
 import type * as AppModule from '@/pages/App';
-import type { ChallengesProvider } from '@/contexts/ChallengesContext';
+import type { ChallengesContextValue, ChallengesProvider } from '@/contexts/ChallengesContext';
 import type { AutovoteProvider } from '@/contexts/AutovoteContext';
 import type { UpdateProvider } from '@/contexts/UpdateContext';
 import type { AutoVoteControls } from '@/components/app/AutoVoteControls';
@@ -47,7 +47,10 @@ type StubProps = {
 
 // Filled by each stub as App renders it; the tests read it after render.
 const mockProps = invalid<StubProps>({});
-const mockChallenges: { challenges: Challenge[]; refetch: jest.Mock } = { challenges: [], refetch: jest.fn() };
+const mockChallenges: { challenges: Challenge[]; refetch: jest.MockedFunction<ChallengesContextValue['refetch']> } = {
+    challenges: [],
+    refetch: jest.fn(),
+};
 const mockBankroll = { bankroll: { coins: 5 }, refetch: jest.fn() };
 const mockAutovote = {
     running: false,

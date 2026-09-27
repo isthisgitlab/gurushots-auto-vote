@@ -16,7 +16,7 @@ jest.mock('../../src/js/settings', () => ({
     MAX_TITLE_LENGTH: 200,
     rememberChallengeTitles: jest.fn(() => true),
     getTitlePins: jest.fn(() => ({ ...pinStore })),
-    mergeTitlePins: jest.fn((adds, removeIds) => {
+    mergeTitlePins: jest.fn((adds: Record<string, string>, removeIds?: readonly string[]) => {
         for (const id of removeIds || []) {
             delete pinStore[id];
         }
@@ -29,7 +29,7 @@ jest.mock('../../src/js/settings', () => ({
     }),
 }));
 
-const mockWarning = jest.fn();
+const mockWarning = jest.fn<void, Parameters<CategoryLogger['warning']>>();
 jest.mock('../../src/js/logger', () => ({
     withCategory: jest.fn(() => ({
         info: jest.fn(),
@@ -40,7 +40,7 @@ jest.mock('../../src/js/logger', () => ({
     })),
     // Faithful implementation — the module under test interpolates its return
     // value into the warning message this suite asserts on.
-    sanitizeLogString: jest.fn((value, maxLength = 200) =>
+    sanitizeLogString: jest.fn((value: unknown, maxLength: number = 200) =>
         String(value ?? '')
             .replace(/[\r\n\t]/g, ' ')
             .slice(0, maxLength),
@@ -50,11 +50,10 @@ jest.mock('../../src/js/logger', () => ({
 import settingsModule = require('../../src/js/settings');
 const settings = jest.mocked(settingsModule);
 import type * as challengeTitlePinModule from '../../src/js/services/challengeTitlePin';
+import type { CategoryLogger } from '../../src/js/logger';
 import { invalid } from '../helpers/invalid';
-const {
-    pinChallengeTitles,
-    __resetForTests,
-}: typeof challengeTitlePinModule = require('../../src/js/services/challengeTitlePin');
+const { pinChallengeTitles, __resetForTests } =
+    require('../../src/js/services/challengeTitlePin') as typeof challengeTitlePinModule;
 
 describe('pinChallengeTitles', () => {
     beforeEach(() => {

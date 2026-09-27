@@ -25,7 +25,7 @@ jest.mock('../../src/js/logger', () => {
     return { withCategory: jest.fn(() => cat) };
 });
 
-const { buildHandlers }: typeof misc_handlersModule = require('../../src/js/ipc/misc.handlers');
+const { buildHandlers } = require('../../src/js/ipc/misc.handlers') as typeof misc_handlersModule;
 
 describe('misc.handlers open-external-url scheme gate', () => {
     let handler: (event: unknown, url: unknown) => Promise<{ success: boolean; error?: string }>;
@@ -127,8 +127,8 @@ describe('misc.handlers reload-window', () => {
 });
 
 describe('misc.handlers refresh-menu', () => {
-    const { updateMenuTranslations } = jest.mocked<typeof applicationMenuModule>(
-        require('../../src/js/ui/applicationMenu'),
+    const { updateMenuTranslations } = jest.mocked(
+        require('../../src/js/ui/applicationMenu') as typeof applicationMenuModule,
     );
     const { loadLanguageFromSettings } = mockTranslationManager;
 
@@ -167,7 +167,7 @@ describe('misc.handlers refresh-menu', () => {
 
 describe('misc.handlers register', () => {
     test('registers every channel with the injected window accessors', async () => {
-        const { register }: typeof misc_handlersModule = require('../../src/js/ipc/misc.handlers');
+        const { register } = require('../../src/js/ipc/misc.handlers') as typeof misc_handlersModule;
         const channels = new Map<string, Parameters<IpcMain['handle']>[1]>();
         const main = { isDestroyed: () => false, reload: jest.fn() };
         register(

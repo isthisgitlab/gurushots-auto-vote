@@ -8,7 +8,7 @@
 import type * as durationModule from '../../src/js/format/duration';
 import { invalid } from '../helpers/invalid';
 
-const { formatDuration }: typeof durationModule = require('../../src/js/format/duration');
+const { formatDuration } = require('../../src/js/format/duration') as typeof durationModule;
 
 describe('formatDuration (default — minute granularity, "<1m" floor)', () => {
     test('sub-minute, zero, negative, and non-numeric all read "<1m"', () => {

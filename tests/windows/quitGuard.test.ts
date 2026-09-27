@@ -5,11 +5,13 @@
 
 import type * as VotingLogicModule from '../../src/js/services/VotingLogic';
 import type * as quitGuardModule from '../../src/js/windows/quitGuard';
-import type { BrowserWindow } from 'electron';
+import type { BrowserWindow, Dialog } from 'electron';
 import type { Challenge } from '../../src/js/types/gurushots';
+import type { CategoryLogger } from '../../src/js/logger';
 import { invalid } from '../helpers/invalid';
 
 type Deps = Parameters<typeof quitGuardModule.holdQuitForOpenBoosts>[1];
+type ShowMessageBox = jest.MockedFunction<Dialog['showMessageBox']>;
 
 jest.mock('../../src/js/logger', () => {
     const cat = { info: jest.fn(), error: jest.fn() };
@@ -44,13 +46,15 @@ const t = (key: string) => `<${key}>`;
 const flush = () => new Promise((r) => setImmediate(r));
 
 let guard: typeof quitGuardModule;
-let logger: { cat: { info: jest.Mock; error: jest.Mock } };
+let logger: {
+    cat: { info: jest.MockedFunction<CategoryLogger['info']>; error: jest.MockedFunction<CategoryLogger['error']> };
+};
 
 beforeEach(() => {
     // Module-level state (list, bypass, prompting) must not leak across tests.
     jest.resetModules();
-    guard = require('../../src/js/windows/quitGuard');
-    logger = require('../../src/js/logger');
+    guard = require('../../src/js/windows/quitGuard') as typeof guard;
+    logger = require('../../src/js/logger') as typeof logger;
 });
 
 const setup = ({
@@ -63,12 +67,12 @@ const setup = ({
     response?: number;
     parent?: Deps['parent'];
     autovoteRunning?: boolean;
-    showMessageBox?: jest.Mock;
+    showMessageBox?: ShowMessageBox;
     describe?: Deps['describeDeadlineActions'];
 } = {}) => {
     const event = { preventDefault: jest.fn() };
-    const dialog: { showMessageBox: jest.Mock } = {
-        showMessageBox: showMessageBox ?? jest.fn(() => Promise.resolve({ response })),
+    const dialog: { showMessageBox: ShowMessageBox } = {
+        showMessageBox: showMessageBox ?? invalid(jest.fn(() => Promise.resolve({ response }))),
     };
     const proceed = jest.fn();
     const hold = () =>
@@ -122,14 +126,16 @@ describe('holdQuitForOpenBoosts — when to ask', () => {
     });
 
     test('defaults to the real clock and VotingLogic.describeDeadlineActions', () => {
-        const votingLogic = jest.mocked<typeof VotingLogicModule>(require('../../src/js/services/VotingLogic'));
+        const votingLogic = jest.mocked(require('../../src/js/services/VotingLogic') as typeof VotingLogicModule);
         guard.rememberChallenges([keyed]);
         votingLogic.describeDeadlineActions.mockReturnValue(
             invalid({
                 actions: [{ action: 'boost', dueAt: Math.floor(Date.now() / 1000) + 60 }],
             }),
         );
-        const dialog: { showMessageBox: jest.Mock } = { showMessageBox: jest.fn(() => new Promise(() => {})) };
+        const dialog: { showMessageBox: ShowMessageBox } = {
+            showMessageBox: invalid(jest.fn(() => new Promise(() => {}))),
+        };
         const held = guard.holdQuitForOpenBoosts(
             { preventDefault: jest.fn() },
             { autovoteRunning: true, dialog, parent: null, t, proceed: jest.fn() },
@@ -165,7 +171,7 @@ describe('holdQuitForOpenBoosts — the dialog', () => {
 
         expect(hold()).toBe(true);
         expect(event.preventDefault).toHaveBeenCalled();
-        const options = dialog.showMessageBox.mock.calls[0][0];
+        const options = jest.mocked(dialog.showMessageBox as Dialog['showMessageBox']).mock.calls[0][0];
         expect(options).toMatchObject({
             type: 'warning',
             buttons: ['<quitGuard.keepRunning>', '<quitGuard.quitAnyway>'],
@@ -187,7 +193,9 @@ describe('holdQuitForOpenBoosts — the dialog', () => {
 
     test('substitutes the time until the boost into the translated suffix', () => {
         guard.rememberChallenges([timed]);
-        const dialog: { showMessageBox: jest.Mock } = { showMessageBox: jest.fn(() => new Promise(() => {})) };
+        const dialog: { showMessageBox: ShowMessageBox } = {
+            showMessageBox: invalid(jest.fn(() => new Promise(() => {}))),
+        };
         guard.holdQuitForOpenBoosts(
             { preventDefault: jest.fn() },
             {
@@ -200,7 +208,9 @@ describe('holdQuitForOpenBoosts — the dialog', () => {
                 describeDeadlineActions: describe_,
             },
         );
-        expect(dialog.showMessageBox.mock.calls[0][0].detail).toContain('• Anything Music — boost due in 9m');
+        expect(jest.mocked(dialog.showMessageBox as Dialog['showMessageBox']).mock.calls[0][0].detail).toContain(
+            '• Anything Music — boost due in 9m',
+        );
     });
 
     test('"Keep running" leaves the app up and asks again next time', async () => {
@@ -217,7 +227,7 @@ describe('holdQuitForOpenBoosts — the dialog', () => {
 
     test('a second quit while the dialog is up is held without stacking a dialog', () => {
         guard.rememberChallenges([timed]);
-        setup({ showMessageBox: jest.fn(() => new Promise(() => {})) }).hold();
+        setup({ showMessageBox: invalid(jest.fn(() => new Promise(() => {}))) }).hold();
 
         const again = setup();
         expect(again.hold()).toBe(true);
@@ -228,7 +238,7 @@ describe('holdQuitForOpenBoosts — the dialog', () => {
     test('attaches the dialog to a live parent window, not a destroyed one', () => {
         guard.rememberChallenges([timed]);
         const live = invalid<BrowserWindow>({ isDestroyed: () => false });
-        const a = setup({ parent: live, showMessageBox: jest.fn(() => new Promise(() => {})) });
+        const a = setup({ parent: live, showMessageBox: invalid(jest.fn(() => new Promise(() => {}))) });
         a.hold();
         expect(a.dialog.showMessageBox).toHaveBeenCalledWith(live, expect.any(Object));
 
@@ -236,7 +246,7 @@ describe('holdQuitForOpenBoosts — the dialog', () => {
         guard.rememberChallenges([timed]);
         const dead = setup({
             parent: invalid({ isDestroyed: () => true }),
-            showMessageBox: jest.fn(() => new Promise(() => {})),
+            showMessageBox: invalid(jest.fn(() => new Promise(() => {}))),
         });
         dead.hold();
         expect(dead.dialog.showMessageBox).toHaveBeenCalledWith(expect.objectContaining({ type: 'warning' }));
@@ -245,7 +255,7 @@ describe('holdQuitForOpenBoosts — the dialog', () => {
     test('a failing dialog quits anyway instead of trapping the user', async () => {
         guard.rememberChallenges([timed]);
         const err = new Error('no dialog');
-        const { proceed, hold } = setup({ showMessageBox: jest.fn(() => Promise.reject(err)) });
+        const { proceed, hold } = setup({ showMessageBox: invalid(jest.fn(() => Promise.reject(err))) });
         hold();
         await flush();
         expect(logger.cat.error).toHaveBeenCalledWith('Quit confirmation failed — quitting anyway:', err);

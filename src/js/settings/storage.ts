@@ -29,7 +29,7 @@ import type { AndroidHeadlessStore } from '../types/settings';
  * else).
  */
 const headlessStore = (): AndroidHeadlessStore | undefined =>
-    (globalThis as unknown as { AndroidHeadlessStore?: AndroidHeadlessStore }).AndroidHeadlessStore;
+    (globalThis as typeof globalThis & { AndroidHeadlessStore?: AndroidHeadlessStore }).AndroidHeadlessStore;
 
 // Try to import electron, but don't fail if it's not available (CLI context)
 let electronApp: App | null | undefined = null;

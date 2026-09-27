@@ -5,14 +5,11 @@
  * never touched.
  */
 
-import type { AndroidHeadlessStore } from '../../src/js/types/settings';
+import type { AndroidHeadlessStore, AppSettings } from '../../src/js/types/settings';
 import settings = require('../../src/js/settings');
 import type * as scenarioStateStoreModule from '../../src/js/scenarioStateStore';
-const {
-    scenarioStateLedger,
-    mockScenarioStateLedger,
-    initialState,
-}: typeof scenarioStateStoreModule = require('../../src/js/scenarioStateStore');
+const { scenarioStateLedger, mockScenarioStateLedger, initialState } =
+    require('../../src/js/scenarioStateStore') as typeof scenarioStateStoreModule;
 
 jest.mock('../../src/js/logger', () => {
     const category = { info: jest.fn(), error: jest.fn(), debug: jest.fn(), success: jest.fn(), warning: jest.fn() };
@@ -140,7 +137,9 @@ describe('scenario phase-settings overlay', () => {
     test('no overlay when the stored scenario no longer validates', () => {
         assign();
         scenarioStateLedger.set(7, initialState('Plan', 'buildup', 1));
-        const blob = JSON.parse(store.value!);
+        const blob = JSON.parse(store.value!) as AppSettings & {
+            challengeSettings: { scenarios: Record<string, { version: number }> };
+        };
         blob.challengeSettings.scenarios.Plan.version = 99;
         store.value = JSON.stringify(blob);
         expect(settings.getEffectiveSetting('exposure', '7')).toBe(100);

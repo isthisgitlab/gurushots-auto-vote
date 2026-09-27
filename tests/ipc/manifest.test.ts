@@ -44,25 +44,20 @@ import type * as scenarios_handlersModule from '../../src/js/ipc/scenarios.handl
 import type * as misc_handlersModule from '../../src/js/ipc/misc.handlers';
 import type * as update_handlersModule from '../../src/js/ipc/update.handlers';
 
-const {
-    invokeChannels,
-    aliases,
-    sendMethods,
-    eventMethods,
-    kebabToCamel,
-    allInvokeChannels,
-}: typeof manifestModule = require('../../src/js/ipc/manifest');
+const { invokeChannels, aliases, sendMethods, eventMethods, kebabToCamel, allInvokeChannels } =
+    require('../../src/js/ipc/manifest') as typeof manifestModule;
 
 const collectHandlerChannels = () => {
-    const settingsHandlers: typeof settings_handlersModule = require('../../src/js/ipc/settings.handlers');
-    const votingHandlers: typeof voting_handlersModule = require('../../src/js/ipc/voting.handlers');
-    const logHandlers: typeof log_handlersModule = require('../../src/js/ipc/log.handlers');
-    const actionsHandlers: typeof actions_handlersModule = require('../../src/js/ipc/actions.handlers');
-    const computationsHandlers: typeof computations_handlersModule = require('../../src/js/ipc/computations.handlers');
-    const currencyHandlers: typeof currency_handlersModule = require('../../src/js/ipc/currency.handlers');
-    const scenariosHandlers: typeof scenarios_handlersModule = require('../../src/js/ipc/scenarios.handlers');
-    const miscHandlers: typeof misc_handlersModule = require('../../src/js/ipc/misc.handlers');
-    const updateHandlers: typeof update_handlersModule = require('../../src/js/ipc/update.handlers');
+    const settingsHandlers = require('../../src/js/ipc/settings.handlers') as typeof settings_handlersModule;
+    const votingHandlers = require('../../src/js/ipc/voting.handlers') as typeof voting_handlersModule;
+    const logHandlers = require('../../src/js/ipc/log.handlers') as typeof log_handlersModule;
+    const actionsHandlers = require('../../src/js/ipc/actions.handlers') as typeof actions_handlersModule;
+    const computationsHandlers =
+        require('../../src/js/ipc/computations.handlers') as typeof computations_handlersModule;
+    const currencyHandlers = require('../../src/js/ipc/currency.handlers') as typeof currency_handlersModule;
+    const scenariosHandlers = require('../../src/js/ipc/scenarios.handlers') as typeof scenarios_handlersModule;
+    const miscHandlers = require('../../src/js/ipc/misc.handlers') as typeof misc_handlersModule;
+    const updateHandlers = require('../../src/js/ipc/update.handlers') as typeof update_handlersModule;
 
     return [
         ...Object.keys(settingsHandlers.buildHandlers({ broadcastSettingsChange: () => {} })),

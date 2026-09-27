@@ -8,13 +8,11 @@
  */
 
 import type * as nodeNotifyModule from '../../src/js/services/notify/nodeNotify';
+import type { Challenge } from '../../src/js/types/gurushots';
 import { invalid } from '../helpers/invalid';
 
-const {
-    createNodeDeadlineNotifier,
-    escapeAppleScript,
-    escapePango,
-}: typeof nodeNotifyModule = require('../../src/js/services/notify/nodeNotify');
+const { createNodeDeadlineNotifier, escapeAppleScript, escapePango } =
+    require('../../src/js/services/notify/nodeNotify') as typeof nodeNotifyModule;
 
 const NOW = 1_000_000;
 const describeWith =
@@ -67,7 +65,7 @@ describe('createNodeDeadlineNotifier', () => {
 
     test('a throwing describeDeadlineActions for one challenge does not sink the batch', async () => {
         const deliver = jest.fn();
-        const describeDeadlineActions = jest.fn((c) => {
+        const describeDeadlineActions = jest.fn((c: Challenge) => {
             if (c.id === 'bad') throw new Error('boom');
             return { actions: [act('boost', 60)] };
         });

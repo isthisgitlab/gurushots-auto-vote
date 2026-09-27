@@ -20,8 +20,13 @@ import type { Challenge, VoteImagesResponse } from '../../src/js/types/gurushots
 import { invalid } from '../helpers/invalid';
 
 /** The shared category-logger functions this file's logger mock exposes. */
-type LoggerMock = typeof loggerModule &
-    Record<'__mockDebugFn' | '__mockInfoFn' | '__mockSuccessFn' | '__mockErrorFn' | '__mockApiFn', jest.Mock>;
+type LoggerMock = typeof loggerModule & {
+    __mockDebugFn: jest.MockedFunction<loggerModule.CategoryLogger['debug']>;
+    __mockInfoFn: jest.MockedFunction<loggerModule.CategoryLogger['info']>;
+    __mockSuccessFn: jest.MockedFunction<loggerModule.CategoryLogger['success']>;
+    __mockErrorFn: jest.MockedFunction<loggerModule.CategoryLogger['error']>;
+    __mockApiFn: jest.MockedFunction<loggerModule.CategoryLogger['api']>;
+};
 /** The per-test fixture the challenge-generator mock is pointed at (not a real export). */
 type ChallengesMock = jest.MockedObject<typeof challengesModule> & {
     mockActiveChallenges: { challenges: Array<Record<string, unknown>> };
@@ -82,7 +87,12 @@ jest.mock('../../src/js/logger', () => {
     const mockErrorFn = jest.fn();
     const mockApiFn = jest.fn();
 
-    const mock: Record<string, jest.Mock> = {
+    // Every entry is an argument-agnostic mock except challengeTag, which
+    // formats the challenge object it is given.
+    const mock: Record<
+        string,
+        jest.Mock<unknown, never[]> | jest.Mock<string, [{ id?: string | number } | null | undefined]>
+    > = {
         debug: jest.fn(),
         info: jest.fn(),
         success: jest.fn(),
@@ -93,7 +103,7 @@ jest.mock('../../src/js/logger', () => {
         apiRequest: jest.fn(),
         apiResponse: jest.fn(),
         isDevMode: jest.fn(() => false),
-        challengeTag: jest.fn((c) => `[Challenge ${c?.id ?? 'unknown'}]`),
+        challengeTag: jest.fn((c: { id?: string | number } | null | undefined) => `[Challenge ${c?.id ?? 'unknown'}]`),
         // Export the shared functions for access in tests
         __mockDebugFn: mockDebugFn,
         __mockInfoFn: mockInfoFn,
@@ -118,11 +128,11 @@ jest.mock('../../src/js/logger', () => {
 });
 
 describe('mock/index', () => {
-    const auth: typeof authModule = require('../../src/js/mock/auth');
-    const challenges: ChallengesMock = require('../../src/js/mock/challenges');
-    const voting: VotingMock = require('../../src/js/mock/voting');
-    const boost: typeof boostModule = require('../../src/js/mock/boost');
-    const logger: LoggerMock = require('../../src/js/logger');
+    const auth = require('../../src/js/mock/auth') as typeof authModule;
+    const challenges = require('../../src/js/mock/challenges') as ChallengesMock;
+    const voting = require('../../src/js/mock/voting') as VotingMock;
+    const boost = require('../../src/js/mock/boost') as typeof boostModule;
+    const logger = require('../../src/js/logger') as LoggerMock;
 
     beforeEach(() => {
         jest.clearAllMocks();
@@ -492,7 +502,7 @@ describe('mock/index', () => {
                 // Mock ids never match real challenge ids, so a mock cycle
                 // running cleanupStaleMetadata would purge the user's REAL
                 // voting metadata. The binder must inject null for it.
-                const metadata: typeof metadataModule = require('../../src/js/metadata');
+                const metadata = require('../../src/js/metadata') as typeof metadataModule;
                 const cleanupSpy = jest.spyOn(metadata, 'cleanupStaleMetadata');
 
                 const result = await mockIndex.mockApiClient.fetchChallengesAndVote('test-token');
@@ -508,8 +518,8 @@ describe('mock/index', () => {
                 // so a metadata-backed tracker here would pile up entryIds in the
                 // user's REAL metadata.json that nothing would ever prune. The mock
                 // binder must inject the in-memory tracker.
-                const metadata: typeof metadataModule = require('../../src/js/metadata');
-                const settings: typeof settingsModule = require('../../src/js/settings');
+                const metadata = require('../../src/js/metadata') as typeof metadataModule;
+                const settings = require('../../src/js/settings') as typeof settingsModule;
                 const setSpy = jest.spyOn(metadata, 'setChallengeEntryIds');
                 const getSpy = jest.spyOn(metadata, 'getChallengeEntryIds');
                 // Two things have to be true for this assertion to mean anything, and
@@ -548,9 +558,8 @@ describe('mock/index', () => {
                     // Pin the precondition, so this stays a real assertion: if a future
                     // fixture change drops `entries` again, fail here rather than
                     // silently passing because the tracker was never reached.
-                    const {
-                        readEntryIds,
-                    }: typeof newEntryTrackerModule = require('../../src/js/services/newEntryTracker');
+                    const { readEntryIds } =
+                        require('../../src/js/services/newEntryTracker') as typeof newEntryTrackerModule;
                     expect(readEntryIds(invalid(challenges.mockActiveChallenges.challenges[0]))).toEqual(['e1', 'e2']);
 
                     const result = await mockIndex.mockApiClient.fetchChallengesAndVote('test-token');
@@ -569,7 +578,7 @@ describe('mock/index', () => {
         });
 
         describe('fetchChallengesAndVote — fill-new options', () => {
-            const settings: typeof settingsModule = require('../../src/js/settings');
+            const settings = require('../../src/js/settings') as typeof settingsModule;
 
             beforeEach(() => {
                 mockIndex.clearSessionCache();
@@ -706,7 +715,7 @@ describe('mock/index', () => {
 });
 
 describe('mock currency spends (keyUnlock / swapPhoto / exposureAutofill)', () => {
-    const { mockApiClient }: typeof indexModule = require('../../src/js/mock/index');
+    const { mockApiClient } = require('../../src/js/mock/index') as typeof indexModule;
 
     test.each([
         ['keyUnlock', (id: string, tok: string) => mockApiClient.keyUnlock(id, tok)],

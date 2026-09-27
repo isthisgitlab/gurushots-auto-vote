@@ -17,7 +17,7 @@ import lexiconModule = require('../../src/js/services/semantic/lexicon');
 const lexicon = jest.mocked(lexiconModule);
 import type * as tagResolverModule from '../../src/js/services/tagResolver';
 import { invalid } from '../helpers/invalid';
-const { resolveTermsToTags }: typeof tagResolverModule = require('../../src/js/services/tagResolver');
+const { resolveTermsToTags } = require('../../src/js/services/tagResolver') as typeof tagResolverModule;
 
 const challenge = { id: 1, title: 'Stairs', welcome_message: '' };
 const deps = (tags: string[]) => ({

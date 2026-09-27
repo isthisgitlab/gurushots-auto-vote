@@ -14,6 +14,8 @@ import { StrokeIcon, ICON_PATHS } from '@/components/ui/StrokeIcon';
 import { mockApi } from './helpers/setup';
 import { invalid } from '../helpers/invalid';
 
+type LogErrorMock = jest.MockedFunction<Window['api']['logError']>;
+
 beforeEach(() => {
     window.api = invalid(mockApi);
     jest.clearAllMocks();
@@ -228,7 +230,7 @@ describe('ErrorBoundary edges', () => {
             </ErrorBoundary>,
         );
         expect(screen.getByText('raw failure')).toBeTruthy();
-        expect(mockApi.logError.mock.calls[0][0]).toMatch(
+        expect((mockApi.logError as LogErrorMock).mock.calls[0][0]).toMatch(
             /^React error boundary caught: raw failure\nComponent stack:/,
         );
     });
@@ -240,7 +242,9 @@ describe('ErrorBoundary edges', () => {
                 <Thrower value={err} />
             </ErrorBoundary>,
         );
-        expect(mockApi.logError.mock.calls[0][0]).toContain('React error boundary caught: no stack here');
+        expect((mockApi.logError as LogErrorMock).mock.calls[0][0]).toContain(
+            'React error boundary caught: no stack here',
+        );
     });
 
     test('without window.api.logError nothing is logged and the fallback still renders', () => {
@@ -261,14 +265,18 @@ describe('ErrorBoundary edges', () => {
                 <Thrower value={new Error('crash')} />
             </ErrorBoundary>,
         );
-        await expect(mockApi.logError.mock.results[0].value.catch(() => 'handled')).resolves.toBe('handled');
+        await expect(
+            ((mockApi.logError as LogErrorMock).mock.results[0].value as ReturnType<LogErrorMock>).catch(
+                () => 'handled',
+            ),
+        ).resolves.toBe('handled');
         expect(screen.getByText('crash')).toBeTruthy();
     });
 
     test('componentDidCatch without info still logs an empty component stack', () => {
         const boundary = new ErrorBoundary({});
         boundary.componentDidCatch(new Error('direct'), undefined);
-        expect(mockApi.logError.mock.calls[0][0]).toMatch(/Component stack:$/);
+        expect((mockApi.logError as LogErrorMock).mock.calls[0][0]).toMatch(/Component stack:$/);
     });
 
     test('Reload reloads the window', () => {

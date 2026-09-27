@@ -85,39 +85,46 @@ const logger = jest.mocked(
 import settingsModule = require('../../src/js/settings');
 const settings = jest.mocked(settingsModule);
 import apiFactoryModule = require('../../src/js/apiFactory');
+// The middleware whose methods the factory mock exposes as __-prefixed jest.fns.
+type Middleware = ReturnType<typeof apiFactoryModule.getMiddleware>;
 const apiFactory = jest.mocked(
     invalid<
         typeof apiFactoryModule & {
-            __getActiveChallenges: jest.Mock;
-            __isAuthenticated: jest.Mock;
-            __applyBoost: jest.Mock;
-            __cliVote: jest.Mock;
-            __cliVoteManual: jest.Mock;
+            __getActiveChallenges: jest.MockedFunction<Middleware['getActiveChallenges']>;
+            __isAuthenticated: jest.MockedFunction<Middleware['isAuthenticated']>;
+            __applyBoost: jest.MockedFunction<Middleware['applyBoost']>;
+            __cliVote: jest.MockedFunction<Middleware['cliVote']>;
+            __cliVoteManual: jest.MockedFunction<Middleware['cliVoteManual']>;
         }
     >(apiFactoryModule),
 );
 import boostApiModule = require('../../src/js/strategies/real/applyBoost');
 const boostApi = jest.mocked(boostApiModule);
 // The handler-module mocks expose their jest.fn table for the assertions.
-type HandlersMock = { __handlers: Record<string, jest.Mock> };
-const actionsHandlers = invalid<HandlersMock>(require('../../src/js/ipc/actions.handlers')).__handlers;
-const votingHandlers = invalid<HandlersMock>(require('../../src/js/ipc/voting.handlers')).__handlers;
+type HandlersMock<M extends { buildHandlers: (...args: never[]) => object }> = {
+    __handlers: jest.Mocked<ReturnType<M['buildHandlers']>>;
+};
+const actionsHandlers = invalid<HandlersMock<typeof actionsHandlersModule>>(
+    require('../../src/js/ipc/actions.handlers'),
+).__handlers;
+const votingHandlers = invalid<HandlersMock<typeof votingHandlersModule>>(
+    require('../../src/js/ipc/voting.handlers'),
+).__handlers;
 import updateCheckerModule = require('../../src/js/services/UpdateChecker');
 const updateChecker = jest.mocked(updateCheckerModule);
 import type * as actionsModule from '../../src/js/cli/commands/actions';
+import type * as actionsHandlersModule from '../../src/js/ipc/actions.handlers';
+import type * as votingHandlersModule from '../../src/js/ipc/voting.handlers';
 import type * as votingModule from '../../src/js/cli/commands/voting';
 import type * as authModule from '../../src/js/cli/commands/auth';
 import type * as updateModule from '../../src/js/cli/commands/update';
 import { invalid } from '../helpers/invalid';
 
-const {
-    boostChallenge,
-    turboChallenge,
-    fillChallenge,
-}: typeof actionsModule = require('../../src/js/cli/commands/actions');
-const { voteChallengeManual, runVotingCycle }: typeof votingModule = require('../../src/js/cli/commands/voting');
-const { handleLogout }: typeof authModule = require('../../src/js/cli/commands/auth');
-const { checkUpdates }: typeof updateModule = require('../../src/js/cli/commands/update');
+const { boostChallenge, turboChallenge, fillChallenge } =
+    require('../../src/js/cli/commands/actions') as typeof actionsModule;
+const { voteChallengeManual, runVotingCycle } = require('../../src/js/cli/commands/voting') as typeof votingModule;
+const { handleLogout } = require('../../src/js/cli/commands/auth') as typeof authModule;
+const { checkUpdates } = require('../../src/js/cli/commands/update') as typeof updateModule;
 
 const msgsAt = (level: string) => logger.__calls.filter((c) => c.level === level).map((c) => String(c.msg));
 const allMsgs = () => logger.__calls.map((c) => String(c.msg));
@@ -127,13 +134,13 @@ beforeEach(() => {
     logger.__calls.length = 0;
     jest.clearAllMocks();
     apiFactory.__isAuthenticated.mockReturnValue(true);
-    apiFactory.__getActiveChallenges.mockResolvedValue({ challenges: [{ id: 111, title: 'Sunset' }] });
+    apiFactory.__getActiveChallenges.mockResolvedValue(invalid({ challenges: [{ id: 111, title: 'Sunset' }] }));
     settings.getSetting.mockReturnValue('tok');
 });
 
 describe('CLI boost command', () => {
     test('no --image: routes through the middleware applyBoost (resolves boostImageIndex) and reports success', async () => {
-        apiFactory.__applyBoost.mockResolvedValue({ ok: true });
+        apiFactory.__applyBoost.mockResolvedValue(invalid({ ok: true }));
 
         await boostChallenge('111', {});
 
@@ -144,7 +151,7 @@ describe('CLI boost command', () => {
     });
 
     test('never bypasses the factory to reach the real-strategy applyBoost (mock-mode safety)', async () => {
-        apiFactory.__applyBoost.mockResolvedValue({ ok: true });
+        apiFactory.__applyBoost.mockResolvedValue(invalid({ ok: true }));
 
         await boostChallenge('111', {});
 
@@ -153,7 +160,7 @@ describe('CLI boost command', () => {
     });
 
     test('--image routes to the apply-boost-to-entry handler with the explicit id', async () => {
-        actionsHandlers['apply-boost-to-entry'].mockResolvedValue({ success: true });
+        actionsHandlers['apply-boost-to-entry'].mockResolvedValue(invalid({ success: true }));
 
         await boostChallenge('111', { imageId: 'img9' });
 
@@ -192,8 +199,8 @@ describe('CLI boost command', () => {
     test('finds the challenge when the API returns string ids', async () => {
         // Regression companion to findActiveChallenge: the live list may
         // carry ids as strings; the lookup must still match.
-        apiFactory.__getActiveChallenges.mockResolvedValue({ challenges: [{ id: '111', title: 'Sunset' }] });
-        apiFactory.__applyBoost.mockResolvedValue({ ok: true });
+        apiFactory.__getActiveChallenges.mockResolvedValue(invalid({ challenges: [{ id: '111', title: 'Sunset' }] }));
+        apiFactory.__applyBoost.mockResolvedValue(invalid({ ok: true }));
 
         await boostChallenge(invalid(111), {});
 
@@ -204,7 +211,7 @@ describe('CLI boost command', () => {
 
 describe('CLI turbo command', () => {
     test('delegates to play-auto-turbo with the resolved title and reports success', async () => {
-        actionsHandlers['play-auto-turbo'].mockResolvedValue({ success: true });
+        actionsHandlers['play-auto-turbo'].mockResolvedValue(invalid({ success: true }));
 
         await turboChallenge('111');
 
@@ -226,7 +233,7 @@ describe('CLI turbo command', () => {
 
 describe('CLI fill command', () => {
     test('default mode "one"', async () => {
-        actionsHandlers['fill-challenge-now'].mockResolvedValue({ success: true, submitted: 1, skipped: 0 });
+        actionsHandlers['fill-challenge-now'].mockResolvedValue(invalid({ success: true, submitted: 1, skipped: 0 }));
 
         await fillChallenge('111', {});
 
@@ -235,7 +242,7 @@ describe('CLI fill command', () => {
     });
 
     test('--all maps to mode "all"', async () => {
-        actionsHandlers['fill-challenge-now'].mockResolvedValue({ success: true, submitted: 2, skipped: 1 });
+        actionsHandlers['fill-challenge-now'].mockResolvedValue(invalid({ success: true, submitted: 2, skipped: 1 }));
 
         await fillChallenge('111', { all: true });
 
@@ -307,7 +314,7 @@ describe('CLI runVotingCycle — challenges gated on success', () => {
     });
 
     test('a failed strategy cycle returns challenges: null even with a non-empty list', async () => {
-        apiFactory.__cliVote.mockResolvedValue({ success: false, challenges: [{ id: 1 }] });
+        apiFactory.__cliVote.mockResolvedValue(invalid({ success: false, challenges: [{ id: 1 }] }));
 
         const result = await runVotingCycle(1);
 
@@ -316,7 +323,7 @@ describe('CLI runVotingCycle — challenges gated on success', () => {
 
     test('a successful strategy cycle hands its fetched list back as prefetched', async () => {
         const challenges = [{ id: 111, title: 'Sunset' }];
-        apiFactory.__cliVote.mockResolvedValue({ success: true, challenges });
+        apiFactory.__cliVote.mockResolvedValue(invalid({ success: true, challenges }));
 
         const result = await runVotingCycle(1);
 

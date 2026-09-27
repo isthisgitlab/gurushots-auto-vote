@@ -11,13 +11,9 @@ import type * as swapBackStoreModule from '../../src/js/swapBackStore';
 import type { Challenge, MemberBoost, MemberRanking } from '../../src/js/types/gurushots';
 import type * as settingsModule from '../../src/js/settings';
 import { invalid } from '../helpers/invalid';
-const { __resetMemberIdCache }: typeof autoFillModule = require('../../src/js/services/autoFill');
-const {
-    unlockBoostWithKey,
-    previewSwap,
-    swapEntry,
-    fillExposure,
-}: typeof currencyActionsModule = require('../../src/js/services/currencyActions');
+const { __resetMemberIdCache } = require('../../src/js/services/autoFill') as typeof autoFillModule;
+const { unlockBoostWithKey, previewSwap, swapEntry, fillExposure } =
+    require('../../src/js/services/currencyActions') as typeof currencyActionsModule;
 
 const NOW = () => Math.floor(Date.now() / 1000);
 
@@ -247,8 +243,8 @@ describe('swapEntry', () => {
 });
 
 describe('swap back', () => {
-    const { createMemoryLedger }: typeof swapBackStoreModule = require('../../src/js/swapBackStore');
-    const { swapBack }: typeof currencyActionsModule = require('../../src/js/services/currencyActions');
+    const { createMemoryLedger } = require('../../src/js/swapBackStore') as typeof swapBackStoreModule;
+    const { swapBack } = require('../../src/js/services/currencyActions') as typeof currencyActionsModule;
 
     // Slot now holds 'repl'; the boosted original 'orig' sits in the swap history.
     const swappedChallenge = () =>
@@ -324,8 +320,8 @@ describe('swap back', () => {
 });
 
 describe('edge paths', () => {
-    const { createMemoryLedger }: typeof swapBackStoreModule = require('../../src/js/swapBackStore');
-    const { swapBack }: typeof currencyActionsModule = require('../../src/js/services/currencyActions');
+    const { createMemoryLedger } = require('../../src/js/swapBackStore') as typeof swapBackStoreModule;
+    const { swapBack } = require('../../src/js/services/currencyActions') as typeof currencyActionsModule;
 
     test('previewSwap: a live block (swap locked) spends and ranks nothing', async () => {
         const strategy = stubStrategy({ challenge: makeChallenge({ swap_locked: true }) });

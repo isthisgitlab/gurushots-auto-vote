@@ -8,7 +8,7 @@
  * uses) so the facade's loadSettings/saveSettings round-trip without touching fs.
  */
 
-import type { AndroidHeadlessStore } from '../../src/js/types/settings';
+import type { AndroidHeadlessStore, AppSettings } from '../../src/js/types/settings';
 import { invalid } from '../helpers/invalid';
 import settings = require('../../src/js/settings');
 
@@ -111,8 +111,8 @@ describe('settings facade — first-seen title pins', () => {
         settings.mergeTitlePins({ 1: 'Real' }, []);
         // Simulate external tampering: inject a whitespace-only pin directly
         // into the persisted blob, bypassing mergeTitlePins' validation.
-        const blob = JSON.parse(store.value!);
-        blob.challengeSettings.titlePins['2'] = '   ';
+        const blob = JSON.parse(store.value!) as AppSettings;
+        blob.challengeSettings.titlePins!['2'] = '   ';
         store.value = JSON.stringify(blob);
 
         expect(settings.getTitlePins()).toEqual({ 1: 'Real' });
@@ -120,8 +120,8 @@ describe('settings facade — first-seen title pins', () => {
 
     test('legacy boundary-length truncated pins are filtered on read', () => {
         settings.mergeTitlePins({ 1: 'Real' }, []);
-        const blob = JSON.parse(store.value!);
-        blob.challengeSettings.titlePins['2'] = 'x'.repeat(settings.MAX_TITLE_LENGTH);
+        const blob = JSON.parse(store.value!) as AppSettings;
+        blob.challengeSettings.titlePins!['2'] = 'x'.repeat(settings.MAX_TITLE_LENGTH);
         store.value = JSON.stringify(blob);
 
         expect(settings.getTitlePins()).toEqual({ 1: 'Real' });
@@ -139,7 +139,10 @@ describe('settings facade — first-seen title pins', () => {
     test('a prototype-named id never surfaces a non-string prototype member', () => {
         // JSON.parse (like an API payload) makes `__proto__` a real own key; a
         // plain `__proto__:` literal would only set the prototype.
-        settings.mergeTitlePins(JSON.parse('{"__proto__":"Proto Title","constructor":"Ctor Title","1":"Real"}'), []);
+        settings.mergeTitlePins(
+            JSON.parse('{"__proto__":"Proto Title","constructor":"Ctor Title","1":"Real"}') as Record<string, string>,
+            [],
+        );
         const pins = settings.getTitlePins();
         // The facade must only ever return validated own string entries.
         for (const [, title] of Object.entries(pins)) {

@@ -9,7 +9,7 @@ import type * as lexiconModule from '../../src/js/services/semantic/lexicon';
 import type * as photoStatsModule from '../../src/js/services/photoStats';
 import type * as photoPickerModule from '../../src/js/services/photoPicker';
 import type { CategoryLogger } from '../../src/js/logger';
-import type { FillLogger, FillSettings } from '../../src/js/types/autoFill';
+import type { FillDeps, FillLogger, FillSettings } from '../../src/js/types/autoFill';
 import type { FillSchedule } from '../../src/js/services/scheduleRemap';
 import type { ActionResult, Challenge, ImageRecord } from '../../src/js/types/gurushots';
 import { invalid } from '../helpers/invalid';
@@ -48,8 +48,8 @@ const {
     resolveScheduleTarget,
     getNextScheduleThresholdSec,
     refreshChallengeState,
-}: typeof autoFillModule = require('../../src/js/services/autoFill');
-const { buildChallenge }: typeof challengeFixturesModule = require('../helpers/challengeFixtures');
+} = require('../../src/js/services/autoFill') as typeof autoFillModule;
+const { buildChallenge } = require('../helpers/challengeFixtures') as typeof challengeFixturesModule;
 
 // Mirrors the schema default: "have ≥2 entries at T-30m, ≥3 at T-20m, ≥4 at
 // T-10m" for a 4-slot challenge.
@@ -90,6 +90,10 @@ const allowedPhoto = (id: string, labels: string[] = ['Pink'], uploadDate = 9000
     upload_date: uploadDate,
     permission: { allowed: true, message: null },
 });
+
+type GetEligiblePhotos = FillDeps['getEligiblePhotos'];
+type SubmitToChallenge = FillDeps['submitToChallenge'];
+type EligibleOptions = NonNullable<Parameters<GetEligiblePhotos>[2]>;
 
 // withCategory returns only the methods the fill paths call.
 type MockFillLogger = FillLogger & {
@@ -160,7 +164,7 @@ describe('ignore-words setting reaches the real fill path', () => {
         await maybeAutoFillChallenge(challenge, 'tok', NOW, {
             settings: makeSettings({ autoFill: true, ignoreTitleWords: ['epic'] }),
             logger: makeLogger(),
-            getEligiblePhotos: jest.fn(async (_id, _tok, opts) => {
+            getEligiblePhotos: jest.fn(async (_id: string | number, _tok: string, opts: EligibleOptions) => {
                 if (opts && opts.search) {
                     searches.push(opts.search);
                     return [];
@@ -180,7 +184,7 @@ describe('ignore-words setting reaches the real fill path', () => {
         await maybeAutoFillChallenge(challenge, 'tok', NOW, {
             settings: makeSettings({ autoFill: true }),
             logger: makeLogger(),
-            getEligiblePhotos: jest.fn(async (_id, _tok, opts) => {
+            getEligiblePhotos: jest.fn(async (_id: string | number, _tok: string, opts: EligibleOptions) => {
                 if (opts && opts.search) {
                     searches.push(opts.search);
                     return [];
@@ -215,7 +219,7 @@ describe('tag-resolution deps reach the real fill path', () => {
             logger: makeLogger(),
             // Themed searches miss; the unfiltered library still has a photo, so
             // the fill proceeds and the resolution attempt is reached.
-            getEligiblePhotos: jest.fn(async (_id, _tok, opts) =>
+            getEligiblePhotos: jest.fn(async (_id: string | number, _tok: string, opts: EligibleOptions) =>
                 opts && opts.search ? [] : [allowedPhoto('p1', ['Misc'])],
             ),
             submitToChallenge: jest.fn(async (): Promise<ActionResult> => ({ ok: true, raw: { success: true } })),
@@ -283,7 +287,9 @@ describe('maybeAutoFillChallenge — staggered auto-fill', () => {
     test('schedule: 2 entries at T-19m → target 3 → submits', async () => {
         // At T-19m the {count:3, seconds:1200} row applies; entries=2 < 3.
         const challenge = makeChallenge({ maxSubmits: 4, entries: [{ id: 'e1' }, { id: 'e2' }], closeIn: 19 * 60 });
-        const getEligiblePhotos = jest.fn().mockResolvedValue([allowedPhoto('p1', ['Pink'])]);
+        const getEligiblePhotos = jest
+            .fn<ReturnType<GetEligiblePhotos>, Parameters<GetEligiblePhotos>>()
+            .mockResolvedValue([allowedPhoto('p1', ['Pink'])]);
         const submitToChallenge = jest.fn().mockResolvedValue({ ok: true, raw: { success: true } });
         const result = await maybeAutoFillChallenge(challenge, 'tok', NOW, {
             settings: makeSettings({ autoFill: true }),
@@ -301,7 +307,7 @@ describe('maybeAutoFillChallenge — staggered auto-fill', () => {
         // concurrently seconds before a close, and the themed phase may run
         // twice (raw terms, then the tag-resolver retry). `expect.any(Number)`
         // alone would not notice the two being accidentally equalised.
-        const themedBudget = getEligiblePhotos.mock.calls.find(([, , o]) => o && o.search)[2].budgetMs;
+        const themedBudget = getEligiblePhotos.mock.calls.find(([, , o]) => o && o.search)![2]!.budgetMs;
         expect(themedBudget).toBeGreaterThan(0);
         expect(themedBudget).toBeLessThanOrEqual(8000);
         expect(getEligiblePhotos).toHaveBeenCalledWith('c1', 'tok', {
@@ -355,7 +361,7 @@ describe('maybeAutoFillChallenge — staggered auto-fill', () => {
         expect(result).toBe('submitted');
         expect(submitToChallenge).toHaveBeenCalledWith('c1', ['p1'], 'tok');
         const warned = logger.withCategory.mock.results.flatMap(({ value }) =>
-            value.warning.mock.calls.map(([message]: string[]) => message),
+            (value as jest.MockedObject<CategoryLogger>).warning.mock.calls.map(([message]) => message),
         );
         const failures = warned.filter((message) => message.startsWith('Visual check failed for'));
         expect(failures).toEqual(warning ? [expect.stringContaining(warning)] : []);
@@ -390,7 +396,9 @@ describe('maybeAutoFillChallenge — staggered auto-fill', () => {
         const getEligiblePhotos = jest
             .fn()
             .mockResolvedValue([allowedPhoto('p1'), allowedPhoto('p2'), allowedPhoto('p3'), allowedPhoto('p4')]);
-        const submitToChallenge = jest.fn().mockResolvedValue({ ok: true, raw: { success: true } });
+        const submitToChallenge = jest
+            .fn<ReturnType<SubmitToChallenge>, Parameters<SubmitToChallenge>>()
+            .mockResolvedValue({ ok: true, raw: { success: true } });
         await maybeAutoFillChallenge(challenge, 'tok', NOW, {
             settings: makeSettings({ autoFill: true }),
             logger: makeLogger(),
@@ -616,7 +624,9 @@ describe('maybeAutoFillChallenge — staggered auto-fill', () => {
         // T-5m → target 4, but only 1 entry exists (the app was behind
         // schedule). One photo goes in now; the next cycle catches up further.
         const challenge = makeChallenge({ maxSubmits: 4, entries: [{ id: 'e1' }], closeIn: 5 * 60 });
-        const submitToChallenge = jest.fn().mockResolvedValue({ ok: true, raw: { success: true } });
+        const submitToChallenge = jest
+            .fn<ReturnType<SubmitToChallenge>, Parameters<SubmitToChallenge>>()
+            .mockResolvedValue({ ok: true, raw: { success: true } });
         const result = await maybeAutoFillChallenge(challenge, 'tok', NOW, {
             settings: makeSettings({ autoFill: true }),
             logger: makeLogger(),
@@ -1044,7 +1054,7 @@ describe('maybeEmergencyFillChallenge — last-resort fill near deadline', () =>
         // the picker's fillWithoutTagMatch:true (forced by emergency fill) relaxes
         // the must-filter so an off-theme photo is submitted rather than no photo.
         const challenge = makeChallenge({ maxSubmits: 4, entries: [], closeIn: 3 * 60 });
-        const getEligiblePhotos = jest.fn(async (_id, _tok, opts) =>
+        const getEligiblePhotos = jest.fn(async (_id: string | number, _tok: string, opts: EligibleOptions) =>
             opts && opts.search ? [] : [allowedPhoto('off', ['Cat'])],
         );
         const submitToChallenge = jest.fn().mockResolvedValue({ ok: true, raw: { success: true } });
@@ -1095,7 +1105,9 @@ describe('maybeEmergencyFillChallenge — last-resort fill near deadline', () =>
         const getEligiblePhotos = jest
             .fn()
             .mockResolvedValue([allowedPhoto('p1'), allowedPhoto('p2'), allowedPhoto('p3'), allowedPhoto('p4')]);
-        const submitToChallenge = jest.fn().mockResolvedValue({ ok: true, raw: { success: true } });
+        const submitToChallenge = jest
+            .fn<ReturnType<SubmitToChallenge>, Parameters<SubmitToChallenge>>()
+            .mockResolvedValue({ ok: true, raw: { success: true } });
         const result = await maybeEmergencyFillChallenge(challenge, 'tok', NOW, {
             settings: makeSettings({ autoFill: false, emergencyFill: 300 }),
             logger: makeLogger(),
@@ -1205,7 +1217,9 @@ describe('maybeEmergencyFillChallenge — last-resort fill near deadline', () =>
         // Window guard is `secondsRemaining > emergencyFill` → the exact
         // boundary is inside the window, mirroring the staggered fill convention.
         const challenge = makeChallenge({ maxSubmits: 2, entries: [], closeIn: 5 * 60 });
-        const submitToChallenge = jest.fn().mockResolvedValue({ ok: true, raw: { success: true } });
+        const submitToChallenge = jest
+            .fn<ReturnType<SubmitToChallenge>, Parameters<SubmitToChallenge>>()
+            .mockResolvedValue({ ok: true, raw: { success: true } });
         const result = await maybeEmergencyFillChallenge(challenge, 'tok', NOW, {
             settings: makeSettings({ autoFill: false, emergencyFill: 300 }),
             logger: makeLogger(),
@@ -1314,7 +1328,9 @@ describe('maybeEmergencyFillChallenge — last-resort fill near deadline', () =>
 describe('fillChallengeNow — manual fill', () => {
     test("mode='one' submits exactly 1 photo regardless of slots remaining", async () => {
         const challenge = makeChallenge({ maxSubmits: 4, entries: [], closeIn: 86400 });
-        const submitToChallenge = jest.fn().mockResolvedValue({ ok: true, raw: { success: true } });
+        const submitToChallenge = jest
+            .fn<ReturnType<SubmitToChallenge>, Parameters<SubmitToChallenge>>()
+            .mockResolvedValue({ ok: true, raw: { success: true } });
         const result = await fillChallengeNow(challenge, 'tok', 'one', {
             logger: makeLogger(),
             getEligiblePhotos: jest
@@ -1331,7 +1347,9 @@ describe('fillChallengeNow — manual fill', () => {
 
     test("mode='all' submits up to slotsRemaining in one batch", async () => {
         const challenge = makeChallenge({ maxSubmits: 4, entries: [{ id: 'e1' }], closeIn: 86400 });
-        const submitToChallenge = jest.fn().mockResolvedValue({ ok: true, raw: { success: true } });
+        const submitToChallenge = jest
+            .fn<ReturnType<SubmitToChallenge>, Parameters<SubmitToChallenge>>()
+            .mockResolvedValue({ ok: true, raw: { success: true } });
         const result = await fillChallengeNow(challenge, 'tok', 'all', {
             logger: makeLogger(),
             getEligiblePhotos: jest
@@ -1819,7 +1837,7 @@ describe('reflect-on-submit — auto-fill consumes the slot it just used', () =>
 
 describe('fetchCandidatesForChallenge — theme-narrowed fetch', () => {
     test('searches per derived term and returns the deduped union', async () => {
-        const getEligiblePhotos = jest.fn(async (_id, _tok, opts) => {
+        const getEligiblePhotos = jest.fn(async (_id: string | number, _tok: string, opts: EligibleOptions) => {
             if (opts && opts.search === 'cat') return [allowedPhoto('p1', ['Cat']), allowedPhoto('shared', ['Pet'])];
             if (opts && opts.search === 'dog') return [allowedPhoto('p2', ['Dog']), allowedPhoto('shared', ['Pet'])];
             return [];
@@ -1848,7 +1866,7 @@ describe('fetchCandidatesForChallenge — theme-narrowed fetch', () => {
     });
 
     test('falls back to the unfiltered library when every search is empty', async () => {
-        const getEligiblePhotos = jest.fn(async (_id, _tok, opts) =>
+        const getEligiblePhotos = jest.fn(async (_id: string | number, _tok: string, opts: EligibleOptions) =>
             opts && opts.search ? [] : [allowedPhoto('full', ['Misc'])],
         );
         const out = await fetchCandidatesForChallenge(
@@ -1868,9 +1886,9 @@ describe('fetchCandidatesForChallenge — theme-narrowed fetch', () => {
     });
 
     test('searches related existing tags before the truncated whole-library fallback', async () => {
-        const lexicon: typeof lexiconModule = require('../../src/js/services/semantic/lexicon');
+        const lexicon = require('../../src/js/services/semantic/lexicon') as typeof lexiconModule;
         const related = jest.spyOn(lexicon, 'relatedSearchTerms').mockReturnValue(['church', 'altar']);
-        const getEligiblePhotos = jest.fn(async (_id, _tok, opts) =>
+        const getEligiblePhotos = jest.fn(async (_id: string | number, _tok: string, opts: EligibleOptions) =>
             opts.search === 'church' ? [allowedPhoto('church', ['Church'])] : [],
         );
         const out = await fetchCandidatesForChallenge(
@@ -1886,9 +1904,9 @@ describe('fetchCandidatesForChallenge — theme-narrowed fetch', () => {
     });
 
     test('includes related tags when an exact title tag already has a candidate', async () => {
-        const lexicon: typeof lexiconModule = require('../../src/js/services/semantic/lexicon');
+        const lexicon = require('../../src/js/services/semantic/lexicon') as typeof lexiconModule;
         const related = jest.spyOn(lexicon, 'relatedSearchTerms').mockReturnValue(['church', 'altar']);
-        const getEligiblePhotos = jest.fn(async (_id, _tok, opts) => {
+        const getEligiblePhotos = jest.fn(async (_id: string | number, _tok: string, opts: EligibleOptions) => {
             if (opts.search === 'history') return [allowedPhoto('history', ['History'])];
             if (opts.search === 'church') return [allowedPhoto('church', ['Church'])];
             if (opts.search === 'altar') return [allowedPhoto('church', ['Church', 'Altar'])];
@@ -1907,9 +1925,9 @@ describe('fetchCandidatesForChallenge — theme-narrowed fetch', () => {
     });
 
     test('uses the whole library when related tags also have no eligible photos', async () => {
-        const lexicon: typeof lexiconModule = require('../../src/js/services/semantic/lexicon');
+        const lexicon = require('../../src/js/services/semantic/lexicon') as typeof lexiconModule;
         const related = jest.spyOn(lexicon, 'relatedSearchTerms').mockReturnValue(['church']);
-        const getEligiblePhotos = jest.fn(async (_id, _tok, opts) =>
+        const getEligiblePhotos = jest.fn(async (_id: string | number, _tok: string, opts: EligibleOptions) =>
             opts.search ? [] : [allowedPhoto('fallback', ['Portrait'])],
         );
         const out = await fetchCandidatesForChallenge(
@@ -1950,7 +1968,9 @@ describe('fetchCandidatesForChallenge — theme-narrowed fetch', () => {
             };
         };
         const emptySearch = () =>
-            jest.fn(async (_id, _tok, opts) => (opts && opts.search ? [] : [allowedPhoto('full', ['Misc'])]));
+            jest.fn(async (_id: string | number, _tok: string, opts: EligibleOptions) =>
+                opts && opts.search ? [] : [allowedPhoto('full', ['Misc'])],
+            );
 
         test('terms from the challenge title → warning naming the searched terms', async () => {
             // Reaching the fallback means the term was searched AND no library
@@ -1987,7 +2007,7 @@ describe('fetchCandidatesForChallenge — theme-narrowed fetch', () => {
 
     test('falls back when search returns only non-allowed photos', async () => {
         const blockedItem = { id: 'b', labels: ['Cat'], permission: { allowed: false } };
-        const getEligiblePhotos = jest.fn(async (_id, _tok, opts) =>
+        const getEligiblePhotos = jest.fn(async (_id: string | number, _tok: string, opts: EligibleOptions) =>
             opts && opts.search ? [blockedItem] : [allowedPhoto('full', ['Misc'])],
         );
         const out = await fetchCandidatesForChallenge(
@@ -2014,7 +2034,7 @@ describe('fetchCandidatesForChallenge — theme-narrowed fetch', () => {
     });
 
     test('tolerates a single search term throwing (other terms still contribute)', async () => {
-        const getEligiblePhotos = jest.fn(async (_id, _tok, opts) => {
+        const getEligiblePhotos = jest.fn(async (_id: string | number, _tok: string, opts: EligibleOptions) => {
             if (opts && opts.search === 'cat') throw new Error('boom');
             if (opts && opts.search === 'dog') return [allowedPhoto('p2', ['Dog'])];
             return [allowedPhoto('full')];
@@ -2212,7 +2232,7 @@ describe('letter challenges ("Begins With L") — tag-based fill, end to end', (
             withCategory: () => ({ info: jest.fn(), warning: jest.fn(), success: jest.fn(), error: jest.fn(), debug }),
             challengeTag: () => '[Challenge c1: Begins With L]',
         });
-        const getEligiblePhotos = jest.fn(async (_id, _tok, opts) =>
+        const getEligiblePhotos = jest.fn(async (_id: string | number, _tok: string, opts: EligibleOptions) =>
             opts && opts.search === 'leaf' ? [allowedPhoto('leaf', ['Leaf'], 1000)] : [],
         );
         const out = await fetchCandidatesForChallenge(
@@ -2780,7 +2800,9 @@ describe('pre-submit live re-check (refreshChallengeState) — stale pass snapsh
             settings: makeSettings({ autoFill: false, emergencyFill: 300 }),
             logger: makeLogger(),
             getEligiblePhotos: jest.fn().mockResolvedValue([allowedPhoto('p1'), allowedPhoto('p2')]),
-            submitToChallenge: jest.fn().mockResolvedValue({ ok: true, raw: { success: true } }),
+            submitToChallenge: jest
+                .fn<ReturnType<SubmitToChallenge>, Parameters<SubmitToChallenge>>()
+                .mockResolvedValue({ ok: true, raw: { success: true } }),
             getActiveChallenges: jest.fn().mockRejectedValue(new Error('boom')),
         };
         const result = await maybeEmergencyFillChallenge(challenge, 'tok', NOW, deps);
@@ -2797,7 +2819,9 @@ describe('pre-submit live re-check (refreshChallengeState) — stale pass snapsh
             getEligiblePhotos: jest
                 .fn()
                 .mockResolvedValue([allowedPhoto('p1'), allowedPhoto('p2'), allowedPhoto('p3'), allowedPhoto('p4')]),
-            submitToChallenge: jest.fn().mockResolvedValue({ ok: true, raw: { success: true } }),
+            submitToChallenge: jest
+                .fn<ReturnType<SubmitToChallenge>, Parameters<SubmitToChallenge>>()
+                .mockResolvedValue({ ok: true, raw: { success: true } }),
             getActiveChallenges: jest.fn().mockResolvedValue(freshList('c1', [{ id: 'm1' }, { id: 'm2' }])),
         };
         const result = await maybeEmergencyFillChallenge(challenge, 'tok', NOW, deps);
@@ -2850,7 +2874,7 @@ describe('pre-submit live re-check (refreshChallengeState) — stale pass snapsh
 });
 
 describe('photo-stats enrichment in the fill pipeline', () => {
-    const photoStats: typeof photoStatsModule = require('../../src/js/services/photoStats');
+    const photoStats = require('../../src/js/services/photoStats') as typeof photoStatsModule;
 
     // Stable per-category logger so warnings can be asserted on.
     const makeCapturingLogger = () => {
@@ -3086,10 +3110,8 @@ describe('photo-stats enrichment in the fill pipeline', () => {
         const photos = [stairPhoto('s1', 900), stairPhoto('s2', 800)];
         // Guard the premise: if the matcher ever learns "staircase" ~ "stair",
         // this test stops testing the semantic-only path and must be revisited.
-        const {
-            scorePhoto,
-            buildChallengeKeywords,
-        }: typeof photoPickerModule = require('../../src/js/services/photoPicker');
+        const { scorePhoto, buildChallengeKeywords } =
+            require('../../src/js/services/photoPicker') as typeof photoPickerModule;
         const challenge = makeChallenge({ title: 'Stairs', url: 'stairs', entries: [{ id: 'e1' }] });
         expect(scorePhoto(photos[0], buildChallengeKeywords(challenge))).toBe(0);
 

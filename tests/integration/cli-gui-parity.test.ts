@@ -5,7 +5,7 @@
  * in the CLI version, ensuring feature parity between the two interfaces.
  */
 
-const { getMiddleware, getApiStrategy }: typeof apiFactoryModule = require('../../src/js/apiFactory');
+const { getMiddleware, getApiStrategy } = require('../../src/js/apiFactory') as typeof apiFactoryModule;
 // The raw surfaces are not exported; the explicit override returns
 // the module-level singletons.
 const realApi = getApiStrategy({ mock: false });
@@ -13,7 +13,7 @@ const mockApi = getApiStrategy({ mock: true });
 import settings = require('../../src/js/settings');
 import type * as apiFactoryModule from '../../src/js/apiFactory';
 import type * as BaseMiddlewareModule from '../../src/js/services/BaseMiddleware';
-const { BaseMiddleware }: typeof BaseMiddlewareModule = require('../../src/js/services/BaseMiddleware');
+const { BaseMiddleware } = require('../../src/js/services/BaseMiddleware') as typeof BaseMiddlewareModule;
 
 // Mock the API client for testing
 jest.mock('../../src/js/api/api-client', () => ({

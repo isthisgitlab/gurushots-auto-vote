@@ -8,7 +8,7 @@
  * stops exactly where the real process would.
  */
 
-// tests/setup.js globally mocks fs and path; this suite needs the real modules.
+// tests/setup.ts globally mocks fs and path; this suite needs the real modules.
 jest.unmock('fs');
 jest.unmock('node:fs');
 jest.unmock('path');
@@ -20,8 +20,8 @@ import os = require('node:os');
 import pathModule = require('node:path');
 const path = jest.mocked(pathModule);
 import crypto = require('node:crypto');
-const { EventEmitter }: typeof node_eventsModule = require('node:events');
-const { Readable }: typeof node_streamModule = require('node:stream');
+const { EventEmitter } = require('node:events') as typeof node_eventsModule;
+const { Readable } = require('node:stream') as typeof node_streamModule;
 import yauzl = require('yauzl');
 import type * as node_eventsModule from 'node:events';
 import type * as node_streamModule from 'node:stream';
@@ -29,6 +29,9 @@ import type * as fetch_embeddingsModule from '../../scripts/fetch-embeddings';
 import type * as stored_zipModule from './helpers/stored-zip';
 import { invalid } from '../helpers/invalid';
 import type { MainOptions } from '../../scripts/fetch-embeddings';
+import type { Intermediate } from '../../scripts/build-lexicon';
+
+/** The intermediate main() writes to outPath (fetch-embeddings' `output`). */
 
 type OpenCallback = (err: Error | null, zipfile: yauzl.ZipFile) => void;
 type FakeOpenReadStream = (
@@ -36,16 +39,9 @@ type FakeOpenReadStream = (
     done: (err: Error | null, stream?: node_streamModule.Readable) => void,
 ) => void;
 
-const {
-    download,
-    fetchHttpsOnly,
-    main,
-    run,
-    sha256OfFile,
-    streamEntryLines,
-    ENTRY_NAME,
-}: typeof fetch_embeddingsModule = require('../../scripts/fetch-embeddings');
-const { makeStoredZip }: typeof stored_zipModule = require('./helpers/stored-zip');
+const { download, fetchHttpsOnly, main, run, sha256OfFile, streamEntryLines, ENTRY_NAME } =
+    require('../../scripts/fetch-embeddings') as typeof fetch_embeddingsModule;
+const { makeStoredZip } = require('./helpers/stored-zip') as typeof stored_zipModule;
 
 const DIMS = 100;
 const sha = (data: string | Buffer) => crypto.createHash('sha256').update(data).digest('hex');
@@ -401,7 +397,7 @@ describe('fetch-embeddings', () => {
             setup();
             await main(opts);
             expect(exitSpy).not.toHaveBeenCalled();
-            const out = JSON.parse(fs.readFileSync(opts.outPath, 'utf8'));
+            const out = JSON.parse(fs.readFileSync(opts.outPath, 'utf8')) as Intermediate;
             expect(out).toMatchObject({
                 version: 1,
                 dims: DIMS,
@@ -409,7 +405,7 @@ describe('fetch-embeddings', () => {
                 retrofitBeta: 0.5,
                 source: { url: opts.url, zipSha256: opts.expectedZipSha256, entrySha256: opts.expectedEntrySha256 },
             });
-            expect(Object.keys(out.packed).sort()).toEqual(['and', 'cat', 'kitten', 'sofa', 'the']);
+            expect(Object.keys(out.packed!).sort()).toEqual(['and', 'cat', 'kitten', 'sofa', 'the']);
             expect(out.surfaces).toEqual({});
             const sidecar = fs.readFileSync(path.join(tmp, 'lexicon-embeddings.sha256'), 'utf8');
             expect(sidecar).toBe(`${sha(JSON.stringify({ packed: out.packed, surfaces: out.surfaces }))}\n`);
@@ -421,14 +417,14 @@ describe('fetch-embeddings', () => {
         test('keeps the source spelling for a stemmed search word', async () => {
             setup({ concepts: { concepts: [] }, lines: [gloveLine('cats', 1)] });
             await main(opts);
-            const out = JSON.parse(fs.readFileSync(opts.outPath, 'utf8'));
+            const out = JSON.parse(fs.readFileSync(opts.outPath, 'utf8')) as Intermediate;
             expect(out.surfaces).toEqual({ cat: 'cats' });
         });
 
         test('handles an empty scan and skips centering when disabled', async () => {
             setup({ concepts: {}, lines: ["o'neil 1 2"] });
             await main({ ...opts, meanCenter: false });
-            const out = JSON.parse(fs.readFileSync(opts.outPath, 'utf8'));
+            const out = JSON.parse(fs.readFileSync(opts.outPath, 'utf8')) as Intermediate;
             expect(out).toMatchObject({ meanCentered: false, packed: {}, scale: 1 / 127 });
             expect(logs()).not.toContain('Mean-centering');
             expect(logs()).not.toContain('Retrofit');
@@ -437,7 +433,7 @@ describe('fetch-embeddings', () => {
         test('mean-centering copes with an empty scan', async () => {
             setup({ concepts: {}, lines: [] });
             await main(opts);
-            expect(JSON.parse(fs.readFileSync(opts.outPath, 'utf8')).packed).toEqual({});
+            expect((JSON.parse(fs.readFileSync(opts.outPath, 'utf8')) as Intermediate).packed).toEqual({});
             expect(logs()).toContain('0 stems stored');
         });
     });

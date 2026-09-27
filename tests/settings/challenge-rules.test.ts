@@ -7,8 +7,9 @@
  * round-trip without touching fs.
  */
 
-import type { AndroidHeadlessStore } from '../../src/js/types/settings';
+import type { AndroidHeadlessStore, AppSettings } from '../../src/js/types/settings';
 import type { Challenge } from '../../src/js/types/gurushots';
+import type { CategoryLogger } from '../../src/js/logger';
 import { invalid } from '../helpers/invalid';
 import rules = require('../../src/js/settings/challengeRules');
 import settings = require('../../src/js/settings');
@@ -28,9 +29,9 @@ jest.mock('../../src/js/logger', () => {
     };
 });
 
-const cat = invalid<{ __cat: Record<'info' | 'error' | 'debug' | 'success' | 'warning', jest.Mock> }>(
-    require('../../src/js/logger'),
-).__cat;
+const cat = invalid<{
+    __cat: { [K in 'info' | 'error' | 'debug' | 'success' | 'warning']: jest.MockedFunction<CategoryLogger[K]> };
+}>(require('../../src/js/logger')).__cat;
 
 const HOUR = 3600;
 const START = 1_700_000_000;
@@ -170,7 +171,7 @@ describe('settings facade — class conditions and the rule cascade', () => {
         settings.loadSettings();
         store.write.mockClear();
     };
-    const saved = () => JSON.parse(store.value!);
+    const saved = () => JSON.parse(store.value!) as AppSettings;
     const base = (over = {}) => ({ challengeSettings: { globalDefaults: {}, ...over } });
     const withTags = (rule: Record<string, unknown>) => ({ mustIncludeTags: [], shouldIncludeTags: [], ...rule });
 

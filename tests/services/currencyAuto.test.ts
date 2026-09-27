@@ -32,13 +32,9 @@ import type {
     RankingExposure,
 } from '../../src/js/types/gurushots';
 import { invalid } from '../helpers/invalid';
-const {
-    runAutoKey,
-    runAutoSwap,
-    runAutoExposureFill,
-    runMissionFill,
-}: typeof currencyAutoModule = require('../../src/js/services/currencyAuto');
-const { createMemoryAutoSpendLedger }: typeof currencyAutoStoreModule = require('../../src/js/currencyAutoStore');
+const { runAutoKey, runAutoSwap, runAutoExposureFill, runMissionFill } =
+    require('../../src/js/services/currencyAuto') as typeof currencyAutoModule;
+const { createMemoryAutoSpendLedger } = require('../../src/js/currencyAutoStore') as typeof currencyAutoStoreModule;
 
 const NOW = 1_000_000;
 const H = 3600;
@@ -79,7 +75,10 @@ const makeChallenge = (overrides: object = {}) =>
 type FixtureCtx = Parameters<typeof runAutoKey>[0] & {
     challenge: FixtureChallenge;
     currency: CurrencyPassDeps & {
-        strategy: { getBankroll: jest.Mock; getVoteImages: jest.Mock };
+        strategy: {
+            getBankroll: jest.MockedFunction<CurrencyPassDeps['strategy']['getBankroll']>;
+            getVoteImages: jest.MockedFunction<CurrencyPassDeps['strategy']['getVoteImages']>;
+        };
         spendLedger: ReturnType<typeof createMemoryAutoSpendLedger>;
     };
 };
@@ -196,7 +195,7 @@ describe('shared gates', () => {
     });
 
     test('another spend in flight defers the action', async () => {
-        let release;
+        let release: ((value?: unknown) => void) | undefined;
         const held = currencyActions.withSpendLock(() => new Promise((resolve) => (release = resolve)));
         expect(await runAutoKey(makeCtx())).toBe(false);
         expect(currencyActions.unlockBoostWithKey).not.toHaveBeenCalled();

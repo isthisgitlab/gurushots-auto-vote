@@ -89,22 +89,26 @@ describe('autovoteScheduler resolvers', () => {
 
     it('resolveScenarioWake: a known scenario with readable state, else null', async () => {
         const scenario = { name: 'Plan', start: 'main', phases: { main: {} } };
-        mockApi.getScenarioStatus.mockResolvedValueOnce({
-            success: true,
-            scenario,
-            state: null,
-            corrupt: false,
-            timezone: 'UTC',
-        });
+        mockApi.getScenarioStatus.mockResolvedValueOnce(
+            invalid({
+                success: true,
+                scenario,
+                state: null,
+                corrupt: false,
+                timezone: 'UTC',
+            }),
+        );
         await expect(resolveScenarioWake('c1')).resolves.toEqual({ scenario, state: null, timezone: 'UTC' });
         expect(mockApi.getScenarioStatus).toHaveBeenCalledWith('c1');
-        mockApi.getScenarioStatus.mockResolvedValueOnce({ success: true, scenario, state: null, corrupt: true });
+        mockApi.getScenarioStatus.mockResolvedValueOnce(
+            invalid({ success: true, scenario, state: null, corrupt: true }),
+        );
         await expect(resolveScenarioWake('c1')).resolves.toBeNull();
-        mockApi.getScenarioStatus.mockResolvedValueOnce({ success: true, scenario: null });
+        mockApi.getScenarioStatus.mockResolvedValueOnce(invalid({ success: true, scenario: null }));
         await expect(resolveScenarioWake('c1')).resolves.toBeNull();
-        mockApi.getScenarioStatus.mockResolvedValueOnce({ success: false });
+        mockApi.getScenarioStatus.mockResolvedValueOnce(invalid({ success: false }));
         await expect(resolveScenarioWake('c1')).resolves.toBeNull();
-        mockApi.getScenarioStatus.mockResolvedValueOnce(undefined);
+        mockApi.getScenarioStatus.mockResolvedValueOnce(invalid(undefined));
         await expect(resolveScenarioWake('c1')).resolves.toBeNull();
     });
 

@@ -7,6 +7,7 @@
  */
 
 import type { RendererGlobals } from '../../src/js/types/capacitor';
+import type { CategoryLogger } from '../../src/js/logger';
 
 const SRC = '../../src/js';
 
@@ -86,7 +87,7 @@ describe('Capacitor entry', () => {
             flushDiagnosticsWrites: jest.fn(),
             isCapacitor: jest.fn(() => native),
             categoryError: jest.fn(),
-            withCategory: jest.fn((): { error: jest.Mock } => ({ error: m.categoryError })),
+            withCategory: jest.fn((): Pick<CategoryLogger, 'error'> => ({ error: m.categoryError })),
             mountApp: jest.fn(),
             mountLogin: jest.fn(),
         };

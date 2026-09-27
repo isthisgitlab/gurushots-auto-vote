@@ -5,7 +5,7 @@ const {
     sanitizeTimeOfDayList,
     sanitizeBeforeEndList,
     MAX_SCHEDULED_FILL_ENTRIES,
-}: typeof schemaModule = require('../../src/js/settings/schema');
+} = require('../../src/js/settings/schema') as typeof schemaModule;
 import type { AndroidHeadlessStore } from '../../src/js/types/settings';
 import settings = require('../../src/js/settings');
 import type * as schemaModule from '../../src/js/settings/schema';

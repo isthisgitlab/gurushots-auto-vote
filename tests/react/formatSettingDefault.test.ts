@@ -1,5 +1,5 @@
 import type * as formattersModule from '../../src/js/react/utils/formatters';
-const { formatSettingDefault }: typeof formattersModule = require('../../src/js/react/utils/formatters');
+const { formatSettingDefault } = require('../../src/js/react/utils/formatters') as typeof formattersModule;
 
 // Minimal stand-in for the React translation function. Maps the keys this
 // helper looks up to their English strings; unknown keys echo back so a

@@ -6,6 +6,7 @@
 import { render, screen, waitFor } from './helpers/test-utils';
 import { useScenarios } from '@/api/useScenarios';
 import { useScenarioStatus } from '@/api/useScenarioStatus';
+import type { ScenarioSummary } from '@/api/useScenarioStatus';
 import { invalid } from '../helpers/invalid';
 import type { Challenge } from '../../src/js/types/gurushots';
 
@@ -108,7 +109,7 @@ describe('useScenarioStatus', () => {
         );
         render(<StatusProbe challenge={challenge()} />);
         await waitFor(() => expect(out()).not.toBe('none'));
-        const summary = JSON.parse(out());
+        const summary = JSON.parse(out()) as ScenarioSummary;
         expect(summary).toEqual(
             expect.objectContaining({ name: 'Plan', phase: 'main', started: false, lastError: null }),
         );

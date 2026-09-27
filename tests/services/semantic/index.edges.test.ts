@@ -18,8 +18,8 @@ import type * as semanticModule from '../../../src/js/services/semantic';
 import type * as photoPickerModule from '../../../src/js/services/photoPicker';
 import type { PickerPhoto } from '../../../src/js/types/photoPicker';
 import { invalid } from '../../helpers/invalid';
-const { getSemanticScores, __resetForTests }: typeof semanticModule = require('../../../src/js/services/semantic');
-const { buildThemeKeywords }: typeof photoPickerModule = require('../../../src/js/services/photoPicker');
+const { getSemanticScores, __resetForTests } = require('../../../src/js/services/semantic') as typeof semanticModule;
+const { buildThemeKeywords } = require('../../../src/js/services/photoPicker') as typeof photoPickerModule;
 
 const challenge = { title: 'Feline Friends', url: 'feline-friends' };
 const photo = (id: string, labels = ['Cat']): PickerPhoto => ({ id, labels });

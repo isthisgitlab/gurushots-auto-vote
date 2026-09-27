@@ -24,6 +24,7 @@ jest.mock('../src/js/settings', () => ({
 
 import metadata = require('../src/js/metadata');
 import type * as loggerModule from '../src/js/logger';
+import type { CategoryLogger } from '../src/js/logger';
 import type { ChallengeMetadataEntry, MetadataFile } from '../src/js/types/stores';
 import { invalid } from './helpers/invalid';
 
@@ -38,7 +39,7 @@ const setNoStoredFile = () => {
 
 const captureWrites = () => {
     const writes: MetadataFile[] = [];
-    fs.writeFileSync.mockImplementation((p, data) => writes.push(JSON.parse(data as string)));
+    fs.writeFileSync.mockImplementation((p, data) => writes.push(JSON.parse(data as string) as MetadataFile));
     return writes;
 };
 
@@ -375,14 +376,18 @@ describe('entryIds snapshot (voteOnNewEntry)', () => {
 });
 
 describe('validation of stored metadata', () => {
-    const logger = jest.mocked<typeof loggerModule>(require('../src/js/logger'));
+    const logger = jest.mocked(require('../src/js/logger') as typeof loggerModule);
     const warnings = () =>
         logger.withCategory.mock.results.flatMap((r) =>
-            jest.mocked(r.value.warning).mock.calls.map((call: unknown[]) => call[0]),
+            jest.mocked((r.value as CategoryLogger).warning).mock.calls.map((call: unknown[]) => call[0]),
         );
     const warningCategories = () =>
         logger.withCategory.mock.calls
-            .filter((_call, i) => jest.mocked(logger.withCategory.mock.results[i].value.warning).mock.calls.length > 0)
+            .filter(
+                (_call, i) =>
+                    jest.mocked((logger.withCategory.mock.results[i].value as CategoryLogger).warning).mock.calls
+                        .length > 0,
+            )
             .map(([category]) => category);
 
     test.each([

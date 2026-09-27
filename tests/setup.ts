@@ -56,15 +56,16 @@ jest.mock('../src/js/logger', () => ({
     // Runtime detection helpers (canonical source) — settings.ts destructures these from logger.
     isSourceCode: jest.fn(() => true),
     getAppName: jest.fn(() => 'gurushots-auto-vote-dev'),
-    challengeTag: jest.fn((c, t) =>
-        c && typeof c === 'object'
-            ? `[Challenge ${c.id ?? 'unknown'}: ${c.title ?? 'unknown'}]`
-            : `[Challenge ${c ?? 'unknown'}: ${t ?? 'unknown'}]`,
+    challengeTag: jest.fn(
+        (c: { id?: string | number; title?: string } | string | number | null | undefined, t?: string | null) =>
+            c && typeof c === 'object'
+                ? `[Challenge ${c.id ?? 'unknown'}: ${c.title ?? 'unknown'}]`
+                : `[Challenge ${c ?? 'unknown'}: ${t ?? 'unknown'}]`,
     ),
     getRecentLogs: jest.fn(() => []),
     // Faithful implementation — production code interpolates its return value
     // into log/messages, so a bare jest.fn() would break those call sites.
-    sanitizeLogString: jest.fn((value, maxLength = 200) =>
+    sanitizeLogString: jest.fn((value: unknown, maxLength: number = 200) =>
         String(value ?? '')
             .replace(/[\r\n\t]/g, ' ')
             .slice(0, maxLength),

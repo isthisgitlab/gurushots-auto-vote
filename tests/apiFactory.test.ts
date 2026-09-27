@@ -9,7 +9,7 @@ jest.mock('../src/js/settings', () => ({
 }));
 
 jest.mock('../src/js/services/BaseMiddleware', () => ({
-    BaseMiddleware: jest.fn().mockImplementation((strategy) => ({
+    BaseMiddleware: jest.fn().mockImplementation((strategy: unknown) => ({
         strategy,
         mockMiddlewareInstance: true,
     })),
@@ -77,7 +77,7 @@ jest.mock('../src/js/logger', () => {
         apiResponse: jest.fn(),
         isDevMode: jest.fn(() => false),
         withCategory: jest.fn(
-            (): Record<string, jest.Mock> => ({
+            (): Pick<CategoryLogger, 'info' | 'error' | 'debug' | 'success' | 'warning'> => ({
                 info: mock.info,
                 error: mock.error,
                 debug: mock.debug,
@@ -89,17 +89,18 @@ jest.mock('../src/js/logger', () => {
     return mock;
 });
 
-const { getApiStrategy, getMiddleware, refreshApi }: typeof apiFactoryModule = require('../src/js/apiFactory');
+const { getApiStrategy, getMiddleware, refreshApi } = require('../src/js/apiFactory') as typeof apiFactoryModule;
 // The raw surfaces are not exported — the explicit override returns the
 // module-level singletons, so identity assertions still hold.
 const realApi = getApiStrategy({ mock: false });
 const mockApi = getApiStrategy({ mock: true });
 import settingsModule = require('../src/js/settings');
 const settings = jest.mocked(settingsModule);
-const { BaseMiddleware } = jest.mocked<typeof BaseMiddlewareModule>(require('../src/js/services/BaseMiddleware'));
+const { BaseMiddleware } = jest.mocked(require('../src/js/services/BaseMiddleware') as typeof BaseMiddlewareModule);
 import mockLoggerModule = require('../src/js/logger');
 const mockLogger = jest.mocked(mockLoggerModule);
 import type * as apiFactoryModule from '../src/js/apiFactory';
+import type { CategoryLogger } from '../src/js/logger';
 import type * as BaseMiddlewareModule from '../src/js/services/BaseMiddleware';
 import type * as mockModule from '../src/js/mock';
 import { invalid } from './helpers/invalid';
@@ -250,7 +251,7 @@ describe('apiFactory', () => {
 
     describe('mock surface debug wrapper', () => {
         test('logs the mock label and forwards args/result to the wrapped client', async () => {
-            const { mockApiClient } = jest.mocked<typeof mockModule>(require('../src/js/mock'));
+            const { mockApiClient } = jest.mocked(require('../src/js/mock') as typeof mockModule);
             mockApiClient.authenticate.mockResolvedValueOnce(invalid('token-xyz'));
             const result = await mockApi.authenticate('user@example.com', 'pw');
             expect(result).toBe('token-xyz');

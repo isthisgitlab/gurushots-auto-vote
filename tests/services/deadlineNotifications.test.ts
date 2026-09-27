@@ -18,7 +18,7 @@ const {
     formatNotification,
     readNotificationConfig,
     ACTION_LABEL_KEY,
-}: typeof deadlineNotificationsModule = require('../../src/js/services/deadlineNotifications');
+} = require('../../src/js/services/deadlineNotifications') as typeof deadlineNotificationsModule;
 
 const NOW = 1_000_000;
 const ALL_ON = { autoFill: true, boost: true, turbo: true, emergencyFill: true };

@@ -6,7 +6,7 @@
  * be asserted without killing the Jest worker.
  */
 
-// tests/setup.js globally mocks fs and path; this suite needs the real modules.
+// tests/setup.ts globally mocks fs and path; this suite needs the real modules.
 jest.unmock('fs');
 jest.unmock('node:fs');
 jest.unmock('path');
@@ -20,12 +20,8 @@ const path = jest.mocked(pathModule);
 import type * as check_cli_sizeModule from '../../scripts/check-cli-size';
 import { invalid } from '../helpers/invalid';
 
-const {
-    main,
-    check,
-    MAX_BUNDLE_MB,
-    MAX_BINARY_MB,
-}: typeof check_cli_sizeModule = require('../../scripts/check-cli-size');
+const { main, check, MAX_BUNDLE_MB, MAX_BINARY_MB } =
+    require('../../scripts/check-cli-size') as typeof check_cli_sizeModule;
 
 const MB = 1024 * 1024;
 

@@ -88,7 +88,7 @@ interface EmbeddingsSource {
  * The parsed scripts/lexicon-embeddings.json (written by fetch-embeddings).
  * Fields are optional because buildAsset tolerates a partial intermediate.
  */
-interface Intermediate {
+export interface Intermediate {
     source?: EmbeddingsSource;
     dims?: number;
     scale?: number;
@@ -101,7 +101,7 @@ interface Intermediate {
 }
 
 /** The runtime asset written to src/assets/semantic-vectors.json. */
-interface LexiconAsset {
+export interface LexiconAsset {
     version: 2;
     generator: string;
     source: EmbeddingsSource | undefined;

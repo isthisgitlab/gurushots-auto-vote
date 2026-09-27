@@ -13,7 +13,7 @@ import type * as updateCheckerModule from '../../src/js/services/UpdateChecker';
 import type * as installerModule from '../../src/js/services/AndroidUpdateInstaller';
 import type * as authModule from '../../src/js/services/auth';
 import type * as loggerModule from '../../src/js/logger';
-import type { GuiLogSink } from '../../src/js/logger';
+import type { CategoryLogger, GuiLogSink } from '../../src/js/logger';
 import type { CapacitorGlobals } from '../../src/js/types/capacitor';
 import type { WindowApi } from '../../src/js/types/ipc';
 import { invalid } from '../helpers/invalid';
@@ -30,7 +30,9 @@ jest.mock('../../src/js/ipc/voting.handlers', () => ({
 }));
 jest.mock('../../src/js/ipc/log.handlers', () => ({ buildHandlers: () => ({}) }));
 jest.mock('../../src/js/ipc/actions.handlers', () => ({
-    buildHandlers: () => ({ 'apply-boost-to-entry': jest.fn(async (_event, id) => ({ success: true, id })) }),
+    buildHandlers: () => ({
+        'apply-boost-to-entry': jest.fn(async (_event: unknown, id: string | number) => ({ success: true, id })),
+    }),
 }));
 jest.mock('../../src/js/ipc/computations.handlers', () => ({ buildHandlers: () => ({}) }));
 jest.mock('../../src/js/ipc/currency.handlers', () => ({ buildHandlers: () => ({}) }));
@@ -59,18 +61,18 @@ describe('Capacitor bridge', () => {
     let updateChecker: jest.MockedObject<typeof updateCheckerModule>;
     let installer: jest.MockedObject<typeof installerModule>;
     let auth: jest.MockedObject<typeof authModule>;
-    let log: { error: jest.Mock; warning: jest.Mock; info: jest.Mock; debug: jest.Mock };
+    let log: jest.Mocked<Pick<CategoryLogger, 'error' | 'warning' | 'info' | 'debug'>>;
 
     beforeEach(() => {
         delete g.api;
         jest.resetModules();
-        settings = jest.mocked<typeof settingsModule>(require('../../src/js/settings'));
-        updateChecker = jest.mocked<typeof updateCheckerModule>(require('../../src/js/services/UpdateChecker'));
-        installer = jest.mocked<typeof installerModule>(require('../../src/js/services/AndroidUpdateInstaller'));
-        auth = jest.mocked<typeof authModule>(require('../../src/js/services/auth'));
+        settings = jest.mocked(require('../../src/js/settings') as typeof settingsModule);
+        updateChecker = jest.mocked(require('../../src/js/services/UpdateChecker') as typeof updateCheckerModule);
+        installer = jest.mocked(require('../../src/js/services/AndroidUpdateInstaller') as typeof installerModule);
+        auth = jest.mocked(require('../../src/js/services/auth') as typeof authModule);
         log = { error: jest.fn(), warning: jest.fn(), info: jest.fn(), debug: jest.fn() };
-        jest.mocked<typeof loggerModule>(require('../../src/js/logger')).withCategory.mockReturnValue(invalid(log));
-        bridge = require('../../src/js/bridge/capacitor');
+        jest.mocked(require('../../src/js/logger') as typeof loggerModule).withCategory.mockReturnValue(invalid(log));
+        bridge = require('../../src/js/bridge/capacitor') as typeof bridge;
         api = bridge.installBridge();
     });
 

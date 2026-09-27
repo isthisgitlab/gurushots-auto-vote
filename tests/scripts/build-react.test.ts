@@ -9,6 +9,7 @@
  */
 
 import type * as pathModule from 'path';
+import type { BuildOptions } from 'esbuild';
 import { invalid } from '../helpers/invalid';
 
 const realPath = jest.requireActual<typeof pathModule>('path');
@@ -16,9 +17,9 @@ const realPath = jest.requireActual<typeof pathModule>('path');
 jest.mock('path', () => jest.requireActual<typeof import('path')>('path'));
 // Shared instances (not per-registry factories) so the copies the script
 // requires inside jest.isolateModules are the same objects asserted here.
-const mockEsbuild = { build: jest.fn(), context: jest.fn() };
+const mockEsbuild = { build: jest.fn<Promise<unknown>, [BuildOptions]>(), context: jest.fn() };
 const mockFs = {
-    existsSync: jest.fn(),
+    existsSync: jest.fn<boolean, [string]>(),
     mkdirSync: jest.fn(),
     writeFileSync: jest.fn(),
     copyFileSync: jest.fn(),
@@ -100,7 +101,7 @@ describe('scripts/build-react.ts', () => {
             expect(fs.copyFileSync).toHaveBeenCalledWith(LEXICON, realPath.join(DIST, 'semantic-vectors.json'));
 
             expect(esbuild.build).toHaveBeenCalledTimes(ENTRY_NAMES.length);
-            const outfiles = esbuild.build.mock.calls.map(([opts]) => realPath.basename(opts.outfile));
+            const outfiles = esbuild.build.mock.calls.map(([opts]) => realPath.basename(opts.outfile!));
             expect(outfiles).toEqual(ENTRY_NAMES.map((n) => `${n}-bundle.js`));
 
             const appOpts = esbuild.build.mock.calls[1][0];
@@ -113,7 +114,7 @@ describe('scripts/build-react.ts', () => {
                 define: { 'process.env.NODE_ENV': '"production"' },
             });
             expect(appOpts.external).toEqual(expect.arrayContaining(['fs', 'node:fs', 'electron', '@capacitor/core']));
-            expect(appOpts.banner.js).toContain('__nodeModuleShims');
+            expect(appOpts.banner!.js).toContain('__nodeModuleShims');
 
             // Capacitor entry must BUNDLE the Capacitor plugin packages.
             const capOpts = esbuild.build.mock.calls[3][0];
@@ -160,7 +161,7 @@ describe('scripts/build-react.ts', () => {
             const opts = esbuild.build.mock.calls[0][0];
             expect(opts.minify).toBe(false);
             expect(opts.sourcemap).toBe(true);
-            expect(opts.define['process.env.NODE_ENV']).toBe('"development"');
+            expect(opts.define!['process.env.NODE_ENV']).toBe('"development"');
             expect(logged()).toContain('Skipping logs');
             expect(logged()).toContain('(5 bundles)');
         });

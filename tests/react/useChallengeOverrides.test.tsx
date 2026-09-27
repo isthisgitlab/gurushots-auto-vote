@@ -24,7 +24,7 @@ const props = () => ({
 beforeEach(() => {
     mockApi.getTitleProfile.mockReset().mockResolvedValue(null);
     mockApi.replaceChallengeOverrides.mockReset().mockResolvedValue(true);
-    mockApi.logError.mockReset().mockResolvedValue(undefined);
+    mockApi.logError.mockReset().mockResolvedValue(invalid(undefined));
 });
 
 test('save() writes nothing after a failed load', async () => {

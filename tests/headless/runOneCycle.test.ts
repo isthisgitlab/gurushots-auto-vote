@@ -21,10 +21,13 @@ import type * as indexModule from '../../src/js/headless/index';
 import type * as loggerModule from '../../src/js/logger';
 import type { HeadlessGlobals } from '../../src/js/types/capacitor';
 import { invalid } from '../helpers/invalid';
-const { OFFLINE_RETRY_MS }: typeof randomDelayModule = require('../../src/js/scheduling/randomDelay');
+const { OFFLINE_RETRY_MS } = require('../../src/js/scheduling/randomDelay') as typeof randomDelayModule;
 
 // Requiring the entry installs globalThis.GS.
-const { computeNextDelayMs }: typeof indexModule = require('../../src/js/headless/index');
+const { computeNextDelayMs } = require('../../src/js/headless/index') as typeof indexModule;
+
+// What runOneCycle reports through AndroidHeadlessBridge.onCycleComplete (JSON).
+type CyclePayload = { ok: boolean; nextDelayMs: number; message?: string | null; error?: string; skipped?: string };
 
 // The headless WebView's globals (the native bridge and the GS entry point).
 const g = globalThis as HeadlessGlobals;
@@ -44,7 +47,7 @@ describe('headless runOneCycle', () => {
     beforeEach(() => {
         jest.clearAllMocks();
         jest.spyOn(Date, 'now').mockReturnValue(FIXED_NOW_MS);
-        onCycleComplete = jest.fn();
+        onCycleComplete = jest.fn<void, [string]>();
         g.AndroidHeadlessBridge = { onCycleComplete };
         settings.loadSettings.mockReturnValue(invalid({ checkFrequencyMin: 2, checkFrequencyMax: 2 }));
         settings.getEffectiveSetting.mockImplementation((key) => (key === 'lastMinuteThreshold' ? 10 : 1));
@@ -59,7 +62,7 @@ describe('headless runOneCycle', () => {
         delete g.AndroidHeadlessBridge;
     });
 
-    const lastPayload = () => JSON.parse(onCycleComplete.mock.calls[0][0]);
+    const lastPayload = () => JSON.parse(onCycleComplete.mock.calls[0][0]) as CyclePayload;
 
     test('runs the full cycle and reports ok with a numeric nextDelayMs', async () => {
         const fetchChallengesAndVote = jest.fn().mockResolvedValue({ success: true, message: 'done' });
@@ -262,8 +265,8 @@ describe('headless runOneCycle', () => {
     });
 
     describe('defensive fallbacks', () => {
-        const logger = jest.mocked<typeof loggerModule>(require('../../src/js/logger'));
-        let info: jest.Mock;
+        const logger = jest.mocked(require('../../src/js/logger') as typeof loggerModule);
+        let info: jest.MockedFunction<loggerModule.CategoryLogger['info']>;
 
         beforeEach(() => {
             info = jest.fn();

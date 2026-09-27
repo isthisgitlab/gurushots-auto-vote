@@ -32,7 +32,7 @@ jest.mock('../../src/js/services/scenarioRunner', () => ({ runScenarioStep: jest
 
 import votingLogicModule = require('../../src/js/services/VotingLogic');
 const votingLogic = jest.mocked(votingLogicModule);
-const { runScenarioStep } = jest.mocked<typeof scenarioRunnerModule>(require('../../src/js/services/scenarioRunner'));
+const { runScenarioStep } = jest.mocked(require('../../src/js/services/scenarioRunner') as typeof scenarioRunnerModule);
 import autoFillModule = require('../../src/js/services/autoFill');
 const autoFill = jest.mocked(autoFillModule);
 import currencyAutoModule = require('../../src/js/services/currencyAuto');
@@ -44,8 +44,8 @@ import type { CurrencyPassDeps } from '../../src/js/services/currencyAuto';
 import type { MissionNeeds } from '../../src/js/services/missions';
 import type { ScenarioDeps } from '../../src/js/types/votingPass';
 import { invalid } from '../helpers/invalid';
-const { runVotingPass }: typeof votingOrchestratorModule = require('../../src/js/services/votingOrchestrator');
-const { buildChallenge }: typeof challengeFixturesModule = require('../helpers/challengeFixtures');
+const { runVotingPass } = require('../../src/js/services/votingOrchestrator') as typeof votingOrchestratorModule;
+const { buildChallenge } = require('../helpers/challengeFixtures') as typeof challengeFixturesModule;
 
 const NOW = Math.floor(Date.now() / 1000);
 const challenge = () =>

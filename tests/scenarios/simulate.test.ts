@@ -10,9 +10,9 @@ import type { ScenarioDocument } from '../../src/js/settings/scenarioSchema';
 import type { Challenge } from '../../src/js/types/gurushots';
 import { invalid } from '../helpers/invalid';
 
-const { simulateScenario, MAX_EVENTS }: typeof simulateModule = require('../../src/js/scenarios/simulate');
-const { initialState }: typeof scenarioStateStoreModule = require('../../src/js/scenarioStateStore');
-const { epochForWallTime }: typeof wallClockModule = require('../../src/js/scheduling/wallClock');
+const { simulateScenario, MAX_EVENTS } = require('../../src/js/scenarios/simulate') as typeof simulateModule;
+const { initialState } = require('../../src/js/scenarioStateStore') as typeof scenarioStateStoreModule;
+const { epochForWallTime } = require('../../src/js/scheduling/wallClock') as typeof wallClockModule;
 
 jest.mock('../../src/js/logger', () => ({ withCategory: jest.fn(() => ({ error: jest.fn() })) }));
 

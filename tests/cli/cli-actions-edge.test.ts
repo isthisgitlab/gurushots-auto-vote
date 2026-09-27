@@ -42,18 +42,29 @@ jest.mock('../../src/js/ipc/currency.handlers', () => {
 
 import loggerModule = require('../../src/js/logger');
 const logger = jest.mocked(invalid<typeof loggerModule & { __calls: { level: string; msg: unknown }[] }>(loggerModule));
-const { __mw: mw } = jest.mocked<
-    typeof apiFactoryModule & {
-        __mw: { isAuthenticated: jest.Mock; getActiveChallenges: jest.Mock; applyBoost: jest.Mock };
-    }
->(require('../../src/js/apiFactory'));
-const h: Record<string, jest.Mock> = {
-    ...require('../../src/js/ipc/actions.handlers').__handlers,
-    ...require('../../src/js/ipc/currency.handlers').__handlers,
+const { __mw: mw } = jest.mocked(
+    require('../../src/js/apiFactory') as typeof apiFactoryModule & {
+        __mw: Pick<Middleware, 'isAuthenticated' | 'getActiveChallenges' | 'applyBoost'>;
+    },
+);
+const h: jest.Mocked<EdgeHandlers> = {
+    ...invalid<{ __handlers: jest.Mocked<Pick<ActionHandlers, ActionChannel>> }>(
+        require('../../src/js/ipc/actions.handlers'),
+    ).__handlers,
+    ...invalid<{ __handlers: jest.Mocked<CurrencyHandlers> }>(require('../../src/js/ipc/currency.handlers')).__handlers,
 };
 import actions = require('../../src/js/cli/commands/actions');
 import type * as apiFactoryModule from '../../src/js/apiFactory';
+import type * as actionsHandlersModule from '../../src/js/ipc/actions.handlers';
+import type * as currencyHandlersModule from '../../src/js/ipc/currency.handlers';
 import { invalid } from '../helpers/invalid';
+
+type Middleware = ReturnType<typeof apiFactoryModule.getMiddleware>;
+type ActionHandlers = ReturnType<typeof actionsHandlersModule.buildHandlers>;
+type CurrencyHandlers = ReturnType<typeof currencyHandlersModule.buildHandlers>;
+/** The action channels the mock factory above provides. */
+type ActionChannel = 'apply-boost-to-entry' | 'play-auto-turbo' | 'fill-challenge-now' | 'get-bankroll';
+type EdgeHandlers = Pick<ActionHandlers, ActionChannel> & CurrencyHandlers;
 
 const msgs = (level: string) => logger.__calls.filter((c) => c.level === level).map((c) => String(c.msg));
 
@@ -63,13 +74,15 @@ beforeEach(() => {
     Object.values(h).forEach((m) => m.mockReset());
     mw.applyBoost.mockReset();
     mw.isAuthenticated.mockReturnValue(true);
-    mw.getActiveChallenges.mockResolvedValue({ challenges: [{ id: 111, title: 'Sunset' }] });
-    h['get-bankroll'].mockResolvedValue({ success: true, keys: 0, swaps: 3, fills: 1 });
-    h['preview-swap-photo'].mockResolvedValue({ success: true, candidate: { id: 'new9' } });
-    h['get-swap-backs'].mockResolvedValue({
-        success: true,
-        items: [{ currentId: 'repl', previousId: 'orig', kind: 'turbo' }],
-    });
+    mw.getActiveChallenges.mockResolvedValue(invalid({ challenges: [{ id: 111, title: 'Sunset' }] }));
+    h['get-bankroll'].mockResolvedValue(invalid({ success: true, keys: 0, swaps: 3, fills: 1 }));
+    h['preview-swap-photo'].mockResolvedValue(invalid({ success: true, candidate: { id: 'new9' } }));
+    h['get-swap-backs'].mockResolvedValue(
+        invalid({
+            success: true,
+            items: [{ currentId: 'repl', previousId: 'orig', kind: 'turbo' }],
+        }),
+    );
 });
 
 describe('challenge lookup', () => {
@@ -80,12 +93,12 @@ describe('challenge lookup', () => {
     });
 
     test('a response without a challenges list reports not found', async () => {
-        mw.getActiveChallenges.mockResolvedValue(null);
+        mw.getActiveChallenges.mockResolvedValue(invalid(null));
         await actions.boostChallenge('111');
         expect(msgs('error')).toEqual(['Challenge 111 not found among active challenges']);
     });
 
-    test.each<['turboChallenge' | 'fillChallenge' | 'unlockBoostCmd' | 'fillExposureCmd', string]>([
+    test.each<['turboChallenge' | 'fillChallenge' | 'unlockBoostCmd' | 'fillExposureCmd', keyof EdgeHandlers]>([
         ['turboChallenge', 'play-auto-turbo'],
         ['fillChallenge', 'fill-challenge-now'],
         ['unlockBoostCmd', 'key-unlock-boost'],
@@ -108,7 +121,7 @@ describe('challenge lookup', () => {
 
 describe('boost / turbo / fill fallbacks', () => {
     test('boost --image failure with no error text uses the default message', async () => {
-        h['apply-boost-to-entry'].mockResolvedValue(null);
+        h['apply-boost-to-entry'].mockResolvedValue(invalid(null));
         await actions.boostChallenge('111', { imageId: 'img' });
         expect(msgs('error')).toEqual(['Failed to apply boost']);
     });
@@ -120,7 +133,7 @@ describe('boost / turbo / fill fallbacks', () => {
     });
 
     test('turbo failure with no error text uses the default message', async () => {
-        h['play-auto-turbo'].mockResolvedValue(undefined);
+        h['play-auto-turbo'].mockResolvedValue(invalid(undefined));
         await actions.turboChallenge('111');
         expect(msgs('error')).toEqual(['Turbo not earned']);
     });
@@ -132,20 +145,22 @@ describe('boost / turbo / fill fallbacks', () => {
     });
 
     test('fill without opts uses mode "one" and reports the handler message and counts', async () => {
-        h['fill-challenge-now'].mockResolvedValue({ success: true, message: 'Done', submitted: 2, skipped: 1 });
+        h['fill-challenge-now'].mockResolvedValue(
+            invalid({ success: true, message: 'Done', submitted: 2, skipped: 1 }),
+        );
         await actions.fillChallenge('111');
         expect(h['fill-challenge-now']).toHaveBeenCalledWith(null, '111', 'one');
         expect(msgs('success')).toEqual(['Done (submitted 2, skipped 1)']);
     });
 
     test('fill success without message/counts falls back to defaults', async () => {
-        h['fill-challenge-now'].mockResolvedValue({ success: true });
+        h['fill-challenge-now'].mockResolvedValue(invalid({ success: true }));
         await actions.fillChallenge('111', { all: true });
         expect(msgs('success')).toEqual(['Submitted photos to "Sunset" (submitted 0, skipped 0)']);
     });
 
     test('fill failure with no error text uses the default message', async () => {
-        h['fill-challenge-now'].mockResolvedValue(null);
+        h['fill-challenge-now'].mockResolvedValue(invalid(null));
         await actions.fillChallenge('111');
         expect(msgs('error')).toEqual(['Failed to submit photos']);
     });
@@ -159,7 +174,7 @@ describe('boost / turbo / fill fallbacks', () => {
 
 describe('currency spends', () => {
     test('the cost line says so when the balance cannot be read', async () => {
-        h['get-bankroll'].mockResolvedValue({ success: false });
+        h['get-bankroll'].mockResolvedValue(invalid({ success: false }));
         await actions.unlockBoostCmd('111');
         expect(msgs('info')).toContain('Cost: 1 key (balance could not be read).');
     });
@@ -172,12 +187,12 @@ describe('currency spends', () => {
     test('a failed spend with only an error string shows it; with nothing, a default', async () => {
         h['key-unlock-boost'].mockResolvedValueOnce({ success: false, error: 'server said no' });
         await actions.unlockBoostCmd('111', { yes: true });
-        h['fill-exposure'].mockResolvedValueOnce(undefined);
+        h['fill-exposure'].mockResolvedValueOnce(invalid(undefined));
         await actions.fillExposureCmd('111', { yes: true });
         expect(msgs('error')).toEqual(['server said no', 'Action failed']);
     });
 
-    test.each<['unlockBoostCmd' | 'fillExposureCmd', string, string]>([
+    test.each<['unlockBoostCmd' | 'fillExposureCmd', 'key-unlock-boost' | 'fill-exposure', string]>([
         ['unlockBoostCmd', 'key-unlock-boost', 'Failed to unlock boost'],
         ['fillExposureCmd', 'fill-exposure', 'Failed to fill exposure'],
     ])('%s: a thrown spend is reported (Error and non-Error)', async (fn, channel, prefix) => {
@@ -221,7 +236,7 @@ describe('swap-back', () => {
     });
 
     test('no swap-back list at all reports nothing recorded', async () => {
-        h['get-swap-backs'].mockResolvedValue(null);
+        h['get-swap-backs'].mockResolvedValue(invalid(null));
         await expect(actions.swapBackCmd('111', { imageId: 'repl' })).resolves.toBe(true);
         expect(msgs('error')[0]).toMatch(/No swap back is recorded for repl/);
     });

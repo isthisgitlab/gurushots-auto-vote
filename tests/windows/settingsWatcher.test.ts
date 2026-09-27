@@ -16,7 +16,7 @@ const mockWatchHandlers: Array<(event: string) => void> = [];
 
 jest.mock('node:fs', () => ({
     existsSync: jest.fn(() => true),
-    watch: jest.fn((_path, handler) => {
+    watch: jest.fn((_path: string, handler: (event: string) => void) => {
         mockWatchHandlers.push(handler);
         return { close: jest.fn() };
     }),
@@ -35,7 +35,13 @@ jest.mock('../../src/js/settings', () => ({
     isReloadRequired: jest.fn(() => false),
 }));
 
-const mockLog = { info: jest.fn(), debug: jest.fn(), warning: jest.fn(), error: jest.fn() };
+type LogArgs = [message: string, data?: unknown];
+const mockLog = {
+    info: jest.fn<void, LogArgs>(),
+    debug: jest.fn<void, LogArgs>(),
+    warning: jest.fn<void, LogArgs>(),
+    error: jest.fn<void, LogArgs>(),
+};
 jest.mock('../../src/js/logger', () => ({
     withCategory: jest.fn(() => mockLog),
 }));
@@ -45,7 +51,7 @@ const settings = jest.mocked(settingsModule);
 import type * as settingsWatcherModule from '../../src/js/windows/settingsWatcher';
 import type * as electronModule from 'electron';
 import type * as node_fsModule from 'node:fs';
-const { watchSettingsFile }: typeof settingsWatcherModule = require('../../src/js/windows/settingsWatcher');
+const { watchSettingsFile } = require('../../src/js/windows/settingsWatcher') as typeof settingsWatcherModule;
 
 type Deps = Parameters<typeof watchSettingsFile>[0];
 
@@ -137,7 +143,7 @@ describe('watchSettingsFile onSettingsChanged', () => {
     });
 
     test('returns null (and never watches) when there is no settings file yet', () => {
-        jest.mocked<typeof import('node:fs')>(require('node:fs')).existsSync.mockReturnValueOnce(false);
+        jest.mocked(require('node:fs') as typeof node_fsModule).existsSync.mockReturnValueOnce(false);
 
         expect(watchSettingsFile(makeDeps(jest.fn()))).toBeNull();
     });
@@ -183,9 +189,9 @@ describe('watchSettingsFile onSettingsChanged', () => {
 });
 
 describe('watchSettingsFile change detection', () => {
-    const { BrowserWindow } = jest.mocked<typeof electronModule>(require('electron'));
-    const fs: typeof node_fsModule = require('node:fs');
-    let reload: jest.Mock;
+    const { BrowserWindow } = jest.mocked(require('electron') as typeof electronModule);
+    const fs = require('node:fs') as typeof node_fsModule;
+    let reload: jest.MockedFunction<NonNullable<ReturnType<Deps['getMainWindow']>>['reload']>;
     let windowDestroyed: boolean;
 
     const deps = (overrides: Partial<Deps> = {}): Deps => ({

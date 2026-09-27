@@ -9,9 +9,9 @@
 import type { AndroidHeadlessStore } from '../../src/js/types/settings';
 import settings = require('../../src/js/settings');
 import type * as defaultsModule from '../../src/js/settings/defaults';
-const { getDefaultSettings }: typeof defaultsModule = require('../../src/js/settings/defaults');
+const { getDefaultSettings } = require('../../src/js/settings/defaults') as typeof defaultsModule;
 
-const mockWarning = jest.fn();
+const mockWarning = jest.fn<void, [message: string, data?: unknown]>();
 jest.mock('../../src/js/logger', () => ({
     info: jest.fn(),
     warning: jest.fn(),

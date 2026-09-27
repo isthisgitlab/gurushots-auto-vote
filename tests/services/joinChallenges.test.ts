@@ -20,10 +20,12 @@ jest.mock('../../src/js/services/photoPicker', () => ({
     pickPhotosForChallenge: jest.fn(() => ['imgA']),
 }));
 jest.mock('../../src/js/services/visionVerifier', () => ({
-    rankVisually: jest.fn(async (challenge, ids, eligible, wantCount) => ids.slice(0, wantCount)),
+    rankVisually: jest.fn(async (challenge: unknown, ids: string[], eligible: unknown, wantCount: number) =>
+        ids.slice(0, wantCount),
+    ),
 }));
 jest.mock('../../src/js/settings', () => ({
-    getEffectiveSetting: jest.fn((key) => {
+    getEffectiveSetting: jest.fn((key: string) => {
         const map: Record<string, unknown> = {
             autoJoin: true,
             autoJoinTypes: '',
@@ -53,16 +55,12 @@ import type { RawJsonStore } from '../../src/js/types/stores';
 import type { RuleMatchChallenge } from '../../src/js/types/settings';
 import { invalid } from '../helpers/invalid';
 import type { JoinDeps } from '../../src/js/services/joinChallenges';
-const {
-    performJoin,
-    runJoinPass,
-    joinChallengeSingle,
-    resolveJoinSetting,
-    isAutoJoinActive,
-    inFlight,
-}: typeof joinChallengesModule = require('../../src/js/services/joinChallenges');
+const { performJoin, runJoinPass, joinChallengeSingle, resolveJoinSetting, isAutoJoinActive, inFlight } =
+    require('../../src/js/services/joinChallenges') as typeof joinChallengesModule;
 
 // The logger factory above: withCategory() hands back one shared level object.
+// The join-state file readUnlockedState parses: one unlock marker per challenge id.
+type UnlockMarkers = Record<string, { unlockedAt: number }>;
 type LogMock = jest.Mock<void, [message: string, data?: unknown]>;
 type LoggerMock = { withCategory: () => Record<'info' | 'error' | 'debug' | 'success' | 'warning', LogMock> };
 
@@ -162,7 +160,7 @@ describe('performJoin — ordering & idempotency', () => {
         expect(res).toMatchObject({ status: 'joined', charged: 100 });
         expect(deps.coinsUnlock).toHaveBeenCalledTimes(1);
         // marker cleared on success → no '7' key
-        const state = JSON.parse(deps.joinStateStore.readRaw() || '{}');
+        const state = JSON.parse(deps.joinStateStore.readRaw() || '{}') as UnlockMarkers;
         expect(state['7']).toBeUndefined();
     });
 
@@ -172,14 +170,14 @@ describe('performJoin — ordering & idempotency', () => {
         });
         const first = await performJoin(invalid({ id: 9 }), 'tok', deps, 100);
         expect(first).toMatchObject({ status: 'charged-pending-submit', charged: 100 });
-        expect(JSON.parse(deps.joinStateStore.readRaw()!)['9']).toBeDefined();
+        expect((JSON.parse(deps.joinStateStore.readRaw()!) as UnlockMarkers)['9']).toBeDefined();
         expect(deps.coinsUnlock).toHaveBeenCalledTimes(1);
 
         // Retry: marker present → skip unlock, submit only.
         const second = await performJoin(invalid({ id: 9 }), 'tok', deps, 100);
         expect(second.status).toBe('joined');
         expect(deps.coinsUnlock).toHaveBeenCalledTimes(1); // NOT called again
-        expect(JSON.parse(deps.joinStateStore.readRaw() || '{}')['9']).toBeUndefined();
+        expect((JSON.parse(deps.joinStateStore.readRaw() || '{}') as UnlockMarkers)['9']).toBeUndefined();
     });
 
     test('unlock failure → failed-no-charge, no submit', async () => {
@@ -209,7 +207,7 @@ describe('performJoin — ordering & idempotency', () => {
             joinStateStore: store,
             coinsUnlock: jest.fn(async (id) => {
                 // The claim must already be on disk at the moment we spend.
-                expect(JSON.parse(store.readRaw()!)[String(id)]).toBeDefined();
+                expect((JSON.parse(store.readRaw()!) as UnlockMarkers)[String(id)]).toBeDefined();
                 return { ok: true };
             }),
         });
@@ -380,7 +378,7 @@ describe('runJoinPass', () => {
             ]),
         });
         const res = await runJoinPass('tok', Date.now(), deps);
-        const byId = Object.fromEntries(res.results.map((r) => [r.id, r.status]));
+        const byId = Object.fromEntries(res.results.map((r) => [r.id, r.status])) as Record<string, string>;
         expect(byId[1]).toBe('joined');
         expect(byId[2]).toBe('skipped:autojoin-off');
         expect(res.joined).toBe(1);
@@ -397,7 +395,7 @@ describe('runJoinPass', () => {
             ]),
         });
         const res = await runJoinPass('tok', Date.now(), deps);
-        const byId = Object.fromEntries(res.results.map((r) => [r.id, r.status]));
+        const byId = Object.fromEntries(res.results.map((r) => [r.id, r.status])) as Record<string, string>;
         expect(byId[1]).toBe('skipped:autojoin-off');
         expect(byId[2]).toBe('joined');
     });
@@ -459,7 +457,7 @@ describe('runJoinPass', () => {
             ]),
         });
         const res = await runJoinPass('tok', Date.now(), deps);
-        const byId = Object.fromEntries(res.results.map((r) => [r.id, r.status]));
+        const byId = Object.fromEntries(res.results.map((r) => [r.id, r.status])) as Record<string, string>;
         expect(byId[1]).toBe('skipped:excluded-type');
         expect(byId[2]).toBe('joined');
         expect(res.joined).toBe(1);
@@ -484,7 +482,7 @@ describe('runJoinPass', () => {
             ]),
         });
         const res = await runJoinPass('tok', Date.now(), deps);
-        const byId = Object.fromEntries(res.results.map((r) => [r.id, r.status]));
+        const byId = Object.fromEntries(res.results.map((r) => [r.id, r.status])) as Record<string, string>;
         expect(byId[1]).toBe('skipped:out-of-scope');
         expect(byId[2]).toBe('joined');
         expect(res.joined).toBe(1);
@@ -1080,7 +1078,7 @@ describe('runJoinPass \u2014 join timing from class rules', () => {
 
 describe('joinChallenges — edge paths', () => {
     const logger: LoggerMock = invalid(require('../../src/js/logger'));
-    const autoFill = jest.mocked<typeof autoFillModule>(require('../../src/js/services/autoFill'));
+    const autoFill = jest.mocked(require('../../src/js/services/autoFill') as typeof autoFillModule);
     const warnings = () => logger.withCategory().warning.mock.calls.map(([msg]) => msg);
     const errors = () => logger.withCategory().error.mock.calls.map(([msg]) => msg);
 

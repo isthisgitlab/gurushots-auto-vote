@@ -1,7 +1,7 @@
 /**
  * Tests for the static word-vector lexicon backend.
  *
- * tests/setup.js mocks `fs`/`path` globally, so the cross-platform asset loader
+ * tests/setup.ts mocks `fs`/`path` globally, so the cross-platform asset loader
  * (assets.ts) can't read the real file here. We mock that loader to hand back
  * the real shipped lexicon JSON (read via requireActual) and exercise the
  * lexicon math against actual data. The platform loader itself is integration
@@ -19,7 +19,7 @@ const realFs = jest.requireActual<typeof import('fs')>('fs');
 const realPath = jest.requireActual<typeof import('path')>('path');
 const mockLexicon = JSON.parse(
     realFs.readFileSync(realPath.join(__dirname, '..', '..', '..', 'src', 'assets', 'semantic-vectors.json'), 'utf8'),
-);
+) as RawLexicon & { surfaces: Record<string, string> };
 
 jest.mock('../../../src/js/services/semantic/assets', () => ({
     loadLexiconAsset: async () => mockLexicon,
@@ -31,7 +31,7 @@ import lexicon = require('../../../src/js/services/semantic/lexicon');
 import type * as photoPickerModule from '../../../src/js/services/photoPicker';
 import type { RawLexicon } from '../../../src/js/types/semantic';
 import { invalid } from '../../helpers/invalid';
-const { SEMANTIC_MATCH_FLOOR }: typeof photoPickerModule = require('../../../src/js/services/photoPicker');
+const { SEMANTIC_MATCH_FLOOR } = require('../../../src/js/services/photoPicker') as typeof photoPickerModule;
 
 const FLOOR = SEMANTIC_MATCH_FLOOR / 100;
 

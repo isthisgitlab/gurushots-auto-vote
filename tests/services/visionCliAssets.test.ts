@@ -15,14 +15,14 @@ const path = jest.mocked(pathModule);
 import crypto = require('node:crypto');
 import tar = require('tar');
 
-const mockSea = { getAsset: jest.fn() };
+const mockSea = { getAsset: jest.fn<string | Buffer, [key: string, encoding?: string]>() };
 jest.mock('node:sea', () => mockSea, { virtual: true });
 jest.mock('../../src/js/runtime', () => ({ getUserDataDir: jest.fn() }));
 
 import runtimeModule = require('../../src/js/runtime');
 const runtime = jest.mocked(runtimeModule);
 import type * as visionCliAssetsModule from '../../src/js/services/visionCliAssets';
-const { extractVisionCliAssets }: typeof visionCliAssetsModule = require('../../src/js/services/visionCliAssets');
+const { extractVisionCliAssets } = require('../../src/js/services/visionCliAssets') as typeof visionCliAssetsModule;
 
 test('first extraction uses only bundled JavaScript with no system tar', () => {
     const directory = fs.mkdtempSync(path.join(os.tmpdir(), 'vision-cli-assets-'));

@@ -57,23 +57,27 @@ const logger = jest.mocked(
     invalid<typeof loggerModule & { __calls: { level: string; msg: unknown; data?: unknown }[] }>(loggerModule),
 );
 import apiFactoryModule = require('../../src/js/apiFactory');
+// The middleware whose methods the factory mock exposes as __-prefixed jest.fns.
+type Middleware = ReturnType<typeof apiFactoryModule.getMiddleware>;
 const apiFactory = jest.mocked(
-    invalid<typeof apiFactoryModule & { __getActiveChallenges: jest.Mock; __isAuthenticated: jest.Mock }>(
-        apiFactoryModule,
-    ),
+    invalid<
+        typeof apiFactoryModule & {
+            __getActiveChallenges: jest.MockedFunction<Middleware['getActiveChallenges']>;
+            __isAuthenticated: jest.MockedFunction<Middleware['isAuthenticated']>;
+        }
+    >(apiFactoryModule),
 );
 import type * as actionsModule from '../../src/js/cli/commands/actions';
 import { invalid } from '../helpers/invalid';
-const handlers: Record<string, jest.Mock> = {
-    ...require('../../src/js/ipc/actions.handlers').__handlers,
-    ...require('../../src/js/ipc/currency.handlers').__handlers,
+// Both handler mocks, merged into one table the describe.each rows index by
+// channel name: every entry is an async handler the tests treat alike.
+type HandlerTable = Record<string, jest.Mock<Promise<unknown>, unknown[]>>;
+const handlers: HandlerTable = {
+    ...invalid<{ __handlers: HandlerTable }>(require('../../src/js/ipc/actions.handlers')).__handlers,
+    ...invalid<{ __handlers: HandlerTable }>(require('../../src/js/ipc/currency.handlers')).__handlers,
 };
-const {
-    unlockBoostCmd,
-    swapCmd,
-    swapBackCmd,
-    fillExposureCmd,
-}: typeof actionsModule = require('../../src/js/cli/commands/actions');
+const { unlockBoostCmd, swapCmd, swapBackCmd, fillExposureCmd } =
+    require('../../src/js/cli/commands/actions') as typeof actionsModule;
 
 const msgsAt = (level: string) => logger.__calls.filter((c) => c.level === level).map((c) => String(c.msg));
 const contains = (arr: string[], sub: string) => arr.some((s) => s.includes(sub));
@@ -82,7 +86,7 @@ beforeEach(() => {
     logger.__calls.length = 0;
     jest.clearAllMocks();
     apiFactory.__isAuthenticated.mockReturnValue(true);
-    apiFactory.__getActiveChallenges.mockResolvedValue({ challenges: [{ id: 111, title: 'Sunset' }] });
+    apiFactory.__getActiveChallenges.mockResolvedValue(invalid({ challenges: [{ id: 111, title: 'Sunset' }] }));
     handlers['get-bankroll'].mockResolvedValue({ success: true, keys: 4, swaps: 7, fills: 2, coins: 0 });
     handlers['preview-swap-photo'].mockResolvedValue({ success: true, candidate: { id: 'new9', member_id: 'm' } });
 });

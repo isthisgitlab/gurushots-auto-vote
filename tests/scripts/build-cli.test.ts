@@ -7,7 +7,7 @@
  * paths so nothing under the repo's dist/, build/ or .cache/ is touched.
  */
 
-// tests/setup.js globally mocks fs and path; this suite needs the real modules.
+// tests/setup.ts globally mocks fs and path; this suite needs the real modules.
 jest.unmock('fs');
 jest.unmock('node:fs');
 jest.unmock('path');
@@ -24,9 +24,9 @@ const fs = jest.mocked(fsModule);
 const realReadFileSync = fs.readFileSync;
 import pathModule = require('node:path');
 const path = jest.mocked(pathModule);
-const { build } = jest.mocked<typeof esbuildModule>(require('esbuild'));
-const { execFileSync } = jest.mocked<typeof node_child_processModule>(require('node:child_process'));
-const { version }: typeof package_jsonModule = require('../../package.json');
+const { build } = jest.mocked(require('esbuild') as typeof esbuildModule);
+const { execFileSync } = jest.mocked(require('node:child_process') as typeof node_child_processModule);
+const { version } = require('../../package.json') as typeof package_jsonModule;
 
 import buildCli = require('../../scripts/build-cli');
 import type * as esbuildModule from 'esbuild';
@@ -35,6 +35,7 @@ import type * as package_jsonModule from '../../package.json';
 import type * as fetch_vision_modelModule from '../../scripts/fetch-vision-model';
 import type * as node_osModule from 'node:os';
 import type { PathLike } from 'node:fs';
+import type { SeaConfig } from '../../scripts/build-cli';
 import { invalid } from '../helpers/invalid';
 
 const ROOT = path.join(__dirname, '..', '..');
@@ -132,7 +133,7 @@ describe('build-cli', () => {
     });
 
     describe('generateSeaBlob', () => {
-        const writtenConfig = () => JSON.parse(fs.writeFileSync.mock.calls[0][1] as string);
+        const writtenConfig = () => JSON.parse(fs.writeFileSync.mock.calls[0][1] as string) as SeaConfig;
 
         test('embeds the lexicon asset when present', () => {
             existing.add(LEXICON);
@@ -310,8 +311,8 @@ describe('build-cli', () => {
         });
 
         test('--lite builds "-lite" binaries without preparing the visual runtime', async () => {
-            const { ensureVisionModel } = jest.mocked<typeof fetch_vision_modelModule>(
-                require('../../scripts/fetch-vision-model'),
+            const { ensureVisionModel } = jest.mocked(
+                require('../../scripts/fetch-vision-model') as typeof fetch_vision_modelModule,
             );
             ensureVisionModel.mockClear();
             process.argv = ['node', 'build-cli.ts', 'gurucli-mac', '--lite'];
@@ -342,7 +343,7 @@ describe('build-cli', () => {
 });
 
 describe('pruneVisionRuntime', () => {
-    const os: typeof node_osModule = require('node:os');
+    const os = require('node:os') as typeof node_osModule;
     let pnpmDir: string;
     const tree = (...parts: string[]) => path.join(pnpmDir, ...parts);
     const onnxBin = (...parts: string[]) =>

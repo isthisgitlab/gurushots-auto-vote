@@ -10,21 +10,21 @@ jest.mock('../../src/js/services/VotingLogic', () => ({ pickBoostEntry: jest.fn(
 
 jest.mock('../../src/js/api/api-client', () => ({
     makePostRequest: jest.fn(),
-    createCommonHeaders: jest.fn((token) => ({ 'x-token': token })),
+    createCommonHeaders: jest.fn((token: string) => ({ 'x-token': token })),
     FORM_CONTENT_TYPE: 'application/x-www-form-urlencoded; charset=utf-8',
 }));
 
-const { pickBoostEntry } = jest.mocked<typeof VotingLogicModule>(require('../../src/js/services/VotingLogic'));
-const { makePostRequest } = jest.mocked<typeof api_clientModule>(require('../../src/js/api/api-client'));
-const { ENDPOINTS }: typeof constantsModule = require('../../src/js/api/constants');
+const { pickBoostEntry } = jest.mocked(require('../../src/js/services/VotingLogic') as typeof VotingLogicModule);
+const { makePostRequest } = jest.mocked(require('../../src/js/api/api-client') as typeof api_clientModule);
+const { ENDPOINTS } = require('../../src/js/api/constants') as typeof constantsModule;
 import logger = require('../../src/js/logger');
 import type * as VotingLogicModule from '../../src/js/services/VotingLogic';
 import type * as api_clientModule from '../../src/js/api/api-client';
 import type * as constantsModule from '../../src/js/api/constants';
 import type * as boostModule from '../../src/js/api/boost';
 import type * as applyBoostModule from '../../src/js/strategies/real/applyBoost';
-const { applyBoostToEntry }: typeof boostModule = require('../../src/js/api/boost');
-const { applyBoost }: typeof applyBoostModule = require('../../src/js/strategies/real/applyBoost');
+const { applyBoostToEntry } = require('../../src/js/api/boost') as typeof boostModule;
+const { applyBoost } = require('../../src/js/strategies/real/applyBoost') as typeof applyBoostModule;
 import type { CategoryLogger } from '../../src/js/logger';
 import type { RankingEntry } from '../../src/js/types/gurushots';
 import { invalid } from '../helpers/invalid';
@@ -33,7 +33,7 @@ const scopedErrors = () =>
     jest
         .mocked(logger.withCategory)
         .mock.results.flatMap((r) =>
-            jest.mocked<CategoryLogger>(r.value).error.mock.calls.map((call) => [call[0], call[1]]),
+            jest.mocked(r.value as CategoryLogger).error.mock.calls.map((call) => [call[0], call[1]]),
         );
 
 beforeEach(() => {

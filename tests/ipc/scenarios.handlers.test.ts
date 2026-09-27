@@ -32,8 +32,8 @@ import settingsModule = require('../../src/js/settings');
 const settings = jest.mocked(settingsModule);
 import scenarioStatusModule = require('../../src/js/services/scenarioStatus');
 const scenarioStatus = jest.mocked(scenarioStatusModule);
-const { refreshScenarioStateAsync } = jest.mocked<typeof scenarioStateStoreModule>(
-    require('../../src/js/scenarioStateStore'),
+const { refreshScenarioStateAsync } = jest.mocked(
+    require('../../src/js/scenarioStateStore') as typeof scenarioStateStoreModule,
 );
 import authModule = require('../../src/js/services/auth');
 const auth = jest.mocked(authModule);
@@ -42,8 +42,8 @@ const apiFactory = jest.mocked(apiFactoryModule);
 import type * as scenarioStateStoreModule from '../../src/js/scenarioStateStore';
 import type * as templatesModule from '../../src/js/scenarios/templates';
 import type * as scenarios_handlersModule from '../../src/js/ipc/scenarios.handlers';
-const { SCENARIO_TEMPLATES }: typeof templatesModule = require('../../src/js/scenarios/templates');
-const { buildHandlers, register }: typeof scenarios_handlersModule = require('../../src/js/ipc/scenarios.handlers');
+const { SCENARIO_TEMPLATES } = require('../../src/js/scenarios/templates') as typeof templatesModule;
+const { buildHandlers, register } = require('../../src/js/ipc/scenarios.handlers') as typeof scenarios_handlersModule;
 
 const handlers = buildHandlers();
 const issue = { path: 'start', message: 'No phase named "x"' };
@@ -191,7 +191,13 @@ describe('status and reset', () => {
     test('reset forgets the challenge progress', async () => {
         await expect(handlers['reset-scenario-state'](null, 7)).resolves.toEqual({ success: true });
         expect(
-            (scenarioStatus as typeof scenarioStatus & { __ledger: { remove: jest.Mock } }).__ledger.remove,
+            (
+                scenarioStatus as typeof scenarioStatus & {
+                    __ledger: {
+                        remove: jest.MockedFunction<ReturnType<typeof scenarioStatusModule.ledgerForMode>['remove']>;
+                    };
+                }
+            ).__ledger.remove,
         ).toHaveBeenCalledWith('7');
     });
 
@@ -365,7 +371,7 @@ describe('simulate-scenario', () => {
 });
 
 test('register wires every handler through the trusted-sender wrapper', () => {
-    const ipcMain = { handle: jest.fn() };
+    const ipcMain = { handle: jest.fn<void, [channel: string, listener: unknown]>() };
     register(invalid(ipcMain));
     expect(ipcMain.handle.mock.calls.map(([channel]) => channel)).toEqual(Object.keys(handlers));
 });

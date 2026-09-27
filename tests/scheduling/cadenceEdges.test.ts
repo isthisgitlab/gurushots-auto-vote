@@ -12,12 +12,9 @@ import type * as randomDelayModule from '../../src/js/scheduling/randomDelay';
 import type { TimerHandle } from '../../src/js/scheduling/cadenceChain';
 import { invalid } from '../helpers/invalid';
 
-const {
-    soonestFinalWindowTopUpStart,
-    soonestBoostPrefillStart,
-    calculateNextThresholdEntry,
-}: typeof thresholdWindowModule = require('../../src/js/scheduling/thresholdWindow');
-const { soonestScheduledStart }: typeof scheduledFillModule = require('../../src/js/scheduling/scheduledFill');
+const { soonestFinalWindowTopUpStart, soonestBoostPrefillStart, calculateNextThresholdEntry } =
+    require('../../src/js/scheduling/thresholdWindow') as typeof thresholdWindowModule;
+const { soonestScheduledStart } = require('../../src/js/scheduling/scheduledFill') as typeof scheduledFillModule;
 
 const NOW = 1_700_000_000;
 
@@ -89,8 +86,8 @@ describe('soonestScheduledStart', () => {
 });
 
 describe('createCadenceChain transport fallbacks', () => {
-    const { createCadenceChain }: typeof cadenceChainModule = require('../../src/js/scheduling/cadenceChain');
-    const { MS_PER_MINUTE }: typeof randomDelayModule = require('../../src/js/scheduling/randomDelay');
+    const { createCadenceChain } = require('../../src/js/scheduling/cadenceChain') as typeof cadenceChainModule;
+    const { MS_PER_MINUTE } = require('../../src/js/scheduling/randomDelay') as typeof randomDelayModule;
 
     const makeDeps = (overrides = {}) => {
         let timer: TimerHandle | null = null;
@@ -141,8 +138,8 @@ describe('createCadenceChain transport fallbacks', () => {
 });
 
 describe('overslept hook rejection', () => {
-    const { createCadenceChain }: typeof cadenceChainModule = require('../../src/js/scheduling/cadenceChain');
-    const { MS_PER_MINUTE }: typeof randomDelayModule = require('../../src/js/scheduling/randomDelay');
+    const { createCadenceChain } = require('../../src/js/scheduling/cadenceChain') as typeof cadenceChainModule;
+    const { MS_PER_MINUTE } = require('../../src/js/scheduling/randomDelay') as typeof randomDelayModule;
 
     beforeEach(() => jest.useFakeTimers());
     afterEach(() => {

@@ -10,6 +10,8 @@ import { invalid } from '../helpers/invalid';
 
 /** The wrappers looked up by name, for the table-driven cases. */
 type IpcByName = Record<string, (...args: unknown[]) => unknown>;
+/** The bridge mocks looked up by name, for the same table-driven cases. */
+const mockByName = invalid<Record<string, jest.Mock<Promise<unknown>, unknown[]>>>(mockApi);
 
 beforeEach(() => {
     window.api = invalid(mockApi);
@@ -63,9 +65,9 @@ describe('scenario wrappers', () => {
         ['dryRunScenario', ['7']],
         ['simulateScenario', ['7', { name: 'Draft' }]],
     ])('%s forwards its arguments', async (method, args) => {
-        mockApi[method].mockResolvedValueOnce({ success: true });
+        mockByName[method].mockResolvedValueOnce({ success: true });
         await expect(invalid<IpcByName>(ipc)[method](...args)).resolves.toEqual({ success: true });
-        expect(mockApi[method]).toHaveBeenCalledWith(...args);
+        expect(mockByName[method]).toHaveBeenCalledWith(...args);
     });
 });
 
@@ -114,12 +116,12 @@ describe.each([
 ])('%s', (helper, method) => {
     test(`hands the message to ${method} synchronously and resolves`, async () => {
         const pending = invalid<IpcByName>(ipc)[helper]('hello');
-        expect(mockApi[method]).toHaveBeenCalledWith('hello');
+        expect(mockByName[method]).toHaveBeenCalledWith('hello');
         await expect(pending).resolves.toBeUndefined();
     });
 
     test('swallows a rejecting sink', async () => {
-        mockApi[method].mockRejectedValueOnce(new Error('sink down'));
+        mockByName[method].mockRejectedValueOnce(new Error('sink down'));
         await expect(invalid<IpcByName>(ipc)[helper]('x')).resolves.toBeUndefined();
     });
 

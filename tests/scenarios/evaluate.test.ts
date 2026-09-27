@@ -14,10 +14,11 @@ import type { ScenarioFiredRecord } from '../../src/js/types/stores';
 import { invalid } from '../helpers/invalid';
 import type { EvaluateInput } from '../../src/js/scenarios/evaluate';
 
-const { evaluateScenario, firedRecord, localDayOf }: typeof evaluateModule = require('../../src/js/scenarios/evaluate');
-const { nextWakeAt }: typeof nextWakeModule = require('../../src/js/scenarios/nextWake');
-const { initialState }: typeof scenarioStateStoreModule = require('../../src/js/scenarioStateStore');
-const { epochForWallTime }: typeof wallClockModule = require('../../src/js/scheduling/wallClock');
+const { evaluateScenario, firedRecord, localDayOf } =
+    require('../../src/js/scenarios/evaluate') as typeof evaluateModule;
+const { nextWakeAt } = require('../../src/js/scenarios/nextWake') as typeof nextWakeModule;
+const { initialState } = require('../../src/js/scenarioStateStore') as typeof scenarioStateStoreModule;
+const { epochForWallTime } = require('../../src/js/scheduling/wallClock') as typeof wallClockModule;
 
 jest.mock('../../src/js/logger', () => ({ withCategory: jest.fn(() => ({ error: jest.fn() })) }));
 

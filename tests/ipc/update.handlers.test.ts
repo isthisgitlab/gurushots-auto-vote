@@ -20,8 +20,8 @@ jest.mock('../../src/js/services/UpdateChecker', () => ({
     getReleasesUrl: jest.fn(() => 'https://github.com/example/releases'),
 }));
 
-const { AutoUpdater } = jest.mocked<typeof AutoUpdaterModule>(require('../../src/js/services/AutoUpdater'));
-const { buildHandlers, register }: typeof update_handlersModule = require('../../src/js/ipc/update.handlers');
+const { AutoUpdater } = jest.mocked(require('../../src/js/services/AutoUpdater') as typeof AutoUpdaterModule);
+const { buildHandlers, register } = require('../../src/js/ipc/update.handlers') as typeof update_handlersModule;
 
 const makeUpdater = (overrides = {}) => ({
     checkForUpdates: jest.fn().mockResolvedValue({ latestVersion: '9.9.9' }),

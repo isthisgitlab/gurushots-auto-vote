@@ -9,15 +9,9 @@ import type * as entrySlotModule from '../../src/js/voting/entrySlot';
 import type { Challenge } from '../../src/js/types/gurushots';
 import { invalid } from '../helpers/invalid';
 
-const {
-    ruleOpensAt,
-    isRuleOpen,
-    isProtectedEntry,
-    pickSwapTarget,
-    votePoolReach,
-    fillBeatsVoting,
-}: typeof currencyAutoModule = require('../../src/js/voting/currencyAuto');
-const { resolveEntryIndex }: typeof entrySlotModule = require('../../src/js/voting/entrySlot');
+const { ruleOpensAt, isRuleOpen, isProtectedEntry, pickSwapTarget, votePoolReach, fillBeatsVoting } =
+    require('../../src/js/voting/currencyAuto') as typeof currencyAutoModule;
+const { resolveEntryIndex } = require('../../src/js/voting/entrySlot') as typeof entrySlotModule;
 
 const H = 3600;
 // A 24h challenge started at t=1000.

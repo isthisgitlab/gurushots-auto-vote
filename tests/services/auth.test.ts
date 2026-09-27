@@ -17,7 +17,7 @@ const settings = jest.mocked(settingsModule);
 import loggerModule = require('../../src/js/logger');
 const logger = jest.mocked(loggerModule);
 import type * as authModule from '../../src/js/services/auth';
-const { extractAuthResult, requireAuthToken }: typeof authModule = require('../../src/js/services/auth');
+const { extractAuthResult, requireAuthToken } = require('../../src/js/services/auth') as typeof authModule;
 
 describe('extractAuthResult', () => {
     test('null / undefined response → no-response failure', () => {

@@ -4,7 +4,7 @@
  * Every platform branch resolves to the parsed object or null — never a throw —
  * and the result is memoised, with concurrent callers sharing one load.
  * `runtime` is mocked to pick the branch; `fs` is already mocked by
- * tests/setup.js; `node:sea` is replaced per test.
+ * tests/setup.ts; `node:sea` is replaced per test.
  */
 
 jest.mock('../../../src/js/runtime', () => ({

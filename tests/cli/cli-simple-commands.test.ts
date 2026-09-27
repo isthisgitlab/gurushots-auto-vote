@@ -69,20 +69,34 @@ const logger = jest.mocked(
 import settingsModule = require('../../src/js/settings');
 const settings = jest.mocked(settingsModule);
 import apiFactoryModule = require('../../src/js/apiFactory');
+type Middleware = ReturnType<typeof apiFactoryModule.getMiddleware>;
 const apiFactory = jest.mocked(
-    invalid<typeof apiFactoryModule & { __mw: { isAuthenticated: jest.Mock; cliLogin: jest.Mock } }>(apiFactoryModule),
+    invalid<
+        typeof apiFactoryModule & {
+            __mw: {
+                isAuthenticated: jest.MockedFunction<Middleware['isAuthenticated']>;
+                cliLogin: jest.MockedFunction<Middleware['cliLogin']>;
+            };
+        }
+    >(apiFactoryModule),
 );
-const { clearAuthToken } = jest.mocked<typeof authModule>(require('../../src/js/services/auth'));
+const { clearAuthToken } = jest.mocked(require('../../src/js/services/auth') as typeof authModule);
 import promptsModule = require('../../src/js/cli/prompts');
 const prompts = jest.mocked(promptsModule);
 // The handler-module mocks expose their jest.fn table for the assertions.
-type HandlersMock = { __handlers: Record<string, jest.Mock> };
-const handlers: Record<string, jest.Mock> = invalid<HandlersMock>(
-    require('../../src/js/ipc/actions.handlers'),
-).__handlers;
+type HandlersMock = {
+    __handlers: jest.Mocked<
+        Pick<
+            ReturnType<typeof actionsHandlersModule.buildHandlers>,
+            'get-bankroll' | 'get-member-challenges' | 'join-challenge'
+        >
+    >;
+};
+const handlers = invalid<HandlersMock>(require('../../src/js/ipc/actions.handlers')).__handlers;
 import updateCheckerModule = require('../../src/js/services/UpdateChecker');
 const updateChecker = jest.mocked(updateCheckerModule);
 import type * as authModule from '../../src/js/services/auth';
+import type * as actionsHandlersModule from '../../src/js/ipc/actions.handlers';
 import type * as authCommandsModule from '../../src/js/cli/commands/auth';
 import type * as bankrollModule from '../../src/js/cli/commands/bankroll';
 import type * as joinModule from '../../src/js/cli/commands/join';
@@ -91,11 +105,11 @@ import type * as logsModule from '../../src/js/cli/commands/logs';
 import { invalid } from '../helpers/invalid';
 const pkg = jest.requireActual<typeof import('../../package.json')>('../../package.json');
 
-const { handleLogin, handleLogout }: typeof authCommandsModule = require('../../src/js/cli/commands/auth');
-const { showBankroll }: typeof bankrollModule = require('../../src/js/cli/commands/bankroll');
-const { showDiscover, joinChallengeCmd }: typeof joinModule = require('../../src/js/cli/commands/join');
-const { checkUpdates }: typeof updateModule = require('../../src/js/cli/commands/update');
-const { showLogs }: typeof logsModule = require('../../src/js/cli/commands/logs');
+const { handleLogin, handleLogout } = require('../../src/js/cli/commands/auth') as typeof authCommandsModule;
+const { showBankroll } = require('../../src/js/cli/commands/bankroll') as typeof bankrollModule;
+const { showDiscover, joinChallengeCmd } = require('../../src/js/cli/commands/join') as typeof joinModule;
+const { checkUpdates } = require('../../src/js/cli/commands/update') as typeof updateModule;
+const { showLogs } = require('../../src/js/cli/commands/logs') as typeof logsModule;
 
 const msgs = (level: string) => logger.__calls.filter((c) => c.level === level).map((c) => String(c.msg));
 const all = () => logger.__calls.map((c) => String(c.msg)).join('\n');
@@ -131,7 +145,7 @@ describe('auth: login', () => {
         if (desc) Object.defineProperty(stream, 'isTTY', desc);
         else delete stream.isTTY;
     };
-    let rl: { close: jest.Mock };
+    let rl: { close: jest.MockedFunction<ReturnType<typeof promptsModule.createReadlineInterface>['close']> };
     beforeEach(() => {
         setTTY(true, true);
         rl = { close: jest.fn() };
@@ -157,7 +171,7 @@ describe('auth: login', () => {
 
     test('keeps the mode and saves the token on success', async () => {
         prompts.askYesNo.mockResolvedValueOnce(false);
-        apiFactory.__mw.cliLogin.mockResolvedValue({ success: true });
+        apiFactory.__mw.cliLogin.mockResolvedValue(invalid({ success: true }));
         await handleLogin();
         expect(msgs('info')).toContain('Current mode: REAL');
         expect(settings.setSetting).not.toHaveBeenCalled();
@@ -169,7 +183,7 @@ describe('auth: login', () => {
 
     test('switches to MOCK mode when asked', async () => {
         prompts.askYesNo.mockResolvedValueOnce(true).mockResolvedValueOnce(true);
-        apiFactory.__mw.cliLogin.mockResolvedValue({ success: true });
+        apiFactory.__mw.cliLogin.mockResolvedValue(invalid({ success: true }));
         await handleLogin();
         expect(settings.setSetting).toHaveBeenCalledWith('mock', true);
         expect(msgs('success')).toEqual(['Mode changed to: MOCK', 'Token saved for MOCK mode']);
@@ -188,7 +202,7 @@ describe('auth: login', () => {
 
     test('a failed login without an error message falls back to "Unknown error"', async () => {
         prompts.askYesNo.mockResolvedValueOnce(false);
-        apiFactory.__mw.cliLogin.mockResolvedValue({ success: false });
+        apiFactory.__mw.cliLogin.mockResolvedValue(invalid({ success: false }));
         await handleLogin();
         expect(logger.__calls.find((c) => c.level === 'endOperation')!.data).toBe('Unknown error');
     });
@@ -238,7 +252,7 @@ describe('bankroll', () => {
         [{ success: false }, '(unavailable — could not read balance)'],
         [undefined, '(unavailable — could not read balance)'],
     ])('never prints a zero balance on a failed read (%p)', async (result, line) => {
-        handlers['get-bankroll'].mockResolvedValue(result);
+        handlers['get-bankroll'].mockResolvedValue(invalid(result));
         await showBankroll();
         expect(msgs('info')).toContain(`  ${line}`);
         expect(all()).not.toContain('Keys');
@@ -258,22 +272,24 @@ describe('discover', () => {
         [{ success: true, items: [] }, '  None'],
         [{ success: true, items: 'nope' }, '  None'],
     ])('reports %p', async (result, line) => {
-        handlers['get-member-challenges'].mockResolvedValue(result);
+        handlers['get-member-challenges'].mockResolvedValue(invalid(result));
         await showDiscover();
         expect(handlers['get-member-challenges']).toHaveBeenCalledWith(null, 'open');
         expect(msgs('info')).toContain(line);
     });
 
     test('lists challenges with cost, name fallbacks and join hints', async () => {
-        handlers['get-member-challenges'].mockResolvedValue({
-            success: true,
-            items: [
-                { id: 1, title: 'Sunset', type: 'flash', join_coins: 5 },
-                { id: 2, url: 'dogs', join_coins: 0 },
-                { id: 3 },
-                null,
-            ],
-        });
+        handlers['get-member-challenges'].mockResolvedValue(
+            invalid({
+                success: true,
+                items: [
+                    { id: 1, title: 'Sunset', type: 'flash', join_coins: 5 },
+                    { id: 2, url: 'dogs', join_coins: 0 },
+                    { id: 3 },
+                    null,
+                ],
+            }),
+        );
         await showDiscover();
         const info = msgs('info');
         expect(info).toContain('  • [1] Sunset (flash) — 5 coins');
@@ -311,7 +327,7 @@ describe('join', () => {
         [{ status: 'weird' }, 'error', 'Could not join 7 right now'],
         [undefined, 'error', 'Could not join 7 right now'],
     ])('free/first-attempt outcome %p is reported', async (result, level, text) => {
-        handlers['join-challenge'].mockResolvedValue(result);
+        handlers['join-challenge'].mockResolvedValue(invalid(result));
         await joinChallengeCmd('7');
         expect(handlers['join-challenge']).toHaveBeenCalledTimes(1);
         expect(handlers['join-challenge']).toHaveBeenCalledWith(null, '7', false);
@@ -319,13 +335,13 @@ describe('join', () => {
     });
 
     test('an unknown status is logged at debug for diagnosis', async () => {
-        handlers['join-challenge'].mockResolvedValue({ status: 'weird' });
+        handlers['join-challenge'].mockResolvedValue(invalid({ status: 'weird' }));
         await joinChallengeCmd('7');
         expect(msgs('debug')).toEqual(['join status=weird']);
     });
 
     test('a paid challenge without --yes prints the cost and spends nothing', async () => {
-        handlers['join-challenge'].mockResolvedValue({ status: 'needs-confirm', cost: 25 });
+        handlers['join-challenge'].mockResolvedValue(invalid({ status: 'needs-confirm', cost: 25 }));
         await joinChallengeCmd('7');
         expect(handlers['join-challenge']).toHaveBeenCalledTimes(1);
         expect(msgs('info')).toEqual([
@@ -336,8 +352,8 @@ describe('join', () => {
 
     test('a paid challenge with --yes spends and reports the confirmed join', async () => {
         handlers['join-challenge']
-            .mockResolvedValueOnce({ status: 'needs-confirm', cost: 25 })
-            .mockResolvedValueOnce({ status: 'joined' });
+            .mockResolvedValueOnce(invalid({ status: 'needs-confirm', cost: 25 }))
+            .mockResolvedValueOnce(invalid({ status: 'joined' }));
         await joinChallengeCmd('7', { yes: true });
         expect(handlers['join-challenge']).toHaveBeenLastCalledWith(null, '7', true);
         expect(msgs('info')).toContain('✅ Joined challenge 7.');

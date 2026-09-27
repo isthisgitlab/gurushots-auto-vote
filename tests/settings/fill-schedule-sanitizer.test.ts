@@ -13,7 +13,7 @@ import type * as challengeFixturesModule from '../helpers/challengeFixtures';
 import type * as fsModule from 'node:fs';
 import type * as settingsModule from '../../src/js/settings';
 
-const { sanitizeFillSchedule, validateSetting }: typeof schemaModule = require('../../src/js/settings/schema');
+const { sanitizeFillSchedule, validateSetting } = require('../../src/js/settings/schema') as typeof schemaModule;
 
 const MAX_SECONDS = 30 * 24 * 3600;
 
@@ -105,9 +105,8 @@ describe('_autoFillScheduleBoundsV1 sanitizer pass in loadSettings', () => {
     let settings: typeof settingsModule;
     let fs: jest.MockedObject<typeof fsModule>;
 
-    const {
-        buildSettingsFixture: buildFixture,
-    }: typeof challengeFixturesModule = require('../helpers/challengeFixtures');
+    const { buildSettingsFixture: buildFixture } =
+        require('../helpers/challengeFixtures') as typeof challengeFixturesModule;
 
     const setSettingsFile = (payload: unknown) => {
         fs.existsSync.mockReturnValue(true);
@@ -120,8 +119,8 @@ describe('_autoFillScheduleBoundsV1 sanitizer pass in loadSettings', () => {
         // Ensure no autovote-running flag bleeds across tests
         // Re-require fs *after* resetModules so we share the fresh mock
         // instance that settings.ts will see.
-        fs = jest.mocked<typeof fsModule>(require('node:fs'));
-        settings = require('../../src/js/settings');
+        fs = jest.mocked(require('node:fs') as typeof fsModule);
+        settings = require('../../src/js/settings') as typeof settings;
     });
 
     test('cleans an out-of-bounds global default and sets the flag', () => {

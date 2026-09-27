@@ -20,9 +20,9 @@ let electron: jest.MaybeMockedDeep<typeof electronModule>;
 
 function loadPreload(): Record<string, ApiMethod> {
     jest.resetModules();
-    electron = jest.mocked<typeof electronModule>(require('electron'));
+    electron = jest.mocked(require('electron') as typeof electronModule);
     require('../../src/js/preload');
-    const [name, api] = electron.contextBridge.exposeInMainWorld.mock.calls[0];
+    const [name, api] = electron.contextBridge.exposeInMainWorld.mock.calls[0] as [string, Record<string, ApiMethod>];
     expect(name).toBe('api');
     return api;
 }

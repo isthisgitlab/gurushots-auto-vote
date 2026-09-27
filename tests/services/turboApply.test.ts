@@ -12,7 +12,8 @@ import VotingLogic = require('../../src/js/services/VotingLogic');
 import type * as challengeFixturesModule from '../helpers/challengeFixtures';
 import type { RankingEntry } from '../../src/js/types/gurushots';
 import { invalid } from '../helpers/invalid';
-const { buildChallenge: buildBaseChallenge }: typeof challengeFixturesModule = require('../helpers/challengeFixtures');
+const { buildChallenge: buildBaseChallenge } =
+    require('../helpers/challengeFixtures') as typeof challengeFixturesModule;
 
 jest.mock('../../src/js/settings');
 

@@ -12,13 +12,8 @@ import { invalid } from '../helpers/invalid';
 import settingsModule = require('../../src/js/settings');
 const settings = jest.mocked(settingsModule);
 import type * as nodeResolversModule from '../../src/js/scheduling/nodeResolvers';
-const {
-    resolveThreshold,
-    resolveScheduledFill,
-    resolveFinalWindowTopUp,
-    resolveBoostPrefill,
-    resolveCurrencyAuto,
-}: typeof nodeResolversModule = require('../../src/js/scheduling/nodeResolvers');
+const { resolveThreshold, resolveScheduledFill, resolveFinalWindowTopUp, resolveBoostPrefill, resolveCurrencyAuto } =
+    require('../../src/js/scheduling/nodeResolvers') as typeof nodeResolversModule;
 
 const withSettings = (values: Record<string, unknown>) => {
     settings.getEffectiveSetting.mockImplementation((key) => invalid(values[key]));

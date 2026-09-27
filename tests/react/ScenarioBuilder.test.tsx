@@ -46,8 +46,8 @@ const doc = () => ({
 });
 
 let saved: unknown;
-let onSaved: jest.Mock;
-let onCancel: jest.Mock;
+let onSaved: jest.MockedFunction<ComponentProps<typeof ScenarioBuilder>['onSaved']>;
+let onCancel: jest.MockedFunction<ComponentProps<typeof ScenarioBuilder>['onCancel']>;
 
 const renderBuilder = async (props: Partial<ComponentProps<typeof ScenarioBuilder>> = {}) => {
     onSaved = jest.fn();

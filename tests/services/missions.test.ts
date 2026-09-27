@@ -11,21 +11,23 @@ jest.mock('../../src/js/logger', () => {
 jest.mock('../../src/js/settings', () => ({ getEffectiveSetting: jest.fn() }));
 
 import type { Mission } from '../../src/js/types/gurushots';
+import type { CategoryLogger } from '../../src/js/logger';
 import { invalid } from '../helpers/invalid';
 
-type LoggerMock = typeof loggerModule & { __level: { info: jest.Mock; warning: jest.Mock } };
+type LoggerMock = typeof loggerModule & {
+    __level: {
+        info: jest.Mock<void, Parameters<CategoryLogger['info']>>;
+        warning: jest.Mock<void, Parameters<CategoryLogger['warning']>>;
+    };
+};
 
 import loggerModule = require('../../src/js/logger');
 const logger = jest.mocked(invalid<LoggerMock>(loggerModule));
 import settingsModule = require('../../src/js/settings');
 const settings = jest.mocked(settingsModule);
 import type * as missionsModule from '../../src/js/services/missions';
-const {
-    classifyMission,
-    loadMissionNeeds,
-    consumeMission,
-    resetMissionLog,
-}: typeof missionsModule = require('../../src/js/services/missions');
+const { classifyMission, loadMissionNeeds, consumeMission, resetMissionLog } =
+    require('../../src/js/services/missions') as typeof missionsModule;
 
 const NOW_MS = 1_790_514_858_000;
 const NOW_SEC = NOW_MS / 1000;

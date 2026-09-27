@@ -6,7 +6,7 @@
 
 import type * as logSafeModule from '../../src/js/format/logSafe';
 
-const { failureText }: typeof logSafeModule = require('../../src/js/format/logSafe');
+const { failureText } = require('../../src/js/format/logSafe') as typeof logSafeModule;
 
 describe('failureText', () => {
     test.each([

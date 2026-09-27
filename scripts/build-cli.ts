@@ -25,7 +25,7 @@ interface CliPlatform {
 }
 
 // Node single-executable-application config (`node --experimental-sea-config`).
-interface SeaConfig {
+export interface SeaConfig {
     main: string;
     output: string;
     disableExperimentalSEAWarning: boolean;

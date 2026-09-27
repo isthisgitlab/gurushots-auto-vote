@@ -8,13 +8,13 @@ import type * as loginModule from '../../src/js/api/login';
 import type * as api_clientModule from '../../src/js/api/api-client';
 import type * as loggerModule from '../../src/js/logger';
 
-const { authenticate }: typeof loginModule = require('../../src/js/api/login');
+const { authenticate } = require('../../src/js/api/login') as typeof loginModule;
 
 // Mock the api-client module — login routes through makePostRequest so the
 // CapacitorHttp adapter applies on Android.
 jest.mock('../../src/js/api/api-client', () => ({
     makePostRequest: jest.fn(),
-    createCommonHeaders: jest.fn((token) => ({
+    createCommonHeaders: jest.fn((token: string | undefined) => ({
         'x-token': token || 'mock-token',
         'user-agent': 'GuruShots/1.0 (iPhone; iOS 16.0; en_US)',
         accept: 'application/json',
@@ -56,10 +56,10 @@ jest.mock('../../src/js/logger', () => ({
 describe('login', () => {
     const mockEmail = 'test@example.com';
     const mockPassword = 'testpassword123';
-    const { makePostRequest, createCommonHeaders } = jest.mocked<typeof api_clientModule>(
-        require('../../src/js/api/api-client'),
+    const { makePostRequest, createCommonHeaders } = jest.mocked(
+        require('../../src/js/api/api-client') as typeof api_clientModule,
     );
-    const logger: typeof loggerModule = require('../../src/js/logger');
+    const logger = require('../../src/js/logger') as typeof loggerModule;
     const SIGNUP_URL = 'https://api.gurushots.com/rest_mobile/signup';
 
     beforeEach(() => {

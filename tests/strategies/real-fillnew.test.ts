@@ -67,12 +67,12 @@ jest.mock('../../src/js/logger', () => {
     return { withCategory: jest.fn(() => scoped), challengeTag: jest.fn(() => '[challenge]') };
 });
 
-const { getActiveChallenges } = jest.mocked<typeof activeChallengesModule>(
-    require('../../src/js/strategies/real/activeChallenges'),
+const { getActiveChallenges } = jest.mocked(
+    require('../../src/js/strategies/real/activeChallenges') as typeof activeChallengesModule,
 );
-const { applyBoost } = jest.mocked<typeof applyBoostModule>(require('../../src/js/strategies/real/applyBoost'));
-const { applyBoostToEntry } = jest.mocked<typeof boostModule>(require('../../src/js/api/boost'));
-const { applyTurbo } = jest.mocked<typeof turboModule>(require('../../src/js/api/turbo'));
+const { applyBoost } = jest.mocked(require('../../src/js/strategies/real/applyBoost') as typeof applyBoostModule);
+const { applyBoostToEntry } = jest.mocked(require('../../src/js/api/boost') as typeof boostModule);
+const { applyTurbo } = jest.mocked(require('../../src/js/api/turbo') as typeof turboModule);
 import votingLogicModule = require('../../src/js/services/VotingLogic');
 const votingLogic = jest.mocked(votingLogicModule);
 import autoFillModule = require('../../src/js/services/autoFill');
@@ -85,8 +85,8 @@ import type * as boostModule from '../../src/js/api/boost';
 import type * as turboModule from '../../src/js/api/turbo';
 import type * as realModule from '../../src/js/strategies/real';
 import type * as challengeFixturesModule from '../helpers/challengeFixtures';
-const { fetchChallengesAndVote }: typeof realModule = require('../../src/js/strategies/real');
-const { buildChallenge }: typeof challengeFixturesModule = require('../helpers/challengeFixtures');
+const { fetchChallengesAndVote } = require('../../src/js/strategies/real') as typeof realModule;
+const { buildChallenge } = require('../helpers/challengeFixtures') as typeof challengeFixturesModule;
 import { invalid } from '../helpers/invalid';
 
 const NOW = () => Math.floor(Date.now() / 1000);

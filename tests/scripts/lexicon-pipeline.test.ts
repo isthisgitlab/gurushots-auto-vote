@@ -17,8 +17,8 @@ import type * as fetch_embeddingsModule from '../../scripts/fetch-embeddings';
 import type * as stored_zipModule from './helpers/stored-zip';
 import type { ConceptsConfig } from '../../scripts/build-lexicon';
 import { invalid } from '../helpers/invalid';
-const { buildAsset, buildConcreteAxis }: typeof build_lexiconModule = require('../../scripts/build-lexicon');
-const { percentile, validateConfigRefs }: typeof validate_lexiconModule = require('../../scripts/validate-lexicon');
+const { buildAsset, buildConcreteAxis } = require('../../scripts/build-lexicon') as typeof build_lexiconModule;
+const { percentile, validateConfigRefs } = require('../../scripts/validate-lexicon') as typeof validate_lexiconModule;
 const {
     collectAuthoredWords,
     parseGloveLine,
@@ -29,8 +29,8 @@ const {
     streamEntryLines,
     GENERIC_TOKEN_RE,
     ENTRY_NAME,
-}: typeof fetch_embeddingsModule = require('../../scripts/fetch-embeddings');
-const { makeStoredZip }: typeof stored_zipModule = require('./helpers/stored-zip');
+} = require('../../scripts/fetch-embeddings') as typeof fetch_embeddingsModule;
+const { makeStoredZip } = require('./helpers/stored-zip') as typeof stored_zipModule;
 
 type Concept = ConceptsConfig['concepts'][number];
 type Intermediate = NonNullable<Parameters<typeof buildAsset>[0]>;

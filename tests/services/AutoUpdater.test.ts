@@ -1,6 +1,8 @@
 import type * as electronModule from 'electron';
+import type { AppUpdater } from 'electron-updater';
 import type * as AutoUpdaterModule from '../../src/js/services/AutoUpdater';
 import type { UpdateCheckData } from '../../src/js/types/stores';
+import type { CategoryLogger } from '../../src/js/logger';
 import { invalid } from '../helpers/invalid';
 // Mock electron modules
 jest.mock('electron', () => ({
@@ -16,17 +18,17 @@ const mockAutoUpdater: {
     autoInstallOnAppQuit: boolean;
     autoRunAppAfterInstall: boolean;
     allowPrerelease?: boolean;
-    on: jest.Mock;
-    checkForUpdates: jest.Mock;
-    downloadUpdate: jest.Mock<Promise<void>>;
-    quitAndInstall: jest.Mock;
+    on: jest.Mock<void, [string, (...args: unknown[]) => void]>;
+    checkForUpdates: jest.MockedFunction<AppUpdater['checkForUpdates']>;
+    downloadUpdate: jest.Mock<Promise<void>, []>;
+    quitAndInstall: jest.MockedFunction<AppUpdater['quitAndInstall']>;
 } = {
     autoDownload: true,
     autoInstallOnAppQuit: false,
     autoRunAppAfterInstall: false,
-    on: jest.fn(),
+    on: jest.fn<void, [string, (...args: unknown[]) => void]>(),
     checkForUpdates: jest.fn(),
-    downloadUpdate: jest.fn(),
+    downloadUpdate: jest.fn<Promise<void>, []>(),
     quitAndInstall: jest.fn(),
 };
 
@@ -47,7 +49,7 @@ jest.mock('../../src/js/logger', () => ({
 // Mock metadata
 const mockMetadata = {
     getUpdateCheckData: jest.fn((): UpdateCheckData => ({ lastCheck: null, skipVersion: null })),
-    setLastUpdateCheck: jest.fn(),
+    setLastUpdateCheck: jest.fn<boolean, [number]>(),
     getLegacySkipVersion: jest.fn((): string | null => null),
     clearLegacySkipVersion: jest.fn(() => true),
 };
@@ -58,8 +60,8 @@ jest.mock('../../src/js/metadata', () => mockMetadata);
 // the write->verify->clear migration ordering is observable.
 const settingsState: Record<string, unknown> = { skipUpdateVersion: '' };
 const mockSettings = {
-    getSetting: jest.fn((key) => settingsState[key]),
-    setSetting: jest.fn((key, value) => {
+    getSetting: jest.fn((key: string) => settingsState[key]),
+    setSetting: jest.fn((key: string, value: unknown) => {
         settingsState[key] = value;
         return true;
     }),
@@ -91,17 +93,19 @@ describe('AutoUpdater', () => {
             settingsState[key] = value;
             return true;
         });
-        mockAutoUpdater.checkForUpdates.mockResolvedValue({
-            updateInfo: {
-                version: '0.7.0',
-                releaseNotes: 'New features',
-                releaseDate: '2024-01-01',
-                files: [],
-            },
-        });
+        mockAutoUpdater.checkForUpdates.mockResolvedValue(
+            invalid({
+                updateInfo: {
+                    version: '0.7.0',
+                    releaseNotes: 'New features',
+                    releaseDate: '2024-01-01',
+                    files: [],
+                },
+            }),
+        );
 
         // Re-require AutoUpdater after mocks are set up
-        ({ AutoUpdater } = require('../../src/js/services/AutoUpdater'));
+        ({ AutoUpdater } = require('../../src/js/services/AutoUpdater') as typeof AutoUpdaterModule);
         autoUpdater = new AutoUpdater();
     });
 
@@ -336,7 +340,7 @@ describe('AutoUpdater', () => {
 
     describe('canAutoUpdate', () => {
         it('should return false when not packaged (development mode)', () => {
-            const { app } = jest.mocked<typeof electronModule>(require('electron'));
+            const { app } = jest.mocked(require('electron') as typeof electronModule);
             (app as { isPackaged: boolean }).isPackaged = false;
 
             const result = autoUpdater.canAutoUpdate();
@@ -473,16 +477,16 @@ describe('AutoUpdater', () => {
 
     describe('electron-updater events', () => {
         let handlers: Record<string, (...args: unknown[]) => void>;
-        let send: jest.Mock;
-        let log: Record<'info' | 'debug' | 'warning' | 'error', jest.Mock>;
+        let send: jest.Mock<void, [string, unknown]>;
+        let log: jest.Mocked<Pick<CategoryLogger, 'info' | 'debug' | 'warning' | 'error'>>;
 
         beforeEach(() => {
-            handlers = Object.fromEntries(mockAutoUpdater.on.mock.calls.map(([event, fn]) => [event, fn]));
-            send = jest.fn();
+            handlers = Object.fromEntries(mockAutoUpdater.on.mock.calls.map(([event, fn]) => [event, fn] as const));
+            send = jest.fn<void, [string, unknown]>();
             autoUpdater.setMainWindow(invalid({ isDestroyed: () => false, webContents: { send } }));
             log = { info: jest.fn(), debug: jest.fn(), warning: jest.fn(), error: jest.fn() };
-            jest.mocked<typeof import('../../src/js/logger')>(
-                require('../../src/js/logger'),
+            jest.mocked(
+                require('../../src/js/logger') as typeof import('../../src/js/logger'),
             ).withCategory.mockReturnValue(invalid(log));
         });
 
@@ -595,8 +599,8 @@ describe('AutoUpdater', () => {
 
         it('a throwing legacy store never breaks construction', () => {
             const error = jest.fn();
-            jest.mocked<typeof import('../../src/js/logger')>(
-                require('../../src/js/logger'),
+            jest.mocked(
+                require('../../src/js/logger') as typeof import('../../src/js/logger'),
             ).withCategory.mockReturnValueOnce(invalid({ error }));
             mockMetadata.getLegacySkipVersion.mockImplementationOnce(() => {
                 throw new Error('metadata.json corrupt');

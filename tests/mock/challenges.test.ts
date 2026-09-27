@@ -4,7 +4,7 @@
 
 import type * as challengesModule from '../../src/js/mock/challenges';
 
-const { generateMockChallenges }: typeof challengesModule = require('../../src/js/mock/challenges');
+const { generateMockChallenges } = require('../../src/js/mock/challenges') as typeof challengesModule;
 
 afterEach(() => jest.restoreAllMocks());
 

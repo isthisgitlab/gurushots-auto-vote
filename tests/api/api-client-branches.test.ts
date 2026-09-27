@@ -19,7 +19,7 @@ type AxiosMock = jest.Mock<Promise<unknown>, [config: AxiosRequestConfig]>;
 const axios: AxiosMock = invalid(axiosModule);
 
 jest.mock('../../src/js/api/randomizer', () => ({
-    generateRandomHeaders: jest.fn((token) => ({ 'x-token': token })),
+    generateRandomHeaders: jest.fn((token: string) => ({ 'x-token': token })),
 }));
 
 jest.mock('../../src/js/runtime', () => ({
@@ -47,7 +47,7 @@ import timingModule = require('../../src/js/timing');
 const timing = jest.mocked(timingModule);
 import logger = require('../../src/js/logger');
 import type * as api_clientModule from '../../src/js/api/api-client';
-const { makePostRequest }: typeof api_clientModule = require('../../src/js/api/api-client');
+const { makePostRequest } = require('../../src/js/api/api-client') as typeof api_clientModule;
 
 const URL = 'https://api.gurushots.com/edge';
 
@@ -65,7 +65,7 @@ const httpError = (status: number | string, data: unknown, headers: Record<strin
 const apiLogEntries = (message: string) =>
     jest
         .mocked(logger.withCategory)
-        .mock.results.flatMap((r) => jest.mocked<CategoryLogger>(r.value).api.mock.calls)
+        .mock.results.flatMap((r) => jest.mocked(r.value as CategoryLogger).api.mock.calls)
         .filter((call) => call[0] === message)
         .map((call) => call[1]);
 
@@ -182,7 +182,7 @@ describe('headless adapter', () => {
             const existing = jest.fn();
             g.__gsResolveHeadlessHttp = existing;
             try {
-                const isolatedRuntime = jest.mocked<typeof runtimeModule>(require('../../src/js/runtime'));
+                const isolatedRuntime = jest.mocked(require('../../src/js/runtime') as typeof runtimeModule);
                 const isolatedAxios: AxiosMock = invalid(require('axios'));
                 isolatedRuntime.isHeadlessService.mockReturnValue(true);
                 isolatedAxios.mockResolvedValueOnce({ status: 200, headers: {}, data: {} });

@@ -37,7 +37,7 @@ describe('AsyncActionButton', () => {
     });
 
     test('shows the loading label and disables while the action is pending, then calls onSuccess', async () => {
-        let resolve;
+        let resolve: ((value: unknown) => void) | undefined;
         const action = jest.fn(() => new Promise((r) => (resolve = r)));
         const { props, container } = renderButton({ action });
 

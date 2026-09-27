@@ -10,11 +10,8 @@
  * eyeball on the UI would catch. These tests are that missing signal, at CI
  * time rather than at runtime.
  */
-const {
-    SETTINGS_SCHEMA,
-    SETTINGS_GROUPS,
-    SETTINGS_TIERS,
-}: typeof schemaModule = require('../../src/js/settings/schema');
+const { SETTINGS_SCHEMA, SETTINGS_GROUPS, SETTINGS_TIERS } =
+    require('../../src/js/settings/schema') as typeof schemaModule;
 import english = require('../../src/js/translations/english');
 import type * as schemaModule from '../../src/js/settings/schema';
 import type { SettingsSchemaEntry } from '../../src/js/settings/schema';

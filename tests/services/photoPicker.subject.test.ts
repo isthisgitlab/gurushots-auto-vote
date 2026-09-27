@@ -2,7 +2,7 @@
  * The title-subject pass (abstractTitleWords) and the three title readers it
  * feeds — search terms, pooled theme keywords, lexical keywords — against the
  * REAL shipped lexicon, so "Balloon Fun" is judged by the axis that ships, not
- * by a stub. tests/setup.js mocks fs globally, so the asset loader is mocked to
+ * by a stub. tests/setup.ts mocks fs globally, so the asset loader is mocked to
  * hand back the committed JSON read through requireActual (as lexicon.test.ts).
  */
 
@@ -10,7 +10,7 @@ const realFs = jest.requireActual<typeof import('fs')>('fs');
 const realPath = jest.requireActual<typeof import('path')>('path');
 const mockLexicon = JSON.parse(
     realFs.readFileSync(realPath.join(__dirname, '..', '..', 'src', 'assets', 'semantic-vectors.json'), 'utf8'),
-);
+) as RawLexicon;
 
 jest.mock('../../src/js/services/semantic/assets', () => ({
     loadLexiconAsset: async () => mockLexicon,
@@ -20,6 +20,7 @@ jest.mock('../../src/js/services/semantic/assets', () => ({
 
 import lexicon = require('../../src/js/services/semantic/lexicon');
 import type * as photoPickerModule from '../../src/js/services/photoPicker';
+import type { RawLexicon } from '../../src/js/types/semantic';
 import { invalid } from '../helpers/invalid';
 const {
     abstractTitleWords,
@@ -28,7 +29,7 @@ const {
     buildThemeAlternatives,
     buildChallengeKeywords,
     visualSubjectWords,
-}: typeof photoPickerModule = require('../../src/js/services/photoPicker');
+} = require('../../src/js/services/photoPicker') as typeof photoPickerModule;
 
 describe('abstractTitleWords', () => {
     const scores: Record<string, number> = { balloon: 0.37, fun: -0.16, nature: -0.3, built: 0.11, cold: 0 };

@@ -1,6 +1,6 @@
 import { invalid } from '../helpers/invalid';
 import type * as run_if_mainModule from '../../scripts/lib/run-if-main';
-const { runIfMain }: typeof run_if_mainModule = require('../../scripts/lib/run-if-main');
+const { runIfMain } = require('../../scripts/lib/run-if-main') as typeof run_if_mainModule;
 
 describe('runIfMain', () => {
     test('runs only when the module is the entry point', () => {

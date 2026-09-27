@@ -7,9 +7,10 @@
 import { renderHook, waitFor } from '@testing-library/preact';
 import { useSessionLoad } from '@/hooks/useSessionLoad';
 import { mockApi } from './helpers/setup';
+import { invalid } from '../helpers/invalid';
 
 beforeEach(() => {
-    mockApi.logError.mockReset().mockResolvedValue(undefined);
+    mockApi.logError.mockReset().mockResolvedValue(invalid(undefined));
 });
 
 test('a successful load hands its value to onLoad', async () => {

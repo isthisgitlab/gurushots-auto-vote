@@ -11,8 +11,10 @@ const settings = jest.mocked(settingsModule);
 import type * as scenarioStatusModule from '../../src/js/services/scenarioStatus';
 import type * as nodeNotifyModule from '../../src/js/services/notify/nodeNotify';
 import { invalid } from '../helpers/invalid';
-const { getScenarioStatus } = jest.mocked<typeof scenarioStatusModule>(require('../../src/js/services/scenarioStatus'));
-const { createNodeScenarioNotifier }: typeof nodeNotifyModule = require('../../src/js/services/notify/nodeNotify');
+const { getScenarioStatus } = jest.mocked(
+    require('../../src/js/services/scenarioStatus') as typeof scenarioStatusModule,
+);
+const { createNodeScenarioNotifier } = require('../../src/js/services/notify/nodeNotify') as typeof nodeNotifyModule;
 
 const future = () => [{ id: 'n', at: Math.floor(Date.now() / 1000) + 60, message: 'Boost now' }];
 

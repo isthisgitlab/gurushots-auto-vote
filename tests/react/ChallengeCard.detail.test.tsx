@@ -373,14 +373,30 @@ describe('entries, tags and alerts', () => {
         );
         expect(screen.getByText('night')).toBeTruthy();
         expect(screen.getByText('city')).toBeTruthy();
-        await waitFor(() => expect(JSON.parse(screen.getByTestId('entry-2').textContent).swapBack).not.toBeNull());
+        await waitFor(() =>
+            expect(
+                (
+                    JSON.parse(screen.getByTestId('entry-2').textContent) as Pick<
+                        Parameters<typeof RealEntryBadge>[0],
+                        'swapBack'
+                    >
+                ).swapBack,
+            ).not.toBeNull(),
+        );
         expect(JSON.parse(screen.getByTestId('entry-2').textContent)).toEqual({
             swapBack: { currentId: '2', previousId: '9', previousMemberId: 'm', kind: 'turbo' },
             swapAvailable: false,
             boostAvailable: true,
             turboAvailable: true,
         });
-        expect(JSON.parse(screen.getByTestId('entry-1').textContent).swapBack).toBeNull();
+        expect(
+            (
+                JSON.parse(screen.getByTestId('entry-1').textContent) as Pick<
+                    Parameters<typeof RealEntryBadge>[0],
+                    'swapBack'
+                >
+            ).swapBack,
+        ).toBeNull();
     });
 
     test('a settings change refreshes the deadline preview in place, without remounting the card', async () => {

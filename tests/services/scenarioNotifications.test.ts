@@ -7,11 +7,8 @@ import type * as scenarioNotificationsModule from '../../src/js/services/scenari
 import type { OutboxItem } from '../../src/js/services/scenarioNotifications';
 import { invalid } from '../helpers/invalid';
 
-const {
-    createNoticeTracker,
-    formatScenarioNotification,
-    createScenarioNotifier,
-}: typeof scenarioNotificationsModule = require('../../src/js/services/scenarioNotifications');
+const { createNoticeTracker, formatScenarioNotification, createScenarioNotifier } =
+    require('../../src/js/services/scenarioNotifications') as typeof scenarioNotificationsModule;
 
 const T = (key: string) =>
     (

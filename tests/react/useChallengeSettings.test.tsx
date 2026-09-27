@@ -24,7 +24,9 @@ function Probe({ id = 42, initialCompact, version }: { id?: number; initialCompa
     );
 }
 
-const state = () => JSON.parse(screen.getByTestId('state').textContent);
+/** What Probe renders into its state span. */
+type ProbeState = { custom: boolean; fill: boolean; compact: boolean; override: boolean };
+const state = () => JSON.parse(screen.getByTestId('state').textContent) as ProbeState;
 
 let overrides: Record<string, unknown>;
 let effective: Record<string, unknown>;

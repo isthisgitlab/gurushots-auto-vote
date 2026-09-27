@@ -28,7 +28,8 @@ import loggerModule = require('../../src/js/logger');
 const logger = jest.mocked(loggerModule);
 import type * as settingsModule from '../../src/js/settings';
 import type * as node_fsModule from 'node:fs';
-import type { AndroidHeadlessStore } from '../../src/js/types/settings';
+import type { CategoryLogger } from '../../src/js/logger';
+import type { AndroidHeadlessStore, AppSettings } from '../../src/js/types/settings';
 import { invalid } from '../helpers/invalid';
 
 const g = globalThis as typeof globalThis & {
@@ -44,7 +45,7 @@ type HeadlessStoreDouble = {
 };
 
 /** The shared category logger the logger mock above exposes as `__cat`. */
-type CatDouble = Record<'info' | 'error' | 'debug' | 'success' | 'warning', jest.Mock>;
+type CatDouble = jest.Mocked<Pick<CategoryLogger, 'info' | 'error' | 'debug' | 'success' | 'warning'>>;
 
 const cat = invalid<typeof logger & { __cat: CatDouble }>(logger).__cat;
 
@@ -57,7 +58,7 @@ describe('settings facade — edge cases', () => {
         settings.loadSettings();
         store.write.mockClear();
     };
-    const saved = () => JSON.parse(store.value!);
+    const saved = () => JSON.parse(store.value!) as AppSettings;
 
     beforeAll(() => {
         // Burn the once-per-process obsolete-settings cleanup so it never
@@ -725,8 +726,8 @@ describe('settings facade — edge cases', () => {
             const capWarnings = cat.warning.mock.calls.filter(([msg]) => String(msg).includes('pin cap'));
             expect(capWarnings).toHaveLength(1);
             expect(capWarnings[0][0]).toContain('extra1');
-            expect(Object.keys(saved().challengeSettings.titlePins)).toHaveLength(500);
-            expect(saved().challengeSettings.titlePins.extra2).toBeUndefined();
+            expect(Object.keys(saved().challengeSettings.titlePins!)).toHaveLength(500);
+            expect(saved().challengeSettings.titlePins!.extra2).toBeUndefined();
         });
     });
 
@@ -758,7 +759,7 @@ describe('settings facade — edge cases', () => {
 
             seed({ challengeSettings: { globalDefaults: {}, profiles: { constructor: { exposure: 1 }, A: {} } } });
             expect(settings.saveChallengeProfile('B', {})).toBe(true);
-            expect(Object.keys(saved().challengeSettings.profiles)).toEqual(['A', 'B']);
+            expect(Object.keys(saved().challengeSettings.profiles!)).toEqual(['A', 'B']);
         });
 
         test('overwriting a profile tolerates non-array rules and renames only its own assignments', () => {
@@ -781,7 +782,7 @@ describe('settings facade — edge cases', () => {
             });
             expect(settings.saveChallengeProfile('a', { exposure: 70 })).toBe(true);
             const rules = saved().challengeSettings.titleRules;
-            expect(rules.map((r: { profile: string }) => r.profile)).toEqual(['a', 'B']);
+            expect(rules.map((r) => r.profile)).toEqual(['a', 'B']);
         });
 
         test("deleteChallengeProfile skips reserved stored keys and keeps other profiles' rules", () => {
@@ -797,7 +798,7 @@ describe('settings facade — edge cases', () => {
             });
             expect(settings.deleteChallengeProfile('a')).toBe(true);
             const cs = saved().challengeSettings;
-            expect(cs.profiles.A).toBeUndefined();
+            expect(cs.profiles!.A).toBeUndefined();
             expect(cs.titleRules).toEqual([{ title: 'Y', profile: 'B' }]);
 
             seed({
@@ -830,8 +831,8 @@ describe('settings facade — edge cases', () => {
             });
             expect(settings.seedIntentProfiles()).toBe(true);
             const cs = saved().challengeSettings;
-            expect(cs.profiles['Just Participate']).toBeUndefined();
-            expect(cs.profiles['Finish Strong']).toBeDefined();
+            expect(cs.profiles!['Just Participate']).toBeUndefined();
+            expect(cs.profiles!['Finish Strong']).toBeDefined();
             expect(cs.seededProfiles).toContain('just participate');
             expect(cat.warning).toHaveBeenCalledWith(
                 expect.stringContaining('Skipped seeding intent profile "Just Participate"'),
@@ -895,7 +896,7 @@ describe('settings facade — edge cases', () => {
 
         test('load-time cleanup runs once per process on the first load', () => {
             jest.isolateModules(() => {
-                const fresh: typeof settingsModule = require('../../src/js/settings');
+                const fresh = require('../../src/js/settings') as typeof settingsModule;
                 store.value = JSON.stringify({ challengeSettings: { globalDefaults: { exposure: 70, bogus: 1 } } });
                 fresh.loadSettings();
                 expect(saved().challengeSettings.globalDefaults).toEqual({ exposure: 70 });
@@ -969,7 +970,7 @@ describe('settings facade — edge cases', () => {
             return store.value!;
         };
         const useFailingDisk = (blob: string) => {
-            fs = jest.mocked<typeof node_fsModule>(require('node:fs'));
+            fs = jest.mocked(require('node:fs') as typeof node_fsModule);
             delete g.__GS_HEADLESS__;
             fs.existsSync.mockReturnValue(true);
             fs.readFileSync.mockReturnValue(blob);

@@ -8,7 +8,7 @@
 import type * as VotingLogicModule from '../../src/js/services/VotingLogic';
 import { invalid } from '../helpers/invalid';
 
-const { shouldJoinChallenge }: typeof VotingLogicModule = require('../../src/js/services/VotingLogic');
+const { shouldJoinChallenge } = require('../../src/js/services/VotingLogic') as typeof VotingLogicModule;
 
 type JoinParams = Parameters<typeof shouldJoinChallenge>[0];
 

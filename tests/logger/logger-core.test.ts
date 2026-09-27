@@ -1,5 +1,5 @@
 /**
- * Behaviour of the REAL logger module (tests/setup.js mocks it globally, so
+ * Behaviour of the REAL logger module (tests/setup.ts mocks it globally, so
  * every load here goes through jest.requireActual inside isolateModules).
  * Each load gets a fresh fs stub + runtime stub so module-load decisions
  * (logs dir creation, CLI/GUI context, periodic cleanup, debug gating) can
@@ -18,8 +18,8 @@ const makeFs = (overrides = {}) => ({
     mkdirSync: jest.fn(),
     readdirSync: jest.fn(() => []),
     statSync: jest.fn(() => ({ size: 0, mtime: new Date() })),
-    unlinkSync: jest.fn(),
-    appendFileSync: jest.fn(),
+    unlinkSync: jest.fn<void, [string]>(),
+    appendFileSync: jest.fn<void, [string, string]>(),
     ...overrides,
 });
 
@@ -144,7 +144,7 @@ describe('cleanupOldLogs', () => {
         };
         const fs = makeFs({
             readdirSync: jest.fn(() => Object.keys(files)),
-            statSync: jest.fn((p) => files[p.split('/').pop()]),
+            statSync: jest.fn((p: string) => files[p.split('/').pop()!]),
         });
         loadLogger({ fs });
 
@@ -470,7 +470,7 @@ describe('withCategory', () => {
         log.progress('p');
         expectLast({ message: 'ℹ️ p' });
         log.progress('p', 1, 4);
-        expectLast({ message: expect.stringContaining('25% (1/4)') });
+        expectLast({ message: invalid(expect.stringContaining('25% (1/4)')) });
     });
 
     test('operations started on a scoped logger end at the start level and category', () => {
