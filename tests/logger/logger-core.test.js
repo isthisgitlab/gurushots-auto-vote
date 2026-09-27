@@ -319,9 +319,9 @@ describe('writeLog routing and fan-out', () => {
 
     test('leaves blank, indented and banner lines without an icon', () => {
         const { logger } = loadLogger();
-        for (const message of ['', '  Status:  Default', '\nSettings:', '=== Login ===', '--- Cycle 1 ---']) {
+        for (const message of ['', '  Status:  Default', '\nSettings:\nMore', '=== Login ===', '--- Cycle 1 ---']) {
             logger.info(message);
-            expect(lastEntry(logger).message).toBe(message.replace('\n', ' '));
+            expect(lastEntry(logger).message).toBe(message.replaceAll('\n', ' '));
         }
     });
 

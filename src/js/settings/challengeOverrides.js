@@ -336,7 +336,6 @@ const replaceChallengeOverrides = (challengeId, overrides, suppressTitleProfile 
     const id = trimmedChallengeId(challengeId);
     if (!id || typeof suppressTitleProfile !== 'boolean') return false;
     const settings = loadSettings();
-    settings.challengeSettings;
     if (!replaceChallengeOverridesInSettings(settings, id, overrides, suppressTitleProfile)) return false;
     return saveSettings(settings);
 };
