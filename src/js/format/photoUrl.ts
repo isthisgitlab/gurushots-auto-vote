@@ -47,17 +47,21 @@ const DEFAULT_EDGE_PX = 200;
 /**
  * Builds a CDN URL for one photo.
  *
- * @param {string} memberId - owning member id (32-char hex)
- * @param {string} imageId  - photo id (32-char hex)
- * @param {{size?: number, fit?: boolean}} [options]
+ * @param memberId - owning member id (32-char hex)
+ * @param imageId  - photo id (32-char hex)
+ * @param options
  *   size: length of the square's edge in px (default 200, clamped to 2000).
  *   fit:  true uses thumbor's `fit-in`, which letterboxes the whole frame
  *         inside the box instead of centre-cropping it to fill. Cropping is
  *         right for a small chip; fitting is right for a preview, where the
  *         point is to see the composition the way it was submitted.
- * @returns {string|null} the URL, or null when either id is not well-formed.
+ * @returns the URL, or null when either id is not well-formed.
  */
-const buildPhotoUrl = (memberId, imageId, options = {}) => {
+const buildPhotoUrl = (
+    memberId: string,
+    imageId: string,
+    options: { size?: number; fit?: boolean } = {},
+): string | null => {
     if (!ID_PATTERN.test(String(memberId ?? '')) || !ID_PATTERN.test(String(imageId ?? ''))) {
         return null;
     }
@@ -76,11 +80,10 @@ const buildPhotoUrl = (memberId, imageId, options = {}) => {
  * Convenience wrapper for an entry out of `member.ranking.entries`.
  * Optional-chained throughout: a per-challenge API read that comes back shaped
  * differently must degrade to "no thumbnail", never throw into the renderer.
- *
- * @param {{id?: string, member_id?: string}|null|undefined} entry
- * @param {{size?: number, fit?: boolean}} [options]
- * @returns {string|null}
  */
-const entryPhotoUrl = (entry, options = {}) => buildPhotoUrl(entry?.member_id ?? '', entry?.id ?? '', options);
+const entryPhotoUrl = (
+    entry: { id?: string; member_id?: string } | null | undefined,
+    options: { size?: number; fit?: boolean } = {},
+): string | null => buildPhotoUrl(entry?.member_id ?? '', entry?.id ?? '', options);
 
 export { buildPhotoUrl, entryPhotoUrl };

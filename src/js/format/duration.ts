@@ -4,10 +4,8 @@
  * and the voting pass's log lines in services/votingOrchestrator.js) so they
  * all read identically.
  *
- * Authored as CommonJS with no React/Node-service dependency: the CLI (CJS)
- * `require`s it and the renderer (ESM, bundled by esbuild + @swc/jest) imports
- * it the same way it already imports the CJS `scheduling/*` and `settings`
- * core — see react/contexts/autovoteScheduler.js.
+ * No React or Node-service dependency, so the CLI, the main process and the
+ * renderer bundle all import it.
  *
  * Two shapes from one function:
  *   - default (largest two units, minute granularity, "<1m" under a minute) —
@@ -18,11 +16,9 @@
  *     that should tick the final minute. Callers own any "Ended" guard.
  *       2d3h→"2d 3h 5m", 1h→"1h 0m", 90→"1m 30s", 30→"30s"
  *
- * @param {number} seconds - Duration in seconds (not an absolute timestamp).
- * @param {{ includeSeconds?: boolean }} [opts]
- * @returns {string}
+ * @param seconds - Duration in seconds (not an absolute timestamp).
  */
-const formatDuration = (seconds, { includeSeconds = false } = {}) => {
+const formatDuration = (seconds: number, { includeSeconds = false }: { includeSeconds?: boolean } = {}): string => {
     const total = Math.max(0, Math.floor(Number(seconds) || 0));
     const days = Math.floor(total / 86400);
     const hours = Math.floor((total % 86400) / 3600);
