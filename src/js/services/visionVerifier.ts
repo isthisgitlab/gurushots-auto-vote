@@ -17,6 +17,7 @@ import { visualSubjectWords } from './photoPicker';
 
 import type { ChallengeText, IgnoreWords, PickerPhoto } from '../types/photoPicker';
 import type { ErrorLike, FillLogger } from '../types/autoFill';
+import type * as Transformers from '@huggingface/transformers';
 import type { ZeroShotImageClassificationPipeline } from '@huggingface/transformers';
 
 const MAX_IMAGES = 12;
@@ -79,18 +80,18 @@ const hasBundledModel = (): Promise<boolean> => {
 };
 
 /**
- * The transformers module is `any` on the SEA path (createRequire), so the
- * pipeline type is stated here rather than inferred.
+ * The SEA path loads the package through createRequire, which returns `any`;
+ * it is the same package, so it is typed as the module the import path loads.
  */
 const loadClassifier = async (): Promise<ZeroShotImageClassificationPipeline> => {
-    let transformers;
+    let transformers: typeof Transformers | undefined;
     if (runtime.isCli()) {
         const sea = require('node:sea');
         if (sea.isSea()) {
             const assets = require('./visionCliAssets').extractVisionCliAssets();
             cliAssetRoot = assets.root;
             const { createRequire } = require('node:module');
-            transformers = createRequire(assets.modulePath)('@huggingface/transformers');
+            transformers = createRequire(assets.modulePath)('@huggingface/transformers') as typeof Transformers;
         }
     }
     transformers ||= await import('@huggingface/transformers');
@@ -99,8 +100,10 @@ const loadClassifier = async (): Promise<ZeroShotImageClassificationPipeline> =>
     env.allowLocalModels = true;
     env.localModelPath = getModelLocation();
     if (runtime.isCapacitor() || runtime.isHeadlessService()) {
-        env.backends.onnx.wasm.wasmPaths = './';
-        env.backends.onnx.wasm.numThreads = 1;
+        // The library types every build's onnx env as Partial; the WebView build this
+        // branch runs on always has the wasm backend.
+        env.backends.onnx.wasm!.wasmPaths = './';
+        env.backends.onnx.wasm!.numThreads = 1;
     }
     return pipeline('zero-shot-image-classification', 'vision-model', {
         dtype: 'q8',
