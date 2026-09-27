@@ -108,7 +108,13 @@ export function UpdateDialog() {
             {state === UPDATE_STATES.ERROR && (
                 <div className="alert alert-error">
                     <StrokeIcon className="w-5 h-5" d={ICON_PATHS.xCircle} />
-                    <span>{(error as NonNullable<typeof error>).message}</span>
+                    <span>
+                        {t(
+                            (error as NonNullable<typeof error>).kind === 'install'
+                                ? 'app.updateInstallFailed'
+                                : 'app.updateFailed',
+                        )}
+                    </span>
                 </div>
             )}
 
@@ -154,7 +160,7 @@ export function UpdateDialog() {
                         <button className="btn btn-outline btn-sm" onClick={hideDialog}>
                             {t('app.close')}
                         </button>
-                        {(error as NonNullable<typeof error>).canFallbackToBrowser && (
+                        {(error as NonNullable<typeof error>).kind === 'update' && (
                             <button className="btn btn-latvian btn-sm" onClick={() => void openBrowserDownload()}>
                                 {t('app.downloadInBrowser')}
                             </button>

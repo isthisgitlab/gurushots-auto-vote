@@ -954,6 +954,10 @@ export const app = {
     updateError: 'Atjaunināšanas kļūda',
     releaseNotes: 'Laidiena piezīmes',
     updateReadyToInstall: 'Atjauninājums lejupielādēts un gatavs instalēšanai. Restartē lietotni, lai to uzstādītu.',
+    updateFailed:
+        'Atjauninājumu neizdevās pabeigt: nevarēja sazināties ar atjauninājumu serveri vai lejupielāde tika pārtraukta. Mēģini vēlreiz vēlāk vai lejupielādē to pārlūkā.',
+    updateInstallFailed:
+        'Atjauninājumu neizdevās instalēt: lejupielādēto atjauninājumu nevarēja uzstādīt. Restartē lietotni un mēģini vēlreiz.',
     skipVersion: 'Izlaist versiju',
     remindLater: 'Atgādināt vēlāk',
     download: 'Lejupielādēt',

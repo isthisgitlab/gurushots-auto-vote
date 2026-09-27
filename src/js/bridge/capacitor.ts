@@ -151,7 +151,7 @@ const buildAllHandlers = () => {
                 return { success: true, updateInfo: null };
             } catch (error) {
                 const failure = errorResult(error, 'Failed to check for updates');
-                emit('update-error', { message: failure.error, canFallbackToBrowser: true });
+                emit('update-error', { message: failure.error });
                 return failure;
             }
         },
@@ -175,7 +175,7 @@ const buildAllHandlers = () => {
                 // settles to a "see system notification" state.
                 emit('update-downloaded', lastUpdateInfo);
             } else {
-                emit('update-error', { message: result.error, canFallbackToBrowser: true });
+                emit('update-error', { message: result.error });
             }
             return { ...result, fallbackUrl: updateChecker.getReleasesUrl() };
         },

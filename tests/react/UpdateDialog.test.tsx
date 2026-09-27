@@ -55,7 +55,7 @@ describe('UpdateProvider + UpdateDialog', () => {
         mockApi.canAutoUpdate.mockResolvedValue({ canAutoUpdate: true });
         mockApi.getReleasesUrl.mockResolvedValue({ url: 'https://example.test/releases' });
         mockApi.downloadUpdate.mockResolvedValue({ success: true });
-        mockApi.installUpdate.mockResolvedValue(undefined);
+        mockApi.installUpdate.mockResolvedValue({ success: true });
         mockApi.skipUpdateVersion.mockResolvedValue(undefined);
         mockApi.openExternalUrl.mockResolvedValue(undefined);
     });
@@ -235,7 +235,10 @@ describe('UpdateProvider + UpdateDialog', () => {
         await emit('onUpdateAvailable', INFO);
         await clickAndSettle(screen.getByText('app.download'));
         expect(screen.getByText('app.updateError')).toBeTruthy();
-        expect(screen.getByText('checksum mismatch')).toBeTruthy();
+        // The translated message is shown; the technical reason goes to the log.
+        expect(screen.getByText('app.updateFailed')).toBeTruthy();
+        expect(screen.queryByText('checksum mismatch')).toBeNull();
+        expect(mockApi.logError).toHaveBeenCalledWith('Update update failed: checksum mismatch');
 
         await clickAndSettle(screen.getByText('app.downloadInBrowser'));
         expect(mockApi.openExternalUrl).toHaveBeenCalledWith('https://example.test/releases');
@@ -243,40 +246,43 @@ describe('UpdateProvider + UpdateDialog', () => {
     });
 
     it.each([
-        [new Error('offline'), 'offline'],
-        [{}, 'Download failed'],
-    ])('a thrown download error (%p) is shown as "%s"', async (thrown, message) => {
+        [new Error('offline'), 'Update update failed: offline'],
+        ['bare', 'Update update failed: bare'],
+    ])('a thrown download error (%p) shows the update failure and logs "%s"', async (thrown, logged) => {
         mockApi.canAutoUpdate.mockRejectedValue(thrown);
         renderDialog();
         await emit('onUpdateAvailable', INFO);
         await clickAndSettle(screen.getByText('app.download'));
-        expect(screen.getByText(message)).toBeTruthy();
-        expect(ctx.error!.canFallbackToBrowser).toBe(true);
+        expect(screen.getByText('app.updateFailed')).toBeTruthy();
+        expect(screen.getByText('app.downloadInBrowser')).toBeTruthy();
+        expect(mockApi.logError).toHaveBeenCalledWith(logged);
     });
 
     it.each([
-        [new Error('locked'), 'locked'],
-        [{}, 'Installation failed'],
-    ])('a failed install (%p) shows "%s" without the browser fallback', async (thrown, message) => {
-        mockApi.installUpdate.mockRejectedValue(thrown);
+        ['a rejected install', () => mockApi.installUpdate.mockRejectedValue(new Error('locked')), 'locked'],
+        [
+            'an install the handler refused',
+            () => mockApi.installUpdate.mockResolvedValue({ success: false, error: 'AutoUpdater not initialized' }),
+            'AutoUpdater not initialized',
+        ],
+    ])('%s shows the install failure without the browser fallback', async (_label, arrange, reason) => {
+        arrange();
         renderDialog();
         await emit('onUpdateAvailable', INFO);
         await emit('onUpdateDownloaded');
         await clickAndSettle(screen.getByText('app.restartNow'));
-        expect(screen.getByText(message)).toBeTruthy();
+        expect(screen.getByText('app.updateInstallFailed')).toBeTruthy();
         expect(screen.queryByText('app.downloadInBrowser')).toBeNull();
+        expect(mockApi.logError).toHaveBeenCalledWith(`Update install failed: ${reason}`);
     });
 
-    it('maps update-error events, defaulting the message and the fallback flag', async () => {
+    it('shows update-error events as the update failure and logs their reason', async () => {
         renderDialog();
         await emit('onUpdateAvailable', INFO);
-        await emit('onUpdateError', {});
-        expect(screen.getByText('Download failed')).toBeTruthy();
+        await emit('onUpdateError', { message: 'sig invalid' });
+        expect(screen.getByText('app.updateFailed')).toBeTruthy();
         expect(screen.getByText('app.downloadInBrowser')).toBeTruthy();
-
-        await emit('onUpdateError', { message: 'sig invalid', canFallbackToBrowser: false });
-        expect(screen.getByText('sig invalid')).toBeTruthy();
-        expect(screen.queryByText('app.downloadInBrowser')).toBeNull();
+        expect(mockApi.logError).toHaveBeenCalledWith('Update update failed: sig invalid');
 
         // Error state closes via "Close" and via the backdrop.
         fireEvent.click(screen.getByText('app.close'));

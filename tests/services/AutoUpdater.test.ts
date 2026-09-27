@@ -527,10 +527,7 @@ describe('AutoUpdater', () => {
             handlers.error(new Error('signature mismatch'));
 
             expect(autoUpdater.isDownloading).toBe(false);
-            expect(send).toHaveBeenCalledWith('update-error', {
-                message: 'signature mismatch',
-                canFallbackToBrowser: true,
-            });
+            expect(send).toHaveBeenCalledWith('update-error', { message: 'signature mismatch' });
         });
 
         it('download-progress rounds the percentage and forwards the progress', () => {

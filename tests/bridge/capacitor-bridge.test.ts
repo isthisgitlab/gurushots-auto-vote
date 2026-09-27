@@ -218,7 +218,7 @@ describe('Capacitor bridge', () => {
             api.onUpdateError(onError);
 
             await expect(api.checkForUpdates()).resolves.toEqual({ success: false, error: 'rate limited' });
-            expect(onError).toHaveBeenCalledWith({ message: 'rate limited', canFallbackToBrowser: true });
+            expect(onError).toHaveBeenCalledWith({ message: 'rate limited' });
         });
 
         test('check-for-updates rejecting with null still reports the check failure', async () => {
@@ -230,10 +230,7 @@ describe('Capacitor bridge', () => {
                 success: false,
                 error: 'Failed to check for updates',
             });
-            expect(onError).toHaveBeenCalledWith({
-                message: 'Failed to check for updates',
-                canFallbackToBrowser: true,
-            });
+            expect(onError).toHaveBeenCalledWith({ message: 'Failed to check for updates' });
         });
 
         test('download-update without a prior check points the user at the releases page', async () => {
@@ -278,7 +275,7 @@ describe('Capacitor bridge', () => {
 
             const res = await api.downloadUpdate();
 
-            expect(onError).toHaveBeenCalledWith({ message: 'No mechanism', canFallbackToBrowser: true });
+            expect(onError).toHaveBeenCalledWith({ message: 'No mechanism' });
             expect(res).toEqual({ success: false, error: 'No mechanism', fallbackUrl: 'https://example.com/releases' });
         });
 

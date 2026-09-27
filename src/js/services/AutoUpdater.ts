@@ -148,10 +148,7 @@ class AutoUpdater {
         autoUpdater.on('error', (err) => {
             logger.withCategory('update').error('Update error:', err.message);
             this.isDownloading = false;
-            this.sendToRenderer('update-error', {
-                message: err.message,
-                canFallbackToBrowser: true,
-            });
+            this.sendToRenderer('update-error', { message: err.message });
         });
 
         autoUpdater.on('download-progress', (progressObj) => {

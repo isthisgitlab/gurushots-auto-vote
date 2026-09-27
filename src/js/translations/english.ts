@@ -942,6 +942,10 @@ export const app = {
     updateError: 'Update Error',
     releaseNotes: 'Release Notes',
     updateReadyToInstall: 'Update downloaded and ready to install. Restart to apply.',
+    updateFailed:
+        "The update didn't finish: the update server couldn't be reached or the download was interrupted. Try again later, or download it in your browser.",
+    updateInstallFailed:
+        "The update couldn't be installed: the downloaded update could not be applied. Restart the app and try again.",
     skipVersion: 'Skip Version',
     remindLater: 'Remind Later',
     download: 'Download',

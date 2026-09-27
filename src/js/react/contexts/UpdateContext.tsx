@@ -2,6 +2,7 @@ import { createContext, useContext, useReducer, useCallback, useEffect } from 'r
 import * as ipc from '../api/ipc';
 
 import type { ComponentChildren } from 'preact';
+import type { Dispatch } from 'react';
 import type { UpdateSummary } from '../../services/AutoUpdater';
 
 // Update states
@@ -24,7 +25,11 @@ const ACTIONS = {
 } as const;
 
 export type DownloadProgress = { percent: number; transferred: number; total: number; bytesPerSecond: number };
-type UpdateError = { message: string; canFallbackToBrowser: boolean };
+/**
+ * Which step failed, for the dialog's translated message: `update` (reaching the
+ * update server or downloading) offers the browser download, `install` does not.
+ */
+type UpdateError = { kind: 'update' | 'install' };
 
 interface UpdateStateFields {
     updateInfo: UpdateSummary | null;
@@ -118,6 +123,15 @@ function updateReducer(state: UpdateState, action: UpdateAction): UpdateState {
 const UpdateContext = createContext<UpdateContextValue | null>(null);
 
 /**
+ * Put the dialog into its error state. The user reads a translated message for
+ * the failed step; the technical reason goes to the log.
+ */
+const failWith = (dispatch: Dispatch<UpdateAction>, kind: UpdateError['kind'], reason: unknown) => {
+    void ipc.logRendererError(`Update ${kind} failed: ${(reason as Error | null | undefined)?.message || reason}`);
+    dispatch({ type: ACTIONS.SET_ERROR, payload: { kind } });
+};
+
+/**
  * Provider for update dialog state
  */
 export function UpdateProvider({ children }: { children?: ComponentChildren }) {
@@ -137,14 +151,8 @@ export function UpdateProvider({ children }: { children?: ComponentChildren }) {
             dispatch({ type: ACTIONS.SET_READY });
         });
 
-        const unsubscribeError = ipc.onUpdateError((error: { message?: string; canFallbackToBrowser?: boolean }) => {
-            dispatch({
-                type: ACTIONS.SET_ERROR,
-                payload: {
-                    message: error?.message || 'Download failed',
-                    canFallbackToBrowser: error.canFallbackToBrowser !== false,
-                },
-            });
+        const unsubscribeError = ipc.onUpdateError((error: { message?: string }) => {
+            failWith(dispatch, 'update', error?.message);
         });
 
         return () => {
@@ -174,20 +182,9 @@ export function UpdateProvider({ children }: { children?: ComponentChildren }) {
             dispatch({ type: ACTIONS.SET_DOWNLOADING });
             const result = await ipc.downloadUpdate();
 
-            if (!result.success) {
-                dispatch({
-                    type: ACTIONS.SET_ERROR,
-                    payload: { message: result.error, canFallbackToBrowser: true },
-                });
-            }
+            if (!result.success) failWith(dispatch, 'update', result.error);
         } catch (err) {
-            dispatch({
-                type: ACTIONS.SET_ERROR,
-                payload: {
-                    message: (err as Error | null | undefined)?.message || 'Download failed',
-                    canFallbackToBrowser: true,
-                },
-            });
+            failWith(dispatch, 'update', err);
         }
     }, []);
 
@@ -196,15 +193,10 @@ export function UpdateProvider({ children }: { children?: ComponentChildren }) {
      */
     const installUpdate = useCallback(async () => {
         try {
-            await ipc.installUpdate();
+            const result = await ipc.installUpdate();
+            if (!result.success) failWith(dispatch, 'install', result.error);
         } catch (err) {
-            dispatch({
-                type: ACTIONS.SET_ERROR,
-                payload: {
-                    message: (err as Error | null | undefined)?.message || 'Installation failed',
-                    canFallbackToBrowser: false,
-                },
-            });
+            failWith(dispatch, 'install', err);
         }
     }, []);
 
