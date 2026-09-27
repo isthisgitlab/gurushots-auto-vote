@@ -1,5 +1,5 @@
 /**
- * Tests for the mock prize-claim surface in mock/index.js: the four endpoint
+ * Tests for the mock prize-claim surface in mock/index.ts: the four endpoint
  * fixtures (and their no-token shapes), and the claim pre-step the mock
  * fetchChallengesAndVote runs — wired to the mock endpoints, skipped for a
  * single-challenge run, and never allowed to abort voting.

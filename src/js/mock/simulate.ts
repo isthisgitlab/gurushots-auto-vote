@@ -10,12 +10,11 @@ import * as logger from '../logger';
 /**
  * Helper function to simulate API responses with delays
  *
- * @template T
- * @param {T} data - The mock data to return
- * @param {number} [delay] - Delay in milliseconds (default: 1000)
- * @returns {Promise<T>} - Promise that resolves with the mock data after delay
+ * @param data - The mock data to return
+ * @param delay - Delay in milliseconds (default: 1000)
+ * @returns Promise that resolves with the mock data after delay
  */
-const simulateApiResponse = (data, delay = 1000) => {
+const simulateApiResponse = <T>(data: T, delay: number = 1000): Promise<T> => {
     return new Promise((resolve) => {
         setTimeout(() => {
             resolve(data);
@@ -26,11 +25,11 @@ const simulateApiResponse = (data, delay = 1000) => {
 /**
  * Helper function to simulate API errors
  *
- * @param {unknown} error - The error object to return
- * @param {number} [delay] - Delay in milliseconds (default: 500)
- * @returns {Promise<never>} - Promise that rejects with the error after delay
+ * @param error - The error object to return
+ * @param delay - Delay in milliseconds (default: 500)
+ * @returns Promise that rejects with the error after delay
  */
-const simulateApiError = (error, delay = 500) => {
+const simulateApiError = (error: unknown, delay: number = 500): Promise<never> => {
     return new Promise((resolve, reject) => {
         setTimeout(() => {
             reject(error);
@@ -57,18 +56,15 @@ const simulateApiError = (error, delay = 500) => {
  * types the `debug` and `fn` parameters and holds `onNoToken` to the same
  * resolved shape.
  *
- * @template {(...args: never[]) => Promise<unknown>} F
- * @param {object} spec
- * @param {string} spec.name - method name for the "Mock <name>" preamble
- * @param {string} [spec.category] - preamble logger category (default 'api')
- * @param {number} spec.tokenArg - index of the token in the call args
- * @param {(...args: Parameters<F>) => void} [spec.debug] - extra per-method debug logging (gets the raw args)
- * @param {string} [spec.noTokenMessage] - authentication error line
- * @param {(...args: Parameters<F>) => Awaited<ReturnType<F>>} spec.onNoToken - produces the no-token return value
- * @param {(...args: Parameters<F>) => ReturnType<F>} fn - the method body
- * @returns {F}
+ * @param spec.name - method name for the "Mock <name>" preamble
+ * @param spec.category - preamble logger category (default 'api')
+ * @param spec.tokenArg - index of the token in the call args
+ * @param spec.debug - extra per-method debug logging (gets the raw args)
+ * @param spec.noTokenMessage - authentication error line
+ * @param spec.onNoToken - produces the no-token return value
+ * @param fn - the method body
  */
-const mockMethod = (
+const mockMethod = <F extends (...args: never[]) => Promise<unknown>>(
     {
         name,
         category = 'api',
@@ -76,11 +72,17 @@ const mockMethod = (
         debug,
         noTokenMessage = 'No token provided, returning empty result',
         onNoToken,
+    }: {
+        name: string;
+        category?: string;
+        tokenArg: number;
+        debug?: (...args: Parameters<F>) => void;
+        noTokenMessage?: string;
+        onNoToken: (...args: Parameters<F>) => Awaited<ReturnType<F>>;
     },
-    fn,
-) => {
-    /** @param {Parameters<F>} args */
-    const method = async (...args) => {
+    fn: (...args: Parameters<F>) => ReturnType<F>,
+): F => {
+    const method = async (...args: Parameters<F>) => {
         logger.withCategory(category).api(`Mock ${name}`, null);
         if (debug) debug(...args);
         if (!args[tokenArg]) {
@@ -91,7 +93,7 @@ const mockMethod = (
     };
     // `method` takes F's parameters and resolves F's result; the checker cannot
     // relate that to the generic F itself.
-    return /** @type {F} */ (/** @type {unknown} */ (method));
+    return method as unknown as F;
 };
 
 export { simulateApiResponse, simulateApiError, mockMethod };

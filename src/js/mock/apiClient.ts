@@ -3,7 +3,7 @@
  *
  * The mock API surface apiFactory selects in mock mode: the mock endpoints
  * (mock/endpoints/*, counterparts to api/*) plus the mock strategy
- * (mock/strategy.js, counterpart to strategies/real/), which is built over
+ * (mock/strategy.ts, counterpart to strategies/real/), which is built over
  * this same object so it calls whatever is on the client at call time.
  */
 
@@ -53,7 +53,7 @@ const endpoints = {
     exposureAutofill,
 };
 
-/** @typedef {typeof endpoints} MockEndpoints */
+export type MockEndpoints = typeof endpoints;
 
 // Same object, now also carrying the strategy methods.
 const mockApiClient = Object.assign(endpoints, createMockStrategy(endpoints));

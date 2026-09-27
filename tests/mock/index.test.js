@@ -1,5 +1,5 @@
 /**
- * Tests for mock/index.js
+ * Tests for mock/index.ts
  *
  * Tests the mock API client and the session-cache reset.
  */

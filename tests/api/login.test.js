@@ -1,5 +1,5 @@
 /**
- * Tests for login.js
+ * Tests for login.ts
  *
  * Tests the authentication functionality.
  */

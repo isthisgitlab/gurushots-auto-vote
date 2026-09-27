@@ -6,7 +6,7 @@
  * surface is a plain object whose method names mirror what the
  * middleware expects — there is no class hierarchy. The real surface
  * is the api/ endpoint wrappers plus the real-strategy composition
- * (strategies/real); the mock surface is mockApiClient (mock/index.js).
+ * (strategies/real); the mock surface is mockApiClient (mock/index.ts).
  */
 
 import * as settings from './settings';

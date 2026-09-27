@@ -5,14 +5,14 @@
 
 import * as logger from '../../logger';
 import { simulateApiResponse, mockMethod } from '../simulate';
+import type * as turboModule from '../../api/turbo';
+import type * as realModule from '../../strategies/real';
 
 /**
  * Simulate applying a won Turbo to a specific entry. The shape mirrors
  * the live /rest/set_challenge_turbo response: { ok, raw }.
- *
- * @type {typeof import('../../api/turbo').applyTurbo}
  */
-const applyTurbo = mockMethod(
+const applyTurbo: typeof turboModule.applyTurbo = mockMethod(
     {
         name: 'applyTurbo',
         tokenArg: 2,
@@ -33,10 +33,8 @@ const applyTurbo = mockMethod(
  * strategies/real runTurboMiniGame result shape ({ played, correct, flipped,
  * doubleFailed, won }) so the manual-turbo IPC handler behaves the same
  * in mock mode instead of reaching the live battle endpoints.
- *
- * @type {typeof import('../../strategies/real').runTurboMiniGame}
  */
-const runTurboMiniGame = mockMethod(
+const runTurboMiniGame: typeof realModule.runTurboMiniGame = mockMethod(
     {
         name: 'runTurboMiniGame',
         category: 'turbo',

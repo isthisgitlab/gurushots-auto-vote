@@ -7,14 +7,11 @@
 
 import { simulateApiResponse, mockMethod } from '../simulate';
 
-/** @import { ActionResult } from '../../types/gurushots' */
+import type { ActionResult } from '../../types/gurushots';
+import type * as currencyModule from '../../api/currency';
 
 // Shared body of the mock currency spends: fixture 900004 is the failure sentinel.
-/**
- * @param {string|number} challengeId
- * @returns {Promise<ActionResult>}
- */
-const mockSpendResult = async (challengeId) => {
+const mockSpendResult = async (challengeId: string | number): Promise<ActionResult> => {
     await simulateApiResponse({}, 300);
     if (String(challengeId) === '900004') {
         return { ok: false, raw: { success: false } };
@@ -22,20 +19,17 @@ const mockSpendResult = async (challengeId) => {
     return { ok: true, raw: { success: true } };
 };
 
-/** @type {typeof import('../../api/currency').keyUnlock} */
-const keyUnlock = mockMethod(
+const keyUnlock: typeof currencyModule.keyUnlock = mockMethod(
     { name: 'keyUnlock', tokenArg: 1, onNoToken: () => ({ ok: false, raw: null }) },
     async (challengeId) => mockSpendResult(challengeId),
 );
 
-/** @type {typeof import('../../api/currency').swapPhoto} */
-const swapPhoto = mockMethod(
+const swapPhoto: typeof currencyModule.swapPhoto = mockMethod(
     { name: 'swapPhoto', tokenArg: 3, onNoToken: () => ({ ok: false, raw: null }) },
     async (challengeId) => mockSpendResult(challengeId),
 );
 
-/** @type {typeof import('../../api/currency').exposureAutofill} */
-const exposureAutofill = mockMethod(
+const exposureAutofill: typeof currencyModule.exposureAutofill = mockMethod(
     { name: 'exposureAutofill', tokenArg: 2, onNoToken: () => ({ ok: false, raw: null }) },
     async (challengeId) => mockSpendResult(challengeId),
 );

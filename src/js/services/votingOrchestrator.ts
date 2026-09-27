@@ -1,6 +1,6 @@
 /**
  * The voting-pass orchestration shared by BOTH API strategies
- * (strategies/real and mock/strategy.js): the mock runs the identical strategy
+ * (strategies/real and mock/strategy.ts): the mock runs the identical strategy
  * path over its fake endpoints, so auto-fill, emergency fill, turbo-earn and
  * the timer-ordered deadline actions behave the same in both modes.
  *

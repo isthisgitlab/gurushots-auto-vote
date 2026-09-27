@@ -10,7 +10,7 @@ const API_BASE = 'https://api.gurushots.com';
 // rest_mobile/* endpoints share the iOS-spoof header profile assembled
 // in randomizer.ts. rest/* endpoints use the WEB profile (x-env: WEB,
 // x-api-version: 13) built by createWebHeaders below and shared by
-// turbo.js / submissions.js.
+// turbo.ts / submissions.ts.
 const ENDPOINTS = {
     signup: `${API_BASE}/rest_mobile/signup`,
     activeChallenges: `${API_BASE}/rest_mobile/get_my_active_challenges`,

@@ -2,10 +2,10 @@
  * GuruShots Auto Voter - Mock photo library fixtures
  *
  * The member's challenge-eligible library that the mock submissions and tag
- * endpoints (mock/endpoints/submissions.js, mock/endpoints/tags.js) serve.
+ * endpoints (mock/endpoints/submissions.ts, mock/endpoints/tags.ts) serve.
  */
 
-/** @import { LibraryPhoto } from '../types/gurushots' */
+import type { LibraryPhoto } from '../types/gurushots';
 
 // The mock library's label sets, hoisted so the tag vocabulary below is DERIVED
 // from them instead of hand-maintained alongside them — a second list that must
@@ -41,10 +41,9 @@ const MOCK_LIBRARY_TAGS = Array.from(
  * photos and a populated views count, so views carry per-photo varied values
  * here too.)
  *
- * @param {number} now - epoch seconds the upload dates are relative to
- * @returns {Array<LibraryPhoto & { labels: string[] }>}
+ * @param now - epoch seconds the upload dates are relative to
  */
-const buildLibraryPhotos = (now) => [
+const buildLibraryPhotos = (now: number): Array<LibraryPhoto & { labels: string[] }> => [
     {
         id: 'photo_pink_flower_001',
         labels: MOCK_PHOTO_LABELS.photo_pink_flower_001,
@@ -121,10 +120,8 @@ const buildLibraryPhotos = (now) => [
  *
  * Built fresh per call so a caller mutating a returned `achievements` array
  * never leaks into the next read.
- *
- * @returns {Record<string, {votes:number, views:number, achievements:string[]}>}
  */
-const buildImageStats = () => ({
+const buildImageStats = (): Record<string, { votes: number; views: number; achievements: string[] }> => ({
     photo_pink_flower_001: { votes: 3120, views: 1820, achievements: ['top_100'] },
     photo_nature_landscape_002: { votes: 1780, views: 1110, achievements: [] },
     photo_urban_003: { votes: 890, views: 640, achievements: [] },

@@ -5,6 +5,7 @@
 
 import * as logger from '../../logger';
 import { simulateApiResponse, mockMethod } from '../simulate';
+import type * as joinModule from '../../api/join';
 
 /**
  * Simulate /rest/get_member_challenges (un-joined "open" challenges).
@@ -12,10 +13,8 @@ import { simulateApiResponse, mockMethod } from '../simulate';
  * paid id (900004) whose coinsUnlock fails — so the "coins charged but
  * submit failed" / "unlock failed" paths are exercisable without a real
  * account. Id 900005 unlocks but its submit fails (see submitToChallenge).
- *
- * @type {typeof import('../../api/join').getMemberChallenges}
  */
-const getMemberChallenges = mockMethod(
+const getMemberChallenges: typeof joinModule.getMemberChallenges = mockMethod(
     {
         name: 'getMemberChallenges',
         tokenArg: 0,
@@ -99,10 +98,8 @@ const getMemberChallenges = mockMethod(
 /**
  * Simulate /rest/get_bankroll. Normalized to the flat balance shape the
  * real getBankroll returns.
- *
- * @type {typeof import('../../api/join').getBankroll}
  */
-const getBankroll = mockMethod(
+const getBankroll: typeof joinModule.getBankroll = mockMethod(
     {
         name: 'getBankroll',
         tokenArg: 0,
@@ -117,10 +114,8 @@ const getBankroll = mockMethod(
 /**
  * Simulate /rest/coins_unlock. Fixture 900004 fails (success:false) so the
  * unlock-failure and charged-pending-submit paths can be tested.
- *
- * @type {typeof import('../../api/join').coinsUnlock}
  */
-const coinsUnlock = mockMethod(
+const coinsUnlock: typeof joinModule.coinsUnlock = mockMethod(
     {
         name: 'coinsUnlock',
         tokenArg: 1,

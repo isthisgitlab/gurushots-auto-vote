@@ -5,7 +5,7 @@
  * join and prize-claim pre-steps) and the manual join, running the SAME
  * shared services as the real strategy over the mock endpoints.
  *
- * Built against the assembled mock client (mock/apiClient.js) and reads each
+ * Built against the assembled mock client (mock/apiClient.ts) and reads each
  * endpoint off it at call time, so a method replaced on the client (e.g. a
  * test spy on mockApiClient) is what the pass and the join actually call.
  */
@@ -22,7 +22,8 @@ import { createMemoryEntryAgeLedger } from '../entryAgeStore';
 import { mockScenarioStateLedger } from '../scenarioStateStore';
 import { mockMethod } from './simulate';
 
-/** @import { MockEndpoints } from './apiClient' */
+import type { MockEndpoints } from './apiClient';
+import type * as realModule from '../strategies/real';
 
 // Module-level so snapshots survive across mock cycles within a run — a per-call
 // tracker would look like "first sight" every cycle and never detect anything.
@@ -33,7 +34,7 @@ const mockAutoSpendLedger = createMemoryAutoSpendLedger();
 const mockEntryAgeLedger = createMemoryEntryAgeLedger();
 
 // Endpoints runVotingPass reads off `api`.
-const VOTING_PASS_ENDPOINTS = /** @type {const} */ ([
+const VOTING_PASS_ENDPOINTS = [
     'getActiveChallenges',
     'getVoteImages',
     'submitVotes',
@@ -46,10 +47,10 @@ const VOTING_PASS_ENDPOINTS = /** @type {const} */ ([
     'runTurboMiniGame',
     'searchTagAutocomplete',
     'getCurrentMemberProfile',
-]);
+] as const;
 
 // Endpoints the automatic currency spends use (services/currencyAuto.ts).
-const CURRENCY_ENDPOINTS = /** @type {const} */ ([
+const CURRENCY_ENDPOINTS = [
     'getActiveChallenges',
     'getBankroll',
     'keyUnlock',
@@ -60,10 +61,10 @@ const CURRENCY_ENDPOINTS = /** @type {const} */ ([
     'getImageData',
     'searchTagAutocomplete',
     'getCurrentMemberProfile',
-]);
+] as const;
 
 // Endpoints the join flow uses (services/joinChallenges.ts).
-const JOIN_ENDPOINTS = /** @type {const} */ ([
+const JOIN_ENDPOINTS = [
     'getMemberChallenges',
     'getBankroll',
     'coinsUnlock',
@@ -71,32 +72,26 @@ const JOIN_ENDPOINTS = /** @type {const} */ ([
     'getEligiblePhotos',
     'searchTagAutocomplete',
     'getCurrentMemberProfile',
-]);
+] as const;
 
 // Endpoints for the hourly prize-claim pre-step (services/autoClaim.ts).
-const CLAIM_ENDPOINTS = /** @type {const} */ ([
+const CLAIM_ENDPOINTS = [
     'getMyCompletedChallenges',
     'claimChallengeResources',
     'getMyMissions',
     'claimMissionPrize',
-]);
+] as const;
 
 /**
  * The named endpoints as they are on the client right now.
- *
- * @template {object} C
- * @template {keyof C} K
- * @param {C} client
- * @param {readonly K[]} names
- * @returns {Pick<C, K>}
  */
-const pickEndpoints = (client, names) =>
-    /** @type {Pick<C, K>} */ (Object.fromEntries(names.map((name) => [name, client[name]])));
+const pickEndpoints = <C extends object, K extends keyof C>(client: C, names: readonly K[]): Pick<C, K> =>
+    Object.fromEntries(names.map((name) => [name, client[name]])) as Pick<C, K>;
 
 /**
- * @param {MockEndpoints} client - the assembled mock endpoints
+ * @param client - the assembled mock endpoints
  */
-const createMockStrategy = (client) => {
+const createMockStrategy = (client: MockEndpoints) => {
     // Join deps over the mock endpoints. joinStateStore is null — mock mode must
     // never touch real persisted state (same rationale as cleanupStaleMetadata:null).
     // No acquireUnlockLock either: mock spends no real coins and runs
@@ -108,10 +103,8 @@ const createMockStrategy = (client) => {
      * Simulate a manual single join, running the SAME service the real strategy
      * runs (services/joinChallenges.ts) over the mock endpoints, with a null
      * join-state store (no real state touched).
-     *
-     * @type {typeof import('../strategies/real').joinChallenge}
      */
-    const joinChallenge = mockMethod(
+    const joinChallenge: typeof realModule.joinChallenge = mockMethod(
         {
             name: 'joinChallenge',
             tokenArg: 2,
@@ -137,11 +130,8 @@ const createMockStrategy = (client) => {
      * shared and un-namespaced, and mock challenge ids never match real
      * ones — running cleanup here would purge the user's real voting
      * metadata.
-     *
-     * @param {string} token
-     * @param {string|number|null} [challengeIdFilter]
      */
-    const fetchChallengesAndVote = async (token, challengeIdFilter = null) => {
+    const fetchChallengesAndVote = async (token: string, challengeIdFilter: string | number | null = null) => {
         logger.withCategory('voting').api('Mock fetchChallengesAndVote', null);
         logger.withCategory('api').debug(`Token provided: ${!!token}`, null);
         if (!token) {
@@ -161,7 +151,7 @@ const createMockStrategy = (client) => {
                 logger
                     .withCategory('join')
                     .warning(
-                        `Mock join pass errored: ${/** @type {{ message?: unknown } | null | undefined} */ (error)?.message || error}`,
+                        `Mock join pass errored: ${(error as { message?: unknown } | null | undefined)?.message || error}`,
                         null,
                     );
             }
@@ -172,7 +162,7 @@ const createMockStrategy = (client) => {
                 logger
                     .withCategory('claim')
                     .warning(
-                        `Mock claim pass errored: ${/** @type {{ message?: unknown } | null | undefined} */ (error)?.message || error}`,
+                        `Mock claim pass errored: ${(error as { message?: unknown } | null | undefined)?.message || error}`,
                         null,
                     );
             }

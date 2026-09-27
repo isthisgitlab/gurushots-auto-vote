@@ -8,13 +8,12 @@ import * as settings from '../../settings';
 import * as logger from '../../logger';
 import { simulateApiResponse, mockMethod } from '../simulate';
 import { getSessionCache } from '../sessionCache';
+import type * as activeChallengesModule from '../../strategies/real/activeChallenges';
 
 /**
  * Simulate getting active challenges
- *
- * @type {typeof import('../../strategies/real/activeChallenges').getActiveChallenges}
  */
-const getActiveChallenges = mockMethod(
+const getActiveChallenges: typeof activeChallengesModule.getActiveChallenges = mockMethod(
     {
         name: 'getActiveChallenges',
         tokenArg: 0,

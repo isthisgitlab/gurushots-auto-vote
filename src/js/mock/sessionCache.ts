@@ -7,19 +7,15 @@
  * so a clearSessionCache() is seen by all of them.
  */
 
-/**
- * @import { generateMockChallenges } from './challenges'
- * @import { generateMockVoteImages } from './voting'
- */
+import type { generateMockChallenges } from './challenges';
+import type { generateMockVoteImages } from './voting';
 
-/**
- * @typedef {object} MockSessionCache
- * @property {ReturnType<typeof generateMockChallenges> | null} challenges
- * @property {Map<string, ReturnType<typeof generateMockVoteImages>>} voteImages
- */
+interface MockSessionCache {
+    challenges: ReturnType<typeof generateMockChallenges> | null;
+    voteImages: Map<string, ReturnType<typeof generateMockVoteImages>>;
+}
 
-/** @returns {MockSessionCache} */
-const createSessionCache = () => ({
+const createSessionCache = (): MockSessionCache => ({
     challenges: null,
     voteImages: new Map(), // challengeUrl -> voteImages
 });

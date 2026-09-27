@@ -4,15 +4,14 @@
  */
 
 import { simulateApiResponse, mockMethod } from '../simulate';
+import type * as rewardsModule from '../../api/rewards';
 
 /**
  * Simulate /rest/get_my_completed_challenges: one finished challenge with
  * unclaimed rewards (claim_state CLAIM) and one already claimed, shaped like
  * the captured web payload. A single short page, so paging stops at once.
- *
- * @type {typeof import('../../api/rewards').getMyCompletedChallenges}
  */
-const getMyCompletedChallenges = mockMethod(
+const getMyCompletedChallenges: typeof rewardsModule.getMyCompletedChallenges = mockMethod(
     {
         name: 'getMyCompletedChallenges',
         tokenArg: 0,
@@ -20,7 +19,7 @@ const getMyCompletedChallenges = mockMethod(
     },
     async () => {
         await simulateApiResponse({}, 200);
-        const rewards = (/** @type {string} */ claimState) => ({
+        const rewards = (claimState: string) => ({
             claim_state: claimState,
             sections: [{ type: 'TOTAL', name: 'Total', resources: [{ type: 'COINS', title: 'Coins', value: 60 }] }],
         });
@@ -33,10 +32,8 @@ const getMyCompletedChallenges = mockMethod(
 
 /**
  * Simulate /rest/claim_resources — always confirms.
- *
- * @type {typeof import('../../api/rewards').claimChallengeResources}
  */
-const claimChallengeResources = mockMethod(
+const claimChallengeResources: typeof rewardsModule.claimChallengeResources = mockMethod(
     {
         name: 'claimChallengeResources',
         tokenArg: 1,
@@ -52,10 +49,8 @@ const claimChallengeResources = mockMethod(
  * Simulate /rest/get_my_missions: one completed mission (claim_state CLAIM)
  * and two still in progress (DISABLED) — one a "Win Turbo" mission, so mock
  * mode exercises the mission-aware turbo earn.
- *
- * @type {typeof import('../../api/rewards').getMyMissions}
  */
-const getMyMissions = mockMethod(
+const getMyMissions: typeof rewardsModule.getMyMissions = mockMethod(
     {
         name: 'getMyMissions',
         tokenArg: 0,
@@ -91,10 +86,8 @@ const getMyMissions = mockMethod(
 
 /**
  * Simulate /rest/claim_mission_prizes — always confirms.
- *
- * @type {typeof import('../../api/rewards').claimMissionPrize}
  */
-const claimMissionPrize = mockMethod(
+const claimMissionPrize: typeof rewardsModule.claimMissionPrize = mockMethod(
     {
         name: 'claimMissionPrize',
         tokenArg: 1,

@@ -1,5 +1,5 @@
 /**
- * mock/challenges.js — the generated active-challenge list for mock mode.
+ * mock/challenges.ts — the generated active-challenge list for mock mode.
  */
 
 const { generateMockChallenges } = require('../../src/js/mock/challenges');

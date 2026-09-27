@@ -5,14 +5,13 @@
 
 import { simulateApiResponse, mockMethod } from '../simulate';
 import { MOCK_LIBRARY_TAGS } from '../photoLibrary';
+import type * as tagsModule from '../../api/tags';
 
 /**
  * Simulate /rest/get_current_member_profile — the token-only identity read
  * that supplies member_id for searchTagAutocomplete below.
- *
- * @type {typeof import('../../api/tags').getCurrentMemberProfile}
  */
-const getCurrentMemberProfile = mockMethod(
+const getCurrentMemberProfile: typeof tagsModule.getCurrentMemberProfile = mockMethod(
     {
         name: 'getCurrentMemberProfile',
         tokenArg: 0,
@@ -28,14 +27,12 @@ const getCurrentMemberProfile = mockMethod(
  * Simulate /rest/search_autocomplete: SUBSTRING match over the tags the
  * mock library actually carries, capped like the live endpoint.
  *
- * The pairing with getEligiblePhotos (mock/endpoints/submissions.js) is the
+ * The pairing with getEligiblePhotos (mock/endpoints/submissions.ts) is the
  * point — that one matches a tag exactly, this one matches inside it — so
  * mock mode reproduces the real resolution problem: searching "flow" finds
  * no photos, autocomplete turns it into "flower", and THAT finds photos.
- *
- * @type {typeof import('../../api/tags').searchTagAutocomplete}
  */
-const searchTagAutocomplete = mockMethod(
+const searchTagAutocomplete: typeof tagsModule.searchTagAutocomplete = mockMethod(
     {
         name: 'searchTagAutocomplete',
         tokenArg: 0,

@@ -1,5 +1,5 @@
 /**
- * mock/index.js — the mock endpoints the shared services run against in mock
+ * mock/index.ts — the mock endpoints the shared services run against in mock
  * mode. Uses the REAL mock data modules (index.test.js stubs them) and fake
  * timers, so the simulated latency never slows the suite.
  *

@@ -115,7 +115,7 @@ Domain terms used throughout, in reader's terms:
 - `now` is re-read per challenge (a pass can take minutes, so a single clock would miss windows that open
   mid-pass).
 - **Auto-join is a pre-step of the pass, not a separate schedule.** `runJoinPass` (`services/joinChallenges.ts`)
-  runs inside the shared `fetchChallengesAndVote` (`strategies/real/index.js` real / `mock/strategy.js` mock) before the
+  runs inside the shared `fetchChallengesAndVote` (`strategies/real/index.js` real / `mock/strategy.ts` mock) before the
   voting pass, so all three platforms get it without forking `runVotingPass`. It is skipped for a
   single-challenge run and never allowed to abort voting (its errors are caught and logged). The `autoJoin`
   enable is **resolved per candidate by rule (see challenge rules below) → master**, not a hard global gate —
@@ -208,7 +208,7 @@ Domain terms used throughout, in reader's terms:
   `api/boost.ts#boostImage`, flags it `boosted`) and `activeChallenges.js` (coalesces concurrent
   `getActiveChallenges` calls per token and pins first-seen titles via `services/challengeTitlePin.ts` on a
   successful fetch only). `apiFactory.js` assembles the real surface from these and selects it or
-  `mock/index.js#mockApiClient`.
+  `mock/index.ts#mockApiClient`.
 - All POSTs go through `makePostRequest()` (`api/api-client.ts` — around L204). **Contract: it returns the
   response body on success and `null` on ultimate failure — it never throws.** Every caller branches on
   `null`, not on a catch.

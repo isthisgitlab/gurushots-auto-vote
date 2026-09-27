@@ -1,5 +1,5 @@
 /**
- * Tests for submissions.js — getEligiblePhotos and submitToChallenge.
+ * Tests for submissions.ts — getEligiblePhotos and submitToChallenge.
  */
 
 const {

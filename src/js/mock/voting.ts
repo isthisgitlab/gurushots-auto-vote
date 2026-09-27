@@ -4,15 +4,12 @@
  * Mock responses for voting operations
  */
 
-/** @import { Challenge } from '../types/gurushots' */
+import type { Challenge } from '../types/gurushots';
 
 /**
  * Generate dynamic mock vote images for different challenges
- *
- * @param {string} challengeUrl
- * @param {Challenge | null} [originalChallenge]
  */
-const generateMockVoteImages = (challengeUrl, originalChallenge = null) => {
+const generateMockVoteImages = (challengeUrl: string, originalChallenge: Challenge | null = null) => {
     const photographers = [
         'John Doe',
         'Jane Smith',
@@ -31,8 +28,7 @@ const generateMockVoteImages = (challengeUrl, originalChallenge = null) => {
         'Alex Thompson',
     ];
 
-    /** @type {Record<string, string[]>} */
-    const titles = {
+    const titles: Record<string, string[]> = {
         'street-photography-2024': [
             'Urban Life',
             'City Lights',

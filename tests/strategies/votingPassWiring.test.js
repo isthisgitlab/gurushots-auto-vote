@@ -2,7 +2,7 @@
  * Guards the hand-built `api` surface both strategies hand to runVotingPass.
  *
  * WHY THIS EXISTS: src/js/strategies/real/index.js (an object literal) and
- * src/js/mock/strategy.js (the VOTING_PASS_ENDPOINTS name list) each list every
+ * src/js/mock/strategy.ts (the VOTING_PASS_ENDPOINTS name list) each list every
  * method by hand, while
  * votingOrchestrator turns it into the `fillDeps` bundle the auto-fill pipeline
  * consumes. Nothing forces the two lists to agree — a method on the API

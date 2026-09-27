@@ -9,15 +9,14 @@ import * as votingLogic from '../../services/VotingLogic';
 import * as autoFill from '../../services/autoFill';
 import { simulateApiResponse, simulateApiError, mockMethod } from '../simulate';
 
-/** @import { Challenge, MemberBoost, SuccessResponse } from '../../types/gurushots' */
+import type * as applyBoostModule from '../../strategies/real/applyBoost';
+import type * as boostModule from '../../api/boost';
 
 /**
  * Simulate applying boost from the boost state the challenge carries; a
  * challenge without one reads as boost not available.
- *
- * @type {typeof import('../../strategies/real/applyBoost').applyBoost}
  */
-const applyBoost = mockMethod(
+const applyBoost: typeof applyBoostModule.applyBoost = mockMethod(
     {
         name: 'applyBoost',
         tokenArg: 1,
@@ -52,10 +51,8 @@ const applyBoost = mockMethod(
 
 /**
  * Simulate applying boost to a specific entry
- *
- * @type {typeof import('../../api/boost').applyBoostToEntry}
  */
-const applyBoostToEntry = mockMethod(
+const applyBoostToEntry: typeof boostModule.applyBoostToEntry = mockMethod(
     {
         name: 'applyBoostToEntry',
         tokenArg: 2,

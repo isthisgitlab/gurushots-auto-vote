@@ -1,5 +1,5 @@
 /**
- * Tests for turbo.js
+ * Tests for turbo.ts
  */
 
 const { getChallengeTurbo, submitTurboSelection, applyTurbo } = require('../../src/js/api/turbo');

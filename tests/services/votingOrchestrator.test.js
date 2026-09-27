@@ -139,7 +139,7 @@ describe('metadata cleanup injection', () => {
         await runVotingPass('tok', null, deps(api));
         // Nothing to assert beyond "did not throw and completed" — the null
         // injection point is the guarantee; the mock binder test pins that
-        // mock/strategy.js actually passes null.
+        // mock/strategy.ts actually passes null.
     });
 });
 
@@ -871,7 +871,7 @@ describe('voteOnNewEntry — gate, arm, record', () => {
 
 describe('failed challenge fetch', () => {
     // makePostRequest resolves null once retries are exhausted (the GuruShots API returning
-    // 5xx for a while is the realistic trigger). challenges.js turns that into an empty list,
+    // 5xx for a while is the realistic trigger). challenges.ts turns that into an empty list,
     // which must stay distinguishable from "you have no active challenges" — otherwise an outage
     // closes the pass as a success and the scheduler re-arms as if everything were healthy.
     test('reports a failure instead of a successful empty pass', async () => {

@@ -1,5 +1,5 @@
 /**
- * Tests for boost.js
+ * Tests for boost.ts
  *
  * Tests the boost application functionality.
  */
@@ -10,7 +10,7 @@ const { applyBoost } = require('../../src/js/strategies/real/applyBoost');
 // Mock settings: default boostImageIndex=1 so the picker targets entries[0]
 // and falls back backward (with wrap) past any turboed primary. Other
 // settings methods default to undefined so a future settings read added to
-// boost.js will surface as `undefined` consistently rather than throwing.
+// boost.ts will surface as `undefined` consistently rather than throwing.
 jest.mock('../../src/js/settings', () => ({
     getEffectiveSetting: jest.fn((key) => (key === 'boostImageIndex' ? 1 : undefined)),
     getSetting: jest.fn(() => undefined),

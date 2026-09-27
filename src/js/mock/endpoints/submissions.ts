@@ -6,20 +6,19 @@
 import * as logger from '../../logger';
 import { simulateApiResponse, mockMethod } from '../simulate';
 import { buildLibraryPhotos, buildImageStats } from '../photoLibrary';
+import type * as submissionsModule from '../../api/submissions';
 
 /**
  * Simulate fetching the user's challenge-eligible photo library.
  * Mirrors /rest/get_photos_private; returns the mock library
- * (mock/photoLibrary.js).
+ * (mock/photoLibrary.ts).
  *
  * When options.search is a non-empty string, mirror the server's
  * library filter by returning only items carrying that exact tag
  * (case-insensitive) — so the auto-fill search path and its
  * unfiltered fallback can both be exercised in mock mode.
- *
- * @type {typeof import('../../api/submissions').getEligiblePhotos}
  */
-const getEligiblePhotos = mockMethod(
+const getEligiblePhotos: typeof submissionsModule.getEligiblePhotos = mockMethod(
     {
         name: 'getEligiblePhotos',
         tokenArg: 1,
@@ -49,10 +48,8 @@ const getEligiblePhotos = mockMethod(
  * where the REAL popularity signals live: the library endpoint above
  * returns votes=0 and no achievements for every photo on the live API, so
  * auto-fill enriches candidates from here before ranking them.
- *
- * @type {typeof import('../../api/submissions').getImageData}
  */
-const getImageData = mockMethod(
+const getImageData: typeof submissionsModule.getImageData = mockMethod(
     {
         name: 'getImageData',
         tokenArg: 1,
@@ -77,10 +74,8 @@ const getImageData = mockMethod(
 /**
  * Simulate submitting one or more photos to a challenge. Mirrors
  * /rest/submit_to_challenge; returns { ok, raw }.
- *
- * @type {typeof import('../../api/submissions').submitToChallenge}
  */
-const submitToChallenge = mockMethod(
+const submitToChallenge: typeof submissionsModule.submitToChallenge = mockMethod(
     {
         name: 'submitToChallenge',
         tokenArg: 2,

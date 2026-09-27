@@ -5,7 +5,7 @@
  * real-mode strategy surface apiFactory exposes: the voting pass (with its
  * mission read and join and prize-claim pre-steps), manual join, the Turbo mini-game, and the
  * entry-picking boost and title-pinned challenge read. The mock counterpart
- * is mockApiClient in mock/index.js.
+ * is mockApiClient in mock/index.ts.
  */
 
 import { getActiveChallenges } from './activeChallenges';

@@ -24,7 +24,7 @@
  *   4. Budget decrements only after a confirmed unlock.
  *   5. Cancellation is honored between candidates and before each spend.
  *
- * deps (injected by strategies/real/index.js real / mock/strategy.js mock):
+ * deps (injected by strategies/real/index.js real / mock/strategy.ts mock):
  *   { getMemberChallenges, getBankroll, coinsUnlock, submitToChallenge,
  *     getEligiblePhotos, joinStateStore, acquireUnlockLock } — joinStateStore is
  *   null and acquireUnlockLock absent in mock (no real state touched, mirroring

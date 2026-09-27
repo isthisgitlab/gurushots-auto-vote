@@ -1,5 +1,5 @@
 /**
- * mock/voting.js — generated vote-image payloads for mock mode.
+ * mock/voting.ts — generated vote-image payloads for mock mode.
  */
 
 const { generateMockVoteImages } = require('../../src/js/mock/voting');

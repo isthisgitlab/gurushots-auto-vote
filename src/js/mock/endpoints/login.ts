@@ -5,13 +5,12 @@
 import * as auth from '../auth';
 import * as logger from '../../logger';
 import { simulateApiResponse, simulateApiError } from '../simulate';
+import type * as loginModule from '../../api/login';
 
 /**
  * Simulate authentication
- *
- * @type {typeof import('../../api/login').authenticate}
  */
-const authenticate = async (email, password) => {
+const authenticate: typeof loginModule.authenticate = async (email, password) => {
     logger
         .withCategory('authentication')
         .debug(`Mock authentication with: ${email}, password: ${password ? '[hidden]' : 'no password'}`, null);

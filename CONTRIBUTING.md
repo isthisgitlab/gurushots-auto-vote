@@ -62,7 +62,6 @@ src/
 │   ├── windows/      # Electron window lifecycle
 │   ├── apiFactory.js # Selects real vs mock at runtime (settings.mock)
 │   ├── index.js      # Electron main process entry
-│   ├── login.js      # Auth flow shared by GUI/CLI
 │   ├── logger.ts     # Category-scoped logger
 │   ├── metadata.ts   # App metadata helpers
 │   ├── preload.js    # Electron preload (context isolation)
