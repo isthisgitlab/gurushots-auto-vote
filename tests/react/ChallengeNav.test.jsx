@@ -68,6 +68,7 @@ describe('ChallengeNav', () => {
 
         await waitFor(() => expect(tuned.className).toMatch(/btn-accent/));
         expect(tuned.textContent).toMatch(/⚙️/);
+        expect(tuned.className).not.toMatch(/btn-info/);
         expect(tuned.querySelector('.truncate').getAttribute('title')).toMatch(/^Tuned — ./);
 
         expect(plain.className).not.toMatch(/btn-accent/);
@@ -76,17 +77,42 @@ describe('ChallengeNav', () => {
     });
 
     test('marks an automatically profiled challenge without a manual override', async () => {
+        window.api.getChallengeOverrides.mockImplementation(async (id) => (id === '4' ? { exposureTarget: 90 } : {}));
         window.api.getTitleProfile.mockImplementation(async (_title, id) =>
-            id === '2' ? { name: '4 pics', values: { exposureTarget: 90 }, suppressed: false } : null,
+            id === '2' || id === '4'
+                ? { name: '4 pics', values: { exposureTarget: 90 }, suppressed: false }
+                : id === '3'
+                  ? { name: '4 pics', values: {}, suppressed: true }
+                  : null,
         );
 
-        render(<ChallengeNav challenges={[challenge(1, 'Plain'), challenge(2, 'Profiled')]} />);
+        render(
+            <ChallengeNav
+                challenges={[
+                    challenge(1, 'Plain'),
+                    challenge(2, 'Profiled'),
+                    challenge(3, 'Suppressed'),
+                    challenge(4, 'Mixed'),
+                ]}
+            />,
+        );
 
         const profiled = screen.getByRole('button', { name: /Profiled/ });
         const plain = screen.getByRole('button', { name: /Plain/ });
-        await waitFor(() => expect(profiled.className).toMatch(/btn-accent/));
-        expect(profiled.textContent).toMatch(/⚙️/);
+        const suppressed = screen.getByRole('button', { name: /Suppressed/ });
+        const mixed = screen.getByRole('button', { name: /Mixed/ });
+        await waitFor(() => expect(profiled.className).toMatch(/btn-info/));
+        expect(profiled.textContent).toMatch(/🔄/);
+        expect(profiled.className).not.toMatch(/btn-accent/);
+        expect(profiled.querySelector('.truncate').getAttribute('title')).toContain('app.titleRuleProfile');
         expect(plain.className).not.toMatch(/btn-accent/);
+        expect(suppressed.className).not.toMatch(/btn-info/);
+        expect(suppressed.textContent).not.toMatch(/🔄/);
+        expect(mixed.className).toMatch(/btn-info/);
+        expect(mixed.textContent).toMatch(/⚙️.*🔄/);
+        expect(mixed.querySelector('.truncate').getAttribute('title')).toContain(
+            'app.customSettingsHint · app.titleRuleProfile',
+        );
     });
 
     test('marks nothing when a per-challenge override read fails', async () => {
@@ -130,7 +156,7 @@ describe('ChallengeNav', () => {
             fireSettingsChanged();
         });
 
-        await waitFor(() => expect(chip.className).toMatch(/btn-accent/));
+        await waitFor(() => expect(chip.className).toMatch(/btn-info/));
     });
 
     test('reads each id once when the list repeats one', async () => {

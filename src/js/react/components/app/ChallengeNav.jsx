@@ -13,12 +13,9 @@ import { isLowExposure } from '@/utils/challengeAlerts';
  * user who knows the name can click instead of scrolling. Renders nothing when
  * there are no challenges. Mirrors BoostWindowBanner, but for the full list.
  *
- * Challenges carrying a per-challenge override or an automatic profile get an
- * accent fill and a ⚙️ prefix, so the tuned ones are findable without scrolling
- * the list. Filled rather than `btn-outline`:
- * outline paints the label in the raw accent colour, which is 1.9:1 on the
- * light theme's white base-100 (AA wants 4.5:1), while the filled pair
- * accent-content-on-accent is 5.1:1 in both themes.
+ * Manual overrides get an accent fill and ⚙️; automatic profiles get an info
+ * fill and 🔄. A challenge with both shows both icons on the info fill. The
+ * icons and tooltip identify sources without relying on colour alone.
  *
  * Each chip also leads with a status dot — pulsing blue for an open boost
  * window, red for low exposure (utils/challengeAlerts) — so the whole
@@ -40,18 +37,28 @@ export function ChallengeNav({ challenges }) {
     return (
         <ChipListPanel icon="📋" label={t('app.jumpToChallenge')} count={list.length}>
             {list.map((c) => {
-                const custom = customized.has(String(c?.id));
+                const kind = customized.get(String(c?.id));
+                const manual = kind === 'manual' || kind === 'both';
+                const automatic = kind === 'profile' || kind === 'both';
+                const hint = [manual && t('app.customSettingsHint'), automatic && t('app.titleRuleProfile')]
+                    .filter(Boolean)
+                    .join(' · ');
                 const boostOpen = isBoostWindowOpen(c?.member?.boost, nowSec);
                 const lowExposure = isLowExposure(c, nowSec);
                 return (
-                    <ChallengeChip key={c?.id} challengeId={c?.id} className={custom ? 'btn-accent' : ''}>
+                    <ChallengeChip
+                        key={c?.id}
+                        challengeId={c?.id}
+                        className={automatic ? 'btn-info' : manual ? 'btn-accent' : ''}
+                    >
                         {boostOpen && <PulseDot variant="info" size="status-sm" />}
                         {lowExposure && <PulseDot variant="error" pulse={false} size="status-sm" />}
-                        {custom && <span aria-hidden="true">⚙️ </span>}
-                        <ChipTitle hint={custom ? t('app.customSettingsHint') : undefined}>{c?.title}</ChipTitle>
+                        {manual && <span aria-hidden="true">⚙️ </span>}
+                        {automatic && <span aria-hidden="true">🔄 </span>}
+                        <ChipTitle hint={hint}>{c?.title}</ChipTitle>
                         {boostOpen && <span className="sr-only"> ({t('app.boostOpenBadge')})</span>}
                         {lowExposure && <span className="sr-only"> ({t('app.lowExposure')})</span>}
-                        {custom && <span className="sr-only"> ({t('app.customSettingsHint')})</span>}
+                        {hint && <span className="sr-only"> ({hint})</span>}
                     </ChallengeChip>
                 );
             })}

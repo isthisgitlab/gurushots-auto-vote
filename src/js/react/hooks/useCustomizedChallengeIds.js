@@ -4,20 +4,21 @@ import * as ipc from '@/api/ipc';
 
 // Stable empty result so consumers never see a changing identity while the
 // first fetch is in flight (or after a failed one).
-/** @type {Set<string>} */
-const NONE = new Set();
+/** @typedef {'manual' | 'profile' | 'both'} CustomizationKind */
+/** @type {Map<string, CustomizationKind>} */
+const NONE = new Map();
 
 /**
  * Ids of challenges with manual overrides or an unsuppressed automatic profile,
- * so ChallengeNav can mark either kind of customized challenge.
+ * with their source so ChallengeNav can mark each kind distinctly.
  *
- * Reads overrides first, then checks the automatic profile where no manual
- * override exists. Neither channel has a bulk reader.
+ * Reads both sources because a challenge can have manual overrides and an
+ * automatic profile at the same time. Neither channel has a bulk reader.
  * Re-runs on settings-changed so the marker tracks both rule edits and
  * per-challenge settings changes.
  *
  * @param {Array<{id: string|number, title: string}>} challenges - always an array (ChallengeNav normalizes)
- * @returns {Set<string>} ids, as strings
+ * @returns {Map<string, CustomizationKind>} ids and their customization source
  */
 export function useCustomizedChallengeIds(challenges) {
     // Key on ids and titles, not challenge objects: routine refreshes often
@@ -40,15 +41,22 @@ export function useCustomizedChallengeIds(challenges) {
     const queryFn = useCallback(async () => {
         const entries = /** @type {Array<[string, string]>} */ (JSON.parse(entriesKey));
         if (entries.length === 0) return NONE;
-        const customized = await Promise.all(
+        /** @type {Array<CustomizationKind | null>} */
+        const kinds = await Promise.all(
             entries.map(async ([id, title]) => {
                 const overrides = await ipc.getChallengeOverrides(id);
-                if (overrides && Object.keys(overrides).length > 0) return true;
                 const profile = await ipc.getTitleProfile(title, id);
-                return profile != null && !profile.suppressed;
+                const manual = overrides && Object.keys(overrides).length > 0;
+                const automatic = profile != null && !profile.suppressed;
+                return manual ? (automatic ? 'both' : 'manual') : automatic ? 'profile' : null;
             }),
         );
-        return new Set(entries.filter((_, i) => customized[i]).map(([id]) => id));
+        /** @type {Map<string, CustomizationKind>} */
+        const customized = new Map();
+        entries.forEach(([id], i) => {
+            if (kinds[i]) customized.set(id, kinds[i]);
+        });
+        return customized;
     }, [entriesKey]);
 
     // latestOnly: two reads racing each other can resolve out of order, and the
@@ -59,7 +67,7 @@ export function useCustomizedChallengeIds(challenges) {
     // read instead of leaving the older set on screen.
     const { data } = useIpcQuery(queryFn, { initialData: NONE, subscribe: true, latestOnly: true });
 
-    // queryFn only ever resolves a Set and a failed read keeps the previous
-    // value, so `data` is always a Set here.
+    // queryFn only ever resolves a Map and a failed read keeps the previous
+    // value, so `data` is always a Map here.
     return data;
 }
