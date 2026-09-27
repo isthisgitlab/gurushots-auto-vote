@@ -20,7 +20,8 @@ concurrency:
 
 jobs:
     test:
-        runs-on: ubuntu-slim
+        # Oxlint's JS plugin allocator crashes on the 5 GB ubuntu-slim runner.
+        runs-on: ubuntu-latest
 
         steps:
             - name: Checkout code
@@ -190,7 +191,7 @@ jobs:
     knip:
         # knip runs on a separate, standard runner: its parser (oxc-parser)
         # allocates a ~2 GiB ArrayBuffer for raw transfer, which the
-        # memory-constrained ubuntu-slim runner used by the `test` job cannot
+        # memory-constrained ubuntu-slim runner cannot
         # satisfy (it crashes with "Array buffer allocation failed"). oxc picks
         # raw transfer purely from the platform (64-bit + Node ≥ 22) with no
         # opt-out, so the fix is more memory rather than a flag.
