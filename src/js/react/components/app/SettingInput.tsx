@@ -7,17 +7,20 @@ import { interp } from '@/utils/interp';
 
 export { SCHEDULED_FILL_MAX_ENTRIES } from './TimeSettingFields';
 
-/**
- * @import { ComponentChildren, ComponentType } from 'preact'
- * @import { SerializableSchemaEntry } from '../../../ipc/settings.handlers'
- * @import { SettingChangeHandler, SettingFieldProps, SettingResetHandler, Translate } from '../../../types/settingsEditor'
- */
+import type { ComponentChildren, ComponentType } from 'preact';
+import type { SerializableSchemaEntry } from '../../../ipc/settings.handlers';
+import type {
+    SettingChangeHandler,
+    SettingFieldProps,
+    SettingResetHandler,
+    Translate,
+} from '../../../types/settingsEditor';
+import type { JSX } from 'preact';
 
 // Setting types rendered as several controls (each with its own aria-label)
 // rather than one: their caption names a role="group" wrapper instead of
 // pointing a <label> at a single control.
-/** @type {Set<string | undefined>} */
-const GROUP_TYPES = new Set(['time', 'schedule', 'timeOfDayList', 'timeList']);
+const GROUP_TYPES: Set<string | undefined> = new Set(['time', 'schedule', 'timeOfDayList', 'timeList']);
 
 /**
  * Caption for a setting control, shared by the global and per-challenge
@@ -25,10 +28,18 @@ const GROUP_TYPES = new Set(['time', 'schedule', 'timeOfDayList', 'timeList']);
  * control by `inputId`; a multi-control one (`group`, derived from the schema
  * `type` for SettingInput) gets a caption whose id `${inputId}-label` names the
  * control group.
- *
- * @param {{ inputId: string, type?: string, group?: boolean, children?: ComponentChildren }} props
  */
-export function SettingLabel({ inputId, type, group = GROUP_TYPES.has(type), children }) {
+export function SettingLabel({
+    inputId,
+    type,
+    group = GROUP_TYPES.has(type),
+    children,
+}: {
+    inputId: string;
+    type?: string;
+    group?: boolean;
+    children?: ComponentChildren;
+}) {
     if (group) {
         return (
             <div className="label" id={`${inputId}-label`}>
@@ -45,10 +56,16 @@ export function SettingLabel({ inputId, type, group = GROUP_TYPES.has(type), chi
 
 /**
  * One-line setting control(s) followed by the setting's reset button.
- *
- * @param {{ settingKey: string, onReset?: SettingResetHandler | null, children?: ComponentChildren }} props
  */
-function ControlRow({ settingKey, onReset, children }) {
+function ControlRow({
+    settingKey,
+    onReset,
+    children,
+}: {
+    settingKey: string;
+    onReset?: SettingResetHandler | null;
+    children?: ComponentChildren;
+}) {
     return (
         <div className="flex items-center gap-2">
             {children}
@@ -58,39 +75,41 @@ function ControlRow({ settingKey, onReset, children }) {
 }
 
 // Callers pass TagsField's already-normalised array, so no guard is needed here.
-/** @param {unknown[]} arr @returns {string} */
-const tagsArrayToText = (arr) => arr.join(', ');
-/** @param {string} text @returns {string[]} */
-const tagsTextToArray = (text) =>
+const tagsArrayToText = (arr: unknown[]): string => arr.join(', ');
+const tagsTextToArray = (text: string): string[] =>
     text
         .split(',')
         .map((s) => s.trim())
         .filter((s) => s.length > 0);
-/** @param {string} text @returns {string} */
-const tagsDraftKey = (text) => tagsTextToArray(text).join(LIST_FINGERPRINT_SEP);
+const tagsDraftKey = (text: string): string => tagsTextToArray(text).join(LIST_FINGERPRINT_SEP);
 
 /**
  * Tag list editor. Tracks the raw text locally so the user can type
  * commas and trailing spaces without the array round-trip eating them
  * mid-keystroke. Re-syncs when the array prop is replaced from outside
  * (reset button, reload).
- *
- * @param {{
- *   id: string,
- *   settingKey: string,
- *   value: unknown,
- *   onChange: SettingChangeHandler,
- *   onReset?: SettingResetHandler | null,
- *   placeholder?: string,
- *   disabled?: boolean,
- * }} props
  */
-export function TagsField({ id, settingKey, value, onChange, onReset, placeholder, disabled = false }) {
+export function TagsField({
+    id,
+    settingKey,
+    value,
+    onChange,
+    onReset,
+    placeholder,
+    disabled = false,
+}: {
+    id: string;
+    settingKey: string;
+    value: unknown;
+    onChange: SettingChangeHandler;
+    onReset?: SettingResetHandler | null;
+    placeholder?: string;
+    disabled?: boolean;
+}) {
     const arr = Array.isArray(value) ? value : [];
     const [draft, setDraft] = useListDraft(arr, tagsArrayToText, tagsDraftKey);
 
-    /** @param {import('preact').JSX.TargetedEvent<HTMLInputElement, Event>} e */
-    const handleChange = (e) => {
+    const handleChange = (e: JSX.TargetedEvent<HTMLInputElement, Event>) => {
         setDraft(e.currentTarget.value);
         onChange(settingKey, tagsTextToArray(e.currentTarget.value));
     };
@@ -112,10 +131,8 @@ export function TagsField({ id, settingKey, value, onChange, onReset, placeholde
 
 /**
  * A schema `tags` setting: TagsField with the shared placeholder.
- *
- * @param {SettingFieldProps} props
  */
-function TagsSetting({ id, settingKey, value, onChange, onReset, disabled }) {
+function TagsSetting({ id, settingKey, value, onChange, onReset, disabled }: SettingFieldProps) {
     const { t } = useTranslation();
     return (
         <TagsField
@@ -130,8 +147,7 @@ function TagsSetting({ id, settingKey, value, onChange, onReset, disabled }) {
     );
 }
 
-/** @param {SettingFieldProps} props */
-function BooleanField({ id, settingKey, value, onChange, onReset, disabled }) {
+function BooleanField({ id, settingKey, value, onChange, onReset, disabled }: SettingFieldProps) {
     return (
         <ControlRow settingKey={settingKey} onReset={onReset}>
             <input
@@ -154,12 +170,8 @@ function BooleanField({ id, settingKey, value, onChange, onReset, disabled }) {
  * border, no message — while Save writes '' straight through to zod, which
  * rejects it with the generic "check the highlighted values" banner and
  * nothing highlighted.
- *
- * @param {unknown} value
- * @param {Pick<SerializableSchemaEntry, 'min' | 'max'>} bounds
- * @returns {boolean}
  */
-function isNumberInvalid(value, { min, max }) {
+function isNumberInvalid(value: unknown, { min, max }: Pick<SerializableSchemaEntry, 'min' | 'max'>): boolean {
     if (value === '' || value === null || value === undefined) return true;
     const numeric = Number(value);
     return (
@@ -169,12 +181,7 @@ function isNumberInvalid(value, { min, max }) {
     );
 }
 
-/**
- * @param {Pick<SerializableSchemaEntry, 'min' | 'max'>} bounds
- * @param {Translate} t
- * @returns {string}
- */
-function numberRangeMessage({ min, max }, t) {
+function numberRangeMessage({ min, max }: Pick<SerializableSchemaEntry, 'min' | 'max'>, t: Translate): string {
     const hasMin = typeof min === 'number';
     if (hasMin && typeof max === 'number') {
         return t('app.validationOutOfRange').replace('{min}', String(min)).replace('{max}', String(max));
@@ -187,18 +194,14 @@ function numberRangeMessage({ min, max }, t) {
  * rather than writing 0, which zod rejects for min-1 keys like exposure — the
  * range check then explains the blank instead of a save failure for a value
  * the user never typed.
- *
- * @param {string} raw
- * @returns {number | ''}
  */
-function parseNumberInput(raw) {
+function parseNumberInput(raw: string): number | '' {
     if (raw === '') return '';
     const parsed = parseInt(raw, 10);
     return Number.isNaN(parsed) ? '' : parsed;
 }
 
-/** @param {SettingFieldProps} props */
-function NumberField({ id, settingKey, config, value, onChange, onReset, disabled }) {
+function NumberField({ id, settingKey, config, value, onChange, onReset, disabled }: SettingFieldProps) {
     const { t } = useTranslation();
     const invalid = isNumberInvalid(value, config);
     return (
@@ -211,7 +214,7 @@ function NumberField({ id, settingKey, config, value, onChange, onReset, disable
                     min={config.min}
                     max={config.max}
                     // A number or '' (SettingInput's normalisation); the DOM coerces either.
-                    value={/** @type {number | string} */ (value)}
+                    value={value as number | string}
                     onChange={(e) => onChange(settingKey, parseNumberInput(e.currentTarget.value))}
                     disabled={disabled}
                 />
@@ -222,8 +225,7 @@ function NumberField({ id, settingKey, config, value, onChange, onReset, disable
     );
 }
 
-/** @param {SettingFieldProps} props */
-function TextField({ id, settingKey, value, onChange, onReset, disabled }) {
+function TextField({ id, settingKey, value, onChange, onReset, disabled }: SettingFieldProps) {
     return (
         <ControlRow settingKey={settingKey} onReset={onReset}>
             <input
@@ -231,7 +233,7 @@ function TextField({ id, settingKey, value, onChange, onReset, disabled }) {
                 type="text"
                 className="input input-sm"
                 // A string for every text-typed schema key; the DOM coerces anything else.
-                value={/** @type {string} */ (value)}
+                value={value as string}
                 onChange={(e) => onChange(settingKey, e.currentTarget.value)}
                 disabled={disabled}
             />
@@ -243,10 +245,8 @@ function TextField({ id, settingKey, value, onChange, onReset, disabled }) {
  * The `scenario` assignment: a pick of the stored scenarios ('' = none). A
  * name that no longer exists stays visible — marked as missing — so the user
  * sees the stale assignment instead of it silently reading as "none".
- *
- * @param {SettingFieldProps} props
  */
-function ScenarioField({ id, settingKey, value, onChange, onReset, disabled }) {
+function ScenarioField({ id, settingKey, value, onChange, onReset, disabled }: SettingFieldProps) {
     const { t } = useTranslation();
     const { scenarios } = useScenarios();
     const names = Object.keys(scenarios);
@@ -278,11 +278,8 @@ function ScenarioField({ id, settingKey, value, onChange, onReset, disabled }) {
 
 /**
  * Get default value for a config type to prevent uncontrolled inputs
- *
- * @param {string | undefined} type
- * @returns {number | boolean | never[] | string}
  */
-function getDefaultForType(type) {
+function getDefaultForType(type: string | undefined): number | boolean | never[] | string {
     switch (type) {
         case 'time':
         case 'number':
@@ -304,8 +301,7 @@ function getDefaultForType(type) {
 // onReset, disabled }. The timeOfDayList values look device-local but are
 // interpreted in the app timezone setting — the surrounding modal renders a
 // hint naming the zone.
-/** @type {Map<string | undefined, ComponentType<SettingFieldProps>>} */
-const FIELD_BY_TYPE = new Map([
+const FIELD_BY_TYPE: Map<string | undefined, ComponentType<SettingFieldProps>> = new Map([
     ['tags', TagsSetting],
     ['schedule', ScheduleField],
     ['timeOfDayList', TimeOfDayListField],
@@ -318,23 +314,12 @@ const FIELD_BY_TYPE = new Map([
 
 // Row-list fields render inside a role="group" wrapper named by the
 // SettingLabel caption; TimeField carries that role on its own row.
-/** @type {Set<string | undefined>} */
-const GROUP_WRAPPED_TYPES = new Set(['schedule', 'timeOfDayList', 'timeList']);
+const GROUP_WRAPPED_TYPES: Set<string | undefined> = new Set(['schedule', 'timeOfDayList', 'timeList']);
 
 /**
  * Schema-driven input renderer for settings. `id` goes on the control a
  * SettingLabel with the same `inputId` points at; multi-control types instead
  * render a role="group" named by that caption (see SettingLabel).
- *
- * @param {{
- *   settingKey: string,
- *   config?: SerializableSchemaEntry | null,
- *   value: unknown,
- *   onChange: SettingChangeHandler,
- *   onReset?: SettingResetHandler | null,
- *   disabled?: boolean,
- *   id?: string,
- * }} props
  */
 export function SettingInput({
     settingKey,
@@ -344,6 +329,14 @@ export function SettingInput({
     onReset,
     disabled = false,
     id = `setting-${settingKey}`,
+}: {
+    settingKey: string;
+    config?: SerializableSchemaEntry | null;
+    value: unknown;
+    onChange: SettingChangeHandler;
+    onReset?: SettingResetHandler | null;
+    disabled?: boolean;
+    id?: string;
 }) {
     // Guard against missing config
     if (!config) {

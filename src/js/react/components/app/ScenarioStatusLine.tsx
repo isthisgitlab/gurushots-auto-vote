@@ -2,16 +2,21 @@ import { useTranslation } from '@/contexts/TranslationContext';
 import { formatDuration } from '@/utils/formatters';
 import { useTick } from '@/hooks/useTick';
 import { interp } from '@/utils/interp';
+import type * as useScenarioStatusModule from '@/api/useScenarioStatus';
 
 /**
  * Where a challenge is in its scenario (useScenarioStatus): the scenario, its
  * phase and when it next looks — plus the last problem, so a stuck step is
  * visible on the card rather than only in the logs. Renders nothing for a
  * challenge without a scenario. `compact` is the one-line tile variant.
- *
- * @param {{status: ReturnType<typeof import('@/api/useScenarioStatus').useScenarioStatus>, compact?: boolean}} props
  */
-export function ScenarioStatusLine({ status, compact = false }) {
+export function ScenarioStatusLine({
+    status,
+    compact = false,
+}: {
+    status: ReturnType<typeof useScenarioStatusModule.useScenarioStatus>;
+    compact?: boolean;
+}) {
     const { t } = useTranslation();
     const now = useTick(1000, Boolean(status?.nextWakeAt));
     if (!status) return null;

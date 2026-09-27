@@ -1,5 +1,5 @@
 /**
- * Component tests for the entry thumbnail added to EntryBadge.jsx.
+ * Component tests for the entry thumbnail added to EntryBadge.tsx.
  *
  * The photo is built client-side from the entry's own ids (no API field
  * carries a URL — see src/js/format/photoUrl.ts), so the two behaviours worth

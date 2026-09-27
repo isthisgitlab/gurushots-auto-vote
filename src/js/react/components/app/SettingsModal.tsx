@@ -19,21 +19,18 @@ import { TitleTagRulesEditor } from './TitleTagRulesEditor';
 import { ScenariosSection } from './ScenariosSection';
 import * as ipc from '@/api/ipc';
 
-/**
- * @import { SettingsBand, SettingsSection } from '@/utils/groupSettings'
- * @import { HintsFor, SettingChangeHandler, SettingResetHandler } from '../../../types/settingsEditor'
- */
+import type { SettingsBand, SettingsSection } from '@/utils/groupSettings';
+import type { HintsFor, SettingChangeHandler, SettingResetHandler } from '../../../types/settingsEditor';
 
 /**
  * The form state every schema-driven setting input reads and writes.
- *
- * @typedef {{
- *   formValues: Record<string, unknown>,
- *   handleFormChange: SettingChangeHandler,
- *   handleResetGlobal: SettingResetHandler,
- *   hintsFor: HintsFor,
- * }} SchemaFormProps
  */
+type SchemaFormProps = {
+    formValues: Record<string, unknown>;
+    handleFormChange: SettingChangeHandler;
+    handleResetGlobal: SettingResetHandler;
+    hintsFor: HintsFor;
+};
 
 // The tier of app-wide settings (rewards, missions, notifications, display).
 // They render with the Application Settings, not as challenge defaults.
@@ -49,10 +46,15 @@ const RULE_TYPE_SUGGESTIONS = ['default', 'exhibition', 'flash', 'speed'];
  * "Global default" badge marks only settings a challenge can override.
  * `level` keeps the heading one below its parent: h6 under a tier band (h5),
  * h5 directly under a section heading (h4).
- *
- * @param {{ group: SettingsSection, level?: 'h5'|'h6' } & SchemaFormProps} props
  */
-function SchemaSettingsGroup({ group, level = 'h6', formValues, handleFormChange, handleResetGlobal, hintsFor }) {
+function SchemaSettingsGroup({
+    group,
+    level = 'h6',
+    formValues,
+    handleFormChange,
+    handleResetGlobal,
+    hintsFor,
+}: { group: SettingsSection; level?: 'h5' | 'h6' } & SchemaFormProps) {
     const { t } = useTranslation();
     const Heading = level;
     return (
@@ -86,10 +88,8 @@ function SchemaSettingsGroup({ group, level = 'h6', formValues, handleFormChange
 
 /**
  * The schema-driven challenge defaults, grouped into tier bands.
- *
- * @param {{ bands: SettingsBand[] } & SchemaFormProps} props
  */
-function ChallengeDefaultsSection({ bands, ...form }) {
+function ChallengeDefaultsSection({ bands, ...form }: { bands: SettingsBand[] } & SchemaFormProps) {
     const { t } = useTranslation();
     return (
         <div>
@@ -108,10 +108,8 @@ function ChallengeDefaultsSection({ bands, ...form }) {
 
 /**
  * Challenge (title-tag) rules: matched on what survives a challenge's id rotation.
- *
- * @param {{ titleRules: ReturnType<typeof useTitleRules> }} props
  */
-function TitleRulesSection({ titleRules }) {
+function TitleRulesSection({ titleRules }: { titleRules: ReturnType<typeof useTitleRules> }) {
     const { t } = useTranslation();
     return (
         <div>
@@ -144,10 +142,8 @@ function TitleRulesSection({ titleRules }) {
 
 /**
  * Global settings modal
- *
- * @param {{ isOpen: boolean, onClose: () => void }} props
  */
-export function SettingsModal({ isOpen, onClose }) {
+export function SettingsModal({ isOpen, onClose }: { isOpen: boolean; onClose: () => void }) {
     const { t, language, setLanguage } = useTranslation();
     const { rearmSchedule } = useAutovote();
     const { settings, updateSetting, refetch: refetchSettings } = useSettings();
@@ -226,7 +222,7 @@ export function SettingsModal({ isOpen, onClose }) {
             await rearmSchedule();
         } catch (err) {
             await ipc.logRendererError(
-                `Error saving settings: ${/** @type {{ message?: unknown } | null | undefined} */ (err)?.message || err}`,
+                `Error saving settings: ${(err as { message?: unknown } | null | undefined)?.message || err}`,
             );
         }
     }, [commit, persistTitleRules, uiValues.language, language, setLanguage, rearmSchedule, onClose]);

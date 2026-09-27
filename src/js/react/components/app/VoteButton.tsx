@@ -1,4 +1,4 @@
-/** @import { Challenge } from '../../../types/gurushots' */
+import type { Challenge } from '../../../types/gurushots';
 import { useTranslation } from '@/contexts/TranslationContext';
 import { IconActionButton } from '@/components/ui/IconActionButton';
 import { ICON_PATHS } from '@/components/ui/StrokeIcon';
@@ -6,10 +6,16 @@ import * as ipc from '@/api/ipc';
 
 /**
  * Vote button for a single challenge
- *
- * @param {{ challengeId: Challenge['id'], challengeTitle: string, onVoteComplete: () => void }} props
  */
-export function VoteButton({ challengeId, challengeTitle, onVoteComplete }) {
+export function VoteButton({
+    challengeId,
+    challengeTitle,
+    onVoteComplete,
+}: {
+    challengeId: Challenge['id'];
+    challengeTitle: string;
+    onVoteComplete: () => void;
+}) {
     const { t } = useTranslation();
 
     return (

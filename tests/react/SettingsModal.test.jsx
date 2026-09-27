@@ -1,5 +1,5 @@
 /**
- * Component tests for SettingsModal.jsx — focuses on the two
+ * Component tests for SettingsModal.tsx — focuses on the two
  * behaviors the schema-driven SettingInput rendering can't catch:
  *   1. Timezone "+" inline-add: invalid input toggles input-error
  *      class; valid input invokes handleUiChange for both

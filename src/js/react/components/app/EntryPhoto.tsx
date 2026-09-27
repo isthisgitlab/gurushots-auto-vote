@@ -1,4 +1,4 @@
-/** @import { RankingEntry } from '../../../types/gurushots' */
+import type { RankingEntry } from '../../../types/gurushots';
 import { useState } from 'react';
 import { useTranslation } from '@/contexts/TranslationContext';
 import { entryPhotoUrl } from '@/utils/formatters';
@@ -30,10 +30,9 @@ const FULL_PX = 1200;
  * actually renders the photo at recognisable size. The hover peek is a
  * desktop-only convenience layered on top.
  *
- * @param {object} props
- * @param {RankingEntry} props.entry - Entry record from challenge.member.ranking.entries
+ * @param props.entry - Entry record from challenge.member.ranking.entries
  */
-export function EntryPhoto({ entry }) {
+export function EntryPhoto({ entry }: { entry: RankingEntry }) {
     const { t } = useTranslation();
     // Pointer-only ON PURPOSE: driving this from onFocus too would make Modal's
     // focus restoration re-open the peek every time the modal closed. Keyboard
@@ -77,7 +76,7 @@ export function EntryPhoto({ entry }) {
                 {/* Decorative: the button carries the accessible name, so an alt
                     here would make a screen reader announce the photo twice. */}
                 <img
-                    src={/** @type {string} */ (thumbUrl)}
+                    src={thumbUrl as string}
                     alt=""
                     loading="lazy"
                     referrerPolicy="no-referrer"
@@ -97,7 +96,7 @@ export function EntryPhoto({ entry }) {
                         dimensions vary with the photo, so a fixed box keeps the
                         card from resizing under the cursor as the image lands. */}
                     <img
-                        src={/** @type {string} */ (entryPhotoUrl(entry, { size: HOVER_PX, fit: true }))}
+                        src={entryPhotoUrl(entry, { size: HOVER_PX, fit: true }) as string}
                         alt=""
                         referrerPolicy="no-referrer"
                         className="aspect-square w-full rounded object-contain"
@@ -106,7 +105,7 @@ export function EntryPhoto({ entry }) {
             )}
             <Modal isOpen={fullOpen} onClose={() => setFullOpen(false)} title={photoLabel} size="xl">
                 <img
-                    src={/** @type {string} */ (entryPhotoUrl(entry, { size: FULL_PX, fit: true }))}
+                    src={entryPhotoUrl(entry, { size: FULL_PX, fit: true }) as string}
                     alt={photoLabel}
                     referrerPolicy="no-referrer"
                     className="max-h-[70vh] w-full rounded object-contain"

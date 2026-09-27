@@ -2,7 +2,7 @@
  * Tests for the time-unit migrations in loadSettings().
  *
  * 1. boostTime/turboTime: the runtime reads these `type: 'time'` values as
- *    seconds, but a buggy SettingInput.jsx stored them as minutes (h*60+m).
+ *    seconds, but a buggy SettingInput.tsx stored them as minutes (h*60+m).
  *    The migration detects values in that GUI's range [1, 1439] and
  *    multiplies by 60. Defaults (3600s, 7200s) are above this band so they
  *    pass through.

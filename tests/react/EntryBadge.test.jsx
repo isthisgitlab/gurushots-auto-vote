@@ -1,5 +1,5 @@
 /**
- * Component tests for EntryBadge.jsx — the most behaviorally dense
+ * Component tests for EntryBadge.tsx — the most behaviorally dense
  * component in the renderer. Covers:
  *   - The mutual-exclusion rule: an entry that is already boosted OR
  *     already turbo'd hides BOTH per-entry buttons (isEntryActioned).

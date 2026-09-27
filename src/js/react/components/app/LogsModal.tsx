@@ -29,10 +29,8 @@ function LogsViewer() {
  * from the application menu). The Capacitor (Android) build has a single
  * WebView and no menu, so this modal gives it the same live log view. Reached
  * from the Navbar's Logs button, which is itself Capacitor-gated.
- *
- * @param {{ isOpen: boolean, onClose: () => void }} props
  */
-export function LogsModal({ isOpen, onClose }) {
+export function LogsModal({ isOpen, onClose }: { isOpen: boolean; onClose: () => void }) {
     const { t } = useTranslation();
 
     return (

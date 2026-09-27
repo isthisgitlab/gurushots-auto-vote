@@ -1,32 +1,26 @@
 import { useTranslation } from '@/contexts/TranslationContext';
 
-/** @import { ScenarioIssue } from '../../../settings/scenarioSchema' */
+import type { ScenarioIssue } from '../../../settings/scenarioSchema';
 
 /**
  * A failed scenario request: the translation key of what happened, and the
  * validator's issues when the handler returned any.
- *
- * @typedef {{ what: string, issues?: ScenarioIssue[] }} ScenarioErrorInfo
  */
+export type ScenarioErrorInfo = { what: string; issues?: ScenarioIssue[] };
 
 /**
  * The validator issues a scenario IPC result carries: present only on a
  * validation failure, absent on success, on a refusal without detail and when
  * the call itself failed (null).
- *
- * @param {object | null | undefined} result
- * @returns {ScenarioIssue[] | undefined}
  */
-export const issuesOf = (result) =>
-    result && 'issues' in result ? /** @type {{ issues?: ScenarioIssue[] }} */ (result).issues : undefined;
+export const issuesOf = (result: object | null | undefined): ScenarioIssue[] | undefined =>
+    result && 'issues' in result ? (result as { issues?: ScenarioIssue[] }).issues : undefined;
 
 /**
  * A failed scenario request as the user sees it: what happened, why (the
  * first validation issues, with the place in the file), and what to do next.
- *
- * @param {{ error: ScenarioErrorInfo | null }} props
  */
-export function ScenarioError({ error }) {
+export function ScenarioError({ error }: { error: ScenarioErrorInfo | null }) {
     const { t } = useTranslation();
     if (!error) return null;
     const issues = error.issues ?? [];

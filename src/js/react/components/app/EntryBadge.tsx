@@ -1,5 +1,5 @@
-/** @import { Bankroll, Challenge, RankingEntry } from '../../../types/gurushots' */
-/** @import { SwapBackOffer } from './SwapEntryButton' */
+import type { Bankroll, Challenge, RankingEntry } from '../../../types/gurushots';
+import type { SwapBackOffer } from './SwapEntryButton';
 import { useTranslation } from '@/contexts/TranslationContext';
 import { useBoost } from '@/api/useBoost';
 import { useTurbo } from '@/api/useTurbo';
@@ -12,17 +12,15 @@ import { SwapEntryButton, SwapBackButton } from './SwapEntryButton';
 /**
  * Entry badge component showing entry details and per-entry action buttons.
  *
- * @param {object} props
- * @param {RankingEntry} props.entry     - Entry record from challenge.member.ranking.entries
- * @param {Challenge['id']} props.challengeId
- * @param {boolean} props.boostAvailable - Boost is currently usable on the parent challenge
- * @param {boolean} [props.turboAvailable] - A won Turbo is held and unapplied
- * @param {() => void} props.onBoostApplied - called after a successful boost
- * @param {() => void} props.onTurboApplied - called after a successful turbo
- * @param {boolean} [props.swapAvailable] - A swap can be spent on this challenge (balance + challenge flags)
- * @param {Bankroll|null} [props.bankroll] - For the swap confirm modal's balance line
- * @param {() => void} props.onSwapped - called after a swap / swap back spent
- * @param {SwapBackOffer|null} [props.swapBack] - Swap-back offer for this slot (the original was swapped out while boosted/turbo'd)
+ * @param props.entry     - Entry record from challenge.member.ranking.entries
+ * @param props.boostAvailable - Boost is currently usable on the parent challenge
+ * @param props.turboAvailable - A won Turbo is held and unapplied
+ * @param props.onBoostApplied - called after a successful boost
+ * @param props.onTurboApplied - called after a successful turbo
+ * @param props.swapAvailable - A swap can be spent on this challenge (balance + challenge flags)
+ * @param props.bankroll - For the swap confirm modal's balance line
+ * @param props.onSwapped - called after a swap / swap back spent
+ * @param props.swapBack - Swap-back offer for this slot (the original was swapped out while boosted/turbo'd)
  */
 export function EntryBadge({
     entry,
@@ -35,6 +33,17 @@ export function EntryBadge({
     bankroll = null,
     onSwapped,
     swapBack = null,
+}: {
+    entry: RankingEntry;
+    challengeId: Challenge['id'];
+    boostAvailable: boolean;
+    turboAvailable?: boolean;
+    onBoostApplied: () => void;
+    onTurboApplied: () => void;
+    swapAvailable?: boolean;
+    bankroll?: Bankroll | null;
+    onSwapped: () => void;
+    swapBack?: SwapBackOffer | null;
 }) {
     const { t } = useTranslation();
     const { applyBoost, loading: boosting, error: boostError, clearError: clearBoostError } = useBoost();

@@ -1,5 +1,5 @@
 /**
- * Component tests for TitleTagRulesEditor.jsx — the controlled list editor
+ * Component tests for TitleTagRulesEditor.tsx — the controlled list editor
  * for challenge rules in the global settings modal. The translation manager
  * mock returns each key verbatim, so labels/placeholders are the i18n keys.
  */

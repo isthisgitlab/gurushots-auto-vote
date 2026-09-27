@@ -15,12 +15,10 @@ import {
 import { COMPARISON_OPS, CURRENCIES, BOOLEAN_ENTRY_FIELDS, isOneOf } from '../../../../scenarios/vocabulary';
 import { moveItem } from '../../../../scenarios/builderModel';
 
-/**
- * @import { ComponentChildren } from 'preact'
- * @import { FieldSpec } from '../../../../scenarios/builderSpec'
- */
+import type { ComponentChildren } from 'preact';
+import type { FieldSpec } from '../../../../scenarios/builderSpec';
 
-/** @typedef {(next: unknown) => void} ValueChange */
+type ValueChange = (next: unknown) => void;
 
 /**
  * The scenario builder's generic form engine: one editor for any condition,
@@ -35,10 +33,8 @@ const SELECT = 'select select-sm select-bordered w-full';
 /**
  * One labelled cell of an item's field grid — a named group, since a cell can
  * hold a whole nested editor; simple controls also carry the label themselves.
- *
- * @param {{ label: string, children: ComponentChildren }} props
  */
-function Field({ label, children }) {
+function Field({ label, children }: { label: string; children: ComponentChildren }) {
     return (
         <div role="group" aria-label={label} className="flex flex-col text-xs gap-1">
             <span className="opacity-70" aria-hidden="true">
@@ -51,10 +47,18 @@ function Field({ label, children }) {
 
 /**
  * A text input whose empty value means "leave the optional field out".
- *
- * @param {{ value: string | number | undefined, onChange: ValueChange, label: string, type?: 'text' | 'number' }} props
  */
-function OptionalText({ value, onChange, label, type = 'text' }) {
+function OptionalText({
+    value,
+    onChange,
+    label,
+    type = 'text',
+}: {
+    value: string | number | undefined;
+    onChange: ValueChange;
+    label: string;
+    type?: 'text' | 'number';
+}) {
     return (
         <input
             type={type}
@@ -62,7 +66,7 @@ function OptionalText({ value, onChange, label, type = 'text' }) {
             className={CONTROL}
             value={value ?? ''}
             onChange={(e) => {
-                const raw = /** @type {HTMLInputElement} */ (e.target).value;
+                const raw = (e.target as HTMLInputElement).value;
                 if (raw === '') onChange(undefined);
                 else onChange(type === 'number' ? Number(raw) : raw);
             }}
@@ -72,10 +76,8 @@ function OptionalText({ value, onChange, label, type = 'text' }) {
 
 /**
  * "best" or a remembered photo (by memory slot).
- *
- * @param {{ value: unknown, onChange: ValueChange, label: string }} props
  */
-function PhotoSourceInput({ value, onChange, label }) {
+function PhotoSourceInput({ value, onChange, label }: { value: unknown; onChange: ValueChange; label: string }) {
     const { t } = useTranslation();
     const fromMemory = typeof value === 'object' && value !== null;
     return (
@@ -85,9 +87,7 @@ function PhotoSourceInput({ value, onChange, label }) {
                 aria-label={label}
                 value={fromMemory ? 'memory' : 'best'}
                 onChange={(e) =>
-                    onChange(
-                        /** @type {HTMLSelectElement} */ (e.target).value === 'memory' ? { memory: 'held' } : 'best',
-                    )
+                    onChange((e.target as HTMLSelectElement).value === 'memory' ? { memory: 'held' } : 'best')
                 }
             >
                 <option value="best">{t('app.sbPhotoBest')}</option>
@@ -98,8 +98,8 @@ function PhotoSourceInput({ value, onChange, label }) {
                     type="text"
                     className={CONTROL}
                     aria-label={t('app.sbField_slot')}
-                    value={/** @type {{ memory?: string }} */ (value).memory}
-                    onChange={(e) => onChange({ memory: /** @type {HTMLInputElement} */ (e.target).value })}
+                    value={(value as { memory?: string }).memory}
+                    onChange={(e) => onChange({ memory: (e.target as HTMLInputElement).value })}
                 />
             )}
         </div>
@@ -108,10 +108,18 @@ function PhotoSourceInput({ value, onChange, label }) {
 
 /**
  * Boost / turbo states: any of the listed ones, labelled in words (the raw state is the tooltip).
- *
- * @param {{ value: unknown, options: string[], labels: string | undefined, onChange: ValueChange }} props
  */
-function StatesInput({ value, options, labels, onChange }) {
+function StatesInput({
+    value,
+    options,
+    labels,
+    onChange,
+}: {
+    value: unknown;
+    options: string[];
+    labels: string | undefined;
+    onChange: ValueChange;
+}) {
     const { t } = useTranslation();
     const selected = new Set(Array.isArray(value) ? value : []);
     return (
@@ -124,7 +132,7 @@ function StatesInput({ value, options, labels, onChange }) {
                         checked={selected.has(state)}
                         onChange={(e) => {
                             const next = new Set(selected);
-                            if (/** @type {HTMLInputElement} */ (e.target).checked) next.add(state);
+                            if ((e.target as HTMLInputElement).checked) next.add(state);
                             else next.delete(state);
                             onChange(options.filter((option) => next.has(option)));
                         }}
@@ -138,22 +146,27 @@ function StatesInput({ value, options, labels, onChange }) {
 
 /**
  * The input for one field, by its kind. `item` is the whole item (entryValue reads its field).
- *
- * @param {{
- *   field: FieldSpec,
- *   value: unknown,
- *   onChange: ValueChange,
- *   item: Record<string, unknown>,
- *   phases: string[],
- *   label: string,
- * }} props
  */
-function FieldInput({ field, value, onChange, item, phases, label }) {
+function FieldInput({
+    field,
+    value,
+    onChange,
+    item,
+    phases,
+    label,
+}: {
+    field: FieldSpec;
+    value: unknown;
+    onChange: ValueChange;
+    item: Record<string, unknown>;
+    phases: string[];
+    label: string;
+}) {
     const { t } = useTranslation();
     // The plain controls' value. Its type is whatever the field's kind puts
     // there, or anything at all in hand-edited JSON; the controls render it
     // as given and the validator judges it on save.
-    const scalar = /** @type {string | number | undefined} */ (value);
+    const scalar = value as string | number | undefined;
     switch (field.kind) {
         case 'op':
             return (
@@ -161,7 +174,7 @@ function FieldInput({ field, value, onChange, item, phases, label }) {
                     aria-label={label}
                     className={SELECT}
                     value={scalar}
-                    onChange={(e) => onChange(/** @type {HTMLSelectElement} */ (e.target).value)}
+                    onChange={(e) => onChange((e.target as HTMLSelectElement).value)}
                 >
                     {COMPARISON_OPS.map((op) => (
                         <option key={op} value={op}>
@@ -180,7 +193,7 @@ function FieldInput({ field, value, onChange, item, phases, label }) {
                     aria-label={label}
                     className={CONTROL}
                     value={scalar}
-                    onChange={(e) => onChange(Number(/** @type {HTMLInputElement} */ (e.target).value))}
+                    onChange={(e) => onChange(Number((e.target as HTMLInputElement).value))}
                 />
             );
         case 'duration':
@@ -193,7 +206,7 @@ function FieldInput({ field, value, onChange, item, phases, label }) {
                     aria-label={label}
                     className={CONTROL}
                     value={scalar}
-                    onChange={(e) => onChange(/** @type {HTMLInputElement} */ (e.target).value)}
+                    onChange={(e) => onChange((e.target as HTMLInputElement).value)}
                 />
             );
         case 'time':
@@ -203,7 +216,7 @@ function FieldInput({ field, value, onChange, item, phases, label }) {
                     aria-label={label}
                     className={CONTROL}
                     value={scalar}
-                    onChange={(e) => onChange(/** @type {HTMLInputElement} */ (e.target).value)}
+                    onChange={(e) => onChange((e.target as HTMLInputElement).value)}
                 />
             );
         case 'text':
@@ -213,7 +226,7 @@ function FieldInput({ field, value, onChange, item, phases, label }) {
                     aria-label={label}
                     className={CONTROL}
                     value={scalar}
-                    onChange={(e) => onChange(/** @type {HTMLInputElement} */ (e.target).value)}
+                    onChange={(e) => onChange((e.target as HTMLInputElement).value)}
                 />
             );
         case 'states':
@@ -221,7 +234,7 @@ function FieldInput({ field, value, onChange, item, phases, label }) {
                 <StatesInput
                     value={value}
                     // Every 'states' field in builderSpec lists its options.
-                    options={/** @type {string[]} */ (field.options)}
+                    options={field.options as string[]}
                     labels={field.labels}
                     onChange={onChange}
                 />
@@ -232,7 +245,7 @@ function FieldInput({ field, value, onChange, item, phases, label }) {
                     aria-label={label}
                     className={SELECT}
                     value={scalar}
-                    onChange={(e) => onChange(/** @type {HTMLSelectElement} */ (e.target).value)}
+                    onChange={(e) => onChange((e.target as HTMLSelectElement).value)}
                 >
                     {CURRENCIES.map((currency) => (
                         <option key={currency} value={currency}>
@@ -247,7 +260,7 @@ function FieldInput({ field, value, onChange, item, phases, label }) {
                     aria-label={label}
                     className={SELECT}
                     value={scalar}
-                    onChange={(e) => onChange(/** @type {HTMLSelectElement} */ (e.target).value)}
+                    onChange={(e) => onChange((e.target as HTMLSelectElement).value)}
                 >
                     {phases.map((phase) => (
                         <option key={phase} value={phase}>
@@ -266,7 +279,7 @@ function FieldInput({ field, value, onChange, item, phases, label }) {
                     aria-label={label}
                     className={SELECT}
                     value={scalar}
-                    onChange={(e) => onChange(/** @type {HTMLSelectElement} */ (e.target).value)}
+                    onChange={(e) => onChange((e.target as HTMLSelectElement).value)}
                 >
                     {ENTRY_FIELDS.map((entryField) => (
                         <option key={entryField} value={entryField}>
@@ -281,7 +294,7 @@ function FieldInput({ field, value, onChange, item, phases, label }) {
                     aria-label={label}
                     className={SELECT}
                     value={String(value)}
-                    onChange={(e) => onChange(/** @type {HTMLSelectElement} */ (e.target).value === 'true')}
+                    onChange={(e) => onChange((e.target as HTMLSelectElement).value === 'true')}
                 >
                     <option value="true">{t('app.sbTrue')}</option>
                     <option value="false">{t('app.sbFalse')}</option>
@@ -292,7 +305,7 @@ function FieldInput({ field, value, onChange, item, phases, label }) {
                     aria-label={label}
                     className={CONTROL}
                     value={scalar}
-                    onChange={(e) => onChange(Number(/** @type {HTMLInputElement} */ (e.target).value))}
+                    onChange={(e) => onChange(Number((e.target as HTMLInputElement).value))}
                 />
             );
         case 'boolean':
@@ -302,7 +315,7 @@ function FieldInput({ field, value, onChange, item, phases, label }) {
                     aria-label={label}
                     className="checkbox checkbox-sm"
                     checked={value === true}
-                    onChange={(e) => onChange(/** @type {HTMLInputElement} */ (e.target).checked ? true : undefined)}
+                    onChange={(e) => onChange((e.target as HTMLInputElement).checked ? true : undefined)}
                 />
             );
         case 'slotIndex':
@@ -311,7 +324,7 @@ function FieldInput({ field, value, onChange, item, phases, label }) {
                     aria-label={label}
                     className={SELECT}
                     value={scalar}
-                    onChange={(e) => onChange(Number(/** @type {HTMLSelectElement} */ (e.target).value))}
+                    onChange={(e) => onChange(Number((e.target as HTMLSelectElement).value))}
                 >
                     {[1, 2, 3, 4, 0].map((index) => (
                         <option key={index} value={index}>
@@ -344,13 +357,8 @@ const KINDS = {
  * A new value for one field of `item`. Switching an entry condition between a
  * number field and a yes/no field also resets its comparison and value, which
  * the validator would otherwise reject.
- *
- * @param {Record<string, unknown>} item
- * @param {FieldSpec} field
- * @param {unknown} next
- * @returns {Record<string, unknown>}
  */
-const withField = (item, field, next) => {
+const withField = (item: Record<string, unknown>, field: FieldSpec, next: unknown): Record<string, unknown> => {
     const updated = { ...item };
     if (next === undefined) delete updated[field.key];
     else updated[field.key] = next;
@@ -368,20 +376,24 @@ const withField = (item, field, next) => {
 
 /**
  * One condition, action or selector: its type, and its fields.
- *
- * @param {{
- *   kind: keyof typeof KINDS,
- *   value: unknown,
- *   onChange: (next: Record<string, unknown>) => void,
- *   phases?: string[],
- *   controls?: ComponentChildren,
- * }} props
  */
-export function ItemEditor({ kind, value, onChange, phases = [], controls = null }) {
+export function ItemEditor({
+    kind,
+    value,
+    onChange,
+    phases = [],
+    controls = null,
+}: {
+    kind: keyof typeof KINDS;
+    value: unknown;
+    onChange: (next: Record<string, unknown>) => void;
+    phases?: string[];
+    controls?: ComponentChildren;
+}) {
     const { t } = useTranslation();
     const spec = KINDS[kind];
-    const item = /** @type {Record<string, unknown>} */ (value !== null && typeof value === 'object' ? value : {});
-    const type = /** @type {string} */ (item[spec.key]);
+    const item = (value !== null && typeof value === 'object' ? value : {}) as Record<string, unknown>;
+    const type = item[spec.key] as string;
     // An unknown type (hand-edited JSON) shows no fields until a known one is picked.
     const fields = spec.table[type] ?? [];
     return (
@@ -391,7 +403,7 @@ export function ItemEditor({ kind, value, onChange, phases = [], controls = null
                     className={SELECT}
                     aria-label={t('app.sbPickType')}
                     value={type}
-                    onChange={(e) => onChange(spec.make(/** @type {HTMLSelectElement} */ (e.target).value, { phases }))}
+                    onChange={(e) => onChange(spec.make((e.target as HTMLSelectElement).value, { phases }))}
                 >
                     {spec.types.map((name) => (
                         <option key={name} value={name}>
@@ -423,10 +435,18 @@ export function ItemEditor({ kind, value, onChange, phases = [], controls = null
 
 /**
  * Remove / move buttons for one list item.
- *
- * @param {{ index: number, count: number, onMove: (delta: number) => void, onRemove: () => void }} props
  */
-function ListControls({ index, count, onMove, onRemove }) {
+function ListControls({
+    index,
+    count,
+    onMove,
+    onRemove,
+}: {
+    index: number;
+    count: number;
+    onMove: (delta: number) => void;
+    onRemove: () => void;
+}) {
     const { t } = useTranslation();
     return (
         <div className="flex gap-1 shrink-0">
@@ -452,26 +472,29 @@ function ListControls({ index, count, onMove, onRemove }) {
 
 /**
  * An editable list of conditions or actions, with add / move / remove.
- *
- * @param {{
- *   kind: 'condition' | 'action',
- *   value: unknown,
- *   onChange: (next: unknown[]) => void,
- *   phases: string[],
- *   addLabel: string,
- * }} props
  */
-function ItemList({ kind, value, onChange, phases, addLabel }) {
+function ItemList({
+    kind,
+    value,
+    onChange,
+    phases,
+    addLabel,
+}: {
+    kind: 'condition' | 'action';
+    value: unknown;
+    onChange: (next: unknown[]) => void;
+    phases: string[];
+    addLabel: string;
+}) {
     const { t } = useTranslation();
     const spec = KINDS[kind];
-    /** @type {unknown[]} */
-    const list = Array.isArray(value) ? value : [];
+    const list: unknown[] = Array.isArray(value) ? value : [];
     return (
         <div className="space-y-2">
             {list.map((item, index) => (
                 <ItemEditor
                     // Items have no identity of their own; the position is what the user edits.
-                    key={`${index}:${/** @type {Record<string, unknown> | null | undefined} */ (item)?.[spec.key]}`}
+                    key={`${index}:${(item as Record<string, unknown> | null | undefined)?.[spec.key]}`}
                     kind={kind}
                     value={item}
                     phases={phases}
@@ -490,9 +513,7 @@ function ItemList({ kind, value, onChange, phases, addLabel }) {
                 className="select select-xs select-bordered"
                 aria-label={t(addLabel)}
                 value=""
-                onChange={(e) =>
-                    onChange([...list, spec.make(/** @type {HTMLSelectElement} */ (e.target).value, { phases })])
-                }
+                onChange={(e) => onChange([...list, spec.make((e.target as HTMLSelectElement).value, { phases })])}
             >
                 <option value="">{t(addLabel)}</option>
                 {spec.types.map((name) => (
@@ -507,10 +528,16 @@ function ItemList({ kind, value, onChange, phases, addLabel }) {
 
 /**
  * A rule's (or an any/all group's) conditions.
- *
- * @param {{ value: unknown, onChange: (next: unknown[]) => void, phases: string[] }} props
  */
-export function ConditionList({ value, onChange, phases }) {
+export function ConditionList({
+    value,
+    onChange,
+    phases,
+}: {
+    value: unknown;
+    onChange: (next: unknown[]) => void;
+    phases: string[];
+}) {
     return (
         <ItemList kind="condition" value={value} onChange={onChange} phases={phases} addLabel="app.sbAddCondition" />
     );
@@ -518,9 +545,15 @@ export function ConditionList({ value, onChange, phases }) {
 
 /**
  * A rule's actions, in order.
- *
- * @param {{ value: unknown, onChange: (next: unknown[]) => void, phases: string[] }} props
  */
-export function ActionList({ value, onChange, phases }) {
+export function ActionList({
+    value,
+    onChange,
+    phases,
+}: {
+    value: unknown;
+    onChange: (next: unknown[]) => void;
+    phases: string[];
+}) {
     return <ItemList kind="action" value={value} onChange={onChange} phases={phases} addLabel="app.sbAddAction" />;
 }
