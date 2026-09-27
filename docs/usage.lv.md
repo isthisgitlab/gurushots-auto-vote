@@ -115,6 +115,8 @@ Turbo ir lēni atjaunojams patēriņa resurss, ko iegūstat, spēlējot mini-sp�
 - **Auto-iegūt (`autoTurbo`, pēc noklusējuma ieslēgts)** — kad nav rokā turbo, lietotne katru ciklu spēlē mini-spēli, lai iegūtu vienu. (Grafiskās lietotnes ekvivalents: poga **Spēlēt Auto-Turbo**.)
 - **Auto-pielietot (`useTurbo`, pēc noklusējuma izslēgts)** — kad turbo ir rokā un izaicinājumam atlicis `turboTime` sekundes vai mazāk, to pielieto foto vietai `turboImageIndex`. Tas negaida atvērta boost loga beigas — boost un turbo tikai nekad nav uz viena un tā paša foto.
 
+Katra izaicinājuma turbo var iegūt tikai vienreiz. Lai daļu pietaupītu "Win Turbo" misijai, ieslēdziet **Taupīt Turbo misijām** (skatiet [Misijas](#misijas)).
+
 Grafiskajā lietotnē rokā esošu turbo varat pielietot arī konkrētai fotogrāfijai ar tās **⚡** pogu, pārrakstot auto vietu. Viena fotogrāfija var būt vai nu ar boost, vai ar turbo, nekad abiem.
 
 ### Trūkstošo ierakstu auto-iesniegšana
@@ -150,6 +152,14 @@ Viss iepriekšējais darbojas ar izaicinājumiem, kuriem jau esat pievienojies. 
 - **Indikators.** Kamēr auto-balsošana darbojas un auto-pievienošanās ir aktīva (master ieslēgts vai to iespējo izaicinājumu noteikums), galvenē blakus taimerim parādās **"auto-pievienošanās ieslēgta"** nozīmīte — tā parādās tikai tad, kad pievienošanās solis tiešām darbosies katrā ciklā, nevis tikai tad, kad iestatījums ir ieslēgts.
 - **Pievienošanās laiks.** `autoJoinWithinHoursOfEnd` gaida, līdz izaicinājumam līdz beigām atlicis tik stundu; `autoJoinAfterPercentElapsed` gaida, līdz pagājusi šī daļa no paša izaicinājuma ilguma (75 = pēdējā ceturtdaļa), kas der gan 24 stundu, gan vairāku nedēļu izaicinājumiem. Ja procenti ir virs 0, tie aizstāj stundu logu. Izaicinājums ārpus loga tiek pārbaudīts katrā ciklā no jauna, nevis izlaists pavisam.
 - **Prioritāte.** `autoJoin`, tipu/monētu iestatījumi un pievienošanās laiks tiek atrisināti caur [izaicinājumu noteikumiem](#izaicinājumu-noteikumi) (salīdzinot ar pašu nepievienoto izaicinājumu), tad master noklusējumu — tāpēc noteikums var ieslēgt pievienošanos, atslābināt vai pastiprināt limitus vai mainīt laiku izaicinājumiem, kuriem tas atbilst, pat ar izslēgtu master noklusējumu. Tikai `autoJoinCycleCoinBudget` paliek globāls — kopējam cikla tēriņa limitam nav nozīmes katram noteikumam.
+
+### Misijas
+
+GuruShots galvenā misija mainās pa kārtai: **Join N challenges**, **Use Fill N times**, **Win Turbo N times** un all-star misija. Lietotne var palīdzēt ar pirmajām trim. Katrai ir savs iestatījums, visi globāli un pēc noklusējuma izslēgti. Kamēr kāds no tiem ieslēgts, lietotne katrā ciklā nolasa jūsu misijas, atpazīst tās pēc nosaukuma un skaita atpakaļ, pievienojoties, izmantojot uzpildes un iegūstot turbo. All-star misiju automatizēt nevar. Izpildītās misijas saņem **Automātiski saņemt balvas** (`autoClaimPrizes`).
+
+- **Taupīt Turbo misijām (`missionSaveTurbos`).** Auto-iegūšana parasti iegūst katra izaicinājuma turbo, tiklīdz tas atveras, tāpēc "Win Turbo" misijai vairs nav ko iegūt. Ar šo iestatījumu iegūstamais turbo gaida, līdz šāda misija ir aktīva vai līdz ir stunda līdz tā `turboTime`. Katrs turbo joprojām tiek iegūts un pielietots kā agrāk, tikai vēlāk. Vajag ieslēgtu auto-iegūšanu (`autoTurbo`), un tas paļaujas uz pārbaudi vismaz reizi stundā (lielākais pārbaudes intervāls grafiskajā lietotnē).
+- **Pievienoties agrāk misijām (`missionJoinEarly`).** "Join challenges" misijas laikā auto-pievienošanās neievēro savu laiku (`autoJoinWithinHoursOfEnd` / `autoJoinAfterPercentElapsed`), līdz misija izpildīta, tāpēc izaicinājumi, kuriem tā tāpat pievienotos vēlāk, tiek pievienoti tagad. Tipu, tagu un monētu filtri joprojām darbojas, un pašai auto-pievienošanai jābūt ieslēgtai.
+- **Izmantot uzpildes misijām (`missionUseFills`).** "Use Fill" misijas laikā lietotne izmanto uzpildes izaicinājumos zem 100% ekspozīcijas, ne vairāk kā vienu katrā izaicinājumā ciklā, līdz misija izpildīta. Uzpilžu rezerve (`currencyReserveFills`) tiek saglabāta.
 
 ### Izaicinājumu noteikumi
 
@@ -255,6 +265,14 @@ Iestatījumi ir divos slāņos. **Lietotnes preferences** ir globālas visai lie
 | `notifyOnAutoFill`      | `false`     | bool                 | Brīdina pirms bildes auto-iesniegšanas tuvu termiņam.                                         |
 | `notifyOnEmergencyFill` | `false`     | bool                 | Brīdina pirms pēdējā brīža ārkārtas iesniegšanas.                                             |
 | `notifyLeadTime`        | `5`         | 1–60 min             | Cik minūtes pirms darbības parāda brīdinājumu.                                                |
+
+**Misijas** (tikai globāli — uzstāda ar `set-global-default`; skatiet [Misijas](#misijas))
+
+| Iestatījums         | Noklusējums | Diapazons / vērtības | Apraksts                                                                                               |
+| ------------------- | ----------- | -------------------- | ------------------------------------------------------------------------------------------------------ |
+| `missionSaveTurbos` | `false`     | bool                 | Neiegūst turbo, līdz ir aktīva "Win Turbo" misija vai līdz turbo pielietošanas laikam atlikusi stunda. |
+| `missionJoinEarly`  | `false`     | bool                 | "Join challenges" misijas laikā auto-pievienojas, negaidot tās laiku, līdz misija izpildīta.           |
+| `missionUseFills`   | `false`     | bool                 | "Use Fill" misijas laikā izmanto uzpildes izaicinājumos zem 100% ekspozīcijas, līdz misija izpildīta.  |
 
 ### Izaicinājumu iestatījumi
 

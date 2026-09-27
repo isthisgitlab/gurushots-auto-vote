@@ -120,6 +120,8 @@ Turbo is a slow-replenishing consumable you earn by playing a mini-game, then sp
 - **Auto-earn (`autoTurbo`, on by default)** — when no turbo is held, the app plays the mini-game each cycle to earn one. (GUI equivalent: the **Play Auto-Turbo** button.)
 - **Auto-apply (`useTurbo`, off by default)** — when a turbo is held and the challenge has `turboTime` seconds or less remaining, it's applied to the entry at `turboImageIndex`. It does not wait for an open boost window — boost and turbo only never share an entry.
 
+Each challenge's turbo can be earned only once. To keep some for a "Win Turbo" mission, turn on **Save Turbos for Missions** (see [Missions](#missions)).
+
 In the GUI you can also apply a held turbo to a specific photo with its **⚡** button, overriding the auto slot. A single photo can be either boosted or turboed, never both.
 
 ### Auto-submit missing entries
@@ -155,6 +157,14 @@ Everything above operates on challenges you've already joined. **Auto-join** (of
 - **Indicator.** While autovote is running and auto-join is armed (the master is on, or a challenge rule enables it), an **"auto-join on"** badge shows in the header next to the timer — it appears only when the join step will actually run each cycle, not merely when the setting is on.
 - **Join timing.** `autoJoinWithinHoursOfEnd` waits until a challenge is that many hours from its end; `autoJoinAfterPercentElapsed` waits until that share of its own length has run (75 = the last quarter), which suits both 24-hour and multi-week challenges. When the percent is above 0 it replaces the hours window. A challenge outside the window is reconsidered every cycle, not skipped for good.
 - **Scoping / precedence.** `autoJoin`, the type/coin-cap settings and the join timing are resolved through the [challenge rules](#challenge-rules) (matched against the un-joined challenge itself), then the master default — so a rule can enable joining, loosen or tighten the caps, or change the timing for the challenges it matches, even with the master default off. Only `autoJoinCycleCoinBudget` stays global — a per-cycle total spend cap has no per-rule meaning.
+
+### Missions
+
+GuruShots' main mission rotates through **Join N challenges**, **Use Fill N times**, **Win Turbo N times** and an all-star mission. The app can help with the first three. Each has its own setting, all global and off by default. While any of them is on, the app reads your missions once per cycle, recognising each by its name and counting down as it joins, fills and wins turbos. The all-star mission can't be automated. Completed missions are claimed by **Auto-Claim Prizes** (`autoClaimPrizes`).
+
+- **Save Turbos for Missions (`missionSaveTurbos`).** Auto-earn normally wins each challenge's turbo the moment it opens, so a "Win Turbo" mission finds none left to win. With this on, an earnable turbo waits until such a mission is active, or until an hour before its `turboTime`. Every turbo is still earned and applied as before, just later. It needs auto-earn (`autoTurbo`) on and relies on a check at least once an hour (the GUI's maximum check interval).
+- **Join Early for Missions (`missionJoinEarly`).** During a "Join challenges" mission, auto-join ignores its timing (`autoJoinWithinHoursOfEnd` / `autoJoinAfterPercentElapsed`) until the mission is done, so challenges it would join later anyway are joined now. The type, tag and coin filters still apply, and auto-join itself must be on.
+- **Use Fills for Missions (`missionUseFills`).** During a "Use Fill" mission, the app spends fills on challenges below 100% exposure, at most one per challenge per cycle, until the mission is done. It keeps your fill reserve (`currencyReserveFills`).
 
 ### Challenge rules
 
@@ -260,6 +270,14 @@ Settings come in two layers. **App preferences** are global to the app. **Challe
 | `notifyOnAutoFill`      | `false` | bool           | Warn before a photo is auto-submitted near the deadline.                                    |
 | `notifyOnEmergencyFill` | `false` | bool           | Warn before a last-second emergency submit.                                                 |
 | `notifyLeadTime`        | `5`     | 1–60 min       | How many minutes before the action the warning is shown.                                    |
+
+**Missions** (global only — set with `set-global-default`; see [Missions](#missions))
+
+| Setting             | Default | Range / values | Description                                                                                              |
+| ------------------- | ------- | -------------- | -------------------------------------------------------------------------------------------------------- |
+| `missionSaveTurbos` | `false` | bool           | Hold off earning turbos until a "Win Turbo" mission is active or the turbo's apply time is an hour away. |
+| `missionJoinEarly`  | `false` | bool           | During a "Join challenges" mission, auto-join without waiting for its timing, until the mission is done. |
+| `missionUseFills`   | `false` | bool           | During a "Use Fill" mission, spend fills on challenges below 100% exposure, until the mission is done.   |
 
 ### Challenge settings
 
