@@ -37,7 +37,6 @@ const isRecord = (r: unknown): r is AutoSpendRecord =>
  * cap then restarts, which at worst allows `autoExposureFillMax` more fills.
  */
 const createAutoSpendLedger = (store: RawJsonStore) => {
-    /** @returns */
     const read = (): Record<string, unknown> => {
         try {
             const parsed = JSON.parse(store.readRaw() || '{}');
@@ -64,7 +63,6 @@ const createAutoSpendLedger = (store: RawJsonStore) => {
          */
         addFill: (challengeId: string | number) => {
             const cutoff = Date.now() - MAX_AGE_MS;
-            /** @type */
             const state: Record<string, AutoSpendRecord> = {};
             for (const [id, record] of Object.entries(read())) {
                 if (isRecord(record) && record.at > cutoff) state[id] = record;
@@ -78,7 +76,6 @@ const createAutoSpendLedger = (store: RawJsonStore) => {
 
 /** Ledger over an in-memory store — mock mode, tests. */
 const createMemoryAutoSpendLedger = () => {
-    /** @type */
     let raw: string | null = null;
     return createAutoSpendLedger({
         readRaw: () => raw,

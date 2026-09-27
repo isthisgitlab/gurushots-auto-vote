@@ -100,7 +100,6 @@ const getLogFilePaths = (
 };
 
 // Per-log-prefix retention rules: { days, maxMB }.
-/** @type */
 const LOG_RETENTION: Record<string, { days: number; maxMB: number }> = {
     errors: { days: 30, maxMB: 10 },
     app: { days: 7, maxMB: 50 },
@@ -178,7 +177,6 @@ const cleanupOldLogs = () => {
 };
 
 // Context override for explicit context setting
-/** @type */
 let contextOverride: string | null = null;
 
 /**
@@ -221,7 +219,6 @@ const getContext = (): string => {
 const getTimeString = () => formatTimeHMS();
 
 // Severity colors — strict 4-level set.
-/** @type */
 const LEVEL_COLORS: Record<LogLevel, ColorName> = {
     DEBUG: 'gray',
     INFO: 'blue',
@@ -231,7 +228,6 @@ const LEVEL_COLORS: Record<LogLevel, ColorName> = {
 
 // Leading icon for a message that doesn't bring its own, so every log line
 // starts with one. `success` overrides INFO's with ✅.
-/** @type */
 const LEVEL_ICONS: Record<LogLevel, string> = {
     DEBUG: '🔍',
     INFO: 'ℹ️',
@@ -248,7 +244,6 @@ const withIcon = (message: string, icon: string): string => (NO_ICON_RE.test(mes
 // Resolve the GUI fan-out sink. Electron main sets global.sendLogToGUI and
 // the Capacitor bridge sets globalThis.sendLogToGUI; in Node `global` IS
 // `globalThis`, so one lookup covers both surfaces.
-/** @returns */
 const resolveGuiSink = (): GuiLogSink | null =>
     (globalThis as typeof globalThis & { sendLogToGUI?: GuiLogSink }).sendLogToGUI || null;
 
@@ -304,7 +299,6 @@ function sanitizeForLog(value: unknown, depth = 0, seen: WeakSet<object> = new W
         return value.map((item) => sanitizeForLog(item, depth + 1, seen));
     }
 
-    /** @type */
     const out: Record<string, unknown> = {};
     const record = value as Record<string, unknown>;
     for (const key of Object.keys(record)) {
@@ -351,7 +345,6 @@ function redactMessage(message: unknown): unknown {
 // monotonic seq lets the renderer de-dupe live messages that race the
 // backlog fetch.
 const MAX_RECENT = 1000;
-/** @type */
 const recentLogs: LogEntry[] = [];
 let nextSeq = 1;
 
@@ -448,7 +441,6 @@ const writeLog = (
  * the default log). Failures always emit at ERROR regardless of start
  * level — a real bug should never be silently swallowed.
  */
-/** @type */
 const operations: Map<string, { startTime: number; message: string; level: LogLevel; category: string | null }> =
     new Map();
 
@@ -507,7 +499,6 @@ const buildProgressMessage = (message: string, current: number | null, total: nu
 cleanupOldLogs();
 
 // Set up periodic cleanup (every hour) only in actual application contexts
-/** @type */
 let cleanupInterval: ReturnType<typeof setInterval> | undefined;
 if (isElectronApp || startedViaCli) {
     cleanupInterval = setInterval(cleanupOldLogs, 60 * 60 * 1000); // 1 hour
@@ -557,19 +548,16 @@ const apiOrDebugEnabled = () => isSourceCode();
 
 // Export logger functions
 // Basic logging methods
-/** @type */
 export const error: (message: string, data?: unknown, category?: string | null) => void = (
     message,
     data,
     category,
 ): void => writeLog('ERROR', message, data, category);
-/** @type */
 export const info: (message: string, data?: unknown, category?: string | null) => void = (
     message,
     data,
     category,
 ): void => writeLog('INFO', message, data, category);
-/** @type */
 export const debug: (message: string, data?: unknown, category?: string | null) => void = (
     message,
     data,
@@ -577,7 +565,6 @@ export const debug: (message: string, data?: unknown, category?: string | null) 
 ): void => {
     if (apiOrDebugEnabled()) writeLog('DEBUG', message, data, category);
 };
-/** @type */
 export const api: (message: string, data?: unknown, category?: string | null) => void = (
     message,
     data,
@@ -586,7 +573,6 @@ export const api: (message: string, data?: unknown, category?: string | null) =>
     if (apiOrDebugEnabled()) writeLog('INFO', message, data, category);
 };
 // Enhanced logging methods
-/** @type */
 export const success: (message: string, data?: unknown, duration?: number | null, category?: string | null) => void = (
     message,
     data = null,
@@ -596,7 +582,6 @@ export const success: (message: string, data?: unknown, duration?: number | null
     const suffix = duration !== null ? ` (${duration}ms)` : '';
     writeLog('INFO', `${message}${suffix}`, data, category, '✅');
 };
-/** @type */
 export const warning: (message: string, data?: unknown, category?: string | null) => void = (
     message,
     data = null,
@@ -604,7 +589,6 @@ export const warning: (message: string, data?: unknown, category?: string | null
 ): void => {
     writeLog('WARN', message, data, category);
 };
-/** @type */
 export const progress: (message: string, current?: number | null, total?: number | null) => void = (
     message,
     current = null,
@@ -664,7 +648,6 @@ export const withCategory = (category: string): CategoryLogger => ({
     endOperation,
 });
 // API-specific logging with timing (top-level convenience)
-/** @type */
 export const apiRequest: (method: string, url: string, duration?: number | null) => void = (
     method,
     url,
@@ -674,7 +657,6 @@ export const apiRequest: (method: string, url: string, duration?: number | null)
     const suffix = duration !== null ? ` (${duration}ms)` : '';
     writeLog('INFO', `🌐 REQUEST: ${method} ${url}${suffix}`, null, 'api');
 };
-/** @type */
 export const apiResponse: (method: string, url: string, status: number, duration?: number | null) => void = (
     method,
     url,

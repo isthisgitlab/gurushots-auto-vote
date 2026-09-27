@@ -51,12 +51,10 @@ const entryIdsOf = (challenge: Challenge): string[] =>
  * boost is not held; it never blocks one.
  */
 const createEntryAgeLedger = (store: RawJsonStore) => {
-    /** @returns */
     const read = (): Record<string, EntryAgeRecord> => {
         try {
             const parsed = JSON.parse(store.readRaw() || '{}');
             if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) return {};
-            /** @type */
             const state: Record<string, EntryAgeRecord> = {};
             for (const [id, record] of Object.entries(parsed)) {
                 if (isRecord(record)) state[id] = record;
@@ -75,7 +73,6 @@ const createEntryAgeLedger = (store: RawJsonStore) => {
      * @param now - Unix seconds
      */
     const write = (state: Record<string, EntryAgeRecord>, challengeId: string, record: EntryAgeRecord, now: number) => {
-        /** @type */
         const next: Record<string, EntryAgeRecord> = {};
         for (const [id, existing] of Object.entries(state)) {
             if (existing.closeTime > now) next[id] = existing;
@@ -97,7 +94,6 @@ const createEntryAgeLedger = (store: RawJsonStore) => {
             const state = read();
             const existing = state[challengeId];
             const ids = entryIdsOf(challenge);
-            /** @type */
             const entered: Record<string, number> = {};
             for (const id of ids) {
                 const known = existing?.entered[id];
@@ -168,7 +164,6 @@ const createEntryAgeLedger = (store: RawJsonStore) => {
 
 /** Ledger over an in-memory store — mock mode, tests. */
 const createMemoryEntryAgeLedger = () => {
-    /** @type */
     let raw: string | null = null;
     return createEntryAgeLedger({
         readRaw: () => raw,

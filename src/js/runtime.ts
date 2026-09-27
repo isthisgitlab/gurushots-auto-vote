@@ -22,7 +22,6 @@ type CapacitorGlobal = { isNativePlatform: () => boolean };
  */
 type RuntimeGlobals = typeof globalThis & { Capacitor?: CapacitorGlobal; __GS_HEADLESS__?: unknown };
 
-/** @returns */
 const getCapacitor = (): CapacitorGlobal | undefined => (globalThis as RuntimeGlobals).Capacitor;
 
 const isElectron = () => hasNode && process.versions.electron != null;

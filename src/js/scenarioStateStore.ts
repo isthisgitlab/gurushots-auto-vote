@@ -88,17 +88,13 @@ type ParsedStateFile = { ok: boolean; map: Record<string, unknown> };
 const createStateLedger = (store: RawJsonStore) => {
     // The engine and the settings overlay read state many times per pass;
     // re-parse only when the stored text changed.
-    /** @type */
     let lastRaw: string | null | undefined;
-    /** @type */
     let lastParsed: ParsedStateFile | undefined;
 
-    /** @returns */
     const read = (): ParsedStateFile => {
         const raw = store.readRaw();
         // lastParsed is set together with lastRaw, and readRaw never returns undefined.
         if (raw === lastRaw) return lastParsed as ParsedStateFile;
-        /** @type */
         let parsed: ParsedStateFile;
         try {
             const value = JSON.parse(raw || '{}');
@@ -115,7 +111,6 @@ const createStateLedger = (store: RawJsonStore) => {
     /** @param map */
     const write = (map: Record<string, unknown>) => {
         const cutoff = Date.now() - MAX_AGE_MS;
-        /** @type */
         const pruned: Record<string, Record<string, unknown>> = {};
         for (const [challengeId, record] of Object.entries(map)) {
             if (isPlainObject(record) && (record.updatedAt as number) > cutoff) pruned[challengeId] = record;
@@ -160,7 +155,6 @@ const createStateLedger = (store: RawJsonStore) => {
 
 /** Ledger over an in-memory store — mock mode, tests. */
 const createMemoryStateLedger = () => {
-    /** @type */
     let raw: string | null = null;
     return createStateLedger({
         readRaw: () => raw,

@@ -193,7 +193,6 @@ const validateUpdateCheck = (updateCheck: unknown): { updateCheck: UpdateCheckDa
     }
     const stored = updateCheck as Record<string, unknown>;
     // Each field is set below — to null or to a value its isValid accepted.
-    /** @type */
     const validUpdateCheck: Partial<Record<keyof UpdateCheckData, unknown>> = {};
     let changed = false;
     for (const { key, label, isValid, describe } of UPDATE_CHECK_FIELDS) {
@@ -342,7 +341,6 @@ const setChallengeMetadata = (
         return false;
     }
 
-    /** @type */
     const entry: ChallengeMetadataEntry = {};
 
     if (lastVoteTime) {

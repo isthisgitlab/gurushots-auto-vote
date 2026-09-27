@@ -46,7 +46,6 @@ const isRecord = (r: unknown): r is SwapBackRecord =>
  * still be swapped back on gurushots.com.
  */
 const createLedger = (store: RawJsonStore) => {
-    /** @returns */
     const read = (): Record<string, unknown> => {
         try {
             const parsed = JSON.parse(store.readRaw() || '{}');
@@ -62,7 +61,6 @@ const createLedger = (store: RawJsonStore) => {
     /** @param state */
     const write = (state: Record<string, unknown>) => {
         const cutoff = Date.now() - MAX_AGE_MS;
-        /** @type */
         const pruned: Record<string, SwapBackRecord[]> = {};
         for (const [challengeId, records] of Object.entries(state)) {
             const kept = (Array.isArray(records) ? records : []).filter((r) => isRecord(r) && r.at > cutoff);
@@ -99,7 +97,6 @@ const createLedger = (store: RawJsonStore) => {
                 .map((r) => (r.currentId === oldId ? { ...r, currentId: String(newId), at: Date.now() } : r))
                 // A plain swap put the original back in its slot: nothing left to swap back.
                 .filter((r) => r.currentId !== r.previousId);
-            /** @type */
             const kind: SwapBackRecord['kind'] | null =
                 oldEntry?.boosted === true ? 'boost' : oldEntry?.turbo ? 'turbo' : null;
             if (kind) {
@@ -129,7 +126,6 @@ const createLedger = (store: RawJsonStore) => {
 
 /** Ledger over an in-memory store — mock mode, tests. */
 const createMemoryLedger = () => {
-    /** @type */
     let raw: string | null = null;
     return createLedger({
         readRaw: () => raw,
