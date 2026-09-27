@@ -20,9 +20,24 @@ import { ScenariosSection } from './ScenariosSection';
 import * as ipc from '@/api/ipc';
 
 /**
- * @import { SettingsGroupDef, SettingsTierDef } from '@/utils/groupSettings'
- * @import { HintsFor, RendererSchema, SettingChangeHandler, SettingResetHandler } from '../../../types/settingsEditor'
+ * @import { SettingsBand, SettingsSection } from '@/utils/groupSettings'
+ * @import { HintsFor, SettingChangeHandler, SettingResetHandler } from '../../../types/settingsEditor'
  */
+
+/**
+ * The form state every schema-driven setting input reads and writes.
+ *
+ * @typedef {{
+ *   formValues: Record<string, unknown>,
+ *   handleFormChange: SettingChangeHandler,
+ *   handleResetGlobal: SettingResetHandler,
+ *   hintsFor: HintsFor,
+ * }} SchemaFormProps
+ */
+
+// The tier of app-wide settings (rewards, missions, notifications, display).
+// They render with the Application Settings, not as challenge defaults.
+const APP_TIER = 'app';
 
 // Challenge types seen on the live API (verified 2026-09-19). Suggestions for
 // the rule type field only — it stays free text, so a type this build has never
@@ -30,60 +45,57 @@ import * as ipc from '@/api/ipc';
 const RULE_TYPE_SUGGESTIONS = ['default', 'exhibition', 'flash', 'speed'];
 
 /**
- * The schema-driven global defaults, grouped into tier bands and static sub-sections.
+ * One schema-driven settings group: its heading and a grid of inputs. The
+ * "Global default" badge marks only settings a challenge can override.
  *
- * @param {{
- *   schema: RendererSchema | null | undefined,
- *   groups: readonly SettingsGroupDef[] | null | undefined,
- *   tiers: readonly SettingsTierDef[] | null | undefined,
- *   formValues: Record<string, unknown>,
- *   handleFormChange: SettingChangeHandler,
- *   handleResetGlobal: SettingResetHandler,
- *   hintsFor: HintsFor,
- * }} props
+ * @param {{ group: SettingsSection } & SchemaFormProps} props
  */
-function ChallengeDefaultsSection({
-    schema,
-    groups,
-    tiers,
-    formValues,
-    handleFormChange,
-    handleResetGlobal,
-    hintsFor,
-}) {
+function SchemaSettingsGroup({ group, formValues, handleFormChange, handleResetGlobal, hintsFor }) {
+    const { t } = useTranslation();
+    return (
+        <div className="mb-4">
+            <h6 className="font-medium text-sm opacity-70 mb-2 mt-3">{t(group.label)}</h6>
+            <div className={SETTINGS_GRID_CLASS}>
+                {group.entries.map(([key, config]) => (
+                    <div key={key} className={SETTING_CELL_CLASS}>
+                        <SettingLabel inputId={`setting-${key}`} type={config.type}>
+                            <span className="font-medium">{t(config.label)}</span>
+                            {config.perChallenge && (
+                                <span className="badge badge-ghost badge-sm ml-2">{t('app.globalDefault')}</span>
+                            )}
+                        </SettingLabel>
+                        <p className="text-xs text-base-content/60 mb-2">{t(config.description)}</p>
+                        <SettingHelp helpKey={config.helpKey} />
+                        <SettingInput
+                            settingKey={key}
+                            config={config}
+                            value={formValues[key] ?? config.default}
+                            onChange={handleFormChange}
+                            onReset={handleResetGlobal}
+                        />
+                        <SettingHintList hints={hintsFor(key)} />
+                    </div>
+                ))}
+            </div>
+        </div>
+    );
+}
+
+/**
+ * The schema-driven challenge defaults, grouped into tier bands.
+ *
+ * @param {{ bands: SettingsBand[] } & SchemaFormProps} props
+ */
+function ChallengeDefaultsSection({ bands, ...form }) {
     const { t } = useTranslation();
     return (
         <div>
             <h4 className="font-semibold text-base mb-3 border-b border-base-300 pb-2">{t('app.challengeDefaults')}</h4>
-            {tierSchemaEntries(schema, groups, tiers).map((band) => (
+            {bands.map((band) => (
                 <div key={band.id ?? '_'} className="mb-6">
                     <SettingsTierHeading id={band.id} label={band.label} level="h5" />
-                    {band.groups.map(({ id, label, entries }) => (
-                        <div key={id} className="mb-4">
-                            <h6 className="font-medium text-sm opacity-70 mb-2 mt-3">{t(label)}</h6>
-                            <div className={SETTINGS_GRID_CLASS}>
-                                {entries.map(([key, config]) => (
-                                    <div key={key} className={SETTING_CELL_CLASS}>
-                                        <SettingLabel inputId={`setting-${key}`} type={config.type}>
-                                            <span className="font-medium">{t(config.label)}</span>
-                                            <span className="badge badge-ghost badge-sm ml-2">
-                                                {t('app.globalDefault')}
-                                            </span>
-                                        </SettingLabel>
-                                        <p className="text-xs text-base-content/60 mb-2">{t(config.description)}</p>
-                                        <SettingHelp helpKey={config.helpKey} />
-                                        <SettingInput
-                                            settingKey={key}
-                                            config={config}
-                                            value={formValues[key] ?? config.default}
-                                            onChange={handleFormChange}
-                                            onReset={handleResetGlobal}
-                                        />
-                                        <SettingHintList hints={hintsFor(key)} />
-                                    </div>
-                                ))}
-                            </div>
-                        </div>
+                    {band.groups.map((group) => (
+                        <SchemaSettingsGroup key={group.id} group={group} {...form} />
                     ))}
                 </div>
             ))}
@@ -219,6 +231,9 @@ export function SettingsModal({ isOpen, onClose }) {
     if (!isOpen) return null;
 
     const hintsFor = globalSettingHints({ formValues, schema, timezone: uiValues.timezone, t });
+    const schemaForm = { formValues, handleFormChange, handleResetGlobal, hintsFor };
+    const bands = tierSchemaEntries(schema, groups, tiers);
+    const appGroups = bands.filter((band) => band.id === APP_TIER).flatMap((band) => band.groups);
     const actionRowProps = {
         onSave: handleSave,
         saving,
@@ -247,16 +262,12 @@ export function SettingsModal({ isOpen, onClose }) {
                         handleUiChange={handleUiChange}
                         handleResetUi={handleResetUi}
                         timezoneInput={timezoneInput}
-                    />
-                    <ChallengeDefaultsSection
-                        schema={schema}
-                        groups={groups}
-                        tiers={tiers}
-                        formValues={formValues}
-                        handleFormChange={handleFormChange}
-                        handleResetGlobal={handleResetGlobal}
-                        hintsFor={hintsFor}
-                    />
+                    >
+                        {appGroups.map((group) => (
+                            <SchemaSettingsGroup key={group.id} group={group} {...schemaForm} />
+                        ))}
+                    </ApplicationSettingsSection>
+                    <ChallengeDefaultsSection bands={bands.filter((band) => band.id !== APP_TIER)} {...schemaForm} />
                     <TitleRulesSection titleRules={titleRules} />
                     <ScenariosSection isOpen={isOpen} />
                     <ModalActionRow bordered {...actionRowProps} />

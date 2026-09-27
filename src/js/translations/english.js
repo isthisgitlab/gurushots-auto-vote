@@ -674,6 +674,7 @@ export const app = {
     groupVotingPause: 'Voting Pause',
     groupAutoFill: 'Auto-Submit',
     groupRewards: 'Rewards',
+    groupMissions: 'Missions',
     groupNotifications: 'Notifications',
     groupDisplay: 'Display',
     tierCore: 'Core',

@@ -438,6 +438,61 @@ describe('SettingsModal tier bands', () => {
     });
 });
 
+describe('SettingsModal — app-wide settings', () => {
+    const entry = (group, label, perChallenge) => ({
+        type: 'boolean',
+        default: false,
+        perChallenge,
+        group,
+        label,
+        description: `${label}Desc`,
+    });
+
+    beforeEach(() => {
+        Object.assign(mockSchemaState, {
+            schema: {
+                autoTurbo: entry('turbo', 'app.autoTurbo', true),
+                currencyReserveFills: entry('turbo', 'app.currencyReserveFills', false),
+                missionSaveTurbos: entry('missions', 'app.missionSaveTurbos', false),
+            },
+            defaults: {},
+            groups: [
+                { id: 'turbo', label: 'app.groupTurbo', tier: 'core' },
+                { id: 'missions', label: 'app.groupMissions', tier: 'app' },
+            ],
+            tiers: [
+                { id: 'core', label: 'app.tierCore' },
+                { id: 'app', label: 'app.tierApp' },
+            ],
+        });
+    });
+
+    afterEach(() => {
+        Object.assign(mockSchemaState, { schema: {}, defaults: {}, groups: undefined, tiers: undefined });
+    });
+
+    test('app-tier groups render with the Application Settings, not as challenge defaults', async () => {
+        render(<SettingsModal isOpen={true} onClose={jest.fn()} />);
+        await screen.findByRole('heading', { level: 6, name: 'app.groupMissions' });
+        const sections = screen.getAllByRole('heading', { level: 4 }).map((h) => h.parentElement);
+        const [appSection, defaultsSection] = [
+            sections.find((el) => el.textContent.startsWith('app.applicationSettings')),
+            sections.find((el) => el.textContent.startsWith('app.challengeDefaults')),
+        ];
+        expect(appSection.textContent).toContain('app.missionSaveTurbos');
+        expect(defaultsSection.textContent).not.toContain('app.missionSaveTurbos');
+        expect(defaultsSection.textContent).toContain('app.autoTurbo');
+        expect(screen.queryByRole('heading', { level: 5, name: 'app.tierApp' })).toBeNull();
+    });
+
+    test('only settings a challenge can override carry the global-default badge', async () => {
+        render(<SettingsModal isOpen={true} onClose={jest.fn()} />);
+        await screen.findByRole('heading', { level: 6, name: 'app.groupMissions' });
+        expect(screen.getAllByText('app.globalDefault')).toHaveLength(1);
+        expect(screen.getByText('app.globalDefault').parentElement.textContent).toContain('app.autoTurbo');
+    });
+});
+
 const clickButtonByText = (text, index = 0) => {
     const buttons = Array.from(document.querySelectorAll('button')).filter((b) => b.textContent.trim() === text);
     fireEvent.click(buttons[index]);

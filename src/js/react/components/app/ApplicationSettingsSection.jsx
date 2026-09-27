@@ -290,11 +290,12 @@ function TimezoneSetting({ uiValues, handleUiChange, handleResetUi, timezoneInpu
  * The global modal's "Application Settings" section: theme, language,
  * timezone, check frequency and API retry. These are UI settings, edited
  * through useSettingsForm's `uiValues` half; `timezoneInput` is
- * useCustomTimezoneInput's state.
+ * useCustomTimezoneInput's state. `children` are the app-wide schema groups
+ * (rewards, missions, notifications, display) the modal renders below them.
  *
- * @param {UiFormProps & { timezoneInput: TimezoneInputState }} props
+ * @param {UiFormProps & { timezoneInput: TimezoneInputState, children?: import('react').ReactNode }} props
  */
-export function ApplicationSettingsSection({ uiValues, handleUiChange, handleResetUi, timezoneInput }) {
+export function ApplicationSettingsSection({ uiValues, handleUiChange, handleResetUi, timezoneInput, children }) {
     const { t } = useTranslation();
     const ui = { uiValues, handleUiChange, handleResetUi };
 
@@ -325,6 +326,7 @@ export function ApplicationSettingsSection({ uiValues, handleUiChange, handleRes
                     fields={RELIABILITY_FIELDS}
                 />
             </div>
+            {children}
         </div>
     );
 }

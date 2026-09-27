@@ -682,6 +682,7 @@ export const app = {
     groupVotingPause: 'Balsošanas pauze',
     groupAutoFill: 'Auto-iesniegšana',
     groupRewards: 'Balvas',
+    groupMissions: 'Misijas',
     groupNotifications: 'Paziņojumi',
     groupDisplay: 'Attēlojums',
     tierCore: 'Pamata',
