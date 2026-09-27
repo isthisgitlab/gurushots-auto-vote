@@ -18,24 +18,26 @@ import {
     finalizePick,
 } from './tiers';
 
-/** @import { ChallengeText, PickerPhoto, PickFallbackInfo, PickOptions, ScoredCandidate } from '../../types/photoPicker' */
+import type {
+    ChallengeText,
+    PickerPhoto,
+    PickFallbackInfo,
+    PickOptions,
+    ScoredCandidate,
+} from '../../types/photoPicker';
 
 /**
  * A photo with its labels stemmed both ways (see buildScoredCandidates).
- *
- * @typedef {object} StemmedPhoto
- * @property {PickerPhoto} photo
- * @property {string[]} wordStems
- * @property {string[]} wholeStems
  */
+interface StemmedPhoto {
+    photo: PickerPhoto;
+    wordStems: string[];
+    wholeStems: string[];
+}
 
 // Same "never throws" contract as resolveSemanticScores: a buggy callback must
 // not turn a fill that would succeed into a crash.
-/**
- * @param {PickOptions} opts
- * @param {PickFallbackInfo} info
- */
-const notifyFallback = (opts, info) => {
+const notifyFallback = (opts: PickOptions, info: PickFallbackInfo) => {
     if (typeof opts.onFallback !== 'function') return;
     try {
         opts.onFallback(info);
@@ -47,10 +49,10 @@ const notifyFallback = (opts, info) => {
 /**
  * Picks photos to submit to a challenge.
  *
- * @param {ChallengeText | null | undefined} challenge - challenge object (url, title, welcome_message all optional)
- * @param {PickerPhoto[]} eligiblePhotos - candidates from getEligiblePhotos
- * @param {number} slotsToFill - how many photos to return at most
- * @param {PickOptions} [opts]
+ * @param challenge - challenge object (url, title, welcome_message all optional)
+ * @param eligiblePhotos - candidates from getEligiblePhotos
+ * @param slotsToFill - how many photos to return at most
+ * @param opts
  *   mustIncludeTags: hard filter — keep only photos whose labels match
  *   every distinct tag stem (ALL semantics). Tags are deduped to stems
  *   first, so "larch, larches" collapses to one requirement. A photo
@@ -85,9 +87,14 @@ const notifyFallback = (opts, info) => {
  *   fallback where a user can see it. Exceptions it throws are swallowed;
  *   omitting it changes nothing. Not called when fillWithoutTagMatch is false
  *   (the picker returns [] instead of relaxing).
- * @returns {Array<string>} ordered list of photo ids; length <= slotsToFill
+ * @returns ordered list of photo ids; length <= slotsToFill
  */
-const pickPhotosForChallenge = (challenge, eligiblePhotos, slotsToFill, opts = {}) => {
+const pickPhotosForChallenge = (
+    challenge: ChallengeText | null | undefined,
+    eligiblePhotos: PickerPhoto[],
+    slotsToFill: number,
+    opts: PickOptions = {},
+): Array<string> => {
     if (!Number.isInteger(slotsToFill) || slotsToFill <= 0) return [];
     const scored = buildScoredCandidates(challenge, eligiblePhotos, opts);
     return finalizePick(scored, slotsToFill);
@@ -100,13 +107,14 @@ const pickPhotosForChallenge = (challenge, eligiblePhotos, slotsToFill, opts = {
  * gets filled (off-theme best performer) — unless the caller opted out with
  * fillWithoutTagMatch:false, or no hard filter was set at all.
  *
- * @param {StemmedPhoto[]} withStems
- * @param {string[]} mustStems
- * @param {string | null} letterPrefix
- * @param {PickOptions} opts
- * @returns {StemmedPhoto[]|null} the surviving stemmed photos, or null for "pick nothing"
+ * @returns the surviving stemmed photos, or null for "pick nothing"
  */
-const applyHardFilters = (withStems, mustStems, letterPrefix, opts) => {
+const applyHardFilters = (
+    withStems: StemmedPhoto[],
+    mustStems: string[],
+    letterPrefix: string | null,
+    opts: PickOptions,
+): StemmedPhoto[] | null => {
     let filtered = withStems;
     if (mustStems.length > 0) {
         filtered = filtered.filter(({ wordStems }) => photoMatchesAllStems(wordStems, mustStems));
@@ -129,12 +137,13 @@ const applyHardFilters = (withStems, mustStems, letterPrefix, opts) => {
  * remaining photo shows it does the picker relax (or return null under
  * fillWithoutTagMatch:false). A photo with no labels cannot be judged and is kept.
  *
- * @param {StemmedPhoto[]} filtered
- * @param {ChallengeText | null | undefined} challenge
- * @param {PickOptions} opts
- * @returns {StemmedPhoto[]|null} the surviving stemmed photos, or null for "pick nothing"
+ * @returns the surviving stemmed photos, or null for "pick nothing"
  */
-const applyExcludedSubjectFilter = (filtered, challenge, opts) => {
+const applyExcludedSubjectFilter = (
+    filtered: StemmedPhoto[],
+    challenge: ChallengeText | null | undefined,
+    opts: PickOptions,
+): StemmedPhoto[] | null => {
     const excluded = excludedSubjectOf(challenge, opts.ignoreWords || null);
     if (!excluded) return filtered;
     const kept = filtered.filter(({ wordStems }) => !photoShowsExcluded(wordStems, excluded));
@@ -154,12 +163,14 @@ const applyExcludedSubjectFilter = (filtered, challenge, opts) => {
  * the hot loop of every fill on every scheduler cycle — including the
  * battery-constrained Android headless service.
  *
- * @param {ChallengeText | null | undefined} challenge
- * @param {PickerPhoto[]} eligiblePhotos
- * @param {PickOptions} [opts] - same shape as pickPhotosForChallenge's opts
- * @returns {ScoredCandidate[]} scored entries (unsorted); [] when nothing qualifies
+ * @param opts - same shape as pickPhotosForChallenge's opts
+ * @returns scored entries (unsorted); [] when nothing qualifies
  */
-const buildScoredCandidates = (challenge, eligiblePhotos, opts = {}) => {
+const buildScoredCandidates = (
+    challenge: ChallengeText | null | undefined,
+    eligiblePhotos: PickerPhoto[],
+    opts: PickOptions = {},
+): ScoredCandidate[] => {
     if (!Array.isArray(eligiblePhotos) || eligiblePhotos.length === 0) return [];
 
     const allowed = eligiblePhotos.filter((p) => p && p.permission && p.permission.allowed === true && p.id);

@@ -15,21 +15,19 @@ import {
     detectLetterPrefix,
 } from './title';
 
-/** @import { ChallengeText, IgnoreWords, TagOptions } from '../../types/photoPicker' */
+import type { ChallengeText, IgnoreWords, TagOptions } from '../../types/photoPicker';
 
 // Keyword count is bounded for the same reason the per-photo stem count is (see
 // MAX_STEMS_PER_PHOTO): these keywords are the inner loop of every scorePhoto
-// call AND become the vecCache key in semantic/index.js, whose MAX_CACHE bounds
+// call AND become the vecCache key in semantic/index.ts, whose MAX_CACHE bounds
 // the number of entries but not the size of one. A challenge's real subject is a
 // few nouns; a welcome_message can be arbitrarily long prose.
 const MAX_CHALLENGE_KEYWORDS = 48;
 
-/**
- * @param {ChallengeText | null | undefined} challenge
- * @param {IgnoreWords} [ignoreWords]
- * @returns {string[]}
- */
-const buildChallengeKeywords = (challenge, ignoreWords = null) => {
+const buildChallengeKeywords = (
+    challenge: ChallengeText | null | undefined,
+    ignoreWords: IgnoreWords = null,
+): string[] => {
     const opts = { ignoreWords };
     // The WHOLE title, series prefix included — unlike buildThemeKeywords, which
     // pools its keywords into one vector and so must drop everything that is not
@@ -66,7 +64,7 @@ const buildChallengeKeywords = (challenge, ignoreWords = null) => {
  * lexicon, the similarity between that challenge and the tag "staircase" falls
  * from 0.94 to 0.25, i.e. from a confident match to below the floor. The effect
  * is the challenge-side twin of the label-bag dilution documented in
- * services/semantic/index.js.
+ * services/semantic/index.ts.
  *
  * The lexical tier keeps using buildChallengeKeywords: there each keyword is
  * matched independently, so extra words can only add weak evidence — they
@@ -87,12 +85,8 @@ const buildChallengeKeywords = (challenge, ignoreWords = null) => {
  * avoid, and would score photos against marketing copy. With [] the semantic
  * tier goes inert and the honest signals — lexical match, then popularity —
  * decide, which is the right answer for a challenge with no visual subject.
- *
- * @param {ChallengeText | null | undefined} challenge
- * @param {IgnoreWords} [ignoreWords]
- * @returns {string[]}
  */
-const buildThemeKeywords = (challenge, ignoreWords = null) => {
+const buildThemeKeywords = (challenge: ChallengeText | null | undefined, ignoreWords: IgnoreWords = null): string[] => {
     const opts = { ignoreWords };
     // A negated subject must not become the theme (see parseNegation): pooling
     // "human" for "No Humans" pulls the vector straight at photos of people.
@@ -109,12 +103,10 @@ const buildThemeKeywords = (challenge, ignoreWords = null) => {
     return Array.from(new Set(fromUrl)).slice(0, MAX_CHALLENGE_KEYWORDS);
 };
 
-/**
- * @param {ChallengeText | null | undefined} challenge
- * @param {IgnoreWords} [ignoreWords]
- * @returns {string[][]}
- */
-const buildThemeAlternatives = (challenge, ignoreWords = null) => {
+const buildThemeAlternatives = (
+    challenge: ChallengeText | null | undefined,
+    ignoreWords: IgnoreWords = null,
+): string[][] => {
     const title = challenge?.title;
     const parts = typeof title === 'string' ? title.split(/\s+(?:vs\.?|versus)\s+/i) : [];
     if (parts.length < 2) return [buildThemeKeywords(challenge, ignoreWords)];
@@ -134,12 +126,8 @@ const buildThemeAlternatives = (challenge, ignoreWords = null) => {
  * nouns as abstract ("leaves" as the verb), and dropping it turned "Glorious
  * Green Leaves" into "a photo of green". The image model handles a qualifier
  * like "fun" in "balloon fun" fine; it does not handle a missing subject.
- *
- * @param {ChallengeText | null | undefined} challenge
- * @param {IgnoreWords} [ignoreWords]
- * @returns {string[]}
  */
-const visualSubjectWords = (challenge, ignoreWords = null) => {
+const visualSubjectWords = (challenge: ChallengeText | null | undefined, ignoreWords: IgnoreWords = null): string[] => {
     const negation = parseNegation(challenge?.title, ignoreWords);
     const title = negation.active ? negation.positiveTitle : challenge?.title;
     const negated = new Set(negation.stems);
@@ -152,8 +140,7 @@ const visualSubjectWords = (challenge, ignoreWords = null) => {
 // Trailing '-ing' marks a participle ("running", "leading"). Length-guarded the
 // same way the stemmer's own '-ing' branch is, so short words that merely end in
 // those letters ("king", "ring", "wing" — all plausible subjects) are not caught.
-/** @param {string} word */
-const isParticiple = (word) => word.length > 5 && word.endsWith('ing');
+const isParticiple = (word: string) => word.length > 5 && word.endsWith('ing');
 
 // Issue at most a few server-side searches per fill: a title rarely has more
 // than two or three subject nouns, and tag lists are short. The cap bounds the
@@ -173,17 +160,12 @@ const SEARCH_TERMS_CAP = 3;
  * SEARCH_TERMS_CAP. Returns [] when nothing usable is derivable (abstract
  * title, no tags) — the caller then fetches the unfiltered library.
  *
- * @param {ChallengeText | null | undefined} challenge - challenge object (title optional)
- * @param {TagOptions | null} [opts]
- * @returns {string[]} ordered, deduped search terms; length <= SEARCH_TERMS_CAP
+ * @param challenge - challenge object (title optional)
+ * @returns ordered, deduped search terms; length <= SEARCH_TERMS_CAP
  */
-const buildSearchTerms = (challenge, opts = {}) => {
+const buildSearchTerms = (challenge: ChallengeText | null | undefined, opts: TagOptions | null = {}): string[] => {
     const { mustIncludeTags, shouldIncludeTags, ignoreWords = null } = opts || {};
-    /**
-     * @param {readonly string[] | null | undefined} tags
-     * @returns {string[]}
-     */
-    const fromTags = (tags) =>
+    const fromTags = (tags: readonly string[] | null | undefined): string[] =>
         Array.isArray(tags)
             ? tags
                   .filter((t) => typeof t === 'string')

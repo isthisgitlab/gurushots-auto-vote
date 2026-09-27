@@ -172,7 +172,7 @@ const notifyLeadMinutes = z.number().int().min(1).max(60);
 // against a corrupted settings file or out-of-band write, same rationale as
 // the tagsList caps below.
 const MAX_SCHEDULE_ROWS = 3;
-// Mirrored in services/scheduleRemap.js (renderer-bundle-safe module that
+// Mirrored in services/scheduleRemap.ts (renderer-bundle-safe module that
 // can't import this zod-carrying file) — change both together.
 const MAX_SCHEDULE_COUNT = 4;
 const MAX_SCHEDULE_SECONDS = 30 * 24 * 3600; // 30 days
@@ -1431,7 +1431,7 @@ const SETTINGS_SCHEMA = {
     // a subject: it dilutes the pooled theme vector and, because only
     // SEARCH_TERMS_CAP terms are searched, it can push the real subject out
     // entirely. The series prefix in "Color Hunt: Green" is handled structurally
-    // (see titleSubject in services/photoPicker/title.js) and needs no entry here.
+    // (see titleSubject in services/photoPicker/title.ts) and needs no entry here.
     //
     // Seeded rather than hardcoded on purpose: every word is visible and
     // removable. Delete one if a challenge genuinely IS about it — "Negative

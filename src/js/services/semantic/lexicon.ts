@@ -17,13 +17,11 @@
 import { loadLexiconAsset } from './assets';
 import { stem } from '../photoPicker/stemming';
 
-/** @import { LexiconTable, RawLexicon } from '../../types/semantic' */
+import type { LexiconTable, RawLexicon } from '../../types/semantic';
 
 // undefined = not initialized, null = unavailable, { dims, words: Map } = ready
-/** @type {LexiconTable | null | undefined} */
-let table;
-/** @type {Promise<LexiconTable | null> | null} */
-let initPromise = null;
+let table: LexiconTable | null | undefined;
+let initPromise: Promise<LexiconTable | null> | null = null;
 
 /**
  * Decode one packed base64 vector to signed int8 bytes. The builder writes
@@ -33,11 +31,8 @@ let initPromise = null;
  * every negative component SILENTLY — tests/services/semantic/lexicon.test.js
  * round-trips known negative values through BOTH branches to pin this down.
  * Returns null for anything malformed.
- *
- * @param {unknown} str
- * @returns {Int8Array | null}
  */
-const decodeBase64Int8 = (str) => {
+const decodeBase64Int8 = (str: unknown): Int8Array | null => {
     if (typeof str !== 'string' || str.length === 0) return null;
     try {
         if (typeof Buffer !== 'undefined' && typeof Buffer.from === 'function') {
@@ -61,30 +56,20 @@ const decodeBase64Int8 = (str) => {
 // (see concreteness below). Optional: an asset without one — or with one that
 // does not fit this table — just leaves concreteness() returning null, which
 // every caller already reads as "no opinion".
-/**
- * @param {unknown} axis
- * @param {number} dims
- * @returns {Float64Array | null}
- */
-const readAxis = (axis, dims) => {
+const readAxis = (axis: unknown, dims: number): Float64Array | null => {
     if (!Array.isArray(axis) || axis.length !== dims || !axis.every(Number.isFinite)) return null;
     return Float64Array.from(axis);
 };
 
-/**
- * @param {RawLexicon | null | undefined} raw
- * @returns {LexiconTable | null}
- */
-const buildTable = (raw) => {
+const buildTable = (raw: RawLexicon | null | undefined): LexiconTable | null => {
     if (!raw || typeof raw !== 'object' || raw.version !== 2 || !raw.packed || typeof raw.packed !== 'object') {
         return null;
     }
     if (!Number.isFinite(raw.dims) || !Number.isFinite(raw.scale)) return null;
     // Both checked finite just above.
-    const dims = /** @type {number} */ (raw.dims);
-    const scale = /** @type {number} */ (raw.scale);
-    /** @type {Map<string, Float32Array>} */
-    const words = new Map();
+    const dims = raw.dims as number;
+    const scale = raw.scale as number;
+    const words: Map<string, Float32Array> = new Map();
     for (const key of Object.keys(raw.packed)) {
         const bytes = decodeBase64Int8(raw.packed[key]);
         if (!bytes || bytes.length !== dims) continue;
@@ -108,9 +93,8 @@ const buildTable = (raw) => {
 
 /**
  * Load the lexicon once. Idempotent; concurrent callers share the load.
- * @returns {Promise<LexiconTable | null>}
  */
-const init = () => {
+const init = (): Promise<LexiconTable | null> => {
     if (table !== undefined) return Promise.resolve(table);
     if (!initPromise) {
         initPromise = (async () => {
@@ -123,11 +107,7 @@ const init = () => {
 
 const isAvailable = async () => (await init()) != null;
 
-/**
- * @param {string} t
- * @returns {string}
- */
-const stemToken = (t) => stem(t.toLowerCase());
+const stemToken = (t: string): string => stem(t.toLowerCase());
 
 /**
  * Vector for one token, tolerating the one known spelling divergence between
@@ -146,12 +126,8 @@ const stemToken = (t) => stem(t.toLowerCase());
  * AFTER a miss, so it cannot shadow a correct key ("rose", "tree", "house" all
  * hit first). Regenerating the 1.2 MB asset would need a network fetch of the
  * source vectors; this is the offline-safe equivalent.
- *
- * @param {Pick<LexiconTable, 'words'>} tbl
- * @param {string} tok
- * @returns {Float32Array|undefined}
  */
-const vectorFor = (tbl, tok) => {
+const vectorFor = (tbl: Pick<LexiconTable, 'words'>, tok: string): Float32Array | undefined => {
     const key = stemToken(tok);
     const hit = tbl.words.get(key);
     if (hit) return hit;
@@ -166,12 +142,11 @@ const vectorFor = (tbl, tok) => {
  * Takes the table explicitly so scripts/build-lexicon.js pools the concreteness
  * poles with exactly the arithmetic the runtime scores against; embed() below
  * is this over the loaded table.
- *
- * @param {{dims:number, words:Map<string,Float32Array>}|null|undefined} tbl
- * @param {Array<string>} tokens
- * @returns {Float64Array|null}
  */
-const embedIn = (tbl, tokens) => {
+const embedIn = (
+    tbl: { dims: number; words: Map<string, Float32Array> } | null | undefined,
+    tokens: Array<string>,
+): Float64Array | null => {
     if (!tbl || !Array.isArray(tokens) || tokens.length === 0) return null;
     const dims = tbl.dims;
     const acc = new Float64Array(dims);
@@ -190,13 +165,8 @@ const embedIn = (tbl, tokens) => {
     return acc;
 };
 
-/**
- * @param {Array<string>} tokens
- * @returns {Float64Array|null}
- */
-const embed = (tokens) => embedIn(table, tokens);
-/** @param {string} token */
-const hasVector = (token) => Boolean(table && vectorFor(table, token));
+const embed = (tokens: Array<string>): Float64Array | null => embedIn(table, tokens);
+const hasVector = (token: string) => Boolean(table && vectorFor(table, token));
 
 const MAX_RELATED_SEARCH_TERMS = 6;
 const GENERIC_SEARCH_FLOOR = 0.76;
@@ -222,19 +192,14 @@ const CONTRASTING_SEARCH_TERMS = new Map([
     ['below', ['above']],
 ]);
 
-/**
- * @param {string} term
- * @returns {string[]}
- */
-const nearestSearchTerms = (term) => {
+const nearestSearchTerms = (term: string): string[] => {
     const query = embed([term]);
     if (!query) return [];
     // embed() only returns a vector from a loaded table.
-    const loaded = /** @type {LexiconTable} */ (table);
+    const loaded = table as LexiconTable;
     const termStem = stemToken(term);
     const contrasting = CONTRASTING_SEARCH_TERMS.get(termStem) || [];
-    /** @type {Array<{word: string, score: number}>} */
-    const matches = [];
+    const matches: Array<{ word: string; score: number }> = [];
     for (const [key, vec] of loaded.words) {
         if (key === termStem || contrasting.includes(key)) continue;
         let dot = 0;
@@ -254,12 +219,7 @@ const nearestSearchTerms = (term) => {
         .map(({ word }) => word);
 };
 
-/**
- * @param {string[][]} groups
- * @param {string[]} terms
- * @returns {string[]}
- */
-const interleaveSearchTerms = (groups, terms) => {
+const interleaveSearchTerms = (groups: string[][], terms: string[]): string[] => {
     const seen = new Set(terms.map(stemToken));
     const related = [];
     const width = Math.max(0, ...groups.map((group) => group.length));
@@ -275,11 +235,7 @@ const interleaveSearchTerms = (groups, terms) => {
     return related;
 };
 
-/**
- * @param {readonly string[]} terms
- * @returns {string[]}
- */
-const relatedSearchTerms = (terms) => {
+const relatedSearchTerms = (terms: readonly string[]): string[] => {
     if (!table || !Array.isArray(terms)) return [];
     const loaded = table;
     const groups = terms.map((term) => {
@@ -299,12 +255,7 @@ const relatedSearchTerms = (terms) => {
 
 // Cosine similarity. Both inputs come from embed() and are already unit
 // vectors, so the dot product is the cosine.
-/**
- * @param {ArrayLike<number> | null | undefined} a
- * @param {ArrayLike<number> | null | undefined} b
- * @returns {number}
- */
-const cosine = (a, b) => {
+const cosine = (a: ArrayLike<number> | null | undefined, b: ArrayLike<number> | null | undefined): number => {
     if (!a || !b || a.length !== b.length) return 0;
     let dot = 0;
     for (let i = 0; i < a.length; i++) dot += a[i] * b[i];
@@ -324,11 +275,8 @@ const cosine = (a, b) => {
  * point — challenge names change every week, and "Balloon Fun" must read as
  * balloons without anyone having written down that "fun" is not a subject.
  * scripts/validate-lexicon.js gates the build on real titles reading correctly.
- *
- * @param {string} token
- * @returns {number|null}
  */
-const concreteness = (token) => {
+const concreteness = (token: string): number | null => {
     if (!table || !table.axis) return null;
     const vec = embed([token]);
     return vec ? cosine(vec, table.axis) : null;

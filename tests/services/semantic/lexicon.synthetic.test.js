@@ -1,5 +1,5 @@
 /**
- * lexicon.js against a tiny synthetic table: concurrent init() sharing one
+ * lexicon.ts against a tiny synthetic table: concurrent init() sharing one
  * load, and a zero vector that must not divide by zero when normalised.
  */
 

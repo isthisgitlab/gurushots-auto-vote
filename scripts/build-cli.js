@@ -104,7 +104,7 @@ function generateSeaBlob(nodeBinary = process.execPath, { lite = false } = {}) {
     };
     // Embed the semantic-matching word-vector lexicon as a SEA asset so the
     // single binary can resolve it via node:sea.getAsset() — it is a runtime
-    // asset (loaded by src/js/services/semantic/assets.js), never bundled into
+    // asset (loaded by src/js/services/semantic/assets.ts), never bundled into
     // cli-bundled.js, so the JS-bundle budget is unaffected.
     const lexiconAsset = path.join(ROOT, 'src', 'assets', 'semantic-vectors.json');
     if (fs.existsSync(lexiconAsset)) {

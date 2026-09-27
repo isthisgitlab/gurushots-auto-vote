@@ -19,26 +19,22 @@
 import * as runtime from '../../runtime';
 import { appPath } from '../../appPaths';
 
-/** @import { RawLexicon } from '../../types/semantic' */
+import type { RawLexicon } from '../../types/semantic';
 
 const ASSET_NAME = 'semantic-vectors.json';
 
 // undefined = not attempted yet, null = attempted and unavailable, object = loaded
-/** @type {RawLexicon | null | undefined} */
-let cached;
-/** @type {Promise<RawLexicon | null> | null} */
-let inflight = null;
+let cached: RawLexicon | null | undefined;
+let inflight: Promise<RawLexicon | null> | null = null;
 
-/** @returns {Promise<RawLexicon | null>} */
-const loadViaFetch = async () => {
+const loadViaFetch = async (): Promise<RawLexicon | null> => {
     // Relative URL resolves against the WebView document served from the webDir.
     const res = await fetch(ASSET_NAME);
     if (!res || !res.ok) throw new Error(`fetch ${ASSET_NAME}: HTTP ${res && res.status}`);
     return res.json();
 };
 
-/** @returns {RawLexicon | null} */
-const loadViaNode = () => {
+const loadViaNode = (): RawLexicon | null => {
     // CLI single binary embeds the lexicon in the SEA blob.
     try {
         const sea = require('node:sea');
@@ -54,9 +50,9 @@ const loadViaNode = () => {
  * Load and cache the parsed lexicon asset. Concurrent callers share one
  * in-flight load. Returns the parsed object, or null when unavailable.
  *
- * @returns {Promise<RawLexicon | null>} the parsed JSON, unchecked (buildTable validates it)
+ * @returns the parsed JSON, unchecked (buildTable validates it)
  */
-const loadLexiconAsset = async () => {
+const loadLexiconAsset = async (): Promise<RawLexicon | null> => {
     if (cached !== undefined) return cached;
     if (!inflight) {
         inflight = (async () => {

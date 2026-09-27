@@ -1,5 +1,5 @@
 /**
- * Tests for the cross-platform lexicon asset loader (semantic/assets.js).
+ * Tests for the cross-platform lexicon asset loader (semantic/assets.ts).
  *
  * Every platform branch resolves to the parsed object or null — never a throw —
  * and the result is memoised, with concurrent callers sharing one load.

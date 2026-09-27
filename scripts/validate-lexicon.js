@@ -29,7 +29,7 @@
  * Everything is rebuilt from the REAL committed asset, in the same MAX-POOLED
  * shape the matcher actually compares: a couple of challenge keywords (mean-
  * pooled, as a title is one phrase) against a photo's several labels scored
- * INDEPENDENTLY, keeping the best. This must track services/semantic/index.js —
+ * INDEPENDENTLY, keeping the best. This must track services/semantic/index.ts —
  * the floor is only meaningful for the pooling it was measured under, and the
  * two distributions move a long way between mean and max. Fails non-zero if the gate does not hold. Run:
  * `pnpm verify:lexicon` (and in CI, where the asset is rebuilt first so this
@@ -139,7 +139,7 @@ const runSubjectGate = (config, lex) => {
     for (const f of failures) console.error(`   - ${f}`);
     console.error(
         '\n   Fix the axis first — `abstractAnchors` / `excludeParents` — then rebuild. Move\n' +
-            '   CONCRETE_SUBJECT_MIN / ABSTRACT_WORD_MAX (src/js/services/photoPicker/title.js) only for a case\n' +
+            '   CONCRETE_SUBJECT_MIN / ABSTRACT_WORD_MAX (src/js/services/photoPicker/title.ts) only for a case\n' +
             '   that genuinely sits on the boundary, and never edit a case to match the output.',
     );
     process.exit(1);
@@ -184,7 +184,7 @@ const main = async ({ lex = lexicon, config = CONFIG, matchFloor = SEMANTIC_MATC
     const challengeVecOf = (c) => lex.embed(c.words.slice(0, MAX_CHALLENGE_KEYWORDS));
 
     // A photo is its labels, each scored on its own and the best kept — the
-    // runtime shape (see services/semantic/index.js). Returns null when no
+    // runtime shape (see services/semantic/index.ts). Returns null when no
     // label is in vocabulary, which is "no signal", not a zero.
     const bestLabelSim = (challengeVec, words) => {
         let best = null;
@@ -319,7 +319,7 @@ const main = async ({ lex = lexicon, config = CONFIG, matchFloor = SEMANTIC_MATC
                 '   2. if the WHOLE related distribution sits low, raise RETROFIT_BETA in\n' +
                 '      scripts/fetch-embeddings.js and re-run fetch + build (offline once cached).\n' +
                 '      MEAN_CENTER is already on — do not turn it off to inflate related scores.\n' +
-                '   3. only then adjust SEMANTIC_MATCH_FLOOR (src/js/services/photoPicker/tiers.js), keeping it\n' +
+                '   3. only then adjust SEMANTIC_MATCH_FLOOR (src/js/services/photoPicker/tiers.ts), keeping it\n' +
                 '      strictly inside p99(unrelated) < FLOOR < p25(related). Do NOT widen the gate itself.',
         );
         process.exit(1);

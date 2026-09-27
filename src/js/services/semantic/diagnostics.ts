@@ -2,16 +2,15 @@ import { createJsonStore } from '../../settings/storage';
 import * as runtime from '../../runtime';
 import * as settings from '../../settings';
 
-/** @import { RawJsonStore } from '../../types/stores' */
-/** @import { LexiconDiagnosticsReport, VocabularyObservation } from '../../types/semantic' */
+import type { RawJsonStore } from '../../types/stores';
+import type { LexiconDiagnosticsReport, VocabularyObservation } from '../../types/semantic';
 
 const diagnosticsStore = createJsonStore({ fileName: 'lexicon-diagnostics.json', prefKey: 'gs_lexicon_diagnostics' });
 const MAX_WORDS = 200;
 const MAX_SEEN_CHALLENGES = 512;
 const WORD_RE = /^[a-z]{2,20}$/;
 
-/** @returns {LexiconDiagnosticsReport} */
-const emptyReport = () => ({
+const emptyReport = (): LexiconDiagnosticsReport => ({
     version: 1,
     since: new Date().toISOString(),
     updatedAt: null,
@@ -27,11 +26,7 @@ const emptyReport = () => ({
 
 // Stable local fingerprint for deduplication across app and CLI restarts.
 // The report never stores the source challenge ID, URL, or title.
-/**
- * @param {string} key
- * @returns {string}
- */
-const challengeFingerprint = (key) => {
+const challengeFingerprint = (key: string): string => {
     let hash = 2166136261;
     for (let i = 0; i < key.length; i++) hash = Math.imul(hash ^ key.charCodeAt(i), 16777619);
     return (hash >>> 0).toString(36);
@@ -39,11 +34,7 @@ const challengeFingerprint = (key) => {
 
 // Keep the most frequent observed misses in a fixed-size local file. Counts
 // are observations, not a claim that a word ought to be added to the lexicon.
-/**
- * @param {Record<string, number>} counts
- * @param {string[]} words
- */
-const countWords = (counts, words) => {
+const countWords = (counts: Record<string, number>, words: string[]) => {
     for (const word of new Set(words)) {
         if (!WORD_RE.test(word)) continue;
         if (Object.hasOwn(counts, word)) {
@@ -58,10 +49,8 @@ const countWords = (counts, words) => {
     }
 };
 
-/** @param {RawJsonStore} store */
-const createDiagnostics = (store) => {
-    /** @returns {LexiconDiagnosticsReport} */
-    const read = () => {
+const createDiagnostics = (store: RawJsonStore) => {
+    const read = (): LexiconDiagnosticsReport => {
         try {
             const data = JSON.parse(store.readRaw() || 'null');
             if (
@@ -86,13 +75,15 @@ const createDiagnostics = (store) => {
 
     return {
         read,
-        /**
-         * @param {string | number | undefined} challengeKey
-         * @param {VocabularyObservation} observation
-         */
         record: (
-            challengeKey,
-            { themeWords = [], labelWords = [], noThemeVector = false, noLabelVectors = false, noOnThemeScore = false },
+            challengeKey: string | number | undefined,
+            {
+                themeWords = [],
+                labelWords = [],
+                noThemeVector = false,
+                noLabelVectors = false,
+                noOnThemeScore = false,
+            }: VocabularyObservation,
         ) => {
             const day = new Date().toISOString().slice(0, 10);
             const key = String(challengeKey || '');

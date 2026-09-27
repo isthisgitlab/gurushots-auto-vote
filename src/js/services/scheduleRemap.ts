@@ -18,9 +18,9 @@
  * so the module stays bundle-friendly for both runtimes.
  */
 
-/** @import { SettingValues } from '../settings/schema' */
+import type { SettingValues } from '../settings/schema';
 
-/** @typedef {SettingValues['autoFillSchedule']} FillSchedule */
+export type FillSchedule = SettingValues['autoFillSchedule'];
 
 /**
  * How far the schedule shifts toward the end for a given challenge: the
@@ -31,11 +31,9 @@
  * ≤ 2 (rows count images 2–4); a missing max pushes it up to the whole span,
  * where every row shifts away and the schedule goes inert — fail-closed.
  *
- * @param {FillSchedule} rows
- * @param {number | undefined} maxPhotoSubmits - challenge.max_photo_submits
- * @returns {number}
+ * @param maxPhotoSubmits - challenge.max_photo_submits
  */
-const getScheduleShift = (rows, maxPhotoSubmits) => {
+const getScheduleShift = (rows: FillSchedule, maxPhotoSubmits: number | undefined): number => {
     const max = maxPhotoSubmits ?? 0;
     const highestActive = rows.reduce((m, r) => (r.seconds > 0 ? Math.max(m, r.count) : m), 0);
     return Math.max(0, highestActive - max);
@@ -47,11 +45,12 @@ const getScheduleShift = (rows, maxPhotoSubmits) => {
  * active span. A uniform shift keeps counts unique, so no dedupe is needed.
  * Off rows (seconds: 0) shift positionally like the rest but stay inert.
  *
- * @param {FillSchedule} rows
- * @param {number | undefined} maxPhotoSubmits - challenge.max_photo_submits
- * @returns {Array<{count: number, seconds: number}>}
+ * @param maxPhotoSubmits - challenge.max_photo_submits
  */
-const remapScheduleRows = (rows, maxPhotoSubmits) => {
+const remapScheduleRows = (
+    rows: FillSchedule,
+    maxPhotoSubmits: number | undefined,
+): Array<{ count: number; seconds: number }> => {
     const shift = getScheduleShift(rows, maxPhotoSubmits);
     if (shift === 0) return [...rows];
     return rows.map((r) => ({ count: r.count - shift, seconds: r.seconds })).filter((r) => r.count >= 2);

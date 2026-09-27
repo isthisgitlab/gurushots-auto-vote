@@ -58,7 +58,7 @@
 
 import { finiteOr } from '../../numbers';
 
-/** @import { PickerPhoto, ScoredCandidate, SemanticScoreMap, ThemeTiers } from '../../types/photoPicker' */
+import type { PickerPhoto, ScoredCandidate, SemanticScoreMap, ThemeTiers } from '../../types/photoPicker';
 
 /**
  * Below this the semantic tier is treated as "no match at all" (see
@@ -77,7 +77,7 @@ import { finiteOr } from '../../numbers';
  * this constant can never quietly drift out of the valid range.
  *
  * CALIBRATED FOR MAX-POOLING. The value is only meaningful for the pooling the
- * validator measured it under, and services/semantic/index.js now scores each
+ * validator measured it under, and services/semantic/index.ts now scores each
  * label independently and keeps the best rather than averaging the whole label
  * bag. Both distributions shifted up when that changed, so this moved 43 -> 46.
  * If the pooling changes again, re-run `pnpm verify:lexicon` and move this with
@@ -92,7 +92,7 @@ const SEMANTIC_MATCH_FLOOR = 46;
  * WHY A CAP AT ALL. Uncapped, this tier would reward a photo for carrying many
  * loosely-related labels over one carrying few strongly-related ones — the same
  * "measures how chatty the tagger was rather than how on-theme the photo is"
- * failure that made mean-pooling wrong in services/semantic/index.js, just
+ * failure that made mean-pooling wrong in services/semantic/index.ts, just
  * wearing a different hat. A photo's third corroborating label has already
  * settled "one lucky tag" versus "this photo is about the theme"; past that the
  * extra labels carry no information this tier can use.
@@ -132,12 +132,11 @@ const NO_SEMANTIC = Object.freeze({ semantic: 0, semanticSupport: 0 });
  * by hand pass — it stays valid and simply contributes no support. Normalising
  * here is what keeps every caller in between shape-agnostic: the map is passed
  * through autoFill and joinChallenges untouched.
- *
- * @param {SemanticScoreMap|null} semanticScores
- * @param {string|number} id
- * @returns {{semantic: number, semanticSupport: number}}
  */
-const semanticTiersOf = (semanticScores, id) => {
+const semanticTiersOf = (
+    semanticScores: SemanticScoreMap | null,
+    id: string | number,
+): { semantic: number; semanticSupport: number } => {
     if (!semanticScores) return NO_SEMANTIC;
     const entry = semanticScores.get(String(id));
     const raw = finiteOr(typeof entry === 'number' ? entry : entry?.score, null);
@@ -159,11 +158,7 @@ const semanticTiersOf = (semanticScores, id) => {
 // icon URLs and would bloat a persisted cache for a value only ever read as a
 // length). Falls back to counting a raw `achievements` array so mocks, tests and
 // any future payload that inlines the array keep working.
-/**
- * @param {PickerPhoto} photo
- * @returns {number}
- */
-const achievementCountOf = (photo) => {
+const achievementCountOf = (photo: PickerPhoto): number => {
     const count = finiteOr(photo.achievementCount, null);
     if (count !== null && count >= 0) {
         return Math.floor(count);
@@ -174,41 +169,20 @@ const achievementCountOf = (photo) => {
 // Tier 5. True only when photoStats.js actually resolved this photo's real
 // numbers; see the "NOTE on tier 5" in the file header for why unknown must not
 // collapse into votes:0.
-/**
- * @param {PickerPhoto} photo
- * @returns {boolean}
- */
-const statsKnownOf = (photo) => photo.statsKnown === true;
+const statsKnownOf = (photo: PickerPhoto): boolean => photo.statsKnown === true;
 
 // The three readers below return the field only once Number.isFinite has
 // vouched for it, hence the casts.
-/**
- * @param {PickerPhoto} photo
- * @returns {number}
- */
-const votesOf = (photo) => finiteOr(photo.votes, 0);
+const votesOf = (photo: PickerPhoto): number => finiteOr(photo.votes, 0);
 
-/**
- * @param {PickerPhoto} photo
- * @returns {number}
- */
-const viewsOf = (photo) => finiteOr(photo.views, 0);
+const viewsOf = (photo: PickerPhoto): number => finiteOr(photo.views, 0);
 
-/**
- * @param {PickerPhoto} photo
- * @returns {number}
- */
-const uploadDateOf = (photo) => finiteOr(photo.upload_date, 0);
+const uploadDateOf = (photo: PickerPhoto): number => finiteOr(photo.upload_date, 0);
 
 // The theme tiers, highest-priority first. A photo's standing on these is what
 // the enrichment set is derived from — they are the tiers that a stat lookup
 // can NEVER change, so anything they already separate is settled.
-/**
- * @param {ThemeTiers} a
- * @param {ThemeTiers} b
- * @returns {number}
- */
-const compareTheme = (a, b) => {
+const compareTheme = (a: ThemeTiers, b: ThemeTiers): number => {
     if (b.shouldMatchCount !== a.shouldMatchCount) return b.shouldMatchCount - a.shouldMatchCount;
     if (b.semantic !== a.semantic) return b.semantic - a.semantic;
     // Strictly below the max-pooled score above: two photos only reach this
@@ -218,11 +192,7 @@ const compareTheme = (a, b) => {
     return b.score - a.score;
 };
 
-/**
- * @param {ThemeTiers} a
- * @param {ThemeTiers} b
- */
-const sameTheme = (a, b) => compareTheme(a, b) === 0;
+const sameTheme = (a: ThemeTiers, b: ThemeTiers) => compareTheme(a, b) === 0;
 
 /**
  * Did this candidate match the challenge theme AT ALL?
@@ -238,11 +208,8 @@ const sameTheme = (a, b) => compareTheme(a, b) === 0;
  * Every theme tier is non-negative (that is what makes the governing rule
  * enforceable — see the file header), so "matched something" is exactly "any
  * tier is above zero".
- *
- * @param {ThemeTiers} entry
- * @returns {boolean}
  */
-const hasThemeMatch = (entry) =>
+const hasThemeMatch = (entry: ThemeTiers): boolean =>
     Boolean(entry) &&
     (entry.shouldMatchCount > 0 || entry.semantic > 0 || entry.semanticSupport > 0 || entry.score > 0);
 
@@ -262,11 +229,10 @@ const hasThemeMatch = (entry) =>
  * theme alone; candidates strictly BELOW it can never reach it. Only the ones
  * sharing the boundary's theme tuple are still competing, so only they matter.
  *
- * @param {ScoredCandidate[]} scored - from buildScoredCandidates
- * @param {number} slotsToFill
- * @returns {PickerPhoto[]} the photo objects to enrich ([] when nothing is contested)
+ * @param scored - from buildScoredCandidates
+ * @returns the photo objects to enrich ([] when nothing is contested)
  */
-const selectEnrichmentSet = (scored, slotsToFill) => {
+const selectEnrichmentSet = (scored: ScoredCandidate[], slotsToFill: number): PickerPhoto[] => {
     if (!Array.isArray(scored) || scored.length === 0) return [];
     if (!Number.isInteger(slotsToFill) || slotsToFill <= 0) return [];
     // Every candidate gets a slot — their order is irrelevant.
@@ -288,12 +254,8 @@ const selectEnrichmentSet = (scored, slotsToFill) => {
  * reached by photos that tied, which for an unmatched photo means tied at
  * zero. That is the governing rule ("a theme match always beats popularity")
  * and it is enforced by this ordering, so do not reorder these.
- *
- * @param {ScoredCandidate[]} scored
- * @param {number} slotsToFill
- * @returns {Array<string>}
  */
-const finalizePick = (scored, slotsToFill) => {
+const finalizePick = (scored: ScoredCandidate[], slotsToFill: number): Array<string> => {
     if (!Array.isArray(scored) || scored.length === 0) return [];
     if (!Number.isInteger(slotsToFill) || slotsToFill <= 0) return [];
     const ranked = scored.slice().sort((a, b) => {

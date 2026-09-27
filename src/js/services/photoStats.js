@@ -13,7 +13,7 @@
  * Because that is one request per photo, enrichment is deliberately frugal:
  *
  *   - The caller only asks for the photos whose ORDER the popularity tiers
- *     actually decide (see selectEnrichmentSet in photoPicker/tiers.js), so a fill
+ *     actually decide (see selectEnrichmentSet in photoPicker/tiers.ts), so a fill
  *     that matched the theme cleanly costs zero extra requests.
  *   - Results are cached PERSISTENTLY, so coverage accumulates across fills
  *     instead of being re-fetched. A cache hit is free and unlimited.
@@ -31,7 +31,7 @@
  * Cache scope: process-global and NOT token-scoped, so switching accounts
  * without restarting reuses entries. Accepted: photo ids are platform-unique
  * and vote counts are public data. This matches the equally unscoped vecCache
- * in services/semantic/index.js.
+ * in services/semantic/index.ts.
  *
  * Platform note: the persistent store is fs on Electron/CLI and Capacitor
  * Preferences on the Android app WebView, but MEMORY-ONLY in the Android
@@ -87,7 +87,7 @@ const MAX_ACHIEVEMENT_COUNT = 999;
 // each is tiny, but 5000 megabyte-long keys is not. Real GuruShots ids are
 // 32-char hex; anything past this is malformed and simply goes uncached (it is
 // still enriched for the current fill, just never persisted). Same
-// bound-the-untrusted-input reflex as MAX_LABELS_PER_PHOTO in photoPicker/labels.js.
+// bound-the-untrusted-input reflex as MAX_LABELS_PER_PHOTO in photoPicker/labels.ts.
 const MAX_PHOTO_ID_LENGTH = 128;
 
 // Ceiling on newly fetched photos across a whole voting pass, not just one

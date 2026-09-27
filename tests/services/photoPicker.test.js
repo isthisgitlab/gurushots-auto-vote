@@ -1,5 +1,5 @@
 /**
- * Tests for photoPicker.js
+ * Tests for photoPicker.ts
  */
 
 const {
@@ -104,7 +104,7 @@ describe('photoPicker', () => {
             // It stays recoverable on every path that matters: the label still
             // matches via the bounded-prefix branch, and tagResolver's backoff
             // shortens the search term by one character. (The lexicon key is
-            // covered by the trailing-e retry in semantic/lexicon.js.)
+            // covered by the trailing-e retry in semantic/lexicon.ts.)
             expect(matches(stem('hero'), stem('heroes'))).toBe(true);
             expect(matches(stem('potato'), stem('potatoes'))).toBe(true);
         });
@@ -601,7 +601,7 @@ describe('photoPicker', () => {
                 allowed('themeMatch', ['Pink'], 1000, { achievements: [], votes: 0 }),
                 // Highest votes — outranks the badge-heavier photo below, because
                 // raw popularity is the stronger signal (see the tier list in
-                // photoPicker/tiers.js's header).
+                // photoPicker/tiers.ts's header).
                 allowed('highVotes', ['Misc'], 5000, { achievements: [], votes: 800 }),
                 // More achievements, but fewer votes
                 allowed('manyWins', ['Misc'], 1000, { achievements: ['a', 'b'], votes: 100 }),

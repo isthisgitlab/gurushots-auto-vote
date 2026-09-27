@@ -86,7 +86,7 @@ const makeFallbackLogger = (
  * not a degenerate case: the fill resolves the challenge to one tag and
  * searches it server-side, so a fill's candidates routinely all carry that tag
  * and tie at the same high semantic bucket by construction (see the SUPPORT
- * note in services/semantic/index.js). Reporting that as "nothing matched the
+ * note in services/semantic/index.ts). Reporting that as "nothing matched the
  * challenge theme" told the user their fill had failed on exactly the fills
  * that worked, and advised a Per-Title Tag Rule to repair something that was
  * not broken. `themeMatched` below splits them.

@@ -9,15 +9,14 @@ import { MAX_TOKENISE_CHARS, stem, tokenise, matches } from './stemming';
 /**
  * A photo as the label readers see it: `labels` is untrusted API data, so each
  * entry is type-checked before use.
- *
- * @typedef {{ labels?: unknown } | null | undefined} LabelledPhoto
  */
+type LabelledPhoto = { labels?: unknown } | null | undefined;
 
 // Bounds on tokenised label data. Photo labels are untrusted strings from the
 // GuruShots API, and splitting them into words (rather than keeping one stem per
 // label) multiplies how many stems a single photo can contribute. Those stems
 // feed the O(stems x keywords) match loops AND the semantic embedding cache key
-// (see semantic/index.js, which JSON.stringifies the token array — its MAX_CACHE
+// (see semantic/index.ts, which JSON.stringifies the token array — its MAX_CACHE
 // bounds the entry COUNT, not the entry SIZE). Cap both fan-outs, mirroring the
 // SEARCH_TERMS_CAP / 200-char caps used elsewhere in the picker. Real vision
 // labels are 1-3 words; these ceilings are far above anything legitimate.
@@ -38,11 +37,8 @@ const MAX_LABELS_PER_PHOTO = 64;
  * a deliberate decision (see pickPhotosForChallenge). Do not reach for this
  * anywhere else: comparing a whole-label stem against a single-word keyword
  * mismatches ("sea life" matching "life"). For matching, use labelWordStems.
- *
- * @param {LabelledPhoto} photo
- * @returns {string[]}
  */
-const wholeLabelStems = (photo) => {
+const wholeLabelStems = (photo: LabelledPhoto): string[] => {
     if (!Array.isArray(photo?.labels)) return [];
     return (
         photo.labels
@@ -70,14 +66,10 @@ const wholeLabelStems = (photo) => {
  * must-tag "sea life" has to be able to match the label "Sea Life" on both
  * words. Deduping matters — a photo carrying both "Sea" and "Sea Life" must not
  * count "sea" twice.
- *
- * @param {LabelledPhoto} photo
- * @returns {string[]}
  */
-const labelWordStems = (photo) => {
+const labelWordStems = (photo: LabelledPhoto): string[] => {
     if (!Array.isArray(photo?.labels)) return [];
-    /** @type {Set<string>} */
-    const out = new Set();
+    const out: Set<string> = new Set();
     for (const label of photo.labels.slice(0, MAX_LABELS_PER_PHOTO)) {
         if (typeof label !== 'string' && typeof label !== 'number') continue;
         const words = tokenise(String(label), { keepStopwords: true }).slice(0, MAX_WORDS_PER_LABEL);
@@ -105,16 +97,11 @@ const labelWordStems = (photo) => {
  * the embedding cost twice, and groups are truncated to keep the total stem
  * count at or under MAX_STEMS_PER_PHOTO — the same ceiling the flat helper
  * enforces, so a photo cannot cost more work here than there.
- *
- * @param {LabelledPhoto} photo
- * @returns {string[][]}
  */
-const labelStemGroups = (photo) => {
+const labelStemGroups = (photo: LabelledPhoto): string[][] => {
     if (!Array.isArray(photo?.labels)) return [];
-    /** @type {string[][]} */
-    const groups = [];
-    /** @type {Set<string>} */
-    const seen = new Set();
+    const groups: string[][] = [];
+    const seen: Set<string> = new Set();
     let stems = 0;
     for (const label of photo.labels.slice(0, MAX_LABELS_PER_PHOTO)) {
         if (typeof label !== 'string' && typeof label !== 'number') continue;
@@ -140,20 +127,10 @@ const labelStemGroups = (photo) => {
 // Precondition: targetStems is non-empty — the only caller skips this filter
 // when there are no required tags, so the vacuous-true `[].every(...)` case
 // (which would pass every photo) is never reached.
-/**
- * @param {string[]} labelStems
- * @param {readonly string[]} targetStems
- * @returns {boolean}
- */
-const photoMatchesAllStems = (labelStems, targetStems) =>
+const photoMatchesAllStems = (labelStems: string[], targetStems: readonly string[]): boolean =>
     targetStems.every((target) => labelStems.some((labelStem) => matches(labelStem, target)));
 
-/**
- * @param {string[]} labelStems
- * @param {readonly string[]} shouldStems
- * @returns {number}
- */
-const countShouldMatches = (labelStems, shouldStems) => {
+const countShouldMatches = (labelStems: string[], shouldStems: readonly string[]): number => {
     if (shouldStems.length === 0 || labelStems.length === 0) return 0;
     let matched = 0;
     for (const target of shouldStems) {
@@ -167,13 +144,11 @@ const countShouldMatches = (labelStems, shouldStems) => {
     return matched;
 };
 
-/**
- * @param {LabelledPhoto} photo
- * @param {string[]} keywords
- * @param {string[] | null} [precomputedLabelStems]
- * @returns {number}
- */
-const scorePhoto = (photo, keywords, precomputedLabelStems = null) => {
+const scorePhoto = (
+    photo: LabelledPhoto,
+    keywords: string[],
+    precomputedLabelStems: string[] | null = null,
+): number => {
     if (keywords.length === 0) return 0;
     const labelStems = precomputedLabelStems || labelWordStems(photo);
     if (labelStems.length === 0) return 0;

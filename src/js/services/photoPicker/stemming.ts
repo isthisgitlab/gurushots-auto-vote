@@ -210,8 +210,7 @@ const STOPWORDS = new Set([
     'tales',
 ]);
 
-/** @param {string} token */
-const isPureDigit = (token) => /^\d+$/.test(token);
+const isPureDigit = (token: string) => /^\d+$/.test(token);
 
 // Bases that take '-es' rather than a bare '-s'. 'ss' is listed explicitly
 // because a single trailing 's' is ambiguous — 'glass'+es vs 'hous'+e+s — and
@@ -238,11 +237,8 @@ const SIBILANT_ES_RE = /(?:x|z|ch|sh|ss)$/;
  * zero candidates, fell back to the whole library) AND missed the lexicon,
  * which has 'lighthouse' but no 'lighthous'. Both failures disappear with the
  * correct stem.
- *
- * @param {string} word
- * @returns {string}
  */
-const stem = (word) => {
+const stem = (word: string): string => {
     if (typeof word !== 'string' || word.length < 4) return word || '';
     const w = word;
     if (w.length > 5 && w.endsWith('ing')) return w.slice(0, -3);
@@ -281,17 +277,13 @@ const MAX_TOKENISE_CHARS = 4096;
 // is full of boilerplate ("shots", "best", "good luck") that drowns out the
 // real subject, so the keyword path filters it. But a user who explicitly
 // types those words as a tag means them literally — honor the input.
-/**
- * @typedef {object} TokeniseOptions
- * @property {boolean} [keepStopwords]
- * @property {Iterable<unknown> | null} [ignoreWords] Raw words to drop; only a Set or an array is honoured.
- */
+interface TokeniseOptions {
+    keepStopwords?: boolean;
+    /** Raw words to drop; only a Set or an array is honoured. */
+    ignoreWords?: Iterable<unknown> | null;
+}
 
-/**
- * @param {Iterable<unknown> | null | undefined} words
- * @returns {Set<unknown> | null}
- */
-const toIgnoreSet = (words) => {
+const toIgnoreSet = (words: Iterable<unknown> | null | undefined): Set<unknown> | null => {
     if (words instanceof Set) return words.size > 0 ? words : null;
     if (!Array.isArray(words) || words.length === 0) return null;
     const out = new Set();
@@ -303,12 +295,10 @@ const toIgnoreSet = (words) => {
     return out.size > 0 ? out : null;
 };
 
-/**
- * @param {string | null | undefined} text
- * @param {TokeniseOptions} [opts]
- * @returns {string[]}
- */
-const rawTokenise = (text, { keepStopwords = false, ignoreWords = null } = {}) => {
+const rawTokenise = (
+    text: string | null | undefined,
+    { keepStopwords = false, ignoreWords = null }: TokeniseOptions = {},
+): string[] => {
     if (typeof text !== 'string' || text.length === 0) return [];
     // Matched against the RAW word, before stemming — same as STOPWORDS — so a
     // user writing "captivating" catches it without having to know that the
@@ -332,12 +322,8 @@ const rawTokenise = (text, { keepStopwords = false, ignoreWords = null } = {}) =
 // The surface words above, stemmed. Split from rawTokenise because term
 // ORDERING needs to see the original spelling — the stemmer erases the '-ing'
 // that marks a participle (see buildSearchTerms).
-/**
- * @param {string | null | undefined} text
- * @param {TokeniseOptions} [opts]
- * @returns {string[]}
- */
-const tokenise = (text, opts) => rawTokenise(text, opts).map(stem);
+const tokenise = (text: string | null | undefined, opts?: TokeniseOptions): string[] =>
+    rawTokenise(text, opts).map(stem);
 
 // Minimum stem length for the fuzzy (prefix) branch of matches(). Below this a
 // stem may only match by exact equality.
@@ -371,12 +357,8 @@ const MAX_STEM_PREFIX_DELTA = 2;
  * lexicon (pretrained GloVe embeddings, with the curated clusters in
  * scripts/lexicon-concepts.json retrofitted in) can, so those compounds get
  * caught by the semantic tier instead.
- *
- * @param {string} labelStem
- * @param {string} keywordStem
- * @returns {boolean}
  */
-const matches = (labelStem, keywordStem) => {
+const matches = (labelStem: string, keywordStem: string): boolean => {
     if (labelStem === keywordStem) return true;
     const [shorter, longer] =
         labelStem.length <= keywordStem.length ? [labelStem, keywordStem] : [keywordStem, labelStem];
@@ -399,11 +381,8 @@ const MIN_USER_TAG_STEM_LENGTH = 3;
  * kept (a user typing "shot" means it), but stems shorter than
  * MIN_USER_TAG_STEM_LENGTH are dropped to avoid spurious substring matches.
  * Empty/non-array input → [].
- *
- * @param {readonly string[] | null | undefined} tags
- * @returns {string[]}
  */
-const tokeniseTagList = (tags) => {
+const tokeniseTagList = (tags: readonly string[] | null | undefined): string[] => {
     if (!Array.isArray(tags) || tags.length === 0) return [];
     const joined = tags.filter((t) => typeof t === 'string').join(' ');
     const stems = tokenise(joined, { keepStopwords: true }).filter((s) => s.length >= MIN_USER_TAG_STEM_LENGTH);

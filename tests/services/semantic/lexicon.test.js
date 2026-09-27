@@ -2,7 +2,7 @@
  * Tests for the static word-vector lexicon backend.
  *
  * tests/setup.js mocks `fs`/`path` globally, so the cross-platform asset loader
- * (assets.js) can't read the real file here. We mock that loader to hand back
+ * (assets.ts) can't read the real file here. We mock that loader to hand back
  * the real shipped lexicon JSON (read via requireActual) and exercise the
  * lexicon math against actual data. The platform loader itself is integration
  * code, exercised in real runs.

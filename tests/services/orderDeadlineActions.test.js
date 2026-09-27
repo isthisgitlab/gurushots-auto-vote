@@ -9,7 +9,7 @@
  * { count, seconds }): the largest threshold among rows whose count exceeds
  * the current entry count, after the schedule end-aligns to the challenge's
  * photo limit (a 2-image challenge follows the Image-4 row's time for its
- * final photo) — see autoFill.getNextScheduleThresholdSec / scheduleRemap.js.
+ * final photo) — see autoFill.getNextScheduleThresholdSec / scheduleRemap.ts.
  */
 
 const settings = require('../../src/js/settings');

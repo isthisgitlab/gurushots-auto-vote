@@ -76,7 +76,7 @@ const isLexicalMatch = (tag, term) => {
  * Best cosine between the challenge theme and a candidate tag, on the same
  * 0..100 bucket scale as SEMANTIC_MATCH_FLOOR.
  *
- * Mirrors services/semantic/index.js: the tag is embedded as ONE label (its
+ * Mirrors services/semantic/index.ts: the tag is embedded as ONE label (its
  * words mean one thing together), then compared with the mean-pooled challenge
  * keywords. Returns null when either side is out of vocabulary — "no signal",
  * which is not the same as a measured zero.

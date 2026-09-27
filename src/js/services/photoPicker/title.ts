@@ -9,7 +9,7 @@ import { MAX_TOKENISE_CHARS, stem, rawTokenise, tokenise, matches } from './stem
 import * as lexicon from '../semantic/lexicon';
 import { finiteOr } from '../../numbers';
 
-/** @import { ChallengeText, ExcludedSubject, IgnoreWords, Negation } from '../../types/photoPicker' */
+import type { ChallengeText, ExcludedSubject, IgnoreWords, Negation } from '../../types/photoPicker';
 
 // Bounds for abstractTitleWords, on the lexicon's concreteness cosine. Pinned by
 // the `concreteness.cases` gate in scripts/validate-lexicon.js (real titles, run
@@ -21,8 +21,7 @@ import { finiteOr } from '../../numbers';
 const CONCRETE_SUBJECT_MIN = 0.15;
 const ABSTRACT_WORD_MAX = -0.1;
 
-/** @param {string} word */
-const lexiconConcreteness = (word) => lexicon.concreteness(word);
+const lexiconConcreteness = (word: string) => lexicon.concreteness(word);
 
 /**
  * Which title words are clearly NOT the subject, judged by meaning rather than
@@ -39,13 +38,14 @@ const lexiconConcreteness = (word) => lexicon.concreteness(word);
  * caller keeps its existing behavior there — as it does whenever the lexicon is
  * not loaded or a word is out of vocabulary (null concreteness = no opinion).
  *
- * @param {string[]} words - title words (surface or stemmed, as the caller has them)
- * @param {(word: string) => (number|null)} [concretenessOf]
- * @returns {Set<string>} a subset of `words`; never all of them
+ * @param words - title words (surface or stemmed, as the caller has them)
+ * @returns a subset of `words`; never all of them
  */
-const abstractTitleWords = (words, concretenessOf = lexiconConcreteness) => {
-    /** @type {Set<string>} */
-    const abstract = new Set();
+const abstractTitleWords = (
+    words: string[],
+    concretenessOf: (word: string) => number | null = lexiconConcreteness,
+): Set<string> => {
+    const abstract: Set<string> = new Set();
     if (!Array.isArray(words) || words.length < 2) return abstract;
     const scores = words.map((word) => finiteOr(concretenessOf(word), null));
     const known = scores.filter((score) => score !== null);
@@ -59,11 +59,7 @@ const abstractTitleWords = (words, concretenessOf = lexiconConcreteness) => {
 
 // A title's subject stems with abstractTitleWords' demotions removed. Safe to
 // apply blindly: the result is never empty for a non-empty input.
-/**
- * @param {string[]} stems
- * @returns {string[]}
- */
-const withoutAbstract = (stems) => {
+const withoutAbstract = (stems: string[]): string[] => {
     const abstract = abstractTitleWords(stems);
     return abstract.size > 0 ? stems.filter((s) => !abstract.has(s)) : stems;
 };
@@ -90,12 +86,7 @@ const withoutAbstract = (stems) => {
 // Falls back to the whole title when the tail carries no usable word, so
 // "Mountains: A Tribute" keeps "mountains" instead of collapsing to nothing.
 const SERIES_SEPARATOR_RE = /[:\u2013\u2014]|\s-\s/;
-/**
- * @param {string | null | undefined} title
- * @param {IgnoreWords} [ignoreWords]
- * @returns {string}
- */
-const titleSubject = (title, ignoreWords) => {
+const titleSubject = (title: string | null | undefined, ignoreWords?: IgnoreWords): string => {
     if (typeof title !== 'string') return '';
     const match = SERIES_SEPARATOR_RE.exec(title);
     if (!match) return title;
@@ -133,17 +124,11 @@ const NO_NEGATION = Object.freeze({ positiveTitle: '', stems: Object.freeze([]),
 
 /**
  * Split a title into its positive text and the stems it says to leave out.
- *
- * @param {string | null | undefined} title
- * @param {IgnoreWords} [ignoreWords]
- * @returns {Negation}
  */
-const parseNegation = (title, ignoreWords = null) => {
+const parseNegation = (title: string | null | undefined, ignoreWords: IgnoreWords = null): Negation => {
     if (typeof title !== 'string' || title === '') return NO_NEGATION;
-    /** @type {Set<string>} */
-    const stems = new Set();
-    /** @param {string} text */
-    const addWords = (text) => {
+    const stems: Set<string> = new Set();
+    const addWords = (text: string) => {
         const words = rawTokenise(text, { ignoreWords });
         for (const word of words) stems.add(stem(word));
         return words.length > 0;
@@ -163,12 +148,7 @@ const parseNegation = (title, ignoreWords = null) => {
 };
 
 // Remove negated subjects and the negation markers from a keyword list.
-/**
- * @param {string[]} keywords
- * @param {Negation} negation
- * @returns {string[]}
- */
-const dropNegated = (keywords, negation) => {
+const dropNegated = (keywords: string[], negation: Negation): string[] => {
     if (!negation.active) return keywords;
     const negated = new Set(negation.stems);
     return keywords.filter((k) => !negated.has(k) && !NEGATION_MARKER_STEMS.has(k));
@@ -218,23 +198,17 @@ const PEOPLE_LABEL_STEMS = new Set(
 /**
  * What the challenge title says to leave out, in the shape the exclusion filter
  * reads, or null when the title negates nothing.
- *
- * @param {ChallengeText | null | undefined} challenge
- * @param {IgnoreWords} ignoreWords
- * @returns {ExcludedSubject | null}
  */
-const excludedSubjectOf = (challenge, ignoreWords) => {
+const excludedSubjectOf = (
+    challenge: ChallengeText | null | undefined,
+    ignoreWords: IgnoreWords,
+): ExcludedSubject | null => {
     const { stems, active } = parseNegation(challenge?.title, ignoreWords);
     if (!active) return null;
     return { stems, concept: stems.some((s) => PEOPLE_LABEL_STEMS.has(s)) ? PEOPLE_LABEL_STEMS : null };
 };
 
-/**
- * @param {string[]} labelStems
- * @param {ExcludedSubject} excluded
- * @returns {boolean}
- */
-const photoShowsExcluded = (labelStems, excluded) =>
+const photoShowsExcluded = (labelStems: string[], excluded: ExcludedSubject): boolean =>
     labelStems.some(
         (labelStem) =>
             (excluded.concept !== null && excluded.concept.has(labelStem)) ||
@@ -286,11 +260,7 @@ const LETTER_IS_FOR_RE = /(?:^|\s)([a-z])\s+is\s+for\b/i;
 // because the curly pairs differ on each side (U+2018/U+2019, U+201C/U+201D);
 // a mismatched pair is accepted since this parses messy titles, not validates.
 const LETTER_NAMED_RE = /\bletters?\s*:?\s*(?:['"‘“]\s*([a-z])\s*['"’”]|([a-z])(?=\s*(?:[-–—:;,.!?|]|$)))/i;
-/**
- * @param {string | null | undefined} title
- * @returns {string | null}
- */
-const detectLetterPrefix = (title) => {
+const detectLetterPrefix = (title: string | null | undefined): string | null => {
     if (typeof title !== 'string' || title.length > 200) return null;
     const m = title.match(LETTER_CHALLENGE_RE) || title.match(LETTER_IS_FOR_RE) || title.match(LETTER_NAMED_RE);
     if (!m) return null;
@@ -298,7 +268,7 @@ const detectLetterPrefix = (title) => {
     // one per quoted/bare branch, only one of which participates), so read the
     // first group that actually matched rather than hard-coding an index. Every
     // match has exactly one participating `([a-z])` group, so this always finds it.
-    const letter = /** @type {string} */ (m.slice(1).find((g) => typeof g === 'string' && g.length === 1));
+    const letter = m.slice(1).find((g) => typeof g === 'string' && g.length === 1) as string;
     return letter.toLowerCase();
 };
 

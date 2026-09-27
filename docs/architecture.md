@@ -232,7 +232,7 @@ Domain terms used throughout, in reader's terms:
 ### 3a. Reading a challenge title
 
 A title rarely just names its subject, so three rules turn it into something searchable
-(`services/photoPicker/title.js`):
+(`services/photoPicker/title.ts`):
 
 - **Series prefix.** `"Color Hunt: Green"` is about green, not colour or hunting. Everything before a
   `:` / en dash / em dash is the series name, so the subject is what follows. A plain hyphen is NOT a
@@ -287,7 +287,7 @@ repeated six times is one that gets forgotten at one of them.
 
 ## 4. Semantic / lexicon
 
-- `getSemanticScores()` (`services/semantic/index.js`) ranks **auto-fill candidate photos only — it is NOT
+- `getSemanticScores()` (`services/semantic/index.ts`) ranks **auto-fill candidate photos only — it is NOT
   part of the vote decision.** It scores each of a photo's labels against the challenge theme separately and
   keeps the **best** (max-pooling); words WITHIN one multi-word label are still mean-pooled.
 - **Both sides pool narrowly, and that is load-bearing.** A photo's labels are a bag in which one or two
@@ -299,7 +299,7 @@ repeated six times is one that gets forgotten at one of them.
 - It **never breaks a fill**: any failure (missing asset, no theme text, no in-vocab labels) resolves to
   `null` and the caller ranks lexically as before. `buildThemeKeywords()` returning `[]` — every title word
   was boilerplate or contest cadence, e.g. "Guru of The Week" — is that "no theme text" case, on purpose.
-- `SEMANTIC_MATCH_FLOOR = 46` (`services/photoPicker/tiers.js`) is **build-gated by
+- `SEMANTIC_MATCH_FLOOR = 46` (`services/photoPicker/tiers.ts`) is **build-gated by
   `scripts/validate-lexicon.js`** (a statistical gate: `p99(unrelated) < FLOOR < p25(related)`), **not
   hand-tuned**. Scores below the floor are forced to 0 (sub-floor cosine is indistinguishable from vector
   noise), not merely ranked low. **The floor is calibrated per pooling shape** — the validator pools exactly
