@@ -20,38 +20,32 @@ import * as logger from '../logger';
 const { isSourceCode, getAppName } = logger;
 import * as runtime from '../runtime';
 
-/** @import { AndroidHeadlessStore } from '../types/settings' */
+import type { App } from 'electron';
+import type { PreferencesPlugin } from '@capacitor/preferences';
+import type { AndroidHeadlessStore } from '../types/settings';
 
 /**
  * The Android headless-service bridge, read at call time (absent everywhere
  * else).
- *
- * @returns {AndroidHeadlessStore | undefined}
  */
-const headlessStore = () =>
-    /** @type {{ AndroidHeadlessStore?: AndroidHeadlessStore }} */ (/** @type {unknown} */ (globalThis))
-        .AndroidHeadlessStore;
+const headlessStore = (): AndroidHeadlessStore | undefined =>
+    (globalThis as unknown as { AndroidHeadlessStore?: AndroidHeadlessStore }).AndroidHeadlessStore;
 
 // Try to import electron, but don't fail if it's not available (CLI context)
-/** @type {import('electron').App | null | undefined} */
-let electronApp = null;
+let electronApp: App | null | undefined = null;
 try {
     const electron = require('electron');
     electronApp = electron.app;
 } catch (error) {
     // Electron not available (CLI context), we'll use fallback
-    logger
-        .withCategory('ui')
-        .info('Running in CLI context - using fallback userData path:', /** @type {Error} */ (error).message);
+    logger.withCategory('ui').info('Running in CLI context - using fallback userData path:', (error as Error).message);
 }
 
 const SETTINGS_KEY = 'gurushots-settings';
 
 let capacitorInitialized = false;
-/** @type {string | null} */
-let cachedSettingsJson = null;
-/** @type {import('@capacitor/preferences').PreferencesPlugin | null} */
-let capacitorPreferences = null;
+let cachedSettingsJson: string | null = null;
+let capacitorPreferences: PreferencesPlugin | null = null;
 
 // Serializes Capacitor write-behind so concurrent full-blob writes apply
 // in issue order — an earlier write can never resolve after a later one
@@ -59,20 +53,18 @@ let capacitorPreferences = null;
 // guarantee durability (e.g. before the WebView is suspended).
 let writeChain = Promise.resolve();
 
-/** @returns {import('@capacitor/preferences').PreferencesPlugin} */
-const getCapacitorPreferences = () => {
+const getCapacitorPreferences = (): PreferencesPlugin => {
     if (capacitorPreferences) return capacitorPreferences;
-    capacitorPreferences = require('@capacitor/preferences').Preferences;
-    return capacitorPreferences;
+    const plugin: PreferencesPlugin = require('@capacitor/preferences').Preferences;
+    capacitorPreferences = plugin;
+    return plugin;
 };
 
 const storage = {
     /**
      * Returns the raw settings JSON string, or null if not yet written.
-     *
-     * @returns {string | null}
      */
-    readRaw: () => {
+    readRaw: (): string | null => {
         if (runtime.isHeadlessService()) {
             // Background WebView: read from the native bridge backed by the
             // same store the app's @capacitor/preferences uses, so the token
@@ -89,10 +81,8 @@ const storage = {
     },
     /**
      * Writes the raw settings JSON string. Sync on Electron/CLI; cache + async write-behind on Capacitor.
-     *
-     * @param {string} data
      */
-    writeRaw: (data) => {
+    writeRaw: (data: string) => {
         if (runtime.isHeadlessService()) {
             // Persist through the native bridge to the shared store; the
             // commit is synchronous so a later read() in the same cycle
@@ -172,8 +162,8 @@ const flushPendingWrites = () => writeChain;
 // runtime.getAppUserDataPath appends `-dev` to userData. When the two differ
 // (userData basename ≠ package name) the legacy dir may still hold a settings.json.
 let legacyDevDirChecked = false;
-/** @param {string} userDataPath */
-const warnIfLegacyDevDir = (userDataPath) => {
+/** @param userDataPath */
+const warnIfLegacyDevDir = (userDataPath: string) => {
     if (legacyDevDirChecked) return;
     legacyDevDirChecked = true;
     if (!(electronApp && electronApp.getPath) || !isSourceCode()) return;
@@ -231,12 +221,7 @@ const getEnvironmentInfo = () => {
     };
 };
 
-/**
- * @param {string} prefKey
- * @param {string | null} fallback
- * @returns {string | null}
- */
-const readHeadlessKey = (prefKey, fallback) => {
+const readHeadlessKey = (prefKey: string, fallback: string | null): string | null => {
     try {
         return headlessStore()?.readKey?.(prefKey) ?? fallback;
     } catch (err) {
@@ -245,11 +230,7 @@ const readHeadlessKey = (prefKey, fallback) => {
     }
 };
 
-/**
- * @param {string} prefKey
- * @param {string} data
- */
-const writeHeadlessKey = (prefKey, data) => {
+const writeHeadlessKey = (prefKey: string, data: string) => {
     try {
         headlessStore()?.writeKey?.(prefKey, data);
     } catch (err) {
@@ -259,7 +240,7 @@ const writeHeadlessKey = (prefKey, data) => {
 
 /**
  * Generic platform-aware JSON store — the same transport pattern the
- * settings store above uses, packaged for other stores (metadata.js).
+ * settings store above uses, packaged for other stores (metadata.ts).
  *
  *   - Electron/CLI: synchronous fs at userData/<fileName>, written with
  *     mode 0o600 (userData JSON can carry tokens/state that other local
@@ -268,13 +249,10 @@ const writeHeadlessKey = (prefKey, data) => {
  *     ordered async write-behind to @capacitor/preferences under prefKey.
  *   - Android headless service: the native keyed preference bridge persists
  *     supported stores; unsupported keys retain their per-cycle memory cache.
- *
- * @param {{fileName: string, prefKey: string}} opts
  */
-const createJsonStore = ({ fileName, prefKey }) => {
+const createJsonStore = ({ fileName, prefKey }: { fileName: string; prefKey: string }) => {
     let initialized = false;
-    /** @type {string | null} */
-    let cachedJson = null;
+    let cachedJson: string | null = null;
     let chain = Promise.resolve();
 
     const filePath = () => path.join(path.dirname(getSettingsPath()), fileName);
@@ -282,10 +260,8 @@ const createJsonStore = ({ fileName, prefKey }) => {
     return {
         /**
          * Raw JSON string, or null when never written.
-         *
-         * @returns {string | null}
          */
-        readRaw: () => {
+        readRaw: (): string | null => {
             if (runtime.isHeadlessService()) {
                 return readHeadlessKey(prefKey, cachedJson);
             }
@@ -298,10 +274,8 @@ const createJsonStore = ({ fileName, prefKey }) => {
         },
         /**
          * Sync on Electron/CLI; cache + ordered write-behind on Capacitor; native keyed bridge on headless.
-         *
-         * @param {string} data
          */
-        writeRaw: (data) => {
+        writeRaw: (data: string) => {
             if (runtime.isHeadlessService()) {
                 cachedJson = data;
                 writeHeadlessKey(prefKey, data);

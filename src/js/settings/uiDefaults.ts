@@ -19,21 +19,19 @@ const DEFAULT_TIMEZONE = 'Europe/Riga';
 /**
  * Fresh object per call so callers can never share (and mutate) the
  * same nested array reference.
- *
- * @returns {{
- *   theme: string,
- *   language: string,
- *   timezone: string,
- *   customTimezones: string[],
- *   stayLoggedIn: boolean,
- *   apiTimeout: number,
- *   checkFrequencyMin: number,
- *   checkFrequencyMax: number,
- *   apiMaxRetries: number,
- *   apiRetryBaseDelayMs: number,
- * }}
  */
-const getUiDefaultSettings = () => ({
+const getUiDefaultSettings = (): {
+    theme: string;
+    language: string;
+    timezone: string;
+    customTimezones: string[];
+    stayLoggedIn: boolean;
+    apiTimeout: number;
+    checkFrequencyMin: number;
+    checkFrequencyMax: number;
+    apiMaxRetries: number;
+    apiRetryBaseDelayMs: number;
+} => ({
     theme: 'light',
     language: 'en',
     timezone: DEFAULT_TIMEZONE,

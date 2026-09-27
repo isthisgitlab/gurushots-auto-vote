@@ -31,7 +31,7 @@
 // are interpolated into a URL path. Without this gate a hostile or corrupted
 // `member_id` of `../../` would walk the path, and one containing `@` would
 // turn the authority into a lookalike host — the same class of bug
-// format/urlSafe.js exists to stop on the outbound side. A non-conforming id
+// format/urlSafe.ts exists to stop on the outbound side. A non-conforming id
 // yields null (render nothing) instead of a broken or attacker-chosen request.
 const ID_PATTERN = /^[0-9a-f]{32}$/i;
 

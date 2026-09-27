@@ -9,17 +9,15 @@ import { SETTINGS_SCHEMA, schemaEntry, validateSetting } from './schema';
 import { getUiDefaultSettings } from './uiDefaults';
 import { getDefaultMockSetting } from './storage';
 
-/** @import { AppSettings, ChallengeValues } from '../types/settings' */
+import type { AppSettings, ChallengeValues } from '../types/settings';
+import type { SettingsSchemaEntry } from './schema';
 
 /**
  * Default settings with environment-aware mock setting
- *
- * @returns {AppSettings}
  */
-const getDefaultSettings = () => {
+const getDefaultSettings = (): AppSettings => {
     // Generate global defaults from schema
-    /** @type {ChallengeValues} */
-    const globalDefaults = {};
+    const globalDefaults: ChallengeValues = {};
     Object.keys(SETTINGS_SCHEMA).forEach((key) => {
         globalDefaults[key] = schemaEntry(key)?.default;
     });
@@ -64,24 +62,16 @@ const getDefaultSettings = () => {
  * Value equality for settings comparisons. JSON-based so reference types
  * (arrays like mustIncludeTags, plain objects) compare by content — a bare
  * !== would treat every array override as "differs from default" forever.
- *
- * @param {unknown} a
- * @param {unknown} b
- * @returns {boolean}
  */
-const valuesEqual = (a, b) => JSON.stringify(a) === JSON.stringify(b);
+const valuesEqual = (a: unknown, b: unknown): boolean => JSON.stringify(a) === JSON.stringify(b);
 
 /**
  * Every schema key's effective global value: the stored global default when
  * present, else the schema default. challengeOnly keys always inherit the
  * schema default, never a stored global value (same rule as getEffectiveSetting).
- *
- * @param {AppSettings} settings
- * @returns {ChallengeValues}
  */
-const globalChallengeValues = (settings) => {
-    /** @type {ChallengeValues} */
-    const values = {
+const globalChallengeValues = (settings: AppSettings): ChallengeValues => {
+    const values: ChallengeValues = {
         ...getDefaultSettings().challengeSettings.globalDefaults,
         ...settings.challengeSettings.globalDefaults,
     };
@@ -96,20 +86,17 @@ const globalChallengeValues = (settings) => {
  * Validate the candidate keys of a challenge value set, plus every perChallenge
  * key that (transitively) depends on one of them, against the full effective
  * `values` as cross-field context.
- *
- * @param {ChallengeValues} values
- * @param {ChallengeValues} candidates
- * @param {string|number|null} [challengeId]
- * @returns {boolean}
  */
-const challengeValueSetIsValid = (values, candidates, challengeId = null) => {
+const challengeValueSetIsValid = (
+    values: ChallengeValues,
+    candidates: ChallengeValues,
+    challengeId: string | number | null = null,
+): boolean => {
     const affected = new Set(Object.keys(candidates));
     let changed = true;
     while (changed) {
         changed = false;
-        for (const [key, config] of Object.entries(
-            /** @type {Record<string, import('./schema').SettingsSchemaEntry>} */ (SETTINGS_SCHEMA),
-        )) {
+        for (const [key, config] of Object.entries(SETTINGS_SCHEMA as Record<string, SettingsSchemaEntry>)) {
             if (affected.has(key) || !config.perChallenge || !config.dependsOn?.some((dep) => affected.has(dep))) {
                 continue;
             }

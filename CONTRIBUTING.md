@@ -88,7 +88,7 @@ The same core business logic in `src/js/` runs under three shells: **Electron (G
 - **Entry points**: Electron `src/js/index.js` (bundled into `out/main/app.js` by `scripts/build-main.js`, loaded through `out/main/index.js`) · CLI `src/js/cli/cli.js` · Electron preload `src/js/preload.js` · Capacitor bridge `src/js/bridge/capacitor.js`
 - **React renderer** (`src/js/react/`) is shared between Electron and Capacitor
 - **`apiFactory.js`** selects real vs mock API implementations at runtime based on `settings.mock`. All business logic goes through the factory — do not import from `src/js/api/*` or `src/js/mock/*` directly
-- **Settings facade** lives at `src/js/settings.js`. Schema + defaults + validation are in `src/js/settings/schema.js`; persistence transport (fs on Electron/CLI, `@capacitor/preferences` on Android) is in `src/js/settings/storage.js`
+- **Settings facade** lives at `src/js/settings.js`. Schema + defaults + validation are in `src/js/settings/schema.ts`; persistence transport (fs on Electron/CLI, `@capacitor/preferences` on Android) is in `src/js/settings/storage.ts`
 
 ## 📝 Code Guidelines
 

@@ -1,10 +1,10 @@
 import { z } from 'zod';
-// Bounds live in the dependency-free limits.js so renderer-reachable modules
+// Bounds live in the dependency-free limits.ts so renderer-reachable modules
 // can read them without pulling zod in through this file. Re-exported below to
 // keep this module's public surface unchanged.
 import { MAX_SCHEDULED_FILL_ENTRIES, MAX_VOTING_PAUSE_MINUTES } from './limits';
 
-/** @import { SettingValueOf } from '../types/settings' */
+import type { SettingValueOf } from '../types/settings';
 
 /**
  * Centralized Settings Schema
@@ -22,55 +22,49 @@ import { MAX_SCHEDULED_FILL_ENTRIES, MAX_VOTING_PAUSE_MINUTES } from './limits';
  * don't) all fit one type; the typed validator signatures also give the
  * inline `(value) => ...` callbacks contextual typing so they aren't flagged
  * as implicit-any.
- *
- * @typedef {object} SettingsSchemaEntry
- * @property {string} [type]
- * @property {unknown} [default]
- * @property {boolean} [perChallenge]
- * @property {boolean} [challengeOnly] - Only settable on a challenge or a profile: the key
- *   has NO global value. Hidden from the global settings modal, refused by
- *   setGlobalDefault, and a stored global value is ignored — the schema default applies
- *   until a challenge override or profile sets it. Implies `perChallenge`. Used for the
- *   settings that require an explicit per-challenge or per-profile choice.
- * @property {import('zod').ZodType} validation
- * @property {(value: unknown, allSettings: Record<string, unknown>, challengeId?: string | number | null) => boolean} [contextValidation]
- * @property {(value: unknown, allSettings: Record<string, unknown>, challengeId?: string | number | null) => string} [getContextError]
- * @property {string[]} [dependsOn]
- * @property {number} [validationOrder]
- * @property {string} [group]
- * @property {string} label
- * @property {string} description
- * @property {string} [helpKey] - Translation key for an optional deeper "explain this"
- *   disclosure shown beside the row (e.g. the two distinct meanings of a `0` sentinel).
- *   Display-only, like `description` — never affects validation. Forwarded by the schema
- *   IPC projection alongside `description`.
- * @property {number} [min] - Advertised lower bound, mirroring `validation`. Forwarded to the
- *   renderer by the schema IPC projection and bound to the number input.
- * @property {number} [max] - Advertised upper bound, mirroring `validation`.
- * @property {string} [unit] - Translation key for the suffix shown beside a number input.
  */
+export interface SettingsSchemaEntry {
+    type?: string;
+    default?: unknown;
+    perChallenge?: boolean;
+    challengeOnly?: boolean;
+    validation: z.ZodType;
+    contextValidation?: (
+        value: unknown,
+        allSettings: Record<string, unknown>,
+        challengeId?: string | number | null,
+    ) => boolean;
+    getContextError?: (
+        value: unknown,
+        allSettings: Record<string, unknown>,
+        challengeId?: string | number | null,
+    ) => string;
+    dependsOn?: string[];
+    validationOrder?: number;
+    group?: string;
+    label: string;
+    description: string;
+    helpKey?: string;
+    min?: number;
+    max?: number;
+    unit?: string;
+}
 
 /**
  * A key's schema default. Defined ahead of SETTINGS_SCHEMA so the
  * contextValidation closures inside the schema can resolve sibling defaults;
  * untyped because those closures are part of the schema's own type. Outside
  * the schema, use the typed `schemaDefault`.
- *
- * @param {string} key
- * @returns {unknown}
  */
-const getSchemaDefault = (key) => schemaEntry(key)?.default;
+const getSchemaDefault = (key: string): unknown => schemaEntry(key)?.default;
 
 /**
  * The exposure value the exposure-dependent validators compare against:
  * the live `exposure` from allSettings when it is a valid 1–100 number,
  * otherwise the schema default. Shared by the exposureTarget and
  * finalWindowExposure context validators/error builders.
- *
- * @param {Record<string, unknown>} allSettings
- * @returns {number}
  */
-const effectiveExposureOf = (allSettings) => {
+const effectiveExposureOf = (allSettings: Record<string, unknown>): number => {
     const exposureValue = allSettings.exposure;
     return typeof exposureValue === 'number' && exposureValue >= 1 && exposureValue <= 100
         ? exposureValue
@@ -80,10 +74,8 @@ const effectiveExposureOf = (allSettings) => {
 /**
  * A context validator's value: validateSetting only calls contextValidation
  * after the key's zod check passed, so a percentage key's value is a number.
- *
- * @param {unknown} value
  */
-const validatedNumber = (value) => /** @type {number} */ (value);
+const validatedNumber = (value: unknown) => value as number;
 
 // Reusable zod validators. Each SETTINGS_SCHEMA entry's `validation` field
 // holds one of these schemas; validateSetting / getValidationError run it via
@@ -186,7 +178,7 @@ const fillSchedule = z
 
 /**
  * Clamp a persisted autoFillSchedule array to the current bounds. Used by the
- * load-time `_autoFillScheduleBoundsV1` sanitizer in settings/migrations.js: the Settings
+ * load-time `_autoFillScheduleBoundsV1` sanitizer in settings/migrations.ts: the Settings
  * modal resubmits EVERY persisted key on save, so a stored schedule that
  * violates the (tightened) validator would block saving unrelated settings
  * until repaired — this heals such data on load instead. Keeps only strict
@@ -194,14 +186,10 @@ const fillSchedule = z
  * sorts by count. Returns the sanitized array when anything changed, or null
  * when the input already conforms or isn't an array at all (load-time
  * validation drops a non-array value).
- *
- * @param {unknown} value
- * @returns {Array<{count: number, seconds: number}>|null}
  */
-const sanitizeFillSchedule = (value) => {
+const sanitizeFillSchedule = (value: unknown): Array<{ count: number; seconds: number }> | null => {
     if (!Array.isArray(value)) return null;
-    /** @type {Set<number>} */
-    const seen = new Set();
+    const seen: Set<number> = new Set();
     const normalized = value
         .filter((row) => {
             if (!row || typeof row !== 'object') return false;
@@ -249,7 +237,7 @@ const tagsList = z
 // day, like 4 hours to the end and 10 hours to the end"). Each entry opens
 // its own fill window; the empty array is the off sentinel and the schema
 // default (scalar '' / 0 values in a stored blob are migrated to lists in
-// settings/migrations.js — _scheduledFillListsMigratedV1). Entries are deduped by the validators and
+// settings/migrations.ts — _scheduledFillListsMigratedV1). Entries are deduped by the validators and
 // canonical-sorted by the sanitizers; order carries no meaning. The window
 // floor keeps a window from being shorter than one last-minute check cycle;
 // the 12h ceiling keeps "hold at 100%" from silently becoming an all-day
@@ -285,12 +273,9 @@ const pauseDurationMinutes = z.number().int().min(5).max(MAX_VOTING_PAUSE_MINUTE
  * for zero-padded 24h times) and THEN caps, so with >MAX entries the earliest
  * survive deterministically rather than storage order. A value that is not an
  * array (`true`/`{}`/null from a hand edit) is left to load-time validation
- * (settings/persistence.js), which drops it so the default applies.
- *
- * @param {unknown} value
- * @returns {string[]|null}
+ * (settings/persistence.ts), which drops it so the default applies.
  */
-const sanitizeTimeOfDayList = (value) => {
+const sanitizeTimeOfDayList = (value: unknown): string[] | null => {
     if (!Array.isArray(value)) return null;
     const seen = new Set();
     const normalized = value
@@ -310,11 +295,8 @@ const sanitizeTimeOfDayList = (value) => {
  * Same contract for the scheduledFillBeforeEnd list: keep ints
  * 1..MAX_BEFORE_END_SECONDS, dedupe, sort ascending, then cap (smallest
  * offsets — the windows closest to the deadline — survive deterministically).
- *
- * @param {unknown} value
- * @returns {number[]|null}
  */
-const sanitizeBeforeEndList = (value) => {
+const sanitizeBeforeEndList = (value: unknown): number[] | null => {
     if (!Array.isArray(value)) return null;
     const seen = new Set();
     const normalized = value
@@ -335,7 +317,6 @@ const sanitizeBeforeEndList = (value) => {
 // settings modals render. Object key order has no runtime effect —
 // getSchemaDefault resolves at call time and validationOrder/dependsOn drive
 // dependency ordering — so the order here is purely for readability.
-/** @satisfies {Record<string, SettingsSchemaEntry>} */
 const SETTINGS_SCHEMA = {
     // --- General ---
     // NOTE on min/max/unit: the IPC schema projection and SettingInput forward these three
@@ -1361,7 +1342,7 @@ const SETTINGS_SCHEMA = {
         description: 'app.autoFillDesc',
     },
     // A stored single autoFillIntervalMinutes value is migrated into this list
-    // in settings/migrations.js (`_autoFillScheduleMigratedV1`). Default: 2 @ 30m,
+    // in settings/migrations.ts (`_autoFillScheduleMigratedV1`). Default: 2 @ 30m,
     // 3 @ 20m, 4 @ 10m before close.
     autoFillSchedule: {
         type: 'schedule',
@@ -1636,34 +1617,29 @@ const SETTINGS_SCHEMA = {
         label: 'app.skipUpdateVersion',
         description: 'app.skipUpdateVersionDesc',
     },
-};
+} satisfies Record<string, SettingsSchemaEntry>;
 
-/** @typedef {keyof typeof SETTINGS_SCHEMA} SettingKey */
+export type SettingKey = keyof typeof SETTINGS_SCHEMA;
 
 /**
  * The value type of each setting, read off its zod validator.
- *
- * @typedef {{ [K in SettingKey]: import('zod').infer<(typeof SETTINGS_SCHEMA)[K]['validation']> }} SettingValues
  */
+export type SettingValues = {
+    [K in SettingKey]: z.infer<(typeof SETTINGS_SCHEMA)[K]['validation']>;
+};
 
 /**
  * The schema entry for a key that is only known at runtime, or undefined for
  * an unknown key.
- *
- * @param {string} key
- * @returns {SettingsSchemaEntry | undefined}
  */
-const schemaEntry = (key) => /** @type {Record<string, SettingsSchemaEntry | undefined>} */ (SETTINGS_SCHEMA)[key];
+const schemaEntry = (key: string): SettingsSchemaEntry | undefined =>
+    (SETTINGS_SCHEMA as Record<string, SettingsSchemaEntry | undefined>)[key];
 
 /**
  * A key's schema default, typed as that key's value: every default passes its
  * own validation (tests/settings/schema-defaults.test.js).
- *
- * @template {string} K
- * @param {K} key
- * @returns {SettingValueOf<K>}
  */
-const schemaDefault = (key) => /** @type {SettingValueOf<K>} */ (getSchemaDefault(key));
+const schemaDefault = <K extends string>(key: K): SettingValueOf<K> => getSchemaDefault(key) as SettingValueOf<K>;
 
 /**
  * Ordered tiers the groups below are rendered under. A tier is presentation
@@ -1678,10 +1654,8 @@ const schemaDefault = (key) => /** @type {SettingValueOf<K>} */ (getSchemaDefaul
  * - `overrides` — timing rules that replace the normal exposure decision.
  *                 Every enable flag in this tier defaults to false.
  * - `app`       — application-level preferences, not voting behaviour.
- *
- * @type {ReadonlyArray<{ id: string, label: string }>}
  */
-const SETTINGS_TIERS = [
+const SETTINGS_TIERS: ReadonlyArray<{ id: string; label: string }> = [
     { id: 'core', label: 'app.tierCore' },
     { id: 'entries', label: 'app.tierEntries' },
     { id: 'overrides', label: 'app.tierOverrides' },
@@ -1725,14 +1699,13 @@ const SETTINGS_GROUPS = [
  * Validate a single setting value against SETTINGS_SCHEMA. Keys that are
  * not in the schema are treated as valid because the schema is the only
  * source of validation rules for per-challenge tunables.
- *
- * @param {string} key
- * @param {unknown} value
- * @param {Record<string, unknown>|null} [allSettings]
- * @param {string|number|null} [challengeId]
- * @returns {boolean}
  */
-const validateSetting = (key, value, allSettings = null, challengeId = null) => {
+const validateSetting = (
+    key: string,
+    value: unknown,
+    allSettings: Record<string, unknown> | null = null,
+    challengeId: string | number | null = null,
+): boolean => {
     const schemaConfig = schemaEntry(key);
     if (!schemaConfig) return true;
     if (schemaConfig.validation && !schemaConfig.validation.safeParse(value).success) return false;
@@ -1748,14 +1721,13 @@ const validateSetting = (key, value, allSettings = null, challengeId = null) => 
  * (challengeId is forwarded to contextValidation) so a future schema
  * entry that depends on per-challenge context behaves identically
  * across both validation paths.
- *
- * @param {string} settingKey
- * @param {unknown} value
- * @param {Record<string, unknown>|null} [allSettings]
- * @param {string|number|null} [challengeId]
- * @returns {string|null}
  */
-const getValidationError = (settingKey, value, allSettings = null, challengeId = null) => {
+const getValidationError = (
+    settingKey: string,
+    value: unknown,
+    allSettings: Record<string, unknown> | null = null,
+    challengeId: string | number | null = null,
+): string | null => {
     const schemaConfig = schemaEntry(settingKey);
     if (!schemaConfig) {
         return null; // No schema config, assume valid

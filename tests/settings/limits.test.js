@@ -3,7 +3,7 @@
 const realFs = jest.requireActual('fs');
 const realPath = jest.requireActual('path');
 
-const LIMITS_PATH = realPath.join(__dirname, '..', '..', 'src', 'js', 'settings', 'limits.js');
+const LIMITS_PATH = realPath.join(__dirname, '..', '..', 'src', 'js', 'settings', 'limits.ts');
 const limits = require('../../src/js/settings/limits');
 const schema = require('../../src/js/settings/schema');
 

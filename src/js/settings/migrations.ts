@@ -2,7 +2,7 @@
  * Load-time migrations of the persisted settings blob, plus the prune of
  * keys the schema no longer knows. Every function here mutates the merged
  * settings object in place and reports whether it changed anything; the
- * caller (persistence.js) owns reading and writing the blob.
+ * caller (persistence.ts) owns reading and writing the blob.
  */
 
 import * as logger from '../logger';
@@ -11,7 +11,7 @@ import { ruleConditions, sortRulesByDefaultOrder } from './challengeRules';
 import { RESERVED_PROFILE_NAMES, normalizeProfileName, readProfilesMap } from './profileStore';
 import { ruleLogLabel } from './titleRuleSanitize';
 
-/** @import { AppSettings, ChallengeValues, LooseRecord, TitleRule } from '../types/settings' */
+import type { AppSettings, ChallengeValues, LooseRecord, TitleRule } from '../types/settings';
 
 // Migrate buggy-GUI-encoded time values. Blobs written by
 // v0.7.0 through v0.8.2 hold boostTime / turboTime as
@@ -19,19 +19,14 @@ import { ruleLogLabel } from './titleRuleSanitize';
 // That GUI could only write values in [0, 1439]
 // (max 23h*60+59); schema defaults (3600, 7200) are above
 // that band, so untouched defaults pass through unchanged.
-/**
- * @param {AppSettings} mergedSettings
- * @returns {boolean}
- */
-const migrateTimeUnits = (mergedSettings) => {
+
+const migrateTimeUnits = (mergedSettings: AppSettings): boolean => {
     if (mergedSettings._timeUnitMigratedV1) return false;
 
     const TIME_KEYS = ['boostTime', 'turboTime'];
-    /**
-     * @param {unknown} v
-     * @returns {v is number}
-     */
-    const looksMinuteEncoded = (v) => typeof v === 'number' && Number.isFinite(v) && v > 0 && v < 1440;
+
+    const looksMinuteEncoded = (v: unknown): v is number =>
+        typeof v === 'number' && Number.isFinite(v) && v > 0 && v < 1440;
 
     const globalDefaults = mergedSettings.challengeSettings?.globalDefaults || {};
     for (const key of TIME_KEYS) {
@@ -72,18 +67,12 @@ const migrateTimeUnits = (mergedSettings) => {
 // seconds values from the time input start at 60, so the band
 // cleanly separates minutes from seconds. This is a separate
 // flag because _timeUnitMigratedV1 is already set for current users.
-/**
- * @param {AppSettings} mergedSettings
- * @returns {boolean}
- */
-const migrateEmergencyFillTime = (mergedSettings) => {
+
+const migrateEmergencyFillTime = (mergedSettings: AppSettings): boolean => {
     if (mergedSettings._emergencyFillTimeMigratedV1) return false;
 
-    /**
-     * @param {unknown} v
-     * @returns {v is number}
-     */
-    const looksMinuteEncoded = (v) => typeof v === 'number' && Number.isFinite(v) && v > 0 && v < 60;
+    const looksMinuteEncoded = (v: unknown): v is number =>
+        typeof v === 'number' && Number.isFinite(v) && v > 0 && v < 60;
 
     const globalDefaults = mergedSettings.challengeSettings?.globalDefaults || {};
     const globalBefore = globalDefaults.emergencyFill;
@@ -125,19 +114,16 @@ const migrateEmergencyFillTime = (mergedSettings) => {
 // user gets 45/30/15), never from the schema default; each scope is
 // migrated independently. Runs before cleanupObsoleteSettings, which
 // would otherwise just delete the schemaless legacy key.
-/**
- * @param {AppSettings} mergedSettings
- * @returns {boolean}
- */
-const migrateAutoFillSchedule = (mergedSettings) => {
+
+const migrateAutoFillSchedule = (mergedSettings: AppSettings): boolean => {
     if (mergedSettings._autoFillScheduleMigratedV1) return false;
 
     const LEGACY_KEY = 'autoFillIntervalMinutes';
     // Clamp to the legacy key's 60-minute ceiling and round: a
     // hand-edited non-integer or oversized legacy value must not
     // migrate into a schedule the int()/max() schema rejects.
-    /** @param {number} minutes */
-    const toSchedule = (minutes) => {
+    /** @param minutes */
+    const toSchedule = (minutes: number) => {
         const m = Math.min(minutes, 60);
         return [
             { count: 2, seconds: Math.round(3 * m * 60) },
@@ -145,11 +131,8 @@ const migrateAutoFillSchedule = (mergedSettings) => {
             { count: 4, seconds: Math.round(m * 60) },
         ];
     };
-    /**
-     * @param {ChallengeValues|undefined} scope
-     * @param {string} label
-     */
-    const migrateScope = (scope, label) => {
+
+    const migrateScope = (scope: ChallengeValues | undefined, label: string) => {
         if (!scope) return;
         const legacy = scope[LEGACY_KEY];
         if (typeof legacy === 'number' && Number.isFinite(legacy) && legacy >= 1) {
@@ -190,18 +173,11 @@ const migrateAutoFillSchedule = (mergedSettings) => {
 // out-of-band file edit made after the flag is set could
 // reintroduce bad rows — the same accepted risk as hand-editing
 // any other setting, and the read path still clamps defensively.
-/**
- * @param {AppSettings} mergedSettings
- * @returns {boolean}
- */
-const migrateAutoFillScheduleBounds = (mergedSettings) => {
+
+const migrateAutoFillScheduleBounds = (mergedSettings: AppSettings): boolean => {
     if (mergedSettings._autoFillScheduleBoundsV1) return false;
 
-    /**
-     * @param {ChallengeValues|undefined} scope
-     * @param {string} label
-     */
-    const sanitizeScope = (scope, label) => {
+    const sanitizeScope = (scope: ChallengeValues | undefined, label: string) => {
         if (!scope) return;
         const cleaned = sanitizeFillSchedule(scope.autoFillSchedule);
         if (cleaned !== null) {
@@ -229,11 +205,11 @@ const migrateAutoFillScheduleBounds = (mergedSettings) => {
 // scalar inside a profile would vanish from the profile view and be lost on
 // the next save. Prototype-shaped profile names are skipped, mirroring
 // getChallengeProfiles' own-property iteration.
-/**
- * @param {AppSettings} mergedSettings
- * @param {(scope: ChallengeValues|undefined, label: string, isGlobalScope: boolean) => void} visit
- */
-const _eachScheduledFillScope = (mergedSettings, visit) => {
+
+const _eachScheduledFillScope = (
+    mergedSettings: AppSettings,
+    visit: (scope: ChallengeValues | undefined, label: string, isGlobalScope: boolean) => void,
+) => {
     visit(mergedSettings.challengeSettings?.globalDefaults, 'global default', true);
     const perChallenge = mergedSettings.challengeSettings?.perChallenge || {};
     for (const [challengeId, overrides] of Object.entries(perChallenge)) {
@@ -266,22 +242,19 @@ const _eachScheduledFillScope = (mergedSettings, visit) => {
 //     profile's present keys, so a deleted profile key stops enforcing the
 //     off. Corrupt (non-sentinel, unparseable) scalars never expressed a
 //     working intent and are deleted in every scope.
-/**
- * @param {AppSettings} mergedSettings
- * @returns {boolean}
- */
-const migrateScheduledFillLists = (mergedSettings) => {
+
+const migrateScheduledFillLists = (mergedSettings: AppSettings): boolean => {
     if (mergedSettings._scheduledFillListsMigratedV1) return false;
 
     const TIME_RE = /^([01]\d|2[0-3]):[0-5]\d$/;
-    /**
-     * @param {ChallengeValues|undefined} scope
-     * @param {string} key
-     * @param {string} label
-     * @param {boolean} isGlobalScope
-     * @param {(value: unknown) => unknown[]|null} toList
-     */
-    const migrateKey = (scope, key, label, isGlobalScope, toList) => {
+
+    const migrateKey = (
+        scope: ChallengeValues | undefined,
+        key: string,
+        label: string,
+        isGlobalScope: boolean,
+        toList: (value: unknown) => unknown[] | null,
+    ) => {
         if (!scope || !Object.prototype.hasOwnProperty.call(scope, key)) return;
         const value = scope[key];
         if (Array.isArray(value)) return; // already migrated / new-shape write
@@ -297,18 +270,15 @@ const migrateScheduledFillLists = (mergedSettings) => {
             .withCategory('settings')
             .info(`Migrated scalar ${key} ${label} to ${JSON.stringify(scope[key] ?? '(removed)')}`, null);
     };
-    /**
-     * @param {string} key
-     * @param {unknown} value
-     */
-    const isOffSentinel = (key, value) => (key === 'scheduledFillTime' ? value === '' : value === 0);
+
+    const isOffSentinel = (key: string, value: unknown) => (key === 'scheduledFillTime' ? value === '' : value === 0);
 
     _eachScheduledFillScope(mergedSettings, (scope, label, isGlobalScope) => {
         migrateKey(scope, 'scheduledFillTime', label, isGlobalScope, (v) =>
             typeof v === 'string' && TIME_RE.test(v) ? [v] : null,
         );
         migrateKey(scope, 'scheduledFillBeforeEnd', label, isGlobalScope, (v) =>
-            Number.isInteger(v) && /** @type {number} */ (v) >= 1 ? [v] : null,
+            Number.isInteger(v) && (v as number) >= 1 ? [v] : null,
         );
     });
 
@@ -325,11 +295,8 @@ const migrateScheduledFillLists = (mergedSettings) => {
 // lists have no structural ceiling, so the hot-path consumers additionally
 // slice to MAX_SCHEDULED_FILL_ENTRIES defensively — a post-flag hand edit
 // can't inflate per-cycle Intl work.
-/**
- * @param {AppSettings} mergedSettings
- * @returns {boolean}
- */
-const migrateScheduledFillListBounds = (mergedSettings) => {
+
+const migrateScheduledFillListBounds = (mergedSettings: AppSettings): boolean => {
     if (mergedSettings._scheduledFillListBoundsV1) return false;
 
     _eachScheduledFillScope(mergedSettings, (scope, label) => {
@@ -365,11 +332,8 @@ const migrateScheduledFillListBounds = (mergedSettings) => {
 // (globalDefaults, every perChallenge map, every non-reserved profile). The new
 // finalWindowDuration setting needs no migration: absent → schema default 3600,
 // the one-hour window the renamed keys were configured against.
-/**
- * @param {AppSettings} mergedSettings
- * @returns {boolean}
- */
-const migrateFinalWindowExposureRename = (mergedSettings) => {
+
+const migrateFinalWindowExposureRename = (mergedSettings: AppSettings): boolean => {
     if (mergedSettings._finalWindowExposureRenamedV1) return false;
 
     const RENAMES = {
@@ -415,22 +379,14 @@ const SPENDING_RULE_KEYS = ['autoJoin', 'autoFill'];
  * A stored profile's raw values by exact name, or {} when absent/corrupt. A
  * rule without a profile name has none — never the profile literally named
  * "undefined" that a bare property lookup would coerce it to.
- *
- * @param {Record<string, ChallengeValues>} map
- * @param {unknown} name
- * @returns {ChallengeValues}
  */
-const _ownValues = (map, name) =>
+const _ownValues = (map: Record<string, ChallengeValues>, name: unknown): ChallengeValues =>
     (typeof name === 'string' && Object.prototype.hasOwnProperty.call(map, name) && map[name]) || {};
 
 // False only when two rules provably never match the same challenge: disjoint
 // exact titles, or different types / photo counts. Anything else may overlap.
-/**
- * @param {TitleRule} a
- * @param {TitleRule} b
- * @returns {boolean}
- */
-const _rulesMayOverlap = (a, b) => {
+
+const _rulesMayOverlap = (a: TitleRule, b: TitleRule): boolean => {
     const x = ruleConditions(a);
     const y = ruleConditions(b);
     const bothExact = x.mode === 'exact' && y.mode === 'exact' && x.patterns.length > 0 && y.patterns.length > 0;
@@ -444,11 +400,8 @@ const _rulesMayOverlap = (a, b) => {
  * rule, which a blob configured under most-specific-wins semantics may not
  * expect. Warn about every pair where that fall-through could switch
  * auto-join or auto-submit ON, so the user can review the order.
- *
- * @param {TitleRule[]} titleRules
- * @param {Record<string, ChallengeValues>} profiles
  */
-const _warnAboutSpendingFallThrough = (titleRules, profiles) => {
+const _warnAboutSpendingFallThrough = (titleRules: TitleRule[], profiles: Record<string, ChallengeValues>) => {
     const log = logger.withCategory('settings');
     titleRules.forEach((higher, index) => {
         const higherProfile = _ownValues(profiles, higher.profile);
@@ -475,16 +428,12 @@ const _warnAboutSpendingFallThrough = (titleRules, profiles) => {
 
 /**
  * Category rules as title-less challenge rules, most conditions first.
- *
- * @param {unknown[]} categoryRules
- * @returns {TitleRule[]}
  */
-const _categoryRulesAsChallengeRules = (categoryRules) =>
+const _categoryRulesAsChallengeRules = (categoryRules: unknown[]): TitleRule[] =>
     categoryRules
-        .filter(/** @returns {rule is LooseRecord} */ (rule) => Boolean(rule) && typeof rule === 'object')
+        .filter(/** @returns */ (rule): rule is LooseRecord => Boolean(rule) && typeof rule === 'object')
         .map((rule) => {
-            /** @type {TitleRule} */
-            const next = { title: '', mustIncludeTags: [], shouldIncludeTags: [] };
+            const next: TitleRule = { title: '', mustIncludeTags: [], shouldIncludeTags: [] };
             for (const key of CATEGORY_RULE_KEYS) {
                 if (Object.prototype.hasOwnProperty.call(rule, key)) next[key] = rule[key];
             }
@@ -492,11 +441,7 @@ const _categoryRulesAsChallengeRules = (categoryRules) =>
         })
         .sort((a, b) => Number('pics' in b) + Number('type' in b) - (Number('pics' in a) + Number('type' in a)));
 
-/**
- * @param {AppSettings} mergedSettings
- * @returns {boolean}
- */
-const migrateCategoryRulesIntoChallengeRules = (mergedSettings) => {
+const migrateCategoryRulesIntoChallengeRules = (mergedSettings: AppSettings): boolean => {
     if (mergedSettings._challengeRulesOrderedV1) return false;
     const challengeSettings = mergedSettings.challengeSettings;
     if (challengeSettings && typeof challengeSettings === 'object') {
@@ -523,11 +468,8 @@ const migrateCategoryRulesIntoChallengeRules = (mergedSettings) => {
  * result. Order matters: the interval→schedule migration must precede the
  * schedule-bounds pass, whose output always conforms already; likewise the
  * scheduled-fill scalar→list migration precedes its bounds pass.
- *
- * @param {AppSettings} mergedSettings
- * @returns {boolean}
  */
-const runMigrations = (mergedSettings) => {
+const runMigrations = (mergedSettings: AppSettings): boolean => {
     let migrationChanges = false;
 
     migrationChanges = migrateTimeUnits(mergedSettings) || migrationChanges;
@@ -544,12 +486,8 @@ const runMigrations = (mergedSettings) => {
 
 /**
  * Delete globalDefaults keys the schema no longer defines. Returns true on change.
- *
- * @param {ChallengeValues} globalDefaults
- * @param {string[]} validSchemaKeys
- * @returns {boolean}
  */
-const _pruneGlobalDefaultKeys = (globalDefaults, validSchemaKeys) => {
+const _pruneGlobalDefaultKeys = (globalDefaults: ChallengeValues, validSchemaKeys: string[]): boolean => {
     const invalidGlobalKeys = Object.keys(globalDefaults).filter((key) => !validSchemaKeys.includes(key));
     if (invalidGlobalKeys.length === 0) return false;
     logger.withCategory('settings').debug(`Removing invalid global default keys: ${invalidGlobalKeys.join(', ')}`);
@@ -561,12 +499,8 @@ const _pruneGlobalDefaultKeys = (globalDefaults, validSchemaKeys) => {
 
 // Delete per-challenge override keys the schema no longer defines, then any
 // container left empty. Returns true on change.
-/**
- * @param {Record<string, ChallengeValues>} perChallenge
- * @param {string[]} validSchemaKeys
- * @returns {boolean}
- */
-const _prunePerChallengeKeys = (perChallenge, validSchemaKeys) => {
+
+const _prunePerChallengeKeys = (perChallenge: Record<string, ChallengeValues>, validSchemaKeys: string[]): boolean => {
     let hasChanges = false;
     for (const challengeId of Object.keys(perChallenge)) {
         const challengeOverrides = perChallenge[challengeId];
@@ -594,11 +528,8 @@ const _prunePerChallengeKeys = (perChallenge, validSchemaKeys) => {
  * Remove settings that are no longer used: the legacy top-level boostConfig,
  * and globalDefaults / perChallenge keys outside the schema. Mutates
  * `settings` in place; returns true when anything was removed.
- *
- * @param {AppSettings} settings
- * @returns {boolean}
  */
-const pruneObsoleteSettings = (settings) => {
+const pruneObsoleteSettings = (settings: AppSettings): boolean => {
     let hasChanges = false;
 
     if (settings.boostConfig) {

@@ -82,7 +82,7 @@ Domain terms used throughout, in reader's terms:
     - `exposureTarget` / `finalWindowExposureTarget`: `0` or null means **"target == trigger"** — the rule
       stays **active**, it simply votes up to the trigger value.
       `getEffectiveExposureTarget()` (`services/decisions/thresholds.js` — around L90); schema note in
-      `settings/schema.js` (around L87).
+      `settings/schema.ts` (around L87).
     - `boostTime` / `emergencyFill` / `keyUnlockedBoostTime`: `0` means **feature off / never auto-apply**.
       See the explicit comment in `getEffectiveKeyUnlockedBoostTime()` (`services/decisions/thresholds.js` — around
       L129: _"An explicit 0 means 'never auto-apply', matching the 0-is-off convention boostTime and
@@ -414,7 +414,7 @@ repeated six times is one that gets forgotten at one of them.
 
 ## 7. Persistence & platform detection
 
-- **Don't hand-roll `fs`.** `createJsonStore({fileName, prefKey})` (`settings/storage.js` — around L239) is
+- **Don't hand-roll `fs`.** `createJsonStore({fileName, prefKey})` (`settings/storage.ts` — around L239) is
   the reusable three-platform JSON store: sync fs at `userData/<fileName>` (mode `0o600`) on Electron/CLI,
   hydrate-once cache + ordered async write-behind to `@capacitor/preferences` on Capacitor, in-memory only
   on the Android headless service. `metadata.ts` and `joinStateStore.ts` (paid-unlock idempotency markers)
