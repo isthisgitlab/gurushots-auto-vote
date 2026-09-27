@@ -4,7 +4,7 @@
  * and fail OPEN on any other lock-infra error (never deadlock a join).
  */
 
-jest.mock('path', () => jest.requireActual('path'));
+jest.mock('path', () => jest.requireActual<typeof import('path')>('path'));
 
 jest.mock('fs', () => ({
     statSync: jest.fn(),

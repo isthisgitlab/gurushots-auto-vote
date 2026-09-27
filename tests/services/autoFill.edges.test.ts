@@ -421,7 +421,9 @@ describe('themed search edge shapes', () => {
                 getEligiblePhotos,
                 logger,
                 searchTagAutocomplete: jest.fn(async () => ['pinks']),
-                getCurrentMemberProfile: jest.fn(async () => invalid<MemberIdentity>({ id: 'member-hash' })),
+                getCurrentMemberProfile: jest.fn(
+                    async (): Promise<MemberIdentity> => ({ id: 'member-hash', userName: 'member' }),
+                ),
             },
         );
         expect(getEligiblePhotos).toHaveBeenCalledWith('c1', 'tok', expect.objectContaining({ search: 'pinks' }));

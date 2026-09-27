@@ -236,7 +236,14 @@ const shouldJoinChallenge = ({
     nowSec = 0,
     joinAfterPercentElapsed = 0,
 }: {
-    challenge: { id?: string | number; type?: string; join_coins?: number; close_time?: number; tags?: string[] };
+    challenge: {
+        id?: string | number;
+        type?: string;
+        join_coins?: number;
+        close_time?: number;
+        start_time?: number;
+        tags?: string[];
+    };
     bankroll: { coins?: number } | null;
     remainingBudget: number;
     includeTypes: string[];

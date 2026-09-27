@@ -173,7 +173,7 @@ describe('fetch-embeddings pure pipeline', () => {
                 { id: 'rosecolor', parent: 'color', words: ['rose'] },
             ],
             extraWords: ['sofa'],
-        } as ConceptsConfig);
+        });
         expect(bySurface.get('cat')).toBe('cat');
         expect(bySurface.get('sofa')).toBe('extraWords');
         expect(collisions).toHaveLength(1);
@@ -189,7 +189,7 @@ describe('fetch-embeddings pure pipeline', () => {
                 { id: 'sky', parent: 'sky', words: ['skies'] },
                 { id: 'skiing', parent: 'wintersport', words: ['ski'] },
             ],
-        } as ConceptsConfig);
+        });
         expect(collisions).toEqual([]);
     });
 
@@ -370,9 +370,9 @@ describe('pure pipeline edge cases', () => {
 
     test('collectAuthoredWords tolerates a null config and word-less concepts', () => {
         expect(collectAuthoredWords(null).bySurface.size).toBe(0);
-        const { bySurface, collisions } = collectAuthoredWords({
-            concepts: [{ id: 'x' }, { id: 'y', words: ['', 'a', 'a'] }],
-        });
+        const { bySurface, collisions } = collectAuthoredWords(
+            invalid({ concepts: [{ id: 'x' }, { id: 'y', words: ['', 'a', 'a'] }] }),
+        );
         expect([...bySurface.keys()]).toEqual(['', 'a']);
         expect(collisions).toEqual([]);
     });

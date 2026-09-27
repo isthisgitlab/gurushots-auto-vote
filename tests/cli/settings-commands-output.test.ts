@@ -1,6 +1,6 @@
 /**
  * Output / failure-path tests for the CLI settings commands
- * (commands/settings.ts). settings-commands.test.js covers the per-challenge
+ * (commands/settings.ts). settings-commands.test.ts covers the per-challenge
  * routing; this file covers what each command prints, the validation
  * failures, the facade-throws paths, and the schema / global-default dumps
  * shared with scripts/settings-cli.ts. The settings facade is a hand-rolled

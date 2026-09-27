@@ -23,7 +23,7 @@ const renderBadge = () => {
             turboAvailable
             onBoostApplied={onBoostApplied}
             onTurboApplied={onTurboApplied}
-            onSwapped={invalid(undefined)}
+            onSwapped={() => {}}
         />,
     );
     return { onBoostApplied, onTurboApplied };

@@ -34,9 +34,10 @@ import type { ResolveScheduledFill } from './scheduledFill';
 import type { AppSettings } from '../types/settings';
 
 /**
- * The host's single timer-handle slot value.
+ * The host's single timer-handle slot value: Node's Timeout on Electron and the
+ * CLI, a number in the WebView.
  */
-export type TimerHandle = ReturnType<typeof setTimeout>;
+export type TimerHandle = ReturnType<typeof setTimeout> | number;
 
 /**
  * What a host's voting cycle resolves to: the fetched challenge list, or a

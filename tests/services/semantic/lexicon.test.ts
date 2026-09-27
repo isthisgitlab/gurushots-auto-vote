@@ -15,8 +15,8 @@
  * the broad theme vocabulary (colors, events, animals, sports…) is present.
  */
 
-const realFs = jest.requireActual('fs');
-const realPath = jest.requireActual('path');
+const realFs = jest.requireActual<typeof import('fs')>('fs');
+const realPath = jest.requireActual<typeof import('path')>('path');
 const mockLexicon = JSON.parse(
     realFs.readFileSync(realPath.join(__dirname, '..', '..', '..', 'src', 'assets', 'semantic-vectors.json'), 'utf8'),
 );

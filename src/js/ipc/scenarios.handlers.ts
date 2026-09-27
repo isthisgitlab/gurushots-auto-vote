@@ -157,7 +157,7 @@ const buildHandlers = () =>
                 return result.ok ? { success: true } : fromResult(result);
             }),
 
-        'save-scenario': async (event: unknown, doc: unknown, options: { overwrite?: boolean } | null | undefined) =>
+        'save-scenario': async (event: unknown, doc: unknown, options?: { overwrite?: boolean } | null) =>
             safely('save-scenario', () =>
                 fromResult(settings.saveScenario(doc, { overwrite: options?.overwrite !== false })),
             ),
@@ -177,7 +177,7 @@ const buildHandlers = () =>
         'preview-scenario-import': async (event: unknown, text: string) =>
             safely('preview-scenario-import', () => fromResult(settings.previewScenarioImport(text))),
 
-        'import-scenario': async (event: unknown, text: string, options: { overwrite?: boolean } | null | undefined) =>
+        'import-scenario': async (event: unknown, text: string, options?: { overwrite?: boolean } | null) =>
             safely('import-scenario', () =>
                 fromResult(settings.importScenario(text, { overwrite: options?.overwrite === true })),
             ),
@@ -245,7 +245,7 @@ const buildHandlers = () =>
             });
         },
 
-        'simulate-scenario': async (event: unknown, challengeId: string | number, draft: unknown) => {
+        'simulate-scenario': async (event: unknown, challengeId: string | number, draft?: unknown) => {
             if (!isIdArg(challengeId)) return invalidArgs;
             return safely('simulate-scenario', async () => {
                 const loaded = await loadLiveScenario('scenario simulation', challengeId, draft ?? null);

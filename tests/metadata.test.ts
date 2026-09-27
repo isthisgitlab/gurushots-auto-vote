@@ -24,7 +24,7 @@ jest.mock('../src/js/settings', () => ({
 
 import metadata = require('../src/js/metadata');
 import type * as loggerModule from '../src/js/logger';
-import type { MetadataFile } from '../src/js/types/stores';
+import type { ChallengeMetadataEntry, MetadataFile } from '../src/js/types/stores';
 import { invalid } from './helpers/invalid';
 
 const setStoredMetadata = (obj: unknown) => {
@@ -41,6 +41,9 @@ const captureWrites = () => {
     fs.writeFileSync.mockImplementation((p, data) => writes.push(JSON.parse(data as string)));
     return writes;
 };
+
+/** A challenge's entry in a captured metadata file (ids never collide with `updateCheck`). */
+const entryOf = (file: MetadataFile, challengeId: string) => file[challengeId] as ChallengeMetadataEntry;
 
 beforeEach(() => {
     jest.clearAllMocks();
@@ -103,7 +106,7 @@ describe('loadMetadata', () => {
 describe('saveMetadata', () => {
     test('writes JSON to the metadata file path', () => {
         const writes = captureWrites();
-        metadata.saveMetadata(invalid({ updateCheck: { lastCheck: 999, skipVersion: null } }));
+        metadata.saveMetadata({ updateCheck: { lastCheck: 999, skipVersion: null } });
         expect(fs.writeFileSync).toHaveBeenCalled();
         expect(writes[0].updateCheck).toEqual({ lastCheck: 999, skipVersion: null });
     });
@@ -112,7 +115,7 @@ describe('saveMetadata', () => {
         fs.writeFileSync.mockImplementation(() => {
             throw new Error('disk full');
         });
-        const result = metadata.saveMetadata(invalid({ updateCheck: { lastCheck: null, skipVersion: null } }));
+        const result = metadata.saveMetadata({ updateCheck: { lastCheck: null, skipVersion: null } });
         expect(result).toBe(false);
     });
 });
@@ -252,7 +255,7 @@ describe('entryIds snapshot (voteOnNewEntry)', () => {
         const writes = captureWrites();
 
         expect(metadata.setChallengeEntryIds('c1', ['a', 'b'])).toBe(true);
-        expect(writes.at(-1)!.c1.entryIds).toEqual(['a', 'b']);
+        expect(entryOf(writes.at(-1)!, 'c1').entryIds).toEqual(['a', 'b']);
 
         setStoredMetadata(writes.at(-1));
         expect(metadata.getChallengeEntryIds('c1')).toEqual(['a', 'b']);
@@ -265,7 +268,7 @@ describe('entryIds snapshot (voteOnNewEntry)', () => {
         const writes = captureWrites();
 
         metadata.setChallengeEntryIds('c1', []);
-        expect(writes.at(-1)!.c1.entryIds).toEqual([]);
+        expect(entryOf(writes.at(-1)!, 'c1').entryIds).toEqual([]);
 
         setStoredMetadata(writes.at(-1));
         expect(metadata.getChallengeEntryIds('c1')).toEqual([]);
@@ -359,7 +362,7 @@ describe('entryIds snapshot (voteOnNewEntry)', () => {
         expect(metadata.cleanupStaleMetadata(['live'])).toBe(true);
 
         expect(writes.at(-1)!.gone).toBeUndefined();
-        expect(writes.at(-1)!.live.entryIds).toEqual(['b']);
+        expect(entryOf(writes.at(-1)!, 'live').entryIds).toEqual(['b']);
     });
 });
 
@@ -544,7 +547,7 @@ describe('entryIds snapshot — guards', () => {
         const writes = captureWrites();
 
         expect(metadata.setChallengeEntryIds('c1', ['a', 'c'])).toBe(true);
-        expect(writes.at(-1)!.c1.entryIds).toEqual(['a', 'c']);
+        expect(entryOf(writes.at(-1)!, 'c1').entryIds).toEqual(['a', 'c']);
     });
 
     test('duplicates are compared as sets: ["a","a"] vs ["a","b"] is a change', () => {
@@ -553,7 +556,7 @@ describe('entryIds snapshot — guards', () => {
 
         expect(metadata.setChallengeEntryIds('c1', ['a', 'a'])).toBe(true);
         expect(writes).toHaveLength(1);
-        expect(writes.at(-1)!.c1.entryIds).toEqual(['a', 'a']);
+        expect(entryOf(writes.at(-1)!, 'c1').entryIds).toEqual(['a', 'a']);
     });
 
     test('an existing entry without a snapshot gets one written', () => {

@@ -19,6 +19,7 @@ const path = jest.mocked(pathModule);
 import crypto = require('node:crypto');
 import type * as fetch_vision_modelModule from '../../scripts/fetch-vision-model';
 import { invalid } from '../helpers/invalid';
+import type { VisionModelFile } from '../../scripts/fetch-vision-model';
 
 const {
     FILES,
@@ -28,8 +29,6 @@ const {
     stageVisionWebAssets,
     main,
 }: typeof fetch_vision_modelModule = require('../../scripts/fetch-vision-model');
-
-type VisionModelFile = (typeof FILES)[number];
 
 const sha = (data: string) => crypto.createHash('sha256').update(data).digest('hex');
 const okResponse = (text: string) => invalid<Response>({ ok: true, status: 200, body: new Response(text).body });

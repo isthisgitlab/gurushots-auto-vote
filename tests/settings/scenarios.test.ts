@@ -16,7 +16,7 @@ import type { AndroidHeadlessStore, ChallengeSettings } from '../../src/js/types
 const g = globalThis as typeof globalThis & { __GS_HEADLESS__?: boolean; AndroidHeadlessStore?: AndroidHeadlessStore };
 
 type SaveRefused = Extract<ReturnType<typeof settings.saveScenario>, { ok: false }>;
-type PreviewAccepted = Extract<ReturnType<typeof settings.previewScenarioImport>, { exists: boolean }>;
+type PreviewAccepted = Extract<ReturnType<typeof settings.previewScenarioImport>, { ok: true }>;
 type PreviewRefused = Extract<ReturnType<typeof settings.previewScenarioImport>, { ok: false }>;
 
 jest.mock('../../src/js/logger', () => {
@@ -351,7 +351,9 @@ describe('settings facade — scenarios when the save fails', () => {
     beforeEach(() => {
         jest.isolateModules(() => {
             jest.doMock('../../src/js/settings/persistence', () => {
-                const actual = jest.requireActual('../../src/js/settings/persistence');
+                const actual = jest.requireActual<typeof import('../../src/js/settings/persistence')>(
+                    '../../src/js/settings/persistence',
+                );
                 return { ...actual, loadSettings: () => actual.loadSettings(), saveSettings: () => false };
             });
             scenarios = require('../../src/js/settings/scenarios');
@@ -367,7 +369,9 @@ describe('settings facade — scenarios when the save fails', () => {
     test('delete reports false when the save fails', () => {
         jest.isolateModules(() => {
             jest.doMock('../../src/js/settings/persistence', () => {
-                const actual = jest.requireActual('../../src/js/settings/persistence');
+                const actual = jest.requireActual<typeof import('../../src/js/settings/persistence')>(
+                    '../../src/js/settings/persistence',
+                );
                 const blob = actual.loadSettings();
                 blob.challengeSettings.scenarios = { Plan: simple() };
                 return { ...actual, loadSettings: () => structuredClone(blob), saveSettings: () => false };

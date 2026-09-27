@@ -6,14 +6,10 @@
  */
 
 import { fireEvent, render, screen } from './helpers/test-utils';
-import type { ComponentProps, FunctionComponent } from 'preact';
-import { SettingInput, SettingLabel, TagsField as TagsFieldComponent } from '@/components/app/SettingInput';
+import type { ComponentProps } from 'preact';
+import { SettingInput, SettingLabel, TagsField } from '@/components/app/SettingInput';
 import type { SerializableSchemaEntry } from '../../src/js/ipc/settings.handlers';
 import { invalid } from '../helpers/invalid';
-
-// TagsField renders without an id, which its signature requires; these tests leave it out.
-type TagsFieldProps = ComponentProps<typeof TagsFieldComponent>;
-const TagsField = invalid<FunctionComponent<Omit<TagsFieldProps, 'id'> & Partial<TagsFieldProps>>>(TagsFieldComponent);
 
 /** The schema entries below are partial: each names only the fields its field editor reads. */
 type PartialEntry = Partial<SerializableSchemaEntry>;
@@ -92,23 +88,27 @@ describe('SettingInput — tags', () => {
     });
 
     test('TagsField treats a missing value as no tags and has no reset without onReset', () => {
-        render(<TagsField settingKey="k" value={undefined} onChange={jest.fn()} placeholder="p" />);
+        render(<TagsField id="k" settingKey="k" value={undefined} onChange={jest.fn()} placeholder="p" />);
         expect(screen.getByPlaceholderText<HTMLInputElement>('p').value).toBe('');
         expect(resetButton()).toBeNull();
     });
 
     test('TagsField re-syncs its draft when the array is replaced from outside', () => {
-        const { rerender } = render(<TagsField settingKey="k" value={['a']} onChange={jest.fn()} placeholder="p" />);
-        rerender(<TagsField settingKey="k" value={['b', 'c']} onChange={jest.fn()} placeholder="p" />);
+        const { rerender } = render(
+            <TagsField id="k" settingKey="k" value={['a']} onChange={jest.fn()} placeholder="p" />,
+        );
+        rerender(<TagsField id="k" settingKey="k" value={['b', 'c']} onChange={jest.fn()} placeholder="p" />);
         expect(screen.getByPlaceholderText<HTMLInputElement>('p').value).toBe('b, c');
     });
 
     test('TagsField keeps a trailing comma while typing when the parsed tags already match', () => {
         const onChange = jest.fn();
-        const { rerender } = render(<TagsField settingKey="k" value={['a']} onChange={onChange} placeholder="p" />);
+        const { rerender } = render(
+            <TagsField id="k" settingKey="k" value={['a']} onChange={onChange} placeholder="p" />,
+        );
         fireEvent.change(screen.getByPlaceholderText('p'), { target: { value: 'a, b,' } });
         // Parent echoes the parsed array back: the draft must keep the comma.
-        rerender(<TagsField settingKey="k" value={['a', 'b']} onChange={onChange} placeholder="p" />);
+        rerender(<TagsField id="k" settingKey="k" value={['a', 'b']} onChange={onChange} placeholder="p" />);
         expect(screen.getByPlaceholderText<HTMLInputElement>('p').value).toBe('a, b,');
     });
 });

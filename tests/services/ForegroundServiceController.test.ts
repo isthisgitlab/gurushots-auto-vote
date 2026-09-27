@@ -8,6 +8,7 @@
 
 import type * as ForegroundServiceControllerModule from '../../src/js/services/ForegroundServiceController';
 import type * as RuntimeModule from '../../src/js/runtime';
+import { invalid } from '../helpers/invalid';
 
 const mockFsPlugin = {
     checkPermissions: jest.fn(),
@@ -124,8 +125,12 @@ describe('ForegroundServiceController', () => {
             throw new Error('native module missing');
         });
         const warning = jest.fn();
-        require('../../src/js/logger').withCategory.mockReturnValueOnce({ warning });
-        require('../../src/js/runtime').isCapacitor.mockReturnValue(true);
+        jest.mocked<typeof import('../../src/js/logger')>(
+            require('../../src/js/logger'),
+        ).withCategory.mockReturnValueOnce(invalid({ warning }));
+        jest.mocked<typeof import('../../src/js/runtime')>(require('../../src/js/runtime')).isCapacitor.mockReturnValue(
+            true,
+        );
         try {
             const isolated: typeof ForegroundServiceControllerModule = require('../../src/js/services/ForegroundServiceController');
 

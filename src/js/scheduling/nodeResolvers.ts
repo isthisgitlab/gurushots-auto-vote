@@ -21,8 +21,8 @@ import type { ResolveScheduledFill } from './scheduledFill';
 import type { RuleTiming } from '../voting/currencyAuto';
 
 // Per-challenge lastMinuteThreshold for the shared threshold math.
-const resolveThreshold: ResolveThreshold = (challengeId) =>
-    settings.getEffectiveSetting('lastMinuteThreshold', challengeId);
+const resolveThreshold = ((challengeId: string) =>
+    settings.getEffectiveSetting('lastMinuteThreshold', challengeId)) satisfies ResolveThreshold;
 
 // Per-challenge scheduled-fill config for the cadence cap (./scheduledFill.ts).
 // Both trigger values are LISTS and are passed RAW — scheduledFill.ts owns the
@@ -30,24 +30,24 @@ const resolveThreshold: ResolveThreshold = (challengeId) =>
 // here: Number([14400]) happens to work via the single-element-array quirk,
 // but Number([14400, 36000]) is NaN, which would silently kill the cadence
 // cap for exactly the flagship two-offset case.
-const resolveScheduledFill: ResolveScheduledFill = (challengeId) => ({
+const resolveScheduledFill = ((challengeId: string) => ({
     enabled: settings.getEffectiveSetting('useScheduledFill', challengeId) === true,
     timesOfDay: settings.getEffectiveSetting('scheduledFillTime', challengeId),
     beforeEndSecs: settings.getEffectiveSetting('scheduledFillBeforeEnd', challengeId),
-});
+})) satisfies ResolveScheduledFill;
 
 // Per-challenge pre-final-window top-up config for the cadence cap (./thresholdWindow.ts).
 // Enabled only when BOTH the final-window feature and this opt-in are on — matching the
 // rule engine's gate in _runVotingRules (services/decisions/ruleEngine.ts). leadSec is minutes → seconds and
 // durationSec is the configurable final-window length; thresholdWindow.ts re-guards a
 // non-positive/NaN value for both.
-const resolveFinalWindowTopUp: ResolveFinalWindowTopUp = (challengeId) => ({
+const resolveFinalWindowTopUp = ((challengeId: string) => ({
     enabled:
         settings.getEffectiveSetting('voteBeforeFinalWindow', challengeId) === true &&
         settings.getEffectiveSetting('useFinalWindowExposure', challengeId) === true,
     leadSec: Number(settings.getEffectiveSetting('voteBeforeFinalWindowLeadMin', challengeId)) * 60,
     durationSec: Number(settings.getEffectiveSetting('finalWindowDuration', challengeId)),
-});
+})) satisfies ResolveFinalWindowTopUp;
 
 // Per-challenge pre-boost fill config for the cadence cap (./thresholdWindow.ts).
 // Enabled only when the opt-in and autoBoost are on AND onlyBoost is off — matching the
@@ -57,7 +57,7 @@ const resolveFinalWindowTopUp: ResolveFinalWindowTopUp = (challengeId) => ({
 // Both boost windows are passed through as numbers because the apply instant depends on
 // the challenge's live boost state, which only thresholdWindow.ts sees; it re-guards the
 // `0 = off` sentinel and an out-of-range leadSec.
-const resolveBoostPrefill: ResolveBoostPrefill = (challengeId) => ({
+const resolveBoostPrefill = ((challengeId: string) => ({
     enabled:
         settings.getEffectiveSetting('voteBeforeBoost', challengeId) === true &&
         settings.getEffectiveSetting('autoBoost', challengeId) === true &&
@@ -65,7 +65,7 @@ const resolveBoostPrefill: ResolveBoostPrefill = (challengeId) => ({
     leadSec: Number(settings.getEffectiveSetting('voteBeforeBoostLeadMin', challengeId)) * 60,
     boostTimeSec: Number(settings.getEffectiveSetting('boostTime', challengeId)),
     keyUnlockedBoostTimeSec: Number(settings.getEffectiveSetting('keyUnlockedBoostTime', challengeId)),
-});
+})) satisfies ResolveBoostPrefill;
 
 // Per-challenge currency-automation timing for the cadence cap (./thresholdWindow.ts):
 // each ENABLED rule's three timing conditions, null for a rule that is off. The
@@ -84,15 +84,16 @@ const currencyTimingOf = (
           }
         : null;
 
-const resolveCurrencyAuto: ResolveCurrencyAuto = (challengeId) => ({
+const resolveCurrencyAuto = ((challengeId: string) => ({
     key: currencyTimingOf('autoKeyUnlock', 'autoKey', challengeId),
     swap: currencyTimingOf('autoSwap', 'autoSwap', challengeId),
     fill: currencyTimingOf('autoExposureFill', 'autoExposureFill', challengeId),
-});
+})) satisfies ResolveCurrencyAuto;
 
 // Per-challenge scenario and runtime state for the scenario boundary
 // (./thresholdWindow.ts computes the instant with the engine's own nextWakeAt).
-const resolveScenarioWake: ResolveScenarioWake = (challengeId) => scenarioWakeInput(getScenarioStatus(challengeId));
+const resolveScenarioWake = ((challengeId: string) =>
+    scenarioWakeInput(getScenarioStatus(challengeId))) satisfies ResolveScenarioWake;
 
 export {
     resolveScenarioWake,

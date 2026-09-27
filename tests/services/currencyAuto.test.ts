@@ -1,14 +1,16 @@
 /**
  * Tests for services/currencyAuto.ts — the automatic key / swap / fill runners
  * the voting pass calls. The spend services are mocked (their own live re-check
- * is covered in currencyActions.test.js); the spend lock is the real one, so the
+ * is covered in currencyActions.test.ts); the spend lock is the real one, so the
  * "another spend in flight" deferral is exercised for real.
  */
 
 jest.mock('../../src/js/settings');
 jest.mock('../../src/js/services/currencyActions', () => ({
     __esModule: true,
-    ...jest.requireActual('../../src/js/services/currencyActions'),
+    ...jest.requireActual<typeof import('../../src/js/services/currencyActions')>(
+        '../../src/js/services/currencyActions',
+    ),
     unlockBoostWithKey: jest.fn(),
     previewSwap: jest.fn(),
     swapEntry: jest.fn(),

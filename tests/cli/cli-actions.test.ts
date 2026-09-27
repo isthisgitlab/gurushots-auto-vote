@@ -98,8 +98,10 @@ const apiFactory = jest.mocked(
 );
 import boostApiModule = require('../../src/js/strategies/real/applyBoost');
 const boostApi = jest.mocked(boostApiModule);
-const actionsHandlers = require('../../src/js/ipc/actions.handlers').__handlers;
-const votingHandlers = require('../../src/js/ipc/voting.handlers').__handlers;
+// The handler-module mocks expose their jest.fn table for the assertions.
+type HandlersMock = { __handlers: Record<string, jest.Mock> };
+const actionsHandlers = invalid<HandlersMock>(require('../../src/js/ipc/actions.handlers')).__handlers;
+const votingHandlers = invalid<HandlersMock>(require('../../src/js/ipc/voting.handlers')).__handlers;
 import updateCheckerModule = require('../../src/js/services/UpdateChecker');
 const updateChecker = jest.mocked(updateCheckerModule);
 import type * as actionsModule from '../../src/js/cli/commands/actions';

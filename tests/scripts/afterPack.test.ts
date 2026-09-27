@@ -27,14 +27,20 @@ import os = require('os');
 import pathModule = require('path');
 const path = jest.mocked(pathModule);
 import type * as fusesModule from '@electron/fuses';
+import type afterPackHook from '../../scripts/afterPack.mts';
+import type { AfterPackContext } from 'electron-builder';
+import { invalid } from '../helpers/invalid';
 const { flipFuses, FuseV1Options } = jest.mocked<typeof fusesModule>(require('@electron/fuses'));
-const afterPack = require('../../scripts/afterPack').default;
+const afterPack = (require('../../scripts/afterPack') as { default: typeof afterPackHook }).default;
 
-const makeContext = (electronPlatformName: string) => ({
-    appOutDir: '/out',
-    electronPlatformName,
-    packager: { appInfo: { productFilename: 'GuruShotsAutoVote' }, executableName: 'gurushots-auto-vote' },
-});
+// A partial context: only the fields afterPack reads.
+const makeContext = (electronPlatformName: string, extra: { appOutDir?: string; arch?: number } = {}) =>
+    invalid<AfterPackContext>({
+        appOutDir: '/out',
+        electronPlatformName,
+        packager: { appInfo: { productFilename: 'GuruShotsAutoVote' }, executableName: 'gurushots-auto-vote' },
+        ...extra,
+    });
 
 describe('afterPack', () => {
     let logSpy: jest.SpiedFunction<typeof console.log>;
@@ -89,7 +95,7 @@ describe('afterPack', () => {
                 fs.mkdirSync(path.join(bin, target), { recursive: true });
                 fs.writeFileSync(path.join(bin, target, 'onnxruntime_binding.node'), 'x');
             }
-            await afterPack({ ...makeContext(platform), appOutDir, arch });
+            await afterPack(makeContext(platform, { appOutDir, arch }));
             expect(fs.readdirSync(bin)).toEqual([keptOs]);
             expect(fs.readdirSync(path.join(bin, keptOs)).sort()).toEqual(keptArchs);
         } finally {

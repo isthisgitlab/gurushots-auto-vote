@@ -30,7 +30,7 @@ jest.mock('../../src/js/ui/applicationMenu', () => ({
     updateMenuTranslations: jest.fn(),
 }));
 
-const fs = jest.requireActual('fs');
+const fs = jest.requireActual<typeof import('fs')>('fs');
 import pathModule = require('path');
 const path = jest.mocked(pathModule);
 import type * as manifestModule from '../../src/js/ipc/manifest';

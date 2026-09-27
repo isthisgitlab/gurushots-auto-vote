@@ -9,15 +9,10 @@ import { ActionButton } from '@/components/ui/ActionButton';
 import { CurrencyConfirmModal, currencyOutcomeText } from './CurrencyConfirmModal';
 
 import type { Bankroll, Challenge, RankingEntry } from '../../../types/gurushots';
-import type { SwapBackRecord } from '../../../types/stores';
 import type { SwapCandidate } from '../../../services/currencyActions';
+import type { SwapBackOffer } from '@/api/useSwapBacks';
 import type { ActionButtonVariant } from '@/components/ui/ActionButton';
 import type { CurrencyConfirmModalProps } from './CurrencyConfirmModal';
-
-/**
- * A swap-back offer for one slot: the boosted/turbo'd original to put back.
- */
-export type SwapBackOffer = Pick<SwapBackRecord, 'previousId' | 'previousMemberId' | 'kind'>;
 
 const ERROR_DISPLAY_MS = 5000;
 const PREVIEW_PX = 240;
@@ -190,7 +185,8 @@ export function SwapBackButton({
     onSpent,
 }: {
     entry: RankingEntry;
-    swapBack: SwapBackOffer;
+    /** The boosted/turbo'd original to put back. */
+    swapBack: Pick<SwapBackOffer, 'previousId' | 'previousMemberId' | 'kind'>;
     challengeId: Challenge['id'];
     bankroll: Bankroll | null;
     onSpent: () => void;

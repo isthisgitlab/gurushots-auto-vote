@@ -9,7 +9,7 @@
  * boundary: getChallengeOverride / getEffectiveSetting stop reporting an
  * override once the value matches the default again.
  *
- * Drives the in-memory headless-store seam (same as title-tag-rules.test.js)
+ * Drives the in-memory headless-store seam (same as title-tag-rules.test.ts)
  * so the facade's loadSettings/saveSettings round-trip without touching fs.
  */
 

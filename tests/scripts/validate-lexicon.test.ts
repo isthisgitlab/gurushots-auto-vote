@@ -8,7 +8,9 @@
 
 jest.mock('../../src/js/services/semantic/lexicon', () => ({
     __esModule: true,
-    ...jest.requireActual('../../src/js/services/semantic/lexicon'),
+    ...jest.requireActual<typeof import('../../src/js/services/semantic/lexicon')>(
+        '../../src/js/services/semantic/lexicon',
+    ),
 }));
 import lexiconModule = require('../../src/js/services/semantic/lexicon');
 const lexicon = jest.mocked(lexiconModule);

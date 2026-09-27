@@ -26,13 +26,12 @@ jest.mock('fs', () => ({
 jest.mock('path', () => {
     const mocked = {
         __esModule: true,
-        ...jest.requireActual('path'),
+        ...jest.requireActual<typeof import('path')>('path'),
         join: jest.fn((...args) => args.join('/')),
         dirname: jest.fn(),
         resolve: jest.fn(),
     };
-    mocked.default = mocked;
-    return mocked;
+    return Object.assign(mocked, { default: mocked });
 });
 
 // Mock logger to prevent fs/path dependency issues in tests

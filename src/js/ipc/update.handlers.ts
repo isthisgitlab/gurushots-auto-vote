@@ -17,6 +17,7 @@ import { getReleasesUrl } from '../services/UpdateChecker';
 
 import type { BrowserWindow, IpcMain } from 'electron';
 import type { IpcHandlerMap } from './registerHandlers';
+import type { UpdateSummary } from '../services/AutoUpdater';
 
 interface UpdateHandlerDeps {
     getAutoUpdater: () => AutoUpdater | null;
@@ -51,7 +52,10 @@ const buildHandlers = (deps: UpdateHandlerDeps) => {
     };
 
     return {
-        'check-for-updates': async () => {
+        // Typed as the summary both shells return (bridge/capacitor.ts implements it too).
+        'check-for-updates': async (): Promise<
+            { success: true; updateInfo: UpdateSummary | null } | { success: false; error: string }
+        > => {
             try {
                 const updateInfo = await ensureUpdater().checkForUpdates(true);
                 return { success: true, updateInfo };

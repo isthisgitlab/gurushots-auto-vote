@@ -10,6 +10,7 @@
 
 import type * as RuntimeModule from '../../src/js/runtime';
 import type { CapacitorGlobals, CapacitorPlugins } from '../../src/js/types/capacitor';
+import { invalid } from '../helpers/invalid';
 
 jest.mock('../../src/js/runtime', () => ({
     isCapacitor: jest.fn(() => false),
@@ -83,7 +84,9 @@ describe('NativeAutovoteBridge', () => {
 
     test('reports unavailable (and logs) when reading the plugin registry throws', async () => {
         const warning = jest.fn();
-        require('../../src/js/logger').withCategory.mockReturnValueOnce({ warning });
+        jest.mocked<typeof import('../../src/js/logger')>(
+            require('../../src/js/logger'),
+        ).withCategory.mockReturnValueOnce(invalid({ warning }));
         g.Capacitor = {
             get Plugins(): CapacitorPlugins {
                 throw new Error('bridge not ready');

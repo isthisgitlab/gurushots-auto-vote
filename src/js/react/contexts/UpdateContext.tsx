@@ -2,7 +2,7 @@ import { createContext, useContext, useReducer, useCallback, useEffect } from 'r
 import * as ipc from '../api/ipc';
 
 import type { ComponentChildren } from 'preact';
-import type { FormattedUpdateInfo } from '../../services/AutoUpdater';
+import type { UpdateSummary } from '../../services/AutoUpdater';
 
 // Update states
 export const UPDATE_STATES = {
@@ -27,7 +27,7 @@ export type DownloadProgress = { percent: number; transferred: number; total: nu
 type UpdateError = { message: string; canFallbackToBrowser: boolean };
 
 interface UpdateStateFields {
-    updateInfo: FormattedUpdateInfo | null;
+    updateInfo: UpdateSummary | null;
     progress: DownloadProgress | null;
     dialogVisible: boolean;
 }
@@ -45,7 +45,7 @@ type UpdateState = UpdateStateFields &
     );
 
 type UpdateAction =
-    | { type: typeof ACTIONS.SET_AVAILABLE; payload: FormattedUpdateInfo }
+    | { type: typeof ACTIONS.SET_AVAILABLE; payload: UpdateSummary }
     | { type: typeof ACTIONS.SET_DOWNLOADING }
     | { type: typeof ACTIONS.UPDATE_PROGRESS; payload: DownloadProgress }
     | { type: typeof ACTIONS.SET_READY }
@@ -125,7 +125,7 @@ export function UpdateProvider({ children }: { children?: ComponentChildren }) {
 
     // Setup IPC event listeners
     useEffect(() => {
-        const unsubscribeAvailable = ipc.onUpdateAvailable((updateInfo: FormattedUpdateInfo) => {
+        const unsubscribeAvailable = ipc.onUpdateAvailable((updateInfo: UpdateSummary) => {
             dispatch({ type: ACTIONS.SET_AVAILABLE, payload: updateInfo });
         });
 

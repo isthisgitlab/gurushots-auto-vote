@@ -18,8 +18,8 @@ type TagDeps = Parameters<typeof tagResolverModule.resolveTermsToTags>[2];
 // the shipped asset through the REAL fs instead, so these tests exercise the
 // vectors that actually ship rather than a fixture that agrees with them.
 jest.mock('../../src/js/services/semantic/assets', () => {
-    const realFs = jest.requireActual('node:fs');
-    const realPath = jest.requireActual('node:path');
+    const realFs = jest.requireActual<typeof import('node:fs')>('node:fs');
+    const realPath = jest.requireActual<typeof import('node:path')>('node:path');
     const assetPath = realPath.join(__dirname, '..', '..', 'src', 'assets', 'semantic-vectors.json');
     let cached: unknown;
     return {

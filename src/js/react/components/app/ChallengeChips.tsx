@@ -65,7 +65,7 @@ export function ChallengeChip({
  * to that tooltip — the text covers most of the chip, so a chip-level hint
  * must live here to stay visible.
  */
-export function ChipTitle({ hint, children }: { hint?: string; children: ComponentChildren }) {
+export function ChipTitle({ hint, children }: { hint?: string; children?: ComponentChildren }) {
     return (
         <span className="truncate" title={[children, hint].filter(Boolean).join(' — ') || undefined}>
             {children}

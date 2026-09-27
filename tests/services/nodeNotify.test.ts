@@ -1,6 +1,6 @@
 /**
  * Node-host delivery for the deadline notifications (CLI scheduler). The pure
- * decision math is covered in deadlineNotifications.test.js; here we pin the
+ * decision math is covered in deadlineNotifications.test.ts; here we pin the
  * Node glue: transport-specific escaping (AppleScript / Pango), early-exit when
  * off, direct describeDeadlineActions use with per-challenge fault isolation,
  * cross-cycle dedupe and coalescing — all with injected seams so no real

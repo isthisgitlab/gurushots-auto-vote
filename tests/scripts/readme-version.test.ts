@@ -10,9 +10,9 @@
 
 import type * as pathModule from 'node:path';
 
-const realPath: typeof pathModule = jest.requireActual('path');
+const realPath: typeof pathModule = jest.requireActual<typeof import('path')>('path');
 
-jest.mock('path', () => jest.requireActual('path'));
+jest.mock('path', () => jest.requireActual<typeof import('path')>('path'));
 
 // Shared instance so the copy required inside jest.isolateModules is this one.
 const mockFiles = new Map<string, string>();

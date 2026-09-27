@@ -12,6 +12,7 @@ import type { Challenge } from '../../src/js/types/gurushots';
 import type { ScenarioEngineState } from '../../src/js/types/scenario';
 import type { ScenarioFiredRecord } from '../../src/js/types/stores';
 import { invalid } from '../helpers/invalid';
+import type { EvaluateInput } from '../../src/js/scenarios/evaluate';
 
 const { evaluateScenario, firedRecord, localDayOf }: typeof evaluateModule = require('../../src/js/scenarios/evaluate');
 const { nextWakeAt }: typeof nextWakeModule = require('../../src/js/scenarios/nextWake');
@@ -55,7 +56,7 @@ const no = { type: 'entries', op: '=', value: 3 };
 const run = (
     doc: ScenarioDocument,
     state: ScenarioEngineState = initialState('Plan', 'main', NOW - 60),
-    overrides: Partial<Parameters<typeof evaluateScenario>[0]> = {},
+    overrides: Partial<EvaluateInput> = {},
 ) => evaluateScenario({ scenario: doc, state, challenge: challenge(), now: NOW, timezone: TZ, ...overrides });
 
 describe('evaluateScenario', () => {

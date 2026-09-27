@@ -9,7 +9,7 @@
  *   - getEffectiveTagSetting precedence (exact case-insensitive match, union
  *     with global default and with a per-challenge id override, no-op cases).
  *
- * Drives the in-memory headless-store seam (same one reset-all-settings.test.js
+ * Drives the in-memory headless-store seam (same one reset-all-settings.test.ts
  * uses) so the facade's loadSettings/saveSettings round-trip without touching fs.
  */
 

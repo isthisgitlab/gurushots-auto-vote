@@ -1,6 +1,6 @@
 /**
  * Renderer-side notifier that the cadence chain calls each cycle. The decision
- * math is tested in tests/services/deadlineNotifications.test.js; here we pin
+ * math is tested in tests/services/deadlineNotifications.test.ts; here we pin
  * the renderer glue: early-exit when the feature is off (no IPC fan-out), the
  * get-deadline-actions {success,actions} unwrap (skip {success:false} without
  * breaking), cross-cycle dedupe, coalescing, and the re-entrancy guard.

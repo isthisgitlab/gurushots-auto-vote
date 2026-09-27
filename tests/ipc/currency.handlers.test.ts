@@ -44,7 +44,9 @@ beforeEach(() => {
     // The spend lock is real (the handlers share it with the automatic runners);
     // only the spend services are mocked.
     currencyActions.withSpendLock.mockImplementation(
-        jest.requireActual('../../src/js/services/currencyActions').withSpendLock,
+        jest.requireActual<typeof import('../../src/js/services/currencyActions')>(
+            '../../src/js/services/currencyActions',
+        ).withSpendLock,
     );
     currencyActions.unlockBoostWithKey.mockResolvedValue(OK);
     currencyActions.fillExposure.mockResolvedValue(OK);

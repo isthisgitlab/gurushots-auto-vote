@@ -17,7 +17,7 @@ import type { ScenarioDocument, ScenarioRule } from '../settings/scenarioSchema'
 import { firstFailing } from './conditions';
 import { nextWakeAt } from './nextWake';
 
-interface EvaluateInput {
+export interface EvaluateInput {
     scenario: ScenarioDocument;
     state: ScenarioEngineState;
     challenge: Challenge;

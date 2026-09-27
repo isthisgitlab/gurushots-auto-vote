@@ -99,6 +99,15 @@ describe('AndroidUpdateInstaller', () => {
         expect(res).toEqual({ success: false, version: undefined, error: 'user cancelled' });
     });
 
+    test('a native failure without a message still reports why', async () => {
+        const dl = jest.fn().mockResolvedValue({ success: false });
+        g.Capacitor = { Plugins: { ApkInstaller: { downloadAndInstall: dl } } };
+
+        const res = await downloadAndInstall({ downloadUrl: 'https://x/app.apk', version: '2.0.0' });
+
+        expect(res).toEqual({ success: false, version: '2.0.0', error: 'The installer reported a failure' });
+    });
+
     test('skips the listener when no onProgress is given and treats a missing result as success', async () => {
         const addListener = jest.fn();
         const dl = jest.fn().mockResolvedValue(undefined);
@@ -150,7 +159,7 @@ describe('AndroidUpdateInstaller', () => {
         const res = await downloadAndInstall({ downloadUrl: 'https://x/app.apk', version: '1.0.0' });
 
         expect(g.open).toHaveBeenCalledWith('https://x/app.apk', '_blank');
-        expect(res.viaFallback).toBe(true);
+        expect(res).toMatchObject({ success: true, viaFallback: true });
     });
 
     test('navigates location.href when window.open is unavailable', async () => {

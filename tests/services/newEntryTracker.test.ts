@@ -23,7 +23,10 @@ import type * as newEntryTrackerModule from '../../src/js/services/newEntryTrack
 import type { Challenge } from '../../src/js/types/gurushots';
 import { invalid } from '../helpers/invalid';
 
-jest.mock('../../src/js/logger', () => ({ __esModule: true, ...jest.requireActual('../../src/js/logger') }));
+jest.mock('../../src/js/logger', () => ({
+    __esModule: true,
+    ...jest.requireActual<typeof import('../../src/js/logger')>('../../src/js/logger'),
+}));
 jest.mock('../../src/js/metadata');
 
 const challengeWithEntries = (entries: unknown[]) => invalid<Challenge>({ member: { ranking: { entries } } });

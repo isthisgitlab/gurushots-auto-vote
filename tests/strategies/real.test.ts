@@ -115,7 +115,9 @@ describe('module wiring', () => {
         // registry (explicit jest.mock factories are shared with it).
         let isolatedFactory;
         jest.isolateModules(() => {
-            isolatedFactory = require('../../src/js/services/newEntryTracker').createMetadataEntryTracker;
+            isolatedFactory = (
+                require('../../src/js/services/newEntryTracker') as typeof import('../../src/js/services/newEntryTracker')
+            ).createMetadataEntryTracker;
             require('../../src/js/strategies/real');
         });
         expect(isolatedFactory).toHaveBeenCalledTimes(1);
@@ -123,9 +125,15 @@ describe('module wiring', () => {
     });
 
     test('exposes the entry-picking boost and the title-pinned challenge read', () => {
-        expect(main.applyBoost).toBe(require('../../src/js/strategies/real/applyBoost').applyBoost);
+        expect(main.applyBoost).toBe(
+            (
+                require('../../src/js/strategies/real/applyBoost') as typeof import('../../src/js/strategies/real/applyBoost')
+            ).applyBoost,
+        );
         expect(main.getActiveChallenges).toBe(
-            require('../../src/js/strategies/real/activeChallenges').getActiveChallenges,
+            (
+                require('../../src/js/strategies/real/activeChallenges') as typeof import('../../src/js/strategies/real/activeChallenges')
+            ).getActiveChallenges,
         );
     });
 });

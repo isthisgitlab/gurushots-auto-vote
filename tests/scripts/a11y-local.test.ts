@@ -5,7 +5,8 @@
  */
 import type a11yLocalPlugin from '../../scripts/lint/a11y-local.mts';
 import { invalid } from '../helpers/invalid';
-const plugin: typeof a11yLocalPlugin = require('../../scripts/lint/a11y-local').default;
+const plugin: typeof a11yLocalPlugin = (require('../../scripts/lint/a11y-local') as { default: typeof a11yLocalPlugin })
+    .default;
 
 const rule = plugin.rules['label-has-control'];
 

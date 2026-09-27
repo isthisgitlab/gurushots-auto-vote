@@ -11,7 +11,7 @@ import { invalid } from '../helpers/invalid';
 const config = invalid<SerializableSchemaEntry>({ type: 'scenario', default: '' });
 
 // A <select>'s onChange stays a native 'change' listener under preact/compat
-// (see ChallengeProfilesBar.test.jsx), so dispatch the real event.
+// (see ChallengeProfilesBar.test.tsx), so dispatch the real event.
 const changeSelect = (sel: HTMLSelectElement, value: string) => {
     sel.value = value;
     sel.dispatchEvent(new window.Event('change', { bubbles: true }));

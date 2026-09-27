@@ -13,7 +13,7 @@ import { invalid } from '../helpers/invalid';
 
 const realPath = jest.requireActual<typeof pathModule>('path');
 
-jest.mock('path', () => jest.requireActual('path'));
+jest.mock('path', () => jest.requireActual<typeof import('path')>('path'));
 // Shared instances (not per-registry factories) so the copies the script
 // requires inside jest.isolateModules are the same objects asserted here.
 const mockEsbuild = { build: jest.fn(), context: jest.fn() };

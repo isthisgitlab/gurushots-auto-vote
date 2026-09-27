@@ -1,6 +1,6 @@
 /**
- * Storage transport edge cases not exercised by storage.test.js /
- * createJsonStore.test.js:
+ * Storage transport edge cases not exercised by storage.test.ts /
+ * createJsonStore.test.ts:
  *   - settings-store Capacitor hydration (initializeAsync) incl. failure
  *   - createJsonStore hydration failure
  *   - fs transport creating the userData dir on first write
@@ -38,7 +38,10 @@ type StorageCtx = {
 
 const mockPrefSet = jest.fn<Promise<void>, [SetOptions]>(() => Promise.resolve());
 const mockPrefGet = jest.fn<Promise<GetResult>, [GetOptions]>(() => Promise.resolve({ value: null }));
-jest.mock('../../src/js/runtime', () => ({ __esModule: true, ...jest.requireActual('../../src/js/runtime') }));
+jest.mock('../../src/js/runtime', () => ({
+    __esModule: true,
+    ...jest.requireActual<typeof import('../../src/js/runtime')>('../../src/js/runtime'),
+}));
 jest.mock(
     '@capacitor/preferences',
     () => ({

@@ -725,7 +725,7 @@ describe.each(Object.entries(resolvers))('thresholdWindow with %s', (_label, res
             it('skips malformed data where the boost outlives the challenge', async () => {
                 const now = Math.floor(Date.now() / 1000);
                 // timeout after close → apply instant negative; mirrors the rule-side
-                // guard asserted in tests/services/boostPrefill.test.js.
+                // guard asserted in tests/services/boostPrefill.test.ts.
                 const challenges = [
                     {
                         id: 9,

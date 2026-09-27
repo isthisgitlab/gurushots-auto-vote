@@ -49,7 +49,7 @@ const simulateApiError = (error: unknown, delay: number = 500): Promise<never> =
  * counterpart resolves with on failure (real api modules never reject on
  * a missing token — e.g. challenges resolves `{ challenges: [] }`, boost
  * resolves `null`). Callers must behave identically in mock and real
- * mode; tests/mock/no-token-contract.test.js enforces this.
+ * mode; tests/mock/no-token-contract.test.ts enforces this.
  *
  * The signature `F` comes from the declared type of the const the result is
  * assigned to (each endpoint declares its real counterpart's signature): it

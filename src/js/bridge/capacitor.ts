@@ -48,14 +48,20 @@ import { kebabToCamel, aliases, sendMethods, eventMethods } from '../ipc/manifes
 import type { IpcHandler } from '../ipc/registerHandlers';
 import type { CapacitorGlobals } from '../types/capacitor';
 import type { GuiLogSink } from '../logger';
+import type { UpdateSummary } from '../services/AutoUpdater';
+import type { WindowApi } from '../types/ipc';
 
-export type BridgeUpdateInfo = {
-    currentVersion: string;
-    latestVersion: string | null;
-    releaseNotes: string;
-    releaseDate: string | null;
-    isPrerelease: boolean;
-    downloadUrl: string | null;
+export type BridgeUpdateInfo = UpdateSummary & { downloadUrl: string | null };
+
+/**
+ * Electron's update handlers, each allowed to answer asynchronously: the
+ * bridge's own update channels must return what the renderer gets on Electron.
+ */
+type ElectronUpdateHandlers = ReturnType<typeof import('../ipc/update.handlers').buildHandlers>;
+type BridgeUpdateHandlers = {
+    [C in keyof ElectronUpdateHandlers]?: ElectronUpdateHandlers[C] extends (...args: infer A) => infer R
+        ? (...args: A) => R | Promise<Awaited<R>>
+        : never;
 };
 
 export type BridgeListener = (payload: unknown) => void;
@@ -196,7 +202,7 @@ const buildAllHandlers = () => {
         },
         'get-releases-url': async () => ({ success: true, url: updateChecker.getReleasesUrl() }),
         'can-auto-update': async () => ({ success: true, canAutoUpdate: true }),
-    };
+    } satisfies BridgeUpdateHandlers;
 
     return {
         ...settingsHandlers.buildHandlers(settingsDeps),
@@ -210,7 +216,7 @@ const buildAllHandlers = () => {
     };
 };
 
-const installBridge = () => {
+const installBridge = (): WindowApi => {
     // Seed the curated intent presets once (idempotent; never fatal). Mobile
     // has no main-process startup, so the bridge install is the boot hook.
     try {
@@ -302,9 +308,11 @@ const installBridge = () => {
         return Promise.resolve({ success: true });
     };
 
-    // Expose
+    // Expose. The object is assembled by channel name from the shared
+    // manifest, so the checker cannot follow it to WindowApi; the handlers it
+    // maps are the same modules WindowApi is derived from.
     (globalThis as typeof globalThis & { api?: object }).api = api;
-    return api;
+    return api as WindowApi;
 };
 
 export { installBridge, subscribe, emit };

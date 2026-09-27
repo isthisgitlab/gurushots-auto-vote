@@ -16,7 +16,6 @@ import { render } from './helpers/test-utils';
 import { ChallengeCard } from '@/components/app/ChallengeCard';
 import { buildChallenge } from '../helpers/challengeFixtures';
 import type { Challenge } from '../../src/js/types/gurushots';
-import { invalid } from '../helpers/invalid';
 
 const mockChallengeSettings = {
     hasCustomSettings: false,
@@ -77,7 +76,7 @@ const renderCard = (challenge: Challenge, autovoteRunning: boolean) =>
             autovoteRunning={autovoteRunning}
             onVoteComplete={jest.fn()}
             onSettingsClick={jest.fn()}
-            onCurrencySpent={invalid(undefined)}
+            onCurrencySpent={() => {}}
         />,
     );
 

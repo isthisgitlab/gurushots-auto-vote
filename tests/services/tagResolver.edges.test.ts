@@ -2,7 +2,7 @@
  * tagResolver.ts — the semantic-validation guards, driven through a stubbed
  * lexicon so each "no signal" exit (no challenge vector, empty tag, tag out of
  * vocabulary, non-finite cosine) is exercised deterministically. The real
- * shipped vectors are covered by tagResolver.test.js.
+ * shipped vectors are covered by tagResolver.test.ts.
  */
 
 jest.mock('../../src/js/services/semantic/lexicon', () => ({

@@ -2,14 +2,14 @@
  * Tests for the semantic scorer orchestrator (getSemanticScores), exercised
  * end-to-end against the real shipped lexicon data. (tests/setup.js mocks
  * fs/path, so the asset loader is mocked to return the real JSON — see
- * lexicon.test.js for the same pattern.)
+ * lexicon.test.ts for the same pattern.)
  *
  * Headline behavior: a "Feline Friends" challenge ranks a cat photo above an
  * unrelated one — which the lexical matcher cannot do.
  */
 
-const realFs = jest.requireActual('fs');
-const realPath = jest.requireActual('path');
+const realFs = jest.requireActual<typeof import('fs')>('fs');
+const realPath = jest.requireActual<typeof import('path')>('path');
 const mockLexicon = JSON.parse(
     realFs.readFileSync(realPath.join(__dirname, '..', '..', '..', 'src', 'assets', 'semantic-vectors.json'), 'utf8'),
 );

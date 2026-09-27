@@ -10,6 +10,7 @@
  */
 
 import type * as backgroundActivityModule from '../../src/js/windows/backgroundActivity';
+import { invalid } from '../helpers/invalid';
 
 const mockPowerSaveBlocker = {
     start: jest.fn(),
@@ -134,7 +135,9 @@ describe('syncBackgroundActivity', () => {
 
     test('a non-Error throw is still reported in the warning text', () => {
         const warning = jest.fn();
-        require('../../src/js/logger').withCategory.mockReturnValueOnce({ warning });
+        jest.mocked<typeof import('../../src/js/logger')>(
+            require('../../src/js/logger'),
+        ).withCategory.mockReturnValueOnce(invalid({ warning }));
         mockPowerSaveBlocker.start.mockImplementationOnce(() => {
             throw 'EPERM';
         });

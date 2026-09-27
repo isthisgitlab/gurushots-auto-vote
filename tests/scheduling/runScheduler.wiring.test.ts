@@ -4,7 +4,7 @@
  * while running, and the lifecycle accessors reflect state.
  *
  * The chain itself is stubbed here so the callbacks it would invoke can be
- * called directly; the cadence behaviour is covered in runScheduler.test.js.
+ * called directly; the cadence behaviour is covered in runScheduler.test.ts.
  */
 
 jest.mock('../../src/js/settings', () => ({
@@ -21,7 +21,9 @@ jest.mock('../../src/js/services/notify/nodeNotify', () => ({
 let mockChainOpts: ChainOpts | null;
 const mockScheduleNext = jest.fn(async () => {});
 jest.mock('../../src/js/scheduling/cadenceChain', () => {
-    const actual = jest.requireActual('../../src/js/scheduling/cadenceChain');
+    const actual = jest.requireActual<typeof import('../../src/js/scheduling/cadenceChain')>(
+        '../../src/js/scheduling/cadenceChain',
+    );
     return {
         ...actual,
         createCadenceChain: jest.fn((opts) => {
@@ -142,7 +144,7 @@ describe('lifecycle', () => {
         const { scheduler } = make();
         await scheduler.start();
         const fired = jest.fn();
-        mockChainOpts!.setTimer(invalid(setTimeout(fired, 1000)));
+        mockChainOpts!.setTimer(setTimeout(fired, 1000));
 
         scheduler.stop();
         expect(scheduler.isRunning()).toBe(false);
@@ -154,11 +156,13 @@ describe('lifecycle', () => {
 
 describe('notifications', () => {
     test('each cycle feeds both the deadline and the scenario notifier', async () => {
-        const nodeNotify = require('../../src/js/services/notify/nodeNotify');
+        const nodeNotify = jest.mocked<typeof import('../../src/js/services/notify/nodeNotify')>(
+            require('../../src/js/services/notify/nodeNotify'),
+        );
         const { createScheduler }: typeof runSchedulerModule = require('../../src/js/scheduling/runScheduler');
         createScheduler({ runVotingCycle: jest.fn(), getActiveChallenges: jest.fn() });
-        const deadlines = nodeNotify.createNodeDeadlineNotifier.mock.results.at(-1).value;
-        const scenarios = nodeNotify.createNodeScenarioNotifier.mock.results.at(-1).value;
+        const deadlines = nodeNotify.createNodeDeadlineNotifier.mock.results.at(-1)!.value;
+        const scenarios = nodeNotify.createNodeScenarioNotifier.mock.results.at(-1)!.value;
         await mockChainOpts!.onCycleChallenges!(invalid([{ id: 1 }]), 1000);
         expect(deadlines).toHaveBeenCalledWith([{ id: 1 }], 1000);
         expect(scenarios).toHaveBeenCalledWith([{ id: 1 }]);

@@ -5,7 +5,7 @@
  * command and the GUI/IPC `reset-all-settings` handler both delegate here, so
  * this invariant is what stops a reset from silently logging the user out.
  *
- * Drives the in-memory headless-store seam (the same one storage.test.js uses)
+ * Drives the in-memory headless-store seam (the same one storage.test.ts uses)
  * so the facade's loadSettings/saveSettings round-trip without touching fs.
  */
 

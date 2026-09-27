@@ -99,7 +99,7 @@ const _addPins = (pins: Record<string, string>, addEntries: Array<[string, strin
  * clobbered) and `removeIds` are deleted. Over-length titles are rejected
  * rather than truncated, preserving exact-match semantics. The map is capped.
  */
-const mergeTitlePins = (adds: Record<string, string>, removeIds: readonly string[]): boolean => {
+const mergeTitlePins = (adds: Record<string, string>, removeIds?: readonly string[]): boolean => {
     const addEntries = _addEntries(adds);
     const removeList = Array.isArray(removeIds) ? removeIds.filter((id) => typeof id === 'string') : [];
     if (addEntries.length === 0 && removeList.length === 0) return true;

@@ -44,16 +44,11 @@ import readline from 'node:readline';
 import { pipeline } from 'node:stream/promises';
 import yauzl from 'yauzl';
 import type { Options as YauzlOptions, ZipFile } from 'yauzl';
+import type { ConceptsConfig } from './build-lexicon';
 import { stem } from '../src/js/services/photoPicker';
 import { runIfMain } from './lib/run-if-main';
 
 type YauzlOpenCallback = (err: Error | null, zipfile: ZipFile) => void;
-
-/** The parts of scripts/lexicon-concepts.json this script reads. */
-interface LexiconConcepts {
-    concepts?: Array<{ id: string; words?: Array<string> }>;
-    extraWords?: Array<string>;
-}
 
 /** One parsed GloVe line. */
 interface GloveRow {
@@ -72,7 +67,7 @@ interface ScanRow extends VocabRow {
 }
 
 /** main()'s options; every one defaults to the pinned production value. */
-interface MainOptions {
+export interface MainOptions {
     conceptsPath?: string;
     cacheDir?: string;
     zipPath?: string;
@@ -172,7 +167,7 @@ const sha256OfString = (str: string): string => crypto.createHash('sha256').upda
  * @param concepts - parsed lexicon-concepts.json
  */
 const collectAuthoredWords = (
-    concepts: LexiconConcepts | null,
+    concepts: ConceptsConfig | null,
 ): { bySurface: Map<string, string>; collisions: Array<string> } => {
     const bySurface = new Map<string, string>();
     const stemOwner = new Map<string, string>();
@@ -479,7 +474,7 @@ const main = async ({
     topN = TOP_N,
     meanCenter = MEAN_CENTER,
 }: MainOptions = {}): Promise<void> => {
-    const concepts: LexiconConcepts | null = JSON.parse(fs.readFileSync(conceptsPath, 'utf8'));
+    const concepts: ConceptsConfig | null = JSON.parse(fs.readFileSync(conceptsPath, 'utf8'));
     const { bySurface: authored, collisions } = collectAuthoredWords(concepts);
     if (collisions.length) {
         fail([

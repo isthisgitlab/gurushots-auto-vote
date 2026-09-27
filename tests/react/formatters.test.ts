@@ -162,9 +162,16 @@ describe('getEntryStatus', () => {
 describe('re-exports from the shared core', () => {
     test('formatters exposes the same functions the core modules define', () => {
         const fm: typeof formattersModule = require('../../src/js/react/utils/formatters');
-        expect(fm.formatDuration).toBe(require('../../src/js/format/duration').formatDuration);
-        expect(fm.entryPhotoUrl).toBe(require('../../src/js/format/photoUrl').entryPhotoUrl);
-        expect(fm.isBoostWindowOpen).toBe(require('../../src/js/voting/boostWindow').isBoostWindowOpen);
+        expect(fm.formatDuration).toBe(
+            (require('../../src/js/format/duration') as typeof import('../../src/js/format/duration')).formatDuration,
+        );
+        expect(fm.entryPhotoUrl).toBe(
+            (require('../../src/js/format/photoUrl') as typeof import('../../src/js/format/photoUrl')).entryPhotoUrl,
+        );
+        expect(fm.isBoostWindowOpen).toBe(
+            (require('../../src/js/voting/boostWindow') as typeof import('../../src/js/voting/boostWindow'))
+                .isBoostWindowOpen,
+        );
     });
 });
 

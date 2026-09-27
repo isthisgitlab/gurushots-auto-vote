@@ -112,11 +112,19 @@
                 "no-console": "off"
             }
         },
-        // TypeScript resolves every identifier in the strict tsc program, type
+        // TypeScript resolves every identifier in the strict tsc programs, type
         // queries such as `typeof ServiceWorkerContainer` included, which
         // no-undef cannot see; the compiler's check replaces it.
         {
-            "files": ["src/js/**/*.ts", "src/js/**/*.tsx"],
+            "files": [
+                "src/js/**/*.ts",
+                "src/js/**/*.tsx",
+                "scripts/**/*.ts",
+                "scripts/**/*.mts",
+                "tests/**/*.ts",
+                "tests/**/*.tsx",
+                "tests/**/*.cts"
+            ],
             "rules": {
                 "no-undef": "off"
             }

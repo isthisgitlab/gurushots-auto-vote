@@ -4,7 +4,7 @@
  * Covers getTitlePins (defensive copy, prototype-key safety) and
  * mergeTitlePins (first-seen-wins merge, removals, length/count caps).
  *
- * Drives the in-memory headless-store seam (same one title-tag-rules.test.js
+ * Drives the in-memory headless-store seam (same one title-tag-rules.test.ts
  * uses) so the facade's loadSettings/saveSettings round-trip without touching fs.
  */
 

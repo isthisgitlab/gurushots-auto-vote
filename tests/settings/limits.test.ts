@@ -1,7 +1,7 @@
 // tests/setup.js mocks `fs` (and path.join/dirname/resolve) globally, so this
 // suite reaches for the real modules to read its own source off disk.
-const realFs = jest.requireActual('fs');
-const realPath = jest.requireActual('path');
+const realFs = jest.requireActual<typeof import('fs')>('fs');
+const realPath = jest.requireActual<typeof import('path')>('path');
 
 const LIMITS_PATH = realPath.join(__dirname, '..', '..', 'src', 'js', 'settings', 'limits.ts');
 import limits = require('../../src/js/settings/limits');

@@ -3,7 +3,7 @@
  *
  *   1. VotingLogic.isWithinFinalWindow(closeTime, now, windowSec) — the pure
  *      membership check the final-window exposure rule keys off. The existing
- *      tests/api/final-window-exposure.test.js reimplements this inline with a
+ *      tests/api/final-window-exposure.test.ts reimplements this inline with a
  *      hardcoded 3600, so it can never catch a regression in the real function's
  *      windowSec handling. These call the REAL export at a non-default width.
  *   2. schema.finalWindowDuration bounds — the 'time' setting is an integer in

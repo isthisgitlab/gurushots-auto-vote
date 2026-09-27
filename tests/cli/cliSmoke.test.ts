@@ -11,7 +11,7 @@ import type * as node_child_processModule from 'node:child_process';
 const { spawnSync }: typeof node_child_processModule = require('node:child_process');
 // tests/setup.js mocks path with stubs that return undefined, which
 // breaks path.resolve. Reach through to the real module.
-const path = jest.requireActual('path');
+const path = jest.requireActual<typeof import('path')>('path');
 
 const CLI_PATH = path.resolve(__dirname, '../../src/js/cli/cli.ts');
 

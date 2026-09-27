@@ -71,7 +71,7 @@ describe('Capacitor bridge', () => {
         log = { error: jest.fn(), warning: jest.fn(), info: jest.fn(), debug: jest.fn() };
         jest.mocked<typeof loggerModule>(require('../../src/js/logger')).withCategory.mockReturnValue(invalid(log));
         bridge = require('../../src/js/bridge/capacitor');
-        api = invalid(bridge.installBridge());
+        api = bridge.installBridge();
     });
 
     afterEach(() => {

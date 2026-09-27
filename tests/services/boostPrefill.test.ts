@@ -15,7 +15,7 @@
  *     rule, but never flash/last-minute (which already vote to 100% anyway) and
  *     never onlyBoost.
  *
- * Structure mirrors votingPause.test.js.
+ * Structure mirrors votingPause.test.ts.
  */
 
 import settingsModule = require('../../src/js/settings');

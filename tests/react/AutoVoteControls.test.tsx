@@ -1,6 +1,5 @@
 import { render, screen, fireEvent } from './helpers/test-utils';
 import { AutoVoteControls } from '@/components/app/AutoVoteControls';
-import { invalid } from '../helpers/invalid';
 
 describe('AutoVoteControls', () => {
     it('offers Start while stopped and shows placeholders for an unrun session', () => {
@@ -13,7 +12,7 @@ describe('AutoVoteControls', () => {
                 lastRun={null}
                 cycles={0}
                 onToggle={onToggle}
-                autoJoinActive={invalid(undefined)}
+                autoJoinActive={false}
             />,
         );
 
@@ -36,7 +35,7 @@ describe('AutoVoteControls', () => {
                 lastRun="12:34:56"
                 cycles={7}
                 onToggle={jest.fn()}
-                autoJoinActive={invalid(undefined)}
+                autoJoinActive={false}
             />,
         );
 

@@ -119,10 +119,10 @@ export function StatusHeader({
     autoClaimStatus,
 }: {
     challenges: Challenge[];
-    nextRunAt: number | null;
+    nextRunAt?: number | null;
     running: boolean;
-    bankroll: Bankroll | null | undefined;
-    autoClaimStatus: { enabled: boolean; nextClaimAt: number } | null;
+    bankroll?: Bankroll | null;
+    autoClaimStatus?: { enabled: boolean; nextClaimAt: number } | null;
 }) {
     const { t } = useTranslation();
     // ChallengesContext always hands down an array ([] while empty/loading).

@@ -137,7 +137,7 @@ describe('watchSettingsFile onSettingsChanged', () => {
     });
 
     test('returns null (and never watches) when there is no settings file yet', () => {
-        require('node:fs').existsSync.mockReturnValueOnce(false);
+        jest.mocked<typeof import('node:fs')>(require('node:fs')).existsSync.mockReturnValueOnce(false);
 
         expect(watchSettingsFile(makeDeps(jest.fn()))).toBeNull();
     });

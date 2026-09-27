@@ -113,7 +113,7 @@ const submitVotes = async (
         // Keep this comparison as written rather than negating it. A caller can pass a
         // function as the target, and `number < function` is false — but so is
         // `number >= function`, so an inverted test would vote the whole pool instead of
-        // standing down. See the thresholdFunction case in tests/api/voting.test.js.
+        // standing down. See the thresholdFunction case in tests/api/voting.test.ts.
         if (!(exposure_factor < targetExposure)) break;
 
         votedImageIds.push(image.id);

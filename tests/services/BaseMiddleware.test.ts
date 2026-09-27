@@ -1,6 +1,6 @@
 /**
  * BaseMiddleware — the token-handling wrapper the CLI and the IPC handlers
- * call into. cliVoteManual has its own suite (cliVoteManual.test.js); this one
+ * call into. cliVoteManual has its own suite (cliVoteManual.test.ts); this one
  * covers login, the vote entry points, auth state, logout and the
  * token-requiring pass-throughs.
  */
@@ -12,7 +12,7 @@ jest.mock('../../src/js/settings', () => ({
 
 jest.mock('../../src/js/services/auth', () => ({
     __esModule: true,
-    ...jest.requireActual('../../src/js/services/auth'),
+    ...jest.requireActual<typeof import('../../src/js/services/auth')>('../../src/js/services/auth'),
     clearAuthToken: jest.fn(async () => true),
 }));
 

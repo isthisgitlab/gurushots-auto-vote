@@ -75,7 +75,11 @@ const apiFactory = jest.mocked(
 const { clearAuthToken } = jest.mocked<typeof authModule>(require('../../src/js/services/auth'));
 import promptsModule = require('../../src/js/cli/prompts');
 const prompts = jest.mocked(promptsModule);
-const handlers: Record<string, jest.Mock> = require('../../src/js/ipc/actions.handlers').__handlers;
+// The handler-module mocks expose their jest.fn table for the assertions.
+type HandlersMock = { __handlers: Record<string, jest.Mock> };
+const handlers: Record<string, jest.Mock> = invalid<HandlersMock>(
+    require('../../src/js/ipc/actions.handlers'),
+).__handlers;
 import updateCheckerModule = require('../../src/js/services/UpdateChecker');
 const updateChecker = jest.mocked(updateCheckerModule);
 import type * as authModule from '../../src/js/services/auth';
@@ -85,7 +89,7 @@ import type * as joinModule from '../../src/js/cli/commands/join';
 import type * as updateModule from '../../src/js/cli/commands/update';
 import type * as logsModule from '../../src/js/cli/commands/logs';
 import { invalid } from '../helpers/invalid';
-const pkg = jest.requireActual('../../package.json');
+const pkg = jest.requireActual<typeof import('../../package.json')>('../../package.json');
 
 const { handleLogin, handleLogout }: typeof authCommandsModule = require('../../src/js/cli/commands/auth');
 const { showBankroll }: typeof bankrollModule = require('../../src/js/cli/commands/bankroll');

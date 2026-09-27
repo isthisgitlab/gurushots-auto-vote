@@ -481,7 +481,9 @@ describe('AutoUpdater', () => {
             send = jest.fn();
             autoUpdater.setMainWindow(invalid({ isDestroyed: () => false, webContents: { send } }));
             log = { info: jest.fn(), debug: jest.fn(), warning: jest.fn(), error: jest.fn() };
-            require('../../src/js/logger').withCategory.mockReturnValue(log);
+            jest.mocked<typeof import('../../src/js/logger')>(
+                require('../../src/js/logger'),
+            ).withCategory.mockReturnValue(invalid(log));
         });
 
         it('checking-for-update notifies the renderer', () => {
@@ -557,12 +559,12 @@ describe('AutoUpdater', () => {
             Object.defineProperty(process, 'platform', { value, configurable: true });
 
         afterEach(() => {
-            require('electron').app.isPackaged = false;
+            (require('electron') as { app: { isPackaged: boolean } }).app.isPackaged = false;
             Object.defineProperty(process, 'platform', originalPlatform!);
         });
 
         it.each(['darwin', 'win32', 'linux', 'freebsd'])('a packaged build on %s attempts auto-update', (platform) => {
-            require('electron').app.isPackaged = true;
+            (require('electron') as { app: { isPackaged: boolean } }).app.isPackaged = true;
             setPlatform(platform);
             expect(autoUpdater.canAutoUpdate()).toBe(true);
         });
@@ -574,7 +576,7 @@ describe('AutoUpdater', () => {
         });
 
         it('downloadUpdate rethrows a failed download and clears the downloading flag', async () => {
-            require('electron').app.isPackaged = true;
+            (require('electron') as { app: { isPackaged: boolean } }).app.isPackaged = true;
             setPlatform('linux');
             autoUpdater.updateInfo = invalid({ latestVersion: '0.8.0' });
             mockAutoUpdater.downloadUpdate.mockRejectedValueOnce(new Error('ENOSPC'));
@@ -596,7 +598,9 @@ describe('AutoUpdater', () => {
 
         it('a throwing legacy store never breaks construction', () => {
             const error = jest.fn();
-            require('../../src/js/logger').withCategory.mockReturnValueOnce({ error });
+            jest.mocked<typeof import('../../src/js/logger')>(
+                require('../../src/js/logger'),
+            ).withCategory.mockReturnValueOnce(invalid({ error }));
             mockMetadata.getLegacySkipVersion.mockImplementationOnce(() => {
                 throw new Error('metadata.json corrupt');
             });

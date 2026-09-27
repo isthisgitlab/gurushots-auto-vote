@@ -28,7 +28,7 @@ let initPromise: Promise<LexiconTable | null> | null = null;
  * two's-complement bytes, so both branches must reinterpret explicitly:
  * Buffer yields unsigned 0..255 (viewed through Int8Array), and atob yields
  * char codes 0..255 (shifted by hand). Getting the sign wrong would corrupt
- * every negative component SILENTLY — tests/services/semantic/lexicon.test.js
+ * every negative component SILENTLY — tests/services/semantic/lexicon.test.ts
  * round-trips known negative values through BOTH branches to pin this down.
  * Returns null for anything malformed.
  */

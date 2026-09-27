@@ -64,7 +64,9 @@ jest.mock('../../src/js/cli/commands/auth', () => ({ handleLogin: jest.fn(), han
 // parseChallengeFlag / parseSwapFlags / the usage strings are pure helpers —
 // keep the real ones so the dispatcher's argv handling is tested end to end.
 jest.mock('../../src/js/cli/commands/voting', () => {
-    const { parseChallengeFlag } = jest.requireActual('../../src/js/cli/commands/voting');
+    const { parseChallengeFlag } = jest.requireActual<typeof import('../../src/js/cli/commands/voting')>(
+        '../../src/js/cli/commands/voting',
+    );
     return {
         parseChallengeFlag,
         runVotingCycle: jest.fn(),
@@ -75,7 +77,9 @@ jest.mock('../../src/js/cli/commands/voting', () => {
 });
 
 jest.mock('../../src/js/cli/commands/actions', () => {
-    const { parseSwapFlags, SWAP_USAGE, SWAP_BACK_USAGE } = jest.requireActual('../../src/js/cli/commands/actions');
+    const { parseSwapFlags, SWAP_USAGE, SWAP_BACK_USAGE } = jest.requireActual<
+        typeof import('../../src/js/cli/commands/actions')
+    >('../../src/js/cli/commands/actions');
     return {
         parseSwapFlags,
         SWAP_USAGE,

@@ -17,7 +17,7 @@ const realPath = jest.requireActual<typeof pathModule>('path');
 const zlib = jest.requireActual<typeof zlibModule>('zlib');
 const crypto = jest.requireActual<typeof cryptoModule>('crypto');
 
-jest.mock('path', () => jest.requireActual('path'));
+jest.mock('path', () => jest.requireActual<typeof import('path')>('path'));
 
 // Shared instance so the copy required inside jest.isolateModules is this one.
 const mockFiles = new Map<string, Buffer | string>();

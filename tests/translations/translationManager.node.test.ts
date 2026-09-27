@@ -5,6 +5,7 @@
 
 import english = require('../../src/js/translations/english');
 import latvian = require('../../src/js/translations/latvian');
+import { invalid } from '../helpers/invalid';
 
 const SETTINGS = '../../src/js/settings';
 const LOGGER = '../../src/js/logger';
@@ -14,10 +15,15 @@ const INDEX = '../../src/js/translations/index';
 const load = (getSetting: () => unknown) => {
     jest.resetModules();
     jest.doMock(SETTINGS, () => ({ getSetting: jest.fn(getSetting) }));
-    const logger = require(LOGGER);
+    const logger = jest.mocked<typeof import('../../src/js/logger')>(require(LOGGER));
     const log = { warning: jest.fn() };
-    logger.withCategory.mockReturnValue(log);
-    return { ...require(INDEX), settings: require(SETTINGS), logger, log };
+    logger.withCategory.mockReturnValue(invalid(log));
+    return {
+        ...(require(INDEX) as typeof import('../../src/js/translations/index')),
+        settings: jest.mocked<typeof import('../../src/js/settings')>(require(SETTINGS)),
+        logger,
+        log,
+    };
 };
 
 afterEach(() => {

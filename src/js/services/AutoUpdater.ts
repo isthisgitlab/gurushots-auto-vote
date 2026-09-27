@@ -14,7 +14,19 @@ import type { UpdateInfo } from 'electron-updater';
  * The update info shape sent to the renderer (and returned by the
  * check-for-updates IPC channel).
  */
-export type FormattedUpdateInfo = {
+/**
+ * The update details every shell hands the renderer — Electron's AutoUpdater
+ * and the Android bridge alike: what the update dialog reads.
+ */
+export type UpdateSummary = {
+    currentVersion: string;
+    latestVersion: string;
+    releaseNotes: string;
+    releaseDate: string | null;
+    isPrerelease: boolean;
+};
+
+type FormattedUpdateInfo = {
     currentVersion: string;
     latestVersion: string;
     releaseNotes: string;

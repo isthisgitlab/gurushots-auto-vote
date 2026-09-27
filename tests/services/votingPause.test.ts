@@ -11,7 +11,7 @@
  * final-window and scheduled fill, but NEVER flash or last-minute — a
  * challenge that genuinely closes mid-pause must still get its final fill.
  *
- * Structure mirrors scheduledFill.test.js: before-end cases are pure
+ * Structure mirrors scheduledFill.test.ts: before-end cases are pure
  * close_time math, time-of-day cases pin `now` to a fixed epoch and run
  * through the real wallClock module with timezone mocked to 'UTC'.
  */
@@ -377,7 +377,7 @@ describe('the last-minute rescue survives a corrupt lastMinuteThreshold', () => 
 
 describe('precedence against neighbouring rules', () => {
     test('voteOnlyInLastMinute is evaluated BEFORE the pause', () => {
-        // Mirrors scheduledFill.test.js's equivalent. Both block, but the
+        // Mirrors scheduledFill.test.ts's equivalent. Both block, but the
         // reported reason must be the vote-only one so the log explains the
         // setting the user actually set.
         mockSettings({

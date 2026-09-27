@@ -64,8 +64,8 @@ describe('ChipTitle', () => {
     test('omits missing parts from the tooltip', () => {
         const { container } = render(
             <>
-                <ChipTitle hint="Custom settings">{invalid(undefined)}</ChipTitle>
-                <ChipTitle>{invalid(undefined)}</ChipTitle>
+                <ChipTitle hint="Custom settings" />
+                <ChipTitle />
             </>,
         );
 

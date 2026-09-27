@@ -9,6 +9,7 @@ import type * as wallClockModule from '../../src/js/scheduling/wallClock';
 import type { Challenge, RankingEntry } from '../../src/js/types/gurushots';
 import type { ComparisonOp, EntryCondition, ScenarioCondition, ScenarioSelector } from '../../src/js/types/scenario';
 import { invalid } from '../helpers/invalid';
+import type { ConditionContext } from '../../src/js/scenarios/conditions';
 
 const {
     evaluateCondition,
@@ -41,8 +42,6 @@ const challenge = (overrides: Record<string, unknown> = {}) => ({
     },
     ...overrides,
 });
-
-type ConditionContext = Parameters<typeof evaluateCondition>[1];
 
 const ctx = (overrides: Partial<Record<keyof ConditionContext, unknown>> = {}) =>
     invalid<ConditionContext>({

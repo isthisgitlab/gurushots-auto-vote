@@ -8,7 +8,7 @@
  * detailed card either way. A detailed card spans the full grid row; a compact
  * tile does not, so several share a row.
  *
- * Hooks are stubbed the same way as ChallengeCard.badges.test.jsx; the action
+ * Hooks are stubbed the same way as ChallengeCard.badges.test.tsx; the action
  * buttons are NOT mocked here, so their absence in compact mode is real.
  * `t(key)` returns the key (see tests/react setup).
  */
@@ -100,7 +100,7 @@ const renderCard = (
             autovoteRunning={false}
             onVoteComplete={jest.fn()}
             onSettingsClick={jest.fn()}
-            onCurrencySpent={invalid(undefined)}
+            onCurrencySpent={() => {}}
             {...props}
         />,
     );

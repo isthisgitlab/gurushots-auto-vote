@@ -1,5 +1,5 @@
 import type { Bankroll, Challenge, RankingEntry } from '../../../types/gurushots';
-import type { SwapBackOffer } from './SwapEntryButton';
+import type { SwapBackOffer } from '@/api/useSwapBacks';
 import { useTranslation } from '@/contexts/TranslationContext';
 import { useBoost } from '@/api/useBoost';
 import { useTurbo } from '@/api/useTurbo';

@@ -717,7 +717,7 @@ describe('ChallengeSettingsModal scheduled-fill hints', () => {
 
     // preact/compat rewrites onChange→onInput for input/textarea only, so a
     // <select>'s onChange needs the real native change event (same workaround
-    // as ChallengeProfilesBar.test.jsx).
+    // as ChallengeProfilesBar.test.tsx).
     const applyProfile = async (name: string) => {
         const select = document.querySelector('select')!;
         await act(async () => {

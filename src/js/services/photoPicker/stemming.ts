@@ -190,7 +190,7 @@ const STOPWORDS = new Set([
     // NOT included: "mood", "style", "vibe". They are weaker cases than the
     // above and stripping them would break the legitimate niche challenge
     // whose entire subject is that word (see the "Mood" case in
-    // tests/services/photoPicker.test.js).
+    // tests/services/photoPicker.test.ts).
     'life',
     'lives',
     'living',

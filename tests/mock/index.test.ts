@@ -29,8 +29,14 @@ type ChallengesMock = jest.MockedObject<typeof challengesModule> & {
 /** The empty vote-images fixture the voting mock carries (not a real export). */
 type VotingMock = jest.MockedObject<typeof votingModule> & { mockEmptyVoteImages: { images: unknown[] } };
 
-jest.mock('../../src/js/metadata', () => ({ __esModule: true, ...jest.requireActual('../../src/js/metadata') }));
-jest.mock('../../src/js/settings', () => ({ __esModule: true, ...jest.requireActual('../../src/js/settings') }));
+jest.mock('../../src/js/metadata', () => ({
+    __esModule: true,
+    ...jest.requireActual<typeof import('../../src/js/metadata')>('../../src/js/metadata'),
+}));
+jest.mock('../../src/js/settings', () => ({
+    __esModule: true,
+    ...jest.requireActual<typeof import('../../src/js/settings')>('../../src/js/settings'),
+}));
 
 // Mock the individual mock modules. The mock endpoints import each one as a
 // namespace; `__esModule` makes that namespace the factory object itself.

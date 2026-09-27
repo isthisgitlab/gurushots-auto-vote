@@ -1657,7 +1657,7 @@ const schemaEntry = (key: string): SettingsSchemaEntry | undefined =>
 
 /**
  * A key's schema default, typed as that key's value: every default passes its
- * own validation (tests/settings/schema-defaults.test.js).
+ * own validation (tests/settings/schema-defaults.test.ts).
  */
 const schemaDefault = <K extends string>(key: K): SettingValueOf<K> => getSchemaDefault(key) as SettingValueOf<K>;
 

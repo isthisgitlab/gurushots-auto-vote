@@ -42,9 +42,9 @@ const renderBadge = (entry: RankingEntry) =>
             challengeId={777}
             boostAvailable={false}
             turboAvailable={false}
-            onBoostApplied={invalid(undefined)}
-            onTurboApplied={invalid(undefined)}
-            onSwapped={invalid(undefined)}
+            onBoostApplied={() => {}}
+            onTurboApplied={() => {}}
+            onSwapped={() => {}}
         />,
     );
 

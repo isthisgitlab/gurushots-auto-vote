@@ -41,7 +41,8 @@ const { logCategories }: typeof logCategoriesModule = require('../helpers/logCat
 // The handler routes auth through the factory surfaces + the shared
 // extractAuthResult normalizer; exercise the real normalizer rather than a stub
 // so these tests pin the actual token-key handling.
-const { extractAuthResult: realExtractAuthResult } = jest.requireActual('../../src/js/services/auth');
+const { extractAuthResult: realExtractAuthResult } =
+    jest.requireActual<typeof import('../../src/js/services/auth')>('../../src/js/services/auth');
 
 const NOW = () => Math.floor(Date.now() / 1000);
 
@@ -137,7 +138,7 @@ describe('authenticate', () => {
     let realSurface: { authenticate: jest.Mock };
 
     beforeEach(() => {
-        auth.extractAuthResult = realExtractAuthResult;
+        auth.extractAuthResult = invalid(realExtractAuthResult);
         settings.setSetting = jest.fn();
         mockSurface = { authenticate: jest.fn() };
         realSurface = { authenticate: jest.fn() };
@@ -884,7 +885,7 @@ describe('join-challenge — guard and errors', () => {
 
 describe('log categories', () => {
     test('authenticate logs the request under authentication', async () => {
-        auth.extractAuthResult = realExtractAuthResult;
+        auth.extractAuthResult = invalid(realExtractAuthResult);
         settings.setSetting = jest.fn();
         apiFactory.getApiStrategy = invalid(
             jest.fn(() => ({ authenticate: jest.fn().mockResolvedValue({ token: 't' }) })),

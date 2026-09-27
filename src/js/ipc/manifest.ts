@@ -7,7 +7,7 @@
  *     same names (it implements a subset of channels plus its own update
  *     stubs, but aliases/sends/events come from here).
  *
- * Drift protection is enforced by tests/ipc/manifest.test.js, which asserts
+ * Drift protection is enforced by tests/ipc/manifest.test.ts, which asserts
  * set-equality between this manifest's invoke surface and the union of every
  * ipc/*.handlers.ts buildHandlers() key plus index.ts's direct ipcMain.on
  * registrations — a channel added on either side without the other fails CI.

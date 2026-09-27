@@ -1,5 +1,5 @@
 /**
- * Edge-case tests for api/api-client.ts that complement api-client.test.js:
+ * Edge-case tests for api/api-client.ts that complement api-client.test.ts:
  *   - the headless (Android background service) adapter's error / non-JSON /
  *     missing-field handling, its request-body encoding, and adapter caching;
  *   - retry classification (TypeError and odd statuses are terminal);
@@ -186,7 +186,9 @@ describe('headless adapter', () => {
                 const isolatedAxios: AxiosMock = invalid(require('axios'));
                 isolatedRuntime.isHeadlessService.mockReturnValue(true);
                 isolatedAxios.mockResolvedValueOnce({ status: 200, headers: {}, data: {} });
-                require('../../src/js/api/api-client').makePostRequest(URL, {}, '');
+                (
+                    require('../../src/js/api/api-client') as typeof import('../../src/js/api/api-client')
+                ).makePostRequest(URL, {}, '');
                 expect(g.__gsResolveHeadlessHttp).toBe(existing);
                 isolatedRuntime.isHeadlessService.mockReturnValue(false);
             } finally {

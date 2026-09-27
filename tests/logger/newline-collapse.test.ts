@@ -9,7 +9,8 @@
 
 import type * as LoggerModule from '../../src/js/logger';
 
-const { info, getRecentLogs }: typeof LoggerModule = jest.requireActual('../../src/js/logger');
+const { info, getRecentLogs }: typeof LoggerModule =
+    jest.requireActual<typeof import('../../src/js/logger')>('../../src/js/logger');
 
 const lastEntry = () => {
     const entries = getRecentLogs();

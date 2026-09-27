@@ -80,7 +80,9 @@ describe('log.handlers — renderer log writes and file lookups', () => {
     beforeEach(() => {
         jest.resetModules();
         logger = require('../../src/js/logger');
-        handlers = require('../../src/js/ipc/log.handlers').buildHandlers();
+        handlers = (
+            require('../../src/js/ipc/log.handlers') as typeof import('../../src/js/ipc/log.handlers')
+        ).buildHandlers();
     });
 
     test.each([

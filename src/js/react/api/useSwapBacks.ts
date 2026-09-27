@@ -1,16 +1,12 @@
 import { useEffect, useState } from 'react';
 
 import type { Challenge } from '../../types/gurushots';
+import type { SwapBackRecord } from '../../types/stores';
 
 /**
  * A slot whose recorded boosted/turbo'd original can be swapped back in.
  */
-export type SwapBackOffer = {
-    currentId: string;
-    previousId: string;
-    previousMemberId: string;
-    kind: 'boost' | 'turbo';
-};
+export type SwapBackOffer = Omit<SwapBackRecord, 'at'>;
 
 /**
  * The challenge's swap-back offers: slots holding a replacement for a photo

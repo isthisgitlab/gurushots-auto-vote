@@ -11,7 +11,7 @@
  *   - applyChallengeProfile atomic replace semantics (incl. the stale
  *     conflicting-override case the set-then-remove design would break on).
  *
- * Drives the in-memory headless-store seam (same one title-tag-rules.test.js
+ * Drives the in-memory headless-store seam (same one title-tag-rules.test.ts
  * uses) so the facade's loadSettings/saveSettings round-trip without touching fs.
  */
 

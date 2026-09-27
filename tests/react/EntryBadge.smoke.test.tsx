@@ -7,13 +7,12 @@
  * TranslationProvider, and a basic component renders without errors.
  *
  * Deeper component behavior (boost+turbo state, error timers, in-flight
- * disable) lives in EntryBadge.test.jsx — this file just validates the
+ * disable) lives in EntryBadge.test.tsx — this file just validates the
  * pipeline.
  */
 
 import { render, screen } from './helpers/test-utils';
 import { EntryBadge } from '@/components/app/EntryBadge';
-import { invalid } from '../helpers/invalid';
 
 // useBoost and useTurbo each call window.api.applyBoost / applyTurbo /
 // playAutoTurbo, but those names don't match the renderer-side mockApi
@@ -34,9 +33,9 @@ describe('EntryBadge — smoke', () => {
                 challengeId={777}
                 boostAvailable={false}
                 turboAvailable={false}
-                onBoostApplied={invalid(undefined)}
-                onTurboApplied={invalid(undefined)}
-                onSwapped={invalid(undefined)}
+                onBoostApplied={() => {}}
+                onTurboApplied={() => {}}
+                onSwapped={() => {}}
             />,
         );
         // Translation keys come through as the keys themselves in tests

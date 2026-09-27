@@ -18,8 +18,17 @@ const getDefaultMetadata = (): MetadataFile => {
             lastCheck: null,
             skipVersion: null,
         },
-    } as MetadataFile;
+    };
 };
+
+/**
+ * One challenge's entry. Challenge ids are numeric strings, so the lookup never
+ * lands on the `updateCheck` block.
+ * @param metadata - Loaded metadata
+ * @param challengeId - Challenge ID
+ */
+const challengeEntry = (metadata: MetadataFile, challengeId: string | number): ChallengeMetadataEntry | undefined =>
+    metadata[challengeId] as ChallengeMetadataEntry | undefined;
 
 /**
  * Upper bounds for the per-challenge entry-id snapshot (voteOnNewEntry). Unlike
@@ -261,7 +270,7 @@ const validateMetadata = (
     metadata: Record<string, unknown>,
 ): { validatedMetadata: MetadataFile; hasChanges: boolean } => {
     const { updateCheck, changed: updateCheckChanged } = validateUpdateCheck(metadata.updateCheck);
-    const validatedMetadata = { updateCheck } as MetadataFile;
+    const validatedMetadata: MetadataFile = { updateCheck };
     const entriesChanged = validateChallengeEntries(metadata, validatedMetadata);
     return { validatedMetadata, hasChanges: updateCheckChanged || entriesChanged };
 };
@@ -320,8 +329,7 @@ const saveMetadata = (metadata: MetadataFile): boolean => {
  * @returns Metadata entry or null if not found
  */
 const getChallengeMetadata = (challengeId: string | number): ChallengeMetadataEntry | null => {
-    const metadata = loadMetadata();
-    return metadata[challengeId] || null;
+    return challengeEntry(loadMetadata(), challengeId) || null;
 };
 
 /**
@@ -365,11 +373,8 @@ const setChallengeMetadata = (
     const metadata = loadMetadata();
 
     // Merge with existing entry or create new one
-    if (metadata[challengeId]) {
-        metadata[challengeId] = { ...metadata[challengeId], ...entry };
-    } else {
-        metadata[challengeId] = entry;
-    }
+    const existing = challengeEntry(metadata, challengeId);
+    metadata[challengeId] = existing ? { ...existing, ...entry } : entry;
 
     return saveMetadata(metadata);
 };
@@ -448,7 +453,7 @@ const setChallengeEntryIds = (challengeId: string, entryIds: string[]): boolean 
     }
 
     const metadata = loadMetadata();
-    const existing = metadata[challengeId];
+    const existing = challengeEntry(metadata, challengeId);
     if (existing && sameEntryIdSet(existing.entryIds, entryIds)) {
         return true; // Unchanged — skip the whole-file rewrite
     }
@@ -484,8 +489,9 @@ const cleanupStaleMetadata = (activeChallengeIds: string[]): boolean => {
 
         // Additional safety: check if metadata is very recent (within last hour)
         // This prevents cleanup of challenges that were just voted on
-        if (isStale && metadata[id] && metadata[id].lastVoteTime) {
-            const voteTime = new Date(metadata[id].lastVoteTime);
+        const lastVoteTime = challengeEntry(metadata, id)?.lastVoteTime;
+        if (isStale && lastVoteTime) {
+            const voteTime = new Date(lastVoteTime);
             const hourAgo = new Date(Date.now() - 60 * 60 * 1000); // 1 hour ago
 
             if (voteTime > hourAgo) {

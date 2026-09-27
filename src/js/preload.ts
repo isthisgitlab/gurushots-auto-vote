@@ -19,7 +19,7 @@ import type { IpcRendererEvent } from 'electron';
 
 // The window.api surface is GENERATED from the shared channel manifest
 // (ipc/manifest.ts) so it can never silently drift from the Capacitor
-// bridge or the main-process handler set (tests/ipc/manifest.test.js
+// bridge or the main-process handler set (tests/ipc/manifest.test.ts
 // enforces the latter). Adding a channel = one manifest entry.
 const api: Record<string, (...args: never[]) => unknown> = {};
 

@@ -209,9 +209,9 @@ const previewSwap = async (
             usage: 'swap',
             excludeIds,
             wantCount: 1,
-            mustIncludeTags: settings?.getEffectiveTagSetting?.('mustIncludeTags', challenge) ?? null,
-            shouldIncludeTags: settings?.getEffectiveTagSetting?.('shouldIncludeTags', challenge) ?? null,
-            fillWithoutTagMatch: settings?.getEffectiveSetting?.('fillWithoutTagMatch', id),
+            mustIncludeTags: settings.getEffectiveTagSetting('mustIncludeTags', challenge) ?? null,
+            shouldIncludeTags: settings.getEffectiveTagSetting('shouldIncludeTags', challenge) ?? null,
+            fillWithoutTagMatch: settings.getEffectiveSetting('fillWithoutTagMatch', id),
         },
     );
     if (ranked.status !== 'ranked') {

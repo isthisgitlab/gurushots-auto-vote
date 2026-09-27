@@ -16,6 +16,11 @@ import * as logger from '../logger';
 
 import type { CapacitorGlobals } from '../types/capacitor';
 
+/** A failure always says why, so the update dialog has a message to show. */
+type InstallResult =
+    | { success: true; version?: string | null; viaFallback?: boolean }
+    | { success: false; version?: string | null; error: string };
+
 // The native plugin, when this build registered it. Accessed lazily (only
 // after downloadAndInstall's isCapacitor() gate) so non-Capacitor paths never
 // touch globalThis.Capacitor.
@@ -24,7 +29,7 @@ const getNativeInstaller = () => (globalThis as CapacitorGlobals).Capacitor?.Plu
 // Browser fallback: hand the URL to the system browser. One extra tap vs the
 // native installer but works with no native code and matches the sideload
 // distribution users are already used to.
-const openInBrowser = (downloadUrl: string, version: string | null | undefined) => {
+const openInBrowser = (downloadUrl: string, version: string | null | undefined): InstallResult => {
     try {
         const Cap = (globalThis as CapacitorGlobals).Capacitor;
         if (Cap?.Plugins?.Browser?.open) {
@@ -61,7 +66,7 @@ const downloadAndInstall = async ({
     downloadUrl: string;
     version?: string | null;
     onProgress?: (progress: { percent?: number }) => void;
-}): Promise<{ success: boolean; version?: string | null; error?: string; viaFallback?: boolean }> => {
+}): Promise<InstallResult> => {
     if (!downloadUrl) return { success: false, error: 'No download URL provided' };
     if (!runtime.isCapacitor()) return { success: false, error: 'Android updater is a no-op outside Capacitor' };
 
@@ -74,7 +79,9 @@ const downloadAndInstall = async ({
                 removeListener = handle && typeof handle.remove === 'function' ? () => handle.remove() : null;
             }
             const result = await native.downloadAndInstall({ url: downloadUrl, version: version || '' });
-            return { success: result?.success !== false, version, ...result };
+            return result?.success === false
+                ? { success: false, version, error: result.error || 'The installer reported a failure' }
+                : { success: true, version };
         } catch (err) {
             logger.withCategory('update').error('Native APK install failed; falling back to browser', err);
             // fall through to the browser fallback below

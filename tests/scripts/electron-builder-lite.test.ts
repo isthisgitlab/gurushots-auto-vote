@@ -5,7 +5,8 @@
 import type * as package_jsonModule from '../../package.json';
 
 const { build }: typeof package_jsonModule = require('../../package.json');
-const lite = require('../../scripts/electron-builder-lite').default;
+const lite = (require('../../scripts/electron-builder-lite') as typeof import('../../scripts/electron-builder-lite'))
+    .default;
 
 describe('scripts/electron-builder-lite.ts', () => {
     test('keeps the full build config apart from what the lite build changes', () => {

@@ -6,7 +6,7 @@
  * cycle submits a fresh entry via autoFill.submitNewEntryForAction and then
  * boosts/turbos THAT id, and that it falls back to the existing-entry path when
  * a fresh photo can't be submitted. The picker/submit internals and the turbo
- * decision gates are covered by autoFill.test.js and turboApply.test.js.
+ * decision gates are covered by autoFill.test.ts and turboApply.test.ts.
  */
 
 jest.mock('../../src/js/strategies/real/activeChallenges', () => ({ getActiveChallenges: jest.fn() }));

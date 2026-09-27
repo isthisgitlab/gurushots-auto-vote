@@ -34,9 +34,13 @@ export interface UpdateCheckData {
 
 /**
  * metadata.json: the `updateCheck` block plus one entry per challenge id.
- * Challenge ids are numeric strings, so no id collides with `updateCheck`.
+ * Challenge ids are numeric strings, so no id collides with `updateCheck`;
+ * metadata.ts reads a challenge's entry through its `challengeEntry` accessor.
  */
-export type MetadataFile = { updateCheck: UpdateCheckData } & { [challengeId: string]: ChallengeMetadataEntry };
+export interface MetadataFile {
+    updateCheck: UpdateCheckData;
+    [challengeId: string]: ChallengeMetadataEntry | UpdateCheckData;
+}
 
 /** One swap-back record: a slot holding a replacement for a boosted/turbo'd photo. */
 export interface SwapBackRecord {

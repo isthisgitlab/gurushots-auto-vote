@@ -348,7 +348,7 @@ describe('mock-parity behaviors on the shared path', () => {
     });
 
     // Exactly-once reflection contract: submitNewEntryForAction deliberately
-    // does NOT reflect internally (pinned in tests/services/autoFill.test.js)
+    // does NOT reflect internally (pinned in tests/services/autoFill.test.ts)
     // — the orchestrator is the one and only place that reflects a successful
     // fill-new. If reflection ever moved inside submitNewEntryForAction these
     // sites would reflect twice, duplicating the entry in

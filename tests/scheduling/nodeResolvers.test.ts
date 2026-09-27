@@ -56,9 +56,7 @@ describe('resolveFinalWindowTopUp', () => {
 
     test('a missing lead yields NaN for thresholdWindow to re-guard', () => {
         withSettings({ voteBeforeFinalWindow: true, useFinalWindowExposure: true });
-        expect(
-            (resolveFinalWindowTopUp('c1') as Awaited<ReturnType<typeof resolveFinalWindowTopUp>>).leadSec,
-        ).toBeNaN();
+        expect(resolveFinalWindowTopUp('c1').leadSec).toBeNaN();
     });
 });
 

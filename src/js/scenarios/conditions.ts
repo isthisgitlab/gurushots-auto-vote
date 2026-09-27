@@ -15,7 +15,7 @@ import { parseDuration } from './duration';
 import { selectEntry, entriesOf, rankOf, votesOf, windowOf } from './selectors';
 import { votesPerHour, speedRatio } from './speed';
 
-interface ConditionContext {
+export interface ConditionContext {
     challenge: Challenge;
     state: { phaseEnteredAt: number; memory: Record<string, string>; history?: VoteHistory };
     /** unix seconds */

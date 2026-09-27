@@ -21,7 +21,9 @@ jest.mock('../../src/js/services/currencyActions', () => ({
     fillExposure: jest.fn(),
 }));
 jest.mock('../../src/js/services/autoFill', () => {
-    const actual = jest.requireActual('../../src/js/services/autoFill/challengeState');
+    const actual = jest.requireActual<typeof import('../../src/js/services/autoFill/challengeState')>(
+        '../../src/js/services/autoFill/challengeState',
+    );
     return {
         submitNewEntryForAction: jest.fn(),
         refreshChallengeState: jest.fn(async () => 'refreshed'),

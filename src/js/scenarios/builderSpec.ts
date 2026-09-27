@@ -3,7 +3,7 @@
  * entry selector, which fields it has and what kind of input each needs. The
  * GUI builder (react/components/app/scenarioBuilder/) renders any of them
  * from this table, so a new vocabulary piece needs a line here and a
- * translation — no new component. A test (tests/scenarios/builderSpec.test.js)
+ * translation — no new component. A test (tests/scenarios/builderSpec.test.ts)
  * checks every default below against the real validator, so the table and
  * settings/scenarioSchema.ts cannot drift apart.
  *

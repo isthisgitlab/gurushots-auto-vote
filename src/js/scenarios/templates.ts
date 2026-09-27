@@ -5,7 +5,7 @@
  * are starting points, not recommendations.
  *
  * Dependency-free so the renderer can list them. Every template must pass
- * validateScenario (tests/scenarios/templates.test.js).
+ * validateScenario (tests/scenarios/templates.test.ts).
  */
 
 const SCENARIO_TEMPLATES = [

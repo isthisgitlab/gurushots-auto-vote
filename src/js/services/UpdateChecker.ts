@@ -91,17 +91,17 @@ const checkForUpdates = async ({
     currentVersion,
     isBetaChannel = false,
     assetSuffix = null,
-}: { currentVersion?: string; isBetaChannel?: boolean; assetSuffix?: string | null } = {}): Promise<{
-    updateAvailable: boolean;
-    version: string | null;
-    downloadUrl: string | null;
-    isPrerelease: boolean;
-    releaseNotes: string;
-    releaseDate: string | null;
-    error?: string;
-}> => {
+}: { currentVersion?: string; isBetaChannel?: boolean; assetSuffix?: string | null } = {}): Promise<
+    {
+        downloadUrl: string | null;
+        isPrerelease: boolean;
+        releaseNotes: string;
+        releaseDate: string | null;
+        error?: string;
+    } & ({ updateAvailable: true; version: string } | { updateAvailable: false; version: string | null })
+> => {
     const empty = {
-        updateAvailable: false,
+        updateAvailable: false as const,
         version: null,
         downloadUrl: null,
         isPrerelease: false,

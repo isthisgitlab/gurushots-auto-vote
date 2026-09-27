@@ -6,7 +6,7 @@
  * exists — and why the mock binder's `cleanupStaleMetadata: null` is pinned by a
  * test of its own. The entry tracker splits the same way (metadata-backed in real
  * mode, in-memory in mock), so both halves get pinned. This file is the real half;
- * tests/mock/index.test.js holds the mock half.
+ * tests/mock/index.test.ts holds the mock half.
  */
 
 jest.mock('../../src/js/strategies/real/activeChallenges', () => ({ getActiveChallenges: jest.fn() }));

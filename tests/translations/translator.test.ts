@@ -103,7 +103,10 @@ describe('English fallback', () => {
 describe('renderer instance', () => {
     test('is a translator shared by every importer of the module', () => {
         const { rendererTranslator }: typeof rendererModule = require('../../src/js/translations/renderer');
-        expect(require('../../src/js/translations/renderer').rendererTranslator).toBe(rendererTranslator);
+        expect(
+            (require('../../src/js/translations/renderer') as typeof import('../../src/js/translations/renderer'))
+                .rendererTranslator,
+        ).toBe(rendererTranslator);
         expect(rendererTranslator.getCurrentLanguage()).toBe('en');
         expect(rendererTranslator.t('common.dark', 'lv')).toBe(latvian.common.dark);
     });

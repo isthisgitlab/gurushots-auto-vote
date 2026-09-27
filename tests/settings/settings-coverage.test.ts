@@ -3,7 +3,7 @@
  * challengeSettings containers), rejection paths of the mutation helpers,
  * cleanup + reset helpers, title-pin fallbacks and the named-profile guards.
  *
- * Drives the in-memory headless-store seam (same as title-tag-rules.test.js)
+ * Drives the in-memory headless-store seam (same as title-tag-rules.test.ts)
  * so loadSettings/saveSettings round-trip without touching fs. `seed()` writes
  * a raw persisted blob; `saved()` reads back what the facade last persisted.
  */
@@ -30,9 +30,6 @@ import type * as settingsModule from '../../src/js/settings';
 import type * as node_fsModule from 'node:fs';
 import type { AndroidHeadlessStore } from '../../src/js/types/settings';
 import { invalid } from '../helpers/invalid';
-
-/** mergeTitlePins called without its removeIds list, as the guard tests do. */
-type MergeAddsOnly = (adds: Record<string, string>) => boolean;
 
 const g = globalThis as typeof globalThis & {
     __GS_HEADLESS__?: boolean;
@@ -714,7 +711,7 @@ describe('settings facade — edge cases', () => {
             seed({
                 challengeSettings: { globalDefaults: {}, titlePins: { x: '', y: 5, z: 'q'.repeat(200), ok: 'Ok' } },
             });
-            expect(invalid<MergeAddsOnly>(settings.mergeTitlePins)({ b: 'B' })).toBe(true);
+            expect(settings.mergeTitlePins({ b: 'B' })).toBe(true);
             expect(saved().challengeSettings.titlePins).toEqual({ ok: 'Ok', b: 'B' });
         });
 
@@ -723,8 +720,8 @@ describe('settings facade — edge cases', () => {
             for (let i = 0; i < 500; i++) pins[`id${i}`] = `T${i}`;
             seed({ challengeSettings: { globalDefaults: {}, titlePins: pins } });
 
-            invalid<MergeAddsOnly>(settings.mergeTitlePins)({ extra1: 'E1' });
-            invalid<MergeAddsOnly>(settings.mergeTitlePins)({ extra2: 'E2' });
+            settings.mergeTitlePins({ extra1: 'E1' });
+            settings.mergeTitlePins({ extra2: 'E2' });
             const capWarnings = cat.warning.mock.calls.filter(([msg]) => String(msg).includes('pin cap'));
             expect(capWarnings).toHaveLength(1);
             expect(capWarnings[0][0]).toContain('extra1');

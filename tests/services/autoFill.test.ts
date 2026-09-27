@@ -16,7 +16,9 @@ import { invalid } from '../helpers/invalid';
 
 jest.mock('../../src/js/services/semantic/lexicon', () => ({
     __esModule: true,
-    ...jest.requireActual('../../src/js/services/semantic/lexicon'),
+    ...jest.requireActual<typeof import('../../src/js/services/semantic/lexicon')>(
+        '../../src/js/services/semantic/lexicon',
+    ),
 }));
 
 // photoStats persists its cache through this store; keep it in memory so the
@@ -139,7 +141,7 @@ const makeSettings = ({
         }),
         // Title-aware tag resolver. The default stub carries no title rules, so it
         // resolves to the same tag values as getEffectiveSetting; the merge-by-title
-        // behavior is covered in tests/settings/title-tag-rules.test.js.
+        // behavior is covered in tests/settings/title-tag-rules.test.ts.
         getEffectiveTagSetting: jest.fn((key: string) => {
             if (key === 'mustIncludeTags') return mustIncludeTags;
             if (key === 'shouldIncludeTags') return shouldIncludeTags;
@@ -165,7 +167,7 @@ describe('ignore-words setting reaches the real fill path', () => {
                 }
                 return [allowedPhoto('p1', ['Misc'])];
             }),
-            submitToChallenge: jest.fn(async () => invalid<ActionResult>({ success: true })),
+            submitToChallenge: jest.fn(async (): Promise<ActionResult> => ({ ok: true, raw: { success: true } })),
         });
 
         expect(searches).toContain('lighthouse');
@@ -185,7 +187,7 @@ describe('ignore-words setting reaches the real fill path', () => {
                 }
                 return [allowedPhoto('p1', ['Misc'])];
             }),
-            submitToChallenge: jest.fn(async () => invalid<ActionResult>({ success: true })),
+            submitToChallenge: jest.fn(async (): Promise<ActionResult> => ({ ok: true, raw: { success: true } })),
         });
 
         // Head-noun first either way, so the subject leads the list.
@@ -216,7 +218,7 @@ describe('tag-resolution deps reach the real fill path', () => {
             getEligiblePhotos: jest.fn(async (_id, _tok, opts) =>
                 opts && opts.search ? [] : [allowedPhoto('p1', ['Misc'])],
             ),
-            submitToChallenge: jest.fn(async () => invalid<ActionResult>({ success: true })),
+            submitToChallenge: jest.fn(async (): Promise<ActionResult> => ({ ok: true, raw: { success: true } })),
             searchTagAutocomplete,
             getCurrentMemberProfile,
         });
@@ -990,7 +992,7 @@ describe('evaluateEmergencyFill — the state-only stand-downs, shared with the 
         // Both assertions route through the one getSlotsRemaining, so this pins
         // the malformed-data BEHAVIOUR, not agreement between two implementations
         // — there is only one left. The cross-module proof that the timeline view
-        // reaches the same verdict lives in describeDeadlineActions.test.js
+        // reaches the same verdict lives in describeDeadlineActions.test.ts
         // ('no phantom emergency-fill row when every slot is already full').
         const malformed = invalid<Challenge>({ id: 'c1', close_time: 1_000_000 + 600 });
         expect(getSlotsRemaining(malformed)).toBe(0);
@@ -1781,7 +1783,7 @@ describe('reflect-on-submit — auto-fill consumes the slot it just used', () =>
         // internally too, those callers would append the entry TWICE,
         // corrupting getSlotsRemaining and boost/turbo entry selection for
         // the rest of the pass. The caller side is pinned in
-        // tests/services/votingOrchestrator.test.js.
+        // tests/services/votingOrchestrator.test.ts.
         const challenge = makeChallenge({ maxSubmits: 4, entries: [{ id: 'e1' }] });
         const result = await submitNewEntryForAction(challenge, 'tok', {
             settings: makeSettings(),
@@ -2893,12 +2895,11 @@ describe('photo-stats enrichment in the fill pipeline', () => {
         const getEligiblePhotos = jest
             .fn()
             .mockResolvedValue([libraryPhoto('soccer', 1203, 9000), libraryPhoto('portfolio', 400, 1000)]);
-        const getImageData = jest.fn(async (id: string | number) =>
-            invalid<ImageRecord>(
+        const getImageData = jest.fn(
+            async (id: string | number): Promise<ImageRecord> =>
                 id === 'portfolio'
                     ? { votes: 100000, views: 400, achievements: [{ n: 1 }, { n: 2 }] }
                     : { votes: 3701, views: 1203, achievements: [{ n: 1 }] },
-            ),
         );
         const submitToChallenge = jest.fn().mockResolvedValue({ ok: true, raw: { success: true } });
 

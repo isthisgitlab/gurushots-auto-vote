@@ -9,6 +9,7 @@ import type * as autoFillModule from '../../src/js/services/autoFill';
 import type * as currencyActionsModule from '../../src/js/services/currencyActions';
 import type * as swapBackStoreModule from '../../src/js/swapBackStore';
 import type { Challenge, MemberBoost, MemberRanking } from '../../src/js/types/gurushots';
+import type * as settingsModule from '../../src/js/settings';
 import { invalid } from '../helpers/invalid';
 const { __resetMemberIdCache }: typeof autoFillModule = require('../../src/js/services/autoFill');
 const {
@@ -19,6 +20,12 @@ const {
 }: typeof currencyActionsModule = require('../../src/js/services/currencyActions');
 
 const NOW = () => Math.floor(Date.now() / 1000);
+
+// A settings facade with no per-challenge tag rules: previewSwap reads only these two.
+const noSettings = invalid<typeof settingsModule>({
+    getEffectiveTagSetting: () => undefined,
+    getEffectiveSetting: () => undefined,
+});
 const FULL = { keys: 2, swaps: 2, fills: 2, coins: 0 };
 
 // A partial challenge (no entries/players counts): the spend checks never read those.
@@ -154,7 +161,7 @@ describe('previewSwap', () => {
         const result: { ok: boolean; candidate?: unknown } = await previewSwap(555, 'old', 'tok', {
             strategy,
             logger,
-            settings: invalid(null),
+            settings: noSettings,
         });
         expect(result).toEqual({ ok: true, outcome: 'ok', candidate: { id: 'fresh', member_id: 'mem1' } });
         expect(strategy.getEligiblePhotos).toHaveBeenCalledWith(555, 'tok', expect.objectContaining({ usage: 'swap' }));
@@ -166,7 +173,7 @@ describe('previewSwap', () => {
         const result: { ok: boolean; candidate?: unknown } = await previewSwap(555, 'old', 'tok', {
             strategy,
             logger,
-            settings: invalid(null),
+            settings: noSettings,
         });
         expect(result.candidate).toEqual({ id: 'swapped-before', member_id: 'mem1' });
     });
@@ -178,7 +185,7 @@ describe('previewSwap', () => {
             555,
             'old',
             'tok',
-            { strategy, logger, settings: invalid(null) },
+            { strategy, logger, settings: noSettings },
             { excludeSwapped: true },
         );
         expect(result.candidate).toEqual({ id: 'fresh', member_id: 'mem1' });
@@ -186,14 +193,14 @@ describe('previewSwap', () => {
 
     test('no different photo → no-alternative', async () => {
         const strategy = stubStrategy({ library: [photo('entered', 5), photo('old', 4)] });
-        expect((await previewSwap(555, 'old', 'tok', { strategy, logger, settings: invalid(null) })).outcome).toBe(
+        expect((await previewSwap(555, 'old', 'tok', { strategy, logger, settings: noSettings })).outcome).toBe(
             'no-alternative',
         );
     });
 
     test('entry no longer entered → not-available', async () => {
         const strategy = stubStrategy({ library: [photo('fresh', 1)] });
-        expect((await previewSwap(555, 'gone', 'tok', { strategy, logger, settings: invalid(null) })).outcome).toBe(
+        expect((await previewSwap(555, 'gone', 'tok', { strategy, logger, settings: noSettings })).outcome).toBe(
             'not-available',
         );
     });
@@ -205,7 +212,7 @@ describe('previewSwap', () => {
         const result: { ok: boolean; candidate?: unknown } = await previewSwap(555, 'old', 'tok', {
             strategy,
             logger,
-            settings: invalid(null),
+            settings: noSettings,
         });
         expect(result.candidate).toEqual({ id: 'fresh', member_id: 'mem1' });
     });
@@ -322,7 +329,7 @@ describe('edge paths', () => {
 
     test('previewSwap: a live block (swap locked) spends and ranks nothing', async () => {
         const strategy = stubStrategy({ challenge: makeChallenge({ swap_locked: true }) });
-        expect(await previewSwap(555, 'old', 'tok', { strategy, logger, settings: invalid(null) })).toEqual({
+        expect(await previewSwap(555, 'old', 'tok', { strategy, logger, settings: noSettings })).toEqual({
             ok: false,
             outcome: 'not-available',
         });
@@ -333,7 +340,7 @@ describe('edge paths', () => {
         const strategy = stubStrategy({
             overrides: { getEligiblePhotos: jest.fn().mockRejectedValue(new Error('503')) },
         });
-        expect(await previewSwap(555, 'old', 'tok', { strategy, logger, settings: invalid(null) })).toEqual({
+        expect(await previewSwap(555, 'old', 'tok', { strategy, logger, settings: noSettings })).toEqual({
             ok: false,
             outcome: 'api-failed',
         });
@@ -371,7 +378,7 @@ describe('edge paths', () => {
         const result: { ok: boolean; candidate?: unknown } = await previewSwap(555, 'old', 'tok', {
             strategy,
             logger,
-            settings: invalid(null),
+            settings: noSettings,
         });
         expect(result.candidate).toEqual({ id: 'fresh', member_id: '' });
     });

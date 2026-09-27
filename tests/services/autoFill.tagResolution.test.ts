@@ -4,20 +4,22 @@
  * from being filled with a yoga photo.
  *
  * Lives in its own file because it needs the REAL shipped lexicon, and making
- * the lexicon available inside the large autoFill.test.js would change the
+ * the lexicon available inside the large autoFill.test.ts would change the
  * semantic tier under tests written without it.
  */
 
 jest.mock('../../src/js/services/semantic/lexicon', () => ({
     __esModule: true,
-    ...jest.requireActual('../../src/js/services/semantic/lexicon'),
+    ...jest.requireActual<typeof import('../../src/js/services/semantic/lexicon')>(
+        '../../src/js/services/semantic/lexicon',
+    ),
 }));
 
-// See tests/services/tagResolver.test.js — tests/setup.js mocks `fs`, so the
+// See tests/services/tagResolver.test.ts — tests/setup.js mocks `fs`, so the
 // loader must go through the real one or every semantic check passes vacuously.
 jest.mock('../../src/js/services/semantic/assets', () => {
-    const realFs = jest.requireActual('node:fs');
-    const realPath = jest.requireActual('node:path');
+    const realFs = jest.requireActual<typeof import('node:fs')>('node:fs');
+    const realPath = jest.requireActual<typeof import('node:path')>('node:path');
     const assetPath = realPath.join(__dirname, '..', '..', 'src', 'assets', 'semantic-vectors.json');
     let cached: unknown;
     return {

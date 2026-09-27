@@ -20,7 +20,6 @@ import { ChallengeCard } from '@/components/app/ChallengeCard';
 import { ChallengeBadgeRow } from '@/components/app/ChallengeBadgeRow';
 import { buildChallenge } from '../helpers/challengeFixtures';
 import type { Challenge } from '../../src/js/types/gurushots';
-import { invalid } from '../helpers/invalid';
 
 const mockChallengeSettings = {
     hasCustomSettings: false,
@@ -84,7 +83,7 @@ const renderCard = (challenge: Challenge) =>
             autovoteRunning={false}
             onVoteComplete={jest.fn()}
             onSettingsClick={jest.fn()}
-            onCurrencySpent={invalid(undefined)}
+            onCurrencySpent={() => {}}
         />,
     );
 

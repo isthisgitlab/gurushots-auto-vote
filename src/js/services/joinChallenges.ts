@@ -53,7 +53,7 @@ import type * as joinStateStore from '../joinStateStore';
 /**
  * The join flow's endpoints and state (see the header).
  */
-interface JoinDeps {
+export interface JoinDeps {
     getMemberChallenges: typeof joinApi.getMemberChallenges;
     getBankroll: typeof joinApi.getBankroll;
     coinsUnlock: typeof joinApi.coinsUnlock;

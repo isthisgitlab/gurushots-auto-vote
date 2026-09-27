@@ -258,7 +258,9 @@ function load({ lock = true, whenReady }: { lock?: boolean; whenReady?: () => Pr
         logger: require('../../src/js/logger'),
         settings: require('../../src/js/settings'),
         randomizer: require('../../src/js/api/randomizer'),
-        AutoUpdater: require('../../src/js/services/AutoUpdater').AutoUpdater,
+        AutoUpdater: (
+            require('../../src/js/services/AutoUpdater') as typeof import('../../src/js/services/AutoUpdater')
+        ).AutoUpdater,
         auth: require('../../src/js/services/auth'),
         updateIpc: require('../../src/js/ipc/update.handlers'),
         miscIpc: require('../../src/js/ipc/misc.handlers'),
@@ -389,14 +391,16 @@ describe('startup (whenReady)', () => {
         jest.resetModules();
         const settings = jest.mocked<typeof settingsModule>(require('../../src/js/settings'));
         settings.loadSettings.mockReturnValue(invalid({ token: 't', stayLoggedIn: true }));
-        const AU = require('../../src/js/services/AutoUpdater').AutoUpdater;
+        const AU = jest.mocked<typeof import('../../src/js/services/AutoUpdater')>(
+            require('../../src/js/services/AutoUpdater'),
+        ).AutoUpdater;
         const check = jest.fn(
             () =>
                 new Promise((r) => {
                     resolveCheck = r;
                 }),
         );
-        AU.mockImplementation(() => ({ checkForUpdates: check, setMainWindow: jest.fn() }));
+        AU.mockImplementation(() => invalid({ checkForUpdates: check, setMainWindow: jest.fn() }));
         const electron: FakeElectron = require('electron');
         require('../../src/js/index');
         await flush();
@@ -420,10 +424,14 @@ describe('startup (whenReady)', () => {
             throw seedErr;
         });
         const checkErr = new Error('offline');
-        require('../../src/js/services/AutoUpdater').AutoUpdater.mockImplementation(() => ({
-            checkForUpdates: jest.fn(() => Promise.reject(checkErr)),
-            setMainWindow: jest.fn(),
-        }));
+        jest.mocked<typeof import('../../src/js/services/AutoUpdater')>(
+            require('../../src/js/services/AutoUpdater'),
+        ).AutoUpdater.mockImplementation(() =>
+            invalid({
+                checkForUpdates: jest.fn(() => Promise.reject(checkErr)),
+                setMainWindow: jest.fn(),
+            }),
+        );
         const { cat } = jest.mocked<MockLogger>(require('../../src/js/logger'));
         const electron: FakeElectron = require('electron');
         require('../../src/js/index');
@@ -437,7 +445,9 @@ describe('startup (whenReady)', () => {
     it('logs a bootstrap failure instead of letting it vanish', async () => {
         jest.resetModules();
         const boom = new Error('no userData');
-        require('../../src/js/settings').getUserDataPath.mockImplementation(() => {
+        jest.mocked<typeof import('../../src/js/settings')>(
+            require('../../src/js/settings'),
+        ).getUserDataPath.mockImplementation(() => {
             throw boom;
         });
         const { cat } = jest.mocked<MockLogger>(require('../../src/js/logger'));

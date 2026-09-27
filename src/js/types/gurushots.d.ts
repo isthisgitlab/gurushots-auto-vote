@@ -227,7 +227,8 @@ export interface ImageRecord {
     id?: string;
     votes?: number;
     views?: number;
-    achievements?: string[];
+    /** Only the count is read; the entries' own shape is not relied on. */
+    achievements?: unknown[];
 }
 
 /** get_image_data. */

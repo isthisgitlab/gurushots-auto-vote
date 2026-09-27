@@ -6,7 +6,7 @@
 
 import { render, screen, fireEvent, waitFor } from './helpers/test-utils';
 import { SwapEntryButton, SwapBackButton } from '@/components/app/SwapEntryButton';
-import type { SwapBackOffer } from '@/components/app/SwapEntryButton';
+import type { SwapBackOffer } from '@/api/useSwapBacks';
 import { mockTranslator } from './helpers/setup';
 
 const ENTRY = { id: 'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa', member_id: 'bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb' };
@@ -111,7 +111,7 @@ test('Cancel closes the confirm modal without swapping', async () => {
 });
 
 describe('SwapBackButton', () => {
-    const SWAP_BACK: SwapBackOffer = {
+    const SWAP_BACK: Pick<SwapBackOffer, 'previousId' | 'previousMemberId' | 'kind'> = {
         previousId: 'dddddddddddddddddddddddddddddddd',
         previousMemberId: ENTRY.member_id,
         kind: 'boost',

@@ -225,12 +225,7 @@ const STOP_REASONS: Record<string, string> = {
 
 const scenarioSimulateCmd = async (challengeId: string) => {
     // The CLI simulates the assigned scenario, so it passes no draft.
-    const result = await (
-        handlers()['simulate-scenario'] as (
-            event: null,
-            challengeId: string,
-        ) => ReturnType<ScenarioHandlers['simulate-scenario']>
-    )(null, challengeId);
+    const result = await handlers()['simulate-scenario'](null, challengeId);
     if (!result.success) return reportFailure(result, 'Simulation failed');
     ui().info(`Scenario "${result.scenario}" from phase ${result.startPhase}, assuming every step succeeds:`);
     if (result.events.length === 0) ui().info('  Nothing would run.');

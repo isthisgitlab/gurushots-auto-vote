@@ -54,7 +54,9 @@ test.each([
             getEligiblePhotos,
             logger,
             searchTagAutocomplete: jest.fn(async () => []),
-            getCurrentMemberProfile: jest.fn(async () => invalid<MemberIdentity>({ id: 'member-hash' })),
+            getCurrentMemberProfile: jest.fn(
+                async (): Promise<MemberIdentity> => ({ id: 'member-hash', userName: 'member' }),
+            ),
         },
     );
     expect(resolveTermsToTags).toHaveBeenCalled();

@@ -28,13 +28,13 @@ import type * as node_streamModule from 'node:stream';
 import type * as fetch_embeddingsModule from '../../scripts/fetch-embeddings';
 import type * as stored_zipModule from './helpers/stored-zip';
 import { invalid } from '../helpers/invalid';
+import type { MainOptions } from '../../scripts/fetch-embeddings';
 
 type OpenCallback = (err: Error | null, zipfile: yauzl.ZipFile) => void;
 type FakeOpenReadStream = (
     entry: yauzl.Entry,
     done: (err: Error | null, stream?: node_streamModule.Readable) => void,
 ) => void;
-type MainOptions = NonNullable<Parameters<typeof main>[0]>;
 
 const {
     download,

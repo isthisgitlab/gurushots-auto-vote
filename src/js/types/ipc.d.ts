@@ -6,7 +6,7 @@
  * Each invoke method takes its handler's arguments minus the leading IPC
  * `event` and resolves to the handler's result, so a renderer call is checked
  * against the handler it reaches. Name parity between the manifest and the
- * handlers stays with tests/ipc/manifest.test.js (skipLibCheck means this
+ * handlers stays with tests/ipc/manifest.test.ts (skipLibCheck means this
  * file's own internals are not checked).
  */
 import type { invokeChannels, aliases, sendMethods, eventMethods } from '../ipc/manifest';

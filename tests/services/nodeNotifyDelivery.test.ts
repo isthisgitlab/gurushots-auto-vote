@@ -1,6 +1,6 @@
 /**
  * Coverage for the Node OS-delivery seams that the injected-`deliver` tests in
- * nodeNotify.test.js bypass: the real execFile branching per platform (and its
+ * nodeNotify.test.ts bypass: the real execFile branching per platform (and its
  * error-swallow), the Node-side i18n resolver, and the re-entrancy guard.
  */
 

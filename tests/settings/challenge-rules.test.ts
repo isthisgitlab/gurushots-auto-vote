@@ -28,7 +28,9 @@ jest.mock('../../src/js/logger', () => {
     };
 });
 
-const cat = require('../../src/js/logger').__cat;
+const cat = invalid<{ __cat: Record<'info' | 'error' | 'debug' | 'success' | 'warning', jest.Mock> }>(
+    require('../../src/js/logger'),
+).__cat;
 
 const HOUR = 3600;
 const START = 1_700_000_000;

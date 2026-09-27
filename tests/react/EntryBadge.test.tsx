@@ -17,7 +17,6 @@
 
 import { act, render, screen } from './helpers/test-utils';
 import { EntryBadge } from '@/components/app/EntryBadge';
-import { invalid } from '../helpers/invalid';
 
 const mockBoostState = {
     applyBoost: jest.fn(),
@@ -59,10 +58,8 @@ const baseEntry = (overrides = {}) => ({
     ...overrides,
 });
 
-// The parent callbacks are never triggered here, so the tests leave them out.
-const noCallbacks = invalid<Pick<Parameters<typeof EntryBadge>[0], 'onBoostApplied' | 'onTurboApplied' | 'onSwapped'>>(
-    {},
-);
+// The parent callbacks are never triggered here.
+const noCallbacks = { onBoostApplied: () => {}, onTurboApplied: () => {}, onSwapped: () => {} };
 
 beforeEach(() => {
     resetHookState();

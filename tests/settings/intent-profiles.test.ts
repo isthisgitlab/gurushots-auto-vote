@@ -13,7 +13,7 @@
  *     defers seeding WITHOUT marking the intent seeded, and it seeds on a later
  *     run once capacity frees (never permanently/silently suppressed).
  *
- * Drives the same in-memory headless-store seam as challenge-profiles.test.js
+ * Drives the same in-memory headless-store seam as challenge-profiles.test.ts
  * so loadSettings/saveSettings round-trip without touching fs.
  */
 

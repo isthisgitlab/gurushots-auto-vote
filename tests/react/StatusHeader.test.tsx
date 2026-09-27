@@ -1,8 +1,8 @@
 import { render, screen, act } from '@testing-library/preact';
 import { TranslationProvider } from '@/contexts/TranslationContext';
-import { StatusHeader as StatusHeaderComponent } from '@/components/app/StatusHeader';
+import { StatusHeader } from '@/components/app/StatusHeader';
 import { openBoostWindows } from '../../src/js/voting/boostWindow';
-import type { ComponentChild, ComponentProps, FunctionComponent } from 'preact';
+import type { ComponentChild } from 'preact';
 import type { Bankroll, Challenge } from '../../src/js/types/gurushots';
 import { invalid } from '../helpers/invalid';
 
@@ -30,14 +30,6 @@ jest.mock('../../src/js/voting/boostWindow', () => ({
 }));
 
 const BASE_MS = 1_700_000_000_000;
-
-// The header renders without a next-run time, a balance or a claim status,
-// which its signature requires; these tests leave them out.
-type HeaderProps = ComponentProps<typeof StatusHeaderComponent>;
-const StatusHeader =
-    invalid<FunctionComponent<Pick<HeaderProps, 'challenges' | 'running'> & Partial<HeaderProps>>>(
-        StatusHeaderComponent,
-    );
 
 const wrap = (ui: ComponentChild) => render(<TranslationProvider>{ui}</TranslationProvider>);
 

@@ -11,7 +11,6 @@ import type { SettingsSchemaEntry } from '../../src/js/settings/schema';
 const { resolveCurrencyAuto }: typeof nodeResolversModule = require('../../src/js/scheduling/nodeResolvers');
 
 // The node resolver answers synchronously; its shared type also admits the renderer's async variant.
-type CurrencyAutoTimings = Awaited<ReturnType<typeof resolveCurrencyAuto>>;
 
 describe('currency automation defaults', () => {
     const headlessGlobals = globalThis as typeof globalThis & {
@@ -75,7 +74,7 @@ describe('currency automation defaults', () => {
         expect(settings.setGlobalDefault('autoSwapAfterStart', 3600)).toBe(true);
         expect(settings.setGlobalDefault('autoSwapMax', 2)).toBe(true);
 
-        expect((resolveCurrencyAuto(challengeId) as CurrencyAutoTimings).swap).toEqual({
+        expect(resolveCurrencyAuto(challengeId).swap).toEqual({
             afterStartSec: 3600,
             beforeEndSec: 0,
             afterPercent: 0,
@@ -83,8 +82,8 @@ describe('currency automation defaults', () => {
         expect(settings.getEffectiveSetting('autoSwapMax', challengeId)).toBe(2);
 
         expect(settings.setChallengeOverride('autoSwapAfterStart', challengeId, 7200)).toBe(true);
-        expect((resolveCurrencyAuto(challengeId) as CurrencyAutoTimings).swap!.afterStartSec).toBe(7200);
-        expect((resolveCurrencyAuto('9999') as CurrencyAutoTimings).swap!.afterStartSec).toBe(3600);
+        expect(resolveCurrencyAuto(challengeId).swap!.afterStartSec).toBe(7200);
+        expect(resolveCurrencyAuto('9999').swap!.afterStartSec).toBe(3600);
     });
 
     test('a title profile takes precedence over globals, and a challenge override takes precedence over it', () => {
@@ -103,10 +102,10 @@ describe('currency automation defaults', () => {
         expect(settings.getEffectiveSetting('autoExposureFill', challengeId)).toBe(false);
         expect(settings.getEffectiveSetting('autoExposureFillBelow', challengeId)).toBe(40);
         expect(settings.getEffectiveSetting('autoExposureFill', '9999')).toBe(true);
-        expect((resolveCurrencyAuto(challengeId) as CurrencyAutoTimings).fill).toBeNull();
+        expect(resolveCurrencyAuto(challengeId).fill).toBeNull();
 
         expect(settings.setChallengeOverride('autoExposureFill', challengeId, true)).toBe(true);
         expect(settings.getEffectiveSetting('autoExposureFill', challengeId)).toBe(true);
-        expect((resolveCurrencyAuto(challengeId) as CurrencyAutoTimings).fill).not.toBeNull();
+        expect(resolveCurrencyAuto(challengeId).fill).not.toBeNull();
     });
 });

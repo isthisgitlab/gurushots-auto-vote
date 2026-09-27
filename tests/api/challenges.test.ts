@@ -27,7 +27,7 @@ jest.mock('../../src/js/api/api-client', () => ({
 
 // Mock the title-pin module as an identity pass-through so this file keeps
 // testing fetch/coalescing behavior in isolation (pin behavior is unit-tested
-// in tests/services/challengeTitlePin.test.js). Wiring is still asserted:
+// in tests/services/challengeTitlePin.test.ts). Wiring is still asserted:
 // success responses must reach the pin hook, failed fetches must not.
 jest.mock('../../src/js/services/challengeTitlePin', () => ({
     pinChallengeTitles: jest.fn((challenges) => challenges),

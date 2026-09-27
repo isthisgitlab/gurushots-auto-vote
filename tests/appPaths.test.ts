@@ -6,8 +6,8 @@
 import type * as appPathsModule from '../src/js/appPaths';
 jest.unmock('path');
 
-const fs = jest.requireActual('node:fs');
-const path = jest.requireActual('node:path');
+const fs = jest.requireActual<typeof import('node:fs')>('node:fs');
+const path = jest.requireActual<typeof import('node:path')>('node:path');
 const { appPath }: typeof appPathsModule = require('../src/js/appPaths');
 
 test('resolves below the app root', () => {

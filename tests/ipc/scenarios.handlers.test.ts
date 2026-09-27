@@ -45,10 +45,6 @@ import type * as scenarios_handlersModule from '../../src/js/ipc/scenarios.handl
 const { SCENARIO_TEMPLATES }: typeof templatesModule = require('../../src/js/scenarios/templates');
 const { buildHandlers, register }: typeof scenarios_handlersModule = require('../../src/js/ipc/scenarios.handlers');
 
-// A handler called without its trailing optional argument (the signatures spell it `T | undefined`).
-type OmitLast<F> = F extends (...args: [...infer A, never]) => infer R ? (...args: A) => R : never;
-type Handlers = ReturnType<typeof buildHandlers>;
-
 const handlers = buildHandlers();
 const issue = { path: 'start', message: 'No phase named "x"' };
 const NOW = Math.floor(Date.now() / 1000);
@@ -81,9 +77,7 @@ test('get-scenarios returns the stored scenarios and the templates', async () =>
 describe('save / rename / delete', () => {
     test('save passes overwrite through and maps issues', async () => {
         settings.saveScenario.mockReturnValueOnce({ ok: true, name: 'Plan' });
-        await expect(
-            invalid<OmitLast<Handlers['save-scenario']>>(handlers['save-scenario'])(null, scenario),
-        ).resolves.toEqual({ success: true, name: 'Plan' });
+        await expect(handlers['save-scenario'](null, scenario)).resolves.toEqual({ success: true, name: 'Plan' });
         expect(settings.saveScenario).toHaveBeenCalledWith(scenario, { overwrite: true });
         settings.saveScenario.mockReturnValueOnce({ ok: false, issues: [issue] });
         await expect(handlers['save-scenario'](null, scenario, { overwrite: false })).resolves.toEqual({
@@ -96,9 +90,9 @@ describe('save / rename / delete', () => {
 
     test('an issue list without entries still yields an error', async () => {
         settings.saveScenario.mockReturnValueOnce({ ok: false, issues: [] });
-        await expect(
-            invalid<OmitLast<Handlers['save-scenario']>>(handlers['save-scenario'])(null, {}),
-        ).resolves.toEqual(expect.objectContaining({ success: false, error: 'Invalid scenario' }));
+        await expect(handlers['save-scenario'](null, {})).resolves.toEqual(
+            expect.objectContaining({ success: false, error: 'Invalid scenario' }),
+        );
     });
 
     test('rename checks its arguments', async () => {
@@ -154,7 +148,7 @@ describe('import / export', () => {
             expect.objectContaining({ success: true, exists: false }),
         );
         settings.importScenario.mockReturnValue({ ok: true, name: 'Plan' });
-        await invalid<OmitLast<Handlers['import-scenario']>>(handlers['import-scenario'])(null, '{}');
+        await handlers['import-scenario'](null, '{}');
         expect(settings.importScenario).toHaveBeenLastCalledWith('{}', { overwrite: false });
         await handlers['import-scenario'](null, '{}', { overwrite: true });
         expect(settings.importScenario).toHaveBeenLastCalledWith('{}', { overwrite: true });
@@ -314,7 +308,7 @@ describe('simulate-scenario', () => {
     });
 
     test('simulates the assigned scenario from its current state', async () => {
-        const result = await invalid<OmitLast<Handlers['simulate-scenario']>>(handlers['simulate-scenario'])(null, 7);
+        const result = await handlers['simulate-scenario'](null, 7);
         expect(result).toEqual(
             expect.objectContaining({
                 success: true,
@@ -355,9 +349,7 @@ describe('simulate-scenario', () => {
         await expect(handlers['simulate-scenario'](null, 7, {})).resolves.toEqual(
             expect.objectContaining({ error: 'Invalid scenario' }),
         );
-        await expect(
-            invalid<OmitLast<Handlers['simulate-scenario']>>(handlers['simulate-scenario'])(null, ''),
-        ).resolves.toEqual({
+        await expect(handlers['simulate-scenario'](null, '')).resolves.toEqual({
             success: false,
             error: 'invalid-args',
         });
@@ -365,9 +357,7 @@ describe('simulate-scenario', () => {
 
     test('refuses what the dry run refuses', async () => {
         scenarioStatus.getScenarioStatus.mockReturnValue(invalid({ assigned: '', scenario: null }));
-        await expect(
-            invalid<OmitLast<Handlers['simulate-scenario']>>(handlers['simulate-scenario'])(null, 7),
-        ).resolves.toEqual({
+        await expect(handlers['simulate-scenario'](null, 7)).resolves.toEqual({
             success: false,
             error: 'no-scenario',
         });

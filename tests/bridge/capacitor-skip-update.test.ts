@@ -8,8 +8,7 @@
 
 import type * as capacitorModule from '../../src/js/bridge/capacitor';
 import type { WindowApi } from '../../src/js/types/ipc';
-import type { FormattedUpdateInfo } from '../../src/js/services/AutoUpdater';
-import { invalid } from '../helpers/invalid';
+import type { UpdateSummary } from '../../src/js/services/AutoUpdater';
 
 let mockSkipStore = '';
 const mockCheck = jest.fn();
@@ -34,7 +33,7 @@ jest.mock('../../src/js/settings', () => ({
 const g = globalThis as typeof globalThis & { api?: object };
 
 /** Either branch of check-for-updates' result, read without narrowing. */
-type CheckResult = { success: boolean; updateInfo?: FormattedUpdateInfo | null; error?: string };
+type CheckResult = { success: boolean; updateInfo?: UpdateSummary | null; error?: string };
 
 describe('Capacitor bridge — update skip', () => {
     let api: WindowApi;
@@ -47,7 +46,7 @@ describe('Capacitor bridge — update skip', () => {
         // lastUpdateInfo cache doesn't leak between tests.
         jest.resetModules();
         const { installBridge }: typeof capacitorModule = require('../../src/js/bridge/capacitor');
-        api = invalid(installBridge());
+        api = installBridge();
     });
 
     test('skip-update-version persists the latest version and suppresses the next check for it', async () => {

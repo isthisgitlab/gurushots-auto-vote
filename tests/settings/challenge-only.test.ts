@@ -4,7 +4,7 @@
  * per-challenge override or a title profile can change it. No shipped key
  * carries the flag today, so each case temporarily flags `autoSwap`.
  *
- * Drives the in-memory headless-store seam (same as override-auto-clear.test.js)
+ * Drives the in-memory headless-store seam (same as override-auto-clear.test.ts)
  * so the facade's loadSettings/saveSettings round-trip without touching fs.
  */
 

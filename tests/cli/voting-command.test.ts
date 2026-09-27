@@ -70,7 +70,9 @@ const { __mw: mw } = jest.mocked<
 const { createScheduler } = jest.mocked<typeof runSchedulerModule>(require('../../src/js/scheduling/runScheduler'));
 const { openBoostWindows } = jest.mocked<typeof boostWindowModule>(require('../../src/js/voting/boostWindow'));
 const { clearTokenUnlessStayingLoggedIn } = jest.mocked<typeof authModule>(require('../../src/js/services/auth'));
-const votingHandlers = require('../../src/js/ipc/voting.handlers').__handlers;
+// The handler-module mocks expose their jest.fn table for the assertions.
+type HandlersMock = { __handlers: Record<string, jest.Mock> };
+const votingHandlers = invalid<HandlersMock>(require('../../src/js/ipc/voting.handlers')).__handlers;
 const {
     runVotingCycle,
     voteChallengeManual,

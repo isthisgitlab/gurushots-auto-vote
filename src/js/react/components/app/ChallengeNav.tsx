@@ -21,7 +21,7 @@ import { isLowExposure } from '@/utils/challengeAlerts';
  * window, red for low exposure (utils/challengeAlerts) — so the whole
  * situation reads off this one panel. The meaning is repeated in sr-only text.
  */
-export function ChallengeNav({ challenges }: { challenges: Challenge[] | null | undefined }) {
+export function ChallengeNav({ challenges }: { challenges?: Challenge[] | null }) {
     const { t } = useTranslation();
 
     const list = challenges || [];

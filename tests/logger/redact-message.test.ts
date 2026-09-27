@@ -10,7 +10,8 @@
 
 import type * as LoggerModule from '../../src/js/logger';
 
-const { redactMessage, info, getRecentLogs }: typeof LoggerModule = jest.requireActual('../../src/js/logger');
+const { redactMessage, info, getRecentLogs }: typeof LoggerModule =
+    jest.requireActual<typeof import('../../src/js/logger')>('../../src/js/logger');
 
 describe('redactMessage', () => {
     test('returns benign messages unchanged', () => {

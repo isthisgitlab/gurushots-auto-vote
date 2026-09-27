@@ -3,11 +3,11 @@
  * feeds — search terms, pooled theme keywords, lexical keywords — against the
  * REAL shipped lexicon, so "Balloon Fun" is judged by the axis that ships, not
  * by a stub. tests/setup.js mocks fs globally, so the asset loader is mocked to
- * hand back the committed JSON read through requireActual (as lexicon.test.js).
+ * hand back the committed JSON read through requireActual (as lexicon.test.ts).
  */
 
-const realFs = jest.requireActual('fs');
-const realPath = jest.requireActual('path');
+const realFs = jest.requireActual<typeof import('fs')>('fs');
+const realPath = jest.requireActual<typeof import('path')>('path');
 const mockLexicon = JSON.parse(
     realFs.readFileSync(realPath.join(__dirname, '..', '..', 'src', 'assets', 'semantic-vectors.json'), 'utf8'),
 );

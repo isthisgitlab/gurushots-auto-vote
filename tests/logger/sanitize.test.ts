@@ -5,7 +5,7 @@
  * cycle guard, array handling, and case-insensitive matching.
  */
 
-const { sanitizeForLog } = jest.requireActual('../../src/js/logger');
+const { sanitizeForLog } = jest.requireActual<typeof import('../../src/js/logger')>('../../src/js/logger');
 
 describe('sanitizeForLog', () => {
     test('returns primitives unchanged', () => {
@@ -96,9 +96,8 @@ describe('sanitizeForLog', () => {
 
     test('truncates beyond max depth (6) to avoid pathological inputs', () => {
         const deep = { a: { b: { c: { d: { e: { f: { g: 'too deep' } } } } } } };
-        const out = sanitizeForLog(deep);
         // Depths 0..5 traverse; depth 6 returns the sentinel.
-        expect(out.a.b.c.d.e.f).toBe('[Object]');
+        expect(sanitizeForLog(deep)).toEqual({ a: { b: { c: { d: { e: { f: '[Object]' } } } } } });
     });
 
     test('handles circular references without stack overflow', () => {

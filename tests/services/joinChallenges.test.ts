@@ -52,6 +52,7 @@ import type { Challenge } from '../../src/js/types/gurushots';
 import type { RawJsonStore } from '../../src/js/types/stores';
 import type { RuleMatchChallenge } from '../../src/js/types/settings';
 import { invalid } from '../helpers/invalid';
+import type { JoinDeps } from '../../src/js/services/joinChallenges';
 const {
     performJoin,
     runJoinPass,
@@ -82,7 +83,6 @@ const makeStore = () => {
     let s: string | null = null;
     return { readRaw: () => s, writeRaw: (d: string) => (s = d) };
 };
-type JoinDeps = Parameters<typeof performJoin>[2];
 // Partial doubles: the overrides stand in for whichever endpoints a test drives.
 const makeDeps = (over: Partial<Record<keyof JoinDeps, unknown>> = {}) =>
     invalid<JoinDeps & { joinStateStore: RawJsonStore }>({

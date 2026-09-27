@@ -24,7 +24,7 @@ const mockSeaTransformers = {
 const mockCreateRequire = jest.fn(() => () => mockSeaTransformers);
 const mockExtract = jest.fn(() => ({ root: '/vision/root', modulePath: '/vision/root/vision-entry.js' }));
 
-jest.mock('path', () => jest.requireActual('path'));
+jest.mock('path', () => jest.requireActual<typeof import('path')>('path'));
 jest.mock('../../src/js/runtime', () => mockRuntime);
 jest.mock('node:sea', () => mockSea, { virtual: true });
 jest.mock('node:module', () => ({ createRequire: mockCreateRequire }));

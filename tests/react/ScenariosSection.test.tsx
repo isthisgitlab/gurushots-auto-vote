@@ -23,7 +23,7 @@ const renderSection = async () => {
 const click = (name: string) => fireEvent.click(screen.getByRole('button', { name }));
 
 // A <select>'s onChange stays a native 'change' listener under preact/compat
-// (see ChallengeProfilesBar.test.jsx), so dispatch the real event.
+// (see ChallengeProfilesBar.test.tsx), so dispatch the real event.
 const changeSelect = (sel: HTMLSelectElement, value: string) =>
     act(() => {
         sel.value = value;

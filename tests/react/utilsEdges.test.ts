@@ -56,17 +56,15 @@ describe('createDeadlineNotifier failure logging', () => {
     });
 
     test('a throwing log sink is itself swallowed', async () => {
-        const notify = createDeadlineNotifier(
-            invalid({
-                getSettings: jest.fn().mockRejectedValue(new Error('down')),
-                getDeadlineActions: jest.fn(),
-                translate: (k: string) => k,
-                deliver: jest.fn(),
-                log: () => {
-                    throw new Error('sink broken');
-                },
-            }),
-        );
+        const notify = createDeadlineNotifier({
+            getSetting: jest.fn().mockRejectedValue(new Error('down')),
+            getDeadlineActions: jest.fn(),
+            translate: (k) => k,
+            deliver: jest.fn(),
+            log: () => {
+                throw new Error('sink broken');
+            },
+        });
         await expect(notify([], 0)).resolves.toBeUndefined();
     });
 });

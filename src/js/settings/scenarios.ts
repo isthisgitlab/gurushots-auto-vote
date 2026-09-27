@@ -23,6 +23,9 @@ import type { AppSettings, ChallengeValues, TitleRule } from '../types/settings'
 import type { ScenarioDocument, ScenarioIssue } from './scenarioSchema';
 
 type ScenarioSaveResult = { ok: true; name: string } | { ok: false; issues: ScenarioIssue[] };
+type ScenarioImportPreview =
+    | { ok: true; scenario: ScenarioDocument; preview: ReturnType<typeof describeScenario>; exists: boolean }
+    | { ok: false; issues: ScenarioIssue[] };
 
 const MAX_SCENARIOS = SCENARIO_CAPS.scenarios;
 
@@ -271,7 +274,7 @@ const checkScenario = (doc: unknown) => validateScenario(doc, globalChallengeVal
  * Parse and validate shared scenario JSON without storing it — the preview
  * step. `exists` tells the caller a save would replace a scenario.
  */
-const previewScenarioImport = (text: unknown) => {
+const previewScenarioImport = (text: unknown): ScenarioImportPreview => {
     const parsed = parseScenarioJson(text);
     if (!parsed.ok) return failure(parsed.issues);
     const result = validateScenario(parsed.value, globalChallengeValues(loadSettings()));
