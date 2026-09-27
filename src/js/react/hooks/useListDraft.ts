@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import { useLatestRef } from '@/hooks/useLatestRef';
 
-/** @import { Dispatch, SetStateAction } from 'react' */
+import type { Dispatch, SetStateAction } from 'react';
 
 // Used only to fingerprint a list value for the draft sync below. A comma is
 // fine here: tag input is split on commas before storage, so a stored tag can
@@ -20,14 +20,12 @@ export const LIST_FINGERPRINT_SEP = ',';
  * the draft would emit; both must be module-level (stable) functions. The
  * value is read through a ref because it is a fresh array every render — the
  * fingerprint, not its identity, is what should re-trigger the sync.
- *
- * @template V, D
- * @param {V[]} value
- * @param {(value: V[]) => D} toDraft
- * @param {(draft: D) => string} draftKeyOf
- * @returns {[D, Dispatch<SetStateAction<D>>]}
  */
-export function useListDraft(value, toDraft, draftKeyOf) {
+export function useListDraft<V, D>(
+    value: V[],
+    toDraft: (value: V[]) => D,
+    draftKeyOf: (draft: D) => string,
+): [D, Dispatch<SetStateAction<D>>] {
     const [draft, setDraft] = useState(() => toDraft(value));
     const valueRef = useLatestRef(value);
     const valueKey = value.join(LIST_FINGERPRINT_SEP);

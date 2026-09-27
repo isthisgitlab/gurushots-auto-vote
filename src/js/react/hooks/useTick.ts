@@ -6,11 +6,9 @@ import { useState, useEffect } from 'react';
  * `enabled` is true. When disabled, no interval runs and the returned
  * value stays at whatever it last was.
  *
- * @param {number} intervalMs
- * @param {boolean} [enabled]
- * @returns {number} current Unix time (seconds)
+ * @returns current Unix time (seconds)
  */
-export function useTick(intervalMs, enabled = true) {
+export function useTick(intervalMs: number, enabled: boolean = true): number {
     const [now, setNow] = useState(() => Math.floor(Date.now() / 1000));
 
     useEffect(() => {

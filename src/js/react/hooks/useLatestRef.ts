@@ -7,12 +7,8 @@ import { useRef } from 'react';
  * value is typically a fresh object or callback identity every render, which
  * would re-run the effect each time. The returned ref is stable, so listing it
  * in a dependency array never re-triggers anything.
- *
- * @template T
- * @param {T} value
- * @returns {{ current: T }}
  */
-export function useLatestRef(value) {
+export function useLatestRef<T>(value: T): { current: T } {
     const ref = useRef(value);
     ref.current = value;
     return ref;

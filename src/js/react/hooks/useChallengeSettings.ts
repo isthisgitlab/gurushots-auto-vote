@@ -22,12 +22,12 @@ import * as ipc from '@/api/ipc';
  *
  * `settingsVersion` changes when a settings-changed broadcast arrives; the
  * values are then re-read in place, without remounting the card.
- *
- * @param {string | number} challengeId
- * @param {boolean} [initialCompact]
- * @param {number} [settingsVersion]
  */
-export function useChallengeSettings(challengeId, initialCompact = false, settingsVersion = 0) {
+export function useChallengeSettings(
+    challengeId: string | number,
+    initialCompact: boolean = false,
+    settingsVersion: number = 0,
+) {
     const [hasCustomSettings, setHasCustomSettings] = useState(false);
     const [autoFillEnabled, setAutoFillEnabled] = useState(false);
     const [isCompact, setIsCompact] = useState(initialCompact);

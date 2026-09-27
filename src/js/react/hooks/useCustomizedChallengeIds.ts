@@ -4,9 +4,8 @@ import * as ipc from '@/api/ipc';
 
 // Stable empty result so consumers never see a changing identity while the
 // first fetch is in flight (or after a failed one).
-/** @typedef {'manual' | 'profile' | 'both'} CustomizationKind */
-/** @type {Map<string, CustomizationKind>} */
-const NONE = new Map();
+export type CustomizationKind = 'manual' | 'profile' | 'both';
+const NONE: Map<string, CustomizationKind> = new Map();
 
 /**
  * Ids of challenges with manual overrides or an unsuppressed automatic profile,
@@ -17,16 +16,17 @@ const NONE = new Map();
  * Re-runs on settings-changed so the marker tracks both rule edits and
  * per-challenge settings changes.
  *
- * @param {Array<{id: string|number, title: string}>} challenges - always an array (ChallengeNav normalizes)
- * @returns {Map<string, CustomizationKind>} ids and their customization source
+ * @param challenges - always an array (ChallengeNav normalizes)
+ * @returns ids and their customization source
  */
-export function useCustomizedChallengeIds(challenges) {
+export function useCustomizedChallengeIds(
+    challenges: Array<{ id: string | number; title: string }>,
+): Map<string, CustomizationKind> {
     // Key on ids and titles, not challenge objects: routine refreshes often
     // leave both unchanged. Re-read if a title changes for the same id.
     const entriesKey = useMemo(() => {
-        /** @type {Array<[string, string]>} */
-        const entries = [];
-        const seen = new Set();
+        const entries: Array<[string, string]> = [];
+        const seen = new Set<string>();
         for (const challenge of challenges) {
             const id = challenge?.id;
             if (id === null || id === undefined) continue;
@@ -39,10 +39,9 @@ export function useCustomizedChallengeIds(challenges) {
     }, [challenges]);
 
     const queryFn = useCallback(async () => {
-        const entries = /** @type {Array<[string, string]>} */ (JSON.parse(entriesKey));
+        const entries = JSON.parse(entriesKey) as Array<[string, string]>;
         if (entries.length === 0) return NONE;
-        /** @type {Array<CustomizationKind | null>} */
-        const kinds = await Promise.all(
+        const kinds: Array<CustomizationKind | null> = await Promise.all(
             entries.map(async ([id, title]) => {
                 const overrides = await ipc.getChallengeOverrides(id);
                 const profile = await ipc.getTitleProfile(title, id);
@@ -51,8 +50,7 @@ export function useCustomizedChallengeIds(challenges) {
                 return manual ? (automatic ? 'both' : 'manual') : automatic ? 'profile' : null;
             }),
         );
-        /** @type {Map<string, CustomizationKind>} */
-        const customized = new Map();
+        const customized: Map<string, CustomizationKind> = new Map();
         entries.forEach(([id], i) => {
             if (kinds[i]) customized.set(id, kinds[i]);
         });

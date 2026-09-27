@@ -15,10 +15,10 @@ import { useEffect, useState } from 'react';
  * withheld for a round trip on the happy path, and so a test environment that
  * never fires either callback keeps rendering normally.
  *
- * @param {string|null|undefined} url - falsy short-circuits to `false`
- * @returns {boolean} false once the URL is known to have failed
+ * @param url - falsy short-circuits to `false`
+ * @returns false once the URL is known to have failed
  */
-export function useImageLoads(url) {
+export function useImageLoads(url: string | null | undefined): boolean {
     const [failed, setFailed] = useState(false);
 
     useEffect(() => {

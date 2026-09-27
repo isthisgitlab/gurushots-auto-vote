@@ -464,7 +464,7 @@ repeated six times is one that gets forgotten at one of them.
   close, Escape-to-close, and body-scroll lock.
 - **Theme** = a `data-theme` attribute on `document.documentElement`, sourced from the `theme` setting
   (DaisyUI). There is **no `dark:` Tailwind variant** in the codebase — theming is entirely `data-theme`.
-- **High-frequency updates** use `@preact/signals` (`react/hooks/useTimers.js`): a single 1 s interval
+- **High-frequency updates** use `@preact/signals` (`react/hooks/useTimers.ts`): a single 1 s interval
   mutates `signal.value` in place so the challenge list does **not** re-render every tick. `useTick` is the
   shared per-second wall-clock re-render.
 - The same tree runs under Electron Chromium, the Capacitor WebView, and happy-dom in tests — so code

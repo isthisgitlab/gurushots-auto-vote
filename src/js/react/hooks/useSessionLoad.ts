@@ -2,14 +2,12 @@ import { useCallback } from 'react';
 import { useIpcQuery } from '@/api/useIpcQuery';
 import * as ipc from '@/api/ipc';
 
-/** @import { IpcQueryTools } from '@/api/useIpcQuery' */
+import type { IpcQueryTools } from '@/api/useIpcQuery';
 
 /**
  * A load settled inside the query: its value, or why it failed.
- *
- * @template T
- * @typedef {{ ok: true, value: T } | { ok: false, reason: unknown }} SessionLoadOutcome
  */
+type SessionLoadOutcome<T> = { ok: true; value: T } | { ok: false; reason: unknown };
 
 /**
  * A modal's load-on-open over IPC, built on useIpcQuery: `load()` runs while
@@ -22,40 +20,30 @@ import * as ipc from '@/api/ipc';
  *
  * `load` and `onLoad` must be referentially stable (module-level or
  * useCallback) — the query keys on them.
- *
- * @template T
- * @param {() => Promise<T>} load
- * @param {{ enabled: boolean, onLoad: (value: T) => void, failureLog: string }} options
- * @returns {{ loading: boolean, loadFailed: boolean }}
  */
-export function useSessionLoad(load, { enabled, onLoad, failureLog }) {
+export function useSessionLoad<T>(
+    load: () => Promise<T>,
+    { enabled, onLoad, failureLog }: { enabled: boolean; onLoad: (value: T) => void; failureLog: string },
+): { loading: boolean; loadFailed: boolean } {
     // Settle inside the query so a failure reaches `apply` — which only runs
     // for the current load — and is logged exactly once per failed load.
-    const queryFn = useCallback(
-        /** @returns {Promise<SessionLoadOutcome<T>>} */
-        async () => {
-            try {
-                return { ok: true, value: await load() };
-            } catch (reason) {
-                return { ok: false, reason };
-            }
-        },
-        [load],
-    );
+    const queryFn = useCallback(async (): Promise<SessionLoadOutcome<T>> => {
+        try {
+            return { ok: true, value: await load() };
+        } catch (reason) {
+            return { ok: false, reason };
+        }
+    }, [load]);
 
     const apply = useCallback(
-        /**
-         * @param {SessionLoadOutcome<T>} result
-         * @param {IpcQueryTools<null, unknown>} tools
-         */
-        async (result, { setError }) => {
+        async (result: SessionLoadOutcome<T>, { setError }: IpcQueryTools<null, unknown>) => {
             if (result.ok) {
                 onLoad(result.value);
                 return;
             }
             setError(result.reason ?? new Error(failureLog));
             await ipc.logRendererError(
-                `${failureLog}: ${/** @type {{ message?: string } | null | undefined} */ (result.reason)?.message || result.reason}`,
+                `${failureLog}: ${(result.reason as { message?: string } | null | undefined)?.message || result.reason}`,
             );
         },
         [onLoad, failureLog],

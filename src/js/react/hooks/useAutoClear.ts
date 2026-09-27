@@ -7,11 +7,10 @@ import { useEffect } from 'react';
  * whenever the value (or the clear callback) changes; falsy values
  * schedule nothing.
  *
- * @param {unknown} value - when truthy, schedules the clear
- * @param {() => void} clear - called after `delayMs`
- * @param {number} delayMs
+ * @param value - when truthy, schedules the clear
+ * @param clear - called after `delayMs`
  */
-export function useAutoClear(value, clear, delayMs) {
+export function useAutoClear(value: unknown, clear: () => void, delayMs: number) {
     useEffect(() => {
         if (!value) return undefined;
         const id = setTimeout(clear, delayMs);

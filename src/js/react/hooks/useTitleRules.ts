@@ -2,7 +2,7 @@ import { useState, useEffect, useCallback } from 'react';
 import { useSessionLoad } from './useSessionLoad';
 import * as ipc from '@/api/ipc';
 
-/** @import { ChallengeValues, TitleRule } from '../../types/settings' */
+import type { ChallengeValues, TitleRule } from '../../types/settings';
 
 const fetchTitleRules = () => Promise.all([ipc.getTitleRules(), ipc.getChallengeProfiles()]);
 
@@ -19,17 +19,14 @@ const fetchTitleRules = () => Promise.all([ipc.getTitleRules(), ipc.getChallenge
  * with the empty default; `loadFailed` is then set so the editor is replaced
  * by an alert rather than accepting edits that would be dropped. `change(next)`
  * clears a stale error as the user edits.
- *
- * @param {boolean} isOpen
  */
-export function useTitleRules(isOpen) {
-    const [rules, setRules] = useState(/** @type {TitleRule[]} */ ([]));
-    const [profiles, setProfiles] = useState(/** @type {Record<string, ChallengeValues>} */ ({}));
+export function useTitleRules(isOpen: boolean) {
+    const [rules, setRules] = useState([] as TitleRule[]);
+    const [profiles, setProfiles] = useState({} as Record<string, ChallengeValues>);
     const [error, setError] = useState(false);
 
     const onLoad = useCallback(
-        /** @param {[TitleRule[] | null, Record<string, ChallengeValues> | null]} loaded */
-        ([saved, savedProfiles]) => {
+        ([saved, savedProfiles]: [TitleRule[] | null, Record<string, ChallengeValues> | null]) => {
             setRules(Array.isArray(saved) ? saved : []);
             setProfiles(savedProfiles && typeof savedProfiles === 'object' ? savedProfiles : {});
         },
@@ -46,8 +43,7 @@ export function useTitleRules(isOpen) {
         if (isOpen) setError(false);
     }, [isOpen]);
 
-    /** @param {TitleRule[]} next */
-    const change = (next) => {
+    const change = (next: TitleRule[]) => {
         if (error) setError(false);
         setRules(next);
     };

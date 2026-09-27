@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef } from 'react';
 import * as ipc from '@/api/ipc';
 
-/** @import { GuiLogEntry } from '../../logger' */
+import type { GuiLogEntry } from '../../logger';
 
 const MAX_ENTRIES = 1000;
 
@@ -13,24 +13,20 @@ const MAX_ENTRIES = 1000;
  * `entries` newest-first, then merge in any live messages that landed
  * during the await — de-duped by monotonic `seq` so identical repeated
  * messages (turbo retries, mock loops) don't collide.
- *
- * @returns {{ entries: GuiLogEntry[], connected: boolean }}
  */
-export function useLogStream() {
-    const [entries, setEntries] = useState(/** @type {GuiLogEntry[]} */ ([]));
+export function useLogStream(): { entries: GuiLogEntry[]; connected: boolean } {
+    const [entries, setEntries] = useState([] as GuiLogEntry[]);
     const [connected, setConnected] = useState(false);
     const mountedRef = useRef(true);
-    const unsubscribeRef = useRef(/** @type {(() => void) | null} */ (null));
+    const unsubscribeRef = useRef(null as (() => void) | null);
 
     useEffect(() => {
         mountedRef.current = true;
         let seeded = false;
         let maxBacklogSeq = 0;
-        /** @type {GuiLogEntry[]} */
-        const liveBuffer = [];
+        const liveBuffer: GuiLogEntry[] = [];
 
-        /** @param {GuiLogEntry} logData */
-        const appendEntry = (logData) => {
+        const appendEntry = (logData: GuiLogEntry) => {
             setEntries((prev) => {
                 const next = [logData, ...prev];
                 return next.length > MAX_ENTRIES ? next.slice(0, MAX_ENTRIES) : next;
@@ -46,7 +42,7 @@ export function useLogStream() {
                 if (!result.success || !mountedRef.current) return;
                 setConnected(true);
 
-                unsubscribeRef.current = ipc.onLogMessage((/** @type {GuiLogEntry} */ logData) => {
+                unsubscribeRef.current = ipc.onLogMessage((logData: GuiLogEntry) => {
                     if (!mountedRef.current) return;
                     if (!seeded) {
                         liveBuffer.push(logData);
