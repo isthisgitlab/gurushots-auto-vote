@@ -7,7 +7,7 @@ import { LogEntry, LogsEmptyState } from '@/components/logs/LogEntry';
  * the in-app LogsModal. The two hosts only differ in the container
  * height (fixed 600px page vs 60vh modal), passed via `heightClass`.
  */
-export function LogViewerBody({ entries, heightClass }: { entries: LogLine[]; heightClass: string; }) {
+export function LogViewerBody({ entries, heightClass }: { entries: LogLine[]; heightClass: string }) {
     const { t } = useTranslation();
 
     return (

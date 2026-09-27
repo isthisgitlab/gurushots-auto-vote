@@ -115,7 +115,7 @@ function updateReducer(state: UpdateState, action: UpdateAction): UpdateState {
     }
 }
 
-const UpdateContext = createContext(null as UpdateContextValue | null);
+const UpdateContext = createContext<UpdateContextValue | null>(null);
 
 /**
  * Provider for update dialog state

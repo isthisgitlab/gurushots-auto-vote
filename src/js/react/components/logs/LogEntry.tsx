@@ -19,7 +19,7 @@ export type LogLine = Pick<GuiLogEntry, 'level' | 'message' | 'context' | 'times
  * Single log entry. Three small badges then the message:
  *   [severity] [context] [category] message
  */
-export function LogEntry({ entry }: { entry: LogLine; }) {
+export function LogEntry({ entry }: { entry: LogLine }) {
     const { level, message, context, timestamp, category } = entry;
     const levelColor = LEVEL_COLORS[level] || 'text-green-400';
 
@@ -42,7 +42,7 @@ export function LogEntry({ entry }: { entry: LogLine; }) {
 /**
  * Empty state when no logs are present
  */
-export function LogsEmptyState({ text }: { text: string; }) {
+export function LogsEmptyState({ text }: { text: string }) {
     return (
         <div className="text-gray-500 text-center py-8">
             {text}

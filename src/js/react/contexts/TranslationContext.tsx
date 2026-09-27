@@ -20,7 +20,7 @@ export interface TranslationContextValue {
     ready: boolean;
 }
 
-const TranslationContext = createContext(null as TranslationContextValue | null);
+const TranslationContext = createContext<TranslationContextValue | null>(null);
 
 const fetchLanguage = () => ipc.getSetting('language');
 

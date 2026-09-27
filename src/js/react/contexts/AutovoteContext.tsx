@@ -39,7 +39,7 @@ export type AutovoteContextValue = AutovoteState & {
     rearmSchedule: () => Promise<void>;
 };
 
-const AutovoteContext = createContext(null as AutovoteContextValue | null);
+const AutovoteContext = createContext<AutovoteContextValue | null>(null);
 
 /**
  * Cancel the cadence chain's armed timer, if any, leaving the slot as-is.

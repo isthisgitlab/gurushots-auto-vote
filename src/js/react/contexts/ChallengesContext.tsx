@@ -14,7 +14,7 @@ export interface ChallengesContextValue {
     refetch: (skipCleanup?: boolean) => Promise<void>;
 }
 
-const ChallengesContext = createContext(null as ChallengesContextValue | null);
+const ChallengesContext = createContext<ChallengesContextValue | null>(null);
 
 /**
  * Provider that wraps useActiveChallenges and provides challenge data with auto-refresh
