@@ -33,12 +33,15 @@ const MISSION_KEYWORDS: ReadonlyArray<[MissionKind, RegExp]> = [
 // joining — never let it read as a join (or fill) mission.
 const ALL_STAR = /all.?star/i;
 
-const MISSION_SETTING: Readonly<Record<MissionKind, 'missionJoinEarly' | 'missionUseFills' | 'missionSaveTurbos'>> =
-    Object.freeze({
-        join: 'missionJoinEarly',
-        fill: 'missionUseFills',
-        turbo: 'missionSaveTurbos',
-    });
+// The settings that follow each mission kind. Joining early serves a turbo
+// mission too: a turbo is only winnable in a joined challenge.
+const MISSION_SETTINGS: Readonly<
+    Record<MissionKind, ReadonlyArray<'missionJoinEarly' | 'missionUseFills' | 'missionSaveTurbos'>>
+> = Object.freeze({
+    join: ['missionJoinEarly'],
+    fill: ['missionUseFills'],
+    turbo: ['missionSaveTurbos', 'missionJoinEarly'],
+});
 
 const CLAIMABLE = 'CLAIM';
 
@@ -78,8 +81,10 @@ const readMissionNeeds = async (
     nowMs: number,
     getMyMissions: (token: string) => Promise<Mission[]>,
 ): Promise<MissionNeeds | null> => {
-    const kinds = Object.keys(MISSION_SETTING) as MissionKind[];
-    const enabled = kinds.filter((kind) => settings.getEffectiveSetting(MISSION_SETTING[kind], null) === true);
+    const kinds = Object.keys(MISSION_SETTINGS) as MissionKind[];
+    const enabled = kinds.filter((kind) =>
+        MISSION_SETTINGS[kind].some((key) => settings.getEffectiveSetting(key, null) === true),
+    );
     if (!token || enabled.length === 0) return null;
     const missions = await getMyMissions(token);
     const nowSec = Math.floor(nowMs / 1000);
@@ -93,8 +98,8 @@ const readMissionNeeds = async (
 };
 
 /**
- * The active missions' needs for the kinds whose setting is on (the rest stay
- * 0), or null when every mission setting is off or the missions can't be read.
+ * The active missions' needs for the kinds a setting on follows (the rest
+ * stay 0), or null when every mission setting is off or the missions can't be read.
  * Never throws: like the join and claim pre-steps, it must not abort voting.
  *
  * @param nowMs epoch ms

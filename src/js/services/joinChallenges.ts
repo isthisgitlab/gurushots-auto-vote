@@ -554,7 +554,8 @@ type JoinPassState = {
     remainingBudget: number;
     nowSec: number;
     missingCloseTimeLogged: boolean;
-    missions: MissionNeeds | null;
+    /** Joins still to make without the timing window, for the active missions. */
+    earlyJoins: number;
 };
 
 /**
@@ -582,9 +583,9 @@ const toPassNowSec = (now: number): number => Math.floor((Number.isFinite(now) &
 
 const decideCandidateJoin = (challenge: Challenge, pass: JoinPassState) => {
     const cfg = resolveCandidateConfig(challenge);
-    // A "Join N challenges" mission (missionJoinEarly) lifts the timing window
-    // until it is met: these would join later anyway, the mission wants them now.
-    const joinEarly = (pass.missions?.join ?? 0) > 0;
+    // Join Early for Missions lifts the timing window while a mission wants
+    // joins: these would join later anyway, the mission wants them now.
+    const joinEarly = pass.earlyJoins > 0;
     return shouldJoinChallenge({
         challenge,
         bankroll: pass.bankroll,
@@ -673,8 +674,10 @@ const joinCandidate = async (
  * @param now epoch ms — the clock the join window is measured against
  *   (converted to seconds to match `close_time`); defaults to Date.now()
  * @param missions what the active missions still need
- *   (services/missions.ts): while a join mission does, the timing window is
- *   lifted, and each join counts it down
+ *   (services/missions.ts). With missionJoinEarly on, the timing window is
+ *   lifted for as many joins as a "Join N challenges" mission needs, or a "Win
+ *   Turbo" mission needs wins — a turbo is only winnable in a joined challenge,
+ *   so each join brings one. Each join counts the join mission down.
  */
 const runJoinPass = async (
     token: string,
@@ -717,7 +720,10 @@ const runJoinPass = async (
         nowSec: toPassNowSec(now),
         // One diagnostic per pass, not per candidate (see warnMissingCloseTime).
         missingCloseTimeLogged: false,
-        missions,
+        earlyJoins:
+            settings.getEffectiveSetting('missionJoinEarly', null) === true
+                ? Math.max(missions?.join ?? 0, missions?.turbo ?? 0)
+                : 0,
     };
 
     const results: Array<{ id: string | number | undefined; status: string }> = [];
@@ -730,6 +736,7 @@ const runJoinPass = async (
         const status = await joinCandidate(challenge, token, deps, pass);
         if (status === 'joined') {
             joined += 1;
+            pass.earlyJoins -= 1;
             consumeMission(missions, 'join');
         }
         results.push({ id: challenge?.id, status });

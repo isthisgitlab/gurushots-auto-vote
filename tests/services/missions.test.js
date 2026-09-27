@@ -114,6 +114,16 @@ describe('loadMissionNeeds', () => {
         expect(needs).toEqual({ join: 0, fill: 0, turbo: 4 });
     });
 
+    test('Join Early alone follows turbo missions too — joining brings turbos to win', async () => {
+        enable('missionJoinEarly');
+        const needs = await loadMissionNeeds(
+            'tok',
+            NOW_MS,
+            deps([mission('Use Fill 3 times', 0, 3), mission('Win Turbo 4 times', 1, 4)]),
+        );
+        expect(needs).toEqual({ join: 0, fill: 0, turbo: 3 });
+    });
+
     test('does not read missions when every setting is off or there is no token', async () => {
         const d = deps([]);
         enable();

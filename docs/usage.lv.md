@@ -158,7 +158,7 @@ Viss iepriekšējais darbojas ar izaicinājumiem, kuriem jau esat pievienojies. 
 GuruShots galvenā misija mainās pa kārtai: **Join N challenges**, **Use Fill N times**, **Win Turbo N times** un all-star misija. Lietotne var palīdzēt ar pirmajām trim. Katrai ir savs iestatījums, visi globāli un pēc noklusējuma izslēgti. Kamēr kāds no tiem ieslēgts, lietotne katrā ciklā nolasa jūsu misijas, atpazīst tās pēc nosaukuma un skaita atpakaļ, pievienojoties, izmantojot uzpildes un iegūstot turbo. All-star misiju automatizēt nevar. Izpildītās misijas saņem **Automātiski saņemt balvas** (`autoClaimPrizes`).
 
 - **Taupīt Turbo misijām (`missionSaveTurbos`).** Auto-iegūšana parasti iegūst katra izaicinājuma turbo, tiklīdz tas atveras, tāpēc "Win Turbo" misijai vairs nav ko iegūt. Ar šo iestatījumu iegūstamais turbo gaida, līdz šāda misija ir aktīva vai līdz ir stunda līdz tā `turboTime`. Katrs turbo joprojām tiek iegūts un pielietots kā agrāk, tikai vēlāk. Vajag ieslēgtu auto-iegūšanu (`autoTurbo`), un tas paļaujas uz pārbaudi vismaz reizi stundā (lielākais pārbaudes intervāls grafiskajā lietotnē).
-- **Pievienoties agrāk misijām (`missionJoinEarly`).** "Join challenges" misijas laikā auto-pievienošanās neievēro savu laiku (`autoJoinWithinHoursOfEnd` / `autoJoinAfterPercentElapsed`), līdz misija izpildīta, tāpēc izaicinājumi, kuriem tā tāpat pievienotos vēlāk, tiek pievienoti tagad. Tipu, tagu un monētu filtri joprojām darbojas, un pašai auto-pievienošanai jābūt ieslēgtai.
+- **Pievienoties agrāk misijām (`missionJoinEarly`).** "Join challenges" vai "Win Turbo" misijas laikā auto-pievienošanās neievēro savu laiku (`autoJoinWithinHoursOfEnd` / `autoJoinAfterPercentElapsed`), līdz misija izpildīta, tāpēc izaicinājumi, kuriem tā tāpat pievienotos vēlāk, tiek pievienoti tagad. Turbo misijai tas dod vairāk turbo, ko iegūt, jo turbo var iegūt tikai izaicinājumā, kuram esat pievienojies; jauna izaicinājuma turbo var iegūt, kad atveras tā taimeris. Ārpus šīm misijām auto-pievienošanās darbojas kā parasti. Tipu, tagu un monētu filtri joprojām darbojas, un pašai auto-pievienošanai jābūt ieslēgtai.
 - **Izmantot uzpildes misijām (`missionUseFills`).** "Use Fill" misijas laikā lietotne izmanto uzpildes izaicinājumos zem 100% ekspozīcijas, ne vairāk kā vienu katrā izaicinājumā ciklā, līdz misija izpildīta. Uzpilžu rezerve (`currencyReserveFills`) tiek saglabāta.
 
 ### Izaicinājumu noteikumi
@@ -268,11 +268,11 @@ Iestatījumi ir divos slāņos. **Lietotnes preferences** ir globālas visai lie
 
 **Misijas** (tikai globāli — uzstāda ar `set-global-default`; skatiet [Misijas](#misijas))
 
-| Iestatījums         | Noklusējums | Diapazons / vērtības | Apraksts                                                                                               |
-| ------------------- | ----------- | -------------------- | ------------------------------------------------------------------------------------------------------ |
-| `missionSaveTurbos` | `false`     | bool                 | Neiegūst turbo, līdz ir aktīva "Win Turbo" misija vai līdz turbo pielietošanas laikam atlikusi stunda. |
-| `missionJoinEarly`  | `false`     | bool                 | "Join challenges" misijas laikā auto-pievienojas, negaidot tās laiku, līdz misija izpildīta.           |
-| `missionUseFills`   | `false`     | bool                 | "Use Fill" misijas laikā izmanto uzpildes izaicinājumos zem 100% ekspozīcijas, līdz misija izpildīta.  |
+| Iestatījums         | Noklusējums | Diapazons / vērtības | Apraksts                                                                                                     |
+| ------------------- | ----------- | -------------------- | ------------------------------------------------------------------------------------------------------------ |
+| `missionSaveTurbos` | `false`     | bool                 | Neiegūst turbo, līdz ir aktīva "Win Turbo" misija vai līdz turbo pielietošanas laikam atlikusi stunda.       |
+| `missionJoinEarly`  | `false`     | bool                 | "Join challenges" vai "Win Turbo" misijas laikā auto-pievienojas, negaidot tās laiku, līdz misija izpildīta. |
+| `missionUseFills`   | `false`     | bool                 | "Use Fill" misijas laikā izmanto uzpildes izaicinājumos zem 100% ekspozīcijas, līdz misija izpildīta.        |
 
 ### Izaicinājumu iestatījumi
 

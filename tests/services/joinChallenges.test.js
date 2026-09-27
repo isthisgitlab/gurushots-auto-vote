@@ -569,25 +569,55 @@ describe('runJoinPass — join window', () => {
         expect(deps.submitToChallenge).toHaveBeenCalledTimes(1);
     });
 
-    test('a join mission lifts the window until it is met, and each join counts it down', async () => {
-        withWindow(24);
+    describe('Join Early for Missions', () => {
         const far = (id) => ({ id, join_coins: 0, type: 'flash', title: `Far ${id}`, close_time: NOW_SEC + 48 * HOUR });
-        const deps = makeDeps({ getMemberChallenges: jest.fn(async () => [far(1), far(2), far(3)]) });
-        const missions = { join: 2, fill: 0, turbo: 0 };
-        const res = await runJoinPass('tok', NOW_MS, deps, missions);
-        expect(res.results.map((r) => r.status)).toEqual(['joined', 'joined', 'skipped:too-early']);
-        expect(missions.join).toBe(0);
-    });
+        const farDeps = () => makeDeps({ getMemberChallenges: jest.fn(async () => [far(1), far(2), far(3)]) });
+        const withJoinEarly = (on) =>
+            settings.getEffectiveSetting.mockImplementation((k) =>
+                k === 'autoJoinWithinHoursOfEnd' ? 24 : k === 'missionJoinEarly' ? on : DEFAULT_SETTINGS[k],
+            );
+        const statuses = (res) => res.results.map((r) => r.status);
 
-    test('a met join mission leaves the window in place', async () => {
-        withWindow(24);
-        const deps = makeDeps({
-            getMemberChallenges: jest.fn(async () => [
-                { id: 1, join_coins: 0, type: 'flash', title: 'Far', close_time: NOW_SEC + 48 * HOUR },
-            ]),
+        test('a join mission lifts the window until it is met, and each join counts it down', async () => {
+            withJoinEarly(true);
+            const missions = { join: 2, fill: 0, turbo: 0 };
+            const res = await runJoinPass('tok', NOW_MS, farDeps(), missions);
+            expect(statuses(res)).toEqual(['joined', 'joined', 'skipped:too-early']);
+            expect(missions.join).toBe(0);
         });
-        const res = await runJoinPass('tok', NOW_MS, deps, { join: 0, fill: 0, turbo: 0 });
-        expect(res.results[0].status).toBe('skipped:too-early');
+
+        test('a turbo mission lifts the window for as many joins as it needs wins', async () => {
+            withJoinEarly(true);
+            const missions = { join: 0, fill: 0, turbo: 1 };
+            const res = await runJoinPass('tok', NOW_MS, farDeps(), missions);
+            expect(statuses(res)).toEqual(['joined', 'skipped:too-early', 'skipped:too-early']);
+            // A join is not a turbo win: the turbo mission counts down only when one is won.
+            expect(missions.turbo).toBe(1);
+        });
+
+        test('with both missions active, the larger need sets how many join early', async () => {
+            withJoinEarly(true);
+            const res = await runJoinPass('tok', NOW_MS, farDeps(), { join: 1, fill: 0, turbo: 2 });
+            expect(statuses(res)).toEqual(['joined', 'joined', 'skipped:too-early']);
+        });
+
+        test('keeps the window while the setting is off, even with missions needing joins', async () => {
+            withJoinEarly(false);
+            const res = await runJoinPass('tok', NOW_MS, farDeps(), { join: 2, fill: 0, turbo: 2 });
+            expect(statuses(res)).toEqual(['skipped:too-early', 'skipped:too-early', 'skipped:too-early']);
+        });
+
+        test('without a mission read (none followed or unreadable) the window stays', async () => {
+            withJoinEarly(true);
+            const res = await runJoinPass('tok', NOW_MS, farDeps());
+            expect(statuses(res)).toEqual(['skipped:too-early', 'skipped:too-early', 'skipped:too-early']);
+        });
+
+        test('a met mission leaves the window in place', async () => {
+            withJoinEarly(true);
+            const res = await runJoinPass('tok', NOW_MS, farDeps(), { join: 0, fill: 0, turbo: 0 });
+            expect(statuses(res)).toEqual(['skipped:too-early', 'skipped:too-early', 'skipped:too-early']);
+        });
     });
 
     test('deferral is per-cycle: the same candidate joins on a later pass', async () => {
