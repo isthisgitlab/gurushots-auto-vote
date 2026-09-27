@@ -1,5 +1,5 @@
 /**
- * Tests for api/join.js — getMemberChallenges, coinsUnlock, getBankroll.
+ * Tests for api/join.ts — getMemberChallenges, coinsUnlock, getBankroll.
  * Focus: form-body encoding of dynamic values, return shapes, and bankroll
  * normalization (incl. the null-on-failure contract callers rely on).
  */

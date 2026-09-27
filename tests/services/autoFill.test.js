@@ -260,7 +260,7 @@ describe('maybeAutoFillChallenge — staggered auto-fill', () => {
         // terms, so the eligible-photo fetch is issued with a `search` filter
         // rather than the bare 2-arg call.
         //
-        // The themed budget must stay STRICTLY under api/submissions.js's own
+        // The themed budget must stay STRICTLY under api/submissions.ts's own
         // PAGINATE_BUDGET_MS (20000): up to SEARCH_TERMS_CAP of these walks run
         // concurrently seconds before a close, and the themed phase may run
         // twice (raw terms, then the tag-resolver retry). `expect.any(Number)`
@@ -2948,7 +2948,7 @@ describe('photo-stats enrichment in the fill pipeline', () => {
 
         // An off-theme submission is surprising enough to warrant a warning —
         // the level is about severity, not reach. (Only `debug`/`api` are gated
-        // on isSourceCode() in logger.js; `info` reaches packaged builds too.)
+        // on isSourceCode() in logger.ts; `info` reaches packaged builds too.)
         const warnings = logger.__level.warning.mock.calls.map(([msg]) => msg);
         const explanation = warnings.find((m) => m.includes('chosen on past performance'));
         expect(explanation).toBeDefined();

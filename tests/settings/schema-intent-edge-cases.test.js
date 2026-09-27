@@ -1,6 +1,6 @@
 /**
- * Leftover edge branches of settings/schema.js (validation fallbacks) and
- * settings/intentProfiles.js (name lookup / bundle comparison guards).
+ * Leftover edge branches of settings/schema.ts (validation fallbacks) and
+ * settings/intentProfiles.ts (name lookup / bundle comparison guards).
  */
 
 const { z } = require('zod');

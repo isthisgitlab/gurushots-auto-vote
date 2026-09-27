@@ -1,5 +1,5 @@
 /**
- * Tests for api/randomizer.js — the per-installation randomized iOS header set.
+ * Tests for api/randomizer.ts — the per-installation randomized iOS header set.
  *
  * Contract pinned here:
  *   - a fresh install (no / incomplete saved headers) generates a full header set

@@ -1,5 +1,5 @@
 /**
- * Challenge rules: the pure matcher / default order (settings/challengeRules.js)
+ * Challenge rules: the pure matcher / default order (settings/challengeRules.ts)
  * and the facade's class conditions (type, photo count, runtime), its per-key
  * cascade, and the id-keyed resolution through the remembered facts cache.
  *

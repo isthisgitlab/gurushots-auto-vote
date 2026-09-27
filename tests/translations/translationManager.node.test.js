@@ -1,5 +1,5 @@
 /**
- * translations/index.js — the Node translation manager (Electron main): the
+ * translations/index.ts — the Node translation manager (Electron main): the
  * translator core plus the language read from the settings facade.
  */
 

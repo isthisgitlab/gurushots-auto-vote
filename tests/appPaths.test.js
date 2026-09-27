@@ -1,5 +1,5 @@
 /**
- * src/js/appPaths.js — the app's own files are addressed from the app root,
+ * src/js/appPaths.ts — the app's own files are addressed from the app root,
  * the directory holding package.json.
  */
 jest.unmock('path');

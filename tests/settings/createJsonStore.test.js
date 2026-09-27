@@ -1,5 +1,5 @@
 /**
- * createJsonStore — the generic platform-aware JSON store metadata.js rides
+ * createJsonStore — the generic platform-aware JSON store metadata.ts rides
  * (same transport pattern as the settings store): fs on Electron/CLI,
  * hydrate-once cache + ordered write-behind on Capacitor, memory-only on the
  * Android headless service.

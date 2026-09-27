@@ -1,5 +1,5 @@
 /**
- * Branch coverage for runtime.js platform detection, env flags and path
+ * Branch coverage for runtime.ts platform detection, env flags and path
  * resolution. Platform-specific inputs (process.versions, process.platform,
  * globalThis.Capacitor, the electron / node:sea modules) are faked per test
  * and every module load that depends on them goes through isolateModules.

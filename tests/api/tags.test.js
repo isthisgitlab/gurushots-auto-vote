@@ -1,5 +1,5 @@
 /**
- * Tests for api/tags.js — the two reads that let auto-fill turn a challenge
+ * Tests for api/tags.ts — the two reads that let auto-fill turn a challenge
  * term into a tag the member's library actually carries.
  */
 

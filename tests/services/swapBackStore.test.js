@@ -1,5 +1,5 @@
 /**
- * Tests for swapBackStore.js — the ledger of slots whose original photo was
+ * Tests for swapBackStore.ts — the ledger of slots whose original photo was
  * swapped out while boosted/turbo'd (the API's swap history has no such flag).
  */
 

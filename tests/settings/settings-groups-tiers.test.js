@@ -13,7 +13,7 @@
 const { SETTINGS_SCHEMA, SETTINGS_GROUPS, SETTINGS_TIERS } = require('../../src/js/settings/schema');
 const english = require('../../src/js/translations/english');
 
-/** Resolve an 'app.foo' translation key against english.js. */
+/** Resolve an 'app.foo' translation key against english.ts. */
 const resolveLabel = (key) => key.split('.').reduce((node, part) => (node == null ? undefined : node[part]), english);
 
 describe('settings group/tier contract', () => {
@@ -57,7 +57,7 @@ describe('settings group/tier contract', () => {
 
     // A mistyped label key does not throw — t() echoes the key back, so the UI
     // would show a literal "app.groupDisplay" as the heading.
-    test('every group and tier label resolves in english.js', () => {
+    test('every group and tier label resolves in english.ts', () => {
         const unresolved = [...SETTINGS_GROUPS, ...SETTINGS_TIERS]
             .filter((entry) => typeof resolveLabel(entry.label) !== 'string')
             .map((entry) => ({ id: entry.id, label: entry.label }));

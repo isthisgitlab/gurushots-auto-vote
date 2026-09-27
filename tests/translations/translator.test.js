@@ -1,6 +1,6 @@
 /**
- * translations/translator.js — the dependency-free translator core — and the
- * renderer's shared instance (translations/renderer.js).
+ * translations/translator.ts — the dependency-free translator core — and the
+ * renderer's shared instance (translations/renderer.ts).
  */
 
 const english = require('../../src/js/translations/english');

@@ -13,14 +13,14 @@ describe('settings/limits', () => {
     });
 
     it('stays the single source of truth for the cap', () => {
-        // schema.js re-exports it, and the renderer reads it through
+        // schema.ts re-exports it, and the renderer reads it through
         // SettingInput's SCHEDULED_FILL_MAX_ENTRIES alias. If these ever
         // diverge the UI would offer a row the validator rejects on save.
         expect(schema.MAX_SCHEDULED_FILL_ENTRIES).toBe(limits.MAX_SCHEDULED_FILL_ENTRIES);
     });
 
     // The whole reason this module exists is that it is safe to import from
-    // app-bundle.js. settings/schema.js requires zod, and a CJS require of it
+    // app-bundle.js. settings/schema.ts requires zod, and a CJS require of it
     // cannot be tree-shaken, so pulling a bound from there puts ~407 KB of zod
     // into the Electron renderer. pnpm size would eventually catch that, but
     // only as a confusing budget failure in a separate CI job

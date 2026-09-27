@@ -1,5 +1,5 @@
 /**
- * Tests for api/currency.js — keyUnlock, swapPhoto, exposureAutofill.
+ * Tests for api/currency.ts — keyUnlock, swapPhoto, exposureAutofill.
  * Focus: exact endpoint + WEB headers, form-body encoding of every dynamic
  * value (no field injection), and the {ok, raw} result contract.
  */

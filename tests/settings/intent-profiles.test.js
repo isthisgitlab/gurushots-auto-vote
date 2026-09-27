@@ -1,6 +1,6 @@
 /**
  * Curated "intent" preset seeding (settings.seedIntentProfiles +
- * settings/intentProfiles.js).
+ * settings/intentProfiles.ts).
  *
  * Covers the review's blocker-tier concerns:
  *   - every bundle validates as a SET against {...globalDefaults, ...bundle}

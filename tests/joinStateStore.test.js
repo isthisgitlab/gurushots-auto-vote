@@ -1,5 +1,5 @@
 /**
- * joinStateStore.js — the persisted paid-join markers plus the cross-process
+ * joinStateStore.ts — the persisted paid-join markers plus the cross-process
  * unlock lock. The lock must: block a genuinely-held lock, reap a stale one,
  * and fail OPEN on any other lock-infra error (never deadlock a join).
  */

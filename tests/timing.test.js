@@ -1,5 +1,5 @@
 /**
- * timing.js — the shared sleep / randomized-delay primitives.
+ * timing.ts — the shared sleep / randomized-delay primitives.
  */
 
 const { sleep, getRandomDelay } = require('../src/js/timing');

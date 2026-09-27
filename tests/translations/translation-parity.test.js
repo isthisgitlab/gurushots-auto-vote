@@ -1,6 +1,6 @@
 /**
- * Guards the english.js / latvian.js key contract: every key must exist in
- * both files, in every section, at every depth. A key missing from latvian.js
+ * Guards the english.ts / latvian.ts key contract: every key must exist in
+ * both files, in every section, at every depth. A key missing from latvian.ts
  * does NOT crash at runtime — t() silently falls back to English — so nothing
  * but this test catches the drift.
  */
@@ -65,7 +65,7 @@ describe('renderer translation keys exist', () => {
             return /\.(jsx?|tsx?|mjs)$/.test(d.name) ? [full] : [];
         });
 
-    test('every literal t() key in src/js/react resolves in english.js', () => {
+    test('every literal t() key in src/js/react resolves in english.ts', () => {
         const known = new Set(flattenKeys(english));
         const root = path.join(__dirname, '../../src/js/react');
         const missing = [];

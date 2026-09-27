@@ -8,7 +8,7 @@
  * (onnxruntime-node, sharp) load exactly as they would unbundled.
  *
  * The output sits in out/main/ — the same depth below the app root
- * as src/js/ — because src/js/appPaths.js resolves the root as `__dirname/../..`
+ * as src/js/ — because src/js/appPaths.ts resolves the root as `__dirname/../..`
  * and inside a bundle `__dirname` is the bundle's own directory. It stays out
  * of dist/, which is Capacitor's webDir and ships inside the Android APK.
  *

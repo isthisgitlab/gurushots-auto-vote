@@ -1,5 +1,5 @@
 /**
- * Tests for metadata.js — local per-challenge state used to track when
+ * Tests for metadata.ts — local per-challenge state used to track when
  * we last voted on each challenge and what the exposure was at that time.
  *
  * Highest-value coverage targets the cleanupStaleMetadata function:

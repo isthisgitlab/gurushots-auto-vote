@@ -1,5 +1,5 @@
 /**
- * Tests for entryAgeStore.js — when each entry entered its challenge, and the
+ * Tests for entryAgeStore.ts — when each entry entered its challenge, and the
  * photo a boost fill-new is waiting on, behind boostFreshEntryWait.
  */
 

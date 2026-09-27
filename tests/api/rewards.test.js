@@ -1,5 +1,5 @@
 /**
- * Tests for api/rewards.js — the prize-claim endpoints. Focus: form-body
+ * Tests for api/rewards.ts — the prize-claim endpoints. Focus: form-body
  * encoding of dynamic values, the []/false-on-failure contracts callers rely
  * on, and required-argument guards.
  */

@@ -2,7 +2,7 @@
  * Component tests for the entry thumbnail added to EntryBadge.jsx.
  *
  * The photo is built client-side from the entry's own ids (no API field
- * carries a URL — see src/js/format/photoUrl.js), so the two behaviours worth
+ * carries a URL — see src/js/format/photoUrl.ts), so the two behaviours worth
  * pinning are:
  *   - a well-formed entry renders a chip pointing at the CDN, and escalating
  *     to hover / click asks for progressively larger renders of the SAME photo;

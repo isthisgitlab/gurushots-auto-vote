@@ -1,5 +1,5 @@
 /**
- * Tests for sanitizeFillSchedule (settings/schema.js) and the
+ * Tests for sanitizeFillSchedule (settings/schema.ts) and the
  * `_autoFillScheduleBoundsV1` load-time block in loadSettings() that applies
  * it per scope. Persisted schedules outside the editor bounds (count 2..4,
  * at most 3 rows, seconds ≤ 30 days) are normalized once on load: out-of-range rows

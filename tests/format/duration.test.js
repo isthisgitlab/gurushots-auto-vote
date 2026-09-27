@@ -1,5 +1,5 @@
 /**
- * Unit tests for the canonical duration formatter (src/js/format/duration.js)
+ * Unit tests for the canonical duration formatter (src/js/format/duration.ts)
  * shared by the CLI status, the renderer boost-window banner + challenge
  * countdown, and the voting pass's log lines. The default mode locks CLI/GUI
  * parity; the includeSeconds mode covers the live countdowns.

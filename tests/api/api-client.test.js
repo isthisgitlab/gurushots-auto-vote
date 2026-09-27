@@ -1,5 +1,5 @@
 /**
- * Tests for api-client.js
+ * Tests for api-client.ts
  *
  * Tests the core HTTP client functionality and common headers for API requests.
  */

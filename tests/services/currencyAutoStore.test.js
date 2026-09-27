@@ -1,5 +1,5 @@
 /**
- * Tests for currencyAutoStore.js — the per-challenge automatic-fill counter
+ * Tests for currencyAutoStore.ts — the per-challenge automatic-fill counter
  * behind autoExposureFillMax.
  */
 

@@ -160,7 +160,7 @@ function fireSettingsChanged(payload) {
     for (const listener of [...settingsListeners]) listener(payload);
 }
 
-// Mock the page translator (translations/renderer.js) that TranslationProvider,
+// Mock the page translator (translations/renderer.ts) that TranslationProvider,
 // ErrorBoundary and Modal translate through. `t` returns the key so tests can
 // assert on keys ('app.save'); override it per test with mockImplementation.
 const mockTranslator = {

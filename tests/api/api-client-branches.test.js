@@ -1,5 +1,5 @@
 /**
- * Edge-case tests for api/api-client.js that complement api-client.test.js:
+ * Edge-case tests for api/api-client.ts that complement api-client.test.js:
  *   - the headless (Android background service) adapter's error / non-JSON /
  *     missing-field handling, its request-body encoding, and adapter caching;
  *   - retry classification (TypeError and odd statuses are terminal);

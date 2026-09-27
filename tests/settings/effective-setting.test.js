@@ -1,5 +1,5 @@
 /**
- * Validates the schema split (settings/schema.js + settings/storage.js
+ * Validates the schema split (settings/schema.ts + settings/storage.ts
  * + settings.js facade) didn't regress the public re-export contract.
  *
  * Internal precedence (per-challenge > global > schema default) is

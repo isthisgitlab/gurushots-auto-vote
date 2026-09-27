@@ -124,7 +124,7 @@ async function buildReact() {
     };
 
     // All renderer bundles run in a browser-context (Electron WebView
-    // or Capacitor WebView). They reach shared modules (runtime.js,
+    // or Capacitor WebView). They reach shared modules (runtime.ts,
     // settings.js, ForegroundServiceController, etc.) that lazy-require
     // Node built-ins and electron — code paths the renderer never
     // reaches at runtime (it goes through window.api / Capacitor.Plugins),
@@ -186,14 +186,14 @@ async function buildReact() {
     ];
     // Two browser-shim banners. require() is faked because external
     // imports leave runtime require() calls that the WebView cannot
-    // resolve. process is faked because logger.js / runtime.js read
+    // resolve. process is faked because logger.ts / runtime.ts read
     // process.type / process.versions / process.platform at module
     // load (before any isCapacitor() guard runs); without a stub the
     // bundle ReferenceErrors before React mounts.
     // Browser shims for Node globals that the bundled code touches at
     // module load before any isCapacitor() guard can run. The require
     // shim returns module-aware stubs (fs/path/os) with the small
-    // surface area logger.js / runtime.js / settings.js actually call —
+    // surface area logger.ts / runtime.ts / settings.js actually call —
     // each method either no-ops or returns a sensible neutral value
     // (false for existsSync, joined string for path.join, etc.) so
     // module init does not throw. All real fs work lives behind
