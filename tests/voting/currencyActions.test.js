@@ -1,5 +1,5 @@
 /**
- * Tests for voting/currencyActions.js — the availability predicates shared by
+ * Tests for voting/currencyActions.ts — the availability predicates shared by
  * the renderer, the IPC re-check and future automation.
  */
 

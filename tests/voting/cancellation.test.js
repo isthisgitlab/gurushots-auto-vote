@@ -1,5 +1,5 @@
 /**
- * Tests for src/js/voting/cancellation.js
+ * Tests for src/js/voting/cancellation.ts
  *
  * The point of the cancellation module is to be a single source of
  * truth that all callers (real-api, mock, IPC) share. These tests

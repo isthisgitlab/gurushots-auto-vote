@@ -67,7 +67,7 @@ describe('getRandomCheckFrequencyMs', () => {
 });
 
 describe('anchoredWaitMs', () => {
-    // The normal-mode anchoring formula shared by runScheduler.js and
+    // The normal-mode anchoring formula shared by runScheduler.ts and
     // AutovoteContext.jsx — these cases pin the semantics both hosts rely on.
     const DELAY = 5 * MS_PER_MINUTE;
 

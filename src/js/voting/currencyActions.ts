@@ -1,4 +1,4 @@
-/** @import { Bankroll, Challenge } from '../types/gurushots' */
+import type { Bankroll, Challenge } from '../types/gurushots';
 /**
  * Availability predicates for the three bankroll-currency actions a member can
  * spend on a challenge — KEYS (unlock a locked boost), SWAPS (replace an entered
@@ -32,34 +32,23 @@ const CURRENCY_OUTCOME = Object.freeze({
 const CURRENCY_FIELD = Object.freeze({ key: 'keys', swap: 'swaps', fill: 'fills' });
 
 /**
- * @param {Challenge} challenge
- * @param {number} nowSec - Unix seconds
- * @returns {boolean}
+ * @param nowSec - Unix seconds
  */
-const isRunning = (challenge, nowSec) => {
+const isRunning = (challenge: Challenge, nowSec: number): boolean => {
     const start = Number(challenge?.start_time);
     const close = Number(challenge?.close_time);
     if (!Number.isFinite(start) || !Number.isFinite(close)) return false;
     return start <= nowSec && close > nowSec;
 };
 
-/**
- * @param {Bankroll | null | undefined} bankroll
- * @param {'key'|'swap'|'fill'} action
- * @returns {boolean}
- */
-const hasBalance = (bankroll, action) => Number(bankroll?.[CURRENCY_FIELD[action]]) > 0;
+const hasBalance = (bankroll: Bankroll | null | undefined, action: 'key' | 'swap' | 'fill'): boolean =>
+    Number(bankroll?.[CURRENCY_FIELD[action]]) > 0;
 
 /**
  * Challenge-side conditions only (no balance) — the part the live re-check needs
  * to tell "state already changed" apart from "out of currency".
- *
- * @param {'key'|'swap'|'fill'} action
- * @param {Challenge} challenge
- * @param {number} nowSec
- * @returns {boolean}
  */
-const challengeAllows = (action, challenge, nowSec) => {
+const challengeAllows = (action: 'key' | 'swap' | 'fill', challenge: Challenge, nowSec: number): boolean => {
     if (!isRunning(challenge, nowSec)) return false;
     if (action === 'key') {
         return challenge?.boost_enable === true && challenge?.member?.boost?.state === 'LOCKED';
@@ -71,28 +60,13 @@ const challengeAllows = (action, challenge, nowSec) => {
     return challenge?.fill_enable === true && challenge?.fill_locked !== true && exposure < 100;
 };
 
-/**
- * @param {Challenge} challenge
- * @param {Bankroll | null | undefined} bankroll
- * @param {number} nowSec
- */
-const canKeyUnlock = (challenge, bankroll, nowSec) =>
+const canKeyUnlock = (challenge: Challenge, bankroll: Bankroll | null | undefined, nowSec: number) =>
     hasBalance(bankroll, 'key') && challengeAllows('key', challenge, nowSec);
 
-/**
- * @param {Challenge} challenge
- * @param {Bankroll | null | undefined} bankroll
- * @param {number} nowSec
- */
-const canSwapEntry = (challenge, bankroll, nowSec) =>
+const canSwapEntry = (challenge: Challenge, bankroll: Bankroll | null | undefined, nowSec: number) =>
     hasBalance(bankroll, 'swap') && challengeAllows('swap', challenge, nowSec);
 
-/**
- * @param {Challenge} challenge
- * @param {Bankroll | null | undefined} bankroll
- * @param {number} nowSec
- */
-const canFillExposure = (challenge, bankroll, nowSec) =>
+const canFillExposure = (challenge: Challenge, bankroll: Bankroll | null | undefined, nowSec: number) =>
     hasBalance(bankroll, 'fill') && challengeAllows('fill', challenge, nowSec);
 
 /**
@@ -102,12 +76,9 @@ const canFillExposure = (challenge, bankroll, nowSec) =>
  * excluded — it keeps its votes (and any boost/turbo) while out, and swapping
  * it back in is a legitimate move. Compared as a set of strings, never by
  * position.
- *
- * @param {Challenge} challenge
- * @returns {Set<string>}
  */
-const swapExcludedIds = (challenge) => {
-    const ids = new Set();
+const swapExcludedIds = (challenge: Challenge): Set<string> => {
+    const ids = new Set<string>();
     const entries = challenge?.member?.ranking?.entries;
     if (!Array.isArray(entries)) return ids;
     for (const item of entries) {
@@ -121,14 +92,13 @@ const swapExcludedIds = (challenge) => {
  * balance → balanceUnknown, empty balance → noBalance, anything else (state
  * already changed, flag locked, challenge closed) → notAvailable. Returns null
  * when the action is allowed.
- *
- * @param {'key'|'swap'|'fill'} action
- * @param {Challenge} challenge
- * @param {Bankroll | null | undefined} bankroll
- * @param {number} nowSec
- * @returns {string|null}
  */
-const blockedOutcome = (action, challenge, bankroll, nowSec) => {
+const blockedOutcome = (
+    action: 'key' | 'swap' | 'fill',
+    challenge: Challenge,
+    bankroll: Bankroll | null | undefined,
+    nowSec: number,
+): string | null => {
     if (!bankroll) return CURRENCY_OUTCOME.balanceUnknown;
     if (!hasBalance(bankroll, action)) return CURRENCY_OUTCOME.noBalance;
     if (!challengeAllows(action, challenge, nowSec)) return CURRENCY_OUTCOME.notAvailable;

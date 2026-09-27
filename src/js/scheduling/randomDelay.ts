@@ -32,22 +32,15 @@ const MIN_CYCLE_GAP_MS = 5_000;
 // which schedules its own alarms but must recover on the same beat.
 const OFFLINE_RETRY_MS = 30_000;
 
-/**
- * @param {unknown} raw
- * @param {number} fallback
- * @returns {number}
- */
-const coerceMinutes = (raw, fallback) => {
+const coerceMinutes = (raw: unknown, fallback: number): number => {
     const n = Number(raw);
     if (!Number.isFinite(n) || n < 1) return fallback;
     return n;
 };
 
-/**
- * @param {{checkFrequencyMin?: unknown, checkFrequencyMax?: unknown}|null|undefined} settings
- * @returns {number}
- */
-const getRandomCheckFrequencyMs = (settings) => {
+const getRandomCheckFrequencyMs = (
+    settings: { checkFrequencyMin?: unknown; checkFrequencyMax?: unknown } | null | undefined,
+): number => {
     const min = coerceMinutes(settings?.checkFrequencyMin, DEFAULT_MINUTES);
     const maxRaw = coerceMinutes(settings?.checkFrequencyMax, min);
     const max = Math.max(min, maxRaw);
@@ -62,16 +55,18 @@ const getRandomCheckFrequencyMs = (settings) => {
  * longer than the delay — recover after a short pause instead of re-firing
  * immediately); the delayMs ceiling handles a wall-clock jump backward that
  * would otherwise inflate the wait. Shared by the CLI scheduler
- * (runScheduler.js) and the GUI cadence chain (AutovoteContext.jsx) so the
+ * (runScheduler.ts) and the GUI cadence chain (AutovoteContext.jsx) so the
  * formula cannot drift between the two.
  *
- * @param {number} delayMs - the rolled normal-mode delay
- * @param {number|null} previousCycleStartMs - anchor; null on a standalone (re)arm
- * @param {number} [nowMs]
- * @param {number} [minGapMs]
- * @returns {number}
+ * @param delayMs - the rolled normal-mode delay
+ * @param previousCycleStartMs - anchor; null on a standalone (re)arm
  */
-const anchoredWaitMs = (delayMs, previousCycleStartMs, nowMs = Date.now(), minGapMs = MIN_CYCLE_GAP_MS) => {
+const anchoredWaitMs = (
+    delayMs: number,
+    previousCycleStartMs: number | null,
+    nowMs: number = Date.now(),
+    minGapMs: number = MIN_CYCLE_GAP_MS,
+): number => {
     const anchorMs = previousCycleStartMs ?? nowMs;
     const remainingMs = anchorMs + delayMs - nowMs;
     return Math.min(delayMs, Math.max(minGapMs, remainingMs));

@@ -30,22 +30,25 @@ import {
 } from './nodeResolvers';
 import { createNodeDeadlineNotifier, createNodeScenarioNotifier } from '../services/notify/nodeNotify';
 
-/** @import { ActiveChallengesResponse, Challenge } from '../types/gurushots' */
-/** @import { TimerHandle } from './cadenceChain' */
+import type { ActiveChallengesResponse, Challenge } from '../types/gurushots';
+import type { TimerHandle } from './cadenceChain';
 
 /**
  * Create a continuous voting scheduler.
  *
- * @param {Object} deps
- * @param {(cycleNumber:number)=>Promise<{success:boolean, challenges:Challenge[]|null}>} deps.runVotingCycle - one-shot voting cycle; resolves with the active list it fetched (null on failure/manual). A non-array `challenges` (or a plain boolean return) is treated as "no list" and triggers a fresh fetch when deciding the next delay.
- * @param {()=>Promise<ActiveChallengesResponse>} deps.getActiveChallenges - fetcher used only when a cycle didn't hand its list over.
- * @returns {{start:()=>Promise<void>, stop:()=>void, getCycleCount:()=>number, isRunning:()=>boolean}}
+ * @param deps.runVotingCycle - one-shot voting cycle; resolves with the active list it fetched (null on failure/manual). A non-array `challenges` (or a plain boolean return) is treated as "no list" and triggers a fresh fetch when deciding the next delay.
+ * @param deps.getActiveChallenges - fetcher used only when a cycle didn't hand its list over.
  */
-const createScheduler = ({ runVotingCycle, getActiveChallenges }) => {
+const createScheduler = ({
+    runVotingCycle,
+    getActiveChallenges,
+}: {
+    runVotingCycle: (cycleNumber: number) => Promise<{ success: boolean; challenges: Challenge[] | null }>;
+    getActiveChallenges: () => Promise<ActiveChallengesResponse>;
+}): { start: () => Promise<void>; stop: () => void; getCycleCount: () => number; isRunning: () => boolean } => {
     let cycleCount = 0;
     let isRunning = false;
-    /** @type {TimerHandle|null} */
-    let timer = null;
+    let timer: TimerHandle | null = null;
 
     // One notifier per scheduler (holds the fire-once dedupe + re-entrancy
     // guard across cycles). The chain fires it in its own isolated wrapper, so
@@ -81,7 +84,7 @@ const createScheduler = ({ runVotingCycle, getActiveChallenges }) => {
                 logger.withCategory('voting').debug('scheduleNext error details:', error);
             },
             // No emoji here: logger.warning already prefixes one (see
-            // logger.js), exactly as the decisionError callback above relies on.
+            // logger.ts), exactly as the decisionError callback above relies on.
             overslept: (lateMs, waitMs) => {
                 logger.withCategory('voting').warning(formatOversleptMessage(lateMs, waitMs));
             },

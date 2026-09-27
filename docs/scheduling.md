@@ -3,7 +3,7 @@
 This app runs the voting cycle on three different shells (CLI, Electron,
 Android). The **cadence decision** — how long to wait before the next
 cycle — is shared via `computeNextCycleDelayMs` in
-`src/js/scheduling/thresholdWindow.js`. The **timer engine** that acts on
+`src/js/scheduling/thresholdWindow.ts`. The **timer engine** that acts on
 that decision is per-shell, because each shell has a different process
 model. Future contributors should keep the decision shared and resist
 re-introducing a separate boundary-switch timer per host.
@@ -40,7 +40,7 @@ nextCurrencyRule, nextScenarioWake, nextBoostHold }`:
   returned none) carries no holds; the boost then goes on the next ordinary
   cycle.
 - **currency-rule**: the soonest opening of an enabled automatic key / swap /
-  fill rule (`voting/currencyAuto.js` `ruleOpensAt`) → wait is capped to it.
+  fill rule (`voting/currencyAuto.ts` `ruleOpensAt`) → wait is capped to it.
   Unlike the modes above it considers every still-open challenge, flash
   included.
 - **scenario**: the soonest instant a user-defined scenario's time condition
@@ -63,7 +63,7 @@ This is what fixed the bug where the next cycle could sleep past a
 challenge's last-minute boundary and start the final voting push late.
 
 **Flash challenges never drive the cadence.** `eligibleChallenges`
-(`scheduling/scheduledFill.js`) filters `type !== 'flash'`, so a flash
+(`scheduling/scheduledFill.ts`) filters `type !== 'flash'`, so a flash
 challenge's close time cannot shorten the sleep — even though
 `_runVotingRules` votes flash to 100% on every cycle. This is deliberate:
 flash is an always-vote rule with no exposure threshold, so there is no
@@ -78,7 +78,7 @@ Per-challenge scheduled fill (issue #26) lets a challenge be voted to 100%
 at chosen wall-clock instants instead of (or on top of) the exposure
 threshold. Two trigger LISTS, all entries OR'd: recurring times-of-day
 (`scheduledFillTime`, each 'HH:MM' entry interpreted in the app `timezone`
-setting via `src/js/scheduling/wallClock.js`, **not** device-local time)
+setting via `src/js/scheduling/wallClock.ts`, **not** device-local time)
 and one-shot seconds-before-close offsets (`scheduledFillBeforeEnd`) —
 e.g. `[14400, 36000]` fills at 4h and 10h before the end. Every entry
 opens its own window sharing `scheduledFillWindowMinutes`; entries are
@@ -97,7 +97,7 @@ normal and final-window threshold rules are blocked outside the windows
 (flash and last-minute always win, manual voting is unaffected).
 
 The cadence side lives in `soonestScheduledStart`
-(`src/js/scheduling/scheduledFill.js`), fed to `computeNextCycleDelayMs`
+(`src/js/scheduling/scheduledFill.ts`), fed to `computeNextCycleDelayMs`
 through a second injected resolver (`resolveScheduledFill`, sync on Node /
 async IPC on the WebView) plus the `timezone` scalar — both optional, so
 hosts that don't pass them keep byte-identical behavior. The cap targets
@@ -115,14 +115,14 @@ Deliberate semantics and caveats:
 - **DST**: around a daylight-saving switch the actual instant of a
   time-of-day fill can shift by up to an hour on the changeover day
   (spring-forward nonexistent times resolve nearby; fall-back ambiguity
-  resolves deterministically). Documented in `wallClock.js`.
+  resolves deterministically). Documented in `wallClock.ts`.
 - **Timezone changes mid-run** take effect on the next cycle: the decision
   path re-reads `settings.getSetting('timezone')` every evaluation, and
   `timezone` is already in the renderer's reload-required list.
 - **Fail-soft**: corrupt persisted values (hand-edited settings.json)
   degrade that one challenge's scheduled fill to "off" — the string key is
   type-guarded, numeric corruption coerces to `NaN`-false, an unknown
-  timezone falls back to UTC inside `wallClock.js`, and
+  timezone falls back to UTC inside `wallClock.ts`, and
   `getScheduledFillState` is wrapped in try/catch so the per-challenge
   voting loop can never be aborted by one bad override.
 
@@ -198,7 +198,7 @@ the window still tops up; a window fully missed while the app was down is
 skipped with no catch-up, exactly like scheduled fill).
 
 The cadence side lives in `soonestFinalWindowTopUpStart`
-(`src/js/scheduling/thresholdWindow.js`), fed to `computeNextCycleDelayMs`
+(`src/js/scheduling/thresholdWindow.ts`), fed to `computeNextCycleDelayMs`
 through a third injected resolver (`resolveFinalWindowTopUp`, sync on Node /
 async IPC on the WebView) returning `{enabled, leadSec, durationSec}` per challenge.
 Unlike scheduled fill, this resolver takes **no `timezone`** and is threaded
@@ -240,11 +240,11 @@ Deliberate semantics and caveats:
 
 - **Live state, unlike every other boundary**: the apply instant comes from the
   challenge's own `member.boost` via the shared `boostApplyThreshold`
-  (`voting/boostWindow.js`), not from `close_time` alone, so this boundary can
+  (`voting/boostWindow.ts`), not from `close_time` alone, so this boundary can
   appear, move or vanish as the Boost's timer is refreshed server-side. That is
   fine — it is recomputed from scratch every cycle and the rule re-checks the
   same window before acting. The resolver carries only settings, keeping
-  `thresholdWindow.js` free of settings I/O for the WebView bundle.
+  `thresholdWindow.ts` free of settings I/O for the WebView bundle.
 - **Sentinel parity**: the `0 = off` sentinel on `boostTime` (timer boost) and
   `keyUnlockedBoostTime` (key-unlocked) is honoured in **both**
   `soonestBoostPrefillStart` and `VotingLogic.getBoostPrefillState`, so the
@@ -261,7 +261,7 @@ Deliberate semantics and caveats:
 
 ## CLI — runScheduler (single setTimeout chain)
 
-- **Owner**: `src/js/scheduling/runScheduler.js`
+- **Owner**: `src/js/scheduling/runScheduler.ts`
 - **Started by**: `src/js/cli/cli.js` `start` command
 - **Cadence**: one recursive `setTimeout` chain. After each cycle,
   `scheduleNext` calls `computeNextCycleDelayMs` and arms a single timer.

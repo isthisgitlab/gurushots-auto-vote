@@ -1,12 +1,12 @@
 /**
- * The pure boost-window helpers (`src/js/voting/boostWindow.js`).
+ * The pure boost-window helpers (`src/js/voting/boostWindow.ts`).
  *
  * These are settings-free and shared by the voting engine, the scheduler and the
  * renderer, so their contract is pinned here directly rather than only through
  * whichever caller happens to exercise it. `boostApplyThreshold` in particular is
  * the single source of the boost-apply instant for BOTH `VotingLogic`
  * (getBoostThresholdSec / getBoostPrefillState) and
- * `scheduling/thresholdWindow.js` (soonestBoostPrefillStart) — if the two ever
+ * `scheduling/thresholdWindow.ts` (soonestBoostPrefillStart) — if the two ever
  * disagree, the scheduler wakes for a fill the rule then refuses.
  */
 

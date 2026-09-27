@@ -630,7 +630,7 @@ const SETTINGS_SCHEMA = {
     // Each action has three optional timing conditions (after start, before
     // end, after % elapsed); every condition that is set must hold (0 = that
     // condition off, family-1 sentinel), and none set means "any time". The pure
-    // rule math lives in voting/currencyAuto.js.
+    // rule math lives in voting/currencyAuto.ts.
     autoKeyUnlock: {
         type: 'boolean',
         default: false,
@@ -1063,11 +1063,11 @@ const SETTINGS_SCHEMA = {
     // Fill exposure at configured wall-clock instants instead of (or on top
     // of) the threshold rules. Two independent trigger LISTS — recurring
     // times-of-day (interpreted in the app `timezone` setting via
-    // scheduling/wallClock.js, NOT device-local time) and one-shot
+    // scheduling/wallClock.ts, NOT device-local time) and one-shot
     // seconds-before-close offsets — every entry opens its own window sharing
     // scheduledFillWindowMinutes, all OR'd. The decision-side consumer is
     // getScheduledFillState in services/decisions/triggerWindows.js; the cadence-side
-    // consumer is scheduling/scheduledFill.js.
+    // consumer is scheduling/scheduledFill.ts.
     useScheduledFill: {
         type: 'boolean',
         default: false,
@@ -1797,7 +1797,7 @@ export {
     sanitizeBeforeEndList,
     // Shared cap for the scheduled-fill lists: the write path enforces it via
     // zod, the load-time bounds migration heals older data, and the hot-path
-    // consumers (VotingLogic, scheduledFill.js, the settings modal) slice
+    // consumers (VotingLogic, scheduledFill.ts, the settings modal) slice
     // defensively with it so a post-migration hand-edited array can't inflate
     // per-cycle Intl work.
     MAX_SCHEDULED_FILL_ENTRIES,

@@ -1,5 +1,5 @@
 /**
- * Tests for voting/currencyAuto.js — the pure rule math behind the automatic
+ * Tests for voting/currencyAuto.ts — the pure rule math behind the automatic
  * key / swap / fill spends: timing windows (AND of the set conditions), the
  * swap target pick, the vote-pool reach and the fill-vs-vote decision.
  */

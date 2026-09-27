@@ -1,4 +1,4 @@
-/** @import { Challenge, MemberBoost } from '../types/gurushots' */
+import type { Challenge, MemberBoost } from '../types/gurushots';
 
 /**
  * Boost-window predicate shared by the voting engine (services/VotingLogic)
@@ -10,11 +10,10 @@
  *     AVAILABLE without a timeout is treated as key-unlocked (open)
  *   - anything else → closed
  *
- * @param {MemberBoost|null|undefined} boost - Boost object from the API (challenge.member.boost)
- * @param {number} now - Current time (Unix seconds)
- * @returns {boolean}
+ * @param boost - Boost object from the API (challenge.member.boost)
+ * @param now - Current time (Unix seconds)
  */
-const isBoostWindowOpen = (boost, now) => {
+const isBoostWindowOpen = (boost: MemberBoost | null | undefined, now: number): boolean => {
     if (!boost || !boost.state) return false;
     if (boost.state === 'AVAILABLE_KEY') return true;
     if (boost.state === 'AVAILABLE') {
@@ -33,11 +32,13 @@ const isBoostWindowOpen = (boost, now) => {
  * countdown; key-unlocked boosts (AVAILABLE_KEY) never expire, so their
  * `remaining` is null and they sort last.
  *
- * @param {Challenge[]|null|undefined} challenges - Active challenges from the API
- * @param {number} now - Current time (Unix seconds)
- * @returns {Array<{id: Challenge['id'], title: string, remaining: number|null}>}
+ * @param challenges - Active challenges from the API
+ * @param now - Current time (Unix seconds)
  */
-const openBoostWindows = (challenges, now) =>
+const openBoostWindows = (
+    challenges: Challenge[] | null | undefined,
+    now: number,
+): Array<{ id: Challenge['id']; title: string; remaining: number | null }> =>
     (challenges || [])
         .filter((c) => isBoostWindowOpen(c.member?.boost, now))
         .map((c) => {
@@ -80,16 +81,19 @@ const openBoostWindows = (challenges, now) =>
  * live state; the callers that care (describeDeadlineActions, the pre-boost fill)
  * re-check the sentinel themselves, which `branch` is returned for.
  *
- * @param {MemberBoost|null|undefined} boost - challenge.member.boost
- * @param {number} closeTime - challenge close time (Unix seconds)
- * @param {{boostTimeSec: number, keyUnlockedBoostTimeSec: number}} windows - the
+ * @param boost - challenge.member.boost
+ * @param closeTime - challenge close time (Unix seconds)
+ * @param windows - the
  *   two configured windows, already resolved by the caller
- * @returns {{thresholdSec: number, branch: 'timer'|'key'|null}} `-Infinity` /
+ * @returns `-Infinity` /
  *   `null` when no boost is available to apply, so the action sorts last
  */
-const boostApplyThreshold = (boost, closeTime, { boostTimeSec, keyUnlockedBoostTimeSec }) => {
-    /** @type {MemberBoost} */
-    const b = boost || {};
+const boostApplyThreshold = (
+    boost: MemberBoost | null | undefined,
+    closeTime: number,
+    { boostTimeSec, keyUnlockedBoostTimeSec }: { boostTimeSec: number; keyUnlockedBoostTimeSec: number },
+): { thresholdSec: number; branch: 'timer' | 'key' | null } => {
+    const b: MemberBoost = boost || {};
     const timeout = b.timeout;
     const hasTimeout = typeof timeout === 'number' && timeout > 0;
     if (b.state === 'AVAILABLE_KEY' || (b.state === 'AVAILABLE' && !hasTimeout)) {

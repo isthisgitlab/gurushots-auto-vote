@@ -12,8 +12,7 @@ let cancelled = false;
 
 const isCancelled = () => cancelled;
 
-/** @param {boolean} value */
-const setCancelled = (value) => {
+const setCancelled = (value: boolean) => {
     cancelled = value;
 };
 

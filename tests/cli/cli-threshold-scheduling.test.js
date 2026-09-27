@@ -1,8 +1,8 @@
 /**
  * CLI/Node threshold-entry calculation.
  *
- * The logic lives in src/js/scheduling/thresholdWindow.js, consumed by
- * runScheduler.js with a synchronous settings.getEffectiveSetting resolver.
+ * The logic lives in src/js/scheduling/thresholdWindow.ts, consumed by
+ * runScheduler.ts with a synchronous settings.getEffectiveSetting resolver.
  * These tests import the real module and use a sync resolver to represent the
  * CLI/Node path. Real scheduler switch/revert behavior is covered by
  * tests/scheduling/runScheduler.test.js.

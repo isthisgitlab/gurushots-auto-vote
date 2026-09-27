@@ -30,14 +30,12 @@
 
 // Intl.DateTimeFormat construction is comparatively expensive and the same
 // zone is queried several times per voting cycle — cache one formatter per zone.
-/** @type {Map<string, Intl.DateTimeFormat>} */
-const formatterCache = new Map();
+const formatterCache: Map<string, Intl.DateTimeFormat> = new Map();
 
 /**
- * @param {string} timeZone - IANA zone name. Throws RangeError for unknown zones.
- * @returns {Intl.DateTimeFormat}
+ * @param timeZone - IANA zone name. Throws RangeError for unknown zones.
  */
-const getFormatter = (timeZone) => {
+const getFormatter = (timeZone: string): Intl.DateTimeFormat => {
     let formatter = formatterCache.get(timeZone);
     if (!formatter) {
         // hourCycle 'h23' (not hour12:false): some ICU versions render midnight
@@ -61,14 +59,12 @@ const getFormatter = (timeZone) => {
  * formatToParts → { type: value } accumulation for an instant in `timeZone`.
  * Shared by tzOffsetSeconds and wallDateOf.
  *
- * @param {number} epochSec - Unix timestamp (seconds)
- * @param {string} timeZone - IANA zone name (throws RangeError if unknown)
- * @returns {Record<string, string>}
+ * @param epochSec - Unix timestamp (seconds)
+ * @param timeZone - IANA zone name (throws RangeError if unknown)
  */
-const partsOf = (epochSec, timeZone) => {
+const partsOf = (epochSec: number, timeZone: string): Record<string, string> => {
     const parts = getFormatter(timeZone).formatToParts(epochSec * 1000);
-    /** @type {Record<string, string>} */
-    const byType = {};
+    const byType: Record<string, string> = {};
     for (const part of parts) {
         byType[part.type] = part.value;
     }
@@ -78,10 +74,9 @@ const partsOf = (epochSec, timeZone) => {
 /**
  * Strict 'HH:MM' 24-hour parser.
  *
- * @param {unknown} str - Candidate value; anything but a strict 'HH:MM' string yields null.
- * @returns {{hours: number, minutes: number}|null}
+ * @param str - Candidate value; anything but a strict 'HH:MM' string yields null.
  */
-const parseTimeOfDay = (str) => {
+const parseTimeOfDay = (str: unknown): { hours: number; minutes: number } | null => {
     if (typeof str !== 'string') {
         return null;
     }
@@ -96,11 +91,11 @@ const parseTimeOfDay = (str) => {
  * Offset (seconds) of `timeZone` from UTC at a given instant. Positive east of
  * UTC (Europe/Riga winter → +7200, summer → +10800).
  *
- * @param {number} epochSec - Unix timestamp (seconds)
- * @param {string} timeZone - IANA zone name (throws RangeError if unknown)
- * @returns {number} Offset in seconds
+ * @param epochSec - Unix timestamp (seconds)
+ * @param timeZone - IANA zone name (throws RangeError if unknown)
+ * @returns Offset in seconds
  */
-const tzOffsetSeconds = (epochSec, timeZone) => {
+const tzOffsetSeconds = (epochSec: number, timeZone: string): number => {
     const byType = partsOf(epochSec, timeZone);
     const asUtc =
         Date.UTC(
@@ -121,15 +116,15 @@ const tzOffsetSeconds = (epochSec, timeZone) => {
  * exactly at a DST transition, where it lands deterministically within an
  * hour of the intended wall time (see module notes).
  *
- * @param {number} y - Full year
- * @param {number} m - Month 1-12
- * @param {number} d - Day of month
- * @param {number} hh - Hour 0-23
- * @param {number} mm - Minute 0-59
- * @param {string} timeZone - IANA zone name (throws RangeError if unknown)
- * @returns {number} Unix timestamp (seconds)
+ * @param y - Full year
+ * @param m - Month 1-12
+ * @param d - Day of month
+ * @param hh - Hour 0-23
+ * @param mm - Minute 0-59
+ * @param timeZone - IANA zone name (throws RangeError if unknown)
+ * @returns Unix timestamp (seconds)
  */
-const epochForWallTime = (y, m, d, hh, mm, timeZone) => {
+const epochForWallTime = (y: number, m: number, d: number, hh: number, mm: number, timeZone: string): number => {
     const naive = Date.UTC(y, m - 1, d, hh, mm) / 1000;
     let guess = naive;
     for (let i = 0; i < 2; i++) {
@@ -141,22 +136,19 @@ const epochForWallTime = (y, m, d, hh, mm, timeZone) => {
 /**
  * Wall-clock date of an instant in `timeZone`.
  *
- * @param {number} epochSec - Unix timestamp (seconds)
- * @param {string} timeZone - IANA zone name (throws RangeError if unknown)
- * @returns {{y: number, m: number, d: number}}
+ * @param epochSec - Unix timestamp (seconds)
+ * @param timeZone - IANA zone name (throws RangeError if unknown)
  */
-const wallDateOf = (epochSec, timeZone) => {
+const wallDateOf = (epochSec: number, timeZone: string): { y: number; m: number; d: number } => {
     const byType = partsOf(epochSec, timeZone);
     return { y: Number(byType.year), m: Number(byType.month), d: Number(byType.day) };
 };
 
-/**
- * @param {{hours: number, minutes: number}} timeOfDay
- * @param {string} timeZone
- * @param {number} nowSec
- * @returns {{prev: number, next: number}}
- */
-const computeOccurrences = (timeOfDay, timeZone, nowSec) => {
+const computeOccurrences = (
+    timeOfDay: { hours: number; minutes: number },
+    timeZone: string,
+    nowSec: number,
+): { prev: number; next: number } => {
     // Candidate occurrences on yesterday / today / tomorrow (dates derived by
     // shifting the epoch ±24h and re-reading the wall date, so month and DST
     // edges are handled by Intl rather than naive date arithmetic).
@@ -182,12 +174,11 @@ const computeOccurrences = (timeOfDay, timeZone, nowSec) => {
  * `nowSec`: `prev` is the latest occurrence <= now (today or yesterday),
  * `next` the earliest occurrence > now (today or tomorrow).
  *
- * @param {unknown} timeHHMM - 'HH:MM' string; anything unparsable yields null.
- * @param {string} timeZone - IANA zone name; unknown zones fall back to 'UTC'.
- * @param {number} nowSec - Unix timestamp (seconds)
- * @returns {{prev: number, next: number}|null}
+ * @param timeHHMM - 'HH:MM' string; anything unparsable yields null.
+ * @param timeZone - IANA zone name; unknown zones fall back to 'UTC'.
+ * @param nowSec - Unix timestamp (seconds)
  */
-const occurrencesOf = (timeHHMM, timeZone, nowSec) => {
+const occurrencesOf = (timeHHMM: unknown, timeZone: string, nowSec: number): { prev: number; next: number } | null => {
     const timeOfDay = parseTimeOfDay(timeHHMM);
     if (!timeOfDay) {
         return null;

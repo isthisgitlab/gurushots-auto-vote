@@ -5,7 +5,7 @@
  * within its last-minute window, the scheduler must tear down the 1-minute
  * cadence and resume the normal randomized checkFrequency cadence.
  *
- * This is the GUI-side counterpart of the runScheduler.js revert; without it
+ * This is the GUI-side counterpart of the runScheduler.ts revert; without it
  * the GUI stays pinned at a 1-minute cadence forever after a challenge's
  * window passes.
  */

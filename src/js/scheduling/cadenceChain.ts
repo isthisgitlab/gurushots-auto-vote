@@ -1,6 +1,6 @@
 /**
  * Shared autovote cadence chain — the recursive "decide delay → arm timer →
- * run cycle → re-arm" loop both schedulers run (runScheduler.js for
+ * run cycle → re-arm" loop both schedulers run (runScheduler.ts for
  * CLI/Android, AutovoteContext.jsx for the GUI).
  * The MATH is shared in ./thresholdWindow and ./randomDelay; this factory
  * shares the LOOP: guard ordering, fresh-settings read per cycle, prefetched
@@ -10,7 +10,7 @@
  *
  * Hosts inject transport only — how to read settings, fetch challenges,
  * resolve per-challenge values, run a cycle, store the timer handle, and emit
- * a log line — mirroring how ./nodeResolvers.js vs
+ * a log line — mirroring how ./nodeResolvers.ts vs
  * react/contexts/autovoteScheduler.js split the per-challenge
  * resolvers by platform. CJS on purpose: required directly by the Node hosts
  * and imported by the esbuild-bundled renderer.
@@ -20,26 +20,35 @@ import { getRandomCheckFrequencyMs, anchoredWaitMs, MIN_CYCLE_GAP_MS, OFFLINE_RE
 import { computeNextCycleDelayMs } from './thresholdWindow';
 import { DEFAULT_TIMEZONE } from '../settings/uiDefaults';
 
-/** @import { ActiveChallengesResponse, Challenge } from '../types/gurushots' */
-/** @import { CadenceDecision, CadenceMode } from './thresholdWindow' */
-/** @import { AppSettings } from '../types/settings' */
+import type { ActiveChallengesResponse, Challenge } from '../types/gurushots';
+import type {
+    CadenceDecision,
+    CadenceMode,
+    ResolveBoostPrefill,
+    ResolveCurrencyAuto,
+    ResolveFinalWindowTopUp,
+    ResolveScenarioWake,
+    ResolveThreshold,
+} from './thresholdWindow';
+import type { ResolveScheduledFill } from './scheduledFill';
+import type { AppSettings } from '../types/settings';
 
 /**
  * The host's single timer-handle slot value.
- * @typedef {ReturnType<typeof setTimeout>} TimerHandle
  */
+export type TimerHandle = ReturnType<typeof setTimeout>;
 
 /**
  * What a host's voting cycle resolves to: the fetched challenge list, or a
  * success/failure flag when it has no list (the next decision then fetches).
- * @typedef {Challenge[] | boolean | null | undefined} CycleResult
  */
+type CycleResult = Challenge[] | boolean | null | undefined;
 
 /**
  * The fields of a FRESH settings snapshot the chain reads (hosts hand over their
  * whole settings blob; `token` is what the GUI's fetchChallenges reads off it).
- * @typedef {Pick<AppSettings, 'timezone' | 'checkFrequencyMin' | 'checkFrequencyMax' | 'token'>} CadenceSettings
  */
+type CadenceSettings = Pick<AppSettings, 'timezone' | 'checkFrequencyMin' | 'checkFrequencyMax' | 'token'>;
 
 /**
  * Canonical warning emitted when deciding the next delay fails and the chain
@@ -84,11 +93,11 @@ const OVERSLEEP_ALWAYS_MS = 5 * 60_000;
 // chain; imported above and re-exported below for callers/tests.
 
 /**
- * @param {number} waitMs - the delay that was armed
- * @param {number} actualMs - how long the timer actually took to fire
- * @returns {number} how late it fired, or 0 when that is within tolerance
+ * @param waitMs - the delay that was armed
+ * @param actualMs - how long the timer actually took to fire
+ * @returns how late it fired, or 0 when that is within tolerance
  */
-const oversleptBy = (waitMs, actualMs) => {
+const oversleptBy = (waitMs: number, actualMs: number): number => {
     const lateMs = actualMs - waitMs;
     if (lateMs <= OVERSLEEP_ABSOLUTE_MS) return 0;
     return lateMs > waitMs * OVERSLEEP_RELATIVE || lateMs > OVERSLEEP_ALWAYS_MS ? lateMs : 0;
@@ -103,11 +112,10 @@ const oversleptBy = (waitMs, actualMs) => {
  * Logs page, not just in a file. No emoji: `logger.warning` (and the GUI's
  * logWarning) already prefix one.
  *
- * @param {number} lateMs - how far past its due time the timer fired
- * @param {number} waitMs - the delay that was armed
- * @returns {string}
+ * @param lateMs - how far past its due time the timer fired
+ * @param waitMs - the delay that was armed
  */
-const formatOversleptMessage = (lateMs, waitMs) =>
+const formatOversleptMessage = (lateMs: number, waitMs: number): string =>
     `Voting cycle ran ${(lateMs / 60_000).toFixed(1)} min later than scheduled ` +
     `(waited ${(waitMs / 60_000).toFixed(1)} min) — the app was suspended or its timers were throttled, ` +
     `so any auto-submit, boost, turbo or emergency submit due in that gap did not happen. ` +
@@ -118,10 +126,8 @@ const formatOversleptMessage = (lateMs, waitMs) =>
  * Run a best-effort observability hook without letting it touch scheduling: a
  * synchronous throw and an async rejection are both swallowed, and the hook is
  * never awaited.
- *
- * @param {() => unknown} hook
  */
-const fireAndForget = (hook) => {
+const fireAndForget = (hook: () => unknown) => {
     try {
         void Promise.resolve(hook()).catch(() => {});
     } catch {
@@ -136,12 +142,9 @@ const fireAndForget = (hook) => {
  * cadence. Only reachable in normal mode: a failed fetch yields an empty list,
  * and an empty list never has a threshold/scheduled window to approach.
  *
- * @param {number} delayMs - the decided delay between cycle starts
- * @param {(number|null)} previousCycleStartMs
- * @param {boolean} fetchFailed
- * @returns {number}
+ * @param delayMs - the decided delay between cycle starts
  */
-const normalWaitMs = (delayMs, previousCycleStartMs, fetchFailed) => {
+const normalWaitMs = (delayMs: number, previousCycleStartMs: number | null, fetchFailed: boolean): number => {
     const waitMs = anchoredWaitMs(delayMs, previousCycleStartMs);
     return fetchFailed ? Math.min(waitMs, OFFLINE_RETRY_MS) : waitMs;
 };
@@ -149,11 +152,9 @@ const normalWaitMs = (delayMs, previousCycleStartMs, fetchFailed) => {
 /**
  * The cadence log line for a boundary-driven (non-normal) decision.
  *
- * @param {CadenceDecision} decision - computeNextCycleDelayMs result
- * @param {number} waitMs
- * @returns {string}
+ * @param decision - computeNextCycleDelayMs result
  */
-const describeBoundaryCadence = (decision, waitMs) => {
+const describeBoundaryCadence = (decision: CadenceDecision, waitMs: number): string => {
     const inSeconds = `next cycle in ${Math.round(waitMs / 1000)}s`;
     switch (decision.mode) {
         case 'last-minute':
@@ -177,8 +178,20 @@ const describeBoundaryCadence = (decision, waitMs) => {
 
 /**
  * The slice of the chain's host transport the decision needs.
- * @typedef {Pick<Parameters<typeof createCadenceChain>[0], 'loadSettings'|'fetchChallenges'|'resolveLastMinuteCheckMinutes'|'resolveThreshold'|'resolveScheduledFill'|'resolveFinalWindowTopUp'|'resolveBoostPrefill'|'resolveCurrencyAuto'|'resolveScenarioWake'|'log'>} DecisionDeps
  */
+type DecisionDeps = Pick<
+    Parameters<typeof createCadenceChain>[0],
+    | 'loadSettings'
+    | 'fetchChallenges'
+    | 'resolveLastMinuteCheckMinutes'
+    | 'resolveThreshold'
+    | 'resolveScheduledFill'
+    | 'resolveFinalWindowTopUp'
+    | 'resolveBoostPrefill'
+    | 'resolveCurrencyAuto'
+    | 'resolveScenarioWake'
+    | 'log'
+>;
 
 /**
  * The one decision point: read fresh settings, resolve the active list, ask
@@ -193,13 +206,14 @@ const describeBoundaryCadence = (decision, waitMs) => {
  * approaching/last-minute/scheduled mode the wait runs from cycle
  * completion so the boundary is never undershot.
  *
- * @param {DecisionDeps} deps - the chain's host transport (see createCadenceChain)
- * @param {CycleResult} prefetched
- * @param {(number|null)} previousCycleStartMs
- * @returns {Promise<{waitMs: number, cycleChallenges: Challenge[], cycleNow: number}>}
+ * @param deps - the chain's host transport (see createCadenceChain)
  *   the wait plus the list/clock snapshot for the onCycleChallenges hook
  */
-const decideNextWait = async (deps, prefetched, previousCycleStartMs) => {
+const decideNextWait = async (
+    deps: DecisionDeps,
+    prefetched: CycleResult,
+    previousCycleStartMs: number | null,
+): Promise<{ waitMs: number; cycleChallenges: Challenge[]; cycleNow: number }> => {
     const settings = await deps.loadSettings();
     const normalDelayMs = getRandomCheckFrequencyMs(settings);
     // When no list was handed over we fetch fresh — and keep the
@@ -208,8 +222,9 @@ const decideNextWait = async (deps, prefetched, previousCycleStartMs) => {
     // otherwise decide a full normal-cadence wait indistinguishable from
     // "nothing to vote on". The flag lets the normal branch shorten
     // the wait so the loop re-probes soon after connectivity returns.
-    /** @type {ActiveChallengesResponse|null} */
-    const fetched = Array.isArray(prefetched) ? { challenges: prefetched } : await deps.fetchChallenges(settings);
+    const fetched: ActiveChallengesResponse | null = Array.isArray(prefetched)
+        ? { challenges: prefetched }
+        : await deps.fetchChallenges(settings);
     const challenges = fetched?.challenges || [];
     const fetchFailedNow = fetched?.fetchFailed === true;
     const now = Math.floor(Date.now() / 1000);
@@ -248,13 +263,15 @@ const decideNextWait = async (deps, prefetched, previousCycleStartMs) => {
  * onCycleChallenges hook is skipped on EVERY decision failure — an early
  * fetch/settings throw and a late one (resolveLastMinuteCheckMinutes,
  * computeNextCycleDelayMs, the cadence log) alike.
- *
- * @param {DecisionDeps} deps
- * @param {CycleResult} prefetched
- * @param {(number|null)} previousCycleStartMs
- * @returns {Promise<{waitMs: number, cycleChallenges: Challenge[], cycleNow: number}|{waitMs: number, cycleChallenges: null, cycleNow: null}>}
  */
-const decideNextWaitOrFallBack = async (deps, prefetched, previousCycleStartMs) => {
+const decideNextWaitOrFallBack = async (
+    deps: DecisionDeps,
+    prefetched: CycleResult,
+    previousCycleStartMs: number | null,
+): Promise<
+    | { waitMs: number; cycleChallenges: Challenge[]; cycleNow: number }
+    | { waitMs: number; cycleChallenges: null; cycleNow: null }
+> => {
     try {
         return await decideNextWait(deps, prefetched, previousCycleStartMs);
     } catch (error) {
@@ -272,58 +289,58 @@ const decideNextWaitOrFallBack = async (deps, prefetched, previousCycleStartMs) 
 /**
  * Create the shared cadence chain.
  *
- * @param {Object} deps - host transport
- * @param {()=>boolean} deps.isRunning - live running flag (ref-backed on React)
- * @param {()=>(TimerHandle|null)} deps.getTimer - read the host's single timer-handle slot; the
+ * @param deps - host transport
+ * @param deps.isRunning - live running flag (ref-backed on React)
+ * @param deps.getTimer - read the host's single timer-handle slot; the
  *   chain uses identity against it as the staleness guard (a host that clears
  *   or replaces the slot makes any in-flight timer/re-arm decline)
- * @param {(handle:(TimerHandle|null))=>void} deps.setTimer - store/clear the timer-handle slot
- * @param {()=>(CadenceSettings|Promise<CadenceSettings>)} deps.loadSettings - FRESH settings
+ * @param deps.setTimer - store/clear the timer-handle slot
+ * @param deps.loadSettings - FRESH settings
  *   snapshot; called at the top of every decision (and again for the fallback)
- * @param {(settings:CadenceSettings)=>(ActiveChallengesResponse|null|Promise<ActiveChallengesResponse|null>)} deps.fetchChallenges -
+ * @param deps.fetchChallenges -
  *   active-challenge fetch (`{challenges, fetchFailed?}` shape) used only when
  *   no prefetched list was handed over. `fetchFailed === true` (an outage:
  *   makePostRequest resolved null after retries) shortens the next normal-mode
  *   wait to OFFLINE_RETRY_MS so the loop re-probes soon after reconnection
  *   rather than waiting out the full cadence
- * @param {()=>(number|string|Promise<number|string>)} deps.resolveLastMinuteCheckMinutes -
+ * @param deps.resolveLastMinuteCheckMinutes -
  *   raw global `lastMinuteCheckFrequency` value (coerced + defaulted here)
- * @param {import('./thresholdWindow').ResolveThreshold} deps.resolveThreshold -
+ * @param deps.resolveThreshold -
  *   per-challenge threshold resolver for the shared math
- * @param {import('./scheduledFill').ResolveScheduledFill} deps.resolveScheduledFill - per-challenge scheduled-fill
+ * @param deps.resolveScheduledFill - per-challenge scheduled-fill
  *   resolver for the shared math
- * @param {import('./thresholdWindow').ResolveFinalWindowTopUp} deps.resolveFinalWindowTopUp -
+ * @param deps.resolveFinalWindowTopUp -
  *   per-challenge pre-final-window top-up resolver for the shared math
- * @param {import('./thresholdWindow').ResolveBoostPrefill} deps.resolveBoostPrefill -
+ * @param deps.resolveBoostPrefill -
  *   per-challenge pre-boost fill resolver for the shared math
- * @param {import('./thresholdWindow').ResolveCurrencyAuto|null} [deps.resolveCurrencyAuto] -
+ * @param deps.resolveCurrencyAuto -
  *   per-challenge currency-automation timing resolver for the shared math
- * @param {import('./thresholdWindow').ResolveScenarioWake|null} [deps.resolveScenarioWake] -
+ * @param deps.resolveScenarioWake -
  *   per-challenge scenario resolver for the shared math
- * @param {()=>Promise<CycleResult>} deps.runCycle - run one voting cycle; the resolved
+ * @param deps.runCycle - run one voting cycle; the resolved
  *   value is handed to the next decision as the prefetched list candidate
  *   (any non-array means "fetch fresh"). A rejection is logged via
  *   `log.cycleError` and never kills the chain.
- * @param {Object} deps.log - host log adapter
- * @param {(mode:CadenceMode, message:string)=>(void|Promise<void>)} deps.log.cadence -
+ * @param deps.log - host log adapter
+ * @param deps.log.cadence -
  *   receives every cadence decision line (modes: normal / last-minute /
  *   scheduled / pre-final-window / pre-boost / boost-hold / currency-rule / scenario /
  *   approaching); a host may drop
  *   modes it never logged
- * @param {(error:unknown)=>(void|Promise<void>)} deps.log.decisionError - decision
+ * @param deps.log.decisionError - decision
  *   failure (chain falls back to the random cadence)
- * @param {(error:unknown)=>(void|Promise<void>)} deps.log.cycleError - a voting
+ * @param deps.log.cycleError - a voting
  *   cycle rejected
- * @param {((lateMs:number, waitMs:number)=>(void|Promise<void>))} [deps.log.overslept] -
+ * @param deps.log.overslept -
  *   OPTIONAL: the armed timer fired far later than it was scheduled to (OS
  *   suspend / App Nap / hidden-page throttling), so every boundary inside that
  *   stall was missed. Hosts that omit it lose only the log line.
- * @param {(waitMs:number|null)=>void} [deps.onScheduled] - OPTIONAL: called with
+ * @param deps.onScheduled - OPTIONAL: called with
  *   the delay (ms) to the next armed cycle each time one is scheduled, and with
  *   null when the chain stops arming. Used by the GUI to surface a live
  *   next-action countdown; Node hosts (CLI/Android) omit it, so it is
  *   optional-chained and never required.
- * @param {(challenges:Challenge[], now:number)=>unknown} [deps.onCycleChallenges] -
+ * @param deps.onCycleChallenges -
  *   OPTIONAL: called once per cycle with the freshly-resolved active-challenge
  *   list and the cycle's `now` (Unix seconds), for hosts that want to react to
  *   the list without re-fetching (the OS deadline-notification layer). Invoked
@@ -331,7 +348,6 @@ const decideNextWaitOrFallBack = async (deps, prefetched, previousCycleStartMs) 
  *   a throw here must never reach the decision `catch`, whose fallback would
  *   discard the boundary-aware cadence for the cycle. Hosts that omit it lose
  *   only the notification opportunity.
- * @returns {{scheduleNext:(prefetched?:CycleResult, previousCycleStartMs?:(number|null))=>Promise<void>}}
  */
 const createCadenceChain = ({
     isRunning,
@@ -350,7 +366,31 @@ const createCadenceChain = ({
     log,
     onScheduled,
     onCycleChallenges,
-}) => {
+}: {
+    isRunning: () => boolean;
+    getTimer: () => TimerHandle | null;
+    setTimer: (handle: TimerHandle | null) => void;
+    loadSettings: () => CadenceSettings | Promise<CadenceSettings>;
+    fetchChallenges: (
+        settings: CadenceSettings,
+    ) => ActiveChallengesResponse | null | Promise<ActiveChallengesResponse | null>;
+    resolveLastMinuteCheckMinutes: () => number | string | Promise<number | string>;
+    resolveThreshold: ResolveThreshold;
+    resolveScheduledFill: ResolveScheduledFill;
+    resolveFinalWindowTopUp: ResolveFinalWindowTopUp;
+    resolveBoostPrefill: ResolveBoostPrefill;
+    resolveCurrencyAuto?: ResolveCurrencyAuto | null;
+    resolveScenarioWake?: ResolveScenarioWake | null;
+    runCycle: () => Promise<CycleResult>;
+    log: {
+        cadence: (mode: CadenceMode, message: string) => void | Promise<void>;
+        decisionError: (error: unknown) => void | Promise<void>;
+        cycleError: (error: unknown) => void | Promise<void>;
+        overslept?: (lateMs: number, waitMs: number) => void | Promise<void>;
+    };
+    onScheduled?: (waitMs: number | null) => void;
+    onCycleChallenges?: (challenges: Challenge[], now: number) => unknown;
+}): { scheduleNext: (prefetched?: CycleResult, previousCycleStartMs?: number | null) => Promise<void> } => {
     const decisionDeps = {
         loadSettings,
         fetchChallenges,
@@ -372,12 +412,7 @@ const createCadenceChain = ({
     // The armed timer's callback. A newer chain may have taken over (host
     // re-armed / stopped); only the timer that is still current — identity
     // against the host's slot — may run + reschedule.
-    /**
-     * @param {TimerHandle} timeoutId
-     * @param {number} waitMs
-     * @param {number} armedAtMs
-     */
-    const runArmedCycle = async (timeoutId, waitMs, armedAtMs) => {
+    const runArmedCycle = async (timeoutId: TimerHandle, waitMs: number, armedAtMs: number) => {
         if (!isRunning() || getTimer() !== timeoutId) {
             return;
         }
@@ -409,11 +444,7 @@ const createCadenceChain = ({
     };
 
     // Decide how long to wait before the next cycle and arm the single timer.
-    /**
-     * @param {CycleResult} [prefetched]
-     * @param {number|null} [previousCycleStartMs]
-     */
-    const scheduleNext = async (prefetched = null, previousCycleStartMs = null) => {
+    const scheduleNext = async (prefetched: CycleResult = null, previousCycleStartMs: number | null = null) => {
         if (!isRunning()) {
             stopArming();
             return;

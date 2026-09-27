@@ -54,7 +54,7 @@ Domain terms used throughout, in reader's terms:
   **100%** for `voteBeforeBoostLeadMin` (1–59, default 15) minutes before an available Boost is auto-applied,
   so the Boost multiplies a full entry rather than a decayed one — a Boost is one per challenge and is spent
   on whatever the entry has at that instant. The apply instant is not re-derived: it comes from the same
-  `boostApplyThreshold` (`voting/boostWindow.js`) that `getBoostThresholdSec` uses, so the fill can never aim
+  `boostApplyThreshold` (`voting/boostWindow.ts`) that `getBoostThresholdSec` uses, so the fill can never aim
   at a moment the boost runner disagrees with. `getBoostPrefillState` gates it on the opt-in, `autoBoost`, a
   genuinely AVAILABLE boost, and the `0 = off` sentinel on whichever window the branch measures against
   (`boostTime` for a timer boost, `keyUnlockedBoostTime` for a key-unlocked one) — `boostApplyThreshold`
@@ -100,16 +100,16 @@ Domain terms used throughout, in reader's terms:
 
 ## 2. Scheduling
 
-- `createCadenceChain()` (`scheduling/cadenceChain.js` — around L152) is a single recursive `setTimeout`
+- `createCadenceChain()` (`scheduling/cadenceChain.ts` — around L152) is a single recursive `setTimeout`
   chain — **no cron** — shared by CLI, GUI, and Android headless. See `scheduling.md` for the three timer
   engines that drive it per platform.
-- The single cadence decision is `computeNextCycleDelayMs()` (`scheduling/thresholdWindow.js` — around
+- The single cadence decision is `computeNextCycleDelayMs()` (`scheduling/thresholdWindow.ts` — around
   L390): modes `last-minute` / `approaching` / `scheduled` / `normal`, with the invariant **never sleep
   past an upcoming boundary**.
 - Double-fire guard: a **stale-timer identity check** (`getTimer() !== timeoutId`) ensures only the
   current timer re-arms, so a re-armed/stopped chain can't double-fire. There is no mutex around a
   _running_ cycle — safety comes from the single-chain design plus the cancellation flag.
-- Cancellation is a **global singleton flag** (`voting/cancellation.js`) checked at multiple checkpoints in
+- Cancellation is a **global singleton flag** (`voting/cancellation.ts`) checked at multiple checkpoints in
   the pass, and it propagates by **`return`, never `throw`** — precisely so a per-challenge try/catch can't
   swallow it.
 - `now` is re-read per challenge (a pass can take minutes, so a single clock would miss windows that open

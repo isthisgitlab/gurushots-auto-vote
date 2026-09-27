@@ -7,30 +7,36 @@
  * computeNextCycleDelayMs can cap the sleep and land a cycle exactly at the
  * window start instead of overshooting it by up to a whole random delay.
  *
- * Mirrors thresholdWindow.js's shape: pure math over an injected per-challenge
+ * Mirrors thresholdWindow.ts's shape: pure math over an injected per-challenge
  * config resolver that may be sync (Node: settings facade) or async (WebView:
  * IPC), resolved once per decision in a single pass.
- *
- * @callback ResolveScheduledFill
- * @param {string} challengeId - Challenge id as a string.
- * @returns {ScheduledFillConfig|Promise<ScheduledFillConfig>}
  */
+
+/**
+ * @param challengeId - Challenge id as a string.
+ */
+export type ResolveScheduledFill = (challengeId: string) => ScheduledFillConfig | Promise<ScheduledFillConfig>;
 
 /**
  * Per-challenge scheduled-fill config. Both trigger lists arrive RAW (straight
  * from settings) and are guarded here.
- * @typedef {{enabled: boolean, timesOfDay: unknown, beforeEndSecs: unknown}} ScheduledFillConfig
  */
+type ScheduledFillConfig = { enabled: boolean; timesOfDay: unknown; beforeEndSecs: unknown };
 
 /**
  * The soonest upcoming scheduled-fill window start.
- * @typedef {{challengeId: Challenge['id'], challengeTitle: string, startTime: number, form: 'time-of-day'|'before-end'}} ScheduledStart
  */
+export type ScheduledStart = {
+    challengeId: Challenge['id'];
+    challengeTitle: string;
+    startTime: number;
+    form: 'time-of-day' | 'before-end';
+};
 
-/** @import { Challenge } from '../types/gurushots' */
+import type { Challenge } from '../types/gurushots';
 
 import { occurrencesOf } from './wallClock';
-// From settings/limits (not settings/schema) — schema.js requires zod, and a
+// From settings/limits (not settings/schema) — schema.ts requires zod, and a
 // CJS require of it cannot be tree-shaken out of app-bundle.js, which reaches
 // this module through the cadence chain (AutovoteContext -> cadenceChain ->
 // thresholdWindow) but never otherwise touches the validator.
@@ -38,13 +44,12 @@ import { MAX_SCHEDULED_FILL_ENTRIES } from '../settings/limits';
 
 // Non-flash challenges that are still open at `now`. Flash challenges never
 // enter last-minute/scheduled-fill mode, and closed ones can't. Shared with
-// thresholdWindow.js so the two cadence paths agree on eligibility.
+// thresholdWindow.ts so the two cadence paths agree on eligibility.
 /**
- * @param {Challenge[]} challenges
- * @param {number} now - Unix timestamp (seconds)
- * @returns {Challenge[]}
+ * @param now - Unix timestamp (seconds)
  */
-const eligibleChallenges = (challenges, now) => challenges.filter((c) => c.type !== 'flash' && c.close_time > now);
+const eligibleChallenges = (challenges: Challenge[], now: number): Challenge[] =>
+    challenges.filter((c) => c.type !== 'flash' && c.close_time > now);
 
 /**
  * Soonest upcoming scheduled-fill window start strictly after `now` across
@@ -61,13 +66,15 @@ const eligibleChallenges = (challenges, now) => challenges.filter((c) => c.type 
  * and lists are sliced to MAX_SCHEDULED_FILL_ENTRIES — the scheduler must
  * keep running on its normal cadence regardless.
  *
- * @param {Challenge[]} challenges
- * @param {number} now - Unix timestamp (seconds)
- * @param {ResolveScheduledFill} resolveScheduledFill
- * @param {string} timezone - IANA zone for the time-of-day form
- * @returns {Promise<ScheduledStart|null>}
+ * @param now - Unix timestamp (seconds)
+ * @param timezone - IANA zone for the time-of-day form
  */
-async function soonestScheduledStart(challenges, now, resolveScheduledFill, timezone) {
+async function soonestScheduledStart(
+    challenges: Challenge[],
+    now: number,
+    resolveScheduledFill: ResolveScheduledFill,
+    timezone: string,
+): Promise<ScheduledStart | null> {
     const eligible = eligibleChallenges(challenges, now);
     // One resolution pass for the same reason resolveEligibleThresholds does it:
     // per-question resolution would double the IPC cost on the WebView.
@@ -81,8 +88,7 @@ async function soonestScheduledStart(challenges, now, resolveScheduledFill, time
         }),
     );
 
-    /** @type {ScheduledStart|null} */
-    let best = null;
+    let best: ScheduledStart | null = null;
     for (let i = 0; i < eligible.length; i++) {
         const config = configs[i];
         if (!config || config.enabled !== true) continue;
@@ -90,8 +96,7 @@ async function soonestScheduledStart(challenges, now, resolveScheduledFill, time
         const close = Number(challenge.close_time);
 
         let startTime = Infinity;
-        /** @type {ScheduledStart['form']|null} */
-        let form = null;
+        let form: ScheduledStart['form'] | null = null;
 
         const times = (Array.isArray(config.timesOfDay) ? config.timesOfDay : []).slice(0, MAX_SCHEDULED_FILL_ENTRIES);
         for (const entry of times) {

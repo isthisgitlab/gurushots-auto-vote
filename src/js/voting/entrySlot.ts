@@ -14,12 +14,11 @@
  *     → slot 0 (first entry) rather than propagating NaN
  *   - 0 → last entry slot (sentinel)
  *   - positives → clamped to [0, entries.length - 1]
- *
- * @param {readonly unknown[] | null | undefined} entries
- * @param {number | null | undefined} requestedIndex
- * @returns {number|null}
  */
-const resolveEntryIndex = (entries, requestedIndex) => {
+const resolveEntryIndex = (
+    entries: readonly unknown[] | null | undefined,
+    requestedIndex: number | null | undefined,
+): number | null => {
     if (!Array.isArray(entries) || entries.length === 0) return null;
     if (typeof requestedIndex !== 'number' || !Number.isInteger(requestedIndex) || requestedIndex < 0) return 0;
     if (requestedIndex === 0) return entries.length - 1;

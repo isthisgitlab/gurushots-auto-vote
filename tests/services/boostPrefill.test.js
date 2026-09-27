@@ -190,7 +190,7 @@ describe('getBoostPrefillState — window boundaries', () => {
     });
 
     test('a numeric-string lead is coerced, matching what the cadence resolvers send', () => {
-        // Guard parity: both resolvers hand thresholdWindow.js `Number(raw) * 60`, so
+        // Guard parity: both resolvers hand thresholdWindow.ts `Number(raw) * 60`, so
         // reading the raw value here would clamp a hand-edited "45" to the 15m default
         // on the rule side while the scheduler capped on 45m.
         mockSettings({ voteBeforeBoostLeadMin: '45' });
