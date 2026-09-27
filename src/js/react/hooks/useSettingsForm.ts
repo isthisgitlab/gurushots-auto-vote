@@ -127,43 +127,34 @@ export function useSettingsForm({
         }
     }, [isOpen, defaults, schema, settings]);
 
-    const handleFormChange = useCallback(
-        ((key, value) => {
-            setFormValues((prev) => ({ ...prev, [key]: value }));
-        }) satisfies SettingChangeHandler,
-        [],
-    );
+    const handleFormChange = useCallback<SettingChangeHandler>((key, value) => {
+        setFormValues((prev) => ({ ...prev, [key]: value }));
+    }, []);
 
-    const handleUiChange = useCallback(
-        ((key, value) => {
-            setUiValues((prev) => ({ ...prev, [key]: value }));
-            // Theme is the only UI value that touches the DOM live — applying
-            // here keeps the change visible while the user is still editing.
-            if (key === 'theme') {
-                document.documentElement.setAttribute('data-theme', value as string);
-            }
-        }) satisfies UiChangeHandler,
-        [],
-    );
+    const handleUiChange = useCallback<UiChangeHandler>((key, value) => {
+        setUiValues((prev) => ({ ...prev, [key]: value }));
+        // Theme is the only UI value that touches the DOM live — applying
+        // here keeps the change visible while the user is still editing.
+        if (key === 'theme') {
+            document.documentElement.setAttribute('data-theme', value as string);
+        }
+    }, []);
 
-    const handleResetGlobal = useCallback(
-        ((key) => {
+    const handleResetGlobal = useCallback<SettingResetHandler>(
+        (key) => {
             if (schema && schema[key]) {
                 setFormValues((prev) => ({ ...prev, [key]: schema[key].default }));
             }
-        }) satisfies SettingResetHandler,
+        },
         [schema],
     );
 
-    const handleResetUi = useCallback(
-        ((key) => {
-            setUiValues((prev) => ({ ...prev, [key]: DEFAULT_UI_VALUES[key] }));
-            if (key === 'theme') {
-                document.documentElement.setAttribute('data-theme', DEFAULT_UI_VALUES.theme);
-            }
-        }) satisfies UiResetHandler,
-        [],
-    );
+    const handleResetUi = useCallback<UiResetHandler>((key) => {
+        setUiValues((prev) => ({ ...prev, [key]: DEFAULT_UI_VALUES[key] }));
+        if (key === 'theme') {
+            document.documentElement.setAttribute('data-theme', DEFAULT_UI_VALUES.theme);
+        }
+    }, []);
 
     const handleResetAll = useCallback(() => {
         if (schema) {

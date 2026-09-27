@@ -245,23 +245,17 @@ function useTitleProfile({
 function useOverrideEdits() {
     const [overrides, setOverrides] = useState<ChallengeValues>({});
 
-    const changeOverride = useCallback(
-        ((key, value) => {
-            setOverrides((prev) => ({ ...prev, [key]: value }));
-        }) satisfies SettingChangeHandler,
-        [],
-    );
+    const changeOverride = useCallback<SettingChangeHandler>((key, value) => {
+        setOverrides((prev) => ({ ...prev, [key]: value }));
+    }, []);
 
-    const clearOverride = useCallback(
-        ((key) => {
-            setOverrides((prev) => {
-                const next = { ...prev };
-                delete next[key];
-                return next;
-            });
-        }) satisfies SettingResetHandler,
-        [],
-    );
+    const clearOverride = useCallback<SettingResetHandler>((key) => {
+        setOverrides((prev) => {
+            const next = { ...prev };
+            delete next[key];
+            return next;
+        });
+    }, []);
 
     return { overrides, setOverrides, changeOverride, clearOverride };
 }
