@@ -21,8 +21,8 @@ const fetchTitleRules = () => Promise.all([ipc.getTitleRules(), ipc.getChallenge
  * clears a stale error as the user edits.
  */
 export function useTitleRules(isOpen: boolean) {
-    const [rules, setRules] = useState([] as TitleRule[]);
-    const [profiles, setProfiles] = useState({} as Record<string, ChallengeValues>);
+    const [rules, setRules] = useState<TitleRule[]>([]);
+    const [profiles, setProfiles] = useState<Record<string, ChallengeValues>>({});
     const [error, setError] = useState(false);
 
     const onLoad = useCallback(

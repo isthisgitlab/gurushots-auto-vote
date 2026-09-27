@@ -15,10 +15,10 @@ const MAX_ENTRIES = 1000;
  * messages (turbo retries, mock loops) don't collide.
  */
 export function useLogStream(): { entries: GuiLogEntry[]; connected: boolean } {
-    const [entries, setEntries] = useState([] as GuiLogEntry[]);
+    const [entries, setEntries] = useState<GuiLogEntry[]>([]);
     const [connected, setConnected] = useState(false);
     const mountedRef = useRef(true);
-    const unsubscribeRef = useRef(null as (() => void) | null);
+    const unsubscribeRef = useRef<(() => void) | null>(null);
 
     useEffect(() => {
         mountedRef.current = true;

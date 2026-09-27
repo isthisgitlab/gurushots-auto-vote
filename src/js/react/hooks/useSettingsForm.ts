@@ -73,10 +73,10 @@ export function useSettingsForm({
     refetchSchema: () => Promise<void>;
     updateSetting: (key: string, value: unknown) => Promise<void>;
 }) {
-    const [formValues, setFormValues] = useState({} as Record<string, unknown>);
+    const [formValues, setFormValues] = useState<Record<string, unknown>>({});
     const [uiValues, setUiValues] = useState(DEFAULT_UI_VALUES);
-    const [originalUiValues, setOriginalUiValues] = useState(null as UiValues | null);
-    const [originalFormValues, setOriginalFormValues] = useState(null as Record<string, unknown> | null);
+    const [originalUiValues, setOriginalUiValues] = useState<UiValues | null>(null);
+    const [originalFormValues, setOriginalFormValues] = useState<Record<string, unknown> | null>(null);
     const [saving, setSaving] = useState(false);
 
     // Refetch from disk every time the modal opens so we never display
@@ -99,8 +99,8 @@ export function useSettingsForm({
     // original* snapshots (which revert/Cancel roll back to) so a save that
     // fails partway and keeps the modal open still diffs the retry against
     // what was actually persisted, not against the open-time values.
-    const persistedUiRef = useRef(null as Record<string, unknown> | null);
-    const persistedFormRef = useRef(null as Record<string, unknown> | null);
+    const persistedUiRef = useRef<Record<string, unknown> | null>(null);
+    const persistedFormRef = useRef<Record<string, unknown> | null>(null);
     useEffect(() => {
         if (!isOpen) {
             formInitForOpenRef.current = false;

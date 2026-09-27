@@ -33,7 +33,7 @@ export function useCustomTimezoneInput({
     const [error, setError] = useState(false);
     // Revealing the input (the "+" button) moves focus into it, so the user
     // can type straight away.
-    const inputRef = useRef(null as HTMLInputElement | null);
+    const inputRef = useRef<HTMLInputElement | null>(null);
     useEffect(() => {
         if (visible) inputRef.current?.focus();
     }, [visible]);

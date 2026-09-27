@@ -74,7 +74,7 @@ function useOverridesLoad({
     setOverrides: SetOverrides;
     setTitleProfile: SetTitleProfile;
 }) {
-    const [loadedKey, setLoadedKey] = useState(null as string | null);
+    const [loadedKey, setLoadedKey] = useState<string | null>(null);
     useEffect(() => {
         if (!isOpen) setLoadedKey(null);
     }, [isOpen]);
@@ -187,7 +187,7 @@ function useTitleProfile({
     overrides: ChallengeValues;
     setOverrides: SetOverrides;
 }) {
-    const [titleProfile, setTitleProfile] = useState(null as TitleProfileState);
+    const [titleProfile, setTitleProfile] = useState<TitleProfileState>(null);
     // Set when a profile Apply flips scheduledFillReplaces on for a challenge
     // that didn't have it — that one field can silently cost a challenge its
     // fills, so it gets a highlighted warning the generic apply-hint lacks.
@@ -243,7 +243,7 @@ function useTitleProfile({
 
 /** The sparse override map and its per-key edits. */
 function useOverrideEdits() {
-    const [overrides, setOverrides] = useState({} as ChallengeValues);
+    const [overrides, setOverrides] = useState<ChallengeValues>({});
 
     const changeOverride = useCallback(
         ((key, value) => {
