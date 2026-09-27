@@ -195,10 +195,8 @@ const storeScenario = (
     return { ok: true, name: scenario.name };
 };
 
-const saveScenario = (
-    doc: unknown,
-    { overwrite = true }: { overwrite?: boolean } | undefined = {},
-): ScenarioSaveResult => storeScenario(doc, { overwrite });
+const saveScenario = (doc: unknown, { overwrite = true }: { overwrite?: boolean } = {}): ScenarioSaveResult =>
+    storeScenario(doc, { overwrite });
 
 /**
  * Rename a stored scenario and every assignment of it. The new name must be
@@ -290,10 +288,7 @@ const previewScenarioImport = (text: unknown) => {
 /**
  * Parse, validate and store shared scenario JSON.
  */
-const importScenario = (
-    text: unknown,
-    { overwrite = false }: { overwrite?: boolean } | undefined = {},
-): ScenarioSaveResult => {
+const importScenario = (text: unknown, { overwrite = false }: { overwrite?: boolean } = {}): ScenarioSaveResult => {
     const parsed = parseScenarioJson(text);
     if (!parsed.ok) return failure(parsed.issues);
     return storeScenario(parsed.value, { overwrite });
