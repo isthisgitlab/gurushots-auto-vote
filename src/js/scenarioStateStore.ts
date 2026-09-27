@@ -1,6 +1,6 @@
 /**
  * Scenario runtime state: where each challenge is in its user-defined
- * scenario (settings/scenarios.js) — current phase, remembered photos, which
+ * scenario (settings/scenarios.ts) — current phase, remembered photos, which
  * rules already fired, an action in flight, currency spent, and the last
  * action / error for the status line.
  *

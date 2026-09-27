@@ -44,7 +44,7 @@ const getDefaultSettings = (): AppSettings => {
             // id-keyed perChallenge overrides are lost on every rotation; these
             // rules match on what survives a rotation — title, challenge tag,
             // type, photo count, runtime — and list order is precedence (see
-            // settings/challengeRules.js). A rule may assign one named settings
+            // settings/challengeRules.ts). A rule may assign one named settings
             // profile, override a few join settings inline, and add
             // must/should-include tags; all of it is an inherited baseline
             // below any id-keyed manual override.

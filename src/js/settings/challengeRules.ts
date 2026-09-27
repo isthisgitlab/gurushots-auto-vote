@@ -12,38 +12,37 @@
  * the first matching rule that sets it wins.
  */
 
-/** @import { LooseRecord, RuleMatchChallenge } from '../types/settings' */
+import type { LooseRecord, RuleMatchChallenge } from '../types/settings';
 
 /**
  * A rule as the matcher reads it: a stored rule, an editor row, or raw input.
  * Every field is re-normalized on read, so nothing about it is trusted.
- *
- * @typedef {LooseRecord | null | undefined} RuleLike
  */
+export type RuleLike = LooseRecord | null | undefined;
 
 /**
  * A rule's conditions, normalized. `null` / '' / [] = not set.
- *
- * @typedef {object} RuleConditions
- * @property {string[]} patterns
- * @property {string} mode
- * @property {string} tag
- * @property {string} type
- * @property {number|null} pics
- * @property {number|null} minHours
- * @property {number|null} maxHours
  */
+interface RuleConditions {
+    patterns: string[];
+    mode: string;
+    tag: string;
+    type: string;
+    pics: number | null;
+    minHours: number | null;
+    maxHours: number | null;
+}
 
 /**
  * A challenge normalized into the keys the conditions compare against.
- *
- * @typedef {object} RuleMatchTarget
- * @property {string} titleKey
- * @property {string[]} tagKeys
- * @property {string} typeKey
- * @property {number|null} pics
- * @property {number|null} runtimeHours
  */
+interface RuleMatchTarget {
+    titleKey: string;
+    tagKeys: string[];
+    typeKey: string;
+    pics: number | null;
+    runtimeHours: number | null;
+}
 
 // How a rule's title is compared. 'exact' is the default; a rule without a
 // `match` key compares exactly.
@@ -59,27 +58,17 @@ const MAX_RULE_RUNTIME_HOURS = 2000;
 
 // Stable match key for a title: trimmed + lowercased. The same challenge recurs
 // with the same title (but a new id) on each rotation.
-/**
- * @param {unknown} title
- * @returns {string}
- */
-const normalizeTitle = (title) => (typeof title === 'string' ? title.trim().toLowerCase() : '');
+
+const normalizeTitle = (title: unknown): string => (typeof title === 'string' ? title.trim().toLowerCase() : '');
 
 // Challenge tags ("Exhibition", "No comm") and types ("default", "flash") are
 // API-owned strings, compared trimmed + lowercased like titles.
 const normalizeTag = normalizeTitle;
 
-/**
- * @param {unknown} tags
- * @returns {string[]}
- */
-const normalizeTagList = (tags) => (Array.isArray(tags) ? tags.map(normalizeTag).filter(Boolean) : []);
+const normalizeTagList = (tags: unknown): string[] =>
+    Array.isArray(tags) ? tags.map(normalizeTag).filter(Boolean) : [];
 
-/**
- * @param {RuleLike} rule
- * @returns {string}
- */
-const ruleMatchMode = (rule) => {
+const ruleMatchMode = (rule: RuleLike): string => {
     const match = rule?.match;
     return typeof match === 'string' && TITLE_MATCH_MODES.includes(match) ? match : 'exact';
 };
@@ -88,32 +77,22 @@ const ruleMatchMode = (rule) => {
  * The raw title patterns a rule carries: the full `titles` list when present,
  * else the single `title` (which always mirrors the first entry of `titles`).
  * Non-strings are dropped; empties are left for callers to filter.
- *
- * @param {RuleLike} rule
- * @returns {string[]}
  */
-const titleRuleTitles = (rule) => {
+const titleRuleTitles = (rule: RuleLike): string[] => {
     const titles = rule?.titles;
-    /** @type {unknown[]} */
-    const list = Array.isArray(titles) && titles.length > 0 ? titles : [rule?.title];
+    const list: unknown[] = Array.isArray(titles) && titles.length > 0 ? titles : [rule?.title];
     return list.filter((title) => typeof title === 'string');
 };
 
 /**
  * Normalized, non-empty patterns — what the matcher and the identity key use.
- *
- * @param {RuleLike} rule
- * @returns {string[]}
  */
-const rulePatterns = (rule) => titleRuleTitles(rule).map(normalizeTitle).filter(Boolean);
+const rulePatterns = (rule: RuleLike): string[] => titleRuleTitles(rule).map(normalizeTitle).filter(Boolean);
 
 /**
  * A photo-count condition value, or null when absent/out of range.
- *
- * @param {unknown} pics
- * @returns {number|null}
  */
-const normalizeRulePics = (pics) => {
+const normalizeRulePics = (pics: unknown): number | null => {
     if (pics === null || pics === undefined || pics === '') return null;
     const n = Number(pics);
     return Number.isInteger(n) && n >= 1 && n <= MAX_RULE_PICS ? n : null;
@@ -121,11 +100,8 @@ const normalizeRulePics = (pics) => {
 
 /**
  * A runtime bound in hours, or null when absent/out of range.
- *
- * @param {unknown} hours
- * @returns {number|null}
  */
-const normalizeRuleHours = (hours) => {
+const normalizeRuleHours = (hours: unknown): number | null => {
     if (hours === null || hours === undefined || hours === '') return null;
     const n = Number(hours);
     return Number.isFinite(n) && n > 0 && n <= MAX_RULE_RUNTIME_HOURS ? n : null;
@@ -135,11 +111,8 @@ const normalizeRuleHours = (hours) => {
  * How long a challenge runs, in hours (`close_time` - `start_time`, both epoch
  * seconds), or null when either is unreadable. A runtime condition fails closed
  * on null, so a payload missing the times never matches a runtime rule.
- *
- * @param {RuleMatchChallenge | null | undefined} challenge
- * @returns {number|null}
  */
-const challengeRuntimeHours = (challenge) => {
+const challengeRuntimeHours = (challenge: RuleMatchChallenge | null | undefined): number | null => {
     const start = Number(challenge?.start_time);
     const close = Number(challenge?.close_time);
     if (!Number.isFinite(start) || !Number.isFinite(close) || close <= start || start <= 0) return null;
@@ -149,13 +122,9 @@ const challengeRuntimeHours = (challenge) => {
 /**
  * Normalize a challenge (or a bare title, for callers that only have one) into
  * the keys the conditions compare against.
- *
- * @param {RuleMatchChallenge|string|null|undefined} target
- * @returns {RuleMatchTarget}
  */
-const ruleMatchTarget = (target) => {
-    /** @type {RuleMatchChallenge} */
-    const challenge = typeof target === 'string' ? { title: target } : target || {};
+const ruleMatchTarget = (target: RuleMatchChallenge | string | null | undefined): RuleMatchTarget => {
+    const challenge: RuleMatchChallenge = typeof target === 'string' ? { title: target } : target || {};
     return {
         titleKey: normalizeTitle(challenge.title),
         tagKeys: normalizeTagList(challenge.tags),
@@ -167,11 +136,8 @@ const ruleMatchTarget = (target) => {
 
 /**
  * The conditions a rule carries, normalized. `null` / '' / [] = not set.
- *
- * @param {RuleLike} rule
- * @returns {RuleConditions}
  */
-const ruleConditions = (rule) => ({
+const ruleConditions = (rule: RuleLike): RuleConditions => ({
     patterns: rulePatterns(rule),
     mode: ruleMatchMode(rule),
     tag: normalizeTag(rule?.challengeTag),
@@ -181,16 +147,14 @@ const ruleConditions = (rule) => ({
     maxHours: normalizeRuleHours(rule?.maxHours),
 });
 
-/** @param {RuleConditions} conditions */
-const hasRuntimeCondition = (conditions) => conditions.minHours !== null || conditions.maxHours !== null;
+/** @param conditions */
+const hasRuntimeCondition = (conditions: RuleConditions) =>
+    conditions.minHours !== null || conditions.maxHours !== null;
 
 /**
  * How many CLASS conditions (everything but the title) a rule carries.
- *
- * @param {RuleConditions} conditions
- * @returns {number}
  */
-const classConditionCount = (conditions) =>
+const classConditionCount = (conditions: RuleConditions): number =>
     (conditions.tag ? 1 : 0) +
     (conditions.type ? 1 : 0) +
     (conditions.pics !== null ? 1 : 0) +
@@ -198,21 +162,13 @@ const classConditionCount = (conditions) =>
 
 /**
  * True when the rule carries at least one condition.
- *
- * @param {RuleLike} rule
- * @returns {boolean}
  */
-const hasRuleCondition = (rule) => {
+const hasRuleCondition = (rule: RuleLike): boolean => {
     const conditions = ruleConditions(rule);
     return conditions.patterns.length > 0 || classConditionCount(conditions) > 0;
 };
 
-/**
- * @param {RuleConditions} conditions
- * @param {string} titleKey
- * @returns {boolean}
- */
-const titleMatches = (conditions, titleKey) => {
+const titleMatches = (conditions: RuleConditions, titleKey: string): boolean => {
     if (!titleKey) return false;
     return conditions.patterns.some((pattern) =>
         conditions.mode === 'contains'
@@ -223,12 +179,7 @@ const titleMatches = (conditions, titleKey) => {
     );
 };
 
-/**
- * @param {RuleConditions} conditions
- * @param {number|null} runtimeHours
- * @returns {boolean}
- */
-const runtimeMatches = (conditions, runtimeHours) => {
+const runtimeMatches = (conditions: RuleConditions, runtimeHours: number | null): boolean => {
     if (runtimeHours === null) return false;
     if (conditions.minHours !== null && runtimeHours < conditions.minHours) return false;
     return conditions.maxHours === null || runtimeHours <= conditions.maxHours;
@@ -237,12 +188,8 @@ const runtimeMatches = (conditions, runtimeHours) => {
 /**
  * Does `rule` match the normalized `target` (from ruleMatchTarget)? Every
  * condition the rule carries must hold; a rule with none matches nothing.
- *
- * @param {RuleLike} rule
- * @param {RuleMatchTarget} target
- * @returns {boolean}
  */
-const ruleMatches = (rule, target) => {
+const ruleMatches = (rule: RuleLike, target: RuleMatchTarget): boolean => {
     const conditions = ruleConditions(rule);
     if (conditions.patterns.length === 0 && classConditionCount(conditions) === 0) return false;
     if (conditions.patterns.length > 0 && !titleMatches(conditions, target.titleKey)) return false;
@@ -255,20 +202,19 @@ const ruleMatches = (rule, target) => {
 /**
  * Every rule in `rules` matching a challenge, in list (= precedence) order.
  *
- * @template {RuleLike} R
- * @param {readonly R[] | null | undefined} rules
- * @param {RuleMatchChallenge|string|null|undefined} challenge a challenge, or just its title
- * @returns {R[]}
+ * @param challenge a challenge, or just its title
  */
-const matchingRules = (rules, challenge) => {
+const matchingRules = <R extends RuleLike>(
+    rules: readonly R[] | null | undefined,
+    challenge: RuleMatchChallenge | string | null | undefined,
+): R[] => {
     if (!Array.isArray(rules) || rules.length === 0) return [];
     const target = ruleMatchTarget(challenge);
     return rules.filter((rule) => ruleMatches(rule, target));
 };
 
 // Title modes ranked by how narrowly they pin one challenge.
-/** @type {Record<string, number>} */
-const TITLE_MODE_SCORE = { exact: 3, starts: 2, contains: 1 };
+const TITLE_MODE_SCORE: Record<string, number> = { exact: 3, starts: 2, contains: 1 };
 
 /**
  * Sort key for the default order, compared element by element, higher first:
@@ -281,11 +227,8 @@ const TITLE_MODE_SCORE = { exact: 3, starts: 2, contains: 1 };
  *      then type, then tag — so "4 photos + 7 days" > "4 photos" > "7 days".
  * For title rules 1–3 reproduce the most-specific-wins ranking, so the
  * ordering migration keeps every existing winner.
- *
- * @param {RuleLike} rule
- * @returns {number[]}
  */
-const defaultOrderKey = (rule) => {
+const defaultOrderKey = (rule: RuleLike): number[] => {
     const conditions = ruleConditions(rule);
     const hasTitle = conditions.patterns.length > 0;
     const count = classConditionCount(conditions);
@@ -300,12 +243,7 @@ const defaultOrderKey = (rule) => {
     ];
 };
 
-/**
- * @param {RuleLike} a
- * @param {RuleLike} b
- * @returns {number}
- */
-const compareDefaultOrder = (a, b) => {
+const compareDefaultOrder = (a: RuleLike, b: RuleLike): number => {
     const left = defaultOrderKey(a);
     const right = defaultOrderKey(b);
     for (let i = 0; i < left.length; i += 1) {
@@ -317,12 +255,9 @@ const compareDefaultOrder = (a, b) => {
 /**
  * A copy of `rules` in the default order (see defaultOrderKey). Stable, so
  * rules that rank equal keep their relative order.
- *
- * @template {RuleLike} R
- * @param {readonly R[] | null | undefined} rules
- * @returns {R[]}
  */
-const sortRulesByDefaultOrder = (rules) => (Array.isArray(rules) ? [...rules].sort(compareDefaultOrder) : []);
+const sortRulesByDefaultOrder = <R extends RuleLike>(rules: readonly R[] | null | undefined): R[] =>
+    Array.isArray(rules) ? [...rules].sort(compareDefaultOrder) : [];
 
 export {
     TITLE_MATCH_MODES,

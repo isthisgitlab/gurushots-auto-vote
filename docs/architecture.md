@@ -149,11 +149,11 @@ Domain terms used throughout, in reader's terms:
   runtime range `minHours`/`maxHours` over `close_time` - `start_time` — and every condition present must
   hold (AND); a rule with none matches nothing, and a runtime condition fails closed when either time is
   unreadable. The pure matcher and the default order live in the dependency-free
-  `settings/challengeRules.js` so the renderer can use them too. Runtime exists because entry timing and
+  `settings/challengeRules.ts` so the renderer can use them too. Runtime exists because entry timing and
   tactics really track how long a challenge runs, and photo count is only an **imperfect proxy** for it: on
   the live account 4-photo defaults run 24h, 2-photo ones 48h and 3-photo ones 72h, yet 4-photo challenges
   also span 72h, 168h and 515.7h — so "4 photos" and "4 photos + at least 168h" are different rules.
-- **Resolution cascades per key (`ruleValuesFor` in `settings/ruleResolution.js`).** The matching rules are walked in list order and, for
+- **Resolution cascades per key (`ruleValuesFor` in `settings/ruleResolution.ts`).** The matching rules are walked in list order and, for
   each setting, the FIRST rule that sets it wins — its own inline value first, then (for the first rule
   naming a profile only) that profile's value; a key it leaves unset falls through to the next matching
   rule, then to the global default. Only **one profile** ever applies to a challenge, because profiles are
@@ -513,7 +513,7 @@ A **scenario** is a user-written, multi-day playbook for a challenge: named **ph
 hard-codes no tactic; `scenarios/vocabulary.js` is the one list of conditions, entry selectors, actions and
 caps (dependency-free, renderer-safe), and `scenarios/templates.js` holds editable examples.
 
-- **Documents** (`settings/scenarios.js`, `settings/scenarioSchema.js`, via the facade): stored name-keyed
+- **Documents** (`settings/scenarios.ts`, `settings/scenarioSchema.ts`, via the facade): stored name-keyed
   in `challengeSettings.scenarios` (so the Android background service has them) and re-validated on read.
   A shared file is untrusted input: size-capped before parsing, strict zod shapes (unknown keys rejected),
   bounded non-reserved names, resolvable `start` / `goto` / memory slots, and phase settings limited to
@@ -524,7 +524,7 @@ caps (dependency-free, renderer-safe), and `scenarios/templates.js` holds editab
   profile). An unknown name runs nothing and is logged.
 - **Overlay precedence**: while a challenge is in a phase, that phase's `settings` sit **above** every other
   layer of `getEffectiveSetting` for that challenge, the manual override included
-  (`settings/scenarioOverlay.js`). Leaving the phase restores normal values; nothing is copied into stored
+  (`settings/scenarioOverlay.ts`). Leaving the phase restores normal values; nothing is copied into stored
   overrides; the `scenario` key itself is never overlaid. No overlay while the state is unreadable, belongs
   to another scenario, or names a phase the scenario no longer has.
 - **Runtime state** (`scenarioStateStore.ts`, per challenge: phase, memory, fired markers, in-flight action,

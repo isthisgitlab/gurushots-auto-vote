@@ -9,15 +9,12 @@ import { loadSettings, saveSettings, setSetting, cleanupObsoleteSettings } from 
 import { getDefaultSettings, valuesEqual } from './defaults';
 import { getGlobalDefault, setGlobalDefault } from './challengeOverrides';
 
-/** @import { AppSettings, ChallengeValues } from '../types/settings' */
+import type { AppSettings, ChallengeValues } from '../types/settings';
 
 /**
  * Reset a single setting to its default value
- *
- * @param {string} key
- * @returns {boolean}
  */
-const resetSetting = (key) => {
+const resetSetting = (key: string): boolean => {
     const defaultSettings = getDefaultSettings();
 
     if (!Object.prototype.hasOwnProperty.call(defaultSettings, key)) {
@@ -30,11 +27,8 @@ const resetSetting = (key) => {
 
 /**
  * Reset global default for a schema-based setting
- *
- * @param {string} settingKey
- * @returns {boolean}
  */
-const resetGlobalDefault = (settingKey) => {
+const resetGlobalDefault = (settingKey: string): boolean => {
     const entry = schemaEntry(settingKey);
     if (!entry) {
         logger.withCategory('settings').error(`Invalid setting key: ${settingKey}`, null);
@@ -47,16 +41,13 @@ const resetGlobalDefault = (settingKey) => {
 
 /**
  * Reset all global defaults for schema-based settings
- *
- * @returns {boolean}
  */
-const resetAllGlobalDefaults = () => {
+const resetAllGlobalDefaults = (): boolean => {
     const settings = loadSettings();
     const challengeSettings = settings.challengeSettings;
 
     // Reset all global defaults to schema defaults
-    /** @type {ChallengeValues} */
-    const globalDefaults = {};
+    const globalDefaults: ChallengeValues = {};
     Object.keys(SETTINGS_SCHEMA).forEach((key) => {
         globalDefaults[key] = schemaEntry(key)?.default;
     });
@@ -67,16 +58,13 @@ const resetAllGlobalDefaults = () => {
 
 /**
  * Reset all settings to their default values (preserves only essential user data)
- *
- * @returns {boolean}
  */
-const resetAllSettings = () => {
+const resetAllSettings = (): boolean => {
     const currentSettings = loadSettings();
 
     // Start with defaults, preserving only essential user data. loadSettings
     // merges over the defaults, so these keys are always present.
-    /** @type {AppSettings} */
-    const newSettings = { ...getDefaultSettings() };
+    const newSettings: AppSettings = { ...getDefaultSettings() };
     for (const key of ['token', 'mock', 'apiHeaders']) {
         newSettings[key] = currentSettings[key];
     }
@@ -94,11 +82,8 @@ const resetAllSettings = () => {
 
 /**
  * Check if a setting has been modified from its default value
- *
- * @param {string} key
- * @returns {boolean}
  */
-const isSettingModified = (key) => {
+const isSettingModified = (key: string): boolean => {
     const defaultSettings = getDefaultSettings();
     if (!Object.prototype.hasOwnProperty.call(defaultSettings, key)) {
         return false;
@@ -108,11 +93,8 @@ const isSettingModified = (key) => {
 
 /**
  * Check if a global default has been modified from its schema default
- *
- * @param {string} settingKey
- * @returns {boolean}
  */
-const isGlobalDefaultModified = (settingKey) => {
+const isGlobalDefaultModified = (settingKey: string): boolean => {
     const entry = schemaEntry(settingKey);
     if (!entry) {
         return false;

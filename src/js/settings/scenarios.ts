@@ -19,10 +19,10 @@ import { validateScenario, parseScenarioJson } from './scenarioSchema';
 import { sanitizeTitleRuleInline } from './titleRuleSanitize';
 import { isPlainObject } from '../plainObject';
 
-/** @import { AppSettings, ChallengeValues, TitleRule } from '../types/settings' */
-/** @import { ScenarioDocument, ScenarioIssue } from './scenarioSchema' */
+import type { AppSettings, ChallengeValues, TitleRule } from '../types/settings';
+import type { ScenarioDocument, ScenarioIssue } from './scenarioSchema';
 
-/** @typedef {{ok: true, name: string} | {ok: false, issues: ScenarioIssue[]}} ScenarioSaveResult */
+type ScenarioSaveResult = { ok: true; name: string } | { ok: false; issues: ScenarioIssue[] };
 
 const MAX_SCENARIOS = SCENARIO_CAPS.scenarios;
 
@@ -30,11 +30,8 @@ const log = () => logger.withCategory('settings');
 
 /**
  * The stored scenarios map when it is a plain object, else `{}`.
- *
- * @param {AppSettings} settings
- * @returns {Record<string, unknown>}
  */
-const readScenariosMap = (settings) => {
+const readScenariosMap = (settings: AppSettings): Record<string, unknown> => {
     const stored = settings.challengeSettings?.scenarios;
     return stored && typeof stored === 'object' && !Array.isArray(stored) ? stored : {};
 };
@@ -43,33 +40,23 @@ const readScenariosMap = (settings) => {
 // per challenge per pass), so results are memoized by the stored document and
 // the global defaults its phase settings are checked against.
 const VALIDATION_CACHE_LIMIT = 200;
-/** @type {Map<string, ReturnType<typeof validateScenario>>} */
-const validationCache = new Map();
+const validationCache: Map<string, ReturnType<typeof validateScenario>> = new Map();
 
-/**
- * @param {unknown} raw
- * @param {ChallengeValues} globalDefaults
- * @returns {ReturnType<typeof validateScenario>}
- */
-const validateStored = (raw, globalDefaults) => {
+const validateStored = (raw: unknown, globalDefaults: ChallengeValues): ReturnType<typeof validateScenario> => {
     const key = JSON.stringify([raw, globalDefaults]);
     if (!validationCache.has(key)) {
         if (validationCache.size >= VALIDATION_CACHE_LIMIT) validationCache.clear();
         validationCache.set(key, validateScenario(raw, globalDefaults));
     }
-    return /** @type {ReturnType<typeof validateScenario>} */ (validationCache.get(key));
+    return validationCache.get(key) as ReturnType<typeof validateScenario>;
 };
 
 /**
  * The valid stored scenario named `name` (case-insensitive) in an already
  * loaded settings object, or null. Not a copy — callers only read it. Used by
  * the phase-settings overlay, which must not load settings a second time.
- *
- * @param {AppSettings} settings
- * @param {unknown} name
- * @returns {ScenarioDocument|null}
  */
-const findStoredScenario = (settings, name) => {
+const findStoredScenario = (settings: AppSettings, name: unknown): ScenarioDocument | null => {
     const stored = readScenariosMap(settings);
     const key = findProfileKey(stored, normalizeProfileName(name));
     if (key === null) return null;
@@ -79,24 +66,18 @@ const findStoredScenario = (settings, name) => {
 
 /**
  * True when any scenario is stored at all — lets hot paths skip the overlay cheaply.
- *
- * @param {AppSettings} settings
- * @returns {boolean}
  */
-const hasStoredScenarios = (settings) => Object.keys(readScenariosMap(settings)).length > 0;
+const hasStoredScenarios = (settings: AppSettings): boolean => Object.keys(readScenariosMap(settings)).length > 0;
 
 /**
  * Valid stored scenarios as `{ [name]: document }` (defensive copies). A
  * stored document that no longer validates is left out — and logged — rather
  * than run.
- *
- * @returns {Record<string, ScenarioDocument>}
  */
-const getScenarios = () => {
+const getScenarios = (): Record<string, ScenarioDocument> => {
     const settings = loadSettings();
     const globalDefaults = globalChallengeValues(settings);
-    /** @type {Record<string, ScenarioDocument>} */
-    const scenarios = {};
+    const scenarios: Record<string, ScenarioDocument> = {};
     for (const [name, raw] of Object.entries(readScenariosMap(settings))) {
         const result = validateStored(raw, globalDefaults);
         if (result.ok) {
@@ -110,11 +91,8 @@ const getScenarios = () => {
 
 /**
  * One valid scenario by name (case-insensitive), or null.
- *
- * @param {unknown} name
- * @returns {ScenarioDocument|null}
  */
-const getScenario = (name) => {
+const getScenario = (name: unknown): ScenarioDocument | null => {
     if (!normalizeProfileName(name)) return null;
     // Looks up and copies just this one — the engine and the scheduler call it
     // per challenge per pass.
@@ -122,25 +100,14 @@ const getScenario = (name) => {
     return scenario ? structuredClone(scenario) : null;
 };
 
-/**
- * @param {ScenarioIssue[]} issues
- * @returns {{ok: false, issues: ScenarioIssue[]}}
- */
-const failure = (issues) => ({ ok: false, issues });
+const failure = (issues: ScenarioIssue[]): { ok: false; issues: ScenarioIssue[] } => ({ ok: false, issues });
 
-/**
- * @param {unknown} value
- * @returns {Record<string, unknown>}
- */
-const plainObject = (value) => (isPlainObject(value) ? value : {});
+const plainObject = (value: unknown): Record<string, unknown> => (isPlainObject(value) ? value : {});
 
 // A rule keeps its row only while it still contributes something: a profile,
 // tags, or a valid inline value.
-/**
- * @param {TitleRule} rule
- * @returns {boolean}
- */
-const ruleHasBehaviour = (rule) => {
+
+const ruleHasBehaviour = (rule: TitleRule): boolean => {
     const hasTags = ['mustIncludeTags', 'shouldIncludeTags'].some(
         (key) => Array.isArray(rule[key]) && rule[key].length > 0,
     );
@@ -153,15 +120,11 @@ const ruleHasBehaviour = (rule) => {
  * profiles and challenge rules — at `toName`, or clear it when `toName` is
  * ''. A deleted scenario must not linger as an assignment that silently runs
  * nothing, and a rename must not orphan its challenges.
- *
- * @param {AppSettings} settings
- * @param {string} fromName
- * @param {string} toName
  */
-const reassignScenario = (settings, fromName, toName) => {
+const reassignScenario = (settings: AppSettings, fromName: string, toName: string) => {
     const from = normalizeProfileName(fromName);
-    /** @param {unknown} value */
-    const assigned = (value) => typeof value === 'string' && normalizeProfileName(value) === from;
+    /** @param value */
+    const assigned = (value: unknown) => typeof value === 'string' && normalizeProfileName(value) === from;
     const challengeSettings = settings.challengeSettings;
     // Overrides are validated on load; stored profiles are checked here.
     const valueMaps = [
@@ -186,24 +149,26 @@ const reassignScenario = (settings, fromName, toName) => {
  * Validate and store a scenario. `overwrite: false` refuses a name that
  * already exists; `replaces` names a stored scenario this document takes the
  * place of (a rename), which frees that name.
- *
- * @param {unknown} doc
- * @param {{
- *   overwrite: boolean,
- *   replaces?: string|null,
- *   beforeSave?: ((settings: AppSettings, storedName: string) => void)|null,
- * }} options
- * @returns {ScenarioSaveResult}
  */
-const storeScenario = (doc, { overwrite, replaces = null, beforeSave = null }) => {
+const storeScenario = (
+    doc: unknown,
+    {
+        overwrite,
+        replaces = null,
+        beforeSave = null,
+    }: {
+        overwrite: boolean;
+        replaces?: string | null;
+        beforeSave?: ((settings: AppSettings, storedName: string) => void) | null;
+    },
+): ScenarioSaveResult => {
     const settings = loadSettings();
     const result = validateScenario(doc, globalChallengeValues(settings));
     if (!result.ok) return failure(result.issues);
     const { scenario } = result;
 
     const stored = readScenariosMap(settings);
-    /** @type {Record<string, unknown>} */
-    const scenarios = {};
+    const scenarios: Record<string, unknown> = {};
     const target = normalizeProfileName(scenario.name);
     const replaced = replaces === null ? null : normalizeProfileName(replaces);
     let exists = false;
@@ -230,22 +195,16 @@ const storeScenario = (doc, { overwrite, replaces = null, beforeSave = null }) =
     return { ok: true, name: scenario.name };
 };
 
-/**
- * @param {unknown} doc
- * @param {{overwrite?: boolean}} [options]
- * @returns {ScenarioSaveResult}
- */
-const saveScenario = (doc, { overwrite = true } = {}) => storeScenario(doc, { overwrite });
+const saveScenario = (
+    doc: unknown,
+    { overwrite = true }: { overwrite?: boolean } | undefined = {},
+): ScenarioSaveResult => storeScenario(doc, { overwrite });
 
 /**
  * Rename a stored scenario and every assignment of it. The new name must be
  * free (a casing-only change is fine).
- *
- * @param {unknown} oldName
- * @param {unknown} newName
- * @returns {ScenarioSaveResult}
  */
-const renameScenario = (oldName, newName) => {
+const renameScenario = (oldName: unknown, newName: unknown): ScenarioSaveResult => {
     const existing = getScenario(oldName);
     if (!existing) return failure([{ path: 'name', message: `No scenario named "${profileNameForLog(oldName)}"` }]);
     const sameName = normalizeProfileName(oldName) === normalizeProfileName(newName);
@@ -262,11 +221,8 @@ const renameScenario = (oldName, newName) => {
 /**
  * Delete a stored scenario and clear every assignment of it. False when there
  * is none by that name.
- *
- * @param {unknown} name
- * @returns {boolean}
  */
-const deleteScenario = (name) => {
+const deleteScenario = (name: unknown): boolean => {
     const settings = loadSettings();
     const stored = readScenariosMap(settings);
     const key = findProfileKey(stored, normalizeProfileName(name));
@@ -283,14 +239,10 @@ const deleteScenario = (name) => {
 /**
  * What a scenario will do, for the import confirmation: its phases, every
  * action that spends currency or a one-per-challenge power, and its limits.
- *
- * @param {ScenarioDocument} scenario
  */
-const describeScenario = (scenario) => {
-    /** @type {Array<{name: string, settings: string[], rules: number}>} */
-    const phases = [];
-    /** @type {Array<{phase: string, rule: string|undefined, action: string}>} */
-    const spending = [];
+const describeScenario = (scenario: ScenarioDocument) => {
+    const phases: Array<{ name: string; settings: string[]; rules: number }> = [];
+    const spending: Array<{ phase: string; rule: string | undefined; action: string }> = [];
     for (const [phaseName, phase] of Object.entries(scenario.phases)) {
         const rules = phase.rules ?? [];
         phases.push({ name: phaseName, settings: Object.keys(phase.settings ?? {}), rules: rules.length });
@@ -315,18 +267,14 @@ const describeScenario = (scenario) => {
 /**
  * Validate a scenario document without storing it (the builder's draft, the
  * simulation of an unsaved edit).
- *
- * @param {unknown} doc
  */
-const checkScenario = (doc) => validateScenario(doc, globalChallengeValues(loadSettings()));
+const checkScenario = (doc: unknown) => validateScenario(doc, globalChallengeValues(loadSettings()));
 
 /**
  * Parse and validate shared scenario JSON without storing it — the preview
  * step. `exists` tells the caller a save would replace a scenario.
- *
- * @param {unknown} text
  */
-const previewScenarioImport = (text) => {
+const previewScenarioImport = (text: unknown) => {
     const parsed = parseScenarioJson(text);
     if (!parsed.ok) return failure(parsed.issues);
     const result = validateScenario(parsed.value, globalChallengeValues(loadSettings()));
@@ -341,12 +289,11 @@ const previewScenarioImport = (text) => {
 
 /**
  * Parse, validate and store shared scenario JSON.
- *
- * @param {unknown} text
- * @param {{overwrite?: boolean}} [options]
- * @returns {ScenarioSaveResult}
  */
-const importScenario = (text, { overwrite = false } = {}) => {
+const importScenario = (
+    text: unknown,
+    { overwrite = false }: { overwrite?: boolean } | undefined = {},
+): ScenarioSaveResult => {
     const parsed = parseScenarioJson(text);
     if (!parsed.ok) return failure(parsed.issues);
     return storeScenario(parsed.value, { overwrite });
@@ -354,11 +301,8 @@ const importScenario = (text, { overwrite = false } = {}) => {
 
 /**
  * A stored scenario as pretty-printed JSON, or null when there is none.
- *
- * @param {unknown} name
- * @returns {string|null}
  */
-const exportScenario = (name) => {
+const exportScenario = (name: unknown): string | null => {
     const scenario = getScenario(name);
     return scenario ? `${JSON.stringify(scenario, null, 2)}\n` : null;
 };

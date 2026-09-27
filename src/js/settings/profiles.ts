@@ -2,7 +2,7 @@
  * Named challenge-settings profiles ("save this tactic, recall it later"):
  * list, save/overwrite, delete, apply to a challenge, and first-run seeding of
  * the curated intent presets. Name handling and value sanitization live in
- * profileStore.js; this module owns the load-modify-save around them.
+ * profileStore.ts; this module owns the load-modify-save around them.
  */
 
 import * as logger from '../logger';
@@ -23,44 +23,35 @@ import { sanitizeTitleRuleInline } from './titleRuleSanitize';
 import { titleProfileComposesWithKnownOverrides } from './ruleResolution';
 import { replaceChallengeOverridesInSettings, trimmedChallengeId } from './challengeOverrides';
 
-/** @import { AppSettings, ChallengeIdInput, ChallengeValues, TitleRule } from '../types/settings' */
+import type { AppSettings, ChallengeIdInput, ChallengeValues, TitleRule } from '../types/settings';
 
-/**
- * @param {unknown} name
- * @returns {boolean}
- */
-const _isReservedName = (name) => RESERVED_PROFILE_NAMES.has(normalizeProfileName(name));
+const _isReservedName = (name: unknown): boolean => RESERVED_PROFILE_NAMES.has(normalizeProfileName(name));
 
 /**
  * Get the saved profiles as `{ [displayName]: { [settingKey]: value } }`.
  * Defensive copy; values are sanitized drop-silently (stale schema keys and
  * now-invalid values disappear from the view without rewriting storage — the
  * next save of that profile persists the sanitized form).
- *
- * @returns {Record<string, ChallengeValues>}
  */
-const getChallengeProfiles = () => {
+const getChallengeProfiles = (): Record<string, ChallengeValues> => {
     const settings = loadSettings();
     const stored = readProfilesMap(settings);
     const globalDefaults = globalChallengeValues(settings);
-    /** @type {Record<string, ChallengeValues>} */
-    const profiles = {};
+    const profiles: Record<string, ChallengeValues> = {};
     for (const name of Object.keys(stored)) {
         if (_isReservedName(name)) continue;
         // failClosed=false drops invalid values instead of rejecting, so it never yields null.
-        profiles[name] = /** @type {ChallengeValues} */ (sanitizeProfileValues(stored[name], false, globalDefaults));
+        profiles[name] = sanitizeProfileValues(stored[name], false, globalDefaults) as ChallengeValues;
     }
     return profiles;
 };
 
-/**
- * @param {AppSettings} settings
- * @param {string} normalizedName
- * @param {string} displayName
- * @param {ChallengeValues} values
- * @returns {boolean}
- */
-const _updateAssignedProfileRules = (settings, normalizedName, displayName, values) => {
+const _updateAssignedProfileRules = (
+    settings: AppSettings,
+    normalizedName: string,
+    displayName: string,
+    values: ChallengeValues,
+): boolean => {
     const rules = settings.challengeSettings.titleRules;
     const assigned = rules.filter((rule) => normalizeProfileName(rule?.profile) === normalizedName);
     if (assigned.some((rule) => !titleProfileComposesWithKnownOverrides(settings, rule, values))) {
@@ -84,14 +75,12 @@ const _updateAssignedProfileRules = (settings, normalizedName, displayName, valu
  * Own-property copy of the stored profiles minus reserved names and minus the
  * profile being saved (so a same-normalized-name save replaces the old casing
  * in place). `existed` reports whether that profile was present.
- *
- * @param {Record<string, ChallengeValues>} stored
- * @param {string} normalized
- * @returns {{profiles: Record<string, ChallengeValues>, existed: boolean}}
  */
-const _profilesWithout = (stored, normalized) => {
-    /** @type {Record<string, ChallengeValues>} */
-    const profiles = {};
+const _profilesWithout = (
+    stored: Record<string, ChallengeValues>,
+    normalized: string,
+): { profiles: Record<string, ChallengeValues>; existed: boolean } => {
+    const profiles: Record<string, ChallengeValues> = {};
     let existed = false;
     for (const existingName of Object.keys(stored)) {
         const key = normalizeProfileName(existingName);
@@ -110,12 +99,8 @@ const _profilesWithout = (stored, normalized) => {
  * name, the profile-count cap (new names only — overwriting an existing name
  * always succeeds), a non-plain-object values payload, or any invalid value.
  * An empty values map is allowed — it's a useful "all global defaults" preset.
- *
- * @param {unknown} name
- * @param {unknown} values
- * @returns {boolean}
  */
-const saveChallengeProfile = (name, values) => {
+const saveChallengeProfile = (name: unknown, values: unknown): boolean => {
     const trimmed = typeof name === 'string' ? name.trim() : '';
     const normalized = normalizeProfileName(trimmed);
     if (!trimmed || trimmed.length > MAX_PROFILE_NAME_LENGTH || RESERVED_PROFILE_NAMES.has(normalized)) {
@@ -150,11 +135,8 @@ const saveChallengeProfile = (name, values) => {
 /**
  * A rule with its profile assignment removed, or null when the profile was the
  * rule's sole contribution (no tags, no valid inline overrides left).
- *
- * @param {TitleRule} rule
- * @returns {TitleRule|null}
  */
-const _ruleWithoutProfile = (rule) => {
+const _ruleWithoutProfile = (rule: TitleRule): TitleRule | null => {
     const withoutProfile = { ...rule };
     delete withoutProfile.profile;
     const hasTags =
@@ -168,11 +150,8 @@ const _ruleWithoutProfile = (rule) => {
 /**
  * Delete a profile by name (case-insensitive on the normalized name).
  * Returns false when no such profile exists.
- *
- * @param {unknown} name
- * @returns {boolean}
  */
-const deleteChallengeProfile = (name) => {
+const deleteChallengeProfile = (name: unknown): boolean => {
     const normalized = normalizeProfileName(name);
     if (!normalized || RESERVED_PROFILE_NAMES.has(normalized)) {
         return false;
@@ -210,12 +189,8 @@ const deleteChallengeProfile = (name) => {
  * loop could observe half-applied. Here every value is validated against
  * {globalDefaults + profile} — the same context the profile was saved under —
  * and nothing is written unless all of it passes.
- *
- * @param {unknown} name
- * @param {ChallengeIdInput} challengeId
- * @returns {boolean}
  */
-const applyChallengeProfile = (name, challengeId) => {
+const applyChallengeProfile = (name: unknown, challengeId: ChallengeIdInput): boolean => {
     const id = trimmedChallengeId(challengeId);
     if (!id) {
         logger.withCategory('settings').error('applyChallengeProfile requires a challenge id', null);
@@ -253,7 +228,7 @@ const applyChallengeProfile = (name, challengeId) => {
 };
 
 /**
- * Seed the curated "intent" presets (settings/intentProfiles.js) into the
+ * Seed the curated "intent" presets (settings/intentProfiles.ts) into the
  * named-profiles store on first run. Idempotent and collision-safe:
  *
  *  - A per-profile marker in `challengeSettings.seededProfiles` (normalized
@@ -271,10 +246,8 @@ const applyChallengeProfile = (name, challengeId) => {
  *    they free capacity, rather than being permanently and silently suppressed.
  *
  * Returns true when nothing needed seeding or the seed-marker write succeeded.
- *
- * @returns {boolean}
  */
-const seedIntentProfiles = () => {
+const seedIntentProfiles = (): boolean => {
     const settings = loadSettings();
     const priorSeeded = Array.isArray(settings.challengeSettings?.seededProfiles)
         ? settings.challengeSettings.seededProfiles

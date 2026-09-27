@@ -21,9 +21,9 @@ import { schemaEntry, validateSetting, getValidationError } from './schema';
 import { challengeValueSetIsValid } from './defaults';
 import { RESERVED_PROFILE_NAMES } from './profileStore';
 
-/** @import { ScenarioCondition } from '../types/scenario' */
+import type { ScenarioCondition } from '../types/scenario';
 
-/** @typedef {{path: string, message: string}} ScenarioIssue */
+export type ScenarioIssue = { path: string; message: string };
 
 const { SCENARIO_CAPS } = vocabulary;
 
@@ -41,22 +41,19 @@ const SETTING_PAIRS = [
 /** Setting keys a phase may never overlay. */
 const PHASE_FORBIDDEN_KEYS = new Set(['scenario']);
 
-const isReserved = (/** @type {string} */ value) => RESERVED_PROFILE_NAMES.has(value.trim().toLowerCase());
+const isReserved = (value: string) => RESERVED_PROFILE_NAMES.has(value.trim().toLowerCase());
 
 /**
  * z.enum over one of the vocabulary's lists.
- *
- * @template {string} T
- * @param {readonly [T, ...T[]]} values
  */
-const oneOf = (values) => z.enum(values);
+const oneOf = <T extends string>(values: readonly [T, ...T[]]) => z.enum(values);
 
 /**
  * Free text shown in logs, the CLI and the GUI (rule labels, descriptions).
  * Control characters are refused: a shared file must not be able to forge log
  * lines (CR/LF) or drive the terminal (ANSI escapes).
  */
-const plainText = (/** @type {number} */ max) =>
+const plainText = (max: number) =>
     z
         .string()
         .max(max)
@@ -89,11 +86,10 @@ const stateName = z.string().regex(/^[A-Z_]{1,32}$/, 'Use an upper-case state na
 
 /**
  * `{min?, max?}` — at least one bound, and min <= max.
- *
- * @param {(value: unknown) => number|null} toNumber
  */
 const checkRange =
-    (toNumber) => (/** @type {{min?: unknown, max?: unknown}} */ value, /** @type {z.RefinementCtx} */ ctx) => {
+    (toNumber: (value: unknown) => number | null) =>
+    (value: { min?: unknown; max?: unknown }, ctx: z.RefinementCtx) => {
         if (value.min === undefined && value.max === undefined) {
             ctx.addIssue({ code: 'custom', message: 'Set min, max or both' });
             return;
@@ -105,11 +101,7 @@ const checkRange =
         }
     };
 
-/**
- * @template {string} T
- * @param {T} type
- */
-const durationRange = (type) =>
+const durationRange = <T extends string>(type: T) =>
     z
         .strictObject({ type: z.literal(type), min: duration.optional(), max: duration.optional() })
         .superRefine(checkRange(parseDuration));
@@ -158,8 +150,7 @@ const entryCondition = z
         }
     });
 
-/** @type {z.ZodType<ScenarioCondition>} */
-const condition = z.lazy(() =>
+const condition: z.ZodType<ScenarioCondition> = z.lazy(() =>
     z.discriminatedUnion('type', [
         z
             .strictObject({ type: z.literal('dailyWindow'), from: timeOfDay, to: timeOfDay })
@@ -167,7 +158,7 @@ const condition = z.lazy(() =>
         ...vocabulary.RANGE_TIME_CONDITIONS.map(durationRange),
         z
             .strictObject({ type: z.literal('elapsedPercent'), min: percent.optional(), max: percent.optional() })
-            .superRefine(checkRange((value) => /** @type {number} */ (value))),
+            .superRefine(checkRange((value) => value as number)),
         ...vocabulary.NUMERIC_CONDITIONS.map((type) =>
             z.strictObject({ type: z.literal(type), op, value: finiteNumber }),
         ),
@@ -253,46 +244,37 @@ const scenarioDocument = z.strictObject({
 
 /**
  * A scenario document as zod parses it; rule ids are still optional.
- *
- * @typedef {z.infer<typeof scenarioDocument>} ParsedScenarioDocument
  */
+type ParsedScenarioDocument = z.infer<typeof scenarioDocument>;
 
 /**
  * A validated rule: validateScenario gives every rule an id.
- *
- * @typedef {z.infer<typeof rule> & { id: string }} ScenarioRule
  */
+export type ScenarioRule = z.infer<typeof rule> & { id: string };
 
-/** @typedef {ScenarioRule['do'][number]} ScenarioAction */
+export type ScenarioAction = ScenarioRule['do'][number];
 
-/** @typedef {Omit<z.infer<typeof phase>, 'rules'> & { rules?: ScenarioRule[] }} ScenarioPhase */
+type ScenarioPhase = Omit<z.infer<typeof phase>, 'rules'> & { rules?: ScenarioRule[] };
 
 /**
  * A validated scenario document: names trimmed, every rule carrying an id.
- *
- * @typedef {Omit<ParsedScenarioDocument, 'phases'> & { phases: Record<string, ScenarioPhase> }} ScenarioDocument
  */
+export type ScenarioDocument = Omit<ParsedScenarioDocument, 'phases'> & { phases: Record<string, ScenarioPhase> };
 
 /**
  * `['phases', 'buildup', 'rules', 1, 'do', 0]` → `phases.buildup.rules[1].do[0]`.
- *
- * @param {ReadonlyArray<PropertyKey>} path
- * @returns {string}
  */
-const formatPath = (path) =>
+const formatPath = (path: ReadonlyArray<PropertyKey>): string =>
     path.reduce(
-        (/** @type {string} */ out, segment) =>
+        (out: string, segment) =>
             typeof segment === 'number' ? `${out}[${segment}]` : out ? `${out}.${String(segment)}` : String(segment),
         '',
     );
 
 /**
  * Nesting depth of a condition list (a flat list is depth 1).
- *
- * @param {readonly ScenarioCondition[]} conditions
- * @returns {number}
  */
-const conditionDepth = (conditions) => {
+const conditionDepth = (conditions: readonly ScenarioCondition[]): number => {
     let depth = 0;
     for (const item of conditions) {
         const nested =
@@ -304,11 +286,8 @@ const conditionDepth = (conditions) => {
 
 /**
  * Every memory slot a condition list reads.
- *
- * @param {readonly ScenarioCondition[]} conditions
- * @param {Set<string>} into
  */
-const collectConditionReads = (conditions, into) => {
+const collectConditionReads = (conditions: readonly ScenarioCondition[], into: Set<string>) => {
     for (const item of conditions) {
         if (item.type === 'memorySet') into.add(item.slot);
         if (item.type === 'entry' && item.select.by === 'memory') into.add(item.select.slot);
@@ -321,13 +300,12 @@ const collectConditionReads = (conditions, into) => {
  * Per-key validation of one phase's settings overlay, against the global
  * defaults as context. Mirrors a profile value set, with explicit errors
  * instead of silent drops.
- *
- * @param {Record<string, unknown>} values
- * @param {string} basePath
- * @param {Record<string, unknown>} globalDefaults
- * @returns {ScenarioIssue[]}
  */
-const phaseSettingsIssues = (values, basePath, globalDefaults) => {
+const phaseSettingsIssues = (
+    values: Record<string, unknown>,
+    basePath: string,
+    globalDefaults: Record<string, unknown>,
+): ScenarioIssue[] => {
     const issues = [];
     const context = { ...globalDefaults, ...values };
     for (const [key, value] of Object.entries(values)) {
@@ -356,24 +334,20 @@ const phaseSettingsIssues = (values, basePath, globalDefaults) => {
 /**
  * Rule ids unique across the scenario (the engine keys its "already fired"
  * records by them). Missing ids are generated as `<phase>-<n>`.
- *
- * @param {ParsedScenarioDocument} doc
- * @returns {ScenarioDocument}
  */
-const assignRuleIds = (doc) => {
+const assignRuleIds = (doc: ParsedScenarioDocument): ScenarioDocument => {
     const taken = new Set();
     for (const phaseDoc of Object.values(doc.phases)) {
         for (const item of phaseDoc.rules ?? []) if (item.id) taken.add(item.id);
     }
-    /** @param {string} phaseName @param {number} index */
-    const freshId = (phaseName, index) => {
+    /** @param phaseName @param index */
+    const freshId = (phaseName: string, index: number) => {
         let id = `${phaseName}-${index + 1}`.slice(0, 40);
         for (let n = 2; taken.has(id); n++) id = `${phaseName}-${index + 1}-${n}`.slice(0, 40);
         taken.add(id);
         return id;
     };
-    /** @type {Record<string, ScenarioPhase>} */
-    const phases = {};
+    const phases: Record<string, ScenarioPhase> = {};
     for (const [phaseName, { rules, ...phaseDoc }] of Object.entries(doc.phases)) {
         phases[phaseName] = rules
             ? {
@@ -388,19 +362,14 @@ const assignRuleIds = (doc) => {
 /**
  * Checks the zod shape cannot express: references, unique rule ids, nesting
  * depth, and the phase settings overlays.
- *
- * @param {ParsedScenarioDocument} doc
- * @param {Record<string, unknown>} globalDefaults
- * @returns {ScenarioIssue[]}
  */
-const semanticIssues = (doc, globalDefaults) => {
+const semanticIssues = (doc: ParsedScenarioDocument, globalDefaults: Record<string, unknown>): ScenarioIssue[] => {
     const issues = [];
     const phaseNames = new Set(Object.keys(doc.phases));
     if (!phaseNames.has(doc.start)) issues.push({ path: 'start', message: `No phase named "${doc.start}"` });
 
     const ruleIds = new Set();
-    /** @type {Array<{slot: string, path: string}>} */
-    const reads = [];
+    const reads: Array<{ slot: string; path: string }> = [];
     const writes = new Set();
     for (const [phaseName, phaseDoc] of Object.entries(doc.phases)) {
         const phasePath = `phases.${phaseName}`;
@@ -420,7 +389,7 @@ const semanticIssues = (doc, globalDefaults) => {
                     message: `Conditions nest deeper than ${SCENARIO_CAPS.conditionDepth} levels`,
                 });
             }
-            const conditionReads = new Set();
+            const conditionReads = new Set<string>();
             collectConditionReads(conditions, conditionReads);
             for (const slot of conditionReads) reads.push({ slot, path: `${rulePath}.if` });
             item.do.forEach((step, stepIndex) => {
@@ -445,11 +414,12 @@ const semanticIssues = (doc, globalDefaults) => {
  * Validates a scenario document. On success returns the canonical document
  * (names trimmed, every rule carrying an id); otherwise every issue found.
  *
- * @param {unknown} input
- * @param {Record<string, unknown>} globalDefaults - the stored global challenge defaults
- * @returns {{ok: true, scenario: ScenarioDocument} | {ok: false, issues: ScenarioIssue[]}}
+ * @param globalDefaults - the stored global challenge defaults
  */
-const validateScenario = (input, globalDefaults) => {
+const validateScenario = (
+    input: unknown,
+    globalDefaults: Record<string, unknown>,
+): { ok: true; scenario: ScenarioDocument } | { ok: false; issues: ScenarioIssue[] } => {
     const parsed = scenarioDocument.safeParse(input);
     if (!parsed.success) {
         return {
@@ -465,11 +435,8 @@ const validateScenario = (input, globalDefaults) => {
 
 /**
  * Parses shared scenario JSON text, bounded before parsing.
- *
- * @param {unknown} text
- * @returns {{ok: true, value: unknown} | {ok: false, issues: ScenarioIssue[]}}
  */
-const parseScenarioJson = (text) => {
+const parseScenarioJson = (text: unknown): { ok: true; value: unknown } | { ok: false; issues: ScenarioIssue[] } => {
     if (typeof text !== 'string' || text.trim() === '') {
         return { ok: false, issues: [{ path: '', message: 'No scenario JSON was given' }] };
     }
@@ -485,7 +452,7 @@ const parseScenarioJson = (text) => {
         // JSON.parse only ever throws a SyntaxError.
         return {
             ok: false,
-            issues: [{ path: '', message: `Not valid JSON: ${/** @type {Error} */ (error).message}` }],
+            issues: [{ path: '', message: `Not valid JSON: ${(error as Error).message}` }],
         };
     }
 };

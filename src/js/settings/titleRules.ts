@@ -19,9 +19,8 @@ import {
 } from './ruleResolution';
 import { getEffectiveSetting } from './challengeOverrides';
 
-/**
- * @import { ChallengeValues, RuleMatchChallenge, SettingValueOf, TitleRule } from '../types/settings'
- */
+import type { ChallengeValues, RuleMatchChallenge, SettingValueOf, TitleRule } from '../types/settings';
+import type { RuleLike } from './challengeRules';
 
 /**
  * Setting keys whose rule contribution is merged as a tag union. Named
@@ -31,14 +30,9 @@ const TITLE_RULE_TAG_KEYS = ['mustIncludeTags', 'shouldIncludeTags'];
 
 /**
  * Order-preserving union of two tag lists with the base first.
- *
- * @param {readonly string[]} base
- * @param {unknown[]} extra
- * @returns {string[]}
  */
-const unionTags = (base, extra) => {
-    /** @type {string[]} */
-    const out = [];
+const unionTags = (base: readonly string[], extra: unknown[]): string[] => {
+    const out: string[] = [];
     const seen = new Set();
     for (const list of [base, extra]) {
         for (const tag of list) {
@@ -53,22 +47,16 @@ const unionTags = (base, extra) => {
 
 /**
  * Get the saved challenge rules.
- *
- * @returns {TitleRule[]}
  */
-const getTitleRules = () => loadSettings().challengeSettings.titleRules;
+const getTitleRules = (): TitleRule[] => loadSettings().challengeSettings.titleRules;
 
 /**
  * Public per-setting resolver for callers holding a challenge payload (the join
  * pass resolves un-joined candidates, which have no id-keyed state). Returns
  * `{ value }` from the first matching rule that sets the key (see
- * `ruleValuesFor` in settings/ruleResolution.js), or null when none does.
- *
- * @param {string} key
- * @param {RuleMatchChallenge|string} target
- * @returns {{value: unknown}|null}
+ * `ruleValuesFor` in settings/ruleResolution.ts), or null when none does.
  */
-const resolveRuleSetting = (key, target) => {
+const resolveRuleSetting = (key: string, target: RuleMatchChallenge | string): { value: unknown } | null => {
     const { values } = ruleValuesFor(loadSettings(), target);
     return Object.prototype.hasOwnProperty.call(values, key) ? { value: values[key] } : null;
 };
@@ -80,11 +68,8 @@ const resolveRuleSetting = (key, target) => {
  * a challenge tag — the user naming this challenge and handing it a tactic.
  * A profile from a rule keyed only on type / photo count / runtime does not
  * bypass: "every 4-photo challenge votes like this" says how, not whether.
- *
- * @param {RuleMatchChallenge} challenge
- * @returns {boolean}
  */
-const hasRuleJoinOptIn = (challenge) => {
+const hasRuleJoinOptIn = (challenge: RuleMatchChallenge): boolean => {
     const { values, profile } = ruleValuesFor(loadSettings(), challenge);
     if (values.autoJoin === true) return true;
     if (!profile) return false;
@@ -94,11 +79,8 @@ const hasRuleJoinOptIn = (challenge) => {
 
 // Bound a user-supplied title before it reaches a log line so an oversized
 // value can't produce a huge log event (defense in depth for log shipping).
-/**
- * @param {string} title
- * @returns {string}
- */
-const _titleForLog = (title) => (title.length > 80 ? `${title.slice(0, 80)}…` : title);
+
+const _titleForLog = (title: string): string => (title.length > 80 ? `${title.slice(0, 80)}…` : title);
 
 /**
  * Sanitize every rule and de-dupe on the whole CONDITION, not the title alone:
@@ -106,16 +88,14 @@ const _titleForLog = (title) => (title.length > 80 ? `${title.slice(0, 80)}…` 
  * no title to key on at all. Last wins within one identical condition, at the
  * first one's position. Returns the rule list, or null (logged) on the first
  * rejected rule.
- *
- * @param {unknown[]} rules
- * @param {Record<string, ChallengeValues>} storedProfiles
- * @returns {TitleRule[]|null}
  */
-const _sanitizedUniqueRules = (rules, storedProfiles) => {
-    /** @type {Map<string, TitleRule>} */
-    const byKey = new Map();
+const _sanitizedUniqueRules = (
+    rules: unknown[],
+    storedProfiles: Record<string, ChallengeValues>,
+): TitleRule[] | null => {
+    const byKey: Map<string, TitleRule> = new Map();
     for (const rule of rules) {
-        const result = sanitizeTitleRule(/** @type {import('./challengeRules').RuleLike} */ (rule), storedProfiles);
+        const result = sanitizeTitleRule(rule as RuleLike, storedProfiles);
         if (!result.valid) {
             const detail = result.requestedProfile
                 ? `unknown profile "${profileNameForLog(result.requestedProfile)}"`
@@ -137,11 +117,8 @@ const _sanitizedUniqueRules = (rules, storedProfiles) => {
  * tag lists against the schema, resolves profile names case-insensitively,
  * drops no-op rules, and de-dupes by the whole match condition (last wins, at
  * the first one's position).
- *
- * @param {unknown} rules
- * @returns {boolean}
  */
-const setTitleRules = (rules) => {
+const setTitleRules = (rules: unknown): boolean => {
     if (!Array.isArray(rules)) {
         logger.withCategory('settings').error('setTitleRules expects an array', null);
         return false;
@@ -185,15 +162,13 @@ const setTitleRules = (rules) => {
  * Accepts a challenge object or a bare title. With only a title, a rule keyed
  * on tag / type / photo count / runtime can still resolve when `challengeId` is
  * given, because those facts come from the remembered active-challenge list.
- *
- * @param {RuleMatchChallenge|string} target
- * @param {string|number|null} [challengeId]
- * @returns {{name: string, values: ChallengeValues, suppressed?: boolean}|null}
  */
-const getTitleProfile = (target, challengeId = null) => {
+const getTitleProfile = (
+    target: RuleMatchChallenge | string,
+    challengeId: string | number | null = null,
+): { name: string; values: ChallengeValues; suppressed?: boolean } | null => {
     const settings = loadSettings();
-    /** @type {Record<string, unknown>} */
-    const challenge = typeof target === 'string' ? { title: target } : { ...target };
+    const challenge: Record<string, unknown> = typeof target === 'string' ? { title: target } : { ...target };
     const hasId = challengeId !== null && challengeId !== undefined;
     if (hasId) {
         // Fill only what the caller did not supply, so an explicit payload wins.
@@ -215,13 +190,11 @@ const getTitleProfile = (target, challengeId = null) => {
  *
  * Falls back to plain getEffectiveSetting for any non-tag key, and preserves
  * the null "no filter" sentinel when there is no rule to contribute tags.
- *
- * @template {string} K
- * @param {K} settingKey
- * @param {RuleMatchChallenge|null|undefined} challenge
- * @returns {SettingValueOf<K>}
  */
-const getEffectiveTagSetting = (settingKey, challenge) => {
+const getEffectiveTagSetting = <K extends string>(
+    settingKey: K,
+    challenge: RuleMatchChallenge | null | undefined,
+): SettingValueOf<K> => {
     const challengeId = challenge?.id != null ? String(challenge.id) : null;
     const base = getEffectiveSetting(settingKey, challengeId);
     if (!TITLE_RULE_TAG_KEYS.includes(settingKey)) return base;
@@ -235,8 +208,8 @@ const getEffectiveTagSetting = (settingKey, challenge) => {
     if (!rule) return base;
 
     // A tag key's effective value is a tag list: stored values are validated on load.
-    const baseTags = /** @type {string[]} */ (base);
-    return /** @type {SettingValueOf<K>} */ (unionTags(baseTags, /** @type {unknown[]} */ (rule[settingKey])));
+    const baseTags = base as string[];
+    return unionTags(baseTags, rule[settingKey] as unknown[]) as SettingValueOf<K>;
 };
 
 /**
@@ -246,11 +219,8 @@ const getEffectiveTagSetting = (settingKey, challenge) => {
  * both the fill and join paths read it the same way without either importing
  * the other. Returns null rather than [] because the picker treats null as
  * "no list" and skips the Set construction entirely.
- *
- * @param {RuleMatchChallenge|null|undefined} challenge
- * @returns {Array<string>|null}
  */
-const getEffectiveIgnoreTitleWords = (challenge) => {
+const getEffectiveIgnoreTitleWords = (challenge: RuleMatchChallenge | null | undefined): Array<string> | null => {
     const challengeId = challenge?.id != null ? String(challenge.id) : null;
     const words = getEffectiveSetting('ignoreTitleWords', challengeId);
     return Array.isArray(words) && words.length > 0 ? words : null;

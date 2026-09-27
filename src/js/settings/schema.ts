@@ -342,7 +342,7 @@ const SETTINGS_SCHEMA = {
     // fields; without them a number input renders unbounded and unlabelled, and the only
     // feedback for an out-of-range value is a generic "could not be saved" banner. They
     // mirror the zod validator directly; keep the two in step when either changes.
-    // The user-defined scenario (settings/scenarios.js) this challenge runs,
+    // The user-defined scenario (settings/scenarios.ts) this challenge runs,
     // by name; '' = none. challengeOnly: a scenario is assigned per challenge,
     // through a challenge rule or a profile — there is no "run it everywhere"
     // global value. An unknown name runs nothing (the engine logs it).

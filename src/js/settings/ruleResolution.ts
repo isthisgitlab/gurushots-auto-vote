@@ -18,13 +18,12 @@ import {
 } from './profileStore';
 import { sanitizeTitleRuleInline } from './titleRuleSanitize';
 
-/** @import { AppSettings, ChallengeValues, RuleMatchChallenge, TitleRule } from '../types/settings' */
+import type { AppSettings, ChallengeValues, RuleMatchChallenge, TitleRule } from '../types/settings';
 
 /**
  * The one profile a challenge's matching rules apply, and the rule naming it.
- *
- * @typedef {{name: string, values: ChallengeValues, rule: TitleRule}} RuleProfile
  */
+type RuleProfile = { name: string; values: ChallengeValues; rule: TitleRule };
 
 /**
  * The profile a matching rule list contributes: the one named by the FIRST
@@ -34,12 +33,8 @@ import { sanitizeTitleRuleInline } from './titleRuleSanitize';
  * could assemble a combination neither one allows. A stale/corrupt reference
  * fails closed as a whole: automation never executes a partially sanitized
  * profile.
- *
- * @param {AppSettings} settings
- * @param {TitleRule[]} matches
- * @returns {RuleProfile|null}
  */
-const profileFromMatches = (settings, matches) => {
+const profileFromMatches = (settings: AppSettings, matches: TitleRule[]): RuleProfile | null => {
     const rule = matches.find((candidate) => normalizeProfileName(candidate?.profile));
     if (!rule) return null;
     const normalizedProfile = normalizeProfileName(rule.profile);
@@ -63,19 +58,17 @@ const profileFromMatches = (settings, matches) => {
  *
  * `suppressProfile` drops the profile layer (a challenge whose rule profile was
  * replaced by a manually applied one).
- *
- * @param {AppSettings} settings
- * @param {RuleMatchChallenge|string|null|undefined} target
- * @param {boolean} [suppressProfile]
- * @returns {{values: ChallengeValues, profile: RuleProfile|null}}
  */
-const ruleValuesFor = (settings, target, suppressProfile = false) => {
+const ruleValuesFor = (
+    settings: AppSettings,
+    target: RuleMatchChallenge | string | null | undefined,
+    suppressProfile: boolean = false,
+): { values: ChallengeValues; profile: RuleProfile | null } => {
     const matches = matchingRules(settings.challengeSettings?.titleRules, target);
     const profile = suppressProfile ? null : profileFromMatches(settings, matches);
-    /** @type {ChallengeValues} */
-    const values = {};
-    /** @param {ChallengeValues} source */
-    const take = (source) => {
+    const values: ChallengeValues = {};
+    /** @param source */
+    const take = (source: ChallengeValues) => {
         for (const [key, value] of Object.entries(source)) {
             if (!Object.prototype.hasOwnProperty.call(values, key)) values[key] = value;
         }
@@ -90,12 +83,7 @@ const ruleValuesFor = (settings, target, suppressProfile = false) => {
     return { values, profile };
 };
 
-/**
- * @param {AppSettings} settings
- * @param {string | number | null | undefined} challengeId
- * @returns {boolean}
- */
-const isTitleProfileSuppressed = (settings, challengeId) => {
+const isTitleProfileSuppressed = (settings: AppSettings, challengeId: string | number | null | undefined): boolean => {
     const id = challengeId === null || challengeId === undefined ? '' : String(challengeId);
     const suppressions = settings.challengeSettings?.titleProfileSuppressions;
     return Boolean(
@@ -110,25 +98,18 @@ const isTitleProfileSuppressed = (settings, challengeId) => {
 
 /**
  * `ruleValuesFor` for an id-only caller, honouring its profile suppression.
- *
- * @param {AppSettings} settings
- * @param {string | number | null | undefined} challengeId
- * @param {boolean} [suppressProfile]
- * @returns {ChallengeValues}
  */
 const ruleValuesForChallengeId = (
-    settings,
-    challengeId,
-    suppressProfile = isTitleProfileSuppressed(settings, challengeId),
-) => ruleValuesFor(settings, challengeTargetForId(settings, challengeId), suppressProfile).values;
+    settings: AppSettings,
+    challengeId: string | number | null | undefined,
+    suppressProfile: boolean = isTitleProfileSuppressed(settings, challengeId),
+): ChallengeValues => ruleValuesFor(settings, challengeTargetForId(settings, challengeId), suppressProfile).values;
 
-/**
- * @param {AppSettings} settings
- * @param {TitleRule} rule
- * @param {unknown} rawProfileValues
- * @returns {boolean}
- */
-const titleProfileComposesWithKnownOverrides = (settings, rule, rawProfileValues) => {
+const titleProfileComposesWithKnownOverrides = (
+    settings: AppSettings,
+    rule: TitleRule,
+    rawProfileValues: unknown,
+): boolean => {
     const globalValues = globalChallengeValues(settings);
     const profileValues = sanitizeProfileValues(rawProfileValues, true, globalValues);
     if (profileValues === null) return false;

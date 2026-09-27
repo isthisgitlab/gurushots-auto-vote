@@ -14,23 +14,25 @@ import { scenarioStateLedger, mockScenarioStateLedger } from '../scenarioStateSt
 import { normalizeProfileName } from './profileStore';
 import { findStoredScenario, hasStoredScenarios } from './scenarios';
 
-/** @import { AppSettings } from '../types/settings' */
+import type { AppSettings } from '../types/settings';
 
 // Mock mode keeps scenario state in memory only (it must never touch the real
 // scenarioState.json), so the overlay reads the same ledger the mock pass uses.
-/** @param {AppSettings} settings */
-const ledgerFor = (settings) => (settings.mock === true ? mockScenarioStateLedger : scenarioStateLedger);
+/** @param settings */
+const ledgerFor = (settings: AppSettings) => (settings.mock === true ? mockScenarioStateLedger : scenarioStateLedger);
 
 /**
  * The active phase's settings for a challenge, or null.
  *
- * @param {AppSettings} settings - the loaded settings blob
- * @param {string} challengeId
- * @param {() => string} resolveScenarioName - the challenge's `scenario` setting,
+ * @param settings - the loaded settings blob
+ * @param resolveScenarioName - the challenge's `scenario` setting,
  *   resolved without the overlay (only called when any scenario is stored)
- * @returns {Record<string, unknown>|null}
  */
-const scenarioPhaseSettings = (settings, challengeId, resolveScenarioName) => {
+const scenarioPhaseSettings = (
+    settings: AppSettings,
+    challengeId: string,
+    resolveScenarioName: () => string,
+): Record<string, unknown> | null => {
     if (!hasStoredScenarios(settings)) return null;
     const name = resolveScenarioName();
     if (!name) return null;

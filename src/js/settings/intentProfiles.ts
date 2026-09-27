@@ -2,7 +2,7 @@
  * Curated "intent" presets, seeded into the named-profiles system on first
  * run (see settings.js `seedIntentProfiles`). Deliberately free of any
  * dependency — NO zod — so it is safe to import into the renderer bundle
- * (mirrors settings/limits.js).
+ * (mirrors settings/limits.ts).
  *
  * Each bundle is SELF-CONTAINED: it sets both sides of every cross-field pair
  * it touches (exposure/exposureTarget, finalWindowExposure/finalWindowExposureTarget)
@@ -19,17 +19,15 @@
 // Sentinel-family note: exposureTarget / finalWindowExposureTarget are family 2
 // (0 = "follow the trigger", rule still active); every *Time / *Fill value is
 // family 1 (0 = off). These bundles never conflate the two.
-/**
- * @typedef {object} IntentProfile
- * @property {string} id
- * @property {string} name
- * @property {string} nameKey
- * @property {string} descKey
- * @property {Record<string, unknown>} values
- */
+interface IntentProfile {
+    id: string;
+    name: string;
+    nameKey: string;
+    descKey: string;
+    values: Record<string, unknown>;
+}
 
-/** @type {IntentProfile[]} */
-const INTENT_PROFILES = [
+const INTENT_PROFILES: IntentProfile[] = [
     {
         id: 'justParticipate',
         name: 'Just Participate',
@@ -86,19 +84,12 @@ const INTENT_PROFILES = [
     },
 ];
 
-/**
- * @param {string | null | undefined} name
- * @returns {string}
- */
-const _norm = (name) => (typeof name === 'string' ? name.trim().toLowerCase() : '');
+const _norm = (name: string | null | undefined): string => (typeof name === 'string' ? name.trim().toLowerCase() : '');
 
 /**
  * The intent whose stored name matches `name` (trim+lowercase), or null.
- *
- * @param {string | null | undefined} name
- * @returns {IntentProfile|null}
  */
-const getIntentByName = (name) => {
+const getIntentByName = (name: string | null | undefined): IntentProfile | null => {
     const n = _norm(name);
     if (!n) return null;
     return INTENT_PROFILES.find((intent) => _norm(intent.name) === n) || null;
@@ -108,14 +99,13 @@ const getIntentByName = (name) => {
  * True when a stored profile's values still equal the canonical intent bundle,
  * i.e. the user hasn't edited it. Compares the union of keys so an added or
  * removed key counts as "modified".
- *
- * @param {IntentProfile|null|undefined} intent
- * @param {Record<string, unknown> | null | undefined} storedValues
- * @returns {boolean}
  */
-const intentValuesMatch = (intent, storedValues) => {
+const intentValuesMatch = (
+    intent: IntentProfile | null | undefined,
+    storedValues: Record<string, unknown> | null | undefined,
+): boolean => {
     if (!intent || !storedValues || typeof storedValues !== 'object') return false;
-    const stored = /** @type {Record<string, unknown>} */ (storedValues);
+    const stored = storedValues as Record<string, unknown>;
     const keys = new Set([...Object.keys(intent.values), ...Object.keys(stored)]);
     for (const key of keys) {
         if (intent.values[key] !== stored[key]) return false;

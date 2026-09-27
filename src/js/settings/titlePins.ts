@@ -25,26 +25,20 @@ let titlePinCapWarned = false;
  * would blank a real incoming title. A value at MAX_TITLE_LENGTH or longer is
  * rejected rather than truncated: stored pins exactly at that boundary may be
  * the prefix of a longer title and must never be restored as an exact match.
- *
- * @param {unknown} title
- * @returns {title is string}
  */
-const _isPinnableTitle = (title) => typeof title === 'string' && title.trim() !== '' && title.length < MAX_TITLE_LENGTH;
+const _isPinnableTitle = (title: unknown): title is string =>
+    typeof title === 'string' && title.trim() !== '' && title.length < MAX_TITLE_LENGTH;
 
 /**
  * Own-property copy of the valid pins in a stored map. Iterating own keys
  * means an id named `__proto__`/`constructor` can never surface a prototype
  * member; non-string / whitespace-only / over-length values a corrupted blob
  * might carry are dropped.
- *
- * @param {unknown} stored
- * @returns {Record<string, string>}
  */
-const _validPins = (stored) => {
-    /** @type {Record<string, string>} */
-    const pins = {};
+const _validPins = (stored: unknown): Record<string, string> => {
+    const pins: Record<string, string> = {};
     if (stored && typeof stored === 'object' && !Array.isArray(stored)) {
-        const map = /** @type {Record<string, unknown>} */ (stored);
+        const map = stored as Record<string, unknown>;
         for (const id of Object.keys(map)) {
             const title = map[id];
             if (_isPinnableTitle(title)) pins[id] = title;
@@ -57,28 +51,23 @@ const _validPins = (stored) => {
  * Get the persisted first-seen challenge-title pins as `{ [id]: title }`.
  * Returns a defensive copy so callers can't mutate stored state around
  * mergeTitlePins' validation.
- *
- * @returns {Record<string, string>}
  */
-const getTitlePins = () => _validPins(loadSettings().challengeSettings?.titlePins);
+const getTitlePins = (): Record<string, string> => _validPins(loadSettings().challengeSettings?.titlePins);
 
 /**
  * The pinnable `[id, title]` entries of a caller-supplied adds map.
- *
- * @param {Record<string, string>} adds
- * @returns {Array<[string, string]>}
  */
-const _addEntries = (adds) =>
+const _addEntries = (adds: Record<string, string>): Array<[string, string]> =>
     adds && typeof adds === 'object' && !Array.isArray(adds)
-        ? Object.entries(adds).filter(/** @returns {entry is [string, string]} */ (entry) => _isPinnableTitle(entry[1]))
+        ? Object.entries(adds).filter((entry): entry is [string, string] => _isPinnableTitle(entry[1]))
         : [];
 
 // Warn once per saturation that the pin cap blocked `id`. The id originates
 // from the untrusted API response — strip CR/LF/tab and bound it before it
 // reaches a log line (log-injection guard, same treatment as
 // logger.challengeTag).
-/** @param {string} id */
-const _warnPinCapOnce = (id) => {
+/** @param id */
+const _warnPinCapOnce = (id: string) => {
     if (titlePinCapWarned) return;
     titlePinCapWarned = true;
     const safeId = String(id)
@@ -91,11 +80,8 @@ const _warnPinCapOnce = (id) => {
 
 /**
  * Add each entry whose id has no pin yet (first-seen wins), stopping at the cap.
- *
- * @param {Record<string, string>} pins
- * @param {Array<[string, string]>} addEntries
  */
-const _addPins = (pins, addEntries) => {
+const _addPins = (pins: Record<string, string>, addEntries: Array<[string, string]>) => {
     for (const [id, title] of addEntries) {
         if (Object.prototype.hasOwnProperty.call(pins, id)) continue;
         if (Object.keys(pins).length >= MAX_TITLE_PINS) {
@@ -112,12 +98,8 @@ const _addPins = (pins, addEntries) => {
  * existing pin (first-seen wins, so a concurrent writer's fresh pin is never
  * clobbered) and `removeIds` are deleted. Over-length titles are rejected
  * rather than truncated, preserving exact-match semantics. The map is capped.
- *
- * @param {Record<string, string>} adds
- * @param {readonly string[]} removeIds
- * @returns {boolean}
  */
-const mergeTitlePins = (adds, removeIds) => {
+const mergeTitlePins = (adds: Record<string, string>, removeIds: readonly string[]): boolean => {
     const addEntries = _addEntries(adds);
     const removeList = Array.isArray(removeIds) ? removeIds.filter((id) => typeof id === 'string') : [];
     if (addEntries.length === 0 && removeList.length === 0) return true;
