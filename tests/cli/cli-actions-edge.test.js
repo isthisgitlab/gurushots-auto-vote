@@ -6,7 +6,7 @@
  * (happy paths) and cli-currency.test.js (the --yes confirmation gate).
  */
 
-jest.mock('../../src/js/logger.js', () => {
+jest.mock('../../src/js/logger', () => {
     const calls = [];
     const rec = (level) => (msg) => calls.push({ level, msg });
     const cat = { info: rec('info'), error: rec('error'), success: rec('success') };
@@ -40,7 +40,7 @@ jest.mock('../../src/js/ipc/currency.handlers', () => {
     return { __handlers: handlers, buildHandlers: () => handlers };
 });
 
-const logger = require('../../src/js/logger.js');
+const logger = require('../../src/js/logger');
 const { __mw: mw } = require('../../src/js/apiFactory');
 const h = {
     ...require('../../src/js/ipc/actions.handlers').__handlers,

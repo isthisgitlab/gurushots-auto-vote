@@ -5,7 +5,7 @@
  * mocked and the tests assert what gets printed and dispatched.
  */
 
-jest.mock('../../src/js/logger.js', () => {
+jest.mock('../../src/js/logger', () => {
     const calls = [];
     const rec = (level) => (msg, data) => calls.push({ level, msg, data });
     const cat = {
@@ -60,7 +60,7 @@ const mockHasBundledModel = jest.fn(async () => true);
 jest.mock('../../src/js/services/visionVerifier', () => ({ hasBundledModel: mockHasBundledModel }));
 
 const fs = require('fs');
-const logger = require('../../src/js/logger.js');
+const logger = require('../../src/js/logger');
 const settings = require('../../src/js/settings');
 const apiFactory = require('../../src/js/apiFactory');
 const { clearAuthToken } = require('../../src/js/services/auth');

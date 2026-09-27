@@ -8,7 +8,7 @@
  * leak plaintext to the log file.
  */
 
-const { redactMessage, info, getRecentLogs } = jest.requireActual('../../src/js/logger.js');
+const { redactMessage, info, getRecentLogs } = jest.requireActual('../../src/js/logger');
 
 describe('redactMessage', () => {
     test('returns benign messages unchanged', () => {

@@ -6,7 +6,7 @@
  * settings, the middleware, and the scheduler are mocked.
  */
 
-jest.mock('../../src/js/logger.js', () => {
+jest.mock('../../src/js/logger', () => {
     const infoMock = jest.fn();
     return {
         __infoMock: infoMock,
@@ -21,7 +21,7 @@ jest.mock('../../src/js/logger.js', () => {
     };
 });
 
-jest.mock('../../src/js/settings.js', () => ({
+jest.mock('../../src/js/settings', () => ({
     loadSettings: jest.fn(() => ({
         mock: true,
         token: 'tok',
@@ -51,7 +51,7 @@ jest.mock('../../src/js/apiFactory', () => {
     };
 });
 
-const logger = require('../../src/js/logger.js');
+const logger = require('../../src/js/logger');
 const apiFactory = require('../../src/js/apiFactory');
 const { showStatus } = require('../../src/js/cli/commands/voting');
 

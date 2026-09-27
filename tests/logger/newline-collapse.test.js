@@ -7,7 +7,7 @@
  * originating call site remembered to sanitize.
  */
 
-const { info, getRecentLogs } = jest.requireActual('../../src/js/logger.js');
+const { info, getRecentLogs } = jest.requireActual('../../src/js/logger');
 
 const lastEntry = () => {
     const entries = getRecentLogs();

@@ -18,7 +18,7 @@ jest.mock('../../src/js/api/api-client', () => ({
     FORM_CONTENT_TYPE: 'application/x-www-form-urlencoded; charset=utf-8',
 }));
 
-jest.mock('../../src/js/settings.js', () => ({
+jest.mock('../../src/js/settings', () => ({
     getSetting: jest.fn(() => null),
     getEffectiveSetting: jest.fn(() => 1),
     loadSettings: jest.fn(() => ({ mock: true })),

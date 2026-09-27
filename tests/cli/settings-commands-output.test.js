@@ -7,7 +7,7 @@
  * mock so every return value is explicit.
  */
 
-jest.mock('../../src/js/logger.js', () => {
+jest.mock('../../src/js/logger', () => {
     const calls = [];
     const rec = (level) => (msg) => calls.push({ level, msg });
     const cat = { info: rec('info'), error: rec('error'), success: rec('success') };
@@ -43,7 +43,7 @@ jest.mock('../../src/js/settings', () => ({
     deleteChallengeProfile: jest.fn(),
 }));
 
-const logger = require('../../src/js/logger.js');
+const logger = require('../../src/js/logger');
 const settings = require('../../src/js/settings');
 const cmd = require('../../src/js/cli/commands/settings');
 

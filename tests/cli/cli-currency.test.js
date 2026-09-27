@@ -6,7 +6,7 @@
  * assert the dispatch and the confirmation gate.
  */
 
-jest.mock('../../src/js/logger.js', () => {
+jest.mock('../../src/js/logger', () => {
     const calls = [];
     const rec = (level) => (msg, data) => calls.push({ level, msg, data });
     const cat = {
@@ -19,7 +19,7 @@ jest.mock('../../src/js/logger.js', () => {
     return { __calls: calls, withCategory: jest.fn(() => cat), CATEGORIES: {} };
 });
 
-jest.mock('../../src/js/settings.js', () => ({
+jest.mock('../../src/js/settings', () => ({
     getSetting: jest.fn(() => 'tok'),
     loadSettings: jest.fn(() => ({ mock: true, token: 'tok' })),
 }));
@@ -52,7 +52,7 @@ jest.mock('../../src/js/ipc/currency.handlers', () => {
     return { __handlers: handlers, buildHandlers: () => handlers, register: jest.fn() };
 });
 
-const logger = require('../../src/js/logger.js');
+const logger = require('../../src/js/logger');
 const apiFactory = require('../../src/js/apiFactory');
 const handlers = {
     ...require('../../src/js/ipc/actions.handlers').__handlers,

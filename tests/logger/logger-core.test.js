@@ -46,7 +46,7 @@ const loadLogger = ({
         jest.isolateModules(() => {
             jest.doMock('fs', () => fs);
             jest.doMock('../../src/js/runtime', () => runtime);
-            logger = jest.requireActual('../../src/js/logger.js');
+            logger = jest.requireActual('../../src/js/logger');
         });
     } finally {
         process.argv = origArgv;

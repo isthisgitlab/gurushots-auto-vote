@@ -7,7 +7,7 @@
 jest.mock('fs');
 jest.mock('../../src/js/services/semantic/diagnostics', () => ({ diagnostics: { read: jest.fn() } }));
 
-jest.mock('../../src/js/logger.js', () => {
+jest.mock('../../src/js/logger', () => {
     const infoMock = jest.fn();
     const errorMock = jest.fn();
     return {
@@ -22,7 +22,7 @@ jest.mock('../../src/js/logger.js', () => {
 });
 
 const fs = require('fs');
-const logger = require('../../src/js/logger.js');
+const logger = require('../../src/js/logger');
 const { diagnostics } = require('../../src/js/services/semantic/diagnostics');
 const { showLogs } = require('../../src/js/cli/commands/logs');
 

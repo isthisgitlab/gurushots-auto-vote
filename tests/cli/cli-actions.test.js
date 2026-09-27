@@ -10,7 +10,7 @@
  * never bypasses the factory to reach the real API surface.
  */
 
-jest.mock('../../src/js/logger.js', () => {
+jest.mock('../../src/js/logger', () => {
     const calls = [];
     const rec = (level) => (msg, data) => calls.push({ level, msg, data });
     const cat = {
@@ -26,7 +26,7 @@ jest.mock('../../src/js/logger.js', () => {
     return { __calls: calls, withCategory: jest.fn(() => cat), CATEGORIES: {} };
 });
 
-jest.mock('../../src/js/settings.js', () => ({
+jest.mock('../../src/js/settings', () => ({
     getSetting: jest.fn(() => 'tok'),
     setSetting: jest.fn(() => true),
     loadSettings: jest.fn(() => ({ mock: true, token: 'tok' })),
@@ -78,8 +78,8 @@ jest.mock('../../src/js/services/UpdateChecker', () => ({
     getReleasesUrl: jest.fn(() => 'https://github.com/owner/repo/releases/latest'),
 }));
 
-const logger = require('../../src/js/logger.js');
-const settings = require('../../src/js/settings.js');
+const logger = require('../../src/js/logger');
+const settings = require('../../src/js/settings');
 const apiFactory = require('../../src/js/apiFactory');
 const boostApi = require('../../src/js/strategies/real/applyBoost');
 const actionsHandlers = require('../../src/js/ipc/actions.handlers').__handlers;

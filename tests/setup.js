@@ -30,7 +30,7 @@ jest.mock('path', () => ({
 }));
 
 // Mock logger to prevent fs/path dependency issues in tests
-jest.mock('../src/js/logger.js', () => ({
+jest.mock('../src/js/logger', () => ({
     info: jest.fn(),
     error: jest.fn(),
     debug: jest.fn(),

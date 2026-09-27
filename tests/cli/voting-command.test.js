@@ -6,7 +6,7 @@
  * mocked; process signal / exit / stdin hooks are stubbed per test.
  */
 
-jest.mock('../../src/js/logger.js', () => {
+jest.mock('../../src/js/logger', () => {
     const calls = [];
     const rec = (level) => (msg, data) => calls.push({ level, msg, data });
     const cat = {
@@ -45,7 +45,7 @@ jest.mock('../../src/js/ipc/voting.handlers', () => {
     return { __handlers: handlers, buildHandlers: () => handlers };
 });
 
-const logger = require('../../src/js/logger.js');
+const logger = require('../../src/js/logger');
 const settings = require('../../src/js/settings');
 const { __mw: mw } = require('../../src/js/apiFactory');
 const { createScheduler } = require('../../src/js/scheduling/runScheduler');

@@ -8,7 +8,7 @@
  * process.on is captured, never installed.
  */
 
-jest.mock('../../src/js/logger.js', () => {
+jest.mock('../../src/js/logger', () => {
     const calls = [];
     const rec = (level) => (msg) => calls.push({ level, msg });
     const cat = { info: rec('info'), error: rec('error'), debug: rec('debug'), warning: rec('warning') };
@@ -125,7 +125,7 @@ const run = async (argv, setup) => {
     process.argv = ['node', 'cli.js', ...argv];
     jest.isolateModules(() => {
         m = {
-            logger: require('../../src/js/logger.js'),
+            logger: require('../../src/js/logger'),
             settings: require('../../src/js/settings'),
             randomizer: require('../../src/js/api/randomizer'),
             guards: require('../../src/js/cli/guards'),
@@ -140,7 +140,7 @@ const run = async (argv, setup) => {
             scenarios: require('../../src/js/cli/commands/scenarios'),
         };
         setup?.(m);
-        require('../../src/js/cli/cli.js');
+        require('../../src/js/cli/cli');
     });
     await flush();
     await flush();

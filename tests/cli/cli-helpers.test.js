@@ -5,7 +5,7 @@
  * stubbed to throw so a guard's early exit halts the helper like the real one.
  */
 
-jest.mock('../../src/js/logger.js', () => {
+jest.mock('../../src/js/logger', () => {
     const calls = [];
     const rec = (level) => (msg) => calls.push({ level, msg });
     const cat = { info: rec('info'), error: rec('error') };
@@ -19,7 +19,7 @@ jest.mock('../../src/js/apiFactory', () => {
 
 jest.mock('node:readline', () => ({ createInterface: jest.fn(() => ({ tag: 'rl' })) }));
 
-const logger = require('../../src/js/logger.js');
+const logger = require('../../src/js/logger');
 const apiFactory = require('../../src/js/apiFactory');
 const readline = require('node:readline');
 const { ensureAuthenticated, requireProfileArgs, requireChallenge } = require('../../src/js/cli/guards');

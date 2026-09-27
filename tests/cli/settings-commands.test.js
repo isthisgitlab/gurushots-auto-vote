@@ -8,7 +8,7 @@
 
 jest.mock('../../src/js/settings');
 
-jest.mock('../../src/js/logger.js', () => {
+jest.mock('../../src/js/logger', () => {
     const withCategory = () => ({
         info: jest.fn(),
         error: jest.fn(),
