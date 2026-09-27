@@ -20,9 +20,9 @@
  * once the real CI sizes are known.
  */
 
-const fs = require('node:fs');
-const path = require('node:path');
-const { runIfMain } = require('./lib/run-if-main');
+import fs from 'node:fs';
+import path from 'node:path';
+import { runIfMain } from './lib/run-if-main';
 
 const ROOT = path.join(__dirname, '..');
 const BUNDLE_PATH = path.join(ROOT, 'dist', 'cli-bundled.js');
@@ -34,9 +34,15 @@ const MAX_BUNDLE_MB = 5; // dist/cli-bundled.js (our code, unminified)
 const MAX_BINARY_MB = 600; // Node with exported N-API symbols + embedded local vision runtime/model
 
 const MB = 1024 * 1024;
-const fmt = (bytes) => `${(bytes / MB).toFixed(1)} MB`;
+const fmt = (bytes: number) => `${(bytes / MB).toFixed(1)} MB`;
 
-function check(label, filePath, maxMb, tally) {
+// Running count of artifacts measured / found over budget.
+interface SizeTally {
+    checked: number;
+    failed: number;
+}
+
+function check(label: string, filePath: string, maxMb: number, tally: SizeTally) {
     if (!fs.existsSync(filePath)) {
         return false;
     }
@@ -52,7 +58,7 @@ function check(label, filePath, maxMb, tally) {
 }
 
 function main({ bundlePath = BUNDLE_PATH, cliBuildDir = CLI_BUILD_DIR } = {}) {
-    const tally = { checked: 0, failed: 0 };
+    const tally: SizeTally = { checked: 0, failed: 0 };
 
     console.log('📏 CLI size guard');
 
@@ -82,4 +88,4 @@ function main({ bundlePath = BUNDLE_PATH, cliBuildDir = CLI_BUILD_DIR } = {}) {
 
 runIfMain(require.main, module, main);
 
-module.exports = { check, main, MAX_BUNDLE_MB, MAX_BINARY_MB };
+export { check, main, MAX_BUNDLE_MB, MAX_BINARY_MB };

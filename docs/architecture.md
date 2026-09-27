@@ -300,7 +300,7 @@ repeated six times is one that gets forgotten at one of them.
   `null` and the caller ranks lexically as before. `buildThemeKeywords()` returning `[]` — every title word
   was boilerplate or contest cadence, e.g. "Guru of The Week" — is that "no theme text" case, on purpose.
 - `SEMANTIC_MATCH_FLOOR = 46` (`services/photoPicker/tiers.ts`) is **build-gated by
-  `scripts/validate-lexicon.js`** (a statistical gate: `p99(unrelated) < FLOOR < p25(related)`), **not
+  `scripts/validate-lexicon.ts`** (a statistical gate: `p99(unrelated) < FLOOR < p25(related)`), **not
   hand-tuned**. Scores below the floor are forced to 0 (sub-floor cosine is indistinguishable from vector
   noise), not merely ranked low. **The floor is calibrated per pooling shape** — the validator pools exactly
   as the matcher does, so changing one without re-deriving the other silently admits the noise tail.
@@ -327,10 +327,10 @@ repeated six times is one that gets forgotten at one of them.
   `ABSTAIN_LOGIT` for any prompt, or on any load/inference/URL failure. Both thresholds were calibrated on
   16 live challenges (2026-09-24) — re-measure against real shortlists before moving them.
 - **Packaging, per shell** — the model is fetched and sha256-pinned at build time by
-  `scripts/fetch-vision-model.js`; nothing downloads at runtime (`allowRemoteModels = false`).
+  `scripts/fetch-vision-model.ts`; nothing downloads at runtime (`allowRemoteModels = false`).
     - Electron: `extraResources` → `Resources/vision-model`, native `onnxruntime-node` in `app.asar.unpacked`.
       The Android-only copies under `dist/` and the standalone `onnxruntime-web` package are excluded from
-      the asar, and `scripts/afterPack.js` deletes other OS/CPU `onnxruntime-node` binaries.
+      the asar, and `scripts/afterPack.ts` deletes other OS/CPU `onnxruntime-node` binaries.
     - CLI: the build embeds a `pnpm deploy --prod` tree + model as a SEA asset (pruned to the host OS/CPU by
       `pruneVisionRuntime`); `services/visionCliAssets.ts` verifies its sha256, extracts it once per version
       into `<userData>/vision/<sha>`, and removes finished copies from earlier versions unless one was marked in use
@@ -338,8 +338,8 @@ repeated six times is one that gets forgotten at one of them.
     - Android: `dist/` is the WebView root, so `vision-model/` and the single-threaded ORT WASM files are
       served from it and inference runs on the `wasm` device with one thread.
 - **Lite builds** (`build:<os>:lite`, `build:cli:<target>:lite`, `build:android:lite`) ship none of the above:
-  `scripts/electron-builder-lite.js` drops `extraResources` and the transformers/onnxruntime/sharp packages,
-  `build-cli.js --lite` embeds no runtime asset, and `build-react.js --lite` clears the model and WASM files from
+  `scripts/electron-builder-lite.ts` drops `extraResources` and the transformers/onnxruntime/sharp packages,
+  `build-cli.ts --lite` embeds no runtime asset, and `build-react.ts --lite` clears the model and WASM files from
   `dist/` and leaves transformers out of the bundles. `hasBundledModel()` (a fetch of
   `vision-model/config.json` on Android, the `vision-runtime.sha256` SEA asset on the CLI, the model folder
   otherwise; cached) makes `rankVisually()` keep the tag order without a warning. It also keeps updates on lite:
@@ -428,7 +428,7 @@ repeated six times is one that gets forgotten at one of them.
   `getPlatform()`, `getAppUserDataPath()` — the single path resolver shared with the logger); **renderer-
   side** via `globalThis.Capacitor?.isNativePlatform?.() === true` inline, to keep node out of the browser
   bundle.
-- **The Electron main process runs from a bundle.** `scripts/build-main.js` bundles `src/js/index.ts` into
+- **The Electron main process runs from a bundle.** `scripts/build-main.ts` bundles `src/js/index.ts` into
   `out/main/app.js` with a linked source map, loaded by the `out/main/index.js` stub (package.json `main`)
   that turns source maps on first so main-process stack traces point at `src/js`. Every package import stays
   a runtime require from the shipped `node_modules`; `src/js` itself is not packaged, and `out/` stays out of

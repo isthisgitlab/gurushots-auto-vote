@@ -1,6 +1,6 @@
 /**
  * CLI string-to-value coercion shared between the in-app CLI
- * (`src/js/cli/cli.ts`) and the standalone `scripts/settings-cli.js`.
+ * (`src/js/cli/cli.ts`) and the standalone `scripts/settings-cli.ts`.
  *
  * Tries JSON first, then numeric, else returns the raw string unchanged.
  * JSON-first is intentional: it correctly parses `null`, `true`/`false`,

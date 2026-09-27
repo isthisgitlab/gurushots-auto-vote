@@ -2,7 +2,7 @@
  * Static word-vector lexicon backend.
  *
  * Loads the pruned, int8-quantized GloVe vector table shipped with the app
- * (v2 packed format — see scripts/build-lexicon.js and fetch-embeddings.js)
+ * (v2 packed format — see scripts/build-lexicon.ts and fetch-embeddings.ts)
  * and turns a list of words into a single mean-pooled unit vector. The vectors
  * are REAL pretrained embeddings, so similarity is graded: "feline" vs "cat"
  * scores high (same meaning), "cat" vs "lion" moderate (related), "cat" vs
@@ -52,7 +52,7 @@ const decodeBase64Int8 = (str: unknown): Int8Array | null => {
     }
 };
 
-// The concreteness direction build-lexicon.js derives from the table itself
+// The concreteness direction build-lexicon.ts derives from the table itself
 // (see concreteness below). Optional: an asset without one — or with one that
 // does not fit this table — just leaves concreteness() returning null, which
 // every caller already reads as "no opinion".
@@ -139,7 +139,7 @@ const vectorFor = (tbl: Pick<LexiconTable, 'words'>, tok: string): Float32Array 
  * normalize to a unit vector. Returns null when none of the tokens are in the
  * lexicon (no signal to contribute).
  *
- * Takes the table explicitly so scripts/build-lexicon.js pools the concreteness
+ * Takes the table explicitly so scripts/build-lexicon.ts pools the concreteness
  * poles with exactly the arithmetic the runtime scores against; embed() below
  * is this over the loaded table.
  */
@@ -274,7 +274,7 @@ const cosine = (a: ArrayLike<number> | null | undefined, b: ArrayLike<number> | 
  * title word nobody has ever authored still lands somewhere on it, which is the
  * point — challenge names change every week, and "Balloon Fun" must read as
  * balloons without anyone having written down that "fun" is not a subject.
- * scripts/validate-lexicon.js gates the build on real titles reading correctly.
+ * scripts/validate-lexicon.ts gates the build on real titles reading correctly.
  */
 const concreteness = (token: string): number | null => {
     if (!table || !table.axis) return null;

@@ -253,7 +253,7 @@ class AutoUpdater {
             metadata.setLastUpdateCheck(Date.now());
 
             // A lite build reads lite*.yml (the `channel` in its app-update.yml,
-            // see scripts/electron-builder-lite.js). On a prerelease the GitHub
+            // see scripts/electron-builder-lite.ts). On a prerelease the GitHub
             // provider swaps that channel for the prerelease one and then falls
             // back to latest*.yml, the full build, so lite stays on stable.
             if (!(await hasBundledModel())) autoUpdater.allowPrerelease = false;

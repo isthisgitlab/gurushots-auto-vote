@@ -1,9 +1,10 @@
 #!/usr/bin/env node
 
-const { build, context } = require('esbuild');
-const path = require('node:path');
-const fs = require('node:fs');
-const { removeVisionWebAssets, stageVisionWebAssets } = require('./fetch-vision-model');
+import { build, context } from 'esbuild';
+import type { BuildContext, BuildOptions } from 'esbuild';
+import path from 'node:path';
+import fs from 'node:fs';
+import { removeVisionWebAssets, stageVisionWebAssets } from './fetch-vision-model';
 
 const reactDir = path.join(__dirname, '..', 'src', 'js', 'react');
 const jsDir = path.join(__dirname, '..', 'src', 'js');
@@ -25,6 +26,8 @@ const entryPoints = {
     // BrowserWindows load (dist/preload.js).
     preload: path.join(jsDir, 'preload.ts'),
 };
+
+type EntryName = keyof typeof entryPoints;
 
 // Capacitor entry point. Capacitor copies dist/ wholesale into the
 // Android WebView's web assets and loads index.html at app start.
@@ -97,7 +100,7 @@ async function buildReact() {
         fs.copyFileSync(lexiconSrc, path.join(distDir, 'semantic-vectors.json'));
     }
 
-    const commonOptions = {
+    const commonOptions: BuildOptions = {
         bundle: true,
         platform: 'browser',
         format: 'iife',
@@ -233,7 +236,7 @@ async function buildReact() {
         'var __filename = (typeof __filename !== "undefined") ? __filename : "/index.html";',
     ].join('');
     const REQUIRE_SHIM = { js: SHIM_BANNER };
-    const perEntryOptions = {
+    const perEntryOptions: Record<EntryName, BuildOptions> = {
         // Electron entries: externalize Capacitor packages too. Their
         // require shim returns an empty object that is never accessed
         // because runtime.isCapacitor() returns false on Electron.
@@ -258,9 +261,10 @@ async function buildReact() {
     try {
         if (isWatch) {
             // Watch mode - create contexts for each entry point
-            const contexts = [];
+            const contexts: { name: EntryName; ctx: BuildContext }[] = [];
 
-            for (const [name, entry] of Object.entries(entryPoints)) {
+            // Object.entries widens keys to string; entryPoints has exactly the EntryName keys.
+            for (const [name, entry] of Object.entries(entryPoints) as [EntryName, string][]) {
                 // Only build if entry file exists
                 if (!fs.existsSync(entry)) {
                     console.log(`⏭️  Skipping ${name} (file not found: ${entry})`);
@@ -302,7 +306,8 @@ async function buildReact() {
             // Build mode - build each entry point
             let builtCount = 0;
 
-            for (const [name, entry] of Object.entries(entryPoints)) {
+            // Object.entries widens keys to string; entryPoints has exactly the EntryName keys.
+            for (const [name, entry] of Object.entries(entryPoints) as [EntryName, string][]) {
                 // Only build if entry file exists
                 if (!fs.existsSync(entry)) {
                     console.log(`⏭️  Skipping ${name} (file not found: ${entry})`);

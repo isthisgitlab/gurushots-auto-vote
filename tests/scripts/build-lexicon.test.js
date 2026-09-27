@@ -1,5 +1,5 @@
 /**
- * Tests for scripts/build-lexicon.js main() — the fatal gates and the asset
+ * Tests for scripts/build-lexicon.ts main() — the fatal gates and the asset
  * write, run against os.tmpdir() fixtures so the committed intermediate and
  * src/assets/semantic-vectors.json are never read or written. process.exit is
  * stubbed to throw so a fatal path stops exactly where the real process would.

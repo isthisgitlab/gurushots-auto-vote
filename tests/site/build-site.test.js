@@ -64,7 +64,7 @@ const {
     PAGES,
     main,
     runCli,
-} = require('../../scripts/build-site.js');
+} = require('../../scripts/build-site');
 
 const pageBySrc = (src) => PAGES.find((p) => p.src === src);
 

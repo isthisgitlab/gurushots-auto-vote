@@ -30,6 +30,6 @@
         "skipLibCheck": true,
         "forceConsistentCasingInFileNames": true
     },
-    "include": ["src/js/**/*.ts", "src/js/**/*.tsx"],
+    "include": ["src/js/**/*.ts", "src/js/**/*.tsx", "scripts/**/*.ts", "scripts/**/*.mts"],
     "exclude": ["node_modules", "dist", "build", "coverage", "android"]
 }

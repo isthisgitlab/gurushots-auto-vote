@@ -19,9 +19,10 @@
  * swapped-in unpacked app dir (asar:true is the electron-builder default here).
  */
 
-const fs = require('fs');
-const path = require('path');
-const { flipFuses, FuseVersion, FuseV1Options } = require('@electron/fuses');
+import fs from 'fs';
+import path from 'path';
+import { flipFuses, FuseVersion, FuseV1Options } from '@electron/fuses';
+import type { AfterPackContext, LinuxPackager } from 'electron-builder';
 
 /**
  * onnxruntime-node (local image inference, services/visionVerifier.ts) ships
@@ -33,12 +34,12 @@ const { flipFuses, FuseVersion, FuseV1Options } = require('@electron/fuses');
  */
 // electron-builder's Arch enum (builder-util) → onnxruntime's directory names.
 // Anything else (universal) keeps every architecture.
-const ONNX_ARCH_DIRS = Object.freeze({ 1: 'x64', 3: 'arm64' });
+const ONNX_ARCH_DIRS: Readonly<Record<number, string>> = Object.freeze({ 1: 'x64', 3: 'arm64' });
 
-const pruneForeignOnnxBinaries = (resourcesDir, targetOs, targetArch) => {
+const pruneForeignOnnxBinaries = (resourcesDir: string, targetOs: string, targetArch: string | undefined) => {
     const binRoot = path.join(resourcesDir, 'app.asar.unpacked', 'node_modules', 'onnxruntime-node', 'bin');
     if (!fs.existsSync(binRoot)) return;
-    const remove = (target) => fs.rmSync(target, { recursive: true, force: true });
+    const remove = (target: string) => fs.rmSync(target, { recursive: true, force: true });
     for (const napi of fs.readdirSync(binRoot)) {
         for (const os of fs.readdirSync(path.join(binRoot, napi))) {
             const osDir = path.join(binRoot, napi, os);
@@ -52,7 +53,7 @@ const pruneForeignOnnxBinaries = (resourcesDir, targetOs, targetArch) => {
     }
 };
 
-exports.default = async function afterPack(context) {
+export default async function afterPack(context: AfterPackContext) {
     const { appOutDir, packager, electronPlatformName, arch } = context;
     const productName = packager.appInfo.productFilename;
     const isMac = electronPlatformName === 'darwin' || electronPlatformName === 'mas';
@@ -70,7 +71,7 @@ exports.default = async function afterPack(context) {
         // (platformPackager: `this instanceof LinuxPackager ? this.executableName
         // : productFilename`); using productName here would ENOENT and fail the
         // whole Linux/Linux-ARM build.
-        electronBinary = path.join(appOutDir, packager.executableName);
+        electronBinary = path.join(appOutDir, (packager as LinuxPackager).executableName);
     }
 
     // Before the fuse flip, whose ad-hoc re-sign must cover the final tree.
@@ -95,4 +96,4 @@ exports.default = async function afterPack(context) {
     });
 
     console.log(`[afterPack] Hardened Electron fuses for ${electronPlatformName}: ${electronBinary}`);
-};
+}

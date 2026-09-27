@@ -1,5 +1,5 @@
 /**
- * Unit tests for scripts/check-size-delta.js.
+ * Unit tests for scripts/check-size-delta.ts.
  *
  * The script measures dist/*-bundle.js with real zlib brotli and compares the
  * sizes against .size-baseline.json. fs is replaced by an in-memory file map
@@ -59,7 +59,7 @@ class ExitCalled extends Error {
     }
 }
 
-describe('scripts/check-size-delta.js', () => {
+describe('scripts/check-size-delta.ts', () => {
     const originalArgv = process.argv;
     const originalDelta = process.env.SIZE_DELTA_KB;
     let logSpy;
@@ -92,10 +92,10 @@ describe('scripts/check-size-delta.js', () => {
     const setBaseline = (obj) => mockFiles.set(BASELINE, typeof obj === 'string' ? obj : JSON.stringify(obj));
 
     const run = (args = []) => {
-        process.argv = ['node', 'scripts/check-size-delta.js', ...args];
+        process.argv = ['node', 'scripts/check-size-delta.ts', ...args];
         try {
             jest.isolateModules(() => {
-                require('../../scripts/check-size-delta.js');
+                require('../../scripts/check-size-delta');
             });
         } catch (err) {
             if (err instanceof ExitCalled) return err.code;

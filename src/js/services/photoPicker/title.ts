@@ -12,7 +12,7 @@ import { finiteOr } from '../../numbers';
 import type { ChallengeText, ExcludedSubject, IgnoreWords, Negation } from '../../types/photoPicker';
 
 // Bounds for abstractTitleWords, on the lexicon's concreteness cosine. Pinned by
-// the `concreteness.cases` gate in scripts/validate-lexicon.js (real titles, run
+// the `concreteness.cases` gate in scripts/validate-lexicon.ts (real titles, run
 // on every build), so move them only with that gate green. SUBJECT_MIN is the
 // high one on purpose: GloVe reads some photographable words as abstract
 // ("people" -0.38, "nature" -0.30) and some verbs as mildly concrete ("built"

@@ -3,7 +3,7 @@
  * (commands/settings.ts). settings-commands.test.js covers the per-challenge
  * routing; this file covers what each command prints, the validation
  * failures, the facade-throws paths, and the schema / global-default dumps
- * shared with scripts/settings-cli.js. The settings facade is a hand-rolled
+ * shared with scripts/settings-cli.ts. The settings facade is a hand-rolled
  * mock so every return value is explicit.
  */
 

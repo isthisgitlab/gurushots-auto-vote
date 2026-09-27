@@ -1,5 +1,5 @@
 /**
- * Regression tests for scripts/settings-cli.js secret redaction.
+ * Regression tests for scripts/settings-cli.ts secret redaction.
  *
  * `pnpm settings:get token` and the bare `pnpm settings:get` dump must never
  * print the raw auth token: both branches redact sensitive keys via
@@ -88,11 +88,11 @@ const runScript = async (...argv) => {
     const errorSpy = jest.spyOn(console, 'error').mockImplementation(() => {});
     const exitSpy = jest.spyOn(process, 'exit').mockImplementation(() => {});
     const originalArgv = process.argv;
-    process.argv = ['node', 'settings-cli.js', ...argv];
+    process.argv = ['node', 'settings-cli.ts', ...argv];
     try {
         scriptHooks.beforeRequire?.({ exitSpy });
         jest.isolateModules(() => {
-            require('../../scripts/settings-cli.js');
+            require('../../scripts/settings-cli');
         });
         await scriptHooks.afterRequire?.();
         // main() is async; flush its promise chain before asserting.

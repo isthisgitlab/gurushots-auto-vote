@@ -3,6 +3,7 @@
 // no side effects. A plain function rather than an inline
 // `if (require.main === module)` so the wiring is unit-testable: under Jest,
 // require.main is always the test file, never the script.
-const runIfMain = (mainModule, mod, run) => mainModule === mod && run();
+const runIfMain = (mainModule: NodeJS.Module | undefined, mod: NodeJS.Module, run: () => unknown) =>
+    mainModule === mod && run();
 
-module.exports = { runIfMain };
+export { runIfMain };

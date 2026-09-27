@@ -1,5 +1,5 @@
 /**
- * Tests for scripts/fetch-embeddings.js — the download, the zip-extraction
+ * Tests for scripts/fetch-embeddings.ts — the download, the zip-extraction
  * guards yauzl alone cannot trip, and main()/run() end to end. Fully hermetic:
  * fetch is stubbed (no network), the "archive" is a tiny stored zip built in
  * memory and written into an os.tmpdir() sandbox, and the pins are the hashes

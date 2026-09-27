@@ -1,4 +1,4 @@
-const { runIfMain } = require('../../scripts/lib/run-if-main.js');
+const { runIfMain } = require('../../scripts/lib/run-if-main');
 
 describe('runIfMain', () => {
     test('runs only when the module is the entry point', () => {

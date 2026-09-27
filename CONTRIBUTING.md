@@ -72,19 +72,19 @@ src/
 └── assets/           # Images and other assets
 
 scripts/              # Development and build utilities
-├── build-cli.js          # Bundle CLI and inject into Node SEA binary
-├── build-react.js        # esbuild orchestration for the React renderer
-├── cleanup-logs.js       # Delete legacy api-debug-* log files
-├── readme-version.js     # Sync (or verify with --check) README/README.lv version strings
-├── settings-cli.js       # Settings facade CLI used by the settings:* pnpm scripts
-└── syntax-check.js       # Lightweight node-context syntax check (used by `pnpm lint`)
+├── build-cli.ts          # Bundle CLI and inject into Node SEA binary
+├── build-react.ts        # esbuild orchestration for the React renderer
+├── cleanup-logs.ts       # Delete legacy api-debug-* log files
+├── readme-version.ts     # Sync (or verify with --check) README/README.lv version strings
+├── settings-cli.ts       # Settings facade CLI used by the settings:* pnpm scripts
+└── syntax-check.ts       # Lightweight node-context syntax check (used by `pnpm lint`)
 ```
 
 ### Architecture
 
 The same core business logic in `src/js/` runs under three shells: **Electron (GUI)**, **CLI**, and **Capacitor (Android)**. Only the entry points, transport, and storage adapter are platform-specific.
 
-- **Entry points**: Electron `src/js/index.ts` (bundled into `out/main/app.js` by `scripts/build-main.js`, loaded through `out/main/index.js`) · CLI `src/js/cli/cli.ts` · Electron preload `src/js/preload.ts` · Capacitor bridge `src/js/bridge/capacitor.ts`
+- **Entry points**: Electron `src/js/index.ts` (bundled into `out/main/app.js` by `scripts/build-main.ts`, loaded through `out/main/index.js`) · CLI `src/js/cli/cli.ts` · Electron preload `src/js/preload.ts` · Capacitor bridge `src/js/bridge/capacitor.ts`
 - **React renderer** (`src/js/react/`) is shared between Electron and Capacitor
 - **`apiFactory.ts`** selects real vs mock API implementations at runtime based on `settings.mock`. All business logic goes through the factory — do not import from `src/js/api/*` or `src/js/mock/*` directly
 - **Settings facade** lives at `src/js/settings.ts`. Schema + defaults + validation are in `src/js/settings/schema.ts`; persistence transport (fs on Electron/CLI, `@capacitor/preferences` on Android) is in `src/js/settings/storage.ts`

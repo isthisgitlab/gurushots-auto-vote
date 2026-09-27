@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 
-const fs = require('node:fs');
-const path = require('node:path');
+import fs from 'node:fs';
+import path from 'node:path';
 
 const check = process.argv.includes('--check');
 const root = path.join(__dirname, '..');
@@ -33,7 +33,9 @@ const dl = `https://github.com/isthisgitlab/gurushots-auto-vote/releases/latest/
 // /-linux-arm/. Insert any new variants (e.g. `-linux-riscv`) BEFORE the bare `-linux` rules.
 // The gurucli rules also cover the `-lite` binaries (the suffix follows the matched text); the
 // `.apk` rules look behind for `-lite` because `v` would otherwise read it as a prerelease tag.
-const rules = [
+// 'always' / 'cli' / false — see the requirement values above.
+type Requirement = 'always' | 'cli' | false;
+const rules: [pattern: string, replacement: string, required: Requirement][] = [
     [`\\*\\*Latest Version: v${v}`, `**Latest Version: v${vRepl}`, 'always'],
     [`GuruShotsAutoVote-v${v}-x64\\.exe`, `GuruShotsAutoVote-v${vRepl}-x64.exe`, 'always'],
     [`GuruShotsAutoVote-v${v}-arm64\\.dmg`, `GuruShotsAutoVote-v${vRepl}-arm64.dmg`, 'always'],
@@ -86,7 +88,7 @@ for (const file of files) {
     try {
         original = fs.readFileSync(file, 'utf8');
     } catch (err) {
-        if (err.code === 'ENOENT') continue;
+        if ((err as NodeJS.ErrnoException).code === 'ENOENT') continue;
         throw err;
     }
     let content = original;

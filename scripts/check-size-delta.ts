@@ -19,22 +19,22 @@
  * number differs slightly from size-limit's).
  *
  * Usage:
- *   node scripts/check-size-delta.js            # check (exit 1 on a too-big jump)
- *   node scripts/check-size-delta.js --update   # rewrite the baseline to current
- *   SIZE_DELTA_KB=8 node scripts/check-size-delta.js   # override the threshold
+ *   node --import tsx scripts/check-size-delta.ts            # check (exit 1 on a too-big jump)
+ *   node --import tsx scripts/check-size-delta.ts --update   # rewrite the baseline to current
+ *   SIZE_DELTA_KB=8 node --import tsx scripts/check-size-delta.ts   # override the threshold
  *
  * Assumes the bundles are already built (the `size` npm script runs build:react
  * first).
  */
 
-const fs = require('fs');
-const path = require('path');
-const zlib = require('zlib');
+import fs from 'fs';
+import path from 'path';
+import zlib from 'zlib';
 
 const ROOT = path.join(__dirname, '..');
 const BASELINE_PATH = path.join(ROOT, '.size-baseline.json');
 
-// The renderer/service bundles produced by scripts/build-react.js.
+// The renderer/service bundles produced by scripts/build-react.ts.
 const BUNDLES = [
     { name: 'app', path: 'dist/app-bundle.js', label: 'app (Electron renderer)' },
     { name: 'login', path: 'dist/login-bundle.js', label: 'login (Electron renderer)' },
@@ -49,10 +49,10 @@ const THRESHOLD_BYTES = Math.round(THRESHOLD_KB * 1024);
 
 const UPDATE = process.argv.includes('--update');
 
-const kb = (bytes) => `${(bytes / 1024).toFixed(2)} kB`;
-const signedKb = (bytes) => `${bytes >= 0 ? '+' : ''}${(bytes / 1024).toFixed(2)} kB`;
+const kb = (bytes: number) => `${(bytes / 1024).toFixed(2)} kB`;
+const signedKb = (bytes: number) => `${bytes >= 0 ? '+' : ''}${(bytes / 1024).toFixed(2)} kB`;
 
-const brotliSize = (filePath) => {
+const brotliSize = (filePath: string) => {
     const buf = fs.readFileSync(filePath);
     const compressed = zlib.brotliCompressSync(buf, {
         params: { [zlib.constants.BROTLI_PARAM_QUALITY]: 11 },
@@ -60,7 +60,8 @@ const brotliSize = (filePath) => {
     return compressed.length;
 };
 
-const readBaseline = () => {
+// Parsed JSON, so each entry is checked with typeof before it is used.
+const readBaseline = (): Record<string, unknown> => {
     try {
         const raw = fs.readFileSync(BASELINE_PATH, 'utf8');
         const parsed = JSON.parse(raw);
@@ -72,7 +73,7 @@ const readBaseline = () => {
 
 const main = () => {
     const baseline = readBaseline();
-    const measured = {};
+    const measured: Record<string, number> = {};
     const rows = [];
     let failed = false;
     let missingBaseline = false;

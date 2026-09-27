@@ -1,8 +1,8 @@
 #!/usr/bin/env node
 
-const settings = require('../src/js/settings');
-const logger = require('../src/js/logger');
-const {
+import * as settings from '../src/js/settings';
+import * as logger from '../src/js/logger';
+import {
     dumpSchema,
     listGlobalDefaults,
     setSetting,
@@ -10,8 +10,8 @@ const {
     resetSetting,
     resetGlobalDefault,
     resetAllSettings,
-} = require('../src/js/cli/commands/settings');
-const { spawn } = require('node:child_process');
+} from '../src/js/cli/commands/settings';
+import { spawn } from 'node:child_process';
 
 /**
  * CLI Settings Management Script
@@ -49,14 +49,16 @@ const value = cliArgs[2];
 const UI_SETTINGS = ['theme', 'language', 'timezone'];
 
 // Helper function to get nested property value
-function getNestedProperty(obj, path) {
-    return path.split('.').reduce((current, key) => {
-        return current && current[key] !== undefined ? current[key] : undefined;
+function getNestedProperty(obj: object, path: string): unknown {
+    return path.split('.').reduce<unknown>((current, key) => {
+        // A primitive `current` indexes to undefined at runtime, same as a missing key.
+        const node = current as Record<string, unknown> | undefined;
+        return node && node[key] !== undefined ? node[key] : undefined;
     }, obj);
 }
 
 // Helper function to format output
-function formatValue(value, indent = 0) {
+function formatValue(value: unknown, indent = 0): string {
     const spaces = '  '.repeat(indent);
 
     if (value === null) return 'null';
@@ -87,7 +89,7 @@ function formatValue(value, indent = 0) {
 
 // Function to check if Electron GUI is running
 function isElectronRunning() {
-    return new Promise((resolve) => {
+    return new Promise<boolean>((resolve) => {
         // Named `child`, NOT `process` — shadowing the global here would make
         // any future `process.*` reference in this function silently hit the
         // child process instead.
@@ -132,11 +134,12 @@ async function main() {
                 // Redact sensitive keys (token etc.) unless --reveal was
                 // passed — sanitizeForLog deep-masks by key name, so nested
                 // sensitive values inside objects are covered too.
-                const forDisplay = (val, keyName = null) => {
+                const forDisplay = (val: unknown, keyName: string | null = null) => {
                     if (reveal) return val;
                     const wrapped = keyName === null ? val : { [keyName]: val };
                     const masked = logger.sanitizeForLog(wrapped);
-                    return keyName === null ? masked : masked[keyName];
+                    // With a keyName, `wrapped` is a record, so `masked` is one too.
+                    return keyName === null ? masked : (masked as Record<string, unknown>)[keyName];
                 };
 
                 if (!key) {
@@ -315,7 +318,7 @@ async function main() {
             }
         }
     } catch (error) {
-        console.error('❌ Error:', error.message);
+        console.error('❌ Error:', (error as Error).message);
         process.exit(1);
     }
 }

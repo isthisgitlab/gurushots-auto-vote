@@ -1,5 +1,5 @@
 /**
- * Unit tests for scripts/readme-version.js (`pnpm update:readme` /
+ * Unit tests for scripts/readme-version.ts (`pnpm update:readme` /
  * `pnpm verify:readme`).
  *
  * fs is an in-memory file map, so the real READMEs and usage guides
@@ -79,7 +79,7 @@ class ExitCalled extends Error {
     }
 }
 
-describe('scripts/readme-version.js', () => {
+describe('scripts/readme-version.ts', () => {
     const originalArgv = process.argv;
     let logSpy;
     let errorSpy;
@@ -105,10 +105,10 @@ describe('scripts/readme-version.js', () => {
 
     /** Runs the script; resolves to the exit code, or null when it returned normally. */
     const run = (args = []) => {
-        process.argv = ['node', 'scripts/readme-version.js', ...args];
+        process.argv = ['node', 'scripts/readme-version.ts', ...args];
         try {
             jest.isolateModules(() => {
-                require('../../scripts/readme-version.js');
+                require('../../scripts/readme-version');
             });
         } catch (err) {
             if (err instanceof ExitCalled) return err.code;

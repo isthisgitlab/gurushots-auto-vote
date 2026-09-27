@@ -10,16 +10,17 @@
  * prerelease the GitHub provider would fall back to latest*.yml, the full build.
  */
 
-const { build } = require('../package.json');
+import packageJson from '../package.json';
+const { build } = packageJson;
 
 // @huggingface/transformers and the native runtimes it loads (the full build
 // already leaves out onnxruntime-web).
 const VISION_PACKAGES = ['@huggingface', 'onnxruntime-node', 'onnxruntime-common', 'sharp', '@img'];
 
 // "…-${arch}.${ext}" → "…-${arch}-lite.${ext}" (also for a literal ".exe"/".AppImage").
-const liteArtifact = (artifactName) => artifactName.replace(/(\.[^.]+)$/, '-lite$1');
+const liteArtifact = (artifactName: string) => artifactName.replace(/(\.[^.]+)$/, '-lite$1');
 
-module.exports = {
+export default {
     ...build,
     files: [...build.files, ...VISION_PACKAGES.map((name) => `!**/node_modules/${name}\${/*}`)],
     extraResources: [],

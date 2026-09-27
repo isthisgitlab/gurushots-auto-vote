@@ -1,11 +1,11 @@
 /**
- * Tests for scripts/electron-builder-lite.js — the lite desktop build config.
+ * Tests for scripts/electron-builder-lite.ts — the lite desktop build config.
  */
 
 const { build } = require('../../package.json');
-const lite = require('../../scripts/electron-builder-lite');
+const lite = require('../../scripts/electron-builder-lite').default;
 
-describe('scripts/electron-builder-lite.js', () => {
+describe('scripts/electron-builder-lite.ts', () => {
     test('keeps the full build config apart from what the lite build changes', () => {
         const changed = ['files', 'extraResources', 'asarUnpack', 'directories', 'mac', 'win', 'linux', 'publish'];
         const without = (config) =>

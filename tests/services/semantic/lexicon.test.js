@@ -8,7 +8,7 @@
  * code, exercised in real runs.
  *
  * The vectors are real pretrained GloVe embeddings (mean-centered and
- * cluster-retrofitted — see scripts/fetch-embeddings.js), so synonyms do NOT
+ * cluster-retrofitted — see scripts/fetch-embeddings.ts), so synonyms do NOT
  * embed to identical vectors. The properties
  * under test are the ones the picker actually relies on: synonym pairs land
  * clearly above the semantic floor, unrelated pairs land clearly below it, and

@@ -1,5 +1,5 @@
 /**
- * Tests for scripts/validate-lexicon.js main() — the statistical gate, driven
+ * Tests for scripts/validate-lexicon.ts main() — the statistical gate, driven
  * by a tiny fake lexicon (hand-placed 2-D vectors, cosine = dot product) and a
  * fixture eval config, so every gate outcome is reachable without loading the
  * committed semantic-vectors.json asset. process.exit is stubbed to throw so a

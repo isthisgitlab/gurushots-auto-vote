@@ -1,11 +1,11 @@
 #!/usr/bin/env node
 
-const fs = require('node:fs');
-const path = require('node:path');
+import fs from 'node:fs';
+import path from 'node:path';
 // The shared resolver, so this script targets the same userData dir as the
 // app (the -dev dir when run from source, where the logs actually live).
-const runtime = require('../src/js/runtime');
-const { runIfMain } = require('./lib/run-if-main');
+import * as runtime from '../src/js/runtime';
+import { runIfMain } from './lib/run-if-main';
 
 // Deletes the legacy api-debug-* files from `logsDir` (defaults to the
 // userData logs dir). Exported so tests can point it at a temp dir; the
@@ -33,4 +33,4 @@ function cleanupLogs(logsDir = path.join(runtime.getAppUserDataPath(), 'logs')) 
 
 runIfMain(require.main, module, cleanupLogs);
 
-module.exports = { cleanupLogs };
+export { cleanupLogs };

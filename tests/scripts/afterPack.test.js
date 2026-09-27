@@ -1,5 +1,5 @@
 /**
- * Tests for scripts/afterPack.js — the electron-builder afterPack hook that
+ * Tests for scripts/afterPack.ts — the electron-builder afterPack hook that
  * flips Electron fuses. @electron/fuses is mocked so no binary is touched.
  */
 

@@ -33,7 +33,7 @@
  * on theme. Max-pooling separates the same two at 0.939 vs 0.483.
  *
  * SEMANTIC_MATCH_FLOOR moves with this: it is calibrated per pooling shape by
- * scripts/validate-lexicon.js, which pools the same way this does. Changing the
+ * scripts/validate-lexicon.ts, which pools the same way this does. Changing the
  * pooling here without re-deriving the floor there would admit the tail of the
  * unrelated distribution - do not change one alone.
  *

@@ -1,5 +1,5 @@
 /**
- * Tests for scripts/syntax-check.js. Hermetic: `node --check` is never
+ * Tests for scripts/syntax-check.ts. Hermetic: `node --check` is never
  * actually spawned (execFileSync is mocked), and directory walks run over
  * temp dirs under os.tmpdir() — except one read-only walk of the real
  * project roots to pin the default include list.
@@ -18,7 +18,7 @@ const os = require('node:os');
 const path = require('node:path');
 const { execFileSync } = require('node:child_process');
 
-const { main, checkFileSyntax, getJsFiles, shouldExclude } = require('../../scripts/syntax-check.js');
+const { main, checkFileSyntax, getJsFiles, shouldExclude } = require('../../scripts/syntax-check');
 
 let tmp;
 let logSpy;
@@ -64,7 +64,7 @@ describe('shouldExclude', () => {
     test('matches excluded directory prefixes', () => {
         expect(shouldExclude('scripts/site/x.js')).toBe(true);
         expect(shouldExclude(['scripts', 'site', 'x.js'].join(path.sep))).toBe(true);
-        expect(shouldExclude('scripts/build-main.js')).toBe(false);
+        expect(shouldExclude('scripts/build-main.ts')).toBe(false);
     });
 });
 
@@ -129,7 +129,7 @@ describe('main', () => {
         main();
 
         const checked = execFileSync.mock.calls.map(([, [, file]]) => file.split(path.sep).join('/'));
-        expect(checked).toContain('scripts/syntax-check.js');
+        expect(checked).toContain('tests/scripts/syntax-check.test.js');
         expect(checked.some((f) => f.startsWith('src/'))).toBe(false);
         expect(checked.some((f) => f.startsWith('scripts/site/'))).toBe(false);
         expect(exitSpy).toHaveBeenCalledWith(0);

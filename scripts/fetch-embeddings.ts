@@ -37,14 +37,53 @@
  * https://nlp.stanford.edu/projects/glove/ (Pennington, Socher, Manning 2014).
  */
 
-const fs = require('node:fs');
-const path = require('node:path');
-const crypto = require('node:crypto');
-const readline = require('node:readline');
-const { pipeline } = require('node:stream/promises');
-const yauzl = require('yauzl');
-const { stem } = require('../src/js/services/photoPicker');
-const { runIfMain } = require('./lib/run-if-main');
+import fs from 'node:fs';
+import path from 'node:path';
+import crypto from 'node:crypto';
+import readline from 'node:readline';
+import { pipeline } from 'node:stream/promises';
+import yauzl from 'yauzl';
+import type { Options as YauzlOptions, ZipFile } from 'yauzl';
+import { stem } from '../src/js/services/photoPicker';
+import { runIfMain } from './lib/run-if-main';
+
+type YauzlOpenCallback = (err: Error | null, zipfile: ZipFile) => void;
+
+/** The parts of scripts/lexicon-concepts.json this script reads. */
+interface LexiconConcepts {
+    concepts?: Array<{ id: string; words?: Array<string> }>;
+    extraWords?: Array<string>;
+}
+
+/** One parsed GloVe line. */
+interface GloveRow {
+    token: string;
+    vec: Float64Array;
+}
+
+/** A GloVe row kept by the scan, tagged with where its word came from. */
+interface VocabRow extends GloveRow {
+    isAuthored: boolean;
+}
+
+/** A kept row plus whether it belongs to the mean-centering baseline. */
+interface ScanRow extends VocabRow {
+    centerBaseline: boolean;
+}
+
+/** main()'s options; every one defaults to the pinned production value. */
+interface MainOptions {
+    conceptsPath?: string;
+    cacheDir?: string;
+    zipPath?: string;
+    outPath?: string;
+    url?: string;
+    expectedZipSha256?: string;
+    expectedEntrySha256?: string;
+    maxDownloadBytes?: number;
+    topN?: number;
+    meanCenter?: boolean;
+}
 
 const GLOVE_URL = 'https://nlp.stanford.edu/data/glove.6B.zip';
 // SHA-256 of the whole archive as served by the pinned URL. The entry hash
@@ -108,12 +147,12 @@ const ZIP_PATH = path.join(CACHE_DIR, 'glove.6B.zip');
 const OUT_PATH = path.join(__dirname, 'lexicon-embeddings.json');
 const CONCEPTS_PATH = path.join(__dirname, 'lexicon-concepts.json');
 
-const fail = (lines) => {
+const fail: (lines: string | Array<string>) => never = (lines) => {
     console.error(`❌ ${Array.isArray(lines) ? lines.join('\n   ') : lines}`);
     process.exit(1);
 };
 
-const sha256OfFile = (filePath) =>
+const sha256OfFile = (filePath: string): Promise<string> =>
     new Promise((resolve, reject) => {
         const hash = crypto.createHash('sha256');
         fs.createReadStream(filePath)
@@ -122,22 +161,23 @@ const sha256OfFile = (filePath) =>
             .on('end', () => resolve(hash.digest('hex')));
     });
 
-const sha256OfString = (str) => crypto.createHash('sha256').update(str).digest('hex');
+const sha256OfString = (str: string): string => crypto.createHash('sha256').update(str).digest('hex');
 
 /**
  * Authored vocabulary: surface word -> owning concept id (or 'extraWords'),
  * plus any cross-cluster stem collisions (an authoring mistake the caller
- * treats as fatal, mirroring build-lexicon.js). Pure — takes the parsed
+ * treats as fatal, mirroring build-lexicon.ts). Pure — takes the parsed
  * concepts config, exits nowhere.
  *
- * @param {object} concepts - parsed lexicon-concepts.json
- * @returns {{bySurface: Map<string,string>, collisions: Array<string>}}
+ * @param concepts - parsed lexicon-concepts.json
  */
-const collectAuthoredWords = (concepts) => {
-    const bySurface = new Map();
-    const stemOwner = new Map();
-    const collisions = [];
-    const claim = (word, owner) => {
+const collectAuthoredWords = (
+    concepts: LexiconConcepts | null,
+): { bySurface: Map<string, string>; collisions: Array<string> } => {
+    const bySurface = new Map<string, string>();
+    const stemOwner = new Map<string, string>();
+    const collisions: Array<string> = [];
+    const claim = (word: string, owner: string) => {
         const surface = String(word).toLowerCase();
         if (!bySurface.has(surface)) bySurface.set(surface, owner);
         const key = stem(surface);
@@ -158,7 +198,7 @@ const collectAuthoredWords = (concepts) => {
  * Parse one GloVe text line ("token v1 v2 … vN") into { token, vec }, or null
  * when the line is malformed or the wrong dimensionality.
  */
-const parseGloveLine = (line, dims) => {
+const parseGloveLine = (line: string, dims: number): GloveRow | null => {
     const firstSpace = line.indexOf(' ');
     if (firstSpace <= 0) return null;
     const token = line.slice(0, firstSpace);
@@ -172,14 +212,14 @@ const parseGloveLine = (line, dims) => {
     return { token, vec };
 };
 
-const normalize = (vec) => {
+const normalize = (vec: Float64Array): void => {
     let norm = 0;
     for (const x of vec) norm += x * x;
     norm = Math.sqrt(norm) || 1;
     for (let i = 0; i < vec.length; i++) vec[i] /= norm;
 };
 
-const cosineOf = (a, b) => {
+const cosineOf = (a: Float64Array, b: Float64Array): number => {
     let dot = 0;
     for (let i = 0; i < a.length; i++) dot += a[i] * b[i];
     return dot;
@@ -191,20 +231,20 @@ const cosineOf = (a, b) => {
  * vectors in place. extraWords have no cluster and are left untouched;
  * single-word clusters are a no-op by construction.
  *
- * @param {Array<{token:string, vec:Float64Array, isAuthored:boolean}>} rows
- * @param {Map<string,string>} authored - surface word -> owner id
- * @param {number} beta - blend strength in [0, 1]
- * @returns {number} how many vectors were adjusted
+ * @param authored - surface word -> owner id
+ * @param beta - blend strength in [0, 1]
+ * @returns how many vectors were adjusted
  */
-const retrofit = (rows, authored, beta) => {
+const retrofit = (rows: Array<VocabRow>, authored: Map<string, string>, beta: number): number => {
     if (!(beta > 0)) return 0;
-    const clusters = new Map();
+    const clusters = new Map<string, Array<Float64Array>>();
     for (const row of rows) {
         if (!row.isAuthored) continue;
         const owner = authored.get(row.token);
         if (!owner || owner === 'extraWords') continue;
         if (!clusters.has(owner)) clusters.set(owner, []);
-        clusters.get(owner).push(row.vec);
+        // Set on the line above when absent.
+        clusters.get(owner)!.push(row.vec);
     }
     let retrofitted = 0;
     for (const members of clusters.values()) {
@@ -227,14 +267,13 @@ const retrofit = (rows, authored, beta) => {
  * authored rows claim their stems first (in row order — GloVe frequency order),
  * generic rows only fill still-free stems. A generic merge whose two vectors
  * disagree (cosine < badCosine) is counted as bad.
- *
- * @param {Array<{token:string, vec:Float64Array, isAuthored:boolean}>} rows
- * @param {number} badCosine
- * @returns {{stems: Map<string, object>, merges: number, badMerges: number, badSamples: Array<string>}}
  */
-const assignStems = (rows, badCosine) => {
-    const stems = new Map();
-    const badSamples = [];
+const assignStems = (
+    rows: Array<VocabRow>,
+    badCosine: number,
+): { stems: Map<string, VocabRow>; merges: number; badMerges: number; badSamples: Array<string> } => {
+    const stems = new Map<string, VocabRow>();
+    const badSamples: Array<string> = [];
     let merges = 0;
     let badMerges = 0;
     for (const authoredPass of [true, false]) {
@@ -265,16 +304,15 @@ const assignStems = (rows, badCosine) => {
  * int8-quantize every stem's vector with one global scale and pack each as
  * base64 (two's-complement bytes — the runtime decoder reinterprets them as
  * signed).
- *
- * @param {Map<string, {vec: Float64Array}>} stems
- * @param {number} dims
- * @returns {{scale: number, packed: object}}
  */
-const quantizePack = (stems, dims) => {
+const quantizePack = (
+    stems: Map<string, { vec: Float64Array }>,
+    dims: number,
+): { scale: number; packed: Record<string, string> } => {
     let maxAbs = 0;
     for (const { vec } of stems.values()) for (const x of vec) maxAbs = Math.max(maxAbs, Math.abs(x));
     const scale = maxAbs / 127 || 1 / 127;
-    const packed = Object.create(null);
+    const packed: Record<string, string> = Object.create(null);
     for (const [key, { vec }] of stems) {
         const q = new Int8Array(dims);
         for (let i = 0; i < dims; i++) q[i] = Math.max(-127, Math.min(127, Math.round(vec[i] / scale)));
@@ -287,7 +325,7 @@ const quantizePack = (stems, dims) => {
  * fetch() that follows redirects itself so every hop is held to https — the
  * built-in redirect handling would follow an https→http downgrade silently.
  */
-const fetchHttpsOnly = async (url, maxRedirects = MAX_REDIRECTS) => {
+const fetchHttpsOnly = async (url: string, maxRedirects = MAX_REDIRECTS): Promise<Response> => {
     let current = url;
     for (let hop = 0; ; hop++) {
         const res = await fetch(current, { redirect: 'manual' });
@@ -301,7 +339,17 @@ const fetchHttpsOnly = async (url, maxRedirects = MAX_REDIRECTS) => {
     }
 };
 
-const download = async ({ cacheDir, zipPath, url, maxBytes }) => {
+const download = async ({
+    cacheDir,
+    zipPath,
+    url,
+    maxBytes,
+}: {
+    cacheDir: string;
+    zipPath: string;
+    url: string;
+    maxBytes: number;
+}): Promise<void> => {
     fs.mkdirSync(cacheDir, { recursive: true });
     if (fs.existsSync(zipPath)) {
         console.log(`📦 Using cached archive: ${path.relative(ROOT, zipPath)}`);
@@ -314,7 +362,7 @@ const download = async ({ cacheDir, zipPath, url, maxBytes }) => {
         res = await fetchHttpsOnly(url);
     } catch (err) {
         fail([
-            `download failed: ${err.message || err}`,
+            `download failed: ${(err as Error).message || err}`,
             `URL: ${url}`,
             'Check network/proxy access and re-run `pnpm fetch:embeddings` — a completed download is',
             'cached and reused on every later run.',
@@ -328,7 +376,7 @@ const download = async ({ cacheDir, zipPath, url, maxBytes }) => {
         // Cap the bytes written before any hash check can run — a wrong or
         // malicious source must not be able to fill the disk first.
         let written = 0;
-        const capped = async function* (source) {
+        const capped = async function* (source: AsyncIterable<Uint8Array>) {
             for await (const chunk of source) {
                 written += chunk.length;
                 if (written > maxBytes) {
@@ -344,7 +392,7 @@ const download = async ({ cacheDir, zipPath, url, maxBytes }) => {
         fs.renameSync(tmpPath, zipPath);
     } catch (err) {
         fs.rmSync(tmpPath, { force: true });
-        fail([`download interrupted: ${err.message || err}`, 'Re-run `pnpm fetch:embeddings` to retry.']);
+        fail([`download interrupted: ${(err as Error).message || err}`, 'Re-run `pnpm fetch:embeddings` to retry.']);
     }
 };
 
@@ -353,15 +401,18 @@ const download = async ({ cacheDir, zipPath, url, maxBytes }) => {
  * onLine. Never writes any entry to disk; caps inflated size. Resolves with the
  * entry's SHA-256 once fully consumed.
  *
- * @param {string|Buffer} zipSource - path to the archive, or its bytes (the
+ * @param zipSource - path to the archive, or its bytes (the
  *   Buffer form exists so tests can exercise this path without any fs)
- * @param {(line: string) => void} onLine
- * @param {{maxEntryBytes?: number}} [limits] - inflated-size cap (tests lower it)
- * @returns {Promise<string>} SHA-256 hex of the entry's inflated bytes
+ * @param limits - inflated-size cap (tests lower it)
+ * @returns SHA-256 hex of the entry's inflated bytes
  */
-const streamEntryLines = (zipSource, onLine, { maxEntryBytes = MAX_ENTRY_BYTES } = {}) =>
+const streamEntryLines = (
+    zipSource: string | Buffer,
+    onLine: (line: string) => void,
+    { maxEntryBytes = MAX_ENTRY_BYTES }: { maxEntryBytes?: number } = {},
+): Promise<string> =>
     new Promise((resolve, reject) => {
-        const opener = Buffer.isBuffer(zipSource)
+        const opener: (opts: YauzlOptions, cb: YauzlOpenCallback) => void = Buffer.isBuffer(zipSource)
             ? (opts, cb) => yauzl.fromBuffer(zipSource, opts, cb)
             : (opts, cb) => yauzl.open(zipSource, opts, cb);
         opener({ lazyEntries: true }, (err, zipfile) => {
@@ -382,7 +433,7 @@ const streamEntryLines = (zipSource, onLine, { maxEntryBytes = MAX_ENTRY_BYTES }
                     if (streamErr) return reject(streamErr);
                     const hash = crypto.createHash('sha256');
                     let inflated = 0;
-                    stream.on('data', (chunk) => {
+                    stream.on('data', (chunk: Buffer) => {
                         inflated += chunk.length;
                         if (inflated > maxEntryBytes) {
                             stream.destroy(new Error(`entry inflated past ${maxEntryBytes} bytes — aborting`));
@@ -415,8 +466,6 @@ const streamEntryLines = (zipSource, onLine, { maxEntryBytes = MAX_ENTRY_BYTES }
  * CLI entry. Every option defaults to the pinned production value; tests
  * override paths (os.tmpdir() fixtures), pins (hashes of a tiny fixture zip)
  * and the scale knobs so the whole pipeline runs offline in milliseconds.
- *
- * @param {object} [opts]
  */
 const main = async ({
     conceptsPath = CONCEPTS_PATH,
@@ -429,8 +478,8 @@ const main = async ({
     maxDownloadBytes = MAX_DOWNLOAD_BYTES,
     topN = TOP_N,
     meanCenter = MEAN_CENTER,
-} = {}) => {
-    const concepts = JSON.parse(fs.readFileSync(conceptsPath, 'utf8'));
+}: MainOptions = {}): Promise<void> => {
+    const concepts: LexiconConcepts | null = JSON.parse(fs.readFileSync(conceptsPath, 'utf8'));
     const { bySurface: authored, collisions } = collectAuthoredWords(concepts);
     if (collisions.length) {
         fail([
@@ -453,11 +502,11 @@ const main = async ({
 
     // Single frequency-ordered scan. `rows` keeps encounter order (= GloVe
     // frequency order), which assignStems' precedence relies on.
-    const rows = [];
-    const authoredFound = new Set();
+    const rows: Array<ScanRow> = [];
+    const authoredFound = new Set<string>();
     let genericKept = 0;
     let parsed = 0;
-    const onLine = (line) => {
+    const onLine = (line: string) => {
         parsed++;
         const firstSpace = line.indexOf(' ');
         if (firstSpace <= 0) return;
@@ -477,7 +526,7 @@ const main = async ({
         entrySha256 = await streamEntryLines(zipPath, onLine);
     } catch (err) {
         fail([
-            `extraction failed: ${err.message || err}`,
+            `extraction failed: ${(err as Error).message || err}`,
             'The cached archive may be corrupt — delete scripts/.cache/glove.6B.zip and re-run.',
         ]);
     }
@@ -535,7 +584,7 @@ const main = async ({
     );
     const output = {
         version: 1,
-        generator: 'fetch-embeddings.js',
+        generator: 'fetch-embeddings.ts',
         source: {
             url,
             zipSha256,
@@ -556,7 +605,7 @@ const main = async ({
     // Sidecar payload hash: the intermediate itself is an unreviewable
     // multi-MB blob, so a hand-edit to its vectors would be invisible in a
     // diff. This one-line file makes any payload change show up as a
-    // human-readable hunk, and build-lexicon.js refuses to build if the
+    // human-readable hunk, and build-lexicon.ts refuses to build if the
     // committed payload no longer matches it.
     fs.writeFileSync(
         `${outPath.replace(/\.json$/, '')}.sha256`,
@@ -570,9 +619,9 @@ const main = async ({
     console.log('   Next: pnpm build:lexicon && pnpm verify:lexicon');
 };
 
-const run = (opts) => main(opts).catch((err) => fail(err.stack || String(err)));
+const run = (opts?: MainOptions): Promise<void> => main(opts).catch((err: Error) => fail(err.stack || String(err)));
 
-module.exports = {
+export {
     collectAuthoredWords,
     parseGloveLine,
     normalize,

@@ -1,13 +1,13 @@
 #!/usr/bin/env node
 
-const { build } = require('esbuild');
-const { execFileSync } = require('node:child_process');
-const path = require('node:path');
-const fs = require('node:fs');
-const crypto = require('node:crypto');
-const packageJson = require('../package.json');
-const { runIfMain } = require('./lib/run-if-main');
-const { ensureVisionModel } = require('./fetch-vision-model');
+import { build } from 'esbuild';
+import { execFileSync } from 'node:child_process';
+import path from 'node:path';
+import fs from 'node:fs';
+import crypto from 'node:crypto';
+import packageJson from '../package.json';
+import { runIfMain } from './lib/run-if-main';
+import { ensureVisionModel } from './fetch-vision-model';
 
 const { version } = packageJson;
 
@@ -17,7 +17,22 @@ const SEA_FUSE = 'NODE_SEA_FUSE_fce680ab2cc467b6e072b8b5df1996b2';
 // Pin to a specific Node version for reproducible bundle output. Bump when bumping engines.
 const TARGET_NODE_VERSION = process.versions.node;
 
-const platforms = [
+interface CliPlatform {
+    input: string;
+    output: string;
+    plat: NodeJS.Platform;
+    arch: NodeJS.Architecture;
+}
+
+// Node single-executable-application config (`node --experimental-sea-config`).
+interface SeaConfig {
+    main: string;
+    output: string;
+    disableExperimentalSEAWarning: boolean;
+    assets?: Record<string, string>;
+}
+
+const platforms: CliPlatform[] = [
     { input: 'gurucli-mac', output: `gurucli-v${version}-mac`, plat: 'darwin', arch: 'arm64' },
     { input: 'gurucli-linux', output: `gurucli-v${version}-linux`, plat: 'linux', arch: 'x64' },
     { input: 'gurucli-linux-arm', output: `gurucli-v${version}-linux-arm`, plat: 'linux', arch: 'arm64' },
@@ -28,7 +43,7 @@ const DIST_DIR = path.join(ROOT, 'dist');
 const BUILD_DIR = path.join(ROOT, 'build', 'cli');
 const NODE_CACHE_DIR = path.join(ROOT, '.cache', 'node-binaries');
 
-function ensureDir(p) {
+function ensureDir(p: string) {
     if (!fs.existsSync(p)) fs.mkdirSync(p, { recursive: true });
 }
 
@@ -56,9 +71,13 @@ async function bundleCli() {
 // OS/arch. transformers' Node build also inlines the web runtime it uses, so
 // the standalone onnxruntime-web package is never loaded. Both are dropped
 // from the archive that the SEA binary embeds.
-function pruneVisionRuntime(pnpmDir, platform = process.platform, arch = process.arch) {
+function pruneVisionRuntime(
+    pnpmDir: string,
+    platform: NodeJS.Platform = process.platform,
+    arch: NodeJS.Architecture = process.arch,
+) {
     if (!fs.existsSync(pnpmDir)) return;
-    const remove = (target) => fs.rmSync(target, { recursive: true, force: true });
+    const remove = (target: string) => fs.rmSync(target, { recursive: true, force: true });
     for (const entry of fs.readdirSync(pnpmDir)) {
         if (entry.startsWith('onnxruntime-web@')) {
             remove(path.join(pnpmDir, entry));
@@ -97,7 +116,7 @@ function generateSeaBlob(nodeBinary = process.execPath, { lite = false } = {}) {
     console.log('📦 Generating SEA blob...');
     const seaConfigPath = path.join(BUILD_DIR, 'sea-config.json');
     const seaBlobPath = path.join(BUILD_DIR, 'sea-prep.blob');
-    const seaConfig = {
+    const seaConfig: SeaConfig = {
         main: path.join(DIST_DIR, 'cli-bundled.js'),
         output: seaBlobPath,
         disableExperimentalSEAWarning: true,
@@ -126,7 +145,7 @@ function generateSeaBlob(nodeBinary = process.execPath, { lite = false } = {}) {
 // Always download the official nodejs.org Node binary rather than using process.execPath.
 // Local Homebrew (and some package-manager Node installs) are dynamically linked to host
 // dylibs and produce non-portable binaries when used as the SEA injection target.
-async function getOfficialNodeBinary(plat, arch) {
+async function getOfficialNodeBinary(plat: NodeJS.Platform, arch: NodeJS.Architecture) {
     const ver = TARGET_NODE_VERSION;
     const ext = plat === 'darwin' ? 'tar.gz' : 'tar.xz';
     const tarName = `node-v${ver}-${plat}-${arch}.${ext}`;
@@ -159,7 +178,7 @@ async function getOfficialNodeBinary(plat, arch) {
     return binaryPath;
 }
 
-async function buildPlatform({ output, plat, arch }, seaBlobPath) {
+async function buildPlatform({ output, plat, arch }: CliPlatform, seaBlobPath: string) {
     console.log(`🔧 Building ${output} (${plat}/${arch})...`);
 
     const sourceBinary = await getOfficialNodeBinary(plat, arch);
@@ -172,7 +191,7 @@ async function buildPlatform({ output, plat, arch }, seaBlobPath) {
     // the executable removes those symbols and causes dlopen to fail.
 
     // Invoke postject's local binary directly to avoid a runtime dependency on `pnpm` being
-    // on PATH (the CLI build is called via `node scripts/build-cli.js`, which may not inherit
+    // on PATH (the CLI build is called via `node --import tsx scripts/build-cli.ts`, which may not inherit
     // a pnpm-augmented PATH in every environment).
     const postjectBin = path.join(ROOT, 'node_modules', '.bin', 'postject');
     const postjectArgs = [outputBinary, 'NODE_SEA_BLOB', seaBlobPath, '--sentinel-fuse', SEA_FUSE, '--overwrite'];
@@ -234,7 +253,7 @@ async function main() {
 
 runIfMain(require.main, module, main);
 
-module.exports = {
+export {
     platforms,
     ensureDir,
     bundleCli,

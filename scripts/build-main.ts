@@ -17,20 +17,21 @@
  * bundle. Node maps only files it compiles after source maps are switched on,
  * so the loader switches them on and then requires the bundle.
  *
- * Usage: node scripts/build-main.js [--watch]
+ * Usage: node --import tsx scripts/build-main.ts [--watch]
  */
 
-const fs = require('node:fs');
-const path = require('node:path');
-const { build, context } = require('esbuild');
-const { runIfMain } = require('./lib/run-if-main');
+import fs from 'node:fs';
+import path from 'node:path';
+import { build, context } from 'esbuild';
+import type { BuildOptions } from 'esbuild';
+import { runIfMain } from './lib/run-if-main';
 
 const ROOT = path.join(__dirname, '..');
 const OUT_DIR = path.join(ROOT, 'out', 'main');
 const LOADER = path.join(OUT_DIR, 'index.js');
 const LOADER_SOURCE = "process.setSourceMapsEnabled(true);\nrequire('./app.js');\n";
 
-const OPTIONS = {
+const OPTIONS: BuildOptions = {
     entryPoints: [path.join(ROOT, 'src', 'js', 'index.ts')],
     outfile: path.join(OUT_DIR, 'app.js'),
     bundle: true,
@@ -43,11 +44,7 @@ const OPTIONS = {
     logLevel: 'info',
 };
 
-/**
- * @param {string[]} [argv]
- * @returns {Promise<void>}
- */
-async function main(argv = process.argv.slice(2)) {
+async function main(argv: string[] = process.argv.slice(2)): Promise<void> {
     fs.mkdirSync(OUT_DIR, { recursive: true });
     fs.writeFileSync(LOADER, LOADER_SOURCE);
     if (argv.includes('--watch')) {
@@ -60,4 +57,4 @@ async function main(argv = process.argv.slice(2)) {
 
 runIfMain(require.main, module, main);
 
-module.exports = { OPTIONS, LOADER, LOADER_SOURCE, main };
+export { OPTIONS, LOADER, LOADER_SOURCE, main };

@@ -1,8 +1,8 @@
 /**
- * Unit tests for scripts/build-react.js.
+ * Unit tests for scripts/build-react.ts.
  *
  * The script runs buildReact() at require time (it is only ever invoked as
- * `node scripts/build-react.js [--watch]`), so each case stubs argv/env/exit,
+ * `node --import tsx scripts/build-react.ts [--watch]`), so each case stubs argv/env/exit,
  * requires it in an isolated module registry and flushes the async build.
  * esbuild and fs are fully mocked — no real bundle is built or watched and
  * nothing under dist/ is touched.
@@ -45,7 +45,7 @@ const flush = async () => {
     }
 };
 
-describe('scripts/build-react.js', () => {
+describe('scripts/build-react.ts', () => {
     const originalArgv = process.argv;
     const originalEnv = process.env.NODE_ENV;
     let logSpy;
@@ -70,11 +70,11 @@ describe('scripts/build-react.js', () => {
     });
 
     const run = async (args = [], nodeEnv) => {
-        process.argv = ['node', 'scripts/build-react.js', ...args];
+        process.argv = ['node', 'scripts/build-react.ts', ...args];
         if (nodeEnv === undefined) delete process.env.NODE_ENV;
         else process.env.NODE_ENV = nodeEnv;
         jest.isolateModules(() => {
-            require('../../scripts/build-react.js');
+            require('../../scripts/build-react');
         });
         await flush();
     };

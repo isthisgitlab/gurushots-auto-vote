@@ -12,9 +12,9 @@
 // main() takes the repo root / output dir / layout as overridable paths so the
 // full render can be tested against a temp tree without touching dist-site/.
 
-const fs = require('node:fs');
-const path = require('node:path');
-const { runIfMain } = require('./lib/run-if-main');
+import fs from 'node:fs';
+import path from 'node:path';
+import { runIfMain } from './lib/run-if-main';
 
 const root = path.join(__dirname, '..');
 const outDir = path.join(root, 'dist-site');
@@ -31,7 +31,17 @@ const SITE_DESCRIPTION =
 // buildNav) so it cannot drift from the rendered pages. Keys are repo-relative
 // POSIX paths so link rewriting can resolve against them; add a page here and
 // links to it across the set resolve on-site.
-const PAGES = [
+type Lang = 'en' | 'lv';
+
+interface SitePage {
+    src: string;
+    out: string;
+    title: string;
+    nav: string;
+    lang: Lang;
+}
+
+const PAGES: SitePage[] = [
     { src: 'README.md', out: 'index.html', title: 'GuruShots Auto Vote', nav: 'Home', lang: 'en' },
     {
         src: 'docs/usage.md',
@@ -67,42 +77,43 @@ const PAGES = [
 // side (README.lv.md and usage.lv.md). Every page carries a switch to the OTHER
 // language's entry page, labelled in the target language — so the Latvian guide
 // shows "🇬🇧 English" (the way back) instead of a useless "Latviski".
-const LANGUAGES = {
+const LANGUAGES: Record<Lang, { entry: string; switchLabel: string }> = {
     en: { entry: 'index.html', switchLabel: '🇬🇧 English' },
     lv: { entry: 'lv.html', switchLabel: '🇱🇻 Latviski' },
 };
 
 const srcToOut = Object.fromEntries(PAGES.map((p) => [p.src, p.out]));
 
-const navLink = (out, label, active) =>
+const navLink = (out: string, label: string, active: boolean) =>
     `<a href="./${out}" class="btn btn-ghost btn-sm${active ? ' btn-active' : ''}">${label}</a>`;
 
 // Per-page navbar: the current language's pages (current one marked active),
 // followed by a switch to the other language's entry page.
-const buildNav = (page) => {
+const buildNav = (page: SitePage) => {
     const links = PAGES.filter((p) => p.lang === page.lang).map((p) => navLink(p.out, p.nav, p.out === page.out));
     const target = page.lang === 'en' ? 'lv' : 'en';
     links.push(navLink(LANGUAGES[target].entry, LANGUAGES[target].switchLabel, false));
     return links.join('\n');
 };
 
-const hasScheme = (url) => /^[a-zA-Z][a-zA-Z0-9+.-]*:/.test(url) || url.startsWith('//');
+const hasScheme = (url: string) => /^[a-zA-Z][a-zA-Z0-9+.-]*:/.test(url) || url.startsWith('//');
 
 // POSIX directory of a repo-relative source path ('' for root-level files).
-const srcDirOf = (src) => {
+const srcDirOf = (src: string) => {
     const dir = path.posix.dirname(src.split(path.sep).join('/'));
     return dir === '.' ? '' : dir;
 };
 
 // Resolve `rel` (a link target) to a repo-relative path with no leading ./,
 // interpreted relative to `srcDir` (the directory of the file the link is in).
-const toRepoPath = (srcDir, rel) => path.posix.normalize(path.posix.join(srcDir, rel)).replace(/^\.\//, '');
+const toRepoPath = (srcDir: string, rel: string) =>
+    path.posix.normalize(path.posix.join(srcDir, rel)).replace(/^\.\//, '');
 
 // Anchors and absolute/scheme URLs (http, mailto, bitcoin:, ethereum:, …) pass
 // through. Relative links to a rendered page become its .html; any other
 // repo-relative target (LICENSE, ../CONTRIBUTING.md, …) points at GitHub. Any
 // ?query / #fragment suffix is preserved either way.
-const rewriteLink = (href, srcDir) => {
+const rewriteLink = (href: string, srcDir: string) => {
     if (!href || href.startsWith('#') || hasScheme(href)) return href;
     const cut = href.search(/[?#]/);
     const rel = cut >= 0 ? href.slice(0, cut) : href;
@@ -117,12 +128,12 @@ const rewriteLink = (href, srcDir) => {
 
 // The README references no local images today, but if one is ever added a
 // relative <img> must resolve to GitHub's raw host to render off-repo.
-const rewriteImage = (src, srcDir) => {
+const rewriteImage = (src: string, srcDir: string) => {
     if (!src || src.startsWith('#') || hasScheme(src)) return src;
     return `${GITHUB_RAW}/${toRepoPath(srcDir, src)}`;
 };
 
-const render = (template, tokens) => {
+const render = (template: string, tokens: Record<string, string>) => {
     let html = template;
     for (const [key, value] of Object.entries(tokens)) {
         // split/join (not String.replace) so `$` sequences in a value are literal.
@@ -170,7 +181,9 @@ const main = async ({ rootDir = root, out = outDir, layoutFile = layoutPath } = 
         // Reset the slugger so each page numbers its heading ids from scratch
         // (otherwise repeated headings across pages collect -1/-2 suffixes).
         resetHeadings();
-        const content = marked.parse(fs.readFileSync(srcPath, 'utf8'));
+        // No async extension is registered, so parse returns synchronously; its
+        // declared type only widens to Promise for the `async: true` option.
+        const content = marked.parse(fs.readFileSync(srcPath, 'utf8')) as string;
         const html = render(layout, {
             title: page.title,
             description: SITE_DESCRIPTION,
@@ -194,15 +207,4 @@ const runCli = () =>
 
 runIfMain(require.main, module, runCli);
 
-module.exports = {
-    hasScheme,
-    srcDirOf,
-    toRepoPath,
-    rewriteLink,
-    rewriteImage,
-    render,
-    buildNav,
-    PAGES,
-    main,
-    runCli,
-};
+export { hasScheme, srcDirOf, toRepoPath, rewriteLink, rewriteImage, render, buildNav, PAGES, main, runCli };

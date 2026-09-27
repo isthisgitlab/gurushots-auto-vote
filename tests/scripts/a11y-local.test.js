@@ -1,9 +1,9 @@
 /**
- * scripts/lint/a11y-local.js — the Oxlint JS plugin rule that every <label>
+ * scripts/lint/a11y-local.ts — the Oxlint JS plugin rule that every <label>
  * names or wraps its control. Nodes are built by hand in the ESTree/JSX shape
  * Oxlint hands to JS plugins.
  */
-const plugin = require('../../scripts/lint/a11y-local');
+const plugin = require('../../scripts/lint/a11y-local').default;
 
 const rule = plugin.rules['label-has-control'];
 

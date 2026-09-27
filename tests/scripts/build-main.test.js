@@ -1,5 +1,5 @@
 /**
- * Tests for scripts/build-main.js — the Electron main-process bundle. esbuild
+ * Tests for scripts/build-main.ts — the Electron main-process bundle. esbuild
  * is mocked, so nothing is written to dist/.
  */
 
@@ -67,7 +67,7 @@ test('--watch rebuilds on change instead', async () => {
 
 test('reads its flags from the command line by default', async () => {
     const argv = process.argv;
-    process.argv = ['node', 'build-main.js'];
+    process.argv = ['node', 'build-main.ts'];
     try {
         await main();
     } finally {

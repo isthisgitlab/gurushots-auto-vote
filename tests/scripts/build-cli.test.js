@@ -1,5 +1,5 @@
 /**
- * Tests for scripts/build-cli.js — the SEA CLI builder.
+ * Tests for scripts/build-cli.ts — the SEA CLI builder.
  *
  * Fully hermetic: esbuild and child_process are mocked (no bundling, tar,
  * strip, postject or codesign ever runs), fetch is stubbed, and every fs call
@@ -275,7 +275,7 @@ describe('build-cli', () => {
         const builtOutputs = () => fs.copyFileSync.mock.calls.map(([, dest]) => path.basename(dest));
 
         test('builds every platform when no argument is given', async () => {
-            process.argv = ['node', 'build-cli.js'];
+            process.argv = ['node', 'build-cli.ts'];
             await buildCli.main();
             expect(fs.mkdirSync).toHaveBeenCalledWith(DIST_DIR, { recursive: true });
             expect(fs.mkdirSync).toHaveBeenCalledWith(BUILD_DIR, { recursive: true });
@@ -285,7 +285,7 @@ describe('build-cli', () => {
         });
 
         test('builds only the requested platform', async () => {
-            process.argv = ['node', 'build-cli.js', 'gurucli-linux-arm'];
+            process.argv = ['node', 'build-cli.ts', 'gurucli-linux-arm'];
             await buildCli.main();
             expect(builtOutputs()).toEqual([`gurucli-v${version}-linux-arm`]);
             expect(exitSpy).not.toHaveBeenCalled();
@@ -294,7 +294,7 @@ describe('build-cli', () => {
         test('--lite builds "-lite" binaries without preparing the visual runtime', async () => {
             const { ensureVisionModel } = require('../../scripts/fetch-vision-model');
             ensureVisionModel.mockClear();
-            process.argv = ['node', 'build-cli.js', 'gurucli-mac', '--lite'];
+            process.argv = ['node', 'build-cli.ts', 'gurucli-mac', '--lite'];
             await buildCli.main();
             expect(builtOutputs()).toEqual([`gurucli-v${version}-mac-lite`]);
             expect(ensureVisionModel).not.toHaveBeenCalled();
@@ -303,7 +303,7 @@ describe('build-cli', () => {
         });
 
         test('fails with exit 1 on an unknown platform', async () => {
-            process.argv = ['node', 'build-cli.js', 'gurucli-bogus'];
+            process.argv = ['node', 'build-cli.ts', 'gurucli-bogus'];
             await buildCli.main();
             expect(errorSpy).toHaveBeenCalledWith('❌ Build failed:', new Error('Unknown platform: gurucli-bogus'));
             expect(exitSpy).toHaveBeenCalledWith(1);
@@ -311,7 +311,7 @@ describe('build-cli', () => {
         });
 
         test('fails with exit 1 when bundling throws', async () => {
-            process.argv = ['node', 'build-cli.js'];
+            process.argv = ['node', 'build-cli.ts'];
             build.mockRejectedValueOnce(new Error('esbuild exploded'));
             await buildCli.main();
             expect(errorSpy).toHaveBeenCalledWith('❌ Build failed:', new Error('esbuild exploded'));

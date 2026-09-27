@@ -77,7 +77,7 @@ const isLexicalMatch = (tag: string, term: string): boolean => {
  * keywords. Returns null when either side is out of vocabulary — "no signal",
  * which is not the same as a measured zero.
  *
- * CAVEAT ON THE FLOOR: scripts/validate-lexicon.js measures
+ * CAVEAT ON THE FLOOR: scripts/validate-lexicon.ts measures
  * p99(unrelated) < FLOOR < p25(related) over VISION-LABEL-shaped pairs, not over
  * member tag names. The two distributions are close enough to share a threshold
  * — a tag and a label are both short concrete nouns from the same vocabulary —

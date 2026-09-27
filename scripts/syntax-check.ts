@@ -9,10 +9,10 @@
  * instead.
  */
 
-const fs = require('node:fs');
-const path = require('node:path');
-const { execFileSync } = require('node:child_process');
-const { runIfMain } = require('./lib/run-if-main');
+import fs from 'node:fs';
+import path from 'node:path';
+import { execFileSync } from 'node:child_process';
+import { runIfMain } from './lib/run-if-main';
 
 // Colors for console output (failure output only)
 const colors = {
@@ -30,11 +30,17 @@ const excludePaths = [
     'scripts/site/', // static-site sources, not Node CJS
 ];
 
+type SyntaxCheckResult = { success: true } | { success: false; error: string };
+
+// What execFileSync throws on a non-zero exit: an Error carrying the child's
+// captured stderr (stdio: 'pipe').
+type ExecFileError = Error & { stderr?: Buffer };
+
 /**
  * Recursively get all .js files in a directory
  */
-function getJsFiles(dir) {
-    const files = [];
+function getJsFiles(dir: string): string[] {
+    const files: string[] = [];
 
     if (!fs.existsSync(dir)) {
         return files;
@@ -58,7 +64,7 @@ function getJsFiles(dir) {
 /**
  * Check if a file should be excluded
  */
-function shouldExclude(filePath) {
+function shouldExclude(filePath: string): boolean {
     const normalized = filePath.split(path.sep).join('/');
     return excludePaths.some((excluded) => normalized === excluded || normalized.startsWith(excluded));
 }
@@ -67,14 +73,15 @@ function shouldExclude(filePath) {
  * Run syntax check on a single file. execFileSync (no shell) so the path
  * is passed as an argument, never interpolated into a command string.
  */
-function checkFileSyntax(filePath) {
+function checkFileSyntax(filePath: string): SyntaxCheckResult {
     try {
         execFileSync(process.execPath, ['--check', filePath], { stdio: 'pipe' });
         return { success: true };
     } catch (error) {
+        const execError = error as ExecFileError;
         return {
             success: false,
-            error: error.stderr ? error.stderr.toString() : error.message,
+            error: execError.stderr ? execError.stderr.toString() : execError.message,
         };
     }
 }
@@ -82,8 +89,8 @@ function checkFileSyntax(filePath) {
 /**
  * Main execution. `dirs` defaults to the project roots; tests pass temp dirs.
  */
-function main(dirs = includeDirs) {
-    const filesToCheck = [];
+function main(dirs: string[] = includeDirs) {
+    const filesToCheck: string[] = [];
     for (const dir of dirs) {
         filesToCheck.push(...getJsFiles(dir).filter((file) => !shouldExclude(file)));
     }
@@ -113,4 +120,4 @@ function main(dirs = includeDirs) {
 
 runIfMain(require.main, module, main);
 
-module.exports = { main, checkFileSyntax, getJsFiles, shouldExclude };
+export { main, checkFileSyntax, getJsFiles, shouldExclude };

@@ -12,7 +12,7 @@ import { hasBundledModel } from '../../services/visionVerifier';
 import * as pkg from '../../../../package.json';
 
 // The release asset this binary ships as (gurucli-v<version>-<target>[-lite],
-// see scripts/build-cli.js), so the download link matches this build's own
+// see scripts/build-cli.ts), so the download link matches this build's own
 // platform and variant. null (the releases page) where no CLI build exists.
 const cliAssetSuffix = async () => {
     let target = null;

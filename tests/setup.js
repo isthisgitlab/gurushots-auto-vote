@@ -20,14 +20,20 @@ jest.mock('fs', () => ({
 
 // Mock path operations. Spread the real module first so less-common
 // methods (basename, extname, sep, …) keep working — a partial mock here
-// silently returns undefined for anything it omits.
-jest.mock('path', () => ({
-    __esModule: true,
-    ...jest.requireActual('path'),
-    join: jest.fn((...args) => args.join('/')),
-    dirname: jest.fn(),
-    resolve: jest.fn(),
-}));
+// silently returns undefined for anything it omits. `default` is the mock
+// itself, so a default import (`import path from 'node:path'`) sees the same
+// stubs as a namespace import.
+jest.mock('path', () => {
+    const mocked = {
+        __esModule: true,
+        ...jest.requireActual('path'),
+        join: jest.fn((...args) => args.join('/')),
+        dirname: jest.fn(),
+        resolve: jest.fn(),
+    };
+    mocked.default = mocked;
+    return mocked;
+});
 
 // Mock logger to prevent fs/path dependency issues in tests
 jest.mock('../src/js/logger', () => ({

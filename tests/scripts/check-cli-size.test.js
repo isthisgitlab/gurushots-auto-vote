@@ -1,5 +1,5 @@
 /**
- * Tests for scripts/check-cli-size.js — the coarse SEA CLI size guard.
+ * Tests for scripts/check-cli-size.ts — the coarse SEA CLI size guard.
  *
  * Artifacts are real files in an os.tmpdir() sandbox (sparse via truncate, so
  * "over budget" costs no disk); process.exit is stubbed so the exit code can

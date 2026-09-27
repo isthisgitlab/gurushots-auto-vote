@@ -47,7 +47,7 @@
  *      `unrelatedParents` entry that real embeddings consider related, or a
  *      grab-bag parent missing from `organizationalParents`)?
  *   2. if the whole related distribution sits low, raise RETROFIT_BETA in
- *      scripts/fetch-embeddings.js (tightens the curated clusters) and
+ *      scripts/fetch-embeddings.ts (tightens the curated clusters) and
  *      regenerate — offline once the archive is cached. (MEAN_CENTER is
  *      already on; turning it OFF trades noise rejection for related-pair
  *      similarity and fails the farm-vs-sea case.)
@@ -55,19 +55,26 @@
  *      inside the pre-committed percentile gate above.
  */
 
-const path = require('node:path');
-const lexicon = require('../src/js/services/semantic/lexicon');
-const { SEMANTIC_MATCH_FLOOR, abstractTitleWords, tokenise } = require('../src/js/services/photoPicker');
-const { runIfMain } = require('./lib/run-if-main');
+import * as lexicon from '../src/js/services/semantic/lexicon';
+import { SEMANTIC_MATCH_FLOOR, abstractTitleWords, tokenise } from '../src/js/services/photoPicker';
+import { runIfMain } from './lib/run-if-main';
 
-const CONFIG = require(path.join(__dirname, 'lexicon-concepts.json'));
+import CONFIG from './lexicon-concepts.json';
+
+import type { ConceptsConfig } from './build-lexicon';
+
+type Concept = ConceptsConfig['concepts'][number];
+
+/** The lexicon module surface the gate drives (tests inject a fake). */
+type Lexicon = Pick<typeof lexicon, 'init' | 'embed' | 'cosine' | 'concreteness'>;
 
 // A photo carries several labels; a challenge title yields one or two keywords.
 // Mirror that, so the distributions describe what the matcher really compares.
 const MAX_PHOTO_LABELS = 4;
 const MAX_CHALLENGE_KEYWORDS = 2;
 
-const percentile = (sorted, p) => sorted[Math.min(sorted.length - 1, Math.floor((p / 100) * sorted.length))];
+const percentile = (sorted: number[], p: number): number =>
+    sorted[Math.min(sorted.length - 1, Math.floor((p / 100) * sorted.length))];
 
 /**
  * Referential integrity of the eval config. A typo'd parent in
@@ -77,11 +84,10 @@ const percentile = (sorted, p) => sorted[Math.min(sorted.length - 1, Math.floor(
  * failure mode reading the printed distributions cannot surface, so it is
  * checked structurally. Pure; returns error strings (empty = valid).
  *
- * @param {object} config - parsed lexicon-concepts.json
- * @returns {Array<string>}
+ * @param config - parsed lexicon-concepts.json
  */
-const validateConfigRefs = (config) => {
-    const errors = [];
+const validateConfigRefs = (config: ConceptsConfig): Array<string> => {
+    const errors: string[] = [];
     const concepts = (config.concepts || []).filter((c) => c && c.id && c.parent);
     const ids = new Set(concepts.map((c) => c.id));
     const parents = new Set(concepts.map((c) => c.parent));
@@ -108,12 +114,13 @@ const validateConfigRefs = (config) => {
  * abstractTitleWords over the runtime's own tokeniser, against `lex`, so it
  * judges the asset that ships.
  *
- * @param {Array<{title: string, abstract: string[]}>} cases
- * @param {{concreteness: function(string): (number|null)}} lex
- * @returns {string[]} one line per failing case
+ * @returns one line per failing case
  */
-const checkSubjectCases = (cases, lex) => {
-    const failures = [];
+const checkSubjectCases = (
+    cases: Array<{ title: string; abstract: string[] }>,
+    lex: { concreteness: (arg0: string) => number | null },
+): string[] => {
+    const failures: string[] = [];
     for (const { title, abstract } of cases) {
         const got = [...abstractTitleWords(tokenise(title), (word) => lex.concreteness(word))].sort();
         const want = [...abstract].sort();
@@ -127,10 +134,9 @@ const checkSubjectCases = (cases, lex) => {
 /**
  * Report the title-subject cases and fail the build on any misread one.
  *
- * @param {object} config - the concepts file
- * @param {{concreteness: function(string): (number|null)}} lex
+ * @param config - the concepts file
  */
-const runSubjectGate = (config, lex) => {
+const runSubjectGate = (config: ConceptsConfig, lex: { concreteness: (arg0: string) => number | null }) => {
     const cases = (config.concreteness && config.concreteness.cases) || [];
     const failures = checkSubjectCases(cases, lex);
     console.log(`  title-subject cases: ${cases.length - failures.length}/${cases.length} read correctly`);
@@ -149,12 +155,15 @@ const runSubjectGate = (config, lex) => {
  * Run the gate. The collaborators default to the real ones; tests inject a
  * small fake lexicon + eval config so every branch is reachable offline.
  *
- * @param {object} [deps]
- * @param {object} [deps.lex] - lexicon module ({init, embed, cosine})
- * @param {object} [deps.config] - parsed lexicon-concepts.json
- * @param {number} [deps.matchFloor] - SEMANTIC_MATCH_FLOOR (0-100 bucket)
+ * @param deps.lex - lexicon module ({init, embed, cosine})
+ * @param deps.config - parsed lexicon-concepts.json
+ * @param deps.matchFloor - SEMANTIC_MATCH_FLOOR (0-100 bucket)
  */
-const main = async ({ lex = lexicon, config = CONFIG, matchFloor = SEMANTIC_MATCH_FLOOR } = {}) => {
+const main = async ({
+    lex = lexicon,
+    config = CONFIG,
+    matchFloor = SEMANTIC_MATCH_FLOOR,
+}: { lex?: Lexicon; config?: ConceptsConfig; matchFloor?: number } = {}) => {
     if (!(await lex.init())) {
         console.error('❌ lexicon asset unavailable — run `pnpm build:lexicon` first');
         process.exit(1);
@@ -173,7 +182,7 @@ const main = async ({ lex = lexicon, config = CONFIG, matchFloor = SEMANTIC_MATC
     // umbrella vs book share nothing thematically). Their sibling pairs are
     // neither related nor noise, so they contribute only same-concept pairs.
     const organizational = new Set(config.organizationalParents || []);
-    const unrelatedParentPairs = new Set();
+    const unrelatedParentPairs = new Set<string>();
     for (const [a, b] of config.unrelatedParents || []) {
         unrelatedParentPairs.add(`${a}|${b}`);
         unrelatedParentPairs.add(`${b}|${a}`);
@@ -181,13 +190,13 @@ const main = async ({ lex = lexicon, config = CONFIG, matchFloor = SEMANTIC_MATC
 
     // Keywords come from the *front* of the cluster (the canonical name), which
     // is what a challenge title would actually say ("farm", not "homestead").
-    const challengeVecOf = (c) => lex.embed(c.words.slice(0, MAX_CHALLENGE_KEYWORDS));
+    const challengeVecOf = (c: Concept) => lex.embed(c.words.slice(0, MAX_CHALLENGE_KEYWORDS));
 
     // A photo is its labels, each scored on its own and the best kept — the
     // runtime shape (see services/semantic/index.ts). Returns null when no
     // label is in vocabulary, which is "no signal", not a zero.
-    const bestLabelSim = (challengeVec, words) => {
-        let best = null;
+    const bestLabelSim = (challengeVec: Float64Array, words: string[]): number | null => {
+        let best: number | null = null;
         for (const word of words) {
             const vec = lex.embed([word]);
             if (!vec) continue;
@@ -196,10 +205,11 @@ const main = async ({ lex = lexicon, config = CONFIG, matchFloor = SEMANTIC_MATC
         }
         return best;
     };
-    const photoSimOf = (challengeVec, c) => bestLabelSim(challengeVec, c.words.slice(0, MAX_PHOTO_LABELS));
+    const photoSimOf = (challengeVec: Float64Array, c: Concept) =>
+        bestLabelSim(challengeVec, c.words.slice(0, MAX_PHOTO_LABELS));
 
-    const related = [];
-    const unrelated = [];
+    const related: number[] = [];
+    const unrelated: number[] = [];
 
     for (const challenge of concepts) {
         const challengeVec = challengeVecOf(challenge);
@@ -255,7 +265,7 @@ const main = async ({ lex = lexicon, config = CONFIG, matchFloor = SEMANTIC_MATC
     const relP05 = percentile(related, 5);
     const relMedian = percentile(related, 50);
 
-    const fmt = (n) => n.toFixed(3);
+    const fmt = (n: number) => n.toFixed(3);
     console.log(`Lexicon separation check (n_related=${related.length}, n_unrelated=${unrelated.length})`);
     console.log(
         `  unrelated  p50 = ${fmt(percentile(unrelated, 50))}   p95 = ${fmt(percentile(unrelated, 95))}   ` +
@@ -270,7 +280,7 @@ const main = async ({ lex = lexicon, config = CONFIG, matchFloor = SEMANTIC_MATC
     // Near-misses: wrong theme, plausibly correlated. Not gated — but each one
     // the floor lets through is a photo the semantic tier would call on-theme
     // when it isn't, so surface them loudly.
-    const nearMisses = [];
+    const nearMisses: Array<{ pair: string; sim: number }> = [];
     for (const [aId, bId] of config.nearMissPairs || []) {
         const a = byId.get(aId);
         const b = byId.get(bId);
@@ -296,7 +306,7 @@ const main = async ({ lex = lexicon, config = CONFIG, matchFloor = SEMANTIC_MATC
         }
     }
 
-    const failures = [];
+    const failures: string[] = [];
     if (!(unrelP99 < floor)) {
         failures.push(
             `unrelated p99 (${fmt(unrelP99)}) >= floor (${fmt(floor)}) — noise would be scored as a theme match`,
@@ -317,7 +327,7 @@ const main = async ({ lex = lexicon, config = CONFIG, matchFloor = SEMANTIC_MATC
                 '      consider related poisons the noise distribution, and a grab-bag parent missing from\n' +
                 '      `organizationalParents` drags the related side down; fix the eval set, not the floor.\n' +
                 '   2. if the WHOLE related distribution sits low, raise RETROFIT_BETA in\n' +
-                '      scripts/fetch-embeddings.js and re-run fetch + build (offline once cached).\n' +
+                '      scripts/fetch-embeddings.ts and re-run fetch + build (offline once cached).\n' +
                 '      MEAN_CENTER is already on — do not turn it off to inflate related scores.\n' +
                 '   3. only then adjust SEMANTIC_MATCH_FLOOR (src/js/services/photoPicker/tiers.ts), keeping it\n' +
                 '      strictly inside p99(unrelated) < FLOOR < p25(related). Do NOT widen the gate itself.',
@@ -330,6 +340,6 @@ const main = async ({ lex = lexicon, config = CONFIG, matchFloor = SEMANTIC_MATC
     console.log(`\n✅ Floor sits in the gap: ${fmt(unrelP99)} < ${fmt(floor)} < ${fmt(relP25)}`);
 };
 
-module.exports = { percentile, validateConfigRefs, checkSubjectCases, main };
+export { percentile, validateConfigRefs, checkSubjectCases, main };
 
 runIfMain(require.main, module, main);

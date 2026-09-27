@@ -27,17 +27,93 @@
  * asar and is embedded as a SEA asset for the CLI single binary.
  */
 
-const fs = require('node:fs');
-const path = require('node:path');
-const { stem } = require('../src/js/services/photoPicker');
+import fs from 'node:fs';
+import path from 'node:path';
+import { stem } from '../src/js/services/photoPicker';
 // The collision/vocab rules are shared with the fetch step ON PURPOSE — two
 // hand-rolled copies of "stem -> owner, fail on cross-cluster collision"
 // would drift apart silently.
-const { collectAuthoredWords, sha256OfString } = require('./fetch-embeddings');
+import { collectAuthoredWords, sha256OfString } from './fetch-embeddings';
 // The runtime's own decode + pooling, so the shipped axis is measured in exactly
 // the space concreteness() later projects onto.
-const { buildTable, embedIn } = require('../src/js/services/semantic/lexicon');
-const { runIfMain } = require('./lib/run-if-main');
+import { buildTable, embedIn } from '../src/js/services/semantic/lexicon';
+import { runIfMain } from './lib/run-if-main';
+
+import type { SearchGroup } from '../src/js/types/semantic';
+
+/** One authored cluster of scripts/lexicon-concepts.json. */
+interface Concept {
+    id: string;
+    parent: string;
+    /** Canonical words first — the validator embeds the front of the list. */
+    words: string[];
+    /** Related-search expansion; defaults to `words`. */
+    searchWords?: string[];
+}
+
+/** A `concreteness.cases` entry: a title and the words it must demote. */
+interface SubjectCase {
+    title: string;
+    abstract: string[];
+}
+
+/** The parsed scripts/lexicon-concepts.json (shared with validate-lexicon.ts). */
+export interface ConceptsConfig {
+    concepts: Concept[];
+    extraWords?: string[];
+    organizationalParents?: string[];
+    /** Parent pairs, each entry `[parentA, parentB]`. */
+    unrelatedParents?: string[][];
+    /** Concept-id pairs, each entry `[conceptIdA, conceptIdB]`. */
+    nearMissPairs?: string[][];
+    concreteness?: {
+        excludeParents?: string[];
+        abstractAnchors?: string[];
+        cases?: SubjectCase[];
+    };
+}
+
+/** Provenance block fetch-embeddings writes into the intermediate. */
+interface EmbeddingsSource {
+    url: string;
+    zipSha256: string;
+    entry: string;
+    entrySha256: string;
+    retrieved: string;
+    license: string;
+    citation: string;
+}
+
+/**
+ * The parsed scripts/lexicon-embeddings.json (written by fetch-embeddings).
+ * Fields are optional because buildAsset tolerates a partial intermediate.
+ */
+interface Intermediate {
+    source?: EmbeddingsSource;
+    dims?: number;
+    scale?: number;
+    meanCentered?: boolean;
+    retrofitBeta?: number;
+    /** Stem -> base64 int8 vector. */
+    packed?: Record<string, string>;
+    /** Stem -> the surface word it was built from. */
+    surfaces?: Record<string, string>;
+}
+
+/** The runtime asset written to src/assets/semantic-vectors.json. */
+interface LexiconAsset {
+    version: 2;
+    generator: string;
+    source: EmbeddingsSource | undefined;
+    dims: number | undefined;
+    scale: number | undefined;
+    meanCentered: boolean;
+    retrofitBeta: number;
+    packed: Record<string, string>;
+    surfaces: Record<string, string>;
+    searchGroups: SearchGroup[];
+    concreteAxis?: number[];
+}
 
 const ROOT = path.join(__dirname, '..');
 const EMBEDDINGS_PATH = path.join(__dirname, 'lexicon-embeddings.json');
@@ -61,16 +137,18 @@ const AXIS_DECIMALS = 6;
  * word); an anchor that is ALSO an authored concept word is a collision (fatal)
  * — it would sit on both poles at once.
  *
- * @param {{packed: object, dims: number, scale: number}} asset - the asset
+ * @param asset - the asset
  *   being assembled (its vectors are what the axis must be measured against)
- * @param {object} concepts
- * @param {Map<string,string>} authored - surface word -> owning concept
- * @returns {{axis: Array<number>|undefined, missing: Array<string>, collisions: Array<string>}}
+ * @param authored - surface word -> owning concept
  */
-const buildConcreteAxis = ({ packed, dims, scale }, concepts, authored) => {
+const buildConcreteAxis = (
+    { packed, dims, scale }: Pick<LexiconAsset, 'packed' | 'dims' | 'scale'>,
+    concepts: ConceptsConfig,
+    authored: Map<string, string>,
+): { axis: Array<number> | undefined; missing: Array<string>; collisions: Array<string> } => {
     const config = concepts && concepts.concreteness;
-    const missing = [];
-    const collisions = [];
+    const missing: string[] = [];
+    const collisions: string[] = [];
     if (!config) return { axis: undefined, missing, collisions };
 
     const anchors = (config.abstractAnchors || []).map((w) => String(w).toLowerCase());
@@ -100,14 +178,16 @@ const buildConcreteAxis = ({ packed, dims, scale }, concepts, authored) => {
  * runtime asset object. Pure — no fs, no process.exit — so the fatal paths are
  * unit-testable against small fixtures.
  *
- * @param {object} intermediate - parsed scripts/lexicon-embeddings.json
- * @param {object} concepts - parsed scripts/lexicon-concepts.json
- * @returns {{output: object, missing: Array<string>, collisions: Array<string>}}
+ * @param intermediate - parsed scripts/lexicon-embeddings.json
+ * @param concepts - parsed scripts/lexicon-concepts.json
  */
-const buildAsset = (intermediate, concepts) => {
+const buildAsset = (
+    intermediate: Intermediate | null,
+    concepts: ConceptsConfig,
+): { output: LexiconAsset; missing: Array<string>; collisions: Array<string> } => {
     const packed = (intermediate && intermediate.packed) || {};
     const { bySurface, collisions } = collectAuthoredWords(concepts);
-    const missing = [];
+    const missing: string[] = [];
     for (const [surface, owner] of bySurface) {
         const key = stem(surface);
         if (!key || key.length < 2) continue;
@@ -116,14 +196,16 @@ const buildAsset = (intermediate, concepts) => {
         }
     }
 
-    const output = {
+    const output: LexiconAsset = {
         version: 2,
-        generator: 'build-lexicon.js',
+        generator: 'build-lexicon.ts',
         source: intermediate ? intermediate.source : undefined,
         dims: intermediate ? intermediate.dims : undefined,
         scale: intermediate ? intermediate.scale : undefined,
         meanCentered: intermediate ? Boolean(intermediate.meanCentered) : false,
-        retrofitBeta: intermediate && Number.isFinite(intermediate.retrofitBeta) ? intermediate.retrofitBeta : 0,
+        // Number.isFinite proves retrofitBeta a number but is not a type guard.
+        retrofitBeta:
+            intermediate && Number.isFinite(intermediate.retrofitBeta) ? (intermediate.retrofitBeta as number) : 0,
         packed,
         surfaces: intermediate?.surfaces || {},
         searchGroups: concepts.concepts.map((concept) => ({
@@ -140,8 +222,6 @@ const buildAsset = (intermediate, concepts) => {
 /**
  * CLI entry. Paths default to the committed files; tests point them at
  * os.tmpdir() fixtures so the committed assets are never touched.
- *
- * @param {object} [paths]
  */
 const main = ({
     embeddingsPath = EMBEDDINGS_PATH,
@@ -149,6 +229,12 @@ const main = ({
     conceptsPath = CONCEPTS_PATH,
     outAsset = OUT_ASSET,
     distDir = DIST_DIR,
+}: {
+    embeddingsPath?: string;
+    embeddingsShaPath?: string;
+    conceptsPath?: string;
+    outAsset?: string;
+    distDir?: string;
 } = {}) => {
     if (!fs.existsSync(embeddingsPath)) {
         console.error(
@@ -156,8 +242,10 @@ const main = ({
         );
         process.exit(1);
     }
-    const intermediate = JSON.parse(fs.readFileSync(embeddingsPath, 'utf8'));
-    const concepts = JSON.parse(fs.readFileSync(conceptsPath, 'utf8'));
+    // Committed, generated files (the intermediate is hash-checked below), so
+    // they are typed as their writers produce them rather than re-validated.
+    const intermediate: Intermediate = JSON.parse(fs.readFileSync(embeddingsPath, 'utf8'));
+    const concepts: ConceptsConfig = JSON.parse(fs.readFileSync(conceptsPath, 'utf8'));
 
     // Tamper check: the intermediate is a multi-MB base64 blob nobody can
     // review line-by-line, so its payload hash lives in a one-line sidecar
@@ -210,6 +298,6 @@ const main = ({
     );
 };
 
-module.exports = { buildAsset, buildConcreteAxis, main };
+export { buildAsset, buildConcreteAxis, main };
 
 runIfMain(require.main, module, main);

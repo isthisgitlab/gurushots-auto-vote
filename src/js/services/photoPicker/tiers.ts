@@ -67,12 +67,12 @@ import type { PickerPhoto, ScoredCandidate, SemanticScoreMap, ThemeTiers } from 
  *
  * This is a measured value, not a guess. The lexicon's vectors are real
  * pretrained GloVe embeddings (mean-centered, cluster-retrofitted — see
- * scripts/fetch-embeddings.js), whose related and unrelated cosine
+ * scripts/fetch-embeddings.ts), whose related and unrelated cosine
  * distributions genuinely overlap in the tails: corpus artifacts put a few
  * unrelated theme pairs (snake↔lamp via zodiac/lantern co-occurrence) near
  * 0.49, while a few honestly-related sibling pairs sit low. The floor is
  * placed by the pre-committed gate p99(unrelated) < FLOOR < p25(related),
- * which scripts/validate-lexicon.js re-derives from the real asset on every
+ * which scripts/validate-lexicon.ts re-derives from the real asset on every
  * build (measured at 0.448 < 0.455 < 0.476) and fails if the gap closes, so
  * this constant can never quietly drift out of the valid range.
  *
@@ -101,7 +101,7 @@ const SEMANTIC_MATCH_FLOOR = 46;
  * depends on its exact value, and it is safe to move. The floor is what decides
  * whether a label counts at all, and it is NOT re-derived by this tier: the
  * per-label similarity being thresholded here is the same quantity, pooled the
- * same way, that scripts/validate-lexicon.js already gates the build on.
+ * same way, that scripts/validate-lexicon.ts already gates the build on.
  */
 const SEMANTIC_SUPPORT_CAP = 3;
 
@@ -123,7 +123,7 @@ const NO_SEMANTIC = Object.freeze({ semantic: 0, semanticSupport: 0 });
  * without the floor a photo with pure vector drift would out-rank a photo with
  * a genuine keyword hit. The floor is what makes "nothing matched the theme" an
  * honest, testable state instead of a fuzzy one. Its value is not hand-picked:
- * scripts/validate-lexicon.js gates the build on p99(unrelated) < FLOOR <
+ * scripts/validate-lexicon.ts gates the build on p99(unrelated) < FLOOR <
  * p25(related) against the real lexicon.
  *
  * Two accepted value shapes. The scorer hands over a {score, support} record; a

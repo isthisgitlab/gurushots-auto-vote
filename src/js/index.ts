@@ -110,7 +110,7 @@ function createLoginWindow() {
         webPreferences: {
             nodeIntegration: false,
             contextIsolation: true,
-            // Bundled by scripts/build-react.js — the sandboxed preload cannot
+            // Bundled by scripts/build-react.ts — the sandboxed preload cannot
             // require() the relative channel manifest, so it ships pre-bundled.
             preload: appPath('dist', 'preload-bundle.js'),
             webSecurity: true,
@@ -171,7 +171,7 @@ function createMainWindow() {
         webPreferences: {
             nodeIntegration: false,
             contextIsolation: true,
-            // Bundled by scripts/build-react.js — the sandboxed preload cannot
+            // Bundled by scripts/build-react.ts — the sandboxed preload cannot
             // require() the relative channel manifest, so it ships pre-bundled.
             preload: appPath('dist', 'preload-bundle.js'),
             webSecurity: true,

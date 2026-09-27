@@ -1,5 +1,5 @@
 /**
- * Tests for scripts/fetch-vision-model.js — the pinned model download and the
+ * Tests for scripts/fetch-vision-model.ts — the pinned model download and the
  * WebView asset staging. Hermetic: fetch is stubbed, pins are hashes of tiny
  * fixtures, and every write lands in an os.tmpdir() sandbox, so the real
  * .cache/vision-model and dist/ are never touched.
@@ -28,7 +28,7 @@ const {
 const sha = (data) => crypto.createHash('sha256').update(data).digest('hex');
 const okResponse = (text) => ({ ok: true, status: 200, body: new Response(text).body });
 
-describe('scripts/fetch-vision-model.js', () => {
+describe('scripts/fetch-vision-model.ts', () => {
     let directory;
     beforeEach(() => {
         directory = fs.mkdtempSync(path.join(os.tmpdir(), 'vision-model-'));

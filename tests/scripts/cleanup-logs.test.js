@@ -1,5 +1,5 @@
 /**
- * Tests for scripts/cleanup-logs.js — deletes legacy api-debug-* files from
+ * Tests for scripts/cleanup-logs.ts — deletes legacy api-debug-* files from
  * the userData logs dir. Hermetic: runtime is mocked to a temp dir, and all
  * fs work happens under os.tmpdir(); the real logs/ is never touched.
  */
@@ -20,7 +20,7 @@ jest.mock('../../src/js/runtime', () => ({
     getAppUserDataPath: () => mockUserDataPath,
 }));
 
-const { cleanupLogs } = require('../../scripts/cleanup-logs.js');
+const { cleanupLogs } = require('../../scripts/cleanup-logs');
 
 describe('cleanup-logs', () => {
     let tmp;
