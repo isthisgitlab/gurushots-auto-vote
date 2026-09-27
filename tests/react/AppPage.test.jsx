@@ -1,5 +1,5 @@
 /**
- * Main App page (pages/App.jsx) — the shell that wires settings, challenges,
+ * Main App page (pages/App.tsx) — the shell that wires settings, challenges,
  * autovote and the modals together. Child sections/modals and the
  * challenge/autovote/update providers are stubbed so each stub records the
  * props App hands it; the tests then drive App's handlers through those props

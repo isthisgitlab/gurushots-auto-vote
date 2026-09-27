@@ -6,7 +6,7 @@
  * unlock on a later cycle. It uses the same platform-aware transport as
  * settings/metadata (fs on Electron/CLI, @capacitor/preferences on Android),
  * so — exactly like metadata — its Capacitor cache MUST be hydrated at boot via
- * initializeJoinStateAsync() (wired in Capacitor.jsx) or the marker is invisible
+ * initializeJoinStateAsync() (wired in Capacitor.tsx) or the marker is invisible
  * after an app relaunch and a paid retry would double-charge.
  *
  * acquireUnlockLock gives cross-process mutual exclusion around the

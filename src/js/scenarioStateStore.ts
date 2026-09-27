@@ -25,7 +25,7 @@
  * the persisted file.
  *
  * Same platform-aware transport as the other side stores; on Capacitor its
- * cache must be hydrated at boot (initializeScenarioStateAsync, Capacitor.jsx),
+ * cache must be hydrated at boot (initializeScenarioStateAsync, Capacitor.tsx),
  * and the Android background service persists it through the native keyed
  * bridge (the `gs_scenario_state` key in AutoVoteService.kt). That service
  * advances scenarios while the app is open too, so the app re-reads the store

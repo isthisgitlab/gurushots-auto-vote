@@ -422,7 +422,7 @@ repeated six times is one that gets forgotten at one of them.
 - Write-behind is **ordered** (writes chain onto a promise) and `flushPendingWrites()` awaits durability
   before session invalidation. On Capacitor, `initializeAsync()` must be awaited before the first sync
   read — **each store hydrates independently**, so a new store must be wired into the Capacitor bootstrap
-  (`react/pages/Capacitor.jsx`) or its markers are invisible after relaunch. `joinState` is wired there
+  (`react/pages/Capacitor.tsx`) or its markers are invisible after relaunch. `joinState` is wired there
   alongside settings + metadata; skipping it would double-charge a paid retry on Android.
 - Platform detection has two sides: **node-side** via `runtime.ts` (`isCapacitor()`, `isHeadlessService()`,
   `getPlatform()`, `getAppUserDataPath()` — the single path resolver shared with the logger); **renderer-
@@ -450,7 +450,7 @@ repeated six times is one that gets forgotten at one of them.
   subscribers refetch in the background without toggling `loading`, and the translation provider reads
   `language` straight from the payload.
 - **No router.** "Pages" are separate mount entry points chosen by auth state: `mountApp()` / `mountLogin()`
-  (`react/pages/App.jsx`). Electron swaps native windows; Capacitor swaps React trees into `#root`.
+  (`react/pages/App.tsx`). Electron swaps native windows; Capacitor swaps React trees into `#root`.
 - **No toast library.** Error surfaces are: inline DaisyUI `alert` banners with a translated message; and
   `react/components/ui/ErrorBoundary.tsx` (an `alert alert-error` with Dismiss/Reload) wrapped around every
   major subtree. Action failures generally log via `ipc.logRendererError` rather than showing a banner.

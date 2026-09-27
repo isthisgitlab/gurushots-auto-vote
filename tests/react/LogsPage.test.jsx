@@ -1,5 +1,5 @@
 /**
- * Logs window page (pages/Logs.jsx) — shows a loader until translations are
+ * Logs window page (pages/Logs.tsx) — shows a loader until translations are
  * ready, then the navbar (connection status from useLogStream) and the log
  * list. It mounts itself into #root at module load when that element exists.
  */

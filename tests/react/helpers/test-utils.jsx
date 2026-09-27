@@ -19,7 +19,7 @@ const fireEvent = new Proxy(preactFireEvent, {
 
 /**
  * Wrapper component that provides all necessary context providers.
- * AutovoteProvider mirrors the production tree (App.jsx wraps the modals in
+ * AutovoteProvider mirrors the production tree (App.tsx wraps the modals in
  * it); its mount-time auto-resume no-ops under the mocked window.api.
  */
 function AllProviders({ children }) {

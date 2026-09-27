@@ -147,7 +147,7 @@ describe('scripts/build-react.js', () => {
         });
 
         test('creates dist/, skips missing entries and the lexicon, defaults NODE_ENV to development', async () => {
-            fs.existsSync.mockImplementation((p) => p !== DIST && p !== LEXICON && !p.endsWith('Logs.jsx'));
+            fs.existsSync.mockImplementation((p) => p !== DIST && p !== LEXICON && !p.endsWith('Logs.tsx'));
 
             await run([], undefined);
 
@@ -193,7 +193,7 @@ describe('scripts/build-react.js', () => {
                 contexts.push(ctx);
                 return ctx;
             });
-            fs.existsSync.mockImplementation((p) => !p.endsWith('Logs.jsx'));
+            fs.existsSync.mockImplementation((p) => !p.endsWith('Logs.tsx'));
 
             await run(['--watch'], 'production');
 

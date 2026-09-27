@@ -17,7 +17,7 @@
  *
  * Uses the same platform-aware transport as joinState/metadata, so on
  * Capacitor its cache MUST be hydrated at boot (initializeSwapBackAsync, wired
- * in Capacitor.jsx). Mock mode uses createMemoryLedger() and never touches the
+ * in Capacitor.tsx). Mock mode uses createMemoryLedger() and never touches the
  * persisted file.
  */
 

@@ -1,5 +1,5 @@
 /**
- * Capacitor entry (pages/Capacitor.jsx) — runs its bootstrap at module load:
+ * Capacitor entry (pages/Capacitor.tsx) — runs its bootstrap at module load:
  * on a native platform installs the bridge and hydrates every write-behind
  * store, wires flush-on-background, then mounts Login or App by token and
  * re-mounts on login-success / logout. Each test loads the module in an isolated registry
@@ -46,7 +46,7 @@ describe('Capacitor entry', () => {
     });
 
     /**
-     * Load Capacitor.jsx with mocked collaborators.
+     * Load Capacitor.tsx with mocked collaborators.
      * @param {object} opts
      */
     const load = ({ native = true, token = 'tok', getSettingThrows = false, initSettingsRejects = null } = {}) => {

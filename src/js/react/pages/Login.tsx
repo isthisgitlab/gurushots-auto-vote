@@ -1,4 +1,4 @@
-/** @import { RendererGlobals } from '../../types/capacitor' */
+import type { RendererGlobals } from '../../types/capacitor';
 import { createRoot } from 'react-dom/client';
 import { useState, useEffect, useCallback } from 'react';
 import { TranslationProvider, useTranslation } from '@/contexts/TranslationContext';
@@ -51,8 +51,7 @@ function LoginPageContent() {
 
     // Handle theme change
     const handleThemeChange = useCallback(
-        /** @param {'dark' | 'light'} newTheme */
-        async (newTheme) => {
+        async (newTheme: 'dark' | 'light') => {
             setTheme(newTheme);
             document.documentElement.setAttribute('data-theme', newTheme);
             await updateSetting('theme', newTheme);
@@ -62,8 +61,7 @@ function LoginPageContent() {
 
     // Handle stay logged in change
     const handleStayLoggedInChange = useCallback(
-        /** @param {boolean} value */
-        async (value) => {
+        async (value: boolean) => {
             setStayLoggedIn(value);
             await updateSetting('stayLoggedIn', value);
 
@@ -77,8 +75,7 @@ function LoginPageContent() {
 
     // Handle mock mode change
     const handleMockModeChange = useCallback(
-        /** @param {boolean} value */
-        async (value) => {
+        async (value: boolean) => {
             setMockMode(value);
             await updateSetting('mock', value);
         },
@@ -87,11 +84,7 @@ function LoginPageContent() {
 
     // Handle form submission
     const handleSubmit = useCallback(
-        /**
-         * @param {string} username
-         * @param {string} password
-         */
-        async (username, password) => {
+        async (username: string, password: string) => {
             const result = await authenticate(username, password, mockMode);
 
             if (result.success) {
@@ -179,11 +172,11 @@ export const mountLogin = () => {
     }
 };
 
-// Deferred via queueMicrotask: see App.jsx for the full reasoning —
-// ESM import hoisting moves Capacitor.jsx's bootstrap-flag assignment
+// Deferred via queueMicrotask: see App.tsx for the full reasoning —
+// ESM import hoisting moves Capacitor.tsx's bootstrap-flag assignment
 // after its imports, so the check has to wait a microtask to see it.
 queueMicrotask(() => {
-    if (!(/** @type {RendererGlobals} */ (globalThis).__capacitorBootstrap)) {
+    if (!(globalThis as RendererGlobals).__capacitorBootstrap) {
         mountLogin();
     }
 });

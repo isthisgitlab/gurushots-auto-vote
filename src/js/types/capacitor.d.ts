@@ -50,7 +50,7 @@ export type HeadlessGlobals = typeof globalThis & {
 
 /**
  * `globalThis` as the renderer reads it: the Capacitor runtime's platform
- * probe (absent on Electron), and the flag pages/Capacitor.jsx sets before
+ * probe (absent on Electron), and the flag pages/Capacitor.tsx sets before
  * importing App/Login so neither auto-mounts.
  */
 export type RendererGlobals = typeof globalThis & {

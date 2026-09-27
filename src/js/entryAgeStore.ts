@@ -14,7 +14,7 @@
  * challenge" — its age is unknown, so it never holds a boost.
  *
  * Same platform-aware transport as currencyAutoStore, so on Capacitor its cache
- * MUST be hydrated at boot (initializeEntryAgesAsync, wired in Capacitor.jsx).
+ * MUST be hydrated at boot (initializeEntryAgesAsync, wired in Capacitor.tsx).
  * Mock mode uses createMemoryEntryAgeLedger() and never touches the file.
  */
 

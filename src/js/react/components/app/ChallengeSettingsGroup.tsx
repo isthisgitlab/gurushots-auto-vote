@@ -42,7 +42,7 @@ function ValueSourceBadge({ hasOverride, hasProfileValue }: { hasOverride: boole
  * fill time would look.
  *
  * The `>= 2` gate does double duty. Null guard: `challenge` goes null when it
- * drops off the live 60s poll while the modal is open (App.jsx derives it as
+ * drops off the live 60s poll while the modal is open (App.tsx derives it as
  * find(...) ?? null), and without the gate getScheduleShift would treat max as
  * 0 and render the hint into a null dereference. Accuracy guard: on a
  * single-photo challenge every remapped row lands below count 2 and is

@@ -9,11 +9,11 @@
  * loads this entry.
  */
 
-/** @import { RendererGlobals } from '../../types/capacitor' */
+import type { RendererGlobals } from '../../types/capacitor';
 
-// Tell App.jsx not to auto-mount when imported below. The import
+// Tell App.tsx not to auto-mount when imported below. The import
 // must happen after this assignment.
-/** @type {RendererGlobals} */ (globalThis).__capacitorBootstrap = true;
+(globalThis as RendererGlobals).__capacitorBootstrap = true;
 
 import { installBridge, subscribe } from '../../bridge/capacitor';
 import { initializeAsync as initSettings, flushPendingWrites, getSetting } from '../../settings';
@@ -98,8 +98,8 @@ const bootstrap = async () => {
         globalThis.addEventListener('pagehide', flush);
     }
     // Wire login-success / logout from the bridge to swap mounts.
-    // Login.jsx calls the login IPC after a successful auth;
-    // App.jsx calls the logout IPC from the navbar's logout button.
+    // Login.tsx calls the login IPC after a successful auth;
+    // App.tsx calls the logout IPC from the navbar's logout button.
     subscribe('login-success', () => mountForCurrentAuthState());
     subscribe('logout', () => mountForCurrentAuthState());
 

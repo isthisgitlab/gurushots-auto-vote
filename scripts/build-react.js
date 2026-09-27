@@ -11,10 +11,10 @@ const distDir = path.join(__dirname, '..', 'dist');
 
 // Entry points for each page
 const entryPoints = {
-    login: path.join(reactDir, 'pages', 'Login.jsx'),
-    app: path.join(reactDir, 'pages', 'App.jsx'),
-    logs: path.join(reactDir, 'pages', 'Logs.jsx'),
-    capacitor: path.join(reactDir, 'pages', 'Capacitor.jsx'),
+    login: path.join(reactDir, 'pages', 'Login.tsx'),
+    app: path.join(reactDir, 'pages', 'App.tsx'),
+    logs: path.join(reactDir, 'pages', 'Logs.tsx'),
+    capacitor: path.join(reactDir, 'pages', 'Capacitor.tsx'),
     // Android background service entry — runs in a bare WebView (no
     // Capacitor runtime) owned by AutoVoteService. Not a React page.
     headless: path.join(jsDir, 'headless', 'index.ts'),

@@ -464,7 +464,7 @@ describe('ChallengeSettingsModal auto-fill schedule shift hint', () => {
     });
 
     test('null challenge (dropped off the live poll mid-session): no crash, no hint', async () => {
-        // App.jsx derives challenge as challenges.find(...) ?? null on every
+        // App.tsx derives challenge as challenges.find(...) ?? null on every
         // 60s tick, so it goes null while the modal stays open — the hint
         // must not render (and must not dereference null).
         renderWithChallenge(null);

@@ -1,5 +1,5 @@
 /**
- * Login page (pages/Login.jsx) — hydrates theme / stay-logged-in / username
+ * Login page (pages/Login.tsx) — hydrates theme / stay-logged-in / username
  * from settings and mock mode from the environment, persists toggle changes,
  * and on a successful auth saves the token (+ username when remembered) and
  * transitions via window.api.login(). Also covers the module-load auto-mount,

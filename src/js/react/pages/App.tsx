@@ -1,7 +1,5 @@
-/**
- * @import { Challenge } from '../../types/gurushots'
- * @import { RendererGlobals } from '../../types/capacitor'
- */
+import type { Challenge } from '../../types/gurushots';
+import type { RendererGlobals } from '../../types/capacitor';
 import { createRoot } from 'react-dom/client';
 import { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import { TranslationProvider, useTranslation } from '@/contexts/TranslationContext';
@@ -30,8 +28,7 @@ import { useDocumentTheme } from '@/hooks/useDocumentTheme';
 import { DEFAULT_TIMEZONE } from '../../settings/uiDefaults';
 import * as ipc from '@/api/ipc';
 
-/** @type {{ id: Challenge['id'] | null, title: string }} */
-const NO_CHALLENGE = { id: null, title: '' };
+const NO_CHALLENGE: { id: Challenge['id'] | null; title: string } = { id: null, title: '' };
 
 /**
  * Show the first-run welcome once per launch until dismissed. A ref (not
@@ -39,12 +36,12 @@ const NO_CHALLENGE = { id: null, title: '' };
  * re-runs the effect with the flag still false, and without the ref that would
  * reopen the modal mid-session. Persisted via the settings facade so it stays
  * dismissed across launches/platforms.
- *
- * @param {ReturnType<typeof useSettings>['settings']} settings
- * @param {boolean} settingsLoading
- * @param {ReturnType<typeof useSettings>['updateSetting']} updateSetting
  */
-function useWelcomeGate(settings, settingsLoading, updateSetting) {
+function useWelcomeGate(
+    settings: ReturnType<typeof useSettings>['settings'],
+    settingsLoading: boolean,
+    updateSetting: ReturnType<typeof useSettings>['updateSetting'],
+) {
     const [welcomeOpen, setWelcomeOpen] = useState(false);
     const welcomeHandledRef = useRef(false);
     const settingsReady = !settingsLoading && Boolean(settings);
@@ -65,7 +62,7 @@ function useWelcomeGate(settings, settingsLoading, updateSetting) {
             // Won't reappear this session (ref-gated); log so a persistent
             // write failure (e.g. Android storage I/O) stays diagnosable.
             await ipc.logRendererError(
-                `Failed to persist onboardingCompleted: ${/** @type {{ message?: unknown } | null | undefined} */ (err)?.message || err}`,
+                `Failed to persist onboardingCompleted: ${(err as { message?: unknown } | null | undefined)?.message || err}`,
             );
         }
     }, [updateSetting]);
@@ -75,10 +72,8 @@ function useWelcomeGate(settings, settingsLoading, updateSetting) {
 
 /**
  * Which challenge the per-challenge settings modal is open for.
- *
- * @param {ReturnType<typeof useChallenges>['challenges']} challenges
  */
-function useChallengeSettingsTarget(challenges) {
+function useChallengeSettingsTarget(challenges: ReturnType<typeof useChallenges>['challenges']) {
     const [isOpen, setIsOpen] = useState(false);
     const [selected, setSelected] = useState(NO_CHALLENGE);
 
@@ -99,11 +94,7 @@ function useChallengeSettingsTarget(challenges) {
     // so the modal's applicability hints stay current without an imperative
     // fetch.
     const open = useCallback(
-        /**
-         * @param {Challenge['id']} challengeId
-         * @param {string} challengeTitle
-         */
-        (challengeId, challengeTitle) => {
+        (challengeId: Challenge['id'], challengeTitle: string) => {
             if (isOpen && selected.id === challengeId) return;
             setSelected({ id: challengeId, title: challengeTitle });
             setIsOpen(true);
@@ -121,16 +112,20 @@ function useChallengeSettingsTarget(challenges) {
 
 /**
  * The app's modals and dialogs, each isolated in its own ErrorBoundary.
- *
- * @param {{
- *   settingsModal: ReturnType<typeof useDisclosure>,
- *   challengeSettings: ReturnType<typeof useChallengeSettingsTarget>,
- *   logsModal: ReturnType<typeof useDisclosure>,
- *   welcomeOpen: boolean,
- *   onWelcomeClose: () => Promise<void>,
- * }} props
  */
-function AppModals({ settingsModal, challengeSettings, logsModal, welcomeOpen, onWelcomeClose }) {
+function AppModals({
+    settingsModal,
+    challengeSettings,
+    logsModal,
+    welcomeOpen,
+    onWelcomeClose,
+}: {
+    settingsModal: ReturnType<typeof useDisclosure>;
+    challengeSettings: ReturnType<typeof useChallengeSettingsTarget>;
+    logsModal: ReturnType<typeof useDisclosure>;
+    welcomeOpen: boolean;
+    onWelcomeClose: () => Promise<void>;
+}) {
     return (
         <>
             {/* Settings Modal */}
@@ -210,7 +205,7 @@ function AppContent() {
             await ipc.logout();
         } catch (err) {
             await ipc.logRendererError(
-                `Error during logout: ${/** @type {{ message?: unknown } | null | undefined} */ (err)?.message || err}`,
+                `Error during logout: ${(err as { message?: unknown } | null | undefined)?.message || err}`,
             );
         }
     }, [autovote]);
@@ -222,7 +217,7 @@ function AppContent() {
             // start/stop await bridge calls; a failure there must reach the log
             // rather than surface as an unhandled rejection from a click.
             await ipc.logRendererError(
-                `Autovote toggle failed: ${/** @type {{ message?: unknown } | null | undefined} */ (err)?.message || err}`,
+                `Autovote toggle failed: ${(err as { message?: unknown } | null | undefined)?.message || err}`,
             );
         }
     }, [autovote]);
@@ -327,8 +322,7 @@ function AppWithChallenges() {
     // path awaits IPC first, so its running=true event always lands after
     // the listener is attached.
     useEffect(() => {
-        /** @param {Event} e */
-        const handler = (e) => setAutovoteRunning(!!(/** @type {CustomEvent<unknown>} */ (e).detail));
+        const handler = (e: Event) => setAutovoteRunning(!!(e as CustomEvent<unknown>).detail);
         window.addEventListener('autovote:running-changed', handler);
         return () => window.removeEventListener('autovote:running-changed', handler);
     }, []);
@@ -365,12 +359,12 @@ export const mountApp = () => {
     }
 };
 
-// Deferred via queueMicrotask: ESM hoists Capacitor.jsx's static
+// Deferred via queueMicrotask: ESM hoists Capacitor.tsx's static
 // imports above its `globalThis.__capacitorBootstrap = true;` assignment,
 // so a synchronous check at module load would see the flag undefined
-// and double-mount on top of Login.jsx, breaking React's reconciler.
+// and double-mount on top of Login.tsx, breaking React's reconciler.
 queueMicrotask(() => {
-    if (!(/** @type {RendererGlobals} */ (globalThis).__capacitorBootstrap)) {
+    if (!(globalThis as RendererGlobals).__capacitorBootstrap) {
         mountApp();
     }
 });

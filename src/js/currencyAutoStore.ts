@@ -11,7 +11,7 @@
  * Shape, keyed by challenge id: { "<challengeId>": { fills, at } }.
  *
  * Same platform-aware transport as swapBackStore, so on Capacitor its cache
- * MUST be hydrated at boot (initializeAutoSpendAsync, wired in Capacitor.jsx).
+ * MUST be hydrated at boot (initializeAutoSpendAsync, wired in Capacitor.tsx).
  * Mock mode uses createMemoryAutoSpendLedger() and never touches the file.
  */
 
