@@ -1,9 +1,9 @@
 import { useCallback, useRef } from 'react';
 import { useIpcQuery } from './useIpcQuery';
 
-/** @import { ActiveChallengesResponse, Challenge } from '../../types/gurushots' */
-/** @import { AppSettings } from '../../types/settings' */
-/** @import { IpcQueryTools } from './useIpcQuery' */
+import type { ActiveChallengesResponse, Challenge } from '../../types/gurushots';
+import type { AppSettings } from '../../types/settings';
+import type { IpcQueryTools } from './useIpcQuery';
 
 /**
  * Hook for fetching active challenges via IPC.
@@ -22,14 +22,18 @@ import { useIpcQuery } from './useIpcQuery';
  *     repeatedly-failing 60s background refresh doesn't clear-then-
  *     re-raise the banner on every tick.
  *
- * @param {boolean} [autovoteRunning=false] - whether the autovote loop is
+ * @param autovoteRunning - whether the autovote loop is
  *   currently running; stale-settings cleanup is skipped while it is (the
  *   voting pass owns metadata cleanup then). Threaded down as a prop from
  *   ChallengesProvider — no window.* side-channel.
- * @returns {{ data: Challenge[], loading: boolean, error: Error|null, refetch: (skipCleanup?: boolean) => Promise<void> }}
  */
-export function useActiveChallenges(autovoteRunning = false) {
-    const lastKeyRef = useRef(/** @type {string | null} */ (null));
+export function useActiveChallenges(autovoteRunning: boolean = false): {
+    data: Challenge[];
+    loading: boolean;
+    error: Error | null;
+    refetch: (skipCleanup?: boolean) => Promise<void>;
+} {
+    const lastKeyRef = useRef<string | null>(null);
 
     // Ref mirror so the async apply() below reads the current flag at
     // cleanup time (post-await) instead of the value captured when the
@@ -44,12 +48,11 @@ export function useActiveChallenges(autovoteRunning = false) {
     }, []);
 
     const apply = useCallback(
-        /**
-         * @param {{ settings: AppSettings, result: ActiveChallengesResponse }} payload
-         * @param {IpcQueryTools<Challenge[], Error>} tools
-         * @param {boolean} [skipCleanup]
-         */
-        async ({ settings, result }, { setData, setError }, skipCleanup = false) => {
+        async (
+            { settings, result }: { settings: AppSettings; result: ActiveChallengesResponse },
+            { setData, setError }: IpcQueryTools<Challenge[], Error>,
+            skipCleanup: boolean = false,
+        ) => {
             // A transient network/5xx failure that outlived the api-client's retries is a fetch
             // failure, not an empty challenge list — surface it so the UI shows its "retrying"
             // banner, and keep the last-known challenges on screen rather than blanking them on
@@ -106,7 +109,7 @@ export function useActiveChallenges(autovoteRunning = false) {
     const showLoading = useCallback((skipCleanup = false) => !skipCleanup, []);
 
     const { data, loading, error, refetch } = useIpcQuery(queryFn, {
-        initialData: /** @type {Challenge[]} */ ([]),
+        initialData: [] as Challenge[],
         singleFlight: true,
         clearErrorOnStart: false,
         showLoading,

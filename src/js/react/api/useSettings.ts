@@ -1,26 +1,25 @@
 import { useState, useCallback, useEffect } from 'react';
 import { useIpcQuery } from './useIpcQuery';
 
-/** @import { WindowApi } from '../../types/ipc' */
-/** @import { AppSettings, SettingValueOf } from '../../types/settings' */
+import type { WindowApi } from '../../types/ipc';
+import type { AppSettings, SettingValueOf } from '../../types/settings';
 
-/** @typedef {Awaited<ReturnType<WindowApi['getEnvironmentInfo']>>} EnvironmentInfo */
+export type EnvironmentInfo = Awaited<ReturnType<WindowApi['getEnvironmentInfo']>>;
 
 const fetchSettings = () => window.api.getSettings();
 
 /**
  * Hook for managing settings via IPC
  * Follows React Query-like pattern for consistent data fetching
- * @returns {{
- *   settings: AppSettings | null,
- *   loading: boolean,
- *   error: Error | null,
- *   updateSetting: <K extends string>(key: K, value: SettingValueOf<K>) => Promise<void>,
- *   getSetting: (key: string) => unknown,
- *   refetch: () => Promise<void>,
- * }}
  */
-export function useSettings() {
+export function useSettings(): {
+    settings: AppSettings | null;
+    loading: boolean;
+    error: Error | null;
+    updateSetting: <K extends string>(key: K, value: SettingValueOf<K>) => Promise<void>;
+    getSetting: (key: string) => unknown;
+    refetch: () => Promise<void>;
+} {
     const {
         data: settings,
         setData: setSettings,
@@ -31,18 +30,13 @@ export function useSettings() {
     } = useIpcQuery(fetchSettings, { subscribe: true });
 
     const updateSetting = useCallback(
-        /**
-         * @template {string} K
-         * @param {K} key
-         * @param {SettingValueOf<K>} value
-         */
-        async (key, value) => {
+        async <K extends string>(key: K, value: SettingValueOf<K>) => {
             try {
                 await window.api.setSetting(key, value);
                 // Optimistic update
                 setSettings((prev) => (prev ? { ...prev, [key]: value } : null));
             } catch (err) {
-                setError(/** @type {Error} */ (err));
+                setError(err as Error);
                 // Refetch to get actual state on error
                 await refetch();
                 throw err;
@@ -52,7 +46,7 @@ export function useSettings() {
     );
 
     const getSetting = useCallback(
-        (/** @type {string} */ key) => {
+        (key: string) => {
             return settings ? settings[key] : undefined;
         },
         [settings],
@@ -70,10 +64,9 @@ export function useSettings() {
 
 /**
  * Hook for fetching environment info
- * @returns {{ envInfo: EnvironmentInfo | null, loading: boolean }}
  */
-export function useEnvironmentInfo() {
-    const [envInfo, setEnvInfo] = useState(/** @type {EnvironmentInfo | null} */ (null));
+export function useEnvironmentInfo(): { envInfo: EnvironmentInfo | null; loading: boolean } {
+    const [envInfo, setEnvInfo] = useState<EnvironmentInfo | null>(null);
     const [loading, setLoading] = useState(true);
 
     useEffect(() => {

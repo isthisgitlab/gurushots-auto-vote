@@ -4,16 +4,23 @@ import { startState } from '../../scenarios/evaluate';
 import { useLatestRef } from '../hooks/useLatestRef';
 import * as ipc from './ipc';
 
-/** @import { Challenge } from '../../types/gurushots' */
-/** @import { WindowApi } from '../../types/ipc' */
+import type { Challenge } from '../../types/gurushots';
+import type { WindowApi } from '../../types/ipc';
 
 /**
  * A challenge's scenario position as the card shows it.
- *
- * @typedef {{name: string, missing?: true, corrupt?: true, phase?: string, started?: boolean, lastError?: string|null, nextWakeAt?: number|null}} ScenarioSummary
  */
+export type ScenarioSummary = {
+    name: string;
+    missing?: true;
+    corrupt?: true;
+    phase?: string;
+    started?: boolean;
+    lastError?: string | null;
+    nextWakeAt?: number | null;
+};
 
-/** @typedef {Extract<Awaited<ReturnType<WindowApi['getScenarioStatus']>>, { success: true }>} ScenarioStatus */
+type ScenarioStatus = Extract<Awaited<ReturnType<WindowApi['getScenarioStatus']>>, { success: true }>;
 
 /**
  * A card-sized summary of where a challenge is in its scenario, or null when
@@ -26,13 +33,14 @@ import * as ipc from './ipc';
  * phase or send a notice without touching the challenge payload. So it
  * refetches after a pass or an edit, not on every render.
  *
- * @param {Challenge} challenge - the card's challenge (always present)
- * @param {number} [settingsVersion]
- * @param {number} [passVersion]
- * @returns {ScenarioSummary | null}
+ * @param challenge - the card's challenge (always present)
  */
-export function useScenarioStatus(challenge, settingsVersion, passVersion) {
-    const [summary, setSummary] = useState(/** @type {ScenarioSummary | null} */ (null));
+export function useScenarioStatus(
+    challenge: Challenge,
+    settingsVersion?: number,
+    passVersion?: number,
+): ScenarioSummary | null {
+    const [summary, setSummary] = useState<ScenarioSummary | null>(null);
     const entries = challenge.member?.ranking?.entries;
     const fingerprint = [
         challenge.id,
@@ -47,8 +55,7 @@ export function useScenarioStatus(challenge, settingsVersion, passVersion) {
         let cancelled = false;
         void (async () => {
             const current = challengeRef.current;
-            /** @type {ScenarioSummary | null} */
-            let next = null;
+            let next: ScenarioSummary | null = null;
             try {
                 const status = await ipc.getScenarioStatus(current.id);
                 if (status?.success && status.assigned) next = summarize(status, current);
@@ -66,11 +73,9 @@ export function useScenarioStatus(challenge, settingsVersion, passVersion) {
 }
 
 /**
- * @param {ScenarioStatus} status - an assigned challenge's status
- * @param {Challenge} challenge
- * @returns {ScenarioSummary}
+ * @param status - an assigned challenge's status
  */
-function summarize(status, challenge) {
+function summarize(status: ScenarioStatus, challenge: Challenge): ScenarioSummary {
     if (!status.scenario) return { name: status.assigned, missing: true };
     if (status.corrupt) return { name: status.scenario.name, corrupt: true };
     const now = Math.floor(Date.now() / 1000);

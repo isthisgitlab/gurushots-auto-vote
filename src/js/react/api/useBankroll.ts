@@ -1,13 +1,9 @@
 import { useIpcResultQuery } from './useIpcQuery';
 
-/** @import { Bankroll } from '../../types/gurushots' */
+import type { Bankroll } from '../../types/gurushots';
 
 const fetchBankroll = () => window.api.getBankroll();
-/**
- * @param {Bankroll} result
- * @returns {Bankroll}
- */
-const selectBalances = (result) => ({
+const selectBalances = (result: Bankroll): Bankroll => ({
     keys: result.keys,
     swaps: result.swaps,
     fills: result.fills,
@@ -15,8 +11,7 @@ const selectBalances = (result) => ({
 });
 // null (not 0) so the UI shows a "couldn't check" placeholder rather than
 // implying an empty balance.
-/** @returns {{ data: null }} */
-const noBalances = () => ({ data: null });
+const noBalances = (): { data: null } => ({ data: null });
 
 /**
  * Fetches the account bankroll (keys/swaps/fills/coins) via IPC. The token is
@@ -26,10 +21,13 @@ const noBalances = () => ({ data: null });
  * vote/join/turbo/fill), so there is no per-second tick to optimize. `bankroll`
  * is the balances object, or null when the balance could not be read (transport
  * failure) — callers must render a placeholder (never 0) in that case.
- *
- * @returns {{ bankroll: Bankroll | null, loading: boolean, error: Error|null, refetch: () => Promise<void> }}
  */
-export function useBankroll() {
+export function useBankroll(): {
+    bankroll: Bankroll | null;
+    loading: boolean;
+    error: Error | null;
+    refetch: () => Promise<void>;
+} {
     const { data, loading, error, refetch } = useIpcResultQuery(fetchBankroll, {
         select: selectBalances,
         fail: noBalances,

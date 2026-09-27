@@ -7,16 +7,14 @@ import { useAsyncIpcAction } from './useAsyncIpcAction';
  */
 export function useTurbo() {
     const apply = useAsyncIpcAction(
-        (/** @type {string | number} */ challengeId, /** @type {string} */ imageId) =>
-            window.api.applyTurbo(challengeId, imageId),
+        (challengeId: string | number, imageId: string) => window.api.applyTurbo(challengeId, imageId),
         {
             failureMessage: 'Turbo apply failed',
             errorMessage: 'Turbo apply error',
         },
     );
     const auto = useAsyncIpcAction(
-        (/** @type {string | number} */ challengeId, /** @type {string} */ challengeTitle) =>
-            window.api.playAutoTurbo(challengeId, challengeTitle),
+        (challengeId: string | number, challengeTitle: string) => window.api.playAutoTurbo(challengeId, challengeTitle),
         { failureMessage: 'Auto-turbo run failed', errorMessage: 'Auto-turbo error' },
     );
 

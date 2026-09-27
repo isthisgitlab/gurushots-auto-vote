@@ -1,19 +1,22 @@
 import { useEffect, useState } from 'react';
 import { useLatestRef } from '../hooks/useLatestRef';
 
-/** @import { Challenge } from '../../types/gurushots' */
+import type { Challenge } from '../../types/gurushots';
 
 /**
  * One previewed deadline action.
- *
- * @typedef {{ action: string, thresholdSec: number, dueAt: number | null }} DeadlineAction
  */
+type DeadlineAction = { action: string; thresholdSec: number; dueAt: number | null };
 
 /**
  * useDeadlineActions' state.
- *
- * @typedef {{ actions: DeadlineAction[], boostBlocked: boolean, loading: boolean, error: boolean }} DeadlineActionsState
  */
+export type DeadlineActionsState = {
+    actions: DeadlineAction[];
+    boostBlocked: boolean;
+    loading: boolean;
+    error: boolean;
+};
 
 /**
  * Fetches the read-only deadline-action preview + boost/turbo conflict flag for
@@ -28,14 +31,18 @@ import { useLatestRef } from '../hooks/useLatestRef';
  * `settingsVersion`, which ChallengesSection bumps once per settings-changed
  * broadcast — one refetch per card per settings change, without a remount.
  *
- * @param {Challenge | null | undefined} challenge
- * @param {number} [settingsVersion] - bumped when settings change
- * @returns {DeadlineActionsState}
+ * @param settingsVersion - bumped when settings change
  */
-export function useDeadlineActions(challenge, settingsVersion = 0) {
-    const [state, setState] = useState(
-        /** @type {DeadlineActionsState} */ ({ actions: [], boostBlocked: false, loading: true, error: false }),
-    );
+export function useDeadlineActions(
+    challenge: Challenge | null | undefined,
+    settingsVersion: number = 0,
+): DeadlineActionsState {
+    const [state, setState] = useState({
+        actions: [],
+        boostBlocked: false,
+        loading: true,
+        error: false,
+    } as DeadlineActionsState);
 
     const boost = challenge?.member?.boost;
     const turbo = challenge?.member?.turbo;

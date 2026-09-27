@@ -440,10 +440,10 @@ repeated six times is one that gets forgotten at one of them.
 ## 8. Renderer / UI conventions
 
 - **All backend calls go through `window.api.*`** — there is zero Electron-vs-Capacitor branching in
-  components. Build on the shared envelopes: `react/api/useIpcQuery.js` (data/loading/error + stable
-  `refetch`, optional subscribe) and `react/api/useAsyncIpcAction.js` (loading + `{success,error}`
+  components. Build on the shared envelopes: `react/api/useIpcQuery.ts` (data/loading/error + stable
+  `refetch`, optional subscribe) and `react/api/useAsyncIpcAction.ts` (loading + `{success,error}`
   handling). `useSettings`, `useActiveChallenges`, `useAuth`, `useBoost`, etc. all build on these. One-shot
-  calls, event subscriptions and best-effort logging go through `react/api/ipc.js` (`logRendererError` never
+  calls, event subscriptions and best-effort logging go through `react/api/ipc.ts` (`logRendererError` never
   throws). Nothing else under `src/js/react/` touches `window.api`; Oxlint enforces it.
 - **Settings changes reach every window.** A successful `set-setting` / `save-settings` broadcasts
   `settings-changed` to every open window (Electron) or the in-process bus (Capacitor); `useIpcQuery`
@@ -478,7 +478,7 @@ repeated six times is one that gets forgotten at one of them.
   `translations/latvian.ts`, under the existing namespaces (`common` / `errors` / `onboarding` / `menu` /
   `login` / `app` / `logs`). Languages: `en` and `lv` only.
 - **Internal / log / error-prefix strings stay English** (not translated) — e.g. the fallback strings
-  inside `useAsyncIpcAction.js` and the action hooks are English literals by design.
+  inside `useAsyncIpcAction.ts` and the action hooks are English literals by design.
 - Non-hook contexts (class components, primitives, the deadline notifier) use the bundled
   `translations/renderer.ts` translator (`ui/Modal.jsx`, `ui/ErrorBoundary.jsx`), because they can't call
   the hook. The dependency-free core is `translations/translator.ts`; the renderer persists the language

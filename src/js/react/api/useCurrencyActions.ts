@@ -11,19 +11,13 @@ const SPEND_LABELS = { failureMessage: 'api-failed', errorMessage: 'api-failed' 
  * outcome code the handler returned (see voting/currencyActions CURRENCY_OUTCOME).
  */
 export const useKeyUnlock = () =>
-    useAsyncIpcAction(
-        (/** @type {string | number} */ challengeId) => window.api.keyUnlockBoost(challengeId, true),
-        SPEND_LABELS,
-    );
+    useAsyncIpcAction((challengeId: string | number) => window.api.keyUnlockBoost(challengeId, true), SPEND_LABELS);
 
 /**
  * Spend a FILL to top a challenge's exposure up to 100%. Same shape as useKeyUnlock.
  */
 export const useFillExposure = () =>
-    useAsyncIpcAction(
-        (/** @type {string | number} */ challengeId) => window.api.fillExposure(challengeId, true),
-        SPEND_LABELS,
-    );
+    useAsyncIpcAction((challengeId: string | number) => window.api.fillExposure(challengeId, true), SPEND_LABELS);
 
 /**
  * Swap flow: `preview` (spends nothing) suggests the replacement for one
@@ -31,12 +25,11 @@ export const useFillExposure = () =>
  */
 export function useSwapPhoto() {
     const preview = useAsyncIpcAction(
-        (/** @type {string | number} */ challengeId, /** @type {string} */ imageId) =>
-            window.api.previewSwapPhoto(challengeId, imageId),
+        (challengeId: string | number, imageId: string) => window.api.previewSwapPhoto(challengeId, imageId),
         SPEND_LABELS,
     );
     const commit = useAsyncIpcAction(
-        (/** @type {string | number} */ challengeId, /** @type {string} */ imageId, /** @type {string} */ newImageId) =>
+        (challengeId: string | number, imageId: string, newImageId: string) =>
             window.api.swapEntryPhoto(challengeId, imageId, newImageId, true),
         SPEND_LABELS,
     );
@@ -49,7 +42,7 @@ export function useSwapPhoto() {
  */
 export const useSwapBack = () =>
     useAsyncIpcAction(
-        (/** @type {string | number} */ challengeId, /** @type {string} */ currentImageId) =>
+        (challengeId: string | number, currentImageId: string) =>
             window.api.swapBackEntryPhoto(challengeId, currentImageId, true),
         SPEND_LABELS,
     );

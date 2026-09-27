@@ -1,10 +1,7 @@
 import { useNamedIpcAction } from './useAsyncIpcAction';
 
-/**
- * @param {string | number} challengeId
- * @param {'one' | 'all'} mode
- */
-const fillNowIpc = (challengeId, mode) => window.api.fillChallengeNow(challengeId, mode);
+const fillNowIpc = (challengeId: string | number, mode: 'one' | 'all') =>
+    window.api.fillChallengeNow(challengeId, mode);
 const LABELS = { failureMessage: 'Photo submit failed', errorMessage: 'Photo submit error' };
 
 /**

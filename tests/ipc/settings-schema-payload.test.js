@@ -3,7 +3,7 @@
  * settings modals depend on to know what sections exist and in what order.
  *
  * The renderer reads `groups` and `tiers` off this payload (via
- * react/api/useSettingsSchema.js) and bands one into the other. Nothing else
+ * react/api/useSettingsSchema.ts) and bands one into the other. Nothing else
  * asserts the handler actually emits them, so dropping a key, misspelling it,
  * or forgetting to re-export SETTINGS_TIERS from the settings facade would
  * surface only as an unheaded settings modal at runtime — the renderer's

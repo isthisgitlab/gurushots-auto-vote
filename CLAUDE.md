@@ -46,7 +46,7 @@
 
 > Scope: `## UI/UX Standards` above governs styling policy (Tailwind/DaisyUI/theme); this section governs component & data-flow conventions. Deep reference: `docs/architecture.md` §8–9.
 
-- **Backend access**: all backend calls go through `window.api.*` via `src/js/react/api/` only — `useIpcQuery.js` / `useAsyncIpcAction.js` for queries and actions, `ipc.js` for one-shot calls, event subscriptions and best-effort logging (`logRendererError`) — **no per-platform branching in components**. Oxlint rejects `window.api` / `globalThis.api` access anywhere else under `src/js/react/`.
+- **Backend access**: all backend calls go through `window.api.*` via `src/js/react/api/` only — `useIpcQuery.ts` / `useAsyncIpcAction.ts` for queries and actions, `ipc.ts` for one-shot calls, event subscriptions and best-effort logging (`logRendererError`) — **no per-platform branching in components**. Oxlint rejects `window.api` / `globalThis.api` access anywhere else under `src/js/react/`.
 - **Structure**: no router (mount entry points `mountApp`/`mountLogin`); no toast lib — inline DaisyUI `alert` + `ui/ErrorBoundary`. User-facing error text follows _what happened → why → what next_, translated, never raw status codes at the user.
 - **Primitives & theme**: reuse `src/js/react/components/ui/` primitives; new modals **must** use `ui/Modal.jsx` (owns the a11y focus-trap bar). Theme = DaisyUI `data-theme`, no `dark:` variant. High-frequency ticks via `@preact/signals` (`useTimers`) to avoid re-rendering the challenge list.
 - **i18n mandatory**: user-facing strings via `useTranslation().t()`, added to **both** `src/js/translations/english.ts` and `latvian.ts`. Internal/log strings stay English.

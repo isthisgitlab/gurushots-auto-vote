@@ -1,61 +1,54 @@
 import { useState, useCallback, useEffect, useRef } from 'react';
 
-/** @import { Dispatch, SetStateAction } from 'react' */
+import type { Dispatch, SetStateAction } from 'react';
 
 /**
  * What an `apply` callback gets to write the query's state with.
- *
- * @template D, E
- * @typedef {object} IpcQueryTools
- * @property {Dispatch<SetStateAction<D>>} setData
- * @property {Dispatch<SetStateAction<E | null>>} setError
  */
+export interface IpcQueryTools<D, E> {
+    setData: Dispatch<SetStateAction<D>>;
+    setError: Dispatch<SetStateAction<E | null>>;
+}
 
 /**
  * useIpcQuery's options other than `apply` (see useIpcQuery for what each does).
- *
- * @template D
- * @template {unknown[]} A
- * @typedef {object} IpcQueryBaseOptions
- * @property {D} [initialData]
- * @property {boolean} [subscribe]
- * @property {boolean} [singleFlight]
- * @property {boolean} [clearErrorOnStart]
- * @property {(...args: A) => boolean} [showLoading]
- * @property {boolean} [enabled]
- * @property {boolean} [latestOnly]
  */
+export interface IpcQueryBaseOptions<D, A extends unknown[]> {
+    initialData?: D;
+    subscribe?: boolean;
+    singleFlight?: boolean;
+    clearErrorOnStart?: boolean;
+    showLoading?: (...args: A) => boolean;
+    enabled?: boolean;
+    latestOnly?: boolean;
+}
 
 /**
  * A custom result application: gets the resolved value, the state setters and
  * the refetch arguments.
- *
- * @template R, D, E
- * @template {unknown[]} A
- * @typedef {(result: R, tools: IpcQueryTools<D, E>, ...args: A) => unknown} IpcQueryApply
  */
+export type IpcQueryApply<R, D, E, A extends unknown[]> = (
+    result: R,
+    tools: IpcQueryTools<D, E>,
+    ...args: A
+) => unknown;
 
 /**
  * The state envelope useIpcQuery returns.
- *
- * @template D, E
- * @template {unknown[]} A
- * @typedef {object} IpcQuery
- * @property {D} data
- * @property {Dispatch<SetStateAction<D>>} setData
- * @property {boolean} loading
- * @property {E | null} error
- * @property {Dispatch<SetStateAction<E | null>>} setError
- * @property {(...args: A) => Promise<void>} refetch
  */
+export interface IpcQuery<D, E, A extends unknown[]> {
+    data: D;
+    setData: Dispatch<SetStateAction<D>>;
+    loading: boolean;
+    error: E | null;
+    setError: Dispatch<SetStateAction<E | null>>;
+    refetch: (...args: A) => Promise<void>;
+}
 
 /**
  * singleFlight's gate: take the in-flight slot, or report that a call already holds it.
- *
- * @param {{ current: boolean }} inFlightRef
- * @returns {boolean}
  */
-function claimFlight(inFlightRef) {
+function claimFlight(inFlightRef: { current: boolean }): boolean {
     if (inFlightRef.current) return false;
     inFlightRef.current = true;
     return true;
@@ -77,29 +70,17 @@ function claimFlight(inFlightRef) {
  * and `error` whatever it passes to `setError` (default `Error`). A thrown
  * value is taken as an `Error` — IPC rejections are. `A` is the refetch
  * arguments; the automatic fetches pass none, so every one must be optional.
- *
- * @template R
- * @template [D=null]
- * @template [E=Error]
- * @template {unknown[]} [A=[]]
- * @overload
- * @param {(...args: NoInfer<A>) => Promise<R>} queryFn
- * @param {IpcQueryBaseOptions<D, A> & { apply?: undefined }} [options]
- * @returns {IpcQuery<R | D, E, A>}
  */
+export function useIpcQuery<R, D = null, E = Error, A extends unknown[] = []>(
+    queryFn: (...args: NoInfer<A>) => Promise<R>,
+    options?: IpcQueryBaseOptions<D, A> & { apply?: undefined },
+): IpcQuery<R | D, E, A>;
+export function useIpcQuery<R, D = null, E = Error, A extends unknown[] = []>(
+    queryFn: (...args: NoInfer<A>) => Promise<R>,
+    options: IpcQueryBaseOptions<D, A> & { apply: IpcQueryApply<R, D, E, A> },
+): IpcQuery<D, E, A>;
 /**
- * @template R
- * @template [D=null]
- * @template [E=Error]
- * @template {unknown[]} [A=[]]
- * @overload
- * @param {(...args: NoInfer<A>) => Promise<R>} queryFn
- * @param {IpcQueryBaseOptions<D, A> & { apply: IpcQueryApply<R, D, E, A> }} options
- * @returns {IpcQuery<D, E, A>}
- */
-/**
- * @param {(...args: unknown[]) => Promise<unknown>} queryFn
- * @param {IpcQueryBaseOptions<unknown, unknown[]> & { apply?: IpcQueryApply<unknown, unknown, unknown, unknown[]> }} [options]
+ * @param options
  *   - initialData: initial `data` state (default null)
  *   - subscribe: refetch on window.api.onSettingsChanged (default false).
  *     These refetches run in the background: they never raise `loading`
@@ -119,9 +100,13 @@ function claimFlight(inFlightRef) {
  *     always
  *   - apply: custom result application (dedup, derived errors, side
  *     effects); default stores the resolved value as `data`
- * @returns {IpcQuery<unknown, unknown, unknown[]>}
  */
-export function useIpcQuery(queryFn, options = {}) {
+export function useIpcQuery(
+    queryFn: (...args: unknown[]) => Promise<unknown>,
+    options: IpcQueryBaseOptions<unknown, unknown[]> & {
+        apply?: IpcQueryApply<unknown, unknown, unknown, unknown[]>;
+    } = {},
+): IpcQuery<unknown, unknown, unknown[]> {
     const {
         initialData = null,
         subscribe = false,
@@ -144,18 +129,14 @@ export function useIpcQuery(queryFn, options = {}) {
 
     const [data, setData] = useState(initialData);
     const [loading, setLoading] = useState(true);
-    const [error, setError] = useState(/** @type {unknown} */ (null));
+    const [error, setError] = useState<unknown>(null);
     const inFlightRef = useRef(false);
     const callIdRef = useRef(0);
 
     // One call of either kind: `background` ones (the settings-changed
     // subscription) never raise `loading`.
     const run = useCallback(
-        /**
-         * @param {boolean} background
-         * @param {unknown[]} args
-         */
-        async (background, ...args) => {
+        async (background: boolean, ...args: unknown[]) => {
             if (singleFlight && !claimFlight(inFlightRef)) return;
             const callId = ++callIdRef.current;
             const toggleLoading = !background && (showLoading ? showLoading(...args) : true);
@@ -192,7 +173,7 @@ export function useIpcQuery(queryFn, options = {}) {
         [queryFn, singleFlight, clearErrorOnStart, showLoading, apply, latestOnly],
     );
 
-    const refetch = useCallback((/** @type {unknown[]} */ ...args) => run(false, ...args), [run]);
+    const refetch = useCallback((...args: unknown[]) => run(false, ...args), [run]);
     const revalidate = useCallback(() => run(true), [run]);
 
     useAutoFetch(refetch, revalidate, { enabled, subscribe, latestOnly, callIdRef });
@@ -205,12 +186,17 @@ export function useIpcQuery(queryFn, options = {}) {
  * while `enabled`, and the background `revalidate` on settings-changed when
  * `subscribe` is set. With `latestOnly`, the effect cleanup (re-key, disable,
  * unmount) supersedes the call it started by advancing the shared call id.
- *
- * @param {() => Promise<void>} refetch
- * @param {() => Promise<void>} revalidate
- * @param {{ enabled: boolean, subscribe: boolean, latestOnly: boolean, callIdRef: { current: number } }} options
  */
-function useAutoFetch(refetch, revalidate, { enabled, subscribe, latestOnly, callIdRef }) {
+function useAutoFetch(
+    refetch: () => Promise<void>,
+    revalidate: () => Promise<void>,
+    {
+        enabled,
+        subscribe,
+        latestOnly,
+        callIdRef,
+    }: { enabled: boolean; subscribe: boolean; latestOnly: boolean; callIdRef: { current: number } },
+) {
     useEffect(() => {
         if (!enabled) return undefined;
         // run() settles every failure into the error state.
@@ -239,33 +225,28 @@ function useAutoFetch(refetch, revalidate, { enabled, subscribe, latestOnly, cal
  * `select` gets the `success: true` arms of the result, `fail` the rest;
  * `data` is what either returns, or `initialData` (default null) before the
  * first result lands.
- *
- * @template {{ success: boolean }} R
- * @template D
- * @template [I=null]
- * @template [E=Error]
- * @param {() => Promise<R>} queryFn
- * @param {{
- *   initialData?: I,
- *   select: (result: Extract<R, { success: true }>) => D,
- *   fail: (result: Exclude<R, { success: true }>) => { data: D, error?: E },
- * }} options
- * @returns {IpcQuery<D | I, E, []>}
  */
-export function useIpcResultQuery(queryFn, { initialData = /** @type {I} */ (null), select, fail }) {
+export function useIpcResultQuery<R extends { success: boolean }, D, I = null, E = Error>(
+    queryFn: () => Promise<R>,
+    {
+        initialData = null as I,
+        select,
+        fail,
+    }: {
+        initialData?: I;
+        select: (result: Extract<R, { success: true }>) => D;
+        fail: (result: Exclude<R, { success: true }>) => { data: D; error?: E };
+    },
+): IpcQuery<D | I, E, []> {
     const apply = useCallback(
-        /**
-         * @param {R} result
-         * @param {IpcQueryTools<D | I, E>} tools
-         */
-        (result, { setData, setError }) => {
+        (result: R, { setData, setError }: IpcQueryTools<D | I, E>) => {
             const next = result?.success
-                ? { data: select(/** @type {Extract<R, { success: true }>} */ (result)), error: null }
-                : fail(/** @type {Exclude<R, { success: true }>} */ (result));
+                ? { data: select(result as Extract<R, { success: true }>), error: null }
+                : fail(result as Exclude<R, { success: true }>);
             setData(next.data);
             setError(next.error ?? null);
         },
         [select, fail],
     );
-    return useIpcQuery(queryFn, { initialData: /** @type {D | I} */ (initialData), apply });
+    return useIpcQuery(queryFn, { initialData: initialData as D | I, apply });
 }

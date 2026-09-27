@@ -13,43 +13,32 @@
  * best-effort and never throw.
  */
 
-/** @import { WindowApi } from '../../types/ipc' */
+import type { WindowApi } from '../../types/ipc';
 
 /**
  * The bridge seen as untyped callables, for the pass-throughs below that only
  * forward arguments and results (their public signatures come from WindowApi).
- *
- * @template {PropertyKey} M
- * @typedef {Record<M, (...args: unknown[]) => unknown>} BridgeCalls
  */
+export type BridgeCalls<M extends PropertyKey> = Record<M, (...args: unknown[]) => unknown>;
 
 /**
- * @template {keyof WindowApi} M
- * @param {M} method - bridge method name
- * @returns {WindowApi[M]}
+ * @param method - bridge method name
  */
-const forward = (method) =>
-    /** @type {WindowApi[M]} */ (
-        /** @type {unknown} */ (
-            (/** @type {unknown[]} */ ...args) => /** @type {BridgeCalls<M>} */ (window.api)[method](...args)
-        )
-    );
+const forward = <M extends keyof WindowApi>(method: M): WindowApi[M] =>
+    ((...args: unknown[]) => (window.api as BridgeCalls<M>)[method](...args)) as unknown as WindowApi[M];
 
 /**
  * A bridge method a host may leave out: absent (or no bridge at all) resolves
  * to `undefined` instead of throwing.
  *
- * @template {keyof WindowApi} M
- * @param {M} method - bridge method name
- * @returns {(...args: Parameters<WindowApi[M]>) => ReturnType<WindowApi[M]> | undefined}
+ * @param method - bridge method name
  */
-const forwardOptional = (method) =>
-    /** @type {(...args: Parameters<WindowApi[M]>) => ReturnType<WindowApi[M]> | undefined} */ (
-        /** @type {unknown} */ (
-            (/** @type {unknown[]} */ ...args) =>
-                /** @type {Partial<BridgeCalls<M>> | undefined} */ (window.api)?.[method]?.(...args)
-        )
-    );
+const forwardOptional = <M extends keyof WindowApi>(
+    method: M,
+): ((...args: Parameters<WindowApi[M]>) => ReturnType<WindowApi[M]> | undefined) =>
+    ((...args: unknown[]) => (window.api as Partial<BridgeCalls<M>> | undefined)?.[method]?.(...args)) as unknown as (
+        ...args: Parameters<WindowApi[M]>
+    ) => ReturnType<WindowApi[M]> | undefined;
 
 const ignore = () => {};
 
@@ -58,14 +47,12 @@ const ignore = () => {};
  * both a synchronous throw and a rejection, so a failing log sink can never
  * mask or replace the failure being logged.
  *
- * @param {'logError' | 'logWarning' | 'logDebug'} method - bridge log method name
- * @param {string} message
- * @returns {Promise<void>}
+ * @param method - bridge log method name
  */
-function logBestEffort(method, message) {
+function logBestEffort(method: 'logError' | 'logWarning' | 'logDebug', message: string): Promise<void> {
     try {
         // The renderer sends the message only; the handler's `data` is optional at runtime.
-        const api = /** @type {Partial<BridgeCalls<typeof method>> | undefined} */ (window.api);
+        const api = window.api as Partial<BridgeCalls<typeof method>> | undefined;
         return Promise.resolve(api?.[method]?.(message)).then(ignore, ignore);
     } catch {
         return Promise.resolve();
@@ -77,12 +64,8 @@ function logBestEffort(method, message) {
  * that branches on `result?.success` takes its failure path instead of
  * leaking an unhandled rejection. Takes a thunk so a missing bridge (a
  * synchronous throw) is caught too.
- *
- * @template T
- * @param {() => T | Promise<T>} call
- * @returns {Promise<T | null>}
  */
-export const callOrNull = async (call) => {
+export const callOrNull = async <T>(call: () => T | Promise<T>): Promise<T | null> => {
     try {
         return await call();
     } catch {
@@ -90,12 +73,12 @@ export const callOrNull = async (call) => {
     }
 };
 
-/** @param {string} message @returns {Promise<void>} resolves once the line is handed off; never rejects */
-export const logRendererError = (message) => logBestEffort('logError', message);
-/** @param {string} message @returns {Promise<void>} resolves once the line is handed off; never rejects */
-export const logRendererWarning = (message) => logBestEffort('logWarning', message);
-/** @param {string} message @returns {Promise<void>} resolves once the line is handed off; never rejects */
-export const logRendererDebug = (message) => logBestEffort('logDebug', message);
+/** @returns resolves once the line is handed off; never rejects */
+export const logRendererError = (message: string): Promise<void> => logBestEffort('logError', message);
+/** @returns resolves once the line is handed off; never rejects */
+export const logRendererWarning = (message: string): Promise<void> => logBestEffort('logWarning', message);
+/** @returns resolves once the line is handed off; never rejects */
+export const logRendererDebug = (message: string): Promise<void> => logBestEffort('logDebug', message);
 
 // Settings
 export const getSettings = forward('getSettings');
