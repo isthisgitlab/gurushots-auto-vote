@@ -22,6 +22,7 @@ jobs:
     test:
         # Oxlint's JS plugin allocator crashes on the 5 GB ubuntu-slim runner.
         runs-on: ubuntu-latest
+        timeout-minutes: 15
 
         steps:
             - name: Checkout code
