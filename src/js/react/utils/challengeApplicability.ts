@@ -1,4 +1,4 @@
-/** @import { Challenge, ChallengeMember } from '../../types/gurushots' */
+import type { Challenge, ChallengeMember } from '../../types/gurushots';
 /**
  * Per-challenge settings applicability.
  *
@@ -7,8 +7,8 @@
  * live state. Used by ChallengeSettingsModal to grey out + annotate groups
  * whose action can never happen again this challenge.
  *
- * Pure renderer util (no Node/service deps), mirroring formatters.js /
- * groupSettings.js — derived fresh on every render from the live `challenge`
+ * Pure renderer util (no Node/service deps), mirroring formatters.ts /
+ * groupSettings.ts — derived fresh on every render from the live `challenge`
  * object. The result is never persisted and never mutates an override: when the
  * challenge state changes (e.g. a freed entry slot), the group re-enables on
  * the next render automatically.
@@ -31,18 +31,20 @@
  * slots-full checks are reversible against live state (it never changes mid-
  * challenge, but a fresh challenge prop is re-evaluated every render).
  *
- * @param {string} groupId - One of the SETTINGS_GROUPS ids.
- * @param {Challenge|null} [challenge] - Challenge object (reads challenge.member.*).
+ * @param groupId - One of the SETTINGS_GROUPS ids.
+ * @param challenge - Challenge object (reads challenge.member.*).
  *   When absent (modal closed / unit context) everything is applicable.
- * @returns {{ applicable: boolean, reasonKey: string|null }} reasonKey is a
+ * @returns reasonKey is a
  *   translation key when not applicable, otherwise null.
  */
-export function getGroupApplicability(groupId, challenge) {
+export function getGroupApplicability(
+    groupId: string,
+    challenge?: Challenge | null,
+): { applicable: boolean; reasonKey: string | null } {
     const applicable = { applicable: true, reasonKey: null };
     if (!challenge) return applicable;
 
-    /** @type {ChallengeMember} */
-    const member = challenge.member || {};
+    const member: ChallengeMember = challenge.member || {};
     // Slot state. maxSlots drives the boost single-photo check (=== 1) and the
     // autoFill "all full" check; entries feeds slotsFull. Derive once.
     const entries = member.ranking?.entries || [];

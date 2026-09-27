@@ -3,7 +3,7 @@
  * `notify` action (and a halt) leave in the challenge's scenario state
  * outbox (services/scenarioRunner.ts), delivered by the host's per-cycle
  * notifier — the CLI scheduler (services/notify/nodeNotify.ts) and the
- * desktop renderer (react/notifications/scenarioNotifier.js), alongside the
+ * desktop renderer (react/notifications/scenarioNotifier.ts), alongside the
  * deadline notifications and through the same transports.
  *
  * Pure (no settings, no I/O), so the renderer bundle can carry it. A host

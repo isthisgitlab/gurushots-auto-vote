@@ -71,21 +71,18 @@ const URL_RE = /\bhttps?:\/\/[^\s<]+/g;
 const TRAILING_PUNCT_RE = /[.,;:!?)]+$/;
 const SAFE_HREF_RE = /^(?:https?:\/\/|mailto:)/i;
 
-/** @param {Element} el */
-function isMediumEditorJunk(el) {
+function isMediumEditorJunk(el: Element) {
     if (el.hasAttribute && el.hasAttribute('data-action')) return true;
     const cls = el.getAttribute && el.getAttribute('class');
     return Boolean(cls && /(^|\s)medium-editor/.test(cls));
 }
 
-/** @param {Element} el */
-function stripAttributes(el) {
+function stripAttributes(el: Element) {
     const attrs = Array.from(el.attributes);
     for (const { name } of attrs) el.removeAttribute(name);
 }
 
-/** @param {Element} el */
-function normaliseAnchor(el) {
+function normaliseAnchor(el: Element) {
     const href = el.getAttribute('href') || '';
     stripAttributes(el);
     if (SAFE_HREF_RE.test(href)) {
@@ -95,19 +92,17 @@ function normaliseAnchor(el) {
     }
 }
 
-/** @param {Element} el */
-function unwrap(el) {
-    const parent = /** @type {ParentNode} */ (el.parentNode);
+function unwrap(el: Element) {
+    const parent = el.parentNode as ParentNode;
     while (el.firstChild) parent.insertBefore(el.firstChild, el);
     parent.removeChild(el);
 }
 
-/** @param {Node} node */
-function walk(node) {
+function walk(node: Node) {
     const children = Array.from(node.childNodes);
     for (const childNode of children) {
         if (childNode.nodeType !== 1 /* ELEMENT_NODE */) continue;
-        const child = /** @type {Element} */ (childNode);
+        const child = childNode as Element;
         const tag = child.tagName.toLowerCase();
 
         if (STRIP_WITH_CONTENTS.has(tag) || isMediumEditorJunk(child)) {
@@ -130,22 +125,12 @@ function walk(node) {
     }
 }
 
-/**
- * @param {string} s
- * @returns {string}
- */
-function escapeText(s) {
+function escapeText(s: string): string {
     return s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
 }
 
-/**
- * @param {Node} textNode
- * @param {Node} root
- * @returns {boolean}
- */
-function isInsideAnchor(textNode, root) {
-    /** @type {(ParentNode & { tagName?: string }) | null} */
-    let p = textNode.parentNode;
+function isInsideAnchor(textNode: Node, root: Node): boolean {
+    let p: (ParentNode & { tagName?: string }) | null = textNode.parentNode;
     while (p && p !== root) {
         if (p.tagName && p.tagName.toLowerCase() === 'a') return true;
         p = p.parentNode;
@@ -153,15 +138,9 @@ function isInsideAnchor(textNode, root) {
     return false;
 }
 
-/**
- * @param {Node} root
- * @param {Document} doc
- * @returns {Node[]}
- */
-function collectTextNodes(root, doc) {
+function collectTextNodes(root: Node, doc: Document): Node[] {
     const walker = doc.createTreeWalker(root, /* NodeFilter.SHOW_TEXT */ 4);
-    /** @type {Node[]} */
-    const out = [];
+    const out: Node[] = [];
     let n = walker.nextNode();
     while (n) {
         if (!isInsideAnchor(n, root)) out.push(n);
@@ -170,13 +149,9 @@ function collectTextNodes(root, doc) {
     return out;
 }
 
-/**
- * @param {Node} root
- * @param {Document} doc
- */
-function linkifyTextNodes(root, doc) {
+function linkifyTextNodes(root: Node, doc: Document) {
     for (const textNode of collectTextNodes(root, doc)) {
-        const text = /** @type {string} */ (textNode.nodeValue);
+        const text = textNode.nodeValue as string;
         const matches = Array.from(text.matchAll(URL_RE));
         if (matches.length === 0) continue;
 
@@ -200,15 +175,15 @@ function linkifyTextNodes(root, doc) {
             last = end;
         }
         if (last < text.length) frag.appendChild(doc.createTextNode(text.slice(last)));
-        /** @type {ParentNode} */ (textNode.parentNode).replaceChild(frag, textNode);
+        (textNode.parentNode as ParentNode).replaceChild(frag, textNode);
     }
 }
 
 /**
- * @param {string | null | undefined} input - Raw `welcome_message`; null/undefined render as ''.
- * @returns {string} Sanitised HTML, safe for dangerouslySetInnerHTML.
+ * @param input - Raw `welcome_message`; null/undefined render as ''.
+ * @returns Sanitised HTML, safe for dangerouslySetInnerHTML.
  */
-export function sanitizeWelcomeMessage(input) {
+export function sanitizeWelcomeMessage(input: string | null | undefined): string {
     if (input == null) return '';
     const str = String(input);
     if (str.length === 0) return '';
@@ -216,14 +191,14 @@ export function sanitizeWelcomeMessage(input) {
     try {
         if (str.indexOf('<') === -1 && str.indexOf('&') === -1) {
             const doc = new DOMParser().parseFromString('<div></div>', 'text/html');
-            const wrap = /** @type {HTMLElement} */ (doc.body.firstChild);
+            const wrap = doc.body.firstChild as HTMLElement;
             wrap.appendChild(doc.createTextNode(str));
             linkifyTextNodes(wrap, doc);
             return wrap.innerHTML;
         }
 
         const doc = new DOMParser().parseFromString('<div>' + str + '</div>', 'text/html');
-        const wrap = /** @type {HTMLElement} */ (doc.body.firstChild);
+        const wrap = doc.body.firstChild as HTMLElement;
         walk(wrap);
         linkifyTextNodes(wrap, doc);
         return wrap.innerHTML;

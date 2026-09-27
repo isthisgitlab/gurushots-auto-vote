@@ -1,7 +1,5 @@
-/**
- * @import { MemberBoost, MemberTurbo, RankingEntry } from '../../types/gurushots'
- * @import { SerializableSchemaEntry } from '../../ipc/settings.handlers'
- */
+import type { MemberBoost, MemberTurbo, RankingEntry } from '../../types/gurushots';
+import type { SerializableSchemaEntry } from '../../ipc/settings.handlers';
 /**
  * Time and display formatting utilities (pure functions only)
  */
@@ -33,12 +31,15 @@ export { entryPhotoUrl };
  * `t` is the translation function, passed in so this stays a pure util with no
  * dependency on the React translation context.
  *
- * @param {unknown} value - The value to render (seconds, number, boolean, or array)
- * @param {Pick<SerializableSchemaEntry, 'type' | 'unit'>|null|undefined} config - The setting's schema entry (reads `type` and `unit`)
- * @param {(key: string) => string} t - Translation lookup
- * @returns {string}
+ * @param value - The value to render (seconds, number, boolean, or array)
+ * @param config - The setting's schema entry (reads `type` and `unit`)
+ * @param t - Translation lookup
  */
-export const formatSettingDefault = (value, config, t) => {
+export const formatSettingDefault = (
+    value: unknown,
+    config: Pick<SerializableSchemaEntry, 'type' | 'unit'> | null | undefined,
+    t: (key: string) => string,
+): string => {
     if (config?.type === 'schedule') {
         const rows = Array.isArray(value) ? value : [];
         if (rows.length === 0) return t('app.none');
@@ -77,10 +78,10 @@ export const formatSettingDefault = (value, config, t) => {
 
 /**
  * Format time remaining from Unix timestamp
- * @param {number} endTime - Unix timestamp of end time
- * @returns {string} Formatted time remaining (e.g., "2d 3h 5m", "30m 45s", "Ended")
+ * @param endTime - Unix timestamp of end time
+ * @returns Formatted time remaining (e.g., "2d 3h 5m", "30m 45s", "Ended")
  */
-export const formatTimeRemaining = (endTime) => {
+export const formatTimeRemaining = (endTime: number): string => {
     const now = Math.floor(Date.now() / 1000);
     const remaining = endTime - now;
 
@@ -93,15 +94,14 @@ export const formatTimeRemaining = (endTime) => {
 
 /**
  * Format end time to localized string
- * @param {number} endTime - Unix timestamp
- * @param {string} timezone - Timezone string (e.g., 'local', 'Europe/Riga')
- * @returns {string} Formatted date string
+ * @param endTime - Unix timestamp
+ * @param timezone - Timezone string (e.g., 'local', 'Europe/Riga')
+ * @returns Formatted date string
  */
-export const formatEndTime = (endTime, timezone = 'local') => {
+export const formatEndTime = (endTime: number, timezone: string = 'local'): string => {
     const date = new Date(endTime * 1000);
 
-    /** @type {Intl.DateTimeFormatOptions} */
-    const formatOptions = {
+    const formatOptions: Intl.DateTimeFormatOptions = {
         day: '2-digit',
         month: '2-digit',
         year: 'numeric',
@@ -127,10 +127,9 @@ export const formatEndTime = (endTime, timezone = 'local') => {
 
 /**
  * Get boost status with display text and color class
- * @param {MemberBoost|null|undefined} boost - Boost object from API
- * @returns {{ text: string, colorClass: string }}
+ * @param boost - Boost object from API
  */
-export const getBoostStatus = (boost) => {
+export const getBoostStatus = (boost: MemberBoost | null | undefined): { text: string; colorClass: string } => {
     if (!boost || !boost.state) {
         return { text: 'Unknown', colorClass: 'text-purple-500' };
     }
@@ -166,10 +165,11 @@ export const getBoostStatus = (boost) => {
  * an applied boost with the separate boolean entry.boosted. Reading entry.boost
  * would light the rocket on entries that are merely eligible.
  *
- * @param {RankingEntry|null|undefined} entry - Entry record from challenge.member.ranking.entries
- * @returns {{ isBoosted: boolean, isTurboed: boolean, icon: string, className: string, textClass: string }}
+ * @param entry - Entry record from challenge.member.ranking.entries
  */
-export const getEntryStatus = (entry) => {
+export const getEntryStatus = (
+    entry: RankingEntry | null | undefined,
+): { isBoosted: boolean; isTurboed: boolean; icon: string; className: string; textClass: string } => {
     const isBoosted = entry?.boosted === true;
     const isTurboed = !!entry?.turbo;
     const base = { isBoosted, isTurboed };
@@ -189,10 +189,9 @@ export { isBoostWindowOpen } from '../../voting/boostWindow';
 
 /**
  * Get turbo status with display text and color class
- * @param {MemberTurbo|null|undefined} turbo - Turbo object from API
- * @returns {{ text: string, colorClass: string }}
+ * @param turbo - Turbo object from API
  */
-export const getTurboStatus = (turbo) => {
+export const getTurboStatus = (turbo: MemberTurbo | null | undefined): { text: string; colorClass: string } => {
     if (!turbo || !turbo.state) {
         return { text: 'Unavailable', colorClass: 'text-red-500' };
     }
@@ -220,11 +219,10 @@ export const getTurboStatus = (turbo) => {
 
 /**
  * Get level status with display text and badge color class
- * @param {number} level - Level number
- * @param {string} levelName - Level name (e.g., 'POPULAR', 'SKILLED')
- * @returns {{ text: string, colorClass: string }}
+ * @param level - Level number
+ * @param levelName - Level name (e.g., 'POPULAR', 'SKILLED')
  */
-export const getLevelStatus = (level, levelName) => {
+export const getLevelStatus = (level: number, levelName: string): { text: string; colorClass: string } => {
     if (!level || !levelName) {
         return { text: 'Unknown', colorClass: 'badge-success' };
     }

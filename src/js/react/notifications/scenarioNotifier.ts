@@ -4,25 +4,34 @@
  * get-scenario-status IPC channel and delivered like the deadline
  * notifications. Wired only where deadlineNotifier is — the desktop app; on
  * native Android the caller leaves it out for the same dual-loop reason (see
- * deadlineNotifier.js).
+ * deadlineNotifier.ts).
  */
 
 import { createScenarioNotifier } from '../../services/scenarioNotifications';
 
-/** @import { OutboxItem } from '../../services/scenarioNotifications' */
-/** @import { Challenge } from '../../types/gurushots' */
+import type { OutboxItem } from '../../services/scenarioNotifications';
+import type { Challenge } from '../../types/gurushots';
 
 /**
- * @param {Object} deps
- * @param {(key:string)=>Promise<unknown>} deps.getSetting - the getGlobalDefault IPC
- * @param {(challengeId: Challenge['id'])=>Promise<{success: boolean, state?: {outbox?: OutboxItem[]} | null} | null | undefined>} deps.getScenarioStatus -
+ * @param deps.getSetting - the getGlobalDefault IPC
+ * @param deps.getScenarioStatus -
  *   the getScenarioStatus IPC
- * @param {(key:string)=>string} deps.translate
- * @param {(n:{title:string, body:string})=>void} deps.deliver
- * @param {(message:string)=>void} [deps.log]
- * @returns {(challenges: readonly Challenge[]) => Promise<void>}
  */
-export function createRendererScenarioNotifier({ getSetting, getScenarioStatus, translate, deliver, log }) {
+export function createRendererScenarioNotifier({
+    getSetting,
+    getScenarioStatus,
+    translate,
+    deliver,
+    log,
+}: {
+    getSetting: (key: string) => Promise<unknown>;
+    getScenarioStatus: (
+        challengeId: Challenge['id'],
+    ) => Promise<{ success: boolean; state?: { outbox?: OutboxItem[] } | null } | null | undefined>;
+    translate: (key: string) => string;
+    deliver: (n: { title: string; body: string }) => void;
+    log?: (message: string) => void;
+}): (challenges: readonly Challenge[]) => Promise<void> {
     return createScenarioNotifier({
         isEnabled: async () => (await getSetting('notifyOnScenario')) !== false,
         readOutbox: async (challenge) => {

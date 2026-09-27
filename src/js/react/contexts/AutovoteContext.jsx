@@ -182,7 +182,7 @@ async function runRendererVotingCycle({ runningRef, dispatch, onChallengesRefres
  * scenario notices — on Electron; `null` on native Android, where the native
  * foreground service is authoritative — so the notifier is NOT wired there at
  * all (that both avoids a dual-loop double-fire and the per-cycle IPC that
- * would only be discarded). See deadlineNotifier.js header.
+ * would only be discarded). See deadlineNotifier.ts header.
  *
  * @returns {CycleNotifier | null}
  */

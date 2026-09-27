@@ -1,7 +1,5 @@
-/**
- * @import { Bankroll, Challenge } from '../../types/gurushots'
- * @import { RankedChallenge } from '../../types/rendererUtils'
- */
+import type { Bankroll, Challenge } from '../../types/gurushots';
+import type { RankedChallenge } from '../../types/rendererUtils';
 import { formatDuration, getBoostStatus, getTurboStatus, isBoostWindowOpen } from '@/utils/formatters';
 import { isLowExposure } from '@/utils/challengeAlerts';
 import { canKeyUnlock, canSwapEntry, canFillExposure } from '../../voting/currencyActions';
@@ -14,11 +12,12 @@ const LEVEL_NAMES = ['', 'POPULAR', 'SKILLED', 'PREMIER', 'ELITE', 'ALL STAR'];
  * the challenge has no level table (flash challenges never do) or the member
  * is already on the top level.
  *
- * @param {Challenge} challenge - An active challenge; its member standing is read unguarded.
- * @returns {{ nextLevel: number, votesNeeded: number, levelName: string } | null}
+ * @param challenge - An active challenge; its member standing is read unguarded.
  */
-export function getNextLevelInfo(challenge) {
-    const userProgress = /** @type {RankedChallenge} */ (challenge).member.ranking.total;
+export function getNextLevelInfo(
+    challenge: Challenge,
+): { nextLevel: number; votesNeeded: number; levelName: string } | null {
+    const userProgress = (challenge as RankedChallenge).member.ranking.total;
     if (!challenge.ranking_levels || !userProgress || userProgress.level === undefined || challenge.type === 'flash') {
         return null;
     }
@@ -37,11 +36,18 @@ export function getNextLevelInfo(challenge) {
  * challenge at one `now` tick: stats, alert flags/classes and the action gates.
  * Pure, so the two layouts can never disagree about what a state means.
  *
- * @param {Challenge} challenge - An active challenge; its member standing is read unguarded.
- * @param {{ now: number, bankroll: Bankroll|null, autovoteRunning: boolean, autoFillEnabled: boolean }} context
+ * @param challenge - An active challenge; its member standing is read unguarded.
  */
-export function deriveChallengeCardView(challenge, { now, bankroll, autovoteRunning, autoFillEnabled }) {
-    const member = /** @type {RankedChallenge} */ (challenge).member;
+export function deriveChallengeCardView(
+    challenge: Challenge,
+    {
+        now,
+        bankroll,
+        autovoteRunning,
+        autoFillEnabled,
+    }: { now: number; bankroll: Bankroll | null; autovoteRunning: boolean; autoFillEnabled: boolean },
+) {
+    const member = (challenge as RankedChallenge).member;
     const entries = member.ranking.entries || [];
     const exposureFactor = member.ranking.exposure.exposure_factor;
 

@@ -554,7 +554,7 @@ caps (dependency-free, renderer-safe), and `scenarios/templates.ts` holds editab
   fails closed.
 - **Notices** (`services/scenarioNotifications.ts`, pure): a `notify` action — and a halt — appends to the state's
   bounded `outbox`; each host's per-cycle notifier (CLI `nodeNotify.createNodeScenarioNotifier`, desktop
-  `react/notifications/scenarioNotifier.js`, composed with the deadline notifier) shows only notices created
+  `react/notifications/scenarioNotifier.ts`, composed with the deadline notifier) shows only notices created
   after it started, each once, gated by `notifyOnScenario`. Native Android delivers none, as for deadlines.
 - **Simulation** (`scenarios/simulate.ts`, pure): a what-if timeline jumping between the engine's own wake-ups,
   chaining rules like the runner; assumes every step succeeds and live data holds still, and says why it stopped.

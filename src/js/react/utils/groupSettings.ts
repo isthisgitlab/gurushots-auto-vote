@@ -1,28 +1,29 @@
-/** @import { SerializableSchemaEntry } from '../../ipc/settings.handlers' */
+import type { SerializableSchemaEntry } from '../../ipc/settings.handlers';
 
 /**
  * One settings group as the modals receive it (SETTINGS_GROUPS entry).
- *
- * @typedef {{ id: string, label: string, tier?: string }} SettingsGroupDef
  */
+export type SettingsGroupDef = { id: string; label: string; tier?: string };
 
 /**
  * One settings tier as the modals receive it (SETTINGS_TIERS entry).
- *
- * @typedef {{ id: string, label: string }} SettingsTierDef
  */
+export type SettingsTierDef = { id: string; label: string };
 
 /**
  * A rendered settings section: a group and its schema entries.
- *
- * @typedef {{ id: string, label: string, tier?: string, entries: Array<[string, SerializableSchemaEntry]> }} SettingsSection
  */
+export type SettingsSection = {
+    id: string;
+    label: string;
+    tier?: string;
+    entries: Array<[string, SerializableSchemaEntry]>;
+};
 
 /**
  * A rendered tier band; `id`/`label` are null for the trailing untitled band.
- *
- * @typedef {{ id: string|null, label: string|null, groups: SettingsSection[] }} SettingsBand
  */
+export type SettingsBand = { id: string | null; label: string | null; groups: SettingsSection[] };
 
 /**
  * Responsive grid for a settings section. One column on phones (Capacitor)
@@ -65,12 +66,14 @@ export const SETTING_CELL_CLASS = 'flex flex-col rounded-box border border-base-
  * - challengeOnly entries have no global value, so the global view (without
  *   perChallengeOnly) drops them; the per-challenge view keeps them.
  *
- * @param {Record<string, SerializableSchemaEntry>|null|undefined} schema - serialized schema (key -> config with `group`)
- * @param {readonly SettingsGroupDef[]|null|undefined} groups - ordered [{ id, label }]
- * @param {{ perChallengeOnly?: boolean }} [options]
- * @returns {SettingsSection[]}
+ * @param schema - serialized schema (key -> config with `group`)
+ * @param groups - ordered [{ id, label }]
  */
-export function groupSchemaEntries(schema, groups, { perChallengeOnly = false } = {}) {
+export function groupSchemaEntries(
+    schema: Record<string, SerializableSchemaEntry> | null | undefined,
+    groups: readonly SettingsGroupDef[] | null | undefined,
+    { perChallengeOnly = false }: { perChallengeOnly?: boolean } = {},
+): SettingsSection[] {
     if (!schema || !groups) return [];
     return groups
         .map(({ id, label, tier }) => ({
@@ -97,19 +100,21 @@ export function groupSchemaEntries(schema, groups, { perChallengeOnly = false } 
  * an older main process that predates the `tiers` IPC field — puts every group
  * in that one band, which degrades to exactly the flat list this replaced.
  *
- * @param {Record<string, SerializableSchemaEntry>|null|undefined} schema - serialized schema (key -> config with `group`)
- * @param {readonly SettingsGroupDef[]|null|undefined} groups - ordered [{ id, label, tier }]
- * @param {readonly SettingsTierDef[]|null|undefined} tiers - ordered [{ id, label }]
- * @param {{ perChallengeOnly?: boolean }} [options]
- * @returns {SettingsBand[]}
+ * @param schema - serialized schema (key -> config with `group`)
+ * @param groups - ordered [{ id, label, tier }]
+ * @param tiers - ordered [{ id, label }]
  */
-export function tierSchemaEntries(schema, groups, tiers, { perChallengeOnly = false } = {}) {
+export function tierSchemaEntries(
+    schema: Record<string, SerializableSchemaEntry> | null | undefined,
+    groups: readonly SettingsGroupDef[] | null | undefined,
+    tiers: readonly SettingsTierDef[] | null | undefined,
+    { perChallengeOnly = false }: { perChallengeOnly?: boolean } = {},
+): SettingsBand[] {
     const rendered = groupSchemaEntries(schema, groups, { perChallengeOnly });
     if (!rendered.length) return [];
 
     const order = Array.isArray(tiers) ? tiers : [];
-    /** @type {Set<string|undefined>} */
-    const known = new Set(order.map((tier) => tier.id));
+    const known: Set<string | undefined> = new Set(order.map((tier) => tier.id));
     const banded = order
         .map(({ id, label }) => ({ id, label, groups: rendered.filter((group) => group.tier === id) }))
         .filter((band) => band.groups.length > 0);

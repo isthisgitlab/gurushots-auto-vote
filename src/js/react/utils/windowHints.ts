@@ -11,8 +11,8 @@
  * fallbacks. Keeping the two in step is the point — a hint must never promise
  * a window the decision path won't open, or stay silent about one it will.
  *
- * Pure renderer util (no Node/service deps), mirroring formatters.js /
- * challengeApplicability.js. Deliberately returns the next window's trigger as
+ * Pure renderer util (no Node/service deps), mirroring formatters.ts /
+ * challengeApplicability.ts. Deliberately returns the next window's trigger as
  * DATA (`{kind: 'time'|'beforeEnd', ...}`) rather than a translated string, so
  * this module needs no translation function and the wording stays in the
  * component that renders it.
@@ -21,45 +21,51 @@
 import { occurrencesOf } from '../../scheduling/wallClock';
 import { MAX_SCHEDULED_FILL_ENTRIES } from '../../settings/limits';
 
-/**
- * @typedef {object} WindowHintState
- * @property {string[]} times - Parsed-shape daily entries, cap-sliced.
- * @property {number[]} beforeEnds - Positive seconds-before-close entries, cap-sliced.
- * @property {number} durationMin - Window length in minutes (schema default on corruption).
- * @property {number} durationSec - Same, in seconds.
- * @property {boolean} enabled - The master switch alone.
- * @property {{entry: string, occ: {prev: number, next: number}}[]} timeOccs
- * @property {boolean} timeSet - At least one PARSEABLE daily entry.
- * @property {boolean} active - Enabled AND at least one usable entry in either list.
- * @property {{start: number, source: {kind: 'time', value: string}|{kind: 'beforeEnd', seconds: number}}|null} next
- * @property {boolean} openNow - `next` is a window that has already started.
- * @property {boolean} coversWholeDay - Active, and the daily windows leave no uncovered moment in a day.
- */
+export interface WindowHintState {
+    /** Parsed-shape daily entries, cap-sliced. */
+    times: string[];
+    /** Positive seconds-before-close entries, cap-sliced. */
+    beforeEnds: number[];
+    /** Window length in minutes (schema default on corruption). */
+    durationMin: number;
+    /** Same, in seconds. */
+    durationSec: number;
+    /** The master switch alone. */
+    enabled: boolean;
+    timeOccs: { entry: string; occ: { prev: number; next: number } }[];
+    /** At least one PARSEABLE daily entry. */
+    timeSet: boolean;
+    /** Enabled AND at least one usable entry in either list. */
+    active: boolean;
+    next: { start: number; source: { kind: 'time'; value: string } | { kind: 'beforeEnd'; seconds: number } } | null;
+    /** `next` is a window that has already started. */
+    openNow: boolean;
+    /** Active, and the daily windows leave no uncovered moment in a day. */
+    coversWholeDay: boolean;
+}
 
 /**
  * One feature's duration policy: its fallback, which way a corrupt stored
  * duration fails, and the optional ceiling (null = none).
- *
- * @typedef {object} WindowHintPolicy
- * @property {number} defaultDurationMin - Fallback when the stored duration is corrupt.
- * @property {'default'|'off'} onCorruptDuration - A corrupt duration falls back to the default, or turns the feature off.
- * @property {number|null} maxDurationMin - Clamp ceiling in minutes; null for none.
  */
+export interface WindowHintPolicy {
+    /** Fallback when the stored duration is corrupt. */
+    defaultDurationMin: number;
+    /** A corrupt duration falls back to the default, or turns the feature off. */
+    onCorruptDuration: 'default' | 'off';
+    /** Clamp ceiling in minutes; null for none. */
+    maxDurationMin: number | null;
+}
 
 /**
  * Derive one feature's window state for hint rendering.
  *
- * @param {object} params
- * @param {{enabled: string, times: string, beforeEnd: string, duration: string}} params.keys
+ * @param params.keys
  *   The four setting keys this feature stores its config under.
- * @param {number} params.defaultDurationMin - Fallback when the stored duration is corrupt.
- * @param {(key: string) => unknown} params.effectiveOf - Resolver for the challenge's effective value.
- * @param {string} params.timezone - App timezone; daily times are read in it, never device-local.
- * @param {number} params.nowSec
- * @param {number} params.closeTime - Challenge close time, or 0 when unknown.
- * @param {WindowHintPolicy['onCorruptDuration']} params.onCorruptDuration
- * @param {WindowHintPolicy['maxDurationMin']} params.maxDurationMin
- * @returns {WindowHintState}
+ * @param params.defaultDurationMin - Fallback when the stored duration is corrupt.
+ * @param params.effectiveOf - Resolver for the challenge's effective value.
+ * @param params.timezone - App timezone; daily times are read in it, never device-local.
+ * @param params.closeTime - Challenge close time, or 0 when unknown.
  */
 export function deriveWindowHints({
     keys,
@@ -73,7 +79,16 @@ export function deriveWindowHints({
     // rather than silently inherit scheduled fill's.
     onCorruptDuration,
     maxDurationMin,
-}) {
+}: {
+    keys: { enabled: string; times: string; beforeEnd: string; duration: string };
+    defaultDurationMin: number;
+    effectiveOf: (key: string) => unknown;
+    timezone: string;
+    nowSec: number;
+    closeTime: number;
+    onCorruptDuration: WindowHintPolicy['onCorruptDuration'];
+    maxDurationMin: WindowHintPolicy['maxDurationMin'];
+}): WindowHintState {
     const rawTimes = effectiveOf(keys.times);
     const times = (Array.isArray(rawTimes) ? rawTimes : []).slice(0, MAX_SCHEDULED_FILL_ENTRIES);
     const rawBeforeEnds = effectiveOf(keys.beforeEnd);
@@ -102,9 +117,9 @@ export function deriveWindowHints({
     // hint source after the first unparseable entry. No try/catch: occurrencesOf
     // returns null for unparseable entries and degrades an unknown zone to UTC
     // itself, so it cannot throw for the Date.now()-derived nowSec callers pass.
-    const timeOccs = /** @type {WindowHintState['timeOccs']} */ (
-        times.map((entry) => ({ entry, occ: occurrencesOf(entry, timezone, nowSec) })).filter((p) => p.occ)
-    );
+    const timeOccs = times
+        .map((entry) => ({ entry, occ: occurrencesOf(entry, timezone, nowSec) }))
+        .filter((p) => p.occ) as WindowHintState['timeOccs'];
     const timeSet = timeOccs.length > 0;
     const active = enabled && (timeSet || beforeEnds.length > 0);
 
@@ -112,8 +127,7 @@ export function deriveWindowHints({
     // occurrence, per before-end entry its one-shot start while the window is
     // still at least partly ahead. Each carries its producing trigger so the
     // hint can name whose window is shown.
-    /** @type {NonNullable<WindowHintState['next']>[]} */
-    const candidates = [];
+    const candidates: NonNullable<WindowHintState['next']>[] = [];
     for (const { entry, occ } of timeOccs) {
         const start = nowSec - occ.prev <= durationSec ? occ.prev : occ.next;
         candidates.push({ start, source: { kind: 'time', value: entry } });
@@ -127,7 +141,7 @@ export function deriveWindowHints({
     }
     const next = candidates.reduce(
         (best, c) => (best === null || c.start < best.start ? c : best),
-        /** @type {WindowHintState['next']} */ (null),
+        null as WindowHintState['next'],
     );
 
     return {
@@ -158,11 +172,9 @@ export function deriveWindowHints({
  * recur, so they cannot close the loop. DST is ignored: a changeover day can
  * shift a window by an hour, which does not change the advice this drives.
  *
- * @param {{entry: string}[]} timeOccs - Entries already known to be parseable.
- * @param {number} durationSec
- * @returns {boolean}
+ * @param timeOccs - Entries already known to be parseable.
  */
-function coversWholeDay(timeOccs, durationSec) {
+function coversWholeDay(timeOccs: { entry: string }[], durationSec: number): boolean {
     // Deduped first: two identical starts would each see a zero gap to the
     // other and report full coverage off a single window. The validator's
     // dedupe makes that unreachable through the save path, but a hand-edited

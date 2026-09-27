@@ -1,7 +1,5 @@
-/**
- * @import { Challenge } from '../../types/gurushots'
- * @import { RankedChallenge } from '../../types/rendererUtils'
- */
+import type { Challenge } from '../../types/gurushots';
+import type { RankedChallenge } from '../../types/rendererUtils';
 /**
  * At-a-glance "needs attention" predicates for the challenge list, so a user
  * opening the app can spot what matters without reading every card: an open
@@ -21,11 +19,10 @@ export const LOW_EXPOSURE_THRESHOLD = 10;
  * challenges count: before start there is nothing to vote for, and after close
  * a 0% is final rather than actionable.
  *
- * @param {Challenge} challenge - Active challenge from the API
- * @param {number} now - Current time (Unix seconds)
- * @returns {boolean}
+ * @param challenge - Active challenge from the API
+ * @param now - Current time (Unix seconds)
  */
-export const isLowExposure = (challenge, now) => {
+export const isLowExposure = (challenge: Challenge, now: number): boolean => {
     const exposure = challenge?.member?.ranking?.exposure?.exposure_factor;
     if (typeof exposure !== 'number') return false;
     if (!(challenge.start_time < now) || !(challenge.close_time > now)) return false;
@@ -35,12 +32,14 @@ export const isLowExposure = (challenge, now) => {
 /**
  * Challenges with low exposure as display entries, lowest exposure first.
  *
- * @param {Challenge[]|null|undefined} challenges - Active challenges from the API
- * @param {number} now - Current time (Unix seconds)
- * @returns {Array<{id: Challenge['id'], title: string, exposure: number}>}
+ * @param challenges - Active challenges from the API
+ * @param now - Current time (Unix seconds)
  */
-export const lowExposureChallenges = (challenges, now) =>
+export const lowExposureChallenges = (
+    challenges: Challenge[] | null | undefined,
+    now: number,
+): Array<{ id: Challenge['id']; title: string; exposure: number }> =>
     (challenges || [])
-        .filter(/** @returns {c is RankedChallenge} */ (c) => isLowExposure(c, now))
+        .filter((c): c is RankedChallenge => isLowExposure(c, now))
         .map((c) => ({ id: c.id, title: c.title, exposure: c.member.ranking.exposure.exposure_factor }))
         .sort((a, b) => a.exposure - b.exposure);

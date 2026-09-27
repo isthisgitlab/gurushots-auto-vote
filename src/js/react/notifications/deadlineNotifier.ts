@@ -25,7 +25,7 @@
  * ever added, keep that gate so the two paths never both fire.
  */
 
-/** @import { Challenge } from '../../types/gurushots' */
+import type { Challenge } from '../../types/gurushots';
 
 import {
     NOTIFY_CONFIG_KEYS,
@@ -37,15 +37,15 @@ import {
 
 /**
  * One challenge's previewed deadline actions, as get-deadline-actions sends them.
- *
- * @typedef {{ action: string, thresholdSec: number, dueAt: number | null }} DeadlineActionPreview
  */
+type DeadlineActionPreview = { action: string; thresholdSec: number; dueAt: number | null };
 
 /**
  * The get-deadline-actions IPC: the `{success, actions}` wrapper, never throws.
- *
- * @typedef {(challenge: Challenge) => Promise<{success: boolean, actions?: DeadlineActionPreview[]} | null | undefined>} GetDeadlineActions
  */
+export type GetDeadlineActions = (
+    challenge: Challenge,
+) => Promise<{ success: boolean; actions?: DeadlineActionPreview[] } | null | undefined>;
 
 /**
  * Fetch each challenge's deadline actions, one IPC round trip at a time.
@@ -53,14 +53,12 @@ import {
  * throws; anything that didn't resolve cleanly is skipped. Only id/title are
  * read — the challenge objects belong to the voting pass, so they are treated
  * as read-only.
- *
- * @param {readonly Challenge[]} challenges
- * @param {GetDeadlineActions} getDeadlineActions
- * @returns {Promise<Array<{id: Challenge['id'], title: string, actions: DeadlineActionPreview[]}>>}
  */
-async function collectDeadlineActions(challenges, getDeadlineActions) {
-    /** @type {Array<{id: Challenge['id'], title: string, actions: DeadlineActionPreview[]}>} */
-    const perChallengeActions = [];
+async function collectDeadlineActions(
+    challenges: readonly Challenge[],
+    getDeadlineActions: GetDeadlineActions,
+): Promise<Array<{ id: Challenge['id']; title: string; actions: DeadlineActionPreview[] }>> {
+    const perChallengeActions: Array<{ id: Challenge['id']; title: string; actions: DeadlineActionPreview[] }> = [];
     for (const challenge of challenges) {
         const res = await getDeadlineActions(challenge);
         if (!res || res.success !== true || !Array.isArray(res.actions)) continue;
@@ -72,14 +70,11 @@ async function collectDeadlineActions(challenges, getDeadlineActions) {
 /**
  * Report a failed notifier cycle to the optional diagnostic sink, which is
  * itself best-effort: a throwing sink is swallowed too.
- *
- * @param {((message:string)=>void)|undefined} log
- * @param {unknown} error
  */
-function logCycleFailure(log, error) {
+function logCycleFailure(log: ((message: string) => void) | undefined, error: unknown) {
     try {
         log?.(
-            `deadline notification cycle failed: ${/** @type {{ message?: unknown } | null | undefined} */ (error)?.message ?? error}`,
+            `deadline notification cycle failed: ${(error as { message?: unknown } | null | undefined)?.message ?? error}`,
         );
     } catch {
         /* the diagnostic sink itself is best-effort */
@@ -91,17 +86,27 @@ function logCycleFailure(log, error) {
  * create ONE instance and reuse it across cycles (a fresh instance every cycle
  * would never dedupe).
  *
- * @param {Object} deps
- * @param {(key:string)=>Promise<unknown>} deps.getSetting - the getGlobalDefault IPC
- * @param {GetDeadlineActions} deps.getDeadlineActions -
+ * @param deps.getSetting - the getGlobalDefault IPC
+ * @param deps.getDeadlineActions -
  *   the getDeadlineActions IPC (returns the {success, actions} wrapper — never throws)
- * @param {(key:string)=>string} deps.translate - returns a raw i18n template
- * @param {(n:{title:string, body:string})=>void} deps.deliver - platform delivery
- * @param {(message:string)=>void} [deps.log] - optional best-effort diagnostic sink
+ * @param deps.translate - returns a raw i18n template
+ * @param deps.deliver - platform delivery
+ * @param deps.log - optional best-effort diagnostic sink
  *   (e.g. ipc.logRendererDebug); a failure is logged here rather than vanishing.
- * @returns {(challenges: readonly Challenge[], now: number) => Promise<void>}
  */
-export function createDeadlineNotifier({ getSetting, getDeadlineActions, translate, deliver, log }) {
+export function createDeadlineNotifier({
+    getSetting,
+    getDeadlineActions,
+    translate,
+    deliver,
+    log,
+}: {
+    getSetting: (key: string) => Promise<unknown>;
+    getDeadlineActions: GetDeadlineActions;
+    translate: (key: string) => string;
+    deliver: (n: { title: string; body: string }) => void;
+    log?: (message: string) => void;
+}): (challenges: readonly Challenge[], now: number) => Promise<void> {
     const dedupe = createDedupe();
     // Re-entrancy guard: per-challenge IPC round trips make a cycle's run
     // outlast a fast (last-minute) cadence tick; without this, two overlapping
@@ -143,10 +148,8 @@ export function createDeadlineNotifier({ getSetting, getDeadlineActions, transla
  * silent no-op, so skip and (on the first undecided state) request it, letting
  * later cycles deliver once granted. Best-effort throughout — any throw
  * (notifications unavailable) is swallowed so it can never reach the scheduler.
- *
- * @param {{title:string, body:string}} notification
  */
-export function deliverElectronNotification({ title, body }) {
+export function deliverElectronNotification({ title, body }: { title: string; body: string }) {
     try {
         if (typeof Notification === 'undefined') return;
         if (Notification.permission === 'denied') return;
@@ -179,10 +182,9 @@ export function deliverElectronNotification({ title, body }) {
  * signal NOT to wire the notifier at all (the native service is authoritative
  * there — see the file header). Exported so the platform decision
  * is unit-testable rather than an inline ternary a future edit could invert.
- *
- * @param {boolean} isNativePlatform
- * @returns {((n:{title:string, body:string})=>void) | null}
  */
-export function resolveRendererDelivery(isNativePlatform) {
+export function resolveRendererDelivery(
+    isNativePlatform: boolean,
+): ((n: { title: string; body: string }) => void) | null {
     return isNativePlatform ? null : deliverElectronNotification;
 }
