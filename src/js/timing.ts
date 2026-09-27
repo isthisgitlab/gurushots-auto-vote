@@ -10,10 +10,10 @@
 /**
  * Creates a promise that resolves after the specified time
  *
- * @param {number} ms - Milliseconds to sleep
- * @returns {Promise<void>} - Promise that resolves after the specified time
+ * @param ms - Milliseconds to sleep
+ * @returns Promise that resolves after the specified time
  */
-const sleep = (ms) =>
+const sleep = (ms: number): Promise<void> =>
     new Promise((resolve) => {
         setTimeout(resolve, ms);
     });
@@ -23,10 +23,10 @@ const sleep = (ms) =>
  *
  * Used to add variability to request timing to appear more human-like
  *
- * @param {number} min - Minimum delay in milliseconds
- * @param {number} max - Maximum delay in milliseconds
- * @returns {number} - Random delay value
+ * @param min - Minimum delay in milliseconds
+ * @param max - Maximum delay in milliseconds
+ * @returns Random delay value
  */
-const getRandomDelay = (min, max) => Math.floor(Math.random() * (max - min + 1) + min);
+const getRandomDelay = (min: number, max: number): number => Math.floor(Math.random() * (max - min + 1) + min);
 
 export { sleep, getRandomDelay };

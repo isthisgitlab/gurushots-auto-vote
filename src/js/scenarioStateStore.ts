@@ -32,7 +32,7 @@
  * (refreshScenarioStateAsync) before it reads or resets scenario state.
  */
 
-/** @import { RawJsonStore, ScenarioState } from './types/stores' */
+import type { RawJsonStore, ScenarioState } from './types/stores';
 import * as logger from './logger';
 import { createJsonStore } from './settings/storage';
 import { isPlainObject } from './plainObject';
@@ -42,17 +42,13 @@ const scenarioStateStore = createJsonStore({ fileName: 'scenarioState.json', pre
 // Challenges run for days, not months; anything older is a finished challenge.
 const MAX_AGE_MS = 30 * 24 * 60 * 60 * 1000;
 
-/**
- * @param {unknown} value
- * @returns {boolean}
- */
-const isStringMap = (value) => isPlainObject(value) && Object.values(value).every((v) => typeof v === 'string');
+const isStringMap = (value: unknown): boolean =>
+    isPlainObject(value) && Object.values(value).every((v) => typeof v === 'string');
 
 /**
- * @param {unknown} r - an untrusted parsed-JSON value
- * @returns {r is ScenarioState}
+ * @param r - an untrusted parsed-JSON value
  */
-const isRecord = (r) =>
+const isRecord = (r: unknown): r is ScenarioState =>
     isPlainObject(r) &&
     typeof r.scenario === 'string' &&
     typeof r.phase === 'string' &&
@@ -69,12 +65,8 @@ const isRecord = (r) =>
 
 /**
  * A fresh record for a challenge entering `scenario` at its start phase.
- * @param {string} scenario
- * @param {string} phase
- * @param {number} nowSec
- * @returns {ScenarioState}
  */
-const initialState = (scenario, phase, nowSec) => ({
+const initialState = (scenario: string, phase: string, nowSec: number): ScenarioState => ({
     scenario,
     phase,
     phaseEnteredAt: nowSec,
@@ -88,27 +80,26 @@ const initialState = (scenario, phase, nowSec) => ({
     lastError: null,
 });
 
-/** @typedef {{ ok: boolean, map: Record<string, unknown> }} ParsedStateFile */
+type ParsedStateFile = { ok: boolean; map: Record<string, unknown> };
 
 /**
  * Ledger over a raw-JSON store ({readRaw, writeRaw}).
- * @param {RawJsonStore} store
  */
-const createStateLedger = (store) => {
+const createStateLedger = (store: RawJsonStore) => {
     // The engine and the settings overlay read state many times per pass;
     // re-parse only when the stored text changed.
-    /** @type {string | null | undefined} */
-    let lastRaw;
-    /** @type {ParsedStateFile | undefined} */
-    let lastParsed;
+    /** @type */
+    let lastRaw: string | null | undefined;
+    /** @type */
+    let lastParsed: ParsedStateFile | undefined;
 
-    /** @returns {ParsedStateFile} */
-    const read = () => {
+    /** @returns */
+    const read = (): ParsedStateFile => {
         const raw = store.readRaw();
         // lastParsed is set together with lastRaw, and readRaw never returns undefined.
-        if (raw === lastRaw) return /** @type {ParsedStateFile} */ (lastParsed);
-        /** @type {ParsedStateFile} */
-        let parsed;
+        if (raw === lastRaw) return lastParsed as ParsedStateFile;
+        /** @type */
+        let parsed: ParsedStateFile;
         try {
             const value = JSON.parse(raw || '{}');
             parsed = isPlainObject(value) ? { ok: true, map: value } : { ok: false, map: {} };
@@ -121,14 +112,13 @@ const createStateLedger = (store) => {
         return parsed;
     };
 
-    /** @param {Record<string, unknown>} map */
-    const write = (map) => {
+    /** @param map */
+    const write = (map: Record<string, unknown>) => {
         const cutoff = Date.now() - MAX_AGE_MS;
-        /** @type {Record<string, Record<string, unknown>>} */
-        const pruned = {};
+        /** @type */
+        const pruned: Record<string, Record<string, unknown>> = {};
         for (const [challengeId, record] of Object.entries(map)) {
-            if (isPlainObject(record) && /** @type {number} */ (record.updatedAt) > cutoff)
-                pruned[challengeId] = record;
+            if (isPlainObject(record) && (record.updatedAt as number) > cutoff) pruned[challengeId] = record;
         }
         store.writeRaw(JSON.stringify(pruned));
     };
@@ -138,10 +128,8 @@ const createStateLedger = (store) => {
          * The state for one challenge: `{state: null}` when it has none yet,
          * `{state}` when readable, `{corrupt: true}` when the file or this
          * record cannot be trusted.
-         * @param {string|number} challengeId
-         * @returns {{ corrupt: boolean, state: ScenarioState | null }}
          */
-        get: (challengeId) => {
+        get: (challengeId: string | number): { corrupt: boolean; state: ScenarioState | null } => {
             const { ok, map } = read();
             if (!ok) return { corrupt: true, state: null };
             const record = map[String(challengeId)];
@@ -152,19 +140,16 @@ const createStateLedger = (store) => {
 
         /**
          * Store the state for one challenge. An unreadable file is replaced.
-         * @param {string|number} challengeId
-         * @param {ScenarioState} state
          */
-        set: (challengeId, state) => {
+        set: (challengeId: string | number, state: ScenarioState) => {
             const { map } = read();
             write({ ...map, [String(challengeId)]: { ...state, updatedAt: Date.now() } });
         },
 
         /**
          * Forget one challenge's state (a reset). An unreadable file is replaced.
-         * @param {string|number} challengeId
          */
-        remove: (challengeId) => {
+        remove: (challengeId: string | number) => {
             const { map } = read();
             const next = { ...map };
             delete next[String(challengeId)];
@@ -175,8 +160,8 @@ const createStateLedger = (store) => {
 
 /** Ledger over an in-memory store — mock mode, tests. */
 const createMemoryStateLedger = () => {
-    /** @type {string | null} */
-    let raw = null;
+    /** @type */
+    let raw: string | null = null;
     return createStateLedger({
         readRaw: () => raw,
         writeRaw: (data) => {

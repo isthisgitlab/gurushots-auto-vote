@@ -107,14 +107,14 @@
     "overrides": [
         // logger.js owns the console, and build/dev scripts print to it.
         {
-            "files": ["src/js/logger.js", "scripts/**"],
+            "files": ["src/js/logger.js", "src/js/logger.ts", "scripts/**"],
             "rules": {
                 "no-console": "off"
             }
         },
         // src/js/ui (the application menu) is linted with browser and Node globals.
         {
-            "files": ["src/js/ui/**/*.js"],
+            "files": ["src/js/ui/**/*.js", "src/js/ui/**/*.ts"],
             "env": {
                 "browser": true,
                 "node": true
@@ -128,8 +128,8 @@
         // active-challenge caches) that a direct import would bypass. settings/schema,
         // storage, limits, uiDefaults and challengeRules stay importable.
         {
-            "files": ["src/js/**/*.js", "src/js/**/*.jsx", "scripts/**/*.js"],
-            "excludeFiles": ["src/js/settings.js", "src/js/settings/**"],
+            "files": ["src/js/**/*.js", "src/js/**/*.jsx", "src/js/**/*.ts", "src/js/**/*.tsx", "scripts/**/*.js"],
+            "excludeFiles": ["src/js/settings.js", "src/js/settings.ts", "src/js/settings/**"],
             "rules": {
                 "no-restricted-imports": [
                     "error",
@@ -137,7 +137,8 @@
                         "patterns": [
                             {
                                 "regex": "settings/(challengeFacts|challengeOverrides|defaults|migrations|persistence|profileStore|profiles|reset|ruleResolution|scenarioOverlay|scenarioSchema|scenarios|titlePins|titleRuleSanitize|titleRules)(\\.js)?$",
-                                "message": "Settings internals are private to the facade — import settings.js instead."
+                                "message": "Settings internals are private to the facade — import settings.js instead.",
+                                "allowTypeImports": true
                             }
                         ]
                     }
@@ -147,7 +148,7 @@
         // The type-aware promise rules (via oxlint-tsgolint, over the tsconfig
         // program) and the core rules that went with them.
         {
-            "files": ["src/js/**/*.js", "src/js/**/*.jsx"],
+            "files": ["src/js/**/*.js", "src/js/**/*.jsx", "src/js/**/*.ts", "src/js/**/*.tsx"],
             "rules": {
                 "no-var": "error",
                 "prefer-const": "error",
@@ -172,7 +173,7 @@
         //   whose text is {t('…')} — every label in this translated UI — so an orphan
         //   <label> would otherwise pass.
         {
-            "files": ["src/js/react/**/*.js", "src/js/react/**/*.jsx"],
+            "files": ["src/js/react/**/*.js", "src/js/react/**/*.jsx", "src/js/react/**/*.ts", "src/js/react/**/*.tsx"],
             "env": {
                 "browser": true
             },
@@ -198,7 +199,8 @@
                             },
                             {
                                 "regex": "settings/(challengeFacts|challengeOverrides|defaults|migrations|persistence|profileStore|profiles|reset|ruleResolution|scenarioOverlay|scenarioSchema|scenarios|titlePins|titleRuleSanitize|titleRules)(\\.js)?$",
-                                "message": "Settings internals are private to the facade — import settings.js instead."
+                                "message": "Settings internals are private to the facade — import settings.js instead.",
+                                "allowTypeImports": true
                             }
                         ]
                     }
@@ -314,7 +316,7 @@
         // bridge only through src/js/react/api/, so the bridge surface stays in one
         // place and no component grows per-platform branching.
         {
-            "files": ["src/js/react/**/*.js", "src/js/react/**/*.jsx"],
+            "files": ["src/js/react/**/*.js", "src/js/react/**/*.jsx", "src/js/react/**/*.ts", "src/js/react/**/*.tsx"],
             "excludeFiles": ["src/js/react/api/**"],
             "rules": {
                 "no-restricted-properties": [

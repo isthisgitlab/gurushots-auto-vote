@@ -18,8 +18,8 @@
  * Mock mode uses createMemoryEntryAgeLedger() and never touches the file.
  */
 
-/** @import { EntryAgeRecord, RawJsonStore } from './types/stores' */
-/** @import { Challenge } from './types/gurushots' */
+import type { EntryAgeRecord, RawJsonStore } from './types/stores';
+import type { Challenge } from './types/gurushots';
 import * as logger from './logger';
 import { createJsonStore } from './settings/storage';
 import { isPlainObject } from './plainObject';
@@ -33,13 +33,13 @@ const entryAgeStore = createJsonStore({ fileName: 'entryAges.json', prefKey: 'gs
 const PENDING_GRACE_SEC = 600;
 
 /**
- * @param {unknown} r - an untrusted parsed-JSON value
- * @returns {r is EntryAgeRecord}
+ * @param r - an untrusted parsed-JSON value
  */
-const isRecord = (r) => isPlainObject(r) && Number.isFinite(r.closeTime) && isPlainObject(r.entered);
+const isRecord = (r: unknown): r is EntryAgeRecord =>
+    isPlainObject(r) && Number.isFinite(r.closeTime) && isPlainObject(r.entered);
 
-/** @param {Challenge} challenge @returns {string[]} */
-const entryIdsOf = (challenge) =>
+/** @param challenge @returns */
+const entryIdsOf = (challenge: Challenge): string[] =>
     (Array.isArray(challenge?.member?.ranking?.entries) ? challenge.member.ranking.entries : [])
         .map((entry) => entry?.id)
         .filter((id) => id !== undefined && id !== null && id !== '')
@@ -49,16 +49,15 @@ const entryIdsOf = (challenge) =>
  * Ledger over a raw-JSON store ({readRaw, writeRaw}). An unreadable or corrupt
  * file reads as empty — every entry's age is then unknown, which only means a
  * boost is not held; it never blocks one.
- * @param {RawJsonStore} store
  */
-const createEntryAgeLedger = (store) => {
-    /** @returns {Record<string, EntryAgeRecord>} */
-    const read = () => {
+const createEntryAgeLedger = (store: RawJsonStore) => {
+    /** @returns */
+    const read = (): Record<string, EntryAgeRecord> => {
         try {
             const parsed = JSON.parse(store.readRaw() || '{}');
             if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) return {};
-            /** @type {Record<string, EntryAgeRecord>} */
-            const state = {};
+            /** @type */
+            const state: Record<string, EntryAgeRecord> = {};
             for (const [id, record] of Object.entries(parsed)) {
                 if (isRecord(record)) state[id] = record;
             }
@@ -66,24 +65,18 @@ const createEntryAgeLedger = (store) => {
         } catch (error) {
             logger
                 .withCategory('boost')
-                .warning(
-                    `entry-age ledger unreadable: ${/** @type {Error | undefined} */ (error)?.message || error}`,
-                    null,
-                );
+                .warning(`entry-age ledger unreadable: ${(error as Error | undefined)?.message || error}`, null);
             return {};
         }
     };
 
     /**
      * Write `record` for `challengeId`, dropping every challenge that has closed.
-     * @param {Record<string, EntryAgeRecord>} state
-     * @param {string} challengeId
-     * @param {EntryAgeRecord} record
-     * @param {number} now - Unix seconds
+     * @param now - Unix seconds
      */
-    const write = (state, challengeId, record, now) => {
-        /** @type {Record<string, EntryAgeRecord>} */
-        const next = {};
+    const write = (state: Record<string, EntryAgeRecord>, challengeId: string, record: EntryAgeRecord, now: number) => {
+        /** @type */
+        const next: Record<string, EntryAgeRecord> = {};
         for (const [id, existing] of Object.entries(state)) {
             if (existing.closeTime > now) next[id] = existing;
         }
@@ -96,17 +89,16 @@ const createEntryAgeLedger = (store) => {
          * Record the current entries of `challenge`: an id seen for the first time
          * is stamped `now` (or 0 on the challenge's first sighting), an id no longer
          * entered is forgotten. Writes only when something changed.
-         * @param {Challenge} challenge
-         * @param {number} now - Unix seconds
+         * @param now - Unix seconds
          */
-        observe: (challenge, now) => {
+        observe: (challenge: Challenge, now: number) => {
             const challengeId = String(challenge?.id ?? '');
             if (!challengeId) return;
             const state = read();
             const existing = state[challengeId];
             const ids = entryIdsOf(challenge);
-            /** @type {Record<string, number>} */
-            const entered = {};
+            /** @type */
+            const entered: Record<string, number> = {};
             for (const id of ids) {
                 const known = existing?.entered[id];
                 entered[id] = Number.isFinite(known) ? known : existing ? now : 0;
@@ -119,7 +111,7 @@ const createEntryAgeLedger = (store) => {
                 existing?.pending != null &&
                 (ids.includes(existing.pending) ||
                     (Number.isFinite(pendingAt) && now - Number(pendingAt) <= PENDING_GRACE_SEC));
-            const pending = keepPending ? /** @type {string} */ (existing?.pending) : null;
+            const pending = keepPending ? (existing?.pending as string) : null;
             if (pending && !(pending in entered)) entered[pending] = Number(pendingAt);
             const unchanged =
                 existing &&
@@ -133,30 +125,23 @@ const createEntryAgeLedger = (store) => {
         /**
          * When the entry entered the challenge (Unix seconds), 0 when that is
          * unknown, null when the entry isn't recorded.
-         * @param {string|number} challengeId
-         * @param {string|number} imageId
-         * @returns {number|null}
          */
-        enteredAt: (challengeId, imageId) => {
+        enteredAt: (challengeId: string | number, imageId: string | number): number | null => {
             const at = read()[String(challengeId)]?.entered[String(imageId)];
             return finiteOr(at, null);
         },
 
         /**
          * The photo a boost fill-new submitted and is waiting to boost, if any.
-         * @param {string|number} challengeId
-         * @returns {string|null}
          */
-        pending: (challengeId) => read()[String(challengeId)]?.pending ?? null,
+        pending: (challengeId: string | number): string | null => read()[String(challengeId)]?.pending ?? null,
 
         /**
          * Record a photo a boost fill-new just submitted: entered `now`, and the
          * one the boost is waiting on.
-         * @param {Challenge} challenge
-         * @param {string|number} imageId
-         * @param {number} now - Unix seconds
+         * @param now - Unix seconds
          */
-        markPending: (challenge, imageId, now) => {
+        markPending: (challenge: Challenge, imageId: string | number, now: number) => {
             const challengeId = String(challenge.id);
             const state = read();
             const entered = { ...(state[challengeId]?.entered ?? {}), [String(imageId)]: now };
@@ -170,10 +155,9 @@ const createEntryAgeLedger = (store) => {
 
         /**
          * The boost landed (or gave up): stop waiting on a pending photo.
-         * @param {string|number} challengeId
-         * @param {number} now - Unix seconds
+         * @param now - Unix seconds
          */
-        clearPending: (challengeId, now) => {
+        clearPending: (challengeId: string | number, now: number) => {
             const state = read();
             const record = state[String(challengeId)];
             if (!record?.pending) return;
@@ -184,8 +168,8 @@ const createEntryAgeLedger = (store) => {
 
 /** Ledger over an in-memory store — mock mode, tests. */
 const createMemoryEntryAgeLedger = () => {
-    /** @type {string | null} */
-    let raw = null;
+    /** @type */
+    let raw: string | null = null;
     return createEntryAgeLedger({
         readRaw: () => raw,
         writeRaw: (data) => {

@@ -4,28 +4,28 @@ import * as runtime from './runtime';
 import { formatTimeHMS } from './dateFormat';
 import { oneLine } from './format/logSafe';
 
-/** @typedef {'DEBUG' | 'INFO' | 'WARN' | 'ERROR'} LogLevel */
-/** @typedef {keyof typeof colors} ColorName */
+export type LogLevel = 'DEBUG' | 'INFO' | 'WARN' | 'ERROR';
+export type ColorName = keyof typeof colors;
 
 /**
  * One ring-buffer entry (getRecentLogs). `data` is the sanitized copy.
- * @typedef {{
- *   seq: number,
- *   level: LogLevel,
- *   context: string,
- *   category: string,
- *   timestamp: string,
- *   message: string,
- *   data: unknown,
- * }} LogEntry
  */
+export type LogEntry = {
+    seq: number;
+    level: LogLevel;
+    context: string;
+    category: string;
+    timestamp: string;
+    message: string;
+    data: unknown;
+};
 
 /**
  * The GUI fan-out payload; `timestamp` is the HH:MM:SS display time.
- * @typedef {Omit<LogEntry, 'data'>} GuiLogEntry
  */
+export type GuiLogEntry = Omit<LogEntry, 'data'>;
 
-/** @typedef {(entry: GuiLogEntry) => void} GuiLogSink */
+export type GuiLogSink = (entry: GuiLogEntry) => void;
 
 // ANSI color codes for CLI output (referenced via bracket notation in formatConsoleMessage)
 const colors = {
@@ -66,7 +66,7 @@ try {
 } catch (err) {
     // Browser / Capacitor context — fs is a require shim. Logger falls
     // back to console output only; in-app log streaming uses sendLogToGUI.
-    console.debug('[logger] fs not available; skipping file-based logging:', /** @type {Error} */ (err).message);
+    console.debug('[logger] fs not available; skipping file-based logging:', (err as Error).message);
     logsDir = '';
 }
 
@@ -86,10 +86,11 @@ const getCurrentDate = () => {
 
 // Get log file paths for current date
 /**
- * @param {string} [date] - YYYY-MM-DD
- * @returns {{ error: string, app: string, api: string, settings: string }}
+ * @param date - YYYY-MM-DD
  */
-const getLogFilePaths = (date = getCurrentDate()) => {
+const getLogFilePaths = (
+    date: string = getCurrentDate(),
+): { error: string; app: string; api: string; settings: string } => {
     return {
         error: path.join(logsDir, `errors-${date}.log`),
         app: path.join(logsDir, `app-${date}.log`),
@@ -99,8 +100,8 @@ const getLogFilePaths = (date = getCurrentDate()) => {
 };
 
 // Per-log-prefix retention rules: { days, maxMB }.
-/** @type {Record<string, { days: number, maxMB: number }>} */
-const LOG_RETENTION = {
+/** @type */
+const LOG_RETENTION: Record<string, { days: number; maxMB: number }> = {
     errors: { days: 30, maxMB: 10 },
     app: { days: 7, maxMB: 50 },
     api: { days: 1, maxMB: 20 },
@@ -108,22 +109,15 @@ const LOG_RETENTION = {
 };
 
 // Parse date from filename (e.g., "errors-2025-07-28.log" -> "2025-07-28")
-/**
- * @param {string} filename
- * @returns {string | null}
- */
-const parseDateFromFilename = (filename) => {
+
+const parseDateFromFilename = (filename: string): string | null => {
     const match = filename.match(/(errors|app|api|settings)-(\d{4}-\d{2}-\d{2})\.log$/);
     return match ? match[2] : null;
 };
 
 // Check if a date is older than specified days
-/**
- * @param {string} dateString
- * @param {number} days
- * @returns {boolean}
- */
-const isDateOlderThan = (dateString, days) => {
+
+const isDateOlderThan = (dateString: string, days: number): boolean => {
     const fileDate = new Date(dateString);
     const cutoffDate = new Date();
     cutoffDate.setDate(cutoffDate.getDate() - days);
@@ -184,14 +178,13 @@ const cleanupOldLogs = () => {
 };
 
 // Context override for explicit context setting
-/** @type {string | null} */
-let contextOverride = null;
+/** @type */
+let contextOverride: string | null = null;
 
 /**
  * Set explicit context override (for IPC calls from GUI)
- * @param {string} context
  */
-const setContext = (context) => {
+const setContext = (context: string) => {
     contextOverride = context;
 };
 
@@ -204,9 +197,8 @@ const clearContext = () => {
 
 /**
  * Get context identifier (CLI/GUI)
- * @returns {string}
  */
-const getContext = () => {
+const getContext = (): string => {
     // Use explicit override if set
     if (contextOverride) {
         return contextOverride;
@@ -229,8 +221,8 @@ const getContext = () => {
 const getTimeString = () => formatTimeHMS();
 
 // Severity colors — strict 4-level set.
-/** @type {Record<LogLevel, ColorName>} */
-const LEVEL_COLORS = {
+/** @type */
+const LEVEL_COLORS: Record<LogLevel, ColorName> = {
     DEBUG: 'gray',
     INFO: 'blue',
     WARN: 'yellow',
@@ -239,8 +231,8 @@ const LEVEL_COLORS = {
 
 // Leading icon for a message that doesn't bring its own, so every log line
 // starts with one. `success` overrides INFO's with ✅.
-/** @type {Record<LogLevel, string>} */
-const LEVEL_ICONS = {
+/** @type */
+const LEVEL_ICONS: Record<LogLevel, string> = {
     DEBUG: '🔍',
     INFO: 'ℹ️',
     WARN: '⚠️',
@@ -251,40 +243,32 @@ const LEVEL_ICONS = {
 // detail rows and `===` / `---` banners, where an icon would break alignment.
 const NO_ICON_RE = /^(?:$|\s|[=-]|\p{Extended_Pictographic})/u;
 
-/**
- * @param {string} message
- * @param {string} icon
- * @returns {string}
- */
-const withIcon = (message, icon) => (NO_ICON_RE.test(message) ? message : `${icon} ${message}`);
+const withIcon = (message: string, icon: string): string => (NO_ICON_RE.test(message) ? message : `${icon} ${message}`);
 
 // Resolve the GUI fan-out sink. Electron main sets global.sendLogToGUI and
 // the Capacitor bridge sets globalThis.sendLogToGUI; in Node `global` IS
 // `globalThis`, so one lookup covers both surfaces.
-/** @returns {GuiLogSink | null} */
-const resolveGuiSink = () =>
-    /** @type {typeof globalThis & { sendLogToGUI?: GuiLogSink }} */ (globalThis).sendLogToGUI || null;
+/** @returns */
+const resolveGuiSink = (): GuiLogSink | null =>
+    (globalThis as typeof globalThis & { sendLogToGUI?: GuiLogSink }).sendLogToGUI || null;
 
 /**
  * Wrap text in an ANSI color. Only the console line is colored — the GUI
  * sink and the log files receive the plain message.
- * @param {string} text
- * @param {ColorName} color
- * @returns {string}
  */
-const colorize = (text, color) => `${colors[color]}${text}${colors.reset}`;
+const colorize = (text: string, color: ColorName): string => `${colors[color]}${text}${colors.reset}`;
 
 /**
  * Format console output. Fixed-column order:
  *   [timestamp] [LEVEL] [CONTEXT] [category] message
- * @param {LogLevel} level
- * @param {string} message
- * @param {string} context
- * @param {string} timestamp
- * @param {string} category
- * @returns {string}
  */
-const formatConsoleMessage = (level, message, context, timestamp, category) => {
+const formatConsoleMessage = (
+    level: LogLevel,
+    message: string,
+    context: string,
+    timestamp: string,
+    category: string,
+): string => {
     const color = LEVEL_COLORS[level] || 'white';
     const coloredTime = colorize(`[${timestamp}]`, 'gray');
     const coloredLevel = colorize(`[${level}]`, color);
@@ -307,24 +291,10 @@ const MAX_SANITIZE_DEPTH = 6;
 /**
  * Copy of `value` with sensitive keys redacted, depth-bounded and cycle-safe.
  * A top-level plain object comes back as a plain object.
- * @overload
- * @param {Record<string, unknown>} value
- * @returns {Record<string, unknown>}
  */
-/**
- * @overload
- * @param {unknown} value
- * @param {number} [depth]
- * @param {WeakSet<object>} [seen]
- * @returns {unknown}
- */
-/**
- * @param {unknown} value
- * @param {number} [depth]
- * @param {WeakSet<object>} [seen]
- * @returns {unknown}
- */
-function sanitizeForLog(value, depth = 0, seen = new WeakSet()) {
+function sanitizeForLog(value: Record<string, unknown>): Record<string, unknown>;
+function sanitizeForLog(value: unknown, depth?: number, seen?: WeakSet<object>): unknown;
+function sanitizeForLog(value: unknown, depth = 0, seen: WeakSet<object> = new WeakSet()): unknown {
     if (value === null || typeof value !== 'object') return value;
     if (depth >= MAX_SANITIZE_DEPTH) return '[Object]';
     if (seen.has(value)) return '[Circular]';
@@ -334,9 +304,9 @@ function sanitizeForLog(value, depth = 0, seen = new WeakSet()) {
         return value.map((item) => sanitizeForLog(item, depth + 1, seen));
     }
 
-    /** @type {Record<string, unknown>} */
-    const out = {};
-    const record = /** @type {Record<string, unknown>} */ (value);
+    /** @type */
+    const out: Record<string, unknown> = {};
+    const record = value as Record<string, unknown>;
     for (const key of Object.keys(record)) {
         if (SENSITIVE_KEY_RE.test(key)) {
             out[key] = REDACTED;
@@ -352,12 +322,8 @@ function sanitizeForLog(value, depth = 0, seen = new WeakSet()) {
 // log line in the plain-text file) and the result is truncated. Shared by the
 // IPC shell (actions.handlers) and the core services (challengeTitlePin) so
 // both sides sanitize identically.
-/**
- * @param {unknown} value
- * @param {number} [maxLength]
- * @returns {string}
- */
-const sanitizeLogString = (value, maxLength = 200) =>
+
+const sanitizeLogString = (value: unknown, maxLength: number = 200): string =>
     String(value ?? '')
         .replace(/[\r\n\t]/g, ' ')
         .slice(0, maxLength);
@@ -373,21 +339,9 @@ const sanitizeLogString = (value, maxLength = 200) =>
 const SENSITIVE_MSG_RE =
     /\b(token|auth[_-]?token|access[_-]?token|refresh[_-]?token|bearer|password|api[_-]?key|secret|cookie|authorization|x[_-]?auth[_-]?token|x[_-]?token)\b(\s*[:=]\s*)("[^"]*"|'[^']*'|\S+)/gi;
 
-/**
- * @overload
- * @param {string} message
- * @returns {string}
- */
-/**
- * @overload
- * @param {unknown} message
- * @returns {unknown}
- */
-/**
- * @param {unknown} message
- * @returns {unknown}
- */
-function redactMessage(message) {
+function redactMessage(message: string): string;
+function redactMessage(message: unknown): unknown;
+function redactMessage(message: unknown): unknown {
     if (typeof message !== 'string') return message;
     return message.replace(SENSITIVE_MSG_RE, (_match, key, sep) => `${key}${sep}${REDACTED}`);
 }
@@ -397,18 +351,14 @@ function redactMessage(message) {
 // monotonic seq lets the renderer de-dupe live messages that race the
 // backlog fetch.
 const MAX_RECENT = 1000;
-/** @type {LogEntry[]} */
-const recentLogs = [];
+/** @type */
+const recentLogs: LogEntry[] = [];
 let nextSeq = 1;
 
 // Routes a log entry to the appropriate disk file. ERROR always wins
 // over category-based routing so errors stay co-located across domains.
-/**
- * @param {LogLevel} level
- * @param {string} category
- * @returns {string}
- */
-const routeLogFile = (level, category) => {
+
+const routeLogFile = (level: LogLevel, category: string): string => {
     if (level === 'ERROR') return currentLogFiles.error;
     if (category === 'api') return currentLogFiles.api;
     if (category === 'settings') return currentLogFiles.settings;
@@ -421,13 +371,15 @@ const routeLogFile = (level, category) => {
  * Emits to ring buffer, disk (when fs is available), console, and the
  * GUI IPC fan-out (when wired). Sanitizes data for disk; sends raw to
  * the GUI which renders it.
- * @param {LogLevel} level
- * @param {string} message
- * @param {unknown} [data]
- * @param {string | null} [category]
- * @param {string} [icon] - prefixed unless the message already leads with one
+ * @param icon - prefixed unless the message already leads with one
  */
-const writeLog = (level, message, data = null, category = null, icon = LEVEL_ICONS[level]) => {
+const writeLog = (
+    level: LogLevel,
+    message: string,
+    data: unknown = null,
+    category: string | null = null,
+    icon: string = LEVEL_ICONS[level],
+) => {
     try {
         const context = getContext();
         const timestamp = new Date().toISOString();
@@ -496,17 +448,19 @@ const writeLog = (level, message, data = null, category = null, icon = LEVEL_ICO
  * the default log). Failures always emit at ERROR regardless of start
  * level — a real bug should never be silently swallowed.
  */
-/** @type {Map<string, { startTime: number, message: string, level: LogLevel, category: string | null }>} */
-const operations = new Map();
+/** @type */
+const operations: Map<string, { startTime: number; message: string; level: LogLevel; category: string | null }> =
+    new Map();
 
 /**
- * @param {string} operationId
- * @param {string} message
- * @param {LogLevel} [level]
- * @param {string | null} [category]
- * @returns {number} the start time (ms)
+ * @returns the start time (ms)
  */
-const startOperation = (operationId, message, level = 'INFO', category = null) => {
+const startOperation = (
+    operationId: string,
+    message: string,
+    level: LogLevel = 'INFO',
+    category: string | null = null,
+): number => {
     const startTime = Date.now();
     operations.set(operationId, { startTime, message, level, category });
     writeLog(level, `🔄 ${message}...`, null, category);
@@ -514,12 +468,14 @@ const startOperation = (operationId, message, level = 'INFO', category = null) =
 };
 
 /**
- * @param {string} operationId
- * @param {string | null} [successMessage]
- * @param {string | null} [errorMessage] - non-empty marks the operation failed
- * @returns {number | undefined} the duration (ms), or undefined for an unknown id
+ * @param errorMessage - non-empty marks the operation failed
+ * @returns the duration (ms), or undefined for an unknown id
  */
-const endOperation = (operationId, successMessage = null, errorMessage = null) => {
+const endOperation = (
+    operationId: string,
+    successMessage: string | null = null,
+    errorMessage: string | null = null,
+): number | undefined => {
     const operation = operations.get(operationId);
     if (!operation) return;
 
@@ -539,12 +495,8 @@ const endOperation = (operationId, successMessage = null, errorMessage = null) =
 
 /**
  * Build a progress message with optional [bar] suffix.
- * @param {string} message
- * @param {number | null} current
- * @param {number | null} total
- * @returns {string}
  */
-const buildProgressMessage = (message, current, total) => {
+const buildProgressMessage = (message: string, current: number | null, total: number | null): string => {
     if (current === null || total === null) return message;
     const percentage = Math.round((current / total) * 100);
     const bar = '█'.repeat(Math.floor(percentage / 5)) + '░'.repeat(20 - Math.floor(percentage / 5));
@@ -555,8 +507,8 @@ const buildProgressMessage = (message, current, total) => {
 cleanupOldLogs();
 
 // Set up periodic cleanup (every hour) only in actual application contexts
-/** @type {ReturnType<typeof setInterval> | undefined} */
-let cleanupInterval;
+/** @type */
+let cleanupInterval: ReturnType<typeof setInterval> | undefined;
 if (isElectronApp || startedViaCli) {
     cleanupInterval = setInterval(cleanupOldLogs, 60 * 60 * 1000); // 1 hour
 }
@@ -605,56 +557,82 @@ const apiOrDebugEnabled = () => isSourceCode();
 
 // Export logger functions
 // Basic logging methods
-/** @type {(message: string, data?: unknown, category?: string | null) => void} */
-export const error = (message, data, category) => writeLog('ERROR', message, data, category);
-/** @type {(message: string, data?: unknown, category?: string | null) => void} */
-export const info = (message, data, category) => writeLog('INFO', message, data, category);
-/** @type {(message: string, data?: unknown, category?: string | null) => void} */
-export const debug = (message, data, category) => {
+/** @type */
+export const error: (message: string, data?: unknown, category?: string | null) => void = (
+    message,
+    data,
+    category,
+): void => writeLog('ERROR', message, data, category);
+/** @type */
+export const info: (message: string, data?: unknown, category?: string | null) => void = (
+    message,
+    data,
+    category,
+): void => writeLog('INFO', message, data, category);
+/** @type */
+export const debug: (message: string, data?: unknown, category?: string | null) => void = (
+    message,
+    data,
+    category,
+): void => {
     if (apiOrDebugEnabled()) writeLog('DEBUG', message, data, category);
 };
-/** @type {(message: string, data?: unknown, category?: string | null) => void} */
-export const api = (message, data, category = 'api') => {
+/** @type */
+export const api: (message: string, data?: unknown, category?: string | null) => void = (
+    message,
+    data,
+    category = 'api',
+): void => {
     if (apiOrDebugEnabled()) writeLog('INFO', message, data, category);
 };
 // Enhanced logging methods
-/** @type {(message: string, data?: unknown, duration?: number | null, category?: string | null) => void} */
-export const success = (message, data = null, duration = null, category = null) => {
+/** @type */
+export const success: (message: string, data?: unknown, duration?: number | null, category?: string | null) => void = (
+    message,
+    data = null,
+    duration = null,
+    category = null,
+): void => {
     const suffix = duration !== null ? ` (${duration}ms)` : '';
     writeLog('INFO', `${message}${suffix}`, data, category, '✅');
 };
-/** @type {(message: string, data?: unknown, category?: string | null) => void} */
-export const warning = (message, data = null, category = null) => {
+/** @type */
+export const warning: (message: string, data?: unknown, category?: string | null) => void = (
+    message,
+    data = null,
+    category = null,
+): void => {
     writeLog('WARN', message, data, category);
 };
-/** @type {(message: string, current?: number | null, total?: number | null) => void} */
-export const progress = (message, current = null, total = null) => {
+/** @type */
+export const progress: (message: string, current?: number | null, total?: number | null) => void = (
+    message,
+    current = null,
+    total = null,
+): void => {
     writeLog('INFO', buildProgressMessage(message, current, total), null, null);
 };
 
 /**
  * A logger bound to one category (withCategory).
- * @typedef {{
- *   info: (message: string, data?: unknown) => void,
- *   error: (message: string, data?: unknown) => void,
- *   debug: (message: string, data?: unknown) => void,
- *   api: (message: string, data?: unknown) => void,
- *   apiRequest: (method: string, url: string, duration?: number | null) => void,
- *   apiResponse: (method: string, url: string, status: number, duration?: number | null) => void,
- *   success: (message: string, data?: unknown, duration?: number | null) => void,
- *   warning: (message: string, data?: unknown) => void,
- *   progress: (message: string, current?: number | null, total?: number | null) => void,
- *   startOperation: (operationId: string, message: string, level?: LogLevel) => number,
- *   endOperation: typeof endOperation,
- * }} CategoryLogger
  */
+export type CategoryLogger = {
+    info: (message: string, data?: unknown) => void;
+    error: (message: string, data?: unknown) => void;
+    debug: (message: string, data?: unknown) => void;
+    api: (message: string, data?: unknown) => void;
+    apiRequest: (method: string, url: string, duration?: number | null) => void;
+    apiResponse: (method: string, url: string, status: number, duration?: number | null) => void;
+    success: (message: string, data?: unknown, duration?: number | null) => void;
+    warning: (message: string, data?: unknown) => void;
+    progress: (message: string, current?: number | null, total?: number | null) => void;
+    startOperation: (operationId: string, message: string, level?: LogLevel) => number;
+    endOperation: typeof endOperation;
+};
 
 // Category logging - creates a logger bound to a category
-/**
- * @param {string} category
- * @returns {CategoryLogger}
- */
-export const withCategory = (category) => ({
+
+export const withCategory = (category: string): CategoryLogger => ({
     info: (message, data) => writeLog('INFO', message, data, category),
     error: (message, data) => writeLog('ERROR', message, data, category),
     debug: (message, data) => {
@@ -686,14 +664,23 @@ export const withCategory = (category) => ({
     endOperation,
 });
 // API-specific logging with timing (top-level convenience)
-/** @type {(method: string, url: string, duration?: number | null) => void} */
-export const apiRequest = (method, url, duration = null) => {
+/** @type */
+export const apiRequest: (method: string, url: string, duration?: number | null) => void = (
+    method,
+    url,
+    duration = null,
+): void => {
     if (!apiOrDebugEnabled()) return;
     const suffix = duration !== null ? ` (${duration}ms)` : '';
     writeLog('INFO', `🌐 REQUEST: ${method} ${url}${suffix}`, null, 'api');
 };
-/** @type {(method: string, url: string, status: number, duration?: number | null) => void} */
-export const apiResponse = (method, url, status, duration = null) => {
+/** @type */
+export const apiResponse: (method: string, url: string, status: number, duration?: number | null) => void = (
+    method,
+    url,
+    status,
+    duration = null,
+): void => {
     if (!apiOrDebugEnabled()) return;
     const statusEmoji = status >= 200 && status < 300 ? '✅' : '❌';
     const suffix = duration !== null ? ` (${duration}ms)` : '';
@@ -704,12 +691,11 @@ export const getRecentLogs = () => recentLogs.slice();
 // Formats a challenge object as the standard log prefix
 // `[Challenge {id}: {title}]`. Pass the whole challenge object or
 // (id, title) directly; missing fields render as 'unknown'.
-/**
- * @param {{ id?: string | number, title?: string } | string | number | null | undefined} challengeOrId
- * @param {string | null} [title]
- * @returns {string}
- */
-export const challengeTag = (challengeOrId, title) => {
+
+export const challengeTag = (
+    challengeOrId: { id?: string | number; title?: string } | string | number | null | undefined,
+    title?: string | null,
+): string => {
     if (challengeOrId && typeof challengeOrId === 'object') {
         const id = challengeOrId.id ?? 'unknown';
         const t = challengeOrId.title ?? 'unknown';
@@ -722,8 +708,8 @@ export const getLogFile = () => currentLogFiles.app;
 export const getErrorLogFile = () => currentLogFiles.error;
 export const getApiLogFile = () => currentLogFiles.api;
 export const getSettingsLogFile = () => currentLogFiles.settings;
-/** @param {string} date - YYYY-MM-DD */
-export const getLogFileForDate = (date) => getLogFilePaths(date);
+/** @param date - YYYY-MM-DD */
+export const getLogFileForDate = (date: string) => getLogFilePaths(date);
 export const isCliMode = () => cliMode;
 export const isDevMode = () => devMode;
 export {

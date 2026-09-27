@@ -29,22 +29,17 @@ const joinStateStore = createJsonStore({ fileName: 'joinState.json', prefKey: 'g
 // A held lock older than this is treated as stale (owner crashed) and removed.
 const LOCK_TTL_MS = 60_000;
 
-/**
- * @param {string|number} id
- * @returns {string}
- */
-const lockPathFor = (id) => {
+const lockPathFor = (id: string | number): string => {
     const safeId = String(id).replace(/[^A-Za-z0-9_-]/g, '_');
     return path.join(path.dirname(getSettingsPath()), `joinlock-${safeId}.lock`);
 };
 
 /**
  * Acquire a cross-process lock for one challenge's unlock critical section.
- * @param {string|number} id
- * @returns {{ok: boolean, release: () => void}} ok=false means another process
+ * @returns ok=false means another process
  *   holds it right now (caller should treat as busy). release() is always safe.
  */
-const acquireUnlockLock = (id) => {
+const acquireUnlockLock = (id: string | number): { ok: boolean; release: () => void } => {
     const noop = { ok: true, release: () => {} };
     // Only the real-fs platforms (Electron/CLI) can run two processes against one
     // account; Capacitor/headless are single-process for a given surface.
@@ -76,7 +71,7 @@ const acquireUnlockLock = (id) => {
             },
         };
     } catch (caught) {
-        const error = /** @type {NodeJS.ErrnoException | null | undefined} */ (caught);
+        const error = caught as NodeJS.ErrnoException | null | undefined;
         if (error && error.code === 'EEXIST') {
             return { ok: false, release: () => {} };
         }

@@ -15,7 +15,7 @@
  * Mock mode uses createMemoryAutoSpendLedger() and never touches the file.
  */
 
-/** @import { AutoSpendRecord, RawJsonStore } from './types/stores' */
+import type { AutoSpendRecord, RawJsonStore } from './types/stores';
 import * as logger from './logger';
 import { createJsonStore } from './settings/storage';
 import { isPlainObject } from './plainObject';
@@ -26,30 +26,26 @@ const autoSpendStore = createJsonStore({ fileName: 'autoSpends.json', prefKey: '
 const MAX_AGE_MS = 30 * 24 * 60 * 60 * 1000;
 
 /**
- * @param {unknown} r - an untrusted parsed-JSON value
- * @returns {r is AutoSpendRecord}
+ * @param r - an untrusted parsed-JSON value
  */
-const isRecord = (r) => isPlainObject(r) && Number.isInteger(r.fills) && Number(r.fills) >= 0 && Number.isFinite(r.at);
+const isRecord = (r: unknown): r is AutoSpendRecord =>
+    isPlainObject(r) && Number.isInteger(r.fills) && Number(r.fills) >= 0 && Number.isFinite(r.at);
 
 /**
  * Ledger over a raw-JSON store ({readRaw, writeRaw}). An unreadable or corrupt
  * file reads as empty — fail-soft like the swap-back ledger; the per-challenge
  * cap then restarts, which at worst allows `autoExposureFillMax` more fills.
- * @param {RawJsonStore} store
  */
-const createAutoSpendLedger = (store) => {
-    /** @returns {Record<string, unknown>} */
-    const read = () => {
+const createAutoSpendLedger = (store: RawJsonStore) => {
+    /** @returns */
+    const read = (): Record<string, unknown> => {
         try {
             const parsed = JSON.parse(store.readRaw() || '{}');
             return parsed && typeof parsed === 'object' && !Array.isArray(parsed) ? parsed : {};
         } catch (error) {
             logger
                 .withCategory('currency')
-                .warning(
-                    `auto-spend ledger unreadable: ${/** @type {Error | undefined} */ (error)?.message || error}`,
-                    null,
-                );
+                .warning(`auto-spend ledger unreadable: ${(error as Error | undefined)?.message || error}`, null);
             return {};
         }
     };
@@ -57,22 +53,19 @@ const createAutoSpendLedger = (store) => {
     return {
         /**
          * Automatic fills spent on this challenge so far.
-         * @param {string|number} challengeId
-         * @returns {number}
          */
-        fills: (challengeId) => {
+        fills: (challengeId: string | number): number => {
             const record = read()[String(challengeId)];
             return isRecord(record) ? record.fills : 0;
         },
 
         /**
          * Count one more automatic fill on this challenge.
-         * @param {string|number} challengeId
          */
-        addFill: (challengeId) => {
+        addFill: (challengeId: string | number) => {
             const cutoff = Date.now() - MAX_AGE_MS;
-            /** @type {Record<string, AutoSpendRecord>} */
-            const state = {};
+            /** @type */
+            const state: Record<string, AutoSpendRecord> = {};
             for (const [id, record] of Object.entries(read())) {
                 if (isRecord(record) && record.at > cutoff) state[id] = record;
             }
@@ -85,8 +78,8 @@ const createAutoSpendLedger = (store) => {
 
 /** Ledger over an in-memory store — mock mode, tests. */
 const createMemoryAutoSpendLedger = () => {
-    /** @type {string | null} */
-    let raw = null;
+    /** @type */
+    let raw: string | null = null;
     return createAutoSpendLedger({
         readRaw: () => raw,
         writeRaw: (data) => {

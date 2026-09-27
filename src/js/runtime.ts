@@ -14,16 +14,16 @@ const hasNode = typeof process !== 'undefined' && process.versions != null;
 
 /**
  * The members of the Capacitor runtime global this module reads.
- * @typedef {{ isNativePlatform: () => boolean }} CapacitorGlobal
  */
+type CapacitorGlobal = { isNativePlatform: () => boolean };
 
 /**
  * The page globals the platform shells inject (absent in plain Node).
- * @typedef {typeof globalThis & { Capacitor?: CapacitorGlobal, __GS_HEADLESS__?: unknown }} RuntimeGlobals
  */
+type RuntimeGlobals = typeof globalThis & { Capacitor?: CapacitorGlobal; __GS_HEADLESS__?: unknown };
 
-/** @returns {CapacitorGlobal | undefined} */
-const getCapacitor = () => /** @type {RuntimeGlobals} */ (globalThis).Capacitor;
+/** @returns */
+const getCapacitor = (): CapacitorGlobal | undefined => (globalThis as RuntimeGlobals).Capacitor;
 
 const isElectron = () => hasNode && process.versions.electron != null;
 
@@ -36,7 +36,7 @@ const isCapacitor = () => {
 // Capacitor runtime, and injects this flag so the storage and HTTP layers
 // route through the native @JavascriptInterface bridges instead of
 // @capacitor/preferences / CapacitorHttp.
-const isHeadlessService = () => /** @type {RuntimeGlobals} */ (globalThis).__GS_HEADLESS__ === true;
+const isHeadlessService = () => (globalThis as RuntimeGlobals).__GS_HEADLESS__ === true;
 
 const isCli = () => hasNode && !isElectron();
 
@@ -56,7 +56,7 @@ const isPackaged = () => {
             return false;
         }
     }
-    if (isCapacitor()) return /** @type {CapacitorGlobal} */ (getCapacitor()).isNativePlatform();
+    if (isCapacitor()) return (getCapacitor() as CapacitorGlobal).isNativePlatform();
     return false;
 };
 
@@ -81,11 +81,8 @@ const getEnvSnapshot = () => ({
 // shimmed to undefined when the bundler externalizes 'os'). Code
 // paths that try to actually mkdir/write at this returned path are
 // expected to be wrapped in try/catch so they fail-soft.
-/**
- * @param {string} appName
- * @returns {string}
- */
-const getUserDataDir = (appName) => {
+
+const getUserDataDir = (appName: string): string => {
     if (isCapacitor()) return `/${appName}`;
     switch (process.platform) {
         case 'darwin':
@@ -162,7 +159,7 @@ const getAppUserDataPath = () => {
             try {
                 fs.mkdirSync(userDataPath, { recursive: true });
             } catch (error) {
-                const mkdirError = /** @type {NodeJS.ErrnoException} */ (error);
+                const mkdirError = error as NodeJS.ErrnoException;
                 console.warn(
                     `[runtime] failed to create userData dir ${userDataPath} (${mkdirError.code || mkdirError.message}); falling back to cwd/userData`,
                 );
