@@ -5,45 +5,54 @@ import { ResetButton } from '@/components/ui/ResetButton';
 import { DEFAULT_TIMEZONE } from '../../../settings/uiDefaults';
 import { SettingLabel } from './SettingInput';
 
-/**
- * @import { ComponentChildren } from 'preact'
- * @import { useCustomTimezoneInput } from '@/hooks/useCustomTimezoneInput'
- * @import { UiChangeHandler, UiResetHandler, UiValues } from '../../../types/settingsEditor'
- */
+import type { ComponentChildren } from 'preact';
+import type { useCustomTimezoneInput } from '@/hooks/useCustomTimezoneInput';
+import type { UiChangeHandler, UiResetHandler, UiValues } from '../../../types/settingsEditor';
+import type { ReactNode } from 'react';
 
-/** @typedef {ReturnType<typeof useCustomTimezoneInput>} TimezoneInputState */
+export type TimezoneInputState = ReturnType<typeof useCustomTimezoneInput>;
 
 /**
  * The UI-values half of useSettingsForm, as every UI setting row takes it.
- *
- * @typedef {object} UiFormProps
- * @property {UiValues} uiValues
- * @property {UiChangeHandler} handleUiChange
- * @property {UiResetHandler} handleResetUi
  */
+export interface UiFormProps {
+    uiValues: UiValues;
+    handleUiChange: UiChangeHandler;
+    handleResetUi: UiResetHandler;
+}
 
-/** @typedef {'checkFrequencyMin' | 'checkFrequencyMax' | 'apiMaxRetries' | 'apiRetryBaseDelayMs'} UiNumberKey */
+type UiNumberKey = 'checkFrequencyMin' | 'checkFrequencyMax' | 'apiMaxRetries' | 'apiRetryBaseDelayMs';
 
 /**
  * One integer input of a multi-value UI setting (see UiNumberInputs).
- *
- * @typedef {object} UiNumberField
- * @property {UiNumberKey} key
- * @property {string} labelKey
- * @property {string} widthClass
- * @property {string} min
- * @property {string} max
- * @property {string} [step]
- * @property {number} fallback
- * @property {UiNumberKey} [atLeastKey]
  */
+interface UiNumberField {
+    key: UiNumberKey;
+    labelKey: string;
+    widthClass: string;
+    min: string;
+    max: string;
+    step?: string;
+    fallback: number;
+    atLeastKey?: UiNumberKey;
+}
 
 /**
  * One application (UI) setting: caption with the "UI setting" badge, description, then its controls.
- *
- * @param {{ inputId: string, group?: boolean, labelKey: string, descKey: string, children?: ComponentChildren }} props
  */
-function UiSettingCell({ inputId, group, labelKey, descKey, children }) {
+function UiSettingCell({
+    inputId,
+    group,
+    labelKey,
+    descKey,
+    children,
+}: {
+    inputId: string;
+    group?: boolean;
+    labelKey: string;
+    descKey: string;
+    children?: ComponentChildren;
+}) {
     const { t } = useTranslation();
     return (
         <div className={SETTING_CELL_CLASS}>
@@ -61,10 +70,16 @@ function UiSettingCell({ inputId, group, labelKey, descKey, children }) {
  * Captioned integer inputs for a multi-value UI setting. An unparseable entry
  * falls back to the field's `fallback`; a field with `atLeastKey` is clamped up
  * to that sibling's value once the user leaves it, so a range can never invert.
- *
- * @param {{ fields: UiNumberField[], uiValues: UiValues, handleUiChange: UiChangeHandler }} props
  */
-function UiNumberInputs({ fields, uiValues, handleUiChange }) {
+function UiNumberInputs({
+    fields,
+    uiValues,
+    handleUiChange,
+}: {
+    fields: UiNumberField[];
+    uiValues: UiValues;
+    handleUiChange: UiChangeHandler;
+}) {
     const { t } = useTranslation();
     return fields.map(({ key, labelKey, widthClass, min, max, step, fallback, atLeastKey }) => (
         <Fragment key={key}>
@@ -93,16 +108,23 @@ function UiNumberInputs({ fields, uiValues, handleUiChange }) {
 
 /**
  * A UI setting made of several number inputs, reset together. `suffix` is an optional trailing unit.
- *
- * @param {UiFormProps & {
- *   inputId: string,
- *   labelKey: string,
- *   descKey: string,
- *   fields: UiNumberField[],
- *   suffix?: ComponentChildren,
- * }} props
  */
-function UiNumberGroupCell({ inputId, labelKey, descKey, fields, suffix, uiValues, handleUiChange, handleResetUi }) {
+function UiNumberGroupCell({
+    inputId,
+    labelKey,
+    descKey,
+    fields,
+    suffix,
+    uiValues,
+    handleUiChange,
+    handleResetUi,
+}: UiFormProps & {
+    inputId: string;
+    labelKey: string;
+    descKey: string;
+    fields: UiNumberField[];
+    suffix?: ComponentChildren;
+}) {
     return (
         <UiSettingCell inputId={inputId} group labelKey={labelKey} descKey={descKey}>
             <div className="flex items-center gap-2 flex-wrap" role="group" aria-labelledby={`${inputId}-label`}>
@@ -114,8 +136,7 @@ function UiNumberGroupCell({ inputId, labelKey, descKey, fields, suffix, uiValue
     );
 }
 
-/** @type {UiNumberField[]} */
-const CHECK_FREQUENCY_FIELDS = [
+const CHECK_FREQUENCY_FIELDS: UiNumberField[] = [
     {
         key: 'checkFrequencyMin',
         labelKey: 'app.checkFrequencyMin',
@@ -135,8 +156,7 @@ const CHECK_FREQUENCY_FIELDS = [
     },
 ];
 
-/** @type {UiNumberField[]} */
-const RELIABILITY_FIELDS = [
+const RELIABILITY_FIELDS: UiNumberField[] = [
     { key: 'apiMaxRetries', labelKey: 'app.apiMaxRetries', widthClass: 'w-20', min: '0', max: '10', fallback: 0 },
     {
         key: 'apiRetryBaseDelayMs',
@@ -151,10 +171,8 @@ const RELIABILITY_FIELDS = [
 
 /**
  * The revealed "+" input: Enter or blur adds the typed zone, Escape discards it.
- *
- * @param {{ timezoneInput: TimezoneInputState }} props
  */
-function CustomTimezoneInput({ timezoneInput }) {
+function CustomTimezoneInput({ timezoneInput }: { timezoneInput: TimezoneInputState }) {
     const { t } = useTranslation();
     return (
         <input
@@ -180,10 +198,20 @@ function CustomTimezoneInput({ timezoneInput }) {
 
 /**
  * A UI setting whose controls share one row, ending in the setting's reset.
- *
- * @param {{ inputId: string, labelKey: string, descKey: string, onReset: () => void, children?: ComponentChildren }} props
  */
-function ResettableUiCell({ inputId, labelKey, descKey, onReset, children }) {
+function ResettableUiCell({
+    inputId,
+    labelKey,
+    descKey,
+    onReset,
+    children,
+}: {
+    inputId: string;
+    labelKey: string;
+    descKey: string;
+    onReset: () => void;
+    children?: ComponentChildren;
+}) {
     return (
         <UiSettingCell inputId={inputId} labelKey={labelKey} descKey={descKey}>
             <div className="flex items-center gap-2">
@@ -194,8 +222,7 @@ function ResettableUiCell({ inputId, labelKey, descKey, onReset, children }) {
     );
 }
 
-/** @param {UiFormProps} props */
-function ThemeSetting({ uiValues, handleUiChange, handleResetUi }) {
+function ThemeSetting({ uiValues, handleUiChange, handleResetUi }: UiFormProps) {
     const { t } = useTranslation();
     return (
         <ResettableUiCell
@@ -217,8 +244,7 @@ function ThemeSetting({ uiValues, handleUiChange, handleResetUi }) {
     );
 }
 
-/** @param {UiFormProps} props */
-function LanguageSetting({ uiValues, handleUiChange, handleResetUi }) {
+function LanguageSetting({ uiValues, handleUiChange, handleResetUi }: UiFormProps) {
     const { t } = useTranslation();
     return (
         <ResettableUiCell
@@ -240,8 +266,12 @@ function LanguageSetting({ uiValues, handleUiChange, handleResetUi }) {
     );
 }
 
-/** @param {UiFormProps & { timezoneInput: TimezoneInputState }} props */
-function TimezoneSetting({ uiValues, handleUiChange, handleResetUi, timezoneInput }) {
+function TimezoneSetting({
+    uiValues,
+    handleUiChange,
+    handleResetUi,
+    timezoneInput,
+}: UiFormProps & { timezoneInput: TimezoneInputState }) {
     const { t } = useTranslation();
     const { timezone, customTimezones } = uiValues;
     return (
@@ -292,10 +322,14 @@ function TimezoneSetting({ uiValues, handleUiChange, handleResetUi, timezoneInpu
  * through useSettingsForm's `uiValues` half; `timezoneInput` is
  * useCustomTimezoneInput's state. `children` are the app-wide schema groups
  * (rewards, missions, notifications, display) the modal renders below them.
- *
- * @param {UiFormProps & { timezoneInput: TimezoneInputState, children?: import('react').ReactNode }} props
  */
-export function ApplicationSettingsSection({ uiValues, handleUiChange, handleResetUi, timezoneInput, children }) {
+export function ApplicationSettingsSection({
+    uiValues,
+    handleUiChange,
+    handleResetUi,
+    timezoneInput,
+    children,
+}: UiFormProps & { timezoneInput: TimezoneInputState; children?: ReactNode }) {
     const { t } = useTranslation();
     const ui = { uiValues, handleUiChange, handleResetUi };
 

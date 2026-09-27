@@ -1,12 +1,3 @@
-/**
- * @import { ComponentChildren } from 'preact'
- * @import { Bankroll, Challenge, RankingTotal } from '../../../types/gurushots'
- * @import { ChallengeCardView } from './ChallengeCard'
- * @import { ChallengeCardActionSet } from './ChallengeCardActions'
- * @import { ChallengeBadgeRowProps } from './ChallengeBadgeRow'
- * @import { DeadlineAction } from './DeadlineTimeline'
- */
-/** @typedef {ReturnType<typeof import('@/api/useSwapBacks').useSwapBacks>} SwapBackOffers */
 import { useMemo } from 'react';
 import { useTranslation } from '@/contexts/TranslationContext';
 import { formatEndTime, getLevelStatus } from '@/utils/formatters';
@@ -20,12 +11,21 @@ import { CardDensityToggle } from './CardDensityToggle';
 import { FillButtons } from './ChallengeCardActions';
 import * as ipc from '@/api/ipc';
 
+import type { ComponentChildren } from 'preact';
+import type { Bankroll, Challenge, RankingTotal } from '../../../types/gurushots';
+import type { ChallengeCardView } from './ChallengeCard';
+import type { ChallengeCardActionSet } from './ChallengeCardActions';
+import type { ChallengeBadgeRowProps } from './ChallengeBadgeRow';
+import type { DeadlineAction } from './DeadlineTimeline';
+import type * as useSwapBacksModule from '@/api/useSwapBacks';
+import type * as useScenarioStatusModule from '@/api/useScenarioStatus';
+
+export type SwapBackOffers = ReturnType<typeof useSwapBacksModule.useSwapBacks>;
+
 /**
  * One labelled cell of the detailed card's stat grids.
- *
- * @param {{ label: string, children: ComponentChildren }} props
  */
-function StatCell({ label, children }) {
+function StatCell({ label, children }: { label: string; children: ComponentChildren }) {
     return (
         <div className="text-center p-2 bg-base-200 rounded">
             <div className="font-medium">{label}</div>
@@ -39,16 +39,20 @@ function StatCell({ label, children }) {
  * header stacks vertically: the title gets the full card width (so it
  * truncates far less), and the action buttons sit on their own row beneath it,
  * wrapping as needed rather than squeezing the title.
- *
- * @param {{
- *     challenge: Challenge,
- *     badgeRowProps: ChallengeBadgeRowProps,
- *     actions: ChallengeCardActionSet,
- *     hasCompactOverride: boolean,
- *     onToggleCompact: () => void | Promise<void>,
- * }} props
  */
-function DetailHeader({ challenge, badgeRowProps, actions, hasCompactOverride, onToggleCompact }) {
+function DetailHeader({
+    challenge,
+    badgeRowProps,
+    actions,
+    hasCompactOverride,
+    onToggleCompact,
+}: {
+    challenge: Challenge;
+    badgeRowProps: ChallengeBadgeRowProps;
+    actions: ChallengeCardActionSet;
+    hasCompactOverride: boolean;
+    onToggleCompact: () => void | Promise<void>;
+}) {
     const sanitizedWelcome = useMemo(
         () => sanitizeWelcomeMessage(challenge.welcome_message),
         [challenge.welcome_message],
@@ -95,10 +99,8 @@ function DetailHeader({ challenge, badgeRowProps, actions, hasCompactOverride, o
 /**
  * User progress — full bar + level + next-level info. Rendered only once the
  * member has votes in the challenge.
- *
- * @param {{ challenge: Challenge, userProgress: RankingTotal }} props
  */
-function UserProgressPanel({ challenge, userProgress }) {
+function UserProgressPanel({ challenge, userProgress }: { challenge: Challenge; userProgress: RankingTotal }) {
     const { t } = useTranslation();
     const nextLevelInfo = getNextLevelInfo(challenge);
 
@@ -107,7 +109,7 @@ function UserProgressPanel({ challenge, userProgress }) {
             <div className="flex justify-between items-center mb-1">
                 <span className="text-xs font-medium">{t('app.yourProgress')}</span>
                 <span
-                    className={`badge badge-sm ${getLevelStatus(/** @type {number} */ (userProgress.level), /** @type {string} */ (userProgress.level_name)).colorClass}`}
+                    className={`badge badge-sm ${getLevelStatus(userProgress.level as number, userProgress.level_name as string).colorClass}`}
                 >
                     {userProgress.level_name} {userProgress.level}
                 </span>
@@ -137,17 +139,22 @@ function UserProgressPanel({ challenge, userProgress }) {
  * 6-cell live-state grid (time, end, exposure, boost, turbo, entries) with the
  * cell-placed actions — stacks 2-up on phones, 3-up on small tablets, 6-up on
  * desktop.
- *
- * @param {{
- *     challenge: Challenge,
- *     view: ChallengeCardView,
- *     timeText: string,
- *     timezone: string,
- *     actions: ChallengeCardActionSet,
- *     autovoteRunning: boolean,
- * }} props
  */
-function StatusCells({ challenge, view, timeText, timezone, actions, autovoteRunning }) {
+function StatusCells({
+    challenge,
+    view,
+    timeText,
+    timezone,
+    actions,
+    autovoteRunning,
+}: {
+    challenge: Challenge;
+    view: ChallengeCardView;
+    timeText: string;
+    timezone: string;
+    actions: ChallengeCardActionSet;
+    autovoteRunning: boolean;
+}) {
     const { t } = useTranslation();
     const { turboError, fillError } = actions;
 
@@ -192,17 +199,22 @@ function StatusCells({ challenge, view, timeText, timezone, actions, autovoteRun
 
 /**
  * Entry details — entry-level boost / turbo badges and actions.
- *
- * @param {{
- *     challenge: Challenge,
- *     view: ChallengeCardView,
- *     swapBacks: SwapBackOffers,
- *     bankroll: Bankroll | null,
- *     onVoteComplete: () => void,
- *     onCurrencySpent: () => void,
- * }} props
  */
-function EntryDetails({ challenge, view, swapBacks, bankroll, onVoteComplete, onCurrencySpent }) {
+function EntryDetails({
+    challenge,
+    view,
+    swapBacks,
+    bankroll,
+    onVoteComplete,
+    onCurrencySpent,
+}: {
+    challenge: Challenge;
+    view: ChallengeCardView;
+    swapBacks: SwapBackOffers;
+    bankroll: Bankroll | null;
+    onVoteComplete: () => void;
+    onCurrencySpent: () => void;
+}) {
     const { t } = useTranslation();
 
     return (
@@ -233,24 +245,6 @@ function EntryDetails({ challenge, view, swapBacks, bankroll, onVoteComplete, on
  * The detailed challenge card body: every stat and every action. All values
  * are derived by the parent ChallengeCard (see utils/challengeCardView) and
  * passed in, so this layout and the compact tile never disagree.
- *
- * @param {object} props
- * @param {Challenge} props.challenge
- * @param {ChallengeCardView} props.view
- * @param {ChallengeBadgeRowProps} props.badgeRowProps
- * @param {string} props.timeText
- * @param {string} props.timezone
- * @param {ChallengeCardActionSet} props.actions
- * @param {boolean} props.autovoteRunning
- * @param {boolean} props.hasCompactOverride
- * @param {() => void | Promise<void>} props.onToggleCompact
- * @param {boolean} props.boostBlocked
- * @param {DeadlineAction[]} props.deadlineActions
- * @param {ReturnType<typeof import('@/api/useScenarioStatus').useScenarioStatus>} props.scenarioStatus
- * @param {SwapBackOffers} props.swapBacks
- * @param {Bankroll | null} props.bankroll
- * @param {() => void} props.onVoteComplete
- * @param {() => void} props.onCurrencySpent
  */
 export function ChallengeCardDetail({
     challenge,
@@ -269,6 +263,23 @@ export function ChallengeCardDetail({
     bankroll,
     onVoteComplete,
     onCurrencySpent,
+}: {
+    challenge: Challenge;
+    view: ChallengeCardView;
+    badgeRowProps: ChallengeBadgeRowProps;
+    timeText: string;
+    timezone: string;
+    actions: ChallengeCardActionSet;
+    autovoteRunning: boolean;
+    hasCompactOverride: boolean;
+    onToggleCompact: () => void | Promise<void>;
+    boostBlocked: boolean;
+    deadlineActions: DeadlineAction[];
+    scenarioStatus: ReturnType<typeof useScenarioStatusModule.useScenarioStatus>;
+    swapBacks: SwapBackOffers;
+    bankroll: Bankroll | null;
+    onVoteComplete: () => void;
+    onCurrencySpent: () => void;
 }) {
     const { t } = useTranslation();
     const { userProgress } = view;

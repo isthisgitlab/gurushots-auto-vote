@@ -1,5 +1,5 @@
-/** @import { ComponentChildren } from 'preact' */
-/** @import { Bankroll } from '../../../types/gurushots' */
+import type { ComponentChildren } from 'preact';
+import type { Bankroll } from '../../../types/gurushots';
 import { useTranslation } from '@/contexts/TranslationContext';
 import { Modal, ModalActions } from '@/components/ui/Modal';
 import { interp } from '@/utils/interp';
@@ -7,8 +7,7 @@ import { interp } from '@/utils/interp';
 // Outcome code (voting/currencyActions CURRENCY_OUTCOME) → translated message.
 // Anything unmapped (auth failure, unexpected string) reads as a generic
 // rejection — never a raw code or status in front of the user.
-/** @type {Partial<Record<string, string>>} */
-const OUTCOME_KEY = {
+const OUTCOME_KEY: Partial<Record<string, string>> = {
     'not-available': 'app.currencyOutcomeNotAvailable',
     'no-balance': 'app.currencyOutcomeNoBalance',
     'balance-unknown': 'app.currencyOutcomeBalanceUnknown',
@@ -18,11 +17,11 @@ const OUTCOME_KEY = {
 };
 
 /**
- * @param {(key: string) => string} t - translation function
- * @param {string} outcome - the failed action's outcome code
- * @returns {string}
+ * @param t - translation function
+ * @param outcome - the failed action's outcome code
  */
-export const currencyOutcomeText = (t, outcome) => t(OUTCOME_KEY[outcome] || 'app.currencyOutcomeFailed');
+export const currencyOutcomeText = (t: (key: string) => string, outcome: string): string =>
+    t(OUTCOME_KEY[outcome] || 'app.currencyOutcomeFailed');
 
 // Bankroll field → [plural label (header pill), singular unit] translation keys.
 const CURRENCY_LABELS = {
@@ -33,26 +32,35 @@ const CURRENCY_LABELS = {
 
 /**
  * Props of CurrencyConfirmModal.
- *
- * @typedef {object} CurrencyConfirmModalProps
- * @property {boolean} isOpen
- * @property {() => void} onClose
- * @property {() => void | Promise<void>} onConfirm
- * @property {string} title
- * @property {keyof typeof CURRENCY_LABELS} field - which balance this spends
- * @property {Bankroll | null} bankroll
- * @property {boolean} spending
- * @property {ComponentChildren} children - action-specific body
  */
+export interface CurrencyConfirmModalProps {
+    isOpen: boolean;
+    onClose: () => void;
+    onConfirm: () => void | Promise<void>;
+    title: string;
+    /** which balance this spends */
+    field: keyof typeof CURRENCY_LABELS;
+    bankroll: Bankroll | null;
+    spending: boolean;
+    /** action-specific body */
+    children: ComponentChildren;
+}
 
 /**
  * Confirmation before spending one unit of a bankroll currency. Shows the cost
  * and the current → resulting balance; Spend stays disabled with a spinner from
  * the first click until the spend settles, so a double click can't spend twice.
- *
- * @param {CurrencyConfirmModalProps} props
  */
-export function CurrencyConfirmModal({ isOpen, onClose, onConfirm, title, field, bankroll, spending, children }) {
+export function CurrencyConfirmModal({
+    isOpen,
+    onClose,
+    onConfirm,
+    title,
+    field,
+    bankroll,
+    spending,
+    children,
+}: CurrencyConfirmModalProps) {
     const { t } = useTranslation();
     const [pluralKey, unitKey] = CURRENCY_LABELS[field];
     const currency = t(pluralKey);

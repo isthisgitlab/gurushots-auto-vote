@@ -1,5 +1,5 @@
 /**
- * Component tests for BoostWindowBanner.jsx — the summary above the challenge
+ * Component tests for BoostWindowBanner.tsx — the summary above the challenge
  * list that names the challenges whose boost window is open right now and lets
  * the user jump to a card. Covers:
  *   - renders nothing when no boost window is open

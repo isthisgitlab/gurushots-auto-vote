@@ -1,13 +1,3 @@
-/**
- * @import { Bankroll, Challenge } from '../../../types/gurushots'
- * @import { ChallengeCardView } from './ChallengeCard'
- */
-/**
- * The challenge-level action elements and fill-button props one card shares
- * between its layouts.
- *
- * @typedef {ReturnType<typeof useChallengeCardActions>} ChallengeCardActionSet
- */
 import { useTranslation } from '@/contexts/TranslationContext';
 import { useTurbo } from '@/api/useTurbo';
 import { useFillChallenge } from '@/api/useFillChallenge';
@@ -18,16 +8,33 @@ import { VoteButton } from './VoteButton';
 import { RunButton } from './RunButton';
 import { CurrencyCellButton } from './CurrencyActionButton';
 
+import type { Bankroll, Challenge } from '../../../types/gurushots';
+import type { ChallengeCardView } from './ChallengeCard';
+
+/**
+ * The challenge-level action elements and fill-button props one card shares
+ * between its layouts.
+ */
+export type ChallengeCardActionSet = ReturnType<typeof useChallengeCardActions>;
+
 const TURBO_ERROR_DISPLAY_MS = 5000;
 const FILL_ERROR_DISPLAY_MS = 5000;
 
 /**
  * "Earn turbo" mini-game button (detailed turbo cell, compact action row).
  * Locked while a play is in flight.
- *
- * @param {{ turboError: string | null, playingTurbo: boolean, onPlay: () => Promise<void>, label: string }} props
  */
-function EarnTurboButton({ turboError, playingTurbo, onPlay, label }) {
+function EarnTurboButton({
+    turboError,
+    playingTurbo,
+    onPlay,
+    label,
+}: {
+    turboError: string | null;
+    playingTurbo: boolean;
+    onPlay: () => Promise<void>;
+    label: string;
+}) {
     return (
         <ActionButton
             variant="info"
@@ -45,16 +52,20 @@ function EarnTurboButton({ turboError, playingTurbo, onPlay, label }) {
  * "+1" / "+N" submit buttons (detailed entries cell, compact action row). "+N"
  * only appears when more than one slot is open. `icon` prefixes both labels
  * where the entries cell isn't there to say what they add.
- *
- * @param {{
- *     fillError: string | null,
- *     filling: boolean,
- *     slotsRemaining: number,
- *     onFill: (mode: 'one' | 'all') => Promise<void>,
- *     icon?: string,
- * }} props
  */
-export function FillButtons({ fillError, filling, slotsRemaining, onFill, icon = '' }) {
+export function FillButtons({
+    fillError,
+    filling,
+    slotsRemaining,
+    onFill,
+    icon = '',
+}: {
+    fillError: string | null;
+    filling: boolean;
+    slotsRemaining: number;
+    onFill: (mode: 'one' | 'all') => Promise<void>;
+    icon?: string;
+}) {
     const spinner = <span className="loading loading-spinner loading-xs" />;
     return (
         <>
@@ -72,10 +83,8 @@ export function FillButtons({ fillError, filling, slotsRemaining, onFill, icon =
 
 /**
  * Per-challenge settings button (detailed header, compact action row).
- *
- * @param {{ onClick: () => void, label: string }} props
  */
-function SettingsButton({ onClick, label }) {
+function SettingsButton({ onClick, label }: { onClick: () => void; label: string }) {
     return (
         <button className="btn btn-outline btn-sm" onClick={onClick}>
             <StrokeIcon d={ICON_PATHS.cog} className="w-4 h-4 mr-1" />
@@ -90,15 +99,6 @@ function SettingsButton({ onClick, label }) {
  * under the same gates. Each element is `false` when the action isn't offered
  * right now. Also owns the turbo-play / photo-submit calls and their
  * auto-clearing inline errors.
- *
- * @param {object} args
- * @param {Challenge} args.challenge
- * @param {ChallengeCardView} args.view
- * @param {Bankroll|null} args.bankroll
- * @param {boolean} args.autovoteRunning
- * @param {() => void} args.onVoteComplete
- * @param {(challengeId: Challenge['id'], challengeTitle: string) => void} args.onSettingsClick
- * @param {() => void} [args.onCurrencySpent]
  */
 export function useChallengeCardActions({
     challenge,
@@ -108,6 +108,14 @@ export function useChallengeCardActions({
     onVoteComplete,
     onSettingsClick,
     onCurrencySpent,
+}: {
+    challenge: Challenge;
+    view: ChallengeCardView;
+    bankroll: Bankroll | null;
+    autovoteRunning: boolean;
+    onVoteComplete: () => void;
+    onSettingsClick: (challengeId: Challenge['id'], challengeTitle: string) => void;
+    onCurrencySpent?: () => void;
 }) {
     const { t } = useTranslation();
     const { playAutoTurbo, loading: playingTurbo, error: turboError, clearError: clearTurboError } = useTurbo();
@@ -121,8 +129,7 @@ export function useChallengeCardActions({
         if (result?.success) onVoteComplete();
     };
 
-    /** @param {'one' | 'all'} mode */
-    const handleFill = async (mode) => {
+    const handleFill = async (mode: 'one' | 'all') => {
         const result = await fillNow(challenge.id, mode);
         if (result?.success) onVoteComplete();
     };
@@ -165,10 +172,16 @@ export function useChallengeCardActions({
  * The compact tile's optional footer row of challenge-level actions. `false`
  * when the compactCardActions setting is off or nothing is offered right now.
  * [&>.btn]:mt-0 drops the top margin the cell-placed buttons carry.
- *
- * @param {{ actions: ChallengeCardActionSet, canFill: boolean, enabled: boolean }} props
  */
-export function buildCompactActionRow({ actions, canFill, enabled }) {
+export function buildCompactActionRow({
+    actions,
+    canFill,
+    enabled,
+}: {
+    actions: ChallengeCardActionSet;
+    canFill: boolean;
+    enabled: boolean;
+}) {
     const { voteButton, runButton, earnTurboButton, fillExposureButton, keyUnlockButton, settingsButton } = actions;
     const hasActions =
         voteButton ||

@@ -1,12 +1,11 @@
-/** @import { Challenge } from '../../../types/gurushots' */
+import type { Challenge } from '../../../types/gurushots';
 import { useTranslation } from '@/contexts/TranslationContext';
 import { formatDuration } from '@/utils/formatters';
 import { openBoostWindows } from '../../../voting/boostWindow';
 import { useTick } from '@/hooks/useTick';
 import { ChallengeAlertPanel } from './ChallengeChips';
 
-/** @param {{ remaining: number | null }} c */
-const countdownDetail = (c) =>
+const countdownDetail = (c: { remaining: number | null }) =>
     c.remaining != null && <span className="font-semibold">· {formatDuration(c.remaining)} left</span>;
 
 /**
@@ -14,10 +13,8 @@ const countdownDetail = (c) =>
  * boost window is open right now. Each entry is a button that smooth-scrolls to
  * the matching ChallengeCard (which carries id="challenge-<id>"). Renders
  * nothing when no boost window is open, so it stays out of the way otherwise.
- *
- * @param {{ challenges: Challenge[] }} props
  */
-export function BoostWindowBanner({ challenges }) {
+export function BoostWindowBanner({ challenges }: { challenges: Challenge[] }) {
     const { t } = useTranslation();
 
     // Tick every second only while at least one chip has a live countdown — a

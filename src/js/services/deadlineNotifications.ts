@@ -24,7 +24,7 @@
  * Action key → translation key for its user-facing label. Owned here (the pure,
  * Node-safe module) rather than in the React DeadlineTimeline so both the
  * timeline and the Node notify path can reuse it without pulling React into a
- * Node/headless bundle. DeadlineTimeline.jsx imports this. Indexed by a dynamic
+ * Node/headless bundle. DeadlineTimeline.tsx imports this. Indexed by a dynamic
  * action string (from server data), so typed with a string index.
  */
 const ACTION_LABEL_KEY: Record<string, string> = {

@@ -3,18 +3,24 @@ import { StrokeIcon, ICON_PATHS } from '@/components/ui/StrokeIcon';
 
 /**
  * Autovote controls - toggle button, status, last run, cycle count
- *
- * @param {{
- *   running: boolean,
- *   status: string,
- *   statusClass: string,
- *   lastRun: string | null,
- *   cycles: number,
- *   onToggle: () => void | Promise<void>,
- *   autoJoinActive: boolean,
- * }} props
  */
-export function AutoVoteControls({ running, status, statusClass, lastRun, cycles, onToggle, autoJoinActive }) {
+export function AutoVoteControls({
+    running,
+    status,
+    statusClass,
+    lastRun,
+    cycles,
+    onToggle,
+    autoJoinActive,
+}: {
+    running: boolean;
+    status: string;
+    statusClass: string;
+    lastRun: string | null;
+    cycles: number;
+    onToggle: () => void | Promise<void>;
+    autoJoinActive: boolean;
+}) {
     const { t } = useTranslation();
 
     return (

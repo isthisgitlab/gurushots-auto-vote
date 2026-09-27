@@ -1,17 +1,18 @@
-/**
- * @import { Challenge } from '../../../types/gurushots'
- * @import { ChallengeCardView } from './ChallengeCard'
- */
-/**
- * @typedef {Pick<ChallengeCardView, 'boostOpen' | 'boostTimeLeft' | 'lowExposure' | 'exposureFactor' | 'showAutoFillBadge'> & {
- *     challenge: Challenge,
- *     hasCustomSettings: boolean,
- *     showPhotoCount?: boolean,
- * }} ChallengeBadgeRowProps
- */
 import { useTranslation } from '@/contexts/TranslationContext';
 import { StatusBadge } from '../ui/StatusBadge';
 import { PulseDot } from '../ui/PulseDot';
+
+import type { Challenge } from '../../../types/gurushots';
+import type { ChallengeCardView } from './ChallengeCard';
+
+export type ChallengeBadgeRowProps = Pick<
+    ChallengeCardView,
+    'boostOpen' | 'boostTimeLeft' | 'lowExposure' | 'exposureFactor' | 'showAutoFillBadge'
+> & {
+    challenge: Challenge;
+    hasCustomSettings: boolean;
+    showPhotoCount?: boolean;
+};
 
 /**
  * Challenge badge row, shared by the detailed card and the compact tile.
@@ -28,8 +29,6 @@ import { PulseDot } from '../ui/PulseDot';
  *
  * `showPhotoCount` is off in the compact tile, where the entries cell already
  * reads N/max and the "N photos" badge would only repeat the max.
- *
- * @param {ChallengeBadgeRowProps} props
  */
 export function ChallengeBadgeRow({
     challenge,
@@ -40,7 +39,7 @@ export function ChallengeBadgeRow({
     showAutoFillBadge,
     hasCustomSettings,
     showPhotoCount = true,
-}) {
+}: ChallengeBadgeRowProps) {
     const { t } = useTranslation();
     const showPhotos = showPhotoCount && (challenge.max_photo_submits ?? 0) > 1;
     const hasLogicalBadge = Boolean(

@@ -1,8 +1,3 @@
-/**
- * One upcoming deadline action, as useDeadlineActions returns it.
- *
- * @typedef {ReturnType<typeof import('@/api/useDeadlineActions').useDeadlineActions>['actions'][number]} DeadlineAction
- */
 import { useTranslation } from '@/contexts/TranslationContext';
 import { formatDuration } from '@/utils/formatters';
 import { useTick } from '@/hooks/useTick';
@@ -10,6 +5,13 @@ import { useTick } from '@/hooks/useTick';
 // decision module (Node-safe) so the CLI/headless notify path reuses the same
 // mapping without pulling React in; the timeline imports it here.
 import { ACTION_LABEL_KEY } from '../../../services/deadlineNotifications';
+
+import type * as useDeadlineActionsModule from '@/api/useDeadlineActions';
+
+/**
+ * One upcoming deadline action, as useDeadlineActions returns it.
+ */
+export type DeadlineAction = ReturnType<typeof useDeadlineActionsModule.useDeadlineActions>['actions'][number];
 
 /**
  * Per-card advisory timeline of the automation's upcoming deadline actions.
@@ -22,10 +24,8 @@ import { ACTION_LABEL_KEY } from '../../../services/deadlineNotifications';
  * as auto-fill adds entries mid-cycle, so every duration is `~`-prefixed and the
  * header carries an "approximate" note. In compact mode this collapses to a
  * single "next action" line to respect the card's density control.
- *
- * @param {{ actions: DeadlineAction[], compact?: boolean }} props
  */
-export function DeadlineTimeline({ actions, compact = false }) {
+export function DeadlineTimeline({ actions, compact = false }: { actions: DeadlineAction[]; compact?: boolean }) {
     const { t } = useTranslation();
     const hasRows = Array.isArray(actions) && actions.length > 0;
     // Only tick while there's something to count down.
@@ -33,14 +33,12 @@ export function DeadlineTimeline({ actions, compact = false }) {
     if (!hasRows) return null;
 
     const rows = actions
-        .filter(/** @returns {a is DeadlineAction & { dueAt: number }} */ (a) => typeof a.dueAt === 'number')
+        .filter((a): a is DeadlineAction & { dueAt: number } => typeof a.dueAt === 'number')
         .map((a) => ({ ...a, remaining: a.dueAt - now }));
     if (rows.length === 0) return null;
 
-    /** @param {string} action */
-    const labelFor = (action) => t(ACTION_LABEL_KEY[action] || action);
-    /** @param {number} remaining */
-    const remainingText = (remaining) =>
+    const labelFor = (action: string) => t(ACTION_LABEL_KEY[action] || action);
+    const remainingText = (remaining: number) =>
         remaining > 0 ? `~${formatDuration(remaining, { includeSeconds: true })}` : t('app.deadlineDue');
 
     if (compact) {

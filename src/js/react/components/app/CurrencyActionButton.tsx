@@ -1,9 +1,3 @@
-/** @import { Bankroll, Challenge } from '../../../types/gurushots' */
-/**
- * A bankroll spend hook's state envelope (useKeyUnlock / useFillExposure).
- *
- * @typedef {ReturnType<typeof useKeyUnlock>} CurrencySpendAction
- */
 import { useState } from 'react';
 import { useTranslation } from '@/contexts/TranslationContext';
 import { useAutoClear } from '@/hooks/useAutoClear';
@@ -13,6 +7,13 @@ import { spentOrStale } from '@/utils/spentOrStale';
 import { ActionButton } from '@/components/ui/ActionButton';
 import { CurrencyConfirmModal, currencyOutcomeText } from './CurrencyConfirmModal';
 
+import type { Bankroll, Challenge } from '../../../types/gurushots';
+
+/**
+ * A bankroll spend hook's state envelope (useKeyUnlock / useFillExposure).
+ */
+type CurrencySpendAction = ReturnType<typeof useKeyUnlock>;
+
 const ERROR_DISPLAY_MS = 5000;
 
 /**
@@ -20,18 +21,33 @@ const ERROR_DISPLAY_MS = 5000;
  * challenge (key unlock in the Boost cell, exposure fill in the Exposure cell).
  * Opens a confirm modal first; nothing is spent until Spend is pressed.
  *
- * @param {object} props
- * @param {string} props.label - button text
- * @param {string} props.icon
- * @param {'keys'|'fills'} props.field - which balance this spends
- * @param {Bankroll|null} props.bankroll
- * @param {string} props.title - confirm modal title
- * @param {string} props.body - confirm modal explanation
- * @param {CurrencySpendAction} props.action
- * @param {Challenge['id']} props.challengeId
- * @param {() => void} [props.onSpent] - called after a successful spend (refetch balances + challenges)
+ * @param props.label - button text
+ * @param props.field - which balance this spends
+ * @param props.title - confirm modal title
+ * @param props.body - confirm modal explanation
+ * @param props.onSpent - called after a successful spend (refetch balances + challenges)
  */
-function CurrencyActionButton({ label, icon, field, bankroll, title, body, action, challengeId, onSpent }) {
+function CurrencyActionButton({
+    label,
+    icon,
+    field,
+    bankroll,
+    title,
+    body,
+    action,
+    challengeId,
+    onSpent,
+}: {
+    label: string;
+    icon: string;
+    field: 'keys' | 'fills';
+    bankroll: Bankroll | null;
+    title: string;
+    body: string;
+    action: CurrencySpendAction;
+    challengeId: Challenge['id'];
+    onSpent?: () => void;
+}) {
     const { t } = useTranslation();
     const [confirmOpen, setConfirmOpen] = useState(false);
     const { run, loading, error, clearError } = action;
@@ -83,17 +99,17 @@ function CurrencyActionButton({ label, icon, field, bankroll, title, body, actio
 
 // Per-cell wiring: which hook spends, which balance it draws on, and the
 // translation keys for the button and its confirm modal.
-/**
- * @type {Record<'key' | 'fill', {
- *     useAction: () => CurrencySpendAction,
- *     icon: string,
- *     field: 'keys' | 'fills',
- *     label: string,
- *     title: string,
- *     body: string,
- * }>}
- */
-const CELL_ACTIONS = {
+const CELL_ACTIONS: Record<
+    'key' | 'fill',
+    {
+        useAction: () => CurrencySpendAction;
+        icon: string;
+        field: 'keys' | 'fills';
+        label: string;
+        title: string;
+        body: string;
+    }
+> = {
     key: {
         useAction: useKeyUnlock,
         icon: '🔑',
@@ -116,10 +132,18 @@ const CELL_ACTIONS = {
  * Stat-cell spend button: `kind="key"` unlocks the boost (Boost cell),
  * `kind="fill"` tops exposure up to 100% (Exposure cell). `kind` is fixed per
  * mounted instance, so the hook it selects is stable across renders.
- *
- * @param {{kind: 'key'|'fill', challenge: Challenge, bankroll: Bankroll|null, onSpent?: () => void}} props
  */
-export function CurrencyCellButton({ kind, challenge, bankroll, onSpent }) {
+export function CurrencyCellButton({
+    kind,
+    challenge,
+    bankroll,
+    onSpent,
+}: {
+    kind: 'key' | 'fill';
+    challenge: Challenge;
+    bankroll: Bankroll | null;
+    onSpent?: () => void;
+}) {
     const { t } = useTranslation();
     const config = CELL_ACTIONS[kind];
     const action = config.useAction();

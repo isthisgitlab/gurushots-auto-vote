@@ -7,22 +7,18 @@ import { StatusBadge } from '@/components/ui/StatusBadge';
 import { interp } from '@/utils/interp';
 import * as ipc from '@/api/ipc';
 
-/**
- * @import { Bankroll, Challenge } from '../../../types/gurushots'
- */
+import type { Bankroll, Challenge } from '../../../types/gurushots';
 
 /**
  * What a join left behind for its row: the join-challenge result (either arm)
  * or the local stand-in when the call itself threw.
- *
- * @typedef {{ success?: boolean, status?: string, cost?: number, coins?: number, error?: string }} JoinOutcome
  */
+export type JoinOutcome = { success?: boolean; status?: string; cost?: number; coins?: number; error?: string };
 
 // Map a join outcome status to a translated, colored inline message. Distinct
 // wording for the money-critical "charged but not joined" case, which also
 // surfaces a resume-submit action (see below).
-/** @type {Record<string, { key: string, variant: keyof typeof TEXT_CLASS }>} */
-const OUTCOME = {
+const OUTCOME: Record<string, { key: string; variant: keyof typeof TEXT_CLASS }> = {
     joined: { key: 'app.discoverJoined', variant: 'success' },
     'skipped-unaffordable': { key: 'app.discoverUnaffordable', variant: 'warning' },
     'balance-unknown': { key: 'app.discoverBalanceUnknown', variant: 'warning' },
@@ -42,8 +38,7 @@ const TEXT_CLASS = {
     neutral: 'text-base-content/60',
 };
 
-/** @param {Challenge} c */
-const costOf = (c) => {
+const costOf = (c: Challenge) => {
     const n = Number(c?.join_coins);
     return Number.isFinite(n) && n > 0 ? n : 0;
 };
@@ -54,27 +49,28 @@ const costOf = (c) => {
  * the current → resulting coin balance before spending. After any join that
  * changes state, refetches the list and calls onJoined so the header bankroll
  * (and active challenges) refresh.
- *
- * @param {{ isLoggedIn: boolean, bankroll: Bankroll | null, onJoined: () => void }} props
  */
-export function DiscoverSection({ isLoggedIn, bankroll, onJoined }) {
+export function DiscoverSection({
+    isLoggedIn,
+    bankroll,
+    onJoined,
+}: {
+    isLoggedIn: boolean;
+    bankroll: Bankroll | null;
+    onJoined: () => void;
+}) {
     const { t } = useTranslation();
     const { items, loading, error, refetch } = useMemberChallenges();
-    const [confirm, setConfirm] = useState(/** @type {Challenge | null} */ (null)); // challenge pending paid confirmation
-    const [busyId, setBusyId] = useState(/** @type {Challenge['id'] | null} */ (null));
-    const [results, setResults] = useState(/** @type {Record<string, JoinOutcome>} */ ({})); // id -> outcome result
+    const [confirm, setConfirm] = useState<Challenge | null>(null); // challenge pending paid confirmation
+    const [busyId, setBusyId] = useState<Challenge['id'] | null>(null);
+    const [results, setResults] = useState<Record<string, JoinOutcome>>({}); // id -> outcome result
 
     const doJoin = useCallback(
-        /**
-         * @param {Challenge} challenge
-         * @param {boolean} spendCoins
-         */
-        async (challenge, spendCoins) => {
+        async (challenge: Challenge, spendCoins: boolean) => {
             const id = challenge?.id;
             setBusyId(id);
             try {
-                /** @type {JoinOutcome} */
-                const res = await ipc.joinChallenge(id, spendCoins);
+                const res: JoinOutcome = await ipc.joinChallenge(id, spendCoins);
                 setResults((prev) => ({ ...prev, [id]: res }));
                 // Refetch on any outcome that changes what's joinable (joined,
                 // coins charged, or the challenge is gone) so a stale row/button
@@ -88,7 +84,7 @@ export function DiscoverSection({ isLoggedIn, bankroll, onJoined }) {
                     ...prev,
                     [id]: {
                         status: 'failed-no-charge',
-                        error: /** @type {{ message?: string } | null | undefined} */ (err)?.message,
+                        error: (err as { message?: string } | null | undefined)?.message,
                     },
                 }));
                 return { success: false };
@@ -100,8 +96,7 @@ export function DiscoverSection({ isLoggedIn, bankroll, onJoined }) {
     );
 
     const onJoinClick = useCallback(
-        /** @param {Challenge} challenge */
-        (challenge) => {
+        (challenge: Challenge) => {
             if (costOf(challenge) > 0) {
                 setConfirm(challenge);
             } else {
@@ -116,7 +111,7 @@ export function DiscoverSection({ isLoggedIn, bankroll, onJoined }) {
         setConfirm(null);
         // Only reachable from the modal's Spend button, which renders only
         // while a challenge is pending confirmation.
-        await doJoin(/** @type {Challenge} */ (challenge), true);
+        await doJoin(challenge as Challenge, true);
     }, [confirm, doJoin]);
 
     if (!isLoggedIn) return null;
@@ -169,9 +164,8 @@ export function DiscoverSection({ isLoggedIn, bankroll, onJoined }) {
                                 // Any result without a mapped status (auth-expiry, an
                                 // unexpected handler error) still shows a message rather
                                 // than failing silently on a money-adjacent action.
-                                /** @type {{ key: string | null, variant: keyof typeof TEXT_CLASS } | null} */
-                                const meta = outcome
-                                    ? OUTCOME[/** @type {string} */ (outcome.status)] || { key: null, variant: 'error' }
+                                const meta: { key: string | null; variant: keyof typeof TEXT_CLASS } | null = outcome
+                                    ? OUTCOME[outcome.status as string] || { key: null, variant: 'error' }
                                     : null;
                                 const isBusy = busyId === c.id;
                                 return (

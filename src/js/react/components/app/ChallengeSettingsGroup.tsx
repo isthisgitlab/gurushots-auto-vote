@@ -7,31 +7,27 @@ import { SettingHelp } from '@/components/ui/SettingHelp';
 import { SettingInput, SettingLabel } from './SettingInput';
 import { SettingHintList } from './SettingHints';
 
-/**
- * @import { SerializableSchemaEntry } from '../../../ipc/settings.handlers'
- * @import { useChallengeOverrides } from '@/hooks/useChallengeOverrides'
- * @import { Challenge } from '../../../types/gurushots'
- * @import { FillSchedule } from '../../../services/scheduleRemap'
- * @import { HintsFor } from '../../../types/settingsEditor'
- */
+import type { SerializableSchemaEntry } from '../../../ipc/settings.handlers';
+import type { useChallengeOverrides } from '@/hooks/useChallengeOverrides';
+import type { Challenge } from '../../../types/gurushots';
+import type { FillSchedule } from '../../../services/scheduleRemap';
+import type { HintsFor } from '../../../types/settingsEditor';
 
 /**
  * What every cell of a per-challenge settings group reads: the challenge, the
  * global defaults, useChallengeOverrides' state and the modal's hint resolver.
- *
- * @typedef {object} ChallengeGroupContext
- * @property {Challenge | null | undefined} challenge
- * @property {Record<string, unknown> | null | undefined} defaults
- * @property {ReturnType<typeof useChallengeOverrides>} form
- * @property {HintsFor} hintsFor
  */
+export interface ChallengeGroupContext {
+    challenge: Challenge | null | undefined;
+    defaults: Record<string, unknown> | null | undefined;
+    form: ReturnType<typeof useChallengeOverrides>;
+    hintsFor: HintsFor;
+}
 
 /**
  * Where a setting's shown value comes from: override, title-rule profile, or the global default.
- *
- * @param {{ hasOverride: boolean, hasProfileValue: boolean }} props
  */
-function ValueSourceBadge({ hasOverride, hasProfileValue }) {
+function ValueSourceBadge({ hasOverride, hasProfileValue }: { hasOverride: boolean; hasProfileValue: boolean }) {
     const { t } = useTranslation();
     if (hasOverride) return <span className="badge badge-accent badge-sm">{t('app.overridden')}</span>;
     if (hasProfileValue) return <span className="badge badge-info badge-sm">{t('app.usingProfile')}</span>;
@@ -52,26 +48,24 @@ function ValueSourceBadge({ hasOverride, hasProfileValue }) {
  * single-photo challenge every remapped row lands below count 2 and is
  * dropped, so no image time governs anything — a "final photo uses the Image
  * N time" hint would be false.
- *
- * @param {string} key
- * @param {unknown} value
- * @param {Challenge | null | undefined} challenge
- * @returns {number}
  */
-function scheduleShiftOf(key, value, challenge) {
+function scheduleShiftOf(key: string, value: unknown, challenge: Challenge | null | undefined): number {
     if (key !== 'autoFillSchedule') return 0;
     const max = challenge?.max_photo_submits;
     // Number.isInteger does not narrow: an integer here is a number. The form
     // holds this key's value, a schedule.
-    return Number.isInteger(max) && /** @type {number} */ (max) >= 2
-        ? getScheduleShift(/** @type {FillSchedule} */ (value), max)
-        : 0;
+    return Number.isInteger(max) && (max as number) >= 2 ? getScheduleShift(value as FillSchedule, max) : 0;
 }
 
-/**
- * @param {ChallengeGroupContext & { settingKey: string, config: SerializableSchemaEntry, applicable: boolean }} props
- */
-function ChallengeSettingCell({ settingKey: key, config, applicable, challenge, defaults, form, hintsFor }) {
+function ChallengeSettingCell({
+    settingKey: key,
+    config,
+    applicable,
+    challenge,
+    defaults,
+    form,
+    hintsFor,
+}: ChallengeGroupContext & { settingKey: string; config: SerializableSchemaEntry; applicable: boolean }) {
     const { t } = useTranslation();
     const hasOverride = key in form.overrides;
     const hasProfileValue = Object.prototype.hasOwnProperty.call(form.profileValues, key);
@@ -80,7 +74,7 @@ function ChallengeSettingCell({ settingKey: key, config, applicable, challenge, 
     const inputId = `challenge-setting-${key}`;
     // Only read when scheduleShift > 0, i.e. for a challenge with an integer
     // max_photo_submits ≥ 2 (see scheduleShiftOf).
-    const shiftedChallenge = /** @type {Challenge & { max_photo_submits: number }} */ (challenge);
+    const shiftedChallenge = challenge as Challenge & { max_photo_submits: number };
 
     return (
         <div className={SETTING_CELL_CLASS}>
@@ -124,10 +118,16 @@ function ChallengeSettingCell({ settingKey: key, config, applicable, challenge, 
  *
  * `form` is useChallengeOverrides' state; `hintsFor(key)` the modal's
  * per-setting hint resolver.
- *
- * @param {ChallengeGroupContext & { id: string, label: string, entries: Array<[string, SerializableSchemaEntry]> }} props
  */
-export function ChallengeSettingsGroup({ id, label, entries, challenge, defaults, form, hintsFor }) {
+export function ChallengeSettingsGroup({
+    id,
+    label,
+    entries,
+    challenge,
+    defaults,
+    form,
+    hintsFor,
+}: ChallengeGroupContext & { id: string; label: string; entries: Array<[string, SerializableSchemaEntry]> }) {
     const { t } = useTranslation();
     const { applicable, reasonKey } = getGroupApplicability(id, challenge);
     // When a group can't apply, tie its heading + reason note to the section
@@ -157,7 +157,7 @@ export function ChallengeSettingsGroup({ id, label, entries, challenge, defaults
             {!applicable && (
                 <div id={reasonId} className="mb-3">
                     {/* A not-applicable group always carries its reason key. */}
-                    <p className="text-xs text-base-content/80">{t(/** @type {string} */ (reasonKey))}</p>
+                    <p className="text-xs text-base-content/80">{t(reasonKey as string)}</p>
                     {/* Reassure that a stored override on this (now-inert) group is
                         not lost — the "Overridden" badge below still shows it. */}
                     <p className="text-xs text-base-content/70 mt-0.5">{t('app.notApplicableHint')}</p>

@@ -1,13 +1,3 @@
-/**
- * @import { Signal } from '@preact/signals'
- * @import { Bankroll, Challenge } from '../../../types/gurushots'
- */
-/**
- * Everything the card derives from its challenge at one tick (see
- * utils/challengeCardView), shared by the detailed and compact layouts.
- *
- * @typedef {ReturnType<typeof deriveChallengeCardView>} ChallengeCardView
- */
 import { useTranslation } from '@/contexts/TranslationContext';
 import { deriveChallengeCardView } from '@/utils/challengeCardView';
 import { useDeadlineActions } from '@/api/useDeadlineActions';
@@ -19,6 +9,15 @@ import { ChallengeCardCompact } from './ChallengeCardCompact';
 import { ChallengeCardDetail } from './ChallengeCardDetail';
 import { useChallengeCardActions, buildCompactActionRow } from './ChallengeCardActions';
 
+import type { Signal } from '@preact/signals';
+import type { Bankroll, Challenge } from '../../../types/gurushots';
+
+/**
+ * Everything the card derives from its challenge at one tick (see
+ * utils/challengeCardView), shared by the detailed and compact layouts.
+ */
+export type ChallengeCardView = ReturnType<typeof deriveChallengeCardView>;
+
 /**
  * Challenge card. Renders either the full detailed card (every stat and every
  * action) or, when compactCards is on for this challenge, the
@@ -28,19 +27,8 @@ import { useChallengeCardActions, buildCompactActionRow } from './ChallengeCardA
  * ChallengesSection's #challenges-container: a detailed card spans the full
  * row, compact tiles share one.
  *
- * @param {object} props
- * @param {Challenge} props.challenge
- * @param {number} [props.settingsVersion]
- * @param {number} [props.passVersion]
- * @param {boolean} [props.defaultCompact]
- * @param {boolean} [props.compactActions]
- * @param {Signal<string> | string} [props.timeRemaining] - live countdown from useTimers
- * @param {string} props.timezone
- * @param {boolean} props.autovoteRunning
- * @param {() => void} props.onVoteComplete
- * @param {(challengeId: Challenge['id'], challengeTitle: string) => void} props.onSettingsClick
- * @param {Bankroll | null} [props.bankroll]
- * @param {() => void} props.onCurrencySpent - called after a key / swap / fill spend
+ * @param props.timeRemaining - live countdown from useTimers
+ * @param props.onCurrencySpent - called after a key / swap / fill spend
  */
 export function ChallengeCard({
     challenge,
@@ -55,6 +43,19 @@ export function ChallengeCard({
     onSettingsClick,
     bankroll = null,
     onCurrencySpent,
+}: {
+    challenge: Challenge;
+    settingsVersion?: number;
+    passVersion?: number;
+    defaultCompact?: boolean;
+    compactActions?: boolean;
+    timeRemaining?: Signal<string> | string;
+    timezone: string;
+    autovoteRunning: boolean;
+    onVoteComplete: () => void;
+    onSettingsClick: (challengeId: Challenge['id'], challengeTitle: string) => void;
+    bankroll?: Bankroll | null;
+    onCurrencySpent: () => void;
 }) {
     const { t } = useTranslation();
     const { hasCustomSettings, autoFillEnabled, isCompact, hasCompactOverride, toggleCompact } = useChallengeSettings(

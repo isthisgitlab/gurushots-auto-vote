@@ -1,4 +1,4 @@
-/** @import { Challenge } from '../../../types/gurushots' */
+import type { Challenge } from '../../../types/gurushots';
 import { useTranslation } from '@/contexts/TranslationContext';
 import { useCustomizedChallengeIds } from '@/hooks/useCustomizedChallengeIds';
 import { ChipListPanel, ChallengeChip, ChipTitle } from './ChallengeChips';
@@ -20,10 +20,8 @@ import { isLowExposure } from '@/utils/challengeAlerts';
  * Each chip also leads with a status dot — pulsing blue for an open boost
  * window, red for low exposure (utils/challengeAlerts) — so the whole
  * situation reads off this one panel. The meaning is repeated in sr-only text.
- *
- * @param {{ challenges: Challenge[] | null | undefined }} props
  */
-export function ChallengeNav({ challenges }) {
+export function ChallengeNav({ challenges }: { challenges: Challenge[] | null | undefined }) {
     const { t } = useTranslation();
 
     const list = challenges || [];

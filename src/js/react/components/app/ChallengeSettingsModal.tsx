@@ -14,9 +14,7 @@ import { ChallengeSettingsGroup } from './ChallengeSettingsGroup';
 import { challengeSettingHints } from './SettingHints';
 import * as ipc from '@/api/ipc';
 
-/**
- * @import { Challenge } from '../../../types/gurushots'
- */
+import type { Challenge } from '../../../types/gurushots';
 
 // The window hints only read the app settings; an unreadable read falls back
 // to the defaults rather than blocking the modal.
@@ -30,10 +28,8 @@ const fetchAppSettings = async () => {
 
 /**
  * App settings re-read on every open; a read still in flight at close is dropped.
- *
- * @param {boolean} isOpen
  */
-function useAppSettings(isOpen) {
+function useAppSettings(isOpen: boolean) {
     return useIpcQuery(fetchAppSettings, { enabled: isOpen, latestOnly: true }).data;
 }
 
@@ -43,10 +39,14 @@ function useAppSettings(isOpen) {
  * default: …" hint shows the comparison value; this is the at-a-glance count
  * so a user doesn't have to scan every group) and which title-rule profile
  * applies.
- *
- * @param {{ overrideCount: number, titleProfile: ReturnType<typeof useChallengeOverrides>['titleProfile'] }} props
  */
-function OverridesSummary({ overrideCount, titleProfile }) {
+function OverridesSummary({
+    overrideCount,
+    titleProfile,
+}: {
+    overrideCount: number;
+    titleProfile: ReturnType<typeof useChallengeOverrides>['titleProfile'];
+}) {
     const { t } = useTranslation();
     return (
         <>
@@ -72,16 +72,20 @@ function OverridesSummary({ overrideCount, titleProfile }) {
 
 /**
  * Per-challenge settings modal
- *
- * @param {{
- *   isOpen: boolean,
- *   onClose: () => void,
- *   challengeId: Challenge['id'] | null,
- *   challengeTitle: string,
- *   challenge?: Challenge | null,
- * }} props
  */
-export function ChallengeSettingsModal({ isOpen, onClose, challengeId, challengeTitle, challenge = null }) {
+export function ChallengeSettingsModal({
+    isOpen,
+    onClose,
+    challengeId,
+    challengeTitle,
+    challenge = null,
+}: {
+    isOpen: boolean;
+    onClose: () => void;
+    challengeId: Challenge['id'] | null;
+    challengeTitle: string;
+    challenge?: Challenge | null;
+}) {
     const { t } = useTranslation();
     const { rearmSchedule } = useAutovote();
     const {

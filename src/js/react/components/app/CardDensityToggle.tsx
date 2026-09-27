@@ -9,10 +9,16 @@ import { StrokeIcon, ICON_PATHS } from '@/components/ui/StrokeIcon';
  * "Details" (click to expand). The icon is filled when this card carries its
  * own override, so cards that diverge from the global default are visible at
  * a glance.
- *
- * @param {{ isCompact: boolean, hasOverride: boolean, onToggle: () => void | Promise<void> }} props
  */
-export function CardDensityToggle({ isCompact, hasOverride, onToggle }) {
+export function CardDensityToggle({
+    isCompact,
+    hasOverride,
+    onToggle,
+}: {
+    isCompact: boolean;
+    hasOverride: boolean;
+    onToggle: () => void | Promise<void>;
+}) {
     const { t } = useTranslation();
     return (
         <button className="btn btn-outline btn-sm shrink-0" onClick={() => void onToggle()}>

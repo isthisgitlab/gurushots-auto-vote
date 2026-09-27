@@ -1,25 +1,32 @@
-/**
- * @import { ComponentChildren } from 'preact'
- * @import { Challenge } from '../../../types/gurushots'
- * @import { RankedChallenge } from '../../../types/rendererUtils'
- * @import { ChallengeCardView } from './ChallengeCard'
- * @import { ChallengeBadgeRowProps } from './ChallengeBadgeRow'
- * @import { DeadlineAction } from './DeadlineTimeline'
- */
+import type { ComponentChildren } from 'preact';
+import type { Challenge } from '../../../types/gurushots';
+import type { RankedChallenge } from '../../../types/rendererUtils';
+import type { ChallengeCardView } from './ChallengeCard';
+import type { ChallengeBadgeRowProps } from './ChallengeBadgeRow';
+import type { DeadlineAction } from './DeadlineTimeline';
 import { useTranslation } from '@/contexts/TranslationContext';
 import { getEntryStatus } from '@/utils/formatters';
 import { ChallengeBadgeRow } from './ChallengeBadgeRow';
 import { CardDensityToggle } from './CardDensityToggle';
 import { DeadlineTimeline } from './DeadlineTimeline';
 import { ScenarioStatusLine } from './ScenarioStatusLine';
+import type * as useScenarioStatusModule from '@/api/useScenarioStatus';
 
 /**
  * One labelled stat in the compact tile's grid. The emoji is the visual label;
  * the translated name rides on `title` so the cell stays one short line.
- *
- * @param {{ icon: string, label: string, className?: string, children: ComponentChildren }} props
  */
-function Stat({ icon, label, className = '', children }) {
+function Stat({
+    icon,
+    label,
+    className = '',
+    children,
+}: {
+    icon: string;
+    label: string;
+    className?: string;
+    children: ComponentChildren;
+}) {
     return (
         <div className={`truncate ${className}`} title={label}>
             <span aria-hidden="true">{icon}</span> <span className="sr-only">{label}: </span>
@@ -43,21 +50,7 @@ function Stat({ icon, label, className = '', children }) {
  * All values are derived by the parent ChallengeCard and passed in, so the
  * tile and the detailed card can never disagree about what a state means.
  *
- * @param {object} props
- * @param {Challenge} props.challenge
- * @param {ChallengeBadgeRowProps} props.badgeRowProps
- * @param {string} props.timeText
- * @param {ChallengeCardView['exposureFactor']} props.exposureFactor
- * @param {ChallengeCardView['exposureClass']} props.exposureClass
- * @param {ChallengeCardView['boostStatus']} props.boostStatus
- * @param {ChallengeCardView['turboStatus']} props.turboStatus
- * @param {ChallengeCardView['entries']} props.entries
- * @param {boolean} props.hasCompactOverride
- * @param {() => void | Promise<void>} props.onToggleCompact
- * @param {boolean} props.boostBlocked
- * @param {DeadlineAction[]} props.deadlineActions
- * @param {ReturnType<typeof import('@/api/useScenarioStatus').useScenarioStatus>} props.scenarioStatus
- * @param {ComponentChildren} props.actions - the optional footer action row
+ * @param props.actions - the optional footer action row
  */
 export function ChallengeCardCompact({
     challenge,
@@ -74,9 +67,24 @@ export function ChallengeCardCompact({
     deadlineActions,
     scenarioStatus,
     actions,
+}: {
+    challenge: Challenge;
+    badgeRowProps: ChallengeBadgeRowProps;
+    timeText: string;
+    exposureFactor: ChallengeCardView['exposureFactor'];
+    exposureClass: ChallengeCardView['exposureClass'];
+    boostStatus: ChallengeCardView['boostStatus'];
+    turboStatus: ChallengeCardView['turboStatus'];
+    entries: ChallengeCardView['entries'];
+    hasCompactOverride: boolean;
+    onToggleCompact: () => void | Promise<void>;
+    boostBlocked: boolean;
+    deadlineActions: DeadlineAction[];
+    scenarioStatus: ReturnType<typeof useScenarioStatusModule.useScenarioStatus>;
+    actions: ComponentChildren;
 }) {
     const { t } = useTranslation();
-    const progress = /** @type {RankedChallenge} */ (challenge).member.ranking.total;
+    const progress = (challenge as RankedChallenge).member.ranking.total;
     const rank = progress?.rank;
     const hasRank = rank !== undefined && rank > 0;
 

@@ -6,17 +6,15 @@ import * as ipc from '@/api/ipc';
 /**
  * What a profile save or delete reports to the modal: the profile's name and
  * either its new values or `deleted`.
- *
- * @typedef {{ name: string, values?: Record<string, unknown>, deleted?: boolean }} ProfileChange
  */
+export type ProfileChange = { name: string; values?: Record<string, unknown>; deleted?: boolean };
 
 // How long an armed confirm button (delete / overwrite) stays armed before
 // falling back to its idle state.
 const CONFIRM_TIMEOUT_MS = 4000;
 
 // Only ever called with profile-name keys and the trimmed input — always strings.
-/** @param {string} name @returns {string} */
-const normalizeName = (name) => name.trim().toLowerCase();
+const normalizeName = (name: string): string => name.trim().toLowerCase();
 
 /**
  * Named challenge-settings profiles bar for the per-challenge settings modal.
@@ -30,25 +28,28 @@ const normalizeName = (name) => name.trim().toLowerCase();
  * `profileLimits` comes from the get-settings-schema response so the caps the
  * facade enforces are never duplicated here; when absent the client checks
  * are skipped and the facade's fail-closed save still guards.
- *
- * @param {{
- *   overrides: Record<string, unknown>,
- *   onApply: (values: Record<string, unknown>) => void,
- *   onProfilesChanged?: (change: ProfileChange) => void,
- *   profileLimits?: { maxChallengeProfiles?: number, maxProfileNameLength?: number } | null,
- * }} props
  */
-export function ChallengeProfilesBar({ overrides, onApply, onProfilesChanged = () => {}, profileLimits }) {
+export function ChallengeProfilesBar({
+    overrides,
+    onApply,
+    onProfilesChanged = () => {},
+    profileLimits,
+}: {
+    overrides: Record<string, unknown>;
+    onApply: (values: Record<string, unknown>) => void;
+    onProfilesChanged?: (change: ProfileChange) => void;
+    profileLimits?: { maxChallengeProfiles?: number; maxProfileNameLength?: number } | null;
+}) {
     const { t } = useTranslation();
-    const [profiles, setProfiles] = useState(/** @type {Record<string, Record<string, unknown>>} */ ({}));
+    const [profiles, setProfiles] = useState<Record<string, Record<string, unknown>>>({});
     const [selectedName, setSelectedName] = useState('');
     const [newName, setNewName] = useState('');
     const [busy, setBusy] = useState(false);
     const [errorText, setErrorText] = useState('');
     const [applied, setApplied] = useState(false);
     // null | 'delete' | 'overwrite' — which destructive action is armed.
-    const [confirming, setConfirming] = useState(/** @type {null | 'delete' | 'overwrite'} */ (null));
-    const confirmTimerRef = useRef(/** @type {ReturnType<typeof setTimeout> | null} */ (null));
+    const [confirming, setConfirming] = useState<null | 'delete' | 'overwrite'>(null);
+    const confirmTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
     const clearConfirmTimer = useCallback(() => {
         if (confirmTimerRef.current) {
@@ -63,8 +64,7 @@ export function ChallengeProfilesBar({ overrides, onApply, onProfilesChanged = (
     }, [clearConfirmTimer]);
 
     const arm = useCallback(
-        /** @param {'delete' | 'overwrite'} action */
-        (action) => {
+        (action: 'delete' | 'overwrite') => {
             clearConfirmTimer();
             setConfirming(action);
             confirmTimerRef.current = setTimeout(() => {
@@ -83,7 +83,7 @@ export function ChallengeProfilesBar({ overrides, onApply, onProfilesChanged = (
             setProfiles(result && typeof result === 'object' ? result : {});
         } catch (err) {
             await ipc.logRendererError(
-                `Error loading challenge profiles: ${/** @type {{ message?: unknown } | null | undefined} */ (err)?.message || err}`,
+                `Error loading challenge profiles: ${(err as { message?: unknown } | null | undefined)?.message || err}`,
             );
             setProfiles({});
         }
@@ -98,14 +98,12 @@ export function ChallengeProfilesBar({ overrides, onApply, onProfilesChanged = (
     // Distinguish built-in intent presets from user profiles and edited copies.
     const selectedIntent = getIntentByName(selectedName);
     const selectedIntentModified = selectedIntent ? !intentValuesMatch(selectedIntent, selectedProfile) : false;
-    /** @param {string} name */
-    const displayNameOf = (name) => {
+    const displayNameOf = (name: string) => {
         const intent = getIntentByName(name);
         return intent ? t(intent.nameKey) : name;
     };
 
-    /** @param {string} name */
-    const handleSelect = (name) => {
+    const handleSelect = (name: string) => {
         setSelectedName(name);
         setApplied(false);
         disarm();
@@ -114,7 +112,7 @@ export function ChallengeProfilesBar({ overrides, onApply, onProfilesChanged = (
     // Apply and Delete are disabled while no profile is selected, so both
     // handlers can rely on selectedProfile being set.
     const handleApply = () => {
-        onApply(/** @type {Record<string, unknown>} */ (selectedProfile));
+        onApply(selectedProfile as Record<string, unknown>);
         setErrorText('');
         setApplied(true);
         disarm();
@@ -139,7 +137,7 @@ export function ChallengeProfilesBar({ overrides, onApply, onProfilesChanged = (
             onProfilesChanged({ name: selectedName, deleted: true });
         } catch (err) {
             await ipc.logRendererError(
-                `Error deleting challenge profile: ${/** @type {{ message?: unknown } | null | undefined} */ (err)?.message || err}`,
+                `Error deleting challenge profile: ${(err as { message?: unknown } | null | undefined)?.message || err}`,
             );
         } finally {
             setBusy(false);
@@ -188,7 +186,7 @@ export function ChallengeProfilesBar({ overrides, onApply, onProfilesChanged = (
             }
         } catch (err) {
             await ipc.logRendererError(
-                `Error saving challenge profile: ${/** @type {{ message?: unknown } | null | undefined} */ (err)?.message || err}`,
+                `Error saving challenge profile: ${(err as { message?: unknown } | null | undefined)?.message || err}`,
             );
             setErrorText(t('app.profileSaveError'));
         } finally {

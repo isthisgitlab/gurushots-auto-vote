@@ -1,5 +1,5 @@
 /**
- * Component tests for ChallengeNav.jsx — the "jump to challenge" index above the
+ * Component tests for ChallengeNav.tsx — the "jump to challenge" index above the
  * challenge list that names every active challenge and lets the user click a
  * name to scroll to its card. Covers:
  *   - renders nothing when there are no challenges

@@ -1,4 +1,4 @@
-/** @import { Bankroll, Challenge } from '../../../types/gurushots' */
+import type { Bankroll, Challenge } from '../../../types/gurushots';
 import { useState, useCallback, useEffect } from 'react';
 import { useTranslation } from '@/contexts/TranslationContext';
 import { useChallenges } from '@/contexts/ChallengesContext';
@@ -76,14 +76,7 @@ function useGlobalCardDensity() {
  * changing the challenge payload, so the card re-reads its scenario status
  * on this signal rather than waiting for the data to differ.
  *
- * @param {object} props
- * @param {string} props.timezone
- * @param {boolean} props.autovoteRunning
- * @param {number} [props.autovoteCycles]
- * @param {boolean} props.isLoggedIn
- * @param {(challengeId: Challenge['id'], challengeTitle: string) => void} props.onChallengeSettingsClick
- * @param {Bankroll | null} [props.bankroll]
- * @param {() => void | Promise<void>} [props.onBankrollChanged] - called after a spend changed the balance
+ * @param props.onBankrollChanged - called after a spend changed the balance
  */
 export function ChallengesSection({
     timezone,
@@ -93,6 +86,14 @@ export function ChallengesSection({
     onChallengeSettingsClick,
     bankroll = null,
     onBankrollChanged,
+}: {
+    timezone: string;
+    autovoteRunning: boolean;
+    autovoteCycles?: number;
+    isLoggedIn: boolean;
+    onChallengeSettingsClick: (challengeId: Challenge['id'], challengeTitle: string) => void;
+    bankroll?: Bankroll | null;
+    onBankrollChanged?: () => void | Promise<void>;
 }) {
     const { t } = useTranslation();
     const { challenges, loading, error, refetch } = useChallenges();
