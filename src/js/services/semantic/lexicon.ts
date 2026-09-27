@@ -219,7 +219,7 @@ const nearestSearchTerms = (term: string): string[] => {
         .map(({ word }) => word);
 };
 
-const interleaveSearchTerms = (groups: string[][], terms: string[]): string[] => {
+const interleaveSearchTerms = (groups: readonly (readonly string[])[], terms: readonly string[]): string[] => {
     const seen = new Set(terms.map(stemToken));
     const related = [];
     const width = Math.max(0, ...groups.map((group) => group.length));

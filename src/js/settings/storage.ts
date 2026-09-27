@@ -34,7 +34,7 @@ const headlessStore = (): AndroidHeadlessStore | undefined =>
 // Try to import electron, but don't fail if it's not available (CLI context)
 let electronApp: App | null | undefined = null;
 try {
-    const electron = require('electron');
+    const electron = require('electron') as typeof import('electron');
     electronApp = electron.app;
 } catch (error) {
     // Electron not available (CLI context), we'll use fallback
@@ -55,7 +55,8 @@ let writeChain = Promise.resolve();
 
 const getCapacitorPreferences = (): PreferencesPlugin => {
     if (capacitorPreferences) return capacitorPreferences;
-    const plugin: PreferencesPlugin = require('@capacitor/preferences').Preferences;
+    const plugin: PreferencesPlugin = (require('@capacitor/preferences') as typeof import('@capacitor/preferences'))
+        .Preferences;
     capacitorPreferences = plugin;
     return plugin;
 };

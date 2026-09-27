@@ -90,7 +90,8 @@ export function deriveWindowHints({
     maxDurationMin: WindowHintPolicy['maxDurationMin'];
 }): WindowHintState {
     const rawTimes = effectiveOf(keys.times);
-    const times = (Array.isArray(rawTimes) ? rawTimes : []).slice(0, MAX_SCHEDULED_FILL_ENTRIES);
+    // A time-of-day list setting: 'HH:MM' strings (validated when settings load).
+    const times = (Array.isArray(rawTimes) ? (rawTimes as string[]) : []).slice(0, MAX_SCHEDULED_FILL_ENTRIES);
     const rawBeforeEnds = effectiveOf(keys.beforeEnd);
     const beforeEnds = (Array.isArray(rawBeforeEnds) ? rawBeforeEnds : [])
         .slice(0, MAX_SCHEDULED_FILL_ENTRIES)

@@ -28,10 +28,15 @@ type CurrencyField = 'keys' | 'swaps' | 'fills';
 // dispatcher loads it for `help` or `logout`) does not construct the handler
 // set or pull in its transitive dependencies.
 let _handlers: ActionHandlers | undefined;
-const handlers = (): ActionHandlers => (_handlers ??= require('../../ipc/actions.handlers').buildHandlers());
+const handlers = (): ActionHandlers =>
+    (_handlers ??= (
+        require('../../ipc/actions.handlers') as typeof import('../../ipc/actions.handlers')
+    ).buildHandlers());
 let _currencyHandlers: CurrencyHandlers | undefined;
 const currencyHandlers = (): CurrencyHandlers =>
-    (_currencyHandlers ??= require('../../ipc/currency.handlers').buildHandlers());
+    (_currencyHandlers ??= (
+        require('../../ipc/currency.handlers') as typeof import('../../ipc/currency.handlers')
+    ).buildHandlers());
 
 /**
  * Shared auth guard + challenge lookup. Returns the live challenge object,

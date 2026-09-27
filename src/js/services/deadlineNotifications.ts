@@ -84,7 +84,7 @@ const sanitizeNotificationText = (value: string | null | undefined, maxLength: n
  * Unknown tokens are left intact rather than blanked.
  */
 const interpolate = (template: string, params: Record<string, string | number | null | undefined>): string =>
-    template.replace(/\{(\w+)\}/g, (match, key) => (params[key] != null ? String(params[key]) : match));
+    template.replace(/\{(\w+)\}/g, (match: string, key: string) => (params[key] != null ? String(params[key]) : match));
 
 /**
  * Decide which upcoming actions are within the notification lead window.

@@ -43,7 +43,7 @@ import crypto from 'node:crypto';
 import readline from 'node:readline';
 import { pipeline } from 'node:stream/promises';
 import yauzl from 'yauzl';
-import type { Options as YauzlOptions, ZipFile } from 'yauzl';
+import type { Entry, Options as YauzlOptions, ZipFile } from 'yauzl';
 import type { ConceptsConfig } from './build-lexicon';
 import { stem } from '../src/js/services/photoPicker';
 import { runIfMain } from './lib/run-if-main';
@@ -307,7 +307,7 @@ const quantizePack = (
     let maxAbs = 0;
     for (const { vec } of stems.values()) for (const x of vec) maxAbs = Math.max(maxAbs, Math.abs(x));
     const scale = maxAbs / 127 || 1 / 127;
-    const packed: Record<string, string> = Object.create(null);
+    const packed = Object.create(null) as Record<string, string>;
     for (const [key, { vec }] of stems) {
         const q = new Int8Array(dims);
         for (let i = 0; i < dims; i++) q[i] = Math.max(-127, Math.min(127, Math.round(vec[i] / scale)));
@@ -413,7 +413,7 @@ const streamEntryLines = (
         opener({ lazyEntries: true }, (err, zipfile) => {
             if (err) return reject(new Error(`cannot open zip: ${err.message}`));
             let found = false;
-            zipfile.on('entry', (entry) => {
+            zipfile.on('entry', (entry: Entry) => {
                 if (entry.fileName !== ENTRY_NAME) return zipfile.readEntry();
                 found = true;
                 if (entry.uncompressedSize > maxEntryBytes) {
@@ -474,7 +474,7 @@ const main = async ({
     topN = TOP_N,
     meanCenter = MEAN_CENTER,
 }: MainOptions = {}): Promise<void> => {
-    const concepts: ConceptsConfig | null = JSON.parse(fs.readFileSync(conceptsPath, 'utf8'));
+    const concepts = JSON.parse(fs.readFileSync(conceptsPath, 'utf8')) as ConceptsConfig | null;
     const { bySurface: authored, collisions } = collectAuthoredWords(concepts);
     if (collisions.length) {
         fail([

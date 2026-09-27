@@ -50,7 +50,7 @@ const getPlatform = () => {
 const isPackaged = () => {
     if (isElectron()) {
         try {
-            return require('electron').app.isPackaged;
+            return (require('electron') as typeof import('electron')).app.isPackaged;
         } catch {
             return false;
         }
@@ -109,13 +109,13 @@ const APP_BASE_NAME = 'gurushots-auto-vote';
 const isSourceCode = () => {
     if (isElectron()) {
         try {
-            if (require('electron').app?.isPackaged) return false;
+            if ((require('electron') as typeof import('electron')).app?.isPackaged) return false;
         } catch {
             // Electron module unavailable despite the version flag — treat as source.
         }
     }
     try {
-        if (require('node:sea').isSea()) return false;
+        if ((require('node:sea') as typeof import('node:sea')).isSea()) return false;
     } catch {
         // node:sea unavailable — fall through to other detection
     }
@@ -141,7 +141,7 @@ const getAppName = () => (isSourceCode() ? `${APP_BASE_NAME}-dev` : APP_BASE_NAM
 const getAppUserDataPath = () => {
     if (isElectron()) {
         try {
-            const app = require('electron').app;
+            const app = (require('electron') as typeof import('electron')).app;
             if (app && app.getPath) {
                 const base = app.getPath('userData');
                 return isSourceCode() ? `${base}-dev` : base;
@@ -152,7 +152,7 @@ const getAppUserDataPath = () => {
     }
     let userDataPath = getUserDataDir(getAppName());
     try {
-        const fs = require('node:fs');
+        const fs = require('node:fs') as typeof import('node:fs');
         if (!fs.existsSync(userDataPath)) {
             try {
                 fs.mkdirSync(userDataPath, { recursive: true });

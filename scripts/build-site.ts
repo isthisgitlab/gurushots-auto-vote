@@ -15,6 +15,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { runIfMain } from './lib/run-if-main';
+import type { Tokens } from 'marked';
 
 const root = path.join(__dirname, '..');
 const outDir = path.join(root, 'dist-site');
@@ -154,8 +155,15 @@ const main = async ({ rootDir = root, out = outDir, layoutFile = layoutPath } = 
     marked.use(gfmHeadingId());
     marked.use({
         walkTokens(token) {
-            if (token.type === 'link') token.href = rewriteLink(token.href, activeSrcDir);
-            else if (token.type === 'image') token.href = rewriteImage(token.href, activeSrcDir);
+            // The type tag names the token's shape; marked's union also carries a
+            // generic token that the tag check cannot rule out.
+            if (token.type === 'link') {
+                const link = token as Tokens.Link;
+                link.href = rewriteLink(link.href, activeSrcDir);
+            } else if (token.type === 'image') {
+                const image = token as Tokens.Image;
+                image.href = rewriteImage(image.href, activeSrcDir);
+            }
         },
     });
 
@@ -166,7 +174,7 @@ const main = async ({ rootDir = root, out = outDir, layoutFile = layoutPath } = 
     }
 
     const layout = fs.readFileSync(layoutFile, 'utf8');
-    const { version } = JSON.parse(fs.readFileSync(path.join(rootDir, 'package.json'), 'utf8'));
+    const { version } = JSON.parse(fs.readFileSync(path.join(rootDir, 'package.json'), 'utf8')) as { version: string };
 
     fs.rmSync(out, { recursive: true, force: true });
     fs.mkdirSync(out, { recursive: true });

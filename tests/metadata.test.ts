@@ -83,6 +83,14 @@ describe('loadMetadata', () => {
         expect(writes[0]['777']).toBeUndefined();
     });
 
+    test('a file that is not a JSON object loads as the defaults and is rewritten', () => {
+        setStoredMetadata([{ lastVoteTime: '2026-05-09T12:00:00Z' }]);
+        const writes = captureWrites();
+        const result = metadata.loadMetadata();
+        expect(result).toEqual({ updateCheck: { lastCheck: null, skipVersion: null } });
+        expect(writes).toEqual([{ updateCheck: { lastCheck: null, skipVersion: null } }]);
+    });
+
     test('drops negative exposureBump but keeps oversized values (>100% is legitimate)', () => {
         setStoredMetadata({
             updateCheck: { lastCheck: null, skipVersion: null },

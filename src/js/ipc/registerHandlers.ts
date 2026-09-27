@@ -63,7 +63,7 @@ const isTrustedSender = (event: IpcMainInvokeEvent | IpcMainEvent | null | undef
 
 const registerHandlers = (ipcMain: IpcMain, handlers: Record<string, IpcHandler>) => {
     for (const [channel, impl] of Object.entries(handlers)) {
-        ipcMain.handle(channel, (event, ...args) => {
+        ipcMain.handle(channel, (event, ...args: unknown[]) => {
             if (!isTrustedSender(event)) {
                 logger
                     .withCategory('api')

@@ -53,8 +53,8 @@ const entryIdsOf = (challenge: Challenge): string[] =>
 const createEntryAgeLedger = (store: RawJsonStore) => {
     const read = (): Record<string, EntryAgeRecord> => {
         try {
-            const parsed = JSON.parse(store.readRaw() || '{}');
-            if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) return {};
+            const parsed: unknown = JSON.parse(store.readRaw() || '{}');
+            if (!isPlainObject(parsed)) return {};
             const state: Record<string, EntryAgeRecord> = {};
             for (const [id, record] of Object.entries(parsed)) {
                 if (isRecord(record)) state[id] = record;

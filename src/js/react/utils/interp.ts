@@ -3,4 +3,4 @@
  * interpolation. Missing / null values render as an empty string.
  */
 export const interp = (str: string, vars?: Record<string, unknown>): string =>
-    String(str).replace(/\{(\w+)\}/g, (_, k) => (vars && vars[k] != null ? String(vars[k]) : ''));
+    String(str).replace(/\{(\w+)\}/g, (_: string, k: string) => (vars && vars[k] != null ? String(vars[k]) : ''));

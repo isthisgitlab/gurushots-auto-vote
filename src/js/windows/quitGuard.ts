@@ -47,7 +47,7 @@ const QUIT_WARN_HORIZON_SEC = 60 * 60;
 const BYPASS_TTL_MS = 30_000;
 
 // Last successful challenge list from get-active-challenges.
-let lastChallenges: Challenge[] = [];
+let lastChallenges: readonly Challenge[] = [];
 let bypassed = false;
 let bypassTimer: NodeJS.Timeout | null = null;
 // A second Cmd+Q while the dialog is up must not stack another dialog.

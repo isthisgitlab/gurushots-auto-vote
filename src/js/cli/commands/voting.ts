@@ -26,7 +26,10 @@ import type { Challenge } from '../../types/gurushots';
 import type * as voting_handlersModule from '../../ipc/voting.handlers';
 type VotingHandlers = NullEventHandlers<ReturnType<typeof voting_handlersModule.buildHandlers>>;
 let _votingHandlers: VotingHandlers | undefined;
-const votingHandlers = (): VotingHandlers => (_votingHandlers ??= require('../../ipc/voting.handlers').buildHandlers());
+const votingHandlers = (): VotingHandlers =>
+    (_votingHandlers ??= (
+        require('../../ipc/voting.handlers') as typeof import('../../ipc/voting.handlers')
+    ).buildHandlers());
 
 /**
  * Run a single voting cycle. Pass {isManual: true} to use the manual
@@ -250,12 +253,14 @@ const showStatus = async () => {
 
     if (userSettings.challengeSettings && Object.keys(userSettings.challengeSettings).length > 0) {
         logger.withCategory('settings').info('\nChallenge Settings:');
-        Object.entries(userSettings.challengeSettings).forEach(([challengeId, challengeSettings]) => {
-            logger.withCategory('settings').info(`  Challenge ${challengeId}:`);
-            Object.entries(challengeSettings).forEach(([key, value]) => {
-                logger.withCategory('settings').info(`    ${key}: ${value}`);
-            });
-        });
+        Object.entries(userSettings.challengeSettings).forEach(
+            ([challengeId, challengeSettings]: [string, unknown]) => {
+                logger.withCategory('settings').info(`  Challenge ${challengeId}:`);
+                Object.entries(challengeSettings as object).forEach(([key, value]: [string, unknown]) => {
+                    logger.withCategory('settings').info(`    ${key}: ${value}`);
+                });
+            },
+        );
     }
 
     // Boost-window status: the CLI parity of the GUI banner (no anchors —

@@ -21,7 +21,10 @@ import type * as scenarios_handlersModule from '../../ipc/scenarios.handlers';
 import type * as settingsModule from '../../settings';
 type ScenarioHandlers = NullEventHandlers<ReturnType<typeof scenarios_handlersModule.buildHandlers>>;
 let _handlers: ScenarioHandlers | undefined;
-const handlers = (): ScenarioHandlers => (_handlers ??= require('../../ipc/scenarios.handlers').buildHandlers());
+const handlers = (): ScenarioHandlers =>
+    (_handlers ??= (
+        require('../../ipc/scenarios.handlers') as typeof import('../../ipc/scenarios.handlers')
+    ).buildHandlers());
 
 const ui = () => logger.withCategory('ui');
 

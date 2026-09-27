@@ -3,6 +3,8 @@ import { z } from 'zod';
 // can read them without pulling zod in through this file. Re-exported below to
 // keep this module's public surface unchanged.
 import { MAX_SCHEDULED_FILL_ENTRIES, MAX_VOTING_PAUSE_MINUTES } from './limits';
+import { isInteger } from '../numbers';
+import { isPlainObject } from '../plainObject';
 
 import type { SettingValueOf } from '../types/settings';
 
@@ -210,12 +212,13 @@ const sanitizeFillSchedule = (value: unknown): Array<{ count: number; seconds: n
     if (!Array.isArray(value)) return null;
     const seen: Set<number> = new Set();
     const normalized = value
-        .filter((row) => {
-            if (!row || typeof row !== 'object') return false;
-            if (!Number.isInteger(row.count) || row.count < 2 || row.count > MAX_SCHEDULE_COUNT) return false;
-            if (!Number.isInteger(row.seconds) || row.seconds < 0 || row.seconds > MAX_SCHEDULE_SECONDS) return false;
-            if (seen.has(row.count)) return false;
-            seen.add(row.count);
+        .filter((row): row is { count: number; seconds: number } => {
+            if (!isPlainObject(row)) return false;
+            const { count, seconds } = row;
+            if (!isInteger(count) || count < 2 || count > MAX_SCHEDULE_COUNT) return false;
+            if (!isInteger(seconds) || seconds < 0 || seconds > MAX_SCHEDULE_SECONDS) return false;
+            if (seen.has(count)) return false;
+            seen.add(count);
             return true;
         })
         .sort((a, b) => a.count - b.count)
@@ -225,8 +228,7 @@ const sanitizeFillSchedule = (value: unknown): Array<{ count: number; seconds: n
         normalized.every((row, i) => {
             const orig = value[i];
             return (
-                orig &&
-                typeof orig === 'object' &&
+                isPlainObject(orig) &&
                 orig.count === row.count &&
                 orig.seconds === row.seconds &&
                 Object.keys(orig).length === 2
@@ -296,9 +298,9 @@ const pauseDurationMinutes = z.number().int().min(5).max(MAX_VOTING_PAUSE_MINUTE
  */
 const sanitizeTimeOfDayList = (value: unknown): string[] | null => {
     if (!Array.isArray(value)) return null;
-    const seen = new Set();
+    const seen: Set<string> = new Set();
     const normalized = value
-        .filter((entry) => {
+        .filter((entry): entry is string => {
             if (typeof entry !== 'string' || !/^([01]\d|2[0-3]):[0-5]\d$/.test(entry)) return false;
             if (seen.has(entry)) return false;
             seen.add(entry);
@@ -317,10 +319,10 @@ const sanitizeTimeOfDayList = (value: unknown): string[] | null => {
  */
 const sanitizeBeforeEndList = (value: unknown): number[] | null => {
     if (!Array.isArray(value)) return null;
-    const seen = new Set();
+    const seen: Set<number> = new Set();
     const normalized = value
-        .filter((entry) => {
-            if (!Number.isInteger(entry) || entry < 1 || entry > MAX_BEFORE_END_SECONDS) return false;
+        .filter((entry): entry is number => {
+            if (!isInteger(entry) || entry < 1 || entry > MAX_BEFORE_END_SECONDS) return false;
             if (seen.has(entry)) return false;
             seen.add(entry);
             return true;

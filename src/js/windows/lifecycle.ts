@@ -31,7 +31,7 @@ const ensureExit = (reason: string) => {
             // app.exit() tears down Electron's child processes (renderer,
             // GPU, storage service) in order; lazy require so this module
             // loads outside Electron (Jest) and the net still fires there.
-            require('electron').app.exit(0);
+            (require('electron') as typeof import('electron')).app.exit(0);
         } catch {
             process.exit(0);
         }

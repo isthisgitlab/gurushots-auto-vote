@@ -36,7 +36,7 @@ const isBoostWindowOpen = (boost: MemberBoost | null | undefined, now: number): 
  * @param now - Current time (Unix seconds)
  */
 const openBoostWindows = (
-    challenges: Challenge[] | null | undefined,
+    challenges: readonly Challenge[] | null | undefined,
     now: number,
 ): Array<{ id: Challenge['id']; title: string; remaining: number | null }> =>
     (challenges || [])

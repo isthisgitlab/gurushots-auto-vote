@@ -42,6 +42,7 @@
 import * as logger from './../logger';
 import { oneLine } from '../format/logSafe';
 import { createJsonStore } from '../settings/storage';
+import { isPlainObject } from '../plainObject';
 
 import type { PickerPhoto } from '../types/photoPicker';
 import type { ErrorLike, FillLogger, RankDeps } from '../types/autoFill';
@@ -151,21 +152,21 @@ const loadCache = (): Map<string, PhotoStatsEntry> => {
     try {
         const raw = statsStore.readRaw();
         if (!raw) return cache;
-        const parsed = JSON.parse(raw);
-        const photos = parsed && typeof parsed === 'object' ? parsed.photos : null;
-        if (!photos || typeof photos !== 'object') return cache;
+        const parsed: unknown = JSON.parse(raw);
+        const photos = isPlainObject(parsed) ? parsed.photos : null;
+        if (!isPlainObject(photos)) return cache;
         // Own-property iteration: the ids are remote-controlled, and a
         // "__proto__" key in the file must not reach the prototype chain. A Map
         // is immune to that on write, but Object.keys keeps the read honest too.
         for (const id of Object.keys(photos)) {
             const entry = photos[id];
-            if (!entry || typeof entry !== 'object') continue;
+            if (!isPlainObject(entry)) continue;
             if (cacheKeyFor(id) === null) continue;
             cache.set(id, {
                 votes: nonNegInt(entry.votes),
                 views: nonNegInt(entry.views),
                 achievementCount: Math.min(nonNegInt(entry.achievementCount), MAX_ACHIEVEMENT_COUNT),
-                fetchedAt: Number.isFinite(entry.fetchedAt) ? entry.fetchedAt : 0,
+                fetchedAt: Number.isFinite(entry.fetchedAt) ? (entry.fetchedAt as number) : 0,
             });
         }
     } catch (error) {
@@ -193,7 +194,7 @@ const persistCache = () => {
         // object's prototype instead of storing a key, silently dropping the
         // entry on every write. loadCache already guards the read side with
         // Object.keys; this is the matching write-side guard.
-        const photos = Object.create(null);
+        const photos = Object.create(null) as Record<string, PhotoStatsEntry>;
         for (const [id, entry] of cache) photos[id] = entry;
         statsStore.writeRaw(JSON.stringify({ version: 1, photos }));
         cacheDirty = false;

@@ -41,7 +41,8 @@ export const formatSettingDefault = (
     t: (key: string) => string,
 ): string => {
     if (config?.type === 'schedule') {
-        const rows = Array.isArray(value) ? value : [];
+        // A schedule setting holds { count, seconds } rows (config.type says so).
+        const rows = Array.isArray(value) ? (value as Array<{ count?: number; seconds?: number } | null>) : [];
         if (rows.length === 0) return t('app.none');
         return rows
             .slice()
@@ -56,7 +57,7 @@ export const formatSettingDefault = (
     // must render as hours/minutes, not a raw number. timeOfDayList needs no
     // branch — the generic array join already renders 'HH:MM' strings.
     if (config?.type === 'timeList') {
-        const entries = Array.isArray(value) ? value : [];
+        const entries = Array.isArray(value) ? (value as Array<number | null>) : [];
         return (
             entries.map((entry) => formatSecondsAsHoursMinutes(entry, t('app.hours'), t('app.minutes'))).join(', ') ||
             t('app.none')

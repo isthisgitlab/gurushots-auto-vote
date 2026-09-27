@@ -82,7 +82,7 @@ const mockMethod = <F extends (...args: never[]) => Promise<unknown>>(
     },
     fn: (...args: Parameters<F>) => ReturnType<F>,
 ): F => {
-    const method = async (...args: Parameters<F>) => {
+    const method = async (...args: Parameters<F>): Promise<unknown> => {
         logger.withCategory(category).api(`Mock ${name}`, null);
         if (debug) debug(...args);
         if (!args[tokenArg]) {

@@ -5,7 +5,7 @@ import path from 'node:path';
 
 const check = process.argv.includes('--check');
 const root = path.join(__dirname, '..');
-const { version } = JSON.parse(fs.readFileSync(path.join(root, 'package.json'), 'utf8'));
+const { version } = JSON.parse(fs.readFileSync(path.join(root, 'package.json'), 'utf8')) as { version?: string };
 if (!version) {
     console.error('No version in package.json');
     process.exit(1);

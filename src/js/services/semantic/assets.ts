@@ -31,19 +31,19 @@ const loadViaFetch = async (): Promise<RawLexicon | null> => {
     // Relative URL resolves against the WebView document served from the webDir.
     const res = await fetch(ASSET_NAME);
     if (!res || !res.ok) throw new Error(`fetch ${ASSET_NAME}: HTTP ${res && res.status}`);
-    return res.json();
+    return res.json() as Promise<RawLexicon>;
 };
 
 const loadViaNode = (): RawLexicon | null => {
     // CLI single binary embeds the lexicon in the SEA blob.
     try {
-        const sea = require('node:sea');
-        if (sea.isSea()) return JSON.parse(sea.getAsset(ASSET_NAME, 'utf8'));
+        const sea = require('node:sea') as typeof import('node:sea');
+        if (sea.isSea()) return JSON.parse(sea.getAsset(ASSET_NAME, 'utf8')) as RawLexicon;
     } catch {
         // node:sea unavailable or not a SEA build — fall through to the fs read.
     }
-    const fs = require('node:fs');
-    return JSON.parse(fs.readFileSync(appPath('src', 'assets', ASSET_NAME), 'utf8'));
+    const fs = require('node:fs') as typeof import('node:fs');
+    return JSON.parse(fs.readFileSync(appPath('src', 'assets', ASSET_NAME), 'utf8')) as RawLexicon;
 };
 
 /**

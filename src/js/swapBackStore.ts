@@ -48,8 +48,8 @@ const isRecord = (r: unknown): r is SwapBackRecord =>
 const createLedger = (store: RawJsonStore) => {
     const read = (): Record<string, unknown> => {
         try {
-            const parsed = JSON.parse(store.readRaw() || '{}');
-            return parsed && typeof parsed === 'object' && !Array.isArray(parsed) ? parsed : {};
+            const parsed: unknown = JSON.parse(store.readRaw() || '{}');
+            return isPlainObject(parsed) ? parsed : {};
         } catch (error) {
             logger
                 .withCategory('currency')
@@ -63,7 +63,9 @@ const createLedger = (store: RawJsonStore) => {
         const cutoff = Date.now() - MAX_AGE_MS;
         const pruned: Record<string, SwapBackRecord[]> = {};
         for (const [challengeId, records] of Object.entries(state)) {
-            const kept = (Array.isArray(records) ? records : []).filter((r) => isRecord(r) && r.at > cutoff);
+            const kept = (Array.isArray(records) ? records : []).filter(
+                (r): r is SwapBackRecord => isRecord(r) && r.at > cutoff,
+            );
             if (kept.length > 0) pruned[challengeId] = kept;
         }
         store.writeRaw(JSON.stringify(pruned));

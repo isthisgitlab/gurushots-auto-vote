@@ -1,6 +1,7 @@
 import { createJsonStore } from '../../settings/storage';
 import * as runtime from '../../runtime';
 import * as settings from '../../settings';
+import { isPlainObject } from '../../plainObject';
 
 import type { RawJsonStore } from '../../types/stores';
 import type { LexiconDiagnosticsReport, VocabularyObservation } from '../../types/semantic';
@@ -49,24 +50,28 @@ const countWords = (counts: Record<string, number>, words: string[]) => {
     }
 };
 
+/**
+ * A stored report in the current shape.
+ * @param data - the parsed report file
+ */
+const isReport = (data: unknown): data is LexiconDiagnosticsReport =>
+    isPlainObject(data) &&
+    data.version === 1 &&
+    ['challenges', 'noThemeVector', 'noLabelVectors', 'noOnThemeScore'].every((key) =>
+        Number.isSafeInteger(data[key]),
+    ) &&
+    typeof data.since === 'string' &&
+    Boolean(data.themeWords) &&
+    Boolean(data.labelWords) &&
+    Array.isArray(data.seenChallenges) &&
+    !Array.isArray(data.themeWords) &&
+    !Array.isArray(data.labelWords);
+
 const createDiagnostics = (store: RawJsonStore) => {
     const read = (): LexiconDiagnosticsReport => {
         try {
-            const data = JSON.parse(store.readRaw() || 'null');
-            if (
-                data?.version === 1 &&
-                ['challenges', 'noThemeVector', 'noLabelVectors', 'noOnThemeScore'].every((key) =>
-                    Number.isSafeInteger(data[key]),
-                ) &&
-                typeof data.since === 'string' &&
-                data.themeWords &&
-                data.labelWords &&
-                Array.isArray(data.seenChallenges) &&
-                !Array.isArray(data.themeWords) &&
-                !Array.isArray(data.labelWords)
-            ) {
-                return data;
-            }
+            const data: unknown = JSON.parse(store.readRaw() || 'null');
+            if (isReport(data)) return data;
         } catch {
             // A damaged optional report must never interrupt a fill.
         }

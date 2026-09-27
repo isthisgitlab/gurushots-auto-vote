@@ -34,7 +34,9 @@ const getPlugin = () => {
     if (!runtime.isCapacitor()) return null;
     if (plugin) return plugin;
     try {
-        plugin = require('@capawesome-team/capacitor-android-foreground-service').ForegroundService;
+        plugin = (
+            require('@capawesome-team/capacitor-android-foreground-service') as typeof import('@capawesome-team/capacitor-android-foreground-service')
+        ).ForegroundService;
         return plugin;
     } catch (err) {
         logger.withCategory('voting').warning('ForegroundService plugin unavailable', (err as Error).message);

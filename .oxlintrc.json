@@ -176,6 +176,19 @@
                 "typescript/no-misused-promises": "error"
             }
         },
+        // No `any` leaks: an untyped value (a lazy require, JSON.parse, a
+        // library's loose signature) must be typed before it is used. The one
+        // sanctioned `any` is the IPC handler map's IpcHandler parameter list.
+        {
+            "files": ["src/js/**/*.ts", "src/js/**/*.tsx", "scripts/**/*.ts", "scripts/**/*.mts"],
+            "rules": {
+                "typescript/no-unsafe-argument": "error",
+                "typescript/no-unsafe-assignment": "error",
+                "typescript/no-unsafe-call": "error",
+                "typescript/no-unsafe-member-access": "error",
+                "typescript/no-unsafe-return": "error"
+            }
+        },
         // Renderer (Preact via preact/compat).
         // - no-restricted-imports: the React tree must never import Node-only,
         //   process-spawning code — services/notify/nodeNotify.js requires

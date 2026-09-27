@@ -39,6 +39,7 @@ import { fetchCandidatesForChallenge, resolveSemanticScores } from './autoFill';
 import { pickPhotosForChallenge } from './photoPicker';
 import { rankVisually } from './visionVerifier';
 import { consumeMission } from './missions';
+import { isPlainObject } from '../plainObject';
 
 import type { ActiveChallengesResponse, Bankroll, Challenge } from '../types/gurushots';
 import type { ChallengeValues, TitleRule } from '../types/settings';
@@ -266,8 +267,8 @@ const readUnlockedState = (store: RawJsonStore | null | undefined): { state: Rec
     }
     if (!raw) return { state: {}, ok: true };
     try {
-        const parsed = JSON.parse(raw);
-        if (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) {
+        const parsed: unknown = JSON.parse(raw);
+        if (isPlainObject(parsed)) {
             return { state: parsed, ok: true };
         }
         cat().warning('join-state file is malformed (not an object) — treating as unreadable', null);

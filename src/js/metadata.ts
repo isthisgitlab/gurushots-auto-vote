@@ -45,6 +45,7 @@ const MAX_ENTRY_ID_LENGTH = 64;
 // one into a message. These carry a bare id rather than the full `[Challenge …]`
 // tag, so they use the shared helper directly instead of logger.challengeTag.
 import { oneLine as oneLineId } from './format/logSafe';
+import { isPlainObject } from './plainObject';
 
 /**
  * Reject the three keys that address Object.prototype instead of creating an own
@@ -284,10 +285,10 @@ const loadMetadata = (): MetadataFile => {
         const metadataData = metadataStore.readRaw();
 
         if (metadataData) {
-            const metadata = JSON.parse(metadataData);
+            const metadata: unknown = JSON.parse(metadataData);
 
-            // Validate metadata
-            const { validatedMetadata, hasChanges } = validateMetadata(metadata);
+            // Validate metadata; a file that is not a JSON object has nothing to keep.
+            const { validatedMetadata, hasChanges } = validateMetadata(isPlainObject(metadata) ? metadata : {});
 
             // If validation changed anything, save the corrected metadata
             if (hasChanges) {

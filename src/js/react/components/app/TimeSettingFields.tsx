@@ -311,7 +311,7 @@ function RowListField<R>({
     // not paint hundreds of rows (the write path and load-time bounds pass
     // both enforce the cap already — this is the same defensive posture as
     // the decision/cadence consumers).
-    const arr = (Array.isArray(value) ? value : []).slice(0, SCHEDULED_FILL_MAX_ENTRIES);
+    const arr = (Array.isArray(value) ? (value as R[]) : []).slice(0, SCHEDULED_FILL_MAX_ENTRIES);
     const [rows, setRows] = useListDraft(arr, copyRows, kind.draftKeyOf);
 
     const update = (nextRows: R[]) => {

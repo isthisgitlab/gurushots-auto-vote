@@ -114,11 +114,11 @@ const checkForUpdates = async ({
     try {
         let release: GithubRelease | null = null;
         if (isBetaChannel) {
-            const { data } = await axios.get(releasesListUrl(10));
+            const { data } = await axios.get<GithubRelease[] | null>(releasesListUrl(10));
             // Newest matching prerelease (sorted by published_at descending in GitHub API).
-            release = (data || []).find((r: GithubRelease) => r.prerelease) || null;
+            release = (data || []).find((r) => r.prerelease) || null;
         } else {
-            const { data } = await axios.get(releasesLatestUrl());
+            const { data } = await axios.get<GithubRelease | null>(releasesLatestUrl());
             release = data || null;
         }
         if (!release || !release.tag_name) return empty;

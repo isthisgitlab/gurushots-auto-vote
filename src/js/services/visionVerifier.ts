@@ -43,7 +43,7 @@ let cliAssetRoot: string | undefined;
 
 const getModelLocation = () => {
     if (runtime.isCapacitor() || runtime.isHeadlessService()) return './';
-    const path = require('node:path');
+    const path = require('node:path') as typeof import('node:path');
     if (cliAssetRoot) return `${cliAssetRoot}${path.sep}`;
     if (runtime.isElectron() && runtime.isPackaged()) return `${process.resourcesPath}${path.sep}`;
     return appPath('.cache') + path.sep;
@@ -55,7 +55,7 @@ const isModelBundled = async () => {
         return Boolean(response?.ok);
     }
     if (runtime.isCli()) {
-        const sea = require('node:sea');
+        const sea = require('node:sea') as typeof import('node:sea');
         if (sea.isSea()) {
             try {
                 sea.getAsset('vision-runtime.sha256');
@@ -65,8 +65,10 @@ const isModelBundled = async () => {
             }
         }
     }
-    const path = require('node:path');
-    return require('node:fs').existsSync(path.join(getModelLocation(), 'vision-model', 'config.json'));
+    const path = require('node:path') as typeof import('node:path');
+    return (require('node:fs') as typeof import('node:fs')).existsSync(
+        path.join(getModelLocation(), 'vision-model', 'config.json'),
+    );
 };
 
 /**
@@ -86,11 +88,13 @@ const hasBundledModel = (): Promise<boolean> => {
 const loadClassifier = async (): Promise<ZeroShotImageClassificationPipeline> => {
     let transformers: typeof Transformers | undefined;
     if (runtime.isCli()) {
-        const sea = require('node:sea');
+        const sea = require('node:sea') as typeof import('node:sea');
         if (sea.isSea()) {
-            const assets = require('./visionCliAssets').extractVisionCliAssets();
+            const assets = (
+                require('./visionCliAssets') as typeof import('./visionCliAssets')
+            ).extractVisionCliAssets();
             cliAssetRoot = assets.root;
-            const { createRequire } = require('node:module');
+            const { createRequire } = require('node:module') as typeof import('node:module');
             transformers = createRequire(assets.modulePath)('@huggingface/transformers') as typeof Transformers;
         }
     }

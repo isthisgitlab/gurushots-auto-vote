@@ -16,6 +16,7 @@
 /**
  * @param segments - path below the app root
  */
-const appPath = (...segments: string[]): string => require('node:path').join(__dirname, '..', '..', ...segments);
+const appPath = (...segments: string[]): string =>
+    (require('node:path') as typeof import('node:path')).join(__dirname, '..', '..', ...segments);
 
 export { appPath };

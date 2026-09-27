@@ -327,7 +327,7 @@ main()
     .then(() => {
         process.exit(0);
     })
-    .catch((error) => {
-        console.error('❌ Unhandled error:', error.message);
+    .catch((error: unknown) => {
+        console.error('❌ Unhandled error:', (error as Error).message);
         process.exit(1);
     });

@@ -97,7 +97,7 @@ const createStateLedger = (store: RawJsonStore) => {
         if (raw === lastRaw) return lastParsed as ParsedStateFile;
         let parsed: ParsedStateFile;
         try {
-            const value = JSON.parse(raw || '{}');
+            const value: unknown = JSON.parse(raw || '{}');
             parsed = isPlainObject(value) ? { ok: true, map: value } : { ok: false, map: {} };
         } catch {
             parsed = { ok: false, map: {} };

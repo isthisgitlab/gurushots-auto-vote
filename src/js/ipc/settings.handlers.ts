@@ -14,7 +14,7 @@
 // without esbuild trying to resolve electron.
 let BrowserWindow: typeof electronModule.BrowserWindow | null = null;
 try {
-    BrowserWindow = require('electron').BrowserWindow;
+    BrowserWindow = (require('electron') as typeof import('electron')).BrowserWindow;
 } catch {
     // Capacitor / CLI: register() in this module is never reached.
 }
@@ -277,7 +277,7 @@ const buildHandlers = ({ broadcastSettingsChange }: { broadcastSettingsChange?: 
     // The thin rows are added in place; ThinHandlers types them on the result.
     const thinHandlers = handlers as unknown as Record<string, IpcHandler>;
     THIN_HANDLERS.forEach(([channel, method, fallback, verb]) => {
-        thinHandlers[channel] = async (event, ...args) => {
+        thinHandlers[channel] = async (event, ...args: unknown[]) => {
             try {
                 // Dynamic dispatch over the table's facade methods.
                 const result = (settings[method] as (...a: unknown[]) => unknown)(...args);

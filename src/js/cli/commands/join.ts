@@ -12,7 +12,10 @@ import type { NullEventHandlers } from '../../types/cli';
 import type * as actions_handlersModule from '../../ipc/actions.handlers';
 type ActionHandlers = NullEventHandlers<ReturnType<typeof actions_handlersModule.buildHandlers>>;
 let _handlers: ActionHandlers | undefined;
-const handlers = (): ActionHandlers => (_handlers ??= require('../../ipc/actions.handlers').buildHandlers());
+const handlers = (): ActionHandlers =>
+    (_handlers ??= (
+        require('../../ipc/actions.handlers') as typeof import('../../ipc/actions.handlers')
+    ).buildHandlers());
 
 const showDiscover = async () => {
     if (!ensureAuthenticated()) return;

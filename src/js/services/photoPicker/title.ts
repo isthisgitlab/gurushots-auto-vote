@@ -142,7 +142,9 @@ const parseNegation = (title: string | null | undefined, ignoreWords: IgnoreWord
         if (rawTokenise(match[1], { keepStopwords: true }).some((w) => NEGATION_IDIOM_WORDS.has(w))) return segment;
         return addWords(match[1]) ? '' : segment;
     });
-    const positiveTitle = segments.join(': ').replace(FREE_SUFFIX_RE, (whole, word) => (addWords(word) ? ' ' : whole));
+    const positiveTitle = segments
+        .join(': ')
+        .replace(FREE_SUFFIX_RE, (whole: string, word: string) => (addWords(word) ? ' ' : whole));
     if (stems.size === 0) return { positiveTitle: title, stems: [], active: false };
     return { positiveTitle, stems: Array.from(stems), active: true };
 };

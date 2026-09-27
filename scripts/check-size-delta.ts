@@ -64,8 +64,8 @@ const brotliSize = (filePath: string) => {
 const readBaseline = (): Record<string, unknown> => {
     try {
         const raw = fs.readFileSync(BASELINE_PATH, 'utf8');
-        const parsed = JSON.parse(raw);
-        return parsed && typeof parsed === 'object' ? parsed : {};
+        const parsed: unknown = JSON.parse(raw);
+        return parsed && typeof parsed === 'object' ? (parsed as Record<string, unknown>) : {};
     } catch {
         return {};
     }

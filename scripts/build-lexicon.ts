@@ -244,8 +244,8 @@ const main = ({
     }
     // Committed, generated files (the intermediate is hash-checked below), so
     // they are typed as their writers produce them rather than re-validated.
-    const intermediate: Intermediate = JSON.parse(fs.readFileSync(embeddingsPath, 'utf8'));
-    const concepts: ConceptsConfig = JSON.parse(fs.readFileSync(conceptsPath, 'utf8'));
+    const intermediate = JSON.parse(fs.readFileSync(embeddingsPath, 'utf8')) as Intermediate;
+    const concepts = JSON.parse(fs.readFileSync(conceptsPath, 'utf8')) as ConceptsConfig;
 
     // Tamper check: the intermediate is a multi-MB base64 blob nobody can
     // review line-by-line, so its payload hash lives in a one-line sidecar

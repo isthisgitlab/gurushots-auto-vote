@@ -39,8 +39,8 @@ const isRecord = (r: unknown): r is AutoSpendRecord =>
 const createAutoSpendLedger = (store: RawJsonStore) => {
     const read = (): Record<string, unknown> => {
         try {
-            const parsed = JSON.parse(store.readRaw() || '{}');
-            return parsed && typeof parsed === 'object' && !Array.isArray(parsed) ? parsed : {};
+            const parsed: unknown = JSON.parse(store.readRaw() || '{}');
+            return isPlainObject(parsed) ? parsed : {};
         } catch (error) {
             logger
                 .withCategory('currency')

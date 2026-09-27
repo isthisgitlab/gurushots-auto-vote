@@ -6,4 +6,10 @@
 const finiteOr = <F>(value: number | null | undefined, fallback: F): number | F =>
     value != null && Number.isFinite(value) ? value : fallback;
 
-export { finiteOr };
+/**
+ * Number.isInteger as a type guard: the standard one does not narrow an
+ * unknown value to number.
+ */
+const isInteger = (value: unknown): value is number => Number.isInteger(value);
+
+export { finiteOr, isInteger };

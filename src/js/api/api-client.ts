@@ -60,13 +60,13 @@ const finalizeAdapterResponse = (response: AxiosResponse): AxiosResponse => {
 let capacitorAdapter: AxiosAdapter | null = null;
 const getCapacitorHttpAdapter = (): AxiosAdapter => {
     if (capacitorAdapter) return capacitorAdapter;
-    const { CapacitorHttp } = require('@capacitor/core');
+    const { CapacitorHttp } = require('@capacitor/core') as typeof import('@capacitor/core');
     capacitorAdapter = async (config) => {
         const response = await CapacitorHttp.request({
             method: (config.method || 'get').toUpperCase(),
             url: config.url as string,
             headers: config.headers,
-            data: config.data,
+            data: config.data as unknown,
             connectTimeout: config.timeout,
             readTimeout: config.timeout,
         });
@@ -74,7 +74,7 @@ const getCapacitorHttpAdapter = (): AxiosAdapter => {
         // 429/5xx on the foreground path now reaches the retry layer instead
         // of being mistaken for a successful response.
         return finalizeAdapterResponse({
-            data: response.data,
+            data: response.data as unknown,
             status: response.status,
             statusText: '',
             headers: response.headers || {},
@@ -116,8 +116,13 @@ const getHeadlessHttpAdapter = (): AxiosAdapter => {
             const id = ++headlessReqSeq;
             headlessPending.set(id, (resultJson) => {
                 try {
-                    const parsed: { error?: string; status: number; body: string; headers?: Record<string, string> } =
-                        JSON.parse(resultJson);
+                    // The AndroidHeadlessHttp result contract (see the adapter note above).
+                    const parsed = JSON.parse(resultJson) as {
+                        error?: string;
+                        status: number;
+                        body: string;
+                        headers?: Record<string, string>;
+                    };
                     // A transport/network failure on the native side — reject so
                     // the retry layer treats it as a (retryable) no-response error.
                     if (parsed.error) {
@@ -267,7 +272,7 @@ const makePostRequest = async (url: string, headers: RequestHeaders, data: strin
                 url: url,
                 status: response.status,
                 duration: duration,
-                responseData: response.data,
+                responseData: response.data as unknown,
             });
 
             return response.data;
