@@ -30,11 +30,6 @@ import * as boostTurbo from './decisions/boostTurbo';
 import * as deadlineActions from './decisions/deadlineActions';
 import { shouldJoinChallenge } from './decisions/joinDecision';
 
-/** @typedef {import('./decisions/ruleEngine').VotingRuleResult} VotingRuleResult */
-/** @typedef {import('./decisions/voteDecisions').AutoVoteDecision} AutoVoteDecision */
-/** @typedef {import('./decisions/voteDecisions').ManualVoteDecision} ManualVoteDecision */
-/** @typedef {import('./decisions/boostTurbo').TurboDecision} TurboDecision */
-
 export const isWithinFinalWindow = thresholds.isWithinFinalWindow;
 export const isWithinLastMinuteThreshold = thresholds.isWithinLastMinuteThreshold;
 export const getEffectiveExposureTarget = thresholds.getEffectiveExposureTarget;

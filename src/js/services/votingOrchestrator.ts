@@ -18,11 +18,10 @@
  * challenge object (reflectNewEntry) so a later turbo/boost in the same
  * cycle sees the consumed slot and new entry. Do not parallelize them.
  *
- * @param {string} token
- * @param {string|number|null} challengeIdFilter - restricts the strategy pass
+ * @param challengeIdFilter - restricts the strategy pass
  *   to one challenge (per-card "Run"); stale-metadata cleanup still runs
  *   against the full active list first.
- * @param {VotingPassDeps} deps - see types/votingPass.d.ts
+ * @param deps - see types/votingPass.d.ts
  *   `entryTracker` backs the voteOnNewEntry feature. Real mode passes a
  *   metadata.json-backed tracker; mock passes an in-memory one for the same reason
  *   it passes cleanupStaleMetadata: null — the metadata store is shared and
@@ -31,15 +30,14 @@
  *   `entryAges` records when each entry entered its challenge, for the boost's
  *   fresh-entry wait (boostFreshEntryWait). Real mode persists it; mock passes an
  *   in-memory one. Omitting it means a boost is never held.
- *   `currency` backs the automatic key / swap / fill spends (services/currencyAuto.js):
+ *   `currency` backs the automatic key / swap / fill spends (services/currencyAuto.ts):
  *   `strategy` is the endpoint set the spend services take (the same shape the manual
  *   currency handlers pass), `swapLedger` the swap-back ledger and `spendLedger` the
  *   automatic-fill counter. Mock passes in-memory ledgers for the same reason it passes
  *   cleanupStaleMetadata: null. Omitting it makes the automation inert.
- *   `missions` is what the active missions still need (services/missions.js): a
+ *   `missions` is what the active missions still need (services/missions.ts): a
  *   turbo win or a fill this pass counts down its mission. Omitted = no mission
  *   is followed.
- * @returns {Promise<VotingPassResult>}
  *   `challenges` is the full active list this cycle fetched (not the
  *   filtered subset) so callers can reuse it for threshold scheduling.
  */
@@ -59,42 +57,39 @@ import { failureText } from '../format/logSafe';
 import { sleep } from '../timing';
 import { finiteOr } from '../numbers';
 
-/** @import { Challenge, MemberBoost, VoteImagesResponse } from '../types/gurushots' */
-/** @import { VotingPassApi, VotingPassDeps, VotingPassResult, ScenarioDeps } from '../types/votingPass' */
-/** @import { CurrencyPassDeps } from './currencyAuto' */
-/** @import { EntryTracker } from './newEntryTracker' */
-/** @import { EntryAgeLedger } from '../types/stores' */
-/** @import { AutoVoteDecision } from './decisions/voteDecisions' */
-/** @import { MissionNeeds } from './missions' */
+import type { Challenge, MemberBoost, VoteImagesResponse } from '../types/gurushots';
+import type { VotingPassApi, VotingPassDeps, VotingPassResult, ScenarioDeps } from '../types/votingPass';
+import type { CurrencyPassDeps } from './currencyAuto';
+import type { EntryTracker } from './newEntryTracker';
+import type { EntryAgeLedger } from '../types/stores';
+import type { AutoVoteDecision } from './decisions/voteDecisions';
+import type { MissionNeeds } from './missions';
 
 /**
  * Per-challenge context threaded to every deadline-action runner. All of a
  * runner's per-pass state comes through here explicitly — module-scope
  * imports (logger, settings, votingLogic, autoFill, formatDuration) are the
  * only other things they touch.
- *
- * @typedef {{
- *   challenge: Challenge,
- *   token: string,
- *   now: number,
- *   api: VotingPassApi,
- *   fillDeps: FillDeps,
- *   entryAges: (EntryAgeLedger|null),
- * }} ActionContext
  */
+type ActionContext = {
+    challenge: Challenge;
+    token: string;
+    now: number;
+    api: VotingPassApi;
+    fillDeps: FillDeps;
+    entryAges: EntryAgeLedger | null;
+};
 
 /**
  * Which kind of boost the challenge currently offers. Optional-chained to match
  * shouldApplyBoost/shouldApplyTurbo, which guard the same tree, so a payload
  * without `member` reads as "no boost" instead of throwing out of the
  * per-action loop.
- *
- * @param {Challenge} challenge
- * @returns {{boost: MemberBoost, isTimerBasedAvailable: boolean, isKeyUnlockedAvailable: boolean}}
  */
-const readBoostAvailability = (challenge) => {
-    /** @type {MemberBoost} */
-    const boost = challenge?.member?.boost || {};
+const readBoostAvailability = (
+    challenge: Challenge,
+): { boost: MemberBoost; isTimerBasedAvailable: boolean; isKeyUnlockedAvailable: boolean } => {
+    const boost: MemberBoost = challenge?.member?.boost || {};
     const hasTimeout = typeof boost.timeout === 'number' && boost.timeout > 0;
     return {
         boost,
@@ -105,11 +100,8 @@ const readBoostAvailability = (challenge) => {
 
 /**
  * Close the outer boost-<id> operation as a failure/skip with `reason`.
- *
- * @param {Challenge} challenge
- * @param {string} reason
  */
-const endBoostOperation = (challenge, reason) => {
+const endBoostOperation = (challenge: Challenge, reason: string) => {
     logger.withCategory('boost').endOperation(`boost-${challenge.id}`, null, reason);
 };
 
@@ -118,12 +110,14 @@ const endBoostOperation = (challenge, reason) => {
  * itself (it owns the entry pick); the explicit-entry call cannot, so reflect it
  * here.
  *
- * @param {ActionContext} ctx
- * @param {string} cid
- * @param {string} imageId - the entry fill-new submitted
- * @returns {Promise<unknown>} the boost result; falsy once the operation is closed
+ * @param imageId - the entry fill-new submitted
+ * @returns the boost result; falsy once the operation is closed
  */
-const boostFreshEntry = async ({ challenge, token, api }, cid, imageId) => {
+const boostFreshEntry = async (
+    { challenge, token, api }: ActionContext,
+    cid: string,
+    imageId: string,
+): Promise<unknown> => {
     const boostResult = await api.applyBoostToEntry(cid, imageId, token);
     if (boostResult) {
         autoFill.reflectEntryFlag(challenge, imageId, 'boosted');
@@ -136,8 +130,7 @@ const boostFreshEntry = async ({ challenge, token, api }, cid, imageId) => {
     return boostResult;
 };
 
-/** @param {Challenge} challenge @param {string} message */
-const logBoostTarget = (challenge, message) => {
+const logBoostTarget = (challenge: Challenge, message: string) => {
     logger.withCategory('boost').info(`${logger.challengeTag(challenge)} ${message}`, null);
 };
 
@@ -147,11 +140,10 @@ const logBoostTarget = (challenge, message) => {
  * (remembered as pending, so a held boost reuses it instead of submitting
  * another); else the configured Boost Entry.
  *
- * @param {ActionContext} ctx
- * @returns {Promise<{imageId: (string|null), fresh: boolean}|null>} null when
+ * @returns null when
  *   fill-new found no valid target and the boost is skipped (already logged)
  */
-const resolveBoostTarget = async (ctx) => {
+const resolveBoostTarget = async (ctx: ActionContext): Promise<{ imageId: string | null; fresh: boolean } | null> => {
     const { challenge, token, now, fillDeps, entryAges } = ctx;
     const cid = challenge.id.toString();
     const pending = entryAges?.pending(cid);
@@ -192,12 +184,15 @@ const resolveBoostTarget = async (ctx) => {
 };
 
 /**
- * @param {ActionContext} ctx
- * @param {{imageId: (string|null), fresh: boolean}} target - from resolveBoostTarget
- * @param {boolean} isTimerBasedAvailable
- * @param {number} timeUntilDisplayBase - seconds to the boost timeout (timer-based) or challenge end
+ * @param target - from resolveBoostTarget
+ * @param timeUntilDisplayBase - seconds to the boost timeout (timer-based) or challenge end
  */
-const applyAvailableBoost = async (ctx, target, isTimerBasedAvailable, timeUntilDisplayBase) => {
+const applyAvailableBoost = async (
+    ctx: ActionContext,
+    target: { imageId: string | null; fresh: boolean },
+    isTimerBasedAvailable: boolean,
+    timeUntilDisplayBase: number,
+) => {
     const { challenge, token, api } = ctx;
     // Surface the override so an applied boost on a challenge with
     // Auto-Apply Boost off is explained rather than looking like a bug.
@@ -218,7 +213,7 @@ const applyAvailableBoost = async (ctx, target, isTimerBasedAvailable, timeUntil
 
     try {
         const boostResult = target.fresh
-            ? await boostFreshEntry(ctx, challenge.id.toString(), /** @type {string} */ (target.imageId))
+            ? await boostFreshEntry(ctx, challenge.id.toString(), target.imageId as string)
             : await api.applyBoost(challenge, token);
         if (boostResult) {
             ctx.entryAges?.clearPending(challenge.id, ctx.now);
@@ -238,12 +233,14 @@ const applyAvailableBoost = async (ctx, target, isTimerBasedAvailable, timeUntil
 };
 
 /**
- * @param {Challenge} challenge
- * @param {boolean} isTimerBasedAvailable
- * @param {number} timeUntilDisplayBase
- * @param {number} effectiveBoostTime - the timer-based threshold in seconds
+ * @param effectiveBoostTime - the timer-based threshold in seconds
  */
-const logBoostNotReady = (challenge, isTimerBasedAvailable, timeUntilDisplayBase, effectiveBoostTime) => {
+const logBoostNotReady = (
+    challenge: Challenge,
+    isTimerBasedAvailable: boolean,
+    timeUntilDisplayBase: number,
+    effectiveBoostTime: number,
+) => {
     const timeDisplay = formatDuration(timeUntilDisplayBase);
     // Both branches render the threshold they actually use: the key-unlocked window
     // is a setting, so it is read here rather than restated as a constant.
@@ -259,11 +256,10 @@ const logBoostNotReady = (challenge, isTimerBasedAvailable, timeUntilDisplayBase
  * (VotingLogic.getBoostHoldUntil). The release instant goes on the challenge so
  * the cadence decision lands the next cycle on it.
  *
- * @param {ActionContext} ctx
- * @param {(string|null)} imageId - the entry the boost would land on
- * @returns {boolean} true when the boost waits this pass
+ * @param imageId - the entry the boost would land on
+ * @returns true when the boost waits this pass
  */
-const holdBoostForFreshEntry = ({ challenge, now, entryAges }, imageId) => {
+const holdBoostForFreshEntry = ({ challenge, now, entryAges }: ActionContext, imageId: string | null): boolean => {
     if (!imageId || !entryAges) return false;
     const holdUntil = votingLogic.getBoostHoldUntil(challenge, entryAges.enteredAt(challenge.id, imageId), now);
     if (holdUntil === null) return false;
@@ -275,8 +271,7 @@ const holdBoostForFreshEntry = ({ challenge, now, entryAges }, imageId) => {
     return true;
 };
 
-/** @param {ActionContext} ctx */
-const runBoost = async (ctx) => {
+const runBoost = async (ctx: ActionContext) => {
     const { challenge, now } = ctx;
     // Every pass, so an entry's first-seen time is as close to its real entry
     // time as the cadence allows — including entries this pass just reflected.
@@ -308,12 +303,12 @@ const runBoost = async (ctx) => {
  * — when none could be submitted (full / none / failed) — the configured Turbo
  * Entry, if any.
  *
- * @param {ActionContext} ctx
- * @param {(string|null|undefined)} configuredImageId
- * @returns {Promise<{skipped: true}|{skipped: false, imageId: (string|null|undefined)}>}
  *   `skipped` when the challenge left the active list (already logged)
  */
-const resolveFillNewTurboTarget = async ({ challenge, token, fillDeps }, configuredImageId) => {
+const resolveFillNewTurboTarget = async (
+    { challenge, token, fillDeps }: ActionContext,
+    configuredImageId: string | null | undefined,
+): Promise<{ skipped: true } | { skipped: false; imageId: string | null | undefined }> => {
     const filled = await autoFill.submitNewEntryForAction(challenge, token, fillDeps);
     if (filled.ok) {
         autoFill.reflectNewEntry(challenge, filled.imageId);
@@ -348,10 +343,8 @@ const resolveFillNewTurboTarget = async ({ challenge, token, fillDeps }, configu
  * on-conflict (or always-blocked) path an entry DOES exist — it just already
  * has Boost, so turbo cannot go on it and there is no valid fallback; only in
  * always mode on an empty challenge is there genuinely no entry at all.
- *
- * @param {Challenge} challenge
  */
-const logTurboWithoutTarget = (challenge) => {
+const logTurboWithoutTarget = (challenge: Challenge) => {
     const hasExistingEntry = (challenge?.member?.ranking?.entries?.length ?? 0) > 0;
     const skipReason = hasExistingEntry
         ? 'only entry already has Boost — turbo skipped'
@@ -359,11 +352,7 @@ const logTurboWithoutTarget = (challenge) => {
     logger.withCategory('turbo').info(`${logger.challengeTag(challenge)} turbo fill-new ${skipReason}`, null);
 };
 
-/**
- * @param {ActionContext} ctx
- * @param {string} imageId
- */
-const applyTurboToEntry = async ({ challenge, token, api }, imageId) => {
+const applyTurboToEntry = async ({ challenge, token, api }: ActionContext, imageId: string) => {
     logger
         .withCategory('turbo')
         .startOperation(`turbo-apply-${challenge.id}`, `Applying turbo to entry ${imageId} on ${challenge.title}`);
@@ -385,8 +374,7 @@ const applyTurboToEntry = async ({ challenge, token, api }, imageId) => {
     }
 };
 
-/** @param {ActionContext} ctx */
-const runTurboApply = async (ctx) => {
+const runTurboApply = async (ctx: ActionContext) => {
     const { challenge, now } = ctx;
     // Auto-apply a won turbo when eligible. emergency:true lets
     // shouldApplyTurbo apply a won turbo near the deadline even if
@@ -418,8 +406,7 @@ const runTurboApply = async (ctx) => {
     await applyTurboToEntry(ctx, target.imageId);
 };
 
-/** @param {ActionContext} ctx */
-const runAutoFill = async (ctx) => {
+const runAutoFill = async (ctx: ActionContext) => {
     const { challenge, token, now, fillDeps } = ctx;
     // Auto-fill missing entries near deadline (one slot per cycle, staggered).
     // On submit it reflects the new entry locally, so a turbo/boost that runs
@@ -435,8 +422,7 @@ const runAutoFill = async (ctx) => {
     }
 };
 
-/** @param {ActionContext} ctx */
-const runEmergencyFill = async (ctx) => {
+const runEmergencyFill = async (ctx: ActionContext) => {
     const { challenge, token, now, fillDeps } = ctx;
     // Emergency fill: net for slots that staggered auto-fill leaves
     // empty (auto-fill off, or tags set with no match) — fills all
@@ -449,8 +435,7 @@ const runEmergencyFill = async (ctx) => {
     }
 };
 
-/** @type {Record<string, ((ctx: ActionContext) => Promise<void>) | undefined>} */
-const actionRunners = {
+const actionRunners: Record<string, ((ctx: ActionContext) => Promise<void>) | undefined> = {
     boost: runBoost,
     turbo: runTurboApply,
     autoFill: runAutoFill,
@@ -460,10 +445,8 @@ const actionRunners = {
 /**
  * Shared dependency bundle for every auto-fill entry point this pass
  * (fill-new on boost/turbo, staggered auto-fill, emergency fill).
- *
- * @param {VotingPassApi} api
  */
-const buildFillDeps = (api) => ({
+const buildFillDeps = (api: VotingPassApi) => ({
     settings,
     logger,
     getEligiblePhotos: api.getEligiblePhotos,
@@ -478,32 +461,27 @@ const buildFillDeps = (api) => ({
 
 /**
  * Per-pass context threaded to every per-challenge phase below.
- *
- * @typedef {{
- *   token: string,
- *   api: VotingPassApi,
- *   fillDeps: FillDeps,
- *   interChallengeDelay: () => number,
- *   entryTracker: (EntryTracker|null),
- *   entryAges: (EntryAgeLedger|null),
- *   currency: (CurrencyPassDeps|null),
- *   scenarios: (ScenarioDeps|null),
- *   missions: (MissionNeeds|null),
- *   allChallenges: Challenge[],
- * }} PassContext
  */
+export type PassContext = {
+    token: string;
+    api: VotingPassApi;
+    fillDeps: FillDeps;
+    interChallengeDelay: () => number;
+    entryTracker: EntryTracker | null;
+    entryAges: EntryAgeLedger | null;
+    currency: CurrencyPassDeps | null;
+    scenarios: ScenarioDeps | null;
+    missions: MissionNeeds | null;
+    allChallenges: Challenge[];
+};
 
-/** @typedef {ReturnType<typeof buildFillDeps>} FillDeps */
+type FillDeps = ReturnType<typeof buildFillDeps>;
 
 /**
  * Standard cancelled-pass exit shared by every cancellation checkpoint: one
  * warn, close the operation, surface the full active list.
- *
- * @param {Challenge[]} allChallenges
- * @param {string} [warning]
- * @returns {VotingPassResult}
  */
-const cancelPass = (allChallenges, warning = '🛑 Voting cancelled by user') => {
+const cancelPass = (allChallenges: Challenge[], warning: string = '🛑 Voting cancelled by user'): VotingPassResult => {
     logger.withCategory('voting').warning(warning, null);
     logger.withCategory('voting').endOperation('voting-process', null, 'Voting cancelled by user');
     return { success: false, message: 'Voting cancelled by user', challenges: allChallenges };
@@ -512,13 +490,8 @@ const cancelPass = (allChallenges, warning = '🛑 Voting cancelled by user') =>
 /**
  * Failed-pass exit before any challenge is processed: log on the challenges
  * category, close the operation with the same message, surface the list.
- *
- * @param {string} msg
- * @param {Challenge[]} allChallenges
- * @param {'error'|'warning'} level
- * @returns {VotingPassResult}
  */
-const abortPass = (msg, allChallenges, level) => {
+const abortPass = (msg: string, allChallenges: Challenge[], level: 'error' | 'warning'): VotingPassResult => {
     logger.withCategory('challenges')[level](msg, null);
     logger.withCategory('voting').endOperation('voting-process', null, msg);
     return { success: false, error: msg, challenges: allChallenges };
@@ -528,11 +501,11 @@ const abortPass = (msg, allChallenges, level) => {
  * Cleanup stale metadata against the full active list — must run before any
  * per-challenge filter so we don't drop metadata for challenges the user is
  * simply not running this pass.
- *
- * @param {(activeChallengeIds: string[]) => boolean} cleanupStaleMetadata
- * @param {Challenge[]} allChallenges
  */
-const pruneStaleMetadata = (cleanupStaleMetadata, allChallenges) => {
+const pruneStaleMetadata = (
+    cleanupStaleMetadata: (activeChallengeIds: string[]) => boolean,
+    allChallenges: Challenge[],
+) => {
     try {
         const activeChallengeIds = allChallenges.map((challenge) => challenge.id.toString());
         const cleanupSuccess = cleanupStaleMetadata(activeChallengeIds);
@@ -549,12 +522,12 @@ const pruneStaleMetadata = (cleanupStaleMetadata, allChallenges) => {
 /**
  * Narrow the pass to the per-card "Run" challenge when a filter is set.
  *
- * @param {Challenge[]} allChallenges
- * @param {string|number|null} challengeIdFilter
- * @returns {{challenges: Challenge[], result?: undefined}|{result: VotingPassResult, challenges?: undefined}}
  *   `result` is the pass's exit value when the filtered challenge is not active.
  */
-const selectPassChallenges = (allChallenges, challengeIdFilter) => {
+const selectPassChallenges = (
+    allChallenges: Challenge[],
+    challengeIdFilter: string | number | null,
+): { challenges: Challenge[]; result?: undefined } | { result: VotingPassResult; challenges?: undefined } => {
     if (challengeIdFilter == null) return { challenges: allChallenges };
     const idStr = String(challengeIdFilter);
     const challenges = allChallenges.filter((c) => String(c.id) === idStr);
@@ -572,12 +545,8 @@ const selectPassChallenges = (allChallenges, challengeIdFilter) => {
  * it runs ahead of the timer-ordered deadline actions. With Save Turbos for
  * Missions on, the earn waits (isTurboEarnSaved) unless a "Win Turbo" mission
  * still needs wins; every win counts down that mission.
- *
- * @param {Challenge} challenge
- * @param {number} now
- * @param {PassContext} pass
  */
-const playAutoTurbo = async (challenge, now, { api, token, missions }) => {
+const playAutoTurbo = async (challenge: Challenge, now: number, { api, token, missions }: PassContext) => {
     if (!votingLogic.shouldPlayAutoTurbo(challenge, now)) return;
     const missionWants = (missions?.turbo ?? 0) > 0;
     if (!missionWants && votingLogic.isTurboEarnSaved(challenge, now)) {
@@ -605,14 +574,14 @@ const playAutoTurbo = async (challenge, now, { api, token, missions }) => {
  * turbo (12m) when both are due. Each runner keeps its own full eligibility
  * check, so an action that isn't actually due just no-ops.
  *
- * @param {Challenge} challenge
- * @param {number} now
- * @param {PassContext} pass
- * @returns {Promise<VotingPassResult|null>} the cancelled-pass result, or null to continue
+ * @returns the cancelled-pass result, or null to continue
  */
-const runDeadlineActions = async (challenge, now, pass) => {
-    /** @type {ActionContext} */
-    const actionCtx = {
+const runDeadlineActions = async (
+    challenge: Challenge,
+    now: number,
+    pass: PassContext,
+): Promise<VotingPassResult | null> => {
+    const actionCtx: ActionContext = {
         challenge,
         token: pass.token,
         now,
@@ -641,18 +610,15 @@ const runDeadlineActions = async (challenge, now, pass) => {
  * already-gated boolean. Gating the whole block (not just the decision) keeps
  * the feature genuinely opt-in: metadata.json is a synchronous whole-file
  * read/write, and a user who never enables this should pay none of it.
- *
- * @param {Challenge} challenge
- * @param {(EntryTracker|null)} entryTracker
  */
-const detectNewEntry = (challenge, entryTracker) => {
+const detectNewEntry = (challenge: Challenge, entryTracker: EntryTracker | null) => {
     const challengeId = challenge.id.toString();
     const tracking =
         entryTracker && settings.getEffectiveSetting('voteOnNewEntry', challengeId) === true
             ? newEntryTracker.readEntryIds(challenge)
             : null;
     // `tracking` is only set when entryTracker is.
-    const previousIds = tracking ? /** @type {EntryTracker} */ (entryTracker).get(challengeId) : null;
+    const previousIds = tracking ? (entryTracker as EntryTracker).get(challengeId) : null;
     const hasNewEntry = tracking ? newEntryTracker.hasNewEntries(previousIds, tracking) : false;
     return { challengeId, tracking, previousIds, hasNewEntry };
 };
@@ -663,10 +629,8 @@ const detectNewEntry = (challenge, entryTracker) => {
  * armed, so claiming "forcing a vote this cycle" off `hasNewEntry` alone would
  * repeat every cycle for the whole pause, directly above a "Skipping voting -
  * voting paused" line saying the opposite.
- *
- * @param {AutoVoteDecision} decision
  */
-const describeNewEntryOutcome = ({ forcedByNewEntry, preservesNewEntryTrigger, shouldVote }) => {
+const describeNewEntryOutcome = ({ forcedByNewEntry, preservesNewEntryTrigger, shouldVote }: AutoVoteDecision) => {
     if (forcedByNewEntry) return 'forcing a vote this cycle';
     if (preservesNewEntryTrigger) return 'vote deferred until the pause ends — trigger stays armed';
     return shouldVote ? 'already eligible on its own' : 'not voting this cycle';
@@ -695,31 +659,33 @@ const describeNewEntryOutcome = ({ forcedByNewEntry, preservesNewEntryTrigger, s
  * NORMAL threshold rule, which votes only while exposure is below the trigger,
  * so consuming the trigger here would drop the new entry's vote entirely
  * instead of deferring it past the pause.
- *
- * @param {(EntryTracker|null)} entryTracker
- * @param {ReturnType<typeof detectNewEntry>} entry
- * @param {AutoVoteDecision} decision
- * @param {boolean} voteThrew
  */
-const recordEntrySnapshot = (entryTracker, entry, decision, voteThrew) => {
+const recordEntrySnapshot = (
+    entryTracker: EntryTracker | null,
+    entry: ReturnType<typeof detectNewEntry>,
+    decision: AutoVoteDecision,
+    voteThrew: boolean,
+) => {
     if (!entry.tracking || (decision.forcedByNewEntry && voteThrew)) return;
     if (decision.preservesNewEntryTrigger && entry.hasNewEntry) return;
     if (!newEntryTracker.shouldRecordSnapshot(entry.previousIds, entry.tracking)) return;
     // `entry.tracking` is only set when entryTracker is.
-    /** @type {EntryTracker} */ (entryTracker).set(entry.challengeId, entry.tracking);
+    (entryTracker as EntryTracker).set(entry.challengeId, entry.tracking);
 };
 
 /**
  * Submit votes from an already-fetched pool, then pace before the next challenge.
  *
- * @param {Challenge} challenge
- * @param {VoteImagesResponse} voteImages
- * @param {number} targetExposure
- * @param {PassContext} pass
- * @param {() => void} onVoteLanded - records the snapshot when a cancel follows a landed vote
- * @returns {Promise<VotingPassResult|null>} the cancelled-pass result, or null to continue
+ * @param onVoteLanded - records the snapshot when a cancel follows a landed vote
+ * @returns the cancelled-pass result, or null to continue
  */
-const submitVoteImages = async (challenge, voteImages, targetExposure, pass, onVoteLanded) => {
+const submitVoteImages = async (
+    challenge: Challenge,
+    voteImages: VoteImagesResponse,
+    targetExposure: number,
+    pass: PassContext,
+    onVoteLanded: () => void,
+): Promise<VotingPassResult | null> => {
     // Check for cancellation before submitting votes
     if (cancellation.isCancelled()) {
         return cancelPass(pass.allChallenges, '🛑 Voting cancelled by user before vote submission');
@@ -749,7 +715,11 @@ const submitVoteImages = async (challenge, voteImages, targetExposure, pass, onV
     return null;
 };
 
-/** @typedef {{cancelled: (VotingPassResult|null), voteThrew: boolean, votePool: (VoteImagesResponse|null|undefined)}} VoteOutcome */
+type VoteOutcome = {
+    cancelled: VotingPassResult | null;
+    voteThrew: boolean;
+    votePool: VoteImagesResponse | null | undefined;
+};
 
 /**
  * Vote on the challenge when the decision says so.
@@ -757,16 +727,14 @@ const submitVoteImages = async (challenge, voteImages, targetExposure, pass, onV
  * `votePool` is the pool this pass voted from — handed to the exposure-fill
  * rule, which only spends when voting cannot reach its threshold. undefined =
  * voting didn't run (the rule fetches the pool itself); null = none.
- *
- * @param {Challenge} challenge
- * @param {{shouldVote: boolean, voteReason: string, targetExposure: number}} decision
- * @param {PassContext} pass
- * @param {() => void} onVoteLanded
- * @returns {Promise<VoteOutcome>}
  */
-const voteOnChallenge = async (challenge, decision, pass, onVoteLanded) => {
-    /** @type {VoteOutcome} */
-    const outcome = { cancelled: null, voteThrew: false, votePool: undefined };
+const voteOnChallenge = async (
+    challenge: Challenge,
+    decision: { shouldVote: boolean; voteReason: string; targetExposure: number },
+    pass: PassContext,
+    onVoteLanded: () => void,
+): Promise<VoteOutcome> => {
+    const outcome: VoteOutcome = { cancelled: null, voteThrew: false, votePool: undefined };
     if (!decision.shouldVote) {
         // Log why voting was skipped
         logger
@@ -824,14 +792,16 @@ const voteOnChallenge = async (challenge, decision, pass, onVoteLanded) => {
  * automation, deadline actions, new-entry detection, the vote, and the
  * post-vote exposure fill — in that order.
  *
- * @param {Challenge} challenge
- * @param {number} now
- * @param {number} position - 1-based index for progress reporting
- * @param {number} total
- * @param {PassContext} pass
- * @returns {Promise<VotingPassResult|null>} the cancelled-pass result, or null to continue
+ * @param position - 1-based index for progress reporting
+ * @returns the cancelled-pass result, or null to continue
  */
-const processChallenge = async (challenge, now, position, total, pass) => {
+const processChallenge = async (
+    challenge: Challenge,
+    now: number,
+    position: number,
+    total: number,
+    pass: PassContext,
+): Promise<VotingPassResult | null> => {
     // Check for cancellation before processing each challenge
     if (cancellation.isCancelled()) {
         return cancelPass(pass.allChallenges);
@@ -897,13 +867,12 @@ const processChallenge = async (challenge, now, position, total, pass) => {
 
 /**
  * The voting pass — see the file header.
- *
- * @param {string} token
- * @param {string|number|null} challengeIdFilter
- * @param {VotingPassDeps} deps
- * @returns {Promise<VotingPassResult>}
  */
-const runVotingPass = async (token, challengeIdFilter, deps) => {
+const runVotingPass = async (
+    token: string,
+    challengeIdFilter: string | number | null,
+    deps: VotingPassDeps,
+): Promise<VotingPassResult> => {
     const {
         api,
         cleanupStaleMetadata,
@@ -947,8 +916,7 @@ const runVotingPass = async (token, challengeIdFilter, deps) => {
         if (scope.result) return scope.result;
         const { challenges } = scope;
 
-        /** @type {PassContext} */
-        const pass = {
+        const pass: PassContext = {
             token,
             api,
             fillDeps,
@@ -1004,7 +972,7 @@ const runVotingPass = async (token, challengeIdFilter, deps) => {
         logger.withCategory('voting').endOperation('voting-process', null, failureText(error));
         return {
             success: false,
-            error: /** @type {{ message?: string } | null | undefined} */ (error)?.message || 'Voting process failed',
+            error: (error as { message?: string } | null | undefined)?.message || 'Voting process failed',
         };
     }
 };

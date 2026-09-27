@@ -14,8 +14,8 @@ import * as cancellation from '../voting/cancellation';
 import { extractAuthResult, clearAuthToken } from './auth';
 import { voteAllChallengesManual } from './manualVote';
 
-/** @import { ApiStrategy } from '../apiFactory' */
-/** @import { Challenge } from '../types/gurushots' */
+import type { ApiStrategy } from '../apiFactory';
+import type { Challenge } from '../types/gurushots';
 
 const requireToken = () => {
     const token = settings.getSetting('token');
@@ -24,16 +24,13 @@ const requireToken = () => {
 };
 
 class BaseMiddleware {
-    /** @param {ApiStrategy} apiStrategy */
-    constructor(apiStrategy) {
+    apiStrategy: ApiStrategy;
+
+    constructor(apiStrategy: ApiStrategy) {
         this.apiStrategy = apiStrategy;
     }
 
-    /**
-     * @param {string} email
-     * @param {string} password
-     */
-    async _login(email, password) {
+    async _login(email: string, password: string) {
         const response = await this.apiStrategy.authenticate(email, password);
         // Token extraction is shared with the GUI IPC handler via
         // extractAuthResult so CLI and GUI accept the same token keys /
@@ -46,11 +43,7 @@ class BaseMiddleware {
         return { ok: false, token: null, response };
     }
 
-    /**
-     * @param {string} email
-     * @param {string} password
-     */
-    async cliLogin(email, password) {
+    async cliLogin(email: string, password: string) {
         logger.withCategory('authentication').info('=== GuruShots Auto Voter - CLI Login ===', null);
         logger.withCategory('authentication').startOperation('cli-login', 'CLI Authentication');
         try {
@@ -68,11 +61,7 @@ class BaseMiddleware {
         }
     }
 
-    /**
-     * @param {string} email
-     * @param {string} password
-     */
-    async guiLogin(email, password) {
+    async guiLogin(email: string, password: string) {
         try {
             const { ok, token, response } = await this._login(email, password);
             if (ok) return { success: true, token, data: response };
@@ -80,14 +69,12 @@ class BaseMiddleware {
         } catch (error) {
             return {
                 success: false,
-                error:
-                    /** @type {{ message?: string } | null | undefined} */ (error)?.message || 'Authentication failed',
+                error: (error as { message?: string } | null | undefined)?.message || 'Authentication failed',
             };
         }
     }
 
-    /** @param {string|number|null} [challengeId] */
-    async _runVote(challengeId = null) {
+    async _runVote(challengeId: string | number | null = null) {
         const token = settings.getSetting('token');
         if (!token) {
             return { ok: false, error: 'No authentication token found. Please login first.' };
@@ -101,10 +88,8 @@ class BaseMiddleware {
      * strategy, and returns `{ success, message } | { success: false, error }`
      * matching what the renderer expects. `challengeId` is optional; null/undefined
      * means run the full active set.
-     *
-     * @param {string|number|null} [challengeId]
      */
-    async runVotingCycle(challengeId = null) {
+    async runVotingCycle(challengeId: string | number | null = null) {
         cancellation.reset();
         const { ok, error, result } = await this._runVote(challengeId);
         if (!ok) {
@@ -141,8 +126,7 @@ class BaseMiddleware {
         return token;
     }
 
-    /** @param {string|number|null} [challengeId] */
-    async cliVote(challengeId = null) {
+    async cliVote(challengeId: string | number | null = null) {
         const scopeLabel = challengeId == null ? '' : ` (challenge ${challengeId})`;
         logger.withCategory('voting').info(`=== GuruShots Auto Voter - CLI Voting${scopeLabel} ===`, null);
         const token = this._requireCliToken();
@@ -226,8 +210,7 @@ class BaseMiddleware {
         return this.apiStrategy.getActiveChallenges(requireToken());
     }
 
-    /** @param {Challenge} challenge */
-    applyBoost(challenge) {
+    applyBoost(challenge: Challenge) {
         return this.apiStrategy.applyBoost(challenge, requireToken());
     }
 }

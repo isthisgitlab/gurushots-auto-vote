@@ -19,7 +19,7 @@ import { MAX_SCHEDULED_FILL_ENTRIES, MAX_VOTING_PAUSE_MINUTES } from '../../sett
 // one here would be strictly less visible.
 import * as logger from '../../logger';
 // CR/LF-collapse API-sourced values before they reach a log message (CWE-117).
-// Imported directly rather than off the logger, matching newEntryTracker.js —
+// Imported directly rather than off the logger, matching newEntryTracker.ts —
 // the logger is mocked across much of the test suite, and its own oneLine() on
 // the finished message is a backstop, not the first line of defence.
 import { oneLine as oneLineId } from '../../format/logSafe';

@@ -50,7 +50,7 @@ nextCurrencyRule, nextScenarioWake, nextBoostHold }`:
   engine uses, so the scheduler and the runner cannot disagree). A plan that
   has not started yet is judged from its start phase. Every still-open
   challenge counts, flash included. Resolvers: `nodeResolvers.resolveScenarioWake`
-  (over `services/scenarioStatus.js`) and its IPC twin in
+  (over `services/scenarioStatus.ts`) and its IPC twin in
   `react/contexts/autovoteScheduler.js` (`get-scenario-status`).
 - **normal**: otherwise the random delay in `[checkFrequencyMin,
 checkFrequencyMax]`.
@@ -331,9 +331,9 @@ Deliberate semantics and caveats:
 
 ## Android — native Foreground Service + AlarmManager
 
-- **Owner**: `src/js/services/NativeAutovoteBridge.js` (JS bridge to
+- **Owner**: `src/js/services/NativeAutovoteBridge.ts` (JS bridge to
   the custom Capacitor plugin `AutoVoteBackground`).
-- **Fallback**: `src/js/services/ForegroundServiceController.js` runs
+- **Fallback**: `src/js/services/ForegroundServiceController.ts` runs
   the foreground notification only — used when the native plugin is
   not available on a given build.
 - **Cadence**: the _timing engine_ is owned by the native plugin (Java
@@ -366,7 +366,7 @@ engine_ stays per-shell:
   AlarmManager survives that and Doze deep-sleep.
 
 What they DO share is the cadence _decision_ (`computeNextCycleDelayMs`)
-and what a "cycle" means (`services/manualVote.js` for the manual to-100%
+and what a "cycle" means (`services/manualVote.ts` for the manual to-100%
 path, `strategies/real/index.js#fetchChallengesAndVote` for the auto-strategy path).
 Sharing the decision is what keeps last-minute entry timing correct on all
 three; sharing the timer engine would force the lowest common denominator

@@ -1,7 +1,7 @@
 /**
  * Canonical "seconds → human duration" formatter, shared by every platform
  * shell (CLI status, the renderer boost-window banner + challenge countdown,
- * and the voting pass's log lines in services/votingOrchestrator.js) so they
+ * and the voting pass's log lines in services/votingOrchestrator.ts) so they
  * all read identically.
  *
  * No React or Node-service dependency, so the CLI, the main process and the

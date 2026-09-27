@@ -2,7 +2,7 @@ import type { Challenge, RankingEntry, VoteImagesResponse } from '../types/gurus
 /**
  * Rule math for the currency automation (automatic KEY unlock, photo SWAP and
  * exposure FILL). Pure and dependency-free — no settings, no services — so the
- * Node runners (services/currencyAuto.js), the scheduler's wake-up cap
+ * Node runners (services/currencyAuto.ts), the scheduler's wake-up cap
  * (scheduling/thresholdWindow.ts) and any renderer view all answer "is this rule
  * open?" identically.
  *

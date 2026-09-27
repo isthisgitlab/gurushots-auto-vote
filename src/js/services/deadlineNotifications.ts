@@ -26,9 +26,8 @@
  * timeline and the Node notify path can reuse it without pulling React into a
  * Node/headless bundle. DeadlineTimeline.jsx imports this. Indexed by a dynamic
  * action string (from server data), so typed with a string index.
- * @type {Record<string, string>}
  */
-const ACTION_LABEL_KEY = {
+const ACTION_LABEL_KEY: Record<string, string> = {
     autoFill: 'app.deadlineActionAutoFill',
     boost: 'app.deadlineActionBoost',
     turbo: 'app.deadlineActionTurbo',
@@ -37,9 +36,8 @@ const ACTION_LABEL_KEY = {
 
 /**
  * The settings key that gates each action. Indexed by a dynamic action string.
- * @type {Record<string, string>}
  */
-const NOTIFY_SETTING_KEYS = {
+const NOTIFY_SETTING_KEYS: Record<string, string> = {
     autoFill: 'notifyOnAutoFill',
     boost: 'notifyOnBoost',
     turbo: 'notifyOnTurbo',
@@ -64,12 +62,8 @@ const MAX_TEXT_LEN = 120;
  * chars) are removed; a leading dash run is stripped so the value can never be
  * read as a `--flag`; the result is trimmed and length-capped. Mirrors
  * logger.sanitizeLogString's intent.
- *
- * @param {string | null | undefined} value
- * @param {number} [maxLength]
- * @returns {string}
  */
-const sanitizeNotificationText = (value, maxLength = MAX_TEXT_LEN) =>
+const sanitizeNotificationText = (value: string | null | undefined, maxLength: number = MAX_TEXT_LEN): string =>
     String(value ?? '')
         // First collapse turns CR/LF/TAB into single spaces (newlines must
         // become a space, not vanish, or words would merge). Then strip the
@@ -88,27 +82,42 @@ const sanitizeNotificationText = (value, maxLength = MAX_TEXT_LEN) =>
  * layer (translations/translator.ts `t()`) does no interpolation of its own, so the
  * templates carry `{minutes}` / `{title}` / `{count}` and we substitute here.
  * Unknown tokens are left intact rather than blanked.
- *
- * @param {string} template
- * @param {Record<string, string | number | null | undefined>} params
- * @returns {string}
  */
-const interpolate = (template, params) =>
+const interpolate = (template: string, params: Record<string, string | number | null | undefined>): string =>
     template.replace(/\{(\w+)\}/g, (match, key) => (params[key] != null ? String(params[key]) : match));
 
 /**
  * Decide which upcoming actions are within the notification lead window.
  *
- * @param {Array<{id:*, title:*, actions:*}>} perChallengeActions - one entry per
+ * @param perChallengeActions - one entry per
  *   challenge; `actions` is describeDeadlineActions' output (`[{action, dueAt}]`,
  *   `dueAt` = absolute Unix seconds the action fires, or null/NaN when unknown).
- * @param {number} now - Unix timestamp (seconds)
- * @param {{leadSec:number, enabled:Partial<Record<string, boolean>>}} opts
- * @returns {Array<{fireKey:string, challengeId:string, title:string, action:string, dueAt:number, secondsUntil:number}>}
+ * @param now - Unix timestamp (seconds)
  */
-const computeDueNotifications = (perChallengeActions, now, opts) => {
-    /** @type {Array<{fireKey:string, challengeId:string, title:string, action:string, dueAt:number, secondsUntil:number}>} */
-    const due = [];
+const computeDueNotifications = (
+    perChallengeActions: ReadonlyArray<{
+        id?: string | number | null;
+        title?: string | null;
+        actions: ReadonlyArray<{ action: string; dueAt: number | null }>;
+    }>,
+    now: number,
+    opts: { leadSec: number; enabled: Partial<Record<string, boolean>> },
+): Array<{
+    fireKey: string;
+    challengeId: string;
+    title: string;
+    action: string;
+    dueAt: number;
+    secondsUntil: number;
+}> => {
+    const due: Array<{
+        fireKey: string;
+        challengeId: string;
+        title: string;
+        action: string;
+        dueAt: number;
+        secondsUntil: number;
+    }> = [];
     const leadSec = Number(opts?.leadSec);
     const enabled = opts?.enabled || {};
     // Nothing enabled, or a non-positive lead window → nothing is ever due.
@@ -163,12 +172,9 @@ const computeDueNotifications = (perChallengeActions, now, opts) => {
  * there is no cross-process coordination. Both are accepted; do NOT migrate
  * this to a persisted/shared store without re-litigating the tradeoff, or a
  * stale key could permanently suppress a real warning.
- *
- * @returns {{ filterNew: <T extends {fireKey: string}>(due: readonly T[]) => T[] }}
  */
-const createDedupe = () => {
-    /** @type {Set<string>} */
-    const fired = new Set();
+const createDedupe = (): { filterNew: <T extends { fireKey: string }>(due: readonly T[]) => T[] } => {
+    const fired: Set<string> = new Set();
     return {
         filterNew(due) {
             const list = Array.isArray(due) ? due : [];
@@ -194,16 +200,17 @@ const createDedupe = () => {
  * same cycle coalesce into one grouped toast rather than N simultaneous ones.
  * Returns null when there is nothing to show.
  *
- * @param {Array<{title:string, action:string, secondsUntil:number}>} entries
- * @param {(key:string)=>string} translate - returns a raw template (may carry
+ * @param translate - returns a raw template (may carry
  *   `{placeholders}`); the host passes its own t()/Node translator.
- * @returns {{title:string, body:string}|null}
  */
-const formatNotification = (entries, translate) => {
+const formatNotification = (
+    entries: Array<{ title: string; action: string; secondsUntil: number }>,
+    translate: (key: string) => string,
+): { title: string; body: string } | null => {
     const list = Array.isArray(entries) ? entries : [];
     if (list.length === 0) return null;
-    const t = typeof translate === 'function' ? translate : (/** @type {string} */ key) => key;
-    const minutesOf = (/** @type {{secondsUntil:number}} */ e) => Math.max(1, Math.round(Number(e.secondsUntil) / 60));
+    const t = typeof translate === 'function' ? translate : (key: string) => key;
+    const minutesOf = (e: { secondsUntil: number }) => Math.max(1, Math.round(Number(e.secondsUntil) / 60));
 
     if (list.length === 1) {
         const e = list[0];
@@ -229,14 +236,12 @@ const formatNotification = (entries, translate) => {
  * Read the notification config from a settings accessor. Returns the enabled
  * map and lead window in seconds. `anyEnabled` lets a host early-exit before any
  * per-challenge work when the whole feature is off (the default).
- *
- * @param {(key:string)=>unknown} getSetting
- * @returns {{leadSec:number, enabled:Record<string, boolean>, anyEnabled:boolean}}
  */
-const readNotificationConfig = (getSetting) => {
+const readNotificationConfig = (
+    getSetting: (key: string) => unknown,
+): { leadSec: number; enabled: Record<string, boolean>; anyEnabled: boolean } => {
     const get = typeof getSetting === 'function' ? getSetting : () => undefined;
-    /** @type {Record<string, boolean>} */
-    const enabled = {};
+    const enabled: Record<string, boolean> = {};
     let anyEnabled = false;
     for (const action of Object.keys(NOTIFY_SETTING_KEYS)) {
         const on = get(NOTIFY_SETTING_KEYS[action]) === true;

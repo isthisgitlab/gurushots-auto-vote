@@ -1,4 +1,4 @@
-/** @import { Challenge } from '../types/gurushots' */
+import type { Challenge } from '../types/gurushots';
 /**
  * New-entry detection for the `voteOnNewEntry` setting.
  *
@@ -32,8 +32,7 @@ import * as logger from '../logger';
 // broken import can reach this (both values are static literals in metadata), so it
 // also warns — a silent degrade here would be invisible until it mattered.
 const FALLBACK_ENTRY_ID_CAP = 64;
-/** @param {unknown} value @param {string} name @returns {number} */
-const finiteCap = (value, name) => {
+const finiteCap = (value: unknown, name: string): number => {
     if (typeof value === 'number' && Number.isFinite(value)) return value;
     logger
         .withCategory('challenges')
@@ -56,11 +55,10 @@ import { oneLine as oneLineId } from '../format/logSafe';
  * literal string "undefined" and pollute the diff set (it would also trip the
  * metadata validator later and cost the whole snapshot).
  *
- * @param {Challenge} challenge
- * @returns {string[]|null} - null when the challenge carries no usable entries
+ * @returns null when the challenge carries no usable entries
  *   array at all, which means "don't track this one" rather than "no entries".
  */
-const readEntryIds = (challenge) => {
+const readEntryIds = (challenge: Challenge): string[] | null => {
     const entries = challenge?.member?.ranking?.entries;
     if (!Array.isArray(entries)) return null;
     // Bound the work BEFORE doing it, not just at persistence time. This runs every
@@ -85,12 +83,8 @@ const readEntryIds = (challenge) => {
  * than null and fires once, by design.
  *
  * Removals alone are not new entries; a same-size swap is.
- *
- * @param {string[]|null} previousIds
- * @param {string[]} currentIds
- * @returns {boolean}
  */
-const hasNewEntries = (previousIds, currentIds) => {
+const hasNewEntries = (previousIds: string[] | null, currentIds: string[]): boolean => {
     if (!Array.isArray(previousIds)) return false;
     if (!Array.isArray(currentIds)) return false;
     const previous = new Set(previousIds);
@@ -110,27 +104,23 @@ const hasNewEntries = (previousIds, currentIds) => {
  * transient blip the same ids reappear and correctly read as "nothing new", and
  * after a genuine deletion any photo added later is still genuinely absent from the
  * stored set, so it fires exactly as it should.
- *
- * @param {string[]|null} previousIds
- * @param {string[]} currentIds
- * @returns {boolean}
  */
-const shouldRecordSnapshot = (previousIds, currentIds) => {
+const shouldRecordSnapshot = (previousIds: string[] | null, currentIds: string[]): boolean => {
     if (!Array.isArray(currentIds)) return false;
     if (currentIds.length > 0) return true;
     // currentIds is empty — only trust it when there is nothing better stored.
     return !Array.isArray(previousIds) || previousIds.length === 0;
 };
 
-/**
- * @typedef {{get: (challengeId: string) => string[]|null, set: (challengeId: string, ids: string[]) => void}} EntryTracker
- */
+export type EntryTracker = {
+    get: (challengeId: string) => string[] | null;
+    set: (challengeId: string, ids: string[]) => void;
+};
 
 /**
  * Tracker backed by metadata.json — the real strategy.
- * @returns {EntryTracker}
  */
-const createMetadataEntryTracker = () => ({
+const createMetadataEntryTracker = (): EntryTracker => ({
     get: (challengeId) => metadata.getChallengeEntryIds(challengeId),
     set: (challengeId, ids) => {
         // A dropped write leaves the trigger armed, so the next pass re-fires the
@@ -152,14 +142,11 @@ const createMetadataEntryTracker = () => ({
  * cleanupStaleMetadata: null — so mock snapshots would accumulate in the user's real
  * metadata file and never be pruned. Same reasoning as the cleanupStaleMetadata
  * split documented in votingOrchestrator.
- *
- * @returns {EntryTracker}
  */
-const createMemoryEntryTracker = () => {
-    /** @type {Map<string, string[]>} */
-    const store = new Map();
+const createMemoryEntryTracker = (): EntryTracker => {
+    const store: Map<string, string[]> = new Map();
     return {
-        get: (challengeId) => (store.has(challengeId) ? /** @type {string[]} */ (store.get(challengeId)) : null),
+        get: (challengeId) => (store.has(challengeId) ? (store.get(challengeId) as string[]) : null),
         set: (challengeId, ids) => {
             store.set(challengeId, [...ids]);
         },

@@ -97,7 +97,7 @@ export const importScenario = scenarios.importScenario;
 export const exportScenario = scenarios.exportScenario;
 export const MAX_SCENARIOS = scenarios.MAX_SCENARIOS;
 // First-seen challenge-title pins (internal cache — no IPC wiring).
-// MAX_TITLE_LENGTH is exported so challengeTitlePin.js bounds incoming
+// MAX_TITLE_LENGTH is exported so challengeTitlePin.ts bounds incoming
 // titles with the same cap mergeTitlePins accepts.
 export const getTitlePins = titlePins.getTitlePins;
 export const mergeTitlePins = titlePins.mergeTitlePins;

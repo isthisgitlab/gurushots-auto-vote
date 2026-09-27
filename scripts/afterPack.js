@@ -24,7 +24,7 @@ const path = require('path');
 const { flipFuses, FuseVersion, FuseV1Options } = require('@electron/fuses');
 
 /**
- * onnxruntime-node (local image inference, services/visionVerifier.js) ships
+ * onnxruntime-node (local image inference, services/visionVerifier.ts) ships
  * prebuilt binaries for every OS and CPU — 30–130 MB that this package can
  * never load. They sit in app.asar.unpacked (see asarUnpack), so they are plain
  * files here. A per-platform electron-builder `files` exclusion can't do this:

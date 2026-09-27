@@ -10,8 +10,8 @@
 import * as votingLogic from './VotingLogic';
 import * as logger from '../logger';
 
-/** @import { ApiStrategy } from '../apiFactory' */
-/** @import { Challenge } from '../types/gurushots' */
+import type { ApiStrategy } from '../apiFactory';
+import type { Challenge } from '../types/gurushots';
 
 /**
  * Spacing between successful manual votes within a single cycle. Both
@@ -29,16 +29,15 @@ const STAGGER_MS = 1000;
  *   { outcome: 'no-images',    targetExposure }
  *   { outcome: 'voted',        targetExposure, imageCount }
  *
- * @param {Challenge} challenge
- * @param {ApiStrategy} strategy - API strategy (real or mock)
- * @param {string} token
- * @param {number} now - Unix seconds
+ * @param strategy - API strategy (real or mock)
+ * @param now - Unix seconds
  */
-const submitVotesForChallenge = async (challenge, strategy, token, now) => {
-    const { shouldAllowVoting, errorMessage, targetExposure } =
-        /** @type {{ shouldAllowVoting: boolean, errorMessage: string, targetExposure: number }} */ (
-            votingLogic.evaluateManualVotingToHundred(challenge, now, challenge.title)
-        );
+const submitVotesForChallenge = async (challenge: Challenge, strategy: ApiStrategy, token: string, now: number) => {
+    const { shouldAllowVoting, errorMessage, targetExposure } = votingLogic.evaluateManualVotingToHundred(
+        challenge,
+        now,
+        challenge.title,
+    ) as { shouldAllowVoting: boolean; errorMessage: string; targetExposure: number };
     if (!shouldAllowVoting) {
         return { outcome: 'not-eligible', errorMessage };
     }
@@ -59,15 +58,18 @@ const submitVotesForChallenge = async (challenge, strategy, token, now) => {
  * (BaseMiddleware.cliVoteManual) and the IPC vote-all handler so the loop
  * semantics can never drift between shells.
  *
- * @param {Challenge[]} challenges
- * @param {ApiStrategy} strategy - API strategy (real or mock)
- * @param {string} token
- * @param {object} [opts]
- * @param {(current:number, total:number, challenge:Challenge)=>void} [opts.onProgress]
- * @param {number} [opts.staggerMs] - Override for tests; production callers keep STAGGER_MS.
- * @returns {Promise<{voted:number, skipped:number, total:number}>}
+ * @param strategy - API strategy (real or mock)
+ * @param opts.staggerMs - Override for tests; production callers keep STAGGER_MS.
  */
-const voteAllChallengesManual = async (challenges, strategy, token, { onProgress, staggerMs = STAGGER_MS } = {}) => {
+const voteAllChallengesManual = async (
+    challenges: Challenge[],
+    strategy: ApiStrategy,
+    token: string,
+    {
+        onProgress,
+        staggerMs = STAGGER_MS,
+    }: { onProgress?: (current: number, total: number, challenge: Challenge) => void; staggerMs?: number } = {},
+): Promise<{ voted: number; skipped: number; total: number }> => {
     const now = Math.floor(Date.now() / 1000);
     let voted = 0;
     let skipped = 0;

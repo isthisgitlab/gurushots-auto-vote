@@ -1,6 +1,6 @@
 /**
  * Renderer-side scenario notifier: the notices a user's scenarios left
- * (services/scenarioNotifications.js holds the logic), read over the
+ * (services/scenarioNotifications.ts holds the logic), read over the
  * get-scenario-status IPC channel and delivered like the deadline
  * notifications. Wired only where deadlineNotifier is — the desktop app; on
  * native Android the caller leaves it out for the same dual-loop reason (see

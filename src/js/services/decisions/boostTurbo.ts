@@ -9,7 +9,7 @@ import { isBoostWindowOpen as boostWindowOpen } from '../../voting/boostWindow';
 import { getEffectiveBoostTime, getEffectiveKeyUnlockedBoostTime, getEffectiveTurboTime } from './thresholds';
 import { pickEntryAvoidingConflict } from './entryPick';
 
-export interface TurboDecision {
+interface TurboDecision {
     apply: boolean;
     imageId: string | null;
     fillNew: boolean;

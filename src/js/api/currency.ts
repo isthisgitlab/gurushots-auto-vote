@@ -9,7 +9,7 @@
  *   swapPhoto        - spend a SWAP: replace one entered photo with another
  *   exposureAutofill - spend a FILL: top the challenge exposure up to 100%
  *
- * Each call deducts real currency. Callers (services/currencyActions.js) must
+ * Each call deducts real currency. Callers (services/currencyActions.ts) must
  * re-check the live challenge and bankroll before calling, and guard against
  * double spends.
  *

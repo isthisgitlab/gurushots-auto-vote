@@ -1,8 +1,8 @@
 /**
  * OS notifications for user-defined scenarios: the notices a scenario's
  * `notify` action (and a halt) leave in the challenge's scenario state
- * outbox (services/scenarioRunner.js), delivered by the host's per-cycle
- * notifier — the CLI scheduler (services/notify/nodeNotify.js) and the
+ * outbox (services/scenarioRunner.ts), delivered by the host's per-cycle
+ * notifier — the CLI scheduler (services/notify/nodeNotify.ts) and the
  * desktop renderer (react/notifications/scenarioNotifier.js), alongside the
  * deadline notifications and through the same transports.
  *
@@ -13,32 +13,26 @@
 
 import { sanitizeNotificationText, interpolate } from './deadlineNotifications';
 
-/** @import { Challenge } from '../types/gurushots' */
+import type { Challenge } from '../types/gurushots';
 
 /** Longest notification body; a scenario notice is itself capped at 120 characters. */
 const MAX_BODY = 240;
 
-/**
- * @typedef {{id?: unknown, at?: unknown, message?: unknown}} OutboxItem
- * @typedef {{challengeId: unknown, challengeTitle: string, outbox: OutboxItem[]}} ChallengeOutbox
- */
+export type OutboxItem = { id?: unknown; at?: unknown; message?: unknown };
+
+type ChallengeOutbox = { challengeId: unknown; challengeTitle: string; outbox: OutboxItem[] };
 
 /**
  * Remembers which notices were shown. Keys of notices that left every outbox
  * are forgotten, so the set stays bounded over a long session.
  *
- * @param {number} startedAt - unix seconds; older notices are never shown
+ * @param startedAt - unix seconds; older notices are never shown
  */
-const createNoticeTracker = (startedAt) => {
-    /** @type {Set<string>} */
-    const shown = new Set();
+const createNoticeTracker = (startedAt: number) => {
+    const shown: Set<string> = new Set();
     return {
-        /**
-         * @param {ChallengeOutbox[]} outboxes
-         * @returns {Array<{challengeTitle: string, message: string}>}
-         */
-        fresh(outboxes) {
-            const present = new Set();
+        fresh(outboxes: ChallengeOutbox[]): Array<{ challengeTitle: string; message: string }> {
+            const present = new Set<string>();
             const notices = [];
             for (const { challengeId, challengeTitle, outbox } of outboxes) {
                 for (const item of outbox) {
@@ -59,11 +53,12 @@ const createNoticeTracker = (startedAt) => {
 /**
  * One OS notification for this cycle's new notices — several coalesce into one.
  *
- * @param {Array<{challengeTitle: string, message: string}>} notices
- * @param {(key: string) => string} translate - returns a raw template
- * @returns {{title: string, body: string}|null}
+ * @param translate - returns a raw template
  */
-const formatScenarioNotification = (notices, translate) => {
+const formatScenarioNotification = (
+    notices: Array<{ challengeTitle: string; message: string }>,
+    translate: (key: string) => string,
+): { title: string; body: string } | null => {
     if (notices.length === 0) return null;
     if (notices.length === 1) {
         const [notice] = notices;
@@ -87,16 +82,24 @@ const formatScenarioNotification = (notices, translate) => {
  * chain's onCycleChallenges hook. Create ONE per host and reuse it. Never
  * throws; a failure goes to `log`.
  *
- * @param {object} deps
- * @param {() => boolean|Promise<boolean>} deps.isEnabled - the notifyOnScenario setting
- * @param {(challenge: Challenge) => OutboxItem[]|null|undefined|Promise<OutboxItem[]|null|undefined>} deps.readOutbox
- * @param {(key: string) => string} deps.translate
- * @param {(n: {title: string, body: string}) => void} deps.deliver
- * @param {(message: string) => void} [deps.log]
- * @param {number} [deps.startedAt] - unix seconds (default: now)
- * @returns {(challenges: readonly Challenge[]) => Promise<void>}
+ * @param deps.isEnabled - the notifyOnScenario setting
+ * @param deps.startedAt - unix seconds (default: now)
  */
-const createScenarioNotifier = ({ isEnabled, readOutbox, translate, deliver, log, startedAt }) => {
+const createScenarioNotifier = ({
+    isEnabled,
+    readOutbox,
+    translate,
+    deliver,
+    log,
+    startedAt,
+}: {
+    isEnabled: () => boolean | Promise<boolean>;
+    readOutbox: (challenge: Challenge) => OutboxItem[] | null | undefined | Promise<OutboxItem[] | null | undefined>;
+    translate: (key: string) => string;
+    deliver: (n: { title: string; body: string }) => void;
+    log?: (message: string) => void;
+    startedAt?: number;
+}): ((challenges: readonly Challenge[]) => Promise<void>) => {
     const tracker = createNoticeTracker(startedAt ?? Math.floor(Date.now() / 1000));
     let running = false;
     return async (challenges) => {
@@ -104,8 +107,7 @@ const createScenarioNotifier = ({ isEnabled, readOutbox, translate, deliver, log
         running = true;
         try {
             if (!(await isEnabled())) return;
-            /** @type {ChallengeOutbox[]} */
-            const outboxes = [];
+            const outboxes: ChallengeOutbox[] = [];
             for (const challenge of challenges) {
                 const outbox = await readOutbox(challenge);
                 if (Array.isArray(outbox) && outbox.length) {
@@ -121,7 +123,7 @@ const createScenarioNotifier = ({ isEnabled, readOutbox, translate, deliver, log
         } catch (error) {
             try {
                 log?.(
-                    `scenario notification cycle failed: ${/** @type {{ message?: unknown } | null | undefined} */ (error)?.message ?? error}`,
+                    `scenario notification cycle failed: ${(error as { message?: unknown } | null | undefined)?.message ?? error}`,
                 );
             } catch {
                 /* the diagnostic sink itself is best-effort */

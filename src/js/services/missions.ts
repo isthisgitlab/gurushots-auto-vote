@@ -15,14 +15,15 @@
 import * as logger from '../logger';
 import * as settings from '../settings';
 
-/** @import { Mission } from '../types/gurushots' */
+import type { Mission } from '../types/gurushots';
 
-/** @typedef {'join'|'fill'|'turbo'} MissionKind */
+type MissionKind = 'join' | 'fill' | 'turbo';
 
-/** How many joins / fills / turbo wins the active missions still need. @typedef {Record<MissionKind, number>} MissionNeeds */
+/** How many joins / fills / turbo wins the active missions still need.
+ */
+export type MissionNeeds = Record<MissionKind, number>;
 
-/** @type {ReadonlyArray<[MissionKind, RegExp]>} */
-const MISSION_KEYWORDS = [
+const MISSION_KEYWORDS: ReadonlyArray<[MissionKind, RegExp]> = [
     ['turbo', /\bturbo/i],
     ['fill', /\b(?:auto)?fills?\b/i],
     ['join', /\bjoin\b/i],
@@ -32,12 +33,12 @@ const MISSION_KEYWORDS = [
 // joining — never let it read as a join (or fill) mission.
 const ALL_STAR = /all.?star/i;
 
-/** @type {Readonly<Record<MissionKind, 'missionJoinEarly'|'missionUseFills'|'missionSaveTurbos'>>} */
-const MISSION_SETTING = Object.freeze({
-    join: 'missionJoinEarly',
-    fill: 'missionUseFills',
-    turbo: 'missionSaveTurbos',
-});
+const MISSION_SETTING: Readonly<Record<MissionKind, 'missionJoinEarly' | 'missionUseFills' | 'missionSaveTurbos'>> =
+    Object.freeze({
+        join: 'missionJoinEarly',
+        fill: 'missionUseFills',
+        turbo: 'missionSaveTurbos',
+    });
 
 const CLAIMABLE = 'CLAIM';
 
@@ -46,11 +47,7 @@ const cat = () => logger.withCategory('missions');
 // The last summary logged, so an unchanged mission state isn't repeated every cycle.
 let lastSummary = '';
 
-/**
- * @param {Mission} mission
- * @returns {MissionKind|null}
- */
-const classifyMission = (mission) => {
+const classifyMission = (mission: Mission): MissionKind | null => {
     const text = `${mission?.name ?? ''} ${mission?.description ?? ''}`;
     if (ALL_STAR.test(text)) return null;
     const match = MISSION_KEYWORDS.find(([, pattern]) => pattern.test(text));
@@ -59,12 +56,8 @@ const classifyMission = (mission) => {
 
 /**
  * What the mission still needs: 0 once it is complete (claimable) or expired.
- *
- * @param {Mission} mission
- * @param {number} nowSec
- * @returns {number}
  */
-const remainingOf = (mission, nowSec) => {
+const remainingOf = (mission: Mission, nowSec: number): number => {
     if (mission?.claim_state === CLAIMABLE) return 0;
     const expires = Number(mission?.expiration_timestamp);
     if (Number.isFinite(expires) && expires > 0 && expires <= nowSec) return 0;
@@ -72,29 +65,25 @@ const remainingOf = (mission, nowSec) => {
     return Number.isFinite(left) && left > 0 ? left : 0;
 };
 
-/** @param {MissionNeeds} needs */
-const logNeeds = (needs) => {
-    const active = /** @type {MissionKind[]} */ (Object.keys(needs)).filter((kind) => needs[kind] > 0);
+const logNeeds = (needs: MissionNeeds) => {
+    const active = (Object.keys(needs) as MissionKind[]).filter((kind) => needs[kind] > 0);
     const summary = active.map((kind) => `${kind} ${needs[kind]} to go`).join(', ');
     if (summary === lastSummary) return;
     lastSummary = summary;
     cat().info(summary ? `🎯 Active missions: ${summary}` : 'No automatable mission active', null);
 };
 
-/**
- * @param {string} token
- * @param {number} nowMs
- * @param {(token: string) => Promise<Mission[]>} getMyMissions
- * @returns {Promise<MissionNeeds|null>}
- */
-const readMissionNeeds = async (token, nowMs, getMyMissions) => {
-    const kinds = /** @type {MissionKind[]} */ (Object.keys(MISSION_SETTING));
+const readMissionNeeds = async (
+    token: string,
+    nowMs: number,
+    getMyMissions: (token: string) => Promise<Mission[]>,
+): Promise<MissionNeeds | null> => {
+    const kinds = Object.keys(MISSION_SETTING) as MissionKind[];
     const enabled = kinds.filter((kind) => settings.getEffectiveSetting(MISSION_SETTING[kind], null) === true);
     if (!token || enabled.length === 0) return null;
     const missions = await getMyMissions(token);
     const nowSec = Math.floor(nowMs / 1000);
-    /** @type {MissionNeeds} */
-    const needs = { join: 0, fill: 0, turbo: 0 };
+    const needs: MissionNeeds = { join: 0, fill: 0, turbo: 0 };
     for (const mission of Array.isArray(missions) ? missions : []) {
         const kind = classifyMission(mission);
         if (kind && enabled.includes(kind)) needs[kind] = Math.max(needs[kind], remainingOf(mission, nowSec));
@@ -108,17 +97,18 @@ const readMissionNeeds = async (token, nowMs, getMyMissions) => {
  * 0), or null when every mission setting is off or the missions can't be read.
  * Never throws: like the join and claim pre-steps, it must not abort voting.
  *
- * @param {string} token
- * @param {number} nowMs epoch ms
- * @param {{getMyMissions: (token: string) => Promise<Mission[]>}} deps
- * @returns {Promise<MissionNeeds|null>}
+ * @param nowMs epoch ms
  */
-const loadMissionNeeds = async (token, nowMs, { getMyMissions }) => {
+const loadMissionNeeds = async (
+    token: string,
+    nowMs: number,
+    { getMyMissions }: { getMyMissions: (token: string) => Promise<Mission[]> },
+): Promise<MissionNeeds | null> => {
     try {
         return await readMissionNeeds(token, nowMs, getMyMissions);
     } catch (error) {
         cat().warning(
-            `could not read missions: ${/** @type {{ message?: unknown } | null | undefined} */ (error)?.message || error}`,
+            `could not read missions: ${(error as { message?: unknown } | null | undefined)?.message || error}`,
             null,
         );
         return null;
@@ -127,11 +117,8 @@ const loadMissionNeeds = async (token, nowMs, { getMyMissions }) => {
 
 /**
  * Count one landed join / fill / turbo win against the mission.
- *
- * @param {MissionNeeds|null|undefined} needs
- * @param {MissionKind} kind
  */
-const consumeMission = (needs, kind) => {
+const consumeMission = (needs: MissionNeeds | null | undefined, kind: MissionKind) => {
     if (needs && needs[kind] > 0) needs[kind] -= 1;
 };
 

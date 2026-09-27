@@ -82,7 +82,7 @@ describe('runVotingPass api surface wiring', () => {
     });
 });
 
-// Every API method a scenario action calls on pass.api (services/scenarioRunner.js).
+// Every API method a scenario action calls on pass.api (services/scenarioRunner.ts).
 const SCENARIO_ACTION_METHODS = [
     'getActiveChallenges',
     'submitToChallenge',

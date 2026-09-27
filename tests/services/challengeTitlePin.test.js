@@ -1,5 +1,5 @@
 /**
- * Tests for challengeTitlePin.js — first-seen title pinning applied to
+ * Tests for challengeTitlePin.ts — first-seen title pinning applied to
  * freshly fetched active-challenge lists.
  *
  * The settings facade is a STATEFUL fake (not static mockReturnValue stubs):

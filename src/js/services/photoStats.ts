@@ -43,14 +43,13 @@ import * as logger from './../logger';
 import { oneLine } from '../format/logSafe';
 import { createJsonStore } from '../settings/storage';
 
-/** @import { PickerPhoto } from '../types/photoPicker' */
-/** @import { ErrorLike, FillLogger, RankDeps } from '../types/autoFill' */
+import type { PickerPhoto } from '../types/photoPicker';
+import type { ErrorLike, FillLogger, RankDeps } from '../types/autoFill';
 
 /**
  * One photo's cached ranking signals.
- *
- * @typedef {{votes: number, views: number, achievementCount: number, fetchedAt: number}} PhotoStatsEntry
  */
+type PhotoStatsEntry = { votes: number; views: number; achievementCount: number; fetchedAt: number };
 
 // Newly fetched photos per fill. Cache hits do not count against this — a
 // fully-cached candidate set enriches completely with zero requests.
@@ -100,8 +99,7 @@ const MAX_ENRICH_PER_PASS = 200;
 
 const statsStore = createJsonStore({ fileName: 'photo-stats.json', prefKey: 'gurushots-photo-stats' });
 
-/** @type {Map<string, PhotoStatsEntry>|null} */
-let cache = null;
+let cache: Map<string, PhotoStatsEntry> | null = null;
 let cacheDirty = false;
 
 // Reset per voting pass by resetPassState().
@@ -113,20 +111,12 @@ let passCapLogged = false;
 // Only ids short enough to be safe cache keys are persisted; see
 // MAX_PHOTO_ID_LENGTH. Both callers pass an already-stringified id (a persisted
 // Object.keys key, or String(photo.id)). Returns null for anything unusable.
-/**
- * @param {string} id
- * @returns {string | null}
- */
-const cacheKeyFor = (id) => {
+const cacheKeyFor = (id: string): string | null => {
     if (id === '' || id.length > MAX_PHOTO_ID_LENGTH) return null;
     return id;
 };
 
-/**
- * @param {unknown} value
- * @returns {number}
- */
-const nonNegInt = (value) => {
+const nonNegInt = (value: unknown): number => {
     const n = Number(value);
     if (!Number.isFinite(n) || n < 0) return 0;
     return Math.floor(n);
@@ -135,11 +125,10 @@ const nonNegInt = (value) => {
 /**
  * Extract the three ranking signals from an untrusted get_image_data payload.
  * Everything else in the response is discarded.
- *
- * @param {{votes?: number, views?: number, achievements?: unknown[]} | null | undefined} payload
- * @returns {{votes: number, views: number, achievementCount: number}}
  */
-const toStats = (payload) => ({
+const toStats = (
+    payload: { votes?: number; views?: number; achievements?: unknown[] } | null | undefined,
+): { votes: number; views: number; achievementCount: number } => ({
     votes: nonNegInt(payload?.votes),
     views: nonNegInt(payload?.views),
     achievementCount: Math.min(
@@ -148,21 +137,15 @@ const toStats = (payload) => ({
     ),
 });
 
-/**
- * @param {PhotoStatsEntry | undefined} entry
- * @param {number} now
- */
-const isFresh = (entry, now) =>
+const isFresh = (entry: PhotoStatsEntry | undefined, now: number) =>
     entry && Number.isFinite(entry.fetchedAt) && now - entry.fetchedAt >= 0 && now - entry.fetchedAt < STATS_TTL_MS;
 
 /**
  * Hydrate the in-memory cache from the persistent store. Any corruption is
  * treated as an empty cache — stats are a re-fetchable optimisation, never
  * something worth failing a fill over.
- *
- * @returns {Map<string, PhotoStatsEntry>}
  */
-const loadCache = () => {
+const loadCache = (): Map<string, PhotoStatsEntry> => {
     if (cache) return cache;
     cache = new Map();
     try {
@@ -189,7 +172,7 @@ const loadCache = () => {
         logger
             .withCategory('autoFill')
             .debug(
-                `photoStats: could not read the stats cache: ${/** @type {ErrorLike | null | undefined} */ (error)?.message || error}`,
+                `photoStats: could not read the stats cache: ${(error as ErrorLike | null | undefined)?.message || error}`,
                 null,
             );
         cache = new Map();
@@ -218,7 +201,7 @@ const persistCache = () => {
         logger
             .withCategory('autoFill')
             .debug(
-                `photoStats: could not persist the stats cache: ${/** @type {ErrorLike | null | undefined} */ (error)?.message || error}`,
+                `photoStats: could not persist the stats cache: ${(error as ErrorLike | null | undefined)?.message || error}`,
                 null,
             );
     }
@@ -243,12 +226,8 @@ const breakerOpen = () => consecutiveFailures >= FAILURE_BREAKER_THRESHOLD || fe
  * Run `worker` over `items` at most ENRICH_CONCURRENCY at a time, for its side
  * effects only. allSettled keeps one item's rejection from aborting the rest
  * of its chunk.
- *
- * @template T
- * @param {T[]} items
- * @param {(item: T) => Promise<unknown>} worker
  */
-const forEachChunked = async (items, worker) => {
+const forEachChunked = async <T>(items: T[], worker: (item: T) => Promise<unknown>) => {
     for (let i = 0; i < items.length; i += ENRICH_CONCURRENCY) {
         const chunk = items.slice(i, i + ENRICH_CONCURRENCY);
         await Promise.allSettled(chunk.map(worker));
@@ -264,12 +243,13 @@ const forEachChunked = async (items, worker) => {
  * untouched with `statsKnown: false`. The input objects are never mutated —
  * they flow on to the submit path.
  *
- * @param {PickerPhoto[]} photos - candidates to enrich
- * @param {string} token
- * @param {Pick<RankDeps, 'getImageData'> & {logger?: FillLogger}} deps
- * @returns {Promise<PickerPhoto[]>}
+ * @param photos - candidates to enrich
  */
-const enrichCandidates = async (photos, token, deps) => {
+const enrichCandidates = async (
+    photos: PickerPhoto[],
+    token: string,
+    deps: Pick<RankDeps, 'getImageData'> & { logger?: FillLogger },
+): Promise<PickerPhoto[]> => {
     const log = (deps && deps.logger) || logger;
     if (!Array.isArray(photos) || photos.length === 0) return [];
     const getImageData = deps && deps.getImageData;
@@ -301,12 +281,9 @@ const enrichCandidates = async (photos, token, deps) => {
     // queue permanently, coverage still reaches every candidate; views only
     // affects how soon. What must never happen is views DECIDING the submission;
     // consulting views for the reading order is harmless.
-    /** @type {Array<{photo: PickerPhoto, everMeasured: boolean}>} */
-    const needFetch = [];
-    /** @type {Map<string, PhotoStatsEntry>} */
-    const resolved = new Map();
-    /** @type {Set<string>} */
-    const seen = new Set();
+    const needFetch: Array<{ photo: PickerPhoto; everMeasured: boolean }> = [];
+    const resolved: Map<string, PhotoStatsEntry> = new Map();
+    const seen: Set<string> = new Set();
     for (const photo of photos) {
         const id = photo && photo.id !== undefined && photo.id !== null ? String(photo.id) : null;
         if (!id) continue;
@@ -323,8 +300,7 @@ const enrichCandidates = async (photos, token, deps) => {
         }
     }
 
-    /** @type {PickerPhoto[]} */
-    let fetchList = [];
+    let fetchList: PickerPhoto[] = [];
     if (!breakerOpen()) {
         fetchList = needFetch
             .slice()
@@ -353,7 +329,7 @@ const enrichCandidates = async (photos, token, deps) => {
                 payload = await getImageData(id, token);
             } catch (error) {
                 log.withCategory('autoFill').debug(
-                    `photoStats: get_image_data failed for photo ${oneLine(id)}: ${oneLine(/** @type {ErrorLike | null | undefined} */ (error)?.message || error)}`,
+                    `photoStats: get_image_data failed for photo ${oneLine(id)}: ${oneLine((error as ErrorLike | null | undefined)?.message || error)}`,
                     null,
                 );
                 payload = null;

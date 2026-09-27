@@ -204,7 +204,7 @@ async function buildPlatform({ output, plat, arch }, seaBlobPath) {
 async function main() {
     const args = process.argv.slice(2);
     // --lite leaves the local vision model and its runtime out of the binary;
-    // services/visionVerifier.js then skips the visual check.
+    // services/visionVerifier.ts then skips the visual check.
     const lite = args.includes('--lite');
     const platformArg = args.find((arg) => !arg.startsWith('--'));
 

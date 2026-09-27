@@ -2,7 +2,7 @@
  * The scenario decision: given a validated scenario, a challenge's runtime
  * state and the live challenge, which rule (if any) fires now, from which
  * action, and when the engine next needs to look. Pure — the runner
- * (services/scenarioRunner.js) executes the result and persists state.
+ * (services/scenarioRunner.ts) executes the result and persists state.
  *
  * Rules are tried in phase order; the first whose `repeat` mode allows it
  * and whose conditions all hold fires. A rule interrupted mid-way (an action

@@ -25,39 +25,41 @@ import * as currencyActions from './currencyActions';
 import { CURRENCY_FIELD, challengeAllows } from '../voting/currencyActions';
 import { isRuleOpen, pickSwapTarget, votePoolReach, fillBeatsVoting } from '../voting/currencyAuto';
 
-/**
- * @import { Challenge, ChallengeMember, MemberRanking, VoteImagesResponse } from '../types/gurushots'
- * @import { CurrencyAction, CurrencyStrategy, SwapBackLedger, SwapCandidate } from './currencyActions'
+import type { Challenge, ChallengeMember, MemberRanking, VoteImagesResponse } from '../types/gurushots';
+import type { CurrencyAction, CurrencyStrategy, SwapBackLedger, SwapCandidate } from './currencyActions';
+import type * as currencyAutoStore from '../currencyAutoStore';
+
+type AutoSpendLedger = ReturnType<typeof currencyAutoStore.createAutoSpendLedger>;
+
+/** The part of a getVoteImages response the fill shortfall check reads.
  */
-
-/** @typedef {ReturnType<typeof import('../currencyAutoStore').createAutoSpendLedger>} AutoSpendLedger */
-
-/** The part of a getVoteImages response the fill shortfall check reads. @typedef {Pick<VoteImagesResponse, 'voting'|'images'>} VotePool */
+type VotePool = Pick<VoteImagesResponse, 'voting' | 'images'>;
 
 /**
  * The pass's `currency` block: the spend endpoints (plus getVoteImages for the
  * fill shortfall check) and the swap-back / auto-spend ledgers.
- *
- * @typedef {object} CurrencyPassDeps
- * @property {CurrencyStrategy & {getVoteImages: (challenge: Challenge, token: string) => Promise<VotePool|null>}} strategy
- * @property {SwapBackLedger|null} [swapLedger]
- * @property {AutoSpendLedger|null} [spendLedger]
  */
+export interface CurrencyPassDeps {
+    strategy: CurrencyStrategy & { getVoteImages: (challenge: Challenge, token: string) => Promise<VotePool | null> };
+    swapLedger?: SwapBackLedger | null;
+    spendLedger?: AutoSpendLedger | null;
+}
 
 /**
  * One challenge's context in a voting pass. `currency` is absent when the pass
  * has no currency endpoints.
- *
- * @typedef {object} CurrencyCtx
- * @property {Challenge} challenge
- * @property {string} token
- * @property {number} now - Unix seconds
- * @property {CurrencyPassDeps|null} [currency]
  */
+interface CurrencyCtx {
+    challenge: Challenge;
+    token: string;
+    /** Unix seconds */
+    now: number;
+    currency?: CurrencyPassDeps | null;
+}
 
-/** @typedef {CurrencyCtx & {currency: CurrencyPassDeps}} LiveCurrencyCtx */
+type LiveCurrencyCtx = CurrencyCtx & { currency: CurrencyPassDeps };
 
-/** @typedef {'autoKey'|'autoSwap'|'autoExposureFill'} RulePrefix */
+type RulePrefix = 'autoKey' | 'autoSwap' | 'autoExposureFill';
 
 const log = () => logger.withCategory('currency');
 
@@ -67,30 +69,20 @@ const RESERVE_KEY = Object.freeze({
     fill: 'currencyReserveFills',
 });
 
-/**
- * @param {RulePrefix} prefix
- * @param {string} challengeId
- */
-const timingOf = (prefix, challengeId) => ({
+const timingOf = (prefix: RulePrefix, challengeId: string) => ({
     afterStartSec: settings.getEffectiveSetting(`${prefix}AfterStart`, challengeId),
     beforeEndSec: settings.getEffectiveSetting(`${prefix}BeforeEnd`, challengeId),
     afterPercent: settings.getEffectiveSetting(`${prefix}AfterPercent`, challengeId),
 });
 
-/** @param {Challenge} challenge */
-const entriesOf = (challenge) =>
+const entriesOf = (challenge: Challenge) =>
     Array.isArray(challenge?.member?.ranking?.entries) ? challenge.member.ranking.entries : [];
 
 /**
  * The shared gates every action passes first: the currency endpoints exist in
  * this pass, the challenge allows the action, and its timing rule is open.
- *
- * @param {CurrencyAction} action
- * @param {RulePrefix} prefix
- * @param {CurrencyCtx} ctx
- * @returns {ctx is LiveCurrencyCtx}
  */
-const baseGate = (action, prefix, ctx) => {
+const baseGate = (action: CurrencyAction, prefix: RulePrefix, ctx: CurrencyCtx): ctx is LiveCurrencyCtx => {
     const { challenge, now, currency } = ctx;
     if (!currency?.strategy) return false;
     if (!challengeAllows(action, challenge, now)) return false;
@@ -100,15 +92,14 @@ const baseGate = (action, prefix, ctx) => {
 /**
  * True when the balance stays at or above the global reserve after spending
  * one. An unreadable bankroll refuses — never spend blind. Shared with the
- * scenario runner (services/scenarioRunner.js), which passes its own log
+ * scenario runner (services/scenarioRunner.ts), which passes its own log
  * label, so both automations honour the same user-set reserves.
- *
- * @param {CurrencyAction} action
- * @param {{challenge: Challenge, token: string, currency: CurrencyPassDeps}} ctx
- * @param {string} [label]
- * @returns {Promise<boolean>}
  */
-const reserveAllows = async (action, ctx, label = `auto ${action}`) => {
+const reserveAllows = async (
+    action: CurrencyAction,
+    ctx: { challenge: Challenge; token: string; currency: CurrencyPassDeps },
+    label: string = `auto ${action}`,
+): Promise<boolean> => {
     const { challenge, token, currency } = ctx;
     const bankroll = await currency.strategy.getBankroll(token);
     const balance = Number(bankroll?.[CURRENCY_FIELD[action]]);
@@ -129,15 +120,13 @@ const reserveAllows = async (action, ctx, label = `auto ${action}`) => {
 /**
  * Runs a spend under the shared lock. Null when another spend holds it (the
  * rule simply re-evaluates next cycle).
- *
- * @template T
- * @param {CurrencyAction} action
- * @param {Challenge} challenge
- * @param {() => Promise<T>} spend
- * @param {string} [label]
- * @returns {Promise<T|null>}
  */
-const lockedSpend = async (action, challenge, spend, label = `auto ${action}`) => {
+const lockedSpend = async <T>(
+    action: CurrencyAction,
+    challenge: Challenge,
+    spend: () => Promise<T>,
+    label: string = `auto ${action}`,
+): Promise<T | null> => {
     const locked = await currencyActions.withSpendLock(spend);
     if (locked.busy) {
         log().info(`${label}: ${logger.challengeTag(challenge)} deferred — another spend is in progress`, null);
@@ -148,20 +137,18 @@ const lockedSpend = async (action, challenge, spend, label = `auto ${action}`) =
 
 /**
  * Wraps a runner so a throw is logged, never propagated into the pass.
- *
- * @template {unknown[]} A
- * @param {CurrencyAction} action
- * @param {(ctx: CurrencyCtx, ...rest: A) => Promise<boolean>} runner
- * @returns {(ctx: CurrencyCtx, ...rest: A) => Promise<boolean>}
  */
 const guarded =
-    (action, runner) =>
+    <A extends unknown[]>(
+        action: CurrencyAction,
+        runner: (ctx: CurrencyCtx, ...rest: A) => Promise<boolean>,
+    ): ((ctx: CurrencyCtx, ...rest: A) => Promise<boolean>) =>
     async (ctx, ...rest) => {
         try {
             return await runner(ctx, ...rest);
         } catch (error) {
             log().warning(
-                `auto ${action}: failed for ${logger.challengeTag(ctx?.challenge)}: ${/** @type {{ message?: unknown } | null | undefined} */ (error)?.message || error}`,
+                `auto ${action}: failed for ${logger.challengeTag(ctx?.challenge)}: ${(error as { message?: unknown } | null | undefined)?.message || error}`,
                 null,
             );
             return false;
@@ -173,7 +160,7 @@ const guarded =
  * open. Unlock only: applying the unlocked boost stays with the boost runner
  * (autoBoost + keyUnlockedBoostTime), which sees it this same pass.
  *
- * @returns {Promise<boolean>} true when a key was spent
+ * @returns true when a key was spent
  */
 const runAutoKey = guarded('key', async (ctx) => {
     const { challenge, token } = ctx;
@@ -188,7 +175,7 @@ const runAutoKey = guarded('key', async (ctx) => {
     );
     if (!result?.ok) return false;
     // The gate required member.boost.state === 'LOCKED', so the member block is present.
-    const member = /** @type {ChallengeMember} */ (challenge.member);
+    const member = challenge.member as ChallengeMember;
     member.boost = { ...member.boost, state: 'AVAILABLE_KEY', timeout: null };
     return true;
 });
@@ -200,7 +187,7 @@ const runAutoKey = guarded('key', async (ctx) => {
  * entry with the fewest votes; boosted/turbo'd entries are skipped unless
  * autoSwapAllowBoosted (the swap-back ledger then records them).
  *
- * @returns {Promise<boolean>} true when a swap was spent
+ * @returns true when a swap was spent
  */
 const runAutoSwap = guarded('swap', async (ctx) => {
     const { challenge, token } = ctx;
@@ -208,7 +195,7 @@ const runAutoSwap = guarded('swap', async (ctx) => {
     if (settings.getEffectiveSetting('autoSwap', id) !== true) return false;
     if (!baseGate('swap', 'autoSwap', ctx)) return false;
 
-    const ranking = /** @type {ChallengeMember} */ (challenge.member).ranking;
+    const ranking = (challenge.member as ChallengeMember).ranking;
     const swapsDone = Array.isArray(ranking?.swaps) ? ranking.swaps.length : 0;
     if (swapsDone >= Number(settings.getEffectiveSetting('autoSwapMax', id))) return false;
 
@@ -227,7 +214,7 @@ const runAutoSwap = guarded('swap', async (ctx) => {
     const deps = { strategy: ctx.currency.strategy, logger, settings };
     // Cast, not annotated: the closure below assigns it, which the checker's
     // narrowing of a plain `= null` initializer can't see.
-    let candidate = /** @type {SwapCandidate | null} */ (null);
+    let candidate = null as SwapCandidate | null;
     const result = await lockedSpend('swap', challenge, async () => {
         const preview = await currencyActions.previewSwap(challenge.id, target.id, token, deps, {
             excludeSwapped: true,
@@ -246,7 +233,7 @@ const runAutoSwap = guarded('swap', async (ctx) => {
     const slot = entries.indexOf(target);
     entries[slot] = { id: candidate.id, member_id: candidate.member_id, votes: 0, turbo: false, boosted: false };
     // The target came from ranking.entries, so the ranking block is present.
-    const swapped = /** @type {MemberRanking} */ (ranking);
+    const swapped = ranking as MemberRanking;
     swapped.swaps = [...(Array.isArray(swapped.swaps) ? swapped.swaps : []), { id: String(target.id) }];
     return true;
 });
@@ -255,10 +242,10 @@ const runAutoSwap = guarded('swap', async (ctx) => {
  * Raise the pass's copy of the challenge to the 100% a fill just set, so later
  * steps see it.
  *
- * @param {Challenge} challenge - one whose exposure_factor was read, so member.ranking is present
+ * @param challenge - one whose exposure_factor was read, so member.ranking is present
  */
-const reflectFill = (challenge) => {
-    const ranking = /** @type {MemberRanking} */ (/** @type {ChallengeMember} */ (challenge.member).ranking);
+const reflectFill = (challenge: Challenge) => {
+    const ranking = (challenge.member as ChallengeMember).ranking as MemberRanking;
     ranking.exposure = { ...ranking.exposure, exposure_factor: 100 };
 };
 
@@ -272,44 +259,48 @@ const reflectFill = (challenge) => {
  * `votePool` is the getVoteImages response this pass voted from (null = none
  * available); undefined = voting didn't run, so the pool is fetched here to
  * judge the shortfall. Resolves true when a fill was spent.
- *
- * @type {(ctx: CurrencyCtx, votePool: VotePool|null|undefined) => Promise<boolean>}
  */
-const runAutoExposureFill = guarded('fill', async (ctx, votePool) => {
-    const { challenge, token } = ctx;
-    const id = String(challenge.id);
-    if (settings.getEffectiveSetting('autoExposureFill', id) !== true) return false;
-    if (!baseGate('fill', 'autoExposureFill', ctx)) return false;
-    const ledger = ctx.currency.spendLedger;
-    if (!ledger) return false;
-    if (ledger.fills(id) >= Number(settings.getEffectiveSetting('autoExposureFillMax', id))) return false;
+const runAutoExposureFill: (ctx: CurrencyCtx, votePool: VotePool | null | undefined) => Promise<boolean> = guarded(
+    'fill',
+    async (ctx, votePool) => {
+        const { challenge, token } = ctx;
+        const id = String(challenge.id);
+        if (settings.getEffectiveSetting('autoExposureFill', id) !== true) return false;
+        if (!baseGate('fill', 'autoExposureFill', ctx)) return false;
+        const ledger = ctx.currency.spendLedger;
+        if (!ledger) return false;
+        if (ledger.fills(id) >= Number(settings.getEffectiveSetting('autoExposureFillMax', id))) return false;
 
-    const exposure = Number(challenge.member?.ranking?.exposure?.exposure_factor);
-    const below = settings.getEffectiveSetting('autoExposureFillBelow', id);
-    if (!(exposure < below)) return false;
+        const exposure = Number(challenge.member?.ranking?.exposure?.exposure_factor);
+        const below = settings.getEffectiveSetting('autoExposureFillBelow', id);
+        if (!(exposure < below)) return false;
 
-    const pool = votePool === undefined ? await ctx.currency.strategy.getVoteImages(challenge, token) : votePool;
-    // votePoolReach reads the pool through optional chaining; null (no pool) yields null.
-    const reach = votePoolReach(/** @type {VoteImagesResponse} */ (pool));
-    if (!fillBeatsVoting(exposure, reach, below)) {
-        log().debug(
-            `${logger.challengeTag(challenge)} auto fill: voting can still reach ${below}% — not spending a fill`,
+        const pool = votePool === undefined ? await ctx.currency.strategy.getVoteImages(challenge, token) : votePool;
+        // votePoolReach reads the pool through optional chaining; null (no pool) yields null.
+        const reach = votePoolReach(pool as VoteImagesResponse);
+        if (!fillBeatsVoting(exposure, reach, below)) {
+            log().debug(
+                `${logger.challengeTag(challenge)} auto fill: voting can still reach ${below}% — not spending a fill`,
+                null,
+            );
+            return false;
+        }
+        if (!(await reserveAllows('fill', ctx))) return false;
+
+        const reachText = reach === null ? 'no vote images left' : `votes reach only ~${Math.round(reach)}%`;
+        log().info(
+            `${logger.challengeTag(challenge)} auto fill: exposure ${exposure}% < ${below}%, ${reachText}`,
             null,
         );
-        return false;
-    }
-    if (!(await reserveAllows('fill', ctx))) return false;
-
-    const reachText = reach === null ? 'no vote images left' : `votes reach only ~${Math.round(reach)}%`;
-    log().info(`${logger.challengeTag(challenge)} auto fill: exposure ${exposure}% < ${below}%, ${reachText}`, null);
-    const result = await lockedSpend('fill', challenge, () =>
-        currencyActions.fillExposure(challenge.id, token, { strategy: ctx.currency.strategy, logger }),
-    );
-    if (!result?.ok) return false;
-    ledger.addFill(id);
-    reflectFill(challenge);
-    return true;
-});
+        const result = await lockedSpend('fill', challenge, () =>
+            currencyActions.fillExposure(challenge.id, token, { strategy: ctx.currency.strategy, logger }),
+        );
+        if (!result?.ok) return false;
+        ledger.addFill(id);
+        reflectFill(challenge);
+        return true;
+    },
+);
 
 /**
  * Spend a FILL toward an active "Use Fill" mission (missionUseFills — the
@@ -318,28 +309,29 @@ const runAutoExposureFill = guarded('fill', async (ctx, votePool) => {
  * per challenge per pass. Keeps the fill reserve and takes the spend lock, but
  * isn't counted against autoExposureFillMax, which caps only the exposure rule.
  * Resolves true when a fill was spent.
- *
- * @type {(ctx: CurrencyCtx, missionNeed: number) => Promise<boolean>}
  */
-const runMissionFill = guarded('fill', async (ctx, missionNeed) => {
-    const { challenge, token, now, currency } = ctx;
-    if (!(missionNeed > 0) || !currency?.strategy) return false;
-    if (!challengeAllows('fill', challenge, now)) return false;
-    if (!(await reserveAllows('fill', { challenge, token, currency }, 'mission fill'))) return false;
+const runMissionFill: (ctx: CurrencyCtx, missionNeed: number) => Promise<boolean> = guarded(
+    'fill',
+    async (ctx, missionNeed) => {
+        const { challenge, token, now, currency } = ctx;
+        if (!(missionNeed > 0) || !currency?.strategy) return false;
+        if (!challengeAllows('fill', challenge, now)) return false;
+        if (!(await reserveAllows('fill', { challenge, token, currency }, 'mission fill'))) return false;
 
-    log().info(
-        `${logger.challengeTag(challenge)} mission fill: ${missionNeed} more fill(s) needed for the mission`,
-        null,
-    );
-    const result = await lockedSpend(
-        'fill',
-        challenge,
-        () => currencyActions.fillExposure(challenge.id, token, { strategy: currency.strategy, logger }),
-        'mission fill',
-    );
-    if (!result?.ok) return false;
-    reflectFill(challenge);
-    return true;
-});
+        log().info(
+            `${logger.challengeTag(challenge)} mission fill: ${missionNeed} more fill(s) needed for the mission`,
+            null,
+        );
+        const result = await lockedSpend(
+            'fill',
+            challenge,
+            () => currencyActions.fillExposure(challenge.id, token, { strategy: currency.strategy, logger }),
+            'mission fill',
+        );
+        if (!result?.ok) return false;
+        reflectFill(challenge);
+        return true;
+    },
+);
 
 export { runAutoKey, runAutoSwap, runAutoExposureFill, runMissionFill, reserveAllows, lockedSpend };

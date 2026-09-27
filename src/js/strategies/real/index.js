@@ -58,8 +58,8 @@ const joinDeps = {
     acquireUnlockLock,
 };
 
-// Endpoints the automatic currency spends use (services/currencyAuto.js) — the
-// same surface services/currencyActions.js reads off the strategy for a manual
+// Endpoints the automatic currency spends use (services/currencyAuto.ts) — the
+// same surface services/currencyActions.ts reads off the strategy for a manual
 // spend, plus getVoteImages for the exposure-fill shortfall check.
 const currencyStrategy = {
     getActiveChallenges,
@@ -74,7 +74,7 @@ const currencyStrategy = {
     getCurrentMemberProfile,
 };
 
-// Endpoints for the hourly prize-claim pre-step (services/autoClaim.js).
+// Endpoints for the hourly prize-claim pre-step (services/autoClaim.ts).
 const claimDeps = {
     getMyCompletedChallenges,
     claimChallengeResources,
@@ -170,7 +170,7 @@ const runTurboMiniGame = async (challenge, token) => {
 
 /**
  * Main function that fetches active challenges and processes them — thin
- * binder over the shared orchestration (services/votingOrchestrator.js),
+ * binder over the shared orchestration (services/votingOrchestrator.ts),
  * which real and mock strategies both run. The endpoint references are
  * passed per call (not at module load) so jest.mock'd api modules take
  * effect.

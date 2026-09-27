@@ -625,7 +625,7 @@ const SETTINGS_SCHEMA = {
 
     // --- Keys, Swaps & Fills (currency automation) ---
     // Automatic spending of the three bankroll currencies the manual card buttons
-    // spend (services/currencyActions.js). Global defaults apply to every
+    // spend (services/currencyActions.ts). Global defaults apply to every
     // challenge unless a profile or per-challenge setting overrides them.
     // Each action has three optional timing conditions (after start, before
     // end, after % elapsed); every condition that is set must hold (0 = that
@@ -1480,7 +1480,7 @@ const SETTINGS_SCHEMA = {
     // --- Rewards ---
     // Claim finished-challenge rewards and completed-mission prizes
     // automatically. GLOBAL and default OFF; the pass runs as a pre-step of the
-    // voting cycle but at most once an hour (services/autoClaim.js).
+    // voting cycle but at most once an hour (services/autoClaim.ts).
     autoClaimPrizes: {
         type: 'boolean',
         default: false,
@@ -1491,7 +1491,7 @@ const SETTINGS_SCHEMA = {
         label: 'app.autoClaimPrizes',
         description: 'app.autoClaimPrizesDesc',
     },
-    // Mission-aware automation (services/missions.js). GLOBAL and default OFF;
+    // Mission-aware automation (services/missions.ts). GLOBAL and default OFF;
     // each reads the active missions once per voting cycle.
     // Save turbos: an earnable turbo waits unearned until a "Win Turbo" mission
     // wants it or its apply window (turboTime) is an hour away.
@@ -1534,7 +1534,7 @@ const SETTINGS_SCHEMA = {
     // OS desktop/mobile "action coming up" warnings. All GLOBAL (perChallenge:
     // false) and default OFF — entirely opt-in. Each toggle gates one deadline
     // action type; notifyLeadTime is how far ahead the warning fires. The
-    // decision + delivery live in services/deadlineNotifications.js + the
+    // decision + delivery live in services/deadlineNotifications.ts + the
     // per-host notify adapters. Only the enabled types are ever evaluated, so
     // an all-off config (the default) costs nothing per cycle.
     // Scenario notices (a scenario's `notify` action, and a halted scenario)

@@ -11,21 +11,19 @@
 import * as settings from '../settings';
 import * as logger from '../logger';
 
-/**
- * @import { AppSettings } from '../types/settings'
- */
+import type { AppSettings } from '../types/settings';
 
 /**
  * A raw authentication response: every token key and error field GuruShots
  * has been seen to return across versions.
- *
- * @typedef {object} RawAuthResponse
- * @property {string} [token]
- * @property {string} [access_token]
- * @property {string} [auth_token]
- * @property {string} [error]
- * @property {string} [message]
  */
+interface RawAuthResponse {
+    token?: string;
+    access_token?: string;
+    auth_token?: string;
+    error?: string;
+    message?: string;
+}
 
 /**
  * Loads settings and verifies a token is present. On miss, logs a
@@ -33,12 +31,12 @@ import * as logger from '../logger';
  * early-return response that the IPC handler can pass straight back
  * to the renderer.
  *
- * @param {string} actionLabel - free-text action identifier used only
+ * @param actionLabel - free-text action identifier used only
  *   in the warning log message (e.g. 'turbo apply', 'boost').
- * @returns {{ ok: true, token: string, settings: AppSettings }
- *         | { ok: false, response: { success: false, error: string } }}
  */
-const requireAuthToken = (actionLabel) => {
+const requireAuthToken = (
+    actionLabel: string,
+): { ok: true; token: string; settings: AppSettings } | { ok: false; response: { success: false; error: string } } => {
     const userSettings = settings.loadSettings();
     if (!userSettings.token) {
         logger.withCategory('authentication').warning(`❌ No token found for ${actionLabel}`, null);
@@ -61,11 +59,11 @@ const requireAuthToken = (actionLabel) => {
  * 'success'` without a token still resolves to a failure (there is nothing to
  * persist), matching the prior handler behaviour.
  *
- * @param {RawAuthResponse|null|undefined} response - Raw response from apiStrategy.authenticate.
- * @returns {{ ok: true, token: string, error: null }
- *         | { ok: false, token: null, error: string }}
+ * @param response - Raw response from apiStrategy.authenticate.
  */
-const extractAuthResult = (response) => {
+const extractAuthResult = (
+    response: RawAuthResponse | null | undefined,
+): { ok: true; token: string; error: null } | { ok: false; token: null; error: string } => {
     if (!response) {
         return { ok: false, token: null, error: 'Authentication failed - no response from server' };
     }
@@ -96,9 +94,9 @@ const extractAuthResult = (response) => {
  * Shell-specific behavior (window teardown, mock reset, event emission,
  * logging wording) stays with each caller.
  *
- * @returns {Promise<boolean>} true when a token was actually cleared.
+ * @returns true when a token was actually cleared.
  */
-const clearAuthToken = async () => {
+const clearAuthToken = async (): Promise<boolean> => {
     const hadToken = !!settings.getSetting('token');
     settings.setSetting('token', '');
     await settings.flushPendingWrites();
@@ -115,9 +113,9 @@ const clearAuthToken = async () => {
  * keeps its own single-instance gate around this (a second instance quitting must not clear
  * the running one's token); that gate is genuinely Electron-specific and stays there.
  *
- * @returns {Promise<boolean>} true when a token was actually cleared.
+ * @returns true when a token was actually cleared.
  */
-const clearTokenUnlessStayingLoggedIn = async () => {
+const clearTokenUnlessStayingLoggedIn = async (): Promise<boolean> => {
     if (settings.getSetting('stayLoggedIn')) return false;
     if (!settings.getSetting('token')) return false;
     return clearAuthToken();

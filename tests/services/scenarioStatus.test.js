@@ -1,5 +1,5 @@
 /**
- * Scenario status reads (services/scenarioStatus.js) and the Node-side
+ * Scenario status reads (services/scenarioStatus.ts) and the Node-side
  * scheduler resolver built on them.
  */
 

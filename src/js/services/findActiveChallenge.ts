@@ -11,12 +11,13 @@
  * user-facing error wording ("not found" vs "no longer active" carry
  * different meanings).
  *
- * @template {{ id?: unknown }} T
- * @param {T[]|null|undefined} challenges - candidate list (any falsy/non-array input is treated as empty)
- * @param {string|number} challengeId - id to find
- * @returns {T|null} the matching challenge, or null
+ * @param challenges - candidate list (any falsy/non-array input is treated as empty)
+ * @param challengeId - id to find
+ * @returns the matching challenge, or null
  */
-const findActiveChallenge = (challenges, challengeId) =>
-    (Array.isArray(challenges) ? challenges : []).find((c) => String(c.id) === String(challengeId)) ?? null;
+const findActiveChallenge = <T extends { id?: unknown }>(
+    challenges: T[] | null | undefined,
+    challengeId: string | number,
+): T | null => (Array.isArray(challenges) ? challenges : []).find((c) => String(c.id) === String(challengeId)) ?? null;
 
 export { findActiveChallenge };

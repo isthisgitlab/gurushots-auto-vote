@@ -1,5 +1,5 @@
 /**
- * Tests for the shared auth normalizer (services/auth.js extractAuthResult).
+ * Tests for the shared auth normalizer (services/auth.ts extractAuthResult).
  * This is the single place that knows the GuruShots auth wire shape — both
  * BaseMiddleware._login (CLI + GUI) and the authenticate IPC handler depend on
  * it, so these cases guard the cross-platform login contract, especially the

@@ -28,7 +28,7 @@ export interface AutoVoteDecision {
     preservesNewEntryTrigger?: boolean;
 }
 
-export interface ManualVoteDecision {
+interface ManualVoteDecision {
     shouldAllowVoting: boolean;
     errorMessage: string;
     targetExposure: number;

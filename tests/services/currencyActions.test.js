@@ -1,5 +1,5 @@
 /**
- * Tests for services/currencyActions.js — the live re-check before every
+ * Tests for services/currencyActions.ts — the live re-check before every
  * spend and the swap replacement pick (runs the real fill ranking pipeline
  * against a stubbed API strategy).
  */

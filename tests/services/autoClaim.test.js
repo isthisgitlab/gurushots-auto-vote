@@ -1,5 +1,5 @@
 /**
- * Tests for services/autoClaim.js — the hourly prize-claim pre-step: the
+ * Tests for services/autoClaim.ts — the hourly prize-claim pre-step: the
  * default-off gate, the once-an-hour throttle, claiming only CLAIM-state items,
  * paging, cancellation, and one half's failure never blocking the other.
  */

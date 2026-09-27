@@ -1,5 +1,5 @@
 /**
- * Tests for services/joinChallenges.js — the paid-spend safety model:
+ * Tests for services/joinChallenges.ts — the paid-spend safety model:
  * photo-first ordering, unlock/submit idempotency, the double-spend lock,
  * budget accounting, cancellation, and the null-bankroll fail-safe.
  */

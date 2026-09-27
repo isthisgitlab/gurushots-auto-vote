@@ -3,7 +3,7 @@
  * modal's scheduled-fill and voting-pause hints.
  *
  * Its contract is that it stays in step with `_triggerWindowState` in
- * services/VotingLogic.js: same cap slice, same "active needs a usable entry"
+ * services/VotingLogic.ts: same cap slice, same "active needs a usable entry"
  * rule, same corrupt-value fallbacks. A hint must never promise a window the
  * decision path won't open.
  */

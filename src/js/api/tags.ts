@@ -18,7 +18,7 @@
  * through autocomplete first turns it into "staircase", which the photo search
  * can actually use. Note "stairs" itself returns nothing: autocomplete is a
  * substring match and no tag CONTAINS "stairs", which is why the resolver backs
- * the term off a character at a time (see services/tagResolver.js).
+ * the term off a character at a time (see services/tagResolver.ts).
  *
  * member_id is required and is a member identity, NOT a display name. Both the
  * account's user_name and its opaque id hash work; an email address does not

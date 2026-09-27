@@ -14,23 +14,19 @@
 import * as runtime from '../runtime';
 import * as logger from '../logger';
 
-/** @import { CapacitorGlobals } from '../types/capacitor' */
+import type { CapacitorGlobals } from '../types/capacitor';
 
 // The native plugin, when this build registered it. Accessed lazily (only
 // after downloadAndInstall's isCapacitor() gate) so non-Capacitor paths never
 // touch globalThis.Capacitor.
-const getNativeInstaller = () => /** @type {CapacitorGlobals} */ (globalThis).Capacitor?.Plugins?.ApkInstaller || null;
+const getNativeInstaller = () => (globalThis as CapacitorGlobals).Capacitor?.Plugins?.ApkInstaller || null;
 
 // Browser fallback: hand the URL to the system browser. One extra tap vs the
 // native installer but works with no native code and matches the sideload
 // distribution users are already used to.
-/**
- * @param {string} downloadUrl
- * @param {string | null | undefined} version
- */
-const openInBrowser = (downloadUrl, version) => {
+const openInBrowser = (downloadUrl: string, version: string | null | undefined) => {
     try {
-        const Cap = /** @type {CapacitorGlobals} */ (globalThis).Capacitor;
+        const Cap = (globalThis as CapacitorGlobals).Capacitor;
         if (Cap?.Plugins?.Browser?.open) {
             void Cap.Plugins.Browser.open({ url: downloadUrl });
             return { success: true, version, viaFallback: true };
@@ -52,14 +48,20 @@ const openInBrowser = (downloadUrl, version) => {
 /**
  * Download the APK and hand off to the system installer.
  *
- * @param {Object} opts
- * @param {string} opts.downloadUrl - Direct APK URL from the GitHub release.
- * @param {string | null} [opts.version] - Version string for logging / UI feedback.
- * @param {(progress: {percent?: number}) => void} [opts.onProgress] - Called
+ * @param opts.downloadUrl - Direct APK URL from the GitHub release.
+ * @param opts.version - Version string for logging / UI feedback.
+ * @param opts.onProgress - Called
  *   with native download-progress events when the native plugin is used.
- * @returns {Promise<{success: boolean, version?: string | null, error?: string, viaFallback?: boolean}>}
  */
-const downloadAndInstall = async ({ downloadUrl, version, onProgress }) => {
+const downloadAndInstall = async ({
+    downloadUrl,
+    version,
+    onProgress,
+}: {
+    downloadUrl: string;
+    version?: string | null;
+    onProgress?: (progress: { percent?: number }) => void;
+}): Promise<{ success: boolean; version?: string | null; error?: string; viaFallback?: boolean }> => {
     if (!downloadUrl) return { success: false, error: 'No download URL provided' };
     if (!runtime.isCapacitor()) return { success: false, error: 'Android updater is a no-op outside Capacitor' };
 

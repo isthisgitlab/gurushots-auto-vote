@@ -1,5 +1,5 @@
 /**
- * Edge-case coverage for photoStats.js: store read/write failures (with and
+ * Edge-case coverage for photoStats.ts: store read/write failures (with and
  * without an Error message), malformed persisted cache shapes, null/id-less
  * candidates, non-Error request failures, the uncached-first comparator in
  * both argument orders, and the pass ceiling landing mid-chunk.

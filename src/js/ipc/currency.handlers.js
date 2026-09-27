@@ -6,7 +6,7 @@
  * Every spend requires an explicit confirmed === true (the renderer's confirm
  * modal / the CLI's --yes); without it the handler returns outcome
  * 'needs-confirm' and nothing is spent. The service layer
- * (services/currencyActions.js) re-checks the live challenge and bankroll
+ * (services/currencyActions.ts) re-checks the live challenge and bankroll
  * before calling the API. Results carry an outcome code
  * (voting/currencyActions CURRENCY_OUTCOME) that the renderer and CLI map to
  * their own wording. Handlers never throw to the renderer.

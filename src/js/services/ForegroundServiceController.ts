@@ -13,7 +13,7 @@
  * background voting cycle runs natively in AutoVoteService's headless WebView,
  * driven by AlarmManager — not a JS setInterval (which dies with the WebView).
  * Doze-exact 1-min precision is handled there via setExactAndAllowWhileIdle();
- * see AutoVoteService.kt and NativeAutovoteBridge.js.
+ * see AutoVoteService.kt and NativeAutovoteBridge.ts.
  *
  * Limitations (documented for the next person who looks at this):
  *  - Vendor battery killers (Samsung / Xiaomi / OnePlus) may still kill the
@@ -24,10 +24,9 @@
 import * as runtime from '../runtime';
 import * as logger from '../logger';
 
-/** @import { ForegroundServicePlugin } from '@capawesome-team/capacitor-android-foreground-service' */
+import type { ForegroundServicePlugin } from '@capawesome-team/capacitor-android-foreground-service';
 
-/** @type {ForegroundServicePlugin | null} */
-let plugin = null;
+let plugin: ForegroundServicePlugin | null = null;
 const NOTIFICATION_ID = 27782; // arbitrary stable id
 const APP_NAME = 'GuruShots Auto Vote';
 
@@ -38,9 +37,7 @@ const getPlugin = () => {
         plugin = require('@capawesome-team/capacitor-android-foreground-service').ForegroundService;
         return plugin;
     } catch (err) {
-        logger
-            .withCategory('voting')
-            .warning('ForegroundService plugin unavailable', /** @type {Error} */ (err).message);
+        logger.withCategory('voting').warning('ForegroundService plugin unavailable', (err as Error).message);
         return null;
     }
 };
@@ -53,9 +50,7 @@ const requestPermissions = async () => {
         if (status?.display === 'granted') return status;
         return await fs.requestPermissions();
     } catch (err) {
-        logger
-            .withCategory('voting')
-            .warning('ForegroundService permission check failed', /** @type {Error} */ (err).message);
+        logger.withCategory('voting').warning('ForegroundService permission check failed', (err as Error).message);
         return { display: 'denied' };
     }
 };
@@ -63,10 +58,8 @@ const requestPermissions = async () => {
 /**
  * Start the foreground service with a "running" notification.
  * Safe to call multiple times — the plugin updates if already running.
- *
- * @param {{ title?: string, body?: string }} [opts]
  */
-const start = async ({ title = APP_NAME, body = 'Auto-vote running' } = {}) => {
+const start = async ({ title = APP_NAME, body = 'Auto-vote running' }: { title?: string; body?: string } = {}) => {
     const fs = getPlugin();
     if (!fs) return false;
     try {
@@ -81,7 +74,7 @@ const start = async ({ title = APP_NAME, body = 'Auto-vote running' } = {}) => {
         });
         return true;
     } catch (err) {
-        logger.withCategory('voting').error('startForegroundService failed', /** @type {Error} */ (err).message);
+        logger.withCategory('voting').error('startForegroundService failed', (err as Error).message);
         return false;
     }
 };
@@ -89,10 +82,8 @@ const start = async ({ title = APP_NAME, body = 'Auto-vote running' } = {}) => {
 /**
  * Update the notification text (e.g. last cycle time, next cycle ETA).
  * Cheap on Android — no permission re-prompt.
- *
- * @param {{ title?: string, body?: string }} opts
  */
-const update = async ({ title = APP_NAME, body }) => {
+const update = async ({ title = APP_NAME, body }: { title?: string; body?: string }) => {
     const fs = getPlugin();
     if (!fs || !body) return;
     try {
@@ -104,7 +95,7 @@ const update = async ({ title = APP_NAME, body }) => {
         });
     } catch (err) {
         // updateForegroundService throws if the service isn't running yet — ignore.
-        logger.withCategory('voting').debug('updateForegroundService skipped', /** @type {Error} */ (err).message);
+        logger.withCategory('voting').debug('updateForegroundService skipped', (err as Error).message);
     }
 };
 
@@ -117,7 +108,7 @@ const stop = async () => {
     try {
         await fs.stopForegroundService();
     } catch (err) {
-        logger.withCategory('voting').error('stopForegroundService failed', /** @type {Error} */ (err).message);
+        logger.withCategory('voting').error('stopForegroundService failed', (err as Error).message);
     }
 };
 

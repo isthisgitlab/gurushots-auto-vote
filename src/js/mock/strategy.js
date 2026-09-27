@@ -48,7 +48,7 @@ const VOTING_PASS_ENDPOINTS = /** @type {const} */ ([
     'getCurrentMemberProfile',
 ]);
 
-// Endpoints the automatic currency spends use (services/currencyAuto.js).
+// Endpoints the automatic currency spends use (services/currencyAuto.ts).
 const CURRENCY_ENDPOINTS = /** @type {const} */ ([
     'getActiveChallenges',
     'getBankroll',
@@ -62,7 +62,7 @@ const CURRENCY_ENDPOINTS = /** @type {const} */ ([
     'getCurrentMemberProfile',
 ]);
 
-// Endpoints the join flow uses (services/joinChallenges.js).
+// Endpoints the join flow uses (services/joinChallenges.ts).
 const JOIN_ENDPOINTS = /** @type {const} */ ([
     'getMemberChallenges',
     'getBankroll',
@@ -73,7 +73,7 @@ const JOIN_ENDPOINTS = /** @type {const} */ ([
     'getCurrentMemberProfile',
 ]);
 
-// Endpoints for the hourly prize-claim pre-step (services/autoClaim.js).
+// Endpoints for the hourly prize-claim pre-step (services/autoClaim.ts).
 const CLAIM_ENDPOINTS = /** @type {const} */ ([
     'getMyCompletedChallenges',
     'claimChallengeResources',
@@ -106,7 +106,7 @@ const createMockStrategy = (client) => {
 
     /**
      * Simulate a manual single join, running the SAME service the real strategy
-     * runs (services/joinChallenges.js) over the mock endpoints, with a null
+     * runs (services/joinChallenges.ts) over the mock endpoints, with a null
      * join-state store (no real state touched).
      *
      * @type {typeof import('../strategies/real').joinChallenge}
@@ -128,7 +128,7 @@ const createMockStrategy = (client) => {
 
     /**
      * Simulate the main voting process — runs the SAME orchestration as the
-     * real strategy (services/votingOrchestrator.js) over the mock
+     * real strategy (services/votingOrchestrator.ts) over the mock
      * endpoints, so mock mode exercises auto-fill, emergency fill,
      * turbo-earn, timer-ordered deadline actions, and the shared
      * cancellation/logging path instead of a hand-maintained fork.

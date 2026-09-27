@@ -41,7 +41,7 @@ Domain terms used throughout, in reader's terms:
 
 ## 1. Voting decision engine
 
-- `runVotingPass(token, filter, deps)` (`services/votingOrchestrator.js` — around L712) is the **one**
+- `runVotingPass(token, filter, deps)` (`services/votingOrchestrator.ts` — around L712) is the **one**
   shared loop for both real and mock strategies. **Never fork it** — a fork re-introduces the real/mock
   drift the shared loop exists to remove. Inject strategy differences via `deps`.
 - The per-challenge action **runners are strictly sequential, never parallelised**: auto-fill mutates the
@@ -114,7 +114,7 @@ Domain terms used throughout, in reader's terms:
   swallow it.
 - `now` is re-read per challenge (a pass can take minutes, so a single clock would miss windows that open
   mid-pass).
-- **Auto-join is a pre-step of the pass, not a separate schedule.** `runJoinPass` (`services/joinChallenges.js`)
+- **Auto-join is a pre-step of the pass, not a separate schedule.** `runJoinPass` (`services/joinChallenges.ts`)
   runs inside the shared `fetchChallengesAndVote` (`strategies/real/index.js` real / `mock/strategy.js` mock) before the
   voting pass, so all three platforms get it without forking `runVotingPass`. It is skipped for a
   single-challenge run and never allowed to abort voting (its errors are caught and logged). The `autoJoin`
@@ -203,10 +203,10 @@ Domain terms used throughout, in reader's terms:
 
 - **Layering**: `api/` is the transport layer — `api-client.ts` plus one thin wrapper per endpoint, importing
   nothing from `services/` (`api/voting.ts` still records vote timestamps in `metadata.ts`). The real-mode strategy composes those wrappers with the services in
-  `strategies/real/`: `index.js` (`fetchChallengesAndVote` with its mission read (`services/missions.js`) and join/claim pre-steps, manual join, the
+  `strategies/real/`: `index.js` (`fetchChallengesAndVote` with its mission read (`services/missions.ts`) and join/claim pre-steps, manual join, the
   Turbo mini-game), `applyBoost.js` (picks the entry via `pickBoostEntry`, posts it through
   `api/boost.ts#boostImage`, flags it `boosted`) and `activeChallenges.js` (coalesces concurrent
-  `getActiveChallenges` calls per token and pins first-seen titles via `services/challengeTitlePin.js` on a
+  `getActiveChallenges` calls per token and pins first-seen titles via `services/challengeTitlePin.ts` on a
   successful fetch only). `apiFactory.js` assembles the real surface from these and selects it or
   `mock/index.js#mockApiClient`.
 - All POSTs go through `makePostRequest()` (`api/api-client.ts` — around L204). **Contract: it returns the
@@ -222,7 +222,7 @@ Domain terms used throughout, in reader's terms:
 - Custom (Android OkHttp) adapters **must** call `finalizeAdapterResponse()` to reject non-2xx — axios
   doesn't post-process adapter results, so otherwise an error body is handed back as "success."
 - `fetchFailed` vs empty: `getActiveChallenges` distinguishes an outage from an empty account so the
-  scheduler doesn't re-arm as if all is well (`services/votingOrchestrator.js`).
+  scheduler doesn't re-arm as if all is well (`services/votingOrchestrator.ts`).
 - Join/bankroll endpoints (`api/join.ts`, WEB profile): `get_member_challenges` (open/un-joined list),
   `coins_unlock` (spends coins to open a paid challenge — **not** known to be idempotent), `get_bankroll`.
   `getBankroll` normalizes the currency array to `{keys,swaps,fills,coins}` and returns **`null` on failure
@@ -266,7 +266,7 @@ repeated six times is one that gets forgotten at one of them.
   `case` → `["staircase"]`, and `stairs` → `[]` because no tag _contains_ it).
 - Consequence, and the bug this fixes: a "Stairs" challenge stems to `stair`, the exact search misses, and
   auto-fill falls back to an unfiltered library walk ranked by popularity — an off-theme submission with no
-  explanation. `services/tagResolver.js` runs the miss path's terms through autocomplete to recover the real
+  explanation. `services/tagResolver.ts` runs the miss path's terms through autocomplete to recover the real
   tag. **It only runs after the exact search has already failed**, so a fill that works today pays nothing.
 - `search_autocomplete` needs `member_id`, which is a member identity — the account's `user_name` or its
   opaque id hash. **An email is rejected** (`Couldn't find username`), and the app logs in with one, so the
@@ -309,7 +309,7 @@ repeated six times is one that gets forgotten at one of them.
 
 ### 4a. Visual re-rank (on-device image model)
 
-- `rankVisually()` (`services/visionVerifier.js`) runs a bundled, 8-bit quantized **SigLIP** model
+- `rankVisually()` (`services/visionVerifier.ts`) runs a bundled, 8-bit quantized **SigLIP** model
   (`zero-shot-image-classification`, `@huggingface/transformers`) over the **top 12 tag-ranked
   candidates** of every challenge. Like the lexicon it only orders photos — it is never part of the vote
   decision. One call site feeds every submission path: `verifyFillPick()` in `services/autoFill/pipeline.ts` (auto, emergency,
@@ -332,7 +332,7 @@ repeated six times is one that gets forgotten at one of them.
       The Android-only copies under `dist/` and the standalone `onnxruntime-web` package are excluded from
       the asar, and `scripts/afterPack.js` deletes other OS/CPU `onnxruntime-node` binaries.
     - CLI: the build embeds a `pnpm deploy --prod` tree + model as a SEA asset (pruned to the host OS/CPU by
-      `pruneVisionRuntime`); `services/visionCliAssets.js` verifies its sha256, extracts it once per version
+      `pruneVisionRuntime`); `services/visionCliAssets.ts` verifies its sha256, extracts it once per version
       into `<userData>/vision/<sha>`, and removes finished copies from earlier versions unless one was marked in use
       within the last hour (an older CLI still running may not have loaded its model yet).
     - Android: `dist/` is the WebView root, so `vision-model/` and the single-threaded ORT WASM files are
@@ -354,7 +354,7 @@ repeated six times is one that gets forgotten at one of them.
 - **Defensive optional-chaining on every per-challenge API read** — one unguarded throw dumps the entire
   remaining pass into the outer catch, so each per-challenge property access is optional-chained, and each
   challenge body is independently try/caught for isolation.
-- The new-entry tracker (`services/newEntryTracker.js`) compares entry ids as **SETS, not positions** — the
+- The new-entry tracker (`services/newEntryTracker.ts`) compares entry ids as **SETS, not positions** — the
   server reorders `member.ranking.entries` between polls, so a positional diff would force a vote every
   cycle. An empty entries array is **not** recorded over a non-empty baseline (a degraded API response must
   not poison the baseline).
@@ -362,7 +362,7 @@ repeated six times is one that gets forgotten at one of them.
   never match real ones — so mock mode passes `cleanupStaleMetadata: null` plus an in-memory tracker, or it
   would purge/pollute the user's real `metadata.json`. The join flow follows the same rule: mock passes a
   `null` join-state store and no cross-process lock.
-- **Paid-join money safety** (`services/joinChallenges.js`): the order is load-bearing — resolve an eligible
+- **Paid-join money safety** (`services/joinChallenges.ts`): the order is load-bearing — resolve an eligible
   photo **before** any `coins_unlock` (no photo ⇒ skip, no spend); persist the unlock claim
   (`joinState.json`) **before** the charge so a crash can never let a later pass re-unlock (idempotent
   retry), and if the claim can't be written, don't spend; a per-process in-flight `Set` **plus** a
@@ -406,7 +406,7 @@ repeated six times is one that gets forgotten at one of them.
   automatically via `preload.js` + the module's `register()`; (d) ensure the handler module is in
   `capacitor.js`'s spread for the Capacitor build.
 - Handlers **never throw to the renderer** — they return a tagged `{ success, error }` object. Shared
-  preconditions use a Result guard: `requireAuthToken()` (`services/auth.js`) returns
+  preconditions use a Result guard: `requireAuthToken()` (`services/auth.ts`) returns
   `{ ok: true, token, settings }` or `{ ok: false, response }`, and callers do
   `if (!guard.ok) return guard.response;`.
 - Handlers explicitly **whitelist** the fields returned to the renderer so internal result shapes don't
@@ -538,7 +538,7 @@ caps (dependency-free, renderer-safe), and `scenarios/templates.ts` holds editab
   fails closed (never makes a condition true); entry ids are compared as strings, never by position (except
   the explicit `slot` selector); an in-flight rule resumes first; a phase or in-flight rule the edited
   scenario no longer has **halts** the challenge instead of guessing.
-- **Runner contract** (`services/scenarioRunner.js`, first step of `processChallenge`, never throws): the
+- **Runner contract** (`services/scenarioRunner.ts`, first step of `processChallenge`, never throws): the
   challenge is re-read live and the action's entry re-resolved before every action; a gone target skips the
   action. Once one action of a rule lands the rule is **committed** and its progress persisted after every
   action, so a crash never repeats a spend that landed. A committed rule then passes over a **skipped** step
@@ -552,7 +552,7 @@ caps (dependency-free, renderer-safe), and `scenarios/templates.ts` holds editab
   `history`, keyed by photo id (a swapped-out photo keeps its history). `votesPerHour` / `speedRatio` and the
   `fastest` selector read it; a speed with under 10 minutes of history, or nothing to compare with, is null and
   fails closed.
-- **Notices** (`services/scenarioNotifications.js`, pure): a `notify` action — and a halt — appends to the state's
+- **Notices** (`services/scenarioNotifications.ts`, pure): a `notify` action — and a halt — appends to the state's
   bounded `outbox`; each host's per-cycle notifier (CLI `nodeNotify.createNodeScenarioNotifier`, desktop
   `react/notifications/scenarioNotifier.js`, composed with the deadline notifier) shows only notices created
   after it started, each once, gated by `notifyOnScenario`. Native Android delivers none, as for deadlines.

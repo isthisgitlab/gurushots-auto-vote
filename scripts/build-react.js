@@ -67,7 +67,7 @@ const headlessHtml = `<!doctype html>
 // Check if watch mode is enabled
 const isWatch = process.argv.includes('--watch');
 // --lite: the Android webDir without the local vision model, its WASM runtime
-// or the transformers code (services/visionVerifier.js skips the check).
+// or the transformers code (services/visionVerifier.ts skips the check).
 const isLite = process.argv.includes('--lite');
 
 async function buildReact() {

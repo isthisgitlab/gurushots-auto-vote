@@ -220,7 +220,7 @@ const getEligiblePhotos = async (
  * popularity tiers were flat zero on real data and ranking collapsed to
  * views/upload-date (see the header of services/photoPicker/tiers.ts). This
  * endpoint returns the real `votes`, `views` and `achievements`, and is what
- * services/photoStats.js uses to enrich candidates before ranking.
+ * services/photoStats.ts uses to enrich candidates before ranking.
  *
  * @returns the photo record, or null when the request
  *   failed or the payload was unsuccessful/malformed

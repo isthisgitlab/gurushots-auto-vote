@@ -7,28 +7,23 @@ import { getReleasesUrl as releasesPageUrl } from './UpdateChecker';
 import { hasBundledModel } from './visionVerifier';
 import { bypassQuitGuard } from '../windows/quitGuard';
 
-/**
- * @import { BrowserWindow } from 'electron'
- * @import { UpdateInfo } from 'electron-updater'
- */
+import type { BrowserWindow } from 'electron';
+import type { UpdateInfo } from 'electron-updater';
 
 /**
  * The update info shape sent to the renderer (and returned by the
  * check-for-updates IPC channel).
- *
- * @typedef {{
- *   currentVersion: string,
- *   latestVersion: string,
- *   releaseNotes: string,
- *   releaseDate: string,
- *   isPrerelease: boolean,
- *   files: Array<{ url: string, size: number | undefined }>,
- * }} FormattedUpdateInfo
  */
+export type FormattedUpdateInfo = {
+    currentVersion: string;
+    latestVersion: string;
+    releaseNotes: string;
+    releaseDate: string;
+    isPrerelease: boolean;
+    files: Array<{ url: string; size: number | undefined }>;
+};
 
-/**
- * @typedef {{ percent: number, bytesPerSecond: number, transferred: number, total: number }} DownloadProgress
- */
+type DownloadProgress = { percent: number; bytesPerSecond: number; transferred: number; total: number };
 
 /**
  * One-shot skip-version migration: the canonical store is the settings blob
@@ -67,12 +62,15 @@ const migrateLegacySkipVersion = () => {
  * skip-version integration, and rate limiting
  */
 class AutoUpdater {
-    /** @param {BrowserWindow | null} [mainWindow] */
-    constructor(mainWindow = null) {
+    mainWindow: BrowserWindow | null;
+    updateInfo: FormattedUpdateInfo | null;
+    downloadProgress: DownloadProgress | null;
+    isDownloading: boolean;
+    isUpdateDownloaded: boolean;
+
+    constructor(mainWindow: BrowserWindow | null = null) {
         this.mainWindow = mainWindow;
-        /** @type {FormattedUpdateInfo | null} */
         this.updateInfo = null;
-        /** @type {DownloadProgress | null} */
         this.downloadProgress = null;
         this.isDownloading = false;
         this.isUpdateDownloaded = false;
@@ -93,18 +91,15 @@ class AutoUpdater {
 
     /**
      * Set the main window reference (for sending IPC events)
-     * @param {BrowserWindow | null} window
      */
-    setMainWindow(window) {
+    setMainWindow(window: BrowserWindow | null) {
         this.mainWindow = window;
     }
 
     /**
      * Send event to renderer process
-     * @param {string} channel
-     * @param {unknown} data
      */
-    sendToRenderer(channel, data) {
+    sendToRenderer(channel: string, data: unknown) {
         if (this.mainWindow && !this.mainWindow.isDestroyed()) {
             this.mainWindow.webContents.send(channel, data);
         }
@@ -169,10 +164,10 @@ class AutoUpdater {
 
     /**
      * Format update info for renderer
-     * @param {UpdateInfo} info - Update info from electron-updater
-     * @returns {FormattedUpdateInfo} - Formatted update info
+     * @param info - Update info from electron-updater
+     * @returns Formatted update info
      */
-    formatUpdateInfo(info) {
+    formatUpdateInfo(info: UpdateInfo): FormattedUpdateInfo {
         return {
             currentVersion: app.getVersion(),
             latestVersion: info.version,
@@ -189,10 +184,8 @@ class AutoUpdater {
 
     /**
      * Parse release notes (can be string or array of objects)
-     * @param {UpdateInfo['releaseNotes']} releaseNotes
-     * @returns {string}
      */
-    parseReleaseNotes(releaseNotes) {
+    parseReleaseNotes(releaseNotes: UpdateInfo['releaseNotes']): string {
         if (!releaseNotes) return 'No release notes available';
         if (typeof releaseNotes === 'string') return releaseNotes;
         if (Array.isArray(releaseNotes)) {
@@ -203,9 +196,8 @@ class AutoUpdater {
 
     /**
      * Check if auto-update is supported on this platform/build
-     * @returns {boolean}
      */
-    canAutoUpdate() {
+    canAutoUpdate(): boolean {
         // Not packaged = development mode, can't auto-update
         if (!app.isPackaged) {
             logger.withCategory('update').debug('Auto-update not available in development mode', null);
@@ -237,10 +229,10 @@ class AutoUpdater {
 
     /**
      * Check for updates with rate limiting
-     * @param {boolean} force - Bypass rate limiting
-     * @returns {Promise<FormattedUpdateInfo | null>} - Update info or null
+     * @param force - Bypass rate limiting
+     * @returns Update info or null
      */
-    async checkForUpdates(force = false) {
+    async checkForUpdates(force: boolean = false): Promise<FormattedUpdateInfo | null> {
         try {
             // Rate limiting: check once per 24 hours unless forced
             if (!force) {
@@ -278,7 +270,7 @@ class AutoUpdater {
         } catch (error) {
             logger
                 .withCategory('update')
-                .error('Error checking for updates:', /** @type {{ message?: string } | null} */ (error)?.message);
+                .error('Error checking for updates:', (error as { message?: string } | null)?.message);
             // Don't throw - return null to indicate no update found
             return null;
         }
@@ -286,9 +278,9 @@ class AutoUpdater {
 
     /**
      * Download the available update
-     * @returns {Promise<boolean>} - True if download started
+     * @returns True if download started
      */
-    async downloadUpdate() {
+    async downloadUpdate(): Promise<boolean> {
         if (!this.updateInfo) {
             logger.withCategory('update').error('No update available to download', null);
             return false;
@@ -311,9 +303,7 @@ class AutoUpdater {
             return true;
         } catch (error) {
             this.isDownloading = false;
-            logger
-                .withCategory('update')
-                .error('Download failed:', /** @type {{ message?: string } | null} */ (error)?.message);
+            logger.withCategory('update').error('Download failed:', (error as { message?: string } | null)?.message);
             throw error;
         }
     }
@@ -335,9 +325,9 @@ class AutoUpdater {
 
     /**
      * Skip the current version
-     * @param {string | null} [version] - Version to skip (optional, uses current update)
+     * @param version - Version to skip (optional, uses current update)
      */
-    skipVersion(version = null) {
+    skipVersion(version: string | null = null) {
         const versionToSkip = version || this.updateInfo?.latestVersion;
 
         if (!versionToSkip) {
@@ -360,33 +350,29 @@ class AutoUpdater {
 
     /**
      * Get current update info
-     * @returns {FormattedUpdateInfo | null}
      */
-    getUpdateInfo() {
+    getUpdateInfo(): FormattedUpdateInfo | null {
         return this.updateInfo;
     }
 
     /**
      * Get download progress
-     * @returns {DownloadProgress | null}
      */
-    getDownloadProgress() {
+    getDownloadProgress(): DownloadProgress | null {
         return this.downloadProgress;
     }
 
     /**
      * Check if update is downloaded and ready
-     * @returns {boolean}
      */
-    isReady() {
+    isReady(): boolean {
         return this.isUpdateDownloaded;
     }
 
     /**
      * Get GitHub releases URL for manual download fallback
-     * @returns {string}
      */
-    getReleasesUrl() {
+    getReleasesUrl(): string {
         return releasesPageUrl();
     }
 }

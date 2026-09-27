@@ -2,7 +2,7 @@
  * Node-host delivery for the deadline-action OS notifications (the CLI's
  * continuous scheduler). Injected into the shared cadence chain as its
  * onCycleChallenges hook, exactly like the renderer's deadlineNotifier — same
- * pure decision core (services/deadlineNotifications.js), different transport:
+ * pure decision core (services/deadlineNotifications.ts), different transport:
  * describeDeadlineActions is called directly (this side HAS the settings facade,
  * unlike the renderer which goes over IPC), and delivery shells out to an OS
  * builtin.
@@ -33,10 +33,8 @@ import { createTranslator } from '../../translations/translator';
 import { createScenarioNotifier } from '../scenarioNotifications';
 import { getScenarioStatus } from '../scenarioStatus';
 
-/**
- * @import { Challenge } from '../../types/gurushots'
- * @import { OutboxItem } from '../scenarioNotifications'
- */
+import type { Challenge } from '../../types/gurushots';
+import type { OutboxItem } from '../scenarioNotifications';
 
 const notifyTranslator = createTranslator();
 
@@ -45,10 +43,9 @@ const notifyTranslator = createTranslator();
  * translator core (same English fallback as the UI). Returns the key itself
  * when it doesn't resolve to a string, so the notification still shows
  * something.
- * @param {string} key - dotted key, e.g. 'app.notifyBody'
- * @returns {string}
+ * @param key - dotted key, e.g. 'app.notifyBody'
  */
-const nodeTranslate = (key) => {
+const nodeTranslate = (key: string): string => {
     try {
         return notifyTranslator.t(key, settings.getSetting('language'));
     } catch {
@@ -57,24 +54,20 @@ const nodeTranslate = (key) => {
 };
 
 // AppleScript string-literal escape: backslash first, then double-quote.
-/** @param {string} value */
-const escapeAppleScript = (value) => value.replace(/\\/g, '\\\\').replace(/"/g, '\\"');
+const escapeAppleScript = (value: string) => value.replace(/\\/g, '\\\\').replace(/"/g, '\\"');
 
 // notify-send renders a limited Pango markup subset in the body; escape the
 // markup-significant chars so a crafted title can't inject markup. (The
 // decision module already stripped control chars / RTL.)
-/** @param {string} value */
-const escapePango = (value) => value.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+const escapePango = (value: string) => value.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
 
 /**
  * Deliver one notification via the platform's builtin notifier. macOS →
  * osascript `display notification`; Linux → notify-send. Any other platform (or
  * a missing builtin) is a silent no-op — the callback swallows spawn errors so a
  * missing `notify-send` on a headless box can never bubble into the scheduler.
- *
- * @param {{title:string, body:string}} notification
  */
-const deliverOsNotification = ({ title, body }) => {
+const deliverOsNotification = ({ title, body }: { title: string; body: string }) => {
     try {
         if (process.platform === 'darwin') {
             const script = `display notification "${escapeAppleScript(body)}" with title "${escapeAppleScript(title)}"`;
@@ -95,14 +88,19 @@ const deliverOsNotification = ({ title, body }) => {
  * Build the Node per-cycle notifier. Holds the dedupe Set + re-entrancy guard,
  * so create ONE instance per scheduler and reuse it across cycles.
  *
- * @param {Object} [deps] - injectable seams (defaults wire the real facade)
- * @param {(challenge: Challenge, now: number) => {actions: unknown[]}} [deps.describeDeadlineActions]
- * @param {(key:string)=>unknown} [deps.getSetting]
- * @param {(key:string)=>string} [deps.translate]
- * @param {(n:{title:string, body:string})=>void} [deps.deliver]
- * @returns {(challenges: Challenge[] | null | undefined, now: number) => Promise<void>}
+ * @param deps - injectable seams (defaults wire the real facade)
  */
-const createNodeDeadlineNotifier = (deps = {}) => {
+const createNodeDeadlineNotifier = (
+    deps: {
+        describeDeadlineActions?: (
+            challenge: Challenge,
+            now: number,
+        ) => { actions: Array<{ action: string; dueAt: number | null }> };
+        getSetting?: (key: string) => unknown;
+        translate?: (key: string) => string;
+        deliver?: (n: { title: string; body: string }) => void;
+    } = {},
+): ((challenges: Challenge[] | null | undefined, now: number) => Promise<void>) => {
     const describeDeadlineActions = deps.describeDeadlineActions || votingLogic.describeDeadlineActions;
     const getSetting = deps.getSetting || ((key) => settings.getGlobalDefault(key));
     const translate = deps.translate || nodeTranslate;
@@ -143,7 +141,7 @@ const createNodeDeadlineNotifier = (deps = {}) => {
                 .withCategory('voting')
                 .debug(
                     'deadline notification cycle failed',
-                    /** @type {{ message?: string } | null | undefined} */ (error)?.message ?? String(error),
+                    (error as { message?: string } | null | undefined)?.message ?? String(error),
                 );
         } finally {
             running = false;
@@ -152,18 +150,20 @@ const createNodeDeadlineNotifier = (deps = {}) => {
 };
 
 /**
- * The Node host's scenario notifier (services/scenarioNotifications.js): the
+ * The Node host's scenario notifier (services/scenarioNotifications.ts): the
  * notices scenarios left since this scheduler started, over the same OS
  * delivery. Create ONE per scheduler.
  *
- * @param {Object} [deps] - injectable seams (defaults wire the real facade)
- * @param {(key:string)=>unknown} [deps.getSetting]
- * @param {(challengeId: string) => {state: {outbox?: OutboxItem[]} | null}} [deps.getStatus]
- * @param {(key:string)=>string} [deps.translate]
- * @param {(n:{title:string, body:string})=>void} [deps.deliver]
- * @returns {(challenges: Challenge[]) => Promise<void>}
+ * @param deps - injectable seams (defaults wire the real facade)
  */
-const createNodeScenarioNotifier = (deps = {}) => {
+const createNodeScenarioNotifier = (
+    deps: {
+        getSetting?: (key: string) => unknown;
+        getStatus?: (challengeId: string) => { state: { outbox?: OutboxItem[] } | null };
+        translate?: (key: string) => string;
+        deliver?: (n: { title: string; body: string }) => void;
+    } = {},
+): ((challenges: Challenge[]) => Promise<void>) => {
     const getSetting = deps.getSetting || ((key) => settings.getGlobalDefault(key));
     const getStatus = deps.getStatus || getScenarioStatus;
     return createScenarioNotifier({

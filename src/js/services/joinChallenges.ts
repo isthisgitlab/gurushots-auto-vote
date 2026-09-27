@@ -40,51 +40,61 @@ import { pickPhotosForChallenge } from './photoPicker';
 import { rankVisually } from './visionVerifier';
 import { consumeMission } from './missions';
 
-/**
- * @import { Bankroll, Challenge } from '../types/gurushots'
- * @import { ChallengeValues, TitleRule } from '../types/settings'
- * @import { RawJsonStore } from '../types/stores'
- * @import { PickerPhoto } from '../types/photoPicker'
- * @import { MissionNeeds } from './missions'
- */
+import type { Bankroll, Challenge } from '../types/gurushots';
+import type { ChallengeValues, TitleRule } from '../types/settings';
+import type { RawJsonStore } from '../types/stores';
+import type { PickerPhoto } from '../types/photoPicker';
+import type { MissionNeeds } from './missions';
+import type * as joinApi from '../api/join';
+import type * as submissionsApi from '../api/submissions';
+import type * as tagsApi from '../api/tags';
+import type * as joinStateStore from '../joinStateStore';
 
 /**
  * The join flow's endpoints and state (see the header).
- *
- * @typedef {object} JoinDeps
- * @property {typeof import('../api/join').getMemberChallenges} getMemberChallenges
- * @property {typeof import('../api/join').getBankroll} getBankroll
- * @property {typeof import('../api/join').coinsUnlock} coinsUnlock
- * @property {typeof import('../api/submissions').submitToChallenge} submitToChallenge
- * @property {typeof import('../api/submissions').getEligiblePhotos} getEligiblePhotos
- * @property {typeof import('../api/tags').searchTagAutocomplete} [searchTagAutocomplete]
- * @property {typeof import('../api/tags').getCurrentMemberProfile} [getCurrentMemberProfile]
- * @property {RawJsonStore|null} [joinStateStore] - null in mock mode
- * @property {typeof import('../joinStateStore').acquireUnlockLock} [acquireUnlockLock] - absent in mock mode
- * @property {typeof rankVisually} [rankVisually] - test seam over the visual re-rank
  */
+interface JoinDeps {
+    getMemberChallenges: typeof joinApi.getMemberChallenges;
+    getBankroll: typeof joinApi.getBankroll;
+    coinsUnlock: typeof joinApi.coinsUnlock;
+    submitToChallenge: typeof submissionsApi.submitToChallenge;
+    getEligiblePhotos: typeof submissionsApi.getEligiblePhotos;
+    searchTagAutocomplete?: typeof tagsApi.searchTagAutocomplete;
+    getCurrentMemberProfile?: typeof tagsApi.getCurrentMemberProfile;
+    /** null in mock mode */
+    joinStateStore?: RawJsonStore | null;
+    /** absent in mock mode */
+    acquireUnlockLock?: typeof joinStateStore.acquireUnlockLock;
+    /** test seam over the visual re-rank */
+    rankVisually?: typeof rankVisually;
+}
 
 /**
  * One join's result. `charged` is coins spent THIS call.
- *
- * @typedef {{status: string, charged: number, imageId?: string}} JoinOutcome
  */
+type JoinOutcome = { status: string; charged: number; imageId?: string };
 
-/** @typedef {{charged: number, alreadyUnlocked: boolean}} UnlockState */
+type UnlockState = { charged: number; alreadyUnlocked: boolean };
 
-/** A caught value, read only for its message. @typedef {{ message?: unknown } | null | undefined} CaughtError */
+/** A caught value, read only for its message.
+ */
+type CaughtError = { message?: unknown } | null | undefined;
 
 /**
  * The manual single join's result.
- *
- * @typedef {{status: string, challengeId: (string|number), cost: number, coins?: number, imageId?: string}} JoinSingleResult
  */
+type JoinSingleResult = {
+    status: string;
+    challengeId: string | number;
+    cost: number;
+    coins?: number;
+    imageId?: string;
+};
 
 // Shared across the manual handler and the automatic pass IN THIS PROCESS so the
 // two cannot double-spend the same challenge. Module-level = one Set per process;
 // cross-process racing is bounded by the persisted claim (see header residual).
-/** @type {Set<string>} */
-const inFlight = new Set();
+const inFlight: Set<string> = new Set();
 
 const cat = () => logger.withCategory('join');
 
@@ -100,12 +110,8 @@ const cat = () => logger.withCategory('join');
  * Precedence: rules in list order, the first matching rule that sets the key
  * wins — a rule's inline override before the profile it names — then the
  * global default. See `ruleValuesFor` in settings/ruleResolution.ts.
- *
- * @param {string} key
- * @param {Challenge} challenge
- * @returns {unknown}
  */
-const resolveJoinSetting = (key, challenge) => {
+const resolveJoinSetting = (key: string, challenge: Challenge): unknown => {
     // Pass the whole candidate, never just its title: a rule may be keyed on the
     // challenge's own tags, type, photo count or runtime, and an un-joined
     // candidate carries them. Optional-chained like every other per-challenge
@@ -116,11 +122,7 @@ const resolveJoinSetting = (key, challenge) => {
     return settings.getEffectiveSetting(key, null);
 };
 
-/**
- * @param {unknown} value
- * @returns {string[]}
- */
-const parseTypeList = (value) =>
+const parseTypeList = (value: unknown): string[] =>
     typeof value === 'string'
         ? value
               .split(',')
@@ -144,10 +146,12 @@ const readTitleRules = () => {
  * and a higher rule could win and hide this one's `autoJoin: true`. Arming only
  * asks "could any rule ever turn joining on?", which the rule answers itself.
  *
- * @param {TitleRule|null|undefined} rule
- * @param {() => Record<string, ChallengeValues>} readProfiles - lazily loads the profiles map once per scan
+ * @param readProfiles - lazily loads the profiles map once per scan
  */
-const ruleEnablesAutoJoin = (rule, readProfiles) => {
+const ruleEnablesAutoJoin = (
+    rule: TitleRule | null | undefined,
+    readProfiles: () => Record<string, ChallengeValues>,
+) => {
     if (rule && Object.prototype.hasOwnProperty.call(rule, 'autoJoin')) return rule.autoJoin === true;
     const profileName = typeof rule?.profile === 'string' ? rule.profile : '';
     if (!profileName) return false;
@@ -166,8 +170,7 @@ const ruleEnablesAutoJoin = (rule, readProfiles) => {
 const anyTitleRuleEnablesAutoJoin = () => {
     const rules = readTitleRules();
     if (!Array.isArray(rules)) return false;
-    /** @type {Record<string, ChallengeValues> | null} */
-    let profiles = null;
+    let profiles: Record<string, ChallengeValues> | null = null;
     const readProfiles = () => {
         profiles = profiles || settings.getChallengeProfiles() || {};
         return profiles;
@@ -183,9 +186,8 @@ const anyTitleRuleEnablesAutoJoin = () => {
  * enables it (inline or via its profile). Mirrors the pass short-circuit
  * condition; used to drive the "auto-join active" UI indicator so it reflects
  * the per-rule case too.
- * @returns {boolean}
  */
-const isAutoJoinActive = () => {
+const isAutoJoinActive = (): boolean => {
     if (settings.getEffectiveSetting('autoJoin', null) === true) return true;
     return anyTitleRuleEnablesAutoJoin();
 };
@@ -197,17 +199,13 @@ const isAutoJoinActive = () => {
  *
  * An inline WINDOW alone is deliberately not enough — "join this late" says
  * when, not whether, so it must not smuggle an excluded type into scope.
- *
- * @param {Challenge} challenge
  */
-const hasTitleOptIn = (challenge) => settings.hasRuleJoinOptIn?.(challenge) === true;
+const hasTitleOptIn = (challenge: Challenge) => settings.hasRuleJoinOptIn?.(challenge) === true;
 
 /**
  * Per-candidate scope/coin/timing config, resolved by rule (inline → profile → global).
- *
- * @param {Challenge} challenge
  */
-const resolveCandidateConfig = (challenge) => ({
+const resolveCandidateConfig = (challenge: Challenge) => ({
     // Empty include list = all types (the default scope once auto-join is on).
     includeTypes: parseTypeList(resolveJoinSetting('autoJoinTypes', challenge)),
     excludeTypes: parseTypeList(resolveJoinSetting('autoJoinExcludeTypes', challenge)),
@@ -236,11 +234,8 @@ const resolveCandidateConfig = (challenge) => ({
  * would otherwise be indistinguishable from "nothing to join": if GuruShots ever
  * drops or renames the field, the window would silently stop every join. Naming
  * the fields that ARE present makes that diagnosable from one run.
- *
- * @param {Challenge} challenge
- * @param {string} reason
  */
-const warnMissingCloseTime = (challenge, reason) => {
+const warnMissingCloseTime = (challenge: Challenge, reason: string) => {
     const fields = Object.keys(challenge || {}).join(', ') || '(none)';
     // start_time is only read by the percent-elapsed anchor, so name the field
     // the gate actually could not read rather than a generic "timing" message.
@@ -258,17 +253,13 @@ const warnMissingCloseTime = (challenge, reason) => {
 // "unreadable/corrupt" (ok:false). A corrupt file must NOT silently look empty:
 // that would forget a real unlock marker and let a retry re-charge. Callers on
 // the paid path treat ok:false as "cannot verify — do not spend".
-/**
- * @param {RawJsonStore|null|undefined} store
- * @returns {{state: Record<string, unknown>, ok: boolean}}
- */
-const readUnlockedState = (store) => {
+const readUnlockedState = (store: RawJsonStore | null | undefined): { state: Record<string, unknown>; ok: boolean } => {
     if (!store) return { state: {}, ok: true };
     let raw;
     try {
         raw = store.readRaw();
     } catch (error) {
-        cat().warning(`could not read join-state: ${/** @type {CaughtError} */ (error)?.message || error}`, null);
+        cat().warning(`could not read join-state: ${(error as CaughtError)?.message || error}`, null);
         return { state: {}, ok: false };
     }
     if (!raw) return { state: {}, ok: true };
@@ -281,30 +272,21 @@ const readUnlockedState = (store) => {
         return { state: {}, ok: false };
     } catch (error) {
         // JSON.parse only ever throws a SyntaxError here (readRaw returns a string).
-        cat().warning(`join-state file is corrupt: ${/** @type {SyntaxError} */ (error).message}`, null);
+        cat().warning(`join-state file is corrupt: ${(error as SyntaxError).message}`, null);
         return { state: {}, ok: false };
     }
 };
 
-/** @param {RawJsonStore|null|undefined} store */
-const readUnlocked = (store) => readUnlockedState(store).state;
+const readUnlocked = (store: RawJsonStore | null | undefined) => readUnlockedState(store).state;
 
-/**
- * @param {RawJsonStore|null|undefined} store
- * @param {string|number} id
- */
-const isUnlocked = (store, id) => Object.prototype.hasOwnProperty.call(readUnlocked(store), String(id));
+const isUnlocked = (store: RawJsonStore | null | undefined, id: string | number) =>
+    Object.prototype.hasOwnProperty.call(readUnlocked(store), String(id));
 
 // Persist the unlock claim. Returns true on success (or when there is no store
 // — mock mode, which spends no real coins). Returns false when a real store
 // write fails: the caller MUST NOT spend coins it cannot record, or a crash /
 // retry could re-unlock and double-charge.
-/**
- * @param {RawJsonStore|null|undefined} store
- * @param {string|number} id
- * @returns {boolean}
- */
-const markUnlocked = (store, id) => {
+const markUnlocked = (store: RawJsonStore | null | undefined, id: string | number): boolean => {
     if (!store) return true;
     try {
         const state = readUnlocked(store);
@@ -312,19 +294,12 @@ const markUnlocked = (store, id) => {
         store.writeRaw(JSON.stringify(state));
         return true;
     } catch (error) {
-        cat().warning(
-            `could not persist unlock marker for ${id}: ${/** @type {CaughtError} */ (error)?.message || error}`,
-            null,
-        );
+        cat().warning(`could not persist unlock marker for ${id}: ${(error as CaughtError)?.message || error}`, null);
         return false;
     }
 };
 
-/**
- * @param {RawJsonStore|null|undefined} store
- * @param {string|number} id
- */
-const clearUnlocked = (store, id) => {
+const clearUnlocked = (store: RawJsonStore | null | undefined, id: string | number) => {
     if (!store) return;
     try {
         const state = readUnlocked(store);
@@ -333,10 +308,7 @@ const clearUnlocked = (store, id) => {
             store.writeRaw(JSON.stringify(state));
         }
     } catch (error) {
-        cat().warning(
-            `could not clear unlock marker for ${id}: ${/** @type {CaughtError} */ (error)?.message || error}`,
-            null,
-        );
+        cat().warning(`could not clear unlock marker for ${id}: ${(error as CaughtError)?.message || error}`, null);
     }
 };
 
@@ -349,12 +321,9 @@ const VISUAL_SHORTLIST = 12;
  * Pick a single eligible entry photo for a candidate, honoring the same
  * must/should tag rules and picker as auto-fill. Tags are resolved by the
  * challenge object (title-aware); fillWithoutTagMatch by title profile.
- * @param {Challenge} challenge
- * @param {string} token
- * @param {JoinDeps} deps
- * @returns {Promise<string|null>} the photo id, or null when none is eligible.
+ * @returns the photo id, or null when none is eligible.
  */
-const pickJoinPhoto = async (challenge, token, deps) => {
+const pickJoinPhoto = async (challenge: Challenge, token: string, deps: JoinDeps): Promise<string | null> => {
     const mustIncludeTags = settings.getEffectiveTagSetting('mustIncludeTags', challenge);
     const shouldIncludeTags = settings.getEffectiveTagSetting('shouldIncludeTags', challenge);
     const fillWithoutTagMatch = resolveJoinSetting('fillWithoutTagMatch', challenge) === true;
@@ -372,11 +341,11 @@ const pickJoinPhoto = async (challenge, token, deps) => {
         eligible = await fetchCandidatesForChallenge(
             challenge,
             token,
-            /** @type {Parameters<typeof fetchCandidatesForChallenge>[2]} */ ({
+            {
                 mustIncludeTags,
                 shouldIncludeTags,
                 ignoreWords,
-            }),
+            } as Parameters<typeof fetchCandidatesForChallenge>[2],
             // logLabel 'join' so photo-library warnings are attributed to the join
             // flow, not auto-fill (the picker is shared).
             {
@@ -392,20 +361,18 @@ const pickJoinPhoto = async (challenge, token, deps) => {
         );
     } catch (error) {
         cat().warning(
-            `could not read eligible photos for ${challenge?.id}: ${/** @type {CaughtError} */ (error)?.message || error}`,
+            `could not read eligible photos for ${challenge?.id}: ${(error as CaughtError)?.message || error}`,
             null,
         );
         return null;
     }
-    const semanticScores = await resolveSemanticScores(
-        challenge,
-        eligible,
-        /** @type {Parameters<typeof resolveSemanticScores>[2]} */ ({ ignoreWords }),
-    );
+    const semanticScores = await resolveSemanticScores(challenge, eligible, { ignoreWords } as Parameters<
+        typeof resolveSemanticScores
+    >[2]);
     // A shortlist, not one photo, so the visual re-rank a fill applies can
     // promote an on-theme alternative here too.
     // The candidates are library photo records, the shape the picker ranks.
-    const shortlist = pickPhotosForChallenge(challenge, /** @type {PickerPhoto[]} */ (eligible), VISUAL_SHORTLIST, {
+    const shortlist = pickPhotosForChallenge(challenge, eligible as PickerPhoto[], VISUAL_SHORTLIST, {
         mustIncludeTags,
         shouldIncludeTags,
         fillWithoutTagMatch,
@@ -422,23 +389,22 @@ const pickJoinPhoto = async (challenge, token, deps) => {
 
 // ---- the join itself (shared by pass + manual) ----
 
-/** @returns {JoinOutcome} */
-const failedNoCharge = () => ({ status: 'failed-no-charge', charged: 0 });
+const failedNoCharge = (): JoinOutcome => ({ status: 'failed-no-charge', charged: 0 });
 
 /**
  * The check→claim→unlock section, run under the cross-process lock. Re-reads
  * the unlock claim authoritatively — another process may have unlocked between
  * the caller's first check and acquiring the lock.
  *
- * @param {Challenge} challenge
- * @param {string} token
- * @param {JoinDeps} deps
- * @param {number} needsCoins
- * @returns {Promise<{outcome: JoinOutcome}|UnlockState>}
  *   `outcome` ends the join with that result; otherwise the unlock state the
  *   submit continues from.
  */
-const claimAndUnlock = async (challenge, token, deps, needsCoins) => {
+const claimAndUnlock = async (
+    challenge: Challenge,
+    token: string,
+    deps: JoinDeps,
+    needsCoins: number,
+): Promise<{ outcome: JoinOutcome } | UnlockState> => {
     const id = challenge?.id;
     const { state, ok: stateOk } = readUnlockedState(deps.joinStateStore);
     if (!stateOk) {
@@ -470,14 +436,13 @@ const claimAndUnlock = async (challenge, token, deps, needsCoins) => {
 /**
  * Paid unlock, wrapped in the cross-process lock around the check→claim→unlock
  * section so a concurrent process (GUI auto-join vs CLI join) cannot both unlock.
- *
- * @param {Challenge} challenge
- * @param {string} token
- * @param {JoinDeps} deps
- * @param {number} needsCoins
- * @returns {ReturnType<typeof claimAndUnlock>}
  */
-const unlockUnderLock = async (challenge, token, deps, needsCoins) => {
+const unlockUnderLock = async (
+    challenge: Challenge,
+    token: string,
+    deps: JoinDeps,
+    needsCoins: number,
+): ReturnType<typeof claimAndUnlock> => {
     const id = challenge?.id;
     const xlock = deps.acquireUnlockLock ? deps.acquireUnlockLock(id) : { ok: true, release: () => {} };
     if (!xlock.ok) {
@@ -493,16 +458,17 @@ const unlockUnderLock = async (challenge, token, deps, needsCoins) => {
 /**
  * Submit the photo (the actual join).
  *
- * @param {Challenge} challenge
- * @param {string} token
- * @param {JoinDeps} deps
- * @param {number} needsCoins
- * @param {string} imageId
- * @param {UnlockState} unlock - coins spent this
+ * @param unlock - coins spent this
  *   call, and whether a prior pass/process already unlocked
- * @returns {Promise<JoinOutcome>}
  */
-const submitJoin = async (challenge, token, deps, needsCoins, imageId, { charged, alreadyUnlocked }) => {
+const submitJoin = async (
+    challenge: Challenge,
+    token: string,
+    deps: JoinDeps,
+    needsCoins: number,
+    imageId: string,
+    { charged, alreadyUnlocked }: UnlockState,
+): Promise<JoinOutcome> => {
     const id = challenge?.id;
     const coinsSpent = charged > 0 || alreadyUnlocked;
     // If cancelled now and coins are already spent (this call or a prior
@@ -537,15 +503,16 @@ const submitJoin = async (challenge, token, deps, needsCoins, imageId, { charged
  * Perform one join under the safety model. Assumes the decision to join (and,
  * for paid, the consent/affordability) has already been made by the caller.
  *
- * @param {Challenge} challenge
- * @param {string} token
- * @param {JoinDeps} deps
- * @param {number} needsCoins paid cost (0 = free)
- * @returns {Promise<JoinOutcome>}
+ * @param needsCoins paid cost (0 = free)
  *   status ∈ joined | skipped-no-photo | charged-pending-submit |
  *            failed-no-charge | busy. `charged` is coins spent THIS call.
  */
-const performJoin = async (challenge, token, deps, needsCoins) => {
+const performJoin = async (
+    challenge: Challenge,
+    token: string,
+    deps: JoinDeps,
+    needsCoins: number,
+): Promise<JoinOutcome> => {
     const id = challenge?.id;
     const key = String(id);
     if (inFlight.has(key)) {
@@ -581,30 +548,25 @@ const performJoin = async (challenge, token, deps, needsCoins) => {
  * Mutable per-pass join state: the balance and budget kept locally accurate as
  * the pass spends, the clock the join window is measured against, and whether
  * the one-per-pass missing-timing diagnostic has fired.
- *
- * @typedef {{
- *   bankroll: (Bankroll|null),
- *   remainingBudget: number,
- *   nowSec: number,
- *   missingCloseTimeLogged: boolean,
- *   missions: (MissionNeeds|null),
- * }} JoinPassState
  */
+type JoinPassState = {
+    bankroll: Bankroll | null;
+    remainingBudget: number;
+    nowSec: number;
+    missingCloseTimeLogged: boolean;
+    missions: MissionNeeds | null;
+};
 
 /**
  * One balance read for the whole pass. A throw here (or a null return) means
  * "balance unknown" ⇒ no paid joins.
- *
- * @param {string} token
- * @param {JoinDeps} deps
- * @returns {Promise<Bankroll|null>}
  */
-const readPassBankroll = async (token, deps) => {
+const readPassBankroll = async (token: string, deps: JoinDeps): Promise<Bankroll | null> => {
     try {
         return await deps.getBankroll(token);
     } catch (error) {
         cat().warning(
-            `could not read balance (paid joins skipped this pass): ${/** @type {CaughtError} */ (error)?.message || error}`,
+            `could not read balance (paid joins skipped this pass): ${(error as CaughtError)?.message || error}`,
             null,
         );
         return null;
@@ -615,17 +577,10 @@ const readPassBankroll = async (token, deps) => {
  * close_time is epoch SECONDS everywhere in this codebase; `now` arrives as
  * epoch ms. A caller that omits it falls back to the wall clock rather than
  * computing a window against 0, which would fail every candidate closed.
- *
- * @param {number} now
- * @returns {number}
  */
-const toPassNowSec = (now) => Math.floor((Number.isFinite(now) && now > 0 ? now : Date.now()) / 1000);
+const toPassNowSec = (now: number): number => Math.floor((Number.isFinite(now) && now > 0 ? now : Date.now()) / 1000);
 
-/**
- * @param {Challenge} challenge
- * @param {JoinPassState} pass
- */
-const decideCandidateJoin = (challenge, pass) => {
+const decideCandidateJoin = (challenge: Challenge, pass: JoinPassState) => {
     const cfg = resolveCandidateConfig(challenge);
     // A "Join N challenges" mission (missionJoinEarly) lifts the timing window
     // until it is met: these would join later anyway, the mission wants them now.
@@ -650,12 +605,8 @@ const decideCandidateJoin = (challenge, pass) => {
  * Both timing fields get the same one-per-pass diagnostic: each means the window
  * silently stopped joining, which is otherwise indistinguishable from "nothing
  * to join".
- *
- * @param {Challenge} challenge
- * @param {string} reason
- * @param {JoinPassState} pass
  */
-const noteTimingRefusal = (challenge, reason, pass) => {
+const noteTimingRefusal = (challenge: Challenge, reason: string, pass: JoinPassState) => {
     if (reason !== 'close-time-unknown' && reason !== 'start-time-unknown') return;
     if (pass.missingCloseTimeLogged) return;
     pass.missingCloseTimeLogged = true;
@@ -666,13 +617,14 @@ const noteTimingRefusal = (challenge, reason, pass) => {
  * Decide and (when due) perform one candidate's join, keeping the pass's
  * balance and budget in step with what it spent.
  *
- * @param {Challenge} challenge
- * @param {string} token
- * @param {JoinDeps} deps
- * @param {JoinPassState} pass
- * @returns {Promise<string>} the candidate's result status
+ * @returns the candidate's result status
  */
-const joinCandidate = async (challenge, token, deps, pass) => {
+const joinCandidate = async (
+    challenge: Challenge,
+    token: string,
+    deps: JoinDeps,
+    pass: JoinPassState,
+): Promise<string> => {
     // Per-candidate enable (master → profile): skip titles auto-join is off
     // for, BEFORE resolving the rest of the config (avoid redundant work).
     if (resolveJoinSetting('autoJoin', challenge) !== true) {
@@ -690,7 +642,7 @@ const joinCandidate = async (challenge, token, deps, pass) => {
         outcome = await performJoin(challenge, token, deps, decision.needsCoins);
     } catch (error) {
         cat().warning(
-            `join failed for ${logger.challengeTag(challenge)}: ${/** @type {CaughtError} */ (error)?.message || error}`,
+            `join failed for ${logger.challengeTag(challenge)}: ${(error as CaughtError)?.message || error}`,
             null,
         );
         return 'error';
@@ -700,7 +652,7 @@ const joinCandidate = async (challenge, token, deps, pass) => {
         // A charge only follows a passed affordability check, which already
         // proved Number(bankroll.coins) finite. Coerce the same way so a
         // numeric-string balance is still decremented for the rest of the pass.
-        const bankroll = /** @type {Bankroll} */ (pass.bankroll);
+        const bankroll = pass.bankroll as Bankroll;
         bankroll.coins = Number(bankroll.coins) - outcome.charged;
     }
     return outcome.status;
@@ -718,16 +670,18 @@ const joinCandidate = async (challenge, token, deps, pass) => {
  * `skipped:too-early` and reconsidered next cycle, so entries land near a
  * challenge's end rather than the moment it appears.
  *
- * @param {string} token
- * @param {number} now epoch ms — the clock the join window is measured against
+ * @param now epoch ms — the clock the join window is measured against
  *   (converted to seconds to match `close_time`); defaults to Date.now()
- * @param {JoinDeps} deps
- * @param {MissionNeeds|null} [missions] what the active missions still need
- *   (services/missions.js): while a join mission does, the timing window is
+ * @param missions what the active missions still need
+ *   (services/missions.ts): while a join mission does, the timing window is
  *   lifted, and each join counts it down
- * @returns {Promise<{ran:boolean, joined:number, results:Array<{id: (string|number|undefined), status: string}>}>}
  */
-const runJoinPass = async (token, now, deps, missions = null) => {
+const runJoinPass = async (
+    token: string,
+    now: number,
+    deps: JoinDeps,
+    missions: MissionNeeds | null = null,
+): Promise<{ ran: boolean; joined: number; results: Array<{ id: string | number | undefined; status: string }> }> => {
     const empty = { ran: false, joined: 0, results: [] };
     if (!token) return empty;
     // The master autoJoin is only the default; a title profile can enable joining
@@ -749,7 +703,7 @@ const runJoinPass = async (token, now, deps, missions = null) => {
     try {
         candidates = await deps.getMemberChallenges(token, 'open');
     } catch (error) {
-        cat().warning(`could not list open challenges: ${/** @type {CaughtError} */ (error)?.message || error}`, null);
+        cat().warning(`could not list open challenges: ${(error as CaughtError)?.message || error}`, null);
         return empty;
     }
     if (!Array.isArray(candidates) || candidates.length === 0) {
@@ -757,8 +711,7 @@ const runJoinPass = async (token, now, deps, missions = null) => {
     }
 
     const bankroll = await readPassBankroll(token, deps);
-    /** @type {JoinPassState} */
-    const pass = {
+    const pass: JoinPassState = {
         bankroll,
         remainingBudget: Number(settings.getEffectiveSetting('autoJoinCycleCoinBudget', null)) || 0,
         nowSec: toPassNowSec(now),
@@ -767,8 +720,7 @@ const runJoinPass = async (token, now, deps, missions = null) => {
         missions,
     };
 
-    /** @type {Array<{id: (string|number|undefined), status: string}>} */
-    const results = [];
+    const results: Array<{ id: string | number | undefined; status: string }> = [];
     let joined = 0;
     for (const challenge of candidates) {
         if (cancellation.isCancelled()) {
@@ -794,14 +746,14 @@ const runJoinPass = async (token, now, deps, missions = null) => {
 /**
  * Live balance check for a confirmed paid manual join.
  *
- * @param {string|number} challengeId
- * @param {number} cost
- * @param {string} token
- * @param {JoinDeps} deps
- * @returns {Promise<JoinSingleResult|null>}
  *   the refusal result, or null when the balance covers the cost
  */
-const checkAffordable = async (challengeId, cost, token, deps) => {
+const checkAffordable = async (
+    challengeId: string | number,
+    cost: number,
+    token: string,
+    deps: JoinDeps,
+): Promise<JoinSingleResult | null> => {
     const bankroll = await deps.getBankroll(token);
     const coins = Number(bankroll?.coins);
     if (bankroll == null || !Number.isFinite(coins)) {
@@ -822,21 +774,20 @@ const checkAffordable = async (challengeId, cost, token, deps) => {
  * stale/closed entry in the renderer's cached list cannot trigger a wasted
  * spend. A paid challenge without `spendCoins` returns `needs-confirm` (with the
  * cost) and spends nothing.
- *
- * @param {string|number} challengeId
- * @param {string} token
- * @param {JoinDeps} deps
- * @param {{spendCoins?: boolean}} [opts]
- * @returns {Promise<JoinSingleResult>}
  */
-const joinChallengeSingle = async (challengeId, token, deps, { spendCoins = false } = {}) => {
+const joinChallengeSingle = async (
+    challengeId: string | number,
+    token: string,
+    deps: JoinDeps,
+    { spendCoins = false }: { spendCoins?: boolean } = {},
+): Promise<JoinSingleResult> => {
     if (!token) return { status: 'not-authenticated', challengeId, cost: 0 };
 
     let candidates;
     try {
         candidates = await deps.getMemberChallenges(token, 'open');
     } catch (error) {
-        cat().warning(`could not list open challenges: ${/** @type {CaughtError} */ (error)?.message || error}`, null);
+        cat().warning(`could not list open challenges: ${(error as CaughtError)?.message || error}`, null);
         return { status: 'fetch-failed', challengeId, cost: 0 };
     }
     const challenge = (candidates || []).find((c) => String(c?.id) === String(challengeId));

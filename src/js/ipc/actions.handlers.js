@@ -5,7 +5,7 @@
  *
  * The turbo and boost flows are kept structurally separate (different
  * sanitisation, different result shapes, different log categories) —
- * only their token-presence guard is shared via services/auth.js.
+ * only their token-presence guard is shared via services/auth.ts.
  */
 
 import * as settings from '../settings';

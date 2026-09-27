@@ -3,7 +3,7 @@
  *
  * Injected into the shared cadence chain (AutovoteContext) as its per-cycle
  * onCycleChallenges hook. It owns NONE of the decision logic — that is the pure
- * services/deadlineNotifications.js, safe in this bundle — and only bridges the
+ * services/deadlineNotifications.ts, safe in this bundle — and only bridges the
  * renderer's IPC + platform delivery:
  *
  *   - config + per-challenge deadline actions come over IPC (the same
@@ -13,7 +13,7 @@
  * Fire-and-forget by contract: the chain calls this in its own isolated,
  * never-awaited wrapper, so a throw here cannot affect scheduling. It is also
  * self-contained — a re-entrancy guard, an early-exit when the feature is off,
- * and its own catch (mirroring the Node twin nodeNotify.js) so it resolves
+ * and its own catch (mirroring the Node twin nodeNotify.ts) so it resolves
  * quietly even if the decision code throws, rather than relying on the caller's
  * outer .catch().
  *
@@ -126,7 +126,7 @@ export function createDeadlineNotifier({ getSetting, getDeadlineActions, transla
             if (notification) deliver(notification);
         } catch (error) {
             // Self-contained: swallow so a decision/IPC failure can neither reach
-            // the scheduler nor vanish without a trace (mirrors nodeNotify.js).
+            // the scheduler nor vanish without a trace (mirrors nodeNotify.ts).
             logCycleFailure(log, error);
         } finally {
             running = false;

@@ -13,7 +13,7 @@
  * Confirmation and argument validation live in the IPC layer
  * (ipc/currency.handlers.js); these functions assume the caller already decided
  * to spend. The double-spend lock (withSpendLock) lives here so the manual
- * handlers and the automatic runners (services/currencyAuto.js) share it.
+ * handlers and the automatic runners (services/currencyAuto.ts) share it.
  */
 
 import { findActiveChallenge } from './findActiveChallenge';
@@ -21,33 +21,39 @@ import { rankCandidatesForChallenge, resolveMemberId } from './autoFill';
 import { resetPassState as resetPhotoStatsPassState } from './photoStats';
 import { CURRENCY_OUTCOME, blockedOutcome, swapExcludedIds } from '../voting/currencyActions';
 
-/**
- * @import { Challenge, RankingEntry } from '../types/gurushots'
- */
+import type { Challenge, RankingEntry } from '../types/gurushots';
+import type * as loggerModule from '../logger';
+import type * as settingsModule from '../settings';
+import type * as swapBackStore from '../swapBackStore';
+import type * as activeChallengesApi from '../strategies/real/activeChallenges';
+import type * as joinApi from '../api/join';
+import type * as currencyApi from '../api/currency';
+import type * as submissionsApi from '../api/submissions';
+import type * as tagsApi from '../api/tags';
 
-/** @typedef {typeof import('../logger')} Logger */
-/** @typedef {typeof import('../settings')} SettingsFacade */
-/** @typedef {ReturnType<typeof import('../swapBackStore').createLedger>} SwapBackLedger */
-/** @typedef {'key'|'swap'|'fill'} CurrencyAction */
+type Logger = typeof loggerModule;
+type SettingsFacade = typeof settingsModule;
+export type SwapBackLedger = ReturnType<typeof swapBackStore.createLedger>;
+export type CurrencyAction = 'key' | 'swap' | 'fill';
 
 /**
  * The endpoints a spend reads off the strategy (the real or mock surface).
- *
- * @typedef {object} CurrencyStrategy
- * @property {typeof import('../strategies/real/activeChallenges').getActiveChallenges} getActiveChallenges
- * @property {typeof import('../api/join').getBankroll} getBankroll
- * @property {typeof import('../api/currency').keyUnlock} keyUnlock
- * @property {typeof import('../api/currency').swapPhoto} swapPhoto
- * @property {typeof import('../api/currency').exposureAutofill} exposureAutofill
- * @property {typeof import('../api/submissions').getEligiblePhotos} getEligiblePhotos
- * @property {typeof import('../api/submissions').getImageData} getImageData
- * @property {typeof import('../api/tags').searchTagAutocomplete} searchTagAutocomplete
- * @property {typeof import('../api/tags').getCurrentMemberProfile} getCurrentMemberProfile
  */
+export interface CurrencyStrategy {
+    getActiveChallenges: typeof activeChallengesApi.getActiveChallenges;
+    getBankroll: typeof joinApi.getBankroll;
+    keyUnlock: typeof currencyApi.keyUnlock;
+    swapPhoto: typeof currencyApi.swapPhoto;
+    exposureAutofill: typeof currencyApi.exposureAutofill;
+    getEligiblePhotos: typeof submissionsApi.getEligiblePhotos;
+    getImageData: typeof submissionsApi.getImageData;
+    searchTagAutocomplete: typeof tagsApi.searchTagAutocomplete;
+    getCurrentMemberProfile: typeof tagsApi.getCurrentMemberProfile;
+}
 
-/** @typedef {typeof CURRENCY_OUTCOME[keyof typeof CURRENCY_OUTCOME]} CurrencyOutcome */
-/** @typedef {{ok: boolean, outcome: string}} SpendOutcome */
-/** @typedef {{id: string, member_id: string}} SwapCandidate */
+type CurrencyOutcome = (typeof CURRENCY_OUTCOME)[keyof typeof CURRENCY_OUTCOME];
+export type SpendOutcome = { ok: boolean; outcome: string };
+export type SwapCandidate = { id: string; member_id: string };
 
 const nowSec = () => Math.floor(Date.now() / 1000);
 
@@ -60,12 +66,8 @@ let spendInFlight = false;
 /**
  * Runs `spend` under the process-wide spend lock. Resolves {busy: true} without
  * calling it when another spend is in flight.
- *
- * @template T
- * @param {() => Promise<T>} spend
- * @returns {Promise<{busy: true} | {busy: false, value: T}>}
  */
-const withSpendLock = async (spend) => {
+const withSpendLock = async <T>(spend: () => Promise<T>): Promise<{ busy: true } | { busy: false; value: T }> => {
     if (spendInFlight) return { busy: true };
     spendInFlight = true;
     try {
@@ -75,19 +77,14 @@ const withSpendLock = async (spend) => {
     }
 };
 
-/** @param {Logger} logger */
-const cat = (logger) => logger.withCategory('currency');
+const cat = (logger: Logger) => logger.withCategory('currency');
 
 /**
  * Reads the live challenge and bankroll. A missing challenge is reported as
  * notAvailable; an unreadable bankroll is left null for blockedOutcome to map
  * onto balanceUnknown.
- *
- * @param {string|number} challengeId
- * @param {string} token
- * @param {CurrencyStrategy} strategy
  */
-const loadLive = async (challengeId, token, strategy) => {
+const loadLive = async (challengeId: string | number, token: string, strategy: CurrencyStrategy) => {
     const [challengesResponse, bankroll] = await Promise.all([
         strategy.getActiveChallenges(token),
         strategy.getBankroll(token),
@@ -95,21 +92,13 @@ const loadLive = async (challengeId, token, strategy) => {
     return { challenge: findActiveChallenge(challengesResponse?.challenges, challengeId), bankroll };
 };
 
-/**
- * @param {Challenge} challenge
- * @returns {RankingEntry[]}
- */
-const entriesOf = (challenge) =>
+const entriesOf = (challenge: Challenge): RankingEntry[] =>
     Array.isArray(challenge?.member?.ranking?.entries) ? challenge.member.ranking.entries : [];
 
-/**
- * @param {Challenge} challenge
- * @param {string|number} imageId
- */
-const findEntry = (challenge, imageId) => entriesOf(challenge).find((entry) => String(entry?.id) === String(imageId));
+const findEntry = (challenge: Challenge, imageId: string | number) =>
+    entriesOf(challenge).find((entry) => String(entry?.id) === String(imageId));
 
-/** @param {Challenge} challenge */
-const entryIds = (challenge) =>
+const entryIds = (challenge: Challenge) =>
     new Set(
         entriesOf(challenge)
             .map((entry) => entry?.id)
@@ -118,8 +107,7 @@ const entryIds = (challenge) =>
     );
 
 // Every photo swapped out of the challenge so far (the API's swap history).
-/** @param {Challenge} challenge */
-const swappedOutIds = (challenge) =>
+const swappedOutIds = (challenge: Challenge) =>
     new Set(
         (Array.isArray(challenge?.member?.ranking?.swaps) ? challenge.member.ranking.swaps : []).map((s) =>
             String(s?.id),
@@ -129,29 +117,28 @@ const swappedOutIds = (challenge) =>
 /**
  * Live re-check shared by every action. Returns the blocking outcome, or null
  * with the live challenge when the spend may go ahead.
- *
- * @param {CurrencyAction} action
- * @param {string|number} challengeId
- * @param {string} token
- * @param {CurrencyStrategy} strategy
- * @returns {Promise<{blocked: CurrencyOutcome, challenge: null} | {blocked: CurrencyOutcome|null, challenge: Challenge}>}
  */
-const checkLive = async (action, challengeId, token, strategy) => {
+const checkLive = async (
+    action: CurrencyAction,
+    challengeId: string | number,
+    token: string,
+    strategy: CurrencyStrategy,
+): Promise<
+    { blocked: CurrencyOutcome; challenge: null } | { blocked: CurrencyOutcome | null; challenge: Challenge }
+> => {
     const { challenge, bankroll } = await loadLive(challengeId, token, strategy);
     if (!challenge) return { blocked: CURRENCY_OUTCOME.notAvailable, challenge: null };
     // blockedOutcome only ever answers a CURRENCY_OUTCOME value or null.
-    const blocked = /** @type {CurrencyOutcome|null} */ (blockedOutcome(action, challenge, bankroll, nowSec()));
+    const blocked = blockedOutcome(action, challenge, bankroll, nowSec()) as CurrencyOutcome | null;
     return { blocked, challenge };
 };
 
-/**
- * @param {Logger} logger
- * @param {string} label
- * @param {Challenge} challenge
- * @param {{ok?: boolean} | null | undefined} result
- * @returns {SpendOutcome}
- */
-const spendResult = (logger, label, challenge, result) => {
+const spendResult = (
+    logger: Logger,
+    label: string,
+    challenge: Challenge,
+    result: { ok?: boolean } | null | undefined,
+): SpendOutcome => {
     if (result?.ok) {
         cat(logger).info(`${label}: done for ${logger.challengeTag(challenge)}`, null);
         return { ok: true, outcome: CURRENCY_OUTCOME.ok };
@@ -163,13 +150,12 @@ const spendResult = (logger, label, challenge, result) => {
 /**
  * Spends a KEY to unlock the challenge's LOCKED boost (unlock only — the boost
  * is not applied to any photo).
- *
- * @param {string|number} challengeId
- * @param {string} token
- * @param {{strategy: CurrencyStrategy, logger: Logger}} deps
- * @returns {Promise<SpendOutcome>}
  */
-const unlockBoostWithKey = async (challengeId, token, { strategy, logger }) => {
+const unlockBoostWithKey = async (
+    challengeId: string | number,
+    token: string,
+    { strategy, logger }: { strategy: CurrencyStrategy; logger: Logger },
+): Promise<SpendOutcome> => {
     const { blocked, challenge } = await checkLive('key', challengeId, token, strategy);
     if (blocked) return { ok: false, outcome: blocked };
     return spendResult(logger, 'keyUnlock', challenge, await strategy.keyUnlock(challenge.id, token));
@@ -183,20 +169,15 @@ const unlockBoostWithKey = async (challengeId, token, { strategy, logger }) => {
  * "bring in a fresh photo" and would otherwise flip a slot between the photo it
  * just swapped out and its replacement. Spends nothing.
  *
- * @param {string|number} challengeId
- * @param {string} imageId - the entered photo to replace
- * @param {string} token
- * @param {{strategy: CurrencyStrategy, logger: Logger, settings: SettingsFacade}} deps
- * @param {{excludeSwapped?: boolean}} [options]
- * @returns {Promise<{ok: false, outcome: string} | {ok: true, outcome: string, candidate: SwapCandidate}>}
+ * @param imageId - the entered photo to replace
  */
 const previewSwap = async (
-    challengeId,
-    imageId,
-    token,
-    { strategy, logger, settings },
-    { excludeSwapped = false } = {},
-) => {
+    challengeId: string | number,
+    imageId: string,
+    token: string,
+    { strategy, logger, settings }: { strategy: CurrencyStrategy; logger: Logger; settings: SettingsFacade },
+    { excludeSwapped = false }: { excludeSwapped?: boolean } = {},
+): Promise<{ ok: false; outcome: string } | { ok: true; outcome: string; candidate: SwapCandidate }> => {
     const { blocked, challenge } = await checkLive('swap', challengeId, token, strategy);
     if (blocked) return { ok: false, outcome: blocked };
     if (!entryIds(challenge).has(String(imageId))) {
@@ -237,7 +218,7 @@ const previewSwap = async (
         return { ok: false, outcome: CURRENCY_OUTCOME.apiFailed };
     }
     // The pipeline's picks are library photo records (id, and usually member_id).
-    const best = /** @type {{id: string|number, member_id?: string} | undefined} */ (ranked.picked[0]);
+    const best = ranked.picked[0] as { id: string | number; member_id?: string } | undefined;
     if (!best) {
         cat(logger).info(`swap: no different photo available for ${logger.challengeTag(challenge)}`, null);
         return { ok: false, outcome: CURRENCY_OUTCOME.noAlternative };
@@ -259,16 +240,17 @@ const previewSwap = async (
  * (spending nothing) when `imageId` is no longer entered, or when `newImageId`
  * is already entered / equals `imageId`.
  *
- * @param {string|number} challengeId
- * @param {string} imageId
- * @param {string} newImageId
- * @param {string} token
- * @param {{strategy: CurrencyStrategy, logger: Logger, ledger?: SwapBackLedger|null}} deps - ledger: the swap-back
+ * @param deps - ledger: the swap-back
  *   ledger (swapBackStore.ts), told about every successful swap so a swapped-out
  *   boosted/turbo'd photo can be swapped back later
- * @returns {Promise<SpendOutcome>}
  */
-const swapEntry = async (challengeId, imageId, newImageId, token, { strategy, logger, ledger = null }) => {
+const swapEntry = async (
+    challengeId: string | number,
+    imageId: string,
+    newImageId: string,
+    token: string,
+    { strategy, logger, ledger = null }: { strategy: CurrencyStrategy; logger: Logger; ledger?: SwapBackLedger | null },
+): Promise<SpendOutcome> => {
     const { blocked, challenge } = await checkLive('swap', challengeId, token, strategy);
     if (blocked) return { ok: false, outcome: blocked };
     if (!entryIds(challenge).has(String(imageId))) {
@@ -294,13 +276,14 @@ const swapEntry = async (challengeId, imageId, newImageId, token, { strategy, lo
  * back. The original comes from the swap-back ledger, never from the caller,
  * and must still be in this challenge's swap history (not entered).
  *
- * @param {string|number} challengeId
- * @param {string} currentImageId - the replacement now in the slot
- * @param {string} token
- * @param {{strategy: CurrencyStrategy, logger: Logger, ledger: SwapBackLedger}} deps
- * @returns {Promise<SpendOutcome>}
+ * @param currentImageId - the replacement now in the slot
  */
-const swapBack = async (challengeId, currentImageId, token, { strategy, logger, ledger }) => {
+const swapBack = async (
+    challengeId: string | number,
+    currentImageId: string,
+    token: string,
+    { strategy, logger, ledger }: { strategy: CurrencyStrategy; logger: Logger; ledger: SwapBackLedger },
+): Promise<SpendOutcome> => {
     const record = ledger.list(challengeId).find((r) => r.currentId === String(currentImageId));
     if (!record) return { ok: false, outcome: CURRENCY_OUTCOME.notAvailable };
     const { blocked, challenge } = await checkLive('swap', challengeId, token, strategy);
@@ -324,13 +307,12 @@ const swapBack = async (challengeId, currentImageId, token, { strategy, logger, 
 
 /**
  * Spends a FILL to top the challenge exposure up to 100%.
- *
- * @param {string|number} challengeId
- * @param {string} token
- * @param {{strategy: CurrencyStrategy, logger: Logger}} deps
- * @returns {Promise<SpendOutcome>}
  */
-const fillExposure = async (challengeId, token, { strategy, logger }) => {
+const fillExposure = async (
+    challengeId: string | number,
+    token: string,
+    { strategy, logger }: { strategy: CurrencyStrategy; logger: Logger },
+): Promise<SpendOutcome> => {
     const { blocked, challenge } = await checkLive('fill', challengeId, token, strategy);
     if (blocked) return { ok: false, outcome: blocked };
     // The member id the endpoint wants is the profile id; every entry carries

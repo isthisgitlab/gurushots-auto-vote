@@ -13,15 +13,14 @@
 import * as runtime from '../runtime';
 import * as logger from '../logger';
 
-/** @import { AutoVoteBackgroundPlugin, CapacitorGlobals } from '../types/capacitor' */
+import type { AutoVoteBackgroundPlugin, CapacitorGlobals } from '../types/capacitor';
 
-/** @type {AutoVoteBackgroundPlugin | null} */
-let pluginInstance = null;
+let pluginInstance: AutoVoteBackgroundPlugin | null = null;
 const getPlugin = () => {
     if (!runtime.isCapacitor()) return null;
     if (pluginInstance) return pluginInstance;
     try {
-        const cap = /** @type {CapacitorGlobals} */ (globalThis).Capacitor;
+        const cap = (globalThis as CapacitorGlobals).Capacitor;
         pluginInstance = cap?.Plugins?.AutoVoteBackground || null;
         if (!pluginInstance) {
             logger.withCategory('voting').warning('AutoVoteBackground plugin not registered on this build');
@@ -32,7 +31,7 @@ const getPlugin = () => {
             .withCategory('voting')
             .warning(
                 'NativeAutovoteBridge.getPlugin failed',
-                /** @type {{ message?: string } | null | undefined} */ (err)?.message,
+                (err as { message?: string } | null | undefined)?.message,
             );
         return null;
     }
@@ -49,7 +48,7 @@ const start = async () => {
         return {
             running: false,
             available: true,
-            error: /** @type {{ message?: string } | null | undefined} */ (err)?.message,
+            error: (err as { message?: string } | null | undefined)?.message,
         };
     }
 };
@@ -65,7 +64,7 @@ const stop = async () => {
         return {
             running: false,
             available: true,
-            error: /** @type {{ message?: string } | null | undefined} */ (err)?.message,
+            error: (err as { message?: string } | null | undefined)?.message,
         };
     }
 };
@@ -80,7 +79,7 @@ const getStatus = async () => {
         return {
             running: false,
             available: true,
-            error: /** @type {{ message?: string } | null | undefined} */ (err)?.message,
+            error: (err as { message?: string } | null | undefined)?.message,
         };
     }
 };

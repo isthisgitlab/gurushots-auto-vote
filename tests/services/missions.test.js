@@ -1,5 +1,5 @@
 /**
- * Tests for services/missions.js — recognising the join / fill / turbo
+ * Tests for services/missions.ts — recognising the join / fill / turbo
  * missions by name, what each still needs, the per-kind settings gate, the
  * change-only summary log, and counting a landed action down.
  */

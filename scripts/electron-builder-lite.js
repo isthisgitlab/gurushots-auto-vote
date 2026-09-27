@@ -1,12 +1,12 @@
 /**
  * electron-builder config for the lite desktop build (`build:<os>:lite`): the
  * package.json `build` block without the local vision model and its inference
- * runtime (services/visionVerifier.js), for users who don't want either.
+ * runtime (services/visionVerifier.ts), for users who don't want either.
  * visionVerifier sees no bundled model and keeps the tag order.
  *
  * Lite artifacts carry a "-lite" suffix, land in build/lite/, and publish
  * their own update files (lite*.yml) so electron-updater keeps a lite install
- * on lite. services/AutoUpdater.js limits lite to stable releases: on a
+ * on lite. services/AutoUpdater.ts limits lite to stable releases: on a
  * prerelease the GitHub provider would fall back to latest*.yml, the full build.
  */
 

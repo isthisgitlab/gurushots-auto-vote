@@ -1,5 +1,5 @@
 /**
- * Tests for photoStats.js — per-photo popularity enrichment.
+ * Tests for photoStats.ts — per-photo popularity enrichment.
  *
  * The module exists because get_photos_private reports votes=0 and no
  * achievements for every library photo, so these tests care most about the

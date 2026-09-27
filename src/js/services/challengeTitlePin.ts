@@ -29,14 +29,13 @@ const { MAX_TITLE_LENGTH } = settings;
 // Warn once per distinct incoming title per id — repeated confirmations of
 // the same mismatch on every poll stay silent. In-memory only: durability
 // matters for the pins themselves, not for log dedup.
-let lastWarnedTitleById = new Map();
+let lastWarnedTitleById = new Map<string, string>();
 
-/**
- * @param {Record<string, string>} adds
- * @param {string[]} removeIds
- * @param {Array<{id?: string|number, title?: string}>} challenges
- */
-const commitPinChanges = (adds, removeIds, challenges) => {
+const commitPinChanges = (
+    adds: Record<string, string>,
+    removeIds: string[],
+    challenges: Array<{ id?: string | number; title?: string }>,
+) => {
     if (Object.keys(adds).length > 0 || removeIds.length > 0) settings.mergeTitlePins(adds, removeIds);
     settings.rememberChallengeTitles(challenges);
     for (const id of removeIds) lastWarnedTitleById.delete(id);
@@ -51,11 +50,10 @@ const commitPinChanges = (adds, removeIds, challenges) => {
  * degraded/error payload than a genuinely challenge-free account (mirrors
  * cleanupStaleMetadata's guard), and pruning pins on it would let a later
  * fetch re-pin a mutated title.
- *
- * @param {Array<{id?: string|number, title?: string}>} challenges
- * @returns {Array<{id?: string|number, title?: string}>}
  */
-const pinChallengeTitles = (challenges) => {
+const pinChallengeTitles = (
+    challenges: Array<{ id?: string | number; title?: string }>,
+): Array<{ id?: string | number; title?: string }> => {
     if (!Array.isArray(challenges)) return challenges;
     if (challenges.length === 0) {
         settings.rememberChallengeTitles(challenges);
@@ -63,9 +61,8 @@ const pinChallengeTitles = (challenges) => {
     }
 
     const pins = settings.getTitlePins();
-    /** @type {Record<string, string>} */
-    const adds = {};
-    const activeIds = new Set();
+    const adds: Record<string, string> = {};
+    const activeIds = new Set<string>();
 
     for (const challenge of challenges) {
         if (challenge?.id == null) continue;
@@ -125,7 +122,7 @@ const pinChallengeTitles = (challenges) => {
 
 /** Test-only: clear the in-memory warn-dedup map. */
 const __resetForTests = () => {
-    lastWarnedTitleById = new Map();
+    lastWarnedTitleById = new Map<string, string>();
 };
 
 export { pinChallengeTitles, __resetForTests };

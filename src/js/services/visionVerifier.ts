@@ -15,8 +15,9 @@ import { appPath } from '../appPaths';
 import { entryPhotoUrl } from '../format/photoUrl';
 import { visualSubjectWords } from './photoPicker';
 
-/** @import { ChallengeText, IgnoreWords, PickerPhoto } from '../types/photoPicker' */
-/** @import { ErrorLike, FillLogger } from '../types/autoFill' */
+import type { ChallengeText, IgnoreWords, PickerPhoto } from '../types/photoPicker';
+import type { ErrorLike, FillLogger } from '../types/autoFill';
+import type { ZeroShotImageClassificationPipeline } from '@huggingface/transformers';
 
 const MAX_IMAGES = 12;
 // Thresholds are on SigLIP's logit scale, measured on live GuruShots
@@ -35,12 +36,9 @@ const MAX_DESCRIPTION_CHARS = 200;
 const BOILERPLATE_RE = /join our challenge|participation reward|elite level reward|allstar level reward|good luck/i;
 const HTML_ENTITIES = Object.freeze({ '&amp;': '&', '&quot;': '"', '&#39;': "'", '&apos;': "'", '&nbsp;': ' ' });
 
-/** @type {ReturnType<typeof loadClassifier> | undefined} */
-let classifierPromise;
-/** @type {Promise<boolean> | undefined} */
-let bundledPromise;
-/** @type {string | undefined} */
-let cliAssetRoot;
+let classifierPromise: ReturnType<typeof loadClassifier> | undefined;
+let bundledPromise: Promise<boolean> | undefined;
+let cliAssetRoot: string | undefined;
 
 const getModelLocation = () => {
     if (runtime.isCapacitor() || runtime.isHeadlessService()) return './';
@@ -74,10 +72,8 @@ const isModelBundled = async () => {
  * Whether this build ships the model. Lite builds (`build:*:lite`) leave it
  * and its inference runtime out, so the visual check is skipped without a
  * warning and the update check stays on the lite downloads.
- *
- * @returns {Promise<boolean>}
  */
-const hasBundledModel = () => {
+const hasBundledModel = (): Promise<boolean> => {
     if (!bundledPromise) bundledPromise = isModelBundled();
     return bundledPromise;
 };
@@ -85,10 +81,8 @@ const hasBundledModel = () => {
 /**
  * The transformers module is `any` on the SEA path (createRequire), so the
  * pipeline type is stated here rather than inferred.
- *
- * @returns {Promise<import('@huggingface/transformers').ZeroShotImageClassificationPipeline>}
  */
-const loadClassifier = async () => {
+const loadClassifier = async (): Promise<ZeroShotImageClassificationPipeline> => {
     let transformers;
     if (runtime.isCli()) {
         const sea = require('node:sea');
@@ -124,17 +118,16 @@ const getClassifier = () => {
  * balloons. Special occasion balloons, hot air balloons…". HTML and the shared
  * rewards text are removed; '' when nothing descriptive is left.
  *
- * @param {string | undefined} message - challenge.welcome_message
- * @returns {string}
+ * @param message - challenge.welcome_message
  */
-const descriptionLead = (message) => {
+const descriptionLead = (message: string | undefined): string => {
     if (typeof message !== 'string') return '';
     let text = message
         .replace(/<[^>]*>/g, ' ')
         .replace(
             /&(?:amp|quot|#39|apos|nbsp);/g,
             // The pattern only matches the table's own keys.
-            (entity) => HTML_ENTITIES[/** @type {keyof typeof HTML_ENTITIES} */ (entity)],
+            (entity) => HTML_ENTITIES[entity as keyof typeof HTML_ENTITIES],
         )
         .replace(/\s+/g, ' ')
         .trim();
@@ -149,12 +142,8 @@ const descriptionLead = (message) => {
  * when there is one. Empty when the title names nothing visual — the
  * description of a meta challenge ("Photo of the Day") is about the contest,
  * not the picture, so it is never used alone.
- *
- * @param {ChallengeText | null | undefined} challenge
- * @param {IgnoreWords} [ignoreWords]
- * @returns {string[]}
  */
-const challengePrompts = (challenge, ignoreWords = null) => {
+const challengePrompts = (challenge: ChallengeText | null | undefined, ignoreWords: IgnoreWords = null): string[] => {
     const subject = visualSubjectWords(challenge, ignoreWords);
     if (subject.length === 0) return [];
     const lead = descriptionLead(challenge?.welcome_message);
@@ -162,11 +151,10 @@ const challengePrompts = (challenge, ignoreWords = null) => {
 };
 
 /**
- * @param {number | undefined} score - a missing score reads as NaN, which the caller rejects
- * @returns {number}
+ * @param score - a missing score reads as NaN, which the caller rejects
  */
-const toLogit = (score) => {
-    const p = Math.min(Math.max(/** @type {number} */ (score), 1e-12), 1 - 1e-12);
+const toLogit = (score: number | undefined): number => {
+    const p = Math.min(Math.max(score as number, 1e-12), 1 - 1e-12);
     return Math.log(p / (1 - p));
 };
 
@@ -176,10 +164,10 @@ const toLogit = (score) => {
  * fog, read by the title prompt as "smoke filled scenes", set a bar that
  * rejected the real smoke photo the description prompt preferred.
  *
- * @param {Array<{id: string, logits: number[]}>} scored - in tag/popularity order
- * @returns {string[]|null} ids, accepted photos first; null to abstain
+ * @param scored - in tag/popularity order
+ * @returns ids, accepted photos first; null to abstain
  */
-const orderByVisualFit = (scored) => {
+const orderByVisualFit = (scored: Array<{ id: string; logits: number[] }>): string[] | null => {
     if (scored.length === 0) return null;
     const peak = Math.max(...scored.flatMap((item) => item.logits));
     if (peak < ABSTAIN_LOGIT) return null;
@@ -196,14 +184,17 @@ const orderByVisualFit = (scored) => {
 /**
  * Re-rank the head of a tag-ranked shortlist by what the photos show.
  *
- * @param {ChallengeText | null | undefined} challenge
- * @param {string[]} rankedIds - photo ids, best tag/popularity match first
- * @param {PickerPhoto[]} eligible - photo records (id + member_id) for the ids
- * @param {number} wantCount
- * @param {{logger: FillLogger, ignoreWords?: IgnoreWords}} options
- * @returns {Promise<string[]>} wantCount ids (fewer only if rankedIds is shorter)
+ * @param rankedIds - photo ids, best tag/popularity match first
+ * @param eligible - photo records (id + member_id) for the ids
+ * @returns wantCount ids (fewer only if rankedIds is shorter)
  */
-const rankVisually = async (challenge, rankedIds, eligible, wantCount, { logger, ignoreWords = null }) => {
+const rankVisually = async (
+    challenge: ChallengeText | null | undefined,
+    rankedIds: string[],
+    eligible: PickerPhoto[],
+    wantCount: number,
+    { logger, ignoreWords = null }: { logger: FillLogger; ignoreWords?: IgnoreWords },
+): Promise<string[]> => {
     const original = rankedIds.slice(0, wantCount);
     const prompts = challengePrompts(challenge, ignoreWords);
     if (prompts.length === 0 || rankedIds.length === 0) return original;
@@ -218,11 +209,10 @@ const rankVisually = async (challenge, rankedIds, eligible, wantCount, { logger,
     try {
         if (!(await hasBundledModel())) return original;
         const classifier = await getClassifier();
-        /** @type {Array<{id: string, logits: number[]}>} */
-        const scored = [];
+        const scored: Array<{ id: string; logits: number[] }> = [];
         for (const { id, url } of candidates) {
             // Every url was checked non-null above.
-            const results = await classifier(/** @type {string} */ (url), prompts);
+            const results = await classifier(url as string, prompts);
             const logits = prompts.map((prompt) => toLogit(results?.find?.((r) => r.label === prompt)?.score));
             if (!logits.every(Number.isFinite)) return original;
             scored.push({ id, logits });
@@ -239,7 +229,7 @@ const rankVisually = async (challenge, rankedIds, eligible, wantCount, { logger,
         return picked;
     } catch (error) {
         log.warning(
-            `Visual check unavailable for ${logger.challengeTag(challenge)}: ${/** @type {ErrorLike | null | undefined} */ (error)?.message || error}`,
+            `Visual check unavailable for ${logger.challengeTag(challenge)}: ${(error as ErrorLike | null | undefined)?.message || error}`,
             null,
         );
         return original;

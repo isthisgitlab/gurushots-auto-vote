@@ -1,5 +1,5 @@
 /**
- * Tests for services/tagResolver.js.
+ * Tests for services/tagResolver.ts.
  *
  * Runs against the REAL shipped lexicon, not a fixture: the whole point of the
  * validation step is that it rejects plausible-looking noise, and that is only

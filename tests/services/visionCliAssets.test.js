@@ -1,5 +1,5 @@
 // The real fs, as a marked partial mock: the rename-failure cases spy on it, and
-// visionCliAssets.js must see that spy through its namespace import. `default`
+// visionCliAssets.ts must see that spy through its namespace import. `default`
 // keeps packages that default-import fs (tar) on the real module.
 jest.mock('node:fs', () => {
     const fs = jest.requireActual('node:fs');

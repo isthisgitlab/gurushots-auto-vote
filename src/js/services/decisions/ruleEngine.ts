@@ -73,7 +73,7 @@ interface DecidedRuleResult {
  * Intermediate result from the shared rule engine (`_runVotingRules`); the
  * per-mode wrappers map it onto their caller-facing shapes.
  */
-export type VotingRuleResult = BlockedRuleResult | DecidedRuleResult;
+type VotingRuleResult = BlockedRuleResult | DecidedRuleResult;
 
 /**
  * Shared rule engine for the auto-vote and manual-vote evaluators.

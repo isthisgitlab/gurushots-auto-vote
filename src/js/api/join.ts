@@ -57,7 +57,7 @@ const getMemberChallenges = async (token: string, filter: string = 'open'): Prom
  * Unlocks a paid challenge by spending COINS. This DEDUCTS the challenge's
  * join_coins from the account and is NOT known to be idempotent — callers must
  * guard against calling it twice for the same challenge (see
- * services/joinChallenges.js: in-flight lock + persisted unlock marker).
+ * services/joinChallenges.ts: in-flight lock + persisted unlock marker).
  */
 const coinsUnlock = async (
     challengeId: string | number,

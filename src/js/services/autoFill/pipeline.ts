@@ -141,7 +141,7 @@ const scoreFillCandidates = async ({
     return { scored, contested, contestedIds };
 };
 
-// Visual re-rank of the tag pick (see services/visionVerifier.js). The picked
+// Visual re-rank of the tag pick (see services/visionVerifier.ts). The picked
 // ids lead the shortlist so a model that abstains returns exactly them; the
 // rest of the tag ranking follows as alternatives it may promote.
 const verifyFillPick = async (

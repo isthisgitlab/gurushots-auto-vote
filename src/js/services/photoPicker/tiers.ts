@@ -42,7 +42,7 @@
  *
  * NOTE on tier 5: get_photos_private returns votes=0 and no achievements for
  * every library photo, so the real values are fetched per photo from
- * get_image_data by services/photoStats.js, which marks each candidate
+ * get_image_data by services/photoStats.ts, which marks each candidate
  * `statsKnown`. That fetch is budgeted, so a candidate set can be partially
  * enriched — and an unenriched photo still carries the endpoint's flat
  * `votes: 0`. Ranking it as if it had zero votes would let a mediocre enriched
@@ -153,7 +153,7 @@ const semanticTiersOf = (
     return { semantic: bucket, semanticSupport };
 };
 
-// Prefers the numeric count photoStats.js merges on (it stores only the count,
+// Prefers the numeric count photoStats.ts merges on (it stores only the count,
 // never the full achievements array — those objects carry long descriptions and
 // icon URLs and would bloat a persisted cache for a value only ever read as a
 // length). Falls back to counting a raw `achievements` array so mocks, tests and
@@ -166,7 +166,7 @@ const achievementCountOf = (photo: PickerPhoto): number => {
     return Array.isArray(photo.achievements) ? photo.achievements.length : 0;
 };
 
-// Tier 5. True only when photoStats.js actually resolved this photo's real
+// Tier 5. True only when photoStats.ts actually resolved this photo's real
 // numbers; see the "NOTE on tier 5" in the file header for why unknown must not
 // collapse into votes:0.
 const statsKnownOf = (photo: PickerPhoto): boolean => photo.statsKnown === true;
