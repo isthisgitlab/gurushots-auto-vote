@@ -54,3 +54,24 @@ describe('test typing', () => {
         expect(offenders).toEqual([]);
     });
 });
+
+describe('stylesheet sources', () => {
+    // Tailwind generates only the classes it finds in its @source files, so a
+    // glob that matches nothing (a renamed extension, a moved folder) silently
+    // ships a stylesheet without the app's utility classes.
+    test('every Tailwind @source glob matches a file', () => {
+        const fs = jest.requireActual<typeof import('node:fs')>('node:fs');
+        const path = jest.requireActual<typeof import('node:path')>('node:path');
+        const root = path.join(__dirname, '..');
+        const missing: string[] = [];
+        for (const css of ['src/styles/styles.css', 'scripts/site/site.css']) {
+            const dir = path.dirname(path.join(root, css));
+            for (const [, glob] of fs.readFileSync(path.join(root, css), 'utf8').matchAll(/@source\s+"([^"]+)"/g)) {
+                // Build output (dist*/) is generated before its CSS build and absent in a fresh checkout.
+                if (/(^|\/)dist[^/]*\//.test(glob)) continue;
+                if (fs.globSync(glob, { cwd: dir }).length === 0) missing.push(`${css}: ${glob}`);
+            }
+        }
+        expect(missing).toEqual([]);
+    });
+});
