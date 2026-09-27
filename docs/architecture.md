@@ -202,7 +202,7 @@ Domain terms used throughout, in reader's terms:
 ## 3. GuruShots API transport
 
 - **Layering**: `api/` is the transport layer — `api-client.js` plus one thin wrapper per endpoint, importing
-  nothing from `services/` (`api/voting.js` still records vote timestamps in `metadata.js`). The real-mode strategy composes those wrappers with the services in
+  nothing from `services/` (`api/voting.js` still records vote timestamps in `metadata.ts`). The real-mode strategy composes those wrappers with the services in
   `strategies/real/`: `index.js` (`fetchChallengesAndVote` with its mission read (`services/missions.js`) and join/claim pre-steps, manual join, the
   Turbo mini-game), `applyBoost.js` (picks the entry via `pickBoostEntry`, posts it through
   `api/boost.js#boostImage`, flags it `boosted`) and `activeChallenges.js` (coalesces concurrent
@@ -417,14 +417,14 @@ repeated six times is one that gets forgotten at one of them.
 - **Don't hand-roll `fs`.** `createJsonStore({fileName, prefKey})` (`settings/storage.js` — around L239) is
   the reusable three-platform JSON store: sync fs at `userData/<fileName>` (mode `0o600`) on Electron/CLI,
   hydrate-once cache + ordered async write-behind to `@capacitor/preferences` on Capacitor, in-memory only
-  on the Android headless service. `metadata.js` and `joinStateStore.js` (paid-unlock idempotency markers)
+  on the Android headless service. `metadata.ts` and `joinStateStore.ts` (paid-unlock idempotency markers)
   are the other consumers.
 - Write-behind is **ordered** (writes chain onto a promise) and `flushPendingWrites()` awaits durability
   before session invalidation. On Capacitor, `initializeAsync()` must be awaited before the first sync
   read — **each store hydrates independently**, so a new store must be wired into the Capacitor bootstrap
   (`react/pages/Capacitor.jsx`) or its markers are invisible after relaunch. `joinState` is wired there
   alongside settings + metadata; skipping it would double-charge a paid retry on Android.
-- Platform detection has two sides: **node-side** via `runtime.js` (`isCapacitor()`, `isHeadlessService()`,
+- Platform detection has two sides: **node-side** via `runtime.ts` (`isCapacitor()`, `isHeadlessService()`,
   `getPlatform()`, `getAppUserDataPath()` — the single path resolver shared with the logger); **renderer-
   side** via `globalThis.Capacitor?.isNativePlatform?.() === true` inline, to keep node out of the browser
   bundle.
@@ -434,7 +434,7 @@ repeated six times is one that gets forgotten at one of them.
   a runtime require from the shipped `node_modules`; `src/js` itself is not packaged, and `out/` stays out of
   `dist/` (Capacitor's webDir, which ships in the APK). Inside the bundle every module shares the bundle's
   `__dirname`, so paths to the app's own files (HTML pages, preload bundle, assets, the dev model cache) come
-  from `appPath(...)` (`appPaths.js`), which resolves the root as `__dirname/../..` — valid because the bundle
+  from `appPath(...)` (`appPaths.ts`), which resolves the root as `__dirname/../..` — valid because the bundle
   sits at the same depth below the root as `src/js/`.
 
 ## 8. Renderer / UI conventions
@@ -480,9 +480,9 @@ repeated six times is one that gets forgotten at one of them.
 - **Internal / log / error-prefix strings stay English** (not translated) — e.g. the fallback strings
   inside `useAsyncIpcAction.js` and the action hooks are English literals by design.
 - Non-hook contexts (class components, primitives, the deadline notifier) use the bundled
-  `translations/renderer.js` translator (`ui/Modal.jsx`, `ui/ErrorBoundary.jsx`), because they can't call
-  the hook. The dependency-free core is `translations/translator.js`; the renderer persists the language
-  through `window.api`, the Node side (`translations/index.js`) through the settings facade.
+  `translations/renderer.ts` translator (`ui/Modal.jsx`, `ui/ErrorBoundary.jsx`), because they can't call
+  the hook. The dependency-free core is `translations/translator.ts`; the renderer persists the language
+  through `window.api`, the Node side (`translations/index.ts`) through the settings facade.
 
 ## 10. Security (renderer / main) — state the limits, don't over-promise
 
@@ -497,7 +497,7 @@ repeated six times is one that gets forgotten at one of them.
 - The settings/token file is written mode `0o600` — but **only at creation. A pre-existing or
   backup-restored file keeps whatever mode it already had** (the source says as much); don't state 0600 as
   an always-guarantee.
-- **Log redaction (`logger.js`) is two-layer but credential-key-keyed, not exhaustive.** `sanitizeForLog`
+- **Log redaction (`logger.ts`) is two-layer but credential-key-keyed, not exhaustive.** `sanitizeForLog`
   recursively redacts an **allowlist** of sensitive object keys; `redactMessage` scrubs
   `token=…` / `password=…`-style fragments folded into message strings. Both run on every entry, and
   untrusted API strings additionally pass through `logger.sanitizeLogString()` before interpolation. The
@@ -527,7 +527,7 @@ caps (dependency-free, renderer-safe), and `scenarios/templates.js` holds editab
   (`settings/scenarioOverlay.js`). Leaving the phase restores normal values; nothing is copied into stored
   overrides; the `scenario` key itself is never overlaid. No overlay while the state is unreadable, belongs
   to another scenario, or names a phase the scenario no longer has.
-- **Runtime state** (`scenarioStateStore.js`, per challenge: phase, memory, fired markers, in-flight action,
+- **Runtime state** (`scenarioStateStore.ts`, per challenge: phase, memory, fired markers, in-flight action,
   spends, last action/error). An unreadable file or malformed record reads as **corrupt, never as a fresh
   start** — the challenge halts until `scenario-reset`, because replaying a plan could repeat spends. Mock
   mode uses the in-memory ledger. Android persists it through the native keyed bridge

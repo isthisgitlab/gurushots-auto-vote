@@ -63,10 +63,10 @@ src/
 │   ├── apiFactory.js # Selects real vs mock at runtime (settings.mock)
 │   ├── index.js      # Electron main process entry
 │   ├── login.js      # Auth flow shared by GUI/CLI
-│   ├── logger.js     # Category-scoped logger
-│   ├── metadata.js   # App metadata helpers
+│   ├── logger.ts     # Category-scoped logger
+│   ├── metadata.ts   # App metadata helpers
 │   ├── preload.js    # Electron preload (context isolation)
-│   ├── runtime.js    # Platform detection helpers
+│   ├── runtime.ts    # Platform detection helpers
 │   └── settings.js   # Settings facade (use this, not the transport directly)
 ├── html/             # HTML templates
 ├── styles/           # CSS styles (Tailwind + DaisyUI)
