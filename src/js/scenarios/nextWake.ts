@@ -14,31 +14,27 @@
 import { occurrencesOf } from '../scheduling/wallClock';
 import { finite, durationBound } from './conditions';
 
-/** @import { Challenge } from '../types/gurushots' */
-/** @import { ScenarioCondition, ScenarioEngineState } from '../types/scenario' */
-/** @import { ScenarioDocument } from '../settings/scenarioSchema' */
+import type { Challenge } from '../types/gurushots';
+import type { ScenarioCondition, ScenarioEngineState } from '../types/scenario';
+import type { ScenarioDocument } from '../settings/scenarioSchema';
 
 /**
  * The next occurrence of a validated HH:MM time (occurrencesOf only returns
  * null for an unparsable time).
- *
- * @param {string} time
- * @param {string} timezone
- * @param {number} now
  */
-const nextOccurrence = (time, timezone, now) => /** @type {{next: number}} */ (occurrencesOf(time, timezone, now)).next;
+const nextOccurrence = (time: string, timezone: string, now: number) =>
+    (occurrencesOf(time, timezone, now) as { next: number }).next;
 
 /**
  * Instants at which `min <= f(t) <= max` can flip, for f(t) = t - origin
  * (reversed = f(t) = origin - t, i.e. time left until `origin`).
- *
- * @param {number|null} origin
- * @param {number|null} min
- * @param {number|null} max
- * @param {boolean} [reversed]
- * @returns {number[]}
  */
-const rangeInstants = (origin, min, max, reversed = false) => {
+const rangeInstants = (
+    origin: number | null,
+    min: number | null,
+    max: number | null,
+    reversed: boolean = false,
+): number[] => {
     if (origin === null) return [];
     const instants = [];
     if (reversed) {
@@ -53,12 +49,12 @@ const rangeInstants = (origin, min, max, reversed = false) => {
 
 /**
  * Every instant a condition (and the conditions nested in it) can flip.
- *
- * @param {ScenarioCondition} condition
- * @param {{challenge: Challenge, state: ScenarioEngineState, now: number, timezone: string}} ctx
- * @param {number[]} into
  */
-const collectInstants = (condition, ctx, into) => {
+const collectInstants = (
+    condition: ScenarioCondition,
+    ctx: { challenge: Challenge; state: ScenarioEngineState; now: number; timezone: string },
+    into: number[],
+) => {
     const start = finite(ctx.challenge.start_time);
     const close = finite(ctx.challenge.close_time);
     switch (condition.type) {
@@ -79,7 +75,7 @@ const collectInstants = (condition, ctx, into) => {
             break;
         case 'elapsedPercent':
             if (start !== null && close !== null && close > start) {
-                const toSeconds = (/** @type {number|undefined} */ pct) =>
+                const toSeconds = (pct: number | undefined) =>
                     pct === undefined ? null : Math.ceil(((close - start) * pct) / 100);
                 into.push(...rangeInstants(start, toSeconds(condition.min), toSeconds(condition.max)));
             }
@@ -96,17 +92,24 @@ const collectInstants = (condition, ctx, into) => {
     }
 };
 
-/**
- * @param {{scenario: ScenarioDocument, state: ScenarioEngineState, challenge: Challenge, now: number, timezone: string}} input
- * @returns {number|null}
- */
-const nextWakeAt = ({ scenario, state, challenge, now, timezone }) => {
+const nextWakeAt = ({
+    scenario,
+    state,
+    challenge,
+    now,
+    timezone,
+}: {
+    scenario: ScenarioDocument;
+    state: ScenarioEngineState;
+    challenge: Challenge;
+    now: number;
+    timezone: string;
+}): number | null => {
     const close = finite(challenge?.close_time);
     if (close === null || now >= close) return null;
     const rules = scenario.phases[state.phase]?.rules ?? [];
     const ctx = { challenge, state, now, timezone };
-    /** @type {number[]} */
-    const instants = [];
+    const instants: number[] = [];
     for (const rule of rules) {
         for (const condition of rule.if ?? []) collectInstants(condition, ctx, instants);
         if (rule.repeat === 'oncePerDay' && state.fired?.[rule.id])

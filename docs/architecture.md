@@ -510,8 +510,8 @@ repeated six times is one that gets forgotten at one of them.
 
 A **scenario** is a user-written, multi-day playbook for a challenge: named **phases**, each with a
 **settings overlay** and ordered **rules** (`if` conditions → `do` actions, a `repeat` mode). The app
-hard-codes no tactic; `scenarios/vocabulary.js` is the one list of conditions, entry selectors, actions and
-caps (dependency-free, renderer-safe), and `scenarios/templates.js` holds editable examples.
+hard-codes no tactic; `scenarios/vocabulary.ts` is the one list of conditions, entry selectors, actions and
+caps (dependency-free, renderer-safe), and `scenarios/templates.ts` holds editable examples.
 
 - **Documents** (`settings/scenarios.ts`, `settings/scenarioSchema.ts`, via the facade): stored name-keyed
   in `challengeSettings.scenarios` (so the Android background service has them) and re-validated on read.
@@ -534,7 +534,7 @@ caps (dependency-free, renderer-safe), and `scenarios/templates.js` holds editab
   (`gs_scenario_state`); the app WebView `refreshAsync`es it before status reads, resets and each in-app
   pass, and when the native service is available only the background service advances scenarios
   (`backgroundServiceOwnsScenarios`).
-- **Engine** (`scenarios/conditions.js`, `selectors.js`, `evaluate.js`, `nextWake.js`, pure): unknown data
+- **Engine** (`scenarios/conditions.ts`, `selectors.ts`, `evaluate.ts`, `nextWake.ts`, pure): unknown data
   fails closed (never makes a condition true); entry ids are compared as strings, never by position (except
   the explicit `slot` selector); an in-flight rule resumes first; a phase or in-flight rule the edited
   scenario no longer has **halts** the challenge instead of guessing.
@@ -548,7 +548,7 @@ caps (dependency-free, renderer-safe), and `scenarios/templates.js` holds editab
   fire, so a skip never uses up a `once` rule. A `goto` takes effect when the rule finishes. No spend cap: each rule
   fires at most once per pass and a `goto` chain stops on revisiting a phase in that pass; spends honour the
   user's `currencyReserve*` (shared `reserveAllows`) and the scenario's optional `limits`.
-- **Vote speed** (`scenarios/speed.js`): the runner samples every entry's votes once per pass into the state's
+- **Vote speed** (`scenarios/speed.ts`): the runner samples every entry's votes once per pass into the state's
   `history`, keyed by photo id (a swapped-out photo keeps its history). `votesPerHour` / `speedRatio` and the
   `fastest` selector read it; a speed with under 10 minutes of history, or nothing to compare with, is null and
   fails closed.
@@ -556,13 +556,13 @@ caps (dependency-free, renderer-safe), and `scenarios/templates.js` holds editab
   bounded `outbox`; each host's per-cycle notifier (CLI `nodeNotify.createNodeScenarioNotifier`, desktop
   `react/notifications/scenarioNotifier.js`, composed with the deadline notifier) shows only notices created
   after it started, each once, gated by `notifyOnScenario`. Native Android delivers none, as for deadlines.
-- **Simulation** (`scenarios/simulate.js`, pure): a what-if timeline jumping between the engine's own wake-ups,
+- **Simulation** (`scenarios/simulate.ts`, pure): a what-if timeline jumping between the engine's own wake-ups,
   chaining rules like the runner; assumes every step succeeds and live data holds still, and says why it stopped.
   IPC `simulate-scenario` (stored scenario, or an unsaved draft via `settings.checkScenario`), CLI
   `scenario-simulate`, and the builder.
-- **Builder** (`react/components/app/scenarioBuilder/`): forms generated from `scenarios/builderSpec.js` (every
+- **Builder** (`react/components/app/scenarioBuilder/`): forms generated from `scenarios/builderSpec.ts` (every
   condition / action / selector's fields and kinds — a test checks every default against the validator) over
-  pure draft edits in `scenarios/builderModel.js`; it never validates itself — save and simulate do.
+  pure draft edits in `scenarios/builderModel.ts`; it never validates itself — save and simulate do.
 - **Surfaces**: IPC `ipc/scenarios.handlers.js` (the CLI reuses it), CLI `cli/commands/scenarios.js`,
   GUI `ScenariosSection` (+ the builder), the `scenario` field in `SettingInput`, and the card
   `ScenarioStatusLine`.

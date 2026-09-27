@@ -1,5 +1,5 @@
 /**
- * Validation of a user-defined scenario document (see scenarios/vocabulary.js
+ * Validation of a user-defined scenario document (see scenarios/vocabulary.ts
  * for the pieces). A scenario may come from another player's shared file, so
  * this is the trust boundary:
  *

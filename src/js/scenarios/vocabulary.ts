@@ -1,55 +1,42 @@
 /**
  * The scenario vocabulary — every condition, entry selector, action and rule
  * mode a user-defined scenario may use, plus the document caps. The single
- * list the validator (settings/scenarioSchema.js), the engine, the CLI
+ * list the validator (settings/scenarioSchema.ts), the engine, the CLI
  * reference (`scenario-vocabulary`) and the GUI builder read, so a new piece
  * is added in one place.
  *
  * Dependency-free on purpose (no zod, no settings): renderer-safe, like
- * settings/limits.js.
+ * settings/limits.ts.
  */
 
-const COMPARISON_OPS = /** @type {const} */ (['<', '<=', '=', '!=', '>=', '>']);
+const COMPARISON_OPS = ['<', '<=', '=', '!=', '>=', '>'] as const;
 
-const REPEAT_MODES = /** @type {const} */ (['always', 'once', 'oncePerPhase', 'oncePerDay']);
+const REPEAT_MODES = ['always', 'once', 'oncePerPhase', 'oncePerDay'] as const;
 
 /** Time conditions whose instants the engine can predict (scheduler wake-ups). */
-const RANGE_TIME_CONDITIONS = /** @type {const} */ (['beforeEnd', 'afterStart', 'inPhaseFor']);
+const RANGE_TIME_CONDITIONS = ['beforeEnd', 'afterStart', 'inPhaseFor'] as const;
 
 /** Challenge-level numbers compared with `{op, value}`. */
-const NUMERIC_CONDITIONS = /** @type {const} */ ([
-    'entries',
-    'freeSlots',
-    'exposure',
-    'challengeRank',
-    'challengeVotes',
-]);
+const NUMERIC_CONDITIONS = ['entries', 'freeSlots', 'exposure', 'challengeRank', 'challengeVotes'] as const;
 
-const STATE_CONDITIONS = /** @type {const} */ (['boostState', 'turboState']);
+const STATE_CONDITIONS = ['boostState', 'turboState'] as const;
 
-const CURRENCIES = /** @type {const} */ (['keys', 'swaps', 'fills', 'coins']);
+const CURRENCIES = ['keys', 'swaps', 'fills', 'coins'] as const;
 
-const NUMERIC_ENTRY_FIELDS = /** @type {const} */ (['votes', 'rank', 'votesPerHour', 'speedRatio']);
+const NUMERIC_ENTRY_FIELDS = ['votes', 'rank', 'votesPerHour', 'speedRatio'] as const;
 
 /** Entry fields measured over a time window (the optional `window` duration). */
-const SPEED_ENTRY_FIELDS = /** @type {const} */ (['votesPerHour', 'speedRatio']);
-const BOOLEAN_ENTRY_FIELDS = /** @type {const} */ (['boosted', 'turbo', 'boosting']);
+const SPEED_ENTRY_FIELDS = ['votesPerHour', 'speedRatio'] as const;
+const BOOLEAN_ENTRY_FIELDS = ['boosted', 'turbo', 'boosting'] as const;
 
 /** Selectors that pick an entry by comparing entries; `slot`, `memory` and `fastest` take an argument. */
-const RANKING_SELECTORS = /** @type {const} */ ([
-    'mostVotes',
-    'fewestVotes',
-    'bestRank',
-    'worstRank',
-    'boosted',
-    'turbo',
-]);
+const RANKING_SELECTORS = ['mostVotes', 'fewestVotes', 'bestRank', 'worstRank', 'boosted', 'turbo'] as const;
 
 /** Actions that spend currency or a one-per-challenge power — listed in the import preview. */
-const SPENDING_ACTIONS = /** @type {const} */ (['swap', 'unlockBoost', 'fillExposure', 'boost', 'turbo']);
+const SPENDING_ACTIONS = ['swap', 'unlockBoost', 'fillExposure', 'boost', 'turbo'] as const;
 
 /** Currency caps a scenario may set on itself (`limits`). */
-const LIMIT_KEYS = /** @type {const} */ (['swaps', 'keys', 'fills']);
+const LIMIT_KEYS = ['swaps', 'keys', 'fills'] as const;
 
 const SCENARIO_CAPS = {
     scenarios: 50,
@@ -111,27 +98,20 @@ const VOCABULARY_REFERENCE = [
     ['rule', 'duration', 'seconds or "5d", "90m", "1d 6h"'],
 ];
 
-/** @import { ScenarioAction } from '../settings/scenarioSchema' */
-/** @import { ScenarioSelector } from '../types/scenario' */
+import type { ScenarioAction } from '../settings/scenarioSchema';
+import type { ScenarioSelector } from '../types/scenario';
 
 /**
  * The memory slots an action reads (an entry or photo it looks up by slot)
  * and writes (a photo it remembers).
- *
- * @param {ScenarioAction} action
- * @returns {{reads: string[], writes: string[]}}
  */
-const actionMemory = (action) => {
-    /** @type {string[]} */
-    const reads = [];
-    /** @type {string[]} */
-    const writes = [];
-    /** @param {ScenarioSelector} entry */
-    const readEntry = (entry) => {
+const actionMemory = (action: ScenarioAction): { reads: string[]; writes: string[] } => {
+    const reads: string[] = [];
+    const writes: string[] = [];
+    const readEntry = (entry: ScenarioSelector) => {
         if (entry.by === 'memory') reads.push(entry.slot);
     };
-    /** @param {'best' | {memory: string}} photo */
-    const readPhoto = (photo) => {
+    const readPhoto = (photo: 'best' | { memory: string }) => {
         if (photo !== 'best') reads.push(photo.memory);
     };
     switch (action.type) {
@@ -161,13 +141,9 @@ const actionMemory = (action) => {
 
 /**
  * Whether `value` is one of the vocabulary list's entries.
- *
- * @template {string} T
- * @param {readonly T[]} list
- * @param {unknown} value
- * @returns {value is T}
  */
-const isOneOf = (list, value) => /** @type {readonly unknown[]} */ (list).includes(value);
+const isOneOf = <T extends string>(list: readonly T[], value: unknown): value is T =>
+    (list as readonly unknown[]).includes(value);
 
 export {
     actionMemory,

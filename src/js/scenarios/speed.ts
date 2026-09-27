@@ -21,12 +21,11 @@ const MIN_SPAN_SEC = 10 * 60;
 /** Speed window when a condition or selector does not name one. */
 const DEFAULT_WINDOW_SEC = 3600;
 
-/** @import { RankingEntry } from '../types/gurushots' */
+import type { RankingEntry } from '../types/gurushots';
 
-/** @typedef {Record<string, Array<[number, number]>>} VoteHistory */
+export type VoteHistory = Record<string, Array<[number, number]>>;
 
-/** @param {number | null | undefined} value */
-const votesOf = (value) =>
+const votesOf = (value: number | null | undefined) =>
     value !== null && value !== undefined && Number.isFinite(Number(value)) ? Number(value) : null;
 
 /**
@@ -34,15 +33,13 @@ const votesOf = (value) =>
  * least SAMPLE_SPACING_SEC apart), trimmed to HISTORY_KEEP_SEC and
  * MAX_SAMPLES. Photos no longer seen keep their samples until they age out, so
  * a photo swapped out for a day still has its history when it comes back.
- *
- * @param {VoteHistory|undefined} history
- * @param {readonly RankingEntry[]} entries
- * @param {number} now
- * @returns {VoteHistory}
  */
-const recordVoteSample = (history, entries, now) => {
-    /** @type {VoteHistory} */
-    const next = {};
+const recordVoteSample = (
+    history: VoteHistory | undefined,
+    entries: readonly RankingEntry[],
+    now: number,
+): VoteHistory => {
+    const next: VoteHistory = {};
     for (const [id, samples] of Object.entries(history ?? {})) {
         const kept = samples.filter(([at]) => now - at <= HISTORY_KEEP_SEC);
         if (kept.length) next[id] = kept;
@@ -62,14 +59,13 @@ const recordVoteSample = (history, entries, now) => {
 /**
  * Votes per hour over the last `windowSec` (or over the history there is, if
  * shorter but at least MIN_SPAN_SEC), from the entry's live vote count.
- *
- * @param {VoteHistory|undefined} history
- * @param {RankingEntry} entry
- * @param {number} now
- * @param {number} [windowSec]
- * @returns {number|null}
  */
-const votesPerHour = (history, entry, now, windowSec = DEFAULT_WINDOW_SEC) => {
+const votesPerHour = (
+    history: VoteHistory | undefined,
+    entry: RankingEntry,
+    now: number,
+    windowSec: number = DEFAULT_WINDOW_SEC,
+): number | null => {
     const votes = votesOf(entry?.votes);
     const samples = history?.[String(entry?.id)];
     if (votes === null || !samples?.length) return null;
@@ -86,19 +82,17 @@ const votesPerHour = (history, entry, now, windowSec = DEFAULT_WINDOW_SEC) => {
  * The entry's speed divided by the median speed of the member's OTHER
  * entries. Infinity when the others are not gaining at all but this one is;
  * null when there is nothing to compare with.
- *
- * @param {VoteHistory|undefined} history
- * @param {readonly RankingEntry[]} entries
- * @param {RankingEntry} entry
- * @param {number} now
- * @param {number} [windowSec]
- * @returns {number|null}
  */
-const speedRatio = (history, entries, entry, now, windowSec = DEFAULT_WINDOW_SEC) => {
+const speedRatio = (
+    history: VoteHistory | undefined,
+    entries: readonly RankingEntry[],
+    entry: RankingEntry,
+    now: number,
+    windowSec: number = DEFAULT_WINDOW_SEC,
+): number | null => {
     const own = votesPerHour(history, entry, now, windowSec);
     if (own === null) return null;
-    /** @type {number[]} */
-    const others = [];
+    const others: number[] = [];
     for (const other of entries) {
         const speed = other === entry ? null : votesPerHour(history, other, now, windowSec);
         if (speed !== null) others.push(speed);

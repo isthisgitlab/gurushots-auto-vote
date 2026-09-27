@@ -17,18 +17,15 @@ const PART_PATTERN = /(\d+)\s*([dhms])/gi;
  * Seconds for a duration value, or null when it is not a valid duration
  * (wrong type, negative, fractional, malformed string, or beyond
  * MAX_DURATION_SEC).
- *
- * @param {unknown} value
- * @returns {number|null}
  */
-const parseDuration = (value) => {
+const parseDuration = (value: unknown): number | null => {
     let seconds = null;
     if (typeof value === 'number') {
         seconds = Number.isInteger(value) && value >= 0 ? value : null;
     } else if (typeof value === 'string' && DURATION_PATTERN.test(value)) {
         seconds = 0;
         for (const [, amount, unit] of value.matchAll(PART_PATTERN)) {
-            seconds += Number(amount) * UNIT_SEC[/** @type {'d'|'h'|'m'|'s'} */ (unit.toLowerCase())];
+            seconds += Number(amount) * UNIT_SEC[unit.toLowerCase() as 'd' | 'h' | 'm' | 's'];
         }
     }
     return seconds !== null && seconds <= MAX_DURATION_SEC ? seconds : null;

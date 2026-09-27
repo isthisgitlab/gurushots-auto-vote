@@ -1,5 +1,6 @@
-/** @import { Bankroll, Challenge } from '../types/gurushots' */
-/** @import { ComparisonOp, EntryCondition, NumericConditionType, ScenarioCondition } from '../types/scenario' */
+import type { Bankroll, Challenge } from '../types/gurushots';
+import type { ComparisonOp, EntryCondition, NumericConditionType, ScenarioCondition } from '../types/scenario';
+import type { VoteHistory } from './speed';
 /**
  * Evaluates a scenario rule's conditions against the live challenge. Pure:
  * everything comes in through `ctx`.
@@ -14,25 +15,21 @@ import { parseDuration } from './duration';
 import { selectEntry, entriesOf, rankOf, votesOf, windowOf } from './selectors';
 import { votesPerHour, speedRatio } from './speed';
 
-/**
- * @typedef {object} ConditionContext
- * @property {Challenge} challenge
- * @property {{phaseEnteredAt: number, memory: Record<string, string>, history?: import('./speed').VoteHistory}} state
- * @property {number} now - unix seconds
- * @property {string} timezone - IANA zone for dailyWindow
- * @property {Bankroll|null} [bankroll]
- */
+interface ConditionContext {
+    challenge: Challenge;
+    state: { phaseEnteredAt: number; memory: Record<string, string>; history?: VoteHistory };
+    /** unix seconds */
+    now: number;
+    /** IANA zone for dailyWindow */
+    timezone: string;
+    bankroll?: Bankroll | null;
+}
 
 /**
  * Numbers compare with every op; booleans (entry flags) only with = / !=,
  * which the validator enforces.
- *
- * @param {number | boolean} a
- * @param {ComparisonOp} op
- * @param {number | boolean} b
- * @returns {boolean}
  */
-const compare = (a, op, b) => {
+const compare = (a: number | boolean, op: ComparisonOp, b: number | boolean): boolean => {
     switch (op) {
         case '<':
             return a < b;
@@ -49,31 +46,23 @@ const compare = (a, op, b) => {
     }
 };
 
-/** @param {number | null | undefined} value */
-const finite = (value) =>
+const finite = (value: number | null | undefined) =>
     value !== null && value !== undefined && Number.isFinite(Number(value)) ? Number(value) : null;
 
 /**
  * `min <= value <= max` over the bounds that are set; false for an unknown value.
- *
- * @param {number|null} value
- * @param {number|null} min
- * @param {number|null} max
  */
-const within = (value, min, max) => value !== null && (min === null || value >= min) && (max === null || value <= max);
+const within = (value: number | null, min: number | null, max: number | null) =>
+    value !== null && (min === null || value >= min) && (max === null || value <= max);
 
-/** @param {string | number | undefined} bound */
-const durationBound = (bound) => (bound === undefined ? null : parseDuration(bound));
+const durationBound = (bound: string | number | undefined) => (bound === undefined ? null : parseDuration(bound));
 
-/** @param {number | undefined} bound */
-const numberBound = (bound) => (bound === undefined ? null : bound);
+const numberBound = (bound: number | undefined) => (bound === undefined ? null : bound);
 
 /**
  * The challenge-level numbers `{op, value}` conditions compare.
- *
- * @type {Record<NumericConditionType, (challenge: Challenge) => number|null>}
  */
-const CHALLENGE_NUMBERS = {
+const CHALLENGE_NUMBERS: Record<NumericConditionType, (challenge: Challenge) => number | null> = {
     entries: (challenge) => entriesOf(challenge).length,
     freeSlots: (challenge) => {
         const max = finite(challenge?.max_photo_submits);
@@ -90,23 +79,18 @@ const CHALLENGE_NUMBERS = {
 /**
  * Seconds left until close, or null when the challenge has no readable
  * close_time or has already closed.
- *
- * @param {Challenge} challenge
- * @param {number} now
  */
-const secondsLeft = (challenge, now) => {
+const secondsLeft = (challenge: Challenge, now: number) => {
     const close = finite(challenge?.close_time);
     return close === null || now >= close ? null : close - now;
 };
 
-/** @param {Challenge} challenge @param {number} now */
-const secondsSinceStart = (challenge, now) => {
+const secondsSinceStart = (challenge: Challenge, now: number) => {
     const start = finite(challenge?.start_time);
     return start === null || now < start ? null : now - start;
 };
 
-/** @param {Challenge} challenge @param {number} now */
-const percentElapsed = (challenge, now) => {
+const percentElapsed = (challenge: Challenge, now: number) => {
     const start = finite(challenge?.start_time);
     const close = finite(challenge?.close_time);
     if (start === null || close === null || close <= start || now < start) return null;
@@ -117,22 +101,13 @@ const percentElapsed = (challenge, now) => {
  * True while the wall clock is inside [from, to) — i.e. the latest `from`
  * occurrence is more recent than the latest `to` occurrence. Handles windows
  * that wrap past midnight and DST days without date arithmetic.
- *
- * @param {{from: string, to: string}} window
- * @param {string} timezone
- * @param {number} now
  */
-const inDailyWindow = ({ from, to }, timezone, now) =>
+const inDailyWindow = ({ from, to }: { from: string; to: string }, timezone: string, now: number) =>
     // Both times are validated HH:MM, so occurrencesOf never returns null here.
-    /** @type {{prev: number}} */ (occurrencesOf(from, timezone, now)).prev >
-    /** @type {{prev: number}} */ (occurrencesOf(to, timezone, now)).prev;
+    (occurrencesOf(from, timezone, now) as { prev: number }).prev >
+    (occurrencesOf(to, timezone, now) as { prev: number }).prev;
 
-/**
- * @param {ScenarioCondition} condition
- * @param {ConditionContext} ctx
- * @returns {boolean}
- */
-const evaluateCondition = (condition, ctx) => {
+const evaluateCondition = (condition: ScenarioCondition, ctx: ConditionContext): boolean => {
     const { challenge, state, now } = ctx;
     switch (condition.type) {
         case 'dailyWindow':
@@ -175,11 +150,7 @@ const evaluateCondition = (condition, ctx) => {
     }
 };
 
-/**
- * @param {EntryCondition} condition
- * @param {ConditionContext} ctx
- */
-const evaluateEntryCondition = (condition, ctx) => {
+const evaluateEntryCondition = (condition: EntryCondition, ctx: ConditionContext) => {
     const { history, memory } = ctx.state;
     const entry = selectEntry(condition.select, ctx.challenge, { memory, history, now: ctx.now });
     if (!entry) return false;
@@ -201,19 +172,14 @@ const evaluateEntryCondition = (condition, ctx) => {
 
 /**
  * True when every condition in the list holds (an empty list always holds).
- *
- * @param {readonly ScenarioCondition[]|undefined} conditions
- * @param {ConditionContext} ctx
  */
-const allHold = (conditions, ctx) => (conditions ?? []).every((condition) => evaluateCondition(condition, ctx));
+const allHold = (conditions: readonly ScenarioCondition[] | undefined, ctx: ConditionContext) =>
+    (conditions ?? []).every((condition) => evaluateCondition(condition, ctx));
 
 /**
  * Index of the first condition in the list that does not hold, or -1.
- *
- * @param {readonly ScenarioCondition[]|undefined} conditions
- * @param {ConditionContext} ctx
  */
-const firstFailing = (conditions, ctx) =>
+const firstFailing = (conditions: readonly ScenarioCondition[] | undefined, ctx: ConditionContext) =>
     (conditions ?? []).findIndex((condition) => !evaluateCondition(condition, ctx));
 
 export { evaluateCondition, allHold, firstFailing, compare, finite, durationBound };

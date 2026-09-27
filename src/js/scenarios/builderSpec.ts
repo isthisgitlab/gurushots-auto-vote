@@ -5,7 +5,7 @@
  * from this table, so a new vocabulary piece needs a line here and a
  * translation — no new component. A test (tests/scenarios/builderSpec.test.js)
  * checks every default below against the real validator, so the table and
- * settings/scenarioSchema.js cannot drift apart.
+ * settings/scenarioSchema.ts cannot drift apart.
  *
  * Field kinds: op, number, percent, duration, time, states, currency, slot,
  * phase, selector, photoSource, entryField, entryValue, boolean, text,
@@ -17,12 +17,12 @@
 
 import * as vocabulary from './vocabulary';
 
-/** @typedef {{key: string, kind: string, optional?: boolean, options?: string[], labels?: string}} FieldSpec */
+export type FieldSpec = { key: string; kind: string; optional?: boolean; options?: string[]; labels?: string };
 
 const BOOST_STATES = ['LOCKED', 'AVAILABLE', 'AVAILABLE_KEY', 'USED', 'UNAVAILABLE'];
 const TURBO_STATES = ['FREE', 'IN_PROGRESS', 'TIMER', 'WON', 'LOCKED', 'USED'];
 
-const range = (/** @type {string} */ kind) => [
+const range = (kind: string) => [
     { key: 'min', kind, optional: true },
     { key: 'max', kind, optional: true },
 ];
@@ -31,8 +31,7 @@ const compared = [
     { key: 'value', kind: 'number' },
 ];
 
-/** @type {Record<string, FieldSpec[]>} */
-const CONDITION_FIELDS = {
+const CONDITION_FIELDS: Record<string, FieldSpec[]> = {
     dailyWindow: [
         { key: 'from', kind: 'time' },
         { key: 'to', kind: 'time' },
@@ -60,8 +59,7 @@ const CONDITION_FIELDS = {
 
 const target = { key: 'entry', kind: 'selector' };
 
-/** @type {Record<string, FieldSpec[]>} */
-const ACTION_FIELDS = {
+const ACTION_FIELDS: Record<string, FieldSpec[]> = {
     enterPhoto: [
         { key: 'photo', kind: 'photoSource' },
         { key: 'remember', kind: 'slot', optional: true },
@@ -85,8 +83,7 @@ const ACTION_FIELDS = {
 
 const skipProtected = { key: 'skipProtected', kind: 'boolean', optional: true };
 
-/** @type {Record<string, FieldSpec[]>} */
-const SELECTOR_FIELDS = {
+const SELECTOR_FIELDS: Record<string, FieldSpec[]> = {
     slot: [{ key: 'index', kind: 'slotIndex' }],
     memory: [{ key: 'slot', kind: 'slot' }],
     fastest: [{ key: 'window', kind: 'duration', optional: true }, skipProtected],
@@ -97,12 +94,8 @@ const ENTRY_FIELDS = [...vocabulary.NUMERIC_ENTRY_FIELDS, ...vocabulary.BOOLEAN_
 
 /**
  * A fresh value for a field kind. `phases` supplies the default goto target.
- *
- * @param {FieldSpec} field
- * @param {{phases?: string[]}} [context]
- * @returns {unknown}
  */
-const defaultFieldValue = (field, context = {}) => {
+const defaultFieldValue = (field: FieldSpec, context: { phases?: string[] } = {}): unknown => {
     switch (field.kind) {
         case 'op':
             return '>=';
@@ -113,7 +106,7 @@ const defaultFieldValue = (field, context = {}) => {
         case 'time':
             return field.key === 'to' ? '08:00' : '06:00';
         case 'states':
-            return [/** @type {string[]} */ (field.options)[1]];
+            return [(field.options as string[])[1]];
         case 'currency':
             return 'swaps';
         case 'slot':
@@ -144,10 +137,8 @@ const defaultFieldValue = (field, context = {}) => {
 
 /**
  * Bounds a new range condition starts with — a range needs at least one.
- *
- * @type {Record<string, Record<string, unknown>>}
  */
-const RANGE_DEFAULTS = {
+const RANGE_DEFAULTS: Record<string, Record<string, unknown>> = {
     beforeEnd: { max: '1d' },
     afterStart: { min: '1d' },
     inPhaseFor: { min: '4m' },
@@ -155,26 +146,26 @@ const RANGE_DEFAULTS = {
 };
 
 /**
- * @param {Record<string, FieldSpec[]>} table
- * @param {string} discriminator - 'type' or 'by'
- * @param {string} name
- * @param {{phases?: string[]}} [context]
+ * @param discriminator - 'type' or 'by'
  */
-const defaultOf = (table, discriminator, name, context) => {
-    /** @type {Record<string, unknown>} */
-    const item = { [discriminator]: name };
+const defaultOf = (
+    table: Record<string, FieldSpec[]>,
+    discriminator: string,
+    name: string,
+    context?: { phases?: string[] },
+) => {
+    const item: Record<string, unknown> = { [discriminator]: name };
     for (const field of table[name]) {
         if (!field.optional) item[field.key] = defaultFieldValue(field, context);
     }
     return { ...item, ...RANGE_DEFAULTS[name] };
 };
 
-/** @param {string} type @param {{phases?: string[]}} [context] */
-const defaultCondition = (type, context) => defaultOf(CONDITION_FIELDS, 'type', type, context);
-/** @param {string} type @param {{phases?: string[]}} [context] */
-const defaultAction = (type, context) => defaultOf(ACTION_FIELDS, 'type', type, context);
-/** @param {string} by */
-const defaultSelector = (by) => defaultOf(SELECTOR_FIELDS, 'by', by);
+const defaultCondition = (type: string, context?: { phases?: string[] }) =>
+    defaultOf(CONDITION_FIELDS, 'type', type, context);
+const defaultAction = (type: string, context?: { phases?: string[] }) =>
+    defaultOf(ACTION_FIELDS, 'type', type, context);
+const defaultSelector = (by: string) => defaultOf(SELECTOR_FIELDS, 'by', by);
 
 export const CONDITION_TYPES = Object.keys(CONDITION_FIELDS);
 export const ACTION_TYPES = Object.keys(ACTION_FIELDS);

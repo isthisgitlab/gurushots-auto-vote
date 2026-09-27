@@ -8,9 +8,9 @@
 
 import { isPlainObject } from '../plainObject';
 
-/** @import { ScenarioDraft, ScenarioDraftRule } from '../types/scenarioBuilder' */
+import type { ScenarioDraft, ScenarioDraftRule } from '../types/scenarioBuilder';
 
-/** @typedef {Array<string|number>} Path */
+type Path = Array<string | number>;
 
 /**
  * A copy of `target` with the value at `path` replaced; `undefined` removes
@@ -18,39 +18,27 @@ import { isPlainObject } from '../plainObject';
  *
  * The result keeps `target`'s type: the path and value are the caller's
  * claim, and the draft is validated on save like every other edit.
- *
- * @template T
- * @param {T} target
- * @param {Path} path
- * @param {unknown} value
- * @returns {T}
  */
-const setIn = (target, path, value) => {
-    if (path.length === 0) return /** @type {T} */ (value);
+const setIn = <T>(target: T, path: Path, value: unknown): T => {
+    if (path.length === 0) return value as T;
     const [head, ...rest] = path;
     // A shallow copy of whatever container the path steps into.
-    const copy = /** @type {Record<string | number, unknown>} */ (Array.isArray(target) ? [...target] : { ...target });
+    const copy = (Array.isArray(target) ? [...target] : { ...target }) as Record<string | number, unknown>;
     const next = rest.length ? setIn(copy[head] ?? (typeof rest[0] === 'number' ? [] : {}), rest, value) : value;
     if (next === undefined && rest.length === 0) {
-        if (Array.isArray(copy)) copy.splice(/** @type {number} */ (head), 1);
+        if (Array.isArray(copy)) copy.splice(head as number, 1);
         else delete copy[head];
     } else {
         copy[head] = next;
     }
-    return /** @type {T} */ (copy);
+    return copy as T;
 };
 
 /**
  * Move the array item at `index` by `delta` (−1 up, +1 down); out-of-range
  * moves leave the list as it is.
- *
- * @template T
- * @param {T[]} list
- * @param {number} index
- * @param {number} delta
- * @returns {T[]}
  */
-const moveItem = (list, index, delta) => {
+const moveItem = <T>(list: T[], index: number, delta: number): T[] => {
     const to = index + delta;
     if (to < 0 || to >= list.length) return list;
     const copy = [...list];
@@ -58,19 +46,17 @@ const moveItem = (list, index, delta) => {
     return copy;
 };
 
-/** A new, empty scenario. @param {string} name */
-const newScenario = (name) =>
-    /** @type {ScenarioDraft} */ ({ name, version: 1, start: 'main', phases: { main: { rules: [] } } });
+/** A new, empty scenario. */
+const newScenario = (name: string) =>
+    ({ name, version: 1, start: 'main', phases: { main: { rules: [] } } }) as ScenarioDraft;
 
 /**
  * The first `${base}${n}` not already taken, counting from `first` — 2 for a
  * phase (it follows `main`), 1 for a rule (the phase's first rule is `-1`).
  *
- * @param {string} base
- * @param {Iterable<string | undefined>} taken - rule ids, some possibly unset
- * @param {number} [first]
+ * @param taken - rule ids, some possibly unset
  */
-const freeKey = (base, taken, first = 2) => {
+const freeKey = (base: string, taken: Iterable<string | undefined>, first: number = 2) => {
     const used = new Set(taken);
     let n = first;
     while (used.has(`${base}${n}`)) n++;
@@ -79,11 +65,8 @@ const freeKey = (base, taken, first = 2) => {
 
 /**
  * The draft with a new empty phase at the end.
- *
- * @param {ScenarioDraft} doc
- * @returns {ScenarioDraft}
  */
-const addPhase = (doc) => ({
+const addPhase = (doc: ScenarioDraft): ScenarioDraft => ({
     ...doc,
     phases: { ...doc.phases, [freeKey('phase', Object.keys(doc.phases))]: { rules: [] } },
 });
@@ -91,18 +74,12 @@ const addPhase = (doc) => ({
 /**
  * Rename a phase, keeping its place, and follow the rename in `start` and in
  * every `goto` — the builder's one cross-reference edit.
- *
- * @param {ScenarioDraft} doc
- * @param {string} from
- * @param {string} to
- * @returns {ScenarioDraft}
  */
-const renamePhase = (doc, from, to) => {
+const renamePhase = (doc: ScenarioDraft, from: string, to: string): ScenarioDraft => {
     if (from === to || !to || Object.prototype.hasOwnProperty.call(doc.phases, to)) return doc;
-    const retarget = (/** @type {unknown} */ action) =>
+    const retarget = (action: unknown) =>
         isPlainObject(action) && action.type === 'goto' && action.phase === from ? { ...action, phase: to } : action;
-    /** @type {ScenarioDraft['phases']} */
-    const phases = {};
+    const phases: ScenarioDraft['phases'] = {};
     for (const [name, phase] of Object.entries(doc.phases)) {
         const rules = phase.rules?.map((rule) => ({ ...rule, do: rule.do.map(retarget) }));
         phases[name === from ? to : name] = rules ? { ...phase, rules } : phase;
@@ -114,12 +91,8 @@ const renamePhase = (doc, from, to) => {
  * Remove a phase (never the last one); `start` moves to the first remaining
  * phase if it pointed at the removed one. Gotos into it are left for the
  * validator to report.
- *
- * @param {ScenarioDraft} doc
- * @param {string} name
- * @returns {ScenarioDraft}
  */
-const removePhase = (doc, name) => {
+const removePhase = (doc: ScenarioDraft, name: string): ScenarioDraft => {
     const names = Object.keys(doc.phases);
     if (names.length <= 1) return doc;
     const phases = { ...doc.phases };
@@ -131,12 +104,8 @@ const removePhase = (doc, name) => {
  * A new rule for `phase`, with an id unique across the scenario. It starts as
  * a once-only notification: a fresh rule has no conditions, so an `always`
  * default would notify on every voting pass if saved unedited.
- *
- * @param {ScenarioDraft} doc
- * @param {string} phase
- * @returns {ScenarioDraftRule}
  */
-const newRule = (doc, phase) => {
+const newRule = (doc: ScenarioDraft, phase: string): ScenarioDraftRule => {
     const ids = Object.values(doc.phases).flatMap((p) => (p.rules ?? []).map((r) => r.id));
     return {
         id: freeKey(`${phase}-`, ids, 1),
@@ -150,11 +119,8 @@ const newRule = (doc, phase) => {
  * forms can render: phases of plain objects, rules with an actions list. The
  * validator judges everything else on save; this only keeps the form from
  * rendering something it cannot.
- *
- * @param {unknown} value
- * @returns {value is ScenarioDraft}
  */
-const isEditableDraft = (value) => {
+const isEditableDraft = (value: unknown): value is ScenarioDraft => {
     if (!isPlainObject(value)) return false;
     const { phases } = value;
     if (!isPlainObject(phases)) return false;
@@ -165,7 +131,7 @@ const isEditableDraft = (value) => {
             (phase.rules === undefined ||
                 (Array.isArray(phase.rules) &&
                     phase.rules.every(
-                        (/** @type {unknown} */ rule) =>
+                        (rule: unknown) =>
                             isPlainObject(rule) &&
                             Array.isArray(rule.do) &&
                             (rule.if === undefined || Array.isArray(rule.if)),

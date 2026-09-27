@@ -11,7 +11,7 @@
  *       fired: { ruleId: { at, day?, phase? } },
  *       inFlight: { ruleId, actionIndex } | null,
  *       spent: { swaps, keys, fills },
- *       history: { photoId: [[unixSec, votes], …] },   // vote samples (scenarios/speed.js)
+ *       history: { photoId: [[unixSec, votes], …] },   // vote samples (scenarios/speed.ts)
  *       outbox: [{ id, at, message }],                // notices for the host notifiers
  *       lastAction: { at, ruleId, action, outcome } | null,
  *       lastError: { at, message } | null,

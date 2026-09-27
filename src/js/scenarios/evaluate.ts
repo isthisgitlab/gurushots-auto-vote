@@ -11,41 +11,34 @@
 
 import { occurrencesOf } from '../scheduling/wallClock';
 
-/** @import { Bankroll, Challenge } from '../types/gurushots' */
-/** @import { ScenarioEngineState } from '../types/scenario' */
-/** @import { ScenarioDocument, ScenarioRule } from '../settings/scenarioSchema' */
+import type { Bankroll, Challenge } from '../types/gurushots';
+import type { ScenarioEngineState } from '../types/scenario';
+import type { ScenarioDocument, ScenarioRule } from '../settings/scenarioSchema';
 import { firstFailing } from './conditions';
 import { nextWakeAt } from './nextWake';
 
-/**
- * @typedef {object} EvaluateInput
- * @property {ScenarioDocument} scenario
- * @property {ScenarioEngineState} state
- * @property {Challenge} challenge
- * @property {number} now - unix seconds
- * @property {string} timezone
- * @property {Bankroll|null} [bankroll]
- * @property {Set<string>} [skipRuleIds] - rules already fired in this pass
- */
+interface EvaluateInput {
+    scenario: ScenarioDocument;
+    state: ScenarioEngineState;
+    challenge: Challenge;
+    /** unix seconds */
+    now: number;
+    timezone: string;
+    bankroll?: Bankroll | null;
+    /** rules already fired in this pass */
+    skipRuleIds?: Set<string>;
+}
 
 /**
  * Identity of the local calendar day `now` falls in: the instant of its
  * midnight in `timezone`.
- *
- * @param {number} now
- * @param {string} timezone
  */
-const localDayOf = (now, timezone) => /** @type {{prev: number}} */ (occurrencesOf('00:00', timezone, now)).prev;
+const localDayOf = (now: number, timezone: string) => (occurrencesOf('00:00', timezone, now) as { prev: number }).prev;
 
 /**
  * Why a rule's `repeat` mode keeps it from firing now, or null when it may.
- *
- * @param {ScenarioRule} rule
- * @param {ScenarioEngineState} state
- * @param {number} now
- * @param {string} timezone
  */
-const repeatBlock = (rule, state, now, timezone) => {
+const repeatBlock = (rule: ScenarioRule, state: ScenarioEngineState, now: number, timezone: string) => {
     const fired = state.fired?.[rule.id];
     if (!fired) return null;
     switch (rule.repeat) {
@@ -62,28 +55,22 @@ const repeatBlock = (rule, state, now, timezone) => {
 
 /**
  * The record kept when a rule finishes firing.
- *
- * @param {ScenarioEngineState} state
- * @param {number} now
- * @param {string} timezone
  */
-const firedRecord = (state, now, timezone) => ({
+const firedRecord = (state: ScenarioEngineState, now: number, timezone: string) => ({
     at: now,
     day: localDayOf(now, timezone),
     phaseEnteredAt: state.phaseEnteredAt,
 });
 
-/**
- * @param {EvaluateInput} input
- * @returns {{
- *   phase: string,
- *   halted: string|null,
- *   fire: {ruleId: string, rule: ScenarioRule, startIndex: number}|null,
- *   explain: Array<{ruleId: string, label: string, status: 'ready'|'blocked'|'waiting', reason: string}>,
- *   nextWakeAt: number|null,
- * }}
- */
-const evaluateScenario = (input) => {
+const evaluateScenario = (
+    input: EvaluateInput,
+): {
+    phase: string;
+    halted: string | null;
+    fire: { ruleId: string; rule: ScenarioRule; startIndex: number } | null;
+    explain: Array<{ ruleId: string; label: string; status: 'ready' | 'blocked' | 'waiting'; reason: string }>;
+    nextWakeAt: number | null;
+} => {
     const { scenario, state, now, timezone } = input;
     const skip = input.skipRuleIds ?? new Set();
     const phase = scenario.phases[state.phase];
@@ -119,27 +106,26 @@ const evaluateScenario = (input) => {
     }
 
     const ctx = { challenge: input.challenge, state, now, timezone, bankroll: input.bankroll ?? null };
-    /** @type {{ruleId: string, rule: ScenarioRule, startIndex: number}|null} */
-    let fire = null;
+    let fire: { ruleId: string; rule: ScenarioRule; startIndex: number } | null = null;
     const explain = [];
     for (const rule of rules) {
         const label = rule.label ?? rule.id;
         const blocked = skip.has(rule.id) ? 'already fired in this pass' : repeatBlock(rule, state, now, timezone);
         if (blocked) {
-            explain.push({ ruleId: rule.id, label, status: /** @type {const} */ ('blocked'), reason: blocked });
+            explain.push({ ruleId: rule.id, label, status: 'blocked' as const, reason: blocked });
             continue;
         }
         const conditions = rule.if ?? [];
         const failing = firstFailing(conditions, ctx);
         if (failing !== -1) {
             const reason = `condition ${failing + 1} (${conditions[failing].type}) does not hold`;
-            explain.push({ ruleId: rule.id, label, status: /** @type {const} */ ('waiting'), reason });
+            explain.push({ ruleId: rule.id, label, status: 'waiting' as const, reason });
             continue;
         }
         explain.push({
             ruleId: rule.id,
             label,
-            status: /** @type {const} */ ('ready'),
+            status: 'ready' as const,
             reason: fire ? 'ready, after an earlier rule' : 'all conditions hold',
         });
         fire ??= { ruleId: rule.id, rule, startIndex: 0 };
@@ -151,11 +137,9 @@ const evaluateScenario = (input) => {
  * The state a challenge has before its scenario starts: at the start phase,
  * entered now, nothing remembered or fired.
  *
- * @param {ScenarioDocument} scenario
- * @param {number} now - unix seconds
- * @returns {ScenarioEngineState}
+ * @param now - unix seconds
  */
-const startState = (scenario, now) => ({
+const startState = (scenario: ScenarioDocument, now: number): ScenarioEngineState => ({
     phase: scenario.start,
     phaseEnteredAt: now,
     memory: {},

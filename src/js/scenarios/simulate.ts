@@ -1,8 +1,8 @@
 /**
  * A what-if timeline of a scenario: from now until the challenge closes,
  * which rules would fire when, and which phase the plan would be in. It
- * jumps between the engine's own wake-up instants (nextWake.js) and asks the
- * engine (evaluate.js) at each, exactly like the scheduler and the runner —
+ * jumps between the engine's own wake-up instants (nextWake.ts) and asks the
+ * engine (evaluate.ts) at each, exactly like the scheduler and the runner —
  * so time-based plans ("each morning at 06:00", "4 minutes after the swap")
  * can be checked before they run.
  *
@@ -15,9 +15,9 @@
 import { evaluateScenario, firedRecord } from './evaluate';
 import { actionMemory } from './vocabulary';
 
-/** @import { Bankroll, Challenge } from '../types/gurushots' */
-/** @import { ScenarioEngineState } from '../types/scenario' */
-/** @import { ScenarioDocument, ScenarioRule } from '../settings/scenarioSchema' */
+import type { Bankroll, Challenge } from '../types/gurushots';
+import type { ScenarioEngineState } from '../types/scenario';
+import type { ScenarioDocument, ScenarioRule } from '../settings/scenarioSchema';
 import { nextWakeAt } from './nextWake';
 
 const MAX_EVENTS = 50;
@@ -25,25 +25,25 @@ const MAX_STEPS = 500;
 /** A close far enough away to ask "is there any later step at all?". */
 const FAR_FUTURE_SEC = 100 * 365 * 86400;
 
-/**
- * @typedef {{at: number, phase: string, ruleId: string, label: string, actions: string[], toPhase: string|null}} SimulatedEvent
- * @typedef {'closed'|'idle'|'halted'|'limit'} StopReason
- */
+type SimulatedEvent = {
+    at: number;
+    phase: string;
+    ruleId: string;
+    label: string;
+    actions: string[];
+    toPhase: string | null;
+};
+
+type StopReason = 'closed' | 'idle' | 'halted' | 'limit';
 
 /**
  * The state after a rule fired in the simulation: its fired marker, any
  * memory it would write (a placeholder id — the real photo is unknown), and
  * its goto.
- *
- * @param {ScenarioEngineState} state
- * @param {ScenarioRule} rule
- * @param {number} at
- * @param {string} timezone
  */
-const afterFiring = (state, rule, at, timezone) => {
+const afterFiring = (state: ScenarioEngineState, rule: ScenarioRule, at: number, timezone: string) => {
     const memory = { ...state.memory };
-    /** @type {string | null} */
-    let toPhase = null;
+    let toPhase: string | null = null;
     for (const action of rule.do) {
         for (const slot of actionMemory(action).writes) memory[slot] = '(simulated)';
         if (action.type === 'forget') delete memory[action.slot];
@@ -62,24 +62,32 @@ const afterFiring = (state, rule, at, timezone) => {
 };
 
 /**
- * @param {object} input
- * @param {ScenarioDocument} input.scenario
- * @param {ScenarioEngineState} input.state - the challenge's runtime state (or a start state)
- * @param {Challenge} input.challenge - the live challenge
- * @param {number} input.now - unix seconds
- * @param {string} input.timezone
- * @param {Bankroll|null} [input.bankroll]
- * @returns {{events: SimulatedEvent[], stoppedBecause: StopReason, stoppedAt: number, halted: string|null}}
+ * @param input.state - the challenge's runtime state (or a start state)
+ * @param input.challenge - the live challenge
+ * @param input.now - unix seconds
  */
-const simulateScenario = ({ scenario, state: startState, challenge, now, timezone, bankroll = null }) => {
-    /** @type {SimulatedEvent[]} */
-    const events = [];
+const simulateScenario = ({
+    scenario,
+    state: startState,
+    challenge,
+    now,
+    timezone,
+    bankroll = null,
+}: {
+    scenario: ScenarioDocument;
+    state: ScenarioEngineState;
+    challenge: Challenge;
+    now: number;
+    timezone: string;
+    bankroll?: Bankroll | null;
+}): { events: SimulatedEvent[]; stoppedBecause: StopReason; stoppedAt: number; halted: string | null } => {
+    const events: SimulatedEvent[] = [];
     let state = { ...startState, inFlight: null };
     let at = now;
     for (let step = 0; step < MAX_STEPS; step++) {
         // One simulated pass at `at`: rules chain like in the runner — each
         // at most once, and a goto chain stops on a phase it already visited.
-        const firedThisPass = new Set();
+        const firedThisPass = new Set<string>();
         const visited = new Set([state.phase]);
         for (;;) {
             const decision = evaluateScenario({

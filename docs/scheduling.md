@@ -46,7 +46,7 @@ nextCurrencyRule, nextScenarioWake, nextBoostHold }`:
 - **scenario**: the soonest instant a user-defined scenario's time condition
   can flip — a daily window opening or closing, a before-end / after-start /
   percent / in-phase bound, or local midnight for a once-per-day rule that
-  already fired (`scenarios/nextWake.js`, the same function the runner's
+  already fired (`scenarios/nextWake.ts`, the same function the runner's
   engine uses, so the scheduler and the runner cannot disagree). A plan that
   has not started yet is judged from its start phase. Every still-open
   challenge counts, flash included. Resolvers: `nodeResolvers.resolveScenarioWake`

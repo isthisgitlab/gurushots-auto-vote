@@ -1,5 +1,6 @@
-/** @import { Challenge, RankingEntry } from '../types/gurushots' */
-/** @import { RankingSelectorName, ScenarioSelector } from '../types/scenario' */
+import type { Challenge, RankingEntry } from '../types/gurushots';
+import type { RankingSelectorName, ScenarioSelector } from '../types/scenario';
+import type { VoteHistory } from './speed';
 /**
  * Entry selectors: which of the member's entries a scenario condition or
  * action means. Entries are matched by id (as strings), never by where they
@@ -15,18 +16,13 @@ import { isProtectedEntry } from '../voting/currencyAuto';
 import { parseDuration } from './duration';
 import { votesPerHour, DEFAULT_WINDOW_SEC } from './speed';
 
-/**
- * @param {Challenge} challenge
- * @returns {RankingEntry[]}
- */
-const entriesOf = (challenge) =>
+const entriesOf = (challenge: Challenge): RankingEntry[] =>
     Array.isArray(challenge?.member?.ranking?.entries) ? challenge.member.ranking.entries.filter(Boolean) : [];
 
-/** @param {RankingEntry} entry */
-const votesOf = (entry) => (Number.isFinite(Number(entry?.votes)) ? Number(entry.votes) : 0);
+const votesOf = (entry: RankingEntry) => (Number.isFinite(Number(entry?.votes)) ? Number(entry.votes) : 0);
 
-/** Positive rank, or null when unranked. @param {RankingEntry} entry */
-const rankOf = (entry) => {
+/** Positive rank, or null when unranked. */
+const rankOf = (entry: RankingEntry) => {
     const rank = Number(entry?.rank);
     return Number.isFinite(rank) && rank > 0 ? rank : null;
 };
@@ -34,13 +30,8 @@ const rankOf = (entry) => {
 /**
  * The entry with the best `score` (strictly greater wins, so ties keep the
  * first). Entries scoring null are skipped.
- *
- * @template T
- * @param {readonly T[]} entries
- * @param {(entry: T) => number|null} score
- * @returns {T|null}
  */
-const bestBy = (entries, score) => {
+const bestBy = <T>(entries: readonly T[], score: (entry: T) => number | null): T | null => {
     let best = null;
     let bestScore = -Infinity;
     for (const entry of entries) {
@@ -53,8 +44,7 @@ const bestBy = (entries, score) => {
     return best;
 };
 
-/** @type {Record<RankingSelectorName, (entries: RankingEntry[]) => RankingEntry|null>} */
-const RANKING = {
+const RANKING: Record<RankingSelectorName, (entries: RankingEntry[]) => RankingEntry | null> = {
     mostVotes: (entries) => bestBy(entries, votesOf),
     fewestVotes: (entries) => bestBy(entries, (entry) => -votesOf(entry)),
     bestRank: (entries) =>
@@ -67,29 +57,29 @@ const RANKING = {
     turbo: (entries) => entries.find((entry) => entry.turbo === true) ?? null,
 };
 
-/**
- * @typedef {object} SelectContext
- * @property {Record<string, string>} [memory] - the scenario's remembered photo ids
- * @property {import('./speed').VoteHistory} [history] - sampled vote counts, for `fastest`
- * @property {number} [now] - unix seconds, for `fastest`
- */
+interface SelectContext {
+    /** the scenario's remembered photo ids */
+    memory?: Record<string, string>;
+    /** sampled vote counts, for `fastest` */
+    history?: VoteHistory;
+    /** unix seconds, for `fastest` */
+    now?: number;
+}
 
 /**
  * A duration field's seconds, or the default window. Validated upstream.
- *
- * @param {string | number | undefined} value
  */
-const windowOf = (value) => (value === undefined ? DEFAULT_WINDOW_SEC : /** @type {number} */ (parseDuration(value)));
+const windowOf = (value: string | number | undefined) =>
+    value === undefined ? DEFAULT_WINDOW_SEC : (parseDuration(value) as number);
 
 /**
  * The entry a selector picks, or null when none qualifies.
- *
- * @param {ScenarioSelector} selector
- * @param {Challenge} challenge
- * @param {SelectContext} [context]
- * @returns {RankingEntry|null}
  */
-const selectEntry = (selector, challenge, context = {}) => {
+const selectEntry = (
+    selector: ScenarioSelector,
+    challenge: Challenge,
+    context: SelectContext = {},
+): RankingEntry | null => {
     const entries = entriesOf(challenge);
     if (selector.by === 'memory') {
         const id = context.memory?.[selector.slot];
@@ -102,9 +92,7 @@ const selectEntry = (selector, challenge, context = {}) => {
     const candidates = selector.skipProtected ? entries.filter((entry) => !isProtectedEntry(entry)) : entries;
     if (selector.by === 'fastest') {
         const window = windowOf(selector.window);
-        return bestBy(candidates, (entry) =>
-            votesPerHour(context.history, entry, /** @type {number} */ (context.now), window),
-        );
+        return bestBy(candidates, (entry) => votesPerHour(context.history, entry, context.now as number, window));
     }
     return RANKING[selector.by](candidates);
 };

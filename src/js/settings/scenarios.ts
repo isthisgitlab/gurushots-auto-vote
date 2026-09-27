@@ -1,5 +1,5 @@
 /**
- * User-defined scenarios (see scenarios/vocabulary.js): list, save, rename,
+ * User-defined scenarios (see scenarios/vocabulary.ts): list, save, rename,
  * delete, and the JSON import/export players use to share them. Stored in the
  * settings blob as `challengeSettings.scenarios` — name-keyed like profiles,
  * because challenge ids rotate — so the Android background service, which
