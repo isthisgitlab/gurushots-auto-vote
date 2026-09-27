@@ -7,18 +7,17 @@
 
 import * as logger from '../logger';
 
-/** @import { BrowserWindow } from 'electron' */
+import type { BrowserWindow } from 'electron';
+import type * as settingsModule from '../settings';
 
 // Long enough for Chromium to flush LevelDB storage (a 1s window could
 // kill it mid-write and leave stale locks), short enough to stay a firm
 // ceiling on "the app must die now".
 const FORCE_EXIT_GRACE_MS = 3000;
 
-/** @type {NodeJS.Timeout | null} */
-let forceExitTimeout = null;
+let forceExitTimeout: NodeJS.Timeout | null = null;
 
-/** @param {string} reason */
-const ensureExit = (reason) => {
+const ensureExit = (reason: string) => {
     // Clear any existing timeout to prevent multiple force exits.
     if (forceExitTimeout) {
         clearTimeout(forceExitTimeout);
@@ -41,8 +40,7 @@ const ensureExit = (reason) => {
     forceExitTimeout.unref?.();
 };
 
-/** @param {BrowserWindow | null | undefined} win */
-const focusExistingWindow = (win) => {
+const focusExistingWindow = (win: BrowserWindow | null | undefined) => {
     // isDestroyed() must be checked first — any other method on a
     // destroyed BrowserWindow throws.
     if (!win || win.isDestroyed()) {
@@ -61,11 +59,10 @@ const focusExistingWindow = (win) => {
 // Quit-time token cleanup, gated on holding the single-instance lock: a
 // losing second instance shares settings.json with the running primary
 // and must not even read it, or it could wipe the primary's session.
-/**
- * @param {boolean} hasLock
- * @param {Pick<typeof import('../settings'), 'loadSettings' | 'setSetting'>} settingsFacade
- */
-const clearTokenOnQuit = (hasLock, settingsFacade) => {
+const clearTokenOnQuit = (
+    hasLock: boolean,
+    settingsFacade: Pick<typeof settingsModule, 'loadSettings' | 'setSetting'>,
+) => {
     if (!hasLock) {
         return;
     }

@@ -5,9 +5,9 @@
  * `settings-changed` event to every other renderer window (so React hooks can
  * refetch without a full reload — catches CLI-originated changes).
  *
- * Separate from index.js's createMainWindow — window creation has nothing
+ * Separate from index.ts's createMainWindow — window creation has nothing
  * to do with file watching. The caller owns the returned fs.FSWatcher's
- * lifecycle (index.js closes it when the main window closes).
+ * lifecycle (index.ts closes it when the main window closes).
  */
 
 import { BrowserWindow } from 'electron';
@@ -15,41 +15,33 @@ import * as fs from 'node:fs';
 import * as settings from '../settings';
 import * as logger from '../logger';
 
-/** @import { AppSettings } from '../types/settings' */
-/** @typedef {{ key: string, oldValue: string, newValue: string }} SettingChange */
+import type { AppSettings } from '../types/settings';
+type SettingChange = { key: string; oldValue: string; newValue: string };
 
 // Debounce timeout shared across successive watchSettingsFile calls (the
 // main window can be torn down and re-created on logout/login): a new
 // watcher's first change event clears a still-pending reload scheduled by
 // the previous watcher.
-/** @type {NodeJS.Timeout | null} */
-let settingsReloadTimeout = null;
+let settingsReloadTimeout: NodeJS.Timeout | null = null;
 
 /**
  * Compare two settings objects and return array of changes
- * @param {unknown} oldSettings - Previous settings object
- * @param {unknown} newSettings - New settings object
- * @returns {SettingChange[]} Array of change objects with key, oldValue, newValue
+ * @param oldSettings - Previous settings object
+ * @param newSettings - New settings object
+ * @returns Array of change objects with key, oldValue, newValue
  */
-function compareSettings(oldSettings, newSettings) {
-    /** @type {SettingChange[]} */
-    const changes = [];
+function compareSettings(oldSettings: unknown, newSettings: unknown): SettingChange[] {
+    const changes: SettingChange[] = [];
 
     // Function to safely stringify values for comparison and logging
-    /** @param {unknown} value */
-    const stringify = (value) => {
+    const stringify = (value: unknown) => {
         if (value === null || value === undefined) return 'null';
         if (typeof value === 'object') return JSON.stringify(value);
         return String(value);
     };
 
     // Recursive function to compare nested objects
-    /**
-     * @param {unknown} oldObj
-     * @param {unknown} newObj
-     * @param {string} [path]
-     */
-    const compareRecursive = (oldObj, newObj, path = '') => {
+    const compareRecursive = (oldObj: unknown, newObj: unknown, path: string = '') => {
         // Handle null/undefined cases
         if (oldObj === null || oldObj === undefined || newObj === null || newObj === undefined) {
             if (oldObj !== newObj) {
@@ -73,8 +65,8 @@ function compareSettings(oldSettings, newSettings) {
 
             for (const key of allKeys) {
                 const newPath = path ? `${path}.${key}` : key;
-                const oldValue = /** @type {Record<string, unknown>} */ (oldObj)[key];
-                const newValue = /** @type {Record<string, unknown>} */ (newObj)[key];
+                const oldValue = (oldObj as Record<string, unknown>)[key];
+                const newValue = (newObj as Record<string, unknown>)[key];
 
                 compareRecursive(oldValue, newValue, newPath);
             }
@@ -100,17 +92,13 @@ function compareSettings(oldSettings, newSettings) {
  * Watch the settings file for changes and auto-reload with debouncing.
  * The facade owns the path — never re-derive it here.
  *
- * @param {{
- *   getMainWindow: () => (import('electron').BrowserWindow|null),
- *   getMainWindowCreatedTime: () => (number|null),
- *   onSettingsChanged?: ((settings: AppSettings) => void)|null,
- * }} deps - accessors for the window state index.js owns; read at
+ * @param deps - accessors for the window state index.ts owns; read at
  *   event time so the watcher always sees the current window/creation time.
  *   `onSettingsChanged` is an OPTIONAL side-channel fired with a freshly
  *   loaded snapshot on EVERY exit of the debounced handler — the normal
  *   reload/broadcast path and the "window recently created" early return
  *   alike — so main-process state that must track a setting (e.g. the
- *   auto-vote power-save blocker in windows/backgroundActivity.js) can follow
+ *   auto-vote power-save blocker in windows/backgroundActivity.ts) can follow
  *   a change the renderer made without inventing a second IPC channel.
  *   Exceptions it throws are swallowed: an observer must never stop the
  *   watcher from reloading or broadcasting.
@@ -119,15 +107,22 @@ function compareSettings(oldSettings, newSettings) {
  *   cleared by the returned watcher's `close()`, so a callback armed before a
  *   window teardown still fires afterwards. The reload and broadcast paths
  *   below both re-check the window before acting; an observer must make the
- *   equivalent liveness check itself (see index.js) rather than assume a
+ *   equivalent liveness check itself (see index.ts) rather than assume a
  *   window still exists.
- * @returns {fs.FSWatcher|null} the watcher (caller owns closing it), or
+ * @returns the watcher (caller owns closing it), or
  *   null when no settings file exists yet.
  */
-function watchSettingsFile({ getMainWindow, getMainWindowCreatedTime, onSettingsChanged = null }) {
+function watchSettingsFile({
+    getMainWindow,
+    getMainWindowCreatedTime,
+    onSettingsChanged = null,
+}: {
+    getMainWindow: () => BrowserWindow | null;
+    getMainWindowCreatedTime: () => number | null;
+    onSettingsChanged?: ((settings: AppSettings) => void) | null;
+}): fs.FSWatcher | null {
     const settingsPath = settings.getSettingsPath();
-    /** @type {AppSettings | null} */
-    let previousSettings = null;
+    let previousSettings: AppSettings | null = null;
 
     if (!fs.existsSync(settingsPath)) {
         return null;
@@ -139,7 +134,7 @@ function watchSettingsFile({ getMainWindow, getMainWindowCreatedTime, onSettings
     } catch (error) {
         logger
             .withCategory('settings')
-            .error('Failed to load initial settings for comparison:', /** @type {Error} */ (error).message);
+            .error('Failed to load initial settings for comparison:', (error as Error).message);
     }
 
     // Hand the observer a snapshot the caller already loaded. Never throws: a
@@ -147,8 +142,7 @@ function watchSettingsFile({ getMainWindow, getMainWindowCreatedTime, onSettings
     // their broadcast. A falsy snapshot is a no-op — the load-failure path
     // below already logs the read error, and re-reporting it here as an
     // "observer failed" would name the wrong culprit.
-    /** @param {AppSettings | undefined} snapshot */
-    const notifyObserver = (snapshot) => {
+    const notifyObserver = (snapshot: AppSettings | undefined) => {
         if (!onSettingsChanged || !snapshot) return;
         try {
             onSettingsChanged(snapshot);
@@ -156,7 +150,7 @@ function watchSettingsFile({ getMainWindow, getMainWindowCreatedTime, onSettings
             logger
                 .withCategory('settings')
                 .warning(
-                    `Settings observer failed: ${/** @type {{ message?: unknown } | null | undefined} */ (error)?.message || error}`,
+                    `Settings observer failed: ${(error as { message?: unknown } | null | undefined)?.message || error}`,
                 );
         }
     };
@@ -188,7 +182,7 @@ function watchSettingsFile({ getMainWindow, getMainWindowCreatedTime, onSettings
             settingsReloadTimeout = setTimeout(() => {
                 // Prevent reload if main window was just created (during login)
                 // An unknown (null) creation time coerces to 0 — it never suppresses a reload.
-                const timeSinceCreation = Date.now() - /** @type {number} */ (getMainWindowCreatedTime());
+                const timeSinceCreation = Date.now() - (getMainWindowCreatedTime() as number);
                 if (timeSinceCreation < 2000) {
                     // 2 second window
                     logger
@@ -207,8 +201,7 @@ function watchSettingsFile({ getMainWindow, getMainWindowCreatedTime, onSettings
                 }
 
                 // Load new settings and compare with previous
-                /** @type {AppSettings | undefined} */
-                let newSettings;
+                let newSettings: AppSettings | undefined;
                 let shouldReload = false;
                 let hasChanges = false;
                 try {
@@ -259,7 +252,7 @@ function watchSettingsFile({ getMainWindow, getMainWindowCreatedTime, onSettings
                 } catch (error) {
                     logger
                         .withCategory('settings')
-                        .error('Failed to load new settings for comparison:', /** @type {Error} */ (error).message);
+                        .error('Failed to load new settings for comparison:', (error as Error).message);
                     logger.withCategory('settings').info('🔄 Settings file changed, reloading main window...');
                     shouldReload = true;
                 }

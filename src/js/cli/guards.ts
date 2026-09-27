@@ -25,12 +25,15 @@ const ensureAuthenticated = () => {
  * commands share. Exits the process with usage guidance on any miss;
  * returns the validated profile name otherwise.
  *
- * @param {string} command - e.g. 'save-profile' (used in usage strings)
- * @param {{challengeId: (string|null), rest: string[]}} parsed - extractChallenge() output
- * @param {{needsChallenge?: boolean, challengeHint?: string}} [opts]
- * @returns {string} the profile name
+ * @param command - e.g. 'save-profile' (used in usage strings)
+ * @param parsed - extractChallenge() output
+ * @returns the profile name
  */
-const requireProfileArgs = (command, { challengeId, rest }, { needsChallenge = false, challengeHint = '' } = {}) => {
+const requireProfileArgs = (
+    command: string,
+    { challengeId, rest }: { challengeId: string | null; rest: string[] },
+    { needsChallenge = false, challengeHint = '' }: { needsChallenge?: boolean; challengeHint?: string } = {},
+): string => {
     const usage = needsChallenge ? `Usage: ${command} "<name>" --challenge=<id>` : `Usage: ${command} "<name>"`;
     if (!rest[0]) {
         logger.withCategory('ui').error('Please specify a profile name');
@@ -61,11 +64,11 @@ const requireProfileArgs = (command, { challengeId, rest }, { needsChallenge = f
  * (boost / turbo / fill) share. Exits the process with the command's usage
  * guidance on a miss; returns the challenge id otherwise.
  *
- * @param {{challengeId: (string|null)}} parsed - extractChallenge() output
- * @param {string} usage - the command's usage string
- * @returns {string} the challenge id
+ * @param parsed - extractChallenge() output
+ * @param usage - the command's usage string
+ * @returns the challenge id
  */
-const requireChallenge = ({ challengeId }, usage) => {
+const requireChallenge = ({ challengeId }: { challengeId: string | null }, usage: string): string => {
     if (challengeId == null) {
         logger.withCategory('ui').error('Please specify a challenge');
         logger.withCategory('ui').info(usage);

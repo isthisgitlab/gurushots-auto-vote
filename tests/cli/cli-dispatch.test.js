@@ -1,5 +1,5 @@
 /**
- * Unit tests for the CLI entry point (src/js/cli/cli.js). The module is a
+ * Unit tests for the CLI entry point (src/js/cli/cli.ts). The module is a
  * script: it reads process.argv, registers process-level error handlers and
  * runs main() on load. Each test sets argv and re-requires it in an isolated
  * module registry with every command module mocked, then asserts which
@@ -117,12 +117,12 @@ afterEach(() => {
 });
 
 /**
- * Load cli.js with the given argv in a fresh registry. `setup` receives the
+ * Load cli.ts with the given argv in a fresh registry. `setup` receives the
  * fresh mock modules before the script runs so a test can program them.
  */
 const run = async (argv, setup) => {
     let m;
-    process.argv = ['node', 'cli.js', ...argv];
+    process.argv = ['node', 'cli.ts', ...argv];
     jest.isolateModules(() => {
         m = {
             logger: require('../../src/js/logger'),

@@ -1,5 +1,5 @@
 /**
- * Tests for apiFactory.js
+ * Tests for apiFactory.ts
  *
  * Covers strategy selection (mock vs real), middleware caching, and refresh.
  */

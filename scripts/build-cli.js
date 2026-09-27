@@ -35,7 +35,7 @@ function ensureDir(p) {
 async function bundleCli() {
     console.log('🔨 Bundling CLI with esbuild...');
     await build({
-        entryPoints: [path.join(ROOT, 'src', 'js', 'cli', 'cli.js')],
+        entryPoints: [path.join(ROOT, 'src', 'js', 'cli', 'cli.ts')],
         bundle: true,
         platform: 'node',
         target: 'node26',

@@ -1,9 +1,9 @@
 /**
  * IPC handlers for the auto-updater. The AutoUpdater instance and the
- * main BrowserWindow reference live in index.js; we receive
+ * main BrowserWindow reference live in index.ts; we receive
  * accessors so we can read/write them without owning the lifecycle.
  *
- * Lifecycle ownership is in index.js because the AutoUpdater is
+ * Lifecycle ownership is in index.ts because the AutoUpdater is
  * created lazily on the first manual `check-for-updates`, and the
  * main window's setup path needs to wire the same instance via
  * `autoUpdater.setMainWindow`.
@@ -28,8 +28,8 @@ const buildHandlers = (deps: UpdateHandlerDeps) => {
     const { getAutoUpdater, setAutoUpdater, getMainWindow } = deps;
 
     // Lazily construct the shared instance on first use (windowed — unlike
-    // index.js's deliberate pre-window startup construction) and register it
-    // back through the accessor so index.js keeps lifecycle ownership.
+    // index.ts's deliberate pre-window startup construction) and register it
+    // back through the accessor so index.ts keeps lifecycle ownership.
     const ensureUpdater = () => {
         let autoUpdater = getAutoUpdater();
         if (!autoUpdater) {

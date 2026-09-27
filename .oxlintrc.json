@@ -112,6 +112,15 @@
                 "no-console": "off"
             }
         },
+        // TypeScript resolves every identifier in the strict tsc program, type
+        // queries such as `typeof ServiceWorkerContainer` included, which
+        // no-undef cannot see; the compiler's check replaces it.
+        {
+            "files": ["src/js/**/*.ts", "src/js/**/*.tsx"],
+            "rules": {
+                "no-undef": "off"
+            }
+        },
         // src/js/ui (the application menu) is linted with browser and Node globals.
         {
             "files": ["src/js/ui/**/*.js", "src/js/ui/**/*.ts"],

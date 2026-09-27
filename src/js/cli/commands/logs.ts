@@ -9,8 +9,7 @@ import * as logger from '../../logger';
 import { diagnostics } from '../../services/semantic/diagnostics';
 
 // category flag → logger path getter. Defaults to the app log.
-/** @type {Record<string, () => string | null>} */
-const LOG_FILE_GETTERS = {
+const LOG_FILE_GETTERS: Record<string, () => string | null> = {
     app: () => logger.getLogFile(),
     error: () => logger.getErrorLogFile(),
     api: () => logger.getApiLogFile(),
@@ -19,8 +18,7 @@ const LOG_FILE_GETTERS = {
 
 const showLexiconReport = () => {
     const report = diagnostics.read();
-    /** @param {Record<string, number>} words */
-    const top = (words) =>
+    const top = (words: Record<string, number>) =>
         Object.entries(words)
             .sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0]))
             .slice(0, 20)
@@ -39,8 +37,7 @@ const showLexiconReport = () => {
     }
 };
 
-/** @param {{ category?: string, lines?: number }} [opts] */
-const showLogs = ({ category = 'app', lines = 100 } = {}) => {
+const showLogs = ({ category = 'app', lines = 100 }: { category?: string; lines?: number } = {}) => {
     if (category === 'lexicon') return showLexiconReport();
     const getPath = LOG_FILE_GETTERS[category] || LOG_FILE_GETTERS.app;
     const filePath = getPath();

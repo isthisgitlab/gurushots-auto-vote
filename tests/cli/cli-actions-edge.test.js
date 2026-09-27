@@ -1,6 +1,6 @@
 /**
  * Edge-case tests for the CLI one-shot action and currency commands
- * (commands/actions.js): fallback messages when a handler returns no error
+ * (commands/actions.ts): fallback messages when a handler returns no error
  * text or throws a non-Error, the lookup bail-outs, swap flag parsing and the
  * cost line when the balance can't be read. Complements cli-actions.test.js
  * (happy paths) and cli-currency.test.js (the --yes confirmation gate).

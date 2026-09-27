@@ -262,7 +262,7 @@ Deliberate semantics and caveats:
 ## CLI — runScheduler (single setTimeout chain)
 
 - **Owner**: `src/js/scheduling/runScheduler.ts`
-- **Started by**: `src/js/cli/cli.js` `start` command
+- **Started by**: `src/js/cli/cli.ts` `start` command
 - **Cadence**: one recursive `setTimeout` chain. After each cycle,
   `scheduleNext` calls `computeNextCycleDelayMs` and arms a single timer.
   Normal-mode waits are anchored to the previous cycle _start_ (so the gap
@@ -291,9 +291,9 @@ Deliberate semantics and caveats:
   with no error and no log line, and both must stay defeated:
     - Chromium throttles, then outright **freezes**, timers on a
       hidden/occluded page → `backgroundThrottling: false` on the main
-      window (`src/js/index.js`).
+      window (`src/js/index.ts`).
     - macOS **App Nap** suspends the whole process, which no renderer flag
-      can reach → `src/js/windows/backgroundActivity.js` holds a
+      can reach → `src/js/windows/backgroundActivity.ts` holds a
       `prevent-app-suspension` power-save blocker for exactly as long as
       `autovoteRunning` is true. Main learns the flag from the settings
       watcher's `onSettingsChanged` hook (the renderer already persists it
@@ -303,7 +303,7 @@ Deliberate semantics and caveats:
       and release so it is never a silent behaviour.
 
     Two sharp edges in that `onSettingsChanged` wiring, both already handled
-    in `index.js` — keep them handled:
+    in `index.ts` — keep them handled:
     - The watcher's debounce handle is **module-level and outlives
       `close()`**, so a callback armed before a window teardown still fires
       after it. The observer must re-check the window is alive before acting,
@@ -340,7 +340,7 @@ Deliberate semantics and caveats:
   side), which uses `AlarmManager.setExactAndAllowWhileIdle()` to fire
   cycles even when the WebView process is dead and the device is in Doze.
   The _next-delay decision_ is still the shared one: the headless JS entry
-  (`src/js/headless/index.js`) runs one cycle per alarm and reports
+  (`src/js/headless/index.ts`) runs one cycle per alarm and reports
   `nextDelayMs` from `computeNextCycleDelayMs` back to the plugin, which
   schedules the next alarm accordingly. The JS-side `AutovoteContext` cycle
   still runs while the app is open so the user gets immediate visual

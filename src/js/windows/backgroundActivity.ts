@@ -8,7 +8,7 @@
  * error and no log line:
  *
  *   1. Chromium's hidden-page timer throttling / page freezing — handled by
- *      `backgroundThrottling: false` on the window (see index.js).
+ *      `backgroundThrottling: false` on the window (see index.ts).
  *   2. macOS App Nap — the OS suspends the whole app. No renderer flag helps;
  *      the process must hold a power assertion.
  *
@@ -34,17 +34,16 @@ import * as logger from '../logger';
 // The single held assertion id, or null when nothing is held. Module-level for
 // the same reason settingsWatcher's debounce handle is: there is exactly one
 // main process and exactly one auto-vote session in it.
-/** @type {number | null} */
-let blockerId = null;
+let blockerId: number | null = null;
 
 /**
  * Start/stop the app-suspension blocker to match the auto-vote running flag.
  *
- * @param {boolean} running - is auto-vote currently running?
- * @returns {boolean} whether a blocker is held after this call (for tests /
+ * @param running - is auto-vote currently running?
+ * @returns whether a blocker is held after this call (for tests /
  *   callers that want to assert state; callers may ignore it)
  */
-const syncBackgroundActivity = (running) => {
+const syncBackgroundActivity = (running: boolean): boolean => {
     try {
         if (running) {
             // isStarted() guards against a stale id: Electron can end a
@@ -78,7 +77,7 @@ const syncBackgroundActivity = (running) => {
         logger
             .withCategory('voting')
             .warning(
-                `backgroundActivity: power-save blocker unavailable: ${/** @type {{ message?: unknown } | null | undefined} */ (error)?.message || error}`,
+                `backgroundActivity: power-save blocker unavailable: ${(error as { message?: unknown } | null | undefined)?.message || error}`,
                 null,
             );
         return false;

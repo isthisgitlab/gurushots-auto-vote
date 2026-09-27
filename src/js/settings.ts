@@ -17,7 +17,7 @@
  *   profiles.ts           named challenge-settings profiles
  *   titlePins.ts          persisted first-seen challenge-title pins
  *   scenarioSchema.ts     validation of user-defined scenario documents
- *   scenarios.js          stored scenarios, JSON import/export
+ *   scenarios.ts          stored scenarios, JSON import/export
  *   scenarioOverlay.ts    the active scenario phase's settings layer
  *   reset.ts              reset helpers and "modified" checks
  */

@@ -14,29 +14,20 @@ import * as readline from 'node:readline';
  * readline's Interface plus the undocumented members askSecret relies on:
  * the `_writeToOutput` hook, the configured `output` stream, and the
  * `stdoutMuted` flag this module stores on the instance.
- *
- * @typedef {readline.Interface & {
- *     _writeToOutput?: (s: string) => void,
- *     output: NodeJS.WritableStream,
- *     stdoutMuted?: boolean,
- * }} PromptInterface
  */
+type PromptInterface = readline.Interface & {
+    _writeToOutput?: (s: string) => void;
+    output: NodeJS.WritableStream;
+    stdoutMuted?: boolean;
+};
 
-/** @returns {PromptInterface} */
-const createReadlineInterface = () =>
-    /** @type {PromptInterface} */ (
-        readline.createInterface({
-            input: process.stdin,
-            output: process.stdout,
-        })
-    );
+const createReadlineInterface = (): PromptInterface =>
+    readline.createInterface({
+        input: process.stdin,
+        output: process.stdout,
+    }) as PromptInterface;
 
-/**
- * @param {string} question
- * @param {readline.Interface} rl
- * @returns {Promise<boolean>}
- */
-const askYesNo = async (question, rl) =>
+const askYesNo = async (question: string, rl: readline.Interface): Promise<boolean> =>
     new Promise((resolve) => {
         rl.question(`${question} (y/n): `, (answer) => {
             const normalized = answer.toLowerCase().trim();
@@ -44,12 +35,7 @@ const askYesNo = async (question, rl) =>
         });
     });
 
-/**
- * @param {string} question
- * @param {readline.Interface} rl
- * @returns {Promise<string>}
- */
-const askInput = async (question, rl) =>
+const askInput = async (question: string, rl: readline.Interface): Promise<string> =>
     new Promise((resolve) => {
         rl.question(question, (answer) => {
             resolve(answer.trim());
@@ -71,12 +57,8 @@ const askInput = async (question, rl) =>
  * out. The submitted password is unaffected; correcting + re-typing
  * still produces the right value. Acceptable trade for "no echo at all"
  * vs. the more complex stty-style raw-mode path.
- *
- * @param {string} question
- * @param {PromptInterface} rl
- * @returns {Promise<string>}
  */
-const askSecret = async (question, rl) =>
+const askSecret = async (question: string, rl: PromptInterface): Promise<string> =>
     new Promise((resolve) => {
         const originalWriteToOutput = rl._writeToOutput;
         rl.question(question, (answer) => {

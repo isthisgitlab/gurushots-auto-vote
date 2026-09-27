@@ -1,10 +1,10 @@
 {
     "$schema": "https://unpkg.com/knip@6/schema.json",
     "entry": [
-        "src/js/index.js",
-        "src/js/preload.js",
-        "src/js/bridge/capacitor.js",
-        "src/js/headless/index.js",
+        "src/js/index.ts",
+        "src/js/preload.ts",
+        "src/js/bridge/capacitor.ts",
+        "src/js/headless/index.ts",
         "src/js/react/pages/Login.jsx",
         "src/js/react/pages/App.jsx",
         "src/js/react/pages/Logs.jsx",

@@ -1,6 +1,6 @@
 /**
  * CLI settings commands. Each function is a thin shell around the
- * settings facade; the CLI host (cli.js) handles argv parsing and
+ * settings facade; the CLI host (cli.ts) handles argv parsing and
  * exit codes, this module formats values, validates schema keys,
  * and emits the user-facing logs.
  */
@@ -11,29 +11,22 @@ import { getDefaultSettings } from '../../settings';
 import { parseSettingValue } from '../parseValue';
 import { formatDuration } from '../../format/duration';
 
-/** @import { SettingsSchemaEntry } from '../../settings/schema' */
-/** @typedef {Record<string, SettingsSchemaEntry | undefined>} SchemaByKey */
+import type { SettingsSchemaEntry } from '../../settings/schema';
+type SchemaByKey = Record<string, SettingsSchemaEntry | undefined>;
 
 /**
  * The facade's schema entry for a key only known at runtime (argv), or
  * undefined for an unknown key.
- *
- * @param {string} key
- * @returns {SettingsSchemaEntry | undefined}
  */
-const schemaEntry = (key) => /** @type {SchemaByKey} */ (settings.SETTINGS_SCHEMA)[key];
+const schemaEntry = (key: string): SettingsSchemaEntry | undefined => (settings.SETTINGS_SCHEMA as SchemaByKey)[key];
 
 /**
  * Format a settings value for log output, redacting sensitive keys via
  * the same regex the on-disk sanitizer uses. Keys like `token` would
  * otherwise reach the log file embedded in the message string (which
  * the sanitizer does not see), defeating the Tier 1 protection.
- *
- * @param {string} key
- * @param {unknown} value
- * @returns {string}
  */
-const formatSettingForLog = (key, value) => {
+const formatSettingForLog = (key: string, value: unknown): string => {
     const masked = logger.sanitizeForLog({ [key]: value });
     if (masked[key] === '[REDACTED]') return '[REDACTED]';
 
@@ -57,8 +50,7 @@ const formatSettingForLog = (key, value) => {
 // command that validates against SETTINGS_SCHEMA. Self-contained (lists the
 // keys inline) so it stays correct for both hosts — the main CLI and the
 // pnpm settings:* scripts wire different command names for the schema dump.
-/** @param {string} key */
-const logUnknownSchemaKey = (key) => {
+const logUnknownSchemaKey = (key: string) => {
     logger.withCategory('settings').error(`Unknown schema setting '${key}'`);
     logger
         .withCategory('settings')
@@ -67,8 +59,7 @@ const logUnknownSchemaKey = (key) => {
 
 // Guard for the per-challenge variants: a key must declare perChallenge in
 // the schema before it can carry an override. Logs and returns false on miss.
-/** @param {string} key */
-const requirePerChallenge = (key) => {
+const requirePerChallenge = (key: string) => {
     if (!schemaEntry(key)?.perChallenge) {
         logger.withCategory('settings').error(`Setting '${key}' does not support per-challenge overrides`);
         return false;
@@ -76,11 +67,7 @@ const requirePerChallenge = (key) => {
     return true;
 };
 
-/**
- * @param {string} key
- * @param {string | null} [challengeId]
- */
-const getSetting = (key, challengeId = null) => {
+const getSetting = (key: string, challengeId: string | null = null) => {
     try {
         if (challengeId) {
             if (!requirePerChallenge(key)) return;
@@ -106,12 +93,9 @@ const getSetting = (key, challengeId = null) => {
 };
 
 /**
- * @param {string} key
- * @param {string} value - the raw argv token
- * @param {string | null} [challengeId]
- * @returns {boolean}
+ * @param value - the raw argv token
  */
-const setSetting = (key, value, challengeId = null) => {
+const setSetting = (key: string, value: string, challengeId: string | null = null): boolean => {
     try {
         const parsedValue = parseSettingValue(value);
         if (challengeId) {
@@ -158,15 +142,13 @@ const setSetting = (key, value, challengeId = null) => {
 };
 
 /**
- * @param {string} key
- * @param {string} value - the raw argv token
- * @returns {boolean}
+ * @param value - the raw argv token
  */
-const setGlobalDefault = (key, value) => {
+const setGlobalDefault = (key: string, value: string): boolean => {
     try {
         const parsedValue = parseSettingValue(value);
 
-        const schema = /** @type {SchemaByKey} */ (settings.SETTINGS_SCHEMA);
+        const schema = settings.SETTINGS_SCHEMA as SchemaByKey;
         if (!schema[key]) {
             logUnknownSchemaKey(key);
             return false;
@@ -181,7 +163,7 @@ const setGlobalDefault = (key, value) => {
         logger.withCategory('settings').error(`Failed to set global default '${key}' - validation failed`);
         logger.withCategory('settings').error(`Value ${JSON.stringify(parsedValue)} is invalid for this setting`);
 
-        const config = /** @type {SettingsSchemaEntry} */ (schema[key]);
+        const config = schema[key] as SettingsSchemaEntry;
         logger
             .withCategory('settings')
             .info(`Setting info: ${config.type} type, default: ${JSON.stringify(config.default)}`);
@@ -192,11 +174,10 @@ const setGlobalDefault = (key, value) => {
     }
 };
 
-/** @param {string | null} [challengeId] */
-const listSettings = (challengeId = null) => {
+const listSettings = (challengeId: string | null = null) => {
     try {
         if (challengeId) {
-            const schema = /** @type {Record<string, SettingsSchemaEntry>} */ (settings.SETTINGS_SCHEMA);
+            const schema = settings.SETTINGS_SCHEMA as Record<string, SettingsSchemaEntry>;
             const perChallengeKeys = Object.keys(schema)
                 .filter((key) => schema[key].perChallenge)
                 .sort();
@@ -244,11 +225,7 @@ const listSettings = (challengeId = null) => {
     }
 };
 
-/**
- * @param {string} key
- * @param {string | null} [challengeId]
- */
-const resetSetting = (key, challengeId = null) => {
+const resetSetting = (key: string, challengeId: string | null = null) => {
     try {
         if (challengeId) {
             if (!requirePerChallenge(key)) return false;
@@ -282,8 +259,7 @@ const resetSetting = (key, challengeId = null) => {
     }
 };
 
-/** @param {string} key */
-const resetGlobalDefault = (key) => {
+const resetGlobalDefault = (key: string) => {
     try {
         const entry = schemaEntry(key);
         if (!entry) {
@@ -380,11 +356,7 @@ const listProfiles = () => {
     }
 };
 
-/**
- * @param {string} name
- * @param {string} challengeId
- */
-const saveProfileFromChallenge = (name, challengeId) => {
+const saveProfileFromChallenge = (name: string, challengeId: string) => {
     try {
         const overrides = settings.getChallengeOverrides(challengeId);
         if (settings.saveChallengeProfile(name, overrides)) {
@@ -404,11 +376,7 @@ const saveProfileFromChallenge = (name, challengeId) => {
     }
 };
 
-/**
- * @param {string} name
- * @param {string} challengeId
- */
-const applyProfile = (name, challengeId) => {
+const applyProfile = (name: string, challengeId: string) => {
     try {
         if (settings.applyChallengeProfile(name, challengeId)) {
             logger.withCategory('settings').success(`Applied profile "${name}" to challenge ${challengeId}`);
@@ -427,8 +395,7 @@ const applyProfile = (name, challengeId) => {
     }
 };
 
-/** @param {string} name */
-const deleteProfile = (name) => {
+const deleteProfile = (name: string) => {
     try {
         if (settings.deleteChallengeProfile(name)) {
             logger.withCategory('settings').success(`Deleted profile "${name}"`);

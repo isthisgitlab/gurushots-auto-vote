@@ -17,13 +17,13 @@ const entryPoints = {
     capacitor: path.join(reactDir, 'pages', 'Capacitor.jsx'),
     // Android background service entry — runs in a bare WebView (no
     // Capacitor runtime) owned by AutoVoteService. Not a React page.
-    headless: path.join(jsDir, 'headless', 'index.js'),
+    headless: path.join(jsDir, 'headless', 'index.ts'),
     // Electron preload. Electron sandboxes preloads by default, and a
     // sandboxed preload's require() shim only resolves 'electron' + a few
     // builtins — NOT relative modules — so the shared channel manifest
     // (src/js/ipc/manifest.ts) must be BUNDLED into the preload file the
     // BrowserWindows load (dist/preload.js).
-    preload: path.join(jsDir, 'preload.js'),
+    preload: path.join(jsDir, 'preload.ts'),
 };
 
 // Capacitor entry point. Capacitor copies dist/ wholesale into the
@@ -125,7 +125,7 @@ async function buildReact() {
 
     // All renderer bundles run in a browser-context (Electron WebView
     // or Capacitor WebView). They reach shared modules (runtime.ts,
-    // settings.js, ForegroundServiceController, etc.) that lazy-require
+    // settings.ts, ForegroundServiceController, etc.) that lazy-require
     // Node built-ins and electron — code paths the renderer never
     // reaches at runtime (it goes through window.api / Capacitor.Plugins),
     // but esbuild still tries to resolve at bundle time. Marking them
@@ -193,7 +193,7 @@ async function buildReact() {
     // Browser shims for Node globals that the bundled code touches at
     // module load before any isCapacitor() guard can run. The require
     // shim returns module-aware stubs (fs/path/os) with the small
-    // surface area logger.ts / runtime.ts / settings.js actually call —
+    // surface area logger.ts / runtime.ts / settings.ts actually call —
     // each method either no-ops or returns a sensible neutral value
     // (false for existsSync, joined string for path.join, etc.) so
     // module init does not throw. All real fs work lives behind

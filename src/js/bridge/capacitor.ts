@@ -1,6 +1,6 @@
 /**
  * Capacitor bridge — populates window.api with the same surface that
- * preload.js exposes on Electron, but consumes the IPC handlers
+ * preload.ts exposes on Electron, but consumes the IPC handlers
  * directly instead of going through ipcMain/ipcRenderer.
  *
  * Capacitor runs everything in one JavaScript context (the WebView), so
@@ -15,7 +15,7 @@
  * React code does not need to branch.
  *
  * This module is loaded only by the Capacitor renderer entry. It is
- * never reached on Electron, where preload.js does the wiring.
+ * never reached on Electron, where preload.ts does the wiring.
  */
 
 // Bridge consumes only the IPC handler modules whose impls are
@@ -41,49 +41,40 @@ import * as updateChecker from '../services/UpdateChecker';
 import * as androidUpdateInstaller from '../services/AndroidUpdateInstaller';
 import { hasBundledModel } from '../services/visionVerifier';
 import * as pkg from '../../../package.json';
+// kebab-case channel name → camelCase renderer method name — shared with
+// preload.ts via the channel manifest so both shells derive identically.
+import { kebabToCamel, aliases, sendMethods, eventMethods } from '../ipc/manifest';
 
-/**
- * @import { IpcHandler } from '../ipc/registerHandlers'
- * @import { CapacitorGlobals } from '../types/capacitor'
- * @import { GuiLogSink } from '../logger'
- */
+import type { IpcHandler } from '../ipc/registerHandlers';
+import type { CapacitorGlobals } from '../types/capacitor';
+import type { GuiLogSink } from '../logger';
 
-/**
- * @typedef {{
- *   currentVersion: string,
- *   latestVersion: string | null,
- *   releaseNotes: string,
- *   releaseDate: string | null,
- *   isPrerelease: boolean,
- *   downloadUrl: string | null,
- * }} BridgeUpdateInfo
- */
+export type BridgeUpdateInfo = {
+    currentVersion: string;
+    latestVersion: string | null;
+    releaseNotes: string;
+    releaseDate: string | null;
+    isPrerelease: boolean;
+    downloadUrl: string | null;
+};
 
-/** @typedef {(payload: unknown) => void} BridgeListener */
+export type BridgeListener = (payload: unknown) => void;
 
 // Cached result of the most recent check-for-updates call. download-update
 // reads this so the React UI does not need to thread the URL through.
-/** @type {BridgeUpdateInfo | null} */
-let lastUpdateInfo = null;
+let lastUpdateInfo: BridgeUpdateInfo | null = null;
 
 // Tiny in-process pub/sub. Replaces webContents.send broadcasts.
-/** @type {Map<string, Set<BridgeListener>>} */
-const listeners = new Map();
+const listeners: Map<string, Set<BridgeListener>> = new Map();
 /**
- * @param {string} channel
- * @param {BridgeListener} fn
- * @returns {() => boolean | undefined} unsubscribe
+ * @returns unsubscribe
  */
-const subscribe = (channel, fn) => {
+const subscribe = (channel: string, fn: BridgeListener): (() => boolean | undefined) => {
     if (!listeners.has(channel)) listeners.set(channel, new Set());
-    /** @type {Set<BridgeListener>} */ (listeners.get(channel)).add(fn);
+    (listeners.get(channel) as Set<BridgeListener>).add(fn);
     return () => listeners.get(channel)?.delete(fn);
 };
-/**
- * @param {string} channel
- * @param {unknown} [payload]
- */
-const emit = (channel, payload) => {
+const emit = (channel: string, payload?: unknown) => {
     const set = listeners.get(channel);
     if (!set) return;
     for (const fn of set) {
@@ -95,16 +86,12 @@ const emit = (channel, payload) => {
     }
 };
 
-// kebab-case channel name → camelCase renderer method name — shared with
-// preload.js via the channel manifest so both shells derive identically.
-import { kebabToCamel, aliases, sendMethods, eventMethods } from '../ipc/manifest';
-
 // Wrap a handler whose signature is (event, ...args) so the
 // renderer can call it as (...args). The first parameter (event) is
 // passed as null since there is no IPC event on Capacitor.
 const wrap =
-    (/** @type {IpcHandler} */ impl) =>
-    (/** @type {unknown[]} */ ...args) =>
+    (impl: IpcHandler) =>
+    (...args: unknown[]) =>
         Promise.resolve(impl(null, ...args));
 
 const buildAllHandlers = () => {
@@ -112,7 +99,7 @@ const buildAllHandlers = () => {
     // mutating passthroughs) broadcasts through the local pub/sub so React's
     // onSettingsChanged subscribers fire.
     const settingsDeps = {
-        broadcastSettingsChange: (/** @type {object} */ newSettings) => emit('settings-changed', newSettings),
+        broadcastSettingsChange: (newSettings: object) => emit('settings-changed', newSettings),
     };
 
     // Update channels: check-for-updates uses the shared UpdateChecker
@@ -173,8 +160,7 @@ const buildAllHandlers = () => {
             const result = await androidUpdateInstaller.downloadAndInstall({
                 downloadUrl: lastUpdateInfo.downloadUrl,
                 version: lastUpdateInfo.latestVersion,
-                onProgress: (/** @type {{ percent?: number }} */ progress) =>
-                    emit('update-download-progress', progress),
+                onProgress: (progress: { percent?: number }) => emit('update-download-progress', progress),
             });
             if (result.success) {
                 // The browser is now downloading. The user finishes
@@ -233,8 +219,7 @@ const installBridge = () => {
         logger.withCategory('settings').warning('Intent profile seeding failed (non-fatal):', err);
     }
     const handlers = buildAllHandlers();
-    /** @type {Record<string, (...args: never[]) => unknown>} */
-    const api = {};
+    const api: Record<string, (...args: never[]) => unknown> = {};
 
     // Map every handler to a window.api method using kebab → camel
     for (const [channel, impl] of Object.entries(handlers)) {
@@ -270,14 +255,14 @@ const installBridge = () => {
     // (useLogStream → onLogMessage) receives live entries. Electron does
     // the equivalent in log.handlers.register() by setting
     // global.sendLogToGUI; the WebView has no `global`, so use globalThis.
-    /** @type {typeof globalThis & { sendLogToGUI?: GuiLogSink }} */ (globalThis).sendLogToGUI = (entry) =>
+    (globalThis as typeof globalThis & { sendLogToGUI?: GuiLogSink }).sendLogToGUI = (entry) =>
         emit('log-message', entry);
 
     // Event listeners, generated from the shared manifest. Each returns
     // subscribe()'s unsubscribe, matching the Electron preload contract so
     // React code does not branch per platform.
     for (const [method, channel] of Object.entries(eventMethods)) {
-        api[method] = (/** @type {BridgeListener} */ cb) => subscribe(channel, cb);
+        api[method] = (cb: BridgeListener) => subscribe(channel, cb);
     }
 
     // Window controls the React app sometimes asks for. On mobile,
@@ -290,7 +275,7 @@ const installBridge = () => {
         return Promise.resolve({ success: true });
     };
     api.refreshMenu = () => Promise.resolve({ success: true }); // no menu on mobile
-    api.openExternalUrl = (/** @type {unknown} */ url) => {
+    api.openExternalUrl = (url: unknown) => {
         // Same https-only scheme gate as the Electron handler (shared via
         // format/urlSafe) — the two platforms must not diverge on this
         // security control. Without it the Android path would open any
@@ -303,22 +288,22 @@ const installBridge = () => {
         // to window.open. Loaded lazily so non-Capacitor paths never
         // resolve @capacitor/browser.
         try {
-            const Cap = /** @type {CapacitorGlobals} */ (globalThis).Capacitor;
+            const Cap = (globalThis as CapacitorGlobals).Capacitor;
             if (Cap?.Plugins?.Browser?.open) {
                 // isSafeExternalUrl only passes a string.
-                return Cap.Plugins.Browser.open({ url: /** @type {string} */ (url) });
+                return Cap.Plugins.Browser.open({ url: url as string });
             }
         } catch {
             // fall through
         }
         if (typeof globalThis.open === 'function') {
-            globalThis.open(/** @type {string} */ (url), '_blank');
+            globalThis.open(url as string, '_blank');
         }
         return Promise.resolve({ success: true });
     };
 
     // Expose
-    /** @type {typeof globalThis & { api?: object }} */ (globalThis).api = api;
+    (globalThis as typeof globalThis & { api?: object }).api = api;
     return api;
 };
 

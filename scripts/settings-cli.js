@@ -25,7 +25,7 @@ const { spawn } = require('node:child_process');
  *
  * Output note (deliberate): `get` prints plain console lines (pipeable,
  * no timestamps — it is the read/inspect path), while the mutating
- * commands delegate to src/js/cli/commands/settings.js and emit through
+ * commands delegate to src/js/cli/commands/settings.ts and emit through
  * the shared logger (timestamped, colored) exactly like the main CLI.
  *
  * Examples:
@@ -194,13 +194,13 @@ async function main() {
             }
 
             case 'schema': {
-                // Shared with the main CLI (src/js/cli/commands/settings.js).
+                // Shared with the main CLI (src/js/cli/commands/settings.ts).
                 dumpSchema();
                 break;
             }
 
             case 'global-defaults': {
-                // Shared with the main CLI (src/js/cli/commands/settings.js).
+                // Shared with the main CLI (src/js/cli/commands/settings.ts).
                 listGlobalDefaults();
                 break;
             }

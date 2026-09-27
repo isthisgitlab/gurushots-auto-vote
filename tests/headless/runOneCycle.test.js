@@ -1,5 +1,5 @@
 /**
- * Tests for the Android headless background entry (src/js/headless/index.js).
+ * Tests for the Android headless background entry (src/js/headless/index.ts).
  * It runs one full voting cycle via the existing orchestrator and reports
  * the result + next cadence back to the native service through
  * AndroidHeadlessBridge.onCycleComplete.

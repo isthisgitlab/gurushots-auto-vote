@@ -49,7 +49,7 @@ const isElectronApp = runtime.isElectron();
 
 // Runtime owns the single implementation of source-detection, app naming,
 // and user-data resolution — logger re-exports isSourceCode/getAppName
-// because settings.js and tests consume them through this module.
+// because settings.ts and tests consume them through this module.
 const { isSourceCode, getAppName } = runtime;
 const getUserDataPath = runtime.getAppUserDataPath;
 
@@ -74,9 +74,10 @@ try {
 const devMode = runtime.isDevelopment();
 
 // Check if we're in CLI mode vs GUI mode
-// CLI mode: running directly from cli.js or when electron main process handles CLI commands
+// CLI mode: running directly from cli.ts (through tsx, or as its .js bundle) or when
+// electron main process handles CLI commands
 // GUI mode: electron main process handling GUI IPC calls
-const startedViaCli = Boolean(process.argv[1] && process.argv[1].includes('cli.js'));
+const startedViaCli = Boolean(process.argv[1] && /cli\.[jt]s/.test(process.argv[1]));
 const cliMode = !isElectronApp || startedViaCli;
 
 // Get current date in YYYY-MM-DD format

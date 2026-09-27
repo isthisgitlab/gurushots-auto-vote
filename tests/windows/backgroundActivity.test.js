@@ -1,6 +1,6 @@
 /**
  * Tests for the auto-vote power-save blocker
- * (src/js/windows/backgroundActivity.js).
+ * (src/js/windows/backgroundActivity.ts).
  *
  * The module's whole job is to keep a held assertion in step with the running
  * flag without ever throwing at its callers, so these tests pin three things:

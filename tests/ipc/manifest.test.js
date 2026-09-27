@@ -5,7 +5,7 @@
  * Asserts set-equality between the manifest's invoke surface
  * (invokeChannels ∪ alias targets) and the union of every
  * ipc/*.handlers.ts buildHandlers() key, and between the manifest's
- * sendMethods channels and index.js's direct ipcMain.on registrations
+ * sendMethods channels and index.ts's direct ipcMain.on registrations
  * (login-success / logout live there, not in a handlers module).
  *
  * Coverage is name-level only: a signature change on a channel present on
@@ -79,10 +79,10 @@ describe('ipc channel manifest', () => {
         expect(manifestSet).toEqual(handlerSet);
     });
 
-    test('sendMethods channels set-equal index.js direct ipcMain.on registrations', () => {
-        // index.js pulls in the whole Electron app bootstrap, so its direct
+    test('sendMethods channels set-equal index.ts direct ipcMain.on registrations', () => {
+        // index.ts pulls in the whole Electron app bootstrap, so its direct
         // registrations are read structurally instead of by requiring it.
-        const src = fs.readFileSync(path.join(__dirname, '../../src/js/index.js'), 'utf8');
+        const src = fs.readFileSync(path.join(__dirname, '../../src/js/index.ts'), 'utf8');
         const registered = [...src.matchAll(/ipcMain\.on\(\s*'([^']+)'/g)].map((m) => m[1]).sort();
         expect(Object.values(sendMethods).sort()).toEqual(registered);
     });

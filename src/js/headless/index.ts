@@ -33,16 +33,10 @@ import {
 } from '../scheduling/nodeResolvers';
 import { DEFAULT_TIMEZONE } from '../settings/uiDefaults';
 
-/**
- * @import { ActiveChallengesResponse, Challenge } from '../types/gurushots'
- * @import { HeadlessGlobals } from '../types/capacitor'
- */
+import type { ActiveChallengesResponse, Challenge } from '../types/gurushots';
+import type { HeadlessGlobals } from '../types/capacitor';
 
-/**
- * @param {string} msg
- * @param {unknown} [data]
- */
-const log = (msg, data) => logger.withCategory('voting').info(`[headless] ${msg}`, data);
+const log = (msg: string, data?: unknown) => logger.withCategory('voting').info(`[headless] ${msg}`, data);
 
 /**
  * Mirror the scheduler's cadence decision for a single tick via the shared
@@ -59,22 +53,18 @@ const log = (msg, data) => logger.withCategory('voting').info(`[headless] ${msg}
  * full (possibly very long) normal cadence. This mirrors the cadence chain's
  * offline-retry cap; the headless loop schedules its own AlarmManager ticks but
  * must recover on the same beat.
- *
- * @param {string} token
- * @param {Challenge[] | null} [prefetched]
- * @returns {Promise<number>}
  */
-const computeNextDelayMs = async (token, prefetched = null) => {
+const computeNextDelayMs = async (token: string, prefetched: Challenge[] | null = null): Promise<number> => {
     const userSettings = settings.loadSettings();
     try {
-        /** @type {Challenge[]} */
-        let list;
+        let list: Challenge[];
         let fetchFailedNow = false;
         if (Array.isArray(prefetched)) {
             list = prefetched;
         } else {
-            /** @type {ActiveChallengesResponse | null} */
-            const fetched = await apiFactory.getApiStrategy().getActiveChallenges(token);
+            const fetched: ActiveChallengesResponse | null = await apiFactory
+                .getApiStrategy()
+                .getActiveChallenges(token);
             list = fetched?.challenges || [];
             fetchFailedNow = fetched?.fetchFailed === true;
         }
@@ -103,18 +93,17 @@ const computeNextDelayMs = async (token, prefetched = null) => {
     } catch (err) {
         log(
             'next-delay computation failed; using normal cadence',
-            /** @type {{ message?: string } | null | undefined} */ (err)?.message ?? String(err),
+            (err as { message?: string } | null | undefined)?.message ?? String(err),
         );
         return getRandomCheckFrequencyMs(userSettings);
     }
 };
 
-/** @param {object} payload */
-const reportComplete = (payload) => {
+const reportComplete = (payload: object) => {
     try {
-        /** @type {HeadlessGlobals} */ (globalThis).AndroidHeadlessBridge?.onCycleComplete(JSON.stringify(payload));
+        (globalThis as HeadlessGlobals).AndroidHeadlessBridge?.onCycleComplete(JSON.stringify(payload));
     } catch (err) {
-        log('onCycleComplete failed', /** @type {Error} */ (err).message);
+        log('onCycleComplete failed', (err as Error).message);
     }
 };
 
@@ -133,8 +122,8 @@ const runOneCycle = async () => {
         }
 
         log('cycle starting');
-        /** @type {{ success?: boolean, message?: string, error?: string, challenges?: Challenge[] } | null} */
-        const result = await apiFactory.getApiStrategy().fetchChallengesAndVote(token);
+        const result: { success?: boolean; message?: string; error?: string; challenges?: Challenge[] } | null =
+            await apiFactory.getApiStrategy().fetchChallengesAndVote(token);
         const ok = result ? result.success !== false : false;
         // Only reuse the cycle's list when it succeeded. On an outage the
         // orchestrator returns `{ success: false, challenges: [] }`, and that
@@ -145,7 +134,7 @@ const runOneCycle = async () => {
         log('cycle complete', { ok, nextDelayMs });
         reportComplete({ ok, message: (result && (result.message || result.error)) || null, nextDelayMs });
     } catch (err) {
-        const thrown = /** @type {{ message?: string } | null | undefined} */ (err);
+        const thrown = err as { message?: string } | null | undefined;
         log('cycle threw', thrown && thrown.message);
         reportComplete({
             ok: false,
@@ -155,7 +144,7 @@ const runOneCycle = async () => {
     }
 };
 
-/** @type {HeadlessGlobals} */ (globalThis).GS = { runOneCycle };
+(globalThis as HeadlessGlobals).GS = { runOneCycle };
 log('headless bundle loaded');
 
 export { runOneCycle, computeNextDelayMs };

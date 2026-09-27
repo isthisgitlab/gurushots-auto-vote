@@ -1,5 +1,5 @@
 /**
- * Unit tests for the CLI voting commands (commands/voting.js): manual and
+ * Unit tests for the CLI voting commands (commands/voting.ts): manual and
  * strategy cycles, single-challenge manual vote fallbacks, --challenge flag
  * parsing, continuous mode (scheduler wiring + graceful shutdown) and the
  * status banner. The middleware, scheduler, auth service and handlers are

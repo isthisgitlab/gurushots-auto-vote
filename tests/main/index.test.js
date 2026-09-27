@@ -1,11 +1,11 @@
 /**
- * Electron main entry (src/js/index.js): single-instance lock, IPC module
+ * Electron main entry (src/js/index.ts): single-instance lock, IPC module
  * wiring, window creation/bounds persistence, startup update-check ordering,
  * app lifecycle events, the quit-guard wiring and the login-success / logout
  * window swaps.
  *
  * Every collaborator is mocked; each test re-requires the entry point on a
- * fresh module registry (module-level window state lives in index.js).
+ * fresh module registry (module-level window state lives in index.ts).
  */
 
 jest.mock('electron', () => {
@@ -81,7 +81,7 @@ jest.mock('../../src/js/logger', () => {
 });
 
 jest.mock('../../src/js/settings', () => ({
-    // index.js hands its settings namespace on (clearTokenOnQuit); the marker makes
+    // index.ts hands its settings namespace on (clearTokenOnQuit); the marker makes
     // that namespace this very object, so the assertions can compare identity.
     __esModule: true,
     getWindowBounds: jest.fn((kind) => ({ width: 800, height: 600, x: kind === 'main' ? 10 : 20, y: 30 })),

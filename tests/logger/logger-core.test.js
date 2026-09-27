@@ -230,6 +230,13 @@ describe('periodic cleanup interval', () => {
         expect(fs.readdirSync).toHaveBeenCalledTimes(1);
     });
 
+    test('the tsx source run via cli.ts is a CLI run too', () => {
+        const { fs } = loadLogger({ argv1: '/app/src/js/cli/cli.ts' });
+        fs.readdirSync.mockClear();
+        jest.advanceTimersByTime(60 * 60 * 1000);
+        expect(fs.readdirSync).toHaveBeenCalledTimes(1);
+    });
+
     test('other Node contexts (tests, scripts) schedule nothing; exit handler is a no-op', () => {
         const { onExit } = loadLogger({ argv1: '/x/jest' });
         expect(jest.getTimerCount()).toBe(0);

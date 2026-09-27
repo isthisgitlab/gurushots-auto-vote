@@ -13,7 +13,7 @@
  * it with their platform's resolver, so the part that actually drifts is
  * never duplicated. `computeNextCycleDelayMs` builds on these
  * to make the whole per-cycle cadence decision in one place, so every host
- * (CLI `runScheduler.ts`, GUI `AutovoteContext.jsx`, Android `headless/index.js`)
+ * (CLI `runScheduler.ts`, GUI `AutovoteContext.jsx`, Android `headless/index.ts`)
  * drives a single setTimeout/alarm chain off the same rule rather than each
  * carrying its own boundary-switch timer.
  */

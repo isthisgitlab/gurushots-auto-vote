@@ -21,13 +21,12 @@ import { clearTokenUnlessStayingLoggedIn } from '../../services/auth';
 // bypassing thresholds). Built lazily on first use so loading this module for
 // status/scheduling commands doesn't construct the handler set; invoked with
 // a null event.
-/** @import { NullEventHandlers } from '../../types/cli' */
-/** @import { Challenge } from '../../types/gurushots' */
-/** @typedef {NullEventHandlers<ReturnType<typeof import('../../ipc/voting.handlers').buildHandlers>>} VotingHandlers */
-/** @type {VotingHandlers | undefined} */
-let _votingHandlers;
-/** @returns {VotingHandlers} */
-const votingHandlers = () => (_votingHandlers ??= require('../../ipc/voting.handlers').buildHandlers());
+import type { NullEventHandlers } from '../../types/cli';
+import type { Challenge } from '../../types/gurushots';
+import type * as voting_handlersModule from '../../ipc/voting.handlers';
+type VotingHandlers = NullEventHandlers<ReturnType<typeof voting_handlersModule.buildHandlers>>;
+let _votingHandlers: VotingHandlers | undefined;
+const votingHandlers = (): VotingHandlers => (_votingHandlers ??= require('../../ipc/voting.handlers').buildHandlers());
 
 /**
  * Run a single voting cycle. Pass {isManual: true} to use the manual
@@ -35,13 +34,14 @@ const votingHandlers = () => (_votingHandlers ??= require('../../ipc/voting.hand
  * {challengeId} to scope a strategy cycle to a single challenge —
  * ignored when isManual is true.
  *
- * @param {number} [cycleNumber]
- * @param {{ isManual?: boolean, challengeId?: string | null }} [opts]
- * @returns {Promise<{success:boolean, challenges:Challenge[]|null}>} `challenges` is the
+ * @returns `challenges` is the
  *   full active list the strategy cycle fetched (null for the manual path or any
  *   failure), letting the scheduler reuse it for threshold scheduling.
  */
-const runVotingCycle = async (cycleNumber = 1, { isManual = false, challengeId = null } = {}) => {
+const runVotingCycle = async (
+    cycleNumber: number = 1,
+    { isManual = false, challengeId = null }: { isManual?: boolean; challengeId?: string | null } = {},
+): Promise<{ success: boolean; challenges: Challenge[] | null }> => {
     const scopeSuffix = !isManual && challengeId != null ? ` (challenge ${challengeId})` : '';
     const label = isManual ? 'Manual Voting' : 'Voting';
     const opId = isManual ? `manual-vote-cycle-${cycleNumber}` : `vote-cycle-${cycleNumber}`;
@@ -65,8 +65,7 @@ const runVotingCycle = async (cycleNumber = 1, { isManual = false, challengeId =
         // Capture the strategy cycle's challenge list so the scheduler can hand it
         // to the threshold step (avoids a duplicate getActiveChallenges fetch). The
         // manual path votes-to-100% and surfaces no list.
-        /** @type {Challenge[] | null} */
-        let challenges = null;
+        let challenges: Challenge[] | null = null;
         let success = true;
         if (isManual) {
             await getMiddleware().cliVoteManual();
@@ -100,11 +99,10 @@ const runVotingCycle = async (cycleNumber = 1, { isManual = false, challengeId =
  * the CLI parity of the GUI card's manual-vote button. Reuses the
  * vote-on-challenge-manual handler; resolves the challenge title first
  * because that handler validates a non-empty title.
- *
- * @param {string} challengeId
- * @returns {Promise<{success:boolean, message?:string, error?:string}>}
  */
-const voteChallengeManual = async (challengeId) => {
+const voteChallengeManual = async (
+    challengeId: string,
+): Promise<{ success: boolean; message?: string; error?: string }> => {
     if (!ensureAuthenticated()) {
         return { success: false, error: 'Not authenticated' };
     }
@@ -112,7 +110,7 @@ const voteChallengeManual = async (challengeId) => {
     let title;
     try {
         const resp = await getMiddleware().getActiveChallenges();
-        const challenge = findActiveChallenge(/** @type {Challenge[] | undefined} */ (resp?.challenges), challengeId);
+        const challenge = findActiveChallenge(resp?.challenges as Challenge[] | undefined, challengeId);
         if (!challenge) {
             logger.withCategory('challenges').error(`Challenge ${challengeId} not found among active challenges`);
             return { success: false, error: `Challenge ${challengeId} not found` };
@@ -121,9 +119,7 @@ const voteChallengeManual = async (challengeId) => {
     } catch (err) {
         logger
             .withCategory('challenges')
-            .error(
-                `Failed to fetch challenges: ${/** @type {{ message?: unknown } | null | undefined} */ (err)?.message || err}`,
-            );
+            .error(`Failed to fetch challenges: ${(err as { message?: unknown } | null | undefined)?.message || err}`);
         return { success: false, error: 'Failed to fetch challenges' };
     }
 
@@ -139,11 +135,11 @@ const voteChallengeManual = async (challengeId) => {
         logger
             .withCategory('voting')
             .error(
-                `Failed to vote on "${title}": ${/** @type {{ message?: unknown } | null | undefined} */ (err)?.message || err}`,
+                `Failed to vote on "${title}": ${(err as { message?: unknown } | null | undefined)?.message || err}`,
             );
         return {
             success: false,
-            error: /** @type {{ message?: string } | null | undefined} */ (err)?.message || 'Failed to vote',
+            error: (err as { message?: string } | null | undefined)?.message || 'Failed to vote',
         };
     }
 };
@@ -151,11 +147,8 @@ const voteChallengeManual = async (challengeId) => {
 /**
  * Pull a `--challenge=<id>` or `--challenge <id>` flag value from
  * the remaining argv tail. Returns null when absent.
- *
- * @param {string[]} argv
- * @returns {string | null}
  */
-const parseChallengeFlag = (argv) => {
+const parseChallengeFlag = (argv: string[]): string | null => {
     for (let i = 0; i < argv.length; i++) {
         const a = argv[i];
         if (a === '--challenge') {
@@ -288,9 +281,7 @@ const showStatus = async () => {
         } catch (err) {
             logger
                 .withCategory('ui')
-                .info(
-                    `  (unavailable — ${/** @type {{ message?: unknown } | null | undefined} */ (err)?.message || err})`,
-                );
+                .info(`  (unavailable — ${(err as { message?: unknown } | null | undefined)?.message || err})`);
         }
     }
 

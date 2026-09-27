@@ -7,7 +7,7 @@ import * as ipc from '@/api/ipc';
 
 /**
  * Module-scope defaults for the UI settings half of the modal. Sourced
- * from the same module settings.js getDefaultSettings() spreads
+ * from the same module settings.ts getDefaultSettings() spreads
  * (settings/uiDefaults), so the form can never drift from the storage
  * layer; kept out of the hook body so per-setting reset and reset-all
  * share one object.
@@ -32,8 +32,8 @@ const withFallback = (value, defaultValue) => {
 
 /**
  * Structural equality for setting values (scalars, arrays, plain objects) —
- * the same JSON comparison settings.js uses, kept local because the renderer
- * must not import settings.js.
+ * the same JSON comparison settings.ts uses, kept local because the renderer
+ * must not import settings.ts.
  */
 /**
  * @param {unknown} a

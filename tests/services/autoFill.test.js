@@ -779,7 +779,7 @@ describe('maybeAutoFillChallenge — staggered auto-fill', () => {
     });
 
     test('getEffectiveSetting returning null for tag settings means "no filter"', async () => {
-        // Real settings.js can return null when no global default is set;
+        // Real settings.ts can return null when no global default is set;
         // tokeniseTagList handles null/undefined → []. Verify the picker
         // is reached with both photos eligible.
         const challenge = makeChallenge({ maxSubmits: 4, entries: [], closeIn: 5 * 60 });

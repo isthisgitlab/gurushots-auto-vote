@@ -30,7 +30,7 @@ import { mountApp } from './App';
 import { mountLogin } from './Login';
 
 // Mount Login or App based on whether we have a token. Electron's
-// index.js picks this via createLoginWindow vs createMainWindow and
+// index.ts picks this via createLoginWindow vs createMainWindow and
 // swaps windows on login/logout; Capacitor has only one WebView so
 // we swap React trees and rely on a clean DOM reset between mounts
 // (otherwise React's reconciler hits removeChild errors when its

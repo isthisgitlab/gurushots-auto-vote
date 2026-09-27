@@ -6,7 +6,7 @@
  * / `fill-challenge-now` IPC handlers called with a null event — the same
  * shape the Capacitor bridge uses. The currency spends (unlock-boost / swap /
  * fill-exposure) reuse their IPC handlers the same way. All target a single challenge
- * identified by `--challenge=<id>`; the dispatcher in cli.js enforces that
+ * identified by `--challenge=<id>`; the dispatcher in cli.ts enforces that
  * the flag is present.
  */
 
@@ -15,24 +15,23 @@ import { ensureAuthenticated } from '../guards';
 import { getMiddleware } from '../../apiFactory';
 import { findActiveChallenge } from '../../services/findActiveChallenge';
 
-/** @import { Challenge } from '../../types/gurushots' */
-/** @import { SwapBackRecord } from '../../types/stores' */
-/** @import { NullEventHandlers } from '../../types/cli' */
-/** @typedef {NullEventHandlers<ReturnType<typeof import('../../ipc/actions.handlers').buildHandlers>>} ActionHandlers */
-/** @typedef {NullEventHandlers<ReturnType<typeof import('../../ipc/currency.handlers').buildHandlers>>} CurrencyHandlers */
-/** @typedef {'keys' | 'swaps' | 'fills'} CurrencyField */
+import type { Challenge } from '../../types/gurushots';
+import type { SwapBackRecord } from '../../types/stores';
+import type { NullEventHandlers } from '../../types/cli';
+import type * as actions_handlersModule from '../../ipc/actions.handlers';
+import type * as currency_handlersModule from '../../ipc/currency.handlers';
+type ActionHandlers = NullEventHandlers<ReturnType<typeof actions_handlersModule.buildHandlers>>;
+type CurrencyHandlers = NullEventHandlers<ReturnType<typeof currency_handlersModule.buildHandlers>>;
+type CurrencyField = 'keys' | 'swaps' | 'fills';
 
 // Built lazily on first use so simply requiring this module (e.g. when the
 // dispatcher loads it for `help` or `logout`) does not construct the handler
 // set or pull in its transitive dependencies.
-/** @type {ActionHandlers | undefined} */
-let _handlers;
-/** @returns {ActionHandlers} */
-const handlers = () => (_handlers ??= require('../../ipc/actions.handlers').buildHandlers());
-/** @type {CurrencyHandlers | undefined} */
-let _currencyHandlers;
-/** @returns {CurrencyHandlers} */
-const currencyHandlers = () => (_currencyHandlers ??= require('../../ipc/currency.handlers').buildHandlers());
+let _handlers: ActionHandlers | undefined;
+const handlers = (): ActionHandlers => (_handlers ??= require('../../ipc/actions.handlers').buildHandlers());
+let _currencyHandlers: CurrencyHandlers | undefined;
+const currencyHandlers = (): CurrencyHandlers =>
+    (_currencyHandlers ??= require('../../ipc/currency.handlers').buildHandlers());
 
 /**
  * Shared auth guard + challenge lookup. Returns the live challenge object,
@@ -43,17 +42,14 @@ const currencyHandlers = () => (_currencyHandlers ??= require('../../ipc/currenc
  * themselves, so this lookup is the friendly auth gate + early "not found"
  * (and the source of the title for logging), not the authoritative state
  * check — don't remove the handlers' own fetch on the assumption this covers it.
- *
- * @param {string} challengeId
- * @returns {Promise<Challenge | null>}
  */
-const resolveChallenge = async (challengeId) => {
+const resolveChallenge = async (challengeId: string): Promise<Challenge | null> => {
     if (!ensureAuthenticated()) {
         return null;
     }
     try {
         const resp = await getMiddleware().getActiveChallenges();
-        const challenge = findActiveChallenge(/** @type {Challenge[] | undefined} */ (resp?.challenges), challengeId);
+        const challenge = findActiveChallenge(resp?.challenges as Challenge[] | undefined, challengeId);
         if (!challenge) {
             logger.withCategory('challenges').error(`Challenge ${challengeId} not found among active challenges`);
             return null;
@@ -62,9 +58,7 @@ const resolveChallenge = async (challengeId) => {
     } catch (err) {
         logger
             .withCategory('challenges')
-            .error(
-                `Failed to fetch challenges: ${/** @type {{ message?: unknown } | null | undefined} */ (err)?.message || err}`,
-            );
+            .error(`Failed to fetch challenges: ${(err as { message?: unknown } | null | undefined)?.message || err}`);
         return null;
     }
 };
@@ -73,11 +67,8 @@ const resolveChallenge = async (challengeId) => {
  * Apply a boost to a single challenge. With `--image=<id>` the explicit
  * entry is boosted via the same handler the GUI card button uses; otherwise
  * the auto-cycle's `applyBoost` picks the entry from `boostImageIndex`.
- *
- * @param {string} challengeId
- * @param {{ imageId?: string | null }} [opts]
  */
-const boostChallenge = async (challengeId, { imageId = null } = {}) => {
+const boostChallenge = async (challengeId: string, { imageId = null }: { imageId?: string | null } = {}) => {
     const challenge = await resolveChallenge(challengeId);
     if (!challenge) return;
 
@@ -103,9 +94,7 @@ const boostChallenge = async (challengeId, { imageId = null } = {}) => {
     } catch (err) {
         logger
             .withCategory('boost')
-            .error(
-                `Failed to apply boost: ${/** @type {{ message?: unknown } | null | undefined} */ (err)?.message || err}`,
-            );
+            .error(`Failed to apply boost: ${(err as { message?: unknown } | null | undefined)?.message || err}`);
     }
 };
 
@@ -113,10 +102,8 @@ const boostChallenge = async (challengeId, { imageId = null } = {}) => {
  * Play the Turbo mini-game on a single challenge. Delegates to the
  * play-auto-turbo handler, which resolves the entry (turboImageIndex) and
  * runs the full mini-game loop.
- *
- * @param {string} challengeId
  */
-const turboChallenge = async (challengeId) => {
+const turboChallenge = async (challengeId: string) => {
     const challenge = await resolveChallenge(challengeId);
     if (!challenge) return;
 
@@ -130,20 +117,15 @@ const turboChallenge = async (challengeId) => {
     } catch (err) {
         logger
             .withCategory('turbo')
-            .error(
-                `Failed to play turbo: ${/** @type {{ message?: unknown } | null | undefined} */ (err)?.message || err}`,
-            );
+            .error(`Failed to play turbo: ${(err as { message?: unknown } | null | undefined)?.message || err}`);
     }
 };
 
 /**
  * Submit photo(s) to a challenge's empty slots. `--all` submits to every
  * empty slot; otherwise a single best-ranked eligible photo is submitted.
- *
- * @param {string} challengeId
- * @param {{ all?: boolean }} [opts]
  */
-const fillChallenge = async (challengeId, { all = false } = {}) => {
+const fillChallenge = async (challengeId: string, { all = false }: { all?: boolean } = {}) => {
     const challenge = await resolveChallenge(challengeId);
     if (!challenge) return;
 
@@ -152,7 +134,7 @@ const fillChallenge = async (challengeId, { all = false } = {}) => {
         const result = await handlers()['fill-challenge-now'](null, challengeId, mode);
         if (result?.success) {
             // The handler's result arms share `success: boolean`, so the check above does not narrow.
-            const filled = /** @type {{ message?: string, submitted?: number, skipped?: number }} */ (result);
+            const filled = result as { message?: string; submitted?: number; skipped?: number };
             logger
                 .withCategory('autoFill')
                 .success(
@@ -164,9 +146,7 @@ const fillChallenge = async (challengeId, { all = false } = {}) => {
     } catch (err) {
         logger
             .withCategory('autoFill')
-            .error(
-                `Failed to submit photos: ${/** @type {{ message?: unknown } | null | undefined} */ (err)?.message || err}`,
-            );
+            .error(`Failed to submit photos: ${(err as { message?: unknown } | null | undefined)?.message || err}`);
     }
 };
 
@@ -177,8 +157,7 @@ const fillChallenge = async (challengeId, { all = false } = {}) => {
 // same gate main-side (confirmed === true), so --yes is the only way to spend.
 
 // CLI wording for each outcome code the spend handlers return.
-/** @type {Record<string, string>} */
-const OUTCOME_TEXT = {
+const OUTCOME_TEXT: Record<string, string> = {
     'not-available': 'That action is not available on this challenge right now (it may already be done).',
     'no-balance': 'You have none of that currency left.',
     'balance-unknown': 'Could not read your balance, so nothing was spent. Try again shortly.',
@@ -190,25 +169,17 @@ const OUTCOME_TEXT = {
     'api-failed': 'GuruShots rejected the request. Nothing further was attempted — check the log for details.',
 };
 
-/**
- * @param {{ outcome?: string | null, error?: string | null } | null | undefined} result
- * @returns {string}
- */
-const describeOutcome = (result) => OUTCOME_TEXT[result?.outcome ?? ''] || result?.error || 'Action failed';
+const describeOutcome = (result: { outcome?: string | null; error?: string | null } | null | undefined): string =>
+    OUTCOME_TEXT[result?.outcome ?? ''] || result?.error || 'Action failed';
 
 const CURRENCY_LABEL = { keys: 'key', swaps: 'swap', fills: 'fill' };
 
-/**
- * @param {CurrencyField} field
- * @returns {Promise<number | null>}
- */
-const readBalance = async (field) => {
+const readBalance = async (field: CurrencyField): Promise<number | null> => {
     const bankroll = await handlers()['get-bankroll'](null);
     return bankroll?.success ? Number(bankroll[field]) : null;
 };
 
-/** @param {CurrencyField} field */
-const printCost = async (field) => {
+const printCost = async (field: CurrencyField) => {
     const balance = await readBalance(field);
     const label = CURRENCY_LABEL[field];
     const line =
@@ -218,11 +189,10 @@ const printCost = async (field) => {
     logger.withCategory('currency').info(line);
 };
 
-/**
- * @param {{ success?: boolean, outcome?: string | null, error?: string | null } | null | undefined} result
- * @param {string} successText
- */
-const reportSpend = (result, successText) => {
+const reportSpend = (
+    result: { success?: boolean; outcome?: string | null; error?: string | null } | null | undefined,
+    successText: string,
+) => {
     if (result?.success) {
         logger.withCategory('currency').success(successText);
     } else {
@@ -232,11 +202,8 @@ const reportSpend = (result, successText) => {
 
 /**
  * Spend a KEY to unlock the challenge's locked boost (unlock only).
- *
- * @param {string} challengeId
- * @param {{ yes?: boolean }} [opts]
  */
-const unlockBoostCmd = async (challengeId, { yes = false } = {}) => {
+const unlockBoostCmd = async (challengeId: string, { yes = false }: { yes?: boolean } = {}) => {
     const challenge = await resolveChallenge(challengeId);
     if (!challenge) return;
     try {
@@ -253,9 +220,7 @@ const unlockBoostCmd = async (challengeId, { yes = false } = {}) => {
     } catch (err) {
         logger
             .withCategory('currency')
-            .error(
-                `Failed to unlock boost: ${/** @type {{ message?: unknown } | null | undefined} */ (err)?.message || err}`,
-            );
+            .error(`Failed to unlock boost: ${(err as { message?: unknown } | null | undefined)?.message || err}`);
     }
 };
 
@@ -265,12 +230,9 @@ const SWAP_BACK_USAGE = 'Usage: swap-back --challenge=<id> --image=<id> [--yes]'
 /**
  * Reads swap's own flags from the args left after --challenge:
  * --image=<id> (the entry to replace), --to=<id> (the confirmed replacement), --yes.
- *
- * @param {string[]} rest
  */
-const parseSwapFlags = (rest) => {
-    /** @param {string} name */
-    const flag = (name) => {
+const parseSwapFlags = (rest: string[]) => {
+    const flag = (name: string) => {
         const arg = rest.find((a) => a.startsWith(`--${name}=`));
         return arg ? arg.slice(name.length + 3) || null : null;
     };
@@ -282,11 +244,11 @@ const parseSwapFlags = (rest) => {
  * different photo. The dry run prints the suggested replacement; --yes must
  * repeat it as --to=<id>, and is refused if the suggestion changed since.
  * Returns false on a usage error (no --image).
- *
- * @param {string} challengeId
- * @param {{ imageId?: string | null, to?: string | null, yes?: boolean }} [opts]
  */
-const swapCmd = async (challengeId, { imageId, to = null, yes = false } = {}) => {
+const swapCmd = async (
+    challengeId: string,
+    { imageId, to = null, yes = false }: { imageId?: string | null; to?: string | null; yes?: boolean } = {},
+) => {
     if (!imageId) {
         logger.withCategory('ui').error('Please specify the entered photo to replace with --image=<id>');
         logger.withCategory('ui').info(SWAP_USAGE);
@@ -301,7 +263,7 @@ const swapCmd = async (challengeId, { imageId, to = null, yes = false } = {}) =>
             return;
         }
         // The handler's result arms share `success: boolean`, so the check above does not narrow.
-        const newId = /** @type {{ candidate: { id: string } }} */ (preview).candidate.id;
+        const newId = (preview as { candidate: { id: string } }).candidate.id;
         if (!yes) {
             logger.withCategory('currency').info(`Swap in "${challenge.title}": ${imageId} → ${newId}`);
             await printCost('swaps');
@@ -327,9 +289,7 @@ const swapCmd = async (challengeId, { imageId, to = null, yes = false } = {}) =>
     } catch (err) {
         logger
             .withCategory('currency')
-            .error(
-                `Failed to swap photo: ${/** @type {{ message?: unknown } | null | undefined} */ (err)?.message || err}`,
-            );
+            .error(`Failed to swap photo: ${(err as { message?: unknown } | null | undefined)?.message || err}`);
     }
 };
 
@@ -338,11 +298,11 @@ const swapCmd = async (challengeId, { imageId, to = null, yes = false } = {}) =>
  * slot now holding `imageId` — it gets its boost/turbo back. Only swaps made
  * through this app are known (the API history has no boost flag).
  * Returns false on a usage error (no --image).
- *
- * @param {string} challengeId
- * @param {{ imageId?: string | null, yes?: boolean }} [opts]
  */
-const swapBackCmd = async (challengeId, { imageId, yes = false } = {}) => {
+const swapBackCmd = async (
+    challengeId: string,
+    { imageId, yes = false }: { imageId?: string | null; yes?: boolean } = {},
+) => {
     if (!imageId) {
         logger.withCategory('ui').error('Please specify the photo now in the slot with --image=<id>');
         logger.withCategory('ui').info(SWAP_BACK_USAGE);
@@ -352,10 +312,9 @@ const swapBackCmd = async (challengeId, { imageId, yes = false } = {}) => {
     if (!challenge) return true;
     try {
         const list = await currencyHandlers()['get-swap-backs'](null, challengeId);
-        const items =
-            /** @type {{ items?: Array<Pick<SwapBackRecord, 'currentId' | 'previousId' | 'kind'>> } | null | undefined} */ (
-                list
-            )?.items;
+        const items = (
+            list as { items?: Array<Pick<SwapBackRecord, 'currentId' | 'previousId' | 'kind'>> } | null | undefined
+        )?.items;
         const record = (items || []).find((r) => r.currentId === String(imageId));
         if (!record) {
             logger.withCategory('currency').error(`No swap back is recorded for ${imageId} in "${challenge.title}".`);
@@ -381,20 +340,15 @@ const swapBackCmd = async (challengeId, { imageId, yes = false } = {}) => {
     } catch (err) {
         logger
             .withCategory('currency')
-            .error(
-                `Failed to swap back: ${/** @type {{ message?: unknown } | null | undefined} */ (err)?.message || err}`,
-            );
+            .error(`Failed to swap back: ${(err as { message?: unknown } | null | undefined)?.message || err}`);
     }
     return true;
 };
 
 /**
  * Spend a FILL to top the challenge's exposure up to 100%.
- *
- * @param {string} challengeId
- * @param {{ yes?: boolean }} [opts]
  */
-const fillExposureCmd = async (challengeId, { yes = false } = {}) => {
+const fillExposureCmd = async (challengeId: string, { yes = false }: { yes?: boolean } = {}) => {
     const challenge = await resolveChallenge(challengeId);
     if (!challenge) return;
     try {
@@ -411,9 +365,7 @@ const fillExposureCmd = async (challengeId, { yes = false } = {}) => {
     } catch (err) {
         logger
             .withCategory('currency')
-            .error(
-                `Failed to fill exposure: ${/** @type {{ message?: unknown } | null | undefined} */ (err)?.message || err}`,
-            );
+            .error(`Failed to fill exposure: ${(err as { message?: unknown } | null | undefined)?.message || err}`);
     }
 };
 

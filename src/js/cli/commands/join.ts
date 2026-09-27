@@ -8,12 +8,11 @@
 import * as logger from '../../logger';
 import { ensureAuthenticated } from '../guards';
 
-/** @import { NullEventHandlers } from '../../types/cli' */
-/** @typedef {NullEventHandlers<ReturnType<typeof import('../../ipc/actions.handlers').buildHandlers>>} ActionHandlers */
-/** @type {ActionHandlers | undefined} */
-let _handlers;
-/** @returns {ActionHandlers} */
-const handlers = () => (_handlers ??= require('../../ipc/actions.handlers').buildHandlers());
+import type { NullEventHandlers } from '../../types/cli';
+import type * as actions_handlersModule from '../../ipc/actions.handlers';
+type ActionHandlers = NullEventHandlers<ReturnType<typeof actions_handlersModule.buildHandlers>>;
+let _handlers: ActionHandlers | undefined;
+const handlers = (): ActionHandlers => (_handlers ??= require('../../ipc/actions.handlers').buildHandlers());
 
 const showDiscover = async () => {
     if (!ensureAuthenticated()) return;
@@ -23,7 +22,7 @@ const showDiscover = async () => {
         logger
             .withCategory('ui')
             .info(
-                `  (unavailable — ${/** @type {{ error?: string } | undefined} */ (result)?.error || 'could not list challenges'})`,
+                `  (unavailable — ${(result as { error?: string } | undefined)?.error || 'could not list challenges'})`,
             );
         return;
     }
@@ -44,16 +43,11 @@ const showDiscover = async () => {
 /**
  * A join-challenge handler result, read loosely: its arms share no
  * discriminant, so each field is optional here.
- *
- * @typedef {{ success?: boolean, status?: string, cost?: number, coins?: number, error?: string }} JoinOutcome
  */
+type JoinOutcome = { success?: boolean; status?: string; cost?: number; coins?: number; error?: string };
 
 // Map a join outcome status to a user-facing line.
-/**
- * @param {JoinOutcome | null | undefined} result
- * @param {string | number} challengeId
- */
-const reportJoin = (result, challengeId) => {
+const reportJoin = (result: JoinOutcome | null | undefined, challengeId: string | number) => {
     const status = result?.status;
     switch (status) {
         case 'joined':
@@ -107,10 +101,9 @@ const reportJoin = (result, challengeId) => {
  * Join one challenge. Free challenges join immediately; paid challenges print
  * the cost and require `--yes` (yes=true) before any coins are spent.
  *
- * @param {string|number|undefined} challengeId - from argv; a missing id exits with usage
- * @param {{yes?: boolean}} [opts]
+ * @param challengeId - from argv; a missing id exits with usage
  */
-const joinChallengeCmd = async (challengeId, { yes = false } = {}) => {
+const joinChallengeCmd = async (challengeId: string | number | undefined, { yes = false }: { yes?: boolean } = {}) => {
     if (!ensureAuthenticated()) return;
     if (!challengeId) {
         logger.withCategory('ui').error('Please specify a challenge id');
@@ -120,7 +113,7 @@ const joinChallengeCmd = async (challengeId, { yes = false } = {}) => {
 
     // First attempt with spendCoins=false: free challenges join; paid ones come
     // back as 'needs-confirm' WITHOUT spending anything.
-    const first = /** @type {JoinOutcome} */ (await handlers()['join-challenge'](null, challengeId, false));
+    const first = (await handlers()['join-challenge'](null, challengeId, false)) as JoinOutcome;
     if (first?.status !== 'needs-confirm') {
         reportJoin(first, challengeId);
         return;
@@ -131,7 +124,7 @@ const joinChallengeCmd = async (challengeId, { yes = false } = {}) => {
         logger.withCategory('ui').info(`To spend the coins and join, re-run: join ${challengeId} --yes`);
         return;
     }
-    const confirmed = /** @type {JoinOutcome} */ (await handlers()['join-challenge'](null, challengeId, true));
+    const confirmed = (await handlers()['join-challenge'](null, challengeId, true)) as JoinOutcome;
     reportJoin(confirmed, challengeId);
 };
 

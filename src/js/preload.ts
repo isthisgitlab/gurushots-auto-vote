@@ -1,7 +1,7 @@
 // Block service worker registration
 (() => {
     // Absent in some hosts, whatever the DOM typings claim.
-    const C = /** @type {typeof ServiceWorkerContainer | undefined} */ (globalThis.ServiceWorkerContainer);
+    const C = globalThis.ServiceWorkerContainer as typeof ServiceWorkerContainer | undefined;
     if (C?.prototype?.register) {
         Object.defineProperty(C.prototype, 'register', {
             value: function () {
@@ -15,22 +15,22 @@
 
 import { contextBridge, ipcRenderer } from 'electron';
 import { invokeChannels, aliases, sendMethods, eventMethods, kebabToCamel } from './ipc/manifest';
+import type { IpcRendererEvent } from 'electron';
 
 // The window.api surface is GENERATED from the shared channel manifest
 // (ipc/manifest.ts) so it can never silently drift from the Capacitor
 // bridge or the main-process handler set (tests/ipc/manifest.test.js
 // enforces the latter). Adding a channel = one manifest entry.
-/** @type {Record<string, (...args: never[]) => unknown>} */
-const api = {};
+const api: Record<string, (...args: never[]) => unknown> = {};
 
 // invoke methods: api.getSettings = (...) => ipcRenderer.invoke('get-settings', ...)
 for (const channel of invokeChannels) {
-    api[kebabToCamel(channel)] = (/** @type {unknown[]} */ ...args) => ipcRenderer.invoke(channel, ...args);
+    api[kebabToCamel(channel)] = (...args: unknown[]) => ipcRenderer.invoke(channel, ...args);
 }
 
 // Friendlier aliases over invoke channels (applyBoost / applyTurbo).
 for (const [method, channel] of Object.entries(aliases)) {
-    api[method] = (/** @type {unknown[]} */ ...args) => ipcRenderer.invoke(channel, ...args);
+    api[method] = (...args: unknown[]) => ipcRenderer.invoke(channel, ...args);
 }
 
 // Send-style window-control hints (login-success / logout).
@@ -42,9 +42,9 @@ for (const [method, channel] of Object.entries(sendMethods)) {
 // (UpdateContext, useLogStream, settings sync) can drop the handler on
 // unmount; without it, every remount stacks another ipcRenderer listener.
 for (const [method, channel] of Object.entries(eventMethods)) {
-    api[method] = (/** @type {(...args: unknown[]) => void} */ callback) => {
-        /** @type {(event: import('electron').IpcRendererEvent, ...args: unknown[]) => void} */
-        const handler = (_event, ...args) => callback(...args);
+    api[method] = (callback: (...args: unknown[]) => void) => {
+        const handler: (event: IpcRendererEvent, ...args: unknown[]) => void = (_event, ...args): void =>
+            callback(...args);
         ipcRenderer.on(channel, handler);
         return () => ipcRenderer.removeListener(channel, handler);
     };

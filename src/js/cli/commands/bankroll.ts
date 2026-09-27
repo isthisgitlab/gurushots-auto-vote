@@ -8,13 +8,12 @@ import * as logger from '../../logger';
 import { ensureAuthenticated } from '../guards';
 
 // Lazily built, invoked with a null event (same reuse pattern as
-// commands/actions.js / commands/voting.js).
-/** @import { NullEventHandlers } from '../../types/cli' */
-/** @typedef {NullEventHandlers<ReturnType<typeof import('../../ipc/actions.handlers').buildHandlers>>} ActionHandlers */
-/** @type {ActionHandlers | undefined} */
-let _handlers;
-/** @returns {ActionHandlers} */
-const handlers = () => (_handlers ??= require('../../ipc/actions.handlers').buildHandlers());
+// commands/actions.ts / commands/voting.ts).
+import type { NullEventHandlers } from '../../types/cli';
+import type * as actions_handlersModule from '../../ipc/actions.handlers';
+type ActionHandlers = NullEventHandlers<ReturnType<typeof actions_handlersModule.buildHandlers>>;
+let _handlers: ActionHandlers | undefined;
+const handlers = (): ActionHandlers => (_handlers ??= require('../../ipc/actions.handlers').buildHandlers());
 
 const showBankroll = async () => {
     if (!ensureAuthenticated()) return;

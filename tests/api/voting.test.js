@@ -1,5 +1,5 @@
 /**
- * Simplified tests for voting.js
+ * Simplified tests for voting.ts
  *
  * Tests the vote images fetching and submission functionality.
  */

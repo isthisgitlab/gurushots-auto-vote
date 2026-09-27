@@ -1,7 +1,7 @@
 /**
  * Tests for update.handlers — the auto-updater IPC surface.
  *
- * Lifecycle ownership stays in index.js, so the handlers receive accessors
+ * Lifecycle ownership stays in index.ts, so the handlers receive accessors
  * (getAutoUpdater / setAutoUpdater / getMainWindow). Two contracts matter:
  *   - check-for-updates and clear-skip-version lazily construct the shared
  *     instance and hand it back through setAutoUpdater;
@@ -29,7 +29,7 @@ const makeUpdater = (overrides = {}) => ({
     ...overrides,
 });
 
-// Accessor pair backed by a local slot, mirroring index.js.
+// Accessor pair backed by a local slot, mirroring index.ts.
 const makeDeps = (initial = null) => {
     let current = initial;
     const mainWindow = { id: 'main' };

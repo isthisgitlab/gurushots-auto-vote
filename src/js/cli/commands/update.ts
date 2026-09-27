@@ -30,8 +30,7 @@ const cliAssetSuffix = async () => {
 // whole point — we strip them so they can't reach the terminal.
 // oxlint-disable-next-line no-control-regex
 const CONTROL_CHARS = new RegExp('[\\u0000-\\u001f\\u007f-\\u009f]', 'g');
-/** @param {string | null | undefined} s */
-const plain = (s) => String(s ?? '').replace(CONTROL_CHARS, '');
+const plain = (s: string | null | undefined) => String(s ?? '').replace(CONTROL_CHARS, '');
 
 const checkUpdates = async () => {
     const ui = logger.withCategory('ui');
@@ -49,7 +48,7 @@ const checkUpdates = async () => {
         });
     } catch (err) {
         ui.error(
-            `Update check failed: ${plain(String(/** @type {{ message?: unknown } | null | undefined} */ (err)?.message || err))}`,
+            `Update check failed: ${plain(String((err as { message?: unknown } | null | undefined)?.message || err))}`,
         );
         ui.info(`Check manually: ${updateChecker.getReleasesUrl()}`);
         return;

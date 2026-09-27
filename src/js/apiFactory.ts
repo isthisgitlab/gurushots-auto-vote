@@ -58,21 +58,14 @@ const realApi = {
  * The API surface both strategies implement: the real one's shape. The mock
  * surface below is checked against it, so a method missing on either side or
  * a signature that drifts fails `pnpm typecheck`.
- *
- * @typedef {typeof realApi} ApiStrategy
  */
+export type ApiStrategy = typeof realApi;
 
 /**
  * Wraps a mock implementation so each call emits a debug log first.
- *
- * @template {unknown[]} A
- * @template R
- * @param {string} label
- * @param {(...args: A) => R | Promise<R>} fn
- * @returns {(...args: A) => Promise<R>}
  */
 const withMockDebug =
-    (label, fn) =>
+    <A extends unknown[], R>(label: string, fn: (...args: A) => R | Promise<R>): ((...args: A) => Promise<R>) =>
     async (...args) => {
         logger.withCategory('api').debug(`🔧 Using mock ${label}`, null);
         return fn(...args);
@@ -82,10 +75,8 @@ const withMockDebug =
  * Each method is the matching mockApiClient method behind the debug
  * preamble. (The `authenticate` log label is 'authentication' so log lines
  * keep a stable wording.)
- *
- * @type {ApiStrategy}
  */
-const mockApi = {
+const mockApi: ApiStrategy = {
     authenticate: withMockDebug('authentication', mockApiClient.authenticate),
     fetchChallengesAndVote: withMockDebug('fetchChallengesAndVote', mockApiClient.fetchChallengesAndVote),
     runTurboMiniGame: withMockDebug('runTurboMiniGame', mockApiClient.runTurboMiniGame),
@@ -109,12 +100,9 @@ const mockApi = {
     getStrategyType: () => 'MockAPI',
 };
 
-/** @type {ApiStrategy | null} */
-let currentStrategy = null;
-/** @type {InstanceType<typeof BaseMiddleware> | null} */
-let currentMiddleware = null;
-/** @type {boolean | null} */
-let lastMockSetting = null;
+let currentStrategy: ApiStrategy | null = null;
+let currentMiddleware: InstanceType<typeof BaseMiddleware> | null = null;
+let lastMockSetting: boolean | null = null;
 
 /**
  * Returns the active API surface.
@@ -124,11 +112,8 @@ let lastMockSetting = null;
  * boolean `mock` overrides the setting for THIS call only — used by the
  * login flow, where the caller's choice pre-dates the committed setting —
  * without touching the cached strategy state.
- *
- * @param {{ mock?: boolean }} [options]
- * @returns {ApiStrategy}
  */
-const getApiStrategy = ({ mock } = {}) => {
+const getApiStrategy = ({ mock }: { mock?: boolean } = {}): ApiStrategy => {
     if (typeof mock === 'boolean') {
         return mock ? mockApi : realApi;
     }

@@ -1,5 +1,5 @@
 /**
- * Electron preload (src/js/preload.js): the service-worker register() block
+ * Electron preload (src/js/preload.ts): the service-worker register() block
  * and the window.api surface generated from ipc/manifest.ts.
  */
 

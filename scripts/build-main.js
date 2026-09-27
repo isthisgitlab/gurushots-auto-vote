@@ -31,7 +31,7 @@ const LOADER = path.join(OUT_DIR, 'index.js');
 const LOADER_SOURCE = "process.setSourceMapsEnabled(true);\nrequire('./app.js');\n";
 
 const OPTIONS = {
-    entryPoints: [path.join(ROOT, 'src', 'js', 'index.js')],
+    entryPoints: [path.join(ROOT, 'src', 'js', 'index.ts')],
     outfile: path.join(OUT_DIR, 'app.js'),
     bundle: true,
     platform: 'node',

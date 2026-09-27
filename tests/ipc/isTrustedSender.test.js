@@ -2,7 +2,7 @@
  * isTrustedSender is the app's only IPC sender-origin check.
  *
  * registerHandlers applies it to every ipcMain.handle channel automatically, so it gates the
- * whole invoke surface — including anything added later. index.js's two ipcMain.on channels
+ * whole invoke surface — including anything added later. index.ts's two ipcMain.on channels
  * ('login-success' and 'logout', the latter clearing the auth token) call it directly,
  * which is why it is exported.
  *

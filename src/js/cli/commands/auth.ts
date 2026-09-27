@@ -14,7 +14,7 @@ const handleLogin = async () => {
     // askSecret's mute only works on a real terminal — _writeToOutput is
     // bypassed when stdin is piped or when readline runs in non-terminal
     // mode. Refuse interactive login in that case so a user piping
-    // `echo password | node cli.js login` does not get a false sense of
+    // `echo password | node cli.ts login` does not get a false sense of
     // protection (the password would echo through the unmuted path).
     if (!process.stdin.isTTY || !process.stdout.isTTY) {
         logger

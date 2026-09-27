@@ -30,14 +30,16 @@ import * as votingLogic from '../services/VotingLogic';
 import { openBoostWindows } from '../voting/boostWindow';
 import { formatDuration } from '../format/duration';
 
-/** @import { BrowserWindow, Dialog, MessageBoxOptions } from 'electron' */
-/** @import { Challenge } from '../types/gurushots' */
+import type { BrowserWindow, Dialog, MessageBoxOptions } from 'electron';
+import type { Challenge } from '../types/gurushots';
 
 /**
  * describeDeadlineActions' shape, as far as the guard reads it.
- *
- * @typedef {(challenge: Challenge, now: number) => { actions?: Array<{ action: string, dueAt: number | null }> } | null | undefined} DescribeDeadlineActions
  */
+type DescribeDeadlineActions = (
+    challenge: Challenge,
+    now: number,
+) => { actions?: Array<{ action: string; dueAt: number | null }> } | null | undefined;
 
 const QUIT_WARN_HORIZON_SEC = 60 * 60;
 // A bypass is for the quit already under way; if that quit never lands (a
@@ -45,16 +47,14 @@ const QUIT_WARN_HORIZON_SEC = 60 * 60;
 const BYPASS_TTL_MS = 30_000;
 
 // Last successful challenge list from get-active-challenges.
-/** @type {Challenge[]} */
-let lastChallenges = [];
+let lastChallenges: Challenge[] = [];
 let bypassed = false;
-/** @type {NodeJS.Timeout | null} */
-let bypassTimer = null;
+let bypassTimer: NodeJS.Timeout | null = null;
 // A second Cmd+Q while the dialog is up must not stack another dialog.
 let prompting = false;
 
-/** @param {readonly Challenge[] | null | undefined} challenges - the get-active-challenges list (ignored unless an array) */
-const rememberChallenges = (challenges) => {
+/** @param challenges - the get-active-challenges list (ignored unless an array) */
+const rememberChallenges = (challenges: readonly Challenge[] | null | undefined) => {
     if (Array.isArray(challenges)) lastChallenges = challenges;
 };
 
@@ -84,11 +84,9 @@ const resetQuitGuard = () => {
  * Open boost windows whose boost auto-vote would apply within the horizon,
  * soonest first.
  *
- * @param {number} now - Unix seconds
- * @param {DescribeDeadlineActions} describe
- * @returns {Array<{title: string, dueIn: number}>}
+ * @param now - Unix seconds
  */
-const imminentBoosts = (now, describe) => {
+const imminentBoosts = (now: number, describe: DescribeDeadlineActions): Array<{ title: string; dueIn: number }> => {
     const open = new Set(openBoostWindows(lastChallenges, now).map((w) => w.id));
     return lastChallenges
         .filter((c) => open.has(c.id))
@@ -104,29 +102,24 @@ const imminentBoosts = (now, describe) => {
         .sort((a, b) => a.dueIn - b.dueIn);
 };
 
-/**
- * @param {{ title: string, dueIn: number }} b
- * @param {(key: string) => string} t
- */
-const describeBoost = (b, t) =>
+const describeBoost = (b: { title: string; dueIn: number }, t: (key: string) => string) =>
     `• ${b.title} — ${b.dueIn <= 0 ? t('quitGuard.dueNow') : t('quitGuard.dueIn').replace('{time}', formatDuration(b.dueIn))}`;
 
 /**
  * Hold a quit/close that would forfeit an imminent boost, and ask.
  *
- * @param {{ preventDefault: () => void }} event - the before-quit / close event
- * @param {object} deps
- * @param {boolean} deps.autovoteRunning - nothing is lost when auto-vote is stopped
- * @param {Pick<Dialog, 'showMessageBox'>} deps.dialog - Electron dialog
- * @param {BrowserWindow|null} deps.parent - window to attach the dialog to, if still alive
- * @param {(key: string) => string} deps.t - translator
- * @param {() => void} deps.proceed - re-issues the quit/close once confirmed
- * @param {number} [deps.now] - Unix seconds
- * @param {DescribeDeadlineActions} [deps.describeDeadlineActions] - test seam
- * @returns {boolean} true when the event was held
+ * @param event - the before-quit / close event
+ * @param deps.autovoteRunning - nothing is lost when auto-vote is stopped
+ * @param deps.dialog - Electron dialog
+ * @param deps.parent - window to attach the dialog to, if still alive
+ * @param deps.t - translator
+ * @param deps.proceed - re-issues the quit/close once confirmed
+ * @param deps.now - Unix seconds
+ * @param deps.describeDeadlineActions - test seam
+ * @returns true when the event was held
  */
 const holdQuitForOpenBoosts = (
-    event,
+    event: { preventDefault: () => void },
     {
         autovoteRunning,
         dialog,
@@ -135,8 +128,16 @@ const holdQuitForOpenBoosts = (
         proceed,
         now = Math.floor(Date.now() / 1000),
         describeDeadlineActions = votingLogic.describeDeadlineActions,
+    }: {
+        autovoteRunning: boolean;
+        dialog: Pick<Dialog, 'showMessageBox'>;
+        parent: BrowserWindow | null;
+        t: (key: string) => string;
+        proceed: () => void;
+        now?: number;
+        describeDeadlineActions?: DescribeDeadlineActions;
     },
-) => {
+): boolean => {
     if (bypassed || !autovoteRunning) return false;
     let boosts;
     try {
@@ -152,8 +153,7 @@ const holdQuitForOpenBoosts = (
     if (prompting) return true;
     prompting = true;
 
-    /** @type {MessageBoxOptions} */
-    const options = {
+    const options: MessageBoxOptions = {
         type: 'warning',
         buttons: [t('quitGuard.keepRunning'), t('quitGuard.quitAnyway')],
         defaultId: 0,

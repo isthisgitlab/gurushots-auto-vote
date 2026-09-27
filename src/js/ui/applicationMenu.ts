@@ -5,7 +5,7 @@ import { translationManager } from '../translations/index';
 import { AutoUpdater } from '../services/AutoUpdater';
 import * as packageInfo from '../../../package.json';
 
-/** @import { MenuItemConstructorOptions } from 'electron' */
+import type { MenuItemConstructorOptions } from 'electron';
 
 /**
  * Application Menu Module
@@ -13,8 +13,7 @@ import * as packageInfo from '../../../package.json';
  */
 
 // Translated text in the main process's current language.
-/** @param {string} key */
-const t = (key) => translationManager.t(key);
+const t = (key: string) => translationManager.t(key);
 
 // Create application menu
 function createApplicationMenu() {
@@ -22,11 +21,10 @@ function createApplicationMenu() {
 
     // Each conditional spread is typed on its own: the checker does not carry
     // the template's element type into a spread's array literal.
-    /** @type {MenuItemConstructorOptions[]} */
-    const template = [
+    const template: MenuItemConstructorOptions[] = [
         // macOS app menu
         ...(isMac
-            ? /** @type {MenuItemConstructorOptions[]} */ ([
+            ? ([
                   {
                       label: app.getName(),
                       submenu: [
@@ -41,7 +39,7 @@ function createApplicationMenu() {
                           { role: 'quit' },
                       ],
                   },
-              ])
+              ] as MenuItemConstructorOptions[])
             : []),
 
         // Edit menu - essential for clipboard operations
@@ -73,7 +71,7 @@ function createApplicationMenu() {
                     label: t('menu.selectAll'),
                     // Electron lower-cases a role before looking it up; its typings
                     // spell this one only as 'selectAll'.
-                    role: /** @type {MenuItemConstructorOptions['role']} */ (/** @type {string} */ ('selectall')),
+                    role: 'selectall' as string as MenuItemConstructorOptions['role'],
                 },
             ],
         },
@@ -81,12 +79,12 @@ function createApplicationMenu() {
         // File menu - simplified for this app
         ...(isMac
             ? []
-            : /** @type {MenuItemConstructorOptions[]} */ ([
+            : ([
                   {
                       label: t('menu.file'),
                       submenu: [{ role: 'quit' }],
                   },
-              ])),
+              ] as MenuItemConstructorOptions[])),
 
         // View menu - relevant items for this app
         {
@@ -117,7 +115,7 @@ function createApplicationMenu() {
                     role: 'minimize',
                 },
                 ...(isMac
-                    ? /** @type {MenuItemConstructorOptions[]} */ ([
+                    ? ([
                           {
                               label: t('menu.zoom'),
                               role: 'zoom',
@@ -127,13 +125,13 @@ function createApplicationMenu() {
                               label: t('menu.bringAllToFront'),
                               role: 'front',
                           },
-                      ])
-                    : /** @type {MenuItemConstructorOptions[]} */ ([
+                      ] as MenuItemConstructorOptions[])
+                    : ([
                           {
                               label: t('menu.close'),
                               role: 'close',
                           },
-                      ])),
+                      ] as MenuItemConstructorOptions[])),
             ],
         },
 
@@ -145,7 +143,7 @@ function createApplicationMenu() {
                     label: t('menu.checkForUpdates'),
                     // Electron ignores the returned promise, which never rejects:
                     // checkForUpdatesFromMenu reports every failure itself.
-                    click: /** @type {() => void} */ (() => checkForUpdatesFromMenu()),
+                    click: (() => checkForUpdatesFromMenu()) as () => void,
                 },
                 { type: 'separator' },
                 {
@@ -192,7 +190,7 @@ async function checkForUpdatesFromMenu() {
             type: 'error',
             title: t('menu.updateError'),
             message: t('menu.updateErrorMessage'),
-            detail: /** @type {{ message?: string } | null | undefined} */ (error)?.message,
+            detail: (error as { message?: string } | null | undefined)?.message,
             buttons: [t('common.ok')],
         });
     }
@@ -232,7 +230,7 @@ function openLogsWindow() {
             contextIsolation: true,
             // Same bundle as the main windows (scripts/build-react.js): the
             // sandboxed preload cannot require() the relative channel manifest,
-            // so the raw src/js/preload.js would leave this window without window.api.
+            // so the raw src/js/preload.ts would leave this window without window.api.
             preload: appPath('dist', 'preload-bundle.js'),
         },
         show: false,

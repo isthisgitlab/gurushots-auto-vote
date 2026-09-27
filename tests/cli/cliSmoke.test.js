@@ -11,7 +11,7 @@ const { spawnSync } = require('node:child_process');
 // breaks path.resolve. Reach through to the real module.
 const path = jest.requireActual('path');
 
-const CLI_PATH = path.resolve(__dirname, '../../src/js/cli/cli.js');
+const CLI_PATH = path.resolve(__dirname, '../../src/js/cli/cli.ts');
 
 // Each case cold-spawns a fresh `node` running the full CLI under the tsx
 // loader (as `pnpm cli:*` does — src/ is import/export). Inside the full

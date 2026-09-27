@@ -2,14 +2,14 @@
  * The window.api channel manifest — single source of truth for the surface
  * both platform shells expose to the renderer:
  *
- *   - Electron: preload.js generates contextBridge methods from this list.
- *   - Capacitor: bridge/capacitor.js derives its in-process bridge from the
+ *   - Electron: preload.ts generates contextBridge methods from this list.
+ *   - Capacitor: bridge/capacitor.ts derives its in-process bridge from the
  *     same names (it implements a subset of channels plus its own update
  *     stubs, but aliases/sends/events come from here).
  *
  * Drift protection is enforced by tests/ipc/manifest.test.js, which asserts
  * set-equality between this manifest's invoke surface and the union of every
- * ipc/*.handlers.ts buildHandlers() key plus index.js's direct ipcMain.on
+ * ipc/*.handlers.ts buildHandlers() key plus index.ts's direct ipcMain.on
  * registrations — a channel added on either side without the other fails CI.
  * NOTE: that test is name-level only. Signatures are carried by the
  * `WindowApi` type (src/js/types/ipc.d.ts), derived from these lists and the
@@ -17,7 +17,7 @@
  * checked against the handler it reaches.
  *
  * This module must stay DEPENDENCY-FREE (no logger/settings/electron
- * requires): preload.js runs it in the sandboxed preload context, and the
+ * requires): preload.ts runs it in the sandboxed preload context, and the
  * Capacitor bundle ships it to the WebView.
  */
 

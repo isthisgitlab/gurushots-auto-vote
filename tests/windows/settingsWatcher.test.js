@@ -1,11 +1,11 @@
 /**
  * Tests for the settings-file watcher's optional `onSettingsChanged`
- * side-channel (src/js/windows/settingsWatcher.js).
+ * side-channel (src/js/windows/settingsWatcher.ts).
  *
  * The main process learns that auto-vote started or stopped by watching the
  * `autovoteRunning` flag the renderer persists — there is no dedicated IPC
  * channel for it. That makes this hook load-bearing for the power-save blocker
- * in windows/backgroundActivity.js, so it must fire on every successful load
+ * in windows/backgroundActivity.ts, so it must fire on every successful load
  * (whichever branch follows) and must never be able to cost the window its
  * reload or the renderers their broadcast.
  */

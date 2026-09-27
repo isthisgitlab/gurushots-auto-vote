@@ -21,9 +21,10 @@ import { syncBackgroundActivity } from './windows/backgroundActivity';
 import { holdQuitForOpenBoosts, bypassQuitGuard, resetQuitGuard } from './windows/quitGuard';
 import { createApplicationMenu } from './ui/applicationMenu';
 import { translationManager } from './translations/index';
+import type { FSWatcher } from 'node:fs';
 
 // Disable service workers at the application level. Kept deliberately:
-// with contextIsolation on, the preload.js register() patch only covers
+// with contextIsolation on, the preload.ts register() patch only covers
 // the isolated world — this switch is the only main-world-and-subframe-
 // effective service worker block.
 app.commandLine.appendSwitch('disable-features', 'ServiceWorker');
@@ -44,26 +45,21 @@ if (!gotSingleInstanceLock) {
     app.quit();
 }
 
-// ensureExit (force-exit safety net) lives in windows/lifecycle.js.
+// ensureExit (force-exit safety net) lives in windows/lifecycle.ts.
 
 // Keep a global reference of the windows to prevent them from being garbage collected
-/** @type {BrowserWindow | null} */
-let loginWindow = null;
-/** @type {BrowserWindow | null} */
-let mainWindow = null;
+let loginWindow: BrowserWindow | null = null;
+let mainWindow: BrowserWindow | null = null;
 
 // Settings file watcher (created per main window by watchSettingsFile;
-// the debounce timeout lives in windows/settingsWatcher.js)
-/** @type {import('node:fs').FSWatcher | null} */
-let settingsWatcher = null;
+// the debounce timeout lives in windows/settingsWatcher.ts)
+let settingsWatcher: FSWatcher | null = null;
 
 // Global AutoUpdater instance
-/** @type {AutoUpdater | null} */
-let autoUpdater = null;
+let autoUpdater: AutoUpdater | null = null;
 
 // Track main window creation time to prevent reload during login
-/** @type {number | null} */
-let mainWindowCreatedTime = null;
+let mainWindowCreatedTime: number | null = null;
 
 // Register IPC handlers from their focused modules. Each module
 // receives the accessors it needs to read/write the shared
@@ -72,7 +68,7 @@ let mainWindowCreatedTime = null;
 logIpc.register(ipcMain);
 updateIpc.register(ipcMain, {
     getAutoUpdater: () => autoUpdater,
-    setAutoUpdater: (/** @type {AutoUpdater} */ v) => {
+    setAutoUpdater: (v: AutoUpdater) => {
         autoUpdater = v;
     },
     getMainWindow: () => mainWindow,
@@ -89,12 +85,8 @@ currencyIpc.register(ipcMain);
 scenariosIpc.register(ipcMain);
 
 // Hold a quit or main-window close that would forfeit an open boost window
-// and ask first; `proceed` re-issues it once confirmed. See windows/quitGuard.js.
-/**
- * @param {{ preventDefault: () => void }} event
- * @param {() => void} proceed
- */
-function holdForOpenBoosts(event, proceed) {
+// and ask first; `proceed` re-issues it once confirmed. See windows/quitGuard.ts.
+function holdForOpenBoosts(event: { preventDefault: () => void }, proceed: () => void) {
     return holdQuitForOpenBoosts(event, {
         autovoteRunning: settings.getSetting('autovoteRunning') === true,
         dialog,
@@ -140,19 +132,19 @@ function createLoginWindow() {
 
     // Ensure window is visible on screen
     loginWindow.once('ready-to-show', () => {
-        if (!(/** @type {BrowserWindow} */ (loginWindow).isVisible())) {
-            /** @type {BrowserWindow} */ (loginWindow).center();
+        if (!(loginWindow as BrowserWindow).isVisible()) {
+            (loginWindow as BrowserWindow).center();
         }
     });
 
     // Save window bounds when window is moved or resized
     loginWindow.on('resize', () => {
-        const newBounds = /** @type {BrowserWindow} */ (loginWindow).getBounds();
+        const newBounds = (loginWindow as BrowserWindow).getBounds();
         settings.saveWindowBounds('login', newBounds);
     });
 
     loginWindow.on('move', () => {
-        const newBounds = /** @type {BrowserWindow} */ (loginWindow).getBounds();
+        const newBounds = (loginWindow as BrowserWindow).getBounds();
         settings.saveWindowBounds('login', newBounds);
     });
 
@@ -188,7 +180,7 @@ function createMainWindow() {
             // hidden page — which silently stalls the voting loop. Rationale,
             // measurements and the App Nap counterpart: see
             // docs/scheduling.md "Staying schedulable" and
-            // windows/backgroundActivity.js. Do not re-enable.
+            // windows/backgroundActivity.ts. Do not re-enable.
             backgroundThrottling: false,
             // Use a custom session partition to isolate storage
             partition: 'persist:gurushots',
@@ -210,19 +202,19 @@ function createMainWindow() {
 
     // Ensure window is visible on screen
     mainWindow.once('ready-to-show', () => {
-        if (!(/** @type {BrowserWindow} */ (mainWindow).isVisible())) {
-            /** @type {BrowserWindow} */ (mainWindow).center();
+        if (!(mainWindow as BrowserWindow).isVisible()) {
+            (mainWindow as BrowserWindow).center();
         }
     });
 
     // Save window bounds when window is moved or resized
     mainWindow.on('resize', () => {
-        const newBounds = /** @type {BrowserWindow} */ (mainWindow).getBounds();
+        const newBounds = (mainWindow as BrowserWindow).getBounds();
         settings.saveWindowBounds('main', newBounds);
     });
 
     mainWindow.on('move', () => {
-        const newBounds = /** @type {BrowserWindow} */ (mainWindow).getBounds();
+        const newBounds = (mainWindow as BrowserWindow).getBounds();
         settings.saveWindowBounds('main', newBounds);
     });
 
@@ -252,7 +244,7 @@ function createMainWindow() {
     });
 
     // Watch settings file for changes and auto-reload with debouncing.
-    // The watcher lives in windows/settingsWatcher.js; accessors keep it
+    // The watcher lives in windows/settingsWatcher.ts; accessors keep it
     // reading the current window state this module owns.
     settingsWatcher = watchSettingsFile({
         getMainWindow: () => mainWindow,
@@ -357,7 +349,7 @@ if (gotSingleInstanceLock) {
 
             // Initialize global AutoUpdater instance. Deliberately constructed
             // WITHOUT a window — unlike the windowed constructions in
-            // ipc/update.handlers.ts and ui/applicationMenu.js — because the
+            // ipc/update.handlers.ts and ui/applicationMenu.ts — because the
             // startup check below runs before any window exists (pre-window so
             // an update prompt can't race the main window's challenge load and
             // double-load challenges).
@@ -368,7 +360,7 @@ if (gotSingleInstanceLock) {
             const safeCheckForUpdates = async () => {
                 try {
                     // Set just above; update.handlers may replace it, never with null.
-                    await /** @type {AutoUpdater} */ (autoUpdater).checkForUpdates(false);
+                    await (autoUpdater as AutoUpdater).checkForUpdates(false);
                 } catch (error) {
                     logger.withCategory('update').error('Error during update check:', error);
                 }

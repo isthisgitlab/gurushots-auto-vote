@@ -1,6 +1,6 @@
 /**
  * Validates the schema split (settings/schema.ts + settings/storage.ts
- * + settings.js facade) didn't regress the public re-export contract.
+ * + settings.ts facade) didn't regress the public re-export contract.
  *
  * Internal precedence (per-challenge > global > schema default) is
  * exercised end-to-end by the existing api/final-window-exposure and

@@ -1,5 +1,5 @@
 /**
- * Native application menu (src/js/ui/applicationMenu.js): template shape per
+ * Native application menu (src/js/ui/applicationMenu.ts): template shape per
  * platform, translation lookup, and the Help-menu click actions (update check,
  * logs window, about dialog). Electron and AutoUpdater are mocked.
  */

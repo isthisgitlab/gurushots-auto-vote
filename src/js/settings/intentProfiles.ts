@@ -1,6 +1,6 @@
 /**
  * Curated "intent" presets, seeded into the named-profiles system on first
- * run (see settings.js `seedIntentProfiles`). Deliberately free of any
+ * run (see settings.ts `seedIntentProfiles`). Deliberately free of any
  * dependency — NO zod — so it is safe to import into the renderer bundle
  * (mirrors settings/limits.ts).
  *

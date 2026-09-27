@@ -203,11 +203,11 @@ Domain terms used throughout, in reader's terms:
 
 - **Layering**: `api/` is the transport layer — `api-client.ts` plus one thin wrapper per endpoint, importing
   nothing from `services/` (`api/voting.ts` still records vote timestamps in `metadata.ts`). The real-mode strategy composes those wrappers with the services in
-  `strategies/real/`: `index.js` (`fetchChallengesAndVote` with its mission read (`services/missions.ts`) and join/claim pre-steps, manual join, the
+  `strategies/real/`: `index.ts` (`fetchChallengesAndVote` with its mission read (`services/missions.ts`) and join/claim pre-steps, manual join, the
   Turbo mini-game), `applyBoost.ts` (picks the entry via `pickBoostEntry`, posts it through
   `api/boost.ts#boostImage`, flags it `boosted`) and `activeChallenges.ts` (coalesces concurrent
   `getActiveChallenges` calls per token and pins first-seen titles via `services/challengeTitlePin.ts` on a
-  successful fetch only). `apiFactory.js` assembles the real surface from these and selects it or
+  successful fetch only). `apiFactory.ts` assembles the real surface from these and selects it or
   `mock/index.ts#mockApiClient`.
 - All POSTs go through `makePostRequest()` (`api/api-client.ts` — around L204). **Contract: it returns the
   response body on success and `null` on ultimate failure — it never throws.** Every caller branches on
@@ -392,8 +392,8 @@ repeated six times is one that gets forgotten at one of them.
 
 - `ipc/manifest.ts` is the **dependency-free single source of truth** for the whole `window.api` surface —
   four lists: `invokeChannels`, `aliases`, `sendMethods`, `eventMethods`. Both shells generate from it:
-  Electron `preload.js` builds `contextBridge.exposeInMainWorld('api', …)`; Capacitor
-  `bridge/capacitor.js` builds the identical surface in-process.
+  Electron `preload.ts` builds `contextBridge.exposeInMainWorld('api', …)`; Capacitor
+  `bridge/capacitor.ts` builds the identical surface in-process.
 - **Drift is CI-enforced** by `tests/ipc/manifest.test.js` at the name level. Signatures travel through the
   `WindowApi` type (`types/ipc.d.ts`, derived from the manifest lists and every `buildHandlers()`), so a
   renderer call in a type-checked file is checked against its handler's parameters and result — only as
@@ -403,8 +403,8 @@ repeated six times is one that gets forgotten at one of them.
   require `buildHandlers()`) — never write a parallel implementation.
 - **Add a channel end-to-end**: (a) add the channel string to the right list in `manifest.ts`; (b)
   implement it in the matching `ipc/*.handlers.ts` `buildHandlers()`; (c) Electron picks it up
-  automatically via `preload.js` + the module's `register()`; (d) ensure the handler module is in
-  `capacitor.js`'s spread for the Capacitor build.
+  automatically via `preload.ts` + the module's `register()`; (d) ensure the handler module is in
+  `capacitor.ts`'s spread for the Capacitor build.
 - Handlers **never throw to the renderer** — they return a tagged `{ success, error }` object. Shared
   preconditions use a Result guard: `requireAuthToken()` (`services/auth.ts`) returns
   `{ ok: true, token, settings }` or `{ ok: false, response }`, and callers do
@@ -428,7 +428,7 @@ repeated six times is one that gets forgotten at one of them.
   `getPlatform()`, `getAppUserDataPath()` — the single path resolver shared with the logger); **renderer-
   side** via `globalThis.Capacitor?.isNativePlatform?.() === true` inline, to keep node out of the browser
   bundle.
-- **The Electron main process runs from a bundle.** `scripts/build-main.js` bundles `src/js/index.js` into
+- **The Electron main process runs from a bundle.** `scripts/build-main.js` bundles `src/js/index.ts` into
   `out/main/app.js` with a linked source map, loaded by the `out/main/index.js` stub (package.json `main`)
   that turns source maps on first so main-process stack traces point at `src/js`. Every package import stays
   a runtime require from the shipped `node_modules`; `src/js` itself is not packaged, and `out/` stays out of
@@ -487,7 +487,7 @@ repeated six times is one that gets forgotten at one of them.
 ## 10. Security (renderer / main) — state the limits, don't over-promise
 
 - Every `BrowserWindow` uses `contextIsolation: on`, `nodeIntegration: off`, `webSecurity: on`
-  (`index.js`), and the renderer is exposed only `window.api` via `contextBridge`, never `ipcRenderer`.
+  (`index.ts`), and the renderer is exposed only `window.api` via `contextBridge`, never `ipcRenderer`.
   **Sandboxing here is Electron's default-on behavior** (unset `sandbox` + `nodeIntegration:false`), _not_
   an explicit flag at those lines — a spot-checker won't find the word "sandbox" there. Regressing
   context-isolation / node-integration is a classic severe-vuln class.
@@ -563,6 +563,6 @@ caps (dependency-free, renderer-safe), and `scenarios/templates.ts` holds editab
 - **Builder** (`react/components/app/scenarioBuilder/`): forms generated from `scenarios/builderSpec.ts` (every
   condition / action / selector's fields and kinds — a test checks every default against the validator) over
   pure draft edits in `scenarios/builderModel.ts`; it never validates itself — save and simulate do.
-- **Surfaces**: IPC `ipc/scenarios.handlers.ts` (the CLI reuses it), CLI `cli/commands/scenarios.js`,
+- **Surfaces**: IPC `ipc/scenarios.handlers.ts` (the CLI reuses it), CLI `cli/commands/scenarios.ts`,
   GUI `ScenariosSection` (+ the builder), the `scenario` field in `SettingInput`, and the card
   `ScenarioStatusLine`.
