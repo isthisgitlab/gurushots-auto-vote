@@ -28,12 +28,10 @@ const RESERVED_PROFILE_NAMES = new Set(['__proto__', 'constructor', 'prototype']
 
 // Identity key for a profile name: trimmed + lowercased (the normalizeTitle
 // contract) so "Portrait" and "portrait" are one profile, latest casing wins.
-
 const normalizeProfileName = (name: unknown): string => (typeof name === 'string' ? name.trim().toLowerCase() : '');
 
 // Bound a user-supplied profile name before it reaches a log line
 // (log-injection guard, same treatment as setTitleRules' forLog).
-
 const profileNameForLog = (name: unknown): string =>
     String(name)
         .replace(/[\r\n\t]/g, ' ')

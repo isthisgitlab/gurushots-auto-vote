@@ -58,7 +58,6 @@ const MAX_RULE_RUNTIME_HOURS = 2000;
 
 // Stable match key for a title: trimmed + lowercased. The same challenge recurs
 // with the same title (but a new id) on each rotation.
-
 const normalizeTitle = (title: unknown): string => (typeof title === 'string' ? title.trim().toLowerCase() : '');
 
 // Challenge tags ("Exhibition", "No comm") and types ("default", "flash") are

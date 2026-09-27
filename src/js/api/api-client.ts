@@ -46,7 +46,6 @@ interface HeadlessHttpGlobals {
 // classify 429/5xx as retryable and surface other 4xx (e.g. invalid token) as
 // terminal, instead of handing an error body back to callers as a "success".
 // Shared by both the Capacitor and headless adapters below.
-
 const finalizeAdapterResponse = (response: AxiosResponse): AxiosResponse => {
     if (response.status >= 200 && response.status < 300) return response;
     const err = new Error(`Request failed with status code ${response.status}`) as Error & { response?: AxiosResponse };
@@ -177,7 +176,6 @@ const MIN_RETRY_DELAY_MS = 100;
 // retry knobs aren't in the schema, so this is the only guard against a
 // bad `set-setting apiMaxRetries -1` turning the loop into a no-op (or a
 // NaN bound that never terminates).
-
 const coerceNonNegInt = (value: unknown, fallback: number): number => {
     if (value == null) return fallback; // undefined/null → default, not Number(null)===0
     const n = Number(value);

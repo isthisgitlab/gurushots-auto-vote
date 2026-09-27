@@ -30,7 +30,6 @@ const _finiteOrNull = (value: number | undefined): number | null =>
 // The usable title of one observation, or null for an unusable/over-length one.
 // The explicit miss keeps a truncated stored pin from being used as an
 // apparently exact fallback.
-
 const _observedTitle = (challenge: Partial<Challenge>): string | null => {
     const title = typeof challenge?.title === 'string' ? challenge.title.trim() : '';
     return title && title.length <= MAX_TITLE_LENGTH ? title : null;
@@ -39,7 +38,6 @@ const _observedTitle = (challenge: Partial<Challenge>): string | null => {
 // The bounded match facts of one observation. The per-challenge tag list is
 // bounded the same way titles are: an anomalous payload must not park an
 // unbounded array in memory.
-
 const _observedFacts = (challenge: Partial<Challenge>): ChallengeFacts => {
     const type = typeof challenge?.type === 'string' ? challenge.type.trim() : '';
     const tags = challenge?.tags;

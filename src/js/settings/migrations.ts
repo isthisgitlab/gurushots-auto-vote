@@ -19,7 +19,6 @@ import type { AppSettings, ChallengeValues, LooseRecord, TitleRule } from '../ty
 // That GUI could only write values in [0, 1439]
 // (max 23h*60+59); schema defaults (3600, 7200) are above
 // that band, so untouched defaults pass through unchanged.
-
 const migrateTimeUnits = (mergedSettings: AppSettings): boolean => {
     if (mergedSettings._timeUnitMigratedV1) return false;
 
@@ -67,7 +66,6 @@ const migrateTimeUnits = (mergedSettings: AppSettings): boolean => {
 // seconds values from the time input start at 60, so the band
 // cleanly separates minutes from seconds. This is a separate
 // flag because _timeUnitMigratedV1 is already set for current users.
-
 const migrateEmergencyFillTime = (mergedSettings: AppSettings): boolean => {
     if (mergedSettings._emergencyFillTimeMigratedV1) return false;
 
@@ -114,7 +112,6 @@ const migrateEmergencyFillTime = (mergedSettings: AppSettings): boolean => {
 // user gets 45/30/15), never from the schema default; each scope is
 // migrated independently. Runs before cleanupObsoleteSettings, which
 // would otherwise just delete the schemaless legacy key.
-
 const migrateAutoFillSchedule = (mergedSettings: AppSettings): boolean => {
     if (mergedSettings._autoFillScheduleMigratedV1) return false;
 
@@ -173,7 +170,6 @@ const migrateAutoFillSchedule = (mergedSettings: AppSettings): boolean => {
 // out-of-band file edit made after the flag is set could
 // reintroduce bad rows — the same accepted risk as hand-editing
 // any other setting, and the read path still clamps defensively.
-
 const migrateAutoFillScheduleBounds = (mergedSettings: AppSettings): boolean => {
     if (mergedSettings._autoFillScheduleBoundsV1) return false;
 
@@ -205,7 +201,6 @@ const migrateAutoFillScheduleBounds = (mergedSettings: AppSettings): boolean => 
 // scalar inside a profile would vanish from the profile view and be lost on
 // the next save. Prototype-shaped profile names are skipped, mirroring
 // getChallengeProfiles' own-property iteration.
-
 const _eachScheduledFillScope = (
     mergedSettings: AppSettings,
     visit: (scope: ChallengeValues | undefined, label: string, isGlobalScope: boolean) => void,
@@ -242,7 +237,6 @@ const _eachScheduledFillScope = (
 //     profile's present keys, so a deleted profile key stops enforcing the
 //     off. Corrupt (non-sentinel, unparseable) scalars never expressed a
 //     working intent and are deleted in every scope.
-
 const migrateScheduledFillLists = (mergedSettings: AppSettings): boolean => {
     if (mergedSettings._scheduledFillListsMigratedV1) return false;
 
@@ -295,7 +289,6 @@ const migrateScheduledFillLists = (mergedSettings: AppSettings): boolean => {
 // lists have no structural ceiling, so the hot-path consumers additionally
 // slice to MAX_SCHEDULED_FILL_ENTRIES defensively — a post-flag hand edit
 // can't inflate per-cycle Intl work.
-
 const migrateScheduledFillListBounds = (mergedSettings: AppSettings): boolean => {
     if (mergedSettings._scheduledFillListBoundsV1) return false;
 
@@ -332,7 +325,6 @@ const migrateScheduledFillListBounds = (mergedSettings: AppSettings): boolean =>
 // (globalDefaults, every perChallenge map, every non-reserved profile). The new
 // finalWindowDuration setting needs no migration: absent → schema default 3600,
 // the one-hour window the renamed keys were configured against.
-
 const migrateFinalWindowExposureRename = (mergedSettings: AppSettings): boolean => {
     if (mergedSettings._finalWindowExposureRenamedV1) return false;
 
@@ -385,7 +377,6 @@ const _ownValues = (map: Record<string, ChallengeValues>, name: unknown): Challe
 
 // False only when two rules provably never match the same challenge: disjoint
 // exact titles, or different types / photo counts. Anything else may overlap.
-
 const _rulesMayOverlap = (a: TitleRule, b: TitleRule): boolean => {
     const x = ruleConditions(a);
     const y = ruleConditions(b);
@@ -499,7 +490,6 @@ const _pruneGlobalDefaultKeys = (globalDefaults: ChallengeValues, validSchemaKey
 
 // Delete per-challenge override keys the schema no longer defines, then any
 // container left empty. Returns true on change.
-
 const _prunePerChallengeKeys = (perChallenge: Record<string, ChallengeValues>, validSchemaKeys: string[]): boolean => {
     let hasChanges = false;
     for (const challengeId of Object.keys(perChallenge)) {

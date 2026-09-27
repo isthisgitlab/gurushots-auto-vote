@@ -80,7 +80,6 @@ const getEnvSnapshot = () => ({
 // shimmed to undefined when the bundler externalizes 'os'). Code
 // paths that try to actually mkdir/write at this returned path are
 // expected to be wrapped in try/catch so they fail-soft.
-
 const getUserDataDir = (appName: string): string => {
     if (isCapacitor()) return `/${appName}`;
     switch (process.platform) {

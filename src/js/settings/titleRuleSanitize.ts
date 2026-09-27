@@ -86,7 +86,6 @@ const _canonicalTitleRuleProfile = (storedProfiles: Record<string, unknown>, req
 // Identity of a rule's match condition. "\u0000"/"\u0001" cannot occur in a
 // trimmed title or tag, so they are safe separators no user value can forge.
 // The title list is sorted so the same set in a different order is one rule.
-
 const titleRuleKey = (rule: RuleLike): string => {
     const conditions = ruleConditions(rule);
     return [
@@ -119,7 +118,6 @@ const _sanitizeRuleTitleList = (rule: RuleLike): string[] => {
 // A numeric condition: null = absent, false = supplied but out of range, else
 // the normalized value. Out of range is a rejection, not a silent drop —
 // dropping it would widen the rule to every challenge.
-
 const _ruleNumberCondition = (raw: unknown, normalize: (value: unknown) => number | null): number | null | false =>
     raw === null || raw === undefined || raw === '' ? null : (normalize(raw) ?? false);
 
@@ -151,7 +149,6 @@ const _sanitizeRuleClassConditions = (
 
 // What a rejected rule is called in the log: its first title, else its tag or
 // type, else a generic marker (a photo-count/runtime-only rule has no name).
-
 const ruleLogLabel = (rule: RuleLike, title: string | undefined): string =>
     title ||
     (typeof rule?.challengeTag === 'string' && rule.challengeTag.trim()) ||

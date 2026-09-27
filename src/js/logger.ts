@@ -108,14 +108,12 @@ const LOG_RETENTION: Record<string, { days: number; maxMB: number }> = {
 };
 
 // Parse date from filename (e.g., "errors-2025-07-28.log" -> "2025-07-28")
-
 const parseDateFromFilename = (filename: string): string | null => {
     const match = filename.match(/(errors|app|api|settings)-(\d{4}-\d{2}-\d{2})\.log$/);
     return match ? match[2] : null;
 };
 
 // Check if a date is older than specified days
-
 const isDateOlderThan = (dateString: string, days: number): boolean => {
     const fileDate = new Date(dateString);
     const cutoffDate = new Date();
@@ -316,7 +314,6 @@ function sanitizeForLog(value: unknown, depth = 0, seen: WeakSet<object> = new W
 // log line in the plain-text file) and the result is truncated. Shared by the
 // IPC shell (actions.handlers) and the core services (challengeTitlePin) so
 // both sides sanitize identically.
-
 const sanitizeLogString = (value: unknown, maxLength: number = 200): string =>
     String(value ?? '')
         .replace(/[\r\n\t]/g, ' ')
@@ -350,7 +347,6 @@ let nextSeq = 1;
 
 // Routes a log entry to the appropriate disk file. ERROR always wins
 // over category-based routing so errors stay co-located across domains.
-
 const routeLogFile = (level: LogLevel, category: string): string => {
     if (level === 'ERROR') return currentLogFiles.error;
     if (category === 'api') return currentLogFiles.api;
@@ -615,7 +611,6 @@ export type CategoryLogger = {
 };
 
 // Category logging - creates a logger bound to a category
-
 export const withCategory = (category: string): CategoryLogger => ({
     info: (message, data) => writeLog('INFO', message, data, category),
     error: (message, data) => writeLog('ERROR', message, data, category),
@@ -673,7 +668,6 @@ export const getRecentLogs = () => recentLogs.slice();
 // Formats a challenge object as the standard log prefix
 // `[Challenge {id}: {title}]`. Pass the whole challenge object or
 // (id, title) directly; missing fields render as 'unknown'.
-
 export const challengeTag = (
     challengeOrId: { id?: string | number; title?: string } | string | number | null | undefined,
     title?: string | null,

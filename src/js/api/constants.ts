@@ -61,7 +61,6 @@ const FORM_CONTENT_TYPE = 'application/x-www-form-urlencoded; charset=utf-8';
 
 // WEB header profile for the /rest/ endpoints (turbo + submissions flows).
 // The session token sent via x-token works the same as the mobile flow.
-
 const createWebHeaders = (token: string): Record<string, string> => ({
     host: 'api.gurushots.com',
     accept: '*/*',
@@ -74,7 +73,6 @@ const createWebHeaders = (token: string): Record<string, string> => ({
 
 // Builds a module-scoped required-argument guard whose thrown message is
 // prefixed with the calling module's name (e.g. 'turbo: token is required').
-
 const makeRequireValue =
     (prefix: string): (<T>(value: T, label: string) => T) =>
     (value, label) => {

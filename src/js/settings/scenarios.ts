@@ -106,7 +106,6 @@ const plainObject = (value: unknown): Record<string, unknown> => (isPlainObject(
 
 // A rule keeps its row only while it still contributes something: a profile,
 // tags, or a valid inline value.
-
 const ruleHasBehaviour = (rule: TitleRule): boolean => {
     const hasTags = ['mustIncludeTags', 'shouldIncludeTags'].some(
         (key) => Array.isArray(rule[key]) && rule[key].length > 0,

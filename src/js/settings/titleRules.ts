@@ -79,7 +79,6 @@ const hasRuleJoinOptIn = (challenge: RuleMatchChallenge): boolean => {
 
 // Bound a user-supplied title before it reaches a log line so an oversized
 // value can't produce a huge log event (defense in depth for log shipping).
-
 const _titleForLog = (title: string): string => (title.length > 80 ? `${title.slice(0, 80)}…` : title);
 
 /**
