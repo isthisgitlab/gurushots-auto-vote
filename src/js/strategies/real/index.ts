@@ -33,7 +33,7 @@ import { runClaimPass } from '../../services/autoClaim';
 import { loadMissionNeeds } from '../../services/missions';
 import { joinStateStore, acquireUnlockLock } from '../../joinStateStore';
 
-/** @import { Challenge, TurboBattle, TurboMiniGameResult } from '../../types/gurushots' */
+import type { Challenge, TurboMiniGameResult } from '../../types/gurushots';
 
 // One instance for the process: the tracker is stateless (it reads and writes
 // metadata.json on each call), but building it per pass would be pointless churn.
@@ -85,11 +85,8 @@ const claimDeps = {
 /**
  * Manual single-challenge join (real strategy). Paid joins require an explicit
  * `spendCoins` — otherwise the call returns `needs-confirm` and spends nothing.
- * @param {string|number} challengeId
- * @param {boolean} spendCoins
- * @param {string} token
  */
-const joinChallenge = (challengeId, spendCoins, token) =>
+const joinChallenge = (challengeId: string | number, spendCoins: boolean, token: string) =>
     joinChallengeSingle(challengeId, token, joinDeps, { spendCoins: spendCoins === true });
 
 /**
@@ -97,12 +94,13 @@ const joinChallenge = (challengeId, spendCoins, token) =>
  * pick flips to second_image (after the selection delay). Resolves whether a
  * pick was correct, whether that took the flip, and whether the game is WON.
  *
- * @param {Challenge} challenge
- * @param {{firstImageId: string, secondImageId: string}} battle - a battle with both image ids
- * @param {string} token
- * @returns {Promise<{correct: boolean, flipped: boolean, won: boolean}>}
+ * @param battle - a battle with both image ids
  */
-const playTurboBattle = async (challenge, battle, token) => {
+const playTurboBattle = async (
+    challenge: Challenge,
+    battle: { firstImageId: string; secondImageId: string },
+    token: string,
+): Promise<{ correct: boolean; flipped: boolean; won: boolean }> => {
     const first = await submitTurboSelection(challenge.id, battle.firstImageId, token);
     if (first.ok) {
         return { correct: true, flipped: false, won: first.state === 'WON' };
@@ -127,12 +125,8 @@ const playTurboBattle = async (challenge, battle, token) => {
  * Iterates pair-by-pair (see playTurboBattle), skipping resolved battles and
  * counting malformed ones as double failures, and stops early once a response
  * reports state === 'WON'.
- *
- * @param {Challenge} challenge
- * @param {string} token
- * @returns {Promise<TurboMiniGameResult>}
  */
-const runTurboMiniGame = async (challenge, token) => {
+const runTurboMiniGame = async (challenge: Challenge, token: string): Promise<TurboMiniGameResult> => {
     const set = await getChallengeTurbo(challenge.id, token);
     if (!set) {
         logger.withCategory('turbo').warning(`${logger.challengeTag(challenge)} No turbo battle set returned`, null);
@@ -175,14 +169,16 @@ const runTurboMiniGame = async (challenge, token) => {
  * passed per call (not at module load) so jest.mock'd api modules take
  * effect.
  *
- * @param {string} token - Authentication token
- * @param {string|number|null} [challengeIdFilter] - When set, restricts the strategy pass to a single challenge (per-card "Run"). Stale-metadata cleanup still runs against the full active list before filtering.
- * @returns {Promise<{success:boolean, message?:string, error?:string, challenges?:Challenge[]}>}
+ * @param token - Authentication token
+ * @param challengeIdFilter - When set, restricts the strategy pass to a single challenge (per-card "Run"). Stale-metadata cleanup still runs against the full active list before filtering.
  *   `challenges` is the *full* active list this cycle fetched (not the per-challenge
  *   filtered subset), so callers can reuse it for threshold scheduling instead of
  *   re-fetching. Absent only when the fetch itself threw before a list was obtained.
  */
-const fetchChallengesAndVote = async (token, challengeIdFilter = null) => {
+const fetchChallengesAndVote = async (
+    token: string,
+    challengeIdFilter: string | number | null = null,
+): Promise<{ success: boolean; message?: string; error?: string; challenges?: Challenge[] }> => {
     // What the active missions still need — read only while a mission setting is
     // on, shared by the join pre-step and the pass, which count it down.
     const missions = await loadMissionNeeds(token, Date.now(), { getMyMissions });
@@ -196,7 +192,7 @@ const fetchChallengesAndVote = async (token, challengeIdFilter = null) => {
             logger
                 .withCategory('join')
                 .warning(
-                    `join pass errored (voting continues): ${/** @type {{ message?: unknown } | null | undefined} */ (error)?.message || error}`,
+                    `join pass errored (voting continues): ${(error as { message?: unknown } | null | undefined)?.message || error}`,
                     null,
                 );
         }
@@ -208,7 +204,7 @@ const fetchChallengesAndVote = async (token, challengeIdFilter = null) => {
             logger
                 .withCategory('claim')
                 .warning(
-                    `claim pass errored (voting continues): ${/** @type {{ message?: unknown } | null | undefined} */ (error)?.message || error}`,
+                    `claim pass errored (voting continues): ${(error as { message?: unknown } | null | undefined)?.message || error}`,
                     null,
                 );
         }

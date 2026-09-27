@@ -21,7 +21,7 @@ const entryPoints = {
     // Electron preload. Electron sandboxes preloads by default, and a
     // sandboxed preload's require() shim only resolves 'electron' + a few
     // builtins — NOT relative modules — so the shared channel manifest
-    // (src/js/ipc/manifest.js) must be BUNDLED into the preload file the
+    // (src/js/ipc/manifest.ts) must be BUNDLED into the preload file the
     // BrowserWindows load (dist/preload.js).
     preload: path.join(jsDir, 'preload.js'),
 };

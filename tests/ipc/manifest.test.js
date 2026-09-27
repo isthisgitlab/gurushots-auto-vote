@@ -4,7 +4,7 @@
  *
  * Asserts set-equality between the manifest's invoke surface
  * (invokeChannels ∪ alias targets) and the union of every
- * ipc/*.handlers.js buildHandlers() key, and between the manifest's
+ * ipc/*.handlers.ts buildHandlers() key, and between the manifest's
  * sendMethods channels and index.js's direct ipcMain.on registrations
  * (login-success / logout live there, not in a handlers module).
  *

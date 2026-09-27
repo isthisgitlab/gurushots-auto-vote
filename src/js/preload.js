@@ -17,7 +17,7 @@ import { contextBridge, ipcRenderer } from 'electron';
 import { invokeChannels, aliases, sendMethods, eventMethods, kebabToCamel } from './ipc/manifest';
 
 // The window.api surface is GENERATED from the shared channel manifest
-// (ipc/manifest.js) so it can never silently drift from the Capacitor
+// (ipc/manifest.ts) so it can never silently drift from the Capacitor
 // bridge or the main-process handler set (tests/ipc/manifest.test.js
 // enforces the latter). Adding a channel = one manifest entry.
 /** @type {Record<string, (...args: never[]) => unknown>} */

@@ -115,7 +115,7 @@ Domain terms used throughout, in reader's terms:
 - `now` is re-read per challenge (a pass can take minutes, so a single clock would miss windows that open
   mid-pass).
 - **Auto-join is a pre-step of the pass, not a separate schedule.** `runJoinPass` (`services/joinChallenges.ts`)
-  runs inside the shared `fetchChallengesAndVote` (`strategies/real/index.js` real / `mock/strategy.ts` mock) before the
+  runs inside the shared `fetchChallengesAndVote` (`strategies/real/index.ts` real / `mock/strategy.ts` mock) before the
   voting pass, so all three platforms get it without forking `runVotingPass`. It is skipped for a
   single-challenge run and never allowed to abort voting (its errors are caught and logged). The `autoJoin`
   enable is **resolved per candidate by rule (see challenge rules below) → master**, not a hard global gate —
@@ -204,8 +204,8 @@ Domain terms used throughout, in reader's terms:
 - **Layering**: `api/` is the transport layer — `api-client.ts` plus one thin wrapper per endpoint, importing
   nothing from `services/` (`api/voting.ts` still records vote timestamps in `metadata.ts`). The real-mode strategy composes those wrappers with the services in
   `strategies/real/`: `index.js` (`fetchChallengesAndVote` with its mission read (`services/missions.ts`) and join/claim pre-steps, manual join, the
-  Turbo mini-game), `applyBoost.js` (picks the entry via `pickBoostEntry`, posts it through
-  `api/boost.ts#boostImage`, flags it `boosted`) and `activeChallenges.js` (coalesces concurrent
+  Turbo mini-game), `applyBoost.ts` (picks the entry via `pickBoostEntry`, posts it through
+  `api/boost.ts#boostImage`, flags it `boosted`) and `activeChallenges.ts` (coalesces concurrent
   `getActiveChallenges` calls per token and pins first-seen titles via `services/challengeTitlePin.ts` on a
   successful fetch only). `apiFactory.js` assembles the real surface from these and selects it or
   `mock/index.ts#mockApiClient`.
@@ -279,8 +279,8 @@ repeated six times is one that gets forgotten at one of them.
   challenge from a factory photo.
 - Both deps are **optional** in `fetchCandidatesForChallenge`; omit either and behavior is exactly the
   pre-resolution fallback. Nothing here can fail a fill. **That optionality is a safety net, not the
-  shipping state** — every real path supplies them: `strategies/real/index.js` (the `api:` bundle `votingOrchestrator`
-  copies into `fillDeps`, and `joinDeps`), `ipc/actions.handlers.js` (manual Fill Now), and both mock
+  shipping state** — every real path supplies them: `strategies/real/index.ts` (the `api:` bundle `votingOrchestrator`
+  copies into `fillDeps`, and `joinDeps`), `ipc/actions.handlers.ts` (manual Fill Now), and both mock
   bundles. Note `runFillAttempt` rebuilds a fresh deps object for its
   `fetchCandidatesForChallenge` call rather than spreading `deps`, so a dep added upstream must be named
   there too or it is silently dropped for auto-fill, emergency fill and manual fill alike.
@@ -390,19 +390,19 @@ repeated six times is one that gets forgotten at one of them.
 
 ## 6. IPC contract
 
-- `ipc/manifest.js` is the **dependency-free single source of truth** for the whole `window.api` surface —
+- `ipc/manifest.ts` is the **dependency-free single source of truth** for the whole `window.api` surface —
   four lists: `invokeChannels`, `aliases`, `sendMethods`, `eventMethods`. Both shells generate from it:
   Electron `preload.js` builds `contextBridge.exposeInMainWorld('api', …)`; Capacitor
   `bridge/capacitor.js` builds the identical surface in-process.
 - **Drift is CI-enforced** by `tests/ipc/manifest.test.js` at the name level. Signatures travel through the
   `WindowApi` type (`types/ipc.d.ts`, derived from the manifest lists and every `buildHandlers()`), so a
   renderer call in a type-checked file is checked against its handler's parameters and result — only as
-  precise as that handler's JSDoc.
-- Handler shape: every `ipc/*.handlers.js` exports `buildHandlers(deps) → {channel: impl}` **and**
+  precise as that handler's type annotations.
+- Handler shape: every `ipc/*.handlers.ts` exports `buildHandlers(deps) → {channel: impl}` **and**
   `register(ipcMain)`. **CLI and Capacitor reuse the same handler modules** (`cli/commands/*.js` lazily
   require `buildHandlers()`) — never write a parallel implementation.
-- **Add a channel end-to-end**: (a) add the channel string to the right list in `manifest.js`; (b)
-  implement it in the matching `ipc/*.handlers.js` `buildHandlers()`; (c) Electron picks it up
+- **Add a channel end-to-end**: (a) add the channel string to the right list in `manifest.ts`; (b)
+  implement it in the matching `ipc/*.handlers.ts` `buildHandlers()`; (c) Electron picks it up
   automatically via `preload.js` + the module's `register()`; (d) ensure the handler module is in
   `capacitor.js`'s spread for the Capacitor build.
 - Handlers **never throw to the renderer** — they return a tagged `{ success, error }` object. Shared
@@ -410,7 +410,7 @@ repeated six times is one that gets forgotten at one of them.
   `{ ok: true, token, settings }` or `{ ok: false, response }`, and callers do
   `if (!guard.ok) return guard.response;`.
 - Handlers explicitly **whitelist** the fields returned to the renderer so internal result shapes don't
-  leak (`safeResult` / `safeRaw` in `ipc/actions.handlers.js`).
+  leak (`safeResult` / `safeRaw` in `ipc/actions.handlers.ts`).
 
 ## 7. Persistence & platform detection
 
@@ -491,7 +491,7 @@ repeated six times is one that gets forgotten at one of them.
   **Sandboxing here is Electron's default-on behavior** (unset `sandbox` + `nodeIntegration:false`), _not_
   an explicit flag at those lines — a spot-checker won't find the word "sandbox" there. Regressing
   context-isolation / node-integration is a classic severe-vuln class.
-- A defense-in-depth **sender-frame trust check** (`isTrustedSender`, `ipc/registerHandlers.js`) refuses
+- A defense-in-depth **sender-frame trust check** (`isTrustedSender`, `ipc/registerHandlers.ts`) refuses
   any invoke from a non-main-frame or non-`file://` origin, and is reused by the manual `ipcMain.on`
   channels.
 - The settings/token file is written mode `0o600` — but **only at creation. A pre-existing or
@@ -563,6 +563,6 @@ caps (dependency-free, renderer-safe), and `scenarios/templates.ts` holds editab
 - **Builder** (`react/components/app/scenarioBuilder/`): forms generated from `scenarios/builderSpec.ts` (every
   condition / action / selector's fields and kinds — a test checks every default against the validator) over
   pure draft edits in `scenarios/builderModel.ts`; it never validates itself — save and simulate do.
-- **Surfaces**: IPC `ipc/scenarios.handlers.js` (the CLI reuses it), CLI `cli/commands/scenarios.js`,
+- **Surfaces**: IPC `ipc/scenarios.handlers.ts` (the CLI reuses it), CLI `cli/commands/scenarios.js`,
   GUI `ScenariosSection` (+ the builder), the `scenario` field in `SettingInput`, and the card
   `ScenarioStatusLine`.

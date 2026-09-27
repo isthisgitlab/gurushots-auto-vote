@@ -1,5 +1,5 @@
 /**
- * Mock counterpart to the active-challenge read (strategies/real/activeChallenges.js
+ * Mock counterpart to the active-challenge read (strategies/real/activeChallenges.ts
  * over api/challenges.ts): session-stable generated challenges.
  */
 

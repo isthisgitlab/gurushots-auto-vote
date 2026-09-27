@@ -1,5 +1,5 @@
 /**
- * Mock counterpart to the auto-cycle boost (strategies/real/applyBoost.js)
+ * Mock counterpart to the auto-cycle boost (strategies/real/applyBoost.ts)
  * and api/boost.ts's entry-targeted boost.
  */
 

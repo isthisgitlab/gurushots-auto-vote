@@ -15,20 +15,16 @@ import { errorResult } from './errorResult';
 import { AutoUpdater } from '../services/AutoUpdater';
 import { getReleasesUrl } from '../services/UpdateChecker';
 
-/**
- * @import { BrowserWindow, IpcMain } from 'electron'
- * @import { IpcHandlerMap } from './registerHandlers'
- */
+import type { BrowserWindow, IpcMain } from 'electron';
+import type { IpcHandlerMap } from './registerHandlers';
 
-/**
- * @typedef {object} UpdateHandlerDeps
- * @property {() => AutoUpdater | null} getAutoUpdater
- * @property {(autoUpdater: AutoUpdater) => void} setAutoUpdater
- * @property {() => BrowserWindow | null} getMainWindow
- */
+interface UpdateHandlerDeps {
+    getAutoUpdater: () => AutoUpdater | null;
+    setAutoUpdater: (autoUpdater: AutoUpdater) => void;
+    getMainWindow: () => BrowserWindow | null;
+}
 
-/** @param {UpdateHandlerDeps} deps */
-const buildHandlers = (deps) => {
+const buildHandlers = (deps: UpdateHandlerDeps) => {
     const { getAutoUpdater, setAutoUpdater, getMainWindow } = deps;
 
     // Lazily construct the shared instance on first use (windowed — unlike
@@ -45,18 +41,16 @@ const buildHandlers = (deps) => {
 
     // Guard for handlers that must NOT lazily construct: yields either the
     // existing instance or the standard "not initialized" failure result.
-    /**
-     * @returns {{ autoUpdater: AutoUpdater, failure: null }
-     *   | { autoUpdater: null, failure: { success: false, error: string } }}
-     */
-    const requireUpdater = () => {
+    const requireUpdater = ():
+        | { autoUpdater: AutoUpdater; failure: null }
+        | { autoUpdater: null; failure: { success: false; error: string } } => {
         const autoUpdater = getAutoUpdater();
         return autoUpdater
             ? { autoUpdater, failure: null }
             : { autoUpdater: null, failure: { success: false, error: 'AutoUpdater not initialized' } };
     };
 
-    return /** @satisfies {IpcHandlerMap} */ ({
+    return {
         'check-for-updates': async () => {
             try {
                 const updateInfo = await ensureUpdater().checkForUpdates(true);
@@ -137,14 +131,10 @@ const buildHandlers = (deps) => {
             }
             return { success: false, canAutoUpdate: false };
         },
-    });
+    } satisfies IpcHandlerMap;
 };
 
-/**
- * @param {IpcMain} ipcMain
- * @param {UpdateHandlerDeps} deps
- */
-const register = (ipcMain, deps) => {
+const register = (ipcMain: IpcMain, deps: UpdateHandlerDeps) => {
     registerHandlers(ipcMain, buildHandlers(deps));
 };
 

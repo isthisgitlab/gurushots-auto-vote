@@ -1,5 +1,5 @@
 /**
- * Integrity test for the THIN_HANDLERS table in settings.handlers.js.
+ * Integrity test for the THIN_HANDLERS table in settings.handlers.ts.
  *
  * The table bulk-registers passthrough handlers that delegate to a
  * settings.<method>(...args) call. Two things can go wrong silently:
@@ -22,7 +22,7 @@ jest.mock('../../src/js/apiFactory', () => ({
 const settings = require('../../src/js/settings');
 const { buildHandlers } = require('../../src/js/ipc/settings.handlers');
 
-// Mirror of the THIN_HANDLERS table in src/js/ipc/settings.handlers.js.
+// Mirror of the THIN_HANDLERS table in src/js/ipc/settings.handlers.ts.
 // Kept hand-authored on purpose: if a row changes there, this test must
 // be updated too — that's the contract.
 const EXPECTED_THIN_HANDLERS = [

@@ -6,7 +6,7 @@
 import { fetchActiveChallenges } from '../../api/challenges';
 import { pinChallengeTitles } from '../../services/challengeTitlePin';
 
-/** @import { ActiveChallengesResponse } from '../../types/gurushots' */
+import type { ActiveChallengesResponse } from '../../types/gurushots';
 
 /**
  * One fetch, then pin first-seen titles onto a successful response. A failed
@@ -14,11 +14,8 @@ import { pinChallengeTitles } from '../../services/challengeTitlePin';
  * network blip would wipe pins. The server mutates `title` while an event
  * (turbo) is active; pinning keeps display and title-rule matching stable
  * (see services/challengeTitlePin).
- *
- * @param {string} token
- * @returns {Promise<ActiveChallengesResponse>}
  */
-const fetchAndPin = async (token) => {
+const fetchAndPin = async (token: string): Promise<ActiveChallengesResponse> => {
     const response = await fetchActiveChallenges(token);
     if (!response.fetchFailed && Array.isArray(response.challenges)) {
         pinChallengeTitles(response.challenges);
@@ -33,18 +30,17 @@ const fetchAndPin = async (token) => {
 // calls are merged (and pinned once); a later (sequential) call still hits the
 // network for fresh data. No resolved-result caching, so this never serves
 // stale challenge state.
-/** @type {Map<string, Promise<ActiveChallengesResponse>>} */
-const inFlightByToken = new Map();
+const inFlightByToken: Map<string, Promise<ActiveChallengesResponse>> = new Map();
 
 /**
  * Fetches all active challenges for the authenticated user, coalescing
  * concurrent calls for the same token into one request.
  *
- * @param {string} token - Authentication token
- * @returns {Promise<ActiveChallengesResponse>} Response containing array of active challenges
+ * @param token - Authentication token
+ * @returns Response containing array of active challenges
  *                   or empty challenges array if request fails
  */
-const getActiveChallenges = (token) => {
+const getActiveChallenges = (token: string): Promise<ActiveChallengesResponse> => {
     const key = token || '';
     const existing = inFlightByToken.get(key);
     if (existing) {

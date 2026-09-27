@@ -1,5 +1,5 @@
 /**
- * Defensive-input tests for the real-strategy applyBoost (strategies/real/applyBoost.js)
+ * Defensive-input tests for the real-strategy applyBoost (strategies/real/applyBoost.ts)
  * and api/boost.ts that complement boost.test.js:
  * missing / nullish ids, a picked entry without an id, and missing member data.
  * The entry picker (VotingLogic.pickBoostEntry) is mocked here so each guard

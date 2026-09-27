@@ -1,5 +1,5 @@
 /**
- * Binder wiring test for the voteOnNewEntry entry tracker in src/js/strategies/real/index.js.
+ * Binder wiring test for the voteOnNewEntry entry tracker in src/js/strategies/real/index.ts.
  *
  * The mock fork of this loop once silently lost auto-fill, emergency fill and
  * turbo-earn wiring, which is the documented reason the shared orchestrator

@@ -212,7 +212,7 @@ describe('voting', () => {
 
             // A function target is not a usable shape — the orchestrator passes a
             // resolved number (see the _getExposureThreshold note in
-            // strategies/real/index.js). `exposure_factor < someFunction` is always
+            // strategies/real/index.ts). `exposure_factor < someFunction` is always
             // false, so no image is ever selected.
             const thresholdFunction = (challengeId) => {
                 return challengeId === '123' ? 80 : 100;

@@ -1,6 +1,6 @@
 /**
  * Electron preload (src/js/preload.js): the service-worker register() block
- * and the window.api surface generated from ipc/manifest.js.
+ * and the window.api surface generated from ipc/manifest.ts.
  */
 
 jest.mock('electron', () => ({

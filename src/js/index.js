@@ -357,7 +357,7 @@ if (gotSingleInstanceLock) {
 
             // Initialize global AutoUpdater instance. Deliberately constructed
             // WITHOUT a window — unlike the windowed constructions in
-            // ipc/update.handlers.js and ui/applicationMenu.js — because the
+            // ipc/update.handlers.ts and ui/applicationMenu.js — because the
             // startup check below runs before any window exists (pre-window so
             // an update prompt can't race the main window's challenge load and
             // double-load challenges).
@@ -530,20 +530,20 @@ ipcMain.on('logout', (event) => {
         });
 });
 
-// Settings IPC handlers live in ipc/settings.handlers.js — that
+// Settings IPC handlers live in ipc/settings.handlers.ts — that
 // includes get-settings, get-setting, set-setting, save-settings,
 // schema, boost thresholds, get-environment-info, refresh-api, the
 // thin passthrough table, and cleanup-stale-metadata.
 
 // gui-vote, run-voting-cycle, vote-all-challenges-manual, vote-on-challenge,
 // vote-on-challenge-manual, should-cancel-voting, set-cancel-voting all
-// live in ipc/voting.handlers.js.
+// live in ipc/voting.handlers.ts.
 
-// Logger handlers live in ipc/log.handlers.js.
-// open-external-url, reload-window, refresh-menu live in ipc/misc.handlers.js.
+// Logger handlers live in ipc/log.handlers.ts.
+// open-external-url, reload-window, refresh-menu live in ipc/misc.handlers.ts.
 // authenticate, get-active-challenges, play-auto-turbo, apply-turbo-to-entry,
-// apply-boost-to-entry live in ipc/actions.handlers.js.
+// apply-boost-to-entry live in ipc/actions.handlers.ts.
 
-// AutoUpdater IPC handlers live in ipc/update.handlers.js.
+// AutoUpdater IPC handlers live in ipc/update.handlers.ts.
 
-// Log streaming + log file IPC handlers live in ipc/log.handlers.js.
+// Log streaming + log file IPC handlers live in ipc/log.handlers.ts.

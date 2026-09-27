@@ -13,7 +13,7 @@ import type { ActiveChallengesResponse } from '../types/gurushots';
 /**
  * Fetches all active challenges for the authenticated user — one request per
  * call. Title pinning and in-flight coalescing live in the caller
- * (strategies/real/activeChallenges.js).
+ * (strategies/real/activeChallenges.ts).
  *
  * @param token - Authentication token
  * @returns Response containing array of active challenges, or

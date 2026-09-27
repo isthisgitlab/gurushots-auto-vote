@@ -1,6 +1,6 @@
 /**
  * Orchestration tests for the "fill-new" boost/turbo options in
- * fetchChallengesAndVote (src/js/strategies/real/index.js).
+ * fetchChallengesAndVote (src/js/strategies/real/index.ts).
  *
  * These verify the wiring only — that when boostFillNew/turboFillNew is on the
  * cycle submits a fresh entry via autoFill.submitNewEntryForAction and then

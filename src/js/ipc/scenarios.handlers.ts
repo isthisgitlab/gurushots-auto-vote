@@ -34,71 +34,51 @@ import { simulateScenario } from '../scenarios/simulate';
 import { SCENARIO_TEMPLATES } from '../scenarios/templates';
 import { refreshScenarioStateAsync } from '../scenarioStateStore';
 
-/**
- * @import { IpcMain } from 'electron'
- * @import { IpcHandlerMap } from './registerHandlers'
- * @import { ScenarioDocument, ScenarioIssue } from '../settings/scenarioSchema'
- * @import { ActiveChallengesResponse, Bankroll, Challenge } from '../types/gurushots'
- */
+import type { IpcMain } from 'electron';
+import type { IpcHandlerMap } from './registerHandlers';
+import type { ScenarioDocument, ScenarioIssue } from '../settings/scenarioSchema';
+import type { ActiveChallengesResponse, Bankroll, Challenge } from '../types/gurushots';
 
 /**
  * A facade `{ok, ...}` result mapped onto the IPC `{success, ...}` shape.
- *
- * @template R
- * @typedef {R extends { ok: false }
- *   ? { success: false, error: string, issues: ScenarioIssue[] }
- *   : Omit<R, 'ok'> & { success: true }} FromResult
  */
+type FromResult<R> = R extends { ok: false }
+    ? { success: false; error: string; issues: ScenarioIssue[] }
+    : Omit<R, 'ok'> & { success: true };
 
-/** @typedef {ReturnType<typeof getScenarioStatus>} ScenarioStatus */
+type ScenarioStatus = ReturnType<typeof getScenarioStatus>;
 
 const log = () => logger.withCategory('scenario');
 
-/**
- * @param {unknown} value
- * @returns {value is string | number}
- */
-const isIdArg = (value) => (typeof value === 'string' && value.trim() !== '') || Number.isFinite(value);
-/**
- * @param {unknown} value
- * @returns {value is string}
- */
-const isName = (value) => typeof value === 'string' && value.trim() !== '';
+const isIdArg = (value: unknown): value is string | number =>
+    (typeof value === 'string' && value.trim() !== '') || Number.isFinite(value);
+const isName = (value: unknown): value is string => typeof value === 'string' && value.trim() !== '';
 
 // `issues?: undefined` keeps this arm distinct from the validation failures that
 // do carry issues, so a renderer narrowing on `'issues' in result` keeps them.
-/** @type {{ success: false, error: string, issues?: undefined }} */
-const invalidArgs = { success: false, error: 'invalid-args' };
+const invalidArgs: { success: false; error: string; issues?: undefined } = { success: false, error: 'invalid-args' };
 
 /**
  * A facade `{ok, issues}` result as an IPC result.
  *
  * A failed result always carries `issues` (every facade failure path does).
- *
- * @template {{ ok: boolean, issues?: ScenarioIssue[] }} R
- * @param {R} r
- * @returns {FromResult<R>}
  */
-const fromResult = ({ ok, ...result }) =>
-    /** @type {FromResult<R>} */ (
-        ok
-            ? { success: true, ...result }
-            : {
-                  success: false,
-                  error: /** @type {{ issues: ScenarioIssue[] }} */ (result).issues[0]?.message ?? 'Invalid scenario',
-                  issues: /** @type {{ issues: ScenarioIssue[] }} */ (result).issues,
-              }
-    );
+const fromResult = <R extends { ok: boolean; issues?: ScenarioIssue[] }>({ ok, ...result }: R): FromResult<R> =>
+    (ok
+        ? { success: true, ...result }
+        : {
+              success: false,
+              error: (result as { issues: ScenarioIssue[] }).issues[0]?.message ?? 'Invalid scenario',
+              issues: (result as { issues: ScenarioIssue[] }).issues,
+          }) as FromResult<R>;
 
 /**
  * Runs a handler body, turning a throw into an error result.
- *
- * @template T
- * @param {string} label
- * @param {() => T | Promise<T>} body
- * @returns {Promise<T | { success: false, error: string, issues?: undefined }>}
  */
-const safely = async (label, body) => {
+const safely = async <T>(
+    label: string,
+    body: () => T | Promise<T>,
+): Promise<T | { success: false; error: string; issues?: undefined }> => {
     try {
         return await body();
     } catch (error) {
@@ -112,29 +92,29 @@ const safely = async (label, body) => {
  * status, the live challenge, its state (or a start state) and the bankroll.
  * `draft` replaces the assigned scenario with an unsaved document, which then
  * starts from its start phase.
- *
- * @param {string} label
- * @param {string | number} challengeId
- * @param {unknown} [draft]
- * @returns {Promise<
- *   | { ok: false, response: { success: false, error: string, issues?: ScenarioIssue[] } }
- *   | {
- *       ok: true,
- *       status: Omit<ScenarioStatus, 'scenario'> & { scenario: ScenarioDocument },
- *       challenge: Challenge,
- *       now: number,
- *       state: NonNullable<ScenarioStatus['state']> | ReturnType<typeof startState>,
- *       bankroll: Bankroll | null,
- *     }
- * >}
  */
-const loadLiveScenario = async (label, challengeId, draft = null) => {
-    /**
-     * @param {string} error
-     * @param {{ issues?: ScenarioIssue[] }} [extra]
-     * @returns {{ ok: false, response: { success: false, error: string, issues?: ScenarioIssue[] } }}
-     */
-    const refuse = (error, extra = {}) => ({ ok: false, response: { success: false, error, ...extra } });
+const loadLiveScenario = async (
+    label: string,
+    challengeId: string | number,
+    draft: unknown = null,
+): Promise<
+    | { ok: false; response: { success: false; error: string; issues?: ScenarioIssue[] } }
+    | {
+          ok: true;
+          status: Omit<ScenarioStatus, 'scenario'> & { scenario: ScenarioDocument };
+          challenge: Challenge;
+          now: number;
+          state: NonNullable<ScenarioStatus['state']> | ReturnType<typeof startState>;
+          bankroll: Bankroll | null;
+      }
+> => {
+    const refuse = (
+        error: string,
+        extra: { issues?: ScenarioIssue[] } = {},
+    ): { ok: false; response: { success: false; error: string; issues?: ScenarioIssue[] } } => ({
+        ok: false,
+        response: { success: false, error, ...extra },
+    });
     const guard = auth.requireAuthToken(label);
     if (!guard.ok) return { ok: false, response: guard.response };
     await refreshScenarioStateAsync();
@@ -147,15 +127,14 @@ const loadLiveScenario = async (label, challengeId, draft = null) => {
     if (!status.scenario) return refuse(status.assigned ? 'unknown-scenario' : 'no-scenario');
     if (status.corrupt) return refuse('state-unreadable');
     const strategy = apiFactory.getApiStrategy();
-    /** @type {ActiveChallengesResponse | null} */
-    const response = await strategy.getActiveChallenges(guard.token);
+    const response: ActiveChallengesResponse | null = await strategy.getActiveChallenges(guard.token);
     const challenge = findActiveChallenge(response?.challenges, challengeId);
     if (!challenge) return refuse('challenge-not-found');
     const now = Math.floor(Date.now() / 1000);
     return {
         ok: true,
         // The guard above returned when status.scenario was null.
-        status: /** @type {Omit<ScenarioStatus, 'scenario'> & { scenario: ScenarioDocument }} */ (status),
+        status: status as Omit<ScenarioStatus, 'scenario'> & { scenario: ScenarioDocument },
         challenge,
         now,
         state: status.state ?? startState(status.scenario, now),
@@ -164,7 +143,7 @@ const loadLiveScenario = async (label, challengeId, draft = null) => {
 };
 
 const buildHandlers = () =>
-    /** @satisfies {IpcHandlerMap} */ ({
+    ({
         'get-scenarios': async () =>
             safely('get-scenarios', () => ({
                 success: true,
@@ -172,50 +151,38 @@ const buildHandlers = () =>
                 templates: SCENARIO_TEMPLATES,
             })),
 
-        'check-scenario': async (/** @type {unknown} */ event, /** @type {unknown} */ doc) =>
+        'check-scenario': async (event: unknown, doc: unknown) =>
             safely('check-scenario', () => {
                 const result = settings.checkScenario(doc);
                 return result.ok ? { success: true } : fromResult(result);
             }),
 
-        'save-scenario': async (
-            /** @type {unknown} */ event,
-            /** @type {unknown} */ doc,
-            /** @type {{ overwrite?: boolean } | null | undefined} */ options,
-        ) =>
+        'save-scenario': async (event: unknown, doc: unknown, options: { overwrite?: boolean } | null | undefined) =>
             safely('save-scenario', () =>
                 fromResult(settings.saveScenario(doc, { overwrite: options?.overwrite !== false })),
             ),
 
-        'rename-scenario': async (
-            /** @type {unknown} */ event,
-            /** @type {string} */ oldName,
-            /** @type {string} */ newName,
-        ) => {
+        'rename-scenario': async (event: unknown, oldName: string, newName: string) => {
             if (!isName(oldName) || typeof newName !== 'string') return invalidArgs;
             return safely('rename-scenario', () => fromResult(settings.renameScenario(oldName, newName)));
         },
 
-        'delete-scenario': async (/** @type {unknown} */ event, /** @type {string} */ name) => {
+        'delete-scenario': async (event: unknown, name: string) => {
             if (!isName(name)) return invalidArgs;
             return safely('delete-scenario', () =>
                 settings.deleteScenario(name) ? { success: true } : { success: false, error: 'not-found' },
             );
         },
 
-        'preview-scenario-import': async (/** @type {unknown} */ event, /** @type {string} */ text) =>
+        'preview-scenario-import': async (event: unknown, text: string) =>
             safely('preview-scenario-import', () => fromResult(settings.previewScenarioImport(text))),
 
-        'import-scenario': async (
-            /** @type {unknown} */ event,
-            /** @type {string} */ text,
-            /** @type {{ overwrite?: boolean } | null | undefined} */ options,
-        ) =>
+        'import-scenario': async (event: unknown, text: string, options: { overwrite?: boolean } | null | undefined) =>
             safely('import-scenario', () =>
                 fromResult(settings.importScenario(text, { overwrite: options?.overwrite === true })),
             ),
 
-        'export-scenario': async (/** @type {unknown} */ event, /** @type {string} */ name) => {
+        'export-scenario': async (event: unknown, name: string) => {
             if (!isName(name)) return invalidArgs;
             return safely('export-scenario', () => {
                 const json = settings.exportScenario(name);
@@ -223,7 +190,7 @@ const buildHandlers = () =>
             });
         },
 
-        'get-scenario-status': async (/** @type {unknown} */ event, /** @type {string | number} */ challengeId) => {
+        'get-scenario-status': async (event: unknown, challengeId: string | number) => {
             if (!isIdArg(challengeId)) return invalidArgs;
             return safely('get-scenario-status', async () => {
                 await refreshScenarioStateAsync();
@@ -231,7 +198,7 @@ const buildHandlers = () =>
             });
         },
 
-        'reset-scenario-state': async (/** @type {unknown} */ event, /** @type {string | number} */ challengeId) => {
+        'reset-scenario-state': async (event: unknown, challengeId: string | number) => {
             if (!isIdArg(challengeId)) return invalidArgs;
             return safely('reset-scenario-state', async () => {
                 await refreshScenarioStateAsync();
@@ -244,7 +211,7 @@ const buildHandlers = () =>
             });
         },
 
-        'dry-run-scenario': async (/** @type {unknown} */ event, /** @type {string | number} */ challengeId) => {
+        'dry-run-scenario': async (event: unknown, challengeId: string | number) => {
             if (!isIdArg(challengeId)) return invalidArgs;
             return safely('dry-run-scenario', async () => {
                 const loaded = await loadLiveScenario('scenario dry run', challengeId);
@@ -269,9 +236,7 @@ const buildHandlers = () =>
                               ruleId: decision.fire.ruleId,
                               startIndex: decision.fire.startIndex,
                               // `rule` is untyped in scenarios/evaluate; a validated rule's `do` is its action list.
-                              actions: /** @type {Array<{ type: string }>} */ (decision.fire.rule.do).map(
-                                  (action) => action.type,
-                              ),
+                              actions: (decision.fire.rule.do as Array<{ type: string }>).map((action) => action.type),
                           }
                         : null,
                     explain: decision.explain,
@@ -280,11 +245,7 @@ const buildHandlers = () =>
             });
         },
 
-        'simulate-scenario': async (
-            /** @type {unknown} */ event,
-            /** @type {string | number} */ challengeId,
-            /** @type {unknown} */ draft,
-        ) => {
+        'simulate-scenario': async (event: unknown, challengeId: string | number, draft: unknown) => {
             if (!isIdArg(challengeId)) return invalidArgs;
             return safely('simulate-scenario', async () => {
                 const loaded = await loadLiveScenario('scenario simulation', challengeId, draft ?? null);
@@ -301,9 +262,8 @@ const buildHandlers = () =>
                 return { success: true, scenario: status.scenario.name, startPhase: state.phase, now, ...timeline };
             });
         },
-    });
+    }) satisfies IpcHandlerMap;
 
-/** @param {IpcMain} ipcMain */
-const register = (ipcMain) => registerHandlers(ipcMain, buildHandlers());
+const register = (ipcMain: IpcMain) => registerHandlers(ipcMain, buildHandlers());
 
 export { register, buildHandlers };

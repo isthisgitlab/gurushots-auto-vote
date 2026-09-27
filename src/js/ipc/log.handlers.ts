@@ -15,19 +15,15 @@ import * as logger from '../logger';
 import { registerHandlers } from './registerHandlers';
 import { errorResult } from './errorResult';
 
-/**
- * @import { IpcMain, IpcMainInvokeEvent, WebContents } from 'electron'
- * @import { IpcHandlerMap } from './registerHandlers'
- * @import { GuiLogEntry, GuiLogSink } from '../logger'
- */
+import type { IpcMain, IpcMainInvokeEvent, WebContents } from 'electron';
+import type { IpcHandlerMap } from './registerHandlers';
+import type { GuiLogEntry, GuiLogSink } from '../logger';
 
-/** @type {Set<WebContents>} */
-const logStreamWindows = new Set();
+const logStreamWindows: Set<WebContents> = new Set();
 
 // logger.ts calls this with a full entry object: { seq, level, context,
 // category, timestamp, message }. We forward as-is to renderers.
-/** @param {GuiLogEntry} entry */
-const sendLogToGUI = (entry) => {
+const sendLogToGUI = (entry: GuiLogEntry) => {
     logStreamWindows.forEach((webContents) => {
         if (!webContents.isDestroyed()) {
             webContents.send('log-message', entry);
@@ -36,41 +32,29 @@ const sendLogToGUI = (entry) => {
 };
 
 const buildHandlers = () =>
-    /** @satisfies {IpcHandlerMap} */ ({
-        'log-debug': async (
-            /** @type {unknown} */ event,
-            /** @type {string} */ message,
-            /** @type {unknown} */ data,
-        ) => {
+    ({
+        'log-debug': async (event: unknown, message: string, data: unknown) => {
             logger.setContext('GUI');
             logger.withCategory('ui').debug(message, data);
             logger.clearContext();
             return { success: true };
         },
 
-        'log-error': async (
-            /** @type {unknown} */ event,
-            /** @type {string} */ message,
-            /** @type {unknown} */ data,
-        ) => {
+        'log-error': async (event: unknown, message: string, data: unknown) => {
             logger.setContext('GUI');
             logger.withCategory('ui').error(message, data);
             logger.clearContext();
             return { success: true };
         },
 
-        'log-warning': async (
-            /** @type {unknown} */ event,
-            /** @type {string} */ message,
-            /** @type {unknown} */ data,
-        ) => {
+        'log-warning': async (event: unknown, message: string, data: unknown) => {
             logger.setContext('GUI');
             logger.withCategory('ui').warning(message, data);
             logger.clearContext();
             return { success: true };
         },
 
-        'log-api': async (/** @type {unknown} */ event, /** @type {string} */ message, /** @type {unknown} */ data) => {
+        'log-api': async (event: unknown, message: string, data: unknown) => {
             logger.setContext('GUI');
             logger.withCategory('api').api(message, data);
             logger.clearContext();
@@ -83,7 +67,7 @@ const buildHandlers = () =>
 
         'get-log-backlog': async () => logger.getRecentLogs(),
 
-        'start-log-stream': async (/** @type {IpcMainInvokeEvent | null | undefined} */ event) => {
+        'start-log-stream': async (event: IpcMainInvokeEvent | null | undefined) => {
             try {
                 // Capacitor passes no IPC event (single-process WebView): there
                 // is no webContents to register. Delivery is handled by the
@@ -101,7 +85,7 @@ const buildHandlers = () =>
             }
         },
 
-        'stop-log-stream': async (/** @type {IpcMainInvokeEvent | null | undefined} */ event) => {
+        'stop-log-stream': async (event: IpcMainInvokeEvent | null | undefined) => {
             try {
                 if (event?.sender) logStreamWindows.delete(event.sender);
                 return { success: true };
@@ -110,14 +94,13 @@ const buildHandlers = () =>
                 return errorResult(error, 'Failed to stop log stream');
             }
         },
-    });
+    }) satisfies IpcHandlerMap;
 
-/** @param {IpcMain} ipcMain */
-const register = (ipcMain) => {
+const register = (ipcMain: IpcMain) => {
     registerHandlers(ipcMain, buildHandlers());
     // logger.ts looks up this function via the global to push log
     // events from any module without a back-reference.
-    /** @type {typeof globalThis & { sendLogToGUI?: GuiLogSink }} */ (global).sendLogToGUI = sendLogToGUI;
+    (global as typeof globalThis & { sendLogToGUI?: GuiLogSink }).sendLogToGUI = sendLogToGUI;
 };
 
 export { register, buildHandlers, sendLogToGUI };

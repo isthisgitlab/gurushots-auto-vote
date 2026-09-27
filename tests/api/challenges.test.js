@@ -1,6 +1,6 @@
 /**
  * Tests for the active-challenges read: the api/challenges.ts transport
- * driven through the real-strategy wrapper (strategies/real/activeChallenges.js)
+ * driven through the real-strategy wrapper (strategies/real/activeChallenges.ts)
  * that adds title pinning and in-flight coalescing.
  */
 

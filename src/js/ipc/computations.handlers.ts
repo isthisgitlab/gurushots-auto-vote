@@ -19,15 +19,13 @@ import { registerHandlers } from './registerHandlers';
 import * as logger from '../logger';
 import * as votingLogic from '../services/VotingLogic';
 
-/**
- * @import { IpcMain } from 'electron'
- * @import { IpcHandlerMap } from './registerHandlers'
- * @import { Challenge } from '../types/gurushots'
- */
+import type { IpcMain } from 'electron';
+import type { IpcHandlerMap } from './registerHandlers';
+import type { Challenge } from '../types/gurushots';
 
 const buildHandlers = () =>
-    /** @satisfies {IpcHandlerMap} */ ({
-        'get-deadline-actions': async (/** @type {unknown} */ event, /** @type {unknown} */ challenge) => {
+    ({
+        'get-deadline-actions': async (event: unknown, challenge: unknown) => {
             try {
                 if (!challenge || typeof challenge !== 'object' || Array.isArray(challenge)) {
                     return { success: false, error: 'invalid challenge' };
@@ -36,25 +34,21 @@ const buildHandlers = () =>
                 // per-challenge override lookup key): only a string/number is a valid
                 // challenge id. Rejects e.g. an object/array id before it reaches the
                 // settings facade.
-                const idType = typeof (/** @type {{ id?: unknown }} */ (challenge).id);
+                const idType = typeof (challenge as { id?: unknown }).id;
                 if (idType !== 'string' && idType !== 'number') {
                     return { success: false, error: 'invalid challenge id' };
                 }
                 const now = Math.floor(Date.now() / 1000);
-                const { actions, boostBlocked } = votingLogic.describeDeadlineActions(
-                    /** @type {Challenge} */ (challenge),
-                    now,
-                );
+                const { actions, boostBlocked } = votingLogic.describeDeadlineActions(challenge as Challenge, now);
                 return { success: true, actions, boostBlocked };
             } catch (error) {
                 logger.withCategory('voting').error('Error computing deadline actions:', error);
                 return { success: false, error: 'Failed to compute deadline actions' };
             }
         },
-    });
+    }) satisfies IpcHandlerMap;
 
-/** @param {IpcMain} ipcMain */
-const register = (ipcMain) => {
+const register = (ipcMain: IpcMain) => {
     registerHandlers(ipcMain, buildHandlers());
 };
 

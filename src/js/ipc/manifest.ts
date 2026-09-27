@@ -9,7 +9,7 @@
  *
  * Drift protection is enforced by tests/ipc/manifest.test.js, which asserts
  * set-equality between this manifest's invoke surface and the union of every
- * ipc/*.handlers.js buildHandlers() key plus index.js's direct ipcMain.on
+ * ipc/*.handlers.ts buildHandlers() key plus index.js's direct ipcMain.on
  * registrations — a channel added on either side without the other fails CI.
  * NOTE: that test is name-level only. Signatures are carried by the
  * `WindowApi` type (src/js/types/ipc.d.ts), derived from these lists and the
@@ -22,7 +22,7 @@
  */
 
 // Channels exposed as `api[kebabToCamel(channel)] = (...args) => invoke(channel, ...args)`.
-const invokeChannels = /** @type {const} */ ([
+const invokeChannels = [
     // Settings
     'get-settings',
     'get-setting',
@@ -127,27 +127,27 @@ const invokeChannels = /** @type {const} */ ([
     // Log streaming
     'start-log-stream',
     'stop-log-stream',
-]);
+] as const;
 
 // Friendlier method names layered over invoke channels. applyTurbo is
 // alias-ONLY: 'apply-turbo-to-entry' is deliberately not in invokeChannels,
 // so no applyTurboToEntry method is generated.
-const aliases = /** @type {const} */ ({
+const aliases = {
     applyBoost: 'apply-boost-to-entry',
     applyTurbo: 'apply-turbo-to-entry',
-});
+} as const;
 
 // Send-style methods (fire-and-forget window-control hints on Electron;
 // local event emissions on Capacitor). Method name → channel.
-const sendMethods = /** @type {const} */ ({
+const sendMethods = {
     login: 'login-success',
     logout: 'logout',
-});
+} as const;
 
 // Event-listener methods. Each `api[method](callback)` subscribes to the
 // channel and returns an unsubscribe. Method name → channel (names are
 // not all mechanically derivable — onDownloadProgress).
-const eventMethods = /** @type {const} */ ({
+const eventMethods = {
     onUpdateChecking: 'update-checking',
     onUpdateAvailable: 'update-available',
     onUpdateNotAvailable: 'update-not-available',
@@ -156,15 +156,11 @@ const eventMethods = /** @type {const} */ ({
     onUpdateError: 'update-error',
     onLogMessage: 'log-message',
     onSettingsChanged: 'settings-changed',
-});
+} as const;
 
 // Shared kebab-case → camelCase (both shells must agree on this mapping).
-/**
- * @param {string} channel
- * @returns {string}
- */
-const kebabToCamel = (channel) =>
-    channel.replace(/-([a-z0-9])/g, (/** @type {string} */ _, /** @type {string} */ c) => c.toUpperCase());
+const kebabToCamel = (channel: string): string =>
+    channel.replace(/-([a-z0-9])/g, (_: string, c: string) => c.toUpperCase());
 
 // The full invoke-channel set including alias targets — what the main
 // process must actually register handlers for.

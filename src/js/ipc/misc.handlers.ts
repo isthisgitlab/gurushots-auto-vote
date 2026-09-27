@@ -12,23 +12,19 @@ import { updateMenuTranslations } from '../ui/applicationMenu';
 import { translationManager } from '../translations/index';
 import { isSafeExternalUrl } from '../format/urlSafe';
 
-/**
- * @import { BrowserWindow, IpcMain } from 'electron'
- * @import { IpcHandlerMap } from './registerHandlers'
- */
+import type { BrowserWindow, IpcMain } from 'electron';
+import type { IpcHandlerMap } from './registerHandlers';
 
-/**
- * @typedef {object} MiscHandlerDeps
- * @property {() => BrowserWindow | null} getMainWindow
- * @property {() => BrowserWindow | null} getLoginWindow
- */
+interface MiscHandlerDeps {
+    getMainWindow: () => BrowserWindow | null;
+    getLoginWindow: () => BrowserWindow | null;
+}
 
-/** @param {MiscHandlerDeps} deps */
-const buildHandlers = (deps) => {
+const buildHandlers = (deps: MiscHandlerDeps) => {
     const { getMainWindow, getLoginWindow } = deps;
 
-    return /** @satisfies {IpcHandlerMap} */ ({
-        'open-external-url': async (/** @type {unknown} */ event, /** @type {unknown} */ url) => {
+    return {
+        'open-external-url': async (event: unknown, url: unknown) => {
             try {
                 // Scheme allow-list (shared with the Capacitor bridge via
                 // format/urlSafe): every legitimate call site opens an https
@@ -40,7 +36,7 @@ const buildHandlers = (deps) => {
                     return { success: false, error: 'Only https:// URLs can be opened' };
                 }
                 // isSafeExternalUrl only passes a string.
-                await shell.openExternal(/** @type {string} */ (url));
+                await shell.openExternal(url as string);
                 return { success: true };
             } catch (error) {
                 logger.withCategory('ui').error('Error opening external URL:', error);
@@ -79,14 +75,10 @@ const buildHandlers = (deps) => {
                 return errorResult(error, 'Failed to refresh menu');
             }
         },
-    });
+    } satisfies IpcHandlerMap;
 };
 
-/**
- * @param {IpcMain} ipcMain
- * @param {MiscHandlerDeps} deps
- */
-const register = (ipcMain, deps) => {
+const register = (ipcMain: IpcMain, deps: MiscHandlerDeps) => {
     registerHandlers(ipcMain, buildHandlers(deps));
 };
 

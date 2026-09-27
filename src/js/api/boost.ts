@@ -37,7 +37,7 @@ const _postBoost = async (challengeId: string, imageId: string, token: string): 
 /**
  * Boosts an already-chosen entry of a challenge — the auto-cycle transport.
  * Picking the entry (and flagging it as boosted) is the caller's job; see
- * strategies/real/applyBoost.js.
+ * strategies/real/applyBoost.ts.
  *
  * @param challengeId - Challenge ID (already stringified)
  * @param boostImageId - Image ID of the chosen entry

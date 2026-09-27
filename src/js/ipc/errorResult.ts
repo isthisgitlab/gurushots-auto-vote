@@ -6,13 +6,12 @@
  * message-less value) still yields a plain failure object carrying the
  * handler's fallback text.
  *
- * @param {unknown} error - The caught value (anything a promise can reject with).
- * @param {string} fallback - Message used when the caught value has no `message`.
- * @returns {{ success: false, error: string }}
+ * @param error - The caught value (anything a promise can reject with).
+ * @param fallback - Message used when the caught value has no `message`.
  */
-const errorResult = (error, fallback) => ({
+const errorResult = (error: unknown, fallback: string): { success: false; error: string } => ({
     success: false,
-    error: /** @type {{ message?: string } | null | undefined} */ (error)?.message || fallback,
+    error: (error as { message?: string } | null | undefined)?.message || fallback,
 });
 
 export { errorResult };

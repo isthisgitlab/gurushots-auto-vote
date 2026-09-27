@@ -21,12 +21,10 @@ import * as currencyActions from '../services/currencyActions';
 import { CURRENCY_OUTCOME } from '../voting/currencyActions';
 import { swapBackLedger, mockSwapBackLedger } from '../swapBackStore';
 
-/**
- * @import { IpcMain } from 'electron'
- * @import { IpcHandlerMap, IpcReplyFn } from './registerHandlers'
- * @import { ApiStrategy } from '../apiFactory'
- * @import { SpendOutcome } from '../services/currencyActions'
- */
+import type { IpcMain } from 'electron';
+import type { IpcHandlerMap, IpcReplyFn } from './registerHandlers';
+import type { ApiStrategy } from '../apiFactory';
+import type { SpendOutcome } from '../services/currencyActions';
 
 const sanitizeForLog = logger.sanitizeLogString;
 
@@ -34,38 +32,25 @@ const sanitizeForLog = logger.sanitizeLogString;
 // must name the exact candidate the user was shown; an entry is single-use
 // (deleted on any commit attempt) and expires after PREVIEW_TTL_MS. Bounded so
 // a long session cannot grow it without limit.
-/** @type {Map<string, { candidateId: string, expiresAt: number }>} */
-const swapPreviews = new Map();
+const swapPreviews: Map<string, { candidateId: string; expiresAt: number }> = new Map();
 const PREVIEW_TTL_MS = 5 * 60 * 1000;
 const MAX_SWAP_PREVIEWS = 32;
 
-/**
- * @param {string | number} challengeId
- * @param {string | number} imageId
- */
-const previewKey = (challengeId, imageId) => `${challengeId}:${imageId}`;
+const previewKey = (challengeId: string | number, imageId: string | number) => `${challengeId}:${imageId}`;
 
-/**
- * @param {string} key
- * @param {string} candidateId
- */
-const rememberSwapPreview = (key, candidateId) => {
+const rememberSwapPreview = (key: string, candidateId: string) => {
     const now = Date.now();
     for (const [k, v] of swapPreviews) {
         if (v.expiresAt <= now) swapPreviews.delete(k);
     }
     if (swapPreviews.size >= MAX_SWAP_PREVIEWS) {
         // Non-empty here (size >= MAX_SWAP_PREVIEWS), so the oldest key exists.
-        swapPreviews.delete(/** @type {string} */ (swapPreviews.keys().next().value));
+        swapPreviews.delete(swapPreviews.keys().next().value as string);
     }
     swapPreviews.set(key, { candidateId, expiresAt: now + PREVIEW_TTL_MS });
 };
 
-/**
- * @param {string} key
- * @returns {string | null}
- */
-const takeSwapPreview = (key) => {
+const takeSwapPreview = (key: string): string | null => {
     const entry = swapPreviews.get(key);
     swapPreviews.delete(key);
     return entry && entry.expiresAt > Date.now() ? entry.candidateId : null;
@@ -74,33 +59,29 @@ const takeSwapPreview = (key) => {
 // Mock mode keeps its swap-back records in memory — it must never touch the
 // real ledger file (same rule as metadata/join state). The in-memory ledger is
 // the one the mock voting pass also records automatic swaps into.
-/** @param {ApiStrategy | null | undefined} strategy */
-const ledgerFor = (strategy) => (strategy?.getStrategyType?.() === 'MockAPI' ? mockSwapBackLedger : swapBackLedger);
+const ledgerFor = (strategy: ApiStrategy | null | undefined) =>
+    strategy?.getStrategyType?.() === 'MockAPI' ? mockSwapBackLedger : swapBackLedger;
 
-/**
- * @param {unknown} value
- * @returns {value is string | number}
- */
-const isIdArg = (value) => (typeof value === 'string' && value.trim() !== '') || Number.isFinite(value);
+const isIdArg = (value: unknown): value is string | number =>
+    (typeof value === 'string' && value.trim() !== '') || Number.isFinite(value);
 
-/**
- * @param {string | undefined} outcome
- * @satisfies {IpcReplyFn}
- */
-const currencyFailure = (outcome) => ({ success: false, outcome, error: outcome });
+const currencyFailure = ((outcome: string | undefined) => ({
+    success: false,
+    outcome,
+    error: outcome,
+})) satisfies IpcReplyFn;
 
 /**
  * Shared shell of every spend handler: argument validation, auth, the explicit
  * confirmation gate, and the cross-channel spend lock. `spend(token, strategy)`
  * returns the service's {ok, outcome}. Never throws to the renderer.
- *
- * @param {string} label
- * @param {ReadonlyArray<string | number>} idArgs
- * @param {boolean} confirmed
- * @param {(token: string, strategy: ApiStrategy) => Promise<SpendOutcome>} spend
- * @satisfies {IpcReplyFn}
  */
-const runCurrencySpend = async (label, idArgs, confirmed, spend) => {
+const runCurrencySpend = (async (
+    label: string,
+    idArgs: ReadonlyArray<string | number>,
+    confirmed: boolean,
+    spend: (token: string, strategy: ApiStrategy) => Promise<SpendOutcome>,
+) => {
     if (!idArgs.every(isIdArg)) return currencyFailure(CURRENCY_OUTCOME.invalidArgs);
     const guard = auth.requireAuthToken(label);
     if (!guard.ok) return guard.response;
@@ -117,17 +98,13 @@ const runCurrencySpend = async (label, idArgs, confirmed, spend) => {
         logger.withCategory('currency').error(`Error handling ${label} request:`, error);
         return currencyFailure(CURRENCY_OUTCOME.apiFailed);
     }
-};
+}) satisfies IpcReplyFn;
 
 const buildHandlers = () =>
-    /** @satisfies {IpcHandlerMap} */ ({
+    ({
         // Spend a KEY to unlock a LOCKED boost (unlock only — never applies it).
         // Requires confirmed === true; otherwise returns outcome 'needs-confirm'.
-        'key-unlock-boost': async (
-            /** @type {unknown} */ event,
-            /** @type {string | number} */ challengeId,
-            /** @type {boolean} */ confirmed,
-        ) => {
+        'key-unlock-boost': async (event: unknown, challengeId: string | number, confirmed: boolean) => {
             logger
                 .withCategory('currency')
                 .info(
@@ -141,11 +118,7 @@ const buildHandlers = () =>
 
         // Suggest the replacement a swap of `imageId` would use. Spends nothing;
         // the candidate is remembered so swap-entry-photo can require it.
-        'preview-swap-photo': async (
-            /** @type {unknown} */ event,
-            /** @type {string | number} */ challengeId,
-            /** @type {string} */ imageId,
-        ) => {
+        'preview-swap-photo': async (event: unknown, challengeId: string | number, imageId: string) => {
             if (!isIdArg(challengeId) || !isIdArg(imageId)) return currencyFailure(CURRENCY_OUTCOME.invalidArgs);
             try {
                 logger
@@ -173,11 +146,11 @@ const buildHandlers = () =>
         // Spend a SWAP: replace `imageId` with `newImageId`, which must be the
         // unexpired candidate preview-swap-photo returned for this entry.
         'swap-entry-photo': async (
-            /** @type {unknown} */ event,
-            /** @type {string | number} */ challengeId,
-            /** @type {string} */ imageId,
-            /** @type {string} */ newImageId,
-            /** @type {boolean} */ confirmed,
+            event: unknown,
+            challengeId: string | number,
+            imageId: string,
+            newImageId: string,
+            confirmed: boolean,
         ) => {
             logger
                 .withCategory('currency')
@@ -201,7 +174,7 @@ const buildHandlers = () =>
         // Slots in this challenge that hold a replacement for a photo swapped out
         // while boosted/turbo'd — each can be swapped back to restore it. Reads
         // only the local ledger; spends nothing.
-        'get-swap-backs': async (/** @type {unknown} */ event, /** @type {string | number} */ challengeId) => {
+        'get-swap-backs': async (event: unknown, challengeId: string | number) => {
             if (!isIdArg(challengeId)) return currencyFailure(CURRENCY_OUTCOME.invalidArgs);
             try {
                 const items = ledgerFor(apiFactory.getApiStrategy())
@@ -222,10 +195,10 @@ const buildHandlers = () =>
         // Spend a SWAP to put the recorded boosted/turbo'd original back into the
         // slot now holding `currentImageId`. The original comes from the ledger.
         'swap-back-entry-photo': async (
-            /** @type {unknown} */ event,
-            /** @type {string | number} */ challengeId,
-            /** @type {string} */ currentImageId,
-            /** @type {boolean} */ confirmed,
+            event: unknown,
+            challengeId: string | number,
+            currentImageId: string,
+            confirmed: boolean,
         ) => {
             logger
                 .withCategory('currency')
@@ -243,11 +216,7 @@ const buildHandlers = () =>
         },
 
         // Spend a FILL to top the challenge's exposure up to 100%.
-        'fill-exposure': async (
-            /** @type {unknown} */ event,
-            /** @type {string | number} */ challengeId,
-            /** @type {boolean} */ confirmed,
-        ) => {
+        'fill-exposure': async (event: unknown, challengeId: string | number, confirmed: boolean) => {
             logger
                 .withCategory('currency')
                 .info(
@@ -258,10 +227,9 @@ const buildHandlers = () =>
                 currencyActions.fillExposure(challengeId, token, { strategy, logger }),
             );
         },
-    });
+    }) satisfies IpcHandlerMap;
 
-/** @param {IpcMain} ipcMain */
-const register = (ipcMain) => {
+const register = (ipcMain: IpcMain) => {
     registerHandlers(ipcMain, buildHandlers());
 };
 

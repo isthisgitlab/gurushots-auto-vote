@@ -1,6 +1,6 @@
 /**
  * Manual-vote helpers shared by CLI (BaseMiddleware.cliVoteManual) and
- * Electron IPC (voting.handlers.js). The rule is "vote a challenge to 100%
+ * Electron IPC (voting.handlers.ts). The rule is "vote a challenge to 100%
  * regardless of threshold settings" — the shape of the per-challenge
  * mechanic is identical across shells, only the surrounding logging
  * differs, so it lives here as a single function and each caller formats

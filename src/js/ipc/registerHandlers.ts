@@ -14,9 +14,7 @@
 
 import * as logger from '../logger';
 
-/**
- * @import { IpcMain, IpcMainEvent, IpcMainInvokeEvent } from 'electron'
- */
+import type { IpcMain, IpcMainEvent, IpcMainInvokeEvent } from 'electron';
 
 /**
  * One handler as registered: `(event, ...args) => result`; `event` is null
@@ -24,33 +22,30 @@ import * as logger from '../logger';
  * `any[]` because this is the heterogeneous registration map — each handler
  * declares (and validates) its own renderer-supplied argument types, which a
  * narrower element type here would reject under strict function-type checks.
- *
- * @typedef {(event: IpcMainInvokeEvent | null, ...args: any[]) => unknown} IpcHandler
  */
+export type IpcHandler = (event: IpcMainInvokeEvent | null, ...args: any[]) => unknown;
 
 /**
  * What a handler may resolve to. `{ success?: boolean }` is listed so that,
- * used as a contextual type (`@satisfies {IpcReplyFn}` / `{IpcHandlerMap}`),
+ * used as a contextual type (`satisfies IpcReplyFn` / `IpcHandlerMap`),
  * a returned `success: true`/`false` keeps its literal type and the renderer
  * can discriminate a result on it; the other members admit plain values.
- *
- * @typedef {{ success?: boolean } | object | string | number | boolean | bigint | symbol | null | undefined} IpcReturn
  */
+type IpcReturn = { success?: boolean } | object | string | number | boolean | bigint | symbol | null | undefined;
 
 /**
  * A handler, or a helper producing a handler's reply. `never` parameters
  * accept any declared parameter types, so only the result is constrained.
- *
- * @typedef {(...args: never[]) => IpcReturn | Promise<IpcReturn>} IpcReplyFn
- * @typedef {Record<string, IpcReplyFn>} IpcHandlerMap
  */
+export type IpcReplyFn = (...args: never[]) => IpcReturn | Promise<IpcReturn>;
+
+export type IpcHandlerMap = Record<string, IpcReplyFn>;
 
 /**
- * @param {IpcMainInvokeEvent | IpcMainEvent | null | undefined} event - Null/undefined on a
+ * @param event - Null/undefined on a
  *   direct (non-Electron) invocation.
- * @returns {boolean}
  */
-const isTrustedSender = (event) => {
+const isTrustedSender = (event: IpcMainInvokeEvent | IpcMainEvent | null | undefined): boolean => {
     try {
         // Read senderFrame inside the try: Electron's getter throws when the sending frame
         // has already been disposed (renderer navigated or closed while the message was in
@@ -66,11 +61,7 @@ const isTrustedSender = (event) => {
     }
 };
 
-/**
- * @param {IpcMain} ipcMain
- * @param {Record<string, IpcHandler>} handlers
- */
-const registerHandlers = (ipcMain, handlers) => {
+const registerHandlers = (ipcMain: IpcMain, handlers: Record<string, IpcHandler>) => {
     for (const [channel, impl] of Object.entries(handlers)) {
         ipcMain.handle(channel, (event, ...args) => {
             if (!isTrustedSender(event)) {

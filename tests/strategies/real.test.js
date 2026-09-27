@@ -1,5 +1,5 @@
 /**
- * Unit tests for the real-strategy binder in src/js/strategies/real/index.js:
+ * Unit tests for the real-strategy binder in src/js/strategies/real/index.ts:
  *   - runTurboMiniGame: the pair-by-pair Turbo mini-game loop (first pick, flip
  *     on a wrong pick, early stop on WON, skip of resolved / malformed battles);
  *   - joinChallenge: the manual single-join wrapper (spendCoins must be `true`

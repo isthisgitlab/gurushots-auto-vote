@@ -7,7 +7,7 @@ import { boostImage } from '../../api/boost';
 import * as logger from '../../logger';
 import { pickBoostEntry } from '../../services/VotingLogic';
 
-/** @import { Challenge, SuccessResponse } from '../../types/gurushots' */
+import type { Challenge, SuccessResponse } from '../../types/gurushots';
 
 /**
  * Applies a boost to a photo in a challenge.
@@ -16,11 +16,11 @@ import { pickBoostEntry } from '../../services/VotingLogic';
  * Picks the entry via `boostImageIndex`, walking backward past any
  * turboed entry until a non-turboed one is found.
  *
- * @param {Challenge} challenge - Challenge object containing id and member data
- * @param {string} token - Authentication token
- * @returns {Promise<SuccessResponse|null>} - API response or null if boost failed
+ * @param challenge - Challenge object containing id and member data
+ * @param token - Authentication token
+ * @returns API response or null if boost failed
  */
-const applyBoost = async (challenge, token) => {
+const applyBoost = async (challenge: Challenge, token: string): Promise<SuccessResponse | null> => {
     const { id, member } = challenge;
     const challengeId = id?.toString?.() || '';
     const entries = member?.ranking?.entries;

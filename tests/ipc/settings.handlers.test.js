@@ -1,6 +1,6 @@
 /**
  * Tests for the hand-written (non-THIN_HANDLERS) channels in
- * settings.handlers.js plus the Electron register() broadcast wiring.
+ * settings.handlers.ts plus the Electron register() broadcast wiring.
  * The THIN_HANDLERS table is covered by settings.handlers.thin-table.test.js.
  *
  * Every channel here has a documented error fallback the renderer relies on

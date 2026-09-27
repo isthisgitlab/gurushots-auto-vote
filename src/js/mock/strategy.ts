@@ -1,7 +1,7 @@
 /**
  * GuruShots Auto Voter - Mock strategy
  *
- * Mock counterpart to strategies/real/index.js: the voting pass (with its
+ * Mock counterpart to strategies/real/index.ts: the voting pass (with its
  * join and prize-claim pre-steps) and the manual join, running the SAME
  * shared services as the real strategy over the mock endpoints.
  *

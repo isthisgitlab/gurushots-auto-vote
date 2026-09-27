@@ -11,7 +11,7 @@
  * unlike coinsUnlock's charge-then-join, which needs a persisted marker.
  *
  * Confirmation and argument validation live in the IPC layer
- * (ipc/currency.handlers.js); these functions assume the caller already decided
+ * (ipc/currency.handlers.ts); these functions assume the caller already decided
  * to spend. The double-spend lock (withSpendLock) lives here so the manual
  * handlers and the automatic runners (services/currencyAuto.ts) share it.
  */

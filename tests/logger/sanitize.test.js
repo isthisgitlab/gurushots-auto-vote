@@ -47,7 +47,7 @@ describe('sanitizeForLog', () => {
     });
 
     test('redacts OAuth-style underscored names returned by the GuruShots auth API', () => {
-        // actions.handlers.js:90 logs the raw response which can carry
+        // actions.handlers.ts:90 logs the raw response which can carry
         // access_token / auth_token / refresh_token alongside `token`.
         // Cover the underscored, dashed, and case-varied shapes.
         const input = {

@@ -21,29 +21,29 @@ import * as cancellation from '../voting/cancellation';
 import { submitVotesForChallenge, voteAllChallengesManual } from '../services/manualVote';
 import { findActiveChallenge } from '../services/findActiveChallenge';
 
-/**
- * @import { IpcMain } from 'electron'
- * @import { IpcHandlerMap, IpcReplyFn } from './registerHandlers'
- * @import { ActiveChallengesResponse } from '../types/gurushots'
- */
+import type { IpcMain } from 'electron';
+import type { IpcHandlerMap, IpcReplyFn } from './registerHandlers';
+import type { ActiveChallengesResponse } from '../types/gurushots';
 
 // Run one full strategy pass — global when challengeId is null, scoped
 // to a single card otherwise. Delegates to BaseMiddleware so the
 // auth-check, cancellation-reset, and IPC-envelope shape live in one
 // place that the gui-vote handler also reaches via guiVote().
-/** @param {string | number | null} challengeId */
-const runStrategyOnceViaMiddleware = (challengeId) => apiFactory.getMiddleware().runVotingCycle(challengeId);
+const runStrategyOnceViaMiddleware = (challengeId: string | number | null) =>
+    apiFactory.getMiddleware().runVotingCycle(challengeId);
 
 // Single-target vote entry shared by vote-on-challenge and
 // vote-on-challenge-manual. The two channels differ only in log wording;
 // the `manual` flag flips those wording bits.
 /**
- * @param {string | number} challengeId - Renderer-supplied; validated below.
- * @param {string} challengeTitle - Renderer-supplied; validated below.
- * @param {{ manual: boolean }} opts
- * @satisfies {IpcReplyFn}
+ * @param challengeId - Renderer-supplied; validated below.
+ * @param challengeTitle - Renderer-supplied; validated below.
  */
-const voteOnSingleChallenge = async (challengeId, challengeTitle, { manual }) => {
+const voteOnSingleChallenge = (async (
+    challengeId: string | number,
+    challengeTitle: string,
+    { manual }: { manual: boolean },
+) => {
     // IPC boundary — validate inputs from the renderer. Without these
     // checks, parseInt(undefined) below returns NaN and the find() call
     // produces a misleading "Challenge not found" error.
@@ -67,8 +67,7 @@ const voteOnSingleChallenge = async (challengeId, challengeTitle, { manual }) =>
     }
 
     const strategy = apiFactory.getApiStrategy();
-    /** @type {ActiveChallengesResponse | null} */
-    const challengesResponse = await strategy.getActiveChallenges(userSettings.token);
+    const challengesResponse: ActiveChallengesResponse | null = await strategy.getActiveChallenges(userSettings.token);
 
     if (!challengesResponse || !challengesResponse.challenges) {
         const fetchMsg = manual
@@ -137,10 +136,10 @@ const voteOnSingleChallenge = async (challengeId, challengeTitle, { manual }) =>
         ? `Successfully voted on challenge "${challengeTitle}" manually`
         : `Successfully voted on challenge "${challengeTitle}"`;
     return { success: true, message: successReturnMsg };
-};
+}) satisfies IpcReplyFn;
 
 const buildHandlers = () =>
-    /** @satisfies {IpcHandlerMap} */ ({
+    ({
         'gui-vote': async () => {
             try {
                 const userSettings = settings.loadSettings();
@@ -165,10 +164,7 @@ const buildHandlers = () =>
             }
         },
 
-        'run-voting-cycle-for-challenge': async (
-            /** @type {unknown} */ _event,
-            /** @type {string | number} */ challengeId,
-        ) => {
+        'run-voting-cycle-for-challenge': async (_event: unknown, challengeId: string | number) => {
             try {
                 if (challengeId == null || challengeId === '') {
                     return { success: false, error: 'challengeId is required' };
@@ -195,8 +191,9 @@ const buildHandlers = () =>
 
                 const strategy = apiFactory.getApiStrategy();
 
-                /** @type {ActiveChallengesResponse | null} */
-                const challengesResponse = await strategy.getActiveChallenges(userSettings.token);
+                const challengesResponse: ActiveChallengesResponse | null = await strategy.getActiveChallenges(
+                    userSettings.token,
+                );
                 if (!challengesResponse || !challengesResponse.challenges) {
                     logger
                         .withCategory('challenges')
@@ -240,16 +237,12 @@ const buildHandlers = () =>
 
         'should-cancel-voting': () => cancellation.isCancelled(),
 
-        'set-cancel-voting': (/** @type {unknown} */ event, /** @type {boolean} */ shouldCancel) => {
+        'set-cancel-voting': (event: unknown, shouldCancel: boolean) => {
             cancellation.setCancelled(shouldCancel === true);
             return cancellation.isCancelled();
         },
 
-        'vote-on-challenge': async (
-            /** @type {unknown} */ event,
-            /** @type {string | number} */ challengeId,
-            /** @type {string} */ challengeTitle,
-        ) => {
+        'vote-on-challenge': async (event: unknown, challengeId: string | number, challengeTitle: string) => {
             try {
                 return await voteOnSingleChallenge(challengeId, challengeTitle, { manual: false });
             } catch (error) {
@@ -258,11 +251,7 @@ const buildHandlers = () =>
             }
         },
 
-        'vote-on-challenge-manual': async (
-            /** @type {unknown} */ event,
-            /** @type {string | number} */ challengeId,
-            /** @type {string} */ challengeTitle,
-        ) => {
+        'vote-on-challenge-manual': async (event: unknown, challengeId: string | number, challengeTitle: string) => {
             try {
                 return await voteOnSingleChallenge(challengeId, challengeTitle, { manual: true });
             } catch (error) {
@@ -270,10 +259,9 @@ const buildHandlers = () =>
                 return errorResult(error, 'Failed to vote on challenge manually');
             }
         },
-    });
+    }) satisfies IpcHandlerMap;
 
-/** @param {IpcMain} ipcMain */
-const register = (ipcMain) => {
+const register = (ipcMain: IpcMain) => {
     registerHandlers(ipcMain, buildHandlers());
 };
 

@@ -1,5 +1,5 @@
 /**
- * Tests for boostImageIndex selection in the real-strategy applyBoost (strategies/real/applyBoost.js) and the
+ * Tests for boostImageIndex selection in the real-strategy applyBoost (strategies/real/applyBoost.ts) and the
  * shared resolveEntryIndex helper used by both turbo and boost picks.
  *
  * GuruShots permits at most one turbo per challenge, so the picker only
