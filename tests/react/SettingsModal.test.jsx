@@ -473,7 +473,8 @@ describe('SettingsModal — app-wide settings', () => {
 
     test('app-tier groups render with the Application Settings, not as challenge defaults', async () => {
         render(<SettingsModal isOpen={true} onClose={jest.fn()} />);
-        await screen.findByRole('heading', { level: 6, name: 'app.groupMissions' });
+        // h5: directly under the h4 section heading, with no tier band between.
+        await screen.findByRole('heading', { level: 5, name: 'app.groupMissions' });
         const sections = screen.getAllByRole('heading', { level: 4 }).map((h) => h.parentElement);
         const [appSection, defaultsSection] = [
             sections.find((el) => el.textContent.startsWith('app.applicationSettings')),
@@ -487,7 +488,7 @@ describe('SettingsModal — app-wide settings', () => {
 
     test('only settings a challenge can override carry the global-default badge', async () => {
         render(<SettingsModal isOpen={true} onClose={jest.fn()} />);
-        await screen.findByRole('heading', { level: 6, name: 'app.groupMissions' });
+        await screen.findByRole('heading', { level: 5, name: 'app.groupMissions' });
         expect(screen.getAllByText('app.globalDefault')).toHaveLength(1);
         expect(screen.getByText('app.globalDefault').parentElement.textContent).toContain('app.autoTurbo');
     });

@@ -1667,9 +1667,11 @@ const schemaDefault = (key) => /** @type {SettingValueOf<K>} */ (getSchemaDefaul
 
 /**
  * Ordered tiers the groups below are rendered under. A tier is presentation
- * only — nothing branches on it — but the order encodes the rule the section
- * list follows: settings a user always touches come before ones that only
- * matter once a specific feature is switched on.
+ * only — the one place that branches on it is the global Settings modal, which
+ * renders the `app` tier with its Application Settings instead of as a
+ * challenge-defaults band — and the order encodes the rule the section list
+ * follows: settings a user always touches come before ones that only matter
+ * once a specific feature is switched on.
  *
  * - `core`      — on by default, or the value everyone edits first.
  * - `entries`   — what gets submitted into a challenge (photos, joins).

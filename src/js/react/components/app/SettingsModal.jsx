@@ -47,14 +47,17 @@ const RULE_TYPE_SUGGESTIONS = ['default', 'exhibition', 'flash', 'speed'];
 /**
  * One schema-driven settings group: its heading and a grid of inputs. The
  * "Global default" badge marks only settings a challenge can override.
+ * `level` keeps the heading one below its parent: h6 under a tier band (h5),
+ * h5 directly under a section heading (h4).
  *
- * @param {{ group: SettingsSection } & SchemaFormProps} props
+ * @param {{ group: SettingsSection, level?: 'h5'|'h6' } & SchemaFormProps} props
  */
-function SchemaSettingsGroup({ group, formValues, handleFormChange, handleResetGlobal, hintsFor }) {
+function SchemaSettingsGroup({ group, level = 'h6', formValues, handleFormChange, handleResetGlobal, hintsFor }) {
     const { t } = useTranslation();
+    const Heading = level;
     return (
         <div className="mb-4">
-            <h6 className="font-medium text-sm opacity-70 mb-2 mt-3">{t(group.label)}</h6>
+            <Heading className="font-medium text-sm opacity-70 mb-2 mt-3">{t(group.label)}</Heading>
             <div className={SETTINGS_GRID_CLASS}>
                 {group.entries.map(([key, config]) => (
                     <div key={key} className={SETTING_CELL_CLASS}>
@@ -264,7 +267,7 @@ export function SettingsModal({ isOpen, onClose }) {
                         timezoneInput={timezoneInput}
                     >
                         {appGroups.map((group) => (
-                            <SchemaSettingsGroup key={group.id} group={group} {...schemaForm} />
+                            <SchemaSettingsGroup key={group.id} group={group} level="h5" {...schemaForm} />
                         ))}
                     </ApplicationSettingsSection>
                     <ChallengeDefaultsSection bands={bands.filter((band) => band.id !== APP_TIER)} {...schemaForm} />
