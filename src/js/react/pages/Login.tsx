@@ -51,7 +51,7 @@ function LoginPageContent() {
 
     // Handle theme change
     const handleThemeChange = useCallback(
-        async (newTheme: 'dark' | 'light') => {
+        async (newTheme: string) => {
             setTheme(newTheme);
             document.documentElement.setAttribute('data-theme', newTheme);
             await updateSetting('theme', newTheme);

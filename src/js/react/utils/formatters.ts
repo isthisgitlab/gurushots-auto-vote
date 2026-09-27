@@ -132,7 +132,7 @@ export const formatEndTime = (endTime: number, timezone: string = 'local'): stri
  */
 export const getBoostStatus = (boost: MemberBoost | null | undefined): { text: string; colorClass: string } => {
     if (!boost || !boost.state) {
-        return { text: 'Unknown', colorClass: 'text-purple-500' };
+        return { text: 'Unknown', colorClass: 'text-secondary' };
     }
 
     if (boost.state === 'AVAILABLE' || boost.state === 'AVAILABLE_KEY') {
@@ -140,19 +140,19 @@ export const getBoostStatus = (boost: MemberBoost | null | undefined): { text: s
         const remaining = finiteOr(boost.timeout, 0) - now;
         if (remaining > 0) {
             const minutes = Math.floor(remaining / 60);
-            return { text: `Available (${minutes}m left)`, colorClass: 'text-blue-500' };
+            return { text: `Available (${minutes}m left)`, colorClass: 'text-info' };
         } else {
-            return { text: 'Available', colorClass: 'text-blue-500' };
+            return { text: 'Available', colorClass: 'text-info' };
         }
     } else if (boost.state === 'USED') {
-        return { text: 'Used', colorClass: 'text-green-500' };
+        return { text: 'Used', colorClass: 'text-success' };
     } else if (boost.state === 'UNAVAILABLE') {
-        return { text: 'Unavailable', colorClass: 'text-red-500' };
+        return { text: 'Unavailable', colorClass: 'text-error' };
     } else if (boost.state === 'LOCKED') {
-        return { text: 'Locked', colorClass: 'text-red-500' };
+        return { text: 'Locked', colorClass: 'text-error' };
     } else {
         // state is non-empty here (guarded above), so it is shown verbatim.
-        return { text: boost.state, colorClass: 'text-purple-500' };
+        return { text: boost.state, colorClass: 'text-secondary' };
     }
 };
 
@@ -194,27 +194,27 @@ export { isBoostWindowOpen } from '../../voting/boostWindow';
  */
 export const getTurboStatus = (turbo: MemberTurbo | null | undefined): { text: string; colorClass: string } => {
     if (!turbo || !turbo.state) {
-        return { text: 'Unavailable', colorClass: 'text-red-500' };
+        return { text: 'Unavailable', colorClass: 'text-error' };
     }
 
     switch (turbo.state) {
         case 'FREE':
-            return { text: 'Free', colorClass: 'text-blue-400' };
+            return { text: 'Free', colorClass: 'text-info' };
         case 'TIMER':
-            return { text: 'Timer', colorClass: 'text-red-500' };
+            return { text: 'Timer', colorClass: 'text-error' };
         case 'IN_PROGRESS':
-            return { text: 'In Progress', colorClass: 'text-orange-500' };
+            return { text: 'In Progress', colorClass: 'text-warning' };
         case 'WON':
-            return { text: 'Won', colorClass: 'text-lime-800' };
+            return { text: 'Won', colorClass: 'text-accent' };
         case 'USED':
-            return { text: 'Used', colorClass: 'text-green-500' };
+            return { text: 'Used', colorClass: 'text-success' };
         case 'UNAVAILABLE':
-            return { text: 'Unavailable', colorClass: 'text-red-500' };
+            return { text: 'Unavailable', colorClass: 'text-error' };
         case 'LOCKED':
             return { text: 'Locked', colorClass: 'text-latvian' };
         default:
             // state is non-empty here (guarded above), so it is shown verbatim.
-            return { text: turbo.state, colorClass: 'text-purple-500' };
+            return { text: turbo.state, colorClass: 'text-secondary' };
     }
 };
 

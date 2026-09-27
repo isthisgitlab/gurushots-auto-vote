@@ -35,13 +35,13 @@ describe('createTranslator', () => {
 
     test('starts in English', () => {
         expect(translator.getCurrentLanguage()).toBe('en');
-        expect(translator.t('common.dark')).toBe(english.common.dark);
+        expect(translator.t('themes.dark')).toBe(english.themes.dark);
     });
 
     test('setCurrentLanguage switches the default language of t()', () => {
         translator.setCurrentLanguage('lv');
         expect(translator.getCurrentLanguage()).toBe('lv');
-        expect(translator.t('common.dark')).toBe(latvian.common.dark);
+        expect(translator.t('themes.dark')).toBe(latvian.themes.dark);
     });
 
     test('setCurrentLanguage resolves an unsupported language to English', () => {
@@ -89,7 +89,7 @@ describe('English fallback', () => {
                 require('../../src/js/translations/translator') as typeof translatorModule;
             const translator = isolated();
             expect(translator.t('logs.title', 'lv')).toBe(english.logs.title);
-            expect(translator.t('common.dark', 'lv')).toBe(english.common.dark);
+            expect(translator.t('themes.dark', 'lv')).toBe(english.themes.dark);
             expect(translator.t('app.title', 'lv')).toBe(english.app.title);
         });
     });
@@ -103,6 +103,6 @@ describe('renderer instance', () => {
                 .rendererTranslator,
         ).toBe(rendererTranslator);
         expect(rendererTranslator.getCurrentLanguage()).toBe('en');
-        expect(rendererTranslator.t('common.dark', 'lv')).toBe(latvian.common.dark);
+        expect(rendererTranslator.t('themes.dark', 'lv')).toBe(latvian.themes.dark);
     });
 });

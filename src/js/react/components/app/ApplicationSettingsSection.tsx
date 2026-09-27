@@ -2,6 +2,7 @@ import { Fragment } from 'react';
 import { useTranslation } from '@/contexts/TranslationContext';
 import { SETTINGS_GRID_CLASS, SETTING_CELL_CLASS } from '@/utils/groupSettings';
 import { ResetButton } from '@/components/ui/ResetButton';
+import { ThemeSelect } from '@/components/ui/ThemeSelect';
 import { DEFAULT_TIMEZONE } from '../../../settings/uiDefaults';
 import { SettingLabel } from './SettingInput';
 
@@ -223,7 +224,6 @@ function ResettableUiCell({
 }
 
 function ThemeSetting({ uiValues, handleUiChange, handleResetUi }: UiFormProps) {
-    const { t } = useTranslation();
     return (
         <ResettableUiCell
             inputId="ui-theme"
@@ -231,15 +231,7 @@ function ThemeSetting({ uiValues, handleUiChange, handleResetUi }: UiFormProps) 
             descKey="app.themeDesc"
             onReset={() => handleResetUi('theme')}
         >
-            <span className="text-sm">{t('common.light')}</span>
-            <input
-                id="ui-theme"
-                type="checkbox"
-                className="toggle toggle-sm"
-                checked={uiValues.theme === 'dark'}
-                onChange={(e) => handleUiChange('theme', e.currentTarget.checked ? 'dark' : 'light')}
-            />
-            <span className="text-sm">{t('common.dark')}</span>
+            <ThemeSelect id="ui-theme" value={uiValues.theme} onChange={(theme) => handleUiChange('theme', theme)} />
         </ResettableUiCell>
     );
 }

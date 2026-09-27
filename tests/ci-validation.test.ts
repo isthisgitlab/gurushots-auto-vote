@@ -74,4 +74,21 @@ describe('stylesheet sources', () => {
         }
         expect(missing).toEqual([]);
     });
+
+    // styles.css compiles `themes: all`; the pickers offer THEMES. A daisyui
+    // bump that adds or drops a theme must update the list (and its labels).
+    test('THEMES lists exactly the themes the installed daisyui ships', () => {
+        const fs = jest.requireActual<typeof import('node:fs')>('node:fs');
+        const path = jest.requireActual<typeof import('node:path')>('node:path');
+        const { THEMES } = jest.requireActual<typeof import('../src/js/settings/uiDefaults')>(
+            '../src/js/settings/uiDefaults',
+        );
+        const themeDir = path.join(__dirname, '..', 'node_modules', 'daisyui', 'theme');
+        const shipped = fs
+            .readdirSync(themeDir)
+            .filter((f) => f.endsWith('.css'))
+            .map((f) => f.slice(0, -'.css'.length));
+        expect([...THEMES].sort()).toEqual(shipped.sort());
+        expect(fs.readFileSync(path.join(__dirname, '..', 'src/styles/styles.css'), 'utf8')).toMatch(/themes:\s*all;/);
+    });
 });

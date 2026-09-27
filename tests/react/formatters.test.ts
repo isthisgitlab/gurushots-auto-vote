@@ -95,12 +95,12 @@ describe('formatEndTime', () => {
 
 describe('getBoostStatus', () => {
     test.each([
-        [null, 'Unknown', 'text-purple-500'],
-        [{}, 'Unknown', 'text-purple-500'],
-        [{ state: 'USED' }, 'Used', 'text-green-500'],
-        [{ state: 'UNAVAILABLE' }, 'Unavailable', 'text-red-500'],
-        [{ state: 'LOCKED' }, 'Locked', 'text-red-500'],
-        [{ state: 'WEIRD' }, 'WEIRD', 'text-purple-500'],
+        [null, 'Unknown', 'text-secondary'],
+        [{}, 'Unknown', 'text-secondary'],
+        [{ state: 'USED' }, 'Used', 'text-success'],
+        [{ state: 'UNAVAILABLE' }, 'Unavailable', 'text-error'],
+        [{ state: 'LOCKED' }, 'Locked', 'text-error'],
+        [{ state: 'WEIRD' }, 'WEIRD', 'text-secondary'],
     ])('%j → %s', (boost, text, colorClass) => {
         expect(getBoostStatus(boost)).toEqual({ text, colorClass });
     });
@@ -108,7 +108,7 @@ describe('getBoostStatus', () => {
     test('available with time left shows minutes remaining', () => {
         expect(getBoostStatus({ state: 'AVAILABLE_KEY', timeout: NOW_SEC + 125 })).toEqual({
             text: 'Available (2m left)',
-            colorClass: 'text-blue-500',
+            colorClass: 'text-info',
         });
     });
 
@@ -119,16 +119,16 @@ describe('getBoostStatus', () => {
 
 describe('getTurboStatus', () => {
     test.each([
-        [undefined, 'Unavailable', 'text-red-500'],
-        [{ state: '' }, 'Unavailable', 'text-red-500'],
-        [{ state: 'FREE' }, 'Free', 'text-blue-400'],
-        [{ state: 'TIMER' }, 'Timer', 'text-red-500'],
-        [{ state: 'IN_PROGRESS' }, 'In Progress', 'text-orange-500'],
-        [{ state: 'WON' }, 'Won', 'text-lime-800'],
-        [{ state: 'USED' }, 'Used', 'text-green-500'],
-        [{ state: 'UNAVAILABLE' }, 'Unavailable', 'text-red-500'],
+        [undefined, 'Unavailable', 'text-error'],
+        [{ state: '' }, 'Unavailable', 'text-error'],
+        [{ state: 'FREE' }, 'Free', 'text-info'],
+        [{ state: 'TIMER' }, 'Timer', 'text-error'],
+        [{ state: 'IN_PROGRESS' }, 'In Progress', 'text-warning'],
+        [{ state: 'WON' }, 'Won', 'text-accent'],
+        [{ state: 'USED' }, 'Used', 'text-success'],
+        [{ state: 'UNAVAILABLE' }, 'Unavailable', 'text-error'],
         [{ state: 'LOCKED' }, 'Locked', 'text-latvian'],
-        [{ state: 'NEW_STATE' }, 'NEW_STATE', 'text-purple-500'],
+        [{ state: 'NEW_STATE' }, 'NEW_STATE', 'text-secondary'],
     ])('%j → %s', (turbo, text, colorClass) => {
         expect(getTurboStatus(turbo)).toEqual({ text, colorClass });
     });

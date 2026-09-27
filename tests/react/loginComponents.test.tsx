@@ -3,11 +3,12 @@
  * loading state), LanguageSwitcher, SettingsToggles and ModeInfoText. The
  * test mock's t() returns the key, so assertions match translation keys.
  */
-import { fireEvent, render, screen, waitFor } from './helpers/test-utils';
+import { fireEvent, pickOption, render, screen, waitFor } from './helpers/test-utils';
 import { LoginForm } from '@/components/login/LoginForm';
 import { LanguageSwitcher } from '@/components/login/LanguageSwitcher';
 import { SettingsToggles } from '@/components/login/SettingsToggles';
 import { ModeInfoText } from '@/components/login/ModeInfoText';
+import { THEMES } from '../../src/js/settings/uiDefaults';
 
 describe('LoginForm', () => {
     test('blocks submit and shows both required errors when empty', () => {
@@ -94,18 +95,19 @@ describe('SettingsToggles', () => {
             onMockModeChange: jest.fn(),
         };
         render(<SettingsToggles theme="light" stayLoggedIn={false} mockMode={false} {...handlers} {...props} />);
-        const [theme, stay, mock] = document.querySelectorAll<HTMLInputElement>('input[type="checkbox"]');
+        const theme = document.getElementById('login-theme') as HTMLSelectElement;
+        const [stay, mock] = document.querySelectorAll<HTMLInputElement>('input[type="checkbox"]');
         return { handlers, theme, stay, mock };
     };
 
-    test('reflects props as checked state', () => {
-        const { theme, stay, mock } = renderToggles({ theme: 'dark', stayLoggedIn: true, mockMode: true });
-        expect([theme.checked, stay.checked, mock.checked]).toEqual([true, true, true]);
+    test('reflects props as the selected theme and checked state', () => {
+        const { theme, stay, mock } = renderToggles({ theme: 'nord', stayLoggedIn: true, mockMode: true });
+        expect([theme.value, stay.checked, mock.checked]).toEqual(['nord', true, true]);
     });
 
-    test('toggling maps to dark/light and forwards booleans', () => {
+    test('picking a theme forwards its name; toggles forward booleans', () => {
         const { handlers, theme, stay, mock } = renderToggles();
-        fireEvent.click(theme);
+        pickOption(theme, 'dark');
         expect(handlers.onThemeChange).toHaveBeenLastCalledWith('dark');
         fireEvent.click(stay);
         expect(handlers.onStayLoggedInChange).toHaveBeenLastCalledWith(true);
@@ -113,7 +115,7 @@ describe('SettingsToggles', () => {
         expect(handlers.onMockModeChange).toHaveBeenLastCalledWith(true);
     });
 
-    test('each toggle is named by its caption, under a translated heading', () => {
+    test('each control is named by its caption, under a translated heading', () => {
         const { theme, stay, mock } = renderToggles();
         expect(screen.getByLabelText('common.theme')).toBe(theme);
         expect(screen.getByLabelText('login.stayLoggedIn')).toBe(stay);
@@ -121,10 +123,11 @@ describe('SettingsToggles', () => {
         expect(screen.getByText('app.settings')).toBeTruthy();
     });
 
-    test('unchecking the theme toggle selects light', () => {
-        const { handlers, theme } = renderToggles({ theme: 'dark' });
-        fireEvent.click(theme);
-        expect(handlers.onThemeChange).toHaveBeenLastCalledWith('light');
+    test('the theme picker offers every theme, translated', () => {
+        const { theme } = renderToggles();
+        expect([...theme.options].map((o) => [o.value, o.textContent])).toEqual(
+            THEMES.map((name) => [name, `themes.${name}`]),
+        );
     });
 });
 

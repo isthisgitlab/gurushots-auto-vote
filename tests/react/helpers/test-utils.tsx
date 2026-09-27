@@ -50,3 +50,12 @@ export * from '@testing-library/preact';
 // Override render with our custom render and fireEvent with our patched one
 export { customRender as render };
 export { fireEvent };
+
+/**
+ * Pick an option in a <select>: set its value, then fire the native change
+ * event its onChange listens to.
+ */
+export const pickOption = (select: HTMLSelectElement, value: string) => {
+    select.value = value;
+    select.dispatchEvent(new window.Event('change', { bubbles: true }));
+};

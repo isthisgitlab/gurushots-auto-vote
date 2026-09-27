@@ -8,6 +8,7 @@
 import * as logger from '../../logger';
 import * as settings from '../../settings';
 import { getDefaultSettings } from '../../settings';
+import { THEMES } from '../../settings/uiDefaults';
 import { parseSettingValue } from '../parseValue';
 import { formatDuration } from '../../format/duration';
 
@@ -453,7 +454,8 @@ Common Settings:
   checkFrequencyMax    - Maximum minutes between voting cycles (default: 3). Each cycle picks
                          a random delay in [min, max]; set min === max for a fixed cadence.
   mock                 - Use mock API for testing (default: false)
-  theme                - UI theme: "light" or "dark" (default: "light")
+  theme                - UI theme (default: "light"), one of:
+                         ${THEMES.join(', ')}
   language             - UI language: "en" or "lv" (default: "en")
   timezone             - Timezone for timestamps (default: "Europe/Riga")
 

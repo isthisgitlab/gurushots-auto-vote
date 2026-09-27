@@ -11,7 +11,7 @@
  * mocked at module top with controllable state objects.
  */
 
-import { act, fireEvent, render, screen, waitFor } from './helpers/test-utils';
+import { act, fireEvent, pickOption, render, screen, waitFor } from './helpers/test-utils';
 import { SettingsModal } from '@/components/app/SettingsModal';
 import type { TitleRule } from '../../src/js/types/settings';
 import type { UiResetHandler } from '../../src/js/types/settingsEditor';
@@ -165,7 +165,7 @@ describe('SettingsModal — timezone "+" inline-add', () => {
     test('each static UI setting is reachable by its label', () => {
         render(<SettingsModal isOpen={true} onClose={jest.fn()} />);
         // The accessible name also carries the "UI setting" badge text.
-        expect(screen.getByLabelText<HTMLInputElement>(/^app\.theme/).type).toBe('checkbox');
+        expect(screen.getByLabelText(/^app\.theme/).tagName).toBe('SELECT');
         expect(screen.getByLabelText(/^app\.language/).tagName).toBe('SELECT');
         expect(screen.getByLabelText(/^app\.timezone/).tagName).toBe('SELECT');
         expect(screen.getByRole('group', { name: /^app\.checkFrequency/ })).toBeTruthy();
@@ -547,11 +547,6 @@ const appResetButtons = () =>
 
 // Set a select's value and dispatch a native change event (fireEvent.change
 // does not reach preact's select onChange under happy-dom).
-const pickOption = (select: HTMLSelectElement, value: string) => {
-    select.value = value;
-    select.dispatchEvent(new window.Event('change', { bubbles: true }));
-};
-
 describe('SettingsModal — loading state', () => {
     afterEach(() => {
         mockSchemaState.loading = false;
@@ -578,18 +573,13 @@ describe('SettingsModal — loading state', () => {
 });
 
 describe('SettingsModal — application settings controls', () => {
-    test('the theme toggle emits dark when checked and light when unchecked', () => {
-        const { unmount } = render(<SettingsModal isOpen={true} onClose={jest.fn()} />);
-        fireEvent.click(document.querySelector('input.toggle')!);
-        expect(mockFormState.handleUiChange).toHaveBeenLastCalledWith('theme', 'dark');
-        unmount();
-
-        mockFormState.uiValues.theme = 'dark';
+    test('the theme select shows the current theme and emits the picked one', () => {
+        mockFormState.uiValues.theme = 'dracula';
         render(<SettingsModal isOpen={true} onClose={jest.fn()} />);
-        const toggle = document.querySelector<HTMLInputElement>('input.toggle')!;
-        expect(toggle.checked).toBe(true);
-        fireEvent.click(toggle);
-        expect(mockFormState.handleUiChange).toHaveBeenLastCalledWith('theme', 'light');
+        const select = document.getElementById('ui-theme') as HTMLSelectElement;
+        expect(select.value).toBe('dracula');
+        pickOption(select, 'cupcake');
+        expect(mockFormState.handleUiChange).toHaveBeenLastCalledWith('theme', 'cupcake');
     });
 
     test('changing the language select emits the new language', () => {

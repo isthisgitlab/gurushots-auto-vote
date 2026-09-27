@@ -1,10 +1,11 @@
 import { useCallback } from 'react';
 import { useTranslation } from '@/contexts/TranslationContext';
+import { ThemeSelect } from '@/components/ui/ThemeSelect';
 import type { JSX } from 'preact';
 
 /**
  * Settings toggles section for the login page
- * Contains theme, stay logged in, and mock mode toggles
+ * Contains the theme picker and the stay logged in and mock mode toggles
  */
 export function SettingsToggles({
     theme,
@@ -17,16 +18,14 @@ export function SettingsToggles({
     theme: string;
     stayLoggedIn: boolean;
     mockMode: boolean;
-    onThemeChange: (theme: 'dark' | 'light') => void | Promise<void>;
+    onThemeChange: (theme: string) => void | Promise<void>;
     onStayLoggedInChange: (value: boolean) => void | Promise<void>;
     onMockModeChange: (value: boolean) => void | Promise<void>;
 }) {
     const { t } = useTranslation();
 
-    const handleThemeToggle = useCallback(
-        (e: JSX.TargetedEvent<HTMLInputElement, Event>) => {
-            const isDark = (e.target as HTMLInputElement).checked;
-            const newTheme = isDark ? 'dark' : 'light';
+    const handleThemeChange = useCallback(
+        (newTheme: string) => {
             void onThemeChange(newTheme);
         },
         [onThemeChange],
@@ -51,22 +50,12 @@ export function SettingsToggles({
             <div className="divider">{t('app.settings')}</div>
 
             <div className="grid grid-cols-3 gap-2">
-                {/* Theme Toggle */}
+                {/* Theme Picker */}
                 <div className="flex flex-col items-center">
                     <label className="label mb-2" htmlFor="login-theme">
                         {t('common.theme')}
                     </label>
-                    <div className="flex items-center justify-center">
-                        <span className="mr-2">{t('common.light')}</span>
-                        <input
-                            id="login-theme"
-                            type="checkbox"
-                            className="toggle toggle-sm"
-                            checked={theme === 'dark'}
-                            onChange={handleThemeToggle}
-                        />
-                        <span className="ml-2">{t('common.dark')}</span>
-                    </div>
+                    <ThemeSelect id="login-theme" value={theme} onChange={handleThemeChange} className="w-full" />
                 </div>
 
                 {/* Stay Logged In Toggle */}

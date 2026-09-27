@@ -7,6 +7,7 @@
  */
 import { fireEvent, render, screen, waitFor } from '@testing-library/preact';
 import { invalid } from '../helpers/invalid';
+import { pickOption } from './helpers/test-utils';
 
 import type { RendererGlobals } from '../../src/js/types/capacitor';
 import type { WindowApi } from '../../src/js/types/ipc';
@@ -55,65 +56,68 @@ describe('Login page', () => {
     };
 
     const checkboxes = () => document.querySelectorAll<HTMLInputElement>('input[type="checkbox"]');
+    const themeSelect = () => document.getElementById('login-theme') as HTMLSelectElement;
 
     test('shows the loader, then defaults (light, not remembered, live mode)', async () => {
         render(<LoginPage />);
         expect(screen.getByText('common.loading')).toBeTruthy();
         await waitFor(() => expect(screen.getByText('login.heading')).toBeTruthy());
         expect(document.documentElement.getAttribute('data-theme')).toBe('light');
-        const [theme, stay, mock] = checkboxes();
-        expect([theme.checked, stay.checked, mock.checked]).toEqual([false, false, false]);
+        expect(themeSelect().value).toBe('light');
+        const [stay, mock] = checkboxes();
+        expect([stay.checked, mock.checked]).toEqual([false, false]);
         expect((document.getElementById('username') as HTMLInputElement).value).toBe('');
         expect(screen.getByText('login.loadingModeInfo')).toBeTruthy();
     });
 
     test('hydrates from settings and the environment default', async () => {
         jest.mocked(window.api.getSettings).mockResolvedValue(
-            invalid({ theme: 'dark', stayLoggedIn: true, lastUsername: 'bob' }),
+            invalid({ theme: 'dracula', stayLoggedIn: true, lastUsername: 'bob' }),
         );
         jest.mocked(window.api.getEnvironmentInfo).mockResolvedValue(invalid({ defaultMock: true }));
         await renderReady();
         await waitFor(() => expect((document.getElementById('username') as HTMLInputElement).value).toBe('bob'));
         // The theme lands via a passive effect, which can trail the username commit.
-        await waitFor(() => expect(document.documentElement.getAttribute('data-theme')).toBe('dark'));
-        const [theme, stay, mock] = checkboxes();
-        expect([theme.checked, stay.checked, mock.checked]).toEqual([true, true, true]);
+        await waitFor(() => expect(document.documentElement.getAttribute('data-theme')).toBe('dracula'));
+        expect(themeSelect().value).toBe('dracula');
+        const [stay, mock] = checkboxes();
+        expect([stay.checked, mock.checked]).toEqual([true, true]);
         expect(screen.getByText('login.mockModeInfo')).toBeTruthy();
     });
 
     test('remembered without a saved username leaves the field empty', async () => {
         jest.mocked(window.api.getSettings).mockResolvedValue(invalid({ stayLoggedIn: true }));
         await renderReady();
-        expect(checkboxes()[1].checked).toBe(true);
+        expect(checkboxes()[0].checked).toBe(true);
         expect((document.getElementById('username') as HTMLInputElement).value).toBe('');
     });
 
     test('env info failure keeps live mode', async () => {
         jest.mocked(window.api.getEnvironmentInfo).mockRejectedValue(new Error('no env'));
         await renderReady();
-        expect(checkboxes()[2].checked).toBe(false);
+        expect(checkboxes()[1].checked).toBe(false);
     });
 
     test('env info without defaultMock keeps live mode', async () => {
         jest.mocked(window.api.getEnvironmentInfo).mockResolvedValue(invalid({}));
         await renderReady();
-        expect(checkboxes()[2].checked).toBe(false);
+        expect(checkboxes()[1].checked).toBe(false);
     });
 
-    test('toggles persist theme, stay-logged-in (clearing the username when off) and mock', async () => {
+    test('the theme picker and toggles persist theme, stay-logged-in (clearing the username when off) and mock', async () => {
         await renderReady();
-        const [theme, stay, mock] = checkboxes();
+        const [stay, mock] = checkboxes();
 
-        fireEvent.click(theme);
-        await waitFor(() => expect(window.api.setSetting).toHaveBeenCalledWith('theme', 'dark'));
-        expect(document.documentElement.getAttribute('data-theme')).toBe('dark');
+        pickOption(themeSelect(), 'synthwave');
+        await waitFor(() => expect(window.api.setSetting).toHaveBeenCalledWith('theme', 'synthwave'));
+        expect(document.documentElement.getAttribute('data-theme')).toBe('synthwave');
 
         fireEvent.click(stay);
         await waitFor(() => expect(window.api.setSetting).toHaveBeenCalledWith('stayLoggedIn', true));
         expect(window.api.setSetting).not.toHaveBeenCalledWith('lastUsername', '');
-        await waitFor(() => expect(checkboxes()[1].checked).toBe(true));
+        await waitFor(() => expect(checkboxes()[0].checked).toBe(true));
 
-        fireEvent.click(checkboxes()[1]);
+        fireEvent.click(checkboxes()[0]);
         await waitFor(() => expect(window.api.setSetting).toHaveBeenCalledWith('lastUsername', ''));
         expect(window.api.setSetting).toHaveBeenCalledWith('stayLoggedIn', false);
 

@@ -17,6 +17,49 @@
 const DEFAULT_TIMEZONE = 'Europe/Riga';
 
 /**
+ * Every DaisyUI theme, in DaisyUI's own order — styles.css compiles them all
+ * (`themes: all`), and the theme pickers offer this list. A test keeps it in
+ * step with the installed daisyui package.
+ */
+const THEMES = [
+    'light',
+    'dark',
+    'cupcake',
+    'bumblebee',
+    'emerald',
+    'corporate',
+    'synthwave',
+    'retro',
+    'cyberpunk',
+    'valentine',
+    'halloween',
+    'garden',
+    'forest',
+    'aqua',
+    'lofi',
+    'pastel',
+    'fantasy',
+    'wireframe',
+    'black',
+    'luxury',
+    'dracula',
+    'cmyk',
+    'autumn',
+    'business',
+    'acid',
+    'lemonade',
+    'night',
+    'coffee',
+    'winter',
+    'dim',
+    'nord',
+    'sunset',
+    'caramellatte',
+    'abyss',
+    'silk',
+] as const;
+
+/**
  * Fresh object per call so callers can never share (and mutate) the
  * same nested array reference.
  */
@@ -49,4 +92,4 @@ const getUiDefaultSettings = (): {
     apiRetryBaseDelayMs: 1000, // Base for exponential backoff between retries (ms).
 });
 
-export { getUiDefaultSettings, DEFAULT_TIMEZONE };
+export { getUiDefaultSettings, DEFAULT_TIMEZONE, THEMES };

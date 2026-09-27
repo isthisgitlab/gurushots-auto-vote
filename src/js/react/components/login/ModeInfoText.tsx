@@ -8,5 +8,5 @@ export function ModeInfoText({ isMock }: { isMock: boolean }) {
 
     const text = isMock ? t('login.mockModeInfo') : t('login.loadingModeInfo');
 
-    return <p className="text-center text-sm mt-4 text-gray-500">{text}</p>;
+    return <p className="text-center text-sm mt-4 text-base-content/60">{text}</p>;
 }

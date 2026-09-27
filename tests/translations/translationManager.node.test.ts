@@ -35,13 +35,13 @@ describe('startup', () => {
         const { translationManager, settings } = load(() => 'lv');
         expect(settings.getSetting).toHaveBeenCalledWith('language');
         expect(translationManager.getCurrentLanguage()).toBe('lv');
-        expect(translationManager.t('common.dark')).toBe(latvian.common.dark);
+        expect(translationManager.t('themes.dark')).toBe(latvian.themes.dark);
     });
 
     test('an unset or unknown saved language falls back to English', () => {
         const { translationManager } = load(() => undefined);
         expect(translationManager.getCurrentLanguage()).toBe('en');
-        expect(translationManager.t('common.dark')).toBe(english.common.dark);
+        expect(translationManager.t('themes.dark')).toBe(english.themes.dark);
     });
 
     test('a settings failure is logged and English stays active', () => {
