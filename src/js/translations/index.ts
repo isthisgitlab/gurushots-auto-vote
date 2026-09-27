@@ -2,7 +2,7 @@
  * Node translation manager (Electron main process): the shared translator
  * core plus language persistence through the settings facade.
  *
- * Node-only — the renderer bundles import translations/renderer.js instead,
+ * Node-only — the renderer bundles import translations/renderer.ts instead,
  * because requiring the settings facade here would pull zod into every page
  * bundle.
  */

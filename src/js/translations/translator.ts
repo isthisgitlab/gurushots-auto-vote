@@ -5,7 +5,7 @@
  * Deliberately dependency-free (no settings, logger or electron requires):
  * the renderer bundles import it, and pulling the settings facade in would
  * drag zod into every page bundle. Persisting the chosen language is the job
- * of the platform adapters — translations/index.js (Node: settings facade)
+ * of the platform adapters — translations/index.ts (Node: settings facade)
  * and react/contexts/TranslationContext.jsx (renderer: window.api).
  */
 
