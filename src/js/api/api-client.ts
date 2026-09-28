@@ -225,6 +225,23 @@ const getRetryAfterMs = (error: RequestFailure): number | null => {
 };
 
 /**
+ * The one place a 2xx body becomes a response type. Anything that is not a
+ * JSON object (an HTML error page, a bare string, an array) is no GuruShots
+ * response and reads as a failed request. The fields stay unverified on
+ * purpose: T declares them optional and each endpoint wrapper guards its
+ * reads, so upstream drift in one field degrades that read instead of
+ * rejecting the whole response.
+ */
+const responseObject = <T extends object>(url: string, body: unknown): T | null => {
+    if (isPlainObject(body)) return body as T;
+    logger.withCategory('api').warning('API response body is not a JSON object', {
+        url,
+        type: Array.isArray(body) ? 'array' : typeof body,
+    });
+    return null;
+};
+
+/**
  * Makes a POST request to the GuruShots API
  *
  * Transient failures (network drop, timeout, 429, 5xx) are retried with
@@ -280,19 +297,7 @@ const makePostRequest = async <T extends object>(
                 responseData: response.data as unknown,
             });
 
-            // The one place a body becomes a response type. Anything that is
-            // not a JSON object (an HTML error page, a bare string, an array)
-            // is no GuruShots response and reads as a failed request. The
-            // fields stay unverified on purpose: T declares them optional and
-            // each endpoint wrapper guards its reads, so upstream drift in one
-            // field degrades that read instead of rejecting the whole response.
-            const body: unknown = response.data;
-            if (isPlainObject(body)) return body as T;
-            logger.withCategory('api').warning('API response body is not a JSON object', {
-                url,
-                type: Array.isArray(body) ? 'array' : typeof body,
-            });
-            return null;
+            return responseObject<T>(url, response.data);
         } catch (caught) {
             const error = caught as RequestFailure | null | undefined;
             const duration = Date.now() - startTime;
