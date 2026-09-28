@@ -80,6 +80,26 @@ test('manual Turbo wins update only active missions for the same account', () =>
     expect(second.turbo).toBe(0);
 });
 
+test('nested registrations keep the same mission state active until both release it', () => {
+    const needs = { join: 0, fill: 0, turbo: 2 };
+    const stopOuter = registerMissionNeeds('tok', needs);
+    const stopInner = registerMissionNeeds('tok', needs);
+    try {
+        stopInner?.();
+        recordManualTurboWin('tok');
+        expect(needs.turbo).toBe(1);
+        stopInner?.();
+        recordManualTurboWin('tok');
+        expect(needs.turbo).toBe(0);
+    } finally {
+        stopInner?.();
+        stopOuter?.();
+    }
+    needs.turbo = 1;
+    recordManualTurboWin('tok');
+    expect(needs.turbo).toBe(1);
+});
+
 describe('classifyMission', () => {
     test.each([
         ['Join 7 challenges', 'join'],

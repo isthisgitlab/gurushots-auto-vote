@@ -141,7 +141,7 @@
         "marked": "^18.0.14",
         "marked-gfm-heading-id": "^4.1.4",
         "onnxruntime-web": "1.31.0-dev.20260918-bc8e7ed75",
-        "oxlint": "^1.85.0",
+        "oxlint": "^1.86.0",
         "oxlint-tsgolint": "^7.0.2003",
         "postject": "1.0.0-alpha.6",
         "prettier": "4.0.0-alpha.13",

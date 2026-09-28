@@ -5,11 +5,12 @@
  * so a mission is recognised by the keyword in its name; how many are still
  * needed comes from its progress, never from the text.
  *
- * Read once per voting cycle — only while one of the mission settings is on —
- * and handed to the join pre-step and the voting pass as a mutable
+ * Read at the start of a voting cycle — only while one of the mission settings
+ * is on — and handed to the join pre-step and the voting pass as a mutable
  * MissionNeeds. Each step that lands a join, a fill or a turbo win counts it
  * down (consumeMission), so the rest of the cycle doesn't overshoot on the
- * progress the server reported at its start.
+ * progress the server reported at its start. The headless Android pass also
+ * refreshes progress before using a saved Turbo.
  */
 
 import * as logger from '../logger';
@@ -55,7 +56,7 @@ let lastSummary = '';
 
 // A manual Turbo win must count against the mission state used by any voting
 // pass currently running for the same account.
-const activeNeedsByToken = new Map<string, Set<MissionNeeds>>();
+const activeNeedsByToken = new Map<string, Map<MissionNeeds, number>>();
 
 const classifyMission = (mission: Mission): MissionKind | null => {
     const text = `${mission?.name ?? ''} ${mission?.description ?? ''}`;
@@ -141,17 +142,22 @@ const consumeMission = (needs: MissionNeeds | null | undefined, kind: MissionKin
 
 const registerMissionNeeds = (token: string, needs: MissionNeeds | null): (() => void) | null => {
     if (!needs) return null;
-    const active = activeNeedsByToken.get(token) ?? new Set<MissionNeeds>();
-    active.add(needs);
+    const active = activeNeedsByToken.get(token) ?? new Map<MissionNeeds, number>();
+    active.set(needs, (active.get(needs) ?? 0) + 1);
     activeNeedsByToken.set(token, active);
+    let released = false;
     return () => {
-        active.delete(needs);
+        if (released) return;
+        released = true;
+        const owners = active.get(needs)!;
+        if (owners > 1) active.set(needs, owners - 1);
+        else active.delete(needs);
         if (active.size === 0) activeNeedsByToken.delete(token);
     };
 };
 
 const recordManualTurboWin = (token: string): void => {
-    for (const needs of activeNeedsByToken.get(token) ?? []) consumeMission(needs, 'turbo');
+    for (const needs of activeNeedsByToken.get(token)?.keys() ?? []) consumeMission(needs, 'turbo');
 };
 
 // Test hook: forget the last logged summary.
