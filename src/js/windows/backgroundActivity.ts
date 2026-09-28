@@ -30,6 +30,7 @@
 
 import { powerSaveBlocker } from 'electron';
 import * as logger from '../logger';
+import { errorMessage } from '../errorMessage';
 
 // The single held assertion id, or null when nothing is held. Module-level for
 // the same reason settingsWatcher's debounce handle is: there is exactly one
@@ -76,10 +77,7 @@ const syncBackgroundActivity = (running: boolean): boolean => {
         blockerId = null;
         logger
             .withCategory('voting')
-            .warning(
-                `backgroundActivity: power-save blocker unavailable: ${(error as { message?: unknown } | null | undefined)?.message || error}`,
-                null,
-            );
+            .warning(`backgroundActivity: power-save blocker unavailable: ${errorMessage(error) || error}`, null);
         return false;
     }
 };

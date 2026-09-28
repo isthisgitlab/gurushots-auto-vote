@@ -34,6 +34,7 @@ import {
     formatNotification,
     readNotificationConfig,
 } from '../../services/deadlineNotifications';
+import { errorMessage } from '../../errorMessage';
 
 /**
  * One challenge's previewed deadline actions, as get-deadline-actions sends them.
@@ -73,9 +74,7 @@ async function collectDeadlineActions(
  */
 function logCycleFailure(log: ((message: string) => void) | undefined, error: unknown) {
     try {
-        log?.(
-            `deadline notification cycle failed: ${(error as { message?: unknown } | null | undefined)?.message ?? error}`,
-        );
+        log?.(`deadline notification cycle failed: ${errorMessage(error) ?? error}`);
     } catch {
         /* the diagnostic sink itself is best-effort */
     }

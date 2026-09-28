@@ -14,6 +14,7 @@
  */
 
 import axios from 'axios';
+import { errorMessage } from '../errorMessage';
 
 /**
  * The subset of a GitHub release (REST `releases` payload) this module reads.
@@ -140,7 +141,7 @@ const checkForUpdates = async ({
     } catch (error) {
         return {
             ...empty,
-            error: (error as { message?: string } | null | undefined)?.message || 'Failed to check for updates',
+            error: errorMessage(error) || 'Failed to check for updates',
         };
     }
 };

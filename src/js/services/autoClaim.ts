@@ -18,6 +18,7 @@ import * as settings from '../settings';
 import * as cancellation from '../voting/cancellation';
 
 import type { CompletedChallenge, Mission } from '../types/gurushots';
+import { errorMessage } from '../errorMessage';
 
 /**
  * The endpoints the claim pass calls (api/rewards.ts, or the mock mirror).
@@ -102,10 +103,7 @@ const claimEach = async <T extends ClaimItem>(
         try {
             claimed = (await claim(item.id)) === true;
         } catch (error) {
-            cat().warning(
-                `${kind} ${item.id} claim errored: ${(error as { message?: unknown } | null | undefined)?.message || error}`,
-                null,
-            );
+            cat().warning(`${kind} ${item.id} claim errored: ${errorMessage(error) || error}`, null);
         }
         if (claimed) {
             cat().success(`🎁 Claimed ${kind} "${item?.name ?? item?.title ?? item.id}": ${describe(item)}`, null);
@@ -131,10 +129,7 @@ const runHalf = async <T extends ClaimItem>(
     try {
         items = await list();
     } catch (error) {
-        cat().warning(
-            `could not list claimable ${kind}s: ${(error as { message?: unknown } | null | undefined)?.message || error}`,
-            null,
-        );
+        cat().warning(`could not list claimable ${kind}s: ${errorMessage(error) || error}`, null);
         return [];
     }
     return claimEach(kind, items, claim, describe);

@@ -47,6 +47,7 @@ import type { Entry, Options as YauzlOptions, ZipFile } from 'yauzl';
 import type { ConceptsConfig } from './build-lexicon';
 import { stem } from '../src/js/services/photoPicker';
 import { runIfMain } from './lib/run-if-main';
+import { errorMessage } from '../src/js/errorMessage';
 
 type YauzlOpenCallback = (err: Error | null, zipfile: ZipFile) => void;
 
@@ -357,7 +358,7 @@ const download = async ({
         res = await fetchHttpsOnly(url);
     } catch (err) {
         fail([
-            `download failed: ${(err as Error).message || err}`,
+            `download failed: ${errorMessage(err) || err}`,
             `URL: ${url}`,
             'Check network/proxy access and re-run `pnpm fetch:embeddings` — a completed download is',
             'cached and reused on every later run.',
@@ -387,7 +388,7 @@ const download = async ({
         fs.renameSync(tmpPath, zipPath);
     } catch (err) {
         fs.rmSync(tmpPath, { force: true });
-        fail([`download interrupted: ${(err as Error).message || err}`, 'Re-run `pnpm fetch:embeddings` to retry.']);
+        fail([`download interrupted: ${errorMessage(err) || err}`, 'Re-run `pnpm fetch:embeddings` to retry.']);
     }
 };
 
@@ -521,7 +522,7 @@ const main = async ({
         entrySha256 = await streamEntryLines(zipPath, onLine);
     } catch (err) {
         fail([
-            `extraction failed: ${(err as Error).message || err}`,
+            `extraction failed: ${errorMessage(err) || err}`,
             'The cached archive may be corrupt — delete scripts/.cache/glove.6B.zip and re-run.',
         ]);
     }

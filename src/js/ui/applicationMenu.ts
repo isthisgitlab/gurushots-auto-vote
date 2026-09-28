@@ -6,6 +6,7 @@ import { AutoUpdater } from '../services/AutoUpdater';
 import * as packageInfo from '../../../package.json';
 
 import type { MenuItemConstructorOptions } from 'electron';
+import { errorMessage } from '../errorMessage';
 
 /**
  * Application Menu Module
@@ -190,7 +191,7 @@ async function checkForUpdatesFromMenu() {
             type: 'error',
             title: t('menu.updateError'),
             message: t('menu.updateErrorMessage'),
-            detail: (error as { message?: string } | null | undefined)?.message,
+            detail: errorMessage(error),
             buttons: [t('common.ok')],
         });
     }

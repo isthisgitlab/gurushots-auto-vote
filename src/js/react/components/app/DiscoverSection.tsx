@@ -8,6 +8,7 @@ import { interp } from '@/utils/interp';
 import * as ipc from '@/api/ipc';
 
 import type { Bankroll, Challenge } from '../../../types/gurushots';
+import { errorMessage } from '../../../errorMessage';
 
 /**
  * What a join left behind for its row: the join-challenge result (either arm)
@@ -84,7 +85,7 @@ export function DiscoverSection({
                     ...prev,
                     [id]: {
                         status: 'failed-no-charge',
-                        error: (err as { message?: string } | null | undefined)?.message,
+                        error: errorMessage(err),
                     },
                 }));
                 return { success: false };

@@ -19,6 +19,7 @@ import type { NullEventHandlers } from '../../types/cli';
 import type { ScenarioIssue } from '../../settings/scenarioSchema';
 import type * as scenarios_handlersModule from '../../ipc/scenarios.handlers';
 import type * as settingsModule from '../../settings';
+import { errorMessage } from '../../errorMessage';
 type ScenarioHandlers = NullEventHandlers<ReturnType<typeof scenarios_handlersModule.buildHandlers>>;
 let _handlers: ScenarioHandlers | undefined;
 const handlers = (): ScenarioHandlers =>
@@ -56,7 +57,7 @@ const output = (text: string, file: string | null | undefined) => {
         ui().success(`Written to ${file}`);
         return 0;
     } catch (error) {
-        ui().error(`Could not write ${file}: ${(error as Error).message}`);
+        ui().error(`Could not write ${file}: ${errorMessage(error)}`);
         return 1;
     }
 };
@@ -116,7 +117,7 @@ const importScenarioCmd = async (
     try {
         text = fs.readFileSync(file, 'utf8');
     } catch (error) {
-        ui().error(`Could not read ${file}: ${(error as Error).message}`);
+        ui().error(`Could not read ${file}: ${errorMessage(error)}`);
         return 1;
     }
     const preview = await handlers()['preview-scenario-import'](null, text);

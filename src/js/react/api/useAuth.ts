@@ -1,5 +1,6 @@
 import { useState, useCallback } from 'react';
 import { useAsyncIpcAction } from './useAsyncIpcAction';
+import { errorMessage } from '../../errorMessage';
 
 /**
  * What `authenticate` resolves: the handler's result, or the envelope's
@@ -58,7 +59,7 @@ export function useAuth(): {
             await window.api.login();
         } catch (err) {
             clearAuthError();
-            setFlowError((err as { message?: string } | null | undefined)?.message || 'Login transition failed');
+            setFlowError(errorMessage(err) || 'Login transition failed');
         }
     }, [clearAuthError]);
 
@@ -70,7 +71,7 @@ export function useAuth(): {
             await window.api.logout();
         } catch (err) {
             clearAuthError();
-            setFlowError((err as { message?: string } | null | undefined)?.message || 'Logout failed');
+            setFlowError(errorMessage(err) || 'Logout failed');
         }
     }, [clearAuthError]);
 

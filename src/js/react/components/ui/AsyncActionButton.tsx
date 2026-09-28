@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import * as ipc from '@/api/ipc';
 import type { ComponentChildren } from 'preact';
+import { errorMessage } from '../../../errorMessage';
 
 /**
  * Props of AsyncActionButton.
@@ -59,9 +60,7 @@ export function AsyncActionButton({
                 await ipc.logRendererError(`${failureLogPrefix}: ${result?.error || 'Unknown error'}`);
             }
         } catch (err) {
-            await ipc.logRendererError(
-                `${errorLogPrefix}: ${(err as { message?: unknown } | null | undefined)?.message || err}`,
-            );
+            await ipc.logRendererError(`${errorLogPrefix}: ${errorMessage(err) || err}`);
         } finally {
             setLoading(false);
         }

@@ -35,6 +35,7 @@ import { DEFAULT_TIMEZONE } from '../settings/uiDefaults';
 
 import type { ActiveChallengesResponse, Challenge } from '../types/gurushots';
 import type { HeadlessGlobals } from '../types/capacitor';
+import { errorMessage } from '../errorMessage';
 
 const log = (msg: string, data?: unknown) => logger.withCategory('voting').info(`[headless] ${msg}`, data);
 
@@ -91,10 +92,7 @@ const computeNextDelayMs = async (token: string, prefetched: Challenge[] | null 
         }
         return delayMs;
     } catch (err) {
-        log(
-            'next-delay computation failed; using normal cadence',
-            (err as { message?: string } | null | undefined)?.message ?? String(err),
-        );
+        log('next-delay computation failed; using normal cadence', errorMessage(err) ?? String(err));
         return getRandomCheckFrequencyMs(userSettings);
     }
 };
@@ -103,7 +101,7 @@ const reportComplete = (payload: object) => {
     try {
         (globalThis as HeadlessGlobals).AndroidHeadlessBridge?.onCycleComplete(JSON.stringify(payload));
     } catch (err) {
-        log('onCycleComplete failed', (err as Error).message);
+        log('onCycleComplete failed', errorMessage(err));
     }
 };
 
@@ -134,11 +132,11 @@ const runOneCycle = async () => {
         log('cycle complete', { ok, nextDelayMs });
         reportComplete({ ok, message: (result && (result.message || result.error)) || null, nextDelayMs });
     } catch (err) {
-        const thrown = err as { message?: string } | null | undefined;
-        log('cycle threw', thrown && thrown.message);
+        const thrown = errorMessage(err);
+        log('cycle threw', thrown);
         reportComplete({
             ok: false,
-            error: (thrown && thrown.message) || 'cycle-failed',
+            error: thrown || 'cycle-failed',
             nextDelayMs: fallbackDelay(),
         });
     }

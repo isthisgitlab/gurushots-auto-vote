@@ -6,6 +6,7 @@ import * as ipc from '../api/ipc';
 
 import type { ComponentChildren } from 'preact';
 import type { IpcQueryTools } from '../api/useIpcQuery';
+import { errorMessage } from '../../errorMessage';
 
 /**
  * What useTranslation returns.
@@ -83,7 +84,7 @@ export function TranslationProvider({ children }: { children?: ComponentChildren
             try {
                 saved = await ipc.setSetting('language', lang);
             } catch (error) {
-                logLanguageSaveFailure((error as { message?: unknown } | null | undefined)?.message ?? error);
+                logLanguageSaveFailure(errorMessage(error) ?? error);
                 return false;
             }
             if (saved === false) {

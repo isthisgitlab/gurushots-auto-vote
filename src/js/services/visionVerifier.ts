@@ -16,9 +16,10 @@ import { entryPhotoUrl } from '../format/photoUrl';
 import { visualSubjectWords } from './photoPicker';
 
 import type { ChallengeText, IgnoreWords, PickerPhoto } from '../types/photoPicker';
-import type { ErrorLike, FillLogger } from '../types/autoFill';
+import type { FillLogger } from '../types/autoFill';
 import type * as Transformers from '@huggingface/transformers';
 import type { ZeroShotImageClassificationPipeline } from '@huggingface/transformers';
+import { errorMessage } from '../errorMessage';
 
 const MAX_IMAGES = 12;
 // Thresholds are on SigLIP's logit scale, measured on live GuruShots
@@ -236,7 +237,7 @@ const rankVisually = async (
         return picked;
     } catch (error) {
         log.warning(
-            `Visual check unavailable for ${logger.challengeTag(challenge)}: ${(error as ErrorLike | null | undefined)?.message || error}`,
+            `Visual check unavailable for ${logger.challengeTag(challenge)}: ${errorMessage(error) || error}`,
             null,
         );
         return original;

@@ -27,6 +27,7 @@ import { useDisclosure } from '@/hooks/useDisclosure';
 import { useDocumentTheme } from '@/hooks/useDocumentTheme';
 import { DEFAULT_TIMEZONE } from '../../settings/uiDefaults';
 import * as ipc from '@/api/ipc';
+import { errorMessage } from '../../errorMessage';
 
 const NO_CHALLENGE: { id: Challenge['id'] | null; title: string } = { id: null, title: '' };
 
@@ -61,9 +62,7 @@ function useWelcomeGate(
         } catch (err) {
             // Won't reappear this session (ref-gated); log so a persistent
             // write failure (e.g. Android storage I/O) stays diagnosable.
-            await ipc.logRendererError(
-                `Failed to persist onboardingCompleted: ${(err as { message?: unknown } | null | undefined)?.message || err}`,
-            );
+            await ipc.logRendererError(`Failed to persist onboardingCompleted: ${errorMessage(err) || err}`);
         }
     }, [updateSetting]);
 
@@ -204,9 +203,7 @@ function AppContent() {
             }
             await ipc.logout();
         } catch (err) {
-            await ipc.logRendererError(
-                `Error during logout: ${(err as { message?: unknown } | null | undefined)?.message || err}`,
-            );
+            await ipc.logRendererError(`Error during logout: ${errorMessage(err) || err}`);
         }
     }, [autovote]);
 
@@ -216,9 +213,7 @@ function AppContent() {
         } catch (err) {
             // start/stop await bridge calls; a failure there must reach the log
             // rather than surface as an unhandled rejection from a click.
-            await ipc.logRendererError(
-                `Autovote toggle failed: ${(err as { message?: unknown } | null | undefined)?.message || err}`,
-            );
+            await ipc.logRendererError(`Autovote toggle failed: ${errorMessage(err) || err}`);
         }
     }, [autovote]);
 

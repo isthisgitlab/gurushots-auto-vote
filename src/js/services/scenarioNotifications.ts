@@ -14,6 +14,7 @@
 import { sanitizeNotificationText, interpolate } from './deadlineNotifications';
 
 import type { Challenge } from '../types/gurushots';
+import { errorMessage } from '../errorMessage';
 
 /** Longest notification body; a scenario notice is itself capped at 120 characters. */
 const MAX_BODY = 240;
@@ -122,9 +123,7 @@ const createScenarioNotifier = ({
             if (notification) deliver(notification);
         } catch (error) {
             try {
-                log?.(
-                    `scenario notification cycle failed: ${(error as { message?: unknown } | null | undefined)?.message ?? error}`,
-                );
+                log?.(`scenario notification cycle failed: ${errorMessage(error) ?? error}`);
             } catch {
                 /* the diagnostic sink itself is best-effort */
             }

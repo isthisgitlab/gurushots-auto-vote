@@ -50,6 +50,7 @@ import type * as joinApi from '../api/join';
 import type * as submissionsApi from '../api/submissions';
 import type * as tagsApi from '../api/tags';
 import type * as joinStateStore from '../joinStateStore';
+import { errorMessage } from '../errorMessage';
 
 /**
  * The join flow's endpoints and state (see the header).
@@ -81,8 +82,6 @@ type UnlockState = { charged: number; alreadyUnlocked: boolean };
 
 /** A caught value, read only for its message.
  */
-type CaughtError = { message?: unknown } | null | undefined;
-
 /**
  * The manual single join's result.
  */
@@ -262,7 +261,7 @@ const readUnlockedState = (store: RawJsonStore | null | undefined): { state: Rec
     try {
         raw = store.readRaw();
     } catch (error) {
-        cat().warning(`could not read join-state: ${(error as CaughtError)?.message || error}`, null);
+        cat().warning(`could not read join-state: ${errorMessage(error) || error}`, null);
         return { state: {}, ok: false };
     }
     if (!raw) return { state: {}, ok: true };
@@ -297,7 +296,7 @@ const markUnlocked = (store: RawJsonStore | null | undefined, id: string | numbe
         store.writeRaw(JSON.stringify(state));
         return true;
     } catch (error) {
-        cat().warning(`could not persist unlock marker for ${id}: ${(error as CaughtError)?.message || error}`, null);
+        cat().warning(`could not persist unlock marker for ${id}: ${errorMessage(error) || error}`, null);
         return false;
     }
 };
@@ -311,7 +310,7 @@ const clearUnlocked = (store: RawJsonStore | null | undefined, id: string | numb
             store.writeRaw(JSON.stringify(state));
         }
     } catch (error) {
-        cat().warning(`could not clear unlock marker for ${id}: ${(error as CaughtError)?.message || error}`, null);
+        cat().warning(`could not clear unlock marker for ${id}: ${errorMessage(error) || error}`, null);
     }
 };
 
@@ -361,10 +360,7 @@ const pickJoinPhoto = async (challenge: Challenge, token: string, deps: JoinDeps
             },
         );
     } catch (error) {
-        cat().warning(
-            `could not read eligible photos for ${challenge?.id}: ${(error as CaughtError)?.message || error}`,
-            null,
-        );
+        cat().warning(`could not read eligible photos for ${challenge?.id}: ${errorMessage(error) || error}`, null);
         return null;
     }
     const semanticScores = await resolveSemanticScores(challenge, eligible, { ignoreWords });
@@ -565,10 +561,7 @@ const readPassBankroll = async (token: string, deps: JoinDeps): Promise<Bankroll
     try {
         return await deps.getBankroll(token);
     } catch (error) {
-        cat().warning(
-            `could not read balance (paid joins skipped this pass): ${(error as CaughtError)?.message || error}`,
-            null,
-        );
+        cat().warning(`could not read balance (paid joins skipped this pass): ${errorMessage(error) || error}`, null);
         return null;
     }
 };
@@ -668,10 +661,7 @@ const joinCandidate = async (
     try {
         outcome = await performJoin(challenge, token, deps, decision.needsCoins);
     } catch (error) {
-        cat().warning(
-            `join failed for ${logger.challengeTag(challenge)}: ${(error as CaughtError)?.message || error}`,
-            null,
-        );
+        cat().warning(`join failed for ${logger.challengeTag(challenge)}: ${errorMessage(error) || error}`, null);
         return 'error';
     }
     if (outcome.charged > 0) {
@@ -733,7 +723,7 @@ const runJoinPass = async (
     try {
         candidates = await deps.getMemberChallenges(token, 'open');
     } catch (error) {
-        cat().warning(`could not list open challenges: ${(error as CaughtError)?.message || error}`, null);
+        cat().warning(`could not list open challenges: ${errorMessage(error) || error}`, null);
         return empty;
     }
     if (!Array.isArray(candidates) || candidates.length === 0) {
@@ -822,7 +812,7 @@ const joinChallengeSingle = async (
     try {
         candidates = await deps.getMemberChallenges(token, 'open');
     } catch (error) {
-        cat().warning(`could not list open challenges: ${(error as CaughtError)?.message || error}`, null);
+        cat().warning(`could not list open challenges: ${errorMessage(error) || error}`, null);
         return { status: 'fetch-failed', challengeId, cost: 0 };
     }
     const challenge = (candidates || []).find((c) => String(c?.id) === String(challengeId));

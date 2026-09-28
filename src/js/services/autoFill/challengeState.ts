@@ -7,7 +7,8 @@
 import { finiteOr } from '../../numbers';
 
 import type { Challenge, ChallengeMember, RankingEntry } from '../../types/gurushots';
-import type { AdoptableMember, ErrorLike, FillLogger, RankDeps } from '../../types/autoFill';
+import type { AdoptableMember, FillLogger, RankDeps } from '../../types/autoFill';
+import { errorMessage } from '../../errorMessage';
 
 const getEntries = (challenge: Partial<Challenge> | null | undefined): RankingEntry[] => {
     const entries = challenge?.member?.ranking?.entries;
@@ -188,7 +189,7 @@ const refreshChallengeState = async (
     try {
         response = await getActiveChallenges(token);
     } catch (error) {
-        staleWarning((error && (error as ErrorLike).message) || error);
+        staleWarning(errorMessage(error) || error);
         return 'unavailable';
     }
     if (!Array.isArray(response?.challenges) || response.challenges.length === 0) {

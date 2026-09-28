@@ -28,6 +28,7 @@ import { isRuleOpen, pickSwapTarget, votePoolReach, fillBeatsVoting } from '../v
 import type { Challenge, ChallengeMember, MemberRanking, VoteImagesResponse } from '../types/gurushots';
 import type { CurrencyAction, CurrencyStrategy, SwapBackLedger, SwapCandidate } from './currencyActions';
 import type * as currencyAutoStore from '../currencyAutoStore';
+import { errorMessage } from '../errorMessage';
 
 type AutoSpendLedger = ReturnType<typeof currencyAutoStore.createAutoSpendLedger>;
 
@@ -148,7 +149,7 @@ const guarded =
             return await runner(ctx, ...rest);
         } catch (error) {
             log().warning(
-                `auto ${action}: failed for ${logger.challengeTag(ctx?.challenge)}: ${(error as { message?: unknown } | null | undefined)?.message || error}`,
+                `auto ${action}: failed for ${logger.challengeTag(ctx?.challenge)}: ${errorMessage(error) || error}`,
                 null,
             );
             return false;

@@ -23,6 +23,7 @@ import type { Challenge } from '../../types/gurushots';
 import type { RendererGlobals } from '../../types/capacitor';
 import type { TimerHandle } from '../../scheduling/cadenceChain';
 import type { AutovoteAction, AutovoteState } from './autovoteReducer';
+import { errorMessage } from '../../errorMessage';
 
 /**
  * A per-cycle notifier the cadence chain calls with the cycle's challenges.
@@ -165,7 +166,7 @@ async function runRendererVotingCycle({
     } catch (err) {
         dispatch({
             type: ACTIONS.SET_ERROR,
-            payload: (err as { message?: string } | null | undefined)?.message || 'Voting error',
+            payload: errorMessage(err) || 'Voting error',
         });
         return false;
     }
@@ -249,16 +250,12 @@ function createRendererCadenceChain({
             // so logging can't abort scheduling). Normal-mode lines stay
             // CLI-only — no IPC spam for the common case.
             cadence: (mode, message) => (mode === 'normal' ? undefined : ipc.logRendererDebug(message)),
-            decisionError: (err) =>
-                ipc.logRendererWarning(
-                    `${DECISION_ERROR_MESSAGE}: ${(err as Error | null | undefined)?.message || err}`,
-                ),
+            decisionError: (err) => ipc.logRendererWarning(`${DECISION_ERROR_MESSAGE}: ${errorMessage(err) || err}`),
             // runVotingCycle catches internally and resolves false, so a
             // rejection here is a can't-happen TODAY — but that is an
             // invariant of a different module. Log best-effort instead
             // of swallowing so a future regression can't fail silently.
-            cycleError: (err) =>
-                ipc.logRendererWarning(`Voting cycle failed: ${(err as Error | null | undefined)?.message || err}`),
+            cycleError: (err) => ipc.logRendererWarning(`Voting cycle failed: ${errorMessage(err) || err}`),
             // A renderer timer that fired far late means the page was
             // throttled/frozen or the machine suspended, and every
             // deadline inside that gap went unserved. Warning, not

@@ -35,6 +35,7 @@ import { getScenarioStatus } from '../scenarioStatus';
 
 import type { Challenge } from '../../types/gurushots';
 import type { OutboxItem } from '../scenarioNotifications';
+import { errorMessage } from '../../errorMessage';
 
 const notifyTranslator = createTranslator();
 
@@ -139,10 +140,7 @@ const createNodeDeadlineNotifier = (
             // Best-effort: notifications must never disturb voting.
             logger
                 .withCategory('voting')
-                .debug(
-                    'deadline notification cycle failed',
-                    (error as { message?: string } | null | undefined)?.message ?? String(error),
-                );
+                .debug('deadline notification cycle failed', errorMessage(error) ?? String(error));
         } finally {
             running = false;
         }

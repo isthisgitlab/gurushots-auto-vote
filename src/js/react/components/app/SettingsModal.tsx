@@ -21,6 +21,7 @@ import * as ipc from '@/api/ipc';
 
 import type { SettingsBand, SettingsSection } from '@/utils/groupSettings';
 import type { HintsFor, SettingChangeHandler, SettingResetHandler } from '../../../types/settingsEditor';
+import { errorMessage } from '../../../errorMessage';
 
 /**
  * The form state every schema-driven setting input reads and writes.
@@ -221,9 +222,7 @@ export function SettingsModal({ isOpen, onClose }: { isOpen: boolean; onClose: (
             // setting takes effect now, not after the current wait elapses.
             await rearmSchedule();
         } catch (err) {
-            await ipc.logRendererError(
-                `Error saving settings: ${(err as { message?: unknown } | null | undefined)?.message || err}`,
-            );
+            await ipc.logRendererError(`Error saving settings: ${errorMessage(err) || err}`);
         }
     }, [commit, persistTitleRules, uiValues.language, language, setLanguage, rearmSchedule, onClose]);
 

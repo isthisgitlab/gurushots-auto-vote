@@ -12,6 +12,7 @@ import * as metadata from '../../metadata';
 
 import type { Challenge } from '../../types/gurushots';
 import type * as votingModule from '../../api/voting';
+import { errorMessage } from '../../errorMessage';
 
 /**
  * Simulate getting vote images. The generated set carries only the
@@ -125,10 +126,10 @@ const submitVotes: typeof votingModule.submitVotes = mockMethod(
                 logger
                     .withCategory('voting')
                     .debug(
-                        `Error updating mock metadata for challenge ${voteImages.challenge.id}: ${(error as Error).message}`,
+                        `Error updating mock metadata for challenge ${voteImages.challenge.id}: ${errorMessage(error)}`,
                         null,
                     );
-                logger.withCategory('voting').error(`Error updating mock metadata: ${(error as Error).message}`, null);
+                logger.withCategory('voting').error(`Error updating mock metadata: ${errorMessage(error)}`, null);
             }
 
             return simulateApiResponse(voting.mockVoteSubmissionSuccess, 2000);

@@ -5,6 +5,7 @@ import * as ipc from '@/api/ipc';
 import type { Dispatch, SetStateAction } from 'react';
 import type { ChallengeValues } from '../../types/settings';
 import type { RendererSchema, SettingChangeHandler, SettingResetHandler } from '../../types/settingsEditor';
+import { errorMessage } from '../../errorMessage';
 
 /**
  * The challenge's title-rule profile as the modal holds it: the matched
@@ -157,9 +158,7 @@ function useOverridesSave({
             // scheduled fill takes effect now, not after the current wait.
             await rearmSchedule();
         } catch (err) {
-            await ipc.logRendererError(
-                `Error saving challenge settings: ${(err as { message?: string } | null | undefined)?.message || err}`,
-            );
+            await ipc.logRendererError(`Error saving challenge settings: ${errorMessage(err) || err}`);
         } finally {
             setSaving(false);
         }

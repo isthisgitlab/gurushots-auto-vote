@@ -13,7 +13,8 @@ import { describeSubmitFailure, makeFallbackLogger, logPopularityPick } from './
 
 import type { Challenge } from '../../types/gurushots';
 import type { IgnoreWords, PickerPhoto, ScoredCandidate, SemanticScoreMap } from '../../types/photoPicker';
-import type { ErrorLike, FetchErrorResult, FillAttemptParams, FillAttemptResult, RankDeps } from '../../types/autoFill';
+import type { FetchErrorResult, FillAttemptParams, FillAttemptResult, RankDeps } from '../../types/autoFill';
+import { errorMessage } from '../../errorMessage';
 
 /**
  * First half of the fill pipeline: fetch the candidate library for a challenge
@@ -63,7 +64,7 @@ const loadFillCandidates = async ({
         logger
             .withCategory('autoFill')
             .warning(
-                `${label}: failed to fetch eligible photos for ${logger.challengeTag(challenge)}: ${(error as ErrorLike | null | undefined)?.message || error}`,
+                `${label}: failed to fetch eligible photos for ${logger.challengeTag(challenge)}: ${errorMessage(error) || error}`,
                 null,
             );
         return { status: 'fetch-error', error };
@@ -163,7 +164,7 @@ const verifyFillPick = async (
         deps.logger
             .withCategory('autoFill')
             .warning(
-                `Visual check failed for ${deps.logger.challengeTag(challenge)}: ${(error as ErrorLike | null | undefined)?.message || error}`,
+                `Visual check failed for ${deps.logger.challengeTag(challenge)}: ${errorMessage(error) || error}`,
                 null,
             );
         return picked;
@@ -381,7 +382,7 @@ const runFillAttempt = async ({
         logger
             .withCategory('autoFill')
             .warning(
-                `${label}: submit threw for ${logger.challengeTag(challenge)}: ${(error as ErrorLike | null | undefined)?.message || error}`,
+                `${label}: submit threw for ${logger.challengeTag(challenge)}: ${errorMessage(error) || error}`,
                 null,
             );
         return { status: 'submit-threw', error };

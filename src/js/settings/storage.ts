@@ -23,6 +23,7 @@ import * as runtime from '../runtime';
 import type { App } from 'electron';
 import type { PreferencesPlugin } from '@capacitor/preferences';
 import type { AndroidHeadlessStore } from '../types/settings';
+import { errorMessage } from '../errorMessage';
 
 /**
  * The Android headless-service bridge, read at call time (absent everywhere
@@ -38,7 +39,7 @@ try {
     electronApp = electron.app;
 } catch (error) {
     // Electron not available (CLI context), we'll use fallback
-    logger.withCategory('ui').info('Running in CLI context - using fallback userData path:', (error as Error).message);
+    logger.withCategory('ui').info('Running in CLI context - using fallback userData path:', errorMessage(error));
 }
 
 const SETTINGS_KEY = 'gurushots-settings';

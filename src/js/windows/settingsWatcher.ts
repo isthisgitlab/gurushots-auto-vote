@@ -16,6 +16,7 @@ import * as settings from '../settings';
 import * as logger from '../logger';
 
 import type { AppSettings } from '../types/settings';
+import { errorMessage } from '../errorMessage';
 type SettingChange = { key: string; oldValue: string; newValue: string };
 
 // Debounce timeout shared across successive watchSettingsFile calls (the
@@ -132,9 +133,7 @@ function watchSettingsFile({
     try {
         previousSettings = settings.loadSettings();
     } catch (error) {
-        logger
-            .withCategory('settings')
-            .error('Failed to load initial settings for comparison:', (error as Error).message);
+        logger.withCategory('settings').error('Failed to load initial settings for comparison:', errorMessage(error));
     }
 
     // Hand the observer a snapshot the caller already loaded. Never throws: a
@@ -147,11 +146,7 @@ function watchSettingsFile({
         try {
             onSettingsChanged(snapshot);
         } catch (error) {
-            logger
-                .withCategory('settings')
-                .warning(
-                    `Settings observer failed: ${(error as { message?: unknown } | null | undefined)?.message || error}`,
-                );
+            logger.withCategory('settings').warning(`Settings observer failed: ${errorMessage(error) || error}`);
         }
     };
 
@@ -252,7 +247,7 @@ function watchSettingsFile({
                 } catch (error) {
                     logger
                         .withCategory('settings')
-                        .error('Failed to load new settings for comparison:', (error as Error).message);
+                        .error('Failed to load new settings for comparison:', errorMessage(error));
                     logger.withCategory('settings').info('🔄 Settings file changed, reloading main window...');
                     shouldReload = true;
                 }

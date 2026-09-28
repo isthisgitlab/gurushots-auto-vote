@@ -14,6 +14,7 @@ import * as runtime from '../runtime';
 import * as logger from '../logger';
 
 import type { AutoVoteBackgroundPlugin, CapacitorGlobals } from '../types/capacitor';
+import { errorMessage } from '../errorMessage';
 
 let pluginInstance: AutoVoteBackgroundPlugin | null = null;
 const getPlugin = () => {
@@ -27,12 +28,7 @@ const getPlugin = () => {
         }
         return pluginInstance;
     } catch (err) {
-        logger
-            .withCategory('voting')
-            .warning(
-                'NativeAutovoteBridge.getPlugin failed',
-                (err as { message?: string } | null | undefined)?.message,
-            );
+        logger.withCategory('voting').warning('NativeAutovoteBridge.getPlugin failed', errorMessage(err));
         return null;
     }
 };
@@ -48,7 +44,7 @@ const start = async () => {
         return {
             running: false,
             available: true,
-            error: (err as { message?: string } | null | undefined)?.message,
+            error: errorMessage(err),
         };
     }
 };
@@ -64,7 +60,7 @@ const stop = async () => {
         return {
             running: false,
             available: true,
-            error: (err as { message?: string } | null | undefined)?.message,
+            error: errorMessage(err),
         };
     }
 };
@@ -79,7 +75,7 @@ const getStatus = async () => {
         return {
             running: false,
             available: true,
-            error: (err as { message?: string } | null | undefined)?.message,
+            error: errorMessage(err),
         };
     }
 };

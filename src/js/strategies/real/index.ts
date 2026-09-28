@@ -34,6 +34,7 @@ import { loadMissionNeeds } from '../../services/missions';
 import { joinStateStore, acquireUnlockLock } from '../../joinStateStore';
 
 import type { Challenge, TurboMiniGameResult } from '../../types/gurushots';
+import { errorMessage } from '../../errorMessage';
 
 // One instance for the process: the tracker is stateless (it reads and writes
 // metadata.json on each call), but building it per pass would be pointless churn.
@@ -193,10 +194,7 @@ const fetchChallengesAndVote = async (
         } catch (error) {
             logger
                 .withCategory('join')
-                .warning(
-                    `join pass errored (voting continues): ${(error as { message?: unknown } | null | undefined)?.message || error}`,
-                    null,
-                );
+                .warning(`join pass errored (voting continues): ${errorMessage(error) || error}`, null);
         }
         // Prize-claim pre-step: gated by the default-off `autoClaimPrizes`
         // setting and throttled to once an hour inside runClaimPass.
@@ -205,10 +203,7 @@ const fetchChallengesAndVote = async (
         } catch (error) {
             logger
                 .withCategory('claim')
-                .warning(
-                    `claim pass errored (voting continues): ${(error as { message?: unknown } | null | undefined)?.message || error}`,
-                    null,
-                );
+                .warning(`claim pass errored (voting continues): ${errorMessage(error) || error}`, null);
         }
     }
     // The Android background service advances scenarios in its own JS context;

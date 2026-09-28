@@ -24,6 +24,7 @@ import { mockMethod } from './simulate';
 
 import type { MockEndpoints } from './apiClient';
 import type * as realModule from '../strategies/real';
+import { errorMessage } from '../errorMessage';
 
 // Module-level so snapshots survive across mock cycles within a run — a per-call
 // tracker would look like "first sight" every cycle and never detect anything.
@@ -149,23 +150,13 @@ const createMockStrategy = (client: MockEndpoints) => {
             try {
                 await runJoinPass(token, Date.now(), mockJoinDeps(), missions);
             } catch (error) {
-                logger
-                    .withCategory('join')
-                    .warning(
-                        `Mock join pass errored: ${(error as { message?: unknown } | null | undefined)?.message || error}`,
-                        null,
-                    );
+                logger.withCategory('join').warning(`Mock join pass errored: ${errorMessage(error) || error}`, null);
             }
             // Hourly prize-claim pre-step (default-off autoClaimPrizes), as in real.
             try {
                 await runClaimPass(token, Date.now(), pickEndpoints(client, CLAIM_ENDPOINTS));
             } catch (error) {
-                logger
-                    .withCategory('claim')
-                    .warning(
-                        `Mock claim pass errored: ${(error as { message?: unknown } | null | undefined)?.message || error}`,
-                        null,
-                    );
+                logger.withCategory('claim').warning(`Mock claim pass errored: ${errorMessage(error) || error}`, null);
             }
         }
         return runVotingPass(token, challengeIdFilter, {

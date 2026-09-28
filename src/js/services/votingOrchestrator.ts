@@ -64,6 +64,7 @@ import type { EntryTracker } from './newEntryTracker';
 import type { EntryAgeLedger } from '../types/stores';
 import type { AutoVoteDecision } from './decisions/voteDecisions';
 import type { MissionNeeds } from './missions';
+import { errorMessage } from '../errorMessage';
 
 /**
  * Per-challenge context threaded to every deadline-action runner. All of a
@@ -972,7 +973,7 @@ const runVotingPass = async (
         logger.withCategory('voting').endOperation('voting-process', null, failureText(error));
         return {
             success: false,
-            error: (error as { message?: string } | null | undefined)?.message || 'Voting process failed',
+            error: errorMessage(error) || 'Voting process failed',
         };
     }
 };

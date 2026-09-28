@@ -22,6 +22,7 @@ import { challengeValueSetIsValid } from './defaults';
 import { RESERVED_PROFILE_NAMES } from './profileStore';
 
 import type { ScenarioCondition } from '../types/scenario';
+import { errorMessage } from '../errorMessage';
 
 export type ScenarioIssue = { path: string; message: string };
 
@@ -452,7 +453,7 @@ const parseScenarioJson = (text: unknown): { ok: true; value: unknown } | { ok: 
         // JSON.parse only ever throws a SyntaxError.
         return {
             ok: false,
-            issues: [{ path: '', message: `Not valid JSON: ${(error as Error).message}` }],
+            issues: [{ path: '', message: `Not valid JSON: ${errorMessage(error)}` }],
         };
     }
 };

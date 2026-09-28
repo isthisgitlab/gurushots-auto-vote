@@ -3,7 +3,8 @@
  * This module owns the identity cache; __resetMemberIdCache clears it.
  */
 
-import type { ErrorLike, FillLogger, RankDeps } from '../../types/autoFill';
+import type { FillLogger, RankDeps } from '../../types/autoFill';
+import { errorMessage } from '../../errorMessage';
 
 /**
  * A memoised lookup: the shared promise, and when a null answer expires (null =
@@ -63,10 +64,7 @@ const resolveMemberId = async (
             if (logger) {
                 logger
                     .withCategory(logLabel || 'autoFill')
-                    .debug(
-                        `${logLabel || 'autoFill'}: identity lookup failed: ${(error && (error as ErrorLike).message) || error}`,
-                        null,
-                    );
+                    .debug(`${logLabel || 'autoFill'}: identity lookup failed: ${errorMessage(error) || error}`, null);
             }
             return null;
         }

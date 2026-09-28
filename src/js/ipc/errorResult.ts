@@ -1,3 +1,5 @@
+import { errorMessage } from '../errorMessage';
+
 /**
  * Shared catch-path result for IPC handlers: `{ success: false, error }`.
  *
@@ -11,7 +13,7 @@
  */
 const errorResult = (error: unknown, fallback: string): { success: false; error: string } => ({
     success: false,
-    error: (error as { message?: string } | null | undefined)?.message || fallback,
+    error: errorMessage(error) || fallback,
 });
 
 export { errorResult };

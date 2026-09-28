@@ -10,6 +10,7 @@ import * as logger from '../../logger';
 import * as updateChecker from '../../services/UpdateChecker';
 import { hasBundledModel } from '../../services/visionVerifier';
 import * as pkg from '../../../../package.json';
+import { errorMessage } from '../../errorMessage';
 
 // The release asset this binary ships as (gurucli-v<version>-<target>[-lite],
 // see scripts/build-cli.ts), so the download link matches this build's own
@@ -47,9 +48,7 @@ const checkUpdates = async () => {
             assetSuffix: await cliAssetSuffix(),
         });
     } catch (err) {
-        ui.error(
-            `Update check failed: ${plain(String((err as { message?: unknown } | null | undefined)?.message || err))}`,
-        );
+        ui.error(`Update check failed: ${plain(String(errorMessage(err) || err))}`);
         ui.info(`Check manually: ${updateChecker.getReleasesUrl()}`);
         return;
     }

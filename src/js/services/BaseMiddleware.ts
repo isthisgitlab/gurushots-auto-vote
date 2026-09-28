@@ -16,6 +16,7 @@ import { voteAllChallengesManual } from './manualVote';
 
 import type { ApiStrategy } from '../apiFactory';
 import type { Challenge } from '../types/gurushots';
+import { errorMessage } from '../errorMessage';
 
 const requireToken = () => {
     const token = settings.getSetting('token');
@@ -69,7 +70,7 @@ class BaseMiddleware {
         } catch (error) {
             return {
                 success: false,
-                error: (error as { message?: string } | null | undefined)?.message || 'Authentication failed',
+                error: errorMessage(error) || 'Authentication failed',
             };
         }
     }

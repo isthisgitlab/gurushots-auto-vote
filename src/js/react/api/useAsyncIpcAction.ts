@@ -1,4 +1,5 @@
 import { useState, useCallback } from 'react';
+import { errorMessage } from '../../errorMessage';
 
 /**
  * Fallback messages for a failed action.
@@ -33,7 +34,7 @@ export function useAsyncIpcAction<A extends unknown[], R extends { success: bool
     ipcInvoker: (...args: A) => Promise<R>,
     labels: IpcActionLabels = {},
 ): AsyncIpcAction<A, R> {
-    const { failureMessage = 'Action failed', errorMessage = 'Action error' } = labels;
+    const { failureMessage = 'Action failed', errorMessage: errorFallback = 'Action error' } = labels;
 
     const [loading, setLoading] = useState(false);
     const [error, setError] = useState<string | null>(null);
@@ -49,14 +50,14 @@ export function useAsyncIpcAction<A extends unknown[], R extends { success: bool
                 }
                 return result;
             } catch (err) {
-                const message = (err as { message?: string } | null | undefined)?.message || errorMessage;
+                const message = errorMessage(err) || errorFallback;
                 setError(message);
                 return { success: false, error: message };
             } finally {
                 setLoading(false);
             }
         },
-        [ipcInvoker, failureMessage, errorMessage],
+        [ipcInvoker, failureMessage, errorFallback],
     );
 
     const clearError = useCallback(() => setError(null), []);

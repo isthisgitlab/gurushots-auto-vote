@@ -3,6 +3,7 @@ import * as path from 'node:path';
 import * as runtime from './runtime';
 import { formatTimeHMS } from './dateFormat';
 import { oneLine } from './format/logSafe';
+import { errorMessage } from './errorMessage';
 
 export type LogLevel = 'DEBUG' | 'INFO' | 'WARN' | 'ERROR';
 export type ColorName = keyof typeof colors;
@@ -66,7 +67,7 @@ try {
 } catch (err) {
     // Browser / Capacitor context — fs is a require shim. Logger falls
     // back to console output only; in-app log streaming uses sendLogToGUI.
-    console.debug('[logger] fs not available; skipping file-based logging:', (err as Error).message);
+    console.debug('[logger] fs not available; skipping file-based logging:', errorMessage(err));
     logsDir = '';
 }
 

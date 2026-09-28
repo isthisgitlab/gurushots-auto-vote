@@ -24,6 +24,7 @@ import { clearTokenUnlessStayingLoggedIn } from '../../services/auth';
 import type { NullEventHandlers } from '../../types/cli';
 import type { Challenge } from '../../types/gurushots';
 import type * as voting_handlersModule from '../../ipc/voting.handlers';
+import { errorMessage } from '../../errorMessage';
 type VotingHandlers = NullEventHandlers<ReturnType<typeof voting_handlersModule.buildHandlers>>;
 let _votingHandlers: VotingHandlers | undefined;
 const votingHandlers = (): VotingHandlers =>
@@ -120,9 +121,7 @@ const voteChallengeManual = async (
         }
         title = challenge.title;
     } catch (err) {
-        logger
-            .withCategory('challenges')
-            .error(`Failed to fetch challenges: ${(err as { message?: unknown } | null | undefined)?.message || err}`);
+        logger.withCategory('challenges').error(`Failed to fetch challenges: ${errorMessage(err) || err}`);
         return { success: false, error: 'Failed to fetch challenges' };
     }
 
@@ -135,14 +134,10 @@ const voteChallengeManual = async (
         }
         return result;
     } catch (err) {
-        logger
-            .withCategory('voting')
-            .error(
-                `Failed to vote on "${title}": ${(err as { message?: unknown } | null | undefined)?.message || err}`,
-            );
+        logger.withCategory('voting').error(`Failed to vote on "${title}": ${errorMessage(err) || err}`);
         return {
             success: false,
-            error: (err as { message?: string } | null | undefined)?.message || 'Failed to vote',
+            error: errorMessage(err) || 'Failed to vote',
         };
     }
 };
@@ -284,9 +279,7 @@ const showStatus = async () => {
                 });
             }
         } catch (err) {
-            logger
-                .withCategory('ui')
-                .info(`  (unavailable — ${(err as { message?: unknown } | null | undefined)?.message || err})`);
+            logger.withCategory('ui').info(`  (unavailable — ${errorMessage(err) || err})`);
         }
     }
 

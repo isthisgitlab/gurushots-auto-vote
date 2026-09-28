@@ -20,6 +20,7 @@ import type { SwapBackRecord } from '../../types/stores';
 import type { NullEventHandlers } from '../../types/cli';
 import type * as actions_handlersModule from '../../ipc/actions.handlers';
 import type * as currency_handlersModule from '../../ipc/currency.handlers';
+import { errorMessage } from '../../errorMessage';
 type ActionHandlers = NullEventHandlers<ReturnType<typeof actions_handlersModule.buildHandlers>>;
 type CurrencyHandlers = NullEventHandlers<ReturnType<typeof currency_handlersModule.buildHandlers>>;
 type CurrencyField = 'keys' | 'swaps' | 'fills';
@@ -61,9 +62,7 @@ const resolveChallenge = async (challengeId: string): Promise<Challenge | null> 
         }
         return challenge;
     } catch (err) {
-        logger
-            .withCategory('challenges')
-            .error(`Failed to fetch challenges: ${(err as { message?: unknown } | null | undefined)?.message || err}`);
+        logger.withCategory('challenges').error(`Failed to fetch challenges: ${errorMessage(err) || err}`);
         return null;
     }
 };
@@ -97,9 +96,7 @@ const boostChallenge = async (challengeId: string, { imageId = null }: { imageId
             logger.withCategory('boost').error(`Failed to apply boost to "${challenge.title}" (see log for reason)`);
         }
     } catch (err) {
-        logger
-            .withCategory('boost')
-            .error(`Failed to apply boost: ${(err as { message?: unknown } | null | undefined)?.message || err}`);
+        logger.withCategory('boost').error(`Failed to apply boost: ${errorMessage(err) || err}`);
     }
 };
 
@@ -120,9 +117,7 @@ const turboChallenge = async (challengeId: string) => {
             logger.withCategory('turbo').error(result?.error || 'Turbo not earned');
         }
     } catch (err) {
-        logger
-            .withCategory('turbo')
-            .error(`Failed to play turbo: ${(err as { message?: unknown } | null | undefined)?.message || err}`);
+        logger.withCategory('turbo').error(`Failed to play turbo: ${errorMessage(err) || err}`);
     }
 };
 
@@ -149,9 +144,7 @@ const fillChallenge = async (challengeId: string, { all = false }: { all?: boole
             logger.withCategory('autoFill').error(result?.error || 'Failed to submit photos');
         }
     } catch (err) {
-        logger
-            .withCategory('autoFill')
-            .error(`Failed to submit photos: ${(err as { message?: unknown } | null | undefined)?.message || err}`);
+        logger.withCategory('autoFill').error(`Failed to submit photos: ${errorMessage(err) || err}`);
     }
 };
 
@@ -223,9 +216,7 @@ const unlockBoostCmd = async (challengeId: string, { yes = false }: { yes?: bool
         const result = await currencyHandlers()['key-unlock-boost'](null, challengeId, true);
         reportSpend(result, `Boost unlocked on "${challenge.title}" (not applied yet).`);
     } catch (err) {
-        logger
-            .withCategory('currency')
-            .error(`Failed to unlock boost: ${(err as { message?: unknown } | null | undefined)?.message || err}`);
+        logger.withCategory('currency').error(`Failed to unlock boost: ${errorMessage(err) || err}`);
     }
 };
 
@@ -292,9 +283,7 @@ const swapCmd = async (
         const result = await currencyHandlers()['swap-entry-photo'](null, challengeId, imageId, newId, true);
         reportSpend(result, `Swapped ${imageId} → ${newId} in "${challenge.title}".`);
     } catch (err) {
-        logger
-            .withCategory('currency')
-            .error(`Failed to swap photo: ${(err as { message?: unknown } | null | undefined)?.message || err}`);
+        logger.withCategory('currency').error(`Failed to swap photo: ${errorMessage(err) || err}`);
     }
     return true;
 };
@@ -344,9 +333,7 @@ const swapBackCmd = async (
             `Swapped ${record.previousId} back into "${challenge.title}" — its ${record.kind} is back.`,
         );
     } catch (err) {
-        logger
-            .withCategory('currency')
-            .error(`Failed to swap back: ${(err as { message?: unknown } | null | undefined)?.message || err}`);
+        logger.withCategory('currency').error(`Failed to swap back: ${errorMessage(err) || err}`);
     }
     return true;
 };
@@ -369,9 +356,7 @@ const fillExposureCmd = async (challengeId: string, { yes = false }: { yes?: boo
         const result = await currencyHandlers()['fill-exposure'](null, challengeId, true);
         reportSpend(result, `Exposure filled on "${challenge.title}".`);
     } catch (err) {
-        logger
-            .withCategory('currency')
-            .error(`Failed to fill exposure: ${(err as { message?: unknown } | null | undefined)?.message || err}`);
+        logger.withCategory('currency').error(`Failed to fill exposure: ${errorMessage(err) || err}`);
     }
 };
 

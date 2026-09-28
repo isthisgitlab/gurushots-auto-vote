@@ -20,6 +20,7 @@ import type {
     PhotosPrivateResponse,
     SuccessResponse,
 } from '../types/gurushots';
+import { errorMessage } from '../errorMessage';
 
 const requireValue = makeRequireValue('submissions');
 
@@ -175,7 +176,7 @@ const getEligiblePhotos = async (
             items = await fetchPhotoPage(challengeId, token, { limit, start: start + page * limit, search, usage });
         } catch (error) {
             warn(
-                `reading page ${page + 1} of your photo library failed (${oneLine((error as { message?: unknown } | null | undefined)?.message || error)}); continuing with the ${byId.size} photo(s) already read`,
+                `reading page ${page + 1} of your photo library failed (${oneLine(errorMessage(error) || error)}); continuing with the ${byId.size} photo(s) already read`,
             );
             stoppedEarly = true;
             break;

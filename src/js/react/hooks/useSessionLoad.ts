@@ -3,6 +3,7 @@ import { useIpcQuery } from '@/api/useIpcQuery';
 import * as ipc from '@/api/ipc';
 
 import type { IpcQueryTools } from '@/api/useIpcQuery';
+import { errorMessage } from '../../errorMessage';
 
 /**
  * A load settled inside the query: its value, or why it failed.
@@ -42,9 +43,7 @@ export function useSessionLoad<T>(
                 return;
             }
             setError(result.reason ?? new Error(failureLog));
-            await ipc.logRendererError(
-                `${failureLog}: ${(result.reason as { message?: string } | null | undefined)?.message || result.reason}`,
-            );
+            await ipc.logRendererError(`${failureLog}: ${errorMessage(result.reason) || result.reason}`);
         },
         [onLoad, failureLog],
     );

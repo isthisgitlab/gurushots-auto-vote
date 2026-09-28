@@ -12,6 +12,7 @@ import {
     resetAllSettings,
 } from '../src/js/cli/commands/settings';
 import { spawn } from 'node:child_process';
+import { errorMessage } from '../src/js/errorMessage';
 
 /**
  * CLI Settings Management Script
@@ -318,7 +319,7 @@ async function main() {
             }
         }
     } catch (error) {
-        console.error('❌ Error:', (error as Error).message);
+        console.error('❌ Error:', errorMessage(error));
         process.exit(1);
     }
 }
@@ -328,6 +329,6 @@ main()
         process.exit(0);
     })
     .catch((error: unknown) => {
-        console.error('❌ Unhandled error:', (error as Error).message);
+        console.error('❌ Unhandled error:', errorMessage(error));
         process.exit(1);
     });

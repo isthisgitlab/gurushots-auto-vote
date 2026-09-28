@@ -25,6 +25,7 @@ import * as runtime from '../runtime';
 import * as logger from '../logger';
 
 import type { ForegroundServicePlugin } from '@capawesome-team/capacitor-android-foreground-service';
+import { errorMessage } from '../errorMessage';
 
 let plugin: ForegroundServicePlugin | null = null;
 const NOTIFICATION_ID = 27782; // arbitrary stable id
@@ -39,7 +40,7 @@ const getPlugin = () => {
         ).ForegroundService;
         return plugin;
     } catch (err) {
-        logger.withCategory('voting').warning('ForegroundService plugin unavailable', (err as Error).message);
+        logger.withCategory('voting').warning('ForegroundService plugin unavailable', errorMessage(err));
         return null;
     }
 };
@@ -52,7 +53,7 @@ const requestPermissions = async () => {
         if (status?.display === 'granted') return status;
         return await fs.requestPermissions();
     } catch (err) {
-        logger.withCategory('voting').warning('ForegroundService permission check failed', (err as Error).message);
+        logger.withCategory('voting').warning('ForegroundService permission check failed', errorMessage(err));
         return { display: 'denied' };
     }
 };
@@ -76,7 +77,7 @@ const start = async ({ title = APP_NAME, body = 'Auto-vote running' }: { title?:
         });
         return true;
     } catch (err) {
-        logger.withCategory('voting').error('startForegroundService failed', (err as Error).message);
+        logger.withCategory('voting').error('startForegroundService failed', errorMessage(err));
         return false;
     }
 };
@@ -97,7 +98,7 @@ const update = async ({ title = APP_NAME, body }: { title?: string; body?: strin
         });
     } catch (err) {
         // updateForegroundService throws if the service isn't running yet — ignore.
-        logger.withCategory('voting').debug('updateForegroundService skipped', (err as Error).message);
+        logger.withCategory('voting').debug('updateForegroundService skipped', errorMessage(err));
     }
 };
 
@@ -110,7 +111,7 @@ const stop = async () => {
     try {
         await fs.stopForegroundService();
     } catch (err) {
-        logger.withCategory('voting').error('stopForegroundService failed', (err as Error).message);
+        logger.withCategory('voting').error('stopForegroundService failed', errorMessage(err));
     }
 };
 

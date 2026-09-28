@@ -45,7 +45,8 @@ import { createJsonStore } from '../settings/storage';
 import { isPlainObject } from '../plainObject';
 
 import type { PickerPhoto } from '../types/photoPicker';
-import type { ErrorLike, FillLogger, RankDeps } from '../types/autoFill';
+import type { FillLogger, RankDeps } from '../types/autoFill';
+import { errorMessage } from '../errorMessage';
 
 /**
  * One photo's cached ranking signals.
@@ -175,10 +176,7 @@ const loadCache = (): Map<string, PhotoStatsEntry> => {
     } catch (error) {
         logger
             .withCategory('autoFill')
-            .debug(
-                `photoStats: could not read the stats cache: ${(error as ErrorLike | null | undefined)?.message || error}`,
-                null,
-            );
+            .debug(`photoStats: could not read the stats cache: ${errorMessage(error) || error}`, null);
         cache = new Map();
     }
     return cache;
@@ -205,10 +203,7 @@ const persistCache = () => {
     } catch (error) {
         logger
             .withCategory('autoFill')
-            .debug(
-                `photoStats: could not persist the stats cache: ${(error as ErrorLike | null | undefined)?.message || error}`,
-                null,
-            );
+            .debug(`photoStats: could not persist the stats cache: ${errorMessage(error) || error}`, null);
     }
 };
 
@@ -334,7 +329,7 @@ const enrichCandidates = async (
                 payload = await getImageData(id, token);
             } catch (error) {
                 log.withCategory('autoFill').debug(
-                    `photoStats: get_image_data failed for photo ${oneLine(id)}: ${oneLine((error as ErrorLike | null | undefined)?.message || error)}`,
+                    `photoStats: get_image_data failed for photo ${oneLine(id)}: ${oneLine(errorMessage(error) || error)}`,
                     null,
                 );
                 payload = null;

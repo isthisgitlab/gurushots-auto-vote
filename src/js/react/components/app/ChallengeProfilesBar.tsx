@@ -2,6 +2,7 @@ import { useState, useEffect, useCallback, useRef } from 'react';
 import { useTranslation } from '@/contexts/TranslationContext';
 import { getIntentByName, intentValuesMatch } from '../../../settings/intentProfiles';
 import * as ipc from '@/api/ipc';
+import { errorMessage } from '../../../errorMessage';
 
 /**
  * What a profile save or delete reports to the modal: the profile's name and
@@ -82,9 +83,7 @@ export function ChallengeProfilesBar({
             const result = await ipc.getChallengeProfiles();
             setProfiles(result && typeof result === 'object' ? result : {});
         } catch (err) {
-            await ipc.logRendererError(
-                `Error loading challenge profiles: ${(err as { message?: unknown } | null | undefined)?.message || err}`,
-            );
+            await ipc.logRendererError(`Error loading challenge profiles: ${errorMessage(err) || err}`);
             setProfiles({});
         }
     }, []);
@@ -136,9 +135,7 @@ export function ChallengeProfilesBar({
             await refreshProfiles();
             onProfilesChanged({ name: selectedName, deleted: true });
         } catch (err) {
-            await ipc.logRendererError(
-                `Error deleting challenge profile: ${(err as { message?: unknown } | null | undefined)?.message || err}`,
-            );
+            await ipc.logRendererError(`Error deleting challenge profile: ${errorMessage(err) || err}`);
         } finally {
             setBusy(false);
         }
@@ -185,9 +182,7 @@ export function ChallengeProfilesBar({
                 setErrorText(t('app.profileSaveError'));
             }
         } catch (err) {
-            await ipc.logRendererError(
-                `Error saving challenge profile: ${(err as { message?: unknown } | null | undefined)?.message || err}`,
-            );
+            await ipc.logRendererError(`Error saving challenge profile: ${errorMessage(err) || err}`);
             setErrorText(t('app.profileSaveError'));
         } finally {
             setBusy(false);

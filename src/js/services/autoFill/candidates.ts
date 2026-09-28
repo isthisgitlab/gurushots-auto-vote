@@ -12,7 +12,8 @@ import { resolveMemberId } from './memberIdentity';
 
 import type { Challenge } from '../../types/gurushots';
 import type { ChallengeTheme, IgnoreWords, PickerPhoto, SemanticScore, TagOptions } from '../../types/photoPicker';
-import type { ErrorLike, FillLogger, FillSettings, RankDeps } from '../../types/autoFill';
+import type { FillLogger, FillSettings, RankDeps } from '../../types/autoFill';
+import { errorMessage } from '../../errorMessage';
 
 /**
  * Semantic match scores for an eligible set, computed once per fill and reused
@@ -90,10 +91,7 @@ const resolveTagsForTerms = async (
     } catch (error) {
         logger
             .withCategory(logLabel)
-            .debug(
-                `${logLabel}: tag resolution unavailable: ${(error && (error as ErrorLike).message) || error}`,
-                null,
-            );
+            .debug(`${logLabel}: tag resolution unavailable: ${errorMessage(error) || error}`, null);
         return [];
     }
 };
@@ -281,7 +279,7 @@ const fetchCandidatesForChallenge = async (
                 logger
                     .withCategory(logLabel)
                     .debug(
-                        `${logLabel}: search "${searchTerms[i]}" failed for ${logger.challengeTag(challenge)}: ${(reason && (reason as ErrorLike).message) || reason}`,
+                        `${logLabel}: search "${searchTerms[i]}" failed for ${logger.challengeTag(challenge)}: ${errorMessage(reason) || reason}`,
                         null,
                     );
                 return;

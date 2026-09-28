@@ -4,6 +4,7 @@ import * as ipc from '../api/ipc';
 import type { ComponentChildren } from 'preact';
 import type { Dispatch } from 'react';
 import type { UpdateSummary } from '../../services/AutoUpdater';
+import { errorMessage } from '../../errorMessage';
 
 // Update states
 export const UPDATE_STATES = {
@@ -128,7 +129,7 @@ const UpdateContext = createContext<UpdateContextValue | null>(null);
  */
 const failWith = (dispatch: Dispatch<UpdateAction>, kind: UpdateError['kind'], reason: unknown) => {
     const step = kind === 'install' ? 'Update install' : 'Update';
-    void ipc.logRendererError(`${step} failed: ${(reason as Error | null | undefined)?.message || reason}`);
+    void ipc.logRendererError(`${step} failed: ${errorMessage(reason) || reason}`);
     dispatch({ type: ACTIONS.SET_ERROR, payload: { kind } });
 };
 
@@ -209,9 +210,7 @@ export function UpdateProvider({ children }: { children?: ComponentChildren }) {
             await ipc.skipUpdateVersion();
             dispatch({ type: ACTIONS.HIDE_DIALOG });
         } catch (err) {
-            await ipc.logRendererError(
-                `Error skipping update version: ${(err as Error | null | undefined)?.message || err}`,
-            );
+            await ipc.logRendererError(`Error skipping update version: ${errorMessage(err) || err}`);
         }
     }, []);
 
@@ -231,9 +230,7 @@ export function UpdateProvider({ children }: { children?: ComponentChildren }) {
             await ipc.openExternalUrl(urlResult.url);
             dispatch({ type: ACTIONS.HIDE_DIALOG });
         } catch (err) {
-            await ipc.logRendererError(
-                `Error opening download URL: ${(err as Error | null | undefined)?.message || err}`,
-            );
+            await ipc.logRendererError(`Error opening download URL: ${errorMessage(err) || err}`);
         }
     }, []);
 

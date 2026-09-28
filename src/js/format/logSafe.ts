@@ -7,6 +7,8 @@
  * at all (the mocked run stops exercising the escaping path entirely).
  */
 
+import { errorMessage } from '../errorMessage';
+
 /**
  * Collapse line-breaking characters in a value before it is interpolated into a
  * log message.
@@ -30,9 +32,6 @@ const oneLine = (value: unknown): string => String(value).replace(/[\r\n\v\f\u00
  *
  * @param error - anything a promise can reject with
  */
-const failureText = (error: unknown): string => {
-    const message = (error as { message?: unknown } | null | undefined)?.message;
-    return (message ? String(message) : '') || String(error ?? '') || 'unknown error';
-};
+const failureText = (error: unknown): string => errorMessage(error) || String(error ?? '') || 'unknown error';
 
 export { oneLine, failureText };

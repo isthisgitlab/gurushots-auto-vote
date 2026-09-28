@@ -54,6 +54,7 @@ import type { CurrencyPassDeps } from './currencyAuto';
 import type { SpendOutcome } from './currencyActions';
 import type { ScenarioDocument } from '../settings/scenarioSchema';
 import type { PassContext } from './votingOrchestrator';
+import { errorMessage } from '../errorMessage';
 
 type ScenarioRule = NonNullable<ScenarioDocument['phases'][string]['rules']>[number];
 
@@ -586,10 +587,7 @@ const runScenarioStep = async (challenge: Challenge, now: number, pass: PassCont
             }
         }
     } catch (error) {
-        log().error(
-            `${logger.challengeTag(challenge)} scenario step failed: ${(error as { message?: unknown } | null | undefined)?.message || error}`,
-            null,
-        );
+        log().error(`${logger.challengeTag(challenge)} scenario step failed: ${errorMessage(error) || error}`, null);
     }
 };
 

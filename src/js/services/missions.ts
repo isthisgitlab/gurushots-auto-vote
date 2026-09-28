@@ -16,6 +16,7 @@ import * as logger from '../logger';
 import * as settings from '../settings';
 
 import type { Mission } from '../types/gurushots';
+import { errorMessage } from '../errorMessage';
 
 type MissionKind = 'join' | 'fill' | 'turbo';
 
@@ -112,10 +113,7 @@ const loadMissionNeeds = async (
     try {
         return await readMissionNeeds(token, nowMs, getMyMissions);
     } catch (error) {
-        cat().warning(
-            `could not read missions: ${(error as { message?: unknown } | null | undefined)?.message || error}`,
-            null,
-        );
+        cat().warning(`could not read missions: ${errorMessage(error) || error}`, null);
         return null;
     }
 };

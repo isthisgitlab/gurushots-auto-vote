@@ -8,7 +8,8 @@ import { getSlotsRemaining } from './challengeState';
 import { runFillAttempt } from './pipeline';
 
 import type { Challenge } from '../../types/gurushots';
-import type { ErrorLike, FillDeps } from '../../types/autoFill';
+import type { FillDeps } from '../../types/autoFill';
+import { errorMessage } from '../../errorMessage';
 
 /**
  * Manual fill (GUI button). Submits one or all missing slots in a
@@ -98,7 +99,7 @@ const fillChallengeNow = async (
             success: false,
             submitted: 0,
             skipped: slotsRemaining,
-            error: (attempt.error as ErrorLike | null | undefined)?.message || 'Failed to fetch photos',
+            error: errorMessage(attempt.error) || 'Failed to fetch photos',
         };
     }
     if (attempt.status === 'no-pick') {
@@ -120,7 +121,7 @@ const fillChallengeNow = async (
             success: false,
             submitted: 0,
             skipped: slotsRemaining,
-            error: ((attempt as { error: unknown }).error as ErrorLike | null | undefined)?.message || 'Submit failed',
+            error: errorMessage((attempt as { error: unknown }).error) || 'Submit failed',
         };
     }
 

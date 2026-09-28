@@ -113,8 +113,3 @@ export type FillAttemptResult =
     | { status: 'submitted'; picked: string[] }
     | { status: 'submit-rejected'; reason: string }
     | { status: 'submit-threw'; error: unknown };
-
-/** What a caught value is read as: an Error, or anything else whose `message` reads undefined. */
-export interface ErrorLike {
-    message?: string;
-}
