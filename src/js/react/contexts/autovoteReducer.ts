@@ -90,6 +90,9 @@ export function autovoteReducer(state: AutovoteState, action: AutovoteAction): A
                 statusClass: 'badge-error',
             };
         default:
+            // Every action type has its case (checked here); one outside the
+            // union at runtime leaves the state as it is.
+            action satisfies never;
             return state;
     }
 }
