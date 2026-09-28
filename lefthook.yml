@@ -7,7 +7,7 @@ pre-commit:
     commands:
         no-javascript:
             glob: '*.{js,jsx,mjs,cjs}'
-            run: 'echo "JavaScript is not allowed, this codebase is TypeScript. Rename to .ts/.tsx/.mts/.cts: {staged_files}" >&2 && exit 1'
+            run: 'echo "JavaScript is not allowed, this codebase is TypeScript. Rename to .ts/.tsx/.mts/.cts:" {staged_files} >&2 && exit 1'
         oxlint:
             glob: '*.{ts,tsx,mts,cts}'
             run: pnpm exec oxlint --fix --no-error-on-unmatched-pattern {staged_files}

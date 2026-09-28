@@ -34,12 +34,15 @@ describe('source language', () => {
     // files both count, so a new file fails locally before it is ever staged.
     test('the repository contains no JavaScript files', () => {
         const { execFileSync } = jest.requireActual<typeof import('node:child_process')>('node:child_process');
+        const fs = jest.requireActual<typeof import('node:fs')>('node:fs');
         const path = jest.requireActual<typeof import('node:path')>('node:path');
+        const root = path.join(__dirname, '..');
         const files = execFileSync('git', ['ls-files', '--cached', '--others', '--exclude-standard'], {
-            cwd: path.join(__dirname, '..'),
+            cwd: root,
             encoding: 'utf8',
         }).split('\n');
-        expect(files.filter((f) => /\.[cm]?jsx?$/.test(f))).toEqual([]);
+        // The index still lists a file renamed on disk but not yet staged.
+        expect(files.filter((f) => /\.[cm]?jsx?$/.test(f) && fs.existsSync(path.join(root, f)))).toEqual([]);
     });
 });
 
