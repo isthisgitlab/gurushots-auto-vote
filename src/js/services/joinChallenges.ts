@@ -605,6 +605,13 @@ const decideCandidateJoin = (challenge: Challenge, pass: JoinPassState) => {
     // Join Early for Missions lifts the timing window while a mission wants
     // joins: these would join later anyway, the mission wants them now.
     const joinEarly = pass.earlyJoins > 0;
+    if (joinEarly) {
+        const closeTime = Number(challenge?.close_time);
+        if (!Number.isFinite(closeTime) || closeTime <= 0) {
+            return { join: false, needsCoins: 0, reason: 'close-time-unknown' };
+        }
+        if (closeTime <= pass.nowSec) return { join: false, needsCoins: 0, reason: 'already-closed' };
+    }
     return shouldJoinChallenge({
         challenge,
         bankroll: pass.bankroll,
@@ -746,7 +753,13 @@ const runJoinPass = async (
 
     const results: Array<{ id: string | number | undefined; status: string }> = [];
     let joined = 0;
-    for (const challenge of candidates) {
+    // A mission may need fewer joins than there are open challenges. Spend
+    // those joins on the ones ending soonest, so their turbos can be won first.
+    const orderedCandidates =
+        pass.earlyJoins > 0
+            ? [...candidates].sort((a, b) => (a?.close_time ?? Infinity) - (b?.close_time ?? Infinity))
+            : candidates;
+    for (const challenge of orderedCandidates) {
         if (cancellation.isCancelled()) {
             cat().warning('join pass cancelled by user', null);
             break;

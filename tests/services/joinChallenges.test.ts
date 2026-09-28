@@ -634,6 +634,73 @@ describe('runJoinPass — join window', () => {
             expect(earlyNotices()).toEqual(['joining up to 2 challenge(s) early for the active missions']);
         });
 
+        test('a turbo mission joins the earliest closing challenge before later ones', async () => {
+            withJoinEarly(true);
+            settings.getEffectiveSetting.mockImplementation((k) =>
+                k === 'autoJoinWithinHoursOfEnd' ? 1 : k === 'missionJoinEarly' ? true : DEFAULT_SETTINGS[k],
+            );
+            const deps = makeDeps({
+                getMemberChallenges: jest.fn(async () => [
+                    far(1),
+                    { ...far(2), title: 'Ends in two hours', close_time: NOW_SEC + 2 * HOUR },
+                ]),
+                getActiveChallenges: jest.fn(async () => ({ challenges: [] })),
+            });
+
+            const res = await runJoinPass('tok', NOW_MS, deps, { join: 0, fill: 0, turbo: 1 });
+
+            expect(res.results).toEqual([
+                { id: 2, status: 'joined' },
+                { id: 1, status: 'skipped:too-early' },
+            ]);
+            expect(deps.submitToChallenge).toHaveBeenCalledWith(2, ['imgA'], 'tok');
+        });
+
+        test('a turbo mission puts candidates without a close time after timed candidates', async () => {
+            withJoinEarly(true);
+            const deps = makeDeps({
+                getMemberChallenges: jest.fn(async () => [
+                    { ...far(1), close_time: undefined },
+                    { ...far(2), close_time: NOW_SEC + 2 * HOUR },
+                    { ...far(3), close_time: undefined },
+                ]),
+                getActiveChallenges: jest.fn(async () => ({ challenges: [] })),
+            });
+
+            const res = await runJoinPass('tok', NOW_MS, deps, { join: 0, fill: 0, turbo: 1 });
+
+            expect(res.results.map((result) => result.id)).toEqual([2, 1, 3]);
+            expect(deps.submitToChallenge).toHaveBeenCalledTimes(1);
+            expect(deps.submitToChallenge).toHaveBeenCalledWith(2, ['imgA'], 'tok');
+        });
+
+        test('a turbo mission skips expired and invalid close times before joining a live challenge', async () => {
+            withJoinEarly(true);
+            settings.getEffectiveSetting.mockImplementation((k) =>
+                k === 'autoJoinWithinHoursOfEnd' ? 1 : k === 'missionJoinEarly' ? true : DEFAULT_SETTINGS[k],
+            );
+            const deps = makeDeps({
+                getMemberChallenges: jest.fn(async () => [
+                    { ...far(1), close_time: NOW_SEC - 60 },
+                    { ...far(2), close_time: undefined },
+                    { ...far(3), close_time: 0 },
+                    { ...far(4), close_time: NOW_SEC + 2 * HOUR },
+                ]),
+                getActiveChallenges: jest.fn(async () => ({ challenges: [] })),
+            });
+
+            const res = await runJoinPass('tok', NOW_MS, deps, { join: 0, fill: 0, turbo: 1 });
+
+            expect(res.results).toEqual([
+                { id: 3, status: 'skipped:close-time-unknown' },
+                { id: 1, status: 'skipped:already-closed' },
+                { id: 4, status: 'joined' },
+                { id: 2, status: 'skipped:close-time-unknown' },
+            ]);
+            expect(deps.submitToChallenge).toHaveBeenCalledTimes(1);
+            expect(deps.submitToChallenge).toHaveBeenCalledWith(4, ['imgA'], 'tok');
+        });
+
         test('turbos waiting in joined challenges (free, playing, on the timer) cover the mission', async () => {
             withJoinEarly(true);
             const deps = farDeps(['FREE', 'IN_PROGRESS', 'TIMER']);
