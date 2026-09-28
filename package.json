@@ -353,7 +353,6 @@
         "collectCoverage": false,
         "collectCoverageFrom": [
             "src/js/**/*.{ts,tsx}",
-            "!src/js/types/**",
             "scripts/**/*.{ts,mts}"
         ],
         "coverageDirectory": "coverage",
