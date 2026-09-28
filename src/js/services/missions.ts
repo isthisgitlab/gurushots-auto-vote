@@ -20,9 +20,11 @@ import { errorMessage } from '../errorMessage';
 
 type MissionKind = 'join' | 'fill' | 'turbo';
 
-/** How many joins / fills / turbo wins the active missions still need.
+/** How many actions active missions still need, with each Turbo need paired to its deadline.
  */
-export type MissionNeeds = Record<MissionKind, number>;
+export type MissionNeeds = Record<MissionKind, number> & {
+    turboRequirements?: Array<{ remaining: number; expiresAtSec: number | null }>;
+};
 
 const MISSION_KEYWORDS: ReadonlyArray<[MissionKind, RegExp]> = [
     ['turbo', /\bturbo/i],
@@ -70,7 +72,7 @@ const remainingOf = (mission: Mission, nowSec: number): number => {
 };
 
 const logNeeds = (needs: MissionNeeds) => {
-    const active = (Object.keys(needs) as MissionKind[]).filter((kind) => needs[kind] > 0);
+    const active = (Object.keys(MISSION_SETTINGS) as MissionKind[]).filter((kind) => needs[kind] > 0);
     const summary = active.map((kind) => `${kind} ${needs[kind]} to go`).join(', ');
     if (summary === lastSummary) return;
     lastSummary = summary;
@@ -92,7 +94,15 @@ const readMissionNeeds = async (
     const needs: MissionNeeds = { join: 0, fill: 0, turbo: 0 };
     for (const mission of Array.isArray(missions) ? missions : []) {
         const kind = classifyMission(mission);
-        if (kind && enabled.includes(kind)) needs[kind] = Math.max(needs[kind], remainingOf(mission, nowSec));
+        if (!kind || !enabled.includes(kind)) continue;
+        const remaining = remainingOf(mission, nowSec);
+        needs[kind] = Math.max(needs[kind], remaining);
+        if (kind !== 'turbo' || remaining <= 0) continue;
+        const expires = Number(mission.expiration_timestamp);
+        (needs.turboRequirements ??= []).push({
+            remaining,
+            expiresAtSec: Number.isFinite(expires) && expires > nowSec ? expires : null,
+        });
     }
     logNeeds(needs);
     return needs;

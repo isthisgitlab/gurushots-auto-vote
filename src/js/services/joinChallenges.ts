@@ -572,25 +572,50 @@ const PENDING_TURBO_STATES = new Set(['FREE', 'IN_PROGRESS', 'TIMER']);
 
 /**
  * How many joins a "Win Turbo" mission still needs: its remaining wins minus
- * the turbos already waiting in joined challenges. A join adds one such turbo,
- * so the next cycle counts it and stops joining early for it. An unreadable
- * active list yields 0 — never join early blind.
+ * the turbos in joined challenges that can be won before the mission expires.
+ * A join with a timely turbo stops another early join on the next cycle.
+ * An unreadable active list yields 0 — never join early blind.
  */
-const turboJoinsNeeded = async (token: string, deps: JoinDeps, turboNeed: number): Promise<number> => {
+const turboJoinsNeeded = async (
+    token: string,
+    deps: JoinDeps,
+    missions: MissionNeeds | null,
+    nowSec: number,
+): Promise<number> => {
+    const turboNeed = missions?.turbo ?? 0;
     if (turboNeed <= 0 || !deps.getActiveChallenges) return 0;
     const { challenges, fetchFailed } = await deps.getActiveChallenges(token);
     if (fetchFailed) return 0;
-    const pending = challenges.filter((c) => PENDING_TURBO_STATES.has(c?.member?.turbo?.state ?? '')).length;
-    return Math.max(0, turboNeed - pending);
+    const requirements = missions?.turboRequirements ?? [{ remaining: turboNeed, expiresAtSec: null }];
+    let joinsNeeded = 0;
+    for (const { remaining, expiresAtSec: deadline } of requirements) {
+        const pending = challenges.filter((c) => {
+            const state = c?.member?.turbo?.state ?? '';
+            if (!PENDING_TURBO_STATES.has(state)) return false;
+            if (deadline === null) return true;
+            const closes = Number(c?.close_time);
+            if (!Number.isFinite(closes) || closes <= nowSec) return false;
+            if (state !== 'TIMER') return true;
+            const opens = Number(c?.member?.turbo?.time_to_open);
+            return Number.isFinite(opens) && opens > 0 && opens < deadline && opens < closes;
+        }).length;
+        joinsNeeded = Math.max(joinsNeeded, remaining - pending);
+    }
+    return joinsNeeded;
 };
 
 /**
  * Joins still to make without the timing window (Join Early for Missions): as
  * many as a join mission needs, or as a turbo mission is short of turbos.
  */
-const earlyJoinsFor = async (token: string, deps: JoinDeps, missions: MissionNeeds | null): Promise<number> => {
+const earlyJoinsFor = async (
+    token: string,
+    deps: JoinDeps,
+    missions: MissionNeeds | null,
+    nowSec: number,
+): Promise<number> => {
     if (settings.getEffectiveSetting('missionJoinEarly', null) !== true) return 0;
-    return Math.max(missions?.join ?? 0, await turboJoinsNeeded(token, deps, missions?.turbo ?? 0));
+    return Math.max(missions?.join ?? 0, await turboJoinsNeeded(token, deps, missions, nowSec));
 };
 
 /**
@@ -738,13 +763,14 @@ const runJoinPass = async (
     }
 
     const bankroll = await readPassBankroll(token, deps);
+    const nowSec = toPassNowSec(now);
     const pass: JoinPassState = {
         bankroll,
         remainingBudget: Number(settings.getEffectiveSetting('autoJoinCycleCoinBudget', null)) || 0,
-        nowSec: toPassNowSec(now),
+        nowSec,
         // One diagnostic per pass, not per candidate (see warnMissingCloseTime).
         missingCloseTimeLogged: false,
-        earlyJoins: await earlyJoinsFor(token, deps, missions),
+        earlyJoins: await earlyJoinsFor(token, deps, missions, nowSec),
     };
     // Explain up front why joins may land outside the configured timing.
     if (pass.earlyJoins > 0) {

@@ -708,6 +708,131 @@ describe('runJoinPass — join window', () => {
             expect(statuses(res)).toEqual(['skipped:too-early', 'skipped:too-early', 'skipped:too-early']);
         });
 
+        test('a turbo whose timer opens after the mission expires does not suppress a timely join', async () => {
+            withJoinEarly(true);
+            settings.getEffectiveSetting.mockImplementation((k) =>
+                k === 'autoJoinWithinHoursOfEnd' ? 1 : k === 'missionJoinEarly' ? true : DEFAULT_SETTINGS[k],
+            );
+            const deps = makeDeps({
+                getMemberChallenges: jest.fn(async () => [far(1), { ...far(2), close_time: NOW_SEC + 2 * HOUR }]),
+                getActiveChallenges: jest.fn(async () => ({
+                    challenges: [
+                        {
+                            id: 100,
+                            close_time: NOW_SEC + 48 * HOUR,
+                            member: { turbo: { state: 'TIMER', time_to_open: NOW_SEC + 24 * HOUR } },
+                        },
+                    ],
+                })),
+            });
+
+            const res = await runJoinPass('tok', NOW_MS, deps, {
+                join: 0,
+                fill: 0,
+                turbo: 1,
+                turboRequirements: [{ remaining: 1, expiresAtSec: NOW_SEC + 3 * HOUR }],
+            });
+
+            expect(res.results).toEqual([
+                { id: 2, status: 'joined' },
+                { id: 1, status: 'skipped:too-early' },
+            ]);
+            expect(deps.submitToChallenge).toHaveBeenCalledWith(2, ['imgA'], 'tok');
+        });
+
+        test('only turbos winnable before the mission deadline cover its remaining win', async () => {
+            withJoinEarly(true);
+            const deadline = NOW_SEC + 3 * HOUR;
+            const cases = [
+                { name: 'free now', turbo: { state: 'FREE' }, close: NOW_SEC + 48 * HOUR, joins: 0 },
+                { name: 'playing now', turbo: { state: 'IN_PROGRESS' }, close: NOW_SEC + 48 * HOUR, joins: 0 },
+                {
+                    name: 'timer opens in time',
+                    turbo: { state: 'TIMER', time_to_open: NOW_SEC + HOUR },
+                    close: NOW_SEC + 48 * HOUR,
+                    joins: 0,
+                },
+                {
+                    name: 'timer opens at deadline',
+                    turbo: { state: 'TIMER', time_to_open: deadline },
+                    close: NOW_SEC + 48 * HOUR,
+                    joins: 1,
+                },
+                {
+                    name: 'timer opens after close',
+                    turbo: { state: 'TIMER', time_to_open: NOW_SEC + HOUR },
+                    close: NOW_SEC + 30 * 60,
+                    joins: 1,
+                },
+                { name: 'timer has no open time', turbo: { state: 'TIMER' }, close: NOW_SEC + 48 * HOUR, joins: 1 },
+                {
+                    name: 'timer has invalid open time',
+                    turbo: { state: 'TIMER', time_to_open: 0 },
+                    close: NOW_SEC + 48 * HOUR,
+                    joins: 1,
+                },
+                { name: 'challenge already closed', turbo: { state: 'FREE' }, close: NOW_SEC - 1, joins: 1 },
+                { name: 'challenge close time missing', turbo: { state: 'FREE' }, close: undefined, joins: 1 },
+            ];
+            for (const { name, turbo, close, joins } of cases) {
+                const deps = makeDeps({
+                    getMemberChallenges: jest.fn(async () => [far(1)]),
+                    getActiveChallenges: jest.fn(async () => ({
+                        challenges: [{ id: 100, close_time: close, member: { turbo } }],
+                    })),
+                });
+                const res = await runJoinPass('tok', NOW_MS, deps, {
+                    join: 0,
+                    fill: 0,
+                    turbo: 1,
+                    turboRequirements: [{ remaining: 1, expiresAtSec: deadline }],
+                });
+                expect({ name, joined: res.joined }).toEqual({ name, joined: joins });
+            }
+        });
+
+        test('multiple turbo missions use each deadline with its own remaining wins', async () => {
+            withJoinEarly(true);
+            settings.getEffectiveSetting.mockImplementation((k) =>
+                k === 'autoJoinWithinHoursOfEnd' ? 1 : k === 'missionJoinEarly' ? true : DEFAULT_SETTINGS[k],
+            );
+            const deps = makeDeps({
+                getMemberChallenges: jest.fn(async () => [
+                    far(1),
+                    { ...far(2), close_time: NOW_SEC + 2 * HOUR },
+                    far(3),
+                    far(4),
+                    far(5),
+                ]),
+                getActiveChallenges: jest.fn(async () => ({
+                    challenges: [1, 2, 3, 4].map((id) => ({
+                        id: 100 + id,
+                        close_time: NOW_SEC + 48 * HOUR,
+                        member: { turbo: { state: 'TIMER', time_to_open: NOW_SEC + 3 * HOUR } },
+                    })),
+                })),
+            });
+
+            const res = await runJoinPass('tok', NOW_MS, deps, {
+                join: 0,
+                fill: 0,
+                turbo: 4,
+                turboRequirements: [
+                    { remaining: 1, expiresAtSec: NOW_SEC + 2 * HOUR },
+                    { remaining: 4, expiresAtSec: NOW_SEC + 24 * HOUR },
+                ],
+            });
+
+            expect(res.results).toEqual([
+                { id: 2, status: 'joined' },
+                { id: 1, status: 'skipped:too-early' },
+                { id: 3, status: 'skipped:too-early' },
+                { id: 4, status: 'skipped:too-early' },
+                { id: 5, status: 'skipped:too-early' },
+            ]);
+            expect(deps.submitToChallenge).toHaveBeenCalledTimes(1);
+        });
+
         test('a challenge joined for a turbo mission stops the next cycle joining another for it', async () => {
             withJoinEarly(true);
             const missions = { join: 0, fill: 0, turbo: 1 };

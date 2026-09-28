@@ -84,7 +84,12 @@ describe('loadMissionNeeds', () => {
             mission('Win Turbo 4 times', 0, 4),
             mission('Play 6 Duels', 0, 6),
         ]);
-        await expect(loadMissionNeeds('tok', NOW_MS, d)).resolves.toEqual({ join: 5, fill: 2, turbo: 4 });
+        await expect(loadMissionNeeds('tok', NOW_MS, d)).resolves.toEqual({
+            join: 5,
+            fill: 2,
+            turbo: 4,
+            turboRequirements: [{ remaining: 4, expiresAtSec: NOW_SEC + 3600 }],
+        });
         expect(d.getMyMissions).toHaveBeenCalledWith('tok');
     });
 
@@ -112,6 +117,30 @@ describe('loadMissionNeeds', () => {
             ]),
         );
         expect(needs!.turbo).toBe(3);
+        expect(needs!.turboRequirements).toEqual([
+            { remaining: 1, expiresAtSec: null },
+            { remaining: 3, expiresAtSec: NOW_SEC + 3600 },
+        ]);
+    });
+
+    test('keeps each Turbo mission need paired with its deadline', async () => {
+        const needs = await loadMissionNeeds(
+            'tok',
+            NOW_MS,
+            deps([
+                mission('Win Turbo 4 times', 0, 4, { expiration_timestamp: NOW_SEC + 4 * 3600 }),
+                mission('Win Turbo 2 times', 0, 2, { expiration_timestamp: NOW_SEC + 2 * 3600 }),
+            ]),
+        );
+        expect(needs).toEqual({
+            join: 0,
+            fill: 0,
+            turbo: 4,
+            turboRequirements: [
+                { remaining: 4, expiresAtSec: NOW_SEC + 4 * 3600 },
+                { remaining: 2, expiresAtSec: NOW_SEC + 2 * 3600 },
+            ],
+        });
     });
 
     test('only kinds whose setting is on are followed', async () => {
@@ -121,7 +150,12 @@ describe('loadMissionNeeds', () => {
             NOW_MS,
             deps([mission('Join 7 challenges', 2, 7), mission('Win Turbo 4 times', 0, 4)]),
         );
-        expect(needs).toEqual({ join: 0, fill: 0, turbo: 4 });
+        expect(needs).toEqual({
+            join: 0,
+            fill: 0,
+            turbo: 4,
+            turboRequirements: [{ remaining: 4, expiresAtSec: NOW_SEC + 3600 }],
+        });
     });
 
     test('Join Early alone follows turbo missions too — joining brings turbos to win', async () => {
@@ -131,7 +165,12 @@ describe('loadMissionNeeds', () => {
             NOW_MS,
             deps([mission('Use Fill 3 times', 0, 3), mission('Win Turbo 4 times', 1, 4)]),
         );
-        expect(needs).toEqual({ join: 0, fill: 0, turbo: 3 });
+        expect(needs).toEqual({
+            join: 0,
+            fill: 0,
+            turbo: 3,
+            turboRequirements: [{ remaining: 3, expiresAtSec: NOW_SEC + 3600 }],
+        });
     });
 
     test('does not read missions when every setting is off or there is no token', async () => {
