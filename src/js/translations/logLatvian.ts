@@ -28,7 +28,7 @@ export const logMessages = {
     m0d57f523b49c: 'Atjaunināšanas kļūda:',
     m0db2d1b051d5: 'Izlaišanai atzīmētā versija:',
     m0dceb51716aa: 'Atjaunināti {0} metadati: sākotnējā redzamība {1} %',
-    m0fc649a6905e: 'emergencyFill: pirms termiņa iesniegti {0} ieraksti ({1}) izaicinājumā {2}',
+    m0fc649a6905e: 'Ārkārtas aizpildīšana: pirms termiņa iesniegto ierakstu skaits: {0}, izaicinājums {2}',
     m109401cd242b: 'Lūdzu, norādi izaicinājumu',
     m111666f74c7e:
         'Par {0} tika iekasētas monētas, bet pievienošanās netika pabeigta. Palaid "join {1} --yes" vēlreiz, lai atkārtotu iesniegšanu — monētas netiks iekasētas atkārtoti.',
@@ -46,7 +46,7 @@ export const logMessages = {
     m13f2ed884ed0: 'Neizdevās atsaukt fotoattēla maiņu: {0}',
     m14159dd9d097: '{0}:',
     m1447397c8c02:
-        'fillNew: atkārtotā pārbaude rāda, ka {0} nav brīvu vietu — ārpus šīs palaišanas ir pievienots ieraksts (piemēram, manuāli); jauns fotoattēls netiks iesniegts',
+        'Jauna ieraksta aizpildīšana: atkārtotā pārbaude rāda, ka {0} nav brīvu vietu — ārpus šīs palaišanas ir pievienots ieraksts (piemēram, manuāli); jauns fotoattēls netiks iesniegts',
     m144aa075cf14: '🔄 Ģenerētas jaunas nejaušas API galvenes',
     m1450fc789985: 'Lieto pastiprinājumu attēlam {0} izaicinājumā {1}',
     m155b621149a9: 'Kļūda {0} cikla laikā {1}',
@@ -77,7 +77,7 @@ export const logMessages = {
     m1e2a1cb0aa1e: '🔄 Mainīti iestatījumi, kam nepieciešama pārlāde; pārlādē galveno logu...',
     m1f609b07986f: '\nLai mainītu režīmu, palaid: login',
     m1f91f6908c64:
-        'manualFill: funkcijai fillChallengeNow nav nodots iestatījumu modulis izaicinājumam {0}; tagu noteikumi netiks lietoti',
+        'Manuālā aizpildīšana: funkcijai fillChallengeNow nav nodots iestatījumu modulis izaicinājumam {0}; tagu noteikumi netiks lietoti',
     m1fda900da68a:
         'Neizdevās sasniegt GuruShots, lai pievienotos {0}. Pārbaudiet savu savienojumu un mēģiniet vēlreiz.',
     m1fecc1f1c369: 'Kļūda, nolasot automātiskās atlīdzību saņemšanas statusu:',
@@ -93,7 +93,7 @@ export const logMessages = {
     m2378437f82da: 'Izmanto --challenge <id>, lai mainītu to tikai vienam izaicinājumam',
     m23f42fc399da: 'Kļūda, apstrādājot run-voting-cycle-for-challenge pieprasījumu:',
     m242ed6b08a3d: 'Lejupielādes progress: {0}%',
-    m2432f84c64ff: 'manualFill: iesniegti {0} ieraksti izaicinājumā {1}',
+    m2432f84c64ff: 'Manuālā aizpildīšana: iesniegti {0} ieraksti izaicinājumā {1}',
     m2444c60b5de3: '🔄 Atjauno API iestatījumu maiņas dēļ',
     m248f0056ca94: 'Pēdējā brīža pārbaudes biežums: {0}min',
     m2497a09109d4: 'Testa režīms: {0}',
@@ -117,7 +117,7 @@ export const logMessages = {
     m2ca46059d540: 'Neizdevās atiestatīt {0} izaicinājumam {1}; pārējie iestatījumi varētu būt pretrunā',
     m2d5f722bdf90: 'Izaicinājumā "{1}" nav reģistrēta attēla {0} maiņa atpakaļ.',
     m2dabfcf67a95: 'CLI manuālais balsošanas process',
-    m2dae83def588: 'autoFill: izaicinājumā {0} iesniegts 1 ieraksts ({1} brīvas vietas atlikušas{2})',
+    m2dae83def588: 'Automātiskā aizpildīšana: izaicinājumā {0} iesniegts 1 ieraksts ({1} brīvas vietas atlikušas{2})',
     m2ded65cc4a06: 'Izmanto kešatmiņā saglabātos balsošanas attēlus izaicinājumam {0}',
     m2e27dc229363: 'Manuālā balsošana: nobalsots par {0}, izlaisti {1} no {2}',
     m2eb572c92569: 'Noraidīts IPC "{0}" pieprasījums no neuzticama loga ietvara {1}',
@@ -241,7 +241,7 @@ export const logMessages = {
     m6136b8463c03: 'Neizdevās ielādēt valodu no iestatījumiem:',
     m61c1106461e1: '=== GuruShots Auto Voter — statuss ===',
     m61dd2070422e: '"{0}" ir balsošanas iestatījums — to lieto kā globālo noklusējuma vērtību',
-    m622afeb7b8bc: 'Izaicinājums atrasts: {0}',
+    m622afeb7b8bc: '🎯 Izaicinājums atrasts: {0}',
     m63139dd976ce: '🎯 Palaišana attiecas tikai uz izaicinājumu {0} ({1})',
     m634c2d6dad82: 'Nav profila ar nosaukumu "{0}"',
     m635fdd776db5: 'Izaicinājums {0} nav atrasts aktīvo izaicinājumu sarakstā',
@@ -402,7 +402,7 @@ export const logMessages = {
     m9c096cf8314f: 'scheduledFillTime {0} pielāgots pašreizējiem ierobežojumiem: {1}',
     m9c120fa00e9e: '📸 Saņemti balsošanas attēli: {0}',
     m9c4743591d36: '{0} Pastiprinājums vēl nav gatavs — līdz termiņam {1} (slieksnis: {2} min)',
-    m9c6154758087: 'manualFill: {0} izaicinājumam {1}',
+    m9c6154758087: 'Manuālā aizpildīšana: {0} izaicinājumam {1}',
     m9c6b1e4a337c: '⏭️ {0} Izlaiž — {1}',
     m9c85ca49d3aa:
         'Neizdevās lietot profilu "{0}" — tāda profila nav vai kāda vērtība neizturēja pārbaudi (skatīt iestatījumu žurnālu)',
@@ -481,7 +481,7 @@ export const logMessages = {
     mb7875ee58b05: '{0} autoFill: ieraksts iesniegts (pieejams vēlākām darbībām šajā ciklā)',
     mb7a169226f47: 'Funkcijai applyChallengeProfile nepieciešams izaicinājuma ID',
     mb859a88491a1:
-        'autoFill: grafikā paredzēti ne vairāk kā {0} ieraksti, bet {1} pieļauj {2} — atlikušās vietas atstātas ārkārtas aizpildīšanai',
+        'Automātiskā aizpildīšana: grafikā paredzēti ne vairāk kā {0} ieraksti, bet {1} pieļauj {2} — atlikušās vietas atstātas ārkārtas aizpildīšanai',
     mb8994dacf04e: 'Neizdevās pievienoties izaicinājumam {0}. Monētas netika iekasētas.',
     mb8a998e304ee: '📋 Atrasti {0} aktīvi izaicinājumi',
     mb8ff0ba416b3: 'Pastiprinājums jau izmantots',
@@ -548,7 +548,7 @@ export const logMessages = {
     md3ca853b0731: 'Kļūda, tīrot iestatījumus:',
     md3dd1adf13a3:
         '{0}: burtu izaicinājums "{1}" attiecībā uz {2}; ielādē visu bibliotēku, lai klienta pusē filtrētu pēc tagiem',
-    md3e3363fc7aa: 'fillNew: ieraksts {0} iesniegts izaicinājumam {1}',
+    md3e3363fc7aa: 'Jauna ieraksta aizpildīšana: ieraksts {0} iesniegts izaicinājumam {1}',
     md3ecc51d18dd: 'Kļūda saglabājot iestatījumus:',
     md40e1203cec9: '✅ Pievienojies izaicinājumam {0}.',
     md4271709ebbe: 'CLI modulis ielādēts, sāk inicializāciju',
@@ -630,7 +630,7 @@ export const logMessages = {
     mf192e5ea48a2:
         '\nGuruShots Auto Voter — komandrinda {0}\n\nLietošana: <command>\n\nKomandas:\n  login    - Piesakās GuruShots un saglabā pieteikšanās tokenu\n  logout   - Notīra saglabāto pieteikšanās tokenu\n  vote     - Veic vienu manuālas balsošanas ciklu (balso līdz 100 % neatkarīgi\n             no iestatījumiem). Pievieno --challenge=<id>, lai balsotu tikai\n             vienā izaicinājumā.\n  run      - Veic pilnu automātiskās stratēģijas ciklu (Boost, Turbo,\n             automātiska iesniegšana, balsošana pēc sliekšņiem).\n             Pievieno --challenge=<id> tikai vienam izaicinājumam.\n  boost    - Izmanto Boost izaicinājumā: boost --challenge=<id> [--image=<id>]\n  turbo    - Spēlē Turbo minispēli: turbo --challenge=<id>\n  submit   - Iesniedz fotoattēlus tukšajās vietās:\n             submit --challenge=<id> [--all]\n  unlock-boost  - Iztērē atslēgu, lai atbloķētu Boost (vēl neizmanto to):\n             unlock-boost --challenge=<id> [--yes]\n  swap     - Iztērē maiņu, lai aizstātu iesniegtu fotoattēlu:\n             swap --challenge=<id> --image=<id> [--to=<id> --yes]\n  swap-back - Atgriež fotoattēlu, kas tika nomainīts, kamēr tam bija Boost vai\n             Turbo; tas atgūst savu Boost vai Turbo:\n             swap-back --challenge=<id> --image=<current id> [--yes]\n  fill-exposure - Iztērē aizpildīšanu, lai palielinātu redzamību līdz 100 %:\n             fill-exposure --challenge=<id> [--yes]\n             Darbības ar valūtu bez --yes neko netērē; vispirms tās parāda cenu.\n  start    - Sāk nepārtrauktu balsošanu pēc grafika (līdz aptur ar Ctrl+C)\n  status   - Parāda pašreizējo stāvokli un iestatījumus\n  bankroll - Parāda atslēgu, maiņu, aizpildīšanu un monētu atlikumu.\n             Alternatīva komanda: coins\n  discover - Parāda atvērtos izaicinājumus, kuros vēl neesi piedalījies\n  join <id> [--yes] - Pievienojas atvērtam izaicinājumam. Bez maksas pievienojas\n             uzreiz; maksas pievienošanās parāda monētu cenu un pirms\n             tērēšanas prasa --yes.\n  check-updates - Pārbauda, vai GitHub ir jaunāka versija\n  get-setting <key> [--challenge=<id>] - Parāda iestatījuma vērtību;\n             ar --challenge parāda izaicinājumam spēkā esošo vērtību\n  set-setting <key> <value> [--challenge=<id>] - Maina iestatījumu;\n             ar --challenge maina individuālo vērtību\n  set-global-default <key> <value> - Maina globālo noklusējuma vērtību,\n             pārbaudot ievadīto vērtību\n  list-settings [--challenge=<id>] - Parāda visus iestatījumus;\n             ar --challenge parāda viena izaicinājuma vērtības\n  reset-setting <key> [--challenge=<id>] - Atjauno noklusējuma vērtību;\n             ar --challenge notīra individuālo vērtību\n  reset-all-settings - Atjauno visu iestatījumu noklusējuma vērtības\n  list-profiles - Parāda saglabātos izaicinājumu iestatījumu profilus\n  save-profile "<name>" --challenge=<id> - Saglabā izaicinājuma individuālās\n             vērtības nosauktā profilā\n  apply-profile "<name>" --challenge=<id> - Aizstāj izaicinājuma individuālās\n             vērtības ar profila vērtībām\n  delete-profile "<name>" - Dzēš saglabātu profilu\n  list-scenarios - Parāda saglabātos scenārijus un paraugu veidnes\n  scenario-template <id> [file] - Parāda vai ieraksta scenārija paraugu\n  import-scenario <file> [--overwrite] [--yes] - Pārbauda scenārija failu un\n             parāda tā darbību; --yes importē to\n  export-scenario "<name>" [file] - Parāda vai ieraksta scenāriju JSON formātā\n  rename-scenario "<old>" "<new>" - Pārdēvē scenāriju un tā piesaistes\n  delete-scenario "<name>" - Dzēš scenāriju un tā piesaistes\n  scenario-status --challenge=<id> - Parāda izaicinājuma posmu scenārijā\n  scenario-dry-run --challenge=<id> - Parāda, ko scenārijs darītu tagad,\n             neko netērējot\n  scenario-simulate --challenge=<id> - Simulē iespējamo notikumu gaitu līdz\n             izaicinājuma beigām, neko netērējot\n  scenario-reset --challenge=<id> - Aizmirst izaicinājuma scenārija progresu;\n             plāns sākas no jauna\n  scenario-vocabulary - Parāda scenārijā izmantojamos nosacījumus,\n             atlasītājus un darbības\n             Piesaisti scenāriju ar: set-setting scenario "<name>" --challenge=<id>\n             vai izaicinājuma noteikumu\n  help-settings - Parāda detalizētu iestatījumu palīdzību, arī par profiliem\n  logs [--error|--api|--settings|--lexicon] [--lines=<n>] - Parāda žurnālus vai\n             lokālās leksikas pārskatu\n  reset-windows - Atjauno logu noklusējuma pozīcijas\n  help     - Parāda šo palīdzību\n\nPiemēri:\n  login\n  vote\n  vote --challenge=12345\n  run\n  run --challenge=12345\n  boost --challenge=12345\n  turbo --challenge=12345\n  submit --challenge=12345 --all\n  unlock-boost --challenge=12345 --yes\n  swap --challenge=12345 --image=abc123\n  fill-exposure --challenge=12345 --yes\n  bankroll\n  discover\n  join 12345\n  join 12345 --yes\n  check-updates\n  set-setting exposure 80 --challenge=12345\n  list-settings --challenge=12345\n  logs --error --lines=50\n  start\n  logout\n  reset-windows\n\nPiezīme: pirms balsošanas, Boost, Turbo vai iesniegšanas ir jāpiesakās.\n         Komanda "start" darbojas nepārtraukti līdz apturēšanai ar Ctrl+C.\n         Balsošanas intervāls pielāgojas aktīvajiem izaicinājumiem.\n         Lai skatītu diapazonu, izmanto "get-setting checkFrequencyMin" un\n         "get-setting checkFrequencyMax". Lai to iestatītu, izmanto\n         "set-setting checkFrequencyMin 2" un\n         "set-setting checkFrequencyMax 5".\n         Pašreizējais režīms: {1}\n',
     mf1b3d05d74d7:
-        '{0}: {1} fotoattēli vienlīdz labi atbilst izaicinājuma {2} tēmai, tāpēc {3} izvēlēti pēc iepriekšējiem rezultātiem — {4}{5}.',
+        '{0}: {1} fotoattēli vienlīdz labi atbilst izaicinājuma {2} tēmai. Pēc iepriekšējiem rezultātiem atlasīto ierakstu skaits: {3} — {4}{5}.',
     mf1e4b9cf14d7:
         'Nav iestatījumu faila vērotāja (logs tika izveidots, kad faila vēl nebija) — enerģijas pārvaldība pēc automātiskās balsošanas sākšanas vai apturēšanas atjaunosies tikai pēc lietotnes pārstartēšanas',
     mf2357c47496a: '{0} izaicinājumam {1} ir {2} min, vairāk par maksimālajām {3} min — samazina līdz robežai',
@@ -655,14 +655,14 @@ export const logMessages = {
     mf7a0649dc927: 'Neizdevās ielādēt jaunus iestatījumus salīdzināšanai:',
     mf81316b0770e: '           join <id> --yes    (maksas izaicinājumi — tērē monētas)',
     mf8914347572e:
-        '{0}: izaicinājumā {1} nekas neatbilda tēmai, tāpēc {2} izvēlēti pēc iepriekšējiem rezultātiem — {3} no {4} vienlīdz neatbilstošiem kandidātiem{5}. Iestatījumos pievieno tagu noteikumu šim izaicinājuma virsrakstam, lai norādītu piemērotos fotoattēlus.',
+        '{0}: izaicinājumā {1} nekas neatbilda tēmai. Pēc iepriekšējiem rezultātiem atlasīto ierakstu skaits: {2} — {3} no {4} vienlīdz neatbilstošiem kandidātiem{5}. Iestatījumos pievieno tagu noteikumu šim izaicinājuma virsrakstam, lai norādītu piemērotos fotoattēlus.',
     mf8c3523b4364: '❌ Manuālai balsošanai nav atrasts pieteikšanās tokens',
     mf8cf09af259e: 'Otrās instances palaišana bloķēta — fokusējot esošo logu.',
     mf933d286914f: 'Maiņa izaicinājumā "{0}": {1} → {2}',
     mfa889dafc121:
-        'autoFill: atkārtotā pārbaude rāda, ka {0} jau ir {1} ieraksti (mērķis {2}) — ārpus šīs palaišanas ir pievienots ieraksts (piemēram, manuāli); papildu darbības neveic',
+        'Automātiskā aizpildīšana: atkārtotā pārbaude rāda, ka {0} jau ir {1} ieraksti (mērķis {2}) — ārpus šīs palaišanas ir pievienots ieraksts (piemēram, manuāli); papildu darbības neveic',
     mfaa99a6ba891:
-        'emergencyFill: atkārtotā pārbaude rāda, ka {0} nav brīvu vietu — ārpus šīs palaišanas ir pievienots ieraksts (piemēram, manuāli); papildu darbības neveic',
+        'Ārkārtas aizpildīšana: atkārtotā pārbaude rāda, ka {0} nav brīvu vietu — ārpus šīs palaišanas ir pievienots ieraksts (piemēram, manuāli); papildu darbības neveic',
     mfae5f91acb23: 'Testa atlīdzību saņemšanas solī radās kļūda: {0}',
     mfb62fe2ae6b2: '{0}: {1}',
     mfc0b414e188a: '✅ Manuālās balsis veiksmīgi iesniegtas',

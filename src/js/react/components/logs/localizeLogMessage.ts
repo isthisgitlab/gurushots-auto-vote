@@ -3,9 +3,32 @@ import { logMessages as latvianLogMessages } from '../../../translations/logLatv
 
 const placeholders = /\{(\d+)\}/g;
 const escapeRegex = (text: string) => text.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+const logLabels: Record<string, string> = {
+    Fill: 'Aizpildīšana',
+    autoFill: 'Automātiskā aizpildīšana',
+    join: 'Pievienošanās',
+};
+
+function localizeValue(value: string, isLabel: boolean): string {
+    if (isLabel) return logLabels[value] ?? value;
+    if (value === 'the entry was') return '1';
+    const entries = /^(\d+) entries were$/.exec(value);
+    if (entries) return entries[1];
+    return value
+        .replace(/\[Challenge ([^:\]]+): ([^\]]+)\]/g, '[Izaicinājums $1: $2]')
+        .replace(/\((\d+) votes, (\d+) achievements, (\d+) views\)/g, '(balsis: $1, sasniegumi: $2, skatījumi: $3)')
+        .replace(
+            /past performance not looked up yet — ranked below any photo that was/g,
+            'iepriekšējie rezultāti vēl nav pārbaudīti — sarindots aiz pārbaudītajiem fotoattēliem',
+        )
+        .replace(
+            /; past-performance figures have been looked up for (\d+) of (\d+) of them so far, and the rest are looked up a batch per fill/g,
+            '; iepriekšējie rezultāti pašlaik pārbaudīti $1 no $2 fotoattēliem; pārējos pārbauda pakāpeniski katrā aizpildīšanā',
+        );
+}
 
 const exact = new Map<string, string>();
-const patterns: { key: string; prefix: string; length: number; positions: number[]; regex: RegExp }[] = [];
+const patterns: { key: string; prefix: string; length: number; positions: number[]; label: boolean; regex: RegExp }[] = [];
 
 for (const [key, source] of Object.entries(englishLogMessages)) {
     const template = source.replace(/[\r\n\v\f\u0085\u2028\u2029]+/g, ' ');
@@ -29,6 +52,7 @@ for (const [key, source] of Object.entries(englishLogMessages)) {
         prefix,
         length: template.replace(placeholders, '').length,
         positions: slots.map((slot) => Number(slot[1])),
+        label: template.startsWith('{0}:'),
         regex: new RegExp(expression, 's'),
     });
 }
@@ -43,7 +67,12 @@ function translateBody(message: string): string | null {
         if (!message.startsWith(pattern.prefix)) continue;
         const match = pattern.regex.exec(message);
         if (!match) continue;
-        const values = new Map(pattern.positions.map((position, index) => [position, match[index + 1]]));
+        const values = new Map(
+            pattern.positions.map((position, index) => [
+                position,
+                localizeValue(match[index + 1], pattern.label && position === 0),
+            ]),
+        );
         return latvianLogMessages[pattern.key as keyof typeof latvianLogMessages].replace(
             placeholders,
             // Catalog parity tests ensure each translated slot exists in the matched source.
@@ -54,14 +83,15 @@ function translateBody(message: string): string | null {
 }
 
 export function localizeLogMessage(message: string): string {
-    const translated = translateBody(message);
-    if (translated !== null) return translated;
+    if (exact.has(message)) return translateBody(message)!;
 
     for (const icon of ['🔍 ', 'ℹ️ ', '⚠️ ', '❌ ', '✅ ']) {
         if (!message.startsWith(icon)) continue;
         const body = translateBody(message.slice(icon.length));
         if (body !== null) return icon + body;
     }
+    const translated = translateBody(message);
+    if (translated !== null) return translated;
     if (message.startsWith('🔄 ') && message.endsWith('...')) {
         const body = translateBody(message.slice(3, -3));
         if (body !== null) return `🔄 ${body}...`;
