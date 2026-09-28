@@ -41,8 +41,23 @@ describe('LogEntry', () => {
                 entry={{ timestamp: 'T1', level: 'ERROR', context: 'MAIN', category: 'voting', message: 'boom' }}
             />,
         );
-        expect(container.textContent).toBe('[T1] [ERROR] [MAIN] [voting] boom');
+        expect(container.textContent).toBe('[T1] [ERROR] [MAIN] [voting] Boom');
         expect(screen.getByText('[ERROR]', { exact: false }).className).toBe('text-red-400');
+    });
+
+    test('sentence-cases a previously saved English log line', () => {
+        const { container } = render(
+            <LogEntry
+                entry={{
+                    timestamp: 'T1',
+                    level: 'INFO',
+                    context: 'GUI',
+                    category: 'join',
+                    message: 'ℹ️ joining up to 4 challenge(s) early for the active missions',
+                }}
+            />,
+        );
+        expect(container.textContent).toContain('ℹ️ Joining up to 4 challenge(s) early for the active missions');
     });
 
     test('falls back for an unknown level, missing context/category and an empty message', () => {

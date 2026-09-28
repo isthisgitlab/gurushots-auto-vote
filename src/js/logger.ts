@@ -2,7 +2,7 @@ import * as fs from 'node:fs';
 import * as path from 'node:path';
 import * as runtime from './runtime';
 import { formatTimeHMS } from './dateFormat';
-import { oneLine } from './format/logSafe';
+import { oneLine, sentenceCaseLogMessage } from './format/logSafe';
 import { errorMessage } from './errorMessage';
 
 export type LogLevel = 'DEBUG' | 'INFO' | 'WARN' | 'ERROR';
@@ -235,7 +235,7 @@ const LEVEL_ICONS: Record<LogLevel, string> = {
     ERROR: '❌',
 };
 
-// Messages left as-is: already icon-led, blank, or CLI layout lines — indented
+// Messages left without an added icon: already icon-led, blank, or CLI layout lines — indented
 // detail rows and `===` / `---` banners, where an icon would break alignment.
 const NO_ICON_RE = /^(?:$|\s|[=-]|\p{Extended_Pictographic})/u;
 
@@ -385,7 +385,7 @@ const writeLog = (
         // message) must not be able to forge a fake log line in the plain-text
         // log file. Messages are single-line by convention; structured detail
         // goes in `data`, which is serialised separately below.
-        if (typeof message === 'string') message = withIcon(oneLine(message), icon);
+        if (typeof message === 'string') message = sentenceCaseLogMessage(withIcon(oneLine(message), icon));
         let sanitized = data ? sanitizeForLog(data) : null;
         // A bare-string (or number) `data` value is written to the log file
         // verbatim (the non-object branch below), and rendered in the GUI, so it

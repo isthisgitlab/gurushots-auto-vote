@@ -27,8 +27,8 @@ describe('LogViewerBody', () => {
             <LogViewerBody entries={[entry('first line'), entry('second line')]} heightClass="h-[60vh]" />,
         );
         expect(container.querySelectorAll('.log-entry')).toHaveLength(2);
-        expect(screen.getByText('first line')).toBeTruthy();
-        expect(screen.getByText('second line')).toBeTruthy();
+        expect(screen.getByText('First line')).toBeTruthy();
+        expect(screen.getByText('Second line')).toBeTruthy();
     });
 
     test('applies the host height class on the shared scroll container', () => {

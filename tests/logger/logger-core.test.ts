@@ -120,7 +120,7 @@ describe('module load: logs directory', () => {
         expect(debugSpy).toHaveBeenCalledWith('[logger] fs not available; skipping file-based logging:', 'fs shim');
         logger.info('hello');
         expect(fs.appendFileSync).not.toHaveBeenCalled();
-        expect(logSpy).toHaveBeenCalledWith(expect.stringContaining('hello'));
+        expect(logSpy).toHaveBeenCalledWith(expect.stringContaining('Hello'));
         // cleanup is a no-op without a logs dir
         fs.readdirSync.mockClear();
         logger.cleanup();
@@ -269,7 +269,7 @@ describe('writeLog routing and fan-out', () => {
             logger.getSettingsLogFile(),
             logger.getLogFile(),
         ]);
-        expect(fs.appendFileSync.mock.calls[3][1]).toMatch(/\[INFO\] \[CLI\] \[general\] ℹ️ plain\n={80}\n$/);
+        expect(fs.appendFileSync.mock.calls[3][1]).toMatch(/\[INFO\] \[CLI\] \[general\] ℹ️ Plain\n={80}\n$/);
     });
 
     test('serialises sanitized object data and bare-string data into the file line', () => {
@@ -278,7 +278,7 @@ describe('writeLog routing and fan-out', () => {
         logger.info('str', 'detail');
 
         expect(fs.appendFileSync.mock.calls[0][1]).toContain(JSON.stringify({ token: '[REDACTED]', n: 1 }, null, 2));
-        expect(fs.appendFileSync.mock.calls[1][1]).toContain('] ℹ️ str\ndetail\n');
+        expect(fs.appendFileSync.mock.calls[1][1]).toContain('] ℹ️ Str\ndetail\n');
     });
 
     test('a failing disk write never throws out of the logger', () => {
@@ -290,7 +290,7 @@ describe('writeLog routing and fan-out', () => {
         const { logger } = loadLogger({ fs });
 
         expect(() => logger.info('still fine')).not.toThrow();
-        expect(lastEntry(logger).message).toBe('ℹ️ still fine');
+        expect(lastEntry(logger).message).toBe('ℹ️ Still fine');
     });
 
     test('colors the console line per level (unknown levels render white)', () => {
@@ -314,7 +314,7 @@ describe('writeLog routing and fan-out', () => {
                 level: 'INFO',
                 context: 'CLI',
                 category: 'voting',
-                message: 'ℹ️ to gui',
+                message: 'ℹ️ To gui',
             }),
         );
     });
@@ -326,11 +326,11 @@ describe('writeLog routing and fan-out', () => {
             return lastEntry(logger).message;
         };
 
-        expect(messageOf(() => logger.error('boom'))).toBe('❌ boom');
+        expect(messageOf(() => logger.error('boom'))).toBe('❌ Boom');
         expect(messageOf(() => logger.info('🔄 Starting'))).toBe('🔄 Starting');
-        expect(messageOf(() => logger.info('⚠ bare pictograph'))).toBe('⚠ bare pictograph');
+        expect(messageOf(() => logger.info('⚠ bare pictograph'))).toBe('⚠ Bare pictograph');
         expect(messageOf(() => logger.success('🎁 Claimed'))).toBe('🎁 Claimed');
-        expect(messageOf(() => logger.warning('🔒 locked'))).toBe('🔒 locked');
+        expect(messageOf(() => logger.warning('🔒 locked'))).toBe('🔒 Locked');
         expect(messageOf(() => logger.info('[Challenge 1: x] voted'))).toBe('ℹ️ [Challenge 1: x] voted');
     });
 
@@ -353,8 +353,8 @@ describe('writeLog routing and fan-out', () => {
         for (let i = 0; i < 1001; i++) logger.info(`m${i}`);
         const logs = logger.getRecentLogs();
         expect(logs).toHaveLength(1000);
-        expect(logs[0].message).toBe('ℹ️ m1');
-        expect(logs.at(-1)!.message).toBe('ℹ️ m1000');
+        expect(logs[0].message).toBe('ℹ️ M1');
+        expect(logs.at(-1)!.message).toBe('ℹ️ M1000');
     });
 
     test('an unexpected failure while writing is reported, not thrown', () => {
@@ -373,23 +373,23 @@ describe('top-level sugar methods', () => {
     test('success/warning/progress format their messages', () => {
         const { logger } = loadLogger();
         logger.success('done');
-        expect(lastEntry(logger).message).toBe('✅ done');
+        expect(lastEntry(logger).message).toBe('✅ Done');
         logger.success('timed', { a: 1 }, 12, 'voting');
-        expect(lastEntry(logger)).toMatchObject({ message: '✅ timed (12ms)', category: 'voting', data: { a: 1 } });
+        expect(lastEntry(logger)).toMatchObject({ message: '✅ Timed (12ms)', category: 'voting', data: { a: 1 } });
         logger.warning('hmm');
-        expect(lastEntry(logger)).toMatchObject({ level: 'WARN', message: '⚠️ hmm' });
+        expect(lastEntry(logger)).toMatchObject({ level: 'WARN', message: '⚠️ Hmm' });
         logger.progress('just text');
-        expect(lastEntry(logger).message).toBe('ℹ️ just text');
+        expect(lastEntry(logger).message).toBe('ℹ️ Just text');
         logger.progress('half', 5);
-        expect(lastEntry(logger).message).toBe('ℹ️ half');
+        expect(lastEntry(logger).message).toBe('ℹ️ Half');
         logger.progress('half', 5, 10);
-        expect(lastEntry(logger).message).toBe(`ℹ️ half [${'█'.repeat(10)}${'░'.repeat(10)}] 50% (5/10)`);
+        expect(lastEntry(logger).message).toBe(`ℹ️ Half [${'█'.repeat(10)}${'░'.repeat(10)}] 50% (5/10)`);
     });
 
     test('debug/api/apiRequest/apiResponse emit in source builds', () => {
         const { logger } = loadLogger();
         logger.debug('dbg');
-        expect(lastEntry(logger)).toMatchObject({ level: 'DEBUG', message: '🔍 dbg' });
+        expect(lastEntry(logger)).toMatchObject({ level: 'DEBUG', message: '🔍 Dbg' });
         logger.api('api msg');
         expect(lastEntry(logger)).toMatchObject({ level: 'INFO', category: 'api' });
         logger.api('api custom', null, 'boost');
@@ -444,13 +444,13 @@ describe('withCategory', () => {
             expect(lastEntry(logger)).toMatchObject({ category: 'voting', ...fields });
 
         log.info('i', { a: 1 });
-        expectLast({ level: 'INFO', message: 'ℹ️ i', data: { a: 1 } });
+        expectLast({ level: 'INFO', message: 'ℹ️ I', data: { a: 1 } });
         log.error('e');
-        expectLast({ level: 'ERROR', message: '❌ e' });
+        expectLast({ level: 'ERROR', message: '❌ E' });
         log.debug('d');
-        expectLast({ level: 'DEBUG', message: '🔍 d' });
+        expectLast({ level: 'DEBUG', message: '🔍 D' });
         log.api('a');
-        expectLast({ level: 'INFO', message: 'ℹ️ a' });
+        expectLast({ level: 'INFO', message: 'ℹ️ A' });
         log.apiRequest('GET', '/u');
         expectLast({ message: '🌐 REQUEST: GET /u' });
         log.apiRequest('GET', '/u', 3);
@@ -460,15 +460,15 @@ describe('withCategory', () => {
         log.apiResponse('GET', '/u', 404, 9);
         expectLast({ message: '❌ RESPONSE: GET /u → 404 (9ms)' });
         log.success('ok');
-        expectLast({ message: '✅ ok' });
+        expectLast({ message: '✅ Ok' });
         log.success('ok', null, null);
-        expectLast({ message: '✅ ok' });
+        expectLast({ message: '✅ Ok' });
         log.success('ok', null, 4);
-        expectLast({ message: '✅ ok (4ms)' });
+        expectLast({ message: '✅ Ok (4ms)' });
         log.warning('w');
-        expectLast({ level: 'WARN', message: '⚠️ w' });
+        expectLast({ level: 'WARN', message: '⚠️ W' });
         log.progress('p');
-        expectLast({ message: 'ℹ️ p' });
+        expectLast({ message: 'ℹ️ P' });
         log.progress('p', 1, 4);
         expectLast({ message: invalid(expect.stringContaining('25% (1/4)')) });
     });

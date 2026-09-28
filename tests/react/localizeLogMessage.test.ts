@@ -1,6 +1,7 @@
 import { logMessages as englishLogMessages } from '../../src/js/translations/logEnglish';
 import { logMessages as latvianLogMessages } from '../../src/js/translations/logLatvian';
 import { localizeLogMessage } from '../../src/js/react/components/logs/localizeLogMessage';
+import { sentenceCaseLogMessage } from '../../src/js/format/logSafe';
 
 const slots = /\{(\d+)\}/g;
 const noAutomaticIcon = /^(?:$|\s|[=-]|\p{Extended_Pictographic})/u;
@@ -19,6 +20,11 @@ describe('Latvian log messages', () => {
             const expected = latvian.replace(slots, (_, index: string) => values(index));
             if (/[a-z]/i.test(english.replace(slots, '')) && localizeLogMessage(message) !== expected)
                 failures.push(english.slice(0, 120));
+            if (
+                /[a-z]/i.test(english.replace(slots, '')) &&
+                localizeLogMessage(sentenceCaseLogMessage(message)) !== expected
+            )
+                failures.push(`${english.slice(0, 120)}: sentence case`);
             if (
                 /[a-z]/i.test(english.replace(slots, '')) &&
                 !noAutomaticIcon.test(message) &&
@@ -53,6 +59,22 @@ describe('Latvian log messages', () => {
         expect(localizeLogMessage('ℹ️ emergencyFill: submitted 1 entry for [Challenge 42: Sunset] near deadline')).toBe(
             'ℹ️ Ārkārtas aizpildīšana: pirms termiņa iesniegto ierakstu skaits: 1, izaicinājums [Izaicinājums 42: Sunset]',
         );
+    });
+
+    test('translates the join and challenge fetch lines before and after sentence casing', () => {
+        for (const message of [
+            'ℹ️ joining up to 4 challenge(s) early for the active missions',
+            'ℹ️ Joining up to 4 challenge(s) early for the active missions',
+        ]) {
+            expect(localizeLogMessage(message)).toBe(
+                'ℹ️ Aktīvo misiju dēļ priekšlaikus pievienojas līdz 4 izaicinājumiem',
+            );
+        }
+        for (const message of ['✅ retrieved 24 challenges (1734ms)', '✅ Retrieved 24 challenges (1734ms)']) {
+            expect(localizeLogMessage(message)).toBe('✅ Ielādēti 24 izaicinājumi (1734 ms)');
+        }
+        expect(localizeLogMessage('🔄 Voting process...')).toBe('🔄 Balsošanas process...');
+        expect(localizeLogMessage('🔄 Loading active challenges')).toBe('🔄 Ielādē aktīvos izaicinājumus');
     });
 
     test('translates generated photo ranking details', () => {

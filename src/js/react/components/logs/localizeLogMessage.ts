@@ -1,12 +1,15 @@
 import { logMessages as englishLogMessages } from '../../../translations/logEnglish';
 import { logMessages as latvianLogMessages } from '../../../translations/logLatvian';
+import { sentenceCaseLogMessage } from '../../../format/logSafe';
 
 const placeholders = /\{(\d+)\}/g;
 const escapeRegex = (text: string) => text.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 const logLabels: Record<string, string> = {
     Fill: 'Aizpildīšana',
     autoFill: 'Automātiskā aizpildīšana',
+    AutoFill: 'Automātiskā aizpildīšana',
     join: 'Pievienošanās',
+    Join: 'Pievienošanās',
 };
 
 function localizeValue(value: string, isLabel: boolean): string {
@@ -31,30 +34,32 @@ const exact = new Map<string, string>();
 const patterns: { key: string; prefix: string; length: number; positions: number[]; label: boolean; regex: RegExp }[] = [];
 
 for (const [key, source] of Object.entries(englishLogMessages)) {
-    const template = source.replace(/[\r\n\v\f\u0085\u2028\u2029]+/g, ' ');
-    const slots = [...template.matchAll(placeholders)];
-    if (slots.length === 0) {
-        exact.set(template, key);
-        continue;
-    }
-    if (!/[a-z]/i.test(template.replace(placeholders, ''))) continue;
+    const original = source.replace(/[\r\n\v\f\u0085\u2028\u2029]+/g, ' ');
+    for (const template of new Set([original, sentenceCaseLogMessage(original)])) {
+        const slots = [...template.matchAll(placeholders)];
+        if (slots.length === 0) {
+            exact.set(template, key);
+            continue;
+        }
+        if (!/[a-z]/i.test(template.replace(placeholders, ''))) continue;
 
-    let expression = '^';
-    let cursor = 0;
-    for (const slot of slots) {
-        expression += escapeRegex(template.slice(cursor, slot.index)) + '(.*?)';
-        cursor = slot.index + slot[0].length;
+        let expression = '^';
+        let cursor = 0;
+        for (const slot of slots) {
+            expression += escapeRegex(template.slice(cursor, slot.index)) + '(.*?)';
+            cursor = slot.index + slot[0].length;
+        }
+        expression += escapeRegex(template.slice(cursor)) + '$';
+        const prefix = template.slice(0, slots[0].index);
+        patterns.push({
+            key,
+            prefix,
+            length: template.replace(placeholders, '').length,
+            positions: slots.map((slot) => Number(slot[1])),
+            label: template.startsWith('{0}:'),
+            regex: new RegExp(expression, 's'),
+        });
     }
-    expression += escapeRegex(template.slice(cursor)) + '$';
-    const prefix = template.slice(0, slots[0].index);
-    patterns.push({
-        key,
-        prefix,
-        length: template.replace(placeholders, '').length,
-        positions: slots.map((slot) => Number(slot[1])),
-        label: template.startsWith('{0}:'),
-        regex: new RegExp(expression, 's'),
-    });
 }
 
 patterns.sort((a, b) => b.length - a.length);

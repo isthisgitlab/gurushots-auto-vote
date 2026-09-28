@@ -1,4 +1,5 @@
 import type { GuiLogEntry } from '../../../logger';
+import { sentenceCaseLogMessage } from '../../../format/logSafe';
 import { useTranslation } from '@/contexts/TranslationContext';
 import { localizeLogMessage } from './localizeLogMessage';
 /**
@@ -44,7 +45,7 @@ export function LogEntry({ entry }: { entry: LogLine }) {
             <span className="text-yellow-400">[{language === 'lv' && CATEGORY_KEYS[categoryName] ? t(`logs.categories.${categoryName}`) : categoryName}]</span>
             {' '}
             {/* JSX text is escaped by the renderer; pre-escaping would show "&lt;" literally. */}
-            <span className="text-white">{language === 'lv' ? localizeLogMessage(message) : message}</span>
+            <span className="text-white">{sentenceCaseLogMessage(language === 'lv' ? localizeLogMessage(message) : message)}</span>
         </div>
     );
 }

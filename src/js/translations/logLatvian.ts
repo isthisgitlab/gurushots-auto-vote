@@ -396,6 +396,7 @@ export const logMessages = {
     m9a1f89a92ee8: '{0} {1} pārdēvēts par {2} (vērtība {3})',
     m9a274bb9e06b: '🌐 Izmanto īsto GuruShots API',
     m9af18ab83ac0: 'Lieto pastiprinājumu izaicinājumam {0}',
+    m9af941258be6: 'Aktīvo misiju dēļ priekšlaikus pievienojas līdz {0} izaicinājumiem',
     m9b901c6d995c: '⏰ Tuvojas scenārija solis izaicinājumā "{0}" (fāze {1}) — nākamais cikls pēc {2} s',
     m9bf8122676f3: 'Iestatījumu {0} var iestatīt tikai uz izaicinājumu vai profilu, nevis globāli',
     m9c0887b4c739: 'swap: izaicinājumam {0} nav pieejama cita fotoattēla',

@@ -33,7 +33,7 @@ describe('writeLog CR/LF collapse', () => {
 
     test('collapses the extended line-break set (vertical tab, form feed, NEL, U+2028/U+2029)', () => {
         info('a\vb\fc\u0085d\u2028e\u2029f', null, 'general');
-        expect(lastEntry().message).toBe('ℹ️ a b c d e f');
+        expect(lastEntry().message).toBe('ℹ️ A b c d e f');
     });
 
     test('leaves object data structured (JSON.stringify already escapes newlines)', () => {

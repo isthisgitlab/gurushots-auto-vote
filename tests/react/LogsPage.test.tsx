@@ -27,7 +27,7 @@ describe('Logs page', () => {
 
         render(<LogsPage />);
         expect(screen.getByText('common.loading')).toBeTruthy();
-        await waitFor(() => expect(screen.getByText('hello log')).toBeTruthy());
+        await waitFor(() => expect(screen.getByText('Hello log')).toBeTruthy());
         expect(screen.getByText('logs.title')).toBeTruthy();
         expect(screen.getByText('logs.connected')).toBeTruthy();
     });
@@ -39,6 +39,6 @@ describe('Logs page', () => {
         jest.isolateModules(() => {
             require('@/pages/Logs');
         });
-        await waitFor(() => expect(root.textContent).toContain('hello log'));
+        await waitFor(() => expect(root.textContent).toContain('Hello log'));
     });
 });

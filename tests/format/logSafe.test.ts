@@ -6,7 +6,30 @@
 
 import type * as logSafeModule from '../../src/js/format/logSafe';
 
-const { failureText } = require('../../src/js/format/logSafe') as typeof logSafeModule;
+const { failureText, sentenceCaseLogMessage } = require('../../src/js/format/logSafe') as typeof logSafeModule;
+
+describe('sentenceCaseLogMessage', () => {
+    test.each([
+        ['ℹ️ joining up to 4 challenge(s)', 'ℹ️ Joining up to 4 challenge(s)'],
+        ['✅ retrieved 24 challenges (1734ms)', '✅ Retrieved 24 challenges (1734ms)'],
+        ['🔄 Voting process...', '🔄 Voting process...'],
+        ['⚠️ neizdevās ielādēt', '⚠️ Neizdevās ielādēt'],
+        ['  indented CLI row', '  indented CLI row'],
+        ['ℹ️ macOS detected', 'ℹ️ macOS detected'],
+        ['ℹ️ https://example.com', 'ℹ️ https://example.com'],
+        ['ℹ️ metadata.votes is invalid', 'ℹ️ metadata.votes is invalid'],
+        ['ℹ️ played=3', 'ℹ️ played=3'],
+        ['ℹ️ manualFill: submitted an entry', 'ℹ️ manualFill: Submitted an entry'],
+        ['⚠️ setTitleRules rejected', '⚠️ setTitleRules: Rejected'],
+        ['⚠️ swap-back ledger unreadable', '⚠️ swap-back: Ledger unreadable'],
+        ['⚠️ swap: no different photo', '⚠️ swap: No different photo'],
+        ['ℹ️ main: Command is:', 'ℹ️ main: Command is:'],
+        ['ℹ️ autoFill', 'ℹ️ autoFill'],
+        ['', ''],
+    ])('%s → %s', (message, expected) => {
+        expect(sentenceCaseLogMessage(message)).toBe(expected);
+    });
+});
 
 describe('failureText', () => {
     test.each([

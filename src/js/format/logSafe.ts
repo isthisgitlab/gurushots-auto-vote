@@ -24,6 +24,23 @@ import { errorMessage } from '../errorMessage';
  */
 const oneLine = (value: unknown): string => String(value).replace(/[\r\n\v\f\u0085\u2028\u2029]+/g, ' ');
 
+/** Sentence-case a log's first word, including after a logger icon. */
+const sentenceCaseLogMessage = (message: string): string => {
+    const match = /^((?:[\p{Extended_Pictographic}\uFE0F\u200D]+\s+)*)(\p{Ll}[\p{L}\p{N}-]*)/u.exec(message);
+    if (!match) return message;
+    const [, icon, word] = match;
+    const rest = message.slice(match[0].length);
+    // A leading URL, key or product name is data rather than a sentence.
+    if (word === 'macOS' || /^(?::\/\/|[.=])/.test(rest)) return message;
+    // Keep operation names and command names exact; case the description instead.
+    if (/[A-Z]/.test(word.slice(1)) || /^(?:main|swap|swap-back|skip-version)$/.test(word)) {
+        if (rest.startsWith(': ')) return `${icon}${word}: ${sentenceCaseLogMessage(rest.slice(2))}`;
+        if (rest.startsWith(' ')) return `${icon}${word}: ${sentenceCaseLogMessage(rest.slice(1))}`;
+        return message;
+    }
+    return `${icon}${word[0].toUpperCase()}${word.slice(1)}${rest}`;
+};
+
 /**
  * Text for a caught value in a failure log line: its `message`, else the value
  * itself as text, else 'unknown error'. Never empty — `logger.endOperation`
@@ -34,4 +51,4 @@ const oneLine = (value: unknown): string => String(value).replace(/[\r\n\v\f\u00
  */
 const failureText = (error: unknown): string => errorMessage(error) || String(error ?? '') || 'unknown error';
 
-export { oneLine, failureText };
+export { oneLine, failureText, sentenceCaseLogMessage };
