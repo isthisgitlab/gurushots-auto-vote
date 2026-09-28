@@ -265,7 +265,15 @@ describe('runBoost — fresh-entry hold', () => {
         votingLogic.pickBoostEntry.mockReturnValue({ id: 'fresh' });
         votingLogic.getBoostHoldUntil.mockReturnValue(NOW + 150);
         const api = makeApi([withEntries(['old', 'fresh'])]);
-        const result = await run(api, { entryAges });
+        // The pass reads the clock itself; pinned to NOW so a slow full-suite run
+        // crossing a second boundary cannot make "entered at" differ from NOW.
+        const clock = jest.spyOn(Date, 'now').mockReturnValue(NOW * 1000);
+        let result: Awaited<ReturnType<typeof run>>;
+        try {
+            result = await run(api, { entryAges });
+        } finally {
+            clock.mockRestore();
+        }
         expect(votingLogic.getBoostHoldUntil).toHaveBeenCalledWith(expect.anything(), NOW, NOW);
         expect(api.applyBoost).not.toHaveBeenCalled();
         expect(result.challenges![0].boostHoldUntil).toBe(NOW + 150);
