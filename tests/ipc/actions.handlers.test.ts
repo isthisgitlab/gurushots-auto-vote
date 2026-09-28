@@ -20,6 +20,7 @@ jest.mock('../../src/js/windows/quitGuard', () => ({ rememberChallenges: jest.fn
 
 import type { IpcMain } from 'electron';
 import { invalid } from '../helpers/invalid';
+import { claimTurboRun, releaseTurboRun } from '../../src/js/services/turboRunLock';
 
 import settingsModule = require('../../src/js/settings');
 const settings = jest.mocked(settingsModule);
@@ -74,8 +75,8 @@ const stubAuthGuardFail = () => {
         .mockReturnValue({ ok: false, response: { success: false, error: 'No authentication token found' } });
 };
 
-// Note on module-scoped state: actions.handlers keeps `turboMiniGameInFlight`
-// at module scope. The handler's try/finally always clears its slot, so as
+// Note on module-scoped state: turboRunLock keeps its set at module scope.
+// The handler's try/finally always clears its slot, so as
 // long as every test awaits the calls it makes, the Set stays empty between
 // tests — no jest.resetModules() needed (and it would defeat module-top
 // jest.mock() bindings anyway by giving the handler fresh mock instances).
@@ -330,6 +331,22 @@ describe('play-auto-turbo', () => {
         await firstPromise;
         // Sanity: strategy was not called twice for the second attempt.
         expect(strategy.getActiveChallenges).toHaveBeenCalledTimes(1);
+    });
+
+    test('a manual request cannot duplicate an autovote mini-game', async () => {
+        setToken('tok');
+        const strategy = stubStrategy();
+        expect(claimTurboRun(123)).toBe(true);
+        try {
+            const result = await buildHandlers()['play-auto-turbo']({}, '123', 'C');
+            expect(result).toEqual({
+                success: false,
+                error: 'A turbo run is already in progress for this challenge',
+            });
+            expect(strategy.getActiveChallenges).not.toHaveBeenCalled();
+        } finally {
+            releaseTurboRun(123, 'automatic');
+        }
     });
 });
 

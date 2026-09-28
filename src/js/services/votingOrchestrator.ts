@@ -50,6 +50,7 @@ import * as photoStats from './photoStats';
 import * as newEntryTracker from './newEntryTracker';
 import * as currencyAuto from './currencyAuto';
 import { consumeMission } from './missions';
+import { claimTurboRun, releaseTurboRun, turboRunSnapshot, wasManualTurboRunSince } from './turboRunLock';
 import { runScenarioStep } from './scenarioRunner';
 import * as cancellation from '../voting/cancellation';
 import { formatDuration } from '../format/duration';
@@ -474,6 +475,7 @@ export type PassContext = {
     scenarios: ScenarioDeps | null;
     missions: MissionNeeds | null;
     allChallenges: Challenge[];
+    turboSnapshot: number;
 };
 
 type FillDeps = ReturnType<typeof buildFillDeps>;
@@ -547,13 +549,19 @@ const selectPassChallenges = (
  * Missions on, the earn waits (isTurboEarnSaved) unless a "Win Turbo" mission
  * still needs wins; every win counts down that mission.
  */
-const playAutoTurbo = async (challenge: Challenge, now: number, { api, token, missions }: PassContext) => {
+const playAutoTurbo = async (
+    challenge: Challenge,
+    now: number,
+    { api, token, missions, turboSnapshot }: PassContext,
+) => {
     if (!votingLogic.shouldPlayAutoTurbo(challenge, now)) return;
+    if (wasManualTurboRunSince(challenge.id, turboSnapshot)) return;
     const missionWants = (missions?.turbo ?? 0) > 0;
     if (!missionWants && votingLogic.isTurboEarnSaved(challenge, now)) {
         logger.withCategory('turbo').debug(`${logger.challengeTag(challenge)} Turbo saved for a mission`, null);
         return;
     }
+    if (!claimTurboRun(challenge.id)) return;
     const purpose = missionWants ? ` for the turbo mission (${missions?.turbo} to go)` : '';
     logger
         .withCategory('turbo')
@@ -565,6 +573,8 @@ const playAutoTurbo = async (challenge: Challenge, now: number, { api, token, mi
         logger.withCategory('turbo').endOperation(`turbo-earn-${challenge.id}`, summary);
     } catch (error) {
         logger.withCategory('turbo').endOperation(`turbo-earn-${challenge.id}`, null, failureText(error));
+    } finally {
+        releaseTurboRun(challenge.id, 'automatic');
     }
 };
 
@@ -893,6 +903,7 @@ const runVotingPass = async (
     try {
         // Get all active challenges
         logger.withCategory('challenges').info('🔄 Loading active challenges', null);
+        const turboSnapshot = turboRunSnapshot();
         const { challenges: allChallenges, fetchFailed } = await api.getActiveChallenges(token);
 
         // A failed fetch is not an empty account. makePostRequest resolves null once retries
@@ -928,6 +939,7 @@ const runVotingPass = async (
             scenarios,
             missions,
             allChallenges,
+            turboSnapshot,
         };
 
         // Process each challenge

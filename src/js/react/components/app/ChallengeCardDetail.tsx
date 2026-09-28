@@ -146,14 +146,12 @@ function StatusCells({
     timeText,
     timezone,
     actions,
-    autovoteRunning,
 }: {
     challenge: Challenge;
     view: ChallengeCardView;
     timeText: string;
     timezone: string;
     actions: ChallengeCardActionSet;
-    autovoteRunning: boolean;
 }) {
     const { t } = useTranslation();
     const { turboError, fillError } = actions;
@@ -178,9 +176,6 @@ function StatusCells({
                 <div className={view.turboStatus.colorClass}>{view.turboStatus.text}</div>
                 {actions.earnTurboButton}
                 {turboError && <div className="text-error text-xs mt-1">{turboError}</div>}
-                {!turboError && view.canPlayAutoTurbo && autovoteRunning && (
-                    <div className="text-base-content/60 text-xs mt-1">{t('app.autoTurboRunsWithAutovote')}</div>
-                )}
             </StatCell>
             <StatCell label={t('app.yourEntries')}>
                 <div>
@@ -253,7 +248,6 @@ export function ChallengeCardDetail({
     timeText,
     timezone,
     actions,
-    autovoteRunning,
     hasCompactOverride,
     onToggleCompact,
     boostBlocked,
@@ -270,7 +264,6 @@ export function ChallengeCardDetail({
     timeText: string;
     timezone: string;
     actions: ChallengeCardActionSet;
-    autovoteRunning: boolean;
     hasCompactOverride: boolean;
     onToggleCompact: () => void | Promise<void>;
     boostBlocked: boolean;
@@ -314,14 +307,7 @@ export function ChallengeCardDetail({
                 <UserProgressPanel challenge={challenge} userProgress={userProgress} />
             )}
 
-            <StatusCells
-                challenge={challenge}
-                view={view}
-                timeText={timeText}
-                timezone={timezone}
-                actions={actions}
-                autovoteRunning={autovoteRunning}
-            />
+            <StatusCells challenge={challenge} view={view} timeText={timeText} timezone={timezone} actions={actions} />
 
             {/* Challenge Tags */}
             {challenge.tags && challenge.tags.length > 0 && (

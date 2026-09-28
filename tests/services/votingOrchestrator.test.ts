@@ -51,6 +51,7 @@ import type * as challengeFixturesModule from '../helpers/challengeFixtures';
 import type * as settingsModule from '../../src/js/settings';
 import type { Challenge } from '../../src/js/types/gurushots';
 import type { VotingPassDeps } from '../../src/js/types/votingPass';
+import { claimTurboRun, releaseTurboRun } from '../../src/js/services/turboRunLock';
 import { invalid } from '../helpers/invalid';
 const { runVotingPass } = require('../../src/js/services/votingOrchestrator') as typeof votingOrchestratorModule;
 const { buildChallenge } = require('../helpers/challengeFixtures') as typeof challengeFixturesModule;
@@ -192,6 +193,36 @@ describe('mock-parity behaviors on the shared path', () => {
         votingLogic.shouldPlayAutoTurbo.mockReturnValue(true);
         await runVotingPass('tok', null, deps(api));
         expect(api.runTurboMiniGame).toHaveBeenCalledTimes(1);
+    });
+
+    test('an autovote cycle skips a mini-game already claimed by a manual run', async () => {
+        const api = makeApi([makeChallenge()]);
+        votingLogic.shouldPlayAutoTurbo.mockReturnValue(true);
+        expect(claimTurboRun(101)).toBe(true);
+        try {
+            await runVotingPass('tok', null, deps(api));
+            expect(api.runTurboMiniGame).not.toHaveBeenCalled();
+        } finally {
+            releaseTurboRun(101, 'manual');
+        }
+        await runVotingPass('tok', null, deps(api));
+        expect(api.runTurboMiniGame).toHaveBeenCalledTimes(1);
+    });
+
+    test('manual play after the active-list fetch invalidates that challenge for this cycle', async () => {
+        const api = makeApi([makeChallenge({ id: 101 }), makeChallenge({ id: 102 })]);
+        votingLogic.shouldPlayAutoTurbo.mockReturnValue(true);
+        const cleanup = jest.fn(() => {
+            expect(claimTurboRun(101)).toBe(true);
+            releaseTurboRun(101, 'manual');
+            return true;
+        });
+        await runVotingPass('tok', null, deps(api, { cleanupStaleMetadata: cleanup }));
+        expect(api.runTurboMiniGame).toHaveBeenCalledTimes(1);
+        expect(api.runTurboMiniGame).toHaveBeenCalledWith(expect.objectContaining({ id: 102 }), 'tok');
+
+        await runVotingPass('tok', null, deps(api));
+        expect(api.runTurboMiniGame).toHaveBeenCalledTimes(3);
     });
 
     test('a turbo saved for a mission is not earned while no turbo mission wants it', async () => {

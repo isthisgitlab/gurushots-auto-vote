@@ -19,6 +19,7 @@ import * as autoFill from '../services/autoFill';
 import { isAutoJoinActive } from '../services/joinChallenges';
 import { getAutoClaimStatus } from '../services/autoClaim';
 import { findActiveChallenge } from '../services/findActiveChallenge';
+import { claimTurboRun, releaseTurboRun } from '../services/turboRunLock';
 import { rememberChallenges } from '../windows/quitGuard';
 
 import type { IpcMain } from 'electron';
@@ -35,11 +36,6 @@ type ApplyTurboResult = {
     ok?: boolean;
     raw?: { success?: unknown; error_code?: unknown; message?: unknown } | null;
 };
-
-// In-process guard that prevents two simultaneous mini-game runs on
-// the same challenge — defends against double-click and against an
-// autovote cycle racing with a manual click.
-const turboMiniGameInFlight: Set<string> = new Set();
 
 const sanitizeForLog = logger.sanitizeLogString;
 
@@ -203,14 +199,13 @@ const handlePlayAutoTurbo = (async (event: unknown, challengeId: string | number
         // second click in the same event-loop tick is rejected. The
         // try/finally that owns the slot wraps the entire critical
         // section including the live-fetch + validation.
-        if (turboMiniGameInFlight.has(safeId)) {
+        if (!claimTurboRun(challengeId)) {
             return { success: false as const, error: 'A turbo run is already in progress for this challenge' };
         }
-        turboMiniGameInFlight.add(safeId);
         try {
             return await runManualTurbo(challengeId, safeTitle, userSettings.token);
         } finally {
-            turboMiniGameInFlight.delete(safeId);
+            releaseTurboRun(challengeId, 'manual');
         }
     } catch (error) {
         logger.withCategory('turbo').error('Error running manual auto-turbo:', error);

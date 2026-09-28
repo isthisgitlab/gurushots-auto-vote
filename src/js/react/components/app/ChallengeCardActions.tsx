@@ -104,7 +104,6 @@ export function useChallengeCardActions({
     challenge,
     view,
     bankroll,
-    autovoteRunning,
     onVoteComplete,
     onSettingsClick,
     onCurrencySpent,
@@ -112,7 +111,6 @@ export function useChallengeCardActions({
     challenge: Challenge;
     view: ChallengeCardView;
     bankroll: Bankroll | null;
-    autovoteRunning: boolean;
     onVoteComplete: () => void;
     onSettingsClick: (challengeId: Challenge['id'], challengeTitle: string) => void;
     onCurrencySpent?: () => void;
@@ -144,8 +142,7 @@ export function useChallengeCardActions({
         settingsButton: challenge.type !== 'flash' && (
             <SettingsButton onClick={() => onSettingsClick(challenge.id, challenge.title)} label={t('app.settings')} />
         ),
-        // Hidden while the autovote loop runs: it plays turbo itself.
-        earnTurboButton: view.canPlayAutoTurbo && !autovoteRunning && (
+        earnTurboButton: view.canPlayAutoTurbo && (
             <EarnTurboButton
                 turboError={turboError}
                 playingTurbo={playingTurbo}

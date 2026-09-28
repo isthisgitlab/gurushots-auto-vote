@@ -290,10 +290,11 @@ describe('earn turbo', () => {
         expect(screen.queryByText(/app\.earnTurbo/)).toBeNull();
     });
 
-    test('while autovote runs the button is hidden and a hint shows instead', () => {
+    test('while autovote runs the button remains available', async () => {
         renderCard(turboChallenge({ state: 'FREE' }), { autovoteRunning: true });
-        expect(screen.queryByText(/app\.earnTurbo/)).toBeNull();
-        expect(screen.getByText('app.autoTurboRunsWithAutovote')).toBeTruthy();
+        fireEvent.click(screen.getByText(/app\.earnTurbo/));
+        await waitFor(() => expect(window.api.playAutoTurbo).toHaveBeenCalledWith(101, 'Sunset'));
+        expect(screen.queryByText('app.autoTurboRunsWithAutovote')).toBeNull();
     });
 
     test('closed challenges and missing turbo data offer nothing', () => {

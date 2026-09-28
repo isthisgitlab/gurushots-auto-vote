@@ -87,7 +87,6 @@ export function ChallengeCard({
         challenge,
         view,
         bankroll,
-        autovoteRunning,
         onVoteComplete,
         onSettingsClick,
         onCurrencySpent,
@@ -143,7 +142,6 @@ export function ChallengeCard({
                 timeText={timeText}
                 timezone={timezone}
                 actions={actions}
-                autovoteRunning={autovoteRunning}
                 hasCompactOverride={hasCompactOverride}
                 onToggleCompact={toggleCompact}
                 boostBlocked={boostBlocked}
