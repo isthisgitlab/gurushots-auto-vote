@@ -84,6 +84,11 @@ function translateBody(message: string): string | null {
             (_, index: string) => values.get(Number(index))!,
         );
     }
+    const oldChallengeCase = message.replace(
+        /^(\[Challenge [^\]]+\]\s+)(\p{Lu})/u,
+        (_, tag: string, first: string) => tag + first.toLowerCase(),
+    );
+    if (oldChallengeCase !== message) return translateBody(oldChallengeCase);
     return null;
 }
 

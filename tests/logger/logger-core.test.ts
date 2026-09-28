@@ -331,7 +331,7 @@ describe('writeLog routing and fan-out', () => {
         expect(messageOf(() => logger.info('⚠ bare pictograph'))).toBe('⚠ Bare pictograph');
         expect(messageOf(() => logger.success('🎁 Claimed'))).toBe('🎁 Claimed');
         expect(messageOf(() => logger.warning('🔒 locked'))).toBe('🔒 Locked');
-        expect(messageOf(() => logger.info('[Challenge 1: x] voted'))).toBe('ℹ️ [Challenge 1: x] voted');
+        expect(messageOf(() => logger.info('[Challenge 1: x] voted'))).toBe('ℹ️ [Challenge 1: x] Voted');
     });
 
     test('leaves blank, indented and banner lines without an icon', () => {

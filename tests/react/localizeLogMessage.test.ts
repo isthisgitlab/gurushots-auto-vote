@@ -77,6 +77,16 @@ describe('Latvian log messages', () => {
         expect(localizeLogMessage('🔄 Loading active challenges')).toBe('🔄 Ielādē aktīvos izaicinājumus');
     });
 
+    test('translates challenge-tagged lines with either case after the tag', () => {
+        for (const message of [
+            '[Challenge 12: Sunset] turbo fill-new unavailable (no entry); applying to existing entry',
+            '[Challenge 12: Sunset] Turbo fill-new unavailable (no entry); applying to existing entry',
+        ]) {
+            expect(localizeLogMessage(message)).toContain('Izaicinājums 12: Sunset');
+            expect(localizeLogMessage(message)).not.toBe(message);
+        }
+    });
+
     test('translates generated photo ranking details', () => {
         const coverage =
             '; past-performance figures have been looked up for 1 of 2 of them so far, and the rest are looked up a batch per fill';

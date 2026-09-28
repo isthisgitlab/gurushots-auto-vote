@@ -26,6 +26,10 @@ const oneLine = (value: unknown): string => String(value).replace(/[\r\n\v\f\u00
 
 /** Sentence-case a log's first word, including after a logger icon. */
 const sentenceCaseLogMessage = (message: string): string => {
+    const challenge = /^((?:[\p{Extended_Pictographic}\uFE0F\u200D]+\s+)*)(\[Challenge [^\]]+\]\s+)(.+)$/u.exec(
+        message,
+    );
+    if (challenge) return `${challenge[1]}${challenge[2]}${sentenceCaseLogMessage(challenge[3])}`;
     const match = /^((?:[\p{Extended_Pictographic}\uFE0F\u200D]+\s+)*)(\p{Ll}[\p{L}\p{N}-]*)/u.exec(message);
     if (!match) return message;
     const [, icon, word] = match;

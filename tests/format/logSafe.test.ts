@@ -25,6 +25,8 @@ describe('sentenceCaseLogMessage', () => {
         ['⚠️ swap: no different photo', '⚠️ swap: No different photo'],
         ['ℹ️ main: Command is:', 'ℹ️ main: Command is:'],
         ['ℹ️ autoFill', 'ℹ️ autoFill'],
+        ['ℹ️ [Challenge 12: Sunset] voted for 3 photos', 'ℹ️ [Challenge 12: Sunset] Voted for 3 photos'],
+        ['[Challenge 12: Sunset] turbo fill-new unavailable', '[Challenge 12: Sunset] Turbo fill-new unavailable'],
         ['', ''],
     ])('%s → %s', (message, expected) => {
         expect(sentenceCaseLogMessage(message)).toBe(expected);
