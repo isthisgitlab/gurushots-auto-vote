@@ -21,6 +21,7 @@ jest.mock('../../src/js/windows/quitGuard', () => ({ rememberChallenges: jest.fn
 import type { IpcMain } from 'electron';
 import { invalid } from '../helpers/invalid';
 import { claimTurboRun, releaseTurboRun } from '../../src/js/services/turboRunLock';
+import { registerMissionNeeds } from '../../src/js/services/missions';
 
 import settingsModule = require('../../src/js/settings');
 const settings = jest.mocked(settingsModule);
@@ -265,9 +266,16 @@ describe('play-auto-turbo', () => {
         votingLogic.shouldPlayAutoTurbo = jest.fn().mockReturnValue(false);
         strategy.runTurboMiniGame.mockResolvedValue({ played: 5, correct: 5, won: true, flipped: 0, doubleFailed: 0 });
         const handlers = buildHandlers();
-        const result = await handlers['play-auto-turbo']({}, '123', 'C');
-        expect(result.success).toBe(true);
-        expect(strategy.runTurboMiniGame).toHaveBeenCalled();
+        const needs = { join: 0, fill: 0, turbo: 1 };
+        const unregister = registerMissionNeeds('tok', needs);
+        try {
+            const result = await handlers['play-auto-turbo']({}, '123', 'C');
+            expect(result.success).toBe(true);
+            expect(strategy.runTurboMiniGame).toHaveBeenCalled();
+            expect(needs.turbo).toBe(0);
+        } finally {
+            unregister?.();
+        }
     });
 
     test('returns "no battles" when mini-game played 0', async () => {

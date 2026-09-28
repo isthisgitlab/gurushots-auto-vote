@@ -45,7 +45,12 @@ jest.mock('../../src/js/services/joinChallenges', () => ({
     joinChallengeSingle: jest.fn(),
 }));
 jest.mock('../../src/js/services/autoClaim', () => ({ runClaimPass: jest.fn() }));
-jest.mock('../../src/js/services/missions', () => ({ loadMissionNeeds: jest.fn(async () => null) }));
+jest.mock('../../src/js/services/missions', () => ({
+    loadMissionNeeds: jest.fn(async () => null),
+    registerMissionNeeds: jest.fn((_token: string, needs: missionsModule.MissionNeeds | null) =>
+        needs ? jest.fn() : null,
+    ),
+}));
 jest.mock('../../src/js/api/rewards', () => ({
     getMyCompletedChallenges: jest.fn(),
     claimChallengeResources: jest.fn(),
@@ -80,7 +85,9 @@ const { runJoinPass, joinChallengeSingle } = jest.mocked(
     require('../../src/js/services/joinChallenges') as typeof joinChallengesModule,
 );
 const { runClaimPass } = jest.mocked(require('../../src/js/services/autoClaim') as typeof autoClaimModule);
-const { loadMissionNeeds } = jest.mocked(require('../../src/js/services/missions') as typeof missionsModule);
+const { loadMissionNeeds, registerMissionNeeds } = jest.mocked(
+    require('../../src/js/services/missions') as typeof missionsModule,
+);
 import rewardsModule = require('../../src/js/api/rewards');
 const rewards = jest.mocked(rewardsModule);
 import main = require('../../src/js/strategies/real');
@@ -363,6 +370,8 @@ describe('fetchChallengesAndVote', () => {
     test('reads the missions once and hands the same needs to the join pre-step and the pass', async () => {
         const needs = { join: 2, fill: 0, turbo: 1 };
         loadMissionNeeds.mockResolvedValueOnce(needs);
+        const unregister = jest.fn();
+        registerMissionNeeds.mockReturnValueOnce(unregister);
         runVotingPass.mockResolvedValue({ success: true });
 
         await fetchChallengesAndVote('tok');
@@ -373,6 +382,30 @@ describe('fetchChallengesAndVote', () => {
         });
         expect(runJoinPass.mock.calls[0][3]).toBe(needs);
         expect(runVotingPass.mock.calls[0][2].missions).toBe(needs);
+        expect(runVotingPass.mock.calls[0][2].refreshMissionNeeds).toBeNull();
+        expect(registerMissionNeeds).toHaveBeenCalledWith('tok', needs);
+        expect(registerMissionNeeds.mock.invocationCallOrder[0]).toBeLessThan(runJoinPass.mock.invocationCallOrder[0]!);
+        expect(unregister).toHaveBeenCalledTimes(1);
+    });
+
+    test('headless Android passes a live mission refresh to the voting pass', async () => {
+        const original = Object.getOwnPropertyDescriptor(globalThis, '__GS_HEADLESS__');
+        Object.assign(globalThis, { __GS_HEADLESS__: true });
+        loadMissionNeeds
+            .mockResolvedValueOnce({ join: 0, fill: 0, turbo: 1 })
+            .mockResolvedValueOnce({ join: 0, fill: 0, turbo: 0 });
+        try {
+            await fetchChallengesAndVote('tok');
+            const refresh = runVotingPass.mock.calls.at(-1)![2].refreshMissionNeeds;
+            expect(refresh).toEqual(expect.any(Function));
+            await expect(refresh?.()).resolves.toMatchObject({ turbo: 0 });
+            expect(loadMissionNeeds).toHaveBeenLastCalledWith('tok', expect.any(Number), {
+                getMyMissions: rewards.getMyMissions,
+            });
+        } finally {
+            if (original) Object.defineProperty(globalThis, '__GS_HEADLESS__', original);
+            else Reflect.deleteProperty(globalThis, '__GS_HEADLESS__');
+        }
     });
 
     test('skips the join pre-step for a single-challenge run', async () => {

@@ -52,6 +52,7 @@ import type * as settingsModule from '../../src/js/settings';
 import type { Challenge } from '../../src/js/types/gurushots';
 import type { VotingPassDeps } from '../../src/js/types/votingPass';
 import { claimTurboRun, releaseTurboRun } from '../../src/js/services/turboRunLock';
+import { recordManualTurboWin } from '../../src/js/services/missions';
 import { invalid } from '../helpers/invalid';
 const { runVotingPass } = require('../../src/js/services/votingOrchestrator') as typeof votingOrchestratorModule;
 const { buildChallenge } = require('../helpers/challengeFixtures') as typeof challengeFixturesModule;
@@ -246,6 +247,64 @@ describe('mock-parity behaviors on the shared path', () => {
         expect(api.runTurboMiniGame).toHaveBeenCalledTimes(2);
         expect(missions.turbo).toBe(0);
         votingLogic.isTurboEarnSaved.mockReturnValue(false);
+    });
+
+    test('a manual win during the pass saves the next challenge when one mission win remains', async () => {
+        const api = makeApi([makeChallenge({ id: 1 }), makeChallenge({ id: 2 })]);
+        votingLogic.shouldPlayAutoTurbo.mockReturnValue(true);
+        votingLogic.isTurboEarnSaved.mockReturnValue(true);
+        api.runTurboMiniGame.mockImplementation(async () => {
+            recordManualTurboWin('tok');
+            return { played: 1, correct: 0, flipped: 1, doubleFailed: 0, won: false };
+        });
+        const missions = { join: 0, fill: 0, turbo: 1 };
+        try {
+            await runVotingPass('tok', null, deps(api, { missions }));
+            expect(api.runTurboMiniGame).toHaveBeenCalledTimes(1);
+            expect(api.runTurboMiniGame).toHaveBeenCalledWith(expect.objectContaining({ id: 1 }), 'tok');
+            expect(missions.turbo).toBe(0);
+            missions.turbo = 1;
+            recordManualTurboWin('tok');
+            expect(missions.turbo).toBe(1);
+        } finally {
+            votingLogic.isTurboEarnSaved.mockReturnValue(false);
+        }
+    });
+
+    test('a headless pass refreshes mission wins before each saved Turbo decision', async () => {
+        const api = makeApi([makeChallenge({ id: 1 }), makeChallenge({ id: 2 })]);
+        votingLogic.shouldPlayAutoTurbo.mockReturnValue(true);
+        votingLogic.isTurboEarnSaved.mockReturnValue(true);
+        api.runTurboMiniGame.mockResolvedValue({ played: 1, correct: 0, flipped: 1, doubleFailed: 0, won: false });
+        const missions = { join: 0, fill: 0, turbo: 1 };
+        const refreshMissionNeeds = jest
+            .fn()
+            .mockResolvedValueOnce({ join: 0, fill: 0, turbo: 1 })
+            .mockResolvedValueOnce({ join: 0, fill: 0, turbo: 0 });
+        try {
+            await runVotingPass('tok', null, deps(api, { missions, refreshMissionNeeds }));
+            expect(refreshMissionNeeds).toHaveBeenCalledTimes(2);
+            expect(api.runTurboMiniGame).toHaveBeenCalledTimes(1);
+            expect(api.runTurboMiniGame).toHaveBeenCalledWith(expect.objectContaining({ id: 1 }), 'tok');
+            expect(missions.turbo).toBe(0);
+        } finally {
+            votingLogic.isTurboEarnSaved.mockReturnValue(false);
+        }
+    });
+
+    test('a headless pass keeps a saved Turbo when mission progress cannot be refreshed', async () => {
+        const api = makeApi([makeChallenge()]);
+        votingLogic.shouldPlayAutoTurbo.mockReturnValue(true);
+        votingLogic.isTurboEarnSaved.mockReturnValue(true);
+        const missions = { join: 0, fill: 0, turbo: 1 };
+        const refreshMissionNeeds = jest.fn(async () => null);
+        try {
+            await runVotingPass('tok', null, deps(api, { missions, refreshMissionNeeds }));
+            expect(api.runTurboMiniGame).not.toHaveBeenCalled();
+            expect(missions.turbo).toBe(1);
+        } finally {
+            votingLogic.isTurboEarnSaved.mockReturnValue(false);
+        }
     });
 
     test('a turbo won outside a mission still counts toward one', async () => {

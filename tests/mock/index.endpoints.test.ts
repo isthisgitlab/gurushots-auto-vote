@@ -16,7 +16,12 @@ jest.mock('../../src/js/services/joinChallenges', () => ({
     runJoinPass: jest.fn(async () => ({ ran: false, joined: 0, results: [] })),
     joinChallengeSingle: jest.fn(async () => ({ status: 'joined' })),
 }));
-jest.mock('../../src/js/services/missions', () => ({ loadMissionNeeds: jest.fn(async () => null) }));
+jest.mock('../../src/js/services/missions', () => ({
+    loadMissionNeeds: jest.fn(async () => null),
+    registerMissionNeeds: jest.fn((_token: string, needs: missionsModule.MissionNeeds | null) =>
+        needs ? jest.fn() : null,
+    ),
+}));
 
 import loggerModule = require('../../src/js/logger');
 const logger = jest.mocked(loggerModule);
@@ -37,7 +42,9 @@ const { runVotingPass } = jest.mocked(
 const { runJoinPass, joinChallengeSingle } = jest.mocked(
     require('../../src/js/services/joinChallenges') as typeof joinChallengesModule,
 );
-const { loadMissionNeeds } = jest.mocked(require('../../src/js/services/missions') as typeof missionsModule);
+const { loadMissionNeeds, registerMissionNeeds } = jest.mocked(
+    require('../../src/js/services/missions') as typeof missionsModule,
+);
 const { mockApiClient, clearSessionCache } = require('../../src/js/mock/index') as typeof indexModule;
 
 /** Resolve a promise that is gated on simulated latency. */
@@ -339,12 +346,34 @@ describe('fetchChallengesAndVote — join pre-step', () => {
     test('reads the missions over the mock endpoint and hands the same needs to the join pass and the vote', async () => {
         const needs = { join: 1, fill: 0, turbo: 2 };
         loadMissionNeeds.mockResolvedValueOnce(needs);
+        const unregister = jest.fn();
+        registerMissionNeeds.mockReturnValueOnce(unregister);
         await mockApiClient.fetchChallengesAndVote('tok');
         expect(loadMissionNeeds).toHaveBeenCalledWith('tok', expect.any(Number), {
             getMyMissions: expect.any(Function),
         });
         expect(runJoinPass.mock.calls.at(-1)![3]).toBe(needs);
         expect(runVotingPass.mock.calls.at(-1)![2].missions).toBe(needs);
+        expect(runVotingPass.mock.calls.at(-1)![2].refreshMissionNeeds).toBeNull();
+        expect(registerMissionNeeds).toHaveBeenLastCalledWith('tok', needs);
+        expect(unregister).toHaveBeenCalledTimes(1);
+    });
+
+    test('headless mock mode also passes a live mission refresh', async () => {
+        const original = Object.getOwnPropertyDescriptor(globalThis, '__GS_HEADLESS__');
+        Object.assign(globalThis, { __GS_HEADLESS__: true });
+        loadMissionNeeds
+            .mockResolvedValueOnce({ join: 0, fill: 0, turbo: 1 })
+            .mockResolvedValueOnce({ join: 0, fill: 0, turbo: 0 });
+        try {
+            await mockApiClient.fetchChallengesAndVote('tok');
+            const refresh = runVotingPass.mock.calls.at(-1)![2].refreshMissionNeeds;
+            expect(refresh).toEqual(expect.any(Function));
+            await expect(refresh?.()).resolves.toMatchObject({ turbo: 0 });
+        } finally {
+            if (original) Object.defineProperty(globalThis, '__GS_HEADLESS__', original);
+            else Reflect.deleteProperty(globalThis, '__GS_HEADLESS__');
+        }
     });
 
     test('a single-challenge run skips the join pass', async () => {

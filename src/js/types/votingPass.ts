@@ -74,6 +74,8 @@ export interface VotingPassDeps {
     scenarios?: ScenarioDeps | null;
     /** What the active missions still need (services/missions.ts); counted down as the pass lands them. */
     missions?: MissionNeeds | null;
+    /** Headless Android refreshes server progress before spending a saved Turbo. */
+    refreshMissionNeeds?: (() => Promise<MissionNeeds | null>) | null;
 }
 
 /** What a voting pass resolves with. `challenges` is the full active list this cycle fetched. */

@@ -15,7 +15,8 @@ import { runVotingPass } from '../services/votingOrchestrator';
 import { createMemoryEntryTracker } from '../services/newEntryTracker';
 import { runJoinPass, joinChallengeSingle } from '../services/joinChallenges';
 import { runClaimPass } from '../services/autoClaim';
-import { loadMissionNeeds } from '../services/missions';
+import { loadMissionNeeds, registerMissionNeeds } from '../services/missions';
+import * as runtime from '../runtime';
 import { mockSwapBackLedger } from '../swapBackStore';
 import { createMemoryAutoSpendLedger } from '../currencyAutoStore';
 import { createMemoryEntryAgeLedger } from '../entryAgeStore';
@@ -144,46 +145,58 @@ const createMockStrategy = (client: MockEndpoints) => {
         }
         // Mission read (only while a mission setting is on), as in real.
         const missions = await loadMissionNeeds(token, Date.now(), { getMyMissions: client.getMyMissions });
-        // Auto-join pre-step (gated by the default-off autoJoin setting), mirroring
-        // the real strategy. Skipped for a single-challenge run; never aborts voting.
-        if (challengeIdFilter === null) {
-            try {
-                await runJoinPass(token, Date.now(), mockJoinDeps(), missions);
-            } catch (error) {
-                logger.withCategory('join').warning(`Mock join pass errored: ${errorMessage(error) || error}`, null);
+        const unregisterMissionNeeds = registerMissionNeeds(token, missions);
+        try {
+            // Auto-join pre-step (gated by the default-off autoJoin setting), mirroring
+            // the real strategy. Skipped for a single-challenge run; never aborts voting.
+            if (challengeIdFilter === null) {
+                try {
+                    await runJoinPass(token, Date.now(), mockJoinDeps(), missions);
+                } catch (error) {
+                    logger
+                        .withCategory('join')
+                        .warning(`Mock join pass errored: ${errorMessage(error) || error}`, null);
+                }
+                // Hourly prize-claim pre-step (default-off autoClaimPrizes), as in real.
+                try {
+                    await runClaimPass(token, Date.now(), pickEndpoints(client, CLAIM_ENDPOINTS));
+                } catch (error) {
+                    logger
+                        .withCategory('claim')
+                        .warning(`Mock claim pass errored: ${errorMessage(error) || error}`, null);
+                }
             }
-            // Hourly prize-claim pre-step (default-off autoClaimPrizes), as in real.
-            try {
-                await runClaimPass(token, Date.now(), pickEndpoints(client, CLAIM_ENDPOINTS));
-            } catch (error) {
-                logger.withCategory('claim').warning(`Mock claim pass errored: ${errorMessage(error) || error}`, null);
-            }
+            return await runVotingPass(token, challengeIdFilter, {
+                api: pickEndpoints(client, VOTING_PASS_ENDPOINTS),
+                cleanupStaleMetadata: null,
+                // In-memory for the same reason cleanupStaleMetadata is null: the
+                // metadata store is shared and un-namespaced, and mock challenge ids
+                // never match real ones, so persisting mock entry snapshots would
+                // accumulate junk in the user's real metadata.json that nothing prunes.
+                entryTracker: mockEntryTracker,
+                // In-memory: mock mode must never touch the real entryAges file.
+                entryAges: mockEntryAgeLedger,
+                // Short fixed spacing — mock cycles should stay fast.
+                interChallengeDelay: () => 500,
+                // Mock spends over the mock endpoints, with in-memory ledgers — mock
+                // mode must never touch the real swap-back / auto-spend files.
+                currency: {
+                    strategy: pickEndpoints(client, CURRENCY_ENDPOINTS),
+                    swapLedger: mockSwapBackLedger,
+                    spendLedger: mockAutoSpendLedger,
+                },
+                // In-memory scenario state — mock mode never touches scenarioState.json.
+                // The Android background service does nothing in mock mode, so the
+                // in-app loop always runs mock scenarios.
+                scenarios: { ledger: mockScenarioStateLedger },
+                missions,
+                refreshMissionNeeds: runtime.isHeadlessService()
+                    ? () => loadMissionNeeds(token, Date.now(), { getMyMissions: client.getMyMissions })
+                    : null,
+            });
+        } finally {
+            unregisterMissionNeeds?.();
         }
-        return runVotingPass(token, challengeIdFilter, {
-            api: pickEndpoints(client, VOTING_PASS_ENDPOINTS),
-            cleanupStaleMetadata: null,
-            // In-memory for the same reason cleanupStaleMetadata is null: the
-            // metadata store is shared and un-namespaced, and mock challenge ids
-            // never match real ones, so persisting mock entry snapshots would
-            // accumulate junk in the user's real metadata.json that nothing prunes.
-            entryTracker: mockEntryTracker,
-            // In-memory: mock mode must never touch the real entryAges file.
-            entryAges: mockEntryAgeLedger,
-            // Short fixed spacing — mock cycles should stay fast.
-            interChallengeDelay: () => 500,
-            // Mock spends over the mock endpoints, with in-memory ledgers — mock
-            // mode must never touch the real swap-back / auto-spend files.
-            currency: {
-                strategy: pickEndpoints(client, CURRENCY_ENDPOINTS),
-                swapLedger: mockSwapBackLedger,
-                spendLedger: mockAutoSpendLedger,
-            },
-            // In-memory scenario state — mock mode never touches scenarioState.json.
-            // The Android background service does nothing in mock mode, so the
-            // in-app loop always runs mock scenarios.
-            scenarios: { ledger: mockScenarioStateLedger },
-            missions,
-        });
     };
 
     return { joinChallenge, fetchChallengesAndVote };

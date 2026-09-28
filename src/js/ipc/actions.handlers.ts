@@ -19,6 +19,7 @@ import * as autoFill from '../services/autoFill';
 import { isAutoJoinActive } from '../services/joinChallenges';
 import { getAutoClaimStatus } from '../services/autoClaim';
 import { findActiveChallenge } from '../services/findActiveChallenge';
+import { recordManualTurboWin } from '../services/missions';
 import { claimTurboRun, releaseTurboRun } from '../services/turboRunLock';
 import { rememberChallenges } from '../windows/quitGuard';
 
@@ -179,6 +180,7 @@ const runManualTurbo = (async (challengeId: string | number, safeTitle: string, 
         { ...liveChallenge, title: liveChallenge.title || safeTitle },
         token,
     );
+    if (result?.won) recordManualTurboWin(token);
     return turboRunResponse(result);
 }) satisfies IpcReplyFn;
 

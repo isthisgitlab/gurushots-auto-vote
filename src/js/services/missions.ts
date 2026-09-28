@@ -53,6 +53,10 @@ const cat = () => logger.withCategory('missions');
 // The last summary logged, so an unchanged mission state isn't repeated every cycle.
 let lastSummary = '';
 
+// A manual Turbo win must count against the mission state used by any voting
+// pass currently running for the same account.
+const activeNeedsByToken = new Map<string, Set<MissionNeeds>>();
+
 const classifyMission = (mission: Mission): MissionKind | null => {
     const text = `${mission?.name ?? ''} ${mission?.description ?? ''}`;
     if (ALL_STAR.test(text)) return null;
@@ -135,9 +139,31 @@ const consumeMission = (needs: MissionNeeds | null | undefined, kind: MissionKin
     if (needs && needs[kind] > 0) needs[kind] -= 1;
 };
 
+const registerMissionNeeds = (token: string, needs: MissionNeeds | null): (() => void) | null => {
+    if (!needs) return null;
+    const active = activeNeedsByToken.get(token) ?? new Set<MissionNeeds>();
+    active.add(needs);
+    activeNeedsByToken.set(token, active);
+    return () => {
+        active.delete(needs);
+        if (active.size === 0) activeNeedsByToken.delete(token);
+    };
+};
+
+const recordManualTurboWin = (token: string): void => {
+    for (const needs of activeNeedsByToken.get(token) ?? []) consumeMission(needs, 'turbo');
+};
+
 // Test hook: forget the last logged summary.
 const resetMissionLog = () => {
     lastSummary = '';
 };
 
-export { classifyMission, loadMissionNeeds, consumeMission, resetMissionLog };
+export {
+    classifyMission,
+    loadMissionNeeds,
+    consumeMission,
+    registerMissionNeeds,
+    recordManualTurboWin,
+    resetMissionLog,
+};

@@ -30,7 +30,8 @@ import { runVotingPass } from '../../services/votingOrchestrator';
 import { createMetadataEntryTracker } from '../../services/newEntryTracker';
 import { runJoinPass, joinChallengeSingle } from '../../services/joinChallenges';
 import { runClaimPass } from '../../services/autoClaim';
-import { loadMissionNeeds } from '../../services/missions';
+import { loadMissionNeeds, registerMissionNeeds } from '../../services/missions';
+import * as runtime from '../../runtime';
 import { joinStateStore, acquireUnlockLock } from '../../joinStateStore';
 
 import type { Challenge, TurboMiniGameResult } from '../../types/gurushots';
@@ -185,69 +186,77 @@ const fetchChallengesAndVote = async (
     // What the active missions still need — read only while a mission setting is
     // on, shared by the join pre-step and the pass, which count it down.
     const missions = await loadMissionNeeds(token, Date.now(), { getMyMissions });
-    // Auto-join pre-step (gated by the default-off `autoJoin` setting inside
-    // runJoinPass). Skipped for a single-challenge "Run" (challengeIdFilter set)
-    // and never allowed to abort voting — a join failure is logged, not thrown.
-    if (challengeIdFilter === null) {
-        try {
-            await runJoinPass(token, Date.now(), joinDeps, missions);
-        } catch (error) {
-            logger
-                .withCategory('join')
-                .warning(`join pass errored (voting continues): ${errorMessage(error) || error}`, null);
+    const unregisterMissionNeeds = registerMissionNeeds(token, missions);
+    try {
+        // Auto-join pre-step (gated by the default-off `autoJoin` setting inside
+        // runJoinPass). Skipped for a single-challenge "Run" (challengeIdFilter set)
+        // and never allowed to abort voting — a join failure is logged, not thrown.
+        if (challengeIdFilter === null) {
+            try {
+                await runJoinPass(token, Date.now(), joinDeps, missions);
+            } catch (error) {
+                logger
+                    .withCategory('join')
+                    .warning(`join pass errored (voting continues): ${errorMessage(error) || error}`, null);
+            }
+            // Prize-claim pre-step: gated by the default-off `autoClaimPrizes`
+            // setting and throttled to once an hour inside runClaimPass.
+            try {
+                await runClaimPass(token, Date.now(), claimDeps);
+            } catch (error) {
+                logger
+                    .withCategory('claim')
+                    .warning(`claim pass errored (voting continues): ${errorMessage(error) || error}`, null);
+            }
         }
-        // Prize-claim pre-step: gated by the default-off `autoClaimPrizes`
-        // setting and throttled to once an hour inside runClaimPass.
-        try {
-            await runClaimPass(token, Date.now(), claimDeps);
-        } catch (error) {
-            logger
-                .withCategory('claim')
-                .warning(`claim pass errored (voting continues): ${errorMessage(error) || error}`, null);
-        }
+        // The Android background service advances scenarios in its own JS context;
+        // re-read its state so this pass's phase-settings overlay is current.
+        if (backgroundServiceOwnsScenarios()) await refreshScenarioStateAsync();
+        return await runVotingPass(token, challengeIdFilter, {
+            api: {
+                getActiveChallenges,
+                getVoteImages,
+                submitVotes,
+                applyBoost,
+                applyBoostToEntry,
+                applyTurbo,
+                getEligiblePhotos,
+                getImageData,
+                submitToChallenge,
+                runTurboMiniGame,
+                // votingOrchestrator copies these into fillDeps; without them the
+                // auto-fill path loses tag resolution in real mode only.
+                getCurrentMemberProfile,
+                searchTagAutocomplete,
+            },
+            cleanupStaleMetadata,
+            // Real mode persists new-entry snapshots to metadata.json, where
+            // cleanupStaleMetadata prunes them alongside their challenge.
+            entryTracker: metadataEntryTracker,
+            // When each entry entered its challenge, for the boost's fresh-entry wait.
+            entryAges: entryAgeLedger,
+            // Random 2-5s spacing between challenges to mimic human behavior.
+            interChallengeDelay: () => getRandomDelay(2000, 5000),
+            // Automatic key / swap / fill spends; the ledgers are the persisted ones
+            // the manual currency handlers use too.
+            currency: {
+                strategy: currencyStrategy,
+                swapLedger: swapBackLedger,
+                spendLedger: autoSpendLedger,
+            },
+            // User-defined scenarios over the persisted state ledger. In the Android
+            // app WebView the native background service owns them (it runs a pass
+            // alongside the in-app loop, with its own copy of the state), so only
+            // one loop ever advances a challenge's plan.
+            scenarios: { ledger: scenarioStateLedger, enabled: () => !backgroundServiceOwnsScenarios() },
+            missions,
+            refreshMissionNeeds: runtime.isHeadlessService()
+                ? () => loadMissionNeeds(token, Date.now(), { getMyMissions })
+                : null,
+        });
+    } finally {
+        unregisterMissionNeeds?.();
     }
-    // The Android background service advances scenarios in its own JS context;
-    // re-read its state so this pass's phase-settings overlay is current.
-    if (backgroundServiceOwnsScenarios()) await refreshScenarioStateAsync();
-    return runVotingPass(token, challengeIdFilter, {
-        api: {
-            getActiveChallenges,
-            getVoteImages,
-            submitVotes,
-            applyBoost,
-            applyBoostToEntry,
-            applyTurbo,
-            getEligiblePhotos,
-            getImageData,
-            submitToChallenge,
-            runTurboMiniGame,
-            // votingOrchestrator copies these into fillDeps; without them the
-            // auto-fill path loses tag resolution in real mode only.
-            getCurrentMemberProfile,
-            searchTagAutocomplete,
-        },
-        cleanupStaleMetadata,
-        // Real mode persists new-entry snapshots to metadata.json, where
-        // cleanupStaleMetadata prunes them alongside their challenge.
-        entryTracker: metadataEntryTracker,
-        // When each entry entered its challenge, for the boost's fresh-entry wait.
-        entryAges: entryAgeLedger,
-        // Random 2-5s spacing between challenges to mimic human behavior.
-        interChallengeDelay: () => getRandomDelay(2000, 5000),
-        // Automatic key / swap / fill spends; the ledgers are the persisted ones
-        // the manual currency handlers use too.
-        currency: {
-            strategy: currencyStrategy,
-            swapLedger: swapBackLedger,
-            spendLedger: autoSpendLedger,
-        },
-        // User-defined scenarios over the persisted state ledger. In the Android
-        // app WebView the native background service owns them (it runs a pass
-        // alongside the in-app loop, with its own copy of the state), so only
-        // one loop ever advances a challenge's plan.
-        scenarios: { ledger: scenarioStateLedger, enabled: () => !backgroundServiceOwnsScenarios() },
-        missions,
-    });
 };
 
 export { fetchChallengesAndVote, getActiveChallenges, applyBoost, runTurboMiniGame, joinChallenge };

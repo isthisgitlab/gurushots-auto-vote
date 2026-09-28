@@ -49,7 +49,7 @@ import * as autoFill from './autoFill';
 import * as photoStats from './photoStats';
 import * as newEntryTracker from './newEntryTracker';
 import * as currencyAuto from './currencyAuto';
-import { consumeMission } from './missions';
+import { consumeMission, registerMissionNeeds } from './missions';
 import { claimTurboRun, releaseTurboRun, turboRunSnapshot, wasManualTurboRunSince } from './turboRunLock';
 import { runScenarioStep } from './scenarioRunner';
 import * as cancellation from '../voting/cancellation';
@@ -474,6 +474,7 @@ export type PassContext = {
     currency: CurrencyPassDeps | null;
     scenarios: ScenarioDeps | null;
     missions: MissionNeeds | null;
+    refreshMissionNeeds: (() => Promise<MissionNeeds | null>) | null;
     allChallenges: Challenge[];
     turboSnapshot: number;
 };
@@ -552,12 +553,18 @@ const selectPassChallenges = (
 const playAutoTurbo = async (
     challenge: Challenge,
     now: number,
-    { api, token, missions, turboSnapshot }: PassContext,
+    { api, token, missions, refreshMissionNeeds, turboSnapshot }: PassContext,
 ) => {
     if (!votingLogic.shouldPlayAutoTurbo(challenge, now)) return;
+    const savedForMission = votingLogic.isTurboEarnSaved(challenge, now);
+    if (savedForMission && missions && missions.turbo > 0 && refreshMissionNeeds) {
+        const fresh = await refreshMissionNeeds();
+        if (!fresh) return;
+        missions.turbo = Math.min(missions.turbo, fresh.turbo);
+    }
     if (wasManualTurboRunSince(challenge.id, turboSnapshot)) return;
     const missionWants = (missions?.turbo ?? 0) > 0;
-    if (!missionWants && votingLogic.isTurboEarnSaved(challenge, now)) {
+    if (!missionWants && savedForMission) {
         logger.withCategory('turbo').debug(`${logger.challengeTag(challenge)} Turbo saved for a mission`, null);
         return;
     }
@@ -893,12 +900,14 @@ const runVotingPass = async (
         currency = null,
         scenarios = null,
         missions = null,
+        refreshMissionNeeds = null,
     } = deps;
     const fillDeps = buildFillDeps(api);
     // Clear the photo-stats failure breaker so a pass that hit a rate limit does
     // not disable stat enrichment for every later pass in the session.
     photoStats.resetPassState();
     logger.withCategory('voting').startOperation('voting-process', 'Voting process');
+    const unregisterMissionNeeds = registerMissionNeeds(token, missions);
 
     try {
         // Get all active challenges
@@ -938,6 +947,7 @@ const runVotingPass = async (
             currency,
             scenarios,
             missions,
+            refreshMissionNeeds,
             allChallenges,
             turboSnapshot,
         };
@@ -987,6 +997,8 @@ const runVotingPass = async (
             success: false,
             error: errorMessage(error) || 'Voting process failed',
         };
+    } finally {
+        unregisterMissionNeeds?.();
     }
 };
 

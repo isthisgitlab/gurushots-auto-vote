@@ -26,8 +26,14 @@ const logger = jest.mocked(invalid<LoggerMock>(loggerModule));
 import settingsModule = require('../../src/js/settings');
 const settings = jest.mocked(settingsModule);
 import type * as missionsModule from '../../src/js/services/missions';
-const { classifyMission, loadMissionNeeds, consumeMission, resetMissionLog } =
-    require('../../src/js/services/missions') as typeof missionsModule;
+const {
+    classifyMission,
+    loadMissionNeeds,
+    consumeMission,
+    registerMissionNeeds,
+    recordManualTurboWin,
+    resetMissionLog,
+} = require('../../src/js/services/missions') as typeof missionsModule;
 
 const NOW_MS = 1_790_514_858_000;
 const NOW_SEC = NOW_MS / 1000;
@@ -50,6 +56,28 @@ beforeEach(() => {
     jest.clearAllMocks();
     resetMissionLog();
     enable(...ALL);
+});
+
+test('manual Turbo wins update only active missions for the same account', () => {
+    const first = { join: 0, fill: 0, turbo: 2 };
+    const second = { join: 0, fill: 0, turbo: 2 };
+    const otherAccount = { join: 0, fill: 0, turbo: 1 };
+    const stopFirst = registerMissionNeeds('tok', first);
+    const stopSecond = registerMissionNeeds('tok', second);
+    const stopOther = registerMissionNeeds('other', otherAccount);
+    try {
+        recordManualTurboWin('tok');
+        expect([first.turbo, second.turbo, otherAccount.turbo]).toEqual([1, 1, 1]);
+        stopFirst?.();
+        recordManualTurboWin('tok');
+        expect([first.turbo, second.turbo, otherAccount.turbo]).toEqual([1, 0, 1]);
+    } finally {
+        stopFirst?.();
+        stopSecond?.();
+        stopOther?.();
+    }
+    recordManualTurboWin('tok');
+    expect(second.turbo).toBe(0);
 });
 
 describe('classifyMission', () => {
