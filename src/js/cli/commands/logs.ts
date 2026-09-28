@@ -4,7 +4,7 @@
  * The logger owns the file paths; this command only reads and tails them.
  */
 
-import * as fs from 'fs';
+import * as fs from 'node:fs';
 import * as logger from '../../logger';
 import { diagnostics } from '../../services/semantic/diagnostics';
 

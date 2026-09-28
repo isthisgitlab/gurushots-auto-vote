@@ -21,10 +21,10 @@ jest.mock('@electron/fuses', () => ({
     },
 }));
 
-import fsModule = require('fs');
+import fsModule = require('node:fs');
 const fs = jest.mocked(fsModule);
-import os = require('os');
-import pathModule = require('path');
+import os = require('node:os');
+import pathModule = require('node:path');
 const path = jest.mocked(pathModule);
 import type * as fusesModule from '@electron/fuses';
 import type afterPackHook from '../../scripts/afterPack.mts';

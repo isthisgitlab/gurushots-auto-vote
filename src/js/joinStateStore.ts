@@ -18,8 +18,8 @@
  * so the lock is a no-op there.
  */
 
-import * as fs from 'fs';
-import * as path from 'path';
+import * as fs from 'node:fs';
+import * as path from 'node:path';
 import * as runtime from './runtime';
 import * as logger from './logger';
 import { createJsonStore, getSettingsPath } from './settings/storage';

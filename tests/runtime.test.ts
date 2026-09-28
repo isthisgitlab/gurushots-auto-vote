@@ -6,7 +6,7 @@
  */
 
 import runtime = require('../src/js/runtime');
-import type * as fsModule from 'fs';
+import type * as fsModule from 'node:fs';
 
 const g = globalThis as typeof globalThis & { __GS_HEADLESS__?: boolean };
 
@@ -33,7 +33,7 @@ describe('runtime.isHeadlessService', () => {
 // The app-identity/user-data resolution decides where logs AND settings
 // physically live — pin each branch.
 describe('runtime app identity + user-data path (single source of truth)', () => {
-    const fs = jest.mocked(require('fs') as typeof fsModule);
+    const fs = jest.mocked(require('node:fs') as typeof fsModule);
 
     beforeEach(() => {
         jest.clearAllMocks();

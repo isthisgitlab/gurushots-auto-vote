@@ -22,7 +22,7 @@ jest.mock('node:sea', () => mockSea, { virtual: true });
 
 import runtimeModule = require('../../../src/js/runtime');
 const runtime = jest.mocked(runtimeModule);
-import fsModule = require('fs');
+import fsModule = require('node:fs');
 const fs = jest.mocked(fsModule);
 import assets = require('../../../src/js/services/semantic/assets');
 import { invalid } from '../../helpers/invalid';

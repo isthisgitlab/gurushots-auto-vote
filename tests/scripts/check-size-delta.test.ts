@@ -9,9 +9,9 @@
  * real process would.
  */
 
-import type * as pathModule from 'path';
-import type * as zlibModule from 'zlib';
-import type * as cryptoModule from 'crypto';
+import type * as pathModule from 'node:path';
+import type * as zlibModule from 'node:zlib';
+import type * as cryptoModule from 'node:crypto';
 
 const realPath = jest.requireActual<typeof pathModule>('path');
 const zlib = jest.requireActual<typeof zlibModule>('zlib');

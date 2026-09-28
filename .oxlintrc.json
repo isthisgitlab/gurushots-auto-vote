@@ -1,6 +1,6 @@
 {
     "$schema": "./node_modules/oxlint/configuration_schema.json",
-    "plugins": ["eslint", "typescript", "react", "jsx-a11y"],
+    "plugins": ["eslint", "typescript", "react", "jsx-a11y", "unicorn"],
     "jsPlugins": ["./scripts/lint/a11y-local.mts"],
     // Every category off: the rules below are listed explicitly, mirroring
     // eslint:recommended plus this project's rules, so an Oxlint upgrade never
@@ -97,6 +97,7 @@
         "require-yield": "error",
         "use-isnan": "error",
         "valid-typeof": "error",
+        "unicorn/prefer-node-protocol": "error",
         "no-console": [
             "error",
             {

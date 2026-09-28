@@ -21,7 +21,7 @@ jest.mock('../../src/js/logger', () => {
     };
 });
 
-import fsModule = require('fs');
+import fsModule = require('node:fs');
 const fs = jest.mocked(fsModule);
 import loggerModule = require('../../src/js/logger');
 const logger = jest.mocked(invalid<typeof loggerModule & { __infoMock: jest.Mock<void, [string]> }>(loggerModule));

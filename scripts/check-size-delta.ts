@@ -27,9 +27,9 @@
  * first).
  */
 
-import fs from 'fs';
-import path from 'path';
-import zlib from 'zlib';
+import fs from 'node:fs';
+import path from 'node:path';
+import zlib from 'node:zlib';
 
 const ROOT = path.join(__dirname, '..');
 const BASELINE_PATH = path.join(ROOT, '.size-baseline.json');

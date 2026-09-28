@@ -5,7 +5,7 @@
  * and every module load that depends on them goes through isolateModules.
  */
 
-import fsModule = require('fs');
+import fsModule = require('node:fs');
 const fs = jest.mocked(fsModule);
 import type * as runtimeModule from '../src/js/runtime';
 import type * as node_osModule from 'node:os';

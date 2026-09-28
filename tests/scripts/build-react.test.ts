@@ -8,7 +8,7 @@
  * nothing under dist/ is touched.
  */
 
-import type * as pathModule from 'path';
+import type * as pathModule from 'node:path';
 import type { BuildOptions } from 'esbuild';
 import { invalid } from '../helpers/invalid';
 

@@ -60,7 +60,7 @@ jest.mock('../../src/js/services/UpdateChecker', () => ({
 const mockHasBundledModel = jest.fn(async () => true);
 jest.mock('../../src/js/services/visionVerifier', () => ({ hasBundledModel: mockHasBundledModel }));
 
-import fsModule = require('fs');
+import fsModule = require('node:fs');
 const fs = jest.mocked(fsModule);
 import loggerModule = require('../../src/js/logger');
 const logger = jest.mocked(

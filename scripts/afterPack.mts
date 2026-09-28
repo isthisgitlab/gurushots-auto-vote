@@ -19,8 +19,8 @@
  * swapped-in unpacked app dir (asar:true is the electron-builder default here).
  */
 
-import fs from 'fs';
-import path from 'path';
+import fs from 'node:fs';
+import path from 'node:path';
 import { flipFuses, FuseVersion, FuseV1Options } from '@electron/fuses';
 import type { AfterPackContext, LinuxPackager } from 'electron-builder';
 

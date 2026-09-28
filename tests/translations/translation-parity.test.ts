@@ -6,8 +6,8 @@
  */
 import english = require('../../src/js/translations/english');
 import latvian = require('../../src/js/translations/latvian');
-import type * as pathModule from 'path';
-import type * as fsModule from 'fs';
+import type * as pathModule from 'node:path';
+import type * as fsModule from 'node:fs';
 import { invalid } from '../helpers/invalid';
 
 /**
@@ -55,7 +55,7 @@ describe('translation parity', () => {
 describe('renderer translation keys exist', () => {
     // fs is mocked globally in tests/setup.ts; this test reads real sources.
     const fs = jest.requireActual<typeof fsModule>('fs');
-    const path = require('path') as typeof pathModule;
+    const path = require('node:path') as typeof pathModule;
 
     // Literal t('section.key') calls only — dynamic keys (t(variable)) can't be
     // checked statically. A missing key renders as the raw key string in the

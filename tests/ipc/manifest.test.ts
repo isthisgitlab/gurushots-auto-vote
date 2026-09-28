@@ -31,7 +31,7 @@ jest.mock('../../src/js/ui/applicationMenu', () => ({
 }));
 
 const fs = jest.requireActual<typeof import('fs')>('fs');
-import pathModule = require('path');
+import pathModule = require('node:path');
 const path = jest.mocked(pathModule);
 import type * as manifestModule from '../../src/js/ipc/manifest';
 import type * as settings_handlersModule from '../../src/js/ipc/settings.handlers';

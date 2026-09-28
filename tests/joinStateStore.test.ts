@@ -25,7 +25,7 @@ jest.mock('../src/js/settings/storage', () => ({
     getSettingsPath: jest.fn(() => '/cfg/settings.json'),
 }));
 
-import fsModule = require('fs');
+import fsModule = require('node:fs');
 const fs = jest.mocked(fsModule);
 import runtimeModule = require('../src/js/runtime');
 const runtime = jest.mocked(runtimeModule);
