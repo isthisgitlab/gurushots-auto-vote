@@ -25,6 +25,14 @@
         "types": ["node"],
         "noEmit": true,
         "strict": true,
+        "noImplicitOverride": true,
+        "noImplicitReturns": true,
+        "noFallthroughCasesInSwitch": true,
+        "noUnusedLocals": true,
+        // Every file is compiled on its own (esbuild, swc, tsx), so type-only
+        // imports must say so and nothing may need whole-program information.
+        "verbatimModuleSyntax": true,
+        "isolatedModules": true,
         "esModuleInterop": true,
         "resolveJsonModule": true,
         "skipLibCheck": true,

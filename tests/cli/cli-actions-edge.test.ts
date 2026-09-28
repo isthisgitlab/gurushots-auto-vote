@@ -109,7 +109,7 @@ describe('challenge lookup', () => {
     });
 
     test('swap bails out (undefined, not a usage error) when the challenge is unknown', async () => {
-        await expect(actions.swapCmd('999', { imageId: 'a' })).resolves.toBeUndefined();
+        await expect(actions.swapCmd('999', { imageId: 'a' })).resolves.toBe(true);
         expect(h['preview-swap-photo']).not.toHaveBeenCalled();
     });
 

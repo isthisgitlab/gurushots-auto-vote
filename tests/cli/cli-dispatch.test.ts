@@ -369,8 +369,8 @@ describe('challenge-scoped actions', () => {
         expect(m.exitCodes).toEqual([0]);
     });
 
-    test.each<[false | undefined, number]>([
-        [undefined, 0],
+    test.each<[boolean, number]>([
+        [true, 0],
         [false, 1],
     ])('swap exit code follows the command result (%p → %p)', async (result, code) => {
         const m = await run(['swap', '--challenge=5', '--image=a', '--to=b', '--yes'], (mods) =>

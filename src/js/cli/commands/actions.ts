@@ -248,24 +248,24 @@ const parseSwapFlags = (rest: string[]) => {
  * Spend a SWAP to replace entered photo `imageId` with the app's best-ranked
  * different photo. The dry run prints the suggested replacement; --yes must
  * repeat it as --to=<id>, and is refused if the suggestion changed since.
- * Returns false on a usage error (no --image).
+ * Returns false on a usage error (no --image), true otherwise.
  */
 const swapCmd = async (
     challengeId: string,
     { imageId, to = null, yes = false }: { imageId?: string | null; to?: string | null; yes?: boolean } = {},
-) => {
+): Promise<boolean> => {
     if (!imageId) {
         logger.withCategory('ui').error('Please specify the entered photo to replace with --image=<id>');
         logger.withCategory('ui').info(SWAP_USAGE);
         return false;
     }
     const challenge = await resolveChallenge(challengeId);
-    if (!challenge) return;
+    if (!challenge) return true;
     try {
         const preview = await currencyHandlers()['preview-swap-photo'](null, challengeId, imageId);
         if (!preview?.success) {
             logger.withCategory('currency').error(describeOutcome(preview));
-            return;
+            return true;
         }
         // The handler's result arms share `success: boolean`, so the check above does not narrow.
         const newId = (preview as { candidate: { id: string } }).candidate.id;
@@ -277,7 +277,7 @@ const swapCmd = async (
                 .info(
                     `To spend the swap, re-run: swap --challenge=${challengeId} --image=${imageId} --to=${newId} --yes`,
                 );
-            return;
+            return true;
         }
         if (!to || to !== newId) {
             logger
@@ -287,7 +287,7 @@ const swapCmd = async (
                         ? `The suggested replacement is now ${newId}, not ${to}. Nothing was spent — re-run with --to=${newId} --yes to confirm it.`
                         : `Add --to=${newId} to confirm the replacement (run without --yes first to review it).`,
                 );
-            return;
+            return true;
         }
         const result = await currencyHandlers()['swap-entry-photo'](null, challengeId, imageId, newId, true);
         reportSpend(result, `Swapped ${imageId} → ${newId} in "${challenge.title}".`);
@@ -296,6 +296,7 @@ const swapCmd = async (
             .withCategory('currency')
             .error(`Failed to swap photo: ${(err as { message?: unknown } | null | undefined)?.message || err}`);
     }
+    return true;
 };
 
 /**

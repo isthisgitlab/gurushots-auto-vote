@@ -42,11 +42,11 @@ export class ErrorBoundary extends Component<ErrorBoundaryProps, ErrorBoundarySt
         this.handleReload = this.handleReload.bind(this);
     }
 
-    static getDerivedStateFromError(error: Partial<Error>) {
+    static override getDerivedStateFromError(error: Partial<Error>) {
         return { error };
     }
 
-    componentDidCatch(error: Partial<Error> | null | undefined, info: ErrorInfo | undefined) {
+    override componentDidCatch(error: Partial<Error> | null | undefined, info: ErrorInfo | undefined) {
         const detail = error?.stack || error?.message || String(error);
         const componentStack = info?.componentStack || '';
         const dedupeKey = error?.message || String(error);
