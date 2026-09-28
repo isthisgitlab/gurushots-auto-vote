@@ -204,7 +204,7 @@ const submitVotes = async (
     logger
         .withCategory('voting')
         .success(
-            `${logger.challengeTag(challenge)} Votes submitted (${votedImageIds.length} images, ~${exposure_factor.toFixed(1)}% exposure)`,
+            `${logger.challengeTag(challenge)} Votes submitted (${votedImageIds.length} images, ~${Math.min(exposure_factor, 100).toFixed(1)}% exposure)`,
             null,
             duration,
         );

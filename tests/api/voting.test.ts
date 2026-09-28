@@ -18,6 +18,7 @@ const mockInfoFn = jest.fn();
 const mockWarningFn = jest.fn();
 const mockDebugFn = jest.fn();
 const mockErrorFn = jest.fn();
+const mockSuccessFn = jest.fn();
 
 // Mock the logger module
 jest.mock('../../src/js/logger', () => {
@@ -40,7 +41,7 @@ jest.mock('../../src/js/logger', () => {
             startOperation: jest.fn(),
             endOperation: mockEndOperationFn,
             progress: jest.fn(),
-            success: jest.fn(),
+            success: mockSuccessFn,
         })),
         challengeTag: (c: { id?: unknown; title?: unknown } | string | null | undefined, t?: string) =>
             c && typeof c === 'object'
@@ -73,6 +74,7 @@ describe('voting', () => {
         mockWarningFn.mockClear();
         mockDebugFn.mockClear();
         mockErrorFn.mockClear();
+        mockSuccessFn.mockClear();
     });
 
     describe('getVoteImages', () => {
@@ -374,6 +376,11 @@ describe('voting', () => {
             expect(mockWarningFn).not.toHaveBeenCalledWith(
                 expect.stringContaining('Insufficient images'),
                 expect.anything(),
+            );
+            expect(mockSuccessFn).toHaveBeenCalledWith(
+                expect.stringContaining('2 images, ~100.0% exposure'),
+                null,
+                expect.any(Number),
             );
         });
 
