@@ -10,7 +10,9 @@
         "src/js/react/pages/Logs.tsx",
         "src/js/react/pages/Capacitor.tsx",
         "scripts/*.ts",
-        "scripts/afterPack.mts"
+        "scripts/afterPack.mts",
+        "src/js/types/globals.ts",
+        "tests/jest-matchers.ts"
     ],
     "project": ["src/**/*.{ts,tsx,css}", "scripts/**/*.{ts,mts}", "tests/**/*.{ts,tsx,cts}"],
     "paths": {

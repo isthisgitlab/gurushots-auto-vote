@@ -21,7 +21,7 @@
  * @param challengeIdFilter - restricts the strategy pass
  *   to one challenge (per-card "Run"); stale-metadata cleanup still runs
  *   against the full active list first.
- * @param deps - see types/votingPass.d.ts
+ * @param deps - see types/votingPass.ts
  *   `entryTracker` backs the voteOnNewEntry feature. Real mode passes a
  *   metadata.json-backed tracker; mock passes an in-memory one for the same reason
  *   it passes cleanupStaleMetadata: null — the metadata store is shared and

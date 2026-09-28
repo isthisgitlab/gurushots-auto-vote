@@ -3,7 +3,7 @@
  * (services/autoFill/*). Type-only: nothing here exists at runtime.
  *
  * The endpoint signatures are the real api/* ones; the mock endpoints mirror
- * them. They are declared as methods, like types/votingPass.d.ts, so the real
+ * them. They are declared as methods, like types/votingPass.ts, so the real
  * and mock implementations both fit.
  */
 
@@ -67,16 +67,16 @@ export type AdoptableMember = ChallengeMember & {
 };
 
 /** The log prefix of a submitting fill path. */
-export type FillLabel = 'autoFill' | 'emergencyFill' | 'manualFill' | 'fillNew';
+type FillLabel = 'autoFill' | 'emergencyFill' | 'manualFill' | 'fillNew';
 
 /** What onRefreshed may answer after the live re-check. */
-export interface RefreshVerdict {
+interface RefreshVerdict {
     standDown?: boolean;
     picked?: string[];
 }
 
 /** The loaded candidate set a stand-down probe sees. */
-export interface LoadedCandidates {
+interface LoadedCandidates {
     eligible: PickerPhoto[];
     semanticScores: SemanticScoreMap | null;
 }

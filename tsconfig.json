@@ -2,7 +2,7 @@
     // TypeScript is used here as a CHECKER ONLY — never as a compiler (noEmit):
     // esbuild bundles and swc (tests) / tsx (scripts) run the .ts/.tsx sources
     // directly. Every file under src/js is TypeScript and strictly checked;
-    // the .d.ts files under src/js/types carry the shared shapes.
+    // the type-only modules under src/js/types carry the shared shapes.
     "compilerOptions": {
         "target": "es2025",
         // One program covers the core and the renderer: the renderer bundles

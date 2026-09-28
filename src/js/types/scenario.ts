@@ -15,7 +15,7 @@ export type Duration = number | string;
 
 export type ComparisonOp = OneOf<typeof vocabulary.COMPARISON_OPS>;
 
-export type Currency = OneOf<typeof vocabulary.CURRENCIES>;
+type Currency = OneOf<typeof vocabulary.CURRENCIES>;
 
 export type RankingSelectorName = OneOf<typeof vocabulary.RANKING_SELECTORS>;
 

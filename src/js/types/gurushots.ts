@@ -10,7 +10,7 @@
  */
 
 /** Unix time in seconds, as the API sends it. */
-export type UnixSeconds = number;
+type UnixSeconds = number;
 
 /** One of the member's own photos entered in a challenge. */
 export interface RankingEntry {
@@ -58,7 +58,7 @@ export interface MemberRanking {
 }
 
 export type BoostState = 'LOCKED' | 'AVAILABLE' | 'AVAILABLE_KEY' | 'USED' | 'UNAVAILABLE' | (string & {});
-export type TurboState = 'FREE' | 'IN_PROGRESS' | 'TIMER' | 'WON' | 'LOCKED' | 'USED' | 'UNAVAILABLE' | (string & {});
+type TurboState = 'FREE' | 'IN_PROGRESS' | 'TIMER' | 'WON' | 'LOCKED' | 'USED' | 'UNAVAILABLE' | (string & {});
 
 export interface MemberBoost {
     state?: BoostState;
@@ -76,7 +76,7 @@ export interface MemberTurbo {
     turbo_unlock_amount?: number;
 }
 
-export interface RewardResource {
+interface RewardResource {
     type?: string;
     title?: string;
     value?: number;
@@ -152,7 +152,7 @@ export interface VoteImage {
 }
 
 /** The challenge as get_vote_images echoes it. */
-export interface VoteChallenge {
+interface VoteChallenge {
     id: number | string;
     title: string;
     url?: string;
@@ -266,7 +266,7 @@ export interface ChallengeTurboResponse {
 }
 
 /** One Turbo battle pair, normalized from get_challenge_turbo. */
-export interface TurboBattle {
+interface TurboBattle {
     firstImageId?: string;
     secondImageId?: string;
     isSuccess?: boolean | null;

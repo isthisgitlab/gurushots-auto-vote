@@ -9,7 +9,7 @@
  * implementations both fit (method parameters are checked bivariantly).
  */
 
-import type { Challenge, VoteImagesResponse } from './gurushots';
+import type { Challenge } from './gurushots';
 import type { getActiveChallenges as GetActiveChallenges } from '../strategies/real/activeChallenges';
 import type { applyBoost as ApplyBoost } from '../strategies/real/applyBoost';
 import type { runTurboMiniGame as RunTurboMiniGame } from '../strategies/real';

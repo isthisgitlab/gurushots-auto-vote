@@ -20,7 +20,7 @@ export interface ApkInstallerPlugin {
 }
 
 /** `@capacitor/browser` as registered on the runtime global. */
-export interface BrowserPlugin {
+interface BrowserPlugin {
     open?(options: { url: string }): Promise<void>;
 }
 

@@ -395,7 +395,7 @@ repeated six times is one that gets forgotten at one of them.
   Electron `preload.ts` builds `contextBridge.exposeInMainWorld('api', …)`; Capacitor
   `bridge/capacitor.ts` builds the identical surface in-process.
 - **Drift is CI-enforced** by `tests/ipc/manifest.test.ts` at the name level. Signatures travel through the
-  `WindowApi` type (`types/ipc.d.ts`, derived from the manifest lists and every `buildHandlers()`), so a
+  `WindowApi` type (`types/ipc.ts`, derived from the manifest lists and every `buildHandlers()`), so a
   renderer call in a type-checked file is checked against its handler's parameters and result — only as
   precise as that handler's type annotations.
 - Handler shape: every `ipc/*.handlers.ts` exports `buildHandlers(deps) → {channel: impl}` **and**
