@@ -42,11 +42,7 @@ const getMemberChallenges = async (token: string, filter: string = 'open'): Prom
     requireValue(token, 'token');
     const headers = createWebHeaders(token);
     const data = `filter=${encodeURIComponent(String(filter))}`;
-    const response = (await makePostRequest(
-        ENDPOINTS.getMemberChallenges,
-        headers,
-        data,
-    )) as MemberChallengesResponse | null;
+    const response = await makePostRequest<MemberChallengesResponse>(ENDPOINTS.getMemberChallenges, headers, data);
     if (!response || !Array.isArray(response.items)) {
         return [];
     }
@@ -71,7 +67,7 @@ const coinsUnlock = async (
         `challenge_id=${encodeURIComponent(String(challengeId))}`,
         `usage=${encodeURIComponent(String(usage))}`,
     ].join('&');
-    const response = (await makePostRequest(ENDPOINTS.coinsUnlock, headers, data)) as SuccessResponse | null;
+    const response = await makePostRequest<SuccessResponse>(ENDPOINTS.coinsUnlock, headers, data);
     if (!response) {
         return { ok: false, raw: null };
     }
@@ -100,7 +96,7 @@ const BANKROLL_FIELDS: Record<string, keyof Bankroll> = {
 const getBankroll = async (token: string): Promise<Bankroll | null> => {
     requireValue(token, 'token');
     const headers = createWebHeaders(token);
-    const response = (await makePostRequest(ENDPOINTS.getBankroll, headers, '')) as BankrollResponse | null;
+    const response = await makePostRequest<BankrollResponse>(ENDPOINTS.getBankroll, headers, '');
     if (!response || response.success !== true) {
         return null;
     }

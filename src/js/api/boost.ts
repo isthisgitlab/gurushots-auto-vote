@@ -31,7 +31,7 @@ const _postBoost = async (challengeId: string, imageId: string, token: string): 
         ...createCommonHeaders(token),
         'content-type': FORM_CONTENT_TYPE,
     };
-    return (await makePostRequest(ENDPOINTS.boostPhoto, headers, data)) as SuccessResponse | null;
+    return await makePostRequest<SuccessResponse>(ENDPOINTS.boostPhoto, headers, data);
 };
 
 /**

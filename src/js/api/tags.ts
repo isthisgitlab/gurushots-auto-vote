@@ -51,11 +51,11 @@ const requireValue = makeRequireValue('tags');
  */
 const getCurrentMemberProfile = async (token: string): Promise<MemberIdentity | null> => {
     requireValue(token, 'token');
-    const response = (await makePostRequest(
+    const response = await makePostRequest<CurrentMemberProfileResponse>(
         ENDPOINTS.currentMemberProfile,
         createWebHeaders(token),
         '',
-    )) as CurrentMemberProfileResponse | null;
+    );
     const profile = response && response.profile;
     if (!profile || typeof profile !== 'object') return null;
     const id = profile.id;
@@ -96,11 +96,11 @@ const searchTagAutocomplete = async (token: string, term: string, memberId: stri
     if (typeof memberId !== 'string' || memberId === '') return [];
 
     const data = `search=${encodeURIComponent(text)}&member_id=${encodeURIComponent(memberId)}`;
-    const response = (await makePostRequest(
+    const response = await makePostRequest<SearchAutocompleteResponse>(
         ENDPOINTS.searchAutocomplete,
         createWebHeaders(token),
         data,
-    )) as SearchAutocompleteResponse | null;
+    );
     if (!response || !Array.isArray(response.items)) return [];
     // The payload is untrusted: keep only non-empty strings, normalise, and
     // bound both the list and each entry (see MAX_TAG_LENGTH), so neither a

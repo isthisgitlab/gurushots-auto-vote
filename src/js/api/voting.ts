@@ -32,7 +32,7 @@ const getVoteImages = async (challenge: Challenge, token: string): Promise<VoteI
         'content-type': FORM_CONTENT_TYPE,
     };
 
-    const response = (await makePostRequest(ENDPOINTS.voteImages, headers, data)) as VoteImagesResponse | null;
+    const response = await makePostRequest<VoteImagesResponse>(ENDPOINTS.voteImages, headers, data);
 
     // No-images is an expected branch (mock-mode, or pool emptied between cycles).
     // The outer voting op reports the user-visible line; we close at DEBUG.
@@ -175,7 +175,7 @@ const submitVotes = async (
     };
 
     // Submit votes to API
-    const response = (await makePostRequest(ENDPOINTS.submitVote, headers, data)) as SuccessResponse | null;
+    const response = await makePostRequest<SuccessResponse>(ENDPOINTS.submitVote, headers, data);
     if (!response) {
         logger.withCategory('voting').error(`${logger.challengeTag(challenge)} Vote submission failed`, null);
         return;

@@ -6,8 +6,9 @@
  *   - Retry-After parsing fallbacks and the minimum retry delay;
  *   - coercion of the retry settings.
  *
- * makePostRequest's contract is "body or null, never throws" — every failure
- * path below asserts a null result, never a rejection.
+ * makePostRequest's contract is "object body or null, never throws" — every
+ * failure path below, and a body that is not a JSON object, asserts a null
+ * result, never a rejection.
  */
 
 import axiosModule = require('axios');
@@ -262,20 +263,41 @@ describe('retry classification', () => {
     });
 });
 
+describe('response body', () => {
+    const warnings = () =>
+        jest
+            .mocked(logger.withCategory)
+            .mock.results.flatMap((r) => jest.mocked(r.value as CategoryLogger).warning.mock.calls);
+
+    test.each<[string, unknown, string]>([
+        ['an HTML page', '<html>maintenance</html>', 'string'],
+        ['an empty body', '', 'string'],
+        ['an array', [{ id: 1 }], 'array'],
+        ['a number', 42, 'number'],
+    ])('%s is not a response: null, logged, not retried', async (_label, data, type) => {
+        axios.mockResolvedValueOnce({ status: 200, headers: {}, data });
+
+        await expect(makePostRequest(URL, {}, '')).resolves.toBeNull();
+
+        expect(axios).toHaveBeenCalledTimes(1);
+        expect(warnings()).toEqual([['API response body is not a JSON object', { url: URL, type }]]);
+    });
+});
+
 describe('retry delay selection', () => {
     test('a zero retry_after is clamped up to the 100ms minimum', async () => {
         axios
             .mockRejectedValueOnce(httpError(429, { retry_after: 0 }))
-            .mockResolvedValueOnce({ status: 200, headers: {}, data: 'ok' });
+            .mockResolvedValueOnce({ status: 200, headers: {}, data: { ok: true } });
 
-        await expect(makePostRequest(URL, {}, '')).resolves.toBe('ok');
+        await expect(makePostRequest(URL, {}, '')).resolves.toEqual({ ok: true });
         expect(timing.sleep).toHaveBeenCalledWith(100);
     });
 
     test('a negative body retry_after is ignored in favour of the Retry-After header', async () => {
         axios
             .mockRejectedValueOnce(httpError(429, { retry_after: -3 }, { 'retry-after': '4' }))
-            .mockResolvedValueOnce({ status: 200, headers: {}, data: 'ok' });
+            .mockResolvedValueOnce({ status: 200, headers: {}, data: { ok: true } });
 
         await makePostRequest(URL, {}, '');
 
@@ -289,9 +311,9 @@ describe('retry delay selection', () => {
             axios
                 .mockRejectedValueOnce(httpError(503, null, { 'retry-after': 'soon' }))
                 .mockRejectedValueOnce(httpError(503, null))
-                .mockResolvedValueOnce({ status: 200, headers: {}, data: 'ok' });
+                .mockResolvedValueOnce({ status: 200, headers: {}, data: { ok: true } });
 
-            await expect(makePostRequest(URL, {}, '')).resolves.toBe('ok');
+            await expect(makePostRequest(URL, {}, '')).resolves.toEqual({ ok: true });
 
             // attempt 0: 200*1 + 0.5*200 = 300; attempt 1: 200*2 + 100 = 500
             expect(timing.sleep.mock.calls).toEqual([[300], [500]]);

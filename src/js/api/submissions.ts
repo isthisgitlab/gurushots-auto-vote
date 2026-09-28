@@ -72,11 +72,7 @@ const fetchPhotoPage = async (
     if (typeof search === 'string' && search.trim() !== '') {
         params.push(`search=${encodeURIComponent(search.trim())}`);
     }
-    const response = (await makePostRequest(
-        ENDPOINTS.photosPrivate,
-        headers,
-        params.join('&'),
-    )) as PhotosPrivateResponse | null;
+    const response = await makePostRequest<PhotosPrivateResponse>(ENDPOINTS.photosPrivate, headers, params.join('&'));
     if (!response || !Array.isArray(response.items)) {
         return null;
     }
@@ -231,7 +227,7 @@ const getImageData = async (imageId: string | number, token: string): Promise<Im
     requireValue(token, 'token');
     const headers = createWebHeaders(token);
     const data = `id=${encodeURIComponent(String(imageId))}`;
-    const response = (await makePostRequest(ENDPOINTS.imageData, headers, data)) as ImageDataResponse | null;
+    const response = await makePostRequest<ImageDataResponse>(ENDPOINTS.imageData, headers, data);
     if (!response || response.success !== true) {
         return null;
     }
@@ -263,7 +259,7 @@ const submitToChallenge = async (
         params.push(`image_ids[${index}]=${encodeURIComponent(String(id))}`);
     });
     const data = params.join('&');
-    const response = (await makePostRequest(ENDPOINTS.submitToChallenge, headers, data)) as SuccessResponse | null;
+    const response = await makePostRequest<SuccessResponse>(ENDPOINTS.submitToChallenge, headers, data);
     if (!response) {
         return { ok: false, raw: null };
     }

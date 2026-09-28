@@ -209,9 +209,11 @@ Domain terms used throughout, in reader's terms:
   `getActiveChallenges` calls per token and pins first-seen titles via `services/challengeTitlePin.ts` on a
   successful fetch only). `apiFactory.ts` assembles the real surface from these and selects it or
   `mock/index.ts#mockApiClient`.
-- All POSTs go through `makePostRequest()` (`api/api-client.ts` — around L237). **Contract: it returns the
-  response body on success and `null` on ultimate failure — it never throws.** Every caller branches on
-  `null`, not on a catch.
+- All POSTs go through `makePostRequest<T>()` (`api/api-client.ts` — around L243). **Contract: it returns the
+  response body as `T` on success and `null` on ultimate failure or when the body is not a JSON object — it
+  never throws.** Every caller branches on `null`, not on a catch. Only the object check is enforced: `T`
+  declares every field optional and each endpoint wrapper guards its reads (a tolerant reader — a strict
+  schema would turn harmless upstream drift into a failed request).
 - Auth: `authenticate(email, password)` posts form-encoded credentials and returns the token payload
   (`api/login.ts`). The token is then threaded **explicitly** from caller to caller and injected as the
   `x-token` header — there is no refresh flow.

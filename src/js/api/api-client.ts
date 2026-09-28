@@ -12,6 +12,7 @@ import { sleep } from '../timing';
 import * as settings from '../settings';
 import * as runtime from '../runtime';
 import { FORM_CONTENT_TYPE } from './constants';
+import { isPlainObject } from '../plainObject';
 
 import type { AxiosAdapter, AxiosRequestConfig, AxiosResponse } from 'axios';
 
@@ -235,11 +236,15 @@ const getRetryAfterMs = (error: RequestFailure): number | null => {
  * @param url - The API endpoint URL
  * @param headers - Request headers including authentication token
  * @param data - URL-encoded form data (default: empty string)
- * @returns The parsed response body, or null if the request
- *   failed. The body is untrusted: each endpoint wrapper casts it to the shape it
- *   reads (all fields optional) and guards every read.
+ * @returns The response body as `T` (the shape the endpoint wrapper reads, all
+ *   fields optional), or null if the request failed or the body was not a JSON
+ *   object. Only the object check is enforced: the wrapper guards every read.
  */
-const makePostRequest = async (url: string, headers: RequestHeaders, data: string = ''): Promise<unknown> => {
+const makePostRequest = async <T extends object>(
+    url: string,
+    headers: RequestHeaders,
+    data: string = '',
+): Promise<T | null> => {
     const maxRetries = coerceNonNegInt(settings.getSetting('apiMaxRetries'), 3);
     const baseDelayMs = coerceNonNegInt(settings.getSetting('apiRetryBaseDelayMs'), 1000);
 
@@ -275,7 +280,19 @@ const makePostRequest = async (url: string, headers: RequestHeaders, data: strin
                 responseData: response.data as unknown,
             });
 
-            return response.data;
+            // The one place a body becomes a response type. Anything that is
+            // not a JSON object (an HTML error page, a bare string, an array)
+            // is no GuruShots response and reads as a failed request. The
+            // fields stay unverified on purpose: T declares them optional and
+            // each endpoint wrapper guards its reads, so upstream drift in one
+            // field degrades that read instead of rejecting the whole response.
+            const body: unknown = response.data;
+            if (isPlainObject(body)) return body as T;
+            logger.withCategory('api').warning('API response body is not a JSON object', {
+                url,
+                type: Array.isArray(body) ? 'array' : typeof body,
+            });
+            return null;
         } catch (caught) {
             const error = caught as RequestFailure | null | undefined;
             const duration = Date.now() - startTime;

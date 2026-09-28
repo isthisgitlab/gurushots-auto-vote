@@ -239,7 +239,7 @@ describe('challenges', () => {
 
         test('should handle falsy response object', async () => {
             // Test with false (which is falsy but not null/undefined)
-            makePostRequest.mockResolvedValueOnce(false);
+            makePostRequest.mockResolvedValueOnce(invalid(false));
 
             const result = await getActiveChallenges(mockToken);
 
@@ -249,7 +249,7 @@ describe('challenges', () => {
         });
 
         test('coalesces concurrent calls for the same token into a single request', async () => {
-            let resolveRequest: ((value: unknown) => void) | undefined;
+            let resolveRequest: ((value: object | null) => void) | undefined;
             makePostRequest.mockReturnValueOnce(
                 new Promise((resolve) => {
                     resolveRequest = resolve;

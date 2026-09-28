@@ -32,7 +32,7 @@ const getChallengeTurbo = async (challengeId: string | number, token: string): P
     requireValue(token, 'token');
     const headers = createWebHeaders(token);
     const data = `challenge_id=${encodeURIComponent(String(challengeId))}`;
-    const response = (await makePostRequest(ENDPOINTS.challengeTurbo, headers, data)) as ChallengeTurboResponse | null;
+    const response = await makePostRequest<ChallengeTurboResponse>(ENDPOINTS.challengeTurbo, headers, data);
     if (!response || !Array.isArray(response.images)) {
         return null;
     }
@@ -62,11 +62,7 @@ const submitTurboSelection = async (
     requireValue(token, 'token');
     const headers = createWebHeaders(token);
     const data = `challenge_id=${encodeURIComponent(String(challengeId))}&image_id=${encodeURIComponent(String(imageId))}`;
-    const response = (await makePostRequest(
-        ENDPOINTS.submitTurboSelection,
-        headers,
-        data,
-    )) as TurboSelectionResponse | null;
+    const response = await makePostRequest<TurboSelectionResponse>(ENDPOINTS.submitTurboSelection, headers, data);
     if (!response) {
         return { ok: false, success: false, state: null, scores: null, errorCode: null, raw: null };
     }
@@ -91,7 +87,7 @@ const applyTurbo = async (challengeId: string | number, imageId: string, token: 
     requireValue(token, 'token');
     const headers = createWebHeaders(token);
     const data = `challenge_id=${encodeURIComponent(String(challengeId))}&image_id=${encodeURIComponent(String(imageId))}`;
-    const response = (await makePostRequest(ENDPOINTS.setTurbo, headers, data)) as SuccessResponse | null;
+    const response = await makePostRequest<SuccessResponse>(ENDPOINTS.setTurbo, headers, data);
     if (!response) {
         return { ok: false, raw: null };
     }

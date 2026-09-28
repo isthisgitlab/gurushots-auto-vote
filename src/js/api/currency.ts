@@ -32,7 +32,7 @@ const toResult = (response: SuccessResponse | null): ActionResult =>
 const post = async (url: string, token: string, fields: Record<string, string>): Promise<ActionResult> => {
     const headers = createWebHeaders(token);
     const data = new URLSearchParams(fields).toString();
-    return toResult((await makePostRequest(url, headers, data)) as SuccessResponse | null);
+    return toResult(await makePostRequest<SuccessResponse>(url, headers, data));
 };
 
 /**

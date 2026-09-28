@@ -40,7 +40,7 @@ const authenticate = async (email: string, password: string): Promise<LoginRespo
     // Routed through makePostRequest so the CapacitorHttp adapter applies on
     // Android — the iOS-spoof headers in randomizer.ts (host, user-agent) are
     // forbidden in browser fetch and only survive via native OkHttp.
-    const responseData = (await makePostRequest(ENDPOINTS.signup, headers, data)) as LoginResponse | null;
+    const responseData = await makePostRequest<LoginResponse>(ENDPOINTS.signup, headers, data);
 
     if (responseData) {
         logger.withCategory('authentication').success('Authentication successful', null, null);

@@ -32,7 +32,7 @@ const fetchActiveChallenges = async (token: string): Promise<ActiveChallengesRes
     });
 
     const headers = createCommonHeaders(token);
-    const response = (await makePostRequest(ENDPOINTS.activeChallenges, headers)) as ActiveChallengesResponse | null;
+    const response = await makePostRequest<ActiveChallengesResponse>(ENDPOINTS.activeChallenges, headers);
 
     // Handle failed requests gracefully. The empty list keeps every existing consumer
     // working, but it is flagged so callers can tell "the fetch failed" apart from "you

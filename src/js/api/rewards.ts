@@ -43,11 +43,11 @@ const getMyCompletedChallenges = async (
     requireValue(token, 'token');
     const headers = createWebHeaders(token);
     const data = [`start=${encodeURIComponent(String(start))}`, `limit=${encodeURIComponent(String(limit))}`].join('&');
-    const response = (await makePostRequest(
+    const response = await makePostRequest<CompletedChallengesResponse>(
         ENDPOINTS.getMyCompletedChallenges,
         headers,
         data,
-    )) as CompletedChallengesResponse | null;
+    );
     if (!response || !Array.isArray(response.completed_challenges)) {
         return [];
     }
@@ -65,7 +65,7 @@ const claimChallengeResources = async (challengeId: string | number, token: stri
     requireValue(token, 'token');
     const headers = createWebHeaders(token);
     const data = `challenge_id=${encodeURIComponent(String(challengeId))}`;
-    const response = (await makePostRequest(ENDPOINTS.claimResources, headers, data)) as SuccessResponse | null;
+    const response = await makePostRequest<SuccessResponse>(ENDPOINTS.claimResources, headers, data);
     return response?.success === true;
 };
 
@@ -77,7 +77,7 @@ const claimChallengeResources = async (challengeId: string | number, token: stri
 const getMyMissions = async (token: string): Promise<Mission[]> => {
     requireValue(token, 'token');
     const headers = createWebHeaders(token);
-    const response = (await makePostRequest(ENDPOINTS.getMyMissions, headers, '')) as MissionsResponse | null;
+    const response = await makePostRequest<MissionsResponse>(ENDPOINTS.getMyMissions, headers, '');
     if (!response || !Array.isArray(response.list)) {
         return [];
     }
@@ -94,7 +94,7 @@ const claimMissionPrize = async (missionId: string | number, token: string): Pro
     requireValue(token, 'token');
     const headers = createWebHeaders(token);
     const data = `mission_id=${encodeURIComponent(String(missionId))}`;
-    const response = (await makePostRequest(ENDPOINTS.claimMissionPrizes, headers, data)) as SuccessResponse | null;
+    const response = await makePostRequest<SuccessResponse>(ENDPOINTS.claimMissionPrizes, headers, data);
     return response?.success === true;
 };
 
