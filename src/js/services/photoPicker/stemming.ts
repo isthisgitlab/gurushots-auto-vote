@@ -168,6 +168,9 @@ const STOPWORDS = new Set([
     'shares',
     'sharing',
     'shared',
+    // "Using Reflections" is about reflections; the description repeating
+    // "using" must not confirm it as the subject (see readChallengeTheme).
+    'using',
     // Welcome-message boilerplate adjectives / fillers
     'good',
     'luck',

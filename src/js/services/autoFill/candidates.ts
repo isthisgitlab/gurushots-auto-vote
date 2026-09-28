@@ -4,14 +4,14 @@
  * ignore-words lookup, and the semantic scores the picker ranks with.
  */
 
-import { buildSearchTerms, detectLetterPrefix, parseNegation } from '../photoPicker';
+import { buildSearchTerms, detectLetterPrefix, parseNegation, readChallengeTheme } from '../photoPicker';
 import { getSemanticScores } from '../semantic';
 import * as lexicon from '../semantic/lexicon';
 import { resolveTermsToTags } from '../tagResolver';
 import { resolveMemberId } from './memberIdentity';
 
 import type { Challenge } from '../../types/gurushots';
-import type { IgnoreWords, PickerPhoto, SemanticScore, TagOptions } from '../../types/photoPicker';
+import type { ChallengeTheme, IgnoreWords, PickerPhoto, SemanticScore, TagOptions } from '../../types/photoPicker';
 import type { ErrorLike, FillLogger, FillSettings, RankDeps } from '../../types/autoFill';
 
 /**
@@ -117,6 +117,30 @@ const resolveTagsForTerms = async (
 const THEMED_SEARCH_BUDGET_MS = 8000;
 const THEMED_SEARCH_MIN_BUDGET_MS = 1500;
 
+// Enough of a description to see how it states its theme — GuruShots'
+// "The challenge is an open theme." is its third sentence on "10 Hours".
+const MAX_LOGGED_DESCRIPTION_CHARS = 400;
+
+/**
+ * One line saying how the challenge's theme was read, with the text it was
+ * read from. The app keeps no copy of challenge descriptions, so these lines
+ * are what a misread theme can be checked (and the rule measured) against.
+ */
+const describeTheme = (theme: ChallengeTheme, challenge: Challenge): string => {
+    const verdict =
+        theme.kind === 'open'
+            ? 'reads as an open theme, so its title and description are not matched against your photos'
+            : theme.kind === 'subject'
+              ? `has the subject ${theme.subjects.map((s) => `"${s}"`).join(', ')} (its description repeats it)`
+              : 'has no subject its description confirms, so its title is read as before';
+    const description = String(challenge.welcome_message ?? '')
+        .replace(/<[^>]*>/g, ' ')
+        .replace(/\s+/g, ' ')
+        .trim()
+        .slice(0, MAX_LOGGED_DESCRIPTION_CHARS);
+    return `${verdict}. Description: "${description}"`;
+};
+
 /**
  * Fetch the eligible-photo candidates for a challenge, narrowed to its theme.
  *
@@ -199,22 +223,15 @@ const fetchCandidatesForChallenge = async (
                     `library with photos showing it excluded`,
                 null,
             );
-    } else if (terms.length === 0) {
-        // No searchable term at all: every word in the title was boilerplate or a
-        // contest-cadence word ("Guru of The Week"). There is no theme to match,
-        // so the whole library is ranked and the most popular eligible photo is
-        // submitted. That is the best available answer rather than a failure —
-        // but say so, because from the outside it looks identical to a theme
-        // that existed and was missed.
-        logger
-            .withCategory(logLabel)
-            .warning(
-                `${logLabel}: no searchable theme for ${logger.challengeTag(challenge)} — its title is all ` +
-                    `boilerplate and no Must/Should Include Tag is usable; submitting your most popular ` +
-                    `eligible photo instead`,
-                null,
-            );
     }
+    // Every fill and join reads the theme once here. Info, not debug, so the line
+    // reaches a packaged build's log: an open theme ("10 Hours", "Guru of The
+    // Week") submits your most popular eligible photo, which from the outside
+    // looks identical to a theme that existed and was missed.
+    const theme = readChallengeTheme(challenge, ignoreWords);
+    logger
+        .withCategory(logLabel)
+        .info(`${logLabel}: ${logger.challengeTag(challenge)} ${describeTheme(theme, challenge)}`, null);
     // Shared deadline for the whole themed phase, so raw and related searches
     // and the tag-resolver retry that may follow them split ONE budget instead of
     // each taking a full one (see THEMED_SEARCH_BUDGET_MS). Floored rather than

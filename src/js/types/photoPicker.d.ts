@@ -23,6 +23,16 @@ export interface Negation {
     active: boolean;
 }
 
+/**
+ * What a challenge's title and description say about its theme (readChallengeTheme):
+ * open (no subject to match), a subject the description confirms, or unconfirmed.
+ */
+export interface ChallengeTheme {
+    kind: 'open' | 'subject' | 'unconfirmed';
+    /** Title subject stems the description repeats; empty unless kind is 'subject'. */
+    subjects: readonly string[];
+}
+
 /** A negated subject in the shape the exclusion filter reads. */
 export interface ExcludedSubject {
     stems: readonly string[];

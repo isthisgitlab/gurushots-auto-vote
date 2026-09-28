@@ -9,7 +9,7 @@ import { MAX_TOKENISE_CHARS, stem, rawTokenise, tokenise, matches } from './stem
 import * as lexicon from '../semantic/lexicon';
 import { finiteOr } from '../../numbers';
 
-import type { ChallengeText, ExcludedSubject, IgnoreWords, Negation } from '../../types/photoPicker';
+import type { ChallengeText, ChallengeTheme, ExcludedSubject, IgnoreWords, Negation } from '../../types/photoPicker';
 
 // Bounds for abstractTitleWords, on the lexicon's concreteness cosine. Pinned by
 // the `concreteness.cases` gate in scripts/validate-lexicon.ts (real titles, run
@@ -274,6 +274,82 @@ const detectLetterPrefix = (title: string | null | undefined): string | null => 
     return letter.toLowerCase();
 };
 
+// Title words that name a challenge's FORMAT, never its subject: its length
+// ("10 Hours"), GuruShots' own features ("500 Guru's Picks", "Ultimate
+// Exposure", Turbo) and a challenge type ("Exhibition"). The rest of that
+// vocabulary — guru, week, photo, shot, best, day — is already in STOPWORDS.
+// Keep this to words that are ONLY format words: a title made entirely of them
+// reads as an open theme, so a real subject here ("Stars", "Street Art") would
+// switch its search off. Used only by that test; the search keeps these words.
+const FORMAT_STEMS = new Set(['hour', 'minute', 'pick', 'turbo', 'exposure', 'exhibition'].map(stem));
+// GuruShots' own phrasing for an open theme ("The challenge is an open theme.").
+// Deliberately not "any subject": a subject challenge can say "reflections of
+// any subject" and would lose its theme. For the same reason "the theme is
+// open to interpretation" does not count — that still names a theme.
+const OPEN_THEME_RE = /\b(?:open|free)[\s-]+theme\b|\btheme\s+is\s+open\b(?!\s+to\b)/i;
+
+// A phrase inside straight or curly quotes, spaces allowed inside them
+// ("title of " Photographer of the Week ""). The phrase is untrusted API text,
+// so it is escaped and matched literally.
+const QUOTE_CHARS = `'"‘’“”`;
+const REGEX_SPECIAL_RE = /[.*+?^${}()|[\]\\]/g;
+const quotedPhraseRe = (phrase: string): RegExp => {
+    const literal = phrase.trim().replace(REGEX_SPECIAL_RE, '\\$&');
+    return new RegExp(`[${QUOTE_CHARS}]\\s*${literal}\\s*[${QUOTE_CHARS}]`, 'gi');
+};
+
+const UNCONFIRMED: ChallengeTheme = Object.freeze({ kind: 'unconfirmed', subjects: Object.freeze([]) });
+const OPEN: ChallengeTheme = Object.freeze({ kind: 'open', subjects: Object.freeze([]) });
+
+/**
+ * Whether a challenge has a subject to match, read from its title AND its
+ * description rather than from a list of challenge names (GuruShots runs new
+ * open-theme titles every day). Open when the description says so, or when no
+ * title word (nor, for an all-boilerplate title, slug word) is left once
+ * boilerplate (STOPWORDS), the user's ignore words and format words are
+ * removed. Otherwise a title word the description repeats is
+ * the subject: descriptions restate it ("Show photos of the different kinds of
+ * roads"), while "Roads to Anywhere" alone cannot say which word matters. The
+ * repeat counts whatever the word's concreteness — "people" and "models" read
+ * as abstract to the lexicon yet are real subjects.
+ *
+ * 'unconfirmed' means "no opinion": callers keep their title-only behavior. It
+ * is returned for a missing title, for letter and negated titles, which have
+ * their own handling, and for a title whose words the description never repeats.
+ */
+const readChallengeTheme = (
+    challenge: ChallengeText | null | undefined,
+    ignoreWords: IgnoreWords = null,
+): ChallengeTheme => {
+    const title = typeof challenge?.title === 'string' ? challenge.title.slice(0, MAX_TOKENISE_CHARS) : '';
+    if (title.trim() === '' || detectLetterPrefix(title) || parseNegation(title, ignoreWords).active)
+        return UNCONFIRMED;
+    const message = challenge?.welcome_message;
+    const description =
+        typeof message === 'string'
+            ? message
+                  .slice(0, MAX_TOKENISE_CHARS)
+                  .replace(/<[^>]*>/g, ' ')
+                  .toLowerCase()
+            : '';
+    if (OPEN_THEME_RE.test(title) || OPEN_THEME_RE.test(description)) return OPEN;
+    const subject = titleSubject(title, ignoreWords);
+    const fromTitle = tokenise(subject, { ignoreWords });
+    // A title of pure boilerplate ("Best of the Best") can still carry its
+    // subject in the slug ("macro-insects4"), which buildThemeKeywords falls
+    // back to — so the slug has to be empty too before the theme reads as open.
+    const words = fromTitle.length > 0 ? fromTitle : tokenise(challenge?.url, { ignoreWords });
+    if (words.every((word) => FORMAT_STEMS.has(word))) return OPEN;
+    // Descriptions often quote the title back ("the 'Travel Wonders'
+    // challenge"), which would confirm every one of its words for free. Only a
+    // QUOTED copy is dropped: "Share your photos of people in action" restates
+    // the subject in its own words and must still confirm it.
+    const prose = [title, subject].reduce((text, quoted) => text.replace(quotedPhraseRe(quoted), ' '), description);
+    const described = tokenise(prose, { ignoreWords });
+    const subjects = words.filter((word) => described.some((d) => matches(d, word)));
+    return subjects.length > 0 ? { kind: 'subject', subjects: Array.from(new Set(subjects)) } : UNCONFIRMED;
+};
+
 export {
     abstractTitleWords,
     withoutAbstract,
@@ -284,4 +360,5 @@ export {
     excludedSubjectOf,
     photoShowsExcluded,
     detectLetterPrefix,
+    readChallengeTheme,
 };

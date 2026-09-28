@@ -175,7 +175,42 @@ describe('fetchCandidatesForChallenge — tag resolution', () => {
         expect(category.warning).toHaveBeenCalledWith(expect.stringContaining('nothing found by tag search'), null);
     });
 
-    test('a contest-cadence title has no theme to search and says so', async () => {
+    test('logs how the theme was read, with the description it was read from', async () => {
+        const { logger, category } = makeLogger();
+        await fetchCandidatesForChallenge(
+            invalid({
+                id: 'c-roads',
+                title: 'Roads to Anywhere',
+                welcome_message: '<b>Show photos</b> of the different kinds of   roads.',
+            }),
+            'tok',
+            {},
+            { getEligiblePhotos: makeGetEligiblePhotos(), logger },
+        );
+        expect(category.info).toHaveBeenCalledWith(
+            expect.stringContaining(
+                'has the subject "road" (its description repeats it). Description: "Show photos of the different kinds of roads."',
+            ),
+            null,
+        );
+        await fetchCandidatesForChallenge(
+            invalid({ id: 'c-bare', title: 'Anywhere' }),
+            'tok',
+            {},
+            {
+                getEligiblePhotos: makeGetEligiblePhotos(),
+                logger,
+            },
+        );
+        expect(category.info).toHaveBeenCalledWith(
+            expect.stringContaining(
+                'has no subject its description confirms, so its title is read as before. Description: ""',
+            ),
+            null,
+        );
+    });
+
+    test('a contest-cadence title reads as an open theme and says so', async () => {
         // "week" is a stopword, so "Guru of The Week" yields no search term at
         // all — a different case from a theme that was searched and missed, and
         // it gets its own message rather than claiming a search happened.
@@ -194,7 +229,8 @@ describe('fetchCandidatesForChallenge — tag resolution', () => {
             },
         );
         expect(result).toEqual(LIBRARY);
-        expect(category.warning).toHaveBeenCalledWith(expect.stringContaining('no searchable theme for'), null);
+        expect(category.info).toHaveBeenCalledWith(expect.stringContaining('reads as an open theme'), null);
+        expect(category.warning).not.toHaveBeenCalled();
         // Nothing to resolve means no lookup is attempted at all.
         expect(searchTagAutocomplete).not.toHaveBeenCalled();
     });

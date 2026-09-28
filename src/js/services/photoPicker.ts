@@ -12,7 +12,7 @@
  *   stemming.ts    stopwords, stemmer, bounded tokeniser, stem matching,
  *                  user-tag normalisation
  *   title.ts       abstract title words, series subject, negated subjects,
- *                  letter challenges
+ *                  letter challenges, open theme vs confirmed subject
  *   keywords.ts    challenge keywords, semantic theme words, image-model subject
  *                  words, server-side search terms
  *   labels.ts      photo label stems and the per-photo match counters
@@ -21,7 +21,7 @@
  */
 
 import { stem, tokenise, matches, tokeniseTagList } from './photoPicker/stemming';
-import { abstractTitleWords, detectLetterPrefix, parseNegation } from './photoPicker/title';
+import { abstractTitleWords, detectLetterPrefix, parseNegation, readChallengeTheme } from './photoPicker/title';
 import {
     buildChallengeKeywords,
     buildThemeKeywords,
@@ -48,6 +48,7 @@ export {
     buildSearchTerms,
     detectLetterPrefix,
     parseNegation,
+    readChallengeTheme,
     labelWordStems,
     labelStemGroups,
     SEMANTIC_MATCH_FLOOR,

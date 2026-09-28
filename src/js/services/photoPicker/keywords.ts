@@ -13,6 +13,7 @@ import {
     parseNegation,
     dropNegated,
     detectLetterPrefix,
+    readChallengeTheme,
 } from './title';
 
 import type { ChallengeText, IgnoreWords, TagOptions } from '../../types/photoPicker';
@@ -28,6 +29,9 @@ const buildChallengeKeywords = (
     challenge: ChallengeText | null | undefined,
     ignoreWords: IgnoreWords = null,
 ): string[] => {
+    // An open theme has no subject, and matching its prose ("breathtaking",
+    // "Turbo") against photo labels would only rank noise.
+    if (readChallengeTheme(challenge, ignoreWords).kind === 'open') return [];
     const opts = { ignoreWords };
     // The WHOLE title, series prefix included — unlike buildThemeKeywords, which
     // pools its keywords into one vector and so must drop everything that is not
@@ -87,6 +91,7 @@ const buildChallengeKeywords = (
  * decide, which is the right answer for a challenge with no visual subject.
  */
 const buildThemeKeywords = (challenge: ChallengeText | null | undefined, ignoreWords: IgnoreWords = null): string[] => {
+    if (readChallengeTheme(challenge, ignoreWords).kind === 'open') return [];
     const opts = { ignoreWords };
     // A negated subject must not become the theme (see parseNegation): pooling
     // "human" for "No Humans" pulls the vector straight at photos of people.
@@ -128,6 +133,9 @@ const buildThemeAlternatives = (
  * like "fun" in "balloon fun" fine; it does not handle a missing subject.
  */
 const visualSubjectWords = (challenge: ChallengeText | null | undefined, ignoreWords: IgnoreWords = null): string[] => {
+    // "10 Hours" is the challenge's length: judging photos against "hours"
+    // moved an unrelated clock photo ahead of the ranking's own pick.
+    if (readChallengeTheme(challenge, ignoreWords).kind === 'open') return [];
     const negation = parseNegation(challenge?.title, ignoreWords);
     const title = negation.active ? negation.positiveTitle : challenge?.title;
     const negated = new Set(negation.stems);
@@ -158,7 +166,7 @@ const SEARCH_TERMS_CAP = 3;
  * tokeniseTagList. The title path reuses `tokenise` (stopword-filtered + light
  * stemming), so "Let's See Hats" collapses to ["hat"]. Deduped and capped to
  * SEARCH_TERMS_CAP. Returns [] when nothing usable is derivable (abstract
- * title, no tags) — the caller then fetches the unfiltered library.
+ * title or open theme, no tags) — the caller then fetches the unfiltered library.
  *
  * @param challenge - challenge object (title optional)
  * @returns ordered, deduped search terms; length <= SEARCH_TERMS_CAP
@@ -180,7 +188,8 @@ const buildSearchTerms = (challenge: ChallengeText | null | undefined, opts: Tag
     // tokenisation and leave terms empty; the caller then fetches the full library
     // and the client-side letter filter in pickPhotosForChallenge narrows it. A
     // non-letter title tokenises normally.
-    if (terms.length === 0 && !detectLetterPrefix(challenge?.title)) {
+    const theme = readChallengeTheme(challenge, ignoreWords);
+    if (terms.length === 0 && !detectLetterPrefix(challenge?.title) && theme.kind !== 'open') {
         // Subject segment only: on a series title the prefix ("Color Hunt") is
         // never a tag, so searching it spends a round-trip to find nothing and
         // burns one of the SEARCH_TERMS_CAP slots the real subject needs.
@@ -210,6 +219,11 @@ const buildSearchTerms = (challenge: ChallengeText | null | undefined, opts: Tag
         const heads = words.filter((w) => !isParticiple(w) && !abstract.has(w)).reverse();
         const ideas = words.filter((w) => abstract.has(w)).reverse();
         terms = dropNegated([...heads, ...participles, ...ideas].map(stem), negation);
+        // The words the description repeats are the subject, so they are tried
+        // first: "Roads to Anywhere" reads head-noun-first as "anywhere", but its
+        // description asks for roads. The rest keep their order behind them.
+        const confirmed = new Set(theme.subjects);
+        terms = [...terms.filter((t) => confirmed.has(t)), ...terms.filter((t) => !confirmed.has(t))];
     }
     return Array.from(new Set(terms)).slice(0, SEARCH_TERMS_CAP);
 };
