@@ -33,14 +33,14 @@ export function SettingsToggles({
 
     const handleStayLoggedInToggle = useCallback(
         (e: JSX.TargetedEvent<HTMLInputElement, Event>) => {
-            void onStayLoggedInChange((e.target as HTMLInputElement).checked);
+            void onStayLoggedInChange(e.currentTarget.checked);
         },
         [onStayLoggedInChange],
     );
 
     const handleMockModeToggle = useCallback(
         (e: JSX.TargetedEvent<HTMLInputElement, Event>) => {
-            void onMockModeChange((e.target as HTMLInputElement).checked);
+            void onMockModeChange(e.currentTarget.checked);
         },
         [onMockModeChange],
     );

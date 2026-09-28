@@ -60,7 +60,7 @@ export function LoginForm({
      */
     const handleUsernameChange = useCallback(
         (e: JSX.TargetedEvent<HTMLInputElement, Event>) => {
-            setUsername((e.target as HTMLInputElement).value);
+            setUsername(e.currentTarget.value);
             if (errors.username) {
                 setErrors((prev) => ({ ...prev, username: null }));
             }
@@ -70,7 +70,7 @@ export function LoginForm({
 
     const handlePasswordChange = useCallback(
         (e: JSX.TargetedEvent<HTMLInputElement, Event>) => {
-            setPassword((e.target as HTMLInputElement).value);
+            setPassword(e.currentTarget.value);
             if (errors.password) {
                 setErrors((prev) => ({ ...prev, password: null }));
             }

@@ -103,7 +103,7 @@ function ImportPanel({ onDone, onCancel }: { onDone: () => void; onCancel: () =>
                 rows={6}
                 value={text}
                 onChange={(e) => {
-                    setText((e.target as HTMLTextAreaElement).value);
+                    setText(e.currentTarget.value);
                     setPreview(null);
                 }}
             />
@@ -115,7 +115,7 @@ function ImportPanel({ onDone, onCancel }: { onDone: () => void; onCancel: () =>
                         type="checkbox"
                         className="checkbox checkbox-sm"
                         checked={overwrite}
-                        onChange={(e) => setOverwrite((e.target as HTMLInputElement).checked)}
+                        onChange={(e) => setOverwrite(e.currentTarget.checked)}
                     />
                     {interp(t('app.scenarioOverwrite'), { name: preview.preview.name })}
                 </label>
@@ -231,7 +231,7 @@ function ScenarioRow({
                         className="input input-sm flex-1"
                         aria-label={t('app.scenarioRenameLabel')}
                         value={renaming}
-                        onChange={(e) => setRenaming((e.target as HTMLInputElement).value)}
+                        onChange={(e) => setRenaming(e.currentTarget.value)}
                     />
                     <button type="button" className="btn btn-sm btn-primary" onClick={() => void runRename(renaming)}>
                         {t('app.scenarioRenameSave')}
@@ -250,7 +250,7 @@ function ScenarioRow({
                         readOnly
                         aria-label={interp(t('app.scenarioExportLabel'), { name })}
                         value={exported}
-                        onFocus={(e) => (e.target as HTMLTextAreaElement).select()}
+                        onFocus={(e) => e.currentTarget.select()}
                     />
                     <button type="button" className="btn btn-xs btn-ghost" onClick={() => setExported(null)}>
                         {t('app.scenarioExportClose')}
@@ -363,7 +363,7 @@ export function ScenariosSection({ isOpen }: { isOpen: boolean }) {
                             className="select select-sm"
                             aria-label={t('app.scenarioTemplatePick')}
                             value={templateId}
-                            onChange={(e) => setTemplateId((e.target as HTMLSelectElement).value)}
+                            onChange={(e) => setTemplateId(e.currentTarget.value)}
                         >
                             <option value="">{t('app.scenarioTemplatePick')}</option>
                             {templates.map((template) => (

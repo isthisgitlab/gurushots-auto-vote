@@ -63,10 +63,7 @@ export function Modal({
     // Only called while the dialog is mounted and open (the open effect and the
     // keydown listener it owns), so the box ref is always attached here.
     const getFocusable = useCallback(
-        () =>
-            Array.from(
-                (modalBoxRef.current as HTMLDivElement).querySelectorAll(FOCUSABLE_SELECTOR) as NodeListOf<HTMLElement>,
-            ),
+        () => Array.from((modalBoxRef.current as HTMLDivElement).querySelectorAll<HTMLElement>(FOCUSABLE_SELECTOR)),
         [],
     );
 

@@ -92,7 +92,7 @@ function PhaseSettings({
                 aria-label={t('app.sbAddSetting')}
                 value=""
                 onChange={(e) => {
-                    const key = (e.target as HTMLSelectElement).value;
+                    const key = e.currentTarget.value;
                     // Only a listed key can be picked, and the list comes from the loaded schema.
                     onChange({ ...current, [key]: (schema as RendererSchema)[key].default });
                 }}
@@ -135,9 +135,7 @@ function RuleEditor({
                         className={CONTROL}
                         value={rule.label ?? ''}
                         placeholder={rule.id}
-                        onChange={(e) =>
-                            onChange(setIn(rule, ['label'], (e.target as HTMLInputElement).value || undefined))
-                        }
+                        onChange={(e) => onChange(setIn(rule, ['label'], e.currentTarget.value || undefined))}
                     />
                 </label>
                 <label className="flex flex-col text-xs gap-1">
@@ -145,7 +143,7 @@ function RuleEditor({
                     <select
                         className="select select-sm select-bordered"
                         value={rule.repeat ?? 'always'}
-                        onChange={(e) => onChange({ ...rule, repeat: (e.target as HTMLSelectElement).value })}
+                        onChange={(e) => onChange({ ...rule, repeat: e.currentTarget.value })}
                     >
                         {REPEAT_MODES.map((mode) => (
                             <option key={mode} value={mode}>
@@ -196,7 +194,7 @@ function PhaseEditor({
                         type="text"
                         className={CONTROL}
                         value={editingName}
-                        onChange={(e) => setEditingName((e.target as HTMLInputElement).value)}
+                        onChange={(e) => setEditingName(e.currentTarget.value)}
                         onBlur={() => {
                             const renamed = renamePhase(draft, name, editingName.trim());
                             if (renamed === draft) setEditingName(name);
@@ -281,7 +279,7 @@ function ScenarioHeader({
                     type="text"
                     className={CONTROL}
                     value={draft.name}
-                    onChange={(e) => onDraft({ ...draft, name: (e.target as HTMLInputElement).value })}
+                    onChange={(e) => onDraft({ ...draft, name: e.currentTarget.value })}
                 />
             </label>
             <label className="flex flex-col text-xs gap-1">
@@ -289,7 +287,7 @@ function ScenarioHeader({
                 <select
                     className="select select-sm select-bordered"
                     value={draft.start}
-                    onChange={(e) => onDraft({ ...draft, start: (e.target as HTMLSelectElement).value })}
+                    onChange={(e) => onDraft({ ...draft, start: e.currentTarget.value })}
                 >
                     {phases.map((phase) => (
                         <option key={phase} value={phase}>
@@ -304,9 +302,7 @@ function ScenarioHeader({
                     type="text"
                     className={CONTROL}
                     value={draft.description ?? ''}
-                    onChange={(e) =>
-                        onDraft(setIn(draft, ['description'], (e.target as HTMLInputElement).value || undefined))
-                    }
+                    onChange={(e) => onDraft(setIn(draft, ['description'], e.currentTarget.value || undefined))}
                 />
             </label>
             <fieldset className="sm:col-span-2 text-xs">
@@ -321,7 +317,7 @@ function ScenarioHeader({
                                 className="input input-sm input-bordered w-24"
                                 value={draft.limits?.[key] ?? ''}
                                 onChange={(e) => {
-                                    const input = e.target as HTMLInputElement;
+                                    const input = e.currentTarget;
                                     onDraft(
                                         setIn(
                                             draft,
@@ -355,7 +351,7 @@ function JsonTab({ draft, onDraft }: { draft: ScenarioDraft; onDraft: (next: Sce
                 aria-label={t('app.sbTabJson')}
                 value={text}
                 onChange={(e) => {
-                    const textarea = e.target as HTMLTextAreaElement;
+                    const textarea = e.currentTarget;
                     setText(textarea.value);
                     let parsed: unknown;
                     try {
@@ -409,7 +405,7 @@ function SimulatePanel({ draft }: { draft: ScenarioDraft }) {
                     className="select select-sm select-bordered"
                     aria-label={t('app.sbSimulateOn')}
                     value={challengeId}
-                    onChange={(e) => setChallengeId((e.target as HTMLSelectElement).value)}
+                    onChange={(e) => setChallengeId(e.currentTarget.value)}
                 >
                     <option value="">{t('app.sbSimulatePick')}</option>
                     {challenges.map((challenge) => (

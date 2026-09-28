@@ -66,7 +66,7 @@ function OptionalText({
             className={CONTROL}
             value={value ?? ''}
             onChange={(e) => {
-                const raw = (e.target as HTMLInputElement).value;
+                const raw = e.currentTarget.value;
                 if (raw === '') onChange(undefined);
                 else onChange(type === 'number' ? Number(raw) : raw);
             }}
@@ -86,9 +86,7 @@ function PhotoSourceInput({ value, onChange, label }: { value: unknown; onChange
                 className={SELECT}
                 aria-label={label}
                 value={fromMemory ? 'memory' : 'best'}
-                onChange={(e) =>
-                    onChange((e.target as HTMLSelectElement).value === 'memory' ? { memory: 'held' } : 'best')
-                }
+                onChange={(e) => onChange(e.currentTarget.value === 'memory' ? { memory: 'held' } : 'best')}
             >
                 <option value="best">{t('app.sbPhotoBest')}</option>
                 <option value="memory">{t('app.sbPhotoMemory')}</option>
@@ -99,7 +97,7 @@ function PhotoSourceInput({ value, onChange, label }: { value: unknown; onChange
                     className={CONTROL}
                     aria-label={t('app.sbField_slot')}
                     value={(value as { memory?: string }).memory}
-                    onChange={(e) => onChange({ memory: (e.target as HTMLInputElement).value })}
+                    onChange={(e) => onChange({ memory: e.currentTarget.value })}
                 />
             )}
         </div>
@@ -132,7 +130,7 @@ function StatesInput({
                         checked={selected.has(state)}
                         onChange={(e) => {
                             const next = new Set(selected);
-                            if ((e.target as HTMLInputElement).checked) next.add(state);
+                            if (e.currentTarget.checked) next.add(state);
                             else next.delete(state);
                             onChange(options.filter((option) => next.has(option)));
                         }}
@@ -174,7 +172,7 @@ function FieldInput({
                     aria-label={label}
                     className={SELECT}
                     value={scalar}
-                    onChange={(e) => onChange((e.target as HTMLSelectElement).value)}
+                    onChange={(e) => onChange(e.currentTarget.value)}
                 >
                     {COMPARISON_OPS.map((op) => (
                         <option key={op} value={op}>
@@ -193,7 +191,7 @@ function FieldInput({
                     aria-label={label}
                     className={CONTROL}
                     value={scalar}
-                    onChange={(e) => onChange(Number((e.target as HTMLInputElement).value))}
+                    onChange={(e) => onChange(Number(e.currentTarget.value))}
                 />
             );
         case 'duration':
@@ -206,7 +204,7 @@ function FieldInput({
                     aria-label={label}
                     className={CONTROL}
                     value={scalar}
-                    onChange={(e) => onChange((e.target as HTMLInputElement).value)}
+                    onChange={(e) => onChange(e.currentTarget.value)}
                 />
             );
         case 'time':
@@ -216,7 +214,7 @@ function FieldInput({
                     aria-label={label}
                     className={CONTROL}
                     value={scalar}
-                    onChange={(e) => onChange((e.target as HTMLInputElement).value)}
+                    onChange={(e) => onChange(e.currentTarget.value)}
                 />
             );
         case 'text':
@@ -226,7 +224,7 @@ function FieldInput({
                     aria-label={label}
                     className={CONTROL}
                     value={scalar}
-                    onChange={(e) => onChange((e.target as HTMLInputElement).value)}
+                    onChange={(e) => onChange(e.currentTarget.value)}
                 />
             );
         case 'states':
@@ -245,7 +243,7 @@ function FieldInput({
                     aria-label={label}
                     className={SELECT}
                     value={scalar}
-                    onChange={(e) => onChange((e.target as HTMLSelectElement).value)}
+                    onChange={(e) => onChange(e.currentTarget.value)}
                 >
                     {CURRENCIES.map((currency) => (
                         <option key={currency} value={currency}>
@@ -260,7 +258,7 @@ function FieldInput({
                     aria-label={label}
                     className={SELECT}
                     value={scalar}
-                    onChange={(e) => onChange((e.target as HTMLSelectElement).value)}
+                    onChange={(e) => onChange(e.currentTarget.value)}
                 >
                     {phases.map((phase) => (
                         <option key={phase} value={phase}>
@@ -279,7 +277,7 @@ function FieldInput({
                     aria-label={label}
                     className={SELECT}
                     value={scalar}
-                    onChange={(e) => onChange((e.target as HTMLSelectElement).value)}
+                    onChange={(e) => onChange(e.currentTarget.value)}
                 >
                     {ENTRY_FIELDS.map((entryField) => (
                         <option key={entryField} value={entryField}>
@@ -294,7 +292,7 @@ function FieldInput({
                     aria-label={label}
                     className={SELECT}
                     value={String(value)}
-                    onChange={(e) => onChange((e.target as HTMLSelectElement).value === 'true')}
+                    onChange={(e) => onChange(e.currentTarget.value === 'true')}
                 >
                     <option value="true">{t('app.sbTrue')}</option>
                     <option value="false">{t('app.sbFalse')}</option>
@@ -305,7 +303,7 @@ function FieldInput({
                     aria-label={label}
                     className={CONTROL}
                     value={scalar}
-                    onChange={(e) => onChange(Number((e.target as HTMLInputElement).value))}
+                    onChange={(e) => onChange(Number(e.currentTarget.value))}
                 />
             );
         case 'boolean':
@@ -315,7 +313,7 @@ function FieldInput({
                     aria-label={label}
                     className="checkbox checkbox-sm"
                     checked={value === true}
-                    onChange={(e) => onChange((e.target as HTMLInputElement).checked ? true : undefined)}
+                    onChange={(e) => onChange(e.currentTarget.checked ? true : undefined)}
                 />
             );
         case 'slotIndex':
@@ -324,7 +322,7 @@ function FieldInput({
                     aria-label={label}
                     className={SELECT}
                     value={scalar}
-                    onChange={(e) => onChange(Number((e.target as HTMLSelectElement).value))}
+                    onChange={(e) => onChange(Number(e.currentTarget.value))}
                 >
                     {[1, 2, 3, 4, 0].map((index) => (
                         <option key={index} value={index}>
@@ -403,7 +401,7 @@ export function ItemEditor({
                     className={SELECT}
                     aria-label={t('app.sbPickType')}
                     value={type}
-                    onChange={(e) => onChange(spec.make((e.target as HTMLSelectElement).value, { phases }))}
+                    onChange={(e) => onChange(spec.make(e.currentTarget.value, { phases }))}
                 >
                     {spec.types.map((name) => (
                         <option key={name} value={name}>
@@ -513,7 +511,7 @@ function ItemList({
                 className="select select-xs select-bordered"
                 aria-label={t(addLabel)}
                 value=""
-                onChange={(e) => onChange([...list, spec.make((e.target as HTMLSelectElement).value, { phases })])}
+                onChange={(e) => onChange([...list, spec.make(e.currentTarget.value, { phases })])}
             >
                 <option value="">{t(addLabel)}</option>
                 {spec.types.map((name) => (
