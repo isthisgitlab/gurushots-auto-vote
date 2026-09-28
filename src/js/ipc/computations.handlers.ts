@@ -28,7 +28,7 @@ const buildHandlers = () =>
         'get-deadline-actions': async (event: unknown, challenge: unknown) => {
             try {
                 if (!challenge || typeof challenge !== 'object' || Array.isArray(challenge)) {
-                    return { success: false, error: 'invalid challenge' };
+                    return { success: false as const, error: 'invalid challenge' };
                 }
                 // Defense-in-depth on the renderer-supplied id (used downstream as a
                 // per-challenge override lookup key): only a string/number is a valid
@@ -36,14 +36,14 @@ const buildHandlers = () =>
                 // settings facade.
                 const idType = typeof (challenge as { id?: unknown }).id;
                 if (idType !== 'string' && idType !== 'number') {
-                    return { success: false, error: 'invalid challenge id' };
+                    return { success: false as const, error: 'invalid challenge id' };
                 }
                 const now = Math.floor(Date.now() / 1000);
                 const { actions, boostBlocked } = votingLogic.describeDeadlineActions(challenge as Challenge, now);
-                return { success: true, actions, boostBlocked };
+                return { success: true as const, actions, boostBlocked };
             } catch (error) {
                 logger.withCategory('voting').error('Error computing deadline actions:', error);
-                return { success: false, error: 'Failed to compute deadline actions' };
+                return { success: false as const, error: 'Failed to compute deadline actions' };
             }
         },
     }) satisfies IpcHandlerMap;

@@ -57,7 +57,7 @@ const fetchLiveChallenge = async (
 
 const handleGetAutoClaimStatus = (async () => {
     try {
-        return { success: true, ...getAutoClaimStatus() };
+        return { success: true as const, ...getAutoClaimStatus() };
     } catch (error) {
         logger.withCategory('claim').error('Error reading auto-claim status:', error);
         return errorResult(error, 'Could not read auto-claim status');
@@ -102,10 +102,10 @@ const handleAuthenticate = (async (event: unknown, username: string, password: s
         if (ok) {
             settings.setSetting('token', token);
             logger.withCategory('authentication').info('🔐 Authentication successful', { success: true });
-            return { success: true, token };
+            return { success: true as const, token };
         }
         logger.withCategory('authentication').info('🔐 Authentication failed', { error });
-        return { success: false, error };
+        return { success: false as const, error };
     } catch (error) {
         logger.withCategory('authentication').error('Error handling authenticate request:', error);
         return errorResult(error, 'Authentication failed due to network error');
@@ -156,12 +156,12 @@ const toSafeTurboResult = (result: TurboMiniGameResult | null | undefined) =>
 const turboRunResponse = ((result: TurboMiniGameResult | null | undefined) => {
     const safeResult = toSafeTurboResult(result);
     if (result?.played === 0) {
-        return { success: false, error: 'No battles to play right now', result: safeResult };
+        return { success: false as const, error: 'No battles to play right now', result: safeResult };
     }
     if (!result?.correct) {
-        return { success: false, error: 'Turbo not earned — try again later', result: safeResult };
+        return { success: false as const, error: 'Turbo not earned — try again later', result: safeResult };
     }
-    return { success: true, result: safeResult };
+    return { success: true as const, result: safeResult };
 }) satisfies IpcReplyFn;
 
 /**
@@ -171,12 +171,12 @@ const runManualTurbo = (async (challengeId: string | number, safeTitle: string, 
     const strategy = apiFactory.getApiStrategy();
     const liveChallenge = await fetchLiveChallenge(strategy, token, challengeId);
     if (!liveChallenge) {
-        return { success: false, error: 'Challenge no longer active' };
+        return { success: false as const, error: 'Challenge no longer active' };
     }
     const now = Math.floor(Date.now() / 1000);
     if (!votingLogic.shouldPlayAutoTurbo(liveChallenge, now)) {
         const unplayable = turboUnplayableError(liveChallenge, now);
-        if (unplayable) return { success: false, error: unplayable };
+        if (unplayable) return { success: false as const, error: unplayable };
     }
 
     const result: TurboMiniGameResult | null = await strategy.runTurboMiniGame(
@@ -196,7 +196,7 @@ const handlePlayAutoTurbo = (async (event: unknown, challengeId: string | number
         logger.withCategory('turbo').info(`▶️ Manual auto-turbo run requested for challenge ${safeId}`, null);
         const userSettings = settings.loadSettings();
         if (!userSettings.token) {
-            return { success: false, error: 'No authentication token found' };
+            return { success: false as const, error: 'No authentication token found' };
         }
 
         // Claim the in-flight slot synchronously, before any await, so a
@@ -204,7 +204,7 @@ const handlePlayAutoTurbo = (async (event: unknown, challengeId: string | number
         // try/finally that owns the slot wraps the entire critical
         // section including the live-fetch + validation.
         if (turboMiniGameInFlight.has(safeId)) {
-            return { success: false, error: 'A turbo run is already in progress for this challenge' };
+            return { success: false as const, error: 'A turbo run is already in progress for this challenge' };
         }
         turboMiniGameInFlight.add(safeId);
         try {
@@ -232,7 +232,7 @@ const handleApplyTurboToEntry = (async (event: unknown, challengeId: string | nu
 
         if (result?.ok) {
             logger.withCategory('turbo').success('✅ Turbo applied successfully');
-            return { success: true, message: 'Turbo applied successfully' };
+            return { success: true as const, message: 'Turbo applied successfully' };
         }
         // Log only a small redacted summary of the raw response so any
         // session-identifying material the upstream might reflect back
@@ -243,7 +243,7 @@ const handleApplyTurboToEntry = (async (event: unknown, challengeId: string | nu
             ? { success: result.raw.success, error_code: result.raw.error_code, message: safeMessage }
             : null;
         logger.withCategory('turbo').warning('❌ Failed to apply turbo', safeRaw);
-        return { success: false, error: safeMessage || 'Failed to apply turbo' };
+        return { success: false as const, error: safeMessage || 'Failed to apply turbo' };
     } catch (error) {
         logger.withCategory('turbo').error('Error applying turbo to entry:', error);
         return errorResult(error, 'Failed to apply turbo');
@@ -281,7 +281,7 @@ const handleFillChallengeNow = (async (event: unknown, challengeId: string | num
         const strategy = apiFactory.getApiStrategy();
         const liveChallenge = await fetchLiveChallenge(strategy, guard.token, challengeId);
         if (!liveChallenge) {
-            return { success: false, error: 'Challenge no longer active' };
+            return { success: false as const, error: 'Challenge no longer active' };
         }
 
         const result = await autoFill.fillChallengeNow(liveChallenge, guard.token, safeMode, {
@@ -320,10 +320,10 @@ const handleApplyBoostToEntry = (async (event: unknown, challengeId: string | nu
 
         if (result) {
             logger.withCategory('voting').success('✅ Boost applied successfully');
-            return { success: true, message: 'Boost applied successfully' };
+            return { success: true as const, message: 'Boost applied successfully' };
         }
         logger.withCategory('voting').warning('❌ Failed to apply boost', null);
-        return { success: false, error: 'Failed to apply boost' };
+        return { success: false as const, error: 'Failed to apply boost' };
     } catch (error) {
         logger.withCategory('voting').error('Error applying boost to entry:', error);
         return errorResult(error, 'Failed to apply boost');
@@ -340,11 +340,11 @@ const handleGetBankroll = (async () => {
         const strategy = apiFactory.getApiStrategy();
         const bankroll: Bankroll | null = await strategy.getBankroll(guard.token);
         if (!bankroll) {
-            return { success: false, error: 'Could not read your balance right now' };
+            return { success: false as const, error: 'Could not read your balance right now' };
         }
         // Whitelist the four known currencies — never forward a raw payload.
         return {
-            success: true,
+            success: true as const,
             keys: bankroll.keys,
             swaps: bankroll.swaps,
             fills: bankroll.fills,
@@ -360,10 +360,10 @@ const handleGetBankroll = (async () => {
 // drives the header "auto-join" indicator. Settings-only, no auth needed.
 const handleGetAutoJoinActive = (async () => {
     try {
-        return { success: true, active: isAutoJoinActive() === true };
+        return { success: true as const, active: isAutoJoinActive() === true };
     } catch (error) {
         logger.withCategory('join').error('Error handling get-auto-join-active request:', error);
-        return { success: false, active: false };
+        return { success: false as const, active: false };
     }
 }) satisfies IpcReplyFn;
 
@@ -380,7 +380,7 @@ const handleGetMemberChallenges = (async (event?: unknown, filter?: string) => {
             guard.token,
             filter === undefined ? 'open' : filter,
         );
-        return { success: true, items: Array.isArray(items) ? items : [] };
+        return { success: true as const, items: Array.isArray(items) ? items : [] };
     } catch (error) {
         logger.withCategory('api').error('Error handling get-member-challenges request:', error);
         return { ...errorResult(error, 'Failed to list challenges'), items: [] };

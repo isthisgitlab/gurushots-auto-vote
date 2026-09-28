@@ -65,9 +65,9 @@ const invalidArgs: { success: false; error: string; issues?: undefined } = { suc
  */
 const fromResult = <R extends { ok: boolean; issues?: ScenarioIssue[] }>({ ok, ...result }: R): FromResult<R> =>
     (ok
-        ? { success: true, ...result }
+        ? { success: true as const, ...result }
         : {
-              success: false,
+              success: false as const,
               error: (result as { issues: ScenarioIssue[] }).issues[0]?.message ?? 'Invalid scenario',
               issues: (result as { issues: ScenarioIssue[] }).issues,
           }) as FromResult<R>;
@@ -113,7 +113,7 @@ const loadLiveScenario = async (
         extra: { issues?: ScenarioIssue[] } = {},
     ): { ok: false; response: { success: false; error: string; issues?: ScenarioIssue[] } } => ({
         ok: false,
-        response: { success: false, error, ...extra },
+        response: { success: false as const, error, ...extra },
     });
     const guard = auth.requireAuthToken(label);
     if (!guard.ok) return { ok: false, response: guard.response };
@@ -146,7 +146,7 @@ const buildHandlers = () =>
     ({
         'get-scenarios': async () =>
             safely('get-scenarios', () => ({
-                success: true,
+                success: true as const,
                 scenarios: settings.getScenarios(),
                 templates: SCENARIO_TEMPLATES,
             })),
@@ -154,7 +154,7 @@ const buildHandlers = () =>
         'check-scenario': async (event: unknown, doc: unknown) =>
             safely('check-scenario', () => {
                 const result = settings.checkScenario(doc);
-                return result.ok ? { success: true } : fromResult(result);
+                return result.ok ? { success: true as const } : fromResult(result);
             }),
 
         'save-scenario': async (event: unknown, doc: unknown, options?: { overwrite?: boolean } | null) =>
@@ -170,7 +170,9 @@ const buildHandlers = () =>
         'delete-scenario': async (event: unknown, name: string) => {
             if (!isName(name)) return invalidArgs;
             return safely('delete-scenario', () =>
-                settings.deleteScenario(name) ? { success: true } : { success: false, error: 'not-found' },
+                settings.deleteScenario(name)
+                    ? { success: true as const }
+                    : { success: false as const, error: 'not-found' },
             );
         },
 
@@ -186,7 +188,9 @@ const buildHandlers = () =>
             if (!isName(name)) return invalidArgs;
             return safely('export-scenario', () => {
                 const json = settings.exportScenario(name);
-                return json === null ? { success: false, error: 'not-found' } : { success: true, json };
+                return json === null
+                    ? { success: false as const, error: 'not-found' }
+                    : { success: true as const, json };
             });
         },
 
@@ -194,7 +198,7 @@ const buildHandlers = () =>
             if (!isIdArg(challengeId)) return invalidArgs;
             return safely('get-scenario-status', async () => {
                 await refreshScenarioStateAsync();
-                return { success: true, ...getScenarioStatus(challengeId) };
+                return { success: true as const, ...getScenarioStatus(challengeId) };
             });
         },
 
@@ -207,7 +211,7 @@ const buildHandlers = () =>
                     `Scenario progress reset for challenge ${logger.sanitizeLogString(String(challengeId))}`,
                     null,
                 );
-                return { success: true };
+                return { success: true as const };
             });
         },
 
@@ -226,7 +230,7 @@ const buildHandlers = () =>
                     bankroll,
                 });
                 return {
-                    success: true,
+                    success: true as const,
                     scenario: status.scenario.name,
                     phase: decision.phase,
                     started: status.state !== null,
@@ -259,7 +263,13 @@ const buildHandlers = () =>
                     timezone: status.timezone,
                     bankroll,
                 });
-                return { success: true, scenario: status.scenario.name, startPhase: state.phase, now, ...timeline };
+                return {
+                    success: true as const,
+                    scenario: status.scenario.name,
+                    startPhase: state.phase,
+                    now,
+                    ...timeline,
+                };
             });
         },
     }) satisfies IpcHandlerMap;

@@ -48,7 +48,7 @@ const buildHandlers = (deps: UpdateHandlerDeps) => {
         const autoUpdater = getAutoUpdater();
         return autoUpdater
             ? { autoUpdater, failure: null }
-            : { autoUpdater: null, failure: { success: false, error: 'AutoUpdater not initialized' } };
+            : { autoUpdater: null, failure: { success: false as const, error: 'AutoUpdater not initialized' } };
     };
 
     return {
@@ -58,7 +58,7 @@ const buildHandlers = (deps: UpdateHandlerDeps) => {
         > => {
             try {
                 const updateInfo = await ensureUpdater().checkForUpdates(true);
-                return { success: true, updateInfo };
+                return { success: true as const, updateInfo };
             } catch (error) {
                 logger.withCategory('update').error('Error checking for updates:', error);
                 return errorResult(error, 'Failed to check for updates');
@@ -72,7 +72,7 @@ const buildHandlers = (deps: UpdateHandlerDeps) => {
                     return failure;
                 }
                 await autoUpdater.downloadUpdate();
-                return { success: true };
+                return { success: true as const };
             } catch (error) {
                 logger.withCategory('update').error('Error downloading update:', error);
                 return {
@@ -89,7 +89,7 @@ const buildHandlers = (deps: UpdateHandlerDeps) => {
                     return failure;
                 }
                 autoUpdater.quitAndInstall();
-                return { success: true };
+                return { success: true as const };
             } catch (error) {
                 logger.withCategory('update').error('Error installing update:', error);
                 return errorResult(error, 'Failed to install update');
@@ -105,9 +105,9 @@ const buildHandlers = (deps: UpdateHandlerDeps) => {
                 const updateInfo = autoUpdater.getUpdateInfo();
                 if (updateInfo) {
                     autoUpdater.skipVersion(updateInfo.latestVersion);
-                    return { success: true };
+                    return { success: true as const };
                 }
-                return { success: false, error: 'No update info available' };
+                return { success: false as const, error: 'No update info available' };
             } catch (error) {
                 logger.withCategory('update').error('Error skipping update version:', error);
                 return errorResult(error, 'Failed to skip update version');
@@ -117,7 +117,7 @@ const buildHandlers = (deps: UpdateHandlerDeps) => {
         'clear-skip-version': async () => {
             try {
                 ensureUpdater().clearSkipVersion();
-                return { success: true };
+                return { success: true as const };
             } catch (error) {
                 logger.withCategory('update').error('Error clearing skip version:', error);
                 return errorResult(error, 'Failed to clear skipped version');
@@ -125,15 +125,15 @@ const buildHandlers = (deps: UpdateHandlerDeps) => {
         },
 
         'get-releases-url': () => {
-            return { success: true, url: getReleasesUrl() };
+            return { success: true as const, url: getReleasesUrl() };
         },
 
         'can-auto-update': () => {
             const autoUpdater = getAutoUpdater();
             if (autoUpdater) {
-                return { success: true, canAutoUpdate: autoUpdater.canAutoUpdate() };
+                return { success: true as const, canAutoUpdate: autoUpdater.canAutoUpdate() };
             }
-            return { success: false, canAutoUpdate: false };
+            return { success: false as const, canAutoUpdate: false };
         },
     } satisfies IpcHandlerMap;
 };

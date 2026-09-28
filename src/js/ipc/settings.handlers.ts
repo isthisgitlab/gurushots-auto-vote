@@ -188,7 +188,7 @@ const buildHandlers = ({ broadcastSettingsChange }: { broadcastSettingsChange?: 
             try {
                 logger.withCategory('settings').info('🔄 Refreshing API due to settings change');
                 apiFactory.refreshApi();
-                return { success: true };
+                return { success: true as const };
             } catch (error) {
                 logger.withCategory('api').error('Error handling refresh-api request:', error);
                 return errorResult(error, 'Failed to refresh API');
@@ -207,7 +207,7 @@ const buildHandlers = ({ broadcastSettingsChange }: { broadcastSettingsChange?: 
         'set-boost-threshold': async (event: unknown, challengeId: string | number, threshold: number) => {
             try {
                 settings.setChallengeOverride('boostTime', challengeId.toString(), threshold);
-                return { success: true };
+                return { success: true as const };
             } catch (error) {
                 logger.withCategory('settings').error('Error setting boost threshold:', error);
                 return errorResult(error, 'Failed to set boost threshold');
@@ -217,7 +217,7 @@ const buildHandlers = ({ broadcastSettingsChange }: { broadcastSettingsChange?: 
         'set-default-boost-threshold': async (event: unknown, threshold: number) => {
             try {
                 settings.setGlobalDefault('boostTime', threshold);
-                return { success: true };
+                return { success: true as const };
             } catch (error) {
                 logger.withCategory('settings').error('Error setting default boost threshold:', error);
                 return errorResult(error, 'Failed to set default boost threshold');

@@ -48,10 +48,10 @@ const voteOnSingleChallenge = (async (
     // checks, parseInt(undefined) below returns NaN and the find() call
     // produces a misleading "Challenge not found" error.
     if (challengeId == null || challengeId === '' || Number.isNaN(Number(challengeId))) {
-        return { success: false, error: 'Invalid challenge ID' };
+        return { success: false as const, error: 'Invalid challenge ID' };
     }
     if (typeof challengeTitle !== 'string' || challengeTitle.length === 0) {
-        return { success: false, error: 'Challenge title is required' };
+        return { success: false as const, error: 'Challenge title is required' };
     }
 
     const requestPrefix = manual ? '🔄 Manual vote on challenge request' : '🔄 Vote on challenge request';
@@ -63,7 +63,7 @@ const voteOnSingleChallenge = (async (
     if (!userSettings.token) {
         const noTokenMsg = manual ? '❌ No token found for manual voting' : '❌ No token found for voting';
         logger.withCategory('authentication').warning(noTokenMsg, null);
-        return { success: false, error: 'No authentication token found' };
+        return { success: false as const, error: 'No authentication token found' };
     }
 
     const strategy = apiFactory.getApiStrategy();
@@ -74,7 +74,7 @@ const voteOnSingleChallenge = (async (
             ? '❌ Failed to fetch challenges for manual voting'
             : '❌ Failed to fetch challenges for voting';
         logger.withCategory('challenges').warning(fetchMsg, null);
-        return { success: false, error: 'Failed to fetch challenges' };
+        return { success: false as const, error: 'Failed to fetch challenges' };
     }
 
     logger
@@ -97,12 +97,12 @@ const voteOnSingleChallenge = (async (
         logger
             .withCategory(logger.CATEGORIES.CHALLENGES)
             .warning('❌ Challenge not found:', { challengeId, challengeTitle });
-        return { success: false, error: `Challenge "${challengeTitle}" not found` };
+        return { success: false as const, error: `Challenge "${challengeTitle}" not found` };
     }
 
     const now = Math.floor(Date.now() / 1000);
     if (challenge.start_time >= now) {
-        return { success: false, error: `Challenge "${challengeTitle}" has not started yet` };
+        return { success: false as const, error: `Challenge "${challengeTitle}" has not started yet` };
     }
 
     const startMsg = manual
@@ -112,7 +112,7 @@ const voteOnSingleChallenge = (async (
 
     const result = await submitVotesForChallenge(challenge, strategy, userSettings.token, now);
     if (result.outcome === 'not-eligible') {
-        return { success: false, error: result.errorMessage };
+        return { success: false as const, error: result.errorMessage };
     }
 
     logger
@@ -135,7 +135,7 @@ const voteOnSingleChallenge = (async (
     const successReturnMsg = manual
         ? `Successfully voted on challenge "${challengeTitle}" manually`
         : `Successfully voted on challenge "${challengeTitle}"`;
-    return { success: true, message: successReturnMsg };
+    return { success: true as const, message: successReturnMsg };
 }) satisfies IpcReplyFn;
 
 const buildHandlers = () =>
@@ -144,7 +144,7 @@ const buildHandlers = () =>
             try {
                 const userSettings = settings.loadSettings();
                 if (!userSettings.token) {
-                    return { success: false, error: 'No authentication token found' };
+                    return { success: false as const, error: 'No authentication token found' };
                 }
                 const middleware = apiFactory.getMiddleware();
                 return await middleware.guiVote();
@@ -167,7 +167,7 @@ const buildHandlers = () =>
         'run-voting-cycle-for-challenge': async (_event: unknown, challengeId: string | number) => {
             try {
                 if (challengeId == null || challengeId === '') {
-                    return { success: false, error: 'challengeId is required' };
+                    return { success: false as const, error: 'challengeId is required' };
                 }
                 logger.withCategory('voting').info(`🔄 Starting single-challenge cycle: ${challengeId}`, null);
                 return await runStrategyOnceViaMiddleware(challengeId);
@@ -186,7 +186,7 @@ const buildHandlers = () =>
                 const userSettings = settings.loadSettings();
                 if (!userSettings.token) {
                     logger.withCategory('authentication').warning('❌ No token found for manual voting', null);
-                    return { success: false, error: 'No authentication token found' };
+                    return { success: false as const, error: 'No authentication token found' };
                 }
 
                 const strategy = apiFactory.getApiStrategy();
@@ -198,7 +198,7 @@ const buildHandlers = () =>
                     logger
                         .withCategory('challenges')
                         .warning('❌ Failed to fetch challenges for manual vote all', null);
-                    return { success: false, error: 'Failed to fetch challenges' };
+                    return { success: false as const, error: 'Failed to fetch challenges' };
                 }
 
                 const challenges = challengesResponse.challenges;
@@ -225,7 +225,7 @@ const buildHandlers = () =>
                 logger.withCategory('voting').success(message, null);
 
                 return {
-                    success: true,
+                    success: true as const,
                     message,
                     stats: { total, voted, skipped },
                 };

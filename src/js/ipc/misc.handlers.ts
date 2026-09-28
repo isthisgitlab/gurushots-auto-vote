@@ -33,11 +33,11 @@ const buildHandlers = (deps: MiscHandlerDeps) => {
                 // (file:, shell handlers, ...).
                 if (!isSafeExternalUrl(url)) {
                     logger.withCategory('api').warning(`Refused open-external-url for non-https URL: ${url}`, null);
-                    return { success: false, error: 'Only https:// URLs can be opened' };
+                    return { success: false as const, error: 'Only https:// URLs can be opened' };
                 }
                 // isSafeExternalUrl only passes a string.
                 await shell.openExternal(url as string);
-                return { success: true };
+                return { success: true as const };
             } catch (error) {
                 logger.withCategory('ui').error('Error opening external URL:', error);
                 return errorResult(error, 'Failed to open external URL');
@@ -50,13 +50,13 @@ const buildHandlers = (deps: MiscHandlerDeps) => {
                 const loginWindow = getLoginWindow();
                 if (mainWindow && !mainWindow.isDestroyed()) {
                     mainWindow.reload();
-                    return { success: true };
+                    return { success: true as const };
                 }
                 if (loginWindow && !loginWindow.isDestroyed()) {
                     loginWindow.reload();
-                    return { success: true };
+                    return { success: true as const };
                 }
-                return { success: false, error: 'No active window to reload' };
+                return { success: false as const, error: 'No active window to reload' };
             } catch (error) {
                 logger.withCategory('ui').error('Error reloading window:', error);
                 return errorResult(error, 'Failed to reload window');
@@ -69,7 +69,7 @@ const buildHandlers = (deps: MiscHandlerDeps) => {
                 // then rebuild the menu so its labels reflect it.
                 await translationManager.loadLanguageFromSettings();
                 updateMenuTranslations();
-                return { success: true };
+                return { success: true as const };
             } catch (error) {
                 logger.withCategory('ui').error('Error refreshing menu:', error);
                 return errorResult(error, 'Failed to refresh menu');

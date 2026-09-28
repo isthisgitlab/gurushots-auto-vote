@@ -66,7 +66,7 @@ const isIdArg = (value: unknown): value is string | number =>
     (typeof value === 'string' && value.trim() !== '') || Number.isFinite(value);
 
 const currencyFailure = ((outcome: string | undefined) => ({
-    success: false,
+    success: false as const,
     outcome,
     error: outcome,
 })) satisfies IpcReplyFn;
@@ -93,7 +93,7 @@ const runCurrencySpend = (async (
         const locked = await currencyActions.withSpendLock(() => spend(guard.token, apiFactory.getApiStrategy()));
         if (locked.busy) return currencyFailure(CURRENCY_OUTCOME.busy);
         const result = locked.value;
-        return result?.ok ? { success: true, outcome: CURRENCY_OUTCOME.ok } : currencyFailure(result?.outcome);
+        return result?.ok ? { success: true as const, outcome: CURRENCY_OUTCOME.ok } : currencyFailure(result?.outcome);
     } catch (error) {
         logger.withCategory('currency').error(`Error handling ${label} request:`, error);
         return currencyFailure(CURRENCY_OUTCOME.apiFailed);
@@ -136,7 +136,7 @@ const buildHandlers = () =>
                 });
                 if (!result?.ok || !result.candidate) return currencyFailure(result?.outcome);
                 rememberSwapPreview(previewKey(challengeId, imageId), result.candidate.id);
-                return { success: true, outcome: CURRENCY_OUTCOME.ok, candidate: result.candidate };
+                return { success: true as const, outcome: CURRENCY_OUTCOME.ok, candidate: result.candidate };
             } catch (error) {
                 logger.withCategory('currency').error('Error handling preview-swap-photo request:', error);
                 return currencyFailure(CURRENCY_OUTCOME.apiFailed);
@@ -185,10 +185,10 @@ const buildHandlers = () =>
                         previousMemberId,
                         kind,
                     }));
-                return { success: true, items };
+                return { success: true as const, items };
             } catch (error) {
                 logger.withCategory('currency').error('Error handling get-swap-backs request:', error);
-                return { success: false, items: [], error: CURRENCY_OUTCOME.apiFailed };
+                return { success: false as const, items: [], error: CURRENCY_OUTCOME.apiFailed };
             }
         },
 

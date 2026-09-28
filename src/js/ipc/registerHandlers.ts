@@ -82,7 +82,7 @@ const registerHandlers = (ipcMain: IpcMain, handlers: Record<string, IpcHandler>
                         `Refused IPC '${channel}' from untrusted frame ${event?.senderFrame?.url ?? '<unknown>'}`,
                         null,
                     );
-                return { success: false, error: 'Refused: untrusted sender' };
+                return { success: false as const, error: 'Refused: untrusted sender' };
             }
             return invokeHandler(impl, event, args);
         });

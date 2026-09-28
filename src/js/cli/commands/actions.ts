@@ -16,7 +16,6 @@ import { getMiddleware } from '../../apiFactory';
 import { findActiveChallenge } from '../../services/findActiveChallenge';
 
 import type { Challenge } from '../../types/gurushots';
-import type { SwapBackRecord } from '../../types/stores';
 import type { NullEventHandlers } from '../../types/cli';
 import type * as actions_handlersModule from '../../ipc/actions.handlers';
 import type * as currency_handlersModule from '../../ipc/currency.handlers';
@@ -133,12 +132,10 @@ const fillChallenge = async (challengeId: string, { all = false }: { all?: boole
     try {
         const result = await handlers()['fill-challenge-now'](null, challengeId, mode);
         if (result?.success) {
-            // The handler's result arms share `success: boolean`, so the check above does not narrow.
-            const filled = result as { message?: string; submitted?: number; skipped?: number };
             logger
                 .withCategory('autoFill')
                 .success(
-                    `${filled.message || `Submitted photos to "${challenge.title}"`} (submitted ${filled.submitted ?? 0}, skipped ${filled.skipped ?? 0})`,
+                    `${result.message || `Submitted photos to "${challenge.title}"`} (submitted ${result.submitted ?? 0}, skipped ${result.skipped ?? 0})`,
                 );
         } else {
             logger.withCategory('autoFill').error(result?.error || 'Failed to submit photos');
@@ -258,8 +255,7 @@ const swapCmd = async (
             logger.withCategory('currency').error(describeOutcome(preview));
             return true;
         }
-        // The handler's result arms share `success: boolean`, so the check above does not narrow.
-        const newId = (preview as { candidate: { id: string } }).candidate.id;
+        const newId = preview.candidate.id;
         if (!yes) {
             logger.withCategory('currency').info(`Swap in "${challenge.title}": ${imageId} → ${newId}`);
             await printCost('swaps');
@@ -307,10 +303,7 @@ const swapBackCmd = async (
     if (!challenge) return true;
     try {
         const list = await currencyHandlers()['get-swap-backs'](null, challengeId);
-        const items = (
-            list as { items?: Array<Pick<SwapBackRecord, 'currentId' | 'previousId' | 'kind'>> } | null | undefined
-        )?.items;
-        const record = (items || []).find((r) => r.currentId === String(imageId));
+        const record = (list?.success ? list.items : []).find((r) => r.currentId === String(imageId));
         if (!record) {
             logger.withCategory('currency').error(`No swap back is recorded for ${imageId} in "${challenge.title}".`);
             return true;

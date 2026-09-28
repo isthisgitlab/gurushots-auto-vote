@@ -22,11 +22,7 @@ const showDiscover = async () => {
     const result = await handlers()['get-member-challenges'](null, 'open');
     logger.withCategory('ui').info('=== Open (un-joined) Challenges ===');
     if (!result?.success) {
-        logger
-            .withCategory('ui')
-            .info(
-                `  (unavailable — ${(result as { error?: string } | undefined)?.error || 'could not list challenges'})`,
-            );
+        logger.withCategory('ui').info(`  (unavailable — ${result?.error || 'could not list challenges'})`);
         return;
     }
     const items = Array.isArray(result.items) ? result.items : [];

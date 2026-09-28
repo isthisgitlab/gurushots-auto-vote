@@ -37,28 +37,28 @@ const buildHandlers = () =>
             logger.setContext('GUI');
             logger.withCategory('ui').debug(message, data);
             logger.clearContext();
-            return { success: true };
+            return { success: true as const };
         },
 
         'log-error': async (event: unknown, message: string, data: unknown) => {
             logger.setContext('GUI');
             logger.withCategory('ui').error(message, data);
             logger.clearContext();
-            return { success: true };
+            return { success: true as const };
         },
 
         'log-warning': async (event: unknown, message: string, data: unknown) => {
             logger.setContext('GUI');
             logger.withCategory('ui').warning(message, data);
             logger.clearContext();
-            return { success: true };
+            return { success: true as const };
         },
 
         'log-api': async (event: unknown, message: string, data: unknown) => {
             logger.setContext('GUI');
             logger.withCategory('api').api(message, data);
             logger.clearContext();
-            return { success: true };
+            return { success: true as const };
         },
 
         'get-log-file': async () => logger.getLogFile(),
@@ -73,12 +73,12 @@ const buildHandlers = () =>
                 // is no webContents to register. Delivery is handled by the
                 // bridge wiring globalThis.sendLogToGUI → in-process emitter, so
                 // just acknowledge and let the renderer fetch its backlog.
-                if (!event?.sender) return { success: true };
+                if (!event?.sender) return { success: true as const };
                 logStreamWindows.add(event.sender);
                 event.sender.on('destroyed', () => {
                     logStreamWindows.delete(event.sender);
                 });
-                return { success: true };
+                return { success: true as const };
             } catch (error) {
                 logger.withCategory('ui').error('Error starting log stream:', error);
                 return errorResult(error, 'Failed to start log stream');
@@ -88,7 +88,7 @@ const buildHandlers = () =>
         'stop-log-stream': async (event: IpcMainInvokeEvent | null | undefined) => {
             try {
                 if (event?.sender) logStreamWindows.delete(event.sender);
-                return { success: true };
+                return { success: true as const };
             } catch (error) {
                 logger.withCategory('ui').error('Error stopping log stream:', error);
                 return errorResult(error, 'Failed to stop log stream');
