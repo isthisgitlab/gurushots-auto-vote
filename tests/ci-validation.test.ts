@@ -28,6 +28,21 @@ describe('CI Environment Validation', () => {
     });
 });
 
+describe('source language', () => {
+    // The codebase is TypeScript end to end; a .js/.jsx/.mjs/.cjs file slips
+    // past tsc and the no-`any` lint rules. Tracked and untracked-but-not-ignored
+    // files both count, so a new file fails locally before it is ever staged.
+    test('the repository contains no JavaScript files', () => {
+        const { execFileSync } = jest.requireActual<typeof import('node:child_process')>('node:child_process');
+        const path = jest.requireActual<typeof import('node:path')>('node:path');
+        const files = execFileSync('git', ['ls-files', '--cached', '--others', '--exclude-standard'], {
+            cwd: path.join(__dirname, '..'),
+            encoding: 'utf8',
+        }).split('\n');
+        expect(files.filter((f) => /\.[cm]?jsx?$/.test(f))).toEqual([]);
+    });
+});
+
 describe('test typing', () => {
     // `Mock` without type arguments is `Mock<any, any>`, an `any` the lint rules
     // cannot see until a value is used; a mock names the function it stands in
