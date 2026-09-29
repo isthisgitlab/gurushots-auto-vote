@@ -144,6 +144,12 @@ describe('challenge conditions', () => {
         expect(holds(condition)).toBe(expected);
     });
 
+    test('a missed free boost matches MISSED, not LOCKED', () => {
+        const missed = challenge({ member: { boost: { state: 'MISSED' } } });
+        expect(holds({ type: 'boostState', in: ['MISSED'] }, { challenge: missed })).toBe(true);
+        expect(holds({ type: 'boostState', in: ['LOCKED'] }, { challenge: missed })).toBe(false);
+    });
+
     test('unknown data fails closed', () => {
         const bare = challenge({ max_photo_submits: undefined, member: { ranking: { total: { rank: 0 } } } });
         for (const condition of [

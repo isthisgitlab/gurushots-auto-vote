@@ -482,6 +482,22 @@ describe('actions', () => {
             expect(state().spent.keys).toBe(1);
         });
 
+        test('a MISSED boost condition can unlock and apply the boost', async () => {
+            currencyActions.unlockBoostWithKey.mockResolvedValue(invalid({ ok: true }));
+            setup(
+                single([{ type: 'unlockBoost' }, { type: 'boost', entry: { by: 'bestRank' } }], {
+                    if: [{ type: 'boostState', in: ['MISSED'] }],
+                }),
+            );
+            const c = challenge();
+            c.member.boost = { state: 'MISSED' };
+            await run(c);
+            expect(currencyActions.unlockBoostWithKey).toHaveBeenCalledWith(7, 'tok', expect.any(Object));
+            expect(pass.api.applyBoostToEntry).toHaveBeenCalledWith(7, 'a', 'tok');
+            expect(c.member.boost?.state).toBe('USED');
+            expect(state().spent.keys).toBe(1);
+        });
+
         test('fillExposure spends a fill and raises exposure', async () => {
             currencyActions.fillExposure.mockResolvedValue(invalid({ ok: true }));
             setup(single([{ type: 'fillExposure' }]));

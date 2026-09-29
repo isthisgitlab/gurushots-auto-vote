@@ -110,6 +110,11 @@ describe('visibility', () => {
         expect(fillButton()).toBeTruthy();
     });
 
+    test('Key shown when the free boost was MISSED', () => {
+        renderCard(makeChallenge({ boostState: 'MISSED' }));
+        expect(keyButton()).toBeTruthy();
+    });
+
     test('hidden when the balance is unreadable', () => {
         renderCard(makeChallenge(), { bankroll: null });
         expect(keyButton()).toBeNull();

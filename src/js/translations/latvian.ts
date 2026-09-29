@@ -379,6 +379,7 @@ export const app = {
     sbRepeat_oncePerPhase: 'Vienreiz katrā fāzes sākumā',
     sbRepeat_oncePerDay: 'Vienreiz dienā',
     sbState_boost_LOCKED: 'Bloķēts',
+    sbState_boost_MISSED: 'Nokavēts',
     sbState_boost_AVAILABLE: 'Pieejams',
     sbState_boost_AVAILABLE_KEY: 'Atbloķēts ar atslēgu',
     sbState_boost_USED: 'Izmantots',

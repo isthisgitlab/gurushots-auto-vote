@@ -157,7 +157,7 @@ const guarded =
     };
 
 /**
- * Spend a KEY to unlock the challenge's LOCKED boost once the autoKey rule is
+ * Spend a KEY to unlock the challenge's LOCKED or MISSED boost once the autoKey rule is
  * open. Unlock only: applying the unlocked boost stays with the boost runner
  * (autoBoost + keyUnlockedBoostTime), which sees it this same pass.
  *
@@ -175,7 +175,7 @@ const runAutoKey = guarded('key', async (ctx) => {
         currencyActions.unlockBoostWithKey(challenge.id, token, { strategy: ctx.currency.strategy, logger }),
     );
     if (!result?.ok) return false;
-    // The gate required member.boost.state === 'LOCKED', so the member block is present.
+    // The gate required a LOCKED or MISSED boost, so the member block is present.
     const member = challenge.member as ChallengeMember;
     member.boost = { ...member.boost, state: 'AVAILABLE_KEY', timeout: null };
     return true;

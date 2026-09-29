@@ -74,6 +74,13 @@ test('default field values cover every kind', () => {
     expect(spec.defaultFieldValue({ key: 'window', kind: 'duration' })).toBe('1h');
 });
 
+test('the boost state condition offers MISSED', () => {
+    expect(spec.CONDITION_FIELDS.boostState[0].options).toContain('MISSED');
+    expect(english.app.sbState_boost_MISSED).toBe('Missed');
+    expect(latvian.app.sbState_boost_MISSED).toBeTruthy();
+    expectValid(scenarioWith({ conditions: [{ type: 'boostState', in: ['MISSED'] }] }));
+});
+
 describe('translations', () => {
     const keys = [
         ...spec.CONDITION_TYPES.map((type) => `sbCond_${type}`),

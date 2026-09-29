@@ -19,7 +19,7 @@ import * as vocabulary from './vocabulary';
 
 export type FieldSpec = { key: string; kind: string; optional?: boolean; options?: string[]; labels?: string };
 
-const BOOST_STATES = ['LOCKED', 'AVAILABLE', 'AVAILABLE_KEY', 'USED', 'UNAVAILABLE'];
+const BOOST_STATES = ['LOCKED', 'MISSED', 'AVAILABLE', 'AVAILABLE_KEY', 'USED', 'UNAVAILABLE'];
 const TURBO_STATES = ['FREE', 'IN_PROGRESS', 'TIMER', 'WON', 'LOCKED', 'USED'];
 
 const range = (kind: string) => [

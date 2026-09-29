@@ -221,6 +221,13 @@ describe('runAutoKey', () => {
         expect(ctx.challenge.member.boost.state).toBe('AVAILABLE_KEY');
     });
 
+    test('unlocks a MISSED free boost', async () => {
+        const ctx = makeCtx({ challenge: makeChallenge({ member: { boost: { state: 'MISSED' } } }) });
+        expect(await runAutoKey(ctx)).toBe(true);
+        expect(currencyActions.unlockBoostWithKey).toHaveBeenCalledWith(555, 'tok', expect.any(Object));
+        expect(ctx.challenge.member.boost.state).toBe('AVAILABLE_KEY');
+    });
+
     test('a refused unlock leaves the boost untouched', async () => {
         currencyActions.unlockBoostWithKey.mockResolvedValue({ ok: false, outcome: 'api-failed' });
         const ctx = makeCtx();

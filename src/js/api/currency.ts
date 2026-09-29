@@ -5,7 +5,7 @@
  * already entered, captured from a gurushots.com browser session. Uses the WEB
  * header profile (x-env: WEB, x-api-version: 13) like join/submissions.
  *
- *   keyUnlock        - spend a KEY: LOCKED boost -> AVAILABLE_KEY (not applied)
+ *   keyUnlock        - spend a KEY: LOCKED/MISSED boost -> AVAILABLE_KEY (not applied)
  *   swapPhoto        - spend a SWAP: replace one entered photo with another
  *   exposureAutofill - spend a FILL: top the challenge exposure up to 100%
  *
@@ -36,7 +36,7 @@ const post = async (url: string, token: string, fields: Record<string, string>):
 };
 
 /**
- * Spends a KEY to unlock a LOCKED boost. The boost is only unlocked
+ * Spends a KEY to unlock a LOCKED or MISSED boost. The boost is only unlocked
  * (state AVAILABLE_KEY) — applying it to a photo is a separate call.
  */
 const keyUnlock = async (

@@ -51,7 +51,8 @@ const hasBalance = (bankroll: Bankroll | null | undefined, action: 'key' | 'swap
 const challengeAllows = (action: 'key' | 'swap' | 'fill', challenge: Challenge, nowSec: number): boolean => {
     if (!isRunning(challenge, nowSec)) return false;
     if (action === 'key') {
-        return challenge?.boost_enable === true && challenge?.member?.boost?.state === 'LOCKED';
+        const state = challenge?.member?.boost?.state;
+        return challenge?.boost_enable === true && (state === 'LOCKED' || state === 'MISSED');
     }
     if (action === 'swap') {
         return challenge?.swap_enable === true && challenge?.swap_locked !== true;

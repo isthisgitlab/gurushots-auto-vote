@@ -376,6 +376,7 @@ export const app = {
     sbRepeat_oncePerPhase: 'Once each time the phase starts',
     sbRepeat_oncePerDay: 'Once a day',
     sbState_boost_LOCKED: 'Locked',
+    sbState_boost_MISSED: 'Missed',
     sbState_boost_AVAILABLE: 'Available',
     sbState_boost_AVAILABLE_KEY: 'Unlocked with a key',
     sbState_boost_USED: 'Used',

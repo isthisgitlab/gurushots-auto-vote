@@ -67,6 +67,12 @@ describe('canKeyUnlock', () => {
         expect(canKeyUnlock(makeChallenge(), FULL, NOW)).toBe(true);
     });
 
+    test('a MISSED free boost can still be unlocked with a key', () => {
+        const missed = makeChallenge({ member: { boost: { state: 'MISSED' } } });
+        expect(canKeyUnlock(missed, FULL, NOW)).toBe(true);
+        expect(blockedOutcome('key', missed, FULL, NOW)).toBeNull();
+    });
+
     test.each([
         ['already unlocked', { member: { boost: { state: 'AVAILABLE_KEY' }, ranking: {} } }],
         ['boost disabled', { boost_enable: false }],
