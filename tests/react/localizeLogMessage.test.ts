@@ -46,9 +46,9 @@ describe('Latvian log messages', () => {
         const message =
             '[Challenge 42: No Humans] only names what to leave out (human); ranking your whole library with photos showing it excluded';
         expect(localizeLogMessage(`ℹ️ Fill: ${message}`)).toBe(
-            'ℹ️ Aizpildīšana: [Izaicinājums 42: No Humans] norāda tikai to, ko neiekļaut (human); izvērtē visu fotoattēlu bibliotēku un izslēdz attēlus, kuros tas redzams',
+            'ℹ️ Iesniegšana: [Izaicinājums 42: No Humans] norāda tikai to, ko neiekļaut (human); sarindo visu bibliotēku un izslēdz foto, kuros tas redzams',
         );
-        expect(localizeLogMessage('ℹ️ Invalid timestamp provided')).toBe('ℹ️ Norādīts nepareizs laika zīmogs');
+        expect(localizeLogMessage('ℹ️ Invalid timestamp provided')).toBe('ℹ️ Norādīts nederīgs laika zīmogs');
     });
 
     test('translates logger progress and the generated plural suffix', () => {
@@ -57,7 +57,7 @@ describe('Latvian log messages', () => {
             `ℹ️ Apstrādā izaicinājumu 1/2: Sunset ${progress}`,
         );
         expect(localizeLogMessage('ℹ️ emergencyFill: submitted 1 entry for [Challenge 42: Sunset] near deadline')).toBe(
-            'ℹ️ Ārkārtas aizpildīšana: pirms termiņa iesniegto ierakstu skaits: 1, izaicinājums [Izaicinājums 42: Sunset]',
+            'ℹ️ Ārkārtas iesniegšana: izaicinājumā [Izaicinājums 42: Sunset] īsi pirms termiņa iesniegti foto: 1',
         );
     });
 
@@ -71,7 +71,7 @@ describe('Latvian log messages', () => {
             );
         }
         for (const message of ['✅ retrieved 24 challenges (1734ms)', '✅ Retrieved 24 challenges (1734ms)']) {
-            expect(localizeLogMessage(message)).toBe('✅ Ielādēti 24 izaicinājumi (1734 ms)');
+            expect(localizeLogMessage(message)).toBe('✅ Ielādēti izaicinājumi: 24 (1734 ms)');
         }
         expect(localizeLogMessage('🔄 Voting process...')).toBe('🔄 Balsošanas process...');
         expect(localizeLogMessage('🔄 Loading active challenges')).toBe('🔄 Ielādē aktīvos izaicinājumus');
@@ -95,14 +95,14 @@ describe('Latvian log messages', () => {
                 `ℹ️ Fill: 2 photos matched the theme equally well for [Challenge 42: Sunset], so the entry was chosen on past performance — image1 (3 votes, 1 achievements, 9 views)${coverage}.`,
             ),
         ).toBe(
-            'ℹ️ Aizpildīšana: 2 fotoattēli vienlīdz labi atbilst izaicinājuma [Izaicinājums 42: Sunset] tēmai. Pēc iepriekšējiem rezultātiem atlasīto ierakstu skaits: 1 — image1 (balsis: 3, sasniegumi: 1, skatījumi: 9); iepriekšējie rezultāti pašlaik pārbaudīti 1 no 2 fotoattēliem; pārējos pārbauda pakāpeniski katrā aizpildīšanā.',
+            'ℹ️ Iesniegšana: 2 foto vienlīdz labi atbilst tēmai izaicinājumā [Izaicinājums 42: Sunset]. Pēc iepriekšējiem rezultātiem atlasīto foto skaits: 1 — image1 (balsis: 3, sasniegumi: 1, skatījumi: 9); līdz šim iepriekšējie rezultāti pārbaudīti 1 no 2 foto, pārējos pārbauda pa daļai katrā iesniegšanas reizē.',
         );
         expect(
             localizeLogMessage(
                 '⚠️ autoFill: nothing in [Challenge 42: Sunset] matched the challenge theme, so 2 entries were chosen on past performance — image1 (past performance not looked up yet — ranked below any photo that was) out of 3 equally off-theme candidates. Set a Per-Title Tag Rule for this challenge title in Settings to steer which photos qualify.',
             ),
         ).toBe(
-            '⚠️ Automātiskā aizpildīšana: izaicinājumā [Izaicinājums 42: Sunset] nekas neatbilda tēmai. Pēc iepriekšējiem rezultātiem atlasīto ierakstu skaits: 2 — image1 (iepriekšējie rezultāti vēl nav pārbaudīti — sarindots aiz pārbaudītajiem fotoattēliem) no 3 vienlīdz neatbilstošiem kandidātiem. Iestatījumos pievieno tagu noteikumu šim izaicinājuma virsrakstam, lai norādītu piemērotos fotoattēlus.',
+            '⚠️ Automātiskā iesniegšana: izaicinājumā [Izaicinājums 42: Sunset] nekas neatbilda tēmai. Pēc iepriekšējiem rezultātiem atlasīto foto skaits: 2 — image1 (iepriekšējie rezultāti vēl nav pārbaudīti — sarindots aiz visiem foto, kuru rezultāti ir pārbaudīti) no 3 vienlīdz neatbilstošiem kandidātiem. Uzstādījumos pievieno šī izaicinājuma nosaukumam tagu noteikumu, lai noteiktu, kuri foto ir piemēroti.',
         );
     });
 
@@ -114,11 +114,11 @@ describe('Latvian log messages', () => {
         expect(localizeLogMessage('❌ CLI Manual Voting Process failed: failed to fetch challenges')).toBe(
             '❌ CLI manuālais balsošanas process neizdevās: neizdevās ielādēt izaicinājumus',
         );
-        expect(localizeLogMessage('✅ Boost not available (123ms)')).toBe('✅ Pastiprinājums nav pieejams (123 ms)');
+        expect(localizeLogMessage('✅ Boost not available (123ms)')).toBe('✅ Boost nav pieejams (123 ms)');
         expect(localizeLogMessage('❌ CLI Manual Voting Process failed: upstream-specific-error')).toBe(
             '❌ CLI manuālais balsošanas process neizdevās: upstream-specific-error',
         );
-        expect(localizeLogMessage(' Settings:')).toBe('\nIestatījumi:');
+        expect(localizeLogMessage(' Settings:')).toBe('\nUzstādījumi:');
     });
 
     test('leaves unknown technical text intact and handles unmatched icons', () => {

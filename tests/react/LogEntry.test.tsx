@@ -27,7 +27,7 @@ describe('LogEntry', () => {
                     }}
                 />,
             );
-            await waitFor(() => expect(container.textContent).toContain('Norādīts nepareizs laika zīmogs'));
+            await waitFor(() => expect(container.textContent).toContain('Norādīts nederīgs laika zīmogs'));
             expect(container.textContent).toContain('[Informācija] [MAIN] [Balsošana]');
         } finally {
             mockApi.getSetting.mockResolvedValue(null);

@@ -5,9 +5,9 @@ import { sentenceCaseLogMessage } from '../../../format/logSafe';
 const placeholders = /\{(\d+)\}/g;
 const escapeRegex = (text: string) => text.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 const logLabels: Record<string, string> = {
-    Fill: 'Aizpildīšana',
-    autoFill: 'Automātiskā aizpildīšana',
-    AutoFill: 'Automātiskā aizpildīšana',
+    Fill: 'Iesniegšana',
+    autoFill: 'Automātiskā iesniegšana',
+    AutoFill: 'Automātiskā iesniegšana',
     join: 'Pievienošanās',
     Join: 'Pievienošanās',
 };
@@ -22,11 +22,11 @@ function localizeValue(value: string, isLabel: boolean): string {
         .replace(/\((\d+) votes, (\d+) achievements, (\d+) views\)/g, '(balsis: $1, sasniegumi: $2, skatījumi: $3)')
         .replace(
             /past performance not looked up yet — ranked below any photo that was/g,
-            'iepriekšējie rezultāti vēl nav pārbaudīti — sarindots aiz pārbaudītajiem fotoattēliem',
+            'iepriekšējie rezultāti vēl nav pārbaudīti — sarindots aiz visiem foto, kuru rezultāti ir pārbaudīti',
         )
         .replace(
             /; past-performance figures have been looked up for (\d+) of (\d+) of them so far, and the rest are looked up a batch per fill/g,
-            '; iepriekšējie rezultāti pašlaik pārbaudīti $1 no $2 fotoattēliem; pārējos pārbauda pakāpeniski katrā aizpildīšanā',
+            '; līdz šim iepriekšējie rezultāti pārbaudīti $1 no $2 foto, pārējos pārbauda pa daļai katrā iesniegšanas reizē',
         );
 }
 
