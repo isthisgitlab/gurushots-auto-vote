@@ -249,6 +249,25 @@ describe('mock-parity behaviors on the shared path', () => {
         votingLogic.isTurboEarnSaved.mockReturnValue(false);
     });
 
+    test('an active turbo mission earns the soonest-ending challenge first', async () => {
+        const later = makeChallenge({ id: 1, close_time: NOW + 7200 });
+        const sooner = makeChallenge({ id: 2, close_time: NOW + 1800 });
+        const list = [later, sooner];
+        const api = makeApi(list);
+        votingLogic.shouldPlayAutoTurbo.mockReturnValue(true);
+        votingLogic.isTurboEarnSaved.mockReturnValue(true);
+        const missions = { join: 0, fill: 0, turbo: 1 };
+        try {
+            const result = await runVotingPass('tok', null, deps(api, { missions }));
+            expect(api.runTurboMiniGame).toHaveBeenCalledTimes(1);
+            expect(api.runTurboMiniGame).toHaveBeenCalledWith(sooner, 'tok');
+            expect(missions.turbo).toBe(0);
+            expect(result.challenges).toBe(list);
+        } finally {
+            votingLogic.isTurboEarnSaved.mockReturnValue(false);
+        }
+    });
+
     test('a manual win during the pass saves the next challenge when one mission win remains', async () => {
         const api = makeApi([makeChallenge({ id: 1 }), makeChallenge({ id: 2 })]);
         votingLogic.shouldPlayAutoTurbo.mockReturnValue(true);
