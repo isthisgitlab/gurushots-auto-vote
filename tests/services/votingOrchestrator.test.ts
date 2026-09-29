@@ -32,6 +32,7 @@ jest.mock('../../src/js/services/autoFill', () => ({
     maybeEmergencyFillChallenge: jest.fn(async () => 'skipped'),
     submitNewEntryForAction: jest.fn(async () => ({ ok: false, reason: 'none' })),
     reflectNewEntry: jest.fn(),
+    reflectEntryFlag: jest.fn(),
 }));
 
 jest.mock('../../src/js/voting/cancellation', () => ({
@@ -193,6 +194,65 @@ describe('mock-parity behaviors on the shared path', () => {
         const api = makeApi([makeChallenge()]);
         votingLogic.shouldPlayAutoTurbo.mockReturnValue(true);
         await runVotingPass('tok', null, deps(api));
+        expect(api.runTurboMiniGame).toHaveBeenCalledTimes(1);
+    });
+
+    test('a Turbo won when application is due is applied in the same pass', async () => {
+        const challenge = makeChallenge({
+            close_time: NOW + 600,
+            member: {
+                turbo: { state: 'FREE' },
+                boost: { state: 'LOCKED', timeout: 0 },
+                ranking: { entries: [{ id: 'entry-1' }], exposure: { exposure_factor: 100 } },
+            },
+        });
+        const api = makeApi([challenge]);
+        votingLogic.shouldPlayAutoTurbo.mockReturnValue(true);
+        votingLogic.orderDeadlineActions.mockReturnValue(invalid([{ action: 'turbo' }]));
+        votingLogic.shouldApplyTurbo.mockImplementation((current) => ({
+            apply: current.member?.turbo?.state === 'WON',
+            imageId: 'entry-1',
+            fillNew: false,
+            reason: 'apply window open',
+        }));
+
+        await runVotingPass('tok', null, deps(api));
+
+        expect(api.runTurboMiniGame).toHaveBeenCalledTimes(1);
+        expect(api.applyTurbo).toHaveBeenCalledWith(101, 'entry-1', 'tok');
+        expect(api.runTurboMiniGame.mock.invocationCallOrder[0]).toBeLessThan(
+            api.applyTurbo.mock.invocationCallOrder[0],
+        );
+    });
+
+    test('a Turbo that was not won is not applied when application is due', async () => {
+        const challenge = makeChallenge({
+            member: { turbo: { state: 'FREE' }, ranking: { entries: [{ id: 'entry-1' }] } },
+        });
+        const api = makeApi([challenge]);
+        api.runTurboMiniGame.mockResolvedValue({ played: 1, correct: 0, flipped: 1, doubleFailed: 0, won: false });
+        votingLogic.shouldPlayAutoTurbo.mockReturnValue(true);
+        votingLogic.orderDeadlineActions.mockReturnValue(invalid([{ action: 'turbo' }]));
+        votingLogic.shouldApplyTurbo.mockImplementation((current) => ({
+            apply: current.member?.turbo?.state === 'WON',
+            imageId: 'entry-1',
+            fillNew: false,
+            reason: 'apply window open',
+        }));
+
+        await runVotingPass('tok', null, deps(api));
+
+        expect(challenge.member?.turbo?.state).toBe('FREE');
+        expect(api.applyTurbo).not.toHaveBeenCalled();
+    });
+
+    test('a confirmed Turbo win tolerates a missing member payload', async () => {
+        const api = makeApi([makeChallenge({ member: undefined })]);
+        votingLogic.shouldPlayAutoTurbo.mockReturnValue(true);
+
+        const result = await runVotingPass('tok', null, deps(api));
+
+        expect(result.success).toBe(true);
         expect(api.runTurboMiniGame).toHaveBeenCalledTimes(1);
     });
 

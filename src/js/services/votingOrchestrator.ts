@@ -548,11 +548,10 @@ const selectPassChallenges = (
 
 /**
  * Auto-earn turbo by playing the mini-game when eligible. This has no
- * close-time threshold (it plays whenever a turbo is winnable), and a turbo
- * earned this cycle can't be applied until the next cycle re-fetches state, so
- * it runs ahead of the timer-ordered deadline actions. With Save Turbos for
- * Missions on, the earn waits (isTurboEarnSaved) unless a "Win Turbo" mission
- * still needs wins; every win counts down that mission.
+ * close-time threshold (it plays whenever a turbo is winnable). It runs ahead
+ * of the timer-ordered deadline actions so a win can be applied in this pass.
+ * With Save Turbos for Missions on, the earn waits (isTurboEarnSaved) unless a
+ * "Win Turbo" mission still needs wins; every win counts down that mission.
  */
 const playAutoTurbo = async (
     challenge: Challenge,
@@ -579,7 +578,11 @@ const playAutoTurbo = async (
         .startOperation(`turbo-earn-${challenge.id}`, `Playing turbo mini-game on ${challenge.title}${purpose}`);
     try {
         const result = await api.runTurboMiniGame(challenge, token);
-        if (result.won) consumeMission(missions, 'turbo');
+        if (result.won) {
+            consumeMission(missions, 'turbo');
+            // The API confirmed the win; let this pass's apply decision see it.
+            if (challenge.member?.turbo) challenge.member.turbo.state = 'WON';
+        }
         const summary = `played=${result.played} correct=${result.correct} flipped=${result.flipped} doubleFailed=${result.doubleFailed} won=${result.won}`;
         logger.withCategory('turbo').endOperation(`turbo-earn-${challenge.id}`, summary);
     } catch (error) {
