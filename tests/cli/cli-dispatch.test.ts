@@ -54,8 +54,8 @@ jest.mock('../../src/js/settings', () => ({
 
 jest.mock('../../src/js/api/randomizer', () => ({ initializeHeaders: jest.fn() }));
 
-// CLI dispatch must not load Electron; the global fs mock makes its package
-// entry point attempt a binary download when a real command helper imports it.
+// This test loads real command helpers while fs is globally mocked. Mock
+// Electron so its package entry point does not try to download a binary.
 jest.mock('electron', () => ({}));
 
 jest.mock('../../src/js/cli/guards', () => ({
