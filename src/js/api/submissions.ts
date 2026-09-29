@@ -65,9 +65,8 @@ const fetchPhotoPage = async (
     }: { limit: number; start: number; search?: string; usage: string; order?: 'default' },
 ): Promise<LibraryPhoto[] | null> => {
     const headers = createWebHeaders(token);
-    // Most-voted first. The items still report `votes: 0` (see getImageData),
-    // but the server sorts by the real count, so whatever a page cap or walk
-    // budget cuts off is the least-voted work rather than the oldest.
+    // The vote-ordered path sorts by the server's real count even though items
+    // report `votes: 0` (see getImageData). The default path omits the sort.
     const params = [
         `c_id=${encodeURIComponent(String(challengeId))}`,
         `limit=${encodeURIComponent(String(limit))}`,
