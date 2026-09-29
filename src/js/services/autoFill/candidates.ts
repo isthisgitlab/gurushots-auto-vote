@@ -376,7 +376,15 @@ const fetchCandidatesForChallenge = async (
     // full PAGINATE_BUDGET_MS default rather than the tighter themed budget: by
     // the time it runs the themed searches have already found nothing, and this
     // is the last chance to put ANY photo in the slot.
-    return getEligiblePhotos(challengeId, token, { paginate: true, logLabel, ...usageOpt });
+    const byVotes = await getEligiblePhotos(challengeId, token, { paginate: true, logLabel, ...usageOpt });
+    if (hasEligible(byVotes)) return byVotes;
+    logger
+        .withCategory(logLabel)
+        .info(
+            `${logLabel}: no eligible photos found by vote order for ${logger.challengeTag(challenge)}; checking the API default order`,
+            null,
+        );
+    return getEligiblePhotos(challengeId, token, { order: 'default', logLabel, ...usageOpt });
 };
 
 export { resolveSemanticScores, resolveIgnoreWords, fetchCandidatesForChallenge };

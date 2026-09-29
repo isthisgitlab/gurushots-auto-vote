@@ -57,6 +57,12 @@ describe('submissions', () => {
             );
         });
 
+        test('omits vote ordering when requesting the API default order', async () => {
+            makePostRequest.mockResolvedValueOnce({ items: [] });
+            await getEligiblePhotos('125319', token, { order: 'default' });
+            expect(makePostRequest.mock.calls[0][2]).toBe('c_id=125319&limit=100&start=0&usage=submit');
+        });
+
         test('appends an encoded search param when a non-empty search is given', async () => {
             makePostRequest.mockResolvedValueOnce({ items: [] });
             await getEligiblePhotos('125319', token, { search: 'sun hat' });

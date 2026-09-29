@@ -1836,6 +1836,23 @@ describe('reflect-on-submit — auto-fill consumes the slot it just used', () =>
 });
 
 describe('fetchCandidatesForChallenge — theme-narrowed fetch', () => {
+    test('tries the API default order when vote-sorted photos are all ineligible', async () => {
+        const getEligiblePhotos = jest.fn(async (_id: string | number, _tok: string, opts: EligibleOptions) =>
+            opts.order === 'default'
+                ? [allowedPhoto('new')]
+                : [{ id: 'old', permission: { allowed: false, message: 'Unavailable due to challenge brief' } }],
+        );
+        const out = await fetchCandidatesForChallenge(
+            invalid({ id: 'c1', title: 'Photo of the Week!' }),
+            'tok',
+            {},
+            { getEligiblePhotos, logger: makeLogger(), logLabel: 'join' },
+        );
+        expect(out.map((p) => p.id)).toEqual(['new']);
+        expect(getEligiblePhotos).toHaveBeenNthCalledWith(1, 'c1', 'tok', { paginate: true, logLabel: 'join' });
+        expect(getEligiblePhotos).toHaveBeenNthCalledWith(2, 'c1', 'tok', { order: 'default', logLabel: 'join' });
+    });
+
     test('searches per derived term and returns the deduped union', async () => {
         const getEligiblePhotos = jest.fn(async (_id: string | number, _tok: string, opts: EligibleOptions) => {
             if (opts && opts.search === 'cat') return [allowedPhoto('p1', ['Cat']), allowedPhoto('shared', ['Pet'])];

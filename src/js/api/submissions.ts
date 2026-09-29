@@ -25,7 +25,8 @@ import { errorMessage } from '../errorMessage';
 const requireValue = makeRequireValue('submissions');
 
 // Upper bound on pages fetched by one `paginate: true` call. At the default
-// limit of 100 this is 1000 photos — far above any realistic eligible set.
+// limit of 100 this is 1000 photos. A challenge requiring newly uploaded
+// photos may have no eligible image in the first 1000 sorted by votes.
 // Hitting the cap is logged, never silent: truncating the candidate list
 // without saying so would misreport "considered the whole library".
 const MAX_LIBRARY_PAGES = 10;
@@ -55,7 +56,13 @@ const PAGINATE_BUDGET_MS = 20_000;
 const fetchPhotoPage = async (
     challengeId: string | number,
     token: string,
-    { limit, start, search, usage }: { limit: number; start: number; search?: string; usage: string },
+    {
+        limit,
+        start,
+        search,
+        usage,
+        order,
+    }: { limit: number; start: number; search?: string; usage: string; order?: 'default' },
 ): Promise<LibraryPhoto[] | null> => {
     const headers = createWebHeaders(token);
     // Most-voted first. The items still report `votes: 0` (see getImageData),
@@ -64,11 +71,10 @@ const fetchPhotoPage = async (
     const params = [
         `c_id=${encodeURIComponent(String(challengeId))}`,
         `limit=${encodeURIComponent(String(limit))}`,
-        'order=votes',
-        'sort=desc',
         `start=${encodeURIComponent(String(start))}`,
         `usage=${encodeURIComponent(String(usage))}`,
     ];
+    if (order !== 'default') params.splice(2, 0, 'order=votes', 'sort=desc');
     if (typeof search === 'string' && search.trim() !== '') {
         params.push(`search=${encodeURIComponent(search.trim())}`);
     }
@@ -92,6 +98,8 @@ const fetchPhotoPage = async (
  *   search: optional free-text term; when a non-empty string, the server
  *   filters the library against its own tag index (mirrors the web UI's
  *   `search=hat`) so auto-fill can prefer on-theme photos.
+ *   order: 'default' omits the vote sort so the API's default order can reveal
+ *   eligible new photos that are beyond the vote-sorted page cap.
  *
  *   paginate: opt IN to walking the whole library instead of returning the
  *   first page. WITHOUT this flag the call returns exactly one page — the
@@ -122,6 +130,7 @@ const getEligiblePhotos = async (
         logLabel?: string;
         usage?: string;
         budgetMs?: number;
+        order?: 'default';
     } = {},
 ): Promise<LibraryPhoto[]> => {
     requireValue(challengeId, 'challengeId');
@@ -137,9 +146,10 @@ const getEligiblePhotos = async (
         typeof options.start === 'number' && Number.isFinite(options.start) && options.start >= 0 ? options.start : 0;
     const search = options.search;
     const usage = options.usage === 'swap' ? 'swap' : 'submit';
+    const order = options.order;
 
     if (options.paginate !== true) {
-        return (await fetchPhotoPage(challengeId, token, { limit, start, search, usage })) || [];
+        return (await fetchPhotoPage(challengeId, token, { limit, start, search, usage, order })) || [];
     }
 
     const budgetMs =
@@ -169,7 +179,13 @@ const getEligiblePhotos = async (
         }
         let items;
         try {
-            items = await fetchPhotoPage(challengeId, token, { limit, start: start + page * limit, search, usage });
+            items = await fetchPhotoPage(challengeId, token, {
+                limit,
+                start: start + page * limit,
+                search,
+                usage,
+                order,
+            });
         } catch (error) {
             warn(
                 `reading page ${page + 1} of your photo library failed (${oneLine(errorMessage(error) || error)}); continuing with the ${byId.size} photo(s) already read`,
