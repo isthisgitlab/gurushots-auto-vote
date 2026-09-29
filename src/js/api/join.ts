@@ -41,7 +41,7 @@ const requireValue = makeRequireValue('join');
 const getMemberChallenges = async (token: string, filter: string = 'open'): Promise<Challenge[]> => {
     requireValue(token, 'token');
     const headers = createWebHeaders(token);
-    const data = `filter=${encodeURIComponent(String(filter))}`;
+    const data = `filter=${encodeURIComponent(filter)}`;
     const response = await makePostRequest<MemberChallengesResponse>(ENDPOINTS.getMemberChallenges, headers, data);
     if (!response || !Array.isArray(response.items)) {
         return [];
@@ -63,10 +63,9 @@ const coinsUnlock = async (
     requireValue(challengeId, 'challengeId');
     requireValue(token, 'token');
     const headers = createWebHeaders(token);
-    const data = [
-        `challenge_id=${encodeURIComponent(String(challengeId))}`,
-        `usage=${encodeURIComponent(String(usage))}`,
-    ].join('&');
+    const data = [`challenge_id=${encodeURIComponent(String(challengeId))}`, `usage=${encodeURIComponent(usage)}`].join(
+        '&',
+    );
     const response = await makePostRequest<SuccessResponse>(ENDPOINTS.coinsUnlock, headers, data);
     if (!response) {
         return { ok: false, raw: null };

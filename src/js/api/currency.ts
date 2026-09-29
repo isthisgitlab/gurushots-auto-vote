@@ -46,7 +46,7 @@ const keyUnlock = async (
 ): Promise<ActionResult> => {
     requireValue(challengeId, 'challengeId');
     requireValue(token, 'token');
-    return post(ENDPOINTS.keyUnlock, token, { c_id: String(challengeId), usage: String(usage) });
+    return post(ENDPOINTS.keyUnlock, token, { c_id: String(challengeId), usage });
 };
 
 /**

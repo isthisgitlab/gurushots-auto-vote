@@ -97,10 +97,8 @@ function holdForOpenBoosts(event: { preventDefault: () => void }, proceed: () =>
 }
 
 function createLoginWindow() {
-    // Get saved window bounds
     const bounds = settings.getWindowBounds('login');
 
-    // Create the login window with saved bounds
     loginWindow = new BrowserWindow({
         width: bounds.width,
         height: bounds.height,
@@ -119,7 +117,6 @@ function createLoginWindow() {
         },
     });
 
-    // Load the login HTML file
     loginWindow.loadFile(appPath('src', 'html', 'login.html')).catch((error) => {
         logger.withCategory('ui').error('Failed to load login window content:', error);
     });
@@ -148,20 +145,17 @@ function createLoginWindow() {
         settings.saveWindowBounds('login', newBounds);
     });
 
-    // Handle window close
     loginWindow.on('closed', () => {
         loginWindow = null;
     });
 }
 
 function createMainWindow() {
-    // Get saved window bounds
     const bounds = settings.getWindowBounds('main');
 
     // Track when main window is created to prevent reload during login
     mainWindowCreatedTime = Date.now();
 
-    // Create the main application window with saved bounds
     mainWindow = new BrowserWindow({
         width: bounds.width,
         height: bounds.height,
@@ -187,7 +181,6 @@ function createMainWindow() {
         },
     });
 
-    // Load the main application HTML file
     mainWindow.loadFile(appPath('src', 'html', 'app.html')).catch((error) => {
         logger.withCategory('ui').error('Failed to load main window content:', error);
     });
@@ -229,7 +222,6 @@ function createMainWindow() {
     // Windows log-off / shutdown: the OS is ending the session, not the user.
     win.on('query-session-end', bypassQuitGuard);
 
-    // Handle window close
     mainWindow.on('closed', () => {
         mainWindow = null;
         resetQuitGuard();
@@ -321,10 +313,8 @@ if (gotSingleInstanceLock) {
     // When Electron has finished initialization
     app.whenReady()
         .then(async () => {
-            // Log userData path for verification
             logger.withCategory('ui').info(`[App] UserData path: ${settings.getUserDataPath()}`, null);
 
-            // Initialize API headers on app startup
             initializeHeaders();
 
             // Seed the curated intent presets once (idempotent; never fatal).
@@ -334,10 +324,8 @@ if (gotSingleInstanceLock) {
                 logger.withCategory('settings').warning('Intent profile seeding failed (non-fatal):', err);
             }
 
-            // Run log cleanup on app startup
             logger.cleanup();
 
-            // Create application menu
             createApplicationMenu();
 
             // Linux/macOS shutdown or reboot: never veto the OS with a dialog.
@@ -466,7 +454,6 @@ ipcMain.on('login-success', (event) => {
     if (loginWindow) {
         loginWindow.close();
     }
-    // Create main application window
     createMainWindow();
 });
 

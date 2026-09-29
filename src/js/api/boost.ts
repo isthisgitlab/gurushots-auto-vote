@@ -24,8 +24,8 @@ import type { SuccessResponse } from '../types/gurushots';
  */
 const _postBoost = async (challengeId: string, imageId: string, token: string): Promise<SuccessResponse | null> => {
     const data = new URLSearchParams({
-        c_id: String(challengeId),
-        image_id: String(imageId),
+        c_id: challengeId,
+        image_id: imageId,
     }).toString();
     const headers = {
         ...createCommonHeaders(token),

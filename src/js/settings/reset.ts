@@ -69,10 +69,8 @@ const resetAllSettings = (): boolean => {
         newSettings[key] = currentSettings[key];
     }
 
-    // Save the reset settings
     const saveResult = saveSettings(newSettings);
 
-    // Run cleanup to remove any obsolete settings
     if (saveResult) {
         cleanupObsoleteSettings();
     }

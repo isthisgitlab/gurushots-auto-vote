@@ -20,8 +20,8 @@ export const secondsToHoursMinutes = (totalSeconds: number | null | undefined): 
  * @param minutes - NaN reads as 0; clamped to 0–59.
  */
 export const hoursMinutesToSeconds = (hours: number, minutes: number): number => {
-    const h = Math.max(0, Math.floor(Number(hours) || 0));
-    const m = Math.max(0, Math.min(59, Math.floor(Number(minutes) || 0)));
+    const h = Math.max(0, Math.floor(hours || 0));
+    const m = Math.max(0, Math.min(59, Math.floor(minutes || 0)));
     return h * 3600 + m * 60;
 };
 

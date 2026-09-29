@@ -106,7 +106,6 @@ const initializeHeaders = () => {
             _version: CURRENT_APP_VERSION, // Track version for updates
         };
 
-        // Save headers to settings
         settings.setSetting('apiHeaders', savedHeaders);
         logger.withCategory('api').info('🔄 Generated new random API headers', null);
     } else if (savedHeaders._version !== CURRENT_APP_VERSION) {
@@ -121,7 +120,6 @@ const initializeHeaders = () => {
             _version: CURRENT_APP_VERSION,
         };
 
-        // Save updated headers
         settings.setSetting('apiHeaders', savedHeaders);
         logger.withCategory('api').info('🔄 Updated API headers for new app version', null);
     }
@@ -137,7 +135,6 @@ const generateRandomHeaders = (token: string | undefined): Record<string, string
     // Ensure headers are initialized
     const savedHeaders = initializeHeaders();
 
-    // Return headers with current token
     return {
         ...savedHeaders,
         'x-token': token,

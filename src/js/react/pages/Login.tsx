@@ -27,7 +27,6 @@ function LoginPageContent() {
     const [mockMode, setMockMode] = useState(false);
     const [initialUsername, setInitialUsername] = useState('');
 
-    // Initialize state from settings
     useEffect(() => {
         if (settings) {
             setTheme(settings.theme || 'light');
@@ -40,7 +39,6 @@ function LoginPageContent() {
         }
     }, [settings]);
 
-    // Initialize mock mode from environment
     useEffect(() => {
         if (envInfo) {
             setMockMode(envInfo.defaultMock || false);
@@ -49,7 +47,6 @@ function LoginPageContent() {
 
     useDocumentTheme(theme);
 
-    // Handle theme change
     const handleThemeChange = useCallback(
         async (newTheme: string) => {
             setTheme(newTheme);
@@ -59,7 +56,6 @@ function LoginPageContent() {
         [updateSetting],
     );
 
-    // Handle stay logged in change
     const handleStayLoggedInChange = useCallback(
         async (value: boolean) => {
             setStayLoggedIn(value);
@@ -73,7 +69,6 @@ function LoginPageContent() {
         [updateSetting],
     );
 
-    // Handle mock mode change
     const handleMockModeChange = useCallback(
         async (value: boolean) => {
             setMockMode(value);
@@ -82,7 +77,6 @@ function LoginPageContent() {
         [updateSetting],
     );
 
-    // Handle form submission
     const handleSubmit = useCallback(
         async (username: string, password: string) => {
             const result = await authenticate(username, password, mockMode);
@@ -95,7 +89,6 @@ function LoginPageContent() {
                     await updateSetting('lastUsername', username);
                 }
 
-                // Save mock mode setting
                 await updateSetting('mock', mockMode);
 
                 // Transition to main window
