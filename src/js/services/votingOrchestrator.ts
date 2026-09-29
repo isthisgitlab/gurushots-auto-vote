@@ -533,7 +533,9 @@ const selectPassChallenges = (
     challengeIdFilter: string | number | null,
 ): { challenges: Challenge[]; result?: undefined } | { result: VotingPassResult; challenges?: undefined } => {
     if (challengeIdFilter == null) {
-        return { challenges: [...allChallenges].sort((a, b) => a.close_time - b.close_time) };
+        return {
+            challenges: [...allChallenges].sort((a, b) => (a?.close_time ?? Infinity) - (b?.close_time ?? Infinity)),
+        };
     }
     const idStr = String(challengeIdFilter);
     const challenges = allChallenges.filter((c) => String(c.id) === idStr);

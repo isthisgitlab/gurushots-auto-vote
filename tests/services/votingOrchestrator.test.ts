@@ -268,6 +268,21 @@ describe('mock-parity behaviors on the shared path', () => {
         }
     });
 
+    test('a malformed challenge does not stop a later turbo mission run', async () => {
+        const sooner = makeChallenge({ id: 2, close_time: NOW + 1800 });
+        const api = makeApi([invalid<Challenge>(null), sooner]);
+        votingLogic.shouldPlayAutoTurbo.mockReturnValue(true);
+        votingLogic.isTurboEarnSaved.mockReturnValue(true);
+        const missions = { join: 0, fill: 0, turbo: 1 };
+        try {
+            const result = await runVotingPass('tok', null, deps(api, { missions }));
+            expect(result.success).toBe(true);
+            expect(api.runTurboMiniGame).toHaveBeenCalledWith(sooner, 'tok');
+        } finally {
+            votingLogic.isTurboEarnSaved.mockReturnValue(false);
+        }
+    });
+
     test('a manual win during the pass saves the next challenge when one mission win remains', async () => {
         const api = makeApi([makeChallenge({ id: 1 }), makeChallenge({ id: 2 })]);
         votingLogic.shouldPlayAutoTurbo.mockReturnValue(true);
