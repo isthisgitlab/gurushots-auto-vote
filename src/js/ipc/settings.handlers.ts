@@ -19,15 +19,13 @@ try {
     // Capacitor / CLI: register() in this module is never reached.
 }
 import * as settings from '../settings';
-import { registerHandlers } from './registerHandlers';
+import { registerHandlers, type IpcHandlerMap, type IpcHandler } from './registerHandlers';
 import { errorResult } from './errorResult';
 import * as logger from '../logger';
 import * as apiFactory from '../apiFactory';
 import * as metadata from '../metadata';
 
 import type { IpcMain } from 'electron';
-import type { IpcHandlerMap } from './registerHandlers';
-import type { IpcHandler } from './registerHandlers';
 import type { SettingsSchemaEntry } from '../settings/schema';
 import type { AppSettings } from '../types/settings';
 import type * as electronModule from 'electron';

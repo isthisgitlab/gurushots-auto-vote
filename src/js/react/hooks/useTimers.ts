@@ -41,7 +41,7 @@ export function useTimers(challenges: Array<Pick<Challenge, 'id' | 'close_time'>
             }
             out[challenge.id] = sig;
         }
-        for (const id of [...store.keys()]) {
+        for (const id of store.keys()) {
             if (!present.has(id)) store.delete(id);
         }
         return out;

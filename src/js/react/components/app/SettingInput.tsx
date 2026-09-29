@@ -7,7 +7,7 @@ import { interp } from '@/utils/interp';
 
 export { SCHEDULED_FILL_MAX_ENTRIES } from './TimeSettingFields';
 
-import type { ComponentChildren, ComponentType } from 'preact';
+import type { ComponentChildren, ComponentType, JSX } from 'preact';
 import type { SerializableSchemaEntry } from '../../../ipc/settings.handlers';
 import type {
     SettingChangeHandler,
@@ -15,7 +15,6 @@ import type {
     SettingResetHandler,
     Translate,
 } from '../../../types/settingsEditor';
-import type { JSX } from 'preact';
 
 // Setting types rendered as several controls (each with its own aria-label)
 // rather than one: their caption names a role="group" wrapper instead of

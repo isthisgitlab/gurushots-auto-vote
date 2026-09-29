@@ -54,6 +54,10 @@ jest.mock('../../src/js/settings', () => ({
 
 jest.mock('../../src/js/api/randomizer', () => ({ initializeHeaders: jest.fn() }));
 
+// CLI dispatch must not load Electron; the global fs mock makes its package
+// entry point attempt a binary download when a real command helper imports it.
+jest.mock('electron', () => ({}));
+
 jest.mock('../../src/js/cli/guards', () => ({
     requireChallenge: jest.fn(({ challengeId }: { challengeId: string | null }) => challengeId),
     requireProfileArgs: jest.fn((command: string, { rest }: { rest: string[] }) => rest[0]),

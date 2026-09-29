@@ -8,7 +8,7 @@
  * Mock successful login response
  */
 const mockLoginSuccess = {
-    token: 'mock_prod_token_1234567890abcdef',
+    token: 'mock-auth-token',
     user: {
         id: 12345,
         email: 'test@example.com',
