@@ -20,7 +20,7 @@ Automated voting for GuruShots challenges. The same voting engine ships three wa
 
 ## ⚠️ Single-Instance Warning
 
-**Run only ONE instance at a time** — one GUI **or** one CLI **or** one phone, never several at once. Multiple instances hammer the GuruShots API in parallel and can cause:
+**Run only ONE instance at a time** — one GUI **or** one web UI **or** one CLI **or** one phone, never several at once. Multiple instances hammer the GuruShots API in parallel and can cause:
 
 - **Rate-limit errors** — GuruShots blocks your requests
 - **Failed voting** — cycles stop working correctly
@@ -187,6 +187,18 @@ The Android build is **not on Google Play** — install via direct APK download.
 
 > Replace `[platform]` with `mac`, `linux`, or `linux-arm`. Run `help` to see every command.
 
+### Web UI (from source)
+
+The same interface can run in an ordinary browser tab instead of the desktop window, which is handy for browser automation such as Playwright. It needs a source checkout with Node.js 26+ and pnpm:
+
+```bash
+pnpm install
+pnpm web                 # builds the UI, then serves it at http://localhost:4400/
+pnpm web --port=5000     # another port (0 = any free port)
+```
+
+Open the URL it prints and log in as in the GUI. Auto-voting runs in that tab, so keep it open: closing the tab stops voting. It shares settings and login with the app and CLI run from the same checkout. It does not install updates; the update prompt opens the releases page instead.
+
 For GUI and CLI instructions, voting rules, settings, logs, and troubleshooting, see the [usage guide](docs/usage.md).
 
 ## 🔒 Security
@@ -195,6 +207,7 @@ For GUI and CLI instructions, voting rules, settings, logs, and troubleshooting,
 - Credentials are redacted from logs — sensitive keys are masked before any log write.
 - Your token is stored locally in the app's settings file and is sent only to GuruShots; settings and config never leave your device.
 - Error messages don't expose sensitive information.
+- The web UI (`pnpm web`) listens only on this computer (localhost) and refuses requests from other websites. It has no password of its own, so never expose its port to a network.
 - The auto-submit image check runs locally with a bundled model; it only downloads your own photo thumbnails from GuruShots and sends nothing to any other service.
 
 ## 📄 License & Support

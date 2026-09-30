@@ -16,7 +16,7 @@ Automātiska balsošana GuruShots izaicinājumos. Viens un tas pats balsošanas 
 
 ## ⚠️ Brīdinājums: tikai viens eksemplārs
 
-**Vienlaikus darbiniet tikai VIENU lietotnes eksemplāru** — vienu grafisko lietotni **vai** vienu CLI, **vai** vienu telefonu, nekad vairākus reizē. Vairāki eksemplāri paralēli pārslogo GuruShots API, un tas var izraisīt:
+**Vienlaikus darbiniet tikai VIENU lietotnes eksemplāru** — vienu grafisko lietotni **vai** vienu tīmekļa saskarni, **vai** vienu CLI, **vai** vienu telefonu, nekad vairākus reizē. Vairāki eksemplāri paralēli pārslogo GuruShots API, un tas var izraisīt:
 
 - **pieprasījumu limita kļūdas** (rate limit) — GuruShots bloķē jūsu pieprasījumus;
 - **balsošanas kļūmes** — cikli vairs nedarbojas pareizi;
@@ -183,6 +183,18 @@ Android versija **nav pieejama Google Play** — to instalē, tieši lejupielād
 
 > Aizstājiet `[platforma]` ar `mac`, `linux` vai `linux-arm`. Palaidiet `help`, lai redzētu visas komandas.
 
+### Tīmekļa saskarne (no pirmkoda)
+
+Tādu pašu saskarni var atvērt parastā pārlūka cilnē, nevis darbvirsmas logā, — tas noder pārlūka automatizācijai, piemēram, ar Playwright. Tam vajadzīga pirmkoda kopija, Node.js 26 vai jaunāka versija un pnpm:
+
+```bash
+pnpm install
+pnpm web                 # sabūvē saskarni un palaiž to adresē http://localhost:4400/
+pnpm web --port=5000     # cits ports (0 — jebkurš brīvs ports)
+```
+
+Atveriet adresi, ko komanda izvada, un piesakieties tāpat kā grafiskajā lietotnē. Automātiskā balsošana darbojas šajā cilnē, tāpēc neaizveriet to: aizverot cilni, balsošana apstājas. Uzstādījumi un pieteikšanās ir kopīgi ar lietotni un CLI, kas palaisti no tās pašas pirmkoda kopijas. Tīmekļa saskarne atjauninājumus neinstalē: atjauninājuma paziņojums atver laidienu lapu.
+
 Norādījumus par grafisko lietotni un CLI, balsošanas noteikumus, uzstādījumus, žurnālfailus un problēmu risināšanu skatiet [lietošanas ceļvedī](docs/usage.lv.md).
 
 ## 🔒 Drošība
@@ -191,6 +203,7 @@ Norādījumus par grafisko lietotni un CLI, balsošanas noteikumus, uzstādījum
 - Akreditācijas dati žurnālos netiek rādīti — pirms jebkura ieraksta žurnālā jutīgo lauku vērtības tiek maskētas.
 - Lietotne jūsu tokenu glabā lokāli uzstādījumu failā un sūta to tikai uz GuruShots; uzstādījumi un konfigurācija nekad nepamet jūsu ierīci.
 - Kļūdu ziņojumos nav jutīgas informācijas.
+- Tīmekļa saskarne (`pnpm web`) ir pieejama tikai šajā datorā (localhost) un noraida pieprasījumus no citām vietnēm. Tai nav savas paroles, tāpēc nekad nepadariet tās portu pieejamu tīklā.
 - Automātiskās iesniegšanas vizuālā pārbaude darbojas lokāli ar iebūvētu modeli; tā no GuruShots lejupielādē tikai jūsu pašu foto sīktēlus un neko nesūta citiem pakalpojumiem.
 
 ## 📄 Licence un atbalsts
