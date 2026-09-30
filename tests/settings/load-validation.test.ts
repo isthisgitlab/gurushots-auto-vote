@@ -103,6 +103,20 @@ describe('loadSettings validation', () => {
         );
     });
 
+    test('a missing container is added on every read of an unchanged file, not only the first', () => {
+        // A current blob (no migration rewrites it) that predates one container.
+        seed(getDefaultSettings());
+        settings.loadSettings();
+        const current = JSON.parse(store.value as string) as ReturnType<typeof getDefaultSettings>;
+        const challengeSettings = Object.fromEntries(
+            Object.entries(current.challengeSettings).filter(([key]) => key !== 'titleProfileSuppressions'),
+        );
+        seed({ ...current, challengeSettings });
+        expect(settings.loadSettings().challengeSettings.titleProfileSuppressions).toEqual({});
+        expect(settings.loadSettings().challengeSettings.titleProfileSuppressions).toEqual({});
+        expect(settings.cleanupStaleChallengeSetting([])).toBe(true);
+    });
+
     test('schema values their validation rejects are removed; valid and unknown keys stay', () => {
         seed({
             challengeSettings: {

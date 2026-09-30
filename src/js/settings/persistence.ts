@@ -33,10 +33,19 @@ let lastWarning: string | null = null;
  *
  * @param settings - the parsed persisted blob
  */
-const mergeWithDefaults = (settings: unknown): AppSettings =>
+const mergeWithDefaults = (settings: unknown): AppSettings => {
+    const defaults = getDefaultSettings();
     // Defaults carry the environment-aware mock value, so a persisted blob
     // without `mock` (JSON never holds `undefined`) inherits it here.
-    ({ ...getDefaultSettings(), ...(settings as Partial<AppSettings>) });
+    const merged: AppSettings = { ...defaults, ...(settings as Partial<AppSettings>) };
+    // A stored challengeSettings block that predates one of its containers gets
+    // the default container here, on every read: dropInvalidValues is skipped
+    // for unchanged file text, so it cannot be the one to fill it.
+    if (isPlainObject(merged.challengeSettings)) {
+        merged.challengeSettings = { ...defaults.challengeSettings, ...merged.challengeSettings };
+    }
+    return merged;
+};
 
 /**
  * Whether a stored top-level value has its default's type. The only list
@@ -89,7 +98,7 @@ const dropInvalidValues = (settings: AppSettings): string[] => {
     for (const [key, fallback] of Object.entries(getDefaultSettings().challengeSettings)) {
         const value = challengeSettings[key];
         if (Array.isArray(fallback) ? !Array.isArray(value) : !isPlainObject(value)) {
-            if (value !== undefined) dropped.push(`challengeSettings.${key}`);
+            dropped.push(`challengeSettings.${key}`);
             challengeSettings[key] = fallback;
         }
     }
