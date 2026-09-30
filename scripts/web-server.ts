@@ -5,6 +5,7 @@
 // pass --port=<n> (default 4400, 0 = any free port).
 import { startWebServer } from '../src/js/web/server';
 import { appPath } from '../src/js/appPaths';
+import { errorMessage } from '../src/js/errorMessage';
 import { runIfMain } from './lib/run-if-main';
 
 const DEFAULT_PORT = 4400;
@@ -27,8 +28,18 @@ const main = async (argv = process.argv.slice(2)) => {
         process.exitCode = 1;
         return;
     }
-    const { url } = await startWebServer({ port, distDir: appPath('dist') });
-    console.log(`GuruShots Auto Vote web UI: ${url}`);
+    try {
+        const { url } = await startWebServer({ port, distDir: appPath('dist') });
+        console.log(`GuruShots Auto Vote web UI: ${url}`);
+    } catch (error) {
+        const inUse = error instanceof Error && 'code' in error && error.code === 'EADDRINUSE';
+        console.error(
+            inUse
+                ? `Port ${port} is already in use. Pick another with --port=<n> (0 = any free port).`
+                : `Could not start the web UI: ${errorMessage(error) ?? String(error)}`,
+        );
+        process.exitCode = 1;
+    }
 };
 
 runIfMain(require.main, module, main);

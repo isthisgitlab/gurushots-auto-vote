@@ -46,6 +46,25 @@ describe('scripts/web-server.ts', () => {
         expect(logSpy).toHaveBeenCalledWith('GuruShots Auto Vote web UI: http://localhost:4400/');
     });
 
+    test('main explains a taken port, and reports any other start failure', async () => {
+        server.startWebServer.mockRejectedValueOnce(
+            Object.assign(new Error('listen EADDRINUSE'), { code: 'EADDRINUSE' }),
+        );
+        await main(['--port=4400']);
+        expect(errorSpy).toHaveBeenLastCalledWith(
+            'Port 4400 is already in use. Pick another with --port=<n> (0 = any free port).',
+        );
+        expect(process.exitCode).toBe(1);
+
+        server.startWebServer.mockRejectedValueOnce(new Error('EACCES'));
+        await main(['--port=80']);
+        expect(errorSpy).toHaveBeenLastCalledWith('Could not start the web UI: EACCES');
+
+        server.startWebServer.mockRejectedValueOnce('boom');
+        await main([]);
+        expect(errorSpy).toHaveBeenLastCalledWith('Could not start the web UI: boom');
+    });
+
     test('main refuses a bad --port with a usage line and a failing exit code', async () => {
         await main(['--port=nope']);
         expect(server.startWebServer).not.toHaveBeenCalled();

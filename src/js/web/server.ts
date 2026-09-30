@@ -168,11 +168,11 @@ const serveStatic = (distDir: string, pathname: string, res: ServerResponse) => 
         .pipe(res);
 };
 
-const openEventStream = (req: IncomingMessage, res: ServerResponse, clients: Set<ServerResponse>) => {
+const openEventStream = (res: ServerResponse, clients: Set<ServerResponse>) => {
     res.writeHead(200, { 'Content-Type': 'text/event-stream', 'Cache-Control': 'no-store', Connection: 'keep-alive' });
     res.write(': connected\n\n');
     clients.add(res);
-    req.on('close', () => clients.delete(res));
+    res.on('close', () => clients.delete(res));
 };
 
 // Same as Electron's logout: always drop the token, and put the mock flag back
@@ -262,7 +262,7 @@ const createWebServer = ({ distDir }: WebServerOptions) => {
     const route = async (req: IncomingMessage, res: ServerResponse) => {
         const { pathname } = new URL(String(req.url), 'http://localhost');
         if (!isLocalHost(req.headers.host)) fail(res, 403, 'Refused: non-local Host header');
-        else if (req.method === 'GET' && pathname === '/api/events') openEventStream(req, res, clients);
+        else if (req.method === 'GET' && pathname === '/api/events') openEventStream(res, clients);
         else if (pathname.startsWith('/api/')) await handleApi(handlers, req, res, pathname);
         else if (req.method !== 'GET' && req.method !== 'HEAD') fail(res, 405, 'Method not allowed');
         else serveStatic(root, pathname, res);

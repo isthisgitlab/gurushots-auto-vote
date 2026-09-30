@@ -380,12 +380,19 @@ describe('events', () => {
         stream.req.destroy();
     });
 
-    test('a closed stream stops receiving', async () => {
+    test('a disconnected stream is dropped while the others keep receiving', async () => {
         const gone = await openStream();
-        await gone.ready;
+        const kept = await openStream();
+        await Promise.all([gone.ready, kept.ready]);
         gone.req.destroy();
+        emit('update-checking', { at: 'right after the disconnect' });
         await new Promise((r) => setTimeout(r, 50));
-        emit('update-checking');
+        emit('update-error', { message: 'later' });
+        await waitFor(() => kept.frames.join('').includes('update-error'));
+        expect(kept.frames.join('')).toContain('event: update-checking');
+        expect(kept.frames.join('')).toContain('event: update-error');
+        expect(gone.frames.join('')).not.toContain('update-error');
+        kept.req.destroy();
     });
 });
 
