@@ -201,13 +201,13 @@ describe('TitleTagRulesEditor', () => {
 
         test('a rule with no match key shows as exact', () => {
             render(<TitleTagRulesEditor value={rowWith()} onChange={jest.fn()} />);
-            expect(screen.getByLabelText<HTMLSelectElement>('app.titleRuleMatch').value).toBe('exact');
+            expect(screen.getByLabelText<HTMLSelectElement>('app.titleRuleMatch 1').value).toBe('exact');
         });
 
         test('choosing a mode emits it', () => {
             const onChange = jest.fn();
             render(<TitleTagRulesEditor value={rowWith()} onChange={onChange} />);
-            const select = screen.getByLabelText<HTMLSelectElement>('app.titleRuleMatch');
+            const select = screen.getByLabelText<HTMLSelectElement>('app.titleRuleMatch 1');
             select.value = 'contains';
             select.dispatchEvent(new window.Event('change', { bubbles: true }));
             expect(onChange).toHaveBeenCalledWith([expect.objectContaining({ match: 'contains' })]);
@@ -220,7 +220,7 @@ describe('TitleTagRulesEditor', () => {
                     onChange={jest.fn()}
                 />,
             );
-            const select = () => screen.getByLabelText<HTMLSelectElement>('app.titleRuleMatch');
+            const select = () => screen.getByLabelText<HTMLSelectElement>('app.titleRuleMatch 1');
             expect(select().disabled).toBe(true);
             expect(select().value).toBe('exact');
             rerender(<TitleTagRulesEditor value={rowWith({ match: 'contains' })} onChange={jest.fn()} />);
@@ -230,7 +230,30 @@ describe('TitleTagRulesEditor', () => {
 
         test('a saved mode renders back', () => {
             render(<TitleTagRulesEditor value={rowWith({ match: 'starts' })} onChange={jest.fn()} />);
-            expect(screen.getByLabelText<HTMLSelectElement>('app.titleRuleMatch').value).toBe('starts');
+            expect(screen.getByLabelText<HTMLSelectElement>('app.titleRuleMatch 1').value).toBe('starts');
+        });
+
+        test('each title has its own mode and removing a title keeps modes aligned', () => {
+            const onChange = jest.fn();
+            const value = rowWith({ titles: ['Hats', 'Photo'], titleMatchModes: ['exact', 'starts'] });
+            render(<TitleTagRulesEditor value={value} onChange={onChange} />);
+            expect(screen.getByLabelText<HTMLSelectElement>('app.titleRuleMatch 1').value).toBe('exact');
+            expect(screen.getByLabelText<HTMLSelectElement>('app.titleRuleMatch 2').value).toBe('starts');
+            fireEvent.click(screen.getByLabelText('app.removeTitleRuleTitle 1'));
+            expect(onChange).toHaveBeenLastCalledWith([
+                expect.objectContaining({ title: 'Photo', titles: ['Photo'], titleMatchModes: ['starts'] }),
+            ]);
+        });
+
+        test('changing the second title mode leaves the first title mode unchanged', () => {
+            const onChange = jest.fn();
+            render(<TitleTagRulesEditor value={rowWith({ titles: ['Hats', 'Photo'] })} onChange={onChange} />);
+            const select = screen.getByLabelText<HTMLSelectElement>('app.titleRuleMatch 2');
+            select.value = 'starts';
+            select.dispatchEvent(new window.Event('change', { bubbles: true }));
+            expect(onChange).toHaveBeenLastCalledWith([
+                expect.objectContaining({ titleMatchModes: ['exact', 'starts'] }),
+            ]);
         });
 
         test('editing the challenge tag emits it', () => {

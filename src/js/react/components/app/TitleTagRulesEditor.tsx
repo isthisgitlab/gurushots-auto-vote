@@ -3,7 +3,12 @@ import { StrokeIcon, ICON_PATHS } from '@/components/ui/StrokeIcon';
 import { TagsField } from './SettingInput';
 import { useScenarios } from '@/api/useScenarios';
 import { interp } from '@/utils/interp';
-import { hasRuleCondition, rulePatterns, sortRulesByDefaultOrder } from '../../../settings/challengeRules';
+import {
+    hasRuleCondition,
+    rulePatterns,
+    ruleTitleModes,
+    sortRulesByDefaultOrder,
+} from '../../../settings/challengeRules';
 
 import type { LooseRecord, TitleRule } from '../../../types/settings';
 
@@ -226,43 +231,101 @@ const ruleTitleRows = (rule: TitleRule): string[] => {
 // stays readable by single-title code; the sanitizer drops empty rows.
 const titlesPatch = (titles: string[]): LooseRecord => ({ titles, title: titles[0] ?? '' });
 
+function RuleTitleRow({
+    title,
+    mode,
+    index,
+    count,
+    onTitleChange,
+    onModeChange,
+    onRemove,
+}: {
+    title: string;
+    mode: string;
+    index: number;
+    count: number;
+    onTitleChange: (title: string) => void;
+    onModeChange: (mode: string) => void;
+    onRemove: () => void;
+}) {
+    const { t } = useTranslation();
+    return (
+        <div className="flex items-center gap-2">
+            <input
+                type="text"
+                className="input input-sm flex-1"
+                placeholder={t('app.titleTagRuleTitlePlaceholder')}
+                aria-label={`${t('app.titleTagRuleTitle')} ${index + 1}`}
+                value={title}
+                onChange={(e) => onTitleChange(e.currentTarget.value)}
+            />
+            <select
+                aria-label={`${t('app.titleRuleMatch')} ${index + 1}`}
+                className="select select-sm w-32"
+                disabled={typeof title !== 'string' || !title.trim()}
+                value={typeof title === 'string' && title.trim() ? mode : 'exact'}
+                onChange={(e) => onModeChange(e.currentTarget.value)}
+            >
+                <option value="exact">{t('app.titleRuleMatchExact')}</option>
+                <option value="starts">{t('app.titleRuleMatchStarts')}</option>
+                <option value="contains">{t('app.titleRuleMatchContains')}</option>
+            </select>
+            {count > 1 && (
+                <button
+                    type="button"
+                    className="btn btn-outline btn-sm"
+                    title={t('app.removeTitleRuleTitle')}
+                    aria-label={`${t('app.removeTitleRuleTitle')} ${index + 1}`}
+                    onClick={onRemove}
+                >
+                    ×
+                </button>
+            )}
+        </div>
+    );
+}
+
 function RuleTitleList({ rule, onPatch }: { rule: TitleRule; onPatch: RulePatchHandler }) {
     const { t } = useTranslation();
     const titles = ruleTitleRows(rule);
-    const setTitles = (next: string[]) => onPatch(titlesPatch(next));
+    const modes = ruleTitleModes(rule);
+    const setTitles = (next: string[], nextModes: string[]) =>
+        onPatch({ ...titlesPatch(next), ...(rule.titleMatchModes ? { titleMatchModes: nextModes } : {}) });
     return (
         <div className="space-y-2">
             {titles.map((title, titleIndex) => (
                 // Index key: rows are only appended or removed, and the input is controlled.
-                <div key={titleIndex} className="flex items-center gap-2">
-                    <input
-                        type="text"
-                        className="input input-sm flex-1"
-                        placeholder={t('app.titleTagRuleTitlePlaceholder')}
-                        aria-label={`${t('app.titleTagRuleTitle')} ${titleIndex + 1}`}
-                        value={title}
-                        onChange={(e) =>
-                            setTitles(titles.map((v, i) => (i === titleIndex ? e.currentTarget.value : v)))
-                        }
-                    />
-                    {titles.length > 1 && (
-                        <button
-                            type="button"
-                            className="btn btn-outline btn-sm"
-                            title={t('app.removeTitleRuleTitle')}
-                            aria-label={`${t('app.removeTitleRuleTitle')} ${titleIndex + 1}`}
-                            onClick={() => setTitles(titles.filter((_, i) => i !== titleIndex))}
-                        >
-                            ×
-                        </button>
-                    )}
-                </div>
+                <RuleTitleRow
+                    key={titleIndex}
+                    title={title}
+                    mode={modes[titleIndex] ?? 'exact'}
+                    index={titleIndex}
+                    count={titles.length}
+                    onTitleChange={(next) =>
+                        setTitles(
+                            titles.map((v, i) => (i === titleIndex ? next : v)),
+                            modes,
+                        )
+                    }
+                    onModeChange={(next) =>
+                        onPatch({
+                            ...(titles.length === 1 ? { match: next } : {}),
+                            titleMatchModes: modes.map((mode, i) => (i === titleIndex ? next : mode)),
+                        })
+                    }
+                    onRemove={() =>
+                        setTitles(
+                            titles.filter((_, i) => i !== titleIndex),
+                            modes.filter((_, i) => i !== titleIndex),
+                        )
+                    }
+                />
             ))}
             <button
                 type="button"
                 className="btn btn-outline btn-sm"
                 disabled={titles.length >= MAX_TITLES_PER_RULE}
-                onClick={() => setTitles([...titles, ''])}
+                onClick={() => setTitles([...titles, ''], [...modes, rule.match ?? 'exact'])}
             >
                 + {t('app.addTitleRuleTitle')}
             </button>
@@ -438,25 +501,10 @@ function RuleCard({
     onRemove: () => void;
 }) {
     const { t } = useTranslation();
-    const hasTitle = rulePatterns(rule).length > 0;
     return (
         <div className="rounded-box border border-base-300 p-3 space-y-3">
             <RuleHeader index={index} count={count} onMove={onMove} onRemove={onRemove} />
             <div className="flex items-center gap-2">
-                {/* The mode only shapes how titles compare; the sanitizer saves a
-                    title-less rule as exact, so it shows exact and is not offered
-                    until a title exists. */}
-                <select
-                    aria-label={t('app.titleRuleMatch')}
-                    className="select select-sm w-32"
-                    disabled={!hasTitle}
-                    value={hasTitle ? (rule.match ?? 'exact') : 'exact'}
-                    onChange={(e) => onPatch({ match: e.currentTarget.value })}
-                >
-                    <option value="exact">{t('app.titleRuleMatchExact')}</option>
-                    <option value="starts">{t('app.titleRuleMatchStarts')}</option>
-                    <option value="contains">{t('app.titleRuleMatchContains')}</option>
-                </select>
                 <span className="text-sm flex-1">{t('app.titleRuleTitlesLabel')}</span>
             </div>
             <RuleTitleList rule={rule} onPatch={onPatch} />
@@ -482,8 +530,8 @@ function RuleCard({
  * time, so id-keyed per-challenge overrides are lost on every rotation; these
  * rules match on what survives a rotation instead.
  *
- * MATCHING: a rule matches on any mix of titles (any one is enough; one `match`
- * mode — is-exactly, starts-with or contains — applies to all of them), the
+ * MATCHING: a rule matches on any mix of titles (any one is enough; each title's
+ * mode is is-exactly, starts-with or contains), the
  * challenge's OWN tag (Exhibition, Comm, …, not a photo tag), its type, its
  * photo count and its runtime range in hours. Every filled condition must hold.
  *

@@ -89,8 +89,10 @@ const _canonicalTitleRuleProfile = (storedProfiles: Record<string, unknown>, req
 const titleRuleKey = (rule: RuleLike): string => {
     const conditions = ruleConditions(rule);
     return [
-        [...conditions.patterns].sort().join('\u0001'),
-        conditions.mode,
+        conditions.patterns
+            .map((pattern, index) => `${pattern}\u0001${conditions.modes[index]}`)
+            .sort()
+            .join('\u0001'),
         conditions.tag,
         conditions.type,
         conditions.pics ?? '',
@@ -102,17 +104,26 @@ const titleRuleKey = (rule: RuleLike): string => {
 /**
  * Trim, drop empties and case-insensitive duplicates (first spelling wins).
  */
-const _sanitizeRuleTitleList = (rule: RuleLike): string[] => {
+const _sanitizeRuleTitleList = (rule: RuleLike): { titles: string[]; modes: string[] } | null => {
     const seen = new Set();
     const titles: string[] = [];
-    for (const raw of titleRuleTitles(rule)) {
+    const modes: string[] = [];
+    const rawTitles = titleRuleTitles(rule);
+    const rawModes = rule?.titleMatchModes;
+    const fallback = rule?.match || 'exact';
+    if (typeof fallback !== 'string' || !TITLE_MATCH_MODES.includes(fallback)) return null;
+    if (rawModes !== undefined && (!Array.isArray(rawModes) || rawModes.length !== rawTitles.length)) return null;
+    for (const [index, raw] of rawTitles.entries()) {
+        const mode = rawModes === undefined ? fallback : rawModes[index];
+        if (typeof mode !== 'string' || !TITLE_MATCH_MODES.includes(mode)) return null;
         const title = raw.trim();
         const key = normalizeTitle(title);
         if (!key || seen.has(key)) continue;
         seen.add(key);
         titles.push(title);
+        modes.push(mode);
     }
-    return titles;
+    return { titles, modes };
 };
 
 // A numeric condition: null = absent, false = supplied but out of range, else
@@ -194,7 +205,9 @@ const sanitizeTitleRule = (
     rule: RuleLike,
     storedProfiles: Record<string, unknown>,
 ): { valid: false; title: string; requestedProfile?: string } | { valid: true; rule: TitleRule | null } => {
-    const titles = _sanitizeRuleTitleList(rule);
+    const titleList = _sanitizeRuleTitleList(rule);
+    if (titleList === null) return { valid: false, title: ruleLogLabel(rule, undefined) };
+    const { titles, modes } = titleList;
     const title = titles[0] || '';
     const label = ruleLogLabel(rule, title);
     const conditions = _sanitizeRuleClassConditions(rule);
@@ -205,12 +218,6 @@ const sanitizeTitleRule = (
     if (titles.length > MAX_TITLES_PER_RULE || titles.some((entry) => entry.length > MAX_TITLE_LENGTH)) {
         return { valid: false, title: label };
     }
-    // An unrecognised mode is a rejection, not a silent fall back to 'exact':
-    // quietly narrowing a rule the user meant to widen is the worse failure.
-    const rawMatch = rule?.match;
-    const match = rawMatch === undefined || rawMatch === null || rawMatch === '' ? 'exact' : rawMatch;
-    if (typeof match !== 'string' || !TITLE_MATCH_MODES.includes(match)) return { valid: false, title: label };
-
     const behaviour = _sanitizeRuleBehaviour(rule, storedProfiles);
     if (behaviour.invalid) return { valid: false, title: label, requestedProfile: behaviour.requestedProfile };
     const { mustIncludeTags, shouldIncludeTags, profile, inline } = behaviour;
@@ -229,7 +236,8 @@ const sanitizeTitleRule = (
     if (titles.length > 1) sanitized.titles = titles;
     // Only persist a non-default match mode, and only alongside a title — an
     // orphan `match` on a title-less rule would read as meaningful and isn't.
-    if (title && match !== 'exact') sanitized.match = match;
+    if (title && modes.some((mode) => mode !== modes[0])) sanitized.titleMatchModes = modes;
+    else if (title && modes[0] !== 'exact') sanitized.match = modes[0];
     if (profile) sanitized.profile = profile;
     return { valid: true, rule: sanitized };
 };

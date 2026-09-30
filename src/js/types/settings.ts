@@ -49,6 +49,7 @@ export interface TitleRule {
     title?: string;
     titles?: string[];
     match?: string;
+    titleMatchModes?: string[];
     challengeTag?: string;
     type?: string;
     pics?: number;

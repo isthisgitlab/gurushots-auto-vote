@@ -380,7 +380,11 @@ const _ownValues = (map: Record<string, ChallengeValues>, name: unknown): Challe
 const _rulesMayOverlap = (a: TitleRule, b: TitleRule): boolean => {
     const x = ruleConditions(a);
     const y = ruleConditions(b);
-    const bothExact = x.mode === 'exact' && y.mode === 'exact' && x.patterns.length > 0 && y.patterns.length > 0;
+    const bothExact =
+        x.modes.every((mode) => mode === 'exact') &&
+        y.modes.every((mode) => mode === 'exact') &&
+        x.patterns.length > 0 &&
+        y.patterns.length > 0;
     if (bothExact && !x.patterns.some((pattern) => y.patterns.includes(pattern))) return false;
     if (x.type && y.type && x.type !== y.type) return false;
     return x.pics === null || y.pics === null || x.pics === y.pics;

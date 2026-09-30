@@ -107,6 +107,15 @@ describe('settings/challengeRules — pure matcher', () => {
         expect(rules.hasRuleCondition({ title: 'x' })).toBe(true);
     });
 
+    test('invalid per-title modes fall back to exact when matching hand-edited rules', () => {
+        expect(rules.ruleTitleModes({ title: 'Seaside', titleMatchModes: [42] })).toEqual(['exact']);
+        expect(rules.ruleTitleModes({ title: 'Seaside', titleMatchModes: ['regex'] })).toEqual(['exact']);
+        expect(rules.ruleMatches({ title: 'Seaside', titleMatchModes: ['regex'] }, target())).toBe(true);
+        expect(
+            rules.ruleMatches({ title: 'Seaside', titleMatchModes: ['regex'] }, target({ title: 'Seaside 2' })),
+        ).toBe(false);
+    });
+
     test('matchingRules keeps list order and tolerates a non-array list', () => {
         const a = { pics: 4 };
         const b = { title: 'Seaside' };

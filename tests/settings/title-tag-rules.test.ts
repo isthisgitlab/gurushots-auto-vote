@@ -337,6 +337,35 @@ describe('settings facade — title-keyed tag rules', () => {
                 expect(overridesFor({ title: 'Best Photo' })).toEqual({});
             });
 
+            test('titles in one rule can use exact and starts modes independently', () => {
+                save({
+                    title: 'Hats',
+                    titles: ['Hats', 'Photo'],
+                    titleMatchModes: ['exact', 'starts'],
+                    autoJoin: true,
+                });
+                expect(settings.getTitleRules()[0].titleMatchModes).toEqual(['exact', 'starts']);
+                expect(overridesFor({ title: 'Hats' })).toEqual({ autoJoin: true });
+                expect(overridesFor({ title: 'Hats and Caps' })).toEqual({});
+                expect(overridesFor({ title: 'Photo of the Week' })).toEqual({ autoJoin: true });
+                expect(overridesFor({ title: 'Best Photo' })).toEqual({});
+            });
+
+            test('rejects a per-title mode list with an invalid mode or wrong length', () => {
+                expect(
+                    save({
+                        title: 'Hats',
+                        titles: ['Hats', 'Photo'],
+                        titleMatchModes: ['exact', 'regex'],
+                        autoJoin: true,
+                    }),
+                ).toBe(false);
+                expect(
+                    save({ title: 'Hats', titles: ['Hats', 'Photo'], titleMatchModes: ['exact'], autoJoin: true }),
+                ).toBe(false);
+                expect(settings.getTitleRules()).toEqual([]);
+            });
+
             test('the default mode is not persisted, a non-default one is', () => {
                 save({ title: 'a', autoJoin: true }, { title: 'b', match: 'contains', autoJoin: true });
                 const [exact, contains] = settings.getTitleRules();

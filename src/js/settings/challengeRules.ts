@@ -25,7 +25,7 @@ export type RuleLike = LooseRecord | null | undefined;
  */
 interface RuleConditions {
     patterns: string[];
-    mode: string;
+    modes: string[];
     tag: string;
     type: string;
     pics: number | null;
@@ -88,6 +88,15 @@ const titleRuleTitles = (rule: RuleLike): string[] => {
  */
 const rulePatterns = (rule: RuleLike): string[] => titleRuleTitles(rule).map(normalizeTitle).filter(Boolean);
 
+const ruleTitleModes = (rule: RuleLike): string[] => {
+    const modes = rule?.titleMatchModes;
+    const fallback = ruleMatchMode(rule);
+    return titleRuleTitles(rule).map((_, index) => {
+        const mode = Array.isArray(modes) ? modes[index] : fallback;
+        return typeof mode === 'string' && TITLE_MATCH_MODES.includes(mode) ? mode : 'exact';
+    });
+};
+
 /**
  * A photo-count condition value, or null when absent/out of range.
  */
@@ -137,8 +146,8 @@ const ruleMatchTarget = (target: RuleMatchChallenge | string | null | undefined)
  * The conditions a rule carries, normalized. `null` / '' / [] = not set.
  */
 const ruleConditions = (rule: RuleLike): RuleConditions => ({
-    patterns: rulePatterns(rule),
-    mode: ruleMatchMode(rule),
+    patterns: titleRuleTitles(rule).map(normalizeTitle).filter(Boolean),
+    modes: ruleTitleModes(rule).filter((_, index) => Boolean(normalizeTitle(titleRuleTitles(rule)[index]))),
     tag: normalizeTag(rule?.challengeTag),
     type: normalizeTag(rule?.type),
     pics: normalizeRulePics(rule?.pics),
@@ -169,10 +178,10 @@ const hasRuleCondition = (rule: RuleLike): boolean => {
 
 const titleMatches = (conditions: RuleConditions, titleKey: string): boolean => {
     if (!titleKey) return false;
-    return conditions.patterns.some((pattern) =>
-        conditions.mode === 'contains'
+    return conditions.patterns.some((pattern, index) =>
+        conditions.modes[index] === 'contains'
             ? titleKey.includes(pattern)
-            : conditions.mode === 'starts'
+            : conditions.modes[index] === 'starts'
               ? titleKey.startsWith(pattern)
               : titleKey === pattern,
     );
@@ -233,7 +242,7 @@ const defaultOrderKey = (rule: RuleLike): number[] => {
     const count = classConditionCount(conditions);
     return [
         hasTitle ? 1 : 0,
-        (hasTitle ? TITLE_MODE_SCORE[conditions.mode] : 0) + count,
+        (hasTitle ? Math.max(...conditions.modes.map((mode) => TITLE_MODE_SCORE[mode])) : 0) + count,
         Math.max(0, ...conditions.patterns.map((pattern) => pattern.length)),
         conditions.pics !== null ? 1 : 0,
         hasRuntimeCondition(conditions) ? 1 : 0,
@@ -263,6 +272,7 @@ export {
     normalizeTitle,
     normalizeTag,
     titleRuleTitles,
+    ruleTitleModes,
     rulePatterns,
     normalizeRulePics,
     normalizeRuleHours,
