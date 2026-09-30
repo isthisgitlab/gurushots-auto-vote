@@ -11,6 +11,55 @@ import type { Challenge } from '../../types/gurushots';
 import type { PickFallbackInfo, ScoredCandidate } from '../../types/photoPicker';
 import type { FillLogger } from '../../types/autoFill';
 
+/** Record the submitted photo's exact ranking inputs for later diagnosis. */
+const logSelectionDetails = ({
+    prefix,
+    challenge,
+    scored,
+    picked,
+    contestedIds,
+    logger,
+}: {
+    prefix: string;
+    challenge: Challenge;
+    scored: ScoredCandidate[];
+    picked: string[];
+    contestedIds: Set<string>;
+    logger: FillLogger;
+}) => {
+    const log = logger.withCategory('autoFill');
+    for (const id of picked) {
+        const entry = scored.find((candidate) => String(candidate.id) === String(id));
+        log.info(
+            `${prefix}: submitted photo ${oneLine(id)} selection details for ${logger.challengeTag(challenge)}`,
+            entry
+                ? {
+                      candidateCount: scored.length,
+                      labels: Array.isArray(entry.photo.labels)
+                          ? entry.photo.labels
+                                .filter((value): value is string => typeof value === 'string')
+                                .slice(0, 32)
+                                .map((value) => value.slice(0, 80))
+                          : [],
+                      theme: {
+                          shouldMatchCount: entry.shouldMatchCount,
+                          semantic: entry.semantic,
+                          semanticSupport: entry.semanticSupport,
+                          keywordScore: entry.score,
+                      },
+                      popularity: {
+                          statsKnown: entry.statsKnown,
+                          votes: entry.votes,
+                          achievements: entry.achievementCount,
+                          views: entry.views,
+                      },
+                      popularityTie: contestedIds.has(String(id)),
+                  }
+                : { candidateCount: scored.length, scoredCandidateFound: false },
+        );
+    }
+};
+
 /**
  * Extract a concise, human-readable reason from a failed submit_to_challenge
  * response so the ok=false warning is diagnosable instead of opaque. The server
@@ -186,4 +235,4 @@ const logPopularityPick = (
     );
 };
 
-export { describeSubmitFailure, makeFallbackLogger, logPopularityPick };
+export { describeSubmitFailure, makeFallbackLogger, logPopularityPick, logSelectionDetails };

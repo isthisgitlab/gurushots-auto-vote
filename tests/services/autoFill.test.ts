@@ -291,9 +291,10 @@ describe('maybeAutoFillChallenge — staggered auto-fill', () => {
             .fn<ReturnType<GetEligiblePhotos>, Parameters<GetEligiblePhotos>>()
             .mockResolvedValue([allowedPhoto('p1', ['Pink'])]);
         const submitToChallenge = jest.fn().mockResolvedValue({ ok: true, raw: { success: true } });
+        const logger = makeLogger();
         const result = await maybeAutoFillChallenge(challenge, 'tok', NOW, {
             settings: makeSettings({ autoFill: true }),
-            logger: makeLogger(),
+            logger,
             getEligiblePhotos,
             submitToChallenge,
         });
@@ -317,6 +318,19 @@ describe('maybeAutoFillChallenge — staggered auto-fill', () => {
             logLabel: 'autoFill',
         });
         expect(submitToChallenge).toHaveBeenCalledWith('c1', ['p1'], 'tok');
+        expect(
+            logger.withCategory.mock.results.flatMap(
+                ({ value }) => (value as jest.MockedObject<CategoryLogger>).info.mock.calls,
+            ),
+        ).toContainEqual([
+            expect.stringContaining('submitted photo p1 selection details'),
+            expect.objectContaining({
+                candidateCount: 1,
+                labels: ['Pink'],
+                theme: expect.objectContaining({ keywordScore: expect.any(Number) }),
+                popularityTie: false,
+            }),
+        ]);
     });
 
     test('the visual re-rank can replace the tag pick before submission', async () => {
@@ -339,6 +353,38 @@ describe('maybeAutoFillChallenge — staggered auto-fill', () => {
             { logger: expect.any(Object), ignoreWords: null },
         );
         expect(submitToChallenge).toHaveBeenCalledWith('c1', ['p2'], 'tok');
+    });
+
+    test('selection log records absent labels and a verifier pick outside the scored pool', async () => {
+        const challenge = makeChallenge({ entries: [{ id: 'e1' }], closeIn: 19 * 60 });
+        const logger = makeLogger();
+        const deps = {
+            settings: makeSettings({ autoFill: true }),
+            logger,
+            getEligiblePhotos: jest.fn().mockResolvedValue([{ ...allowedPhoto('p1'), labels: undefined }]),
+            submitToChallenge: jest.fn().mockResolvedValue({ ok: true, raw: { success: true } }),
+        };
+        expect(await maybeAutoFillChallenge(challenge, 'tok', NOW, deps)).toBe('submitted');
+        const details = () =>
+            logger.withCategory.mock.results
+                .flatMap(({ value }) => (value as jest.MockedObject<CategoryLogger>).info.mock.calls)
+                .filter(([message]) => message.includes('selection details'));
+        expect(details()).toContainEqual([
+            expect.stringContaining('submitted photo p1'),
+            expect.objectContaining({ labels: [] }),
+        ]);
+
+        logger.withCategory.mockClear();
+        expect(
+            await maybeAutoFillChallenge(makeChallenge({ entries: [{ id: 'e1' }], closeIn: 19 * 60 }), 'tok', NOW, {
+                ...deps,
+                rankVisually: jest.fn().mockResolvedValue(['not-\nscored']),
+            }),
+        ).toBe('submitted');
+        expect(details()).toContainEqual([
+            expect.stringContaining('submitted photo not- scored'),
+            { candidateCount: 1, scoredCandidateFound: false },
+        ]);
     });
 
     test.each([

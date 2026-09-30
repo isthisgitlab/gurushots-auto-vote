@@ -9,7 +9,7 @@ import { rankVisually } from '../visionVerifier';
 import { enrichCandidates } from '../photoStats';
 import { resolveSemanticScores, resolveIgnoreWords, fetchCandidatesForChallenge } from './candidates';
 import { refreshChallengeState } from './challengeState';
-import { describeSubmitFailure, makeFallbackLogger, logPopularityPick } from './fillLogging';
+import { describeSubmitFailure, makeFallbackLogger, logPopularityPick, logSelectionDetails } from './fillLogging';
 
 import type { Challenge } from '../../types/gurushots';
 import type { IgnoreWords, PickerPhoto, ScoredCandidate, SemanticScoreMap } from '../../types/photoPicker';
@@ -371,6 +371,7 @@ const runFillAttempt = async ({
             if (contested.length > 0) {
                 logPopularityPick(label, challenge, scored, contestedIds, picked, logger);
             }
+            logSelectionDetails({ prefix: label, challenge, scored, picked, contestedIds, logger });
             return { status: 'submitted', picked };
         }
         const reason = describeSubmitFailure(result && result.raw);

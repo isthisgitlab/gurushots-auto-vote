@@ -13,6 +13,7 @@
 import * as runtime from '../runtime';
 import { appPath } from '../appPaths';
 import { entryPhotoUrl } from '../format/photoUrl';
+import { oneLine } from '../format/logSafe';
 import { visualSubjectWords } from './photoPicker';
 
 import type { ChallengeText, IgnoreWords, PickerPhoto } from '../types/photoPicker';
@@ -205,35 +206,39 @@ const rankVisually = async (
 ): Promise<string[]> => {
     const original = rankedIds.slice(0, wantCount);
     const prompts = challengePrompts(challenge, ignoreWords);
-    if (prompts.length === 0 || rankedIds.length === 0) return original;
+    const log = logger.withCategory('autoFill');
+    const keepOriginal = (reason: string, detail: unknown = null) => {
+        log.info(`Visual check ${reason} for ${logger.challengeTag(challenge)}; kept tag order`, detail);
+        return original;
+    };
+    if (prompts.length === 0 || rankedIds.length === 0) return keepOriginal('skipped: no visual subject or candidates');
     const byId = new Map(eligible.map((photo) => [String(photo.id), photo]));
     const shortlist = rankedIds.slice(0, Math.max(MAX_IMAGES, wantCount));
     const candidates = shortlist.map((id) => ({
         id,
         url: entryPhotoUrl(byId.get(String(id)), { size: 256, fit: true }),
     }));
-    if (candidates.some((item) => !item.url)) return original;
-    const log = logger.withCategory('autoFill');
+    if (candidates.some((item) => !item.url)) return keepOriginal('skipped: candidate photo URL unavailable');
     try {
-        if (!(await hasBundledModel())) return original;
+        if (!(await hasBundledModel())) return keepOriginal('skipped: model unavailable');
         const classifier = await getClassifier();
         const scored: Array<{ id: string; logits: number[] }> = [];
         for (const { id, url } of candidates) {
             // Every url was checked non-null above.
             const results = await classifier(url as string, prompts);
             const logits = prompts.map((prompt) => toLogit(results?.find?.((r) => r.label === prompt)?.score));
-            if (!logits.every(Number.isFinite)) return original;
+            if (!logits.every(Number.isFinite)) return keepOriginal('found invalid model scores');
             scored.push({ id, logits });
         }
         const order = orderByVisualFit(scored);
-        if (order === null) return original;
+        const detail = { prompts, scores: scored };
+        if (order === null) return keepOriginal('abstained', detail);
         const picked = [...order, ...rankedIds.slice(shortlist.length)].slice(0, wantCount);
-        if (picked.some((id, index) => id !== original[index])) {
-            log.info(
-                `Visual check reordered picks for ${logger.challengeTag(challenge)}: ${original.join(', ')} → ${picked.join(', ')}`,
-                null,
-            );
-        }
+        const changed = picked.some((id, index) => id !== original[index]);
+        const outcome = changed
+            ? `reordered picks for ${logger.challengeTag(challenge)}: ${original.map(oneLine).join(', ')} → ${picked.map(oneLine).join(', ')}`
+            : `kept tag order for ${logger.challengeTag(challenge)}: no higher-fit replacement`;
+        log.info(`Visual check ${outcome}`, detail);
         return picked;
     } catch (error) {
         log.warning(

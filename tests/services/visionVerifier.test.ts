@@ -177,7 +177,10 @@ describe('rankVisually', () => {
         expect(mockClassifier).toHaveBeenCalledWith(expect.stringContaining('/256x256/'), PROMPTS);
         expect(logger.scoped.info).toHaveBeenCalledWith(
             `Visual check reordered picks for [Challenge c1: Leaves]: ${hex('a')}, ${hex('b')} → ${hex('b')}, ${hex('c')}`,
-            null,
+            {
+                prompts: PROMPTS,
+                scores: expect.arrayContaining([{ id: hex('b'), logits: [expect.any(Number), -2.8] }]),
+            },
         );
         expect(mockTransformers.env).toMatchObject({
             allowRemoteModels: false,
@@ -208,11 +211,14 @@ describe('rankVisually', () => {
         expect(picked).toEqual(long.slice(0, 13));
     });
 
-    test('an unchanged pick logs nothing', async () => {
+    test('an unchanged pick records the model scores', async () => {
         logitsBy({ a: [-2, -2], b: [-2.5, -2.5], c: [-9, -9] });
         const logger = makeLogger();
         expect(await rankVisually(LEAVES, ids, eligible, 1, { logger })).toEqual([hex('a')]);
-        expect(logger.scoped.info).not.toHaveBeenCalled();
+        expect(logger.scoped.info).toHaveBeenCalledWith(
+            'Visual check kept tag order for [Challenge c1: Leaves]: no higher-fit replacement',
+            { prompts: PROMPTS, scores: expect.arrayContaining([{ id: hex('a'), logits: [-2, -2] }]) },
+        );
     });
 
     test.each([
@@ -235,7 +241,12 @@ describe('rankVisually', () => {
 
     test('abstains to the tag order when nothing matches the prompts', async () => {
         logitsBy({ a: [-9, -9], b: [-8, -8], c: [-12, -12] });
-        expect(await rankVisually(LEAVES, ids, eligible, 1, { logger: makeLogger() })).toEqual([hex('a')]);
+        const logger = makeLogger();
+        expect(await rankVisually(LEAVES, ids, eligible, 1, { logger })).toEqual([hex('a')]);
+        expect(logger.scoped.info).toHaveBeenCalledWith(
+            'Visual check abstained for [Challenge c1: Leaves]; kept tag order',
+            { prompts: PROMPTS, scores: expect.arrayContaining([{ id: hex('b'), logits: [-8, -8] }]) },
+        );
     });
 
     test.each([[undefined], [{}], [[]], [[{ label: 'something else', score: 0.5 }]]])(
