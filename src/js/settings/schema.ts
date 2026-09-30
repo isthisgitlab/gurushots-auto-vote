@@ -1362,6 +1362,16 @@ const SETTINGS_SCHEMA = {
         label: 'app.autoFill',
         description: 'app.autoFillDesc',
     },
+    protectUncertainAutoFills: {
+        type: 'boolean',
+        default: true,
+        perChallenge: true,
+        validation: zBool,
+        validationOrder: 1,
+        group: 'autoFill',
+        label: 'app.protectUncertainAutoFills',
+        description: 'app.protectUncertainAutoFillsDesc',
+    },
     // A stored single autoFillIntervalMinutes value is migrated into this list
     // in settings/migrations.ts (`_autoFillScheduleMigratedV1`). Default: 2 @ 30m,
     // 3 @ 20m, 4 @ 10m before close.

@@ -31,6 +31,7 @@ const entryAgeStore = createJsonStore({ fileName: 'entryAges.json', prefKey: 'gs
 // before it counts as not entered. Covers listing lag after a submit; past it, a
 // submit that never landed stops blocking the boost.
 const PENDING_GRACE_SEC = 600;
+type StoredEntryAgeRecord = EntryAgeRecord & { uncertain: string[] };
 
 /**
  * @param r - an untrusted parsed-JSON value
@@ -51,13 +52,22 @@ const entryIdsOf = (challenge: Challenge): string[] =>
  * boost is not held; it never blocks one.
  */
 const createEntryAgeLedger = (store: RawJsonStore) => {
-    const read = (): Record<string, EntryAgeRecord> => {
+    const read = (): Record<string, StoredEntryAgeRecord> => {
         try {
             const parsed: unknown = JSON.parse(store.readRaw() || '{}');
             if (!isPlainObject(parsed)) return {};
-            const state: Record<string, EntryAgeRecord> = {};
+            const state: Record<string, StoredEntryAgeRecord> = {};
             for (const [id, record] of Object.entries(parsed)) {
-                if (isRecord(record)) state[id] = record;
+                if (isRecord(record)) {
+                    state[id] = {
+                        ...record,
+                        uncertain: Array.isArray(record.uncertain)
+                            ? record.uncertain
+                                  .slice(0, 64)
+                                  .filter((value): value is string => typeof value === 'string')
+                            : [],
+                    };
+                }
             }
             return state;
         } catch (error) {
@@ -72,8 +82,13 @@ const createEntryAgeLedger = (store: RawJsonStore) => {
      * Write `record` for `challengeId`, dropping every challenge that has closed.
      * @param now - Unix seconds
      */
-    const write = (state: Record<string, EntryAgeRecord>, challengeId: string, record: EntryAgeRecord, now: number) => {
-        const next: Record<string, EntryAgeRecord> = {};
+    const write = (
+        state: Record<string, StoredEntryAgeRecord>,
+        challengeId: string,
+        record: StoredEntryAgeRecord,
+        now: number,
+    ) => {
+        const next: Record<string, StoredEntryAgeRecord> = {};
         for (const [id, existing] of Object.entries(state)) {
             if (existing.closeTime > now) next[id] = existing;
         }
@@ -109,13 +124,21 @@ const createEntryAgeLedger = (store: RawJsonStore) => {
                     (Number.isFinite(pendingAt) && now - Number(pendingAt) <= PENDING_GRACE_SEC));
             const pending = keepPending ? (existing?.pending as string) : null;
             if (pending && !(pending in entered)) entered[pending] = Number(pendingAt);
+            const uncertain = existing
+                ? existing.uncertain.filter(
+                      (id) =>
+                          id in entered ||
+                          (Number.isFinite(existing.entered[id]) && now - existing.entered[id] <= PENDING_GRACE_SEC),
+                  )
+                : [];
             const unchanged =
                 existing &&
                 existing.pending === pending &&
+                existing.uncertain.length === uncertain.length &&
                 Object.keys(existing.entered).length === Object.keys(entered).length &&
                 Object.keys(entered).every((id) => existing.entered[id] === entered[id]);
             if (unchanged) return;
-            write(state, challengeId, { closeTime: Number(challenge.close_time), entered, pending }, now);
+            write(state, challengeId, { closeTime: Number(challenge.close_time), entered, pending, uncertain }, now);
         },
 
         /**
@@ -132,6 +155,28 @@ const createEntryAgeLedger = (store: RawJsonStore) => {
          */
         pending: (challengeId: string | number): string | null => read()[String(challengeId)]?.pending ?? null,
 
+        isUncertain: (challengeId: string | number, imageId: string | number): boolean =>
+            read()[String(challengeId)]?.uncertain?.includes(String(imageId)) === true,
+
+        markUncertain: (challenge: Challenge, imageId: string | number, now: number) => {
+            const challengeId = String(challenge.id);
+            const state = read();
+            const current = state[challengeId];
+            const id = String(imageId);
+            if (current?.uncertain.includes(id)) return;
+            write(
+                state,
+                challengeId,
+                {
+                    closeTime: Number(challenge.close_time),
+                    entered: { ...(current?.entered ?? {}), [id]: now },
+                    pending: current?.pending ?? null,
+                    uncertain: [...(current?.uncertain ?? []), id],
+                },
+                now,
+            );
+        },
+
         /**
          * Record a photo a boost fill-new just submitted: entered `now`, and the
          * one the boost is waiting on.
@@ -144,7 +189,12 @@ const createEntryAgeLedger = (store: RawJsonStore) => {
             write(
                 state,
                 challengeId,
-                { closeTime: Number(challenge.close_time), entered, pending: String(imageId) },
+                {
+                    closeTime: Number(challenge.close_time),
+                    entered,
+                    pending: String(imageId),
+                    uncertain: state[challengeId]?.uncertain ?? [],
+                },
                 now,
             );
         },

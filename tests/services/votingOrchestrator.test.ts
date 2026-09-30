@@ -17,6 +17,7 @@ jest.mock('../../src/js/settings', () => ({
 }));
 
 jest.mock('../../src/js/services/VotingLogic', () => ({
+    isWithinEmergencyWindow: jest.fn(() => false),
     shouldPlayAutoTurbo: jest.fn(() => false),
     isTurboEarnSaved: jest.fn(() => false),
     orderDeadlineActions: jest.fn(() => []),

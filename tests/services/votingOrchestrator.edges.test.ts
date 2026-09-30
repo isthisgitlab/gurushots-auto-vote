@@ -15,6 +15,7 @@ jest.mock('../../src/js/services/VotingLogic', () => ({
     isTurboEarnSaved: jest.fn(() => false),
     orderDeadlineActions: jest.fn(() => []),
     shouldApplyBoost: jest.fn(() => false),
+    isWithinEmergencyWindow: jest.fn(() => false),
     resolveBoostFillNewMode: jest.fn(() => 'no'),
     pickBoostEntry: jest.fn(() => null),
     getBoostHoldUntil: jest.fn(() => null),
@@ -103,6 +104,7 @@ beforeEach(() => {
     settings.getEffectiveSetting.mockImplementation(() => false);
     votingLogic.orderDeadlineActions.mockReturnValue([]);
     votingLogic.shouldApplyBoost.mockReturnValue(false);
+    votingLogic.isWithinEmergencyWindow.mockReturnValue(false);
     votingLogic.resolveBoostFillNewMode.mockReturnValue('no');
     votingLogic.pickBoostEntry.mockReturnValue(null);
     votingLogic.getBoostHoldUntil.mockReturnValue(null);
@@ -176,6 +178,67 @@ describe('runBoost — availability and readiness', () => {
         api.applyBoost.mockRejectedValue('rate limited');
         await run(api);
         expect(log.endOperation).toHaveBeenCalledWith('boost-101', null, 'rate limited');
+    });
+});
+
+describe('uncertain auto-fill action protection', () => {
+    const ledgerWithUncertain = () => {
+        const ledger = createMemoryEntryAgeLedger();
+        ledger.markUncertain(withBoost({ state: 'AVAILABLE_KEY' }), 'e1', NOW);
+        return ledger;
+    };
+
+    test('skips key-unlocked Boost on an uncertain entry', async () => {
+        settings.getEffectiveSetting.mockImplementation((key) => key === 'protectUncertainAutoFills');
+        votingLogic.orderDeadlineActions.mockReturnValue(invalid([{ action: 'boost' }]));
+        votingLogic.shouldApplyBoost.mockReturnValue(true);
+        votingLogic.pickBoostEntry.mockReturnValue(invalid({ id: 'e1' }));
+        const api = makeApi([
+            withBoost(
+                { state: 'AVAILABLE_KEY' },
+                { member: { boost: { state: 'AVAILABLE_KEY' }, ranking: { entries: [{ id: 'e1' }] } } },
+            ),
+        ]);
+        await run(api, { entryAges: ledgerWithUncertain() });
+        expect(api.applyBoost).not.toHaveBeenCalled();
+    });
+
+    test('allows expiring Boost and emergency Boost on an uncertain entry', async () => {
+        settings.getEffectiveSetting.mockImplementation((key) => key === 'protectUncertainAutoFills');
+        votingLogic.orderDeadlineActions.mockReturnValue(invalid([{ action: 'boost' }]));
+        votingLogic.shouldApplyBoost.mockReturnValue(true);
+        votingLogic.pickBoostEntry.mockReturnValue(invalid({ id: 'e1' }));
+        const timer = makeApi([
+            withBoost(
+                { state: 'AVAILABLE', timeout: NOW + 60 },
+                { member: { boost: { state: 'AVAILABLE', timeout: NOW + 60 }, ranking: { entries: [{ id: 'e1' }] } } },
+            ),
+        ]);
+        await run(timer, { entryAges: ledgerWithUncertain() });
+        expect(timer.applyBoost).toHaveBeenCalledTimes(1);
+
+        votingLogic.isWithinEmergencyWindow.mockReturnValue(true);
+        const emergency = makeApi([
+            withBoost(
+                { state: 'AVAILABLE_KEY' },
+                { member: { boost: { state: 'AVAILABLE_KEY' }, ranking: { entries: [{ id: 'e1' }] } } },
+            ),
+        ]);
+        await run(emergency, { entryAges: ledgerWithUncertain() });
+        expect(emergency.applyBoost).toHaveBeenCalledTimes(1);
+    });
+
+    test('skips Turbo on an uncertain entry unless in the emergency window', async () => {
+        settings.getEffectiveSetting.mockImplementation((key) => key === 'protectUncertainAutoFills');
+        votingLogic.orderDeadlineActions.mockReturnValue(invalid([{ action: 'turbo' }]));
+        votingLogic.shouldApplyTurbo.mockReturnValue(invalid({ apply: true, fillNew: false, imageId: 'e1' }));
+        const challenge = withBoost({ state: 'LOCKED' }, { member: { ranking: { entries: [{ id: 'e1' }] } } });
+        const api = makeApi([challenge]);
+        await run(api, { entryAges: ledgerWithUncertain() });
+        expect(api.applyTurbo).not.toHaveBeenCalled();
+        votingLogic.isWithinEmergencyWindow.mockReturnValue(true);
+        await run(api, { entryAges: ledgerWithUncertain() });
+        expect(api.applyTurbo).toHaveBeenCalledTimes(1);
     });
 });
 

@@ -8,6 +8,7 @@ import type * as challengeFixturesModule from '../helpers/challengeFixtures';
 import type * as lexiconModule from '../../src/js/services/semantic/lexicon';
 import type * as photoStatsModule from '../../src/js/services/photoStats';
 import type * as photoPickerModule from '../../src/js/services/photoPicker';
+import type * as entryAgeStoreModule from '../../src/js/entryAgeStore';
 import type { CategoryLogger } from '../../src/js/logger';
 import type { FillDeps, FillLogger, FillSettings } from '../../src/js/types/autoFill';
 import type { FillSchedule } from '../../src/js/services/scheduleRemap';
@@ -50,6 +51,8 @@ const {
     refreshChallengeState,
 } = require('../../src/js/services/autoFill') as typeof autoFillModule;
 const { buildChallenge } = require('../helpers/challengeFixtures') as typeof challengeFixturesModule;
+const { createEntryAgeLedger, createMemoryEntryAgeLedger } =
+    require('../../src/js/entryAgeStore') as typeof entryAgeStoreModule;
 
 // Mirrors the schema default: "have ≥2 entries at T-30m, ≥3 at T-20m, ≥4 at
 // T-10m" for a 4-slot challenge.
@@ -89,6 +92,102 @@ const allowedPhoto = (id: string, labels: string[] = ['Pink'], uploadDate = 9000
     labels,
     upload_date: uploadDate,
     permission: { allowed: true, message: null },
+});
+
+describe('uncertain auto-submit tracking', () => {
+    test('records an off-theme auto-fill, but not a matching or open-theme fill', async () => {
+        for (const [title, labels, shouldIncludeTags, semantic, uncertain] of [
+            ['Dogs', ['Car'], [], false, true],
+            ['Dogs', ['Car'], ['Car'], false, true],
+            ['Dogs', ['Car'], [], true, false],
+            ['Dogs', ['Dog'], [], false, false],
+            ['Open Theme', ['Car'], [], false, false],
+        ] as const) {
+            const ledger = createMemoryEntryAgeLedger();
+            const challenge = makeChallenge({ title, entries: [{ id: 'existing' }] });
+            const result = await maybeAutoFillChallenge(challenge, 'tok', NOW, {
+                settings: makeSettings({ autoFill: true, shouldIncludeTags: [...shouldIncludeTags] }),
+                logger: makeLogger(),
+                getEligiblePhotos: jest.fn(async () => [allowedPhoto('photo', [...labels])]),
+                getSemanticScores: jest.fn(async () =>
+                    semantic ? new Map([['photo', { score: 0.9, support: 1 }]]) : null,
+                ),
+                submitToChallenge: jest.fn(async () => invalid({ ok: true, raw: { success: true } })),
+                rankVisually: jest.fn(async (_challenge, ids, _eligible, wantCount) => ids.slice(0, wantCount)),
+                entryAges: ledger,
+            });
+            expect(result).toBe('submitted');
+            expect(ledger.isUncertain(challenge.id, 'photo')).toBe(uncertain);
+        }
+    });
+
+    test('a failed uncertainty write does not turn a successful submission into a failure', async () => {
+        const challenge = makeChallenge({ title: 'Dogs', entries: [{ id: 'existing' }] });
+        const result = await maybeAutoFillChallenge(challenge, 'tok', NOW, {
+            settings: makeSettings({ autoFill: true }),
+            logger: makeLogger(),
+            getEligiblePhotos: jest.fn(async () => [allowedPhoto('photo', ['Car'])]),
+            submitToChallenge: jest.fn(async () => invalid({ ok: true, raw: { success: true } })),
+            rankVisually: jest.fn(async (_challenge, ids, _eligible, wantCount) => ids.slice(0, wantCount)),
+            entryAges: createEntryAgeLedger({
+                readRaw: () => null,
+                writeRaw: () => {
+                    throw new Error('disk full');
+                },
+            }),
+        });
+        expect(result).toBe('submitted');
+    });
+
+    test('visual abstention marks a tag-matching photo uncertain', async () => {
+        const ledger = createMemoryEntryAgeLedger();
+        const challenge = makeChallenge({ title: 'Dogs', entries: [{ id: 'existing' }] });
+        const result = await maybeAutoFillChallenge(challenge, 'tok', NOW, {
+            settings: makeSettings({ autoFill: true }),
+            logger: makeLogger(),
+            getEligiblePhotos: jest.fn(async () => [allowedPhoto('photo', ['Dog'])]),
+            submitToChallenge: jest.fn(async () => invalid({ ok: true, raw: { success: true } })),
+            rankVisually: jest.fn(async (_challenge, ids, _eligible, wantCount, options) => {
+                options.onVisualEvidence?.(new Set());
+                return ids.slice(0, wantCount);
+            }),
+            entryAges: ledger,
+        });
+        expect(result).toBe('submitted');
+        expect(ledger.isUncertain(challenge.id, 'photo')).toBe(true);
+    });
+
+    test('visual confirmation can establish subject confidence without matching labels', async () => {
+        const ledger = createMemoryEntryAgeLedger();
+        const challenge = makeChallenge({ title: 'Dogs', entries: [{ id: 'existing' }] });
+        await maybeAutoFillChallenge(challenge, 'tok', NOW, {
+            settings: makeSettings({ autoFill: true }),
+            logger: makeLogger(),
+            getEligiblePhotos: jest.fn(async () => [allowedPhoto('photo', ['Car'])]),
+            submitToChallenge: jest.fn(async () => invalid({ ok: true, raw: { success: true } })),
+            rankVisually: jest.fn(async (_challenge, ids, _eligible, wantCount, options) => {
+                options.onVisualEvidence?.(new Set(['photo']));
+                return ids.slice(0, wantCount);
+            }),
+            entryAges: ledger,
+        });
+        expect(ledger.isUncertain(challenge.id, 'photo')).toBe(false);
+    });
+
+    test('does not infer uncertainty for a visual result absent from the scored pool', async () => {
+        const ledger = createMemoryEntryAgeLedger();
+        const challenge = makeChallenge({ title: 'Dogs', entries: [{ id: 'existing' }] });
+        const result = await maybeAutoFillChallenge(challenge, 'tok', NOW, {
+            settings: makeSettings({ autoFill: true }),
+            logger: makeLogger(),
+            getEligiblePhotos: jest.fn(async () => [allowedPhoto('photo', ['Car'])]),
+            submitToChallenge: jest.fn(async () => invalid({ ok: true, raw: { success: true } })),
+            rankVisually: jest.fn(async () => ['unexpected']),
+            entryAges: ledger,
+        });
+        expect(result).toBe('submitted');
+        expect(ledger.isUncertain(challenge.id, 'unexpected')).toBe(false);
+    });
 });
 
 type GetEligiblePhotos = FillDeps['getEligiblePhotos'];
@@ -350,7 +449,7 @@ describe('maybeAutoFillChallenge — staggered auto-fill', () => {
             expect.arrayContaining(['p1', 'p2']),
             expect.any(Array),
             1,
-            { logger: expect.any(Object), ignoreWords: null },
+            expect.objectContaining({ logger: expect.any(Object), ignoreWords: null }),
         );
         expect(submitToChallenge).toHaveBeenCalledWith('c1', ['p2'], 'tok');
     });

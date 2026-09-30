@@ -178,6 +178,9 @@ export const app = {
         'How long before the Boost is applied the fill starts. Allow enough time for several voting rounds — exposure does not reach 100% in one go.',
     autoBoost: 'Auto-Apply Boost',
     autoBoostDesc: 'Automatically apply Boost on this challenge as its Boost window is about to close.',
+    protectUncertainAutoFills: 'Protect uncertain auto-submitted photos',
+    protectUncertainAutoFillsDesc:
+        'Skip automatic Boost and Turbo on auto-submitted photos without a confirmed subject match. Emergency actions and Boosts near their own expiry still apply. Open-theme challenges are exempt.',
     turbo: 'Turbo',
     autoTurbo: 'Auto-Earn Turbo',
     autoTurboDesc: 'Play the Turbo mini-game automatically to earn the bonus',

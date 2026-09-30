@@ -176,10 +176,16 @@ const toLogit = (score: number | undefined): number => {
  * @param scored - in tag/popularity order
  * @returns ids, accepted photos first; null to abstain
  */
-const orderByVisualFit = (scored: Array<{ id: string; logits: number[] }>): string[] | null => {
+const orderByVisualFit = (
+    scored: Array<{ id: string; logits: number[] }>,
+    onAccepted?: (ids: Set<string>) => void,
+): string[] | null => {
     if (scored.length === 0) return null;
     const peak = Math.max(...scored.flatMap((item) => item.logits));
-    if (peak < ABSTAIN_LOGIT) return null;
+    if (peak < ABSTAIN_LOGIT) {
+        onAccepted?.(new Set());
+        return null;
+    }
     const fits = scored.map((item) => ({
         id: item.id,
         fit: item.logits.reduce((sum, logit) => sum + logit, 0) / item.logits.length,
@@ -187,6 +193,7 @@ const orderByVisualFit = (scored: Array<{ id: string; logits: number[] }>): stri
     const floor = Math.max(...fits.map((item) => item.fit)) - OFF_THEME_MARGIN;
     const accepted = fits.filter((item) => item.fit >= floor);
     const rejected = fits.filter((item) => item.fit < floor).sort((a, b) => b.fit - a.fit);
+    onAccepted?.(new Set(accepted.map((item) => item.id)));
     return [...accepted, ...rejected].map((item) => item.id);
 };
 
@@ -202,7 +209,11 @@ const rankVisually = async (
     rankedIds: string[],
     eligible: PickerPhoto[],
     wantCount: number,
-    { logger, ignoreWords = null }: { logger: FillLogger; ignoreWords?: IgnoreWords },
+    {
+        logger,
+        ignoreWords = null,
+        onVisualEvidence,
+    }: { logger: FillLogger; ignoreWords?: IgnoreWords; onVisualEvidence?: (acceptedIds: Set<string>) => void },
 ): Promise<string[]> => {
     const original = rankedIds.slice(0, wantCount);
     const prompts = challengePrompts(challenge, ignoreWords);
@@ -230,7 +241,7 @@ const rankVisually = async (
             if (!logits.every(Number.isFinite)) return keepOriginal('found invalid model scores');
             scored.push({ id, logits });
         }
-        const order = orderByVisualFit(scored);
+        const order = orderByVisualFit(scored, onVisualEvidence);
         const detail = { prompts, scores: scored };
         if (order === null) return keepOriginal('abstained', detail);
         const picked = [...order, ...rankedIds.slice(shortlist.length)].slice(0, wantCount);

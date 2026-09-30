@@ -4,7 +4,7 @@
  * the submit-free ranking the swap flow uses (rankCandidatesForChallenge).
  */
 
-import { buildScoredCandidates, selectEnrichmentSet, finalizePick } from '../photoPicker';
+import { buildScoredCandidates, selectEnrichmentSet, finalizePick, readChallengeTheme } from '../photoPicker';
 import { rankVisually } from '../visionVerifier';
 import { enrichCandidates } from '../photoStats';
 import { resolveSemanticScores, resolveIgnoreWords, fetchCandidatesForChallenge } from './candidates';
@@ -15,6 +15,7 @@ import type { Challenge } from '../../types/gurushots';
 import type { IgnoreWords, PickerPhoto, ScoredCandidate, SemanticScoreMap } from '../../types/photoPicker';
 import type { FetchErrorResult, FillAttemptParams, FillAttemptResult, RankDeps } from '../../types/autoFill';
 import { errorMessage } from '../../errorMessage';
+import { oneLine } from '../../format/logSafe';
 
 /**
  * First half of the fill pipeline: fetch the candidate library for a challenge
@@ -152,14 +153,23 @@ const verifyFillPick = async (
     picked: string[],
     ignoreWords: IgnoreWords,
     deps: RankDeps,
-): Promise<string[]> => {
+): Promise<{ picked: string[]; visualEvidence: Set<string> | null }> => {
     const ranked = finalizePick(scored, Math.max(12, picked.length));
     const selected = new Set(picked.map(String));
     const preferred = [...picked, ...ranked.filter((id) => !selected.has(String(id)))];
     try {
         const rank = deps.rankVisually || rankVisually;
-        const result = await rank(challenge, preferred, eligible, picked.length, { logger: deps.logger, ignoreWords });
-        return Array.isArray(result) && result.length === picked.length ? result : picked;
+        let visualEvidence: Set<string> | null = null;
+        const result = await rank(challenge, preferred, eligible, picked.length, {
+            logger: deps.logger,
+            ignoreWords,
+            onVisualEvidence: (acceptedIds) => {
+                visualEvidence = acceptedIds;
+            },
+        });
+        return Array.isArray(result) && result.length === picked.length
+            ? { picked: result, visualEvidence }
+            : { picked, visualEvidence: null };
     } catch (error) {
         deps.logger
             .withCategory('autoFill')
@@ -167,7 +177,48 @@ const verifyFillPick = async (
                 `Visual check failed for ${deps.logger.challengeTag(challenge)}: ${errorMessage(error) || error}`,
                 null,
             );
-        return picked;
+        return { picked, visualEvidence: null };
+    }
+};
+
+/** Persist weak subject evidence only after a photo was actually submitted. */
+const recordUncertainSubmission = ({
+    challenge,
+    label,
+    scored,
+    picked,
+    visualEvidence,
+    ignoreWords,
+    deps,
+}: Pick<FillAttemptParams, 'challenge' | 'label' | 'deps'> & {
+    scored: ScoredCandidate[];
+    picked: string[];
+    visualEvidence: Set<string> | null;
+    ignoreWords: IgnoreWords;
+}) => {
+    if (label === 'manualFill' || !deps.entryAges || readChallengeTheme(challenge, ignoreWords).kind === 'open') return;
+    for (const id of picked) {
+        const entry = scored.find((candidate) => String(candidate.id) === String(id));
+        // Should Include Tags are a user preference, not evidence that the
+        // photo depicts the challenge subject.
+        if (!entry || (visualEvidence ? visualEvidence.has(id) : entry.semantic !== 0 || entry.score !== 0)) continue;
+        const reason = visualEvidence ? 'visual check did not confirm the subject' : 'no subject match';
+        try {
+            deps.entryAges.markUncertain(challenge, id, Math.floor(Date.now() / 1000));
+            deps.logger
+                .withCategory('autoFill')
+                .warning(
+                    `${label}: photo ${oneLine(id)} ${reason} for ${deps.logger.challengeTag(challenge)}; automatic Boost/Turbo may be skipped`,
+                    null,
+                );
+        } catch (error) {
+            deps.logger
+                .withCategory('autoFill')
+                .warning(
+                    `${label}: could not record theme uncertainty for submitted photo ${oneLine(id)}: ${errorMessage(error)}`,
+                    null,
+                );
+        }
     }
 };
 
@@ -230,7 +281,7 @@ const rankCandidatesForChallenge = async (
         fillWithoutTagMatch,
     });
     const byId = new Map(eligible.map((photo) => [String(photo.id), photo]));
-    const pickedIds = await verifyFillPick(
+    const { picked: pickedIds } = await verifyFillPick(
         challenge,
         scored,
         eligible,
@@ -358,7 +409,8 @@ const runFillAttempt = async ({
         }
     }
 
-    picked = await verifyFillPick(challenge, scored, eligible, picked, ignoreWords, deps);
+    const verified = await verifyFillPick(challenge, scored, eligible, picked, ignoreWords, deps);
+    picked = verified.picked;
 
     try {
         const result = await submitToChallenge(challenge.id, picked, token);
@@ -372,6 +424,15 @@ const runFillAttempt = async ({
                 logPopularityPick(label, challenge, scored, contestedIds, picked, logger);
             }
             logSelectionDetails({ prefix: label, challenge, scored, picked, contestedIds, logger });
+            recordUncertainSubmission({
+                challenge,
+                label,
+                scored,
+                picked,
+                visualEvidence: verified.visualEvidence,
+                ignoreWords,
+                deps,
+            });
             return { status: 'submitted', picked };
         }
         const reason = describeSubmitFailure(result && result.raw);

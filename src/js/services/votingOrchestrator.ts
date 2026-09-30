@@ -54,7 +54,7 @@ import { claimTurboRun, releaseTurboRun, turboRunSnapshot, wasManualTurboRunSinc
 import { runScenarioStep } from './scenarioRunner';
 import * as cancellation from '../voting/cancellation';
 import { formatDuration } from '../format/duration';
-import { failureText } from '../format/logSafe';
+import { failureText, oneLine } from '../format/logSafe';
 import { sleep } from '../timing';
 import { finiteOr } from '../numbers';
 
@@ -296,6 +296,16 @@ const runBoost = async (ctx: ActionContext) => {
         return;
     }
     const target = await resolveBoostTarget(ctx);
+    if (
+        target?.imageId &&
+        !isTimerBasedAvailable &&
+        !votingLogic.isWithinEmergencyWindow(challenge, now) &&
+        settings.getEffectiveSetting('protectUncertainAutoFills', challenge.id.toString()) &&
+        ctx.entryAges?.isUncertain(challenge.id, target.imageId)
+    ) {
+        logBoostTarget(challenge, `auto-Boost skipped for uncertain auto-submitted photo ${oneLine(target.imageId)}`);
+        return;
+    }
     if (!target || holdBoostForFreshEntry(ctx, target.imageId)) return;
     await applyAvailableBoost(ctx, target, isTimerBasedAvailable, timeUntilDisplayBase);
 };
@@ -405,6 +415,19 @@ const runTurboApply = async (ctx: ActionContext) => {
         logTurboWithoutTarget(challenge);
         return;
     }
+    if (
+        !votingLogic.isWithinEmergencyWindow(challenge, now) &&
+        settings.getEffectiveSetting('protectUncertainAutoFills', challenge.id.toString()) &&
+        ctx.entryAges?.isUncertain(challenge.id, target.imageId)
+    ) {
+        logger
+            .withCategory('turbo')
+            .info(
+                `${logger.challengeTag(challenge)} auto-Turbo skipped for uncertain auto-submitted photo ${oneLine(target.imageId)}`,
+                null,
+            );
+        return;
+    }
     await applyTurboToEntry(ctx, target.imageId);
 };
 
@@ -448,12 +471,13 @@ const actionRunners: Record<string, ((ctx: ActionContext) => Promise<void>) | un
  * Shared dependency bundle for every auto-fill entry point this pass
  * (fill-new on boost/turbo, staggered auto-fill, emergency fill).
  */
-const buildFillDeps = (api: VotingPassApi) => ({
+const buildFillDeps = (api: VotingPassApi, entryAges: EntryAgeLedger | null) => ({
     settings,
     logger,
     getEligiblePhotos: api.getEligiblePhotos,
     getImageData: api.getImageData,
     submitToChallenge: api.submitToChallenge,
+    entryAges,
     getActiveChallenges: api.getActiveChallenges,
     // Enables tag resolution on the themed-search miss path; without the
     // pair the themed search skips tag resolution.
@@ -909,7 +933,7 @@ const runVotingPass = async (
         missions = null,
         refreshMissionNeeds = null,
     } = deps;
-    const fillDeps = buildFillDeps(api);
+    const fillDeps = buildFillDeps(api, entryAges);
     // Clear the photo-stats failure breaker so a pass that hit a rate limit does
     // not disable stat enrichment for every later pass in the session.
     photoStats.resetPassState();

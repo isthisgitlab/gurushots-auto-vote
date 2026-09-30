@@ -658,7 +658,12 @@ describe('mock/index', () => {
                         }),
                     ],
                 };
-                stubToggles({ boostFillNew: false, useTurbo: true, turboFillNew: true });
+                stubToggles({
+                    boostFillNew: false,
+                    useTurbo: true,
+                    turboFillNew: true,
+                    protectUncertainAutoFills: false,
+                });
                 const submitSpy = jest.spyOn(mockIndex.mockApiClient, 'submitToChallenge');
                 const turboSpy = jest.spyOn(mockIndex.mockApiClient, 'applyTurbo');
 
@@ -691,6 +696,7 @@ describe('mock/index', () => {
                     boostFillNew: true,
                     useTurbo: true,
                     turboFillNew: true,
+                    protectUncertainAutoFills: false,
                 });
                 const submitSpy = jest.spyOn(mockIndex.mockApiClient, 'submitToChallenge');
                 const boostEntrySpy = jest.spyOn(mockIndex.mockApiClient, 'applyBoostToEntry');

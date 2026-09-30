@@ -139,7 +139,9 @@ describe('orderByVisualFit', () => {
             { id: 'bridge', logits: [-12.45, -10.9] },
             { id: 'canopy', logits: [-3.52, -2.91] },
         ];
-        expect(orderByVisualFit(scored)).toEqual(['leaf', 'canopy', 'walkers', 'island', 'bridge']);
+        const accepted = jest.fn<void, [Set<string>]>();
+        expect(orderByVisualFit(scored, accepted)).toEqual(['leaf', 'canopy', 'walkers', 'island', 'bridge']);
+        expect(accepted).toHaveBeenCalledWith(new Set(['leaf', 'canopy']));
     });
 
     test('fit averages the prompts, so a title-only match cannot push out a photo that fits both', () => {
@@ -155,12 +157,17 @@ describe('orderByVisualFit', () => {
 
     test('abstains when no photo clearly matches any prompt, or nothing was scored', () => {
         // Live "It's all About Balance": best photo peaked at -7.78.
+        const accepted = jest.fn<void, [Set<string>]>();
         expect(
-            orderByVisualFit([
-                { id: 'stairs', logits: [-7.97] },
-                { id: 'rose', logits: [-11.17] },
-            ]),
+            orderByVisualFit(
+                [
+                    { id: 'stairs', logits: [-7.97] },
+                    { id: 'rose', logits: [-11.17] },
+                ],
+                accepted,
+            ),
         ).toBeNull();
+        expect(accepted).toHaveBeenCalledWith(new Set());
         expect(orderByVisualFit([])).toBeNull();
     });
 });
@@ -173,7 +180,12 @@ describe('rankVisually', () => {
         logitsBy({ a: [-10.3, -8.4], b: [-1.7, -2.8], c: [-3.5, -2.9] });
         const logger = makeLogger();
 
-        expect(await rankVisually(LEAVES, ids, eligible, 2, { logger })).toEqual([hex('b'), hex('c')]);
+        const onVisualEvidence = jest.fn<void, [Set<string>]>();
+        expect(await rankVisually(LEAVES, ids, eligible, 2, { logger, onVisualEvidence })).toEqual([
+            hex('b'),
+            hex('c'),
+        ]);
+        expect(onVisualEvidence).toHaveBeenCalledWith(new Set([hex('b'), hex('c')]));
         expect(mockClassifier).toHaveBeenCalledWith(expect.stringContaining('/256x256/'), PROMPTS);
         expect(logger.scoped.info).toHaveBeenCalledWith(
             `Visual check reordered picks for [Challenge c1: Leaves]: ${hex('a')}, ${hex('b')} → ${hex('b')}, ${hex('c')}`,

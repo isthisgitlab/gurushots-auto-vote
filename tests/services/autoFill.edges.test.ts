@@ -244,10 +244,10 @@ describe('rankCandidatesForChallenge', () => {
             expect.arrayContaining(['island', 'leaves']),
             expect.any(Array),
             1,
-            {
+            expect.objectContaining({
                 logger,
                 ignoreWords: null,
-            },
+            }),
         );
     });
 });

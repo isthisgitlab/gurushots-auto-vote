@@ -117,6 +117,53 @@ describe('entry-age ledger', () => {
         expect(ledger.enteredAt(1, 'fresh')).toBeNull();
     });
 
+    test('remembers uncertain auto-submitted entries and prunes them after removal', () => {
+        const store = rawStore(null);
+        const ledger = createEntryAgeLedger(store);
+        ledger.observe(challenge(1, ['manual']), NOW);
+        ledger.markUncertain(challenge(1, ['manual']), 'auto', NOW + 10);
+        ledger.markUncertain(challenge(1, ['manual']), 'auto', NOW + 10);
+        expect(ledger.isUncertain(1, 'auto')).toBe(true);
+        expect(ledger.isUncertain(1, 'manual')).toBe(false);
+        expect(store.peek()['1'].uncertain).toEqual(['auto']);
+
+        ledger.observe(challenge(1, ['manual']), NOW + 60);
+        expect(ledger.isUncertain(1, 'auto')).toBe(true);
+        ledger.observe(challenge(1, ['manual', 'auto']), NOW + 120);
+        expect(ledger.isUncertain(1, 'auto')).toBe(true);
+        ledger.observe(challenge(1, ['manual']), NOW + 800);
+        expect(ledger.isUncertain(1, 'auto')).toBe(false);
+    });
+
+    test('can record uncertainty before any entry snapshot exists', () => {
+        const ledger = createMemoryEntryAgeLedger();
+        ledger.markUncertain(challenge(2, []), 'fresh', NOW);
+        expect(ledger.isUncertain(2, 'fresh')).toBe(true);
+        expect(ledger.enteredAt(2, 'fresh')).toBe(NOW);
+    });
+
+    test('bounds and validates persisted uncertain ids', () => {
+        const ledger = createEntryAgeLedger(
+            rawStore(
+                JSON.stringify({
+                    1: {
+                        closeTime: NOW + 3600,
+                        entered: {},
+                        pending: null,
+                        uncertain: [
+                            123,
+                            'safe',
+                            ...Array.from({ length: 63 }, (_, index) => `id-${index}`),
+                            'beyond-cap',
+                        ],
+                    },
+                }),
+            ),
+        );
+        expect(ledger.isUncertain(1, 'safe')).toBe(true);
+        expect(ledger.isUncertain(1, 'beyond-cap')).toBe(false);
+    });
+
     test('closed challenges are pruned on the next write', () => {
         const store = rawStore(null);
         const ledger = createEntryAgeLedger(store);

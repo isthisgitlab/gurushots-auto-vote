@@ -11,6 +11,7 @@ import type * as LoggerModule from '../logger';
 import type * as SettingsModule from '../settings';
 import type { Challenge, ChallengeMember, MemberRanking, RankingEntry } from './gurushots';
 import type { PickerPhoto, SemanticScoreMap } from './photoPicker';
+import type { EntryAgeLedger } from './stores';
 import type {
     getEligiblePhotos as GetEligiblePhotos,
     getImageData as GetImageData,
@@ -54,6 +55,7 @@ export interface RankDeps {
 /** A submitting fill's dependencies. */
 export interface FillDeps extends RankDeps {
     submitToChallenge(...args: Parameters<typeof SubmitToChallenge>): ReturnType<typeof SubmitToChallenge>;
+    entryAges?: EntryAgeLedger | null;
 }
 
 /** The dependencies of a fill path that reads its settings unconditionally (auto, emergency, fill-new). */

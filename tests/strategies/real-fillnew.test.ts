@@ -31,6 +31,7 @@ const ALL_ACTIONS: ReturnType<typeof votingLogicModule.orderDeadlineActions> = [
     { action: 'emergencyFill', thresholdSec: 0 },
 ];
 jest.mock('../../src/js/services/VotingLogic', () => ({
+    isWithinEmergencyWindow: jest.fn(() => false),
     shouldApplyBoost: jest.fn(() => false),
     getEffectiveBoostTime: jest.fn(() => 3600),
     resolveBoostFillNewMode: jest.fn(() => 'no'),

@@ -11,6 +11,7 @@ jest.mock('../../src/js/settings', () => ({
 }));
 
 jest.mock('../../src/js/services/VotingLogic', () => ({
+    isWithinEmergencyWindow: jest.fn(() => false),
     shouldPlayAutoTurbo: jest.fn(() => false),
     orderDeadlineActions: jest.fn(() => []),
     evaluateVotingDecision: jest.fn(() => ({ shouldVote: false, voteReason: 'test skip', targetExposure: 100 })),

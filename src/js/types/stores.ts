@@ -69,6 +69,8 @@ export interface EntryAgeRecord {
     entered: Record<string, number>;
     /** The photo a boost fill-new submitted and is waiting to boost. */
     pending: string | null;
+    /** Auto-submitted entries without a theme match; never inferred for manual entries. */
+    uncertain?: string[];
 }
 
 /** The entry-age ledger a voting pass reads and writes (entryAgeStore). */

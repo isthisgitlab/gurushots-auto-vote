@@ -181,6 +181,9 @@ export const app = {
         'Cik ilgi pirms Boost izmantošanas sākas uzpilde. Atvēli pietiekami laika vairākiem balsošanas cikliem — redzamība nesasniedz 100 % vienā piegājienā.',
     autoBoost: 'Automātiski izmantot Boost',
     autoBoostDesc: 'Automātiski izmanto Boost šajā izaicinājumā, kad tā Boost logs drīz aizvērsies.',
+    protectUncertainAutoFills: 'Saudzēt automātiski iesniegtos foto bez skaidras atbilstības',
+    protectUncertainAutoFillsDesc:
+        'Neizmantot Boost un Turbo automātiski iesniegtiem foto bez atbilstības tēmai. Izņēmumi: ārkārtas darbības, Boost termiņa beigas un atvērtas tēmas.',
     turbo: 'Turbo',
     autoTurbo: 'Automātiski iegūt Turbo',
     autoTurboDesc: 'Automātiski spēlē Turbo minispēli, lai iegūtu bonusu',
