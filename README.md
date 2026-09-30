@@ -28,7 +28,7 @@ Automated voting for GuruShots challenges. The same voting engine ships three wa
 
 If you hit a rate-limit error: stop every instance, wait 5–10 minutes, then start a single one.
 
-The desktop app now enforces this for GUI instances: launching it a second time focuses the already-running window instead of starting a new copy. This does not cover running the CLI or the Android app alongside the GUI — the warning above still applies to those combinations.
+The desktop app now enforces this for GUI instances: launching it a second time focuses the already-running window instead of starting a new copy. This does not cover running the CLI, the web UI or the Android app alongside the GUI — the warning above still applies to those combinations.
 
 ## 🚀 Features
 

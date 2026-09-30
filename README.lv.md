@@ -24,7 +24,7 @@ Automātiska balsošana GuruShots izaicinājumos. Viens un tas pats balsošanas 
 
 Ja saņemat pieprasījumu limita kļūdu, apturiet visus eksemplārus, pagaidiet 5–10 minūtes un palaidiet tikai vienu.
 
-Grafiskajai lietotnei tas tagad tiek nodrošināts automātiski: ja palaižat to otrreiz, tiek aktivizēts jau atvērtais logs, nevis sākts jauns eksemplārs. Tas neattiecas uz CLI vai Android lietotni, ko darbina vienlaikus ar grafisko lietotni, — šādās kombinācijās augstāk minētais brīdinājums joprojām ir spēkā.
+Grafiskajai lietotnei tas tagad tiek nodrošināts automātiski: ja palaižat to otrreiz, tiek aktivizēts jau atvērtais logs, nevis sākts jauns eksemplārs. Tas neattiecas uz CLI, tīmekļa saskarni vai Android lietotni, ko darbina vienlaikus ar grafisko lietotni, — šādās kombinācijās augstāk minētais brīdinājums joprojām ir spēkā.
 
 ## 🚀 Funkcijas
 
