@@ -1,4 +1,4 @@
-import { createContext, useContext, useCallback, useEffect, useMemo } from 'react';
+import { createContext, useContext, useCallback, useLayoutEffect, useMemo } from 'react';
 import { rendererTranslator } from '../../translations/renderer';
 import { DEFAULT_LANGUAGE, isSupportedLanguage, resolveLanguage } from '../../translations/translator';
 import { useIpcQuery } from '../api/useIpcQuery';
@@ -58,7 +58,7 @@ export function TranslationProvider({ children }: { children?: ComponentChildren
     // never flips back. A payload without `language` (a partial save-settings)
     // did not change it. This window's own setLanguage is echoed back too;
     // applying the same language again is a no-op.
-    useEffect(
+    useLayoutEffect(
         () =>
             ipc.onSettingsChanged((changed: { language?: unknown } | null | undefined) => {
                 if (changed?.language === undefined) return;

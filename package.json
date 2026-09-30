@@ -295,6 +295,9 @@
             {
                 "displayName": "happy-dom",
                 "testEnvironment": "@happy-dom/jest-environment",
+                "transformIgnorePatterns": [
+                    "/node_modules/(?!.*preact/.*\\.mjs$)"
+                ],
                 "testEnvironmentOptions": {
                     "customExportConditions": [
                         "node"
@@ -313,6 +316,14 @@
                     "**/?(*.)+(spec|test).tsx"
                 ],
                 "transform": {
+                    "\\.mjs$": [
+                        "@swc/jest",
+                        {
+                            "module": {
+                                "type": "commonjs"
+                            }
+                        }
+                    ],
                     "\\.[mc]?ts$": [
                         "<rootDir>/tests/helpers/swc-transformer.cts",
                         {

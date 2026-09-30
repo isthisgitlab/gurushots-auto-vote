@@ -1,5 +1,5 @@
 import type { Bankroll, Challenge } from '../../../types/gurushots';
-import { useState, useCallback, useEffect } from 'react';
+import { useState, useCallback, useLayoutEffect } from 'react';
 import { useTranslation } from '@/contexts/TranslationContext';
 import { useChallenges } from '@/contexts/ChallengesContext';
 import { useTimers } from '@/hooks/useTimers';
@@ -28,7 +28,7 @@ function useGlobalCardDensity() {
     // Read the global compactCards default and the compactCardActions switch
     // + listen for settings-changed events so the toggle below stays in sync
     // if it gets flipped elsewhere (e.g. via the Settings modal).
-    useEffect(() => {
+    useLayoutEffect(() => {
         const sync = async () => {
             try {
                 const [compact, actions] = await Promise.all([

@@ -1,7 +1,7 @@
 import { useCallback } from 'react';
 import { useTranslation } from '@/contexts/TranslationContext';
 import { ThemeSelect } from '@/components/ui/ThemeSelect';
-import type { JSX } from 'preact';
+import type { TargetedEvent } from 'preact';
 
 /**
  * Settings toggles section for the login page
@@ -32,14 +32,14 @@ export function SettingsToggles({
     );
 
     const handleStayLoggedInToggle = useCallback(
-        (e: JSX.TargetedEvent<HTMLInputElement, Event>) => {
+        (e: TargetedEvent<HTMLInputElement, Event>) => {
             void onStayLoggedInChange(e.currentTarget.checked);
         },
         [onStayLoggedInChange],
     );
 
     const handleMockModeToggle = useCallback(
-        (e: JSX.TargetedEvent<HTMLInputElement, Event>) => {
+        (e: TargetedEvent<HTMLInputElement, Event>) => {
             void onMockModeChange(e.currentTarget.checked);
         },
         [onMockModeChange],

@@ -61,7 +61,7 @@ function OptionalText({
 }) {
     return (
         <input
-            type={type}
+            {...(type === 'number' ? { type: 'number' as const } : { type: 'text' as const })}
             aria-label={label}
             className={CONTROL}
             value={value ?? ''}

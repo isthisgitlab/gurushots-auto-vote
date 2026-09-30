@@ -7,7 +7,7 @@ import { interp } from '@/utils/interp';
 
 export { SCHEDULED_FILL_MAX_ENTRIES } from './TimeSettingFields';
 
-import type { ComponentChildren, ComponentType, JSX } from 'preact';
+import type { ComponentChildren, ComponentType, TargetedEvent } from 'preact';
 import type { SerializableSchemaEntry } from '../../../ipc/settings.handlers';
 import type {
     SettingChangeHandler,
@@ -108,7 +108,7 @@ export function TagsField({
     const arr = Array.isArray(value) ? value : [];
     const [draft, setDraft] = useListDraft(arr, tagsArrayToText, tagsDraftKey);
 
-    const handleChange = (e: JSX.TargetedEvent<HTMLInputElement, Event>) => {
+    const handleChange = (e: TargetedEvent<HTMLInputElement, Event>) => {
         setDraft(e.currentTarget.value);
         onChange(settingKey, tagsTextToArray(e.currentTarget.value));
     };

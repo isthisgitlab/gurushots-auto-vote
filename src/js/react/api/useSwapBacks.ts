@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useLayoutEffect, useState } from 'react';
 
 import type { Challenge } from '../../types/gurushots';
 import type { SwapBackRecord } from '../../types/stores';
@@ -24,7 +24,7 @@ export function useSwapBacks(challenge: Challenge | null | undefined): SwapBackO
     const entryKey = Array.isArray(entries) ? entries.map((e) => e?.id).join(',') : '';
     const requestKey = `${challenge?.id ?? ''}|${entryKey}`;
 
-    useEffect(() => {
+    useLayoutEffect(() => {
         const challengeId = requestKey.split('|')[0];
         if (!challengeId) return undefined;
         let cancelled = false;

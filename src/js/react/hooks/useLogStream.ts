@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from 'react';
+import { useState, useLayoutEffect, useRef } from 'react';
 import * as ipc from '@/api/ipc';
 
 import type { GuiLogEntry } from '../../logger';
@@ -20,7 +20,7 @@ export function useLogStream(): { entries: GuiLogEntry[]; connected: boolean } {
     const mountedRef = useRef(true);
     const unsubscribeRef = useRef<(() => void) | null>(null);
 
-    useEffect(() => {
+    useLayoutEffect(() => {
         mountedRef.current = true;
         let seeded = false;
         let maxBacklogSeq = 0;

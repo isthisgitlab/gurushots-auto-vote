@@ -1,4 +1,4 @@
-import { createContext, useContext, useReducer, useCallback, useEffect } from 'react';
+import { createContext, useContext, useReducer, useCallback, useLayoutEffect } from 'react';
 import * as ipc from '../api/ipc';
 
 import type { ComponentChildren } from 'preact';
@@ -140,7 +140,7 @@ export function UpdateProvider({ children }: { children?: ComponentChildren }) {
     const [state, dispatch] = useReducer(updateReducer, initialState);
 
     // Setup IPC event listeners
-    useEffect(() => {
+    useLayoutEffect(() => {
         const unsubscribeAvailable = ipc.onUpdateAvailable((updateInfo: UpdateSummary) => {
             dispatch({ type: ACTIONS.SET_AVAILABLE, payload: updateInfo });
         });

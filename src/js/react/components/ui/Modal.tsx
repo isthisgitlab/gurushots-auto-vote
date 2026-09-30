@@ -1,4 +1,4 @@
-import { useEffect, useCallback, useRef, useId } from 'react';
+import { useLayoutEffect, useCallback, useRef, useId } from 'react';
 import { rendererTranslator } from '../../../translations/renderer';
 import { StrokeIcon, ICON_PATHS } from './StrokeIcon';
 import type { ComponentChildren } from 'preact';
@@ -99,7 +99,7 @@ export function Modal({
         [onClose, getFocusable],
     );
 
-    useEffect(() => {
+    useLayoutEffect(() => {
         if (!isOpen) return undefined;
 
         // Remember the trigger so focus can return to it on close.

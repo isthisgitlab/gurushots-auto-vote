@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useLayoutEffect, useState } from 'react';
 import { useLatestRef } from '../hooks/useLatestRef';
 
 import type { Challenge } from '../../types/gurushots';
@@ -72,7 +72,7 @@ export function useDeadlineActions(
     // every render).
     const challengeRef = useLatestRef(challenge);
 
-    useEffect(() => {
+    useLayoutEffect(() => {
         let cancelled = false;
         setState((s) => ({ ...s, loading: true }));
         void (async () => {

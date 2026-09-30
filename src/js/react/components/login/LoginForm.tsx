@@ -1,7 +1,7 @@
 import { useState, useCallback } from 'react';
 import { useTranslation } from '@/contexts/TranslationContext';
 import { LoadingSpinner } from '@/components/ui/LoadingSpinner';
-import type { JSX } from 'preact';
+import type { TargetedEvent, TargetedSubmitEvent } from 'preact';
 
 /**
  * Login form component with validation
@@ -45,7 +45,7 @@ export function LoginForm({
      * Handle form submission
      */
     const handleSubmit = useCallback(
-        (e: JSX.TargetedSubmitEvent<HTMLFormElement>) => {
+        (e: TargetedSubmitEvent<HTMLFormElement>) => {
             e.preventDefault();
 
             if (validateForm()) {
@@ -59,7 +59,7 @@ export function LoginForm({
      * Clear field error on change
      */
     const handleUsernameChange = useCallback(
-        (e: JSX.TargetedEvent<HTMLInputElement, Event>) => {
+        (e: TargetedEvent<HTMLInputElement, Event>) => {
             setUsername(e.currentTarget.value);
             if (errors.username) {
                 setErrors((prev) => ({ ...prev, username: null }));
@@ -69,7 +69,7 @@ export function LoginForm({
     );
 
     const handlePasswordChange = useCallback(
-        (e: JSX.TargetedEvent<HTMLInputElement, Event>) => {
+        (e: TargetedEvent<HTMLInputElement, Event>) => {
             setPassword(e.currentTarget.value);
             if (errors.password) {
                 setErrors((prev) => ({ ...prev, password: null }));

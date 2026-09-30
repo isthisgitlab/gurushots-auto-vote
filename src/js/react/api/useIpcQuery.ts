@@ -1,4 +1,4 @@
-import { useState, useCallback, useEffect, useRef } from 'react';
+import { useState, useCallback, useEffect, useLayoutEffect, useRef } from 'react';
 
 import type { Dispatch, SetStateAction } from 'react';
 
@@ -207,7 +207,7 @@ function useAutoFetch(
         };
     }, [enabled, latestOnly, refetch, callIdRef]);
 
-    useEffect(() => {
+    useLayoutEffect(() => {
         if (!enabled || !subscribe || !window.api?.onSettingsChanged) return undefined;
         return window.api.onSettingsChanged(() => {
             void revalidate();

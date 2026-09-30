@@ -1,4 +1,4 @@
-import { useEffect, useState, useCallback, useRef } from 'react';
+import { useEffect, useLayoutEffect, useState, useCallback, useRef } from 'react';
 import * as ipc from '@/api/ipc';
 
 /**
@@ -40,7 +40,7 @@ export function useChallengeSettings(
     // Only the newest reload may apply: broadcasts can start overlapping
     // reloads, and an older one settling last must not overwrite newer values.
     const reloadIdRef = useRef(0);
-    useEffect(() => {
+    useLayoutEffect(() => {
         mountedRef.current = true;
         return () => {
             mountedRef.current = false;
