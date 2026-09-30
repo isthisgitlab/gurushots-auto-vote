@@ -4,7 +4,14 @@
  * the submit-free ranking the swap flow uses (rankCandidatesForChallenge).
  */
 
-import { buildScoredCandidates, selectEnrichmentSet, finalizePick, readChallengeTheme } from '../photoPicker';
+import {
+    buildScoredCandidates,
+    selectEnrichmentSet,
+    finalizePick,
+    readChallengeTheme,
+    buildThemeKeywords,
+    scorePhoto,
+} from '../photoPicker';
 import { rankVisually } from '../visionVerifier';
 import { enrichCandidates } from '../photoStats';
 import { resolveSemanticScores, resolveIgnoreWords, fetchCandidatesForChallenge } from './candidates';
@@ -197,11 +204,18 @@ const recordUncertainSubmission = ({
     ignoreWords: IgnoreWords;
 }) => {
     if (label === 'manualFill' || !deps.entryAges || readChallengeTheme(challenge, ignoreWords).kind === 'open') return;
+    const subjectWords = visualEvidence ? [] : buildThemeKeywords(challenge, ignoreWords);
     for (const id of picked) {
         const entry = scored.find((candidate) => String(candidate.id) === String(id));
         // Should Include Tags are a user preference, not evidence that the
         // photo depicts the challenge subject.
-        if (!entry || (visualEvidence ? visualEvidence.has(id) : entry.semantic !== 0 || entry.score !== 0)) continue;
+        if (
+            !entry ||
+            (visualEvidence
+                ? visualEvidence.has(id)
+                : entry.semantic !== 0 || scorePhoto(entry.photo, subjectWords) !== 0)
+        )
+            continue;
         const reason = visualEvidence ? 'visual check did not confirm the subject' : 'no subject match';
         try {
             deps.entryAges.markUncertain(challenge, id, Math.floor(Date.now() / 1000));

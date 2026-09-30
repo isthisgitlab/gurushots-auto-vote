@@ -246,11 +246,11 @@ importers:
         specifier: ^10.1.0
         version: 10.1.0
       daisyui:
-        specifier: ^5.7.46
-        version: 5.7.46
+        specifier: ^5.7.47
+        version: 5.7.47
       electron:
-        specifier: ^44.4.5
-        version: 44.4.5(supports-color@10.2.2)
+        specifier: ^44.5.0
+        version: 44.5.0(supports-color@10.2.2)
       electron-builder:
         specifier: ^26.17.0
         version: 26.17.0(electron-builder-squirrel-windows@26.17.0)(supports-color@10.2.2)
@@ -270,8 +270,8 @@ importers:
         specifier: ^6.38.0
         version: 6.38.0
       lefthook:
-        specifier: ^2.1.14
-        version: 2.1.14
+        specifier: ^2.1.15
+        version: 2.1.15
       marked:
         specifier: ^18.0.14
         version: 18.0.14
@@ -2427,8 +2427,8 @@ packages:
     resolution: {integrity: sha512-yQbXgO/OSZVD2IsiLlro+7Hf6Q18EJrKSEsdoMzKePKXct3gvD8oLcOQdIzGupr5Fj+EDe8gO/lxc1BzfMpxvA==}
     engines: {node: '>=8'}
 
-  browserslist@4.29.2:
-    resolution: {integrity: sha512-/u9r8k8ue4ZhHCw9ovDtltpWdXeXzjhdxCGj6vm1RGLPXb8lu33EMdoCHF5Sx8oYBS+Q/FYYNmAqlHncxR3RmA==}
+  browserslist@4.29.3:
+    resolution: {integrity: sha512-1R4kiYKXGViqEN0CnoDrXc1StD9niAwu+j2dukWzrD4bJgsD4lDmEp0CRbc6E/vYJIfTHwPmwyaKtVSudICdPA==}
     engines: {node: ^6 || ^7 || ^8 || ^9 || ^10 || ^11 || ^12 || >=13.7}
     hasBin: true
 
@@ -2602,8 +2602,8 @@ packages:
     engines: {node: '>=4'}
     hasBin: true
 
-  daisyui@5.7.46:
-    resolution: {integrity: sha512-z/tfVXLpLRe1ojGeokzxauHA9Ij5CGfk+83EdatQbFSVr02h5mUcp4nkgQJOw68wH1wAAPu/SY+MWbDdJG2R4w==}
+  daisyui@5.7.47:
+    resolution: {integrity: sha512-NOl4vPifelRqB3CMzoU751zc44KCDD9HdHMTTqQ30uiYVpIyK7+s94/ySDWgYqjdl1tQCaCrgGBx4KCizm+a3Q==}
 
   debug@4.4.3:
     resolution: {integrity: sha512-RGwwWnwQvkVfavKVt22FGLw+xYSdzARwm0ru6DhTVA3umU5hZc28V3kO4stgYryrTlLpuvgI9GiijltAjNbcqA==}
@@ -2717,8 +2717,8 @@ packages:
   electron-publish@26.16.0:
     resolution: {integrity: sha512-Vt3KzQIiw9BImvNOYtndg9Mjki+tl4+1sQiC/+G5j8khWaENOJFWodiB+sUl6yyHwtd37avehskdtPw7f8y/+Q==}
 
-  electron-to-chromium@1.5.440:
-    resolution: {integrity: sha512-SghDzqdJokdz8zP8YNlvS74+CwLRoUPDGvP/gFA+HrKVw+pOshUAgx8pXR37xl/u16zGae746rFNWvZ/22kU2Q==}
+  electron-to-chromium@1.5.441:
+    resolution: {integrity: sha512-b84H5dyxtHtXYbJRJPLvbS+iud4ys2GVZ61BH7/9lJrfCcIL+Sk+Vh2AW6beaErTdstvjZLgEwkE2j0fZlmwRA==}
 
   electron-updater@6.8.9:
     resolution: {integrity: sha512-ZhVxM9iGONUpZGI1FxdMRgJjUFXi7AYGVa5PwKlO1tV1/4zDxQmfKpXOHVztKrd6L9rLcFjERvi1Mf2vxyTkig==}
@@ -2727,8 +2727,8 @@ packages:
     resolution: {integrity: sha512-bO3y10YikuUwUuDUQRM4KfwNkKhnpVO7IPdbsrejwN9/AABJzzTQ4GeHwyzNSrVO+tEH3/Np255a3sVZpZDjvg==}
     engines: {node: '>=8.0.0'}
 
-  electron@44.4.5:
-    resolution: {integrity: sha512-SjgoaeYsSWZfJzubgQU7juvuXMTvn6/e1gAHdGFA/yuMbpF+I+skYqIJ6DdXBXHeWbkbpNpmwZCTpiivtlWZSw==}
+  electron@44.5.0:
+    resolution: {integrity: sha512-gVUJ6DZcRY80Alh/krc7uwjjCfxjZ3T2suvpBmHsN6zE4ShAc4vzG14kbMgT+ZteaPLddoKg4Pie0CjDdIDdyg==}
     engines: {node: '>= 22.12.0'}
     hasBin: true
 
@@ -3441,58 +3441,58 @@ packages:
   lazy-val@1.0.5:
     resolution: {integrity: sha512-0/BnGCCfyUMkBpeDgWihanIAF9JmZhHBgUhEqzvf+adhNGLoP6TaiI5oF8oyb3I45P+PcnrqihSf01M0l0G5+Q==}
 
-  lefthook-darwin-arm64@2.1.14:
-    resolution: {integrity: sha512-VMUAqY81+8ph7Mc0iROd3JWqj2sOuK7SYDyd8ZgzYVKChCt+Nnz8ehd4gUwprJy7QI28IFSUh1M3wnIRiYh+fA==}
+  lefthook-darwin-arm64@2.1.15:
+    resolution: {integrity: sha512-6sNtlNsoeahxZySHbMMijFS8qB5nxZjMohO5t9x4UoM03sKAwXL++vR196mKOF942YdvkuDrwd+qyxfAU6QmWg==}
     cpu: [arm64]
     os: [darwin]
 
-  lefthook-darwin-x64@2.1.14:
-    resolution: {integrity: sha512-uSmjcPRU+yB+D6vk+u6WJDnyHlB+XIv1QZw97N2+qNGG2bNSLH/7MuJ6puCdJv+lVPBEO5wBjE3JIbaEzPOQCw==}
+  lefthook-darwin-x64@2.1.15:
+    resolution: {integrity: sha512-B2upzVBV/9adKe0fGUO4JCrgx/iKx3qC6PQ2N3Qrok9yL5wDx+AZ6L5GNNgAKUbUWP6XZywyZZ/DFTPLOGxA/Q==}
     cpu: [x64]
     os: [darwin]
 
-  lefthook-freebsd-arm64@2.1.14:
-    resolution: {integrity: sha512-po/pmjbp/7BjE9RFfeDnh+CeNsA0d+utppOYKB425I7mgI1GcmT8GAZ9DDut4DIutNjVqKL/lzrj+F87Gm40Rg==}
+  lefthook-freebsd-arm64@2.1.15:
+    resolution: {integrity: sha512-7PbO32jhKKHqRdD6DIucmQrZ5nHlXwhxHdqy6CxTH2wNNPlvjXPrMqb6W0SpHuOLS0dWdz77ZVJsOvwfH139AA==}
     cpu: [arm64]
     os: [freebsd]
 
-  lefthook-freebsd-x64@2.1.14:
-    resolution: {integrity: sha512-+KiXiFjJf7YdHUYjzhDsklcA5bAFZN+pNcz/NbBftrhVTwzNALNoK+SYEKt+9QJsrzL6tpDWmHHFpeLGp+8t8w==}
+  lefthook-freebsd-x64@2.1.15:
+    resolution: {integrity: sha512-0XEgTQomWVV/uw4v5A/OMSfRk/9MRu3OBgTX1xF2QvUrb+fCEglkrJW299vSqndKn53MkUtyoIntz0ajw4PJlA==}
     cpu: [x64]
     os: [freebsd]
 
-  lefthook-linux-arm64@2.1.14:
-    resolution: {integrity: sha512-bjeJB16ftJaPWGTedssh8ZrqRy1ACfQuTV7a0O3NU1FoIsJtfHOm0o0mV4cPf4q+ZCVCwq1Xf2I11qUpuJFV4Q==}
+  lefthook-linux-arm64@2.1.15:
+    resolution: {integrity: sha512-HfgGoLtzqop68Zo9FDdP7rozFc+hv3xf2s4fWsyH50SbQLNgoKz/9vsneZG7n8bQ5YYGR/up0H9D8WQ7pou01g==}
     cpu: [arm64]
     os: [linux]
 
-  lefthook-linux-x64@2.1.14:
-    resolution: {integrity: sha512-gYExzjU2w3uKrP1MklbHENS1cXUdCQRIiEJkykI7q4RjhIHi+mQEUAZLxZw93a6jE2pNWaO0me5tB8EbEt4/GQ==}
+  lefthook-linux-x64@2.1.15:
+    resolution: {integrity: sha512-oyhZn6koNmXvSlSQXeTL1Zmxmlp1ysInjZCETwfAhjGb5r42HX2coaPzO0e6dvoP6bqEO8cyWoqqj+FYVz9nig==}
     cpu: [x64]
     os: [linux]
 
-  lefthook-openbsd-arm64@2.1.14:
-    resolution: {integrity: sha512-MCW76gTlEMBF3Ds8O63UTxjaSguha/5zT0U3Vr719I1sXueSpttfRmm/5YfIB4MygB116yA/Vi+DsizT/X0kcg==}
+  lefthook-openbsd-arm64@2.1.15:
+    resolution: {integrity: sha512-/hF3ap8CUqD2whU127pesD0x0CLOymDmtR5NR5jbNrT/BryjxlL6YL7HL3KB1Xz3MZwBqYeLIceqFE9/Gc53xQ==}
     cpu: [arm64]
     os: [openbsd]
 
-  lefthook-openbsd-x64@2.1.14:
-    resolution: {integrity: sha512-salAc1PAhLI6xrB9pth5UxALQlTOGvZAfaAvgFwixhkdu8D//uW8zS3faFq31ktd1bDAy5wDI8p9yg+fF5+2uA==}
+  lefthook-openbsd-x64@2.1.15:
+    resolution: {integrity: sha512-IljStK5gOS8oQPxCsHNDoHeD8vSCDHFuHWtJfRbYWVtNMEA9/2shtIKHswFWQBAxltgt4/i/lN86rErKdDoIug==}
     cpu: [x64]
     os: [openbsd]
 
-  lefthook-windows-arm64@2.1.14:
-    resolution: {integrity: sha512-q3JC6lBrYLzkhXEhfnmFxJF47gSd5JeDweH3aNrHoLGX/KkRiOrk9RSyoRwSuGq03EYxSkJhl1FLj2GUxF7VqQ==}
+  lefthook-windows-arm64@2.1.15:
+    resolution: {integrity: sha512-S1HIhsM0RZua8fQlHzXFrF0CpA/eo2/UYVUAqU+pJ/3IBAq0ZpWG4ZzfrQiSSBbcG9LB4tJgqiJVtumQKO+ZgA==}
     cpu: [arm64]
     os: [win32]
 
-  lefthook-windows-x64@2.1.14:
-    resolution: {integrity: sha512-WwIxdwW1lDAaJUU3ETcKlCtdqluGr3Cy+LjKvP4QIQnFf0FEXL78THstIkZ6k6qhfUn7/WvyqSIf0cbTAKw2nQ==}
+  lefthook-windows-x64@2.1.15:
+    resolution: {integrity: sha512-cp4ZhMYpX9khKw+fu0JEskq0Aeo1csREkb4WTMmJaEL7KTt+Lpp5zzSPPa8NGtpcQSKUo+ZXYrtqzpxYpPdt0g==}
     cpu: [x64]
     os: [win32]
 
-  lefthook@2.1.14:
-    resolution: {integrity: sha512-Y9TL1dmpRlIdSp73SJ6bb+xAZ4s2SinGTK3pgC9PRWMSjMr2iOfowPGnlSOfAo5fu6S5rdiItsQDxeLEWCGk4g==}
+  lefthook@2.1.15:
+    resolution: {integrity: sha512-l/BSlOZBou3zLDuSIV8V+kbNyC6UiFCACVHu8dVUCDxH5+8qZXmJr8iROruI/7hv6W7c3sVlVT+6+BpVhGZRmA==}
     hasBin: true
 
   leven@3.1.0:
@@ -4644,7 +4644,7 @@ snapshots:
     dependencies:
       '@babel/compat-data': 7.29.7
       '@babel/helper-validator-option': 7.29.7
-      browserslist: 4.29.2
+      browserslist: 4.29.3
       lru-cache: 5.1.1
       semver: 6.3.1
 
@@ -6533,13 +6533,13 @@ snapshots:
     dependencies:
       fill-range: 7.1.1
 
-  browserslist@4.29.2:
+  browserslist@4.29.3:
     dependencies:
       baseline-browser-mapping: 2.11.26
       caniuse-lite: 1.0.30001813
-      electron-to-chromium: 1.5.440
+      electron-to-chromium: 1.5.441
       node-releases: 2.0.57
-      update-browserslist-db: 1.3.3(browserslist@4.29.2)
+      update-browserslist-db: 1.3.3(browserslist@4.29.3)
 
   bser@2.1.1:
     dependencies:
@@ -6711,7 +6711,7 @@ snapshots:
 
   cssesc@3.0.0: {}
 
-  daisyui@5.7.46: {}
+  daisyui@5.7.47: {}
 
   debug@4.4.3(supports-color@10.2.2):
     dependencies:
@@ -6855,7 +6855,7 @@ snapshots:
     transitivePeerDependencies:
       - supports-color
 
-  electron-to-chromium@1.5.440: {}
+  electron-to-chromium@1.5.441: {}
 
   electron-updater@6.8.9(supports-color@10.2.2):
     dependencies:
@@ -6882,7 +6882,7 @@ snapshots:
     transitivePeerDependencies:
       - supports-color
 
-  electron@44.4.5(supports-color@10.2.2):
+  electron@44.5.0(supports-color@10.2.2):
     dependencies:
       '@electron-internal/extract-zip': 1.0.5
       '@electron/get': 5.1.0(supports-color@10.2.2)
@@ -7846,48 +7846,48 @@ snapshots:
 
   lazy-val@1.0.5: {}
 
-  lefthook-darwin-arm64@2.1.14:
+  lefthook-darwin-arm64@2.1.15:
     optional: true
 
-  lefthook-darwin-x64@2.1.14:
+  lefthook-darwin-x64@2.1.15:
     optional: true
 
-  lefthook-freebsd-arm64@2.1.14:
+  lefthook-freebsd-arm64@2.1.15:
     optional: true
 
-  lefthook-freebsd-x64@2.1.14:
+  lefthook-freebsd-x64@2.1.15:
     optional: true
 
-  lefthook-linux-arm64@2.1.14:
+  lefthook-linux-arm64@2.1.15:
     optional: true
 
-  lefthook-linux-x64@2.1.14:
+  lefthook-linux-x64@2.1.15:
     optional: true
 
-  lefthook-openbsd-arm64@2.1.14:
+  lefthook-openbsd-arm64@2.1.15:
     optional: true
 
-  lefthook-openbsd-x64@2.1.14:
+  lefthook-openbsd-x64@2.1.15:
     optional: true
 
-  lefthook-windows-arm64@2.1.14:
+  lefthook-windows-arm64@2.1.15:
     optional: true
 
-  lefthook-windows-x64@2.1.14:
+  lefthook-windows-x64@2.1.15:
     optional: true
 
-  lefthook@2.1.14:
+  lefthook@2.1.15:
     optionalDependencies:
-      lefthook-darwin-arm64: 2.1.14
-      lefthook-darwin-x64: 2.1.14
-      lefthook-freebsd-arm64: 2.1.14
-      lefthook-freebsd-x64: 2.1.14
-      lefthook-linux-arm64: 2.1.14
-      lefthook-linux-x64: 2.1.14
-      lefthook-openbsd-arm64: 2.1.14
-      lefthook-openbsd-x64: 2.1.14
-      lefthook-windows-arm64: 2.1.14
-      lefthook-windows-x64: 2.1.14
+      lefthook-darwin-arm64: 2.1.15
+      lefthook-darwin-x64: 2.1.15
+      lefthook-freebsd-arm64: 2.1.15
+      lefthook-freebsd-x64: 2.1.15
+      lefthook-linux-arm64: 2.1.15
+      lefthook-linux-x64: 2.1.15
+      lefthook-openbsd-arm64: 2.1.15
+      lefthook-openbsd-x64: 2.1.15
+      lefthook-windows-arm64: 2.1.15
+      lefthook-windows-x64: 2.1.15
 
   leven@3.1.0: {}
 
@@ -8905,9 +8905,9 @@ snapshots:
       graceful-fs: 4.2.11
       node-int64: 0.4.0
 
-  update-browserslist-db@1.3.3(browserslist@4.29.2):
+  update-browserslist-db@1.3.3(browserslist@4.29.3):
     dependencies:
-      browserslist: 4.29.2
+      browserslist: 4.29.3
       escalade: 3.2.0
       picocolors: 1.1.1
 

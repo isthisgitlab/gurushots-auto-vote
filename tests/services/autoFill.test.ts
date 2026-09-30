@@ -157,6 +157,22 @@ describe('uncertain auto-submit tracking', () => {
         expect(ledger.isUncertain(challenge.id, 'photo')).toBe(true);
     });
 
+    test('description words alone do not confirm the challenge subject', async () => {
+        const ledger = createMemoryEntryAgeLedger();
+        const challenge = makeChallenge({ title: 'Dogs', entries: [{ id: 'existing' }] });
+        challenge.welcome_message = 'Photograph your dog in a landscape you love.';
+        const result = await maybeAutoFillChallenge(challenge, 'tok', NOW, {
+            settings: makeSettings({ autoFill: true }),
+            logger: makeLogger(),
+            getEligiblePhotos: jest.fn(async () => [allowedPhoto('photo', ['Landscape'])]),
+            submitToChallenge: jest.fn(async () => invalid({ ok: true, raw: { success: true } })),
+            rankVisually: jest.fn(async (_challenge, ids, _eligible, wantCount) => ids.slice(0, wantCount)),
+            entryAges: ledger,
+        });
+        expect(result).toBe('submitted');
+        expect(ledger.isUncertain(challenge.id, 'photo')).toBe(true);
+    });
+
     test('visual confirmation can establish subject confidence without matching labels', async () => {
         const ledger = createMemoryEntryAgeLedger();
         const challenge = makeChallenge({ title: 'Dogs', entries: [{ id: 'existing' }] });
