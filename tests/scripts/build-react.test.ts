@@ -41,7 +41,7 @@ const fs = mockFs;
 const ROOT = realPath.join(__dirname, '..', '..');
 const DIST = realPath.join(ROOT, 'dist');
 const LEXICON = realPath.join(ROOT, 'src', 'assets', 'semantic-vectors.json');
-const ENTRY_NAMES = ['login', 'app', 'logs', 'capacitor', 'headless', 'preload'];
+const ENTRY_NAMES = ['login', 'app', 'logs', 'capacitor', 'web', 'headless', 'preload'];
 
 const flush = async () => {
     for (let i = 0; i < 20; i++) {
@@ -98,6 +98,10 @@ describe('scripts/build-react.ts', () => {
                 realPath.join(DIST, 'headless.html'),
                 expect.stringContaining('window.__GS_HEADLESS__ = true'),
             );
+            expect(fs.writeFileSync).toHaveBeenCalledWith(
+                realPath.join(DIST, 'web.html'),
+                expect.stringContaining('web-bundle.js'),
+            );
             expect(fs.copyFileSync).toHaveBeenCalledWith(LEXICON, realPath.join(DIST, 'semantic-vectors.json'));
 
             expect(esbuild.build).toHaveBeenCalledTimes(ENTRY_NAMES.length);
@@ -120,8 +124,12 @@ describe('scripts/build-react.ts', () => {
             const capOpts = esbuild.build.mock.calls[3][0];
             expect(capOpts.external).not.toContain('@capacitor/core');
 
+            // The web entry runs in a browser tab: Capacitor packages stay out.
+            const webOpts = esbuild.build.mock.calls[4][0];
+            expect(webOpts.external).toEqual(expect.arrayContaining(['node:fs', '@capacitor/core']));
+
             // Preload is a CJS node bundle with only electron external.
-            const preloadOpts = esbuild.build.mock.calls[5][0];
+            const preloadOpts = esbuild.build.mock.calls[6][0];
             expect(preloadOpts).toMatchObject({
                 platform: 'node',
                 format: 'cjs',
@@ -130,7 +138,7 @@ describe('scripts/build-react.ts', () => {
             });
 
             expect(logged()).toContain('Building React bundles...');
-            expect(logged()).toContain('React build completed! (6 bundles)');
+            expect(logged()).toContain('React build completed! (7 bundles)');
             expect(exitSpy).not.toHaveBeenCalled();
         });
 
@@ -163,7 +171,7 @@ describe('scripts/build-react.ts', () => {
             expect(opts.sourcemap).toBe(true);
             expect(opts.define!['process.env.NODE_ENV']).toBe('"development"');
             expect(logged()).toContain('Skipping logs');
-            expect(logged()).toContain('(5 bundles)');
+            expect(logged()).toContain('(6 bundles)');
         });
 
         test('warns when no entry point exists', async () => {

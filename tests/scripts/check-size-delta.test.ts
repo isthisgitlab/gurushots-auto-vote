@@ -40,7 +40,7 @@ jest.mock('fs', () => mockFs);
 
 const ROOT = realPath.join(__dirname, '..', '..');
 const BASELINE = realPath.join(ROOT, '.size-baseline.json');
-const NAMES = ['app', 'login', 'logs', 'capacitor', 'headless', 'preload'];
+const NAMES = ['app', 'login', 'logs', 'capacitor', 'web', 'headless', 'preload'];
 const bundlePath = (name: string) => realPath.join(ROOT, 'dist', `${name}-bundle.js`);
 
 const brotli = (buf: Buffer) =>

@@ -19,6 +19,7 @@
         "build:main": "node --import tsx scripts/build-main.ts",
         "fetch:embeddings": "node --import tsx scripts/fetch-embeddings.ts",
         "verify:lexicon": "node --import tsx scripts/validate-lexicon.ts",
+        "web": "pnpm run build:css && pnpm run build:react && node --import tsx scripts/web-server.ts",
         "build:react": "node --import tsx scripts/build-react.ts",
         "build:prep": "pnpm run build:css && pnpm run build:lexicon && pnpm run build:react && pnpm run build:main",
         "build:prep:lite": "pnpm run build:css && pnpm run build:lexicon && node --import tsx scripts/build-react.ts --lite && pnpm run build:main",

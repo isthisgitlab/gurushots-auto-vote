@@ -16,6 +16,8 @@ const entryPoints = {
     app: path.join(reactDir, 'pages', 'App.tsx'),
     logs: path.join(reactDir, 'pages', 'Logs.tsx'),
     capacitor: path.join(reactDir, 'pages', 'Capacitor.tsx'),
+    // Browser entry served by the web shell (`pnpm web`, src/js/web/server.ts).
+    web: path.join(reactDir, 'pages', 'Web.tsx'),
     // Android background service entry — runs in a bare WebView (no
     // Capacitor runtime) owned by AutoVoteService. Not a React page.
     headless: path.join(jsDir, 'headless', 'index.ts'),
@@ -44,6 +46,28 @@ const capacitorIndexHtml = `<!doctype html>
         <title>GuruShots Auto Vote</title>
         <link href="styles.css" rel="stylesheet" />
         <script defer src="capacitor-bundle.js"></script>
+    </head>
+    <body class="min-h-screen bg-base-200">
+        <div id="root"></div>
+    </body>
+</html>
+`;
+
+// Web shell document, served at / by src/js/web/server.ts. Same CSP as the
+// Electron pages: script-src 'self' keeps injected inline script from running
+// against the window.api surface.
+const webHtml = `<!doctype html>
+<html data-theme="light" lang="en">
+    <head>
+        <meta charset="UTF-8" />
+        <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+        <meta
+            http-equiv="Content-Security-Policy"
+            content="default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: https:; font-src 'self' data:; connect-src 'self' https:; object-src 'none'; base-uri 'self'"
+        />
+        <title>GuruShots Auto Vote</title>
+        <link href="styles.css" rel="stylesheet" />
+        <script defer src="web-bundle.js"></script>
     </head>
     <body class="min-h-screen bg-base-200">
         <div id="root"></div>
@@ -88,6 +112,8 @@ async function buildReact() {
     fs.writeFileSync(path.join(distDir, 'index.html'), capacitorIndexHtml);
     // Background service document (loaded by AutoVoteService's WebView).
     fs.writeFileSync(path.join(distDir, 'headless.html'), headlessHtml);
+    // Web shell document (served by src/js/web/server.ts).
+    fs.writeFileSync(path.join(distDir, 'web.html'), webHtml);
 
     // Ship the semantic-matching word-vector lexicon into the webDir so the
     // Android WebView (Capacitor page + headless service) can fetch() it at
@@ -247,6 +273,8 @@ async function buildReact() {
         // native bridge proxies (Preferences.set,
         // ForegroundService.startForegroundService, ...) actually work.
         capacitor: { external: RENDERER_EXTERNALS, banner: REQUIRE_SHIM },
+        // Web entry: a browser tab behind the web shell, never Capacitor.
+        web: { external: [...RENDERER_EXTERNALS, ...CAPACITOR_EXTERNALS], banner: REQUIRE_SHIM },
         // Headless background entry: like the Electron entries, externalize
         // Capacitor packages — the headless cycle never touches them (it
         // uses the native AndroidHeadless* @JavascriptInterfaces), so the

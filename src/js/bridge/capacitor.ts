@@ -31,7 +31,6 @@ import * as actionsHandlers from '../ipc/actions.handlers';
 import * as computationsHandlers from '../ipc/computations.handlers';
 import * as currencyHandlers from '../ipc/currency.handlers';
 import * as scenariosHandlers from '../ipc/scenarios.handlers';
-import { errorResult } from '../ipc/errorResult';
 
 import * as settings from '../settings';
 import * as logger from '../logger';
@@ -40,7 +39,7 @@ import { clearAuthToken } from '../services/auth';
 import * as updateChecker from '../services/UpdateChecker';
 import * as androidUpdateInstaller from '../services/AndroidUpdateInstaller';
 import { hasBundledModel } from '../services/visionVerifier';
-import * as pkg from '../../../package.json';
+import { buildReleaseUpdateHandlers } from '../ipc/releaseUpdates';
 // kebab-case channel name → camelCase renderer method name — shared with
 // preload.ts via the channel manifest so both shells derive identically.
 import { kebabToCamel, aliases, sendMethods, eventMethods } from '../ipc/manifest';
@@ -49,27 +48,10 @@ import { invokeHandler } from '../ipc/registerHandlers';
 import type { IpcHandler } from '../ipc/registerHandlers';
 import type { CapacitorGlobals } from '../types/capacitor';
 import type { GuiLogSink } from '../logger';
-import type { UpdateSummary } from '../services/AutoUpdater';
+import type { ShellUpdateHandlers } from '../ipc/releaseUpdates';
 import type { WindowApi } from '../types/ipc';
 
-export type BridgeUpdateInfo = UpdateSummary & { downloadUrl: string | null };
-
-/**
- * Electron's update handlers, each allowed to answer asynchronously: the
- * bridge's own update channels must return what the renderer gets on Electron.
- */
-type ElectronUpdateHandlers = ReturnType<typeof import('../ipc/update.handlers').buildHandlers>;
-type BridgeUpdateHandlers = {
-    [C in keyof ElectronUpdateHandlers]?: ElectronUpdateHandlers[C] extends (...args: infer A) => infer R
-        ? (...args: A) => R | Promise<Awaited<R>>
-        : never;
-};
-
 export type BridgeListener = (payload: unknown) => void;
-
-// Cached result of the most recent check-for-updates call. download-update
-// reads this so the React UI does not need to thread the URL through.
-let lastUpdateInfo: BridgeUpdateInfo | null = null;
 
 // Tiny in-process pub/sub. Replaces webContents.send broadcasts.
 const listeners: Map<string, Set<BridgeListener>> = new Map();
@@ -109,54 +91,18 @@ const buildAllHandlers = () => {
         broadcastSettingsChange: (newSettings: object) => emit('settings-changed', newSettings),
     };
 
-    // Update channels: check-for-updates uses the shared UpdateChecker
-    // to read GitHub Releases. Download / install remain stubbed pending
-    // an Android-specific installer (APK download + Intent.ACTION_VIEW)
-    // which needs a Capacitor plugin or a small Java helper. Until then
-    // the bridge surfaces "update available" via the standard event so
-    // the React UpdateDialog renders correctly; users tap through to
-    // the GitHub release page to install manually.
+    // Update channels: check / skip / releases URL are the shared
+    // GitHub-Releases channels (ipc/releaseUpdates). Download hands the APK
+    // to the AndroidUpdateInstaller; the user confirms the install in the
+    // system installer.
+    const releaseUpdates = buildReleaseUpdateHandlers({
+        emit,
+        assetSuffix: async () => ((await hasBundledModel()) ? '.apk' : '-lite.apk'),
+    });
     const updateStubs = {
-        'check-for-updates': async () => {
-            try {
-                const result = await updateChecker.checkForUpdates({
-                    currentVersion: pkg.version,
-                    isBetaChannel: pkg.version.includes('-'),
-                    assetSuffix: (await hasBundledModel()) ? '.apk' : '-lite.apk',
-                });
-                if (result.updateAvailable) {
-                    // Honor a user-skipped version — the settings facade is
-                    // the single skip-version store on every platform
-                    // (Electron's AutoUpdater reads the same key).
-                    // ('' means no skip, and an available update always has a
-                    // non-empty version, so a plain equality check suffices.)
-                    if (settings.getSetting('skipUpdateVersion') === result.version) {
-                        lastUpdateInfo = null;
-                        emit('update-not-available', { version: result.version });
-                        return { success: true, updateInfo: null };
-                    }
-                    const updateInfo = {
-                        currentVersion: pkg.version,
-                        latestVersion: result.version,
-                        releaseNotes: result.releaseNotes,
-                        releaseDate: result.releaseDate,
-                        isPrerelease: result.isPrerelease,
-                        downloadUrl: result.downloadUrl,
-                    };
-                    lastUpdateInfo = updateInfo;
-                    emit('update-available', updateInfo);
-                    return { success: true, updateInfo };
-                }
-                lastUpdateInfo = null;
-                emit('update-not-available', { version: result.version || pkg.version });
-                return { success: true, updateInfo: null };
-            } catch (error) {
-                const failure = errorResult(error, 'Failed to check for updates');
-                emit('update-error', { message: failure.error });
-                return failure;
-            }
-        },
+        ...releaseUpdates.handlers,
         'download-update': async () => {
+            const lastUpdateInfo = releaseUpdates.getLastUpdateInfo();
             if (!lastUpdateInfo?.downloadUrl) {
                 return {
                     success: false,
@@ -188,22 +134,8 @@ const buildAllHandlers = () => {
             success: true,
             info: 'The system installer will prompt you to confirm. If it does not appear, tap the downloaded APK in your notifications.',
         }),
-        'skip-update-version': async () => {
-            const version = lastUpdateInfo?.latestVersion;
-            if (!version) {
-                return { success: false, error: 'No update info — run check-for-updates first' };
-            }
-            settings.setSetting('skipUpdateVersion', version);
-            lastUpdateInfo = null;
-            return { success: true, version };
-        },
-        'clear-skip-version': async () => {
-            settings.setSetting('skipUpdateVersion', '');
-            return { success: true };
-        },
-        'get-releases-url': async () => ({ success: true, url: updateChecker.getReleasesUrl() }),
         'can-auto-update': async () => ({ success: true, canAutoUpdate: true }),
-    } satisfies BridgeUpdateHandlers;
+    } satisfies ShellUpdateHandlers;
 
     return {
         ...settingsHandlers.buildHandlers(settingsDeps),

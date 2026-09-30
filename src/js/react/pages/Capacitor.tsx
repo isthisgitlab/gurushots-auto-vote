@@ -26,15 +26,9 @@ import { initializeScenarioStateAsync, flushScenarioStateWrites } from '../../sc
 import { initializeDiagnosticsAsync, flushDiagnosticsWrites } from '../../services/semantic/diagnostics';
 import { isCapacitor } from '../../runtime';
 import { withCategory } from '../../logger';
-import { mountApp } from './App';
-import { mountLogin } from './Login';
+import { mountForToken } from './mountForToken';
 
-// Mount Login or App based on whether we have a token. Electron's
-// index.ts picks this via createLoginWindow vs createMainWindow and
-// swaps windows on login/logout; Capacitor has only one WebView so
-// we swap React trees and rely on a clean DOM reset between mounts
-// (otherwise React's reconciler hits removeChild errors when its
-// expected DOM does not match).
+// Mount Login or App based on whether we have a token.
 const mountForCurrentAuthState = () => {
     let token;
     try {
@@ -42,15 +36,7 @@ const mountForCurrentAuthState = () => {
     } catch {
         token = '';
     }
-    const container = document.getElementById('root');
-    if (container) {
-        while (container.firstChild) container.removeChild(container.firstChild);
-    }
-    if (token) {
-        mountApp();
-    } else {
-        mountLogin();
-    }
+    mountForToken(token);
 };
 
 const bootstrap = async () => {

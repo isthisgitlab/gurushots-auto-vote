@@ -40,6 +40,7 @@ const BUNDLES = [
     { name: 'login', path: 'dist/login-bundle.js', label: 'login (Electron renderer)' },
     { name: 'logs', path: 'dist/logs-bundle.js', label: 'logs (Electron renderer)' },
     { name: 'capacitor', path: 'dist/capacitor-bundle.js', label: 'capacitor (Android WebView)' },
+    { name: 'web', path: 'dist/web-bundle.js', label: 'web (browser tab, pnpm web)' },
     { name: 'headless', path: 'dist/headless-bundle.js', label: 'headless (Android background service)' },
     { name: 'preload', path: 'dist/preload-bundle.js', label: 'preload (Electron sandboxed preload)' },
 ];

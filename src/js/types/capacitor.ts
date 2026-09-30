@@ -50,8 +50,8 @@ export type HeadlessGlobals = typeof globalThis & {
 
 /**
  * `globalThis` as the renderer reads it: the Capacitor runtime's platform
- * probe (absent on Electron), and the flag pages/Capacitor.tsx sets before
- * importing App/Login so neither auto-mounts.
+ * probe (absent on Electron), and the flag pages/Capacitor.tsx and pages/Web.tsx
+ * set before importing App/Login so neither auto-mounts.
  */
 export type RendererGlobals = typeof globalThis & {
     Capacitor?: { isNativePlatform?: () => boolean };

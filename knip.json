@@ -9,6 +9,7 @@
         "src/js/react/pages/App.tsx",
         "src/js/react/pages/Logs.tsx",
         "src/js/react/pages/Capacitor.tsx",
+        "src/js/react/pages/Web.tsx",
         "scripts/*.ts",
         "scripts/afterPack.mts",
         "src/js/types/globals.ts",
