@@ -242,7 +242,7 @@ const defaultOrderKey = (rule: RuleLike): number[] => {
     const count = classConditionCount(conditions);
     return [
         hasTitle ? 1 : 0,
-        (hasTitle ? Math.max(...conditions.modes.map((mode) => TITLE_MODE_SCORE[mode])) : 0) + count,
+        (hasTitle ? Math.min(...conditions.modes.map((mode) => TITLE_MODE_SCORE[mode])) : 0) + count,
         Math.max(0, ...conditions.patterns.map((pattern) => pattern.length)),
         conditions.pics !== null ? 1 : 0,
         hasRuntimeCondition(conditions) ? 1 : 0,

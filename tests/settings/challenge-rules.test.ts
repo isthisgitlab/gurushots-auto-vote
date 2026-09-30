@@ -159,6 +159,16 @@ describe('settings/challengeRules — pure matcher', () => {
             expect(rules.sortRulesByDefaultOrder([withTag, withPics])).toEqual([withPics, withTag]);
         });
 
+        test('a mixed-mode rule sorts by its broadest title match', () => {
+            const exact = { title: 'Photo' };
+            const mixed = {
+                title: 'Photo',
+                titles: ['Photo', 'Hats and More'],
+                titleMatchModes: ['starts', 'exact'],
+            };
+            expect(rules.sortRulesByDefaultOrder([mixed, exact])).toEqual([exact, mixed]);
+        });
+
         test('returns a new array and an empty one for a non-array', () => {
             const list = [{ pics: 2 }, { title: 'a' }];
             const sorted = rules.sortRulesByDefaultOrder(list);

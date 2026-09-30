@@ -112,7 +112,13 @@ const _sanitizeRuleTitleList = (rule: RuleLike): { titles: string[]; modes: stri
     const rawModes = rule?.titleMatchModes;
     const fallback = rule?.match || 'exact';
     if (typeof fallback !== 'string' || !TITLE_MATCH_MODES.includes(fallback)) return null;
-    if (rawModes !== undefined && (!Array.isArray(rawModes) || rawModes.length !== rawTitles.length)) return null;
+    if (
+        rawModes !== undefined &&
+        (!Array.isArray(rawModes) ||
+            rawModes.length !== rawTitles.length ||
+            (Array.isArray(rule?.titles) && rule.titles.length > 0 && rule.titles.length !== rawTitles.length))
+    )
+        return null;
     for (const [index, raw] of rawTitles.entries()) {
         const mode = rawModes === undefined ? fallback : rawModes[index];
         if (typeof mode !== 'string' || !TITLE_MATCH_MODES.includes(mode)) return null;

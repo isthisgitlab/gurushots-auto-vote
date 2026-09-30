@@ -366,6 +366,18 @@ describe('settings facade — title-keyed tag rules', () => {
                 expect(settings.getTitleRules()).toEqual([]);
             });
 
+            test('rejects non-string title entries that would shift per-title modes', () => {
+                expect(
+                    save({
+                        title: 'Hats',
+                        titles: ['Hats', null, 'Photo'],
+                        titleMatchModes: ['exact', 'starts'],
+                        autoJoin: true,
+                    }),
+                ).toBe(false);
+                expect(settings.getTitleRules()).toEqual([]);
+            });
+
             test('the default mode is not persisted, a non-default one is', () => {
                 save({ title: 'a', autoJoin: true }, { title: 'b', match: 'contains', autoJoin: true });
                 const [exact, contains] = settings.getTitleRules();

@@ -250,10 +250,10 @@ function RuleTitleRow({
 }) {
     const { t } = useTranslation();
     return (
-        <div className="flex items-center gap-2">
+        <div className="flex flex-wrap items-center gap-2 sm:flex-nowrap">
             <input
                 type="text"
-                className="input input-sm flex-1"
+                className="input input-sm min-w-32 flex-1"
                 placeholder={t('app.titleTagRuleTitlePlaceholder')}
                 aria-label={`${t('app.titleTagRuleTitle')} ${index + 1}`}
                 value={title}
