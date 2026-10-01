@@ -209,7 +209,7 @@ describe('settings storage — edge cases', () => {
             expect(fs.chmodSync).not.toHaveBeenCalled();
         });
 
-        test('a refused chmod (EPERM) is logged with the fix and the data is still written', () => {
+        test('a refused chmod (EPERM) is logged with what to check and the data is still written', () => {
             const { mod, fs, categoryLogger } = loadStorage();
             fs.existsSync.mockReturnValue(true);
             fs.chmodSync.mockImplementationOnce(() => {
@@ -224,28 +224,76 @@ describe('settings storage — edge cases', () => {
             });
             expect(categoryLogger.warning).toHaveBeenCalledTimes(1);
             expect(categoryLogger.warning).toHaveBeenCalledWith(
-                expect.stringMatching(/settings\.json.*EPERM.*chmod 600/),
+                `Could not restrict ${USER_DATA}/settings.json to owner-only (EPERM); other local users may be able to read it. Make sure the file belongs to your user and is on a disk that supports file permissions (not a FAT, SMB or FUSE mount), then run: chmod 600 "${USER_DATA}/settings.json"`,
             );
         });
 
-        test('a refused chmod without an error code falls back to its message, then to a generic reason', () => {
+        test('repeated refused chmods on the same path warn once but every write still lands', () => {
+            const { mod, fs, categoryLogger } = loadStorage();
+            fs.existsSync.mockReturnValue(true);
+            fs.chmodSync.mockImplementation(() => {
+                throw Object.assign(new Error('operation not permitted'), { code: 'EPERM' });
+            });
+
+            mod.storage.writeRaw('{"n":1}');
+            mod.storage.writeRaw('{"n":2}');
+
+            expect(fs.writeFileSync).toHaveBeenCalledTimes(2);
+            expect(categoryLogger.warning).toHaveBeenCalledTimes(1);
+        });
+
+        test('refused chmods on two different paths warn once each', () => {
             const { mod, fs, categoryLogger } = loadStorage();
             const store = mod.createJsonStore({ fileName: 'metadata.json', prefKey: 'k' });
             fs.existsSync.mockReturnValue(true);
+            fs.chmodSync.mockImplementation(() => {
+                throw Object.assign(new Error('operation not permitted'), { code: 'EPERM' });
+            });
+
+            mod.storage.writeRaw('{}');
+            store.writeRaw('{}');
+            mod.storage.writeRaw('{}');
+            store.writeRaw('{}');
+
+            expect(categoryLogger.warning).toHaveBeenCalledTimes(2);
+            expect(categoryLogger.warning).toHaveBeenNthCalledWith(1, expect.stringContaining('/settings.json'));
+            expect(categoryLogger.warning).toHaveBeenNthCalledWith(2, expect.stringContaining('/metadata.json'));
+        });
+
+        test('a refused chmod whose error has no usable string code reports its message, then a generic reason', () => {
+            const { mod, fs, categoryLogger } = loadStorage();
+            const store = mod.createJsonStore({ fileName: 'metadata.json', prefKey: 'k' });
+            const other = mod.createJsonStore({ fileName: 'other.json', prefKey: 'o' });
+            const third = mod.createJsonStore({ fileName: 'third.json', prefKey: 't' });
+            const fourth = mod.createJsonStore({ fileName: 'fourth.json', prefKey: 'f' });
+            fs.existsSync.mockReturnValue(true);
             fs.chmodSync
                 .mockImplementationOnce(() => {
-                    throw invalid<Error>({ message: 'read-only mount' });
+                    throw new Error('read-only mount');
+                })
+                .mockImplementationOnce(() => {
+                    throw Object.assign(new Error('code is undefined'), { code: undefined });
+                })
+                .mockImplementationOnce(() => {
+                    throw invalid<Error>({ message: 'not an Error instance' });
                 })
                 .mockImplementationOnce(() => {
                     throw invalid<Error>({});
                 });
 
-            store.writeRaw('{"a":1}');
-            store.writeRaw('{"a":2}');
+            store.writeRaw('{}');
+            other.writeRaw('{}');
+            third.writeRaw('{}');
+            fourth.writeRaw('{}');
 
-            expect(fs.writeFileSync).toHaveBeenCalledTimes(2);
+            expect(fs.writeFileSync).toHaveBeenCalledTimes(4);
             expect(categoryLogger.warning).toHaveBeenNthCalledWith(1, expect.stringContaining('(read-only mount)'));
-            expect(categoryLogger.warning).toHaveBeenNthCalledWith(2, expect.stringContaining('(unknown error)'));
+            expect(categoryLogger.warning).toHaveBeenNthCalledWith(2, expect.stringContaining('(code is undefined)'));
+            expect(categoryLogger.warning).toHaveBeenNthCalledWith(
+                3,
+                expect.stringContaining('(not an Error instance)'),
+            );
+            expect(categoryLogger.warning).toHaveBeenNthCalledWith(4, expect.stringContaining('(unknown error)'));
         });
 
         test('createJsonStore writeRaw creates the directory when missing', () => {

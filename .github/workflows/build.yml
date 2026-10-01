@@ -531,6 +531,8 @@ jobs:
             - name: Attest build provenance
               uses: actions/attest-build-provenance@4d101475d8b20a2381f78447822ac1eab6504dd8 # v4.2.2
               with:
+                  # Keep these binary globs in sync with create-release's files: list
+                  # (which also carries the updater *.yml manifests, deliberately not attested).
                   subject-path: |
                       artifacts/${{ needs.version-bump.outputs.is-beta == 'true' && 'develop-' || '' }}mac-builds/GuruShotsAutoVote-v*.dmg
                       artifacts/${{ needs.version-bump.outputs.is-beta == 'true' && 'develop-' || '' }}mac-builds/GuruShotsAutoVote-v*.app.zip
@@ -594,7 +596,7 @@ jobs:
                   echo "RELEASE_NAME=v$VERSION" >> $GITHUB_OUTPUT
 
             - name: Download all build artifacts
-              uses: actions/download-artifact@v8
+              uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
               with:
                   path: artifacts
 
@@ -649,10 +651,12 @@ jobs:
                       - Commit: ${{ github.sha }}
                       - Version: ${{ steps.get_version.outputs.VERSION }}
                       - Version Bump Type: ${{ needs.version-bump.outputs.bump-type }}
-                      - Verify a download (GitHub CLI): `gh attestation verify <file> --repo isthisgitlab/gurushots-auto-vote --signer-workflow isthisgitlab/gurushots-auto-vote/.github/workflows/build.yml`
+                      - Verify a binary or APK (GitHub CLI, signed in): `gh attestation verify <file> --repo isthisgitlab/gurushots-auto-vote --signer-workflow isthisgitlab/gurushots-auto-vote/.github/workflows/build.yml`
                       ${{ steps.release_vars.outputs.BUILD_DATE }}
                   draft: false
                   prerelease: ${{ needs.version-bump.outputs.is-beta == 'true' }}
+                  # Keep the binary globs in sync with the attest job's subject-path list; the
+                  # updater *.yml manifests below are deliberately not attested.
                   files: |
                       artifacts/${{ steps.release_vars.outputs.ARTIFACT_PREFIX }}mac-builds/GuruShotsAutoVote-v*.dmg
                       artifacts/${{ steps.release_vars.outputs.ARTIFACT_PREFIX }}mac-builds/GuruShotsAutoVote-v*.app.zip

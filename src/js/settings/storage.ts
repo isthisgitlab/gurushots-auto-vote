@@ -62,15 +62,20 @@ const getCapacitorPreferences = (): PreferencesPlugin => {
     return plugin;
 };
 
+// Paths whose refused chmod has been logged, so a file that stays unrestrictable
+// warns once per process rather than on every write.
+const warnedUnrestrictable = new Set<string>();
+
 /**
  * Write a userData file owner-only (0o600), creating its directory 0o700.
  * The mode passed to writeFileSync only applies when the file is created, so
- * an existing file is chmod'ed to 0o600 before the new content lands in it —
- * the data is never written into a file other local users can read. A chmod
- * the filesystem refuses (a file owned by another uid, a vfat/SMB/FUSE mount)
- * is logged with the fix and does not fail the write: the data still persists.
- * The files can carry the auth token. The file is rewritten in place rather
- * than replaced by a rename, because settingsWatcher watches its inode.
+ * an existing file is chmod'ed to 0o600 before the new content lands in it:
+ * when that chmod succeeds the data is never written into a file other local
+ * users can read. A chmod the filesystem refuses (a file owned by another uid,
+ * a vfat/SMB/FUSE mount) is logged once per path with what to check and does
+ * not fail the write: the data still persists. The files can carry the auth
+ * token. The file is rewritten in place rather than replaced by a rename,
+ * because settingsWatcher watches its inode.
  */
 const writeOwnerOnly = (filePath: string, data: string) => {
     const dir = path.dirname(filePath);
@@ -81,12 +86,18 @@ const writeOwnerOnly = (filePath: string, data: string) => {
         try {
             fs.chmodSync(filePath, 0o600);
         } catch (err) {
-            const reason = err instanceof Error && 'code' in err ? String(err.code) : errorMessage(err);
-            logger
-                .withCategory('settings')
-                .warning(
-                    `Could not restrict ${filePath} to owner-only (${reason ?? 'unknown error'}); other local users may be able to read it. Run: chmod 600 "${filePath}"`,
-                );
+            if (!warnedUnrestrictable.has(filePath)) {
+                warnedUnrestrictable.add(filePath);
+                const reason =
+                    err instanceof Error && 'code' in err && typeof err.code === 'string'
+                        ? err.code
+                        : (errorMessage(err) ?? 'unknown error');
+                logger
+                    .withCategory('settings')
+                    .warning(
+                        `Could not restrict ${filePath} to owner-only (${reason}); other local users may be able to read it. Make sure the file belongs to your user and is on a disk that supports file permissions (not a FAT, SMB or FUSE mount), then run: chmod 600 "${filePath}"`,
+                    );
+            }
         }
     }
     fs.writeFileSync(filePath, data, { encoding: 'utf8', mode: 0o600 });

@@ -83,15 +83,15 @@ describePosix('userData JSON writers leave files owner-only', () => {
         fs.mkdirSync(userData);
         const file = path.join(userData, 'settings.json');
         fs.writeFileSync(file, '{}');
-        const realChmod = fs.chmodSync;
-        const chmodSpy = jest.spyOn(fs, 'chmodSync').mockImplementation((p, mode) => {
-            if (p === file) throw Object.assign(new Error('operation not permitted'), { code: 'EPERM' });
-            realChmod(p, mode);
+        const modeBefore = modeOf(file);
+        const chmodSpy = jest.spyOn(fs, 'chmodSync').mockImplementation(() => {
+            throw Object.assign(new Error('operation not permitted'), { code: 'EPERM' });
         });
 
         expect(() => storage.writeRaw('{"token":"t"}')).not.toThrow();
 
         expect(chmodSpy).toHaveBeenCalledWith(file, 0o600);
+        expect(modeOf(file)).toBe(modeBefore);
         expect(fs.readFileSync(file, 'utf8')).toBe('{"token":"t"}');
     });
 });
