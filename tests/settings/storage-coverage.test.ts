@@ -257,15 +257,20 @@ describe('settings storage — edge cases', () => {
                 .mockImplementationOnce(refuse)
                 .mockImplementationOnce(refuse);
 
-            const warningsAfterEachWrite = [0, 1, 2, 3, 4].map((i) => {
+            const logsAfterEachWrite = [0, 1, 2, 3, 4].map((i) => {
                 mod.storage.writeRaw(`{"n":${i}}`);
-                return categoryLogger.warning.mock.calls.length;
+                return [categoryLogger.warning.mock.calls.length, categoryLogger.info.mock.calls.length];
             });
 
             expect(fs.chmodSync).toHaveBeenCalledTimes(5);
             expect(fs.writeFileSync).toHaveBeenCalledTimes(5);
-            expect(warningsAfterEachWrite).toEqual([1, 1, 1, 2, 2]);
-            expect(categoryLogger.info).toHaveBeenCalledTimes(1);
+            expect(logsAfterEachWrite).toEqual([
+                [1, 0],
+                [1, 0],
+                [1, 1],
+                [2, 1],
+                [2, 1],
+            ]);
             expect(categoryLogger.info).toHaveBeenCalledWith(`Restricted ${USER_DATA}/settings.json to owner-only`);
         });
 
