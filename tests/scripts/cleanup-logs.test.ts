@@ -1,5 +1,5 @@
 /**
- * Tests for scripts/cleanup-logs.ts — deletes legacy api-debug-* files from
+ * Tests for scripts/cleanup-logs.ts — deletes api-debug-* files from
  * the userData logs dir. Hermetic: runtime is mocked to a temp dir, and all
  * fs work happens under os.tmpdir(); the real logs/ is never touched.
  */
@@ -58,6 +58,6 @@ describe('cleanup-logs', () => {
         cleanupLogs();
 
         expect(fs.readdirSync(logsDir)).toEqual(['app.log']);
-        expect(logSpy).toHaveBeenCalledWith(`Deleted 2 legacy api-debug-* file(s) (0.00 MB) from ${logsDir}.`);
+        expect(logSpy).toHaveBeenCalledWith(`Deleted 2 api-debug-* file(s) (0.00 MB) from ${logsDir}.`);
     });
 });

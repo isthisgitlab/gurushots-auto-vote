@@ -190,7 +190,7 @@ const buildScoredCandidates = (
     // through the filters and the scoring rather than recomputing.
     //   wordStems  — word-level, for every match (must / should / keyword score)
     //   wholeStems — one stem per whole label, for the letter filter ONLY
-    // Wiring a matcher to wholeStems would reintroduce the "sea life" bug; wiring
+    // Wiring a matcher to wholeStems would make multi-word labels ("sea life") match as one unit; wiring
     // the letter filter to wordStems would let "Ocean Life" satisfy "Begins With L"
     // on its second word. They are not interchangeable — see their definitions.
     const withStems = allowed.map((photo) => ({

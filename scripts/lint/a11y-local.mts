@@ -5,8 +5,8 @@
  * `label-has-control` — every `<label>` names its control (`htmlFor`) or wraps
  * it. jsx-a11y's label-has-associated-control skips a label whose only text is
  * an expression, and every label in this translated UI reads `{t('…')}`, so an
- * orphan `<label>` tied to no control would otherwise pass. This is the old
- * jsx-a11y label-has-for "nesting OR id" check.
+ * orphan `<label>` tied to no control would otherwise pass. It is jsx-a11y's
+ * label-has-for "nesting OR id" check.
  *
  * Loaded through `jsPlugins` in .oxlintrc.json; the rule API is ESLint's.
  */

@@ -983,7 +983,7 @@ describe('voteOnNewEntry — gate, arm, record', () => {
         expect(tracker.set).not.toHaveBeenCalled();
         expect(tracker.store.get('101')).toEqual(['a', 'b']);
 
-        // Next poll returns the same entries as before — nothing new.
+        // The next poll returns the same entries — nothing new.
         await runVotingPass('tok', null, deps(makeApi([withEntries(['a', 'b'])]), { entryTracker: tracker }));
         expect(lastDecisionOptions()).toEqual({ hasNewEntry: false });
     });

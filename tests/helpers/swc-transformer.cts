@@ -9,7 +9,7 @@
  * at the top level — `_export(exports, { get a() {…} })` for several exports and
  * `Object.defineProperty(exports, "a", { get … })` for one — get an
  * `istanbul ignore next`, which leaves the `__esModule` marker and all real
- * code instrumented as before.
+ * code instrumented.
  */
 // CommonJS TypeScript that Node strips natively: Jest loads a transformer by
 // path before any transform runs, so this file cannot rely on one.

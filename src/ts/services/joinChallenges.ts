@@ -117,7 +117,7 @@ const resolveJoinSetting = (key: string, challenge: Challenge): unknown => {
     // Pass the whole candidate, never just its title: a rule may be keyed on the
     // challenge's own tags, type, photo count or runtime, and an un-joined
     // candidate carries them. Optional-chained like every other per-challenge
-    // settings read here: an older persisted facade (or a partial stub in a
+    // settings read here: a partial settings facade (e.g. a stub in a
     // test) must degrade to "no rule", never throw mid-pass.
     const fromRules = settings.resolveRuleSetting?.(key, challenge);
     if (fromRules) return fromRules.value;
@@ -332,7 +332,7 @@ const pickJoinPhoto = async (challenge: Challenge, token: string, deps: JoinDeps
     // Same list the fill path uses; resolved here because join does its own
     // fetch/score/pick rather than going through runFillAttempt.
     // Optional-chained like every other per-challenge settings read here: a
-    // partial settings stub (or an older persisted facade) must degrade to "no
+    // partial settings stub (or facade) must degrade to "no
     // list", never throw mid-join.
     const ignoreWords = settings.getEffectiveIgnoreTitleWords?.(challenge) ?? null;
 

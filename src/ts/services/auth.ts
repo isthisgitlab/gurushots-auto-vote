@@ -57,7 +57,7 @@ const requireAuthToken = (
  *
  * Success requires an actual token: a bare `success: true` / `status:
  * 'success'` without a token still resolves to a failure (there is nothing to
- * persist), matching the prior handler behaviour.
+ * persist).
  *
  * @param response - Raw response from apiStrategy.authenticate.
  */

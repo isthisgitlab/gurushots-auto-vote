@@ -102,7 +102,7 @@ describe('readChallengeTheme', () => {
         });
     });
 
-    describe('unconfirmed — no opinion, the title is searched as before', () => {
+    describe('unconfirmed — no opinion, the title is searched unchanged', () => {
         test('the description quoting the title back confirms nothing', () => {
             const theme = readChallengeTheme({
                 title: 'Travel Wonders',

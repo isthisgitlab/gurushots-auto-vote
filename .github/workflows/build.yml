@@ -298,7 +298,7 @@ jobs:
                       ACTUAL=$(find "$CHECK/$(basename "$APP")" -type l | wc -l | tr -d ' ')
                       rm -rf "$CHECK"
                       if [ "$ACTUAL" -ne "$EXPECTED" ]; then
-                        echo "::error::.app.zip kept $ACTUAL of $EXPECTED symlinks — archiver regression"
+                        echo "::error::.app.zip kept $ACTUAL of $EXPECTED symlinks — the archiver dropped some"
                         exit 1
                       fi
                     fi

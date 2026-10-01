@@ -2542,7 +2542,7 @@ describe('resolveScheduleTarget — target entry count for the time remaining', 
         expect(resolveScheduleTarget(DEFAULT_SCHEDULE, 300, 2)).toBe(2);
     });
 
-    test('2-image challenge no longer fills at the Image-2 time (the reported bug)', () => {
+    test('2-image challenge does not fill at the Image-2 time', () => {
         // T-25m: the (clamped) Image-2 row @ 30m does not apply. End-aligned,
         // the 2nd photo follows the Image-4 row @ 10m instead.
         expect(resolveScheduleTarget(DEFAULT_SCHEDULE, 1500, 2)).toBe(0);
@@ -2555,7 +2555,7 @@ describe('resolveScheduleTarget — target entry count for the time remaining', 
         expect(resolveScheduleTarget(DEFAULT_SCHEDULE, 1100, 3)).toBe(2);
         // T-~8m: the remapped Image-4 row (600s → count 3) applies too.
         expect(resolveScheduleTarget(DEFAULT_SCHEDULE, 500, 3)).toBe(3);
-        // Above the shifted span nothing is due yet (old Image-2 row @ 30m is gone).
+        // Above the shifted span nothing is due yet (the Image-2 row @ 30m does not apply).
         expect(resolveScheduleTarget(DEFAULT_SCHEDULE, 1500, 3)).toBe(0);
     });
 
@@ -2891,7 +2891,7 @@ describe('pre-submit live re-check (refreshChallengeState) — stale pass snapsh
         expect(challenge.member!.ranking!.entries![0].boosted).toBe(true);
     });
 
-    test('helper without the dep wired → unavailable (legacy callers unchanged)', async () => {
+    test('helper without the dep wired → unavailable', async () => {
         const challenge = makeChallenge();
         const result = await refreshChallengeState(challenge, 'tok', { logger: makeLogger() }, 'autoFill');
         expect(result).toBe('unavailable');
@@ -3434,7 +3434,7 @@ describe('photo-stats enrichment in the fill pipeline', () => {
         expect(submitToChallenge).toHaveBeenCalledWith('c1', ['soccer'], 'tok');
     });
 
-    test('a fill with no getImageData injected behaves exactly as before', async () => {
+    test('a fill with no getImageData injected ranks by library data alone', async () => {
         const getEligiblePhotos = jest
             .fn()
             .mockResolvedValue([libraryPhoto('soccer', 1203, 9000), libraryPhoto('portfolio', 400, 1000)]);

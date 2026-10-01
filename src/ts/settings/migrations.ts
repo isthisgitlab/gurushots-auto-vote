@@ -414,7 +414,7 @@ const _warnAboutSpendingFallThrough = (titleRules: TitleRule[], profiles: Record
             );
             if (keys.length === 0) continue;
             log.warning(
-                `Challenge rules: "${ruleLogLabel(lower, lower.title)}" may now also turn ${keys.join('/')} on for challenges matched by "${ruleLogLabel(higher, higher.title)}" — review the rule order`,
+                `Challenge rules: "${ruleLogLabel(lower, lower.title)}" can also turn ${keys.join('/')} on for challenges matched by "${ruleLogLabel(higher, higher.title)}" — review the rule order`,
                 null,
             );
         }

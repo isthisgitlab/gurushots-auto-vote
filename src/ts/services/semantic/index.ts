@@ -49,8 +49,8 @@
  *
  * So alongside the max, each photo carries `support`: how many of its labels
  * clear the SAME floor, capped at SEMANTIC_SUPPORT_CAP. It is a COUNT of
- * on-theme labels, never an average over all of them - averaging is the shape
- * that measured how generic a photo was, and nothing here reintroduces it. The
+ * on-theme labels, never an average over all of them - an average
+ * measures how generic a photo is, not how on-theme it is. The
  * picker ranks it strictly below the max (see tier 3 in photoPicker/tiers.ts), so it
  * only ever orders photos the max already agreed are on theme.
  *

@@ -915,7 +915,7 @@ export const app = {
     finalWindowDurationDesc:
         'How long the final window before a challenge closes lasts. The Final Window Exposure rule applies inside this window. Defaults to 1 hour.',
     finalWindowDurationHelp:
-        'The length of the final window measured back from the challenge close time. Set to 1 hour to reproduce the old fixed last-hour behaviour, or shorten/lengthen it to change when the Final Window Exposure trigger and target take over.',
+        'The length of the final window measured back from the challenge close time. Set to 1 hour for a fixed last hour, or shorten/lengthen it to change when the Final Window Exposure trigger and target take over.',
     finalWindowExposure: 'Final Window Exposure',
     finalWindowExposureDesc:
         'The exposure level that triggers voting during the final window (only when Use Final Window Exposure is on). Must be at or below your Exposure setting.',

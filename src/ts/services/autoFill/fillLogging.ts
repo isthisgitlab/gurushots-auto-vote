@@ -129,7 +129,7 @@ const makeFallbackLogger = (
 /**
  * Explain a pick that the popularity tiers decided rather than the theme.
  *
- * TWO CASES, and conflating them was a real bug. Popularity decides whenever
+ * TWO CASES, which must not be conflated. Popularity decides whenever
  * the theme tiers TIE — which happens both when nothing matched (every
  * candidate at zero) and when everything matched EQUALLY WELL. The second is
  * not a degenerate case: the fill resolves the challenge to one tag and

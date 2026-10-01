@@ -377,7 +377,7 @@ describe('voteBeforeFinalWindow pre-final-window top-up', () => {
         expect(result.voteReason).toContain('70% >= 60%');
     });
 
-    test('feature OFF: the lower final-window trigger applies as before (no top-up)', () => {
+    test('feature OFF: the lower final-window trigger applies (no top-up)', () => {
         const now = Math.floor(Date.now() / 1000);
         mockSettings({ voteBeforeFinalWindow: false });
         const result = VotingLogic.evaluateVotingDecision(challengeClosingIn(3000, 70), now);

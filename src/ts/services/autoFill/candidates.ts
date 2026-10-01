@@ -130,7 +130,7 @@ const describeTheme = (theme: ChallengeTheme, challenge: Challenge): string => {
             ? 'reads as an open theme, so its title and description are not matched against your photos'
             : theme.kind === 'subject'
               ? `has the subject ${theme.subjects.map((s) => `"${s}"`).join(', ')} (its description repeats it)`
-              : 'has no subject its description confirms, so its title is read as before';
+              : 'has no subject its description confirms, so its title is searched head-noun first';
     const description = String(challenge.welcome_message ?? '')
         .replace(/<[^>]*>/g, ' ')
         .replace(/\s+/g, ' ')

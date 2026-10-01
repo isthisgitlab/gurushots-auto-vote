@@ -114,9 +114,9 @@ const stemToken = (t: string): string => stem(t.toLowerCase());
  * the current stemmer and the shipped table's keys.
  *
  * The table is keyed by stems produced when the intermediate was generated, and
- * that revision of stem() stripped '-es' unconditionally. The current stemmer
- * only does so after a sibilant, correctly leaving the '-e' elsewhere — so a
- * few stems now spell differently than their key: "buses" keys as `bus` but
+ * the stemmer that generated it stripped '-es' unconditionally. stem() only
+ * does so after a sibilant, correctly leaving the '-e' elsewhere — so a few
+ * stems spell differently than their key: "buses" keys as `bus` but
  * stems to `buse`, "clothes" keys as `cloth` but stems to `clothe`. Those
  * lookups would silently return no vector, i.e. the semantic tier would go dark
  * for exactly those themes.

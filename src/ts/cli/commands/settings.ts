@@ -426,7 +426,7 @@ Per-challenge overrides:
   override the challenge inherits the global default. Only settings that
   support per-challenge overrides accept the flag.
   set-setting on a challenge setting WITHOUT --challenge sets the global
-  default instead, and says so — it no longer writes a key nothing reads.
+  default instead, and says so.
   Examples:
     set-setting exposure 80 --challenge=12345
     get-setting exposure --challenge=12345
@@ -468,12 +468,12 @@ Time settings (stored in SECONDS — the GUI enters them as hours+minutes):
   turboTime            - Seconds before close to apply turbo (default: 7200 = 2h)
   emergencyFill        - Emergency Submit: seconds before close to submit photos to
                          empty slots as a last resort
-                         (default: 300 = 5 min; 0 = off). NOTE: this used to be minutes.
+                         (default: 300 = 5 min; 0 = off).
 
 Scheduled voting (vote exposure up to 100% at chosen times — per-challenge, set
 with set-global-default or set-setting --challenge=<id>; every entry opens its
-own voting window, all OR'd; older single values migrate to arrays
-automatically):
+own voting window, all OR'd; a single stored value is converted to an
+array on load):
   useScheduledFill           - Master switch (default: false). Inert until a
                                time below is set; never applies to flash or
                                boost-only challenges.
@@ -523,16 +523,15 @@ few votes. Same per-challenge scoping and JSON value format):
     set-global-default votingPauseTime '["01:30"]'
     set-global-default votingPauseDurationMinutes 270
 
-Auto-Submit schedule (JSON array of {count, seconds} rows; replaces the old
-autoFillIntervalMinutes — existing values are migrated automatically):
+Auto-Submit schedule (JSON array of {count, seconds} rows):
   autoFillSchedule     - Each row: have at least <count> entries once <seconds>
                          remain before close. Counts 2-4 (max 3 rows, unique) —
                          challenges allow at most 4 images and image 1 always
                          exists. Omit a count to never schedule that image; an
                          empty array [] means auto-submit never submits.
                          Default: [{"count":2,"seconds":1800},{"count":3,"seconds":1200},{"count":4,"seconds":600}]
-  Set it with set-global-default (set-setting without --challenge now redirects
-  here rather than writing a key the scheduler never reads):
+  Set it with set-global-default (set-setting without --challenge redirects
+  here, since the scheduler reads only the global default):
     set-global-default autoFillSchedule '[{"count":2,"seconds":172800},{"count":3,"seconds":10800},{"count":4,"seconds":900}]'
   Per-challenge override (also validated):
     set-setting autoFillSchedule '[{"count":2,"seconds":172800}]' --challenge=12345

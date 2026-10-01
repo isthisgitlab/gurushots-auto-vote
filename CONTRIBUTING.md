@@ -74,7 +74,7 @@ src/
 scripts/              # Development and build utilities
 ├── build-cli.ts          # Bundle CLI and inject into Node SEA binary
 ├── build-react.ts        # esbuild orchestration for the React renderer
-├── cleanup-logs.ts       # Delete legacy api-debug-* log files
+├── cleanup-logs.ts       # Delete api-debug-* log files from the userData logs dir
 ├── readme-version.ts     # Sync (or verify with --check) README/README.lv version strings
 └── settings-cli.ts       # Settings facade CLI used by the settings:* pnpm scripts
 ```

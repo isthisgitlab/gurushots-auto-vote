@@ -77,10 +77,10 @@ import type { PickerPhoto, ScoredCandidate, SemanticScoreMap, ThemeTiers } from 
  * this constant can never quietly drift out of the valid range.
  *
  * CALIBRATED FOR MAX-POOLING. The value is only meaningful for the pooling the
- * validator measured it under, and services/semantic/index.ts now scores each
+ * validator measured it under, and services/semantic/index.ts scores each
  * label independently and keeps the best rather than averaging the whole label
- * bag. Both distributions shifted up when that changed, so this moved 43 -> 46.
- * If the pooling changes again, re-run `pnpm verify:lexicon` and move this with
+ * bag, which puts both distributions higher than averaging would.
+ * If the pooling changes, re-run `pnpm verify:lexicon` and move this with
  * it — never one without the other.
  */
 const SEMANTIC_MATCH_FLOOR = 46;
@@ -127,9 +127,8 @@ const NO_SEMANTIC = Object.freeze({ semantic: 0, semanticSupport: 0 });
  * p25(related) against the real lexicon.
  *
  * Two accepted value shapes. The scorer hands over a {score, support} record; a
- * bare number is the shape opts.semanticScores was documented with before the
- * support tier existed, and is still what callers and tests that build the map
- * by hand pass — it stays valid and simply contributes no support. Normalising
+ * bare number is the shorter shape that callers and tests building the map by
+ * hand pass — it stays valid and simply contributes no support. Normalising
  * here is what keeps every caller in between shape-agnostic: the map is passed
  * through autoFill and joinChallenges untouched.
  */

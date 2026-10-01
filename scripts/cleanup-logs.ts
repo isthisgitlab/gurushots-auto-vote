@@ -7,7 +7,7 @@ import path from 'node:path';
 import * as runtime from '../src/ts/runtime';
 import { runIfMain } from './lib/run-if-main';
 
-// Deletes the legacy api-debug-* files from `logsDir` (defaults to the
+// Deletes the api-debug-* files from `logsDir` (defaults to the
 // userData logs dir). Exported so tests can point it at a temp dir; the
 // deletion runs only when the file is executed directly.
 function cleanupLogs(logsDir = path.join(runtime.getAppUserDataPath(), 'logs')) {
@@ -26,9 +26,7 @@ function cleanupLogs(logsDir = path.join(runtime.getAppUserDataPath(), 'logs')) 
         count++;
     }
 
-    console.log(
-        `Deleted ${count} legacy api-debug-* file(s) (${(bytes / 1024 / 1024).toFixed(2)} MB) from ${logsDir}.`,
-    );
+    console.log(`Deleted ${count} api-debug-* file(s) (${(bytes / 1024 / 1024).toFixed(2)} MB) from ${logsDir}.`);
 }
 
 runIfMain(require.main, module, cleanupLogs);

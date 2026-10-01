@@ -28,7 +28,7 @@ Automated voting for GuruShots challenges. The same voting engine ships three wa
 
 If you hit a rate-limit error: stop every instance, wait 5–10 minutes, then start a single one.
 
-The desktop app now enforces this for GUI instances: launching it a second time focuses the already-running window instead of starting a new copy. This does not cover running the CLI, the web UI or the Android app alongside the GUI — the warning above still applies to those combinations.
+The desktop app enforces this for GUI instances: launching it a second time focuses the already-running window instead of starting a new copy. It does not detect the CLI, the web UI or the Android app running alongside the GUI — the warning above applies to those combinations.
 
 ## 🚀 Features
 
@@ -90,7 +90,7 @@ The Android build is a Capacitor wrapper around the same React UI, plus a Kotlin
 
 #### 🪶 Lite builds (no image model)
 
-Every download above also comes as a **lite** build without the image model and its runtime: the macOS DMG shrinks from ~310 MB to ~130 MB and the macOS CLI from ~375 MB to ~140 MB. Everything else works the same — auto-submit just skips the [visual check](docs/usage.md#auto-submit-missing-entries) and keeps its tag-based ranking. A lite GUI or Android install is only offered lite updates (the lite desktop app skips pre-releases).
+Every download above also comes as a **lite** build without the image model and its runtime: the macOS DMG shrinks from ~310 MB to ~130 MB and the macOS CLI from ~375 MB to ~140 MB. Everything else works the same — auto-submit skips the [visual check](docs/usage.md#auto-submit-missing-entries) and ranks photos without it. A lite GUI or Android install is only offered lite updates (the lite desktop app skips pre-releases).
 
 | Platform                     | Download                                                                                                                                                                                       |
 | ---------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |

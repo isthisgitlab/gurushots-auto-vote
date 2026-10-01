@@ -107,7 +107,7 @@ class BaseMiddleware {
             };
         }
         // Forward the list even on a non-error failure (cancelled / inactive
-        // filtered challenge) so the contract matches main.js; consumers still
+        // filtered challenge); consumers still
         // guard with Array.isArray and fall back to fetching when it's absent.
         return { success: false, error: result?.error || 'Voting cycle failed', challenges: result?.challenges };
     }

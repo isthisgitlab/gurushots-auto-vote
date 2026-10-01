@@ -204,7 +204,7 @@ describe('fetchCandidatesForChallenge — tag resolution', () => {
         );
         expect(category.info).toHaveBeenCalledWith(
             expect.stringContaining(
-                'has no subject its description confirms, so its title is read as before. Description: ""',
+                'has no subject its description confirms, so its title is searched head-noun first. Description: ""',
             ),
             null,
         );

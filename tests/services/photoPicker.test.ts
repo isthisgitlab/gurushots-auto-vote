@@ -1300,7 +1300,7 @@ describe('photoPicker', () => {
         });
     });
 
-    describe('theme matching — Farm Life / Sea Life regression', () => {
+    describe('theme matching — Farm Life / Sea Life', () => {
         const farmLife = { title: 'The Farm Life', url: 'the-farm-life' };
 
         test('the abstract head-noun "life" is not a search term or a keyword', () => {
@@ -1323,7 +1323,7 @@ describe('photoPicker', () => {
             expect(labelWordStems({})).toEqual([]);
         });
 
-        test('a Sea Life photo no longer scores as a match for a farm challenge', () => {
+        test('a Sea Life photo does not score as a match for a farm challenge', () => {
             const keywords = buildChallengeKeywords(farmLife);
             expect(scorePhoto({ labels: ['Sea Life', 'Underwater', 'Fish'] }, keywords)).toBe(0);
         });
@@ -1597,7 +1597,7 @@ describe('photoPicker', () => {
     // ~2k votes beats photos with 20+ badges and 100k+ votes. Mirrors the
     // Farm-Life/Sea-Life block above: dropping the enrichment or changing the
     // tier order fails this loudly.
-    describe('"Your Legacy" regression — popularity fallback on the real payload shape', () => {
+    describe('"Your Legacy" — popularity fallback on the real payload shape', () => {
         const challenge = { title: 'Your Legacy', url: 'your-legacy' };
         const soccerLabels = [
             'People',

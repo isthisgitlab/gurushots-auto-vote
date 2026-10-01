@@ -134,7 +134,7 @@ const _runVotingRules = (
     const withinFinalWindow = isWithinFinalWindow(challenge.close_time, now, finalWindowSec);
     // Top-up window straddling the final-window boundary:
     // [close-finalWindowSec-lead, close-finalWindowSec+lead]. Only meaningful when
-    // both the final-window feature and this opt-in are on (it exists to fix the
+    // both the final-window feature and this opt-in are on (it exists to cover the
     // final-window rule's low-trigger blind spot).
     const timeUntilEnd = challenge.close_time - now;
     const preFinalWindowLeadSec = voteBeforeFinalWindowLeadMin * 60;

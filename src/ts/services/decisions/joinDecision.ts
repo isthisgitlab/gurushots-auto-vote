@@ -16,8 +16,7 @@ const MAX_REACHABLE_PERCENT_ELAPSED = 99;
  * wins whenever it is set, because it is the more specific instruction: it
  * names a point in the challenge's own life, while the hours window names a
  * distance from the end that means different things for a 2h flash and a 515h
- * exhibition. With percent off, the hours window applies unchanged, so every
- * pre-existing configuration keeps its exact behavior.
+ * exhibition. With percent off, the hours window applies on its own.
  *
  * @param joinWithinSec seconds before close_time to start joining (0 = off)
  * @param percentElapsed percent of the challenge's lifetime that must have run (0 = off)

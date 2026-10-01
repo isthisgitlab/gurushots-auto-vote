@@ -213,7 +213,7 @@ const warnIfLegacyDevDir = (userDataPath: string) => {
             logger
                 .withCategory('settings')
                 .warning(
-                    `Legacy dev settings found at ${legacy}; settings now live at ${userDataPath} — move settings.json there if your values look reset`,
+                    `Dev settings found at ${legacy}, but settings are read from ${userDataPath} — move settings.json there if your values look reset`,
                 );
         }
     } catch {

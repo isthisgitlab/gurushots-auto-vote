@@ -91,8 +91,8 @@ Domain terms used throughout, in reader's terms:
 - Magic constants: final-window width defaults to 3600 s — the `finalWindowDuration` setting's default
   (configurable 60 s … 30 d); key-unlock boost default window = 900 s when the setting is
   unusable (explicit `0` still = never).
-- Vote submission votes over a **Fisher-Yates-shuffled, de-duplicated** pool (structural termination — the
-  older rejection-sampling could loop forever on duplicate ids) and never posts an empty ballot
+- Vote submission votes over a **Fisher-Yates-shuffled, de-duplicated** pool (structural termination — rejection
+  sampling could loop forever on duplicate ids) and never posts an empty ballot
   (`api/voting.ts` — around L61, L160).
 - **≤1 boost and ≤1 turbo per challenge, on different entries** — enforced by `pickEntryAvoidingConflict()`
   (`services/decisions/entryPick.ts` — around L24) plus a `reflectEntryFlag` marker. Entry-pick logic lives in
@@ -168,7 +168,7 @@ Domain terms used throughout, in reader's terms:
   (exact 3 > starts 2 > contains 1, +1 per class condition, then the longer pattern — the specificity ranking title rules were written against), then title-less rules
   by condition count, then photo count > runtime > type > tag — so "4 photos + 7 days" > "4 photos" >
   "7 days". The user can reorder freely in the editor or reset to this order; saving keeps the order given.
-  The one-time `_challengeRulesOrderedV1` migration applies this order to saved rules and appends the former
+  The one-time `_challengeRulesOrderedV1` migration applies this order to saved rules and appends the saved
   `categoryRules` below them; because the cascade lets a lower rule fill keys a higher one leaves unset, it
   logs a warning for every possibly-overlapping pair where that could newly switch `autoJoin`/`autoFill` on.
   Rules de-duplicate on the whole condition (last wins, at the first one's position), so `abc`/exact and
@@ -266,7 +266,7 @@ repeated six times is one that gets forgotten at one of them.
   `get_photos_private?search=` matches a library tag **EXACTLY** (`staircase` → 23 photos, `stair` → 0,
   `stairs` → 0), while `search_autocomplete` matches a **SUBSTRING** of a tag (`stair` → `["staircase"]`,
   `case` → `["staircase"]`, and `stairs` → `[]` because no tag _contains_ it).
-- Consequence, and the bug this fixes: a "Stairs" challenge stems to `stair`, the exact search misses, and
+- Consequence: a "Stairs" challenge stems to `stair`, the exact search misses, and
   auto-fill falls back to an unfiltered library walk ranked by popularity — an off-theme submission with no
   explanation. `services/tagResolver.ts` runs the miss path's terms through autocomplete to recover the real
   tag. **It only runs after the exact search has already failed**, so a fill that works today pays nothing.
@@ -299,7 +299,7 @@ repeated six times is one that gets forgotten at one of them.
   title only, **never `welcome_message`** — because body prose ("made of wood or stone, with people on them")
   drags the pooled theme off its own subject: same challenge, same tag, 0.94 → 0.25.
 - It **never breaks a fill**: any failure (missing asset, no theme text, no in-vocab labels) resolves to
-  `null` and the caller ranks lexically as before. `buildThemeKeywords()` returning `[]` — every title word
+  `null` and the caller ranks lexically. `buildThemeKeywords()` returning `[]` — every title word
   was boilerplate or contest cadence, e.g. "Guru of The Week" — is that "no theme text" case, on purpose.
 - `SEMANTIC_MATCH_FLOOR = 46` (`services/photoPicker/tiers.ts`) is **build-gated by
   `scripts/validate-lexicon.ts`** (a statistical gate: `p99(unrelated) < FLOOR < p25(related)`), **not

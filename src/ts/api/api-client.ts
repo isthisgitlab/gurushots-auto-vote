@@ -72,7 +72,7 @@ const getCapacitorHttpAdapter = (): AxiosAdapter => {
             readTimeout: config.timeout,
         });
         // Throwing here surfaces as a rejection from this async adapter, so a
-        // 429/5xx on the foreground path now reaches the retry layer instead
+        // 429/5xx on the foreground path reaches the retry layer instead
         // of being mistaken for a successful response.
         return finalizeAdapterResponse({
             data: response.data as unknown,

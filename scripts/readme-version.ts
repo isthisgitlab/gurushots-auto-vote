@@ -36,7 +36,9 @@ const dl = `https://github.com/isthisgitlab/gurushots-auto-vote/releases/latest/
 // 'always' / 'cli' / false — see the requirement values above.
 type Requirement = 'always' | 'cli' | false;
 const rules: [pattern: string, replacement: string, required: Requirement][] = [
-    [`\\*\\*Latest Version: v${v}`, `**Latest Version: v${vRepl}`, 'always'],
+    // The headline version label is `Latest Version` in README.md and `Jaunākā versija` in
+    // README.lv.md; the rewrite keeps whichever label the file carries.
+    [`\\*\\*(Latest Version|Jaunākā versija): v${v}`, `**$1: v${vRepl}`, 'always'],
     [`GuruShotsAutoVote-v${v}-x64\\.exe`, `GuruShotsAutoVote-v${vRepl}-x64.exe`, 'always'],
     [`GuruShotsAutoVote-v${v}-arm64\\.dmg`, `GuruShotsAutoVote-v${vRepl}-arm64.dmg`, 'always'],
     [`GuruShotsAutoVote-v${v}-arm64\\.app\\.zip`, `GuruShotsAutoVote-v${vRepl}-arm64.app.zip`, 'always'],
@@ -111,7 +113,8 @@ for (const file of files) {
             }
             continue;
         }
-        const correct = matched.every((m) => m === replacement);
+        // Compare through replace(): the replacement may carry back-references ($1, $$).
+        const correct = matched.every((m) => m.replace(re, replacement) === m);
         if (correct) continue;
         if (check) {
             console.error(`✗ ${name}: ${matched.length} occurrence(s) of /${pattern}/ do not match v${version}`);

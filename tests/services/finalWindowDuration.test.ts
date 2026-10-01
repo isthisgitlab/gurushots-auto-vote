@@ -4,7 +4,7 @@
  *   1. VotingLogic.isWithinFinalWindow(closeTime, now, windowSec) — the pure
  *      membership check the final-window exposure rule keys off. The existing
  *      tests/api/final-window-exposure.test.ts reimplements this inline with a
- *      hardcoded 3600, so it can never catch a regression in the real function's
+ *      hardcoded 3600, so it cannot catch a fault in the real function's
  *      windowSec handling. These call the REAL export at a non-default width.
  *   2. schema.finalWindowDuration bounds — the 'time' setting is an integer in
  *      [60, MAX_SCHEDULE_SECONDS]; sub-60, over-cap, non-integer and non-finite
@@ -40,7 +40,7 @@ describe('isWithinFinalWindow with a non-default windowSec', () => {
         expect(isWithinFinalWindow(now - 5, now, 1800)).toBe(false); // past close
     });
 
-    test('a wide window (7200s) reaches a challenge the legacy 3600 default would miss', () => {
+    test('a wide window (7200s) reaches a challenge the 3600 default misses', () => {
         const closeIn90Min = now + 5400; // 90 min out
         expect(isWithinFinalWindow(closeIn90Min, now)).toBe(false); // default 3600 → outside
         expect(isWithinFinalWindow(closeIn90Min, now, 7200)).toBe(true); // 2h window → inside
@@ -50,7 +50,7 @@ describe('isWithinFinalWindow with a non-default windowSec', () => {
 describe('schema finalWindowDuration bounds', () => {
     const MAX = SETTINGS_SCHEMA.finalWindowDuration.max;
 
-    test('defaults to the legacy fixed hour (3600s)', () => {
+    test('defaults to one hour (3600s)', () => {
         expect(getSchemaDefault('finalWindowDuration')).toBe(3600);
     });
 

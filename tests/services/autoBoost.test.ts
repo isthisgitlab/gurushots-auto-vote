@@ -185,11 +185,11 @@ describe('shouldApplyBoost — key-unlocked window', () => {
             member: { boost: { state: 'AVAILABLE_KEY', timeout: 0 } },
         });
 
-    test('honours a configured window instead of the old constant', () => {
+    test('honours the configured window, not a fixed 15m constant', () => {
         mockSettings({ keyUnlockedBoostTime: 1800, emergencyFill: 0 });
         const now = NOW();
 
-        // 20 minutes out: inside a 30m window, outside the previous 15m constant.
+        // 20 minutes out: inside a 30m window, outside a fixed 15m window.
         expect(VotingLogic.shouldApplyBoost(keyUnlockedChallenge(now, 1200), now)).toBe(true);
         // 40 minutes out: still outside.
         expect(VotingLogic.shouldApplyBoost(keyUnlockedChallenge(now, 2400), now)).toBe(false);

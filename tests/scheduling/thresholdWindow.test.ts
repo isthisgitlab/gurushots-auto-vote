@@ -221,7 +221,7 @@ describe.each(Object.entries(resolvers))('thresholdWindow with %s', (_label, res
             const wrap = <T>(config: T) => (resolveThreshold() instanceof Promise ? Promise.resolve(config) : config);
             const off = { enabled: false, timesOfDay: [], beforeEndSecs: [] };
 
-            it('omitting the new opts leaves results identical (backward compat)', async () => {
+            it('omitting the opts leaves results identical', async () => {
                 const now = Math.floor(Date.now() / 1000);
                 const challenges = [{ id: 1, title: 'Far', type: 'regular', close_time: now + 3600 }];
                 const result = await computeNextCycleDelayMs(invalid(challenges), now, opts());
@@ -422,7 +422,7 @@ describe.each(Object.entries(resolvers))('thresholdWindow with %s', (_label, res
             // Window START = close_time - (3600 + leadSec); the cap lands a cycle there.
             const on = (leadSec: number) => () => wrap(invalid<FinalWindowTopUpConfig>({ enabled: true, leadSec }));
 
-            it('omitting the resolver leaves results identical (backward compat)', async () => {
+            it('omitting the resolver leaves results identical', async () => {
                 const now = Math.floor(Date.now() / 1000);
                 const challenges = [{ id: 1, title: 'Far', type: 'regular', close_time: now + 7200 }];
                 const result = await computeNextCycleDelayMs(invalid(challenges), now, opts());
@@ -607,7 +607,7 @@ describe.each(Object.entries(resolvers))('thresholdWindow with %s', (_label, res
                     },
                 ]);
 
-            it('omitting the resolver leaves results identical (backward compat)', async () => {
+            it('omitting the resolver leaves results identical', async () => {
                 const now = Math.floor(Date.now() / 1000);
                 const result = await computeNextCycleDelayMs(timerBoost(now), now, opts());
                 expect(result.mode).toBe('normal');

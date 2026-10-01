@@ -38,7 +38,7 @@ describe('getRandomCheckFrequencyMs', () => {
         }
     });
 
-    test('falls back to the legacy default when settings are missing', () => {
+    test('falls back to the default when settings are missing', () => {
         expect(getRandomCheckFrequencyMs({})).toBe(DEFAULT_MINUTES * MS_PER_MINUTE);
         expect(getRandomCheckFrequencyMs(undefined)).toBe(DEFAULT_MINUTES * MS_PER_MINUTE);
     });

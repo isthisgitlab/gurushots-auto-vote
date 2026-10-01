@@ -46,7 +46,7 @@ const mockSettings = (overrides = {}) => {
 describe('exposureTarget — normal rule', () => {
     beforeEach(() => jest.clearAllMocks());
 
-    test('sentinel 0 preserves legacy behavior (target == trigger)', () => {
+    test('sentinel 0 means target == trigger', () => {
         mockSettings({ exposure: 50, exposureTarget: 0 });
         const challenge = buildChallenge({ exposureFactor: 30, closeInSeconds: 7200 });
         const result = VotingLogic.evaluateVotingDecision(challenge, Math.floor(Date.now() / 1000));
@@ -78,7 +78,7 @@ describe('exposureTarget — normal rule', () => {
         expect(result.voteReason).toContain('50% >= 50%');
     });
 
-    test('explicit equal target reads identically to legacy', () => {
+    test('explicit equal target reads like sentinel 0', () => {
         mockSettings({ exposure: 60, exposureTarget: 60 });
         const challenge = buildChallenge({ exposureFactor: 40, closeInSeconds: 7200 });
         const result = VotingLogic.evaluateVotingDecision(challenge, Math.floor(Date.now() / 1000));
@@ -92,7 +92,7 @@ describe('exposureTarget — normal rule', () => {
 describe('finalWindowExposureTarget — final-window rule', () => {
     beforeEach(() => jest.clearAllMocks());
 
-    test('sentinel 0 preserves legacy behavior in the final-window window', () => {
+    test('sentinel 0 means target == trigger in the final-window window', () => {
         mockSettings({
             useFinalWindowExposure: true,
             finalWindowExposure: 40,

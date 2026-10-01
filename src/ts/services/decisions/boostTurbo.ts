@@ -65,7 +65,7 @@ const shouldApplyBoost = (challenge: Challenge, now: number, options: { emergenc
     const emergency = options.emergency === true && isWithinEmergencyWindow(challenge, now);
     if (!emergency && !settings.getEffectiveSetting('autoBoost', challengeId)) return false;
 
-    // In the emergency window the boostTime threshold no longer matters (the
+    // In the emergency window the boostTime threshold does not matter (the
     // challenge is about to close), so apply whenever a boost is actually
     // available to apply — mirrors isBoostWindowOpen.
     if (emergency) return isBoostWindowOpen(challenge, now);

@@ -35,9 +35,9 @@ const USAGE = realPath.join(ROOT, 'docs/usage.md');
 const USAGE_LV = realPath.join(ROOT, 'docs/usage.lv.md');
 const DL = 'https://github.com/isthisgitlab/gurushots-auto-vote/releases/latest/download';
 
-const guiSection = (v: string) =>
+const guiSection = (v: string, label = 'Latest Version') =>
     [
-        `**Latest Version: v${v}**`,
+        `**${label}: v${v}**`,
         `- GuruShotsAutoVote-v${v}-x64.exe`,
         `- GuruShotsAutoVote-v${v}-arm64.dmg`,
         `- GuruShotsAutoVote-v${v}-arm64.app.zip`,
@@ -71,8 +71,9 @@ const cliSection = (v: string) =>
     ].join('\n');
 
 const readme = (v: string) => `${guiSection(v)}\n${cliSection(v)}\n`;
-// The Latvian guide localizes the CLI placeholder as `[platforma]`.
-const readmeLv = (v: string) => `${guiSection(v)}\n${cliSection(v).replace('[platform]', '[platforma]')}\n`;
+// The Latvian guide localizes the version label (`Jaunākā versija`) and the CLI placeholder (`[platforma]`).
+const readmeLv = (v: string) =>
+    `${guiSection(v, 'Jaunākā versija')}\n${cliSection(v).replace('[platform]', '[platforma]')}\n`;
 
 class ExitCalled extends Error {
     declare code: string | number | null | undefined;
@@ -181,6 +182,13 @@ describe('scripts/readme-version.ts', () => {
             expect(out()).toContain('✓ README.md: already at v2.0.0');
         });
 
+        test('rewrites the Latvian version label and keeps it', () => {
+            mockFiles.set(README_LV, '**Jaunākā versija: v1.0.0**\n');
+
+            expect(run()).toBeNull();
+            expect(mockFiles.get(README_LV)).toBe('**Jaunākā versija: v2.0.0**\n');
+        });
+
         test('escapes $ in the version so it is not read as a replacement back-reference', () => {
             setVersion('2.0.0-rc$&');
             mockFiles.set(README, '**Latest Version: v1.0.0**\n');
@@ -215,6 +223,15 @@ describe('scripts/readme-version.ts', () => {
 
             expect(err()).toMatch(/✗ README\.md: 1 occurrence\(s\) of .* do not match v2\.0\.0/);
             expect(err()).toContain('Run `pnpm run update:readme` to fix.');
+            expect(mockFs.writeFileSync).not.toHaveBeenCalled();
+        });
+
+        test('fails on a stale Latvian version label', () => {
+            mockFiles.set(README_LV, readmeLv('1.8.2'));
+
+            expect(run(['--check'])).toBe(1);
+
+            expect(err()).toContain('✗ README.lv.md:');
             expect(mockFs.writeFileSync).not.toHaveBeenCalled();
         });
 

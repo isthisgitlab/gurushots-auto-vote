@@ -1,4 +1,8 @@
-# GuruShots Auto Voter — Lejupielāde un instalācija
+# GuruShots Auto Voter
+
+[![Build Status](https://github.com/isthisgitlab/gurushots-auto-vote/actions/workflows/build.yml/badge.svg?branch=master&event=push)](https://github.com/isthisgitlab/gurushots-auto-vote/actions/workflows/build.yml)
+[![Coverage Status](https://coveralls.io/repos/github/isthisgitlab/gurushots-auto-vote/badge.svg?branch=master)](https://coveralls.io/github/isthisgitlab/gurushots-auto-vote?branch=master)
+[![License](https://img.shields.io/badge/license-ISC-blue.svg)](LICENSE)
 
 Automātiska balsošana GuruShots izaicinājumos. Viens un tas pats balsošanas dzinējs pieejams trīs veidos: kā darbvirsmas **grafiskā lietotne** (Electron), kā **komandrindas rīks** (`gurucli`) un kā **Android** lietotne (APK fails, ko instalē ārpus Play Store), kas turpina balsot fonā.
 
@@ -24,7 +28,7 @@ Automātiska balsošana GuruShots izaicinājumos. Viens un tas pats balsošanas 
 
 Ja saņemat pieprasījumu limita kļūdu, apturiet visus eksemplārus, pagaidiet 5–10 minūtes un palaidiet tikai vienu.
 
-Grafiskajai lietotnei tas tagad tiek nodrošināts automātiski: ja palaižat to otrreiz, tiek aktivizēts jau atvērtais logs, nevis sākts jauns eksemplārs. Tas neattiecas uz CLI, tīmekļa saskarni vai Android lietotni, ko darbina vienlaikus ar grafisko lietotni, — šādās kombinācijās augstāk minētais brīdinājums joprojām ir spēkā.
+Grafiskajai lietotnei to nodrošina pati darbvirsmas lietotne: ja palaižat to otrreiz, tiek aktivizēts jau atvērtais logs, nevis sākts jauns eksemplārs. Tā nekonstatē CLI, tīmekļa saskarni vai Android lietotni, ko darbina vienlaikus ar grafisko lietotni, — uz šīm kombinācijām attiecas augstāk minētais brīdinājums.
 
 ## 🚀 Funkcijas
 
@@ -36,7 +40,7 @@ Grafiskajai lietotnei tas tagad tiek nodrošināts automātiski: ja palaižat to
 - **Turbo (iegūt + izmantot)** — automātiski spēlē minispēli, lai _iegūtu_ Turbo, un pēc tam pirms termiņa beigām automātiski to _izmanto_ izvēlētajam foto.
 - **Automātiskā iesniegšana** — tuvu termiņa beigām iesniedz foto tukšajās vietās ar laika atstarpēm, lai balsis nesadalītos starp vienlaikus iesniegtiem foto; tai ir tagu filtri, tēmai atbilstoša foto izvēle, ko vēlreiz pārbauda ierīcē darbināms attēlu atpazīšanas modelis, un ārkārtas drošības tīkls.
 - **Automātiskā pievienošanās** — atrod atvērtos izaicinājumus, kuriem vēl neesat pievienojušies, un automātiski pievienojas tiem (pēc noklusējuma izslēgta). Kad tā ieslēgta, pēc noklusējuma lietotne pievienojas visiem izaicinājumiem; loku var sašaurināt ar izaicinājumu veidu iekļaušanas/izslēgšanas sarakstu vai izaicinājumu noteikumu. Maksas izaicinājumiem ir monētu limiti (vienam izaicinājumam un vienam ciklam), un monētas nekad netiek iztērētas, ja pievienošanās nav pabeigta. Pievienoties var arī manuāli — grafiskajā lietotnē sakļaujamajā sarakstā "Atrast izaicinājumus" un ar CLI komandām `discover`/`join`.
-- **Misijas** — pēc izvēles palīdz izpildīt GuruShots mainīgās misijas (visas šīs funkcijas pēc noklusējuma ir izslēgtas): pietaupa katra izaicinājuma Turbo "Win Turbo" misijai, nevienu nezaudējot, "Join challenges" misijas laikā pievienojas izaicinājumiem agrāk, "Use Fill" misijas laikā izmanto uzpildes un "Vote on photos" misijas laikā balso jūsu izaicinājumos.
+- **Misijas** — pēc izvēles palīdz izpildīt GuruShots mainīgās misijas (visas šīs funkcijas pēc noklusējuma ir izslēgtas): pietaupa katra izaicinājuma Turbo "Win Turbo" misijai, nevienu nezaudējot, "Join challenges" misijas laikā pievienojas izaicinājumiem, negaidot automātiskās pievienošanās laiku, "Use Fill" misijas laikā izmanto uzpildes un "Vote on photos" misijas laikā balso jūsu izaicinājumos.
 - **Konta atlikums** — rāda jūsu atslēgas / apmaiņas / uzpildes / monētas grafiskajā lietotnē blakus laika atskaitei un ar CLI komandu `bankroll` (sinonīms `coins`).
 - **Uzstādījumi katram izaicinājumam** — katram balsošanas uzstādījumam ir globāla noklusējuma vērtība, ko jebkuram izaicinājumam var pielāgot atsevišķi.
 - **Izaicinājumu noteikumi** — noteikumi, kas atlasa izaicinājumus pēc nosaukuma, izaicinājuma taga, veida, foto skaita vai ilguma (tāpēc tie darbojas arī tad, kad GuruShots katrā rotācijā piešķir izaicinājumam jaunu ID), jūsu izvēlētā secībā; katrs noteikums var piešķirt uzstādījumu profilu, ieslēgt vai izslēgt automātisko pievienošanos / automātisko iesniegšanu, noteikt pievienošanās laiku un pievienot tagus automātiskajai iesniegšanai.
@@ -50,7 +54,7 @@ Grafiskajai lietotnei tas tagad tiek nodrošināts automātiski: ja palaižat to
 
 ### Jaunākie būvējumi
 
-**Latest Version: v1.12.0-beta.6**
+**Jaunākā versija: v1.12.0-beta.6**
 
 #### 🖥️ Grafiskā lietotne (ieteicama lielākajai daļai lietotāju)
 
@@ -86,7 +90,7 @@ Android versija ir Capacitor apvalks ap to pašu React saskarni, un tai ir Kotli
 
 #### 🪶 Vieglie būvējumi (bez attēlu modeļa)
 
-Katra augstāk minētā lejupielāde pieejama arī kā **vieglais** (lite) būvējums bez attēlu atpazīšanas modeļa un tā izpildvides: macOS DMG izmērs samazinās no ~310 MB līdz ~130 MB, bet macOS CLI — no ~375 MB līdz ~140 MB. Viss pārējais darbojas tāpat — automātiskā iesniegšana vienkārši izlaiž [vizuālo pārbaudi](docs/usage.lv.md#trūkstošo-foto-automātiskā-iesniegšana) un ranžē foto pēc tagiem kā līdz šim. Vieglajai grafiskajai lietotnei un vieglajai Android lietotnei tiek piedāvāti tikai vieglie atjauninājumi (vieglā darbvirsmas lietotne pirmsizlaiduma versijas izlaiž).
+Katra augstāk minētā lejupielāde pieejama arī kā **vieglais** (lite) būvējums bez attēlu atpazīšanas modeļa un tā izpildvides: macOS DMG izmērs samazinās no ~310 MB līdz ~130 MB, bet macOS CLI — no ~375 MB līdz ~140 MB. Viss pārējais darbojas tāpat — automātiskā iesniegšana izlaiž [vizuālo pārbaudi](docs/usage.lv.md#trūkstošo-foto-automātiskā-iesniegšana) un ranžē foto bez tās. Vieglajai grafiskajai lietotnei un vieglajai Android lietotnei tiek piedāvāti tikai vieglie atjauninājumi (vieglā darbvirsmas lietotne pirmsizlaiduma versijas izlaiž).
 
 | Platforma                            | Lejupielāde                                                                                                                                                                                    |
 | ------------------------------------ | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
@@ -161,7 +165,7 @@ Android versija **nav pieejama Google Play** — to instalē, tieši lejupielād
     - **Atspējot akumulatora optimizāciju** (sistēmas uzstādījumos: Lietotnes → GuruShots Auto Vote → Akumulators → Neierobežots) — citādi ražotāju akumulatora taupīšanas funkcijas (Samsung, Xiaomi, OnePlus…) pakalpojumu apturēs.
 6. Piesakieties un pieskarieties **Sākt automātisko balsošanu**. Pastāvīgajā paziņojumā redzams pēdējā cikla laiks. Lietotni var aizvērt neseno lietotņu sarakstā — balsošana turpināsies.
 
-**Fona ierobežojumi:** ražotāju akumulatora pārvaldnieki joprojām var apturēt pakalpojumu (pievienojiet lietotni izņēmumiem tā, kā to paredz konkrētais ražotājs; saite ir lietotnes uzstādījumos). Pēdējās minūtes 1 minūtes pārbaužu intervālam vajadzīga atļauja `SCHEDULE_EXACT_ALARM` (Android 13+ to piešķir automātiski, Android 12 — jāpiešķir manuāli).
+**Fona ierobežojumi:** ražotāju akumulatora pārvaldnieki tomēr var apturēt pakalpojumu (pievienojiet lietotni izņēmumiem tā, kā to paredz konkrētais ražotājs; saite ir lietotnes uzstādījumos). Pēdējās minūtes režīma 1 minūtes pārbaužu intervālam vajadzīga atļauja `SCHEDULE_EXACT_ALARM` (Android 13+ to piešķir automātiski, Android 12 — jāpiešķir manuāli).
 
 ## 🎯 Ātrais sākums
 
@@ -193,7 +197,7 @@ pnpm web                 # sabūvē saskarni un palaiž to adresē http://localh
 pnpm web --port=5000     # cits ports (0 — jebkurš brīvs ports)
 ```
 
-Atveriet adresi, ko komanda izvada, un piesakieties tāpat kā grafiskajā lietotnē. Automātiskā balsošana darbojas šajā cilnē, tāpēc neaizveriet to: aizverot cilni, balsošana apstājas. Uzstādījumi un pieteikšanās ir kopīgi ar lietotni un CLI, kas palaisti no tās pašas pirmkoda kopijas. Tīmekļa saskarne atjauninājumus neinstalē: atjauninājuma paziņojums atver laidienu lapu.
+Atveriet adresi, ko komanda izvada, un piesakieties tāpat kā grafiskajā lietotnē. Automātiskā balsošana darbojas šajā cilnē, tāpēc neaizveriet to: aizverot cilni, balsošana apstājas. Uzstādījumi un pieteikšanās ir kopīgi ar lietotni un CLI, kas palaisti no tās pašas pirmkoda kopijas. Tīmekļa saskarne atjauninājumus neinstalē: atjauninājuma paziņojums atver izlaidumu lapu.
 
 Norādījumus par grafisko lietotni un CLI, balsošanas noteikumus, uzstādījumus, žurnālfailus un problēmu risināšanu skatiet [lietošanas ceļvedī](docs/usage.lv.md).
 

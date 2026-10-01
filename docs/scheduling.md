@@ -59,8 +59,8 @@ Every result is floored at `MIN_CYCLE_GAP_MS`. The host rolls the random
 delay and resolves `lastMinuteCheckFrequency`/per-challenge thresholds with
 its own resolver (sync settings read on Node, async IPC in the WebView).
 
-This is what fixed the bug where the next cycle could sleep past a
-challenge's last-minute boundary and start the final voting push late.
+This keeps the next cycle from sleeping past a challenge's last-minute
+boundary, so the final voting push starts on time.
 
 **Flash challenges never drive the cadence.** `eligibleChallenges`
 (`scheduling/scheduledFill.ts`) filters `type !== 'flash'`, so a flash
@@ -319,9 +319,9 @@ Deliberate semantics and caveats:
     `log.overslept` hook reports it as a warning on both hosts, using the
     shared `formatOversleptMessage` so the two surfaces cannot drift. Without
     it the failure is invisible: the only symptom is a challenge that closed
-    with an unfilled slot, and nothing in the log says why. This was a real
-    regression — a 51-minute gap on a 3–4 minute cadence swallowed a
-    challenge's last scheduled fill _and_ its emergency-fill window.
+    with an unfilled slot, and nothing in the log says why. A 51-minute gap on a
+    3–4 minute cadence, for example, can swallow a challenge's last
+    scheduled fill _and_ its emergency-fill window.
 
     `oversleptBy` reports a stall that is over a minute late **and** either
     more than half the intended wait **or** more than five minutes outright.
@@ -339,7 +339,7 @@ Deliberate semantics and caveats:
 - **Cadence**: the _timing engine_ is owned by the native plugin (Java
   side), which uses `AlarmManager.setExactAndAllowWhileIdle()` to fire
   cycles even when the WebView process is dead and the device is in Doze.
-  The _next-delay decision_ is still the shared one: the headless JS entry
+  The _next-delay decision_ is the shared one: the headless JS entry
   (`src/ts/headless/index.ts`) runs one cycle per alarm and reports
   `nextDelayMs` from `computeNextCycleDelayMs` back to the plugin, which
   schedules the next alarm accordingly. The JS-side `AutovoteContext` cycle

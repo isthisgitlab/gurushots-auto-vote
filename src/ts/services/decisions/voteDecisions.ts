@@ -191,9 +191,9 @@ const evaluateManualVotingToHundred = (
     //
     // Behavioral note: `?? 0` deliberately treats absent ranking as 0%
     // exposure, which lets shouldAllowVoting fire for a brand-new entry
-    // that hasn't accumulated any exposure data. The previous (throw)
-    // path silently skipped such challenges; the new path attempts the
-    // vote, which is more useful for the manual vote-to-100% flow.
+    // that hasn't accumulated any exposure data, so the attempt is made
+    // rather than the challenge skipped — more useful for the manual
+    // vote-to-100% flow.
     const currentExposure = challenge.member?.ranking?.exposure?.exposure_factor ?? 0;
 
     let shouldAllowVoting = false;

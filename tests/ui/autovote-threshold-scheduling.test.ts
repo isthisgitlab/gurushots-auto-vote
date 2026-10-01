@@ -85,7 +85,7 @@ describe('autovoteScheduler helpers', () => {
             expect(result.nextScheduled).toMatchObject({ challengeId: 9, form: 'before-end' });
         });
 
-        it('omitting timezone keeps the legacy behavior (no scheduled-fill IPC reads)', async () => {
+        it('omitting timezone makes no scheduled-fill IPC reads', async () => {
             const now = Math.floor(Date.now() / 1000);
             getEffectiveSetting.mockResolvedValue(5);
             const challenges = invalid<Challenge[]>([

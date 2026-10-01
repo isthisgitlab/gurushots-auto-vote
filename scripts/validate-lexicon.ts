@@ -249,7 +249,7 @@ const main = async ({
     if (related.length === 0 || unrelated.length === 0) {
         console.error(
             `❌ eval distributions are empty (n_related=${related.length}, n_unrelated=${unrelated.length}) — ` +
-                'the concepts/unrelatedParents config no longer produces comparable pairs.',
+                'the concepts/unrelatedParents config produces no comparable pairs.',
         );
         process.exit(1);
     }

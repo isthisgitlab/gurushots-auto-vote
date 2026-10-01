@@ -51,9 +51,9 @@ export const SETTING_CELL_CLASS = 'flex flex-col rounded-box border border-base-
 /**
  * Bucket schema entries into ordered UI sections for the settings modals.
  *
- * No component calls this directly any more — both modals go through
+ * No component calls this directly — both modals go through
  * `tierSchemaEntries`, which bands this function's output under SETTINGS_TIERS.
- * It stays exported as that function's building block and as the pure unit
+ * It is exported as that function's building block and as the pure unit
  * under direct test, so a grep for call sites finding none is expected, not a
  * sign it is dead.
  *
@@ -97,8 +97,8 @@ export function groupSchemaEntries(
  * trailing untitled band (`{ id: null, label: null }`) rather than dropped:
  * losing a section entirely would hide settings, whereas an unlabelled band is
  * merely ugly and self-evidently wrong in review. `tiers` being null/absent —
- * an older main process that predates the `tiers` IPC field — puts every group
- * in that one band, which degrades to exactly the flat list this replaced.
+ * a main process that sends no `tiers` IPC field — puts every group
+ * in that one band, which degrades to a flat list.
  *
  * @param schema - serialized schema (key -> config with `group`)
  * @param groups - ordered [{ id, label, tier }]

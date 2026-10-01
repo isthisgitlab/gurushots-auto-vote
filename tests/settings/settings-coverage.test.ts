@@ -603,7 +603,7 @@ describe('settings facade — edge cases', () => {
                 },
             });
             expect(cat.warning).toHaveBeenCalledWith(
-                'Challenge rules: "Exhibition" may now also turn autoJoin on for challenges matched by "Seaside" — review the rule order',
+                'Challenge rules: "Exhibition" can also turn autoJoin on for challenges matched by "Seaside" — review the rule order',
                 null,
             );
 
@@ -619,10 +619,7 @@ describe('settings facade — edge cases', () => {
                     ],
                 },
             });
-            expect(cat.warning).toHaveBeenCalledWith(
-                expect.stringContaining('"Comm" may now also turn autoFill on'),
-                null,
-            );
+            expect(cat.warning).toHaveBeenCalledWith(expect.stringContaining('"Comm" can also turn autoFill on'), null);
         });
 
         test('a rule without a profile never reads the profile named "undefined"', () => {
@@ -640,7 +637,7 @@ describe('settings facade — edge cases', () => {
                 },
             });
             expect(cat.warning).toHaveBeenCalledWith(
-                expect.stringContaining('"Comm" may now also turn autoJoin on for challenges matched by "Sea"'),
+                expect.stringContaining('"Comm" can also turn autoJoin on for challenges matched by "Sea"'),
                 null,
             );
         });
@@ -686,7 +683,7 @@ describe('settings facade — edge cases', () => {
                     titleRules,
                 },
             });
-            expect(cat.warning).not.toHaveBeenCalledWith(expect.stringContaining('may now also turn'), null);
+            expect(cat.warning).not.toHaveBeenCalledWith(expect.stringContaining('can also turn'), null);
         });
 
         test('runs once, tolerates missing lists and a corrupt container, and logs nothing without categories', () => {
