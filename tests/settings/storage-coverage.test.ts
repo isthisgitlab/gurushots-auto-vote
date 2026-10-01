@@ -224,7 +224,7 @@ describe('settings storage — edge cases', () => {
             });
             expect(categoryLogger.warning).toHaveBeenCalledTimes(1);
             expect(categoryLogger.warning).toHaveBeenCalledWith(
-                `Could not restrict ${USER_DATA}/settings.json to owner-only (EPERM); other local users may be able to read it. If it belongs to another user, run: sudo chown "$USER" "${USER_DATA}/settings.json". If it is on a FAT, SMB or FUSE mount, move the app data to a local disk. Then run: chmod 600 "${USER_DATA}/settings.json"`,
+                `Could not restrict ${USER_DATA}/settings.json to owner-only (EPERM); other local users may be able to read it. It must be a regular file owned by the account this app runs as, on a filesystem that supports permissions (not FAT, SMB or FUSE); once it is, the next save restricts it automatically.`,
             );
         });
 
@@ -255,10 +255,13 @@ describe('settings storage — edge cases', () => {
                 .mockImplementationOnce(refuse)
                 .mockImplementationOnce(refuse);
 
-            for (let i = 0; i < 5; i++) mod.storage.writeRaw(`{"n":${i}}`);
+            const warningsAfterEachWrite = [0, 1, 2, 3, 4].map((i) => {
+                mod.storage.writeRaw(`{"n":${i}}`);
+                return categoryLogger.warning.mock.calls.length;
+            });
 
             expect(fs.writeFileSync).toHaveBeenCalledTimes(5);
-            expect(categoryLogger.warning).toHaveBeenCalledTimes(2);
+            expect(warningsAfterEachWrite).toEqual([1, 1, 1, 2, 2]);
         });
 
         test('refused chmods on two different paths warn once each', () => {

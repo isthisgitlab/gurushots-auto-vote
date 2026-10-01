@@ -73,7 +73,7 @@ const warnedUnrestrictable = new Set<string>();
  * an existing file is chmod'ed to 0o600 before the new content lands in it:
  * when that chmod succeeds the data is never written into a file other local
  * users can read. A chmod the filesystem refuses (a file owned by another uid,
- * a vfat/SMB/FUSE mount) is logged with what to do, once per failure episode
+ * a vfat/SMB/FUSE mount) is logged with what it needs, once per failure episode
  * (until a chmod on that path succeeds again), and does not fail the write:
  * the data still persists. The files can carry the auth token. The file is
  * rewritten in place rather than replaced by a rename, because
@@ -98,7 +98,7 @@ const writeOwnerOnly = (filePath: string, data: string) => {
                 logger
                     .withCategory('settings')
                     .warning(
-                        `Could not restrict ${filePath} to owner-only (${reason}); other local users may be able to read it. If it belongs to another user, run: sudo chown "$USER" "${filePath}". If it is on a FAT, SMB or FUSE mount, move the app data to a local disk. Then run: chmod 600 "${filePath}"`,
+                        `Could not restrict ${filePath} to owner-only (${reason}); other local users may be able to read it. It must be a regular file owned by the account this app runs as, on a filesystem that supports permissions (not FAT, SMB or FUSE); once it is, the next save restricts it automatically.`,
                     );
             }
         }
