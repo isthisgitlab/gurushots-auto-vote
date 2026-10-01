@@ -312,12 +312,15 @@ describe('StatusHeader', () => {
         describe.each([
             ['English', englishApp],
             ['Latvian', latvianApp],
-        ])('with real %s strings', (_language, strings: Record<string, string>) => {
+        ])('with real %s strings', (_language, strings: typeof englishApp) => {
+            const byKey = new Map(Object.entries(strings));
+            let previousTranslator: ReturnType<typeof mockTranslator.t.getMockImplementation>;
             beforeEach(() => {
-                mockTranslator.t.mockImplementation((key) => strings[key.replace(/^app\./, '')] ?? key);
+                previousTranslator = mockTranslator.t.getMockImplementation();
+                mockTranslator.t.mockImplementation((key) => byKey.get(key.replace(/^app\./, '')) ?? key);
             });
             afterEach(() => {
-                mockTranslator.t.mockImplementation((key) => key);
+                mockTranslator.t.mockImplementation(previousTranslator!);
             });
 
             const substituted = (template: string) =>
@@ -327,11 +330,11 @@ describe('StatusHeader', () => {
                 wrap(
                     <StatusHeader challenges={missedChallenges} nextRunAt={null} running={true} bankroll={bankroll} />,
                 );
-                const described = document.getElementById(
-                    screen
-                        .getByRole('button', { name: new RegExp(strings.statusHeaderMissedBoosts) })
-                        .getAttribute('aria-describedby')!,
-                );
+                const trigger = screen.getByRole('button', { name: `2 ${strings.statusHeaderMissedBoosts}` });
+                const describedBy = trigger.getAttribute('aria-describedby');
+                expect(describedBy).not.toBeNull();
+                const described = document.getElementById(describedBy!);
+                expect(described).not.toBeNull();
                 return described!.textContent;
             };
 
@@ -351,7 +354,9 @@ describe('StatusHeader', () => {
             });
 
             test('no keys left passes the string through unchanged', () => {
-                expect(descriptionOf(bankrollOf(0))).toBe(strings.missedBoostsNoKeys);
+                const text = descriptionOf(bankrollOf(0));
+                expect(text).toBe(strings.missedBoostsNoKeys);
+                expect(text).not.toContain('{');
             });
         });
 

@@ -143,7 +143,7 @@ export const app = {
     missedBoostsHint:
         'Unlock with a key on the challenge card; if a compact card has no {unlock} button, open {details}',
     missedBoostsNoKeys: 'No keys left to unlock these',
-    missedBoostsKeysUnknown: 'The {unlock} button can appear once the key balance is available',
+    missedBoostsKeysUnknown: 'The {unlock} button can appear on the card once the key balance is available',
     statusHeaderNext: 'Next',
     statusHeaderNextClaim: 'Next claim',
     statusHeaderNextClaimHint: 'Claims run on the first voting cycle after the hourly cooldown ends.',
