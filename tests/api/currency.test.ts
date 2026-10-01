@@ -4,18 +4,18 @@
  * value (no field injection), and the {ok, raw} result contract.
  */
 
-import type * as currencyModule from '../../src/js/api/currency';
-import type * as api_clientModule from '../../src/js/api/api-client';
+import type * as currencyModule from '../../src/ts/api/currency';
+import type * as api_clientModule from '../../src/ts/api/api-client';
 import { invalid } from '../helpers/invalid';
 
-const { keyUnlock, swapPhoto, exposureAutofill } = require('../../src/js/api/currency') as typeof currencyModule;
+const { keyUnlock, swapPhoto, exposureAutofill } = require('../../src/ts/api/currency') as typeof currencyModule;
 
-jest.mock('../../src/js/api/api-client', () => ({
+jest.mock('../../src/ts/api/api-client', () => ({
     makePostRequest: jest.fn(),
     FORM_CONTENT_TYPE: 'application/x-www-form-urlencoded; charset=utf-8',
 }));
 
-const { makePostRequest } = jest.mocked(require('../../src/js/api/api-client') as typeof api_clientModule);
+const { makePostRequest } = jest.mocked(require('../../src/ts/api/api-client') as typeof api_clientModule);
 const token = 'tok-123';
 
 beforeEach(() => jest.clearAllMocks());

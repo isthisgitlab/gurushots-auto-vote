@@ -6,9 +6,9 @@
  * (used by formatSettingForLog) which the global setup mock omits.
  */
 
-jest.mock('../../src/js/settings');
+jest.mock('../../src/ts/settings');
 
-jest.mock('../../src/js/logger', () => {
+jest.mock('../../src/ts/logger', () => {
     const withCategory = () => ({
         info: jest.fn(),
         error: jest.fn(),
@@ -23,9 +23,9 @@ jest.mock('../../src/js/logger', () => {
     };
 });
 
-import settingsModule = require('../../src/js/settings');
+import settingsModule = require('../../src/ts/settings');
 const settings = jest.mocked(settingsModule);
-import type * as settingsCommandsModule from '../../src/js/cli/commands/settings';
+import type * as settingsCommandsModule from '../../src/ts/cli/commands/settings';
 import { invalid } from '../helpers/invalid';
 const {
     getSetting,
@@ -36,7 +36,7 @@ const {
     applyProfile,
     deleteProfile,
     formatSettingForLog,
-} = require('../../src/js/cli/commands/settings') as typeof settingsCommandsModule;
+} = require('../../src/ts/cli/commands/settings') as typeof settingsCommandsModule;
 
 describe('CLI settings commands — per-challenge support', () => {
     beforeEach(() => {

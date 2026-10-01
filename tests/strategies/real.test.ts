@@ -1,5 +1,5 @@
 /**
- * Unit tests for the real-strategy binder in src/js/strategies/real/index.ts:
+ * Unit tests for the real-strategy binder in src/ts/strategies/real/index.ts:
  *   - runTurboMiniGame: the pair-by-pair Turbo mini-game loop (first pick, flip
  *     on a wrong pick, early stop on WON, skip of resolved / malformed battles);
  *   - joinChallenge: the manual single-join wrapper (spendCoins must be `true`
@@ -10,94 +10,94 @@
  * Every collaborator is mocked; sleep resolves immediately so no real timer runs.
  */
 
-jest.mock('../../src/js/strategies/real/activeChallenges', () => ({ getActiveChallenges: jest.fn() }));
-jest.mock('../../src/js/api/voting', () => ({ getVoteImages: jest.fn(), submitVotes: jest.fn() }));
-jest.mock('../../src/js/strategies/real/applyBoost', () => ({ applyBoost: jest.fn() }));
-jest.mock('../../src/js/api/boost', () => ({ applyBoostToEntry: jest.fn() }));
-jest.mock('../../src/js/api/turbo', () => ({
+jest.mock('../../src/ts/strategies/real/activeChallenges', () => ({ getActiveChallenges: jest.fn() }));
+jest.mock('../../src/ts/api/voting', () => ({ getVoteImages: jest.fn(), submitVotes: jest.fn() }));
+jest.mock('../../src/ts/strategies/real/applyBoost', () => ({ applyBoost: jest.fn() }));
+jest.mock('../../src/ts/api/boost', () => ({ applyBoostToEntry: jest.fn() }));
+jest.mock('../../src/ts/api/turbo', () => ({
     getChallengeTurbo: jest.fn(),
     submitTurboSelection: jest.fn(),
     applyTurbo: jest.fn(),
     TURBO_SELECTION_DELAY_MS: 1234,
 }));
-jest.mock('../../src/js/api/submissions', () => ({
+jest.mock('../../src/ts/api/submissions', () => ({
     getEligiblePhotos: jest.fn(),
     getImageData: jest.fn(),
     submitToChallenge: jest.fn(),
 }));
-jest.mock('../../src/js/api/tags', () => ({ getCurrentMemberProfile: jest.fn(), searchTagAutocomplete: jest.fn() }));
-jest.mock('../../src/js/api/join', () => ({
+jest.mock('../../src/ts/api/tags', () => ({ getCurrentMemberProfile: jest.fn(), searchTagAutocomplete: jest.fn() }));
+jest.mock('../../src/ts/api/join', () => ({
     getMemberChallenges: jest.fn(),
     getBankroll: jest.fn(),
     coinsUnlock: jest.fn(),
 }));
-jest.mock('../../src/js/metadata', () => ({ cleanupStaleMetadata: jest.fn(() => true) }));
-jest.mock('../../src/js/timing', () => ({
+jest.mock('../../src/ts/metadata', () => ({ cleanupStaleMetadata: jest.fn(() => true) }));
+jest.mock('../../src/ts/timing', () => ({
     sleep: jest.fn(() => Promise.resolve()),
     getRandomDelay: jest.fn(() => 3210),
 }));
-jest.mock('../../src/js/services/votingOrchestrator', () => ({ runVotingPass: jest.fn() }));
-jest.mock('../../src/js/services/newEntryTracker', () => ({
+jest.mock('../../src/ts/services/votingOrchestrator', () => ({ runVotingPass: jest.fn() }));
+jest.mock('../../src/ts/services/newEntryTracker', () => ({
     createMetadataEntryTracker: jest.fn(() => ({ kind: 'metadata-tracker' })),
 }));
-jest.mock('../../src/js/services/joinChallenges', () => ({
+jest.mock('../../src/ts/services/joinChallenges', () => ({
     runJoinPass: jest.fn(),
     joinChallengeSingle: jest.fn(),
 }));
-jest.mock('../../src/js/services/autoClaim', () => ({ runClaimPass: jest.fn() }));
-jest.mock('../../src/js/services/missions', () => ({
+jest.mock('../../src/ts/services/autoClaim', () => ({ runClaimPass: jest.fn() }));
+jest.mock('../../src/ts/services/missions', () => ({
     loadMissionNeeds: jest.fn(async () => null),
     registerMissionNeeds: jest.fn((_token: string, needs: missionsModule.MissionNeeds | null) =>
         needs ? jest.fn() : null,
     ),
 }));
-jest.mock('../../src/js/api/rewards', () => ({
+jest.mock('../../src/ts/api/rewards', () => ({
     getMyCompletedChallenges: jest.fn(),
     claimChallengeResources: jest.fn(),
     getMyMissions: jest.fn(),
     claimMissionPrize: jest.fn(),
 }));
-jest.mock('../../src/js/joinStateStore', () => ({
+jest.mock('../../src/ts/joinStateStore', () => ({
     joinStateStore: { kind: 'join-state-store' },
     acquireUnlockLock: jest.fn(),
 }));
 
-import logger = require('../../src/js/logger');
-import turboModule = require('../../src/js/api/turbo');
+import logger = require('../../src/ts/logger');
+import turboModule = require('../../src/ts/api/turbo');
 const turbo = jest.mocked(turboModule);
-import timingModule = require('../../src/js/timing');
+import timingModule = require('../../src/ts/timing');
 const timing = jest.mocked(timingModule);
-import metadataModule = require('../../src/js/metadata');
+import metadataModule = require('../../src/ts/metadata');
 const metadata = jest.mocked(metadataModule);
-import joinModule = require('../../src/js/api/join');
+import joinModule = require('../../src/ts/api/join');
 const join = jest.mocked(joinModule);
-import tagsModule = require('../../src/js/api/tags');
+import tagsModule = require('../../src/ts/api/tags');
 const tags = jest.mocked(tagsModule);
-import submissionsModule = require('../../src/js/api/submissions');
+import submissionsModule = require('../../src/ts/api/submissions');
 const submissions = jest.mocked(submissionsModule);
 const { joinStateStore, acquireUnlockLock } = jest.mocked(
-    require('../../src/js/joinStateStore') as typeof joinStateStoreModule,
+    require('../../src/ts/joinStateStore') as typeof joinStateStoreModule,
 );
 const { runVotingPass } = jest.mocked(
-    require('../../src/js/services/votingOrchestrator') as typeof votingOrchestratorModule,
+    require('../../src/ts/services/votingOrchestrator') as typeof votingOrchestratorModule,
 );
 const { runJoinPass, joinChallengeSingle } = jest.mocked(
-    require('../../src/js/services/joinChallenges') as typeof joinChallengesModule,
+    require('../../src/ts/services/joinChallenges') as typeof joinChallengesModule,
 );
-const { runClaimPass } = jest.mocked(require('../../src/js/services/autoClaim') as typeof autoClaimModule);
+const { runClaimPass } = jest.mocked(require('../../src/ts/services/autoClaim') as typeof autoClaimModule);
 const { loadMissionNeeds, registerMissionNeeds } = jest.mocked(
-    require('../../src/js/services/missions') as typeof missionsModule,
+    require('../../src/ts/services/missions') as typeof missionsModule,
 );
-import rewardsModule = require('../../src/js/api/rewards');
+import rewardsModule = require('../../src/ts/api/rewards');
 const rewards = jest.mocked(rewardsModule);
-import main = require('../../src/js/strategies/real');
-import type * as joinStateStoreModule from '../../src/js/joinStateStore';
-import type * as votingOrchestratorModule from '../../src/js/services/votingOrchestrator';
-import type * as joinChallengesModule from '../../src/js/services/joinChallenges';
-import type * as autoClaimModule from '../../src/js/services/autoClaim';
-import type * as missionsModule from '../../src/js/services/missions';
-import type { Challenge } from '../../src/js/types/gurushots';
-import type { CategoryLogger } from '../../src/js/logger';
+import main = require('../../src/ts/strategies/real');
+import type * as joinStateStoreModule from '../../src/ts/joinStateStore';
+import type * as votingOrchestratorModule from '../../src/ts/services/votingOrchestrator';
+import type * as joinChallengesModule from '../../src/ts/services/joinChallenges';
+import type * as autoClaimModule from '../../src/ts/services/autoClaim';
+import type * as missionsModule from '../../src/ts/services/missions';
+import type { Challenge } from '../../src/ts/types/gurushots';
+import type { CategoryLogger } from '../../src/ts/logger';
 import { invalid } from '../helpers/invalid';
 
 const { runTurboMiniGame, joinChallenge, fetchChallengesAndVote } = main;
@@ -123,9 +123,9 @@ describe('module wiring', () => {
         let isolatedFactory;
         jest.isolateModules(() => {
             isolatedFactory = (
-                require('../../src/js/services/newEntryTracker') as typeof import('../../src/js/services/newEntryTracker')
+                require('../../src/ts/services/newEntryTracker') as typeof import('../../src/ts/services/newEntryTracker')
             ).createMetadataEntryTracker;
-            require('../../src/js/strategies/real');
+            require('../../src/ts/strategies/real');
         });
         expect(isolatedFactory).toHaveBeenCalledTimes(1);
         expect(isolatedFactory).toHaveBeenCalledWith();
@@ -134,12 +134,12 @@ describe('module wiring', () => {
     test('exposes the entry-picking boost and the title-pinned challenge read', () => {
         expect(main.applyBoost).toBe(
             (
-                require('../../src/js/strategies/real/applyBoost') as typeof import('../../src/js/strategies/real/applyBoost')
+                require('../../src/ts/strategies/real/applyBoost') as typeof import('../../src/ts/strategies/real/applyBoost')
             ).applyBoost,
         );
         expect(main.getActiveChallenges).toBe(
             (
-                require('../../src/js/strategies/real/activeChallenges') as typeof import('../../src/js/strategies/real/activeChallenges')
+                require('../../src/ts/strategies/real/activeChallenges') as typeof import('../../src/ts/strategies/real/activeChallenges')
             ).getActiveChallenges,
         );
     });

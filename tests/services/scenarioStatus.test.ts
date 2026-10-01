@@ -3,25 +3,25 @@
  * scheduler resolver built on them.
  */
 
-jest.mock('../../src/js/settings', () => ({
+jest.mock('../../src/ts/settings', () => ({
     getSetting: jest.fn(),
     getEffectiveSetting: jest.fn(),
     getScenario: jest.fn(),
 }));
-jest.mock('../../src/js/logger', () => ({ withCategory: jest.fn(() => ({ error: jest.fn() })) }));
+jest.mock('../../src/ts/logger', () => ({ withCategory: jest.fn(() => ({ error: jest.fn() })) }));
 
-import settingsModule = require('../../src/js/settings');
+import settingsModule = require('../../src/ts/settings');
 const settings = jest.mocked(settingsModule);
-import type * as scenarioStatusModule from '../../src/js/services/scenarioStatus';
-import type * as nodeResolversModule from '../../src/js/scheduling/nodeResolvers';
-import type * as scenarioStateStoreModule from '../../src/js/scenarioStateStore';
-import type { ScenarioDocument } from '../../src/js/settings/scenarioSchema';
+import type * as scenarioStatusModule from '../../src/ts/services/scenarioStatus';
+import type * as nodeResolversModule from '../../src/ts/scheduling/nodeResolvers';
+import type * as scenarioStateStoreModule from '../../src/ts/scenarioStateStore';
+import type { ScenarioDocument } from '../../src/ts/settings/scenarioSchema';
 import { invalid } from '../helpers/invalid';
 const { getScenarioStatus, scenarioWakeInput, ledgerForMode } =
-    require('../../src/js/services/scenarioStatus') as typeof scenarioStatusModule;
-const { resolveScenarioWake } = require('../../src/js/scheduling/nodeResolvers') as typeof nodeResolversModule;
+    require('../../src/ts/services/scenarioStatus') as typeof scenarioStatusModule;
+const { resolveScenarioWake } = require('../../src/ts/scheduling/nodeResolvers') as typeof nodeResolversModule;
 const { createMemoryStateLedger, initialState, scenarioStateLedger, mockScenarioStateLedger } =
-    require('../../src/js/scenarioStateStore') as typeof scenarioStateStoreModule;
+    require('../../src/ts/scenarioStateStore') as typeof scenarioStateStoreModule;
 
 const scenario = invalid<ScenarioDocument>({ name: 'Plan', version: 1, start: 'main', phases: { main: {} } });
 let topLevel: Record<string, unknown>;

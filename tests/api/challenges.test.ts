@@ -4,11 +4,11 @@
  * that adds title pinning and in-flight coalescing.
  */
 
-import type * as activeChallengesModule from '../../src/js/strategies/real/activeChallenges';
-import type * as api_clientModule from '../../src/js/api/api-client';
-import type * as challengeTitlePinModule from '../../src/js/services/challengeTitlePin';
-import type * as loggerModule from '../../src/js/logger';
-import type { CategoryLogger } from '../../src/js/logger';
+import type * as activeChallengesModule from '../../src/ts/strategies/real/activeChallenges';
+import type * as api_clientModule from '../../src/ts/api/api-client';
+import type * as challengeTitlePinModule from '../../src/ts/services/challengeTitlePin';
+import type * as loggerModule from '../../src/ts/logger';
+import type { CategoryLogger } from '../../src/ts/logger';
 import { invalid } from '../helpers/invalid';
 
 // The logger factory below also exports its shared debug/endOperation mocks.
@@ -18,10 +18,10 @@ type LoggerMock = typeof loggerModule & {
 };
 
 const { getActiveChallenges } =
-    require('../../src/js/strategies/real/activeChallenges') as typeof activeChallengesModule;
+    require('../../src/ts/strategies/real/activeChallenges') as typeof activeChallengesModule;
 
 // Mock the api-client module
-jest.mock('../../src/js/api/api-client', () => ({
+jest.mock('../../src/ts/api/api-client', () => ({
     makePostRequest: jest.fn(),
     createCommonHeaders: jest.fn((token: string | undefined) => ({
         'x-token': token || 'mock-token',
@@ -34,12 +34,12 @@ jest.mock('../../src/js/api/api-client', () => ({
 // testing fetch/coalescing behavior in isolation (pin behavior is unit-tested
 // in tests/services/challengeTitlePin.test.ts). Wiring is still asserted:
 // success responses must reach the pin hook, failed fetches must not.
-jest.mock('../../src/js/services/challengeTitlePin', () => ({
+jest.mock('../../src/ts/services/challengeTitlePin', () => ({
     pinChallengeTitles: jest.fn((challenges: unknown) => challenges),
 }));
 
 // Mock the logger module
-jest.mock('../../src/js/logger', () => {
+jest.mock('../../src/ts/logger', () => {
     const mockDebugFn = jest.fn();
     const mockEndOperationFn = jest.fn();
 
@@ -69,12 +69,12 @@ jest.mock('../../src/js/logger', () => {
 describe('challenges', () => {
     const mockToken = 'test-token-123';
     const { makePostRequest, createCommonHeaders } = jest.mocked(
-        require('../../src/js/api/api-client') as typeof api_clientModule,
+        require('../../src/ts/api/api-client') as typeof api_clientModule,
     );
     const { pinChallengeTitles } = jest.mocked(
-        require('../../src/js/services/challengeTitlePin') as typeof challengeTitlePinModule,
+        require('../../src/ts/services/challengeTitlePin') as typeof challengeTitlePinModule,
     );
-    const logger: LoggerMock = invalid(require('../../src/js/logger'));
+    const logger: LoggerMock = invalid(require('../../src/ts/logger'));
 
     beforeEach(() => {
         jest.clearAllMocks();

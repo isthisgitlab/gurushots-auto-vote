@@ -8,16 +8,16 @@
  * resets the module registry.
  */
 
-import type * as RuntimeModule from '../../src/js/runtime';
-import type { CapacitorGlobals, CapacitorPlugins } from '../../src/js/types/capacitor';
+import type * as RuntimeModule from '../../src/ts/runtime';
+import type { CapacitorGlobals, CapacitorPlugins } from '../../src/ts/types/capacitor';
 import { invalid } from '../helpers/invalid';
 
-jest.mock('../../src/js/runtime', () => ({
+jest.mock('../../src/ts/runtime', () => ({
     isCapacitor: jest.fn(() => false),
 }));
 
 const loadBridge = () =>
-    require('../../src/js/services/NativeAutovoteBridge') as typeof import('../../src/js/services/NativeAutovoteBridge');
+    require('../../src/ts/services/NativeAutovoteBridge') as typeof import('../../src/ts/services/NativeAutovoteBridge');
 
 const g = globalThis as CapacitorGlobals;
 
@@ -27,7 +27,7 @@ describe('NativeAutovoteBridge', () => {
     beforeEach(() => {
         jest.resetModules();
         delete g.Capacitor;
-        runtime = jest.mocked(require('../../src/js/runtime') as typeof RuntimeModule);
+        runtime = jest.mocked(require('../../src/ts/runtime') as typeof RuntimeModule);
         runtime.isCapacitor.mockReturnValue(true);
     });
 
@@ -86,7 +86,7 @@ describe('NativeAutovoteBridge', () => {
     test('reports unavailable (and logs) when reading the plugin registry throws', async () => {
         const warning = jest.fn();
         jest.mocked(
-            require('../../src/js/logger') as typeof import('../../src/js/logger'),
+            require('../../src/ts/logger') as typeof import('../../src/ts/logger'),
         ).withCategory.mockReturnValueOnce(invalid({ warning }));
         g.Capacitor = {
             get Plugins(): CapacitorPlugins {

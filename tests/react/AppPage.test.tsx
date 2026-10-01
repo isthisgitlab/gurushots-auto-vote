@@ -8,13 +8,13 @@
  * the window.api mock.
  */
 import { act, fireEvent, render, screen, waitFor } from '@testing-library/preact';
-import { DEFAULT_TIMEZONE } from '../../src/js/settings/uiDefaults';
+import { DEFAULT_TIMEZONE } from '../../src/ts/settings/uiDefaults';
 import { invalid } from '../helpers/invalid';
 
 import type { ComponentChildren } from 'preact';
-import type { Challenge } from '../../src/js/types/gurushots';
-import type { RendererGlobals } from '../../src/js/types/capacitor';
-import type { WindowApi } from '../../src/js/types/ipc';
+import type { Challenge } from '../../src/ts/types/gurushots';
+import type { RendererGlobals } from '../../src/ts/types/capacitor';
+import type { WindowApi } from '../../src/ts/types/ipc';
 import type * as AppModule from '@/pages/App';
 import type { ChallengesContextValue, ChallengesProvider } from '@/contexts/ChallengesContext';
 import type { AutovoteProvider } from '@/contexts/AutovoteContext';

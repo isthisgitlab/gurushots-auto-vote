@@ -12,8 +12,8 @@
  * to a real settings method, and returns the documented fallback on error.
  */
 
-jest.mock('../../src/js/settings');
-jest.mock('../../src/js/apiFactory', () => ({
+jest.mock('../../src/ts/settings');
+jest.mock('../../src/ts/apiFactory', () => ({
     refreshApi: jest.fn(),
     getApiStrategy: jest.fn(),
     getMiddleware: jest.fn(),
@@ -21,16 +21,16 @@ jest.mock('../../src/js/apiFactory', () => ({
 
 import { invalid } from '../helpers/invalid';
 
-import settingsModule = require('../../src/js/settings');
+import settingsModule = require('../../src/ts/settings');
 const settings = jest.mocked(settingsModule);
-import type * as settings_handlersModule from '../../src/js/ipc/settings.handlers';
-const { buildHandlers } = require('../../src/js/ipc/settings.handlers') as typeof settings_handlersModule;
+import type * as settings_handlersModule from '../../src/ts/ipc/settings.handlers';
+const { buildHandlers } = require('../../src/ts/ipc/settings.handlers') as typeof settings_handlersModule;
 
 // The table addresses settings methods and handler channels by name.
 type MockTable = Record<string, jest.Mock<unknown, unknown[]>>;
 type HandlerTable = Record<string, (...args: unknown[]) => unknown>;
 
-// Mirror of the THIN_HANDLERS table in src/js/ipc/settings.handlers.ts.
+// Mirror of the THIN_HANDLERS table in src/ts/ipc/settings.handlers.ts.
 // Kept hand-authored on purpose: if a row changes there, this test must
 // be updated too — that's the contract.
 const EXPECTED_THIN_HANDLERS: [string, string, string | boolean | null][] = [

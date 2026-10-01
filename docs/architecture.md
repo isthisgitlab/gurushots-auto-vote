@@ -9,7 +9,7 @@ alone doesn't spell out. For the three per-platform timer engines, see the compa
 _secondary hint_ ("around L204"), because this repo has high edit velocity and bare line ranges rot on the
 next unrelated edit. If a number is stale, search by name and update it here.
 
-**Path convention.** Paths are relative to `src/js/`; renderer paths keep their `react/…` segments
+**Path convention.** Paths are relative to `src/ts/`; renderer paths keep their `react/…` segments
 (e.g. `react/components/ui/Modal.tsx`).
 
 **Verified as of commit `e21931f`.** If a symbol has moved, trust the name over the line number and update
@@ -430,14 +430,14 @@ repeated six times is one that gets forgotten at one of them.
   `getPlatform()`, `getAppUserDataPath()` — the single path resolver shared with the logger); **renderer-
   side** via `globalThis.Capacitor?.isNativePlatform?.() === true` inline, to keep node out of the browser
   bundle.
-- **The Electron main process runs from a bundle.** `scripts/build-main.ts` bundles `src/js/index.ts` into
+- **The Electron main process runs from a bundle.** `scripts/build-main.ts` bundles `src/ts/index.ts` into
   `out/main/app.js` with a linked source map, loaded by the `out/main/index.js` stub (package.json `main`)
-  that turns source maps on first so main-process stack traces point at `src/js`. Every package import stays
-  a runtime require from the shipped `node_modules`; `src/js` itself is not packaged, and `out/` stays out of
+  that turns source maps on first so main-process stack traces point at `src/ts`. Every package import stays
+  a runtime require from the shipped `node_modules`; `src/ts` itself is not packaged, and `out/` stays out of
   `dist/` (Capacitor's webDir, which ships in the APK). Inside the bundle every module shares the bundle's
   `__dirname`, so paths to the app's own files (HTML pages, preload bundle, assets, the dev model cache) come
   from `appPath(...)` (`appPaths.ts`), which resolves the root as `__dirname/../..` — valid because the bundle
-  sits at the same depth below the root as `src/js/`.
+  sits at the same depth below the root as `src/ts/`.
 
 ## 8. Renderer / UI conventions
 
@@ -446,7 +446,7 @@ repeated six times is one that gets forgotten at one of them.
   `refetch`, optional subscribe) and `react/api/useAsyncIpcAction.ts` (loading + `{success,error}`
   handling). `useSettings`, `useActiveChallenges`, `useAuth`, `useBoost`, etc. all build on these. One-shot
   calls, event subscriptions and best-effort logging go through `react/api/ipc.ts` (`logRendererError` never
-  throws). Nothing else under `src/js/react/` touches `window.api`; Oxlint enforces it.
+  throws). Nothing else under `src/ts/react/` touches `window.api`; Oxlint enforces it.
 - **Settings changes reach every window.** A successful `set-setting` / `save-settings` broadcasts
   `settings-changed` to every open window (Electron) or the in-process bus (Capacitor); `useIpcQuery`
   subscribers refetch in the background without toggling `loading`, and the translation provider reads

@@ -5,11 +5,11 @@
  * "another spend in flight" deferral is exercised for real.
  */
 
-jest.mock('../../src/js/settings');
-jest.mock('../../src/js/services/currencyActions', () => ({
+jest.mock('../../src/ts/settings');
+jest.mock('../../src/ts/services/currencyActions', () => ({
     __esModule: true,
-    ...jest.requireActual<typeof import('../../src/js/services/currencyActions')>(
-        '../../src/js/services/currencyActions',
+    ...jest.requireActual<typeof import('../../src/ts/services/currencyActions')>(
+        '../../src/ts/services/currencyActions',
     ),
     unlockBoostWithKey: jest.fn(),
     previewSwap: jest.fn(),
@@ -17,24 +17,24 @@ jest.mock('../../src/js/services/currencyActions', () => ({
     fillExposure: jest.fn(),
 }));
 
-import settingsModule = require('../../src/js/settings');
+import settingsModule = require('../../src/ts/settings');
 const settings = jest.mocked(settingsModule);
-import currencyActionsModule = require('../../src/js/services/currencyActions');
+import currencyActionsModule = require('../../src/ts/services/currencyActions');
 const currencyActions = jest.mocked(currencyActionsModule);
-import type * as currencyAutoModule from '../../src/js/services/currencyAuto';
-import type * as currencyAutoStoreModule from '../../src/js/currencyAutoStore';
-import type { CurrencyPassDeps } from '../../src/js/services/currencyAuto';
+import type * as currencyAutoModule from '../../src/ts/services/currencyAuto';
+import type * as currencyAutoStoreModule from '../../src/ts/currencyAutoStore';
+import type { CurrencyPassDeps } from '../../src/ts/services/currencyAuto';
 import type {
     Challenge,
     MemberBoost,
     MemberRanking,
     RankingEntry,
     RankingExposure,
-} from '../../src/js/types/gurushots';
+} from '../../src/ts/types/gurushots';
 import { invalid } from '../helpers/invalid';
 const { runAutoKey, runAutoSwap, runAutoExposureFill, runMissionFill } =
-    require('../../src/js/services/currencyAuto') as typeof currencyAutoModule;
-const { createMemoryAutoSpendLedger } = require('../../src/js/currencyAutoStore') as typeof currencyAutoStoreModule;
+    require('../../src/ts/services/currencyAuto') as typeof currencyAutoModule;
+const { createMemoryAutoSpendLedger } = require('../../src/ts/currencyAutoStore') as typeof currencyAutoStoreModule;
 
 const NOW = 1_000_000;
 const H = 3600;

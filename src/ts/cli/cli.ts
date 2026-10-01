@@ -11,7 +11,7 @@
  *   - cli/commands/settings.ts get / set / list / reset
  *   - cli/prompts.ts           readline I/O helpers (used by auth)
  *
- * Run: pnpm cli:<command>, or node --import tsx src/js/cli/cli.ts <command> [...args]
+ * Run: pnpm cli:<command>, or node --import tsx src/ts/cli/cli.ts <command> [...args]
  */
 
 import * as logger from '../logger';

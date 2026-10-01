@@ -6,16 +6,16 @@
  * never-throw error envelope (which must not leak the internal message).
  */
 
-jest.mock('../../src/js/services/VotingLogic', () => ({ describeDeadlineActions: jest.fn() }));
+jest.mock('../../src/ts/services/VotingLogic', () => ({ describeDeadlineActions: jest.fn() }));
 
 import type { IpcMain } from 'electron';
 import { invalid } from '../helpers/invalid';
 
-import votingLogicModule = require('../../src/js/services/VotingLogic');
+import votingLogicModule = require('../../src/ts/services/VotingLogic');
 const votingLogic = jest.mocked(votingLogicModule);
-import type * as computations_handlersModule from '../../src/js/ipc/computations.handlers';
+import type * as computations_handlersModule from '../../src/ts/ipc/computations.handlers';
 const { buildHandlers, register } =
-    require('../../src/js/ipc/computations.handlers') as typeof computations_handlersModule;
+    require('../../src/ts/ipc/computations.handlers') as typeof computations_handlersModule;
 
 let handler: ReturnType<typeof buildHandlers>['get-deadline-actions'];
 

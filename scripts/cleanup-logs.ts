@@ -4,7 +4,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 // The shared resolver, so this script targets the same userData dir as the
 // app (the -dev dir when run from source, where the logs actually live).
-import * as runtime from '../src/js/runtime';
+import * as runtime from '../src/ts/runtime';
 import { runIfMain } from './lib/run-if-main';
 
 // Deletes the legacy api-debug-* files from `logsDir` (defaults to the

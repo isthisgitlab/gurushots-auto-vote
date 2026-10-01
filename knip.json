@@ -1,23 +1,23 @@
 {
     "$schema": "https://unpkg.com/knip@6/schema.json",
     "entry": [
-        "src/js/index.ts",
-        "src/js/preload.ts",
-        "src/js/bridge/capacitor.ts",
-        "src/js/headless/index.ts",
-        "src/js/react/pages/Login.tsx",
-        "src/js/react/pages/App.tsx",
-        "src/js/react/pages/Logs.tsx",
-        "src/js/react/pages/Capacitor.tsx",
-        "src/js/react/pages/Web.tsx",
+        "src/ts/index.ts",
+        "src/ts/preload.ts",
+        "src/ts/bridge/capacitor.ts",
+        "src/ts/headless/index.ts",
+        "src/ts/react/pages/Login.tsx",
+        "src/ts/react/pages/App.tsx",
+        "src/ts/react/pages/Logs.tsx",
+        "src/ts/react/pages/Capacitor.tsx",
+        "src/ts/react/pages/Web.tsx",
         "scripts/*.ts",
         "scripts/afterPack.mts",
-        "src/js/types/globals.ts",
+        "src/ts/types/globals.ts",
         "tests/jest-matchers.ts"
     ],
     "project": ["src/**/*.{ts,tsx,css}", "scripts/**/*.{ts,mts}", "tests/**/*.{ts,tsx,cts}"],
     "paths": {
-        "@/*": ["src/js/react/*"]
+        "@/*": ["src/ts/react/*"]
     },
     "ignoreDependencies": ["postject"],
     "ignoreBinaries": ["osascript", "notify-send", "pgrep"],

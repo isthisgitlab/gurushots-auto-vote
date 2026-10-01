@@ -1,6 +1,6 @@
 {
     // The tests' own program: the app's strict settings plus Jest's globals,
-    // kept out of the src/js program so app code cannot reach for them.
+    // kept out of the src/ts program so app code cannot reach for them.
     "extends": "../tsconfig.json",
     "compilerOptions": {
         "types": ["node", "jest"]
@@ -9,8 +9,8 @@
         "**/*.ts",
         "**/*.tsx",
         "**/*.cts",
-        "../src/js/**/*.ts",
-        "../src/js/**/*.tsx",
+        "../src/ts/**/*.ts",
+        "../src/ts/**/*.tsx",
         "../scripts/**/*.ts",
         "../scripts/**/*.mts"
     ]

@@ -2,27 +2,27 @@
  * Tests for submissions.ts — getEligiblePhotos and submitToChallenge.
  */
 
-import type * as submissionsModule from '../../src/js/api/submissions';
-import type * as api_clientModule from '../../src/js/api/api-client';
-import type { CategoryLogger } from '../../src/js/logger';
+import type * as submissionsModule from '../../src/ts/api/submissions';
+import type * as api_clientModule from '../../src/ts/api/api-client';
+import type { CategoryLogger } from '../../src/ts/logger';
 import { invalid } from '../helpers/invalid';
 
 const { getEligiblePhotos, getImageData, submitToChallenge, MAX_LIBRARY_PAGES } =
-    require('../../src/js/api/submissions') as typeof submissionsModule;
+    require('../../src/ts/api/submissions') as typeof submissionsModule;
 
-jest.mock('../../src/js/api/api-client', () => ({
+jest.mock('../../src/ts/api/api-client', () => ({
     makePostRequest: jest.fn(),
     FORM_CONTENT_TYPE: 'application/x-www-form-urlencoded; charset=utf-8',
 }));
 
-jest.mock('../../src/js/logger', () => {
+jest.mock('../../src/ts/logger', () => {
     const level = { info: jest.fn(), error: jest.fn(), debug: jest.fn(), success: jest.fn(), warning: jest.fn() };
     return { withCategory: jest.fn(() => level), __level: level };
 });
 
 describe('submissions', () => {
     const token = 'tok-123';
-    const { makePostRequest } = jest.mocked(require('../../src/js/api/api-client') as typeof api_clientModule);
+    const { makePostRequest } = jest.mocked(require('../../src/ts/api/api-client') as typeof api_clientModule);
 
     beforeEach(() => {
         jest.clearAllMocks();
@@ -103,7 +103,7 @@ describe('submissions', () => {
             __level: {
                 [K in 'info' | 'error' | 'debug' | 'success' | 'warning']: jest.MockedFunction<CategoryLogger[K]>;
             };
-        } = invalid(require('../../src/js/logger'));
+        } = invalid(require('../../src/ts/logger'));
         // limit=2 keeps the page arithmetic readable; a "short" page is <limit.
         const page = (...ids: string[]) => ({ items: ids.map((id) => ({ id })) });
 
@@ -319,7 +319,7 @@ describe('submissions', () => {
 
 describe('getEligiblePhotos usage option', () => {
     const token = 'tok-123';
-    const { makePostRequest } = jest.mocked(require('../../src/js/api/api-client') as typeof api_clientModule);
+    const { makePostRequest } = jest.mocked(require('../../src/ts/api/api-client') as typeof api_clientModule);
 
     beforeEach(() => jest.clearAllMocks());
 

@@ -9,8 +9,8 @@
 import { render, screen, fireEvent, waitFor } from './helpers/test-utils';
 import { ChallengeCard } from '@/components/app/ChallengeCard';
 import { buildChallenge } from '../helpers/challengeFixtures';
-import type { Bankroll, Challenge } from '../../src/js/types/gurushots';
-import type { WindowApi } from '../../src/js/types/ipc';
+import type { Bankroll, Challenge } from '../../src/ts/types/gurushots';
+import type { WindowApi } from '../../src/ts/types/ipc';
 import type { ComponentProps } from 'preact';
 
 const mockChallengeSettings = {

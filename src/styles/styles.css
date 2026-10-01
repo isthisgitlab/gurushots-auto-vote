@@ -1,8 +1,8 @@
 @import 'tailwindcss' source(none);
 
 @source "../../src/html/**/*.html";
-@source "../../src/js/**/*.ts";
-@source "../../src/js/**/*.tsx";
+@source "../../src/ts/**/*.ts";
+@source "../../src/ts/**/*.tsx";
 @plugin "daisyui" {
     themes: all;
     base: true;

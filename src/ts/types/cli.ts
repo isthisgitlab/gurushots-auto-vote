@@ -1,5 +1,5 @@
 /**
- * Types for the CLI host (src/js/cli/). Type-only: nothing here exists at
+ * Types for the CLI host (src/ts/cli/). Type-only: nothing here exists at
  * runtime.
  */
 

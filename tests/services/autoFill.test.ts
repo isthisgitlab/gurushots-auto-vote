@@ -3,29 +3,29 @@
  * (maybeAutoFillChallenge) and the manual GUI entry point (fillChallengeNow).
  */
 
-import type * as autoFillModule from '../../src/js/services/autoFill';
+import type * as autoFillModule from '../../src/ts/services/autoFill';
 import type * as challengeFixturesModule from '../helpers/challengeFixtures';
-import type * as lexiconModule from '../../src/js/services/semantic/lexicon';
-import type * as photoStatsModule from '../../src/js/services/photoStats';
-import type * as photoPickerModule from '../../src/js/services/photoPicker';
-import type * as entryAgeStoreModule from '../../src/js/entryAgeStore';
-import type { CategoryLogger } from '../../src/js/logger';
-import type { FillDeps, FillLogger, FillSettings } from '../../src/js/types/autoFill';
-import type { FillSchedule } from '../../src/js/services/scheduleRemap';
-import type { ActionResult, Challenge, ImageRecord } from '../../src/js/types/gurushots';
+import type * as lexiconModule from '../../src/ts/services/semantic/lexicon';
+import type * as photoStatsModule from '../../src/ts/services/photoStats';
+import type * as photoPickerModule from '../../src/ts/services/photoPicker';
+import type * as entryAgeStoreModule from '../../src/ts/entryAgeStore';
+import type { CategoryLogger } from '../../src/ts/logger';
+import type { FillDeps, FillLogger, FillSettings } from '../../src/ts/types/autoFill';
+import type { FillSchedule } from '../../src/ts/services/scheduleRemap';
+import type { ActionResult, Challenge, ImageRecord } from '../../src/ts/types/gurushots';
 import { invalid } from '../helpers/invalid';
 
-jest.mock('../../src/js/services/semantic/lexicon', () => ({
+jest.mock('../../src/ts/services/semantic/lexicon', () => ({
     __esModule: true,
-    ...jest.requireActual<typeof import('../../src/js/services/semantic/lexicon')>(
-        '../../src/js/services/semantic/lexicon',
+    ...jest.requireActual<typeof import('../../src/ts/services/semantic/lexicon')>(
+        '../../src/ts/services/semantic/lexicon',
     ),
 }));
 
 // photoStats persists its cache through this store; keep it in memory so the
 // suite never touches the real user-data directory.
 let statsStoreData: unknown = null;
-jest.mock('../../src/js/settings/storage', () => ({
+jest.mock('../../src/ts/settings/storage', () => ({
     createJsonStore: () => ({
         readRaw: () => statsStoreData,
         writeRaw: (data: unknown) => {
@@ -49,10 +49,10 @@ const {
     resolveScheduleTarget,
     getNextScheduleThresholdSec,
     refreshChallengeState,
-} = require('../../src/js/services/autoFill') as typeof autoFillModule;
+} = require('../../src/ts/services/autoFill') as typeof autoFillModule;
 const { buildChallenge } = require('../helpers/challengeFixtures') as typeof challengeFixturesModule;
 const { createEntryAgeLedger, createMemoryEntryAgeLedger } =
-    require('../../src/js/entryAgeStore') as typeof entryAgeStoreModule;
+    require('../../src/ts/entryAgeStore') as typeof entryAgeStoreModule;
 
 // Mirrors the schema default: "have ≥2 entries at T-30m, ≥3 at T-20m, ≥4 at
 // T-10m" for a 4-slot challenge.
@@ -2064,7 +2064,7 @@ describe('fetchCandidatesForChallenge — theme-narrowed fetch', () => {
     });
 
     test('searches related existing tags before the truncated whole-library fallback', async () => {
-        const lexicon = require('../../src/js/services/semantic/lexicon') as typeof lexiconModule;
+        const lexicon = require('../../src/ts/services/semantic/lexicon') as typeof lexiconModule;
         const related = jest.spyOn(lexicon, 'relatedSearchTerms').mockReturnValue(['church', 'altar']);
         const getEligiblePhotos = jest.fn(async (_id: string | number, _tok: string, opts: EligibleOptions) =>
             opts.search === 'church' ? [allowedPhoto('church', ['Church'])] : [],
@@ -2082,7 +2082,7 @@ describe('fetchCandidatesForChallenge — theme-narrowed fetch', () => {
     });
 
     test('includes related tags when an exact title tag already has a candidate', async () => {
-        const lexicon = require('../../src/js/services/semantic/lexicon') as typeof lexiconModule;
+        const lexicon = require('../../src/ts/services/semantic/lexicon') as typeof lexiconModule;
         const related = jest.spyOn(lexicon, 'relatedSearchTerms').mockReturnValue(['church', 'altar']);
         const getEligiblePhotos = jest.fn(async (_id: string | number, _tok: string, opts: EligibleOptions) => {
             if (opts.search === 'history') return [allowedPhoto('history', ['History'])];
@@ -2103,7 +2103,7 @@ describe('fetchCandidatesForChallenge — theme-narrowed fetch', () => {
     });
 
     test('uses the whole library when related tags also have no eligible photos', async () => {
-        const lexicon = require('../../src/js/services/semantic/lexicon') as typeof lexiconModule;
+        const lexicon = require('../../src/ts/services/semantic/lexicon') as typeof lexiconModule;
         const related = jest.spyOn(lexicon, 'relatedSearchTerms').mockReturnValue(['church']);
         const getEligiblePhotos = jest.fn(async (_id: string | number, _tok: string, opts: EligibleOptions) =>
             opts.search ? [] : [allowedPhoto('fallback', ['Portrait'])],
@@ -3052,7 +3052,7 @@ describe('pre-submit live re-check (refreshChallengeState) — stale pass snapsh
 });
 
 describe('photo-stats enrichment in the fill pipeline', () => {
-    const photoStats = require('../../src/js/services/photoStats') as typeof photoStatsModule;
+    const photoStats = require('../../src/ts/services/photoStats') as typeof photoStatsModule;
 
     // Stable per-category logger so warnings can be asserted on.
     const makeCapturingLogger = () => {
@@ -3289,7 +3289,7 @@ describe('photo-stats enrichment in the fill pipeline', () => {
         // Guard the premise: if the matcher ever learns "staircase" ~ "stair",
         // this test stops testing the semantic-only path and must be revisited.
         const { scorePhoto, buildChallengeKeywords } =
-            require('../../src/js/services/photoPicker') as typeof photoPickerModule;
+            require('../../src/ts/services/photoPicker') as typeof photoPickerModule;
         const challenge = makeChallenge({ title: 'Stairs', url: 'stairs', entries: [{ id: 'e1' }] });
         expect(scorePhoto(photos[0], buildChallengeKeywords(challenge))).toBe(0);
 

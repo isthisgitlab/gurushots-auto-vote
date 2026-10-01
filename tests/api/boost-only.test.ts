@@ -4,11 +4,11 @@
  * Tests for the boost-only mode functionality
  */
 
-import settingsModule = require('../../src/js/settings');
+import settingsModule = require('../../src/ts/settings');
 const settings = jest.mocked(settingsModule);
 
 // Mock the settings module
-jest.mock('../../src/js/settings', () => ({
+jest.mock('../../src/ts/settings', () => ({
     getEffectiveSetting: jest.fn(),
     SETTINGS_SCHEMA: {
         onlyBoost: {

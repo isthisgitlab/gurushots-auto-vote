@@ -12,7 +12,7 @@
 // Shared mutable pin store backing the settings-facade fake.
 let pinStore: Record<string, unknown> = {};
 
-jest.mock('../../src/js/settings', () => ({
+jest.mock('../../src/ts/settings', () => ({
     MAX_TITLE_LENGTH: 200,
     rememberChallengeTitles: jest.fn(() => true),
     getTitlePins: jest.fn(() => ({ ...pinStore })),
@@ -30,7 +30,7 @@ jest.mock('../../src/js/settings', () => ({
 }));
 
 const mockWarning = jest.fn<void, Parameters<CategoryLogger['warning']>>();
-jest.mock('../../src/js/logger', () => ({
+jest.mock('../../src/ts/logger', () => ({
     withCategory: jest.fn(() => ({
         info: jest.fn(),
         warning: mockWarning,
@@ -47,13 +47,13 @@ jest.mock('../../src/js/logger', () => ({
     ),
 }));
 
-import settingsModule = require('../../src/js/settings');
+import settingsModule = require('../../src/ts/settings');
 const settings = jest.mocked(settingsModule);
-import type * as challengeTitlePinModule from '../../src/js/services/challengeTitlePin';
-import type { CategoryLogger } from '../../src/js/logger';
+import type * as challengeTitlePinModule from '../../src/ts/services/challengeTitlePin';
+import type { CategoryLogger } from '../../src/ts/logger';
 import { invalid } from '../helpers/invalid';
 const { pinChallengeTitles, __resetForTests } =
-    require('../../src/js/services/challengeTitlePin') as typeof challengeTitlePinModule;
+    require('../../src/ts/services/challengeTitlePin') as typeof challengeTitlePinModule;
 
 describe('pinChallengeTitles', () => {
     beforeEach(() => {

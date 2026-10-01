@@ -6,23 +6,23 @@
  * swap preview binding (single-use, bounded, must match the commit).
  */
 
-jest.mock('../../src/js/settings');
-jest.mock('../../src/js/apiFactory');
-jest.mock('../../src/js/services/auth');
-jest.mock('../../src/js/services/currencyActions');
+jest.mock('../../src/ts/settings');
+jest.mock('../../src/ts/apiFactory');
+jest.mock('../../src/ts/services/auth');
+jest.mock('../../src/ts/services/currencyActions');
 
 import type { IpcMain } from 'electron';
 import { invalid } from '../helpers/invalid';
 
-import apiFactoryModule = require('../../src/js/apiFactory');
+import apiFactoryModule = require('../../src/ts/apiFactory');
 const apiFactory = jest.mocked(apiFactoryModule);
-import authModule = require('../../src/js/services/auth');
+import authModule = require('../../src/ts/services/auth');
 const auth = jest.mocked(authModule);
-import currencyActionsModule = require('../../src/js/services/currencyActions');
+import currencyActionsModule = require('../../src/ts/services/currencyActions');
 const currencyActions = jest.mocked(currencyActionsModule);
-import type * as currency_handlersModule from '../../src/js/ipc/currency.handlers';
-import type * as swapBackStoreModule from '../../src/js/swapBackStore';
-const { buildHandlers } = require('../../src/js/ipc/currency.handlers') as typeof currency_handlersModule;
+import type * as currency_handlersModule from '../../src/ts/ipc/currency.handlers';
+import type * as swapBackStoreModule from '../../src/ts/swapBackStore';
+const { buildHandlers } = require('../../src/ts/ipc/currency.handlers') as typeof currency_handlersModule;
 
 const OK = { ok: true, outcome: 'ok' };
 // The handlers as the tests read them: every result is an envelope whose `outcome` the
@@ -44,8 +44,8 @@ beforeEach(() => {
     // The spend lock is real (the handlers share it with the automatic runners);
     // only the spend services are mocked.
     currencyActions.withSpendLock.mockImplementation(
-        jest.requireActual<typeof import('../../src/js/services/currencyActions')>(
-            '../../src/js/services/currencyActions',
+        jest.requireActual<typeof import('../../src/ts/services/currencyActions')>(
+            '../../src/ts/services/currencyActions',
         ).withSpendLock,
     );
     currencyActions.unlockBoostWithKey.mockResolvedValue(OK);
@@ -249,7 +249,7 @@ describe('swap back channels', () => {
     });
 
     test('mock mode uses an in-memory ledger, never the real one', async () => {
-        const { swapBackLedger } = require('../../src/js/swapBackStore') as typeof swapBackStoreModule;
+        const { swapBackLedger } = require('../../src/ts/swapBackStore') as typeof swapBackStoreModule;
         await handlers['swap-back-entry-photo'](null, 10, 'repl', true);
         expect(currencyActions.swapBack.mock.calls[0][3].ledger).not.toBe(swapBackLedger);
     });
@@ -329,7 +329,7 @@ describe('get-swap-backs listing', () => {
 
 describe('register', () => {
     test('registers every currency channel on ipcMain', async () => {
-        const { register } = require('../../src/js/ipc/currency.handlers') as typeof currency_handlersModule;
+        const { register } = require('../../src/ts/ipc/currency.handlers') as typeof currency_handlersModule;
         const channels = new Map<string, Parameters<IpcMain['handle']>[1]>();
         register(
             invalid({

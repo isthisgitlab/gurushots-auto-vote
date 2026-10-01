@@ -14,16 +14,16 @@
 import axiosModule = require('axios');
 import type { AxiosRequestConfig, AxiosResponse } from 'axios';
 import { invalid } from '../helpers/invalid';
-import type { CategoryLogger } from '../../src/js/logger';
+import type { CategoryLogger } from '../../src/ts/logger';
 // tests/setup.ts replaces axios with a bare jest.fn(), called with one config.
 type AxiosMock = jest.Mock<Promise<unknown>, [config: AxiosRequestConfig]>;
 const axios: AxiosMock = invalid(axiosModule);
 
-jest.mock('../../src/js/api/randomizer', () => ({
+jest.mock('../../src/ts/api/randomizer', () => ({
     generateRandomHeaders: jest.fn((token: string) => ({ 'x-token': token })),
 }));
 
-jest.mock('../../src/js/runtime', () => ({
+jest.mock('../../src/ts/runtime', () => ({
     isCapacitor: jest.fn(() => false),
     isHeadlessService: jest.fn(() => false),
 }));
@@ -36,19 +36,19 @@ jest.mock(
     { virtual: true },
 );
 
-jest.mock('../../src/js/settings', () => ({ getSetting: jest.fn() }));
+jest.mock('../../src/ts/settings', () => ({ getSetting: jest.fn() }));
 
-jest.mock('../../src/js/timing', () => ({ sleep: jest.fn(() => Promise.resolve()) }));
+jest.mock('../../src/ts/timing', () => ({ sleep: jest.fn(() => Promise.resolve()) }));
 
-import settingsModule = require('../../src/js/settings');
+import settingsModule = require('../../src/ts/settings');
 const settings = jest.mocked(settingsModule);
-import runtimeModule = require('../../src/js/runtime');
+import runtimeModule = require('../../src/ts/runtime');
 const runtime = jest.mocked(runtimeModule);
-import timingModule = require('../../src/js/timing');
+import timingModule = require('../../src/ts/timing');
 const timing = jest.mocked(timingModule);
-import logger = require('../../src/js/logger');
-import type * as api_clientModule from '../../src/js/api/api-client';
-const { makePostRequest } = require('../../src/js/api/api-client') as typeof api_clientModule;
+import logger = require('../../src/ts/logger');
+import type * as api_clientModule from '../../src/ts/api/api-client';
+const { makePostRequest } = require('../../src/ts/api/api-client') as typeof api_clientModule;
 
 const URL = 'https://api.gurushots.com/edge';
 
@@ -183,12 +183,12 @@ describe('headless adapter', () => {
             const existing = jest.fn();
             g.__gsResolveHeadlessHttp = existing;
             try {
-                const isolatedRuntime = jest.mocked(require('../../src/js/runtime') as typeof runtimeModule);
+                const isolatedRuntime = jest.mocked(require('../../src/ts/runtime') as typeof runtimeModule);
                 const isolatedAxios: AxiosMock = invalid(require('axios'));
                 isolatedRuntime.isHeadlessService.mockReturnValue(true);
                 isolatedAxios.mockResolvedValueOnce({ status: 200, headers: {}, data: {} });
                 (
-                    require('../../src/js/api/api-client') as typeof import('../../src/js/api/api-client')
+                    require('../../src/ts/api/api-client') as typeof import('../../src/ts/api/api-client')
                 ).makePostRequest(URL, {}, '');
                 expect(g.__gsResolveHeadlessHttp).toBe(existing);
                 isolatedRuntime.isHeadlessService.mockReturnValue(false);

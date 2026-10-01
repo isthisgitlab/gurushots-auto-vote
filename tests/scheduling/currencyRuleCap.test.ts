@@ -5,13 +5,13 @@
  * computeNextCycleDelayMs (mode 'currency-rule').
  */
 
-import type * as thresholdWindowModule from '../../src/js/scheduling/thresholdWindow';
-import type { Challenge } from '../../src/js/types/gurushots';
-import type { RuleTiming } from '../../src/js/voting/currencyAuto';
+import type * as thresholdWindowModule from '../../src/ts/scheduling/thresholdWindow';
+import type { Challenge } from '../../src/ts/types/gurushots';
+import type { RuleTiming } from '../../src/ts/voting/currencyAuto';
 import { invalid } from '../helpers/invalid';
 
 const { soonestCurrencyRuleStart, computeNextCycleDelayMs } =
-    require('../../src/js/scheduling/thresholdWindow') as typeof thresholdWindowModule;
+    require('../../src/ts/scheduling/thresholdWindow') as typeof thresholdWindowModule;
 
 const NOW = 1_000_000;
 const H = 3600;

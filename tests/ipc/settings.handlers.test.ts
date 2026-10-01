@@ -13,9 +13,9 @@ const getAllWindowsMock = jest.fn<unknown[], []>(() => []);
 jest.mock('electron', () => ({
     BrowserWindow: { getAllWindows: getAllWindowsMock },
 }));
-jest.mock('../../src/js/settings');
-jest.mock('../../src/js/metadata', () => ({ cleanupStaleMetadata: jest.fn() }));
-jest.mock('../../src/js/apiFactory', () => ({
+jest.mock('../../src/ts/settings');
+jest.mock('../../src/ts/metadata', () => ({ cleanupStaleMetadata: jest.fn() }));
+jest.mock('../../src/ts/apiFactory', () => ({
     refreshApi: jest.fn(),
     getApiStrategy: jest.fn(),
     getMiddleware: jest.fn(),
@@ -24,14 +24,14 @@ jest.mock('../../src/js/apiFactory', () => ({
 import type { IpcMain } from 'electron';
 import { invalid } from '../helpers/invalid';
 
-import settingsModule = require('../../src/js/settings');
+import settingsModule = require('../../src/ts/settings');
 const settings = jest.mocked(settingsModule);
-import metadataModule = require('../../src/js/metadata');
+import metadataModule = require('../../src/ts/metadata');
 const metadata = jest.mocked(metadataModule);
-import apiFactoryModule = require('../../src/js/apiFactory');
+import apiFactoryModule = require('../../src/ts/apiFactory');
 const apiFactory = jest.mocked(apiFactoryModule);
-import type * as settings_handlersModule from '../../src/js/ipc/settings.handlers';
-const { buildHandlers, register } = require('../../src/js/ipc/settings.handlers') as typeof settings_handlersModule;
+import type * as settings_handlersModule from '../../src/ts/ipc/settings.handlers';
+const { buildHandlers, register } = require('../../src/ts/ipc/settings.handlers') as typeof settings_handlersModule;
 
 type ChannelImpl = Parameters<IpcMain['handle']>[1];
 // Rows that address settings methods and handler channels by name.

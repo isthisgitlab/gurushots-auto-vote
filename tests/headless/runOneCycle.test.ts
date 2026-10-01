@@ -1,30 +1,30 @@
 /**
- * Tests for the Android headless background entry (src/js/headless/index.ts).
+ * Tests for the Android headless background entry (src/ts/headless/index.ts).
  * It runs one full voting cycle via the existing orchestrator and reports
  * the result + next cadence back to the native service through
  * AndroidHeadlessBridge.onCycleComplete.
  */
 
-jest.mock('../../src/js/apiFactory', () => ({ getApiStrategy: jest.fn() }));
-jest.mock('../../src/js/settings', () => ({
+jest.mock('../../src/ts/apiFactory', () => ({ getApiStrategy: jest.fn() }));
+jest.mock('../../src/ts/settings', () => ({
     getSetting: jest.fn(),
     loadSettings: jest.fn(() => ({ checkFrequencyMin: 2, checkFrequencyMax: 2 })),
     getEffectiveSetting: jest.fn(),
 }));
 
-import apiFactoryModule = require('../../src/js/apiFactory');
+import apiFactoryModule = require('../../src/ts/apiFactory');
 const apiFactory = jest.mocked(apiFactoryModule);
-import settingsModule = require('../../src/js/settings');
+import settingsModule = require('../../src/ts/settings');
 const settings = jest.mocked(settingsModule);
-import type * as randomDelayModule from '../../src/js/scheduling/randomDelay';
-import type * as indexModule from '../../src/js/headless/index';
-import type * as loggerModule from '../../src/js/logger';
-import type { HeadlessGlobals } from '../../src/js/types/capacitor';
+import type * as randomDelayModule from '../../src/ts/scheduling/randomDelay';
+import type * as indexModule from '../../src/ts/headless/index';
+import type * as loggerModule from '../../src/ts/logger';
+import type { HeadlessGlobals } from '../../src/ts/types/capacitor';
 import { invalid } from '../helpers/invalid';
-const { OFFLINE_RETRY_MS } = require('../../src/js/scheduling/randomDelay') as typeof randomDelayModule;
+const { OFFLINE_RETRY_MS } = require('../../src/ts/scheduling/randomDelay') as typeof randomDelayModule;
 
 // Requiring the entry installs globalThis.GS.
-const { computeNextDelayMs } = require('../../src/js/headless/index') as typeof indexModule;
+const { computeNextDelayMs } = require('../../src/ts/headless/index') as typeof indexModule;
 
 // What runOneCycle reports through AndroidHeadlessBridge.onCycleComplete (JSON).
 type CyclePayload = { ok: boolean; nextDelayMs: number; message?: string | null; error?: string; skipped?: string };
@@ -265,7 +265,7 @@ describe('headless runOneCycle', () => {
     });
 
     describe('defensive fallbacks', () => {
-        const logger = jest.mocked(require('../../src/js/logger') as typeof loggerModule);
+        const logger = jest.mocked(require('../../src/ts/logger') as typeof loggerModule);
         let info: jest.MockedFunction<loggerModule.CategoryLogger['info']>;
 
         beforeEach(() => {

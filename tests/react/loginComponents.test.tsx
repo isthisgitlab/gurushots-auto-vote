@@ -8,7 +8,7 @@ import { LoginForm } from '@/components/login/LoginForm';
 import { LanguageSwitcher } from '@/components/login/LanguageSwitcher';
 import { SettingsToggles } from '@/components/login/SettingsToggles';
 import { ModeInfoText } from '@/components/login/ModeInfoText';
-import { THEMES } from '../../src/js/settings/uiDefaults';
+import { THEMES } from '../../src/ts/settings/uiDefaults';
 
 describe('LoginForm', () => {
     test('blocks submit and shows both required errors when empty', () => {

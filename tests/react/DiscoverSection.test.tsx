@@ -9,8 +9,8 @@ import { render, screen, fireEvent, waitFor } from './helpers/test-utils';
 import { DiscoverSection } from '@/components/app/DiscoverSection';
 import { mockTranslator } from './helpers/setup';
 import { invalid } from '../helpers/invalid';
-import type { Challenge } from '../../src/js/types/gurushots';
-import type { WindowApi } from '../../src/js/types/ipc';
+import type { Challenge } from '../../src/ts/types/gurushots';
+import type { WindowApi } from '../../src/ts/types/ipc';
 
 const items = invalid<Challenge[]>([
     { id: 900001, type: 'default', join_coins: 0, title: 'Free One' },

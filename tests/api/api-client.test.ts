@@ -9,13 +9,13 @@ import type { AxiosRequestConfig, AxiosResponse } from 'axios';
 import { invalid } from '../helpers/invalid';
 // tests/setup.ts replaces axios with a bare jest.fn(), called with one config.
 const axios: jest.Mock<Promise<unknown>, [config: AxiosRequestConfig]> = invalid(axiosModule);
-import type * as api_clientModule from '../../src/js/api/api-client';
-import type * as settingsModule from '../../src/js/settings';
-import type * as loggerModule from '../../src/js/logger';
-import type * as runtimeModule from '../../src/js/runtime';
+import type * as api_clientModule from '../../src/ts/api/api-client';
+import type * as settingsModule from '../../src/ts/settings';
+import type * as loggerModule from '../../src/ts/logger';
+import type * as runtimeModule from '../../src/ts/runtime';
 import type * as coreModule from '@capacitor/core';
 const { makePostRequest, createCommonHeaders, FORM_CONTENT_TYPE } =
-    require('../../src/js/api/api-client') as typeof api_clientModule;
+    require('../../src/ts/api/api-client') as typeof api_clientModule;
 
 // The logger factory below also exports its shared api/apiRequest mocks.
 type LoggerMock = typeof loggerModule & {
@@ -31,7 +31,7 @@ const g = globalThis as typeof globalThis & {
 };
 
 // Mock the randomizer module
-jest.mock('../../src/js/api/randomizer', () => ({
+jest.mock('../../src/ts/api/randomizer', () => ({
     generateRandomHeaders: jest.fn((token: string | undefined) => ({
         'x-token': token || 'mock-token',
         'user-agent': 'GuruShots/1.0 (iPhone; iOS 16.0; en_US)',
@@ -42,7 +42,7 @@ jest.mock('../../src/js/api/randomizer', () => ({
 }));
 
 // Mock the runtime module so we can flip isCapacitor() per-test.
-jest.mock('../../src/js/runtime', () => ({
+jest.mock('../../src/ts/runtime', () => ({
     isCapacitor: jest.fn(() => false),
     isHeadlessService: jest.fn(() => false),
     isElectron: jest.fn(() => false),
@@ -67,12 +67,12 @@ jest.mock(
 // Mock settings so the request timeout and retry/backoff knobs are
 // deterministic. The default impl is installed in beforeEach;
 // apiRetryBaseDelayMs is 0 there so backoff sleeps are instant.
-jest.mock('../../src/js/settings', () => ({
+jest.mock('../../src/ts/settings', () => ({
     getSetting: jest.fn(),
 }));
 
 // Mock the logger module
-jest.mock('../../src/js/logger', () => {
+jest.mock('../../src/ts/logger', () => {
     const mockApiFn = jest.fn();
     const mockApiRequestFn = jest.fn();
 
@@ -108,7 +108,7 @@ describe('api-client', () => {
     const mockToken = 'test-token-123';
     const mockUrl = 'https://api.gurushots.com/test';
     const mockData = 'test=data';
-    const settings = jest.mocked(require('../../src/js/settings') as typeof settingsModule);
+    const settings = jest.mocked(require('../../src/ts/settings') as typeof settingsModule);
 
     beforeEach(() => {
         jest.clearAllMocks();
@@ -261,7 +261,7 @@ describe('api-client', () => {
         });
 
         test('should log API requests and responses', async () => {
-            const logger: LoggerMock = invalid(require('../../src/js/logger'));
+            const logger: LoggerMock = invalid(require('../../src/ts/logger'));
             const mockResponse = {
                 status: 200,
                 headers: { 'content-type': 'application/json' },
@@ -285,7 +285,7 @@ describe('api-client', () => {
         });
 
         test('should log API errors', async () => {
-            const logger: LoggerMock = invalid(require('../../src/js/logger'));
+            const logger: LoggerMock = invalid(require('../../src/ts/logger'));
             const mockError: Error & { response?: unknown } = new Error('API error');
             mockError.response = {
                 status: 400,
@@ -311,7 +311,7 @@ describe('api-client', () => {
         });
 
         test('should log API errors without response', async () => {
-            const logger: LoggerMock = invalid(require('../../src/js/logger'));
+            const logger: LoggerMock = invalid(require('../../src/ts/logger'));
             const mockError = new Error('Network timeout');
 
             axios.mockRejectedValueOnce(mockError);
@@ -332,7 +332,7 @@ describe('api-client', () => {
         });
 
         test('should attach CapacitorHttp adapter when running on Capacitor', async () => {
-            const runtime = jest.mocked(require('../../src/js/runtime') as typeof runtimeModule);
+            const runtime = jest.mocked(require('../../src/ts/runtime') as typeof runtimeModule);
             runtime.isCapacitor.mockReturnValue(true);
 
             const mockResponse = {
@@ -354,7 +354,7 @@ describe('api-client', () => {
         });
 
         test('CapacitorHttp adapter forwards the request to native and reshapes the response', async () => {
-            const runtime = jest.mocked(require('../../src/js/runtime') as typeof runtimeModule);
+            const runtime = jest.mocked(require('../../src/ts/runtime') as typeof runtimeModule);
             runtime.isCapacitor.mockReturnValue(true);
 
             // Capture the adapter axios receives, then invoke it directly to
@@ -402,7 +402,7 @@ describe('api-client', () => {
         });
 
         test('CapacitorHttp adapter defaults method to GET when config.method is missing', async () => {
-            const runtime = jest.mocked(require('../../src/js/runtime') as typeof runtimeModule);
+            const runtime = jest.mocked(require('../../src/ts/runtime') as typeof runtimeModule);
             runtime.isCapacitor.mockReturnValue(true);
 
             let capturedAdapter: TestAdapter | undefined;
@@ -429,7 +429,7 @@ describe('api-client', () => {
             // CapacitorHttp.request resolves for ALL statuses, so without
             // finalizeAdapterResponse the foreground path would treat a 429/5xx
             // error body as a success and the retry layer would never fire.
-            const runtime = jest.mocked(require('../../src/js/runtime') as typeof runtimeModule);
+            const runtime = jest.mocked(require('../../src/ts/runtime') as typeof runtimeModule);
             runtime.isCapacitor.mockReturnValue(true);
 
             let capturedAdapter: TestAdapter | undefined;
@@ -458,7 +458,7 @@ describe('api-client', () => {
         });
 
         test('should log API response with full data', async () => {
-            const logger: LoggerMock = invalid(require('../../src/js/logger'));
+            const logger: LoggerMock = invalid(require('../../src/ts/logger'));
 
             const mockResponse = {
                 status: 200,
@@ -594,7 +594,7 @@ describe('api-client', () => {
         });
 
         test('uses the headless native HTTP adapter when running in the background service', async () => {
-            const runtime = jest.mocked(require('../../src/js/runtime') as typeof runtimeModule);
+            const runtime = jest.mocked(require('../../src/ts/runtime') as typeof runtimeModule);
             runtime.isHeadlessService.mockReturnValue(true);
 
             let capturedAdapter: TestAdapter | undefined;
@@ -641,7 +641,7 @@ describe('api-client', () => {
         });
 
         test('the headless adapter rejects non-2xx so retry/backoff can classify it', async () => {
-            const runtime = jest.mocked(require('../../src/js/runtime') as typeof runtimeModule);
+            const runtime = jest.mocked(require('../../src/ts/runtime') as typeof runtimeModule);
             runtime.isHeadlessService.mockReturnValue(true);
 
             let capturedAdapter: TestAdapter | undefined;

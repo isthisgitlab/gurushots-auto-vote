@@ -3,21 +3,21 @@
  * term into a tag the member's library actually carries.
  */
 
-import type * as tagsModule from '../../src/js/api/tags';
-import type * as api_clientModule from '../../src/js/api/api-client';
+import type * as tagsModule from '../../src/ts/api/tags';
+import type * as api_clientModule from '../../src/ts/api/api-client';
 import { invalid } from '../helpers/invalid';
 
 const { getCurrentMemberProfile, searchTagAutocomplete, MIN_AUTOCOMPLETE_CHARS } =
-    require('../../src/js/api/tags') as typeof tagsModule;
+    require('../../src/ts/api/tags') as typeof tagsModule;
 
-jest.mock('../../src/js/api/api-client', () => ({
+jest.mock('../../src/ts/api/api-client', () => ({
     makePostRequest: jest.fn(),
     FORM_CONTENT_TYPE: 'application/x-www-form-urlencoded; charset=utf-8',
 }));
 
 describe('api/tags', () => {
     const token = 'tok-123';
-    const { makePostRequest } = jest.mocked(require('../../src/js/api/api-client') as typeof api_clientModule);
+    const { makePostRequest } = jest.mocked(require('../../src/ts/api/api-client') as typeof api_clientModule);
 
     beforeEach(() => {
         makePostRequest.mockReset();

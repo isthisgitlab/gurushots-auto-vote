@@ -12,7 +12,7 @@
  * ipc/*.handlers.ts buildHandlers() key plus index.ts's direct ipcMain.on
  * registrations — a channel added on either side without the other fails CI.
  * NOTE: that test is name-level only. Signatures are carried by the
- * `WindowApi` type (src/js/types/ipc.ts), derived from these lists and the
+ * `WindowApi` type (src/ts/types/ipc.ts), derived from these lists and the
  * handlers' buildHandlers(): a renderer call in a type-checked file is
  * checked against the handler it reaches.
  *

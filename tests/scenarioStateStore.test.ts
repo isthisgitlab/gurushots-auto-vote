@@ -11,14 +11,14 @@ const {
     mockScenarioStateLedger,
     initializeScenarioStateAsync,
     flushScenarioStateWrites,
-} = require('../src/js/scenarioStateStore') as typeof scenarioStateStoreModule;
-import loggerModule = require('../src/js/logger');
+} = require('../src/ts/scenarioStateStore') as typeof scenarioStateStoreModule;
+import loggerModule = require('../src/ts/logger');
 const logger = jest.mocked(loggerModule);
-import type * as scenarioStateStoreModule from '../src/js/scenarioStateStore';
-import type { CategoryLogger } from '../src/js/logger';
+import type * as scenarioStateStoreModule from '../src/ts/scenarioStateStore';
+import type { CategoryLogger } from '../src/ts/logger';
 import { invalid } from './helpers/invalid';
 
-jest.mock('../src/js/logger', () => {
+jest.mock('../src/ts/logger', () => {
     const category = { info: jest.fn(), error: jest.fn(), debug: jest.fn(), success: jest.fn(), warning: jest.fn() };
     return { withCategory: jest.fn(() => category) };
 });

@@ -15,12 +15,12 @@
  * uses) so the facade's loadSettings/saveSettings round-trip without touching fs.
  */
 
-import type { AndroidHeadlessStore } from '../../src/js/types/settings';
-import settings = require('../../src/js/settings');
-import loggerModule = require('../../src/js/logger');
+import type { AndroidHeadlessStore } from '../../src/ts/types/settings';
+import settings = require('../../src/ts/settings');
+import loggerModule = require('../../src/ts/logger');
 const logger = jest.mocked(loggerModule);
 
-jest.mock('../../src/js/logger', () => ({
+jest.mock('../../src/ts/logger', () => ({
     info: jest.fn(),
     warning: jest.fn(),
     error: jest.fn(),

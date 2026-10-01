@@ -12,15 +12,15 @@ const mockLexicon = JSON.parse(
     realFs.readFileSync(realPath.join(__dirname, '..', '..', 'src', 'assets', 'semantic-vectors.json'), 'utf8'),
 ) as RawLexicon;
 
-jest.mock('../../src/js/services/semantic/assets', () => ({
+jest.mock('../../src/ts/services/semantic/assets', () => ({
     loadLexiconAsset: async () => mockLexicon,
     ASSET_NAME: 'semantic-vectors.json',
     __resetForTests: () => {},
 }));
 
-import lexicon = require('../../src/js/services/semantic/lexicon');
-import type * as photoPickerModule from '../../src/js/services/photoPicker';
-import type { RawLexicon } from '../../src/js/types/semantic';
+import lexicon = require('../../src/ts/services/semantic/lexicon');
+import type * as photoPickerModule from '../../src/ts/services/photoPicker';
+import type { RawLexicon } from '../../src/ts/types/semantic';
 import { invalid } from '../helpers/invalid';
 const {
     abstractTitleWords,
@@ -29,7 +29,7 @@ const {
     buildThemeAlternatives,
     buildChallengeKeywords,
     visualSubjectWords,
-} = require('../../src/js/services/photoPicker') as typeof photoPickerModule;
+} = require('../../src/ts/services/photoPicker') as typeof photoPickerModule;
 
 describe('abstractTitleWords', () => {
     const scores: Record<string, number> = { balloon: 0.37, fun: -0.16, nature: -0.3, built: 0.11, cold: 0 };

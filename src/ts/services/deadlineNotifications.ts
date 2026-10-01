@@ -13,7 +13,7 @@
  * by the Node hosts and imported by the esbuild-bundled renderer.
  *
  * Security: the `title` here is the raw GuruShots challenge title
- * (src/js/api/challenges.ts) — server-supplied and attacker-influenceable, not
+ * (src/ts/api/challenges.ts) — server-supplied and attacker-influenceable, not
  * app-authored. Every string that leaves this module is passed through
  * sanitizeNotificationText first (mirrors logger.sanitizeLogString) so a
  * crafted title cannot forge a multi-line "system" toast, inject notify-send

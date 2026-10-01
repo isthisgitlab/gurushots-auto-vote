@@ -4,16 +4,16 @@
  * against a stubbed API strategy).
  */
 
-import logger = require('../../src/js/logger');
-import type * as autoFillModule from '../../src/js/services/autoFill';
-import type * as currencyActionsModule from '../../src/js/services/currencyActions';
-import type * as swapBackStoreModule from '../../src/js/swapBackStore';
-import type { Challenge, MemberBoost, MemberRanking } from '../../src/js/types/gurushots';
-import type * as settingsModule from '../../src/js/settings';
+import logger = require('../../src/ts/logger');
+import type * as autoFillModule from '../../src/ts/services/autoFill';
+import type * as currencyActionsModule from '../../src/ts/services/currencyActions';
+import type * as swapBackStoreModule from '../../src/ts/swapBackStore';
+import type { Challenge, MemberBoost, MemberRanking } from '../../src/ts/types/gurushots';
+import type * as settingsModule from '../../src/ts/settings';
 import { invalid } from '../helpers/invalid';
-const { __resetMemberIdCache } = require('../../src/js/services/autoFill') as typeof autoFillModule;
+const { __resetMemberIdCache } = require('../../src/ts/services/autoFill') as typeof autoFillModule;
 const { unlockBoostWithKey, previewSwap, swapEntry, fillExposure } =
-    require('../../src/js/services/currencyActions') as typeof currencyActionsModule;
+    require('../../src/ts/services/currencyActions') as typeof currencyActionsModule;
 
 const NOW = () => Math.floor(Date.now() / 1000);
 
@@ -243,8 +243,8 @@ describe('swapEntry', () => {
 });
 
 describe('swap back', () => {
-    const { createMemoryLedger } = require('../../src/js/swapBackStore') as typeof swapBackStoreModule;
-    const { swapBack } = require('../../src/js/services/currencyActions') as typeof currencyActionsModule;
+    const { createMemoryLedger } = require('../../src/ts/swapBackStore') as typeof swapBackStoreModule;
+    const { swapBack } = require('../../src/ts/services/currencyActions') as typeof currencyActionsModule;
 
     // Slot now holds 'repl'; the boosted original 'orig' sits in the swap history.
     const swappedChallenge = () =>
@@ -320,8 +320,8 @@ describe('swap back', () => {
 });
 
 describe('edge paths', () => {
-    const { createMemoryLedger } = require('../../src/js/swapBackStore') as typeof swapBackStoreModule;
-    const { swapBack } = require('../../src/js/services/currencyActions') as typeof currencyActionsModule;
+    const { createMemoryLedger } = require('../../src/ts/swapBackStore') as typeof swapBackStoreModule;
+    const { swapBack } = require('../../src/ts/services/currencyActions') as typeof currencyActionsModule;
 
     test('previewSwap: a live block (swap locked) spends and ranks nothing', async () => {
         const strategy = stubStrategy({ challenge: makeChallenge({ swap_locked: true }) });

@@ -1,14 +1,14 @@
 /**
- * Unit tests for the canonical duration formatter (src/js/format/duration.ts)
+ * Unit tests for the canonical duration formatter (src/ts/format/duration.ts)
  * shared by the CLI status, the renderer boost-window banner + challenge
  * countdown, and the voting pass's log lines. The default mode locks CLI/GUI
  * parity; the includeSeconds mode covers the live countdowns.
  */
 
-import type * as durationModule from '../../src/js/format/duration';
+import type * as durationModule from '../../src/ts/format/duration';
 import { invalid } from '../helpers/invalid';
 
-const { formatDuration } = require('../../src/js/format/duration') as typeof durationModule;
+const { formatDuration } = require('../../src/ts/format/duration') as typeof durationModule;
 
 describe('formatDuration (default — minute granularity, "<1m" floor)', () => {
     test('sub-minute, zero, negative, and non-numeric all read "<1m"', () => {

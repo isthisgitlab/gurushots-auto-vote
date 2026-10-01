@@ -5,7 +5,7 @@
  * mocked and the tests assert what gets printed and dispatched.
  */
 
-jest.mock('../../src/js/logger', () => {
+jest.mock('../../src/ts/logger', () => {
     const calls: { level: string; msg: unknown; data?: unknown }[] = [];
     const rec = (level: string) => (msg: unknown, data?: unknown) => calls.push({ level, msg, data });
     const cat = {
@@ -28,47 +28,47 @@ jest.mock('../../src/js/logger', () => {
     };
 });
 
-jest.mock('../../src/js/settings', () => ({
+jest.mock('../../src/ts/settings', () => ({
     loadSettings: jest.fn(() => ({ mock: false })),
     setSetting: jest.fn(),
 }));
 
-jest.mock('../../src/js/apiFactory', () => {
+jest.mock('../../src/ts/apiFactory', () => {
     const middleware = { isAuthenticated: jest.fn(() => true), cliLogin: jest.fn() };
     return { __mw: middleware, getMiddleware: jest.fn(() => middleware), refreshApi: jest.fn() };
 });
 
-jest.mock('../../src/js/services/auth', () => ({ clearAuthToken: jest.fn() }));
+jest.mock('../../src/ts/services/auth', () => ({ clearAuthToken: jest.fn() }));
 
-jest.mock('../../src/js/cli/prompts', () => ({
+jest.mock('../../src/ts/cli/prompts', () => ({
     createReadlineInterface: jest.fn(),
     askYesNo: jest.fn(),
     askInput: jest.fn(),
     askSecret: jest.fn(),
 }));
 
-jest.mock('../../src/js/ipc/actions.handlers', () => {
+jest.mock('../../src/ts/ipc/actions.handlers', () => {
     const handlers = { 'get-bankroll': jest.fn(), 'get-member-challenges': jest.fn(), 'join-challenge': jest.fn() };
     return { __handlers: handlers, buildHandlers: jest.fn(() => handlers) };
 });
 
-jest.mock('../../src/js/services/UpdateChecker', () => ({
+jest.mock('../../src/ts/services/UpdateChecker', () => ({
     checkForUpdates: jest.fn(),
     getReleasesUrl: jest.fn(() => 'https://releases'),
 }));
 
 const mockHasBundledModel = jest.fn(async () => true);
-jest.mock('../../src/js/services/visionVerifier', () => ({ hasBundledModel: mockHasBundledModel }));
+jest.mock('../../src/ts/services/visionVerifier', () => ({ hasBundledModel: mockHasBundledModel }));
 
 import fsModule = require('node:fs');
 const fs = jest.mocked(fsModule);
-import loggerModule = require('../../src/js/logger');
+import loggerModule = require('../../src/ts/logger');
 const logger = jest.mocked(
     invalid<typeof loggerModule & { __calls: { level: string; msg: unknown; data?: unknown }[] }>(loggerModule),
 );
-import settingsModule = require('../../src/js/settings');
+import settingsModule = require('../../src/ts/settings');
 const settings = jest.mocked(settingsModule);
-import apiFactoryModule = require('../../src/js/apiFactory');
+import apiFactoryModule = require('../../src/ts/apiFactory');
 type Middleware = ReturnType<typeof apiFactoryModule.getMiddleware>;
 const apiFactory = jest.mocked(
     invalid<
@@ -80,8 +80,8 @@ const apiFactory = jest.mocked(
         }
     >(apiFactoryModule),
 );
-const { clearAuthToken } = jest.mocked(require('../../src/js/services/auth') as typeof authModule);
-import promptsModule = require('../../src/js/cli/prompts');
+const { clearAuthToken } = jest.mocked(require('../../src/ts/services/auth') as typeof authModule);
+import promptsModule = require('../../src/ts/cli/prompts');
 const prompts = jest.mocked(promptsModule);
 // The handler-module mocks expose their jest.fn table for the assertions.
 type HandlersMock = {
@@ -92,24 +92,24 @@ type HandlersMock = {
         >
     >;
 };
-const handlers = invalid<HandlersMock>(require('../../src/js/ipc/actions.handlers')).__handlers;
-import updateCheckerModule = require('../../src/js/services/UpdateChecker');
+const handlers = invalid<HandlersMock>(require('../../src/ts/ipc/actions.handlers')).__handlers;
+import updateCheckerModule = require('../../src/ts/services/UpdateChecker');
 const updateChecker = jest.mocked(updateCheckerModule);
-import type * as authModule from '../../src/js/services/auth';
-import type * as actionsHandlersModule from '../../src/js/ipc/actions.handlers';
-import type * as authCommandsModule from '../../src/js/cli/commands/auth';
-import type * as bankrollModule from '../../src/js/cli/commands/bankroll';
-import type * as joinModule from '../../src/js/cli/commands/join';
-import type * as updateModule from '../../src/js/cli/commands/update';
-import type * as logsModule from '../../src/js/cli/commands/logs';
+import type * as authModule from '../../src/ts/services/auth';
+import type * as actionsHandlersModule from '../../src/ts/ipc/actions.handlers';
+import type * as authCommandsModule from '../../src/ts/cli/commands/auth';
+import type * as bankrollModule from '../../src/ts/cli/commands/bankroll';
+import type * as joinModule from '../../src/ts/cli/commands/join';
+import type * as updateModule from '../../src/ts/cli/commands/update';
+import type * as logsModule from '../../src/ts/cli/commands/logs';
 import { invalid } from '../helpers/invalid';
 const pkg = jest.requireActual<typeof import('../../package.json')>('../../package.json');
 
-const { handleLogin, handleLogout } = require('../../src/js/cli/commands/auth') as typeof authCommandsModule;
-const { showBankroll } = require('../../src/js/cli/commands/bankroll') as typeof bankrollModule;
-const { showDiscover, joinChallengeCmd } = require('../../src/js/cli/commands/join') as typeof joinModule;
-const { checkUpdates } = require('../../src/js/cli/commands/update') as typeof updateModule;
-const { showLogs } = require('../../src/js/cli/commands/logs') as typeof logsModule;
+const { handleLogin, handleLogout } = require('../../src/ts/cli/commands/auth') as typeof authCommandsModule;
+const { showBankroll } = require('../../src/ts/cli/commands/bankroll') as typeof bankrollModule;
+const { showDiscover, joinChallengeCmd } = require('../../src/ts/cli/commands/join') as typeof joinModule;
+const { checkUpdates } = require('../../src/ts/cli/commands/update') as typeof updateModule;
+const { showLogs } = require('../../src/ts/cli/commands/logs') as typeof logsModule;
 
 const msgs = (level: string) => logger.__calls.filter((c) => c.level === level).map((c) => String(c.msg));
 const all = () => logger.__calls.map((c) => String(c.msg)).join('\n');

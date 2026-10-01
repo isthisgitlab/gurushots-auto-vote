@@ -1,6 +1,6 @@
 import { invalid } from '../helpers/invalid';
-import type * as formattersModule from '../../src/js/react/utils/formatters';
-import type * as interpModule from '../../src/js/react/utils/interp';
+import type * as formattersModule from '../../src/ts/react/utils/formatters';
+import type * as interpModule from '../../src/ts/react/utils/interp';
 const {
     formatSettingDefault,
     formatTimeRemaining,
@@ -9,8 +9,8 @@ const {
     getTurboStatus,
     getLevelStatus,
     getEntryStatus,
-} = require('../../src/js/react/utils/formatters') as typeof formattersModule;
-const { interp } = require('../../src/js/react/utils/interp') as typeof interpModule;
+} = require('../../src/ts/react/utils/formatters') as typeof formattersModule;
+const { interp } = require('../../src/ts/react/utils/interp') as typeof interpModule;
 
 const t = (key: string) =>
     (({ 'app.none': '(none)', 'app.hours': 'h', 'app.minutes': 'm' }) as Record<string, string>)[key] ?? key;
@@ -161,15 +161,15 @@ describe('getEntryStatus', () => {
 
 describe('re-exports from the shared core', () => {
     test('formatters exposes the same functions the core modules define', () => {
-        const fm = require('../../src/js/react/utils/formatters') as typeof formattersModule;
+        const fm = require('../../src/ts/react/utils/formatters') as typeof formattersModule;
         expect(fm.formatDuration).toBe(
-            (require('../../src/js/format/duration') as typeof import('../../src/js/format/duration')).formatDuration,
+            (require('../../src/ts/format/duration') as typeof import('../../src/ts/format/duration')).formatDuration,
         );
         expect(fm.entryPhotoUrl).toBe(
-            (require('../../src/js/format/photoUrl') as typeof import('../../src/js/format/photoUrl')).entryPhotoUrl,
+            (require('../../src/ts/format/photoUrl') as typeof import('../../src/ts/format/photoUrl')).entryPhotoUrl,
         );
         expect(fm.isBoostWindowOpen).toBe(
-            (require('../../src/js/voting/boostWindow') as typeof import('../../src/js/voting/boostWindow'))
+            (require('../../src/ts/voting/boostWindow') as typeof import('../../src/ts/voting/boostWindow'))
                 .isBoostWindowOpen,
         );
     });

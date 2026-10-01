@@ -1,6 +1,6 @@
 /**
  * Orchestration tests for the "fill-new" boost/turbo options in
- * fetchChallengesAndVote (src/js/strategies/real/index.ts).
+ * fetchChallengesAndVote (src/ts/strategies/real/index.ts).
  *
  * These verify the wiring only — that when boostFillNew/turboFillNew is on the
  * cycle submits a fresh entry via autoFill.submitNewEntryForAction and then
@@ -9,18 +9,18 @@
  * decision gates are covered by autoFill.test.ts and turboApply.test.ts.
  */
 
-jest.mock('../../src/js/strategies/real/activeChallenges', () => ({ getActiveChallenges: jest.fn() }));
-jest.mock('../../src/js/api/voting', () => ({ getVoteImages: jest.fn(), submitVotes: jest.fn() }));
-jest.mock('../../src/js/strategies/real/applyBoost', () => ({ applyBoost: jest.fn() }));
-jest.mock('../../src/js/api/boost', () => ({ applyBoostToEntry: jest.fn() }));
-jest.mock('../../src/js/api/turbo', () => ({
+jest.mock('../../src/ts/strategies/real/activeChallenges', () => ({ getActiveChallenges: jest.fn() }));
+jest.mock('../../src/ts/api/voting', () => ({ getVoteImages: jest.fn(), submitVotes: jest.fn() }));
+jest.mock('../../src/ts/strategies/real/applyBoost', () => ({ applyBoost: jest.fn() }));
+jest.mock('../../src/ts/api/boost', () => ({ applyBoostToEntry: jest.fn() }));
+jest.mock('../../src/ts/api/turbo', () => ({
     getChallengeTurbo: jest.fn(),
     submitTurboSelection: jest.fn(),
     applyTurbo: jest.fn(),
     TURBO_SELECTION_DELAY_MS: 0,
 }));
-jest.mock('../../src/js/api/submissions', () => ({ getEligiblePhotos: jest.fn(), submitToChallenge: jest.fn() }));
-jest.mock('../../src/js/metadata', () => ({ cleanupStaleMetadata: jest.fn(() => true) }));
+jest.mock('../../src/ts/api/submissions', () => ({ getEligiblePhotos: jest.fn(), submitToChallenge: jest.fn() }));
+jest.mock('../../src/ts/metadata', () => ({ cleanupStaleMetadata: jest.fn(() => true) }));
 // Default order runs all four deadline actions so the boost/turbo wiring tests
 // below exercise their runners regardless of timer values. Ordering-specific
 // tests override orderDeadlineActions per case.
@@ -30,7 +30,7 @@ const ALL_ACTIONS: ReturnType<typeof votingLogicModule.orderDeadlineActions> = [
     { action: 'turbo', thresholdSec: 0 },
     { action: 'emergencyFill', thresholdSec: 0 },
 ];
-jest.mock('../../src/js/services/VotingLogic', () => ({
+jest.mock('../../src/ts/services/VotingLogic', () => ({
     isWithinEmergencyWindow: jest.fn(() => false),
     shouldApplyBoost: jest.fn(() => false),
     getEffectiveBoostTime: jest.fn(() => 3600),
@@ -47,14 +47,14 @@ jest.mock('../../src/js/services/VotingLogic', () => ({
         { action: 'emergencyFill', thresholdSec: 0 },
     ]),
 }));
-jest.mock('../../src/js/services/autoFill', () => ({
+jest.mock('../../src/ts/services/autoFill', () => ({
     submitNewEntryForAction: jest.fn(),
     reflectNewEntry: jest.fn(),
     maybeAutoFillChallenge: jest.fn(() => 'disabled'),
     maybeEmergencyFillChallenge: jest.fn(() => 'disabled'),
 }));
-jest.mock('../../src/js/settings', () => ({ getEffectiveSetting: jest.fn(() => undefined) }));
-jest.mock('../../src/js/logger', () => {
+jest.mock('../../src/ts/settings', () => ({ getEffectiveSetting: jest.fn(() => undefined) }));
+jest.mock('../../src/ts/logger', () => {
     const scoped = {
         startOperation: jest.fn(),
         endOperation: jest.fn(),
@@ -69,24 +69,24 @@ jest.mock('../../src/js/logger', () => {
 });
 
 const { getActiveChallenges } = jest.mocked(
-    require('../../src/js/strategies/real/activeChallenges') as typeof activeChallengesModule,
+    require('../../src/ts/strategies/real/activeChallenges') as typeof activeChallengesModule,
 );
-const { applyBoost } = jest.mocked(require('../../src/js/strategies/real/applyBoost') as typeof applyBoostModule);
-const { applyBoostToEntry } = jest.mocked(require('../../src/js/api/boost') as typeof boostModule);
-const { applyTurbo } = jest.mocked(require('../../src/js/api/turbo') as typeof turboModule);
-import votingLogicModule = require('../../src/js/services/VotingLogic');
+const { applyBoost } = jest.mocked(require('../../src/ts/strategies/real/applyBoost') as typeof applyBoostModule);
+const { applyBoostToEntry } = jest.mocked(require('../../src/ts/api/boost') as typeof boostModule);
+const { applyTurbo } = jest.mocked(require('../../src/ts/api/turbo') as typeof turboModule);
+import votingLogicModule = require('../../src/ts/services/VotingLogic');
 const votingLogic = jest.mocked(votingLogicModule);
-import autoFillModule = require('../../src/js/services/autoFill');
+import autoFillModule = require('../../src/ts/services/autoFill');
 const autoFill = jest.mocked(autoFillModule);
-import settingsModule = require('../../src/js/settings');
+import settingsModule = require('../../src/ts/settings');
 const settings = jest.mocked(settingsModule);
-import type * as activeChallengesModule from '../../src/js/strategies/real/activeChallenges';
-import type * as applyBoostModule from '../../src/js/strategies/real/applyBoost';
-import type * as boostModule from '../../src/js/api/boost';
-import type * as turboModule from '../../src/js/api/turbo';
-import type * as realModule from '../../src/js/strategies/real';
+import type * as activeChallengesModule from '../../src/ts/strategies/real/activeChallenges';
+import type * as applyBoostModule from '../../src/ts/strategies/real/applyBoost';
+import type * as boostModule from '../../src/ts/api/boost';
+import type * as turboModule from '../../src/ts/api/turbo';
+import type * as realModule from '../../src/ts/strategies/real';
 import type * as challengeFixturesModule from '../helpers/challengeFixtures';
-const { fetchChallengesAndVote } = require('../../src/js/strategies/real') as typeof realModule;
+const { fetchChallengesAndVote } = require('../../src/ts/strategies/real') as typeof realModule;
 const { buildChallenge } = require('../helpers/challengeFixtures') as typeof challengeFixturesModule;
 import { invalid } from '../helpers/invalid';
 

@@ -11,8 +11,8 @@ import { act, fireEvent, render, screen, waitFor } from './helpers/test-utils';
 import { ChallengeSettingsModal } from '@/components/app/ChallengeSettingsModal';
 import { mockApi } from './helpers/setup';
 import type { useSettingsSchema } from '@/api/useSettingsSchema';
-import type { Challenge } from '../../src/js/types/gurushots';
-import type { ChallengeValues } from '../../src/js/types/settings';
+import type { Challenge } from '../../src/ts/types/gurushots';
+import type { ChallengeValues } from '../../src/ts/types/settings';
 import { invalid } from '../helpers/invalid';
 
 // Belt-and-suspenders: the global setup wires window.api, but the

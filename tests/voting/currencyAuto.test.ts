@@ -4,14 +4,14 @@
  * swap target pick, the vote-pool reach and the fill-vs-vote decision.
  */
 
-import type * as currencyAutoModule from '../../src/js/voting/currencyAuto';
-import type * as entrySlotModule from '../../src/js/voting/entrySlot';
-import type { Challenge } from '../../src/js/types/gurushots';
+import type * as currencyAutoModule from '../../src/ts/voting/currencyAuto';
+import type * as entrySlotModule from '../../src/ts/voting/entrySlot';
+import type { Challenge } from '../../src/ts/types/gurushots';
 import { invalid } from '../helpers/invalid';
 
 const { ruleOpensAt, isRuleOpen, isProtectedEntry, pickSwapTarget, votePoolReach, fillBeatsVoting } =
-    require('../../src/js/voting/currencyAuto') as typeof currencyAutoModule;
-const { resolveEntryIndex } = require('../../src/js/voting/entrySlot') as typeof entrySlotModule;
+    require('../../src/ts/voting/currencyAuto') as typeof currencyAutoModule;
+const { resolveEntryIndex } = require('../../src/ts/voting/entrySlot') as typeof entrySlotModule;
 
 const H = 3600;
 // A 24h challenge started at t=1000.

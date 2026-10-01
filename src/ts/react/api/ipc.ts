@@ -1,6 +1,6 @@
 /**
  * The renderer's one-shot calls and event subscriptions over the shell bridge
- * (`window.api`, generated from src/js/ipc/manifest.ts by both the Electron
+ * (`window.api`, generated from src/ts/ipc/manifest.ts by both the Electron
  * preload and the Capacitor bridge). Components, hooks and contexts import
  * this module as a namespace (`import * as ipc from '@/api/ipc'`) — or use the
  * query/action hooks beside it — and never touch `window.api` themselves.

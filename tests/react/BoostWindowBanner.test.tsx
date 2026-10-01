@@ -11,7 +11,7 @@
 
 import { render, screen, fireEvent } from './helpers/test-utils';
 import { BoostWindowBanner } from '@/components/app/BoostWindowBanner';
-import type { Challenge, MemberBoost } from '../../src/js/types/gurushots';
+import type { Challenge, MemberBoost } from '../../src/ts/types/gurushots';
 import { invalid } from '../helpers/invalid';
 
 const now = () => Math.floor(Date.now() / 1000);

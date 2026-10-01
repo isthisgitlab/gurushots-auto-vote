@@ -98,8 +98,8 @@ describe('stylesheet sources', () => {
     test('THEMES lists exactly the themes the installed daisyui ships', () => {
         const fs = jest.requireActual<typeof import('node:fs')>('node:fs');
         const path = jest.requireActual<typeof import('node:path')>('node:path');
-        const { THEMES } = jest.requireActual<typeof import('../src/js/settings/uiDefaults')>(
-            '../src/js/settings/uiDefaults',
+        const { THEMES } = jest.requireActual<typeof import('../src/ts/settings/uiDefaults')>(
+            '../src/ts/settings/uiDefaults',
         );
         const themeDir = path.join(__dirname, '..', 'node_modules', 'daisyui', 'theme');
         const shipped = fs

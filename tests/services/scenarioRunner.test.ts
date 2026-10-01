@@ -4,7 +4,7 @@
  * semantics, the per-pass and goto-loop guards, and failure recording.
  */
 
-jest.mock('../../src/js/logger', () => {
+jest.mock('../../src/ts/logger', () => {
     const category = { info: jest.fn(), error: jest.fn(), debug: jest.fn(), warning: jest.fn(), success: jest.fn() };
     return {
         withCategory: jest.fn(() => category),
@@ -12,21 +12,21 @@ jest.mock('../../src/js/logger', () => {
         __category: category,
     };
 });
-jest.mock('../../src/js/settings', () => ({
+jest.mock('../../src/ts/settings', () => ({
     getEffectiveSetting: jest.fn(),
     getScenario: jest.fn(),
     getSetting: jest.fn(() => 'UTC'),
 }));
-jest.mock('../../src/js/services/currencyActions', () => ({
+jest.mock('../../src/ts/services/currencyActions', () => ({
     withSpendLock: jest.fn(async (spend: () => Promise<unknown>) => ({ busy: false, value: await spend() })),
     previewSwap: jest.fn(),
     swapEntry: jest.fn(),
     unlockBoostWithKey: jest.fn(),
     fillExposure: jest.fn(),
 }));
-jest.mock('../../src/js/services/autoFill', () => {
-    const actual = jest.requireActual<typeof import('../../src/js/services/autoFill/challengeState')>(
-        '../../src/js/services/autoFill/challengeState',
+jest.mock('../../src/ts/services/autoFill', () => {
+    const actual = jest.requireActual<typeof import('../../src/ts/services/autoFill/challengeState')>(
+        '../../src/ts/services/autoFill/challengeState',
     );
     return {
         submitNewEntryForAction: jest.fn(),
@@ -36,37 +36,37 @@ jest.mock('../../src/js/services/autoFill', () => {
         getSlotsRemaining: actual.getSlotsRemaining,
     };
 });
-jest.mock('../../src/js/runtime', () => ({
+jest.mock('../../src/ts/runtime', () => ({
     isCapacitor: jest.fn(() => false),
     isHeadlessService: jest.fn(() => false),
 }));
-jest.mock('../../src/js/services/NativeAutovoteBridge', () => ({ isAvailable: jest.fn(() => false) }));
+jest.mock('../../src/ts/services/NativeAutovoteBridge', () => ({ isAvailable: jest.fn(() => false) }));
 
-import loggerModule = require('../../src/js/logger');
+import loggerModule = require('../../src/ts/logger');
 const logger = jest.mocked(loggerModule);
-import settingsModule = require('../../src/js/settings');
+import settingsModule = require('../../src/ts/settings');
 const settings = jest.mocked(settingsModule);
-import currencyActionsModule = require('../../src/js/services/currencyActions');
+import currencyActionsModule = require('../../src/ts/services/currencyActions');
 const currencyActions = jest.mocked(currencyActionsModule);
-import autoFillModule = require('../../src/js/services/autoFill');
+import autoFillModule = require('../../src/ts/services/autoFill');
 const autoFill = jest.mocked(autoFillModule);
-import runtimeModule = require('../../src/js/runtime');
+import runtimeModule = require('../../src/ts/runtime');
 const runtime = jest.mocked(runtimeModule);
-import nativeAutovoteModule = require('../../src/js/services/NativeAutovoteBridge');
+import nativeAutovoteModule = require('../../src/ts/services/NativeAutovoteBridge');
 const nativeAutovote = jest.mocked(nativeAutovoteModule);
-import type * as scenarioRunnerModule from '../../src/js/services/scenarioRunner';
-import type * as scenarioStateStoreModule from '../../src/js/scenarioStateStore';
-import type { Challenge, ChallengeMember, MemberRanking, RankingEntry } from '../../src/js/types/gurushots';
-import type { ScenarioDocument } from '../../src/js/settings/scenarioSchema';
-import type { CategoryLogger } from '../../src/js/logger';
-import type { VotingPassApi } from '../../src/js/types/votingPass';
-import type { CurrencyPassDeps } from '../../src/js/services/currencyAuto';
-import type { SwapBackLedger } from '../../src/js/services/currencyActions';
+import type * as scenarioRunnerModule from '../../src/ts/services/scenarioRunner';
+import type * as scenarioStateStoreModule from '../../src/ts/scenarioStateStore';
+import type { Challenge, ChallengeMember, MemberRanking, RankingEntry } from '../../src/ts/types/gurushots';
+import type { ScenarioDocument } from '../../src/ts/settings/scenarioSchema';
+import type { CategoryLogger } from '../../src/ts/logger';
+import type { VotingPassApi } from '../../src/ts/types/votingPass';
+import type { CurrencyPassDeps } from '../../src/ts/services/currencyAuto';
+import type { SwapBackLedger } from '../../src/ts/services/currencyActions';
 import { invalid } from '../helpers/invalid';
 const { runScenarioStep, backgroundServiceOwnsScenarios } =
-    require('../../src/js/services/scenarioRunner') as typeof scenarioRunnerModule;
+    require('../../src/ts/services/scenarioRunner') as typeof scenarioRunnerModule;
 const { createMemoryStateLedger, initialState } =
-    require('../../src/js/scenarioStateStore') as typeof scenarioStateStoreModule;
+    require('../../src/ts/scenarioStateStore') as typeof scenarioStateStoreModule;
 
 type CategoryMock = {
     [K in 'info' | 'error' | 'debug' | 'warning' | 'success']: jest.MockedFunction<CategoryLogger[K]>;

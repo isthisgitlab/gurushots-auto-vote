@@ -4,7 +4,7 @@
  * non-finite similarity, the bounded embedding cache, and a thrown lexicon.
  */
 
-jest.mock('../../../src/js/services/semantic/lexicon', () => ({
+jest.mock('../../../src/ts/services/semantic/lexicon', () => ({
     isAvailable: jest.fn(async () => true),
     embed: jest.fn(() => [1, 0]),
     cosine: jest.fn(() => 0.9),
@@ -12,14 +12,14 @@ jest.mock('../../../src/js/services/semantic/lexicon', () => ({
     concreteness: jest.fn(() => null),
 }));
 
-import lexiconModule = require('../../../src/js/services/semantic/lexicon');
+import lexiconModule = require('../../../src/ts/services/semantic/lexicon');
 const lexicon = jest.mocked(lexiconModule);
-import type * as semanticModule from '../../../src/js/services/semantic';
-import type * as photoPickerModule from '../../../src/js/services/photoPicker';
-import type { PickerPhoto } from '../../../src/js/types/photoPicker';
+import type * as semanticModule from '../../../src/ts/services/semantic';
+import type * as photoPickerModule from '../../../src/ts/services/photoPicker';
+import type { PickerPhoto } from '../../../src/ts/types/photoPicker';
 import { invalid } from '../../helpers/invalid';
-const { getSemanticScores, __resetForTests } = require('../../../src/js/services/semantic') as typeof semanticModule;
-const { buildThemeKeywords } = require('../../../src/js/services/photoPicker') as typeof photoPickerModule;
+const { getSemanticScores, __resetForTests } = require('../../../src/ts/services/semantic') as typeof semanticModule;
+const { buildThemeKeywords } = require('../../../src/ts/services/photoPicker') as typeof photoPickerModule;
 
 const challenge = { title: 'Feline Friends', url: 'feline-friends' };
 const photo = (id: string, labels = ['Cat']): PickerPhoto => ({ id, labels });

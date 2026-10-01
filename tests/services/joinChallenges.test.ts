@@ -4,27 +4,27 @@
  * budget accounting, cancellation, and the null-bankroll fail-safe.
  */
 
-jest.mock('../../src/js/logger', () => {
+jest.mock('../../src/ts/logger', () => {
     const level = { info: jest.fn(), error: jest.fn(), debug: jest.fn(), success: jest.fn(), warning: jest.fn() };
     return {
         withCategory: jest.fn(() => level),
         challengeTag: (c: { id?: string | number } | null) => `challenge ${c?.id}`,
     };
 });
-jest.mock('../../src/js/voting/cancellation', () => ({ isCancelled: jest.fn(() => false) }));
-jest.mock('../../src/js/services/autoFill', () => ({
+jest.mock('../../src/ts/voting/cancellation', () => ({ isCancelled: jest.fn(() => false) }));
+jest.mock('../../src/ts/services/autoFill', () => ({
     fetchCandidatesForChallenge: jest.fn(async () => [{ id: 'imgA', permission: { allowed: true } }]),
     resolveSemanticScores: jest.fn(async () => null),
 }));
-jest.mock('../../src/js/services/photoPicker', () => ({
+jest.mock('../../src/ts/services/photoPicker', () => ({
     pickPhotosForChallenge: jest.fn(() => ['imgA']),
 }));
-jest.mock('../../src/js/services/visionVerifier', () => ({
+jest.mock('../../src/ts/services/visionVerifier', () => ({
     rankVisually: jest.fn(async (challenge: unknown, ids: string[], eligible: unknown, wantCount: number) =>
         ids.slice(0, wantCount),
     ),
 }));
-jest.mock('../../src/js/settings', () => ({
+jest.mock('../../src/ts/settings', () => ({
     getEffectiveSetting: jest.fn((key: string) => {
         const map: Record<string, unknown> = {
             autoJoin: true,
@@ -42,21 +42,21 @@ jest.mock('../../src/js/settings', () => ({
     hasRuleJoinOptIn: jest.fn(() => false),
 }));
 
-import cancellationModule = require('../../src/js/voting/cancellation');
+import cancellationModule = require('../../src/ts/voting/cancellation');
 const cancellation = jest.mocked(cancellationModule);
-import photoPickerModule = require('../../src/js/services/photoPicker');
+import photoPickerModule = require('../../src/ts/services/photoPicker');
 const photoPicker = jest.mocked(photoPickerModule);
-import settingsModule = require('../../src/js/settings');
+import settingsModule = require('../../src/ts/settings');
 const settings = jest.mocked(settingsModule);
-import type * as joinChallengesModule from '../../src/js/services/joinChallenges';
-import type * as autoFillModule from '../../src/js/services/autoFill';
-import type { Challenge } from '../../src/js/types/gurushots';
-import type { RawJsonStore } from '../../src/js/types/stores';
-import type { RuleMatchChallenge } from '../../src/js/types/settings';
+import type * as joinChallengesModule from '../../src/ts/services/joinChallenges';
+import type * as autoFillModule from '../../src/ts/services/autoFill';
+import type { Challenge } from '../../src/ts/types/gurushots';
+import type { RawJsonStore } from '../../src/ts/types/stores';
+import type { RuleMatchChallenge } from '../../src/ts/types/settings';
 import { invalid } from '../helpers/invalid';
-import type { JoinDeps } from '../../src/js/services/joinChallenges';
+import type { JoinDeps } from '../../src/ts/services/joinChallenges';
 const { performJoin, runJoinPass, joinChallengeSingle, resolveJoinSetting, isAutoJoinActive, inFlight } =
-    require('../../src/js/services/joinChallenges') as typeof joinChallengesModule;
+    require('../../src/ts/services/joinChallenges') as typeof joinChallengesModule;
 
 // The logger factory above: withCategory() hands back one shared level object.
 // The join-state file readUnlockedState parses: one unlock marker per challenge id.
@@ -608,7 +608,7 @@ describe('runJoinPass — join window', () => {
             );
         const statuses = (res: Awaited<ReturnType<typeof runJoinPass>>) => res.results.map((r) => r.status);
         const earlyNotices = () =>
-            invalid<LoggerMock>(require('../../src/js/logger'))
+            invalid<LoggerMock>(require('../../src/ts/logger'))
                 .withCategory()
                 .info.mock.calls.map(([msg]) => msg)
                 .filter((msg) => msg.includes('early for the active missions'));
@@ -955,7 +955,7 @@ describe('runJoinPass — join window', () => {
 
     test('the missing-close_time diagnostic logs the payload shape once per pass', async () => {
         withWindow(24);
-        const logger: LoggerMock = invalid(require('../../src/js/logger'));
+        const logger: LoggerMock = invalid(require('../../src/ts/logger'));
         const deps = makeDeps({
             getMemberChallenges: jest.fn(async () => [
                 { id: 1, join_coins: 0, type: 'flash', title: 'A' },
@@ -1269,8 +1269,8 @@ describe('runJoinPass \u2014 join timing from class rules', () => {
 });
 
 describe('joinChallenges — edge paths', () => {
-    const logger: LoggerMock = invalid(require('../../src/js/logger'));
-    const autoFill = jest.mocked(require('../../src/js/services/autoFill') as typeof autoFillModule);
+    const logger: LoggerMock = invalid(require('../../src/ts/logger'));
+    const autoFill = jest.mocked(require('../../src/ts/services/autoFill') as typeof autoFillModule);
     const warnings = () => logger.withCategory().warning.mock.calls.map(([msg]) => msg);
     const errors = () => logger.withCategory().error.mock.calls.map(([msg]) => msg);
 

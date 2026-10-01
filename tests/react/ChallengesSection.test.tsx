@@ -12,7 +12,7 @@ import { ChallengesSection } from '@/components/app/ChallengesSection';
 import { useActiveChallenges } from '@/api/useActiveChallenges';
 import { mockApi, fireSettingsChanged } from './helpers/setup';
 import type { ChallengeCard } from '@/components/app/ChallengeCard';
-import type { Challenge } from '../../src/js/types/gurushots';
+import type { Challenge } from '../../src/ts/types/gurushots';
 import { invalid } from '../helpers/invalid';
 
 jest.mock('@/api/useActiveChallenges', () => ({ useActiveChallenges: jest.fn() }));

@@ -14,9 +14,9 @@
 
 import type * as node_fsModule from 'node:fs';
 import type * as node_pathModule from 'node:path';
-import type * as loggerModule from '../../src/js/logger';
-import type * as runtimeModule from '../../src/js/runtime';
-import type * as storageModule from '../../src/js/settings/storage';
+import type * as loggerModule from '../../src/ts/logger';
+import type * as runtimeModule from '../../src/ts/runtime';
+import type * as storageModule from '../../src/ts/settings/storage';
 import type { GetOptions, GetResult, SetOptions } from '@capacitor/preferences';
 import type { App } from 'electron';
 import { invalid } from '../helpers/invalid';
@@ -43,9 +43,9 @@ type StorageCtx = {
 
 const mockPrefSet = jest.fn<Promise<void>, [SetOptions]>(() => Promise.resolve());
 const mockPrefGet = jest.fn<Promise<GetResult>, [GetOptions]>(() => Promise.resolve({ value: null }));
-jest.mock('../../src/js/runtime', () => ({
+jest.mock('../../src/ts/runtime', () => ({
     __esModule: true,
-    ...jest.requireActual<typeof import('../../src/js/runtime')>('../../src/js/runtime'),
+    ...jest.requireActual<typeof import('../../src/ts/runtime')>('../../src/ts/runtime'),
 }));
 jest.mock(
     '@capacitor/preferences',
@@ -80,13 +80,13 @@ const loadStorage = ({
         const actualPath = jest.requireActual<typeof node_pathModule>('node:path');
         path.dirname.mockImplementation(actualPath.dirname);
         path.join.mockImplementation(actualPath.join);
-        const logger = jest.mocked(require('../../src/js/logger') as typeof loggerModule);
+        const logger = jest.mocked(require('../../src/ts/logger') as typeof loggerModule);
         const categoryLogger = { info: jest.fn(), error: jest.fn(), debug: jest.fn(), warning: jest.fn() };
         logger.withCategory.mockReturnValue(invalid(categoryLogger));
         logger.isSourceCode.mockReturnValue(sourceCode);
-        const runtime = require('../../src/js/runtime') as typeof runtimeModule;
+        const runtime = require('../../src/ts/runtime') as typeof runtimeModule;
         jest.spyOn(runtime, 'getAppUserDataPath').mockReturnValue(USER_DATA);
-        const mod = require('../../src/js/settings/storage') as typeof storageModule;
+        const mod = require('../../src/ts/settings/storage') as typeof storageModule;
         ctx = { mod, fs, categoryLogger, runtime };
     });
     return ctx!;

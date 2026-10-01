@@ -16,16 +16,16 @@ import * as fs from 'node:fs';
 import * as os from 'node:os';
 import * as path from 'node:path';
 
-import type * as serverModule from '../../src/js/web/server';
-import type * as settingsHandlersModule from '../../src/js/ipc/settings.handlers';
-import type * as authModule from '../../src/js/services/auth';
-import type * as settingsModule from '../../src/js/settings';
-import type * as randomizerModule from '../../src/js/api/randomizer';
-import type * as updateCheckerModule from '../../src/js/services/UpdateChecker';
-import type { CategoryLogger, GuiLogSink } from '../../src/js/logger';
+import type * as serverModule from '../../src/ts/web/server';
+import type * as settingsHandlersModule from '../../src/ts/ipc/settings.handlers';
+import type * as authModule from '../../src/ts/services/auth';
+import type * as settingsModule from '../../src/ts/settings';
+import type * as randomizerModule from '../../src/ts/api/randomizer';
+import type * as updateCheckerModule from '../../src/ts/services/UpdateChecker';
+import type { CategoryLogger, GuiLogSink } from '../../src/ts/logger';
 
 let mockSettingsDeps: Parameters<typeof settingsHandlersModule.buildHandlers>[0] | null = null;
-jest.mock('../../src/js/ipc/settings.handlers', () => ({
+jest.mock('../../src/ts/ipc/settings.handlers', () => ({
     buildHandlers: (deps: Parameters<typeof settingsHandlersModule.buildHandlers>[0]) => {
         mockSettingsDeps = deps;
         return {
@@ -33,7 +33,7 @@ jest.mock('../../src/js/ipc/settings.handlers', () => ({
         };
     },
 }));
-jest.mock('../../src/js/ipc/voting.handlers', () => ({
+jest.mock('../../src/ts/ipc/voting.handlers', () => ({
     buildHandlers: () => ({
         'gui-vote': async () => {
             throw new Error('vote exploded');
@@ -44,21 +44,21 @@ jest.mock('../../src/js/ipc/voting.handlers', () => ({
         'get-active-challenges': async () => ({ big: BigInt(1) }),
     }),
 }));
-jest.mock('../../src/js/ipc/log.handlers', () => ({
+jest.mock('../../src/ts/ipc/log.handlers', () => ({
     buildHandlers: () => ({ 'get-log-backlog': async () => undefined }),
 }));
-jest.mock('../../src/js/ipc/actions.handlers', () => ({ buildHandlers: () => ({}) }));
-jest.mock('../../src/js/ipc/computations.handlers', () => ({ buildHandlers: () => ({}) }));
-jest.mock('../../src/js/ipc/currency.handlers', () => ({ buildHandlers: () => ({}) }));
-jest.mock('../../src/js/ipc/scenarios.handlers', () => ({ buildHandlers: () => ({}) }));
-jest.mock('../../src/js/services/visionVerifier', () => ({ hasBundledModel: async () => true }));
-jest.mock('../../src/js/services/UpdateChecker', () => ({
+jest.mock('../../src/ts/ipc/actions.handlers', () => ({ buildHandlers: () => ({}) }));
+jest.mock('../../src/ts/ipc/computations.handlers', () => ({ buildHandlers: () => ({}) }));
+jest.mock('../../src/ts/ipc/currency.handlers', () => ({ buildHandlers: () => ({}) }));
+jest.mock('../../src/ts/ipc/scenarios.handlers', () => ({ buildHandlers: () => ({}) }));
+jest.mock('../../src/ts/services/visionVerifier', () => ({ hasBundledModel: async () => true }));
+jest.mock('../../src/ts/services/UpdateChecker', () => ({
     checkForUpdates: jest.fn(),
     getReleasesUrl: jest.fn(() => 'https://example.com/releases'),
 }));
-jest.mock('../../src/js/services/auth', () => ({ clearAuthToken: jest.fn(async () => true) }));
-jest.mock('../../src/js/api/randomizer', () => ({ initializeHeaders: jest.fn() }));
-jest.mock('../../src/js/settings', () => ({
+jest.mock('../../src/ts/services/auth', () => ({ clearAuthToken: jest.fn(async () => true) }));
+jest.mock('../../src/ts/api/randomizer', () => ({ initializeHeaders: jest.fn() }));
+jest.mock('../../src/ts/settings', () => ({
     getSetting: jest.fn(() => ''),
     setSetting: jest.fn(() => true),
     seedIntentProfiles: jest.fn(),
@@ -66,15 +66,15 @@ jest.mock('../../src/js/settings', () => ({
     getUserDataPath: jest.fn(() => '/tmp/user-data'),
 }));
 const mockLog = { error: jest.fn(), warning: jest.fn(), info: jest.fn() };
-jest.mock('../../src/js/logger', () => ({
+jest.mock('../../src/ts/logger', () => ({
     withCategory: jest.fn((): Pick<CategoryLogger, 'error' | 'warning' | 'info'> => mockLog),
 }));
 
-const { createWebServer, startWebServer } = require('../../src/js/web/server') as typeof serverModule;
-const auth = jest.mocked(require('../../src/js/services/auth') as typeof authModule);
-const settings = jest.mocked(require('../../src/js/settings') as typeof settingsModule);
-const randomizer = jest.mocked(require('../../src/js/api/randomizer') as typeof randomizerModule);
-const updateChecker = jest.mocked(require('../../src/js/services/UpdateChecker') as typeof updateCheckerModule);
+const { createWebServer, startWebServer } = require('../../src/ts/web/server') as typeof serverModule;
+const auth = jest.mocked(require('../../src/ts/services/auth') as typeof authModule);
+const settings = jest.mocked(require('../../src/ts/settings') as typeof settingsModule);
+const randomizer = jest.mocked(require('../../src/ts/api/randomizer') as typeof randomizerModule);
+const updateChecker = jest.mocked(require('../../src/ts/services/UpdateChecker') as typeof updateCheckerModule);
 
 type Reply = { status: number; headers: http.IncomingHttpHeaders; body: string };
 

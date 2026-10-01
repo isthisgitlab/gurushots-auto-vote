@@ -5,7 +5,7 @@
  * native bridges instead of @capacitor/preferences / CapacitorHttp.
  */
 
-import runtime = require('../src/js/runtime');
+import runtime = require('../src/ts/runtime');
 import type * as fsModule from 'node:fs';
 
 const g = globalThis as typeof globalThis & { __GS_HEADLESS__?: boolean };
@@ -89,7 +89,7 @@ describe('runtime app identity + user-data path (single source of truth)', () =>
                 (process.versions as { electron?: string }).electron = '43.0.0';
                 jest.doMock('electron', () => ({ app: appStub }), { virtual: true });
                 try {
-                    fn(require('../src/js/runtime') as typeof runtime);
+                    fn(require('../src/ts/runtime') as typeof runtime);
                 } finally {
                     delete (process.versions as { electron?: string }).electron;
                     jest.dontMock('electron');

@@ -3,18 +3,18 @@
  * chains rules and phases like the runner, and says why it stopped.
  */
 
-import type * as simulateModule from '../../src/js/scenarios/simulate';
-import type * as scenarioStateStoreModule from '../../src/js/scenarioStateStore';
-import type * as wallClockModule from '../../src/js/scheduling/wallClock';
-import type { ScenarioDocument } from '../../src/js/settings/scenarioSchema';
-import type { Challenge } from '../../src/js/types/gurushots';
+import type * as simulateModule from '../../src/ts/scenarios/simulate';
+import type * as scenarioStateStoreModule from '../../src/ts/scenarioStateStore';
+import type * as wallClockModule from '../../src/ts/scheduling/wallClock';
+import type { ScenarioDocument } from '../../src/ts/settings/scenarioSchema';
+import type { Challenge } from '../../src/ts/types/gurushots';
 import { invalid } from '../helpers/invalid';
 
-const { simulateScenario, MAX_EVENTS } = require('../../src/js/scenarios/simulate') as typeof simulateModule;
-const { initialState } = require('../../src/js/scenarioStateStore') as typeof scenarioStateStoreModule;
-const { epochForWallTime } = require('../../src/js/scheduling/wallClock') as typeof wallClockModule;
+const { simulateScenario, MAX_EVENTS } = require('../../src/ts/scenarios/simulate') as typeof simulateModule;
+const { initialState } = require('../../src/ts/scenarioStateStore') as typeof scenarioStateStoreModule;
+const { epochForWallTime } = require('../../src/ts/scheduling/wallClock') as typeof wallClockModule;
 
-jest.mock('../../src/js/logger', () => ({ withCategory: jest.fn(() => ({ error: jest.fn() })) }));
+jest.mock('../../src/ts/logger', () => ({ withCategory: jest.fn(() => ({ error: jest.fn() })) }));
 
 const TZ = 'Europe/Riga';
 const at = (d: number, hh: number, mm: number) => epochForWallTime(2026, 9, d, hh, mm, TZ);

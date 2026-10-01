@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 
-import * as settings from '../src/js/settings';
-import * as logger from '../src/js/logger';
+import * as settings from '../src/ts/settings';
+import * as logger from '../src/ts/logger';
 import {
     dumpSchema,
     listGlobalDefaults,
@@ -10,9 +10,9 @@ import {
     resetSetting,
     resetGlobalDefault,
     resetAllSettings,
-} from '../src/js/cli/commands/settings';
+} from '../src/ts/cli/commands/settings';
 import { spawn } from 'node:child_process';
-import { errorMessage } from '../src/js/errorMessage';
+import { errorMessage } from '../src/ts/errorMessage';
 
 /**
  * CLI Settings Management Script
@@ -26,7 +26,7 @@ import { errorMessage } from '../src/js/errorMessage';
  *
  * Output note (deliberate): `get` prints plain console lines (pipeable,
  * no timestamps — it is the read/inspect path), while the mutating
- * commands delegate to src/js/cli/commands/settings.ts and emit through
+ * commands delegate to src/ts/cli/commands/settings.ts and emit through
  * the shared logger (timestamped, colored) exactly like the main CLI.
  *
  * Examples:
@@ -198,13 +198,13 @@ async function main() {
             }
 
             case 'schema': {
-                // Shared with the main CLI (src/js/cli/commands/settings.ts).
+                // Shared with the main CLI (src/ts/cli/commands/settings.ts).
                 dumpSchema();
                 break;
             }
 
             case 'global-defaults': {
-                // Shared with the main CLI (src/js/cli/commands/settings.ts).
+                // Shared with the main CLI (src/ts/cli/commands/settings.ts).
                 listGlobalDefaults();
                 break;
             }

@@ -5,7 +5,7 @@
 
 import { render, screen, waitFor } from './helpers/test-utils';
 import { SettingInput } from '@/components/app/SettingInput';
-import type { SerializableSchemaEntry } from '../../src/js/ipc/settings.handlers';
+import type { SerializableSchemaEntry } from '../../src/ts/ipc/settings.handlers';
 import { invalid } from '../helpers/invalid';
 
 const config = invalid<SerializableSchemaEntry>({ type: 'scenario', default: '' });

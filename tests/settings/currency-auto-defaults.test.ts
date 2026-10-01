@@ -4,11 +4,11 @@
  * reads and writes exercise the real settings facade without touching disk.
  */
 
-import type { AndroidHeadlessStore } from '../../src/js/types/settings';
-import settings = require('../../src/js/settings');
-import type * as nodeResolversModule from '../../src/js/scheduling/nodeResolvers';
-import type { SettingsSchemaEntry } from '../../src/js/settings/schema';
-const { resolveCurrencyAuto } = require('../../src/js/scheduling/nodeResolvers') as typeof nodeResolversModule;
+import type { AndroidHeadlessStore } from '../../src/ts/types/settings';
+import settings = require('../../src/ts/settings');
+import type * as nodeResolversModule from '../../src/ts/scheduling/nodeResolvers';
+import type { SettingsSchemaEntry } from '../../src/ts/settings/schema';
+const { resolveCurrencyAuto } = require('../../src/ts/scheduling/nodeResolvers') as typeof nodeResolversModule;
 
 // The node resolver answers synchronously; its shared type also admits the renderer's async variant.
 

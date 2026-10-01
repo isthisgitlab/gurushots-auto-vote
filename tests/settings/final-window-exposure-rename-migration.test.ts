@@ -17,8 +17,8 @@
  */
 
 import type * as fsModule from 'node:fs';
-import type * as settingsModule from '../../src/js/settings';
-import type { AppSettings } from '../../src/js/types/settings';
+import type * as settingsModule from '../../src/ts/settings';
+import type { AppSettings } from '../../src/ts/types/settings';
 import type * as challengeFixturesModule from '../helpers/challengeFixtures';
 
 const { buildSettingsFixture: buildFixture } =
@@ -50,7 +50,7 @@ describe('last-hour → final-window key rename migration in loadSettings', () =
         jest.resetModules();
         jest.clearAllMocks();
         fs = jest.mocked(require('node:fs') as typeof fsModule);
-        settings = require('../../src/js/settings') as typeof settings;
+        settings = require('../../src/ts/settings') as typeof settings;
     });
 
     test('renames every legacy key in globalDefaults, deletes the old keys, sets the flag', () => {

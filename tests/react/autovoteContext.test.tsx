@@ -10,15 +10,15 @@
 import { memo } from 'react';
 import { render, act } from '@testing-library/preact';
 import { AutovoteProvider, useAutovote } from '@/contexts/AutovoteContext';
-import * as foregroundService from '../../src/js/services/ForegroundServiceController';
-import * as nativeAutovote from '../../src/js/services/NativeAutovoteBridge';
+import * as foregroundService from '../../src/ts/services/ForegroundServiceController';
+import * as nativeAutovote from '../../src/ts/services/NativeAutovoteBridge';
 import { mockApi, mockTranslator } from './helpers/setup';
 import type { ComponentProps } from 'preact';
 import type { RenderResult } from '@testing-library/preact';
-import type * as cadenceChainModule from '../../src/js/scheduling/cadenceChain';
-import type * as deadlineNotifierModule from '../../src/js/react/notifications/deadlineNotifier';
-import type { RendererGlobals } from '../../src/js/types/capacitor';
-import type { Challenge } from '../../src/js/types/gurushots';
+import type * as cadenceChainModule from '../../src/ts/scheduling/cadenceChain';
+import type * as deadlineNotifierModule from '../../src/ts/react/notifications/deadlineNotifier';
+import type { RendererGlobals } from '../../src/ts/types/capacitor';
+import type { Challenge } from '../../src/ts/types/gurushots';
 import { invalid } from '../helpers/invalid';
 
 type ChainDeps = Parameters<typeof cadenceChainModule.createCadenceChain>[0];
@@ -30,8 +30,8 @@ const captured: { chainDeps: ChainDeps | null; notifierDeps: NotifierDeps | null
 };
 const g = globalThis as RendererGlobals;
 
-jest.mock('../../src/js/scheduling/cadenceChain', () => {
-    const actual = jest.requireActual<typeof cadenceChainModule>('../../src/js/scheduling/cadenceChain');
+jest.mock('../../src/ts/scheduling/cadenceChain', () => {
+    const actual = jest.requireActual<typeof cadenceChainModule>('../../src/ts/scheduling/cadenceChain');
     return {
         ...actual,
         createCadenceChain: (deps: ChainDeps) => {
@@ -41,9 +41,9 @@ jest.mock('../../src/js/scheduling/cadenceChain', () => {
     };
 });
 
-jest.mock('../../src/js/react/notifications/deadlineNotifier', () => {
+jest.mock('../../src/ts/react/notifications/deadlineNotifier', () => {
     const actual = jest.requireActual<typeof deadlineNotifierModule>(
-        '../../src/js/react/notifications/deadlineNotifier',
+        '../../src/ts/react/notifications/deadlineNotifier',
     );
     return {
         ...actual,
@@ -54,14 +54,14 @@ jest.mock('../../src/js/react/notifications/deadlineNotifier', () => {
     };
 });
 
-jest.mock('../../src/js/services/ForegroundServiceController', () => ({
+jest.mock('../../src/ts/services/ForegroundServiceController', () => ({
     __esModule: true,
     start: jest.fn().mockResolvedValue(undefined),
     stop: jest.fn().mockResolvedValue(undefined),
     update: jest.fn(),
 }));
 
-jest.mock('../../src/js/services/NativeAutovoteBridge', () => ({
+jest.mock('../../src/ts/services/NativeAutovoteBridge', () => ({
     __esModule: true,
     start: jest.fn().mockResolvedValue({ available: false }),
     stop: jest.fn().mockResolvedValue({ available: false }),

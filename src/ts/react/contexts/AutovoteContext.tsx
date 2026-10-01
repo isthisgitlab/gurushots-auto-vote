@@ -203,7 +203,7 @@ function createRendererDeadlineNotifier(): CycleNotifier | null {
 
 /**
  * The shared cadence chain (decide delay → arm the single timer → run cycle
- * → re-arm) from src/js/scheduling/cadenceChain.ts — the same loop the
+ * → re-arm) from src/ts/scheduling/cadenceChain.ts — the same loop the
  * CLI/Android scheduler drives. This only supplies the WebView transport:
  * settings + challenges over IPC, the per-challenge IPC resolvers, the timer
  * slot (`cycleTimerRef`, whose identity doubles as the staleness guard for

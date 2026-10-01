@@ -5,15 +5,15 @@
  * Each test pins the observable fallback, not just that the line ran.
  */
 
-import type { Challenge } from '../../src/js/types/gurushots';
-import settingsModule = require('../../src/js/settings');
+import type { Challenge } from '../../src/ts/types/gurushots';
+import settingsModule = require('../../src/ts/settings');
 const settings = jest.mocked(settingsModule);
-import VotingLogic = require('../../src/js/services/VotingLogic');
+import VotingLogic = require('../../src/ts/services/VotingLogic');
 import type * as challengeFixturesModule from '../helpers/challengeFixtures';
 import { invalid } from '../helpers/invalid';
 const { buildChallenge } = require('../helpers/challengeFixtures') as typeof challengeFixturesModule;
 
-jest.mock('../../src/js/settings');
+jest.mock('../../src/ts/settings');
 
 const NOW = 1_700_000_000;
 

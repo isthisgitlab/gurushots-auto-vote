@@ -8,7 +8,7 @@
 import { fireEvent, render, screen } from './helpers/test-utils';
 import type { ComponentProps } from 'preact';
 import { SettingInput, SettingLabel, TagsField } from '@/components/app/SettingInput';
-import type { SerializableSchemaEntry } from '../../src/js/ipc/settings.handlers';
+import type { SerializableSchemaEntry } from '../../src/ts/ipc/settings.handlers';
 import { invalid } from '../helpers/invalid';
 
 /** The schema entries below are partial: each names only the fields its field editor reads. */

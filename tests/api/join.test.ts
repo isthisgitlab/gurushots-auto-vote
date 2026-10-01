@@ -4,17 +4,17 @@
  * normalization (incl. the null-on-failure contract callers rely on).
  */
 
-import type * as joinModule from '../../src/js/api/join';
-import type * as api_clientModule from '../../src/js/api/api-client';
+import type * as joinModule from '../../src/ts/api/join';
+import type * as api_clientModule from '../../src/ts/api/api-client';
 
-const { getMemberChallenges, coinsUnlock, getBankroll } = require('../../src/js/api/join') as typeof joinModule;
+const { getMemberChallenges, coinsUnlock, getBankroll } = require('../../src/ts/api/join') as typeof joinModule;
 
-jest.mock('../../src/js/api/api-client', () => ({
+jest.mock('../../src/ts/api/api-client', () => ({
     makePostRequest: jest.fn(),
     FORM_CONTENT_TYPE: 'application/x-www-form-urlencoded; charset=utf-8',
 }));
 
-const { makePostRequest } = jest.mocked(require('../../src/js/api/api-client') as typeof api_clientModule);
+const { makePostRequest } = jest.mocked(require('../../src/ts/api/api-client') as typeof api_clientModule);
 const token = 'tok-123';
 
 beforeEach(() => jest.clearAllMocks());

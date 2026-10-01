@@ -11,7 +11,7 @@
 
 import { fireEvent, render, screen } from './helpers/test-utils';
 import { SettingInput, SCHEDULED_FILL_MAX_ENTRIES } from '@/components/app/SettingInput';
-import type { SerializableSchemaEntry } from '../../src/js/ipc/settings.handlers';
+import type { SerializableSchemaEntry } from '../../src/ts/ipc/settings.handlers';
 import { invalid } from '../helpers/invalid';
 
 const timeInputs = () => Array.from(document.querySelectorAll<HTMLInputElement>('input[type="time"]'));

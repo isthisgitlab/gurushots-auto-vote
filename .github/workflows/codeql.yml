@@ -59,12 +59,12 @@ jobs:
             - name: Checkout code
               uses: actions/checkout@v7
 
-            # src/js uses ESM syntax but is transpiled under the root CommonJS
+            # src/ts uses ESM syntax but is transpiled under the root CommonJS
             # package at runtime. Give CodeQL its source module boundary so
             # cross-file imports resolve instead of yielding false alerts.
             - name: Mark source modules for CodeQL
               if: matrix.language == 'javascript-typescript'
-              run: printf '%s\n' '{"type":"module"}' > src/js/package.json
+              run: printf '%s\n' '{"type":"module"}' > src/ts/package.json
 
             - name: Setup Java (JDK 21 — required by Capacitor 8 plugins' kotlin jvmToolchain)
               if: matrix.language == 'java-kotlin'

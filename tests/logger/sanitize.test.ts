@@ -5,7 +5,7 @@
  * cycle guard, array handling, and case-insensitive matching.
  */
 
-const { sanitizeForLog } = jest.requireActual<typeof import('../../src/js/logger')>('../../src/js/logger');
+const { sanitizeForLog } = jest.requireActual<typeof import('../../src/ts/logger')>('../../src/ts/logger');
 
 describe('sanitizeForLog', () => {
     test('returns primitives unchanged', () => {

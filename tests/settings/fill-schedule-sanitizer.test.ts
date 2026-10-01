@@ -8,12 +8,12 @@
  * returns null for "no change" and for non-arrays).
  */
 
-import type * as schemaModule from '../../src/js/settings/schema';
+import type * as schemaModule from '../../src/ts/settings/schema';
 import type * as challengeFixturesModule from '../helpers/challengeFixtures';
 import type * as fsModule from 'node:fs';
-import type * as settingsModule from '../../src/js/settings';
+import type * as settingsModule from '../../src/ts/settings';
 
-const { sanitizeFillSchedule, validateSetting } = require('../../src/js/settings/schema') as typeof schemaModule;
+const { sanitizeFillSchedule, validateSetting } = require('../../src/ts/settings/schema') as typeof schemaModule;
 
 const MAX_SECONDS = 30 * 24 * 3600;
 
@@ -120,7 +120,7 @@ describe('_autoFillScheduleBoundsV1 sanitizer pass in loadSettings', () => {
         // Re-require fs *after* resetModules so we share the fresh mock
         // instance that settings.ts will see.
         fs = jest.mocked(require('node:fs') as typeof fsModule);
-        settings = require('../../src/js/settings') as typeof settings;
+        settings = require('../../src/ts/settings') as typeof settings;
     });
 
     test('cleans an out-of-bounds global default and sets the flag', () => {

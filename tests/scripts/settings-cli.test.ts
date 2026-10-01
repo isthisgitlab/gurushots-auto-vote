@@ -10,7 +10,7 @@
  * module registry, and flushes the async main() before asserting.
  */
 
-jest.mock('../../src/js/settings', () => ({
+jest.mock('../../src/ts/settings', () => ({
     loadSettings: jest.fn(() => ({
         token: 'super-secret-token',
         theme: 'dark',
@@ -22,7 +22,7 @@ jest.mock('../../src/js/settings', () => ({
 // Faithful stand-in for the logger's key-based deep redaction (the real
 // implementation is exercised by the logger's own tests); everything else
 // the script may touch is inert.
-jest.mock('../../src/js/logger', () => {
+jest.mock('../../src/ts/logger', () => {
     const SENSITIVE_KEY_RE = /^(token|auth[_-]?token|password|api[_-]?key|secret|cookie|authorization)$/i;
     const sanitizeForLog = (value: unknown): unknown => {
         if (value === null || typeof value !== 'object') return value;
@@ -65,8 +65,8 @@ jest.mock('node:child_process', () => ({
     }),
 }));
 
-jest.mock('../../src/js/cli/parseValue', () => ({ parseSettingValue: jest.fn((v: string) => v) }));
-jest.mock('../../src/js/cli/commands/settings', () => ({
+jest.mock('../../src/ts/cli/parseValue', () => ({ parseSettingValue: jest.fn((v: string) => v) }));
+jest.mock('../../src/ts/cli/commands/settings', () => ({
     dumpSchema: jest.fn(),
     listGlobalDefaults: jest.fn(),
     setSetting: jest.fn(() => true),
@@ -78,9 +78,9 @@ jest.mock('../../src/js/cli/commands/settings', () => ({
 
 import { invalid } from '../helpers/invalid';
 
-import sharedCommandsModule = require('../../src/js/cli/commands/settings');
+import sharedCommandsModule = require('../../src/ts/cli/commands/settings');
 const sharedCommands = jest.mocked(sharedCommandsModule);
-import settingsModule = require('../../src/js/settings');
+import settingsModule = require('../../src/ts/settings');
 const settings = jest.mocked(settingsModule);
 import type * as node_child_processModule from 'node:child_process';
 const { spawn } = jest.mocked(require('node:child_process') as typeof node_child_processModule);

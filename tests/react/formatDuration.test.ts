@@ -4,9 +4,9 @@
  * than raw minutes: a 10¾-hour window reads "10h 45m", not "645m".
  */
 
-import type * as formattersModule from '../../src/js/react/utils/formatters';
+import type * as formattersModule from '../../src/ts/react/utils/formatters';
 
-const { formatDuration } = require('../../src/js/react/utils/formatters') as typeof formattersModule;
+const { formatDuration } = require('../../src/ts/react/utils/formatters') as typeof formattersModule;
 
 describe('formatDuration', () => {
     test('sub-minute (and zero / negative) reads "<1m", never "0m"', () => {

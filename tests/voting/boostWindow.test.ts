@@ -1,5 +1,5 @@
 /**
- * The pure boost-window helpers (`src/js/voting/boostWindow.ts`).
+ * The pure boost-window helpers (`src/ts/voting/boostWindow.ts`).
  *
  * These are settings-free and shared by the voting engine, the scheduler and the
  * renderer, so their contract is pinned here directly rather than only through
@@ -10,10 +10,10 @@
  * disagree, the scheduler wakes for a fill the rule then refuses.
  */
 
-import type * as boostWindowModule from '../../src/js/voting/boostWindow';
+import type * as boostWindowModule from '../../src/ts/voting/boostWindow';
 
 const { isBoostWindowOpen, openBoostWindows, boostApplyThreshold } =
-    require('../../src/js/voting/boostWindow') as typeof boostWindowModule;
+    require('../../src/ts/voting/boostWindow') as typeof boostWindowModule;
 import { invalid } from '../helpers/invalid';
 
 const NOW = 1_700_000_000;

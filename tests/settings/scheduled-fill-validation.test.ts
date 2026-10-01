@@ -5,12 +5,12 @@ const {
     sanitizeTimeOfDayList,
     sanitizeBeforeEndList,
     MAX_SCHEDULED_FILL_ENTRIES,
-} = require('../../src/js/settings/schema') as typeof schemaModule;
-import type { AndroidHeadlessStore } from '../../src/js/types/settings';
-import settings = require('../../src/js/settings');
-import type * as schemaModule from '../../src/js/settings/schema';
+} = require('../../src/ts/settings/schema') as typeof schemaModule;
+import type { AndroidHeadlessStore } from '../../src/ts/types/settings';
+import settings = require('../../src/ts/settings');
+import type * as schemaModule from '../../src/ts/settings/schema';
 
-jest.mock('../../src/js/logger', () => ({
+jest.mock('../../src/ts/logger', () => ({
     info: jest.fn(),
     warning: jest.fn(),
     error: jest.fn(),

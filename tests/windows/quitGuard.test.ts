@@ -3,21 +3,21 @@
  * due within the horizon, asks, and re-issues it only on "Quit anyway".
  */
 
-import type * as VotingLogicModule from '../../src/js/services/VotingLogic';
-import type * as quitGuardModule from '../../src/js/windows/quitGuard';
+import type * as VotingLogicModule from '../../src/ts/services/VotingLogic';
+import type * as quitGuardModule from '../../src/ts/windows/quitGuard';
 import type { BrowserWindow, Dialog } from 'electron';
-import type { Challenge } from '../../src/js/types/gurushots';
-import type { CategoryLogger } from '../../src/js/logger';
+import type { Challenge } from '../../src/ts/types/gurushots';
+import type { CategoryLogger } from '../../src/ts/logger';
 import { invalid } from '../helpers/invalid';
 
 type Deps = Parameters<typeof quitGuardModule.holdQuitForOpenBoosts>[1];
 type ShowMessageBox = jest.MockedFunction<Dialog['showMessageBox']>;
 
-jest.mock('../../src/js/logger', () => {
+jest.mock('../../src/ts/logger', () => {
     const cat = { info: jest.fn(), error: jest.fn() };
     return { withCategory: jest.fn(() => cat), cat };
 });
-jest.mock('../../src/js/services/VotingLogic', () => ({ describeDeadlineActions: jest.fn(() => ({ actions: [] })) }));
+jest.mock('../../src/ts/services/VotingLogic', () => ({ describeDeadlineActions: jest.fn(() => ({ actions: [] })) }));
 
 const NOW = 1_000_000;
 const timed = invalid<Challenge>({
@@ -53,8 +53,8 @@ let logger: {
 beforeEach(() => {
     // Module-level state (list, bypass, prompting) must not leak across tests.
     jest.resetModules();
-    guard = require('../../src/js/windows/quitGuard') as typeof guard;
-    logger = require('../../src/js/logger') as typeof logger;
+    guard = require('../../src/ts/windows/quitGuard') as typeof guard;
+    logger = require('../../src/ts/logger') as typeof logger;
 });
 
 const setup = ({
@@ -126,7 +126,7 @@ describe('holdQuitForOpenBoosts — when to ask', () => {
     });
 
     test('defaults to the real clock and VotingLogic.describeDeadlineActions', () => {
-        const votingLogic = jest.mocked(require('../../src/js/services/VotingLogic') as typeof VotingLogicModule);
+        const votingLogic = jest.mocked(require('../../src/ts/services/VotingLogic') as typeof VotingLogicModule);
         guard.rememberChallenges([keyed]);
         votingLogic.describeDeadlineActions.mockReturnValue(
             invalid({

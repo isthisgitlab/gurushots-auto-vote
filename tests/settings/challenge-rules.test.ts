@@ -7,14 +7,14 @@
  * round-trip without touching fs.
  */
 
-import type { AndroidHeadlessStore, AppSettings } from '../../src/js/types/settings';
-import type { Challenge } from '../../src/js/types/gurushots';
-import type { CategoryLogger } from '../../src/js/logger';
+import type { AndroidHeadlessStore, AppSettings } from '../../src/ts/types/settings';
+import type { Challenge } from '../../src/ts/types/gurushots';
+import type { CategoryLogger } from '../../src/ts/logger';
 import { invalid } from '../helpers/invalid';
-import rules = require('../../src/js/settings/challengeRules');
-import settings = require('../../src/js/settings');
+import rules = require('../../src/ts/settings/challengeRules');
+import settings = require('../../src/ts/settings');
 
-jest.mock('../../src/js/logger', () => {
+jest.mock('../../src/ts/logger', () => {
     const cat = { info: jest.fn(), error: jest.fn(), debug: jest.fn(), success: jest.fn(), warning: jest.fn() };
     return {
         info: jest.fn(),
@@ -31,7 +31,7 @@ jest.mock('../../src/js/logger', () => {
 
 const cat = invalid<{
     __cat: { [K in 'info' | 'error' | 'debug' | 'success' | 'warning']: jest.MockedFunction<CategoryLogger[K]> };
-}>(require('../../src/js/logger')).__cat;
+}>(require('../../src/ts/logger')).__cat;
 
 const HOUR = 3600;
 const START = 1_700_000_000;

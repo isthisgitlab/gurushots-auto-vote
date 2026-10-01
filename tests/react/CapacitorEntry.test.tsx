@@ -6,10 +6,10 @@
  * with its collaborators doMock'ed, so the bootstrap can be driven per case.
  */
 
-import type { RendererGlobals } from '../../src/js/types/capacitor';
-import type { CategoryLogger } from '../../src/js/logger';
+import type { RendererGlobals } from '../../src/ts/types/capacitor';
+import type { CategoryLogger } from '../../src/ts/logger';
 
-const SRC = '../../src/js';
+const SRC = '../../src/ts';
 
 const flush = async () => {
     for (let i = 0; i < 20; i += 1) await Promise.resolve();

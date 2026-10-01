@@ -45,9 +45,9 @@ import { pipeline } from 'node:stream/promises';
 import yauzl from 'yauzl';
 import type { Entry, Options as YauzlOptions, ZipFile } from 'yauzl';
 import type { ConceptsConfig } from './build-lexicon';
-import { stem } from '../src/js/services/photoPicker';
+import { stem } from '../src/ts/services/photoPicker';
 import { runIfMain } from './lib/run-if-main';
-import { errorMessage } from '../src/js/errorMessage';
+import { errorMessage } from '../src/ts/errorMessage';
 
 type YauzlOpenCallback = (err: Error | null, zipfile: ZipFile) => void;
 
@@ -570,7 +570,7 @@ const main = async ({
         fail([
             `bad stem-merge rate ${(badRate * 100).toFixed(2)}% exceeds the ` +
                 `${MAX_BAD_COLLISION_RATE * 100}% ceiling — the stemmer is merging unrelated words at scale.`,
-            'Inspect the samples above; fix the stemmer edge case (src/js/services/photoPicker/stemming.ts) before committing.',
+            'Inspect the samples above; fix the stemmer edge case (src/ts/services/photoPicker/stemming.ts) before committing.',
         ]);
     }
 

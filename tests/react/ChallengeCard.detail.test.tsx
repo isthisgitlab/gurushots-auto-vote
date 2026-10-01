@@ -12,8 +12,8 @@ import { ChallengeCard } from '@/components/app/ChallengeCard';
 import { scrollToChallenge } from '@/utils/scrollToChallenge';
 import { buildChallenge } from '../helpers/challengeFixtures';
 import type { EntryBadge as RealEntryBadge } from '@/components/app/EntryBadge';
-import type { Challenge, MemberTurbo, RankingTotal } from '../../src/js/types/gurushots';
-import type { WindowApi } from '../../src/js/types/ipc';
+import type { Challenge, MemberTurbo, RankingTotal } from '../../src/ts/types/gurushots';
+import type { WindowApi } from '../../src/ts/types/ipc';
 import { invalid } from '../helpers/invalid';
 
 jest.mock('@/components/app/EntryBadge', () => ({

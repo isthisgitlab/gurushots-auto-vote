@@ -4,15 +4,15 @@
  * Tests the authentication functionality.
  */
 
-import type * as loginModule from '../../src/js/api/login';
-import type * as api_clientModule from '../../src/js/api/api-client';
-import type * as loggerModule from '../../src/js/logger';
+import type * as loginModule from '../../src/ts/api/login';
+import type * as api_clientModule from '../../src/ts/api/api-client';
+import type * as loggerModule from '../../src/ts/logger';
 
-const { authenticate } = require('../../src/js/api/login') as typeof loginModule;
+const { authenticate } = require('../../src/ts/api/login') as typeof loginModule;
 
 // Mock the api-client module — login routes through makePostRequest so the
 // CapacitorHttp adapter applies on Android.
-jest.mock('../../src/js/api/api-client', () => ({
+jest.mock('../../src/ts/api/api-client', () => ({
     makePostRequest: jest.fn(),
     createCommonHeaders: jest.fn((token: string | undefined) => ({
         'x-token': token || 'mock-token',
@@ -30,7 +30,7 @@ const mockDebugFn = jest.fn();
 const mockApiFn = jest.fn();
 const mockApiRequestFn = jest.fn();
 
-jest.mock('../../src/js/logger', () => ({
+jest.mock('../../src/ts/logger', () => ({
     info: jest.fn(),
     error: jest.fn(),
     success: jest.fn(),
@@ -57,9 +57,9 @@ describe('login', () => {
     const mockEmail = 'test@example.com';
     const mockPassword = 'testpassword123';
     const { makePostRequest, createCommonHeaders } = jest.mocked(
-        require('../../src/js/api/api-client') as typeof api_clientModule,
+        require('../../src/ts/api/api-client') as typeof api_clientModule,
     );
-    const logger = require('../../src/js/logger') as typeof loggerModule;
+    const logger = require('../../src/ts/logger') as typeof loggerModule;
     const SIGNUP_URL = 'https://api.gurushots.com/rest_mobile/signup';
 
     beforeEach(() => {

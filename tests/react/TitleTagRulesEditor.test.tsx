@@ -6,7 +6,7 @@
 
 import { fireEvent, render, screen, waitFor } from './helpers/test-utils';
 import { TitleTagRulesEditor } from '@/components/app/TitleTagRulesEditor';
-import type { TitleRule } from '../../src/js/types/settings';
+import type { TitleRule } from '../../src/ts/types/settings';
 import { invalid } from '../helpers/invalid';
 
 describe('TitleTagRulesEditor', () => {

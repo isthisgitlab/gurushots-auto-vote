@@ -20,33 +20,33 @@
  * which we mock here for determinism.
  */
 
-import settingsModule = require('../../src/js/settings');
+import settingsModule = require('../../src/ts/settings');
 const settings = jest.mocked(settingsModule);
-const { applyBoost } = require('../../src/js/strategies/real/applyBoost') as typeof applyBoostModule;
+const { applyBoost } = require('../../src/ts/strategies/real/applyBoost') as typeof applyBoostModule;
 const { resolveEntryIndex, pickEntryAvoidingConflict } =
-    require('../../src/js/services/VotingLogic') as typeof VotingLogicModule;
-import apiClientModule = require('../../src/js/api/api-client');
+    require('../../src/ts/services/VotingLogic') as typeof VotingLogicModule;
+import apiClientModule = require('../../src/ts/api/api-client');
 const apiClient = jest.mocked(apiClientModule);
-import type * as applyBoostModule from '../../src/js/strategies/real/applyBoost';
-import type * as VotingLogicModule from '../../src/js/services/VotingLogic';
+import type * as applyBoostModule from '../../src/ts/strategies/real/applyBoost';
+import type * as VotingLogicModule from '../../src/ts/services/VotingLogic';
 import type * as challengeFixturesModule from '../helpers/challengeFixtures';
-import type * as autoFillModule from '../../src/js/services/autoFill';
-import type { Challenge, RankingEntry } from '../../src/js/types/gurushots';
+import type * as autoFillModule from '../../src/ts/services/autoFill';
+import type { Challenge, RankingEntry } from '../../src/ts/types/gurushots';
 import { invalid } from '../helpers/invalid';
 const { buildChallenge: buildBaseChallenge } =
     require('../helpers/challengeFixtures') as typeof challengeFixturesModule;
 
-jest.mock('../../src/js/settings', () => ({
+jest.mock('../../src/ts/settings', () => ({
     getEffectiveSetting: jest.fn(),
 }));
 
-jest.mock('../../src/js/api/api-client', () => ({
+jest.mock('../../src/ts/api/api-client', () => ({
     makePostRequest: jest.fn(),
     createCommonHeaders: jest.fn(() => ({ 'x-token': 'mock-token' })),
     FORM_CONTENT_TYPE: 'application/x-www-form-urlencoded; charset=utf-8',
 }));
 
-jest.mock('../../src/js/logger', () => ({
+jest.mock('../../src/ts/logger', () => ({
     withCategory: jest.fn(() => ({
         error: jest.fn(),
         info: jest.fn(),
@@ -291,7 +291,7 @@ describe('same-pass boost/turbo conflict reflection', () => {
     });
 
     test('reflectEntryFlag marks a turboed entry so a later boost avoids it', () => {
-        const { reflectEntryFlag } = require('../../src/js/services/autoFill') as typeof autoFillModule;
+        const { reflectEntryFlag } = require('../../src/ts/services/autoFill') as typeof autoFillModule;
         const challenge = buildChallenge([{ id: 'e1' }, { id: 'e2' }]);
 
         reflectEntryFlag(challenge, 'e1', 'turbo');
@@ -302,7 +302,7 @@ describe('same-pass boost/turbo conflict reflection', () => {
     });
 
     test('reflectEntryFlag is a no-op for an unknown id or a missing entry list', () => {
-        const { reflectEntryFlag } = require('../../src/js/services/autoFill') as typeof autoFillModule;
+        const { reflectEntryFlag } = require('../../src/ts/services/autoFill') as typeof autoFillModule;
         const challenge = buildChallenge([{ id: 'e1' }]);
 
         expect(() => reflectEntryFlag(challenge, 'nope', 'turbo')).not.toThrow();

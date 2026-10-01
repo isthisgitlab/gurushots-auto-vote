@@ -22,7 +22,7 @@ jest.mock(
 
 import fsModule = require('node:fs');
 const fs = jest.mocked(fsModule);
-import type * as storageModule from '../../src/js/settings/storage';
+import type * as storageModule from '../../src/ts/settings/storage';
 
 const g = globalThis as typeof globalThis & {
     Capacitor?: { isNativePlatform: () => boolean; getPlatform: () => string };
@@ -44,7 +44,7 @@ describe('createJsonStore', () => {
         let store: ReturnType<typeof storageModule.createJsonStore>;
 
         beforeEach(() => {
-            const { createJsonStore } = require('../../src/js/settings/storage') as typeof storageModule;
+            const { createJsonStore } = require('../../src/ts/settings/storage') as typeof storageModule;
             store = createJsonStore({ fileName: 'metadata.json', prefKey: 'gurushots-metadata' });
         });
 
@@ -94,7 +94,7 @@ describe('createJsonStore', () => {
         beforeEach(() => {
             g.Capacitor = { isNativePlatform: () => true, getPlatform: () => 'android' };
             mockPrefGet.mockResolvedValue({ value: '{"persisted":true}' });
-            const { createJsonStore } = require('../../src/js/settings/storage') as typeof storageModule;
+            const { createJsonStore } = require('../../src/ts/settings/storage') as typeof storageModule;
             store = createJsonStore({ fileName: 'metadata.json', prefKey: 'gurushots-metadata' });
         });
 
@@ -175,7 +175,7 @@ describe('createJsonStore', () => {
 
         beforeEach(() => {
             g.__GS_HEADLESS__ = true;
-            const { createJsonStore } = require('../../src/js/settings/storage') as typeof storageModule;
+            const { createJsonStore } = require('../../src/ts/settings/storage') as typeof storageModule;
             store = createJsonStore({ fileName: 'metadata.json', prefKey: 'gurushots-metadata' });
         });
 

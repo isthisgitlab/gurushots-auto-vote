@@ -3,18 +3,18 @@
  * outbox read, over the injectable seams.
  */
 
-jest.mock('../../src/js/services/scenarioStatus', () => ({ getScenarioStatus: jest.fn() }));
-jest.mock('../../src/js/settings', () => ({ getGlobalDefault: jest.fn() }));
+jest.mock('../../src/ts/services/scenarioStatus', () => ({ getScenarioStatus: jest.fn() }));
+jest.mock('../../src/ts/settings', () => ({ getGlobalDefault: jest.fn() }));
 
-import settingsModule = require('../../src/js/settings');
+import settingsModule = require('../../src/ts/settings');
 const settings = jest.mocked(settingsModule);
-import type * as scenarioStatusModule from '../../src/js/services/scenarioStatus';
-import type * as nodeNotifyModule from '../../src/js/services/notify/nodeNotify';
+import type * as scenarioStatusModule from '../../src/ts/services/scenarioStatus';
+import type * as nodeNotifyModule from '../../src/ts/services/notify/nodeNotify';
 import { invalid } from '../helpers/invalid';
 const { getScenarioStatus } = jest.mocked(
-    require('../../src/js/services/scenarioStatus') as typeof scenarioStatusModule,
+    require('../../src/ts/services/scenarioStatus') as typeof scenarioStatusModule,
 );
-const { createNodeScenarioNotifier } = require('../../src/js/services/notify/nodeNotify') as typeof nodeNotifyModule;
+const { createNodeScenarioNotifier } = require('../../src/ts/services/notify/nodeNotify') as typeof nodeNotifyModule;
 
 const future = () => [{ id: 'n', at: Math.floor(Date.now() / 1000) + 60, message: 'Boost now' }];
 

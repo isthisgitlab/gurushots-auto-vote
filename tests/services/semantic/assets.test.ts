@@ -7,7 +7,7 @@
  * tests/setup.ts; `node:sea` is replaced per test.
  */
 
-jest.mock('../../../src/js/runtime', () => ({
+jest.mock('../../../src/ts/runtime', () => ({
     isCapacitor: jest.fn(() => false),
     isHeadlessService: jest.fn(() => false),
 }));
@@ -20,11 +20,11 @@ const mockSea: { isSea: () => boolean; getAsset: (key: string, encoding: string)
 };
 jest.mock('node:sea', () => mockSea, { virtual: true });
 
-import runtimeModule = require('../../../src/js/runtime');
+import runtimeModule = require('../../../src/ts/runtime');
 const runtime = jest.mocked(runtimeModule);
 import fsModule = require('node:fs');
 const fs = jest.mocked(fsModule);
-import assets = require('../../../src/js/services/semantic/assets');
+import assets = require('../../../src/ts/services/semantic/assets');
 import { invalid } from '../../helpers/invalid';
 
 const LEXICON = { dims: 2, scale: 1, packed: {} };

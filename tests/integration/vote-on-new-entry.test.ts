@@ -11,19 +11,19 @@
  * Only `settings` (to drive the gate) and the API endpoints are stubbed.
  */
 
-jest.mock('../../src/js/settings');
+jest.mock('../../src/ts/settings');
 
-import settingsModule = require('../../src/js/settings');
+import settingsModule = require('../../src/ts/settings');
 const settings = jest.mocked(settingsModule);
-import type * as votingOrchestratorModule from '../../src/js/services/votingOrchestrator';
-import type * as newEntryTrackerModule from '../../src/js/services/newEntryTracker';
+import type * as votingOrchestratorModule from '../../src/ts/services/votingOrchestrator';
+import type * as newEntryTrackerModule from '../../src/ts/services/newEntryTracker';
 import type * as challengeFixturesModule from '../helpers/challengeFixtures';
-import type { Challenge } from '../../src/js/types/gurushots';
-import type { VotingPassDeps } from '../../src/js/types/votingPass';
-import type { EntryTracker } from '../../src/js/services/newEntryTracker';
+import type { Challenge } from '../../src/ts/types/gurushots';
+import type { VotingPassDeps } from '../../src/ts/types/votingPass';
+import type { EntryTracker } from '../../src/ts/services/newEntryTracker';
 import { invalid } from '../helpers/invalid';
-const { runVotingPass } = require('../../src/js/services/votingOrchestrator') as typeof votingOrchestratorModule;
-const { createMemoryEntryTracker } = require('../../src/js/services/newEntryTracker') as typeof newEntryTrackerModule;
+const { runVotingPass } = require('../../src/ts/services/votingOrchestrator') as typeof votingOrchestratorModule;
+const { createMemoryEntryTracker } = require('../../src/ts/services/newEntryTracker') as typeof newEntryTrackerModule;
 const { buildChallenge } = require('../helpers/challengeFixtures') as typeof challengeFixturesModule;
 
 const NOW = Math.floor(Date.now() / 1000);

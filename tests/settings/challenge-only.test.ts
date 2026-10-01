@@ -8,9 +8,9 @@
  * so the facade's loadSettings/saveSettings round-trip without touching fs.
  */
 
-import type { AndroidHeadlessStore, AppSettings } from '../../src/js/types/settings';
-import type { SettingsSchemaEntry } from '../../src/js/settings/schema';
-import settings = require('../../src/js/settings');
+import type { AndroidHeadlessStore, AppSettings } from '../../src/ts/types/settings';
+import type { SettingsSchemaEntry } from '../../src/ts/settings/schema';
+import settings = require('../../src/ts/settings');
 
 describe('challengeOnly settings', () => {
     const { SETTINGS_SCHEMA } = settings;

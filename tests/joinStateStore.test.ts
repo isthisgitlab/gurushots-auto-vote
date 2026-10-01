@@ -14,25 +14,25 @@ jest.mock('fs', () => ({
     closeSync: jest.fn(),
 }));
 
-jest.mock('../src/js/runtime', () => ({
+jest.mock('../src/ts/runtime', () => ({
     isCapacitor: jest.fn(() => false),
     isHeadlessService: jest.fn(() => false),
 }));
 
 const mockStore = { initializeAsync: jest.fn(), flushPendingWrites: jest.fn() };
-jest.mock('../src/js/settings/storage', () => ({
+jest.mock('../src/ts/settings/storage', () => ({
     createJsonStore: jest.fn(() => mockStore),
     getSettingsPath: jest.fn(() => '/cfg/settings.json'),
 }));
 
 import fsModule = require('node:fs');
 const fs = jest.mocked(fsModule);
-import runtimeModule = require('../src/js/runtime');
+import runtimeModule = require('../src/ts/runtime');
 const runtime = jest.mocked(runtimeModule);
-import logger = require('../src/js/logger');
-import storageModule = require('../src/js/settings/storage');
+import logger = require('../src/ts/logger');
+import storageModule = require('../src/ts/settings/storage');
 const storage = jest.mocked(storageModule);
-import joinState = require('../src/js/joinStateStore');
+import joinState = require('../src/ts/joinStateStore');
 import { invalid } from './helpers/invalid';
 
 // Captured at require time: tests/setup.ts clears every mock before each test.

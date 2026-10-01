@@ -4,24 +4,24 @@
  * paging, cancellation, and one half's failure never blocking the other.
  */
 
-jest.mock('../../src/js/logger', () => {
+jest.mock('../../src/ts/logger', () => {
     const level = { info: jest.fn(), success: jest.fn(), warning: jest.fn() };
     return { withCategory: jest.fn(() => level), __level: level };
 });
-jest.mock('../../src/js/voting/cancellation', () => ({ isCancelled: jest.fn(() => false) }));
-jest.mock('../../src/js/settings', () => ({ getEffectiveSetting: jest.fn() }));
+jest.mock('../../src/ts/voting/cancellation', () => ({ isCancelled: jest.fn(() => false) }));
+jest.mock('../../src/ts/settings', () => ({ getEffectiveSetting: jest.fn() }));
 
-import loggerModule = require('../../src/js/logger');
+import loggerModule = require('../../src/ts/logger');
 const logger = jest.mocked(loggerModule);
-import cancellationModule = require('../../src/js/voting/cancellation');
+import cancellationModule = require('../../src/ts/voting/cancellation');
 const cancellation = jest.mocked(cancellationModule);
-import settingsModule = require('../../src/js/settings');
+import settingsModule = require('../../src/ts/settings');
 const settings = jest.mocked(settingsModule);
-import type * as autoClaimModule from '../../src/js/services/autoClaim';
-import type { RewardsBySection } from '../../src/js/types/gurushots';
+import type * as autoClaimModule from '../../src/ts/services/autoClaim';
+import type { RewardsBySection } from '../../src/ts/types/gurushots';
 import { invalid } from '../helpers/invalid';
 const { CLAIM_INTERVAL_MS, getAutoClaimStatus, runClaimPass, resetClaimThrottle } =
-    require('../../src/js/services/autoClaim') as typeof autoClaimModule;
+    require('../../src/ts/services/autoClaim') as typeof autoClaimModule;
 
 const T0 = 1_790_000_000_000;
 

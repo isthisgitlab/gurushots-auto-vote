@@ -10,8 +10,8 @@
  * prove the core behaves identically on each platform.
  */
 
-import type * as thresholdWindowModule from '../../src/js/scheduling/thresholdWindow';
-import type { Challenge } from '../../src/js/types/gurushots';
+import type * as thresholdWindowModule from '../../src/ts/scheduling/thresholdWindow';
+import type { Challenge } from '../../src/ts/types/gurushots';
 import { invalid } from '../helpers/invalid';
 
 // Partial resolver configs (fields the case never reaches left out).
@@ -19,7 +19,7 @@ type FinalWindowTopUpConfig = Awaited<ReturnType<thresholdWindowModule.ResolveFi
 type BoostPrefillConfig = Awaited<ReturnType<thresholdWindowModule.ResolveBoostPrefill>>;
 
 const { calculateNextThresholdEntry, isAnyChallengeInThresholdWindow, computeNextCycleDelayMs } =
-    require('../../src/js/scheduling/thresholdWindow') as typeof thresholdWindowModule;
+    require('../../src/ts/scheduling/thresholdWindow') as typeof thresholdWindowModule;
 
 // Two resolver shapes: Node (sync return) and WebView (Promise). Both yield 5.
 const resolvers = {

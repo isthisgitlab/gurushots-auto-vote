@@ -11,10 +11,10 @@
  * time rather than at runtime.
  */
 const { SETTINGS_SCHEMA, SETTINGS_GROUPS, SETTINGS_TIERS } =
-    require('../../src/js/settings/schema') as typeof schemaModule;
-import english = require('../../src/js/translations/english');
-import type * as schemaModule from '../../src/js/settings/schema';
-import type { SettingsSchemaEntry } from '../../src/js/settings/schema';
+    require('../../src/ts/settings/schema') as typeof schemaModule;
+import english = require('../../src/ts/translations/english');
+import type * as schemaModule from '../../src/ts/settings/schema';
+import type { SettingsSchemaEntry } from '../../src/ts/settings/schema';
 import { invalid } from '../helpers/invalid';
 
 /** Resolve an 'app.foo' translation key against english.ts. */

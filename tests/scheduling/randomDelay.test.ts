@@ -1,6 +1,6 @@
-import type * as randomDelayModule from '../../src/js/scheduling/randomDelay';
+import type * as randomDelayModule from '../../src/ts/scheduling/randomDelay';
 const { getRandomCheckFrequencyMs, anchoredWaitMs, DEFAULT_MINUTES, MS_PER_MINUTE, MIN_CYCLE_GAP_MS } =
-    require('../../src/js/scheduling/randomDelay') as typeof randomDelayModule;
+    require('../../src/ts/scheduling/randomDelay') as typeof randomDelayModule;
 
 describe('getRandomCheckFrequencyMs', () => {
     test('returns a fixed delay when min === max', () => {

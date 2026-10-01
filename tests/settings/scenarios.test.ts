@@ -4,14 +4,14 @@
  * headless-store seam so loadSettings/saveSettings round-trip without fs.
  */
 
-import settings = require('../../src/js/settings');
-import loggerModule = require('../../src/js/logger');
+import settings = require('../../src/ts/settings');
+import loggerModule = require('../../src/ts/logger');
 const logger = jest.mocked(loggerModule);
-import type * as templatesModule from '../../src/js/scenarios/templates';
-import type * as scenariosModule from '../../src/js/settings/scenarios';
-const { SCENARIO_TEMPLATES } = require('../../src/js/scenarios/templates') as typeof templatesModule;
+import type * as templatesModule from '../../src/ts/scenarios/templates';
+import type * as scenariosModule from '../../src/ts/settings/scenarios';
+const { SCENARIO_TEMPLATES } = require('../../src/ts/scenarios/templates') as typeof templatesModule;
 import { invalid } from '../helpers/invalid';
-import type { AndroidHeadlessStore, AppSettings, ChallengeSettings } from '../../src/js/types/settings';
+import type { AndroidHeadlessStore, AppSettings, ChallengeSettings } from '../../src/ts/types/settings';
 
 const g = globalThis as typeof globalThis & { __GS_HEADLESS__?: boolean; AndroidHeadlessStore?: AndroidHeadlessStore };
 
@@ -19,7 +19,7 @@ type SaveRefused = Extract<ReturnType<typeof settings.saveScenario>, { ok: false
 type PreviewAccepted = Extract<ReturnType<typeof settings.previewScenarioImport>, { ok: true }>;
 type PreviewRefused = Extract<ReturnType<typeof settings.previewScenarioImport>, { ok: false }>;
 
-jest.mock('../../src/js/logger', () => {
+jest.mock('../../src/ts/logger', () => {
     const category = { info: jest.fn(), error: jest.fn(), debug: jest.fn(), success: jest.fn(), warning: jest.fn() };
     return {
         info: jest.fn(),
@@ -350,17 +350,17 @@ describe('settings facade — scenarios when the save fails', () => {
 
     beforeEach(() => {
         jest.isolateModules(() => {
-            jest.doMock('../../src/js/settings/persistence', () => {
-                const actual = jest.requireActual<typeof import('../../src/js/settings/persistence')>(
-                    '../../src/js/settings/persistence',
+            jest.doMock('../../src/ts/settings/persistence', () => {
+                const actual = jest.requireActual<typeof import('../../src/ts/settings/persistence')>(
+                    '../../src/ts/settings/persistence',
                 );
                 return { ...actual, loadSettings: () => actual.loadSettings(), saveSettings: () => false };
             });
-            scenarios = require('../../src/js/settings/scenarios') as typeof scenarios;
+            scenarios = require('../../src/ts/settings/scenarios') as typeof scenarios;
         });
     });
 
-    afterEach(() => jest.dontMock('../../src/js/settings/persistence'));
+    afterEach(() => jest.dontMock('../../src/ts/settings/persistence'));
 
     test('save and delete report the failure', () => {
         expect((scenarios.saveScenario(simple()) as SaveRefused).issues[0].message).toContain('could not be saved');
@@ -368,15 +368,15 @@ describe('settings facade — scenarios when the save fails', () => {
 
     test('delete reports false when the save fails', () => {
         jest.isolateModules(() => {
-            jest.doMock('../../src/js/settings/persistence', () => {
-                const actual = jest.requireActual<typeof import('../../src/js/settings/persistence')>(
-                    '../../src/js/settings/persistence',
+            jest.doMock('../../src/ts/settings/persistence', () => {
+                const actual = jest.requireActual<typeof import('../../src/ts/settings/persistence')>(
+                    '../../src/ts/settings/persistence',
                 );
                 const blob = actual.loadSettings();
                 blob.challengeSettings.scenarios = { Plan: simple() };
                 return { ...actual, loadSettings: () => structuredClone(blob), saveSettings: () => false };
             });
-            const isolated = require('../../src/js/settings/scenarios') as typeof scenariosModule;
+            const isolated = require('../../src/ts/settings/scenarios') as typeof scenariosModule;
             expect(isolated.deleteScenario('Plan')).toBe(false);
         });
     });

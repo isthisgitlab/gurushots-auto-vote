@@ -5,11 +5,11 @@
  * when a challenge is within the final window of its runtime.
  */
 
-import settingsModule = require('../../src/js/settings');
+import settingsModule = require('../../src/ts/settings');
 const settings = jest.mocked(settingsModule);
 
 // Mock the settings module
-jest.mock('../../src/js/settings');
+jest.mock('../../src/ts/settings');
 
 describe('finalWindowExposure', () => {
     beforeEach(() => {

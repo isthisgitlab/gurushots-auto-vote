@@ -5,15 +5,15 @@
  * single-challenge run, and never allowed to abort voting.
  */
 
-jest.mock('../../src/js/services/autoClaim', () => ({ runClaimPass: jest.fn() }));
-jest.mock('../../src/js/services/joinChallenges', () => ({
+jest.mock('../../src/ts/services/autoClaim', () => ({ runClaimPass: jest.fn() }));
+jest.mock('../../src/ts/services/joinChallenges', () => ({
     runJoinPass: jest.fn(async () => undefined),
     joinChallengeSingle: jest.fn(),
 }));
-jest.mock('../../src/js/services/votingOrchestrator', () => ({
+jest.mock('../../src/ts/services/votingOrchestrator', () => ({
     runVotingPass: jest.fn(async () => ({ success: true, challenges: [] })),
 }));
-jest.mock('../../src/js/logger', () => {
+jest.mock('../../src/ts/logger', () => {
     const level = {
         info: jest.fn(),
         error: jest.fn(),
@@ -25,17 +25,17 @@ jest.mock('../../src/js/logger', () => {
     return { withCategory: jest.fn(() => level), __level: level };
 });
 
-import loggerModule = require('../../src/js/logger');
+import loggerModule = require('../../src/ts/logger');
 const logger = jest.mocked(loggerModule);
-import type * as autoClaimModule from '../../src/js/services/autoClaim';
-import type * as votingOrchestratorModule from '../../src/js/services/votingOrchestrator';
-import type * as indexModule from '../../src/js/mock/index';
+import type * as autoClaimModule from '../../src/ts/services/autoClaim';
+import type * as votingOrchestratorModule from '../../src/ts/services/votingOrchestrator';
+import type * as indexModule from '../../src/ts/mock/index';
 import { invalid } from '../helpers/invalid';
-const { runClaimPass } = jest.mocked(require('../../src/js/services/autoClaim') as typeof autoClaimModule);
+const { runClaimPass } = jest.mocked(require('../../src/ts/services/autoClaim') as typeof autoClaimModule);
 const { runVotingPass } = jest.mocked(
-    require('../../src/js/services/votingOrchestrator') as typeof votingOrchestratorModule,
+    require('../../src/ts/services/votingOrchestrator') as typeof votingOrchestratorModule,
 );
-const { mockApiClient } = require('../../src/js/mock/index') as typeof indexModule;
+const { mockApiClient } = require('../../src/ts/mock/index') as typeof indexModule;
 
 /** The shared category logger this file's logger mock hands out. */
 type LoggerMock = {

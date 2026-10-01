@@ -1,6 +1,6 @@
 /**
  * Tests for the auto-vote power-save blocker
- * (src/js/windows/backgroundActivity.ts).
+ * (src/ts/windows/backgroundActivity.ts).
  *
  * The module's whole job is to keep a held assertion in step with the running
  * flag without ever throwing at its callers, so these tests pin three things:
@@ -9,7 +9,7 @@
  * the window-creation / settings-change path.
  */
 
-import type * as backgroundActivityModule from '../../src/js/windows/backgroundActivity';
+import type * as backgroundActivityModule from '../../src/ts/windows/backgroundActivity';
 import { invalid } from '../helpers/invalid';
 
 const mockPowerSaveBlocker = {
@@ -22,7 +22,7 @@ jest.mock('electron', () => ({
     powerSaveBlocker: mockPowerSaveBlocker,
 }));
 
-jest.mock('../../src/js/logger', () => ({
+jest.mock('../../src/ts/logger', () => ({
     withCategory: jest.fn(() => ({
         info: jest.fn(),
         debug: jest.fn(),
@@ -42,7 +42,7 @@ describe('syncBackgroundActivity', () => {
         mockPowerSaveBlocker.start.mockReturnValue(7);
         mockPowerSaveBlocker.isStarted.mockReturnValue(true);
         ({ syncBackgroundActivity } =
-            require('../../src/js/windows/backgroundActivity') as typeof backgroundActivityModule);
+            require('../../src/ts/windows/backgroundActivity') as typeof backgroundActivityModule);
     });
 
     test('starts prevent-app-suspension when auto-vote starts running', () => {
@@ -137,7 +137,7 @@ describe('syncBackgroundActivity', () => {
     test('a non-Error throw is still reported in the warning text', () => {
         const warning = jest.fn();
         jest.mocked(
-            require('../../src/js/logger') as typeof import('../../src/js/logger'),
+            require('../../src/ts/logger') as typeof import('../../src/ts/logger'),
         ).withCategory.mockReturnValueOnce(invalid({ warning }));
         mockPowerSaveBlocker.start.mockImplementationOnce(() => {
             throw 'EPERM';

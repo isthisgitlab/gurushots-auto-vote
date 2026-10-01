@@ -3,18 +3,18 @@
  * the renderer, the IPC re-check and future automation.
  */
 
-import type * as currencyActionsModule from '../../src/js/voting/currencyActions';
+import type * as currencyActionsModule from '../../src/ts/voting/currencyActions';
 import type {
     Challenge,
     MemberBoost,
     MemberRanking,
     RankingEntry,
     RankingExposure,
-} from '../../src/js/types/gurushots';
+} from '../../src/ts/types/gurushots';
 import { invalid } from '../helpers/invalid';
 
 const { CURRENCY_OUTCOME, isRunning, canKeyUnlock, canSwapEntry, canFillExposure, swapExcludedIds, blockedOutcome } =
-    require('../../src/js/voting/currencyActions') as typeof currencyActionsModule;
+    require('../../src/ts/voting/currencyActions') as typeof currencyActionsModule;
 
 const NOW = 1_790_100_000;
 const FULL = { keys: 3, swaps: 3, fills: 3, coins: 0 };

@@ -3,9 +3,9 @@
 const realFs = jest.requireActual<typeof import('fs')>('fs');
 const realPath = jest.requireActual<typeof import('path')>('path');
 
-const LIMITS_PATH = realPath.join(__dirname, '..', '..', 'src', 'js', 'settings', 'limits.ts');
-import limits = require('../../src/js/settings/limits');
-import schema = require('../../src/js/settings/schema');
+const LIMITS_PATH = realPath.join(__dirname, '..', '..', 'src', 'ts', 'settings', 'limits.ts');
+import limits = require('../../src/ts/settings/limits');
+import schema = require('../../src/ts/settings/schema');
 
 describe('settings/limits', () => {
     it('exports the scheduled-fill entry cap', () => {

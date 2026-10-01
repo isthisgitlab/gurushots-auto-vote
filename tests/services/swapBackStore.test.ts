@@ -3,11 +3,11 @@
  * swapped out while boosted/turbo'd (the API's swap history has no such flag).
  */
 
-import type * as swapBackStoreModule from '../../src/js/swapBackStore';
-import type * as loggerModule from '../../src/js/logger';
+import type * as swapBackStoreModule from '../../src/ts/swapBackStore';
+import type * as loggerModule from '../../src/ts/logger';
 import { invalid } from '../helpers/invalid';
 
-const { createLedger, createMemoryLedger } = require('../../src/js/swapBackStore') as typeof swapBackStoreModule;
+const { createLedger, createMemoryLedger } = require('../../src/ts/swapBackStore') as typeof swapBackStoreModule;
 
 const boosted = { id: 'A', member_id: 'm', boosted: true };
 const turboed = { id: 'A', member_id: 'm', turbo: true };
@@ -83,7 +83,7 @@ test('a corrupt store reads as empty instead of throwing', () => {
 });
 
 describe('defensive reads and writes', () => {
-    const logger = require('../../src/js/logger') as typeof loggerModule;
+    const logger = require('../../src/ts/logger') as typeof loggerModule;
 
     test.each([['[]'], ['null'], ['5'], ['"str"']])('a non-object JSON root (%s) reads as empty', (raw) => {
         const ledger = createLedger({ readRaw: () => raw, writeRaw: jest.fn() });

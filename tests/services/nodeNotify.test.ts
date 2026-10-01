@@ -7,12 +7,12 @@
  * process is spawned.
  */
 
-import type * as nodeNotifyModule from '../../src/js/services/notify/nodeNotify';
-import type { Challenge } from '../../src/js/types/gurushots';
+import type * as nodeNotifyModule from '../../src/ts/services/notify/nodeNotify';
+import type { Challenge } from '../../src/ts/types/gurushots';
 import { invalid } from '../helpers/invalid';
 
 const { createNodeDeadlineNotifier, escapeAppleScript, escapePango } =
-    require('../../src/js/services/notify/nodeNotify') as typeof nodeNotifyModule;
+    require('../../src/ts/services/notify/nodeNotify') as typeof nodeNotifyModule;
 
 const NOW = 1_000_000;
 const describeWith =

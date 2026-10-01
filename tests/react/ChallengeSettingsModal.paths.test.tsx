@@ -8,8 +8,8 @@ import { act, fireEvent, render, screen, waitFor } from './helpers/test-utils';
 import { ChallengeSettingsModal } from '@/components/app/ChallengeSettingsModal';
 import { mockApi, mockTranslator } from './helpers/setup';
 import type { useSettingsSchema } from '@/api/useSettingsSchema';
-import type { Challenge } from '../../src/js/types/gurushots';
-import type { AppSettings } from '../../src/js/types/settings';
+import type { Challenge } from '../../src/ts/types/gurushots';
+import type { AppSettings } from '../../src/ts/types/settings';
 import { invalid } from '../helpers/invalid';
 
 const field = (group: string, type: string, dflt: unknown) => ({

@@ -44,7 +44,7 @@ import type { FillLogger } from '../types/autoFill';
 const MAX_BACKOFF_STEPS = 2;
 // Must match MIN_AUTOCOMPLETE_CHARS in api/tags.ts — both encode the same server
 // behavior (nothing is returned below three characters). Kept local rather than
-// imported because business logic does not reach into src/js/api/*; if one
+// imported because business logic does not reach into src/ts/api/*; if one
 // moves, move the other.
 const MIN_TERM_LENGTH = 3;
 

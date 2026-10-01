@@ -6,8 +6,8 @@
  * start/update/stop, without a device. The plugin module and runtime are mocked.
  */
 
-import type * as ForegroundServiceControllerModule from '../../src/js/services/ForegroundServiceController';
-import type * as RuntimeModule from '../../src/js/runtime';
+import type * as ForegroundServiceControllerModule from '../../src/ts/services/ForegroundServiceController';
+import type * as RuntimeModule from '../../src/ts/runtime';
 import { invalid } from '../helpers/invalid';
 
 const mockFsPlugin = {
@@ -19,7 +19,7 @@ const mockFsPlugin = {
 };
 
 jest.mock('@capawesome-team/capacitor-android-foreground-service', () => ({ ForegroundService: mockFsPlugin }));
-jest.mock('../../src/js/runtime', () => ({
+jest.mock('../../src/ts/runtime', () => ({
     isCapacitor: jest.fn(() => false),
 }));
 
@@ -29,7 +29,7 @@ describe('ForegroundServiceController', () => {
 
     beforeEach(() => {
         jest.resetModules();
-        runtime = jest.mocked(require('../../src/js/runtime') as typeof RuntimeModule);
+        runtime = jest.mocked(require('../../src/ts/runtime') as typeof RuntimeModule);
         runtime.isCapacitor.mockReturnValue(true);
         // Happy defaults; individual tests override as needed.
         mockFsPlugin.checkPermissions.mockResolvedValue({ display: 'granted' });
@@ -37,7 +37,7 @@ describe('ForegroundServiceController', () => {
         mockFsPlugin.startForegroundService.mockResolvedValue(undefined);
         mockFsPlugin.updateForegroundService.mockResolvedValue(undefined);
         mockFsPlugin.stopForegroundService.mockResolvedValue(undefined);
-        controller = require('../../src/js/services/ForegroundServiceController') as typeof controller;
+        controller = require('../../src/ts/services/ForegroundServiceController') as typeof controller;
     });
 
     describe('when not running on Capacitor (no-op)', () => {
@@ -126,14 +126,14 @@ describe('ForegroundServiceController', () => {
         });
         const warning = jest.fn();
         jest.mocked(
-            require('../../src/js/logger') as typeof import('../../src/js/logger'),
+            require('../../src/ts/logger') as typeof import('../../src/ts/logger'),
         ).withCategory.mockReturnValueOnce(invalid({ warning }));
         jest.mocked(
-            require('../../src/js/runtime') as typeof import('../../src/js/runtime'),
+            require('../../src/ts/runtime') as typeof import('../../src/ts/runtime'),
         ).isCapacitor.mockReturnValue(true);
         try {
             const isolated =
-                require('../../src/js/services/ForegroundServiceController') as typeof ForegroundServiceControllerModule;
+                require('../../src/ts/services/ForegroundServiceController') as typeof ForegroundServiceControllerModule;
 
             await expect(isolated.start()).resolves.toBe(false);
             expect(mockFsPlugin.startForegroundService).not.toHaveBeenCalled();

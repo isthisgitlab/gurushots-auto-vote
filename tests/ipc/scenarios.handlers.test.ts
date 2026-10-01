@@ -3,7 +3,7 @@
  * and never a throw to the renderer.
  */
 
-jest.mock('../../src/js/settings', () => ({
+jest.mock('../../src/ts/settings', () => ({
     checkScenario: jest.fn(),
     getScenarios: jest.fn(() => ({})),
     saveScenario: jest.fn(),
@@ -13,37 +13,37 @@ jest.mock('../../src/js/settings', () => ({
     importScenario: jest.fn(),
     exportScenario: jest.fn(),
 }));
-jest.mock('../../src/js/services/scenarioStatus', () => {
+jest.mock('../../src/ts/services/scenarioStatus', () => {
     const ledger = { remove: jest.fn() };
     return { getScenarioStatus: jest.fn(), ledgerForMode: jest.fn(() => ledger), __ledger: ledger };
 });
-jest.mock('../../src/js/scenarioStateStore', () => ({ refreshScenarioStateAsync: jest.fn(async () => {}) }));
-jest.mock('../../src/js/services/auth', () => ({ requireAuthToken: jest.fn(() => ({ ok: true, token: 'tok' })) }));
-jest.mock('../../src/js/apiFactory', () => ({ getApiStrategy: jest.fn() }));
-jest.mock('../../src/js/logger', () => ({
+jest.mock('../../src/ts/scenarioStateStore', () => ({ refreshScenarioStateAsync: jest.fn(async () => {}) }));
+jest.mock('../../src/ts/services/auth', () => ({ requireAuthToken: jest.fn(() => ({ ok: true, token: 'tok' })) }));
+jest.mock('../../src/ts/apiFactory', () => ({ getApiStrategy: jest.fn() }));
+jest.mock('../../src/ts/logger', () => ({
     withCategory: jest.fn(() => ({ error: jest.fn(), info: jest.fn() })),
     sanitizeLogString: (value: string) => value,
 }));
 
-import type { ScenarioDocument } from '../../src/js/settings/scenarioSchema';
+import type { ScenarioDocument } from '../../src/ts/settings/scenarioSchema';
 import { invalid } from '../helpers/invalid';
 
-import settingsModule = require('../../src/js/settings');
+import settingsModule = require('../../src/ts/settings');
 const settings = jest.mocked(settingsModule);
-import scenarioStatusModule = require('../../src/js/services/scenarioStatus');
+import scenarioStatusModule = require('../../src/ts/services/scenarioStatus');
 const scenarioStatus = jest.mocked(scenarioStatusModule);
 const { refreshScenarioStateAsync } = jest.mocked(
-    require('../../src/js/scenarioStateStore') as typeof scenarioStateStoreModule,
+    require('../../src/ts/scenarioStateStore') as typeof scenarioStateStoreModule,
 );
-import authModule = require('../../src/js/services/auth');
+import authModule = require('../../src/ts/services/auth');
 const auth = jest.mocked(authModule);
-import apiFactoryModule = require('../../src/js/apiFactory');
+import apiFactoryModule = require('../../src/ts/apiFactory');
 const apiFactory = jest.mocked(apiFactoryModule);
-import type * as scenarioStateStoreModule from '../../src/js/scenarioStateStore';
-import type * as templatesModule from '../../src/js/scenarios/templates';
-import type * as scenarios_handlersModule from '../../src/js/ipc/scenarios.handlers';
-const { SCENARIO_TEMPLATES } = require('../../src/js/scenarios/templates') as typeof templatesModule;
-const { buildHandlers, register } = require('../../src/js/ipc/scenarios.handlers') as typeof scenarios_handlersModule;
+import type * as scenarioStateStoreModule from '../../src/ts/scenarioStateStore';
+import type * as templatesModule from '../../src/ts/scenarios/templates';
+import type * as scenarios_handlersModule from '../../src/ts/ipc/scenarios.handlers';
+const { SCENARIO_TEMPLATES } = require('../../src/ts/scenarios/templates') as typeof templatesModule;
+const { buildHandlers, register } = require('../../src/ts/ipc/scenarios.handlers') as typeof scenarios_handlersModule;
 
 const handlers = buildHandlers();
 const issue = { path: 'start', message: 'No phase named "x"' };

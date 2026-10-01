@@ -3,14 +3,14 @@
  * computeNextCycleDelayMs's 'scenario' mode.
  */
 
-import type * as thresholdWindowModule from '../../src/js/scheduling/thresholdWindow';
-import type { Challenge } from '../../src/js/types/gurushots';
-import type { ScenarioDocument } from '../../src/js/settings/scenarioSchema';
-import type { ScenarioEngineState } from '../../src/js/types/scenario';
+import type * as thresholdWindowModule from '../../src/ts/scheduling/thresholdWindow';
+import type { Challenge } from '../../src/ts/types/gurushots';
+import type { ScenarioDocument } from '../../src/ts/settings/scenarioSchema';
+import type { ScenarioEngineState } from '../../src/ts/types/scenario';
 import { invalid } from '../helpers/invalid';
 
 const { soonestScenarioWake, computeNextCycleDelayMs } =
-    require('../../src/js/scheduling/thresholdWindow') as typeof thresholdWindowModule;
+    require('../../src/ts/scheduling/thresholdWindow') as typeof thresholdWindowModule;
 
 const NOW = 1_800_000_000;
 

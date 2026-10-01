@@ -5,15 +5,15 @@
  * The native Kotlin is verified on-device; here we cover the JS routing.
  */
 
-jest.mock('../../src/js/runtime', () => ({ isCapacitor: jest.fn(() => true) }));
+jest.mock('../../src/ts/runtime', () => ({ isCapacitor: jest.fn(() => true) }));
 
-import runtimeModule = require('../../src/js/runtime');
+import runtimeModule = require('../../src/ts/runtime');
 const runtime = jest.mocked(runtimeModule);
-import logger = require('../../src/js/logger');
-import type * as AndroidUpdateInstallerModule from '../../src/js/services/AndroidUpdateInstaller';
+import logger = require('../../src/ts/logger');
+import type * as AndroidUpdateInstallerModule from '../../src/ts/services/AndroidUpdateInstaller';
 const { downloadAndInstall } =
-    require('../../src/js/services/AndroidUpdateInstaller') as typeof AndroidUpdateInstallerModule;
-import type { ApkInstallerPlugin, CapacitorGlobals } from '../../src/js/types/capacitor';
+    require('../../src/ts/services/AndroidUpdateInstaller') as typeof AndroidUpdateInstallerModule;
+import type { ApkInstallerPlugin, CapacitorGlobals } from '../../src/ts/types/capacitor';
 import { invalid } from '../helpers/invalid';
 
 // The globals the installer reads; open and location are removed on purpose to reach the last fallbacks.

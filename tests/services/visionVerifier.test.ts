@@ -1,4 +1,4 @@
-import type { FillLogger } from '../../src/js/types/autoFill';
+import type { FillLogger } from '../../src/ts/types/autoFill';
 import { invalid } from '../helpers/invalid';
 
 /** The mocked transformers `env`: the module writes arbitrary config keys onto it. */
@@ -25,19 +25,19 @@ const mockCreateRequire = jest.fn(() => () => mockSeaTransformers);
 const mockExtract = jest.fn(() => ({ root: '/vision/root', modulePath: '/vision/root/vision-entry.js' }));
 
 jest.mock('path', () => jest.requireActual<typeof import('path')>('path'));
-jest.mock('../../src/js/runtime', () => mockRuntime);
+jest.mock('../../src/ts/runtime', () => mockRuntime);
 jest.mock('node:sea', () => mockSea, { virtual: true });
 jest.mock('node:module', () => ({ createRequire: mockCreateRequire }));
 jest.mock('@huggingface/transformers', () => mockTransformers);
-jest.mock('../../src/js/services/visionCliAssets', () => ({ extractVisionCliAssets: mockExtract }));
+jest.mock('../../src/ts/services/visionCliAssets', () => ({ extractVisionCliAssets: mockExtract }));
 
 import fsModule = require('node:fs');
 const fs = jest.mocked(fsModule);
 import pathModule = require('node:path');
 const path = jest.mocked(pathModule);
-import type * as visionVerifierModule from '../../src/js/services/visionVerifier';
+import type * as visionVerifierModule from '../../src/ts/services/visionVerifier';
 const { rankVisually, hasBundledModel, orderByVisualFit, challengePrompts, descriptionLead, __resetForTests } =
-    require('../../src/js/services/visionVerifier') as typeof visionVerifierModule;
+    require('../../src/ts/services/visionVerifier') as typeof visionVerifierModule;
 
 const hex = (seed: string) => seed.repeat(32).slice(0, 32);
 const photo = (id: string) => ({ id: hex(id), member_id: hex('f') });

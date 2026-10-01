@@ -14,7 +14,7 @@ import { invalid } from '../helpers/invalid';
 // The simulated write-behind store the settings mock exposes as __state.
 type SettingsState = { cached: Record<string, unknown>; persisted: Record<string, unknown>; flushCalls: number };
 
-jest.mock('../../src/js/settings', () => {
+jest.mock('../../src/ts/settings', () => {
     const state: SettingsState = {
         cached: { token: 'old-token' },
         persisted: { token: 'old-token' },
@@ -35,10 +35,10 @@ jest.mock('../../src/js/settings', () => {
     };
 });
 
-import settingsModule = require('../../src/js/settings');
+import settingsModule = require('../../src/ts/settings');
 const settings = jest.mocked(settingsModule as typeof settingsModule & { __state: SettingsState });
-import type * as authModule from '../../src/js/services/auth';
-const { clearAuthToken } = require('../../src/js/services/auth') as typeof authModule;
+import type * as authModule from '../../src/ts/services/auth';
+const { clearAuthToken } = require('../../src/ts/services/auth') as typeof authModule;
 
 describe('clearAuthToken', () => {
     beforeEach(() => {
@@ -89,7 +89,7 @@ describe('clearAuthToken', () => {
  * Electron-specific.
  */
 describe('clearTokenUnlessStayingLoggedIn', () => {
-    const { clearTokenUnlessStayingLoggedIn } = require('../../src/js/services/auth') as typeof authModule;
+    const { clearTokenUnlessStayingLoggedIn } = require('../../src/ts/services/auth') as typeof authModule;
 
     beforeEach(() => {
         settings.__state.cached = { token: 'old-token', stayLoggedIn: false };

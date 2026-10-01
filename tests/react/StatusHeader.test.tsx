@@ -1,14 +1,14 @@
 import { render, screen, act, fireEvent } from '@testing-library/preact';
 import { TranslationProvider } from '@/contexts/TranslationContext';
 import { StatusHeader } from '@/components/app/StatusHeader';
-import { openBoostWindows } from '../../src/js/voting/boostWindow';
+import { openBoostWindows } from '../../src/ts/voting/boostWindow';
 import { scrollToChallenge } from '@/utils/scrollToChallenge';
 import type { ComponentChild } from 'preact';
-import type { Bankroll, Challenge } from '../../src/js/types/gurushots';
+import type { Bankroll, Challenge } from '../../src/ts/types/gurushots';
 import { invalid } from '../helpers/invalid';
 import { mockTranslator } from './helpers/setup';
-import { app as englishApp } from '../../src/js/translations/english';
-import { app as latvianApp } from '../../src/js/translations/latvian';
+import { app as englishApp } from '../../src/ts/translations/english';
+import { app as latvianApp } from '../../src/ts/translations/latvian';
 
 /**
  * StatusHeader: the aggregate summary bar. Two things matter:
@@ -22,7 +22,7 @@ import { app as latvianApp } from '../../src/js/translations/latvian';
  * call count is a direct probe of "did the body re-render?". If the tick ever
  * leaked into the header body, the count would climb with the clock.
  */
-jest.mock('../../src/js/voting/boostWindow', () => ({
+jest.mock('../../src/ts/voting/boostWindow', () => ({
     openBoostWindows: jest.fn((challenges: Challenge[] | null | undefined) =>
         (challenges || [])
             .filter((c) => {

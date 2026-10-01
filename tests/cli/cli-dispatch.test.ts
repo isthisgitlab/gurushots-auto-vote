@@ -1,5 +1,5 @@
 /**
- * Unit tests for the CLI entry point (src/js/cli/cli.ts). The module is a
+ * Unit tests for the CLI entry point (src/ts/cli/cli.ts). The module is a
  * script: it reads process.argv, registers process-level error handlers and
  * runs main() on load. Each test sets argv and re-requires it in an isolated
  * module registry with every command module mocked, then asserts which
@@ -8,19 +8,19 @@
  * process.on is captured, never installed.
  */
 
-import type * as loggerModule from '../../src/js/logger';
-import type * as settingsModule from '../../src/js/settings';
-import type * as randomizerModule from '../../src/js/api/randomizer';
-import type * as guardsModule from '../../src/js/cli/guards';
-import type * as authModule from '../../src/js/cli/commands/auth';
-import type * as votingModule from '../../src/js/cli/commands/voting';
-import type * as actionsModule from '../../src/js/cli/commands/actions';
-import type * as bankrollModule from '../../src/js/cli/commands/bankroll';
-import type * as joinModule from '../../src/js/cli/commands/join';
-import type * as updateModule from '../../src/js/cli/commands/update';
-import type * as logsModule from '../../src/js/cli/commands/logs';
-import type * as settingsCommandsModule from '../../src/js/cli/commands/settings';
-import type * as scenariosModule from '../../src/js/cli/commands/scenarios';
+import type * as loggerModule from '../../src/ts/logger';
+import type * as settingsModule from '../../src/ts/settings';
+import type * as randomizerModule from '../../src/ts/api/randomizer';
+import type * as guardsModule from '../../src/ts/cli/guards';
+import type * as authModule from '../../src/ts/cli/commands/auth';
+import type * as votingModule from '../../src/ts/cli/commands/voting';
+import type * as actionsModule from '../../src/ts/cli/commands/actions';
+import type * as bankrollModule from '../../src/ts/cli/commands/bankroll';
+import type * as joinModule from '../../src/ts/cli/commands/join';
+import type * as updateModule from '../../src/ts/cli/commands/update';
+import type * as logsModule from '../../src/ts/cli/commands/logs';
+import type * as settingsCommandsModule from '../../src/ts/cli/commands/settings';
+import type * as scenariosModule from '../../src/ts/cli/commands/scenarios';
 import { invalid } from '../helpers/invalid';
 
 type Mods = {
@@ -40,36 +40,36 @@ type Mods = {
 };
 type Loaded = Mods & { msgs: (level: string) => string[]; exitCodes: unknown[] };
 
-jest.mock('../../src/js/logger', () => {
+jest.mock('../../src/ts/logger', () => {
     const calls: { level: string; msg: unknown }[] = [];
     const rec = (level: string) => (msg: unknown) => calls.push({ level, msg });
     const cat = { info: rec('info'), error: rec('error'), debug: rec('debug'), warning: rec('warning') };
     return { __calls: calls, withCategory: jest.fn(() => cat), cleanup: jest.fn() };
 });
 
-jest.mock('../../src/js/settings', () => ({
+jest.mock('../../src/ts/settings', () => ({
     loadSettings: jest.fn(() => ({ mock: false })),
     seedIntentProfiles: jest.fn(),
 }));
 
-jest.mock('../../src/js/api/randomizer', () => ({ initializeHeaders: jest.fn() }));
+jest.mock('../../src/ts/api/randomizer', () => ({ initializeHeaders: jest.fn() }));
 
 // This test loads real command helpers while fs is globally mocked. Mock
 // Electron so its package entry point does not try to download a binary.
 jest.mock('electron', () => ({}));
 
-jest.mock('../../src/js/cli/guards', () => ({
+jest.mock('../../src/ts/cli/guards', () => ({
     requireChallenge: jest.fn(({ challengeId }: { challengeId: string | null }) => challengeId),
     requireProfileArgs: jest.fn((command: string, { rest }: { rest: string[] }) => rest[0]),
 }));
 
-jest.mock('../../src/js/cli/commands/auth', () => ({ handleLogin: jest.fn(), handleLogout: jest.fn() }));
+jest.mock('../../src/ts/cli/commands/auth', () => ({ handleLogin: jest.fn(), handleLogout: jest.fn() }));
 
 // parseChallengeFlag / parseSwapFlags / the usage strings are pure helpers —
 // keep the real ones so the dispatcher's argv handling is tested end to end.
-jest.mock('../../src/js/cli/commands/voting', () => {
-    const { parseChallengeFlag } = jest.requireActual<typeof import('../../src/js/cli/commands/voting')>(
-        '../../src/js/cli/commands/voting',
+jest.mock('../../src/ts/cli/commands/voting', () => {
+    const { parseChallengeFlag } = jest.requireActual<typeof import('../../src/ts/cli/commands/voting')>(
+        '../../src/ts/cli/commands/voting',
     );
     return {
         parseChallengeFlag,
@@ -80,10 +80,10 @@ jest.mock('../../src/js/cli/commands/voting', () => {
     };
 });
 
-jest.mock('../../src/js/cli/commands/actions', () => {
+jest.mock('../../src/ts/cli/commands/actions', () => {
     const { parseSwapFlags, SWAP_USAGE, SWAP_BACK_USAGE } = jest.requireActual<
-        typeof import('../../src/js/cli/commands/actions')
-    >('../../src/js/cli/commands/actions');
+        typeof import('../../src/ts/cli/commands/actions')
+    >('../../src/ts/cli/commands/actions');
     return {
         parseSwapFlags,
         SWAP_USAGE,
@@ -98,11 +98,11 @@ jest.mock('../../src/js/cli/commands/actions', () => {
     };
 });
 
-jest.mock('../../src/js/cli/commands/bankroll', () => ({ showBankroll: jest.fn() }));
-jest.mock('../../src/js/cli/commands/join', () => ({ showDiscover: jest.fn(), joinChallengeCmd: jest.fn() }));
-jest.mock('../../src/js/cli/commands/update', () => ({ checkUpdates: jest.fn() }));
-jest.mock('../../src/js/cli/commands/logs', () => ({ showLogs: jest.fn() }));
-jest.mock('../../src/js/cli/commands/scenarios', () =>
+jest.mock('../../src/ts/cli/commands/bankroll', () => ({ showBankroll: jest.fn() }));
+jest.mock('../../src/ts/cli/commands/join', () => ({ showDiscover: jest.fn(), joinChallengeCmd: jest.fn() }));
+jest.mock('../../src/ts/cli/commands/update', () => ({ checkUpdates: jest.fn() }));
+jest.mock('../../src/ts/cli/commands/logs', () => ({ showLogs: jest.fn() }));
+jest.mock('../../src/ts/cli/commands/scenarios', () =>
     Object.fromEntries(
         [
             'listScenarios',
@@ -119,7 +119,7 @@ jest.mock('../../src/js/cli/commands/scenarios', () =>
         ].map((name) => [name, jest.fn(async () => 0)]),
     ),
 );
-jest.mock('../../src/js/cli/commands/settings', () => ({
+jest.mock('../../src/ts/cli/commands/settings', () => ({
     getSetting: jest.fn(),
     setSetting: jest.fn(),
     setGlobalDefault: jest.fn(),
@@ -165,22 +165,22 @@ const run = async (argv: string[], setup?: (mods: Mods) => void) => {
     process.argv = ['node', 'cli.ts', ...argv];
     jest.isolateModules(() => {
         m = invalid<Loaded>({
-            logger: require('../../src/js/logger') as typeof loggerModule,
-            settings: require('../../src/js/settings') as typeof settingsModule,
-            randomizer: require('../../src/js/api/randomizer') as typeof randomizerModule,
-            guards: require('../../src/js/cli/guards') as typeof guardsModule,
-            auth: require('../../src/js/cli/commands/auth') as typeof authModule,
-            voting: require('../../src/js/cli/commands/voting') as typeof votingModule,
-            actions: require('../../src/js/cli/commands/actions') as typeof actionsModule,
-            bankroll: require('../../src/js/cli/commands/bankroll') as typeof bankrollModule,
-            join: require('../../src/js/cli/commands/join') as typeof joinModule,
-            update: require('../../src/js/cli/commands/update') as typeof updateModule,
-            logs: require('../../src/js/cli/commands/logs') as typeof logsModule,
-            cmd: require('../../src/js/cli/commands/settings') as typeof settingsCommandsModule,
-            scenarios: require('../../src/js/cli/commands/scenarios') as typeof scenariosModule,
+            logger: require('../../src/ts/logger') as typeof loggerModule,
+            settings: require('../../src/ts/settings') as typeof settingsModule,
+            randomizer: require('../../src/ts/api/randomizer') as typeof randomizerModule,
+            guards: require('../../src/ts/cli/guards') as typeof guardsModule,
+            auth: require('../../src/ts/cli/commands/auth') as typeof authModule,
+            voting: require('../../src/ts/cli/commands/voting') as typeof votingModule,
+            actions: require('../../src/ts/cli/commands/actions') as typeof actionsModule,
+            bankroll: require('../../src/ts/cli/commands/bankroll') as typeof bankrollModule,
+            join: require('../../src/ts/cli/commands/join') as typeof joinModule,
+            update: require('../../src/ts/cli/commands/update') as typeof updateModule,
+            logs: require('../../src/ts/cli/commands/logs') as typeof logsModule,
+            cmd: require('../../src/ts/cli/commands/settings') as typeof settingsCommandsModule,
+            scenarios: require('../../src/ts/cli/commands/scenarios') as typeof scenariosModule,
         });
         setup?.(m);
-        require('../../src/js/cli/cli');
+        require('../../src/ts/cli/cli');
     });
     await flush();
     await flush();

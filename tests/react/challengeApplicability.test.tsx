@@ -5,7 +5,7 @@
  */
 import { getGroupApplicability } from '@/utils/challengeApplicability';
 import { invalid } from '../helpers/invalid';
-import type { Challenge } from '../../src/js/types/gurushots';
+import type { Challenge } from '../../src/ts/types/gurushots';
 
 const challengeWith = (member: Record<string, unknown>, extra: Record<string, unknown> = {}) =>
     invalid<Challenge>({ member, ...extra });

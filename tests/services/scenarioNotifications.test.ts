@@ -3,12 +3,12 @@
  * started, each once, coalesced per cycle; never throws.
  */
 
-import type * as scenarioNotificationsModule from '../../src/js/services/scenarioNotifications';
-import type { OutboxItem } from '../../src/js/services/scenarioNotifications';
+import type * as scenarioNotificationsModule from '../../src/ts/services/scenarioNotifications';
+import type { OutboxItem } from '../../src/ts/services/scenarioNotifications';
 import { invalid } from '../helpers/invalid';
 
 const { createNoticeTracker, formatScenarioNotification, createScenarioNotifier } =
-    require('../../src/js/services/scenarioNotifications') as typeof scenarioNotificationsModule;
+    require('../../src/ts/services/scenarioNotifications') as typeof scenarioNotificationsModule;
 
 const T = (key: string) =>
     (

@@ -6,46 +6,46 @@
  * scenario step runs before all of them.
  */
 
-jest.mock('../../src/js/settings', () => ({
+jest.mock('../../src/ts/settings', () => ({
     getEffectiveSetting: jest.fn(() => false),
 }));
 
-jest.mock('../../src/js/services/VotingLogic', () => ({
+jest.mock('../../src/ts/services/VotingLogic', () => ({
     isWithinEmergencyWindow: jest.fn(() => false),
     shouldPlayAutoTurbo: jest.fn(() => false),
     orderDeadlineActions: jest.fn(() => []),
     evaluateVotingDecision: jest.fn(() => ({ shouldVote: false, voteReason: 'test skip', targetExposure: 100 })),
 }));
 
-jest.mock('../../src/js/services/autoFill', () => ({
+jest.mock('../../src/ts/services/autoFill', () => ({
     maybeAutoFillChallenge: jest.fn(async () => 'skipped'),
     maybeEmergencyFillChallenge: jest.fn(async () => 'skipped'),
 }));
 
-jest.mock('../../src/js/services/currencyAuto', () => ({
+jest.mock('../../src/ts/services/currencyAuto', () => ({
     runAutoKey: jest.fn(async () => false),
     runAutoSwap: jest.fn(async () => false),
     runAutoExposureFill: jest.fn(async () => false),
     runMissionFill: jest.fn(async () => false),
 }));
 
-jest.mock('../../src/js/services/scenarioRunner', () => ({ runScenarioStep: jest.fn(async () => {}) }));
+jest.mock('../../src/ts/services/scenarioRunner', () => ({ runScenarioStep: jest.fn(async () => {}) }));
 
-import votingLogicModule = require('../../src/js/services/VotingLogic');
+import votingLogicModule = require('../../src/ts/services/VotingLogic');
 const votingLogic = jest.mocked(votingLogicModule);
-const { runScenarioStep } = jest.mocked(require('../../src/js/services/scenarioRunner') as typeof scenarioRunnerModule);
-import autoFillModule = require('../../src/js/services/autoFill');
+const { runScenarioStep } = jest.mocked(require('../../src/ts/services/scenarioRunner') as typeof scenarioRunnerModule);
+import autoFillModule = require('../../src/ts/services/autoFill');
 const autoFill = jest.mocked(autoFillModule);
-import currencyAutoModule = require('../../src/js/services/currencyAuto');
+import currencyAutoModule = require('../../src/ts/services/currencyAuto');
 const currencyAuto = jest.mocked(currencyAutoModule);
-import type * as scenarioRunnerModule from '../../src/js/services/scenarioRunner';
-import type * as votingOrchestratorModule from '../../src/js/services/votingOrchestrator';
+import type * as scenarioRunnerModule from '../../src/ts/services/scenarioRunner';
+import type * as votingOrchestratorModule from '../../src/ts/services/votingOrchestrator';
 import type * as challengeFixturesModule from '../helpers/challengeFixtures';
-import type { CurrencyPassDeps } from '../../src/js/services/currencyAuto';
-import type { MissionNeeds } from '../../src/js/services/missions';
-import type { ScenarioDeps } from '../../src/js/types/votingPass';
+import type { CurrencyPassDeps } from '../../src/ts/services/currencyAuto';
+import type { MissionNeeds } from '../../src/ts/services/missions';
+import type { ScenarioDeps } from '../../src/ts/types/votingPass';
 import { invalid } from '../helpers/invalid';
-const { runVotingPass } = require('../../src/js/services/votingOrchestrator') as typeof votingOrchestratorModule;
+const { runVotingPass } = require('../../src/ts/services/votingOrchestrator') as typeof votingOrchestratorModule;
 const { buildChallenge } = require('../helpers/challengeFixtures') as typeof challengeFixturesModule;
 
 const NOW = Math.floor(Date.now() / 1000);

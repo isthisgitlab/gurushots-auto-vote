@@ -5,26 +5,26 @@
  */
 
 jest.mock('node:child_process', () => ({ execFile: jest.fn() }));
-jest.mock('../../src/js/settings', () => ({
+jest.mock('../../src/ts/settings', () => ({
     getSetting: jest.fn(() => 'en'),
     getGlobalDefault: jest.fn(),
     loadSettings: jest.fn(() => ({})),
     getEffectiveSetting: jest.fn(),
 }));
 
-jest.mock('../../src/js/services/VotingLogic', () => ({ describeDeadlineActions: jest.fn() }));
+jest.mock('../../src/ts/services/VotingLogic', () => ({ describeDeadlineActions: jest.fn() }));
 
 const { execFile } = jest.mocked(require('node:child_process') as typeof node_child_processModule);
-import votingLogicModule = require('../../src/js/services/VotingLogic');
+import votingLogicModule = require('../../src/ts/services/VotingLogic');
 const votingLogic = jest.mocked(votingLogicModule);
-import logger = require('../../src/js/logger');
-import settingsModule = require('../../src/js/settings');
+import logger = require('../../src/ts/logger');
+import settingsModule = require('../../src/ts/settings');
 const settings = jest.mocked(settingsModule);
 import type * as node_child_processModule from 'node:child_process';
-import type * as nodeNotifyModule from '../../src/js/services/notify/nodeNotify';
+import type * as nodeNotifyModule from '../../src/ts/services/notify/nodeNotify';
 import { invalid } from '../helpers/invalid';
 const { createNodeDeadlineNotifier, deliverOsNotification, nodeTranslate } =
-    require('../../src/js/services/notify/nodeNotify') as typeof nodeNotifyModule;
+    require('../../src/ts/services/notify/nodeNotify') as typeof nodeNotifyModule;
 
 /** What deliverOsNotification passes to execFile: file, argv, completion callback. */
 type ExecFileCall = [file: string, args: string[], callback: (error: Error | null) => void];

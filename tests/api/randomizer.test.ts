@@ -11,14 +11,14 @@
  *   - generateRandomHeaders layers the current token on top as `x-token`.
  */
 
-jest.mock('../../src/js/settings', () => ({
+jest.mock('../../src/ts/settings', () => ({
     getSetting: jest.fn(),
     setSetting: jest.fn(),
 }));
 
-import settingsModule = require('../../src/js/settings');
+import settingsModule = require('../../src/ts/settings');
 const settings = jest.mocked(settingsModule);
-import randomizer = require('../../src/js/api/randomizer');
+import randomizer = require('../../src/ts/api/randomizer');
 
 const {
     initializeHeaders,

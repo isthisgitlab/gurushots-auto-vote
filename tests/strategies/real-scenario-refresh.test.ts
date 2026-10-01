@@ -4,32 +4,32 @@
  * scenario state first — its phase-settings overlay must be current.
  */
 
-import type * as votingOrchestratorModule from '../../src/js/services/votingOrchestrator';
-import type * as scenarioRunnerModule from '../../src/js/services/scenarioRunner';
-import type * as scenarioStateStoreModule from '../../src/js/scenarioStateStore';
-import type * as realModule from '../../src/js/strategies/real';
+import type * as votingOrchestratorModule from '../../src/ts/services/votingOrchestrator';
+import type * as scenarioRunnerModule from '../../src/ts/services/scenarioRunner';
+import type * as scenarioStateStoreModule from '../../src/ts/scenarioStateStore';
+import type * as realModule from '../../src/ts/strategies/real';
 
-jest.mock('../../src/js/services/votingOrchestrator', () => ({
+jest.mock('../../src/ts/services/votingOrchestrator', () => ({
     runVotingPass: jest.fn(async () => ({ success: true })),
 }));
-jest.mock('../../src/js/services/scenarioRunner', () => ({ backgroundServiceOwnsScenarios: jest.fn() }));
-jest.mock('../../src/js/scenarioStateStore', () => ({
+jest.mock('../../src/ts/services/scenarioRunner', () => ({ backgroundServiceOwnsScenarios: jest.fn() }));
+jest.mock('../../src/ts/scenarioStateStore', () => ({
     scenarioStateLedger: {},
     refreshScenarioStateAsync: jest.fn(async () => {}),
 }));
-jest.mock('../../src/js/services/joinChallenges', () => ({ runJoinPass: jest.fn(), joinChallengeSingle: jest.fn() }));
-jest.mock('../../src/js/services/autoClaim', () => ({ runClaimPass: jest.fn() }));
+jest.mock('../../src/ts/services/joinChallenges', () => ({ runJoinPass: jest.fn(), joinChallengeSingle: jest.fn() }));
+jest.mock('../../src/ts/services/autoClaim', () => ({ runClaimPass: jest.fn() }));
 
 const { runVotingPass } = jest.mocked(
-    require('../../src/js/services/votingOrchestrator') as typeof votingOrchestratorModule,
+    require('../../src/ts/services/votingOrchestrator') as typeof votingOrchestratorModule,
 );
 const { backgroundServiceOwnsScenarios } = jest.mocked(
-    require('../../src/js/services/scenarioRunner') as typeof scenarioRunnerModule,
+    require('../../src/ts/services/scenarioRunner') as typeof scenarioRunnerModule,
 );
 const { refreshScenarioStateAsync } = jest.mocked(
-    require('../../src/js/scenarioStateStore') as typeof scenarioStateStoreModule,
+    require('../../src/ts/scenarioStateStore') as typeof scenarioStateStoreModule,
 );
-const { fetchChallengesAndVote } = require('../../src/js/strategies/real') as typeof realModule;
+const { fetchChallengesAndVote } = require('../../src/ts/strategies/real') as typeof realModule;
 
 beforeEach(() => jest.clearAllMocks());
 

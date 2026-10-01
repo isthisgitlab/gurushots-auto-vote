@@ -3,13 +3,13 @@
  * the import preview + --yes gate, file reads/writes and exit codes.
  */
 
-jest.mock('../../src/js/logger', () => {
+jest.mock('../../src/ts/logger', () => {
     const calls: { level: string; msg: string }[] = [];
     const rec = (level: string) => (msg: unknown) => calls.push({ level, msg: String(msg) });
     const cat = { info: rec('info'), error: rec('error'), success: rec('success'), warning: rec('warning') };
     return { __calls: calls, withCategory: jest.fn(() => cat) };
 });
-jest.mock('../../src/js/ipc/scenarios.handlers', () => {
+jest.mock('../../src/ts/ipc/scenarios.handlers', () => {
     const handlers = Object.fromEntries(
         [
             'get-scenarios',
@@ -30,16 +30,16 @@ jest.mock('node:fs', () => ({ readFileSync: jest.fn(), writeFileSync: jest.fn() 
 
 import fsModule = require('node:fs');
 const fs = jest.mocked(fsModule);
-import loggerModule = require('../../src/js/logger');
+import loggerModule = require('../../src/ts/logger');
 const logger = jest.mocked(invalid<typeof loggerModule & { __calls: { level: string; msg: string }[] }>(loggerModule));
 type Handlers = ReturnType<typeof scenarios_handlersModule.buildHandlers>;
 type Resolved<K extends keyof Handlers> = Awaited<ReturnType<Handlers[K]>>;
 const { __handlers: h } = jest.mocked(
-    invalid<typeof scenarios_handlersModule & { __handlers: Handlers }>(require('../../src/js/ipc/scenarios.handlers')),
+    invalid<typeof scenarios_handlersModule & { __handlers: Handlers }>(require('../../src/ts/ipc/scenarios.handlers')),
 );
-import cmd = require('../../src/js/cli/commands/scenarios');
-import type * as scenarios_handlersModule from '../../src/js/ipc/scenarios.handlers';
-import type { ScenarioIssue } from '../../src/js/settings/scenarioSchema';
+import cmd = require('../../src/ts/cli/commands/scenarios');
+import type * as scenarios_handlersModule from '../../src/ts/ipc/scenarios.handlers';
+import type { ScenarioIssue } from '../../src/ts/settings/scenarioSchema';
 import { invalid } from '../helpers/invalid';
 
 const lines = (level?: string) => logger.__calls.filter((c) => !level || c.level === level).map((c) => c.msg);

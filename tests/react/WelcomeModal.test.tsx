@@ -5,7 +5,7 @@
  * t() returns the key, so assertions match translation keys.)
  */
 import { fireEvent, render, screen } from './helpers/test-utils';
-import type { RendererGlobals } from '../../src/js/types/capacitor';
+import type { RendererGlobals } from '../../src/ts/types/capacitor';
 import { WelcomeModal } from '@/components/app/WelcomeModal';
 
 const g = globalThis as RendererGlobals;

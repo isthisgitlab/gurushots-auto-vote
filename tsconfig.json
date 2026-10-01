@@ -1,8 +1,8 @@
 {
     // TypeScript is used here as a CHECKER ONLY — never as a compiler (noEmit):
     // esbuild bundles and swc (tests) / tsx (scripts) run the .ts/.tsx sources
-    // directly. Every file under src/js is TypeScript and strictly checked;
-    // the type-only modules under src/js/types carry the shared shapes.
+    // directly. Every file under src/ts is TypeScript and strictly checked;
+    // the type-only modules under src/ts/types carry the shared shapes.
     "compilerOptions": {
         "target": "es2025",
         // One program covers the core and the renderer: the renderer bundles
@@ -17,7 +17,7 @@
         "jsx": "preserve",
         "jsxImportSource": "preact",
         "paths": {
-            "@/*": ["./src/js/react/*"],
+            "@/*": ["./src/ts/react/*"],
             "react": ["./node_modules/preact/compat"],
             "react-dom": ["./node_modules/preact/compat"],
             "react-dom/client": ["./node_modules/preact/compat/client"]
@@ -38,6 +38,6 @@
         "skipLibCheck": true,
         "forceConsistentCasingInFileNames": true
     },
-    "include": ["src/js/**/*.ts", "src/js/**/*.tsx", "scripts/**/*.ts", "scripts/**/*.mts"],
+    "include": ["src/ts/**/*.ts", "src/ts/**/*.tsx", "scripts/**/*.ts", "scripts/**/*.mts"],
     "exclude": ["node_modules", "dist", "build", "coverage", "android"]
 }

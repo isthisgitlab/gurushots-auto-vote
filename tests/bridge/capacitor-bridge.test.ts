@@ -6,45 +6,45 @@
  * installed without a WebView.
  */
 
-import type * as bridgeModule from '../../src/js/bridge/capacitor';
-import type * as settingsModule from '../../src/js/settings';
-import type * as settingsHandlersModule from '../../src/js/ipc/settings.handlers';
-import type * as updateCheckerModule from '../../src/js/services/UpdateChecker';
-import type * as installerModule from '../../src/js/services/AndroidUpdateInstaller';
-import type * as authModule from '../../src/js/services/auth';
-import type * as loggerModule from '../../src/js/logger';
-import type { CategoryLogger, GuiLogSink } from '../../src/js/logger';
-import type { CapacitorGlobals } from '../../src/js/types/capacitor';
-import type { WindowApi } from '../../src/js/types/ipc';
+import type * as bridgeModule from '../../src/ts/bridge/capacitor';
+import type * as settingsModule from '../../src/ts/settings';
+import type * as settingsHandlersModule from '../../src/ts/ipc/settings.handlers';
+import type * as updateCheckerModule from '../../src/ts/services/UpdateChecker';
+import type * as installerModule from '../../src/ts/services/AndroidUpdateInstaller';
+import type * as authModule from '../../src/ts/services/auth';
+import type * as loggerModule from '../../src/ts/logger';
+import type { CategoryLogger, GuiLogSink } from '../../src/ts/logger';
+import type { CapacitorGlobals } from '../../src/ts/types/capacitor';
+import type { WindowApi } from '../../src/ts/types/ipc';
 import { invalid } from '../helpers/invalid';
 
 let mockSettingsDeps: Parameters<typeof settingsHandlersModule.buildHandlers>[0] | null = null;
-jest.mock('../../src/js/ipc/settings.handlers', () => ({
+jest.mock('../../src/ts/ipc/settings.handlers', () => ({
     buildHandlers: (deps: Parameters<typeof settingsHandlersModule.buildHandlers>[0]) => {
         mockSettingsDeps = deps;
         return { 'get-settings': jest.fn(async () => ({ theme: 'dark' })) };
     },
 }));
-jest.mock('../../src/js/ipc/voting.handlers', () => ({
+jest.mock('../../src/ts/ipc/voting.handlers', () => ({
     buildHandlers: () => ({ 'gui-vote': jest.fn(async (_event) => ({ success: true, via: 'gui-vote' })) }),
 }));
-jest.mock('../../src/js/ipc/log.handlers', () => ({ buildHandlers: () => ({}) }));
-jest.mock('../../src/js/ipc/actions.handlers', () => ({
+jest.mock('../../src/ts/ipc/log.handlers', () => ({ buildHandlers: () => ({}) }));
+jest.mock('../../src/ts/ipc/actions.handlers', () => ({
     buildHandlers: () => ({
         'apply-boost-to-entry': jest.fn(async (_event: unknown, id: string | number) => ({ success: true, id })),
     }),
 }));
-jest.mock('../../src/js/ipc/computations.handlers', () => ({ buildHandlers: () => ({}) }));
-jest.mock('../../src/js/ipc/currency.handlers', () => ({ buildHandlers: () => ({}) }));
-jest.mock('../../src/js/services/AndroidUpdateInstaller', () => ({ downloadAndInstall: jest.fn() }));
+jest.mock('../../src/ts/ipc/computations.handlers', () => ({ buildHandlers: () => ({}) }));
+jest.mock('../../src/ts/ipc/currency.handlers', () => ({ buildHandlers: () => ({}) }));
+jest.mock('../../src/ts/services/AndroidUpdateInstaller', () => ({ downloadAndInstall: jest.fn() }));
 const mockHasBundledModel = jest.fn(async () => true);
-jest.mock('../../src/js/services/visionVerifier', () => ({ hasBundledModel: mockHasBundledModel }));
-jest.mock('../../src/js/services/UpdateChecker', () => ({
+jest.mock('../../src/ts/services/visionVerifier', () => ({ hasBundledModel: mockHasBundledModel }));
+jest.mock('../../src/ts/services/UpdateChecker', () => ({
     checkForUpdates: jest.fn(),
     getReleasesUrl: () => 'https://example.com/releases',
 }));
-jest.mock('../../src/js/services/auth', () => ({ clearAuthToken: jest.fn() }));
-jest.mock('../../src/js/settings', () => ({
+jest.mock('../../src/ts/services/auth', () => ({ clearAuthToken: jest.fn() }));
+jest.mock('../../src/ts/settings', () => ({
     getSetting: jest.fn(),
     setSetting: jest.fn(),
     seedIntentProfiles: jest.fn(),
@@ -66,13 +66,13 @@ describe('Capacitor bridge', () => {
     beforeEach(() => {
         delete g.api;
         jest.resetModules();
-        settings = jest.mocked(require('../../src/js/settings') as typeof settingsModule);
-        updateChecker = jest.mocked(require('../../src/js/services/UpdateChecker') as typeof updateCheckerModule);
-        installer = jest.mocked(require('../../src/js/services/AndroidUpdateInstaller') as typeof installerModule);
-        auth = jest.mocked(require('../../src/js/services/auth') as typeof authModule);
+        settings = jest.mocked(require('../../src/ts/settings') as typeof settingsModule);
+        updateChecker = jest.mocked(require('../../src/ts/services/UpdateChecker') as typeof updateCheckerModule);
+        installer = jest.mocked(require('../../src/ts/services/AndroidUpdateInstaller') as typeof installerModule);
+        auth = jest.mocked(require('../../src/ts/services/auth') as typeof authModule);
         log = { error: jest.fn(), warning: jest.fn(), info: jest.fn(), debug: jest.fn() };
-        jest.mocked(require('../../src/js/logger') as typeof loggerModule).withCategory.mockReturnValue(invalid(log));
-        bridge = require('../../src/js/bridge/capacitor') as typeof bridge;
+        jest.mocked(require('../../src/ts/logger') as typeof loggerModule).withCategory.mockReturnValue(invalid(log));
+        bridge = require('../../src/ts/bridge/capacitor') as typeof bridge;
         api = bridge.installBridge();
     });
 

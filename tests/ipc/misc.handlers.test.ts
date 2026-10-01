@@ -5,8 +5,8 @@
  * manifest test only collects channel NAMES, it never invokes the handler.
  */
 
-import type * as misc_handlersModule from '../../src/js/ipc/misc.handlers';
-import type * as applicationMenuModule from '../../src/js/ui/applicationMenu';
+import type * as misc_handlersModule from '../../src/ts/ipc/misc.handlers';
+import type * as applicationMenuModule from '../../src/ts/ui/applicationMenu';
 import type { IpcMain } from 'electron';
 import { invalid } from '../helpers/invalid';
 
@@ -15,17 +15,17 @@ const openExternalMock = jest.fn().mockResolvedValue(undefined);
 jest.mock('electron', () => ({
     shell: { openExternal: openExternalMock },
 }));
-jest.mock('../../src/js/ui/applicationMenu', () => ({
+jest.mock('../../src/ts/ui/applicationMenu', () => ({
     updateMenuTranslations: jest.fn(),
 }));
 const mockTranslationManager = { loadLanguageFromSettings: jest.fn() };
-jest.mock('../../src/js/translations/index', () => ({ translationManager: mockTranslationManager }));
-jest.mock('../../src/js/logger', () => {
+jest.mock('../../src/ts/translations/index', () => ({ translationManager: mockTranslationManager }));
+jest.mock('../../src/ts/logger', () => {
     const cat = { warning: jest.fn(), error: jest.fn(), info: jest.fn() };
     return { withCategory: jest.fn(() => cat) };
 });
 
-const { buildHandlers } = require('../../src/js/ipc/misc.handlers') as typeof misc_handlersModule;
+const { buildHandlers } = require('../../src/ts/ipc/misc.handlers') as typeof misc_handlersModule;
 
 describe('misc.handlers open-external-url scheme gate', () => {
     let handler: (event: unknown, url: unknown) => Promise<{ success: boolean; error?: string }>;
@@ -128,7 +128,7 @@ describe('misc.handlers reload-window', () => {
 
 describe('misc.handlers refresh-menu', () => {
     const { updateMenuTranslations } = jest.mocked(
-        require('../../src/js/ui/applicationMenu') as typeof applicationMenuModule,
+        require('../../src/ts/ui/applicationMenu') as typeof applicationMenuModule,
     );
     const { loadLanguageFromSettings } = mockTranslationManager;
 
@@ -167,7 +167,7 @@ describe('misc.handlers refresh-menu', () => {
 
 describe('misc.handlers register', () => {
     test('registers every channel with the injected window accessors', async () => {
-        const { register } = require('../../src/js/ipc/misc.handlers') as typeof misc_handlersModule;
+        const { register } = require('../../src/ts/ipc/misc.handlers') as typeof misc_handlersModule;
         const channels = new Map<string, Parameters<IpcMain['handle']>[1]>();
         const main = { isDestroyed: () => false, reload: jest.fn() };
         register(

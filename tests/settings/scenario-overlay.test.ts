@@ -5,13 +5,13 @@
  * never touched.
  */
 
-import type { AndroidHeadlessStore, AppSettings } from '../../src/js/types/settings';
-import settings = require('../../src/js/settings');
-import type * as scenarioStateStoreModule from '../../src/js/scenarioStateStore';
+import type { AndroidHeadlessStore, AppSettings } from '../../src/ts/types/settings';
+import settings = require('../../src/ts/settings');
+import type * as scenarioStateStoreModule from '../../src/ts/scenarioStateStore';
 const { scenarioStateLedger, mockScenarioStateLedger, initialState } =
-    require('../../src/js/scenarioStateStore') as typeof scenarioStateStoreModule;
+    require('../../src/ts/scenarioStateStore') as typeof scenarioStateStoreModule;
 
-jest.mock('../../src/js/logger', () => {
+jest.mock('../../src/ts/logger', () => {
     const category = { info: jest.fn(), error: jest.fn(), debug: jest.fn(), success: jest.fn(), warning: jest.fn() };
     return {
         info: jest.fn(),

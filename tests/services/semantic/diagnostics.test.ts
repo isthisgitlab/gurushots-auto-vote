@@ -1,18 +1,18 @@
-jest.mock('../../../src/js/runtime', () => ({
+jest.mock('../../../src/ts/runtime', () => ({
     __esModule: true,
-    ...jest.requireActual<typeof import('../../../src/js/runtime')>('../../../src/js/runtime'),
+    ...jest.requireActual<typeof import('../../../src/ts/runtime')>('../../../src/ts/runtime'),
 }));
-jest.mock('../../../src/js/settings', () => ({
+jest.mock('../../../src/ts/settings', () => ({
     __esModule: true,
-    ...jest.requireActual<typeof import('../../../src/js/settings')>('../../../src/js/settings'),
+    ...jest.requireActual<typeof import('../../../src/ts/settings')>('../../../src/ts/settings'),
 }));
 const { createDiagnostics, shouldCollect } =
-    require('../../../src/js/services/semantic/diagnostics') as typeof diagnosticsModule;
-import runtimeModule = require('../../../src/js/runtime');
+    require('../../../src/ts/services/semantic/diagnostics') as typeof diagnosticsModule;
+import runtimeModule = require('../../../src/ts/runtime');
 const runtime = jest.mocked(runtimeModule);
-import settingsModule = require('../../../src/js/settings');
+import settingsModule = require('../../../src/ts/settings');
 const settings = jest.mocked(settingsModule);
-import type * as diagnosticsModule from '../../../src/js/services/semantic/diagnostics';
+import type * as diagnosticsModule from '../../../src/ts/services/semantic/diagnostics';
 import { invalid } from '../../helpers/invalid';
 
 const memoryStore = () => {

@@ -11,32 +11,32 @@
  * so each method exercises its own failure branch.
  */
 
-jest.mock('../../src/js/api/api-client', () => ({
+jest.mock('../../src/ts/api/api-client', () => ({
     makePostRequest: jest.fn().mockResolvedValue(null),
     makeGetRequest: jest.fn().mockResolvedValue(null),
     createCommonHeaders: jest.fn(() => ({})),
     FORM_CONTENT_TYPE: 'application/x-www-form-urlencoded; charset=utf-8',
 }));
 
-jest.mock('../../src/js/settings', () => ({
+jest.mock('../../src/ts/settings', () => ({
     getSetting: jest.fn(() => null),
     getEffectiveSetting: jest.fn(() => 1),
     loadSettings: jest.fn(() => ({ mock: true })),
     SETTINGS_SCHEMA: { exposure: { default: 100 } },
 }));
 
-import realChallenges = require('../../src/js/strategies/real/activeChallenges');
-import realVoting = require('../../src/js/api/voting');
-import type * as indexModule from '../../src/js/mock/index';
-import type * as boostModule from '../../src/js/api/boost';
-import type * as applyBoostModule from '../../src/js/strategies/real/applyBoost';
-import type { Challenge, VoteImagesResponse } from '../../src/js/types/gurushots';
+import realChallenges = require('../../src/ts/strategies/real/activeChallenges');
+import realVoting = require('../../src/ts/api/voting');
+import type * as indexModule from '../../src/ts/mock/index';
+import type * as boostModule from '../../src/ts/api/boost';
+import type * as applyBoostModule from '../../src/ts/strategies/real/applyBoost';
+import type { Challenge, VoteImagesResponse } from '../../src/ts/types/gurushots';
 import { invalid } from '../helpers/invalid';
 const realBoost: typeof boostModule & typeof applyBoostModule = {
-    ...(require('../../src/js/api/boost') as typeof boostModule),
-    ...(require('../../src/js/strategies/real/applyBoost') as typeof applyBoostModule),
+    ...(require('../../src/ts/api/boost') as typeof boostModule),
+    ...(require('../../src/ts/strategies/real/applyBoost') as typeof applyBoostModule),
 };
-const { mockApiClient } = require('../../src/js/mock/index') as typeof indexModule;
+const { mockApiClient } = require('../../src/ts/mock/index') as typeof indexModule;
 
 // Contract table: [name, real call, mock call, expected resolve shape check]
 const challengeArg = invalid<Challenge>({

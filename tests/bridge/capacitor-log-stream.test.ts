@@ -7,22 +7,22 @@
  * the bridge load light.
  */
 
-import type * as capacitorModule from '../../src/js/bridge/capacitor';
-import type { GuiLogSink } from '../../src/js/logger';
-import type { WindowApi } from '../../src/js/types/ipc';
+import type * as capacitorModule from '../../src/ts/bridge/capacitor';
+import type { GuiLogSink } from '../../src/ts/logger';
+import type { WindowApi } from '../../src/ts/types/ipc';
 import { invalid } from '../helpers/invalid';
 
-jest.mock('../../src/js/ipc/settings.handlers', () => ({ buildHandlers: () => ({}) }));
-jest.mock('../../src/js/ipc/voting.handlers', () => ({ buildHandlers: () => ({}) }));
-jest.mock('../../src/js/ipc/log.handlers', () => ({ buildHandlers: () => ({}) }));
-jest.mock('../../src/js/ipc/actions.handlers', () => ({ buildHandlers: () => ({}) }));
-jest.mock('../../src/js/services/AndroidUpdateInstaller', () => ({ downloadAndInstall: jest.fn() }));
-jest.mock('../../src/js/services/visionVerifier', () => ({ hasBundledModel: async () => true }));
-jest.mock('../../src/js/services/UpdateChecker', () => ({
+jest.mock('../../src/ts/ipc/settings.handlers', () => ({ buildHandlers: () => ({}) }));
+jest.mock('../../src/ts/ipc/voting.handlers', () => ({ buildHandlers: () => ({}) }));
+jest.mock('../../src/ts/ipc/log.handlers', () => ({ buildHandlers: () => ({}) }));
+jest.mock('../../src/ts/ipc/actions.handlers', () => ({ buildHandlers: () => ({}) }));
+jest.mock('../../src/ts/services/AndroidUpdateInstaller', () => ({ downloadAndInstall: jest.fn() }));
+jest.mock('../../src/ts/services/visionVerifier', () => ({ hasBundledModel: async () => true }));
+jest.mock('../../src/ts/services/UpdateChecker', () => ({
     checkForUpdates: jest.fn(),
     getReleasesUrl: () => 'https://example.com/releases',
 }));
-jest.mock('../../src/js/settings', () => ({ getSetting: jest.fn(), setSetting: jest.fn() }));
+jest.mock('../../src/ts/settings', () => ({ getSetting: jest.fn(), setSetting: jest.fn() }));
 
 const g = globalThis as typeof globalThis & { api?: object; sendLogToGUI?: GuiLogSink };
 
@@ -33,7 +33,7 @@ describe('Capacitor bridge — log streaming wiring', () => {
         delete g.api;
         delete g.sendLogToGUI;
         jest.resetModules();
-        const { installBridge } = require('../../src/js/bridge/capacitor') as typeof capacitorModule;
+        const { installBridge } = require('../../src/ts/bridge/capacitor') as typeof capacitorModule;
         api = installBridge();
     });
 

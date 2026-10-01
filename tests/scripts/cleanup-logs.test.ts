@@ -19,7 +19,7 @@ const path = jest.mocked(pathModule);
 import type * as cleanup_logsModule from '../../scripts/cleanup-logs';
 
 let mockUserDataPath = '';
-jest.mock('../../src/js/runtime', () => ({
+jest.mock('../../src/ts/runtime', () => ({
     getAppUserDataPath: () => mockUserDataPath,
 }));
 

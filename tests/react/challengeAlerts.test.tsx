@@ -22,7 +22,7 @@ import { ChallengeNav } from '@/components/app/ChallengeNav';
 import { ChallengeCard } from '@/components/app/ChallengeCard';
 import { buildChallenge } from '../helpers/challengeFixtures';
 import { invalid } from '../helpers/invalid';
-import type { Challenge } from '../../src/js/types/gurushots';
+import type { Challenge } from '../../src/ts/types/gurushots';
 import type { ComponentProps } from 'preact';
 
 type BoostFixture = { state: string; timeout?: number | null };

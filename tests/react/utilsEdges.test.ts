@@ -6,17 +6,17 @@ import { invalid } from '../helpers/invalid';
  * failure handling.
  */
 
-import type * as challengeAlertsModule from '../../src/js/react/utils/challengeAlerts';
-import type * as challengeApplicabilityModule from '../../src/js/react/utils/challengeApplicability';
-import type * as sanitizeWelcomeMessageModule from '../../src/js/react/utils/sanitizeWelcomeMessage';
-import type * as deadlineNotifierModule from '../../src/js/react/notifications/deadlineNotifier';
-const { lowExposureChallenges } = require('../../src/js/react/utils/challengeAlerts') as typeof challengeAlertsModule;
+import type * as challengeAlertsModule from '../../src/ts/react/utils/challengeAlerts';
+import type * as challengeApplicabilityModule from '../../src/ts/react/utils/challengeApplicability';
+import type * as sanitizeWelcomeMessageModule from '../../src/ts/react/utils/sanitizeWelcomeMessage';
+import type * as deadlineNotifierModule from '../../src/ts/react/notifications/deadlineNotifier';
+const { lowExposureChallenges } = require('../../src/ts/react/utils/challengeAlerts') as typeof challengeAlertsModule;
 const { getGroupApplicability } =
-    require('../../src/js/react/utils/challengeApplicability') as typeof challengeApplicabilityModule;
+    require('../../src/ts/react/utils/challengeApplicability') as typeof challengeApplicabilityModule;
 const { sanitizeWelcomeMessage } =
-    require('../../src/js/react/utils/sanitizeWelcomeMessage') as typeof sanitizeWelcomeMessageModule;
+    require('../../src/ts/react/utils/sanitizeWelcomeMessage') as typeof sanitizeWelcomeMessageModule;
 const { createDeadlineNotifier } =
-    require('../../src/js/react/notifications/deadlineNotifier') as typeof deadlineNotifierModule;
+    require('../../src/ts/react/notifications/deadlineNotifier') as typeof deadlineNotifierModule;
 
 describe('lowExposureChallenges', () => {
     test('a missing challenge list yields no entries', () => {

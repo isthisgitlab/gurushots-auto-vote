@@ -1,6 +1,6 @@
-import type * as wallClockModule from '../../src/js/scheduling/wallClock';
+import type * as wallClockModule from '../../src/ts/scheduling/wallClock';
 const { parseTimeOfDay, tzOffsetSeconds, epochForWallTime, occurrencesOf } =
-    require('../../src/js/scheduling/wallClock') as typeof wallClockModule;
+    require('../../src/ts/scheduling/wallClock') as typeof wallClockModule;
 
 const utc = (y: number, m: number, d: number, hh = 0, mm = 0, ss = 0) => Date.UTC(y, m - 1, d, hh, mm, ss) / 1000;
 

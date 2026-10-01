@@ -6,8 +6,8 @@
  * a meaningful assertion against the vectors that actually ship.
  */
 
-import type * as tagResolverModule from '../../src/js/services/tagResolver';
-import type { FillLogger } from '../../src/js/types/autoFill';
+import type * as tagResolverModule from '../../src/ts/services/tagResolver';
+import type { FillLogger } from '../../src/ts/types/autoFill';
 import { invalid } from '../helpers/invalid';
 
 type TagDeps = Parameters<typeof tagResolverModule.resolveTermsToTags>[2];
@@ -17,7 +17,7 @@ type TagDeps = Parameters<typeof tagResolverModule.resolveTermsToTags>[2];
 // would quietly turn every semantic assertion below into a vacuous pass. Load
 // the shipped asset through the REAL fs instead, so these tests exercise the
 // vectors that actually ship rather than a fixture that agrees with them.
-jest.mock('../../src/js/services/semantic/assets', () => {
+jest.mock('../../src/ts/services/semantic/assets', () => {
     const realFs = jest.requireActual<typeof import('node:fs')>('node:fs');
     const realPath = jest.requireActual<typeof import('node:path')>('node:path');
     const assetPath = realPath.join(__dirname, '..', '..', 'src', 'assets', 'semantic-vectors.json');
@@ -33,7 +33,7 @@ jest.mock('../../src/js/services/semantic/assets', () => {
 });
 
 const { resolveTermsToTags, MAX_RESOLVED_TAGS, isLexicalMatch } =
-    require('../../src/js/services/tagResolver') as typeof tagResolverModule;
+    require('../../src/ts/services/tagResolver') as typeof tagResolverModule;
 
 const makeLogger = () => {
     const category = { info: jest.fn(), warning: jest.fn(), debug: jest.fn(), error: jest.fn(), success: jest.fn() };

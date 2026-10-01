@@ -4,9 +4,9 @@
  * facade's getDefaultSettings() and the renderer's Settings form.
  */
 
-import type * as uiDefaultsModule from '../../src/js/settings/uiDefaults';
+import type * as uiDefaultsModule from '../../src/ts/settings/uiDefaults';
 
-const { getUiDefaultSettings } = require('../../src/js/settings/uiDefaults') as typeof uiDefaultsModule;
+const { getUiDefaultSettings } = require('../../src/ts/settings/uiDefaults') as typeof uiDefaultsModule;
 
 describe('getUiDefaultSettings', () => {
     test('returns the documented UI-form defaults', () => {

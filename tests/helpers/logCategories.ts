@@ -8,11 +8,11 @@
  * to a category logger method is silently dropped).
  */
 
-import type * as loggerModule from '../../src/js/logger';
-import type { CategoryLogger } from '../../src/js/logger';
+import type * as loggerModule from '../../src/ts/logger';
+import type { CategoryLogger } from '../../src/ts/logger';
 
 const logCategories = (method: keyof CategoryLogger, ...args: unknown[]): string[] => {
-    const logger = jest.mocked(require('../../src/js/logger') as typeof loggerModule);
+    const logger = jest.mocked(require('../../src/ts/logger') as typeof loggerModule);
     return logger.withCategory.mock.calls
         .filter((_call, i) => {
             const categoryLogger = logger.withCategory.mock.results[i].value as CategoryLogger;

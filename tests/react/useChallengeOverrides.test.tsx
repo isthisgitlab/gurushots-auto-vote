@@ -8,7 +8,7 @@ import { renderHook, act, waitFor } from '@testing-library/preact';
 import { useChallengeOverrides } from '@/hooks/useChallengeOverrides';
 import { mockApi } from './helpers/setup';
 import { invalid } from '../helpers/invalid';
-import type { RendererSchema } from '../../src/js/types/settingsEditor';
+import type { RendererSchema } from '../../src/ts/types/settingsEditor';
 
 const props = () => ({
     isOpen: true,

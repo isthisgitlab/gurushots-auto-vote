@@ -29,15 +29,15 @@ const ROOT = path.join(__dirname, '..', '..');
 
 beforeEach(() => jest.clearAllMocks());
 
-test('bundles src/js/index.ts next to the loader package.json `main` points at', () => {
-    expect(OPTIONS.entryPoints).toEqual([path.join(ROOT, 'src', 'js', 'index.ts')]);
+test('bundles src/ts/index.ts next to the loader package.json `main` points at', () => {
+    expect(OPTIONS.entryPoints).toEqual([path.join(ROOT, 'src', 'ts', 'index.ts')]);
     expect(path.relative(ROOT, LOADER)).toBe(path.normalize(packageMain));
     expect(path.dirname(OPTIONS.outfile!)).toBe(path.dirname(LOADER));
 });
 
-test('emits the bundle at the same depth below the app root as src/js (appPaths relies on it)', () => {
+test('emits the bundle at the same depth below the app root as src/ts (appPaths relies on it)', () => {
     const depth = (dir: string) => path.relative(ROOT, dir).split(path.sep).length;
-    expect(depth(path.dirname(OPTIONS.outfile!))).toBe(depth(path.join(ROOT, 'src', 'js')));
+    expect(depth(path.dirname(OPTIONS.outfile!))).toBe(depth(path.join(ROOT, 'src', 'ts')));
 });
 
 test('keeps every package import a runtime require', () => {
@@ -49,7 +49,7 @@ test("stays out of dist/, Capacitor's webDir that ships in the APK", () => {
     expect(path.relative(path.join(ROOT, webDir), OPTIONS.outfile!).startsWith('..')).toBe(true);
 });
 
-test('maps stack traces back to src/js: the loader enables source maps, then requires the bundle', () => {
+test('maps stack traces back to src/ts: the loader enables source maps, then requires the bundle', () => {
     expect(OPTIONS.sourcemap).toBe('linked');
     expect(LOADER_SOURCE).toBe(
         `process.setSourceMapsEnabled(true);\nrequire('./${path.basename(OPTIONS.outfile!)}');\n`,

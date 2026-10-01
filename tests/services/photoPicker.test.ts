@@ -2,8 +2,8 @@
  * Tests for photoPicker.ts
  */
 
-import type * as photoPickerModule from '../../src/js/services/photoPicker';
-import type { ChallengeText, PickerPhoto, PickOptions, SemanticScore } from '../../src/js/types/photoPicker';
+import type * as photoPickerModule from '../../src/ts/services/photoPicker';
+import type { ChallengeText, PickerPhoto, PickOptions, SemanticScore } from '../../src/ts/types/photoPicker';
 import { invalid } from '../helpers/invalid';
 
 const {
@@ -26,7 +26,7 @@ const {
     wholeLabelStems,
     SEMANTIC_MATCH_FLOOR,
     SEMANTIC_SUPPORT_CAP,
-} = require('../../src/js/services/photoPicker') as typeof photoPickerModule;
+} = require('../../src/ts/services/photoPicker') as typeof photoPickerModule;
 
 const allowed = (id: string, labels: string[], uploadDate = 1000, extras: Partial<PickerPhoto> = {}) => ({
     id,

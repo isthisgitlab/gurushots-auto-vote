@@ -3,9 +3,9 @@
  * schema entries into ordered UI sections for both settings modals.
  */
 import { groupSchemaEntries, tierSchemaEntries } from '@/utils/groupSettings';
-import { SETTINGS_SCHEMA, SETTINGS_GROUPS } from '../../src/js/settings/schema';
+import { SETTINGS_SCHEMA, SETTINGS_GROUPS } from '../../src/ts/settings/schema';
 import type { SettingsBand, SettingsSection } from '@/utils/groupSettings';
-import type { RendererSchema } from '../../src/js/types/settingsEditor';
+import type { RendererSchema } from '../../src/ts/types/settingsEditor';
 import { invalid } from '../helpers/invalid';
 
 const groups = [

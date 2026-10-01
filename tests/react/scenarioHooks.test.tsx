@@ -8,7 +8,7 @@ import { useScenarios } from '@/api/useScenarios';
 import { useScenarioStatus } from '@/api/useScenarioStatus';
 import type { ScenarioSummary } from '@/api/useScenarioStatus';
 import { invalid } from '../helpers/invalid';
-import type { Challenge } from '../../src/js/types/gurushots';
+import type { Challenge } from '../../src/ts/types/gurushots';
 
 function ScenariosProbe({ enabled }: { enabled?: boolean }) {
     const { scenarios, templates, error, loading } = useScenarios(enabled);

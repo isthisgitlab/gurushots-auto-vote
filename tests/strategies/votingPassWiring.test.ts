@@ -1,8 +1,8 @@
 /**
  * Guards the hand-built `api` surface both strategies hand to runVotingPass.
  *
- * WHY THIS EXISTS: src/js/strategies/real/index.ts (an object literal) and
- * src/js/mock/strategy.ts (the VOTING_PASS_ENDPOINTS name list) each list every
+ * WHY THIS EXISTS: src/ts/strategies/real/index.ts (an object literal) and
+ * src/ts/mock/strategy.ts (the VOTING_PASS_ENDPOINTS name list) each list every
  * method by hand, while
  * votingOrchestrator turns it into the `fillDeps` bundle the auto-fill pipeline
  * consumes. Nothing forces the two lists to agree — a method on the API
@@ -16,17 +16,17 @@
  * A missing key here is invisible at runtime, so it gets a structural test.
  */
 
-import type * as votingOrchestratorModule from '../../src/js/services/votingOrchestrator';
-import type * as realModule from '../../src/js/strategies/real';
-import type * as mockModule from '../../src/js/mock';
-import type * as scenarioStateStoreModule from '../../src/js/scenarioStateStore';
-import type { VotingPassApi } from '../../src/js/types/votingPass';
+import type * as votingOrchestratorModule from '../../src/ts/services/votingOrchestrator';
+import type * as realModule from '../../src/ts/strategies/real';
+import type * as mockModule from '../../src/ts/mock';
+import type * as scenarioStateStoreModule from '../../src/ts/scenarioStateStore';
+import type { VotingPassApi } from '../../src/ts/types/votingPass';
 
-jest.mock('../../src/js/services/votingOrchestrator', () => ({
+jest.mock('../../src/ts/services/votingOrchestrator', () => ({
     runVotingPass: jest.fn(async () => ({ success: true })),
 }));
 
-jest.mock('../../src/js/logger', () => {
+jest.mock('../../src/ts/logger', () => {
     const level = {
         info: jest.fn(),
         error: jest.fn(),
@@ -46,7 +46,7 @@ jest.mock('../../src/js/logger', () => {
 });
 
 // Keeps the storage layer (and its electron require) out of this test.
-jest.mock('../../src/js/settings/storage', () => ({
+jest.mock('../../src/ts/settings/storage', () => ({
     createJsonStore: () => ({
         readRaw: () => null,
         writeRaw: () => {},
@@ -56,7 +56,7 @@ jest.mock('../../src/js/settings/storage', () => ({
 }));
 
 const { runVotingPass } = jest.mocked(
-    require('../../src/js/services/votingOrchestrator') as typeof votingOrchestratorModule,
+    require('../../src/ts/services/votingOrchestrator') as typeof votingOrchestratorModule,
 );
 
 // Every API method the auto-fill pipeline reaches for through fillDeps.
@@ -75,7 +75,7 @@ describe('runVotingPass api surface wiring', () => {
     });
 
     test('real strategy passes every method the fill pipeline needs', async () => {
-        const { fetchChallengesAndVote } = require('../../src/js/strategies/real') as typeof realModule;
+        const { fetchChallengesAndVote } = require('../../src/ts/strategies/real') as typeof realModule;
         await fetchChallengesAndVote('tok');
         expect(runVotingPass).toHaveBeenCalledTimes(1);
         const { api } = runVotingPass.mock.calls[0][2];
@@ -85,7 +85,7 @@ describe('runVotingPass api surface wiring', () => {
     });
 
     test('mock strategy passes every method the fill pipeline needs', async () => {
-        const { mockApiClient } = require('../../src/js/mock') as typeof mockModule;
+        const { mockApiClient } = require('../../src/ts/mock') as typeof mockModule;
         await mockApiClient.fetchChallengesAndVote('tok');
         expect(runVotingPass).toHaveBeenCalledTimes(1);
         const { api } = runVotingPass.mock.calls[0][2];
@@ -111,8 +111,8 @@ describe('runVotingPass scenario wiring', () => {
     });
 
     test('real strategy runs scenarios over the persisted state ledger, off-Android', async () => {
-        const { scenarioStateLedger } = require('../../src/js/scenarioStateStore') as typeof scenarioStateStoreModule;
-        const { fetchChallengesAndVote } = require('../../src/js/strategies/real') as typeof realModule;
+        const { scenarioStateLedger } = require('../../src/ts/scenarioStateStore') as typeof scenarioStateStoreModule;
+        const { fetchChallengesAndVote } = require('../../src/ts/strategies/real') as typeof realModule;
         await fetchChallengesAndVote('tok');
         const { api, scenarios } = runVotingPass.mock.calls[0][2];
         expect(scenarios!.ledger).toBe(scenarioStateLedger);
@@ -122,8 +122,8 @@ describe('runVotingPass scenario wiring', () => {
 
     test('mock strategy runs scenarios over the in-memory ledger', async () => {
         const { mockScenarioStateLedger } =
-            require('../../src/js/scenarioStateStore') as typeof scenarioStateStoreModule;
-        const { mockApiClient } = require('../../src/js/mock') as typeof mockModule;
+            require('../../src/ts/scenarioStateStore') as typeof scenarioStateStoreModule;
+        const { mockApiClient } = require('../../src/ts/mock') as typeof mockModule;
         await mockApiClient.fetchChallengesAndVote('tok');
         const { api, scenarios } = runVotingPass.mock.calls[0][2];
         expect(scenarios).toEqual({ ledger: mockScenarioStateLedger });

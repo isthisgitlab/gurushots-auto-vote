@@ -1,7 +1,7 @@
-import { logMessages as englishLogMessages } from '../../src/js/translations/logEnglish';
-import { logMessages as latvianLogMessages } from '../../src/js/translations/logLatvian';
-import { localizeLogMessage } from '../../src/js/react/components/logs/localizeLogMessage';
-import { sentenceCaseLogMessage } from '../../src/js/format/logSafe';
+import { logMessages as englishLogMessages } from '../../src/ts/translations/logEnglish';
+import { logMessages as latvianLogMessages } from '../../src/ts/translations/logLatvian';
+import { localizeLogMessage } from '../../src/ts/react/components/logs/localizeLogMessage';
+import { sentenceCaseLogMessage } from '../../src/ts/format/logSafe';
 
 const slots = /\{(\d+)\}/g;
 const noAutomaticIcon = /^(?:$|\s|[=-]|\p{Extended_Pictographic})/u;

@@ -6,7 +6,7 @@
  * settings, the middleware, and the scheduler are mocked.
  */
 
-jest.mock('../../src/js/logger', () => {
+jest.mock('../../src/ts/logger', () => {
     const infoMock = jest.fn();
     return {
         __infoMock: infoMock,
@@ -21,7 +21,7 @@ jest.mock('../../src/js/logger', () => {
     };
 });
 
-jest.mock('../../src/js/settings', () => ({
+jest.mock('../../src/ts/settings', () => ({
     loadSettings: jest.fn(() => ({
         mock: true,
         token: 'tok',
@@ -36,9 +36,9 @@ jest.mock('../../src/js/settings', () => ({
     getEffectiveSetting: jest.fn(() => 1),
 }));
 
-jest.mock('../../src/js/scheduling/runScheduler', () => ({ createScheduler: jest.fn() }));
+jest.mock('../../src/ts/scheduling/runScheduler', () => ({ createScheduler: jest.fn() }));
 
-jest.mock('../../src/js/apiFactory', () => {
+jest.mock('../../src/ts/apiFactory', () => {
     const mockGetActiveChallenges = jest.fn();
     const mockIsAuthenticated = jest.fn(() => true);
     return {
@@ -51,9 +51,9 @@ jest.mock('../../src/js/apiFactory', () => {
     };
 });
 
-import loggerModule = require('../../src/js/logger');
+import loggerModule = require('../../src/ts/logger');
 const logger = jest.mocked(invalid<typeof loggerModule & { __infoMock: jest.Mock<void, [unknown]> }>(loggerModule));
-import apiFactoryModule = require('../../src/js/apiFactory');
+import apiFactoryModule = require('../../src/ts/apiFactory');
 type Middleware = ReturnType<typeof apiFactoryModule.getMiddleware>;
 const apiFactory = jest.mocked(
     invalid<
@@ -63,10 +63,10 @@ const apiFactory = jest.mocked(
         }
     >(apiFactoryModule),
 );
-import type * as votingModule from '../../src/js/cli/commands/voting';
+import type * as votingModule from '../../src/ts/cli/commands/voting';
 import { invalid } from '../helpers/invalid';
-import type { Challenge } from '../../src/js/types/gurushots';
-const { showStatus } = require('../../src/js/cli/commands/voting') as typeof votingModule;
+import type { Challenge } from '../../src/ts/types/gurushots';
+const { showStatus } = require('../../src/ts/cli/commands/voting') as typeof votingModule;
 
 const challenge = (title: string, boost: { state: string; timeout?: number }) =>
     invalid<Challenge>({

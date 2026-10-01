@@ -8,7 +8,7 @@
  * a raw persisted blob; `saved()` reads back what the facade last persisted.
  */
 
-jest.mock('../../src/js/logger', () => {
+jest.mock('../../src/ts/logger', () => {
     const cat = { info: jest.fn(), error: jest.fn(), debug: jest.fn(), success: jest.fn(), warning: jest.fn() };
     return {
         info: jest.fn(),
@@ -23,13 +23,13 @@ jest.mock('../../src/js/logger', () => {
     };
 });
 
-import settings = require('../../src/js/settings');
-import loggerModule = require('../../src/js/logger');
+import settings = require('../../src/ts/settings');
+import loggerModule = require('../../src/ts/logger');
 const logger = jest.mocked(loggerModule);
-import type * as settingsModule from '../../src/js/settings';
+import type * as settingsModule from '../../src/ts/settings';
 import type * as node_fsModule from 'node:fs';
-import type { CategoryLogger } from '../../src/js/logger';
-import type { AndroidHeadlessStore, AppSettings } from '../../src/js/types/settings';
+import type { CategoryLogger } from '../../src/ts/logger';
+import type { AndroidHeadlessStore, AppSettings } from '../../src/ts/types/settings';
 import { invalid } from '../helpers/invalid';
 
 const g = globalThis as typeof globalThis & {
@@ -896,7 +896,7 @@ describe('settings facade — edge cases', () => {
 
         test('load-time cleanup runs once per process on the first load', () => {
             jest.isolateModules(() => {
-                const fresh = require('../../src/js/settings') as typeof settingsModule;
+                const fresh = require('../../src/ts/settings') as typeof settingsModule;
                 store.value = JSON.stringify({ challengeSettings: { globalDefaults: { exposure: 70, bogus: 1 } } });
                 fresh.loadSettings();
                 expect(saved().challengeSettings.globalDefaults).toEqual({ exposure: 70 });

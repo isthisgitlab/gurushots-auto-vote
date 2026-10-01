@@ -22,10 +22,10 @@
         "es2024": true
     },
     // Type-only declaration files carry no code to lint; tsc checks them.
-    "ignorePatterns": ["src/js/types/**"],
+    "ignorePatterns": ["src/ts/types/**"],
     // eslint:recommended (Oxlint lacks only no-dupe-args and no-octal, both
-    // syntax errors in the strict src/js modules), plus: logging goes through
-    // src/js/logger.ts (console.warn/error stay for bootstrap code that runs before
+    // syntax errors in the strict src/ts modules), plus: logging goes through
+    // src/ts/logger.ts (console.warn/error stay for bootstrap code that runs before
     // the logger exists), and _-prefixed args / catch bindings are deliberately
     // unused. No formatting rules anywhere: Prettier owns formatting.
     "rules": {
@@ -108,7 +108,7 @@
     "overrides": [
         // logger.ts owns the console, and build/dev scripts print to it.
         {
-            "files": ["src/js/logger.ts", "scripts/**"],
+            "files": ["src/ts/logger.ts", "scripts/**"],
             "rules": {
                 "no-console": "off"
             }
@@ -118,8 +118,8 @@
         // no-undef cannot see; the compiler's check replaces it.
         {
             "files": [
-                "src/js/**/*.ts",
-                "src/js/**/*.tsx",
+                "src/ts/**/*.ts",
+                "src/ts/**/*.tsx",
                 "scripts/**/*.ts",
                 "scripts/**/*.mts",
                 "tests/**/*.ts",
@@ -130,9 +130,9 @@
                 "no-undef": "off"
             }
         },
-        // src/js/ui (the application menu) is linted with browser and Node globals.
+        // src/ts/ui (the application menu) is linted with browser and Node globals.
         {
-            "files": ["src/js/ui/**/*.ts"],
+            "files": ["src/ts/ui/**/*.ts"],
             "env": {
                 "browser": true,
                 "node": true
@@ -146,8 +146,8 @@
         // active-challenge caches) that a direct import would bypass. settings/schema,
         // storage, limits, uiDefaults and challengeRules stay importable.
         {
-            "files": ["src/js/**/*.ts", "src/js/**/*.tsx", "scripts/**/*.ts", "scripts/**/*.mts"],
-            "excludeFiles": ["src/js/settings.ts", "src/js/settings/**"],
+            "files": ["src/ts/**/*.ts", "src/ts/**/*.tsx", "scripts/**/*.ts", "scripts/**/*.mts"],
+            "excludeFiles": ["src/ts/settings.ts", "src/ts/settings/**"],
             "rules": {
                 "no-restricted-imports": [
                     "error",
@@ -166,7 +166,7 @@
         // The type-aware promise rules (via oxlint-tsgolint, over the tsconfig
         // program) and the core rules that went with them.
         {
-            "files": ["src/js/**/*.ts", "src/js/**/*.tsx"],
+            "files": ["src/ts/**/*.ts", "src/ts/**/*.tsx"],
             "rules": {
                 "no-var": "error",
                 "prefer-const": "error",
@@ -182,8 +182,8 @@
         // typed before it is used, in the app, the scripts and the tests alike.
         {
             "files": [
-                "src/js/**/*.ts",
-                "src/js/**/*.tsx",
+                "src/ts/**/*.ts",
+                "src/ts/**/*.tsx",
                 "scripts/**/*.ts",
                 "scripts/**/*.mts",
                 "tests/**/*.ts",
@@ -213,7 +213,7 @@
         //   whose text is {t('…')} — every label in this translated UI — so an orphan
         //   <label> would otherwise pass.
         {
-            "files": ["src/js/react/**/*.ts", "src/js/react/**/*.tsx"],
+            "files": ["src/ts/react/**/*.ts", "src/ts/react/**/*.tsx"],
             "env": {
                 "browser": true
             },
@@ -353,23 +353,23 @@
             }
         },
         // Renderer IPC boundary: components, hooks and contexts reach the shell
-        // bridge only through src/js/react/api/, so the bridge surface stays in one
+        // bridge only through src/ts/react/api/, so the bridge surface stays in one
         // place and no component grows per-platform branching.
         {
-            "files": ["src/js/react/**/*.ts", "src/js/react/**/*.tsx"],
-            "excludeFiles": ["src/js/react/api/**"],
+            "files": ["src/ts/react/**/*.ts", "src/ts/react/**/*.tsx"],
+            "excludeFiles": ["src/ts/react/api/**"],
             "rules": {
                 "no-restricted-properties": [
                     "error",
                     {
                         "object": "window",
                         "property": "api",
-                        "message": "Call the shell bridge through src/js/react/api/ (e.g. `import * as ipc from \"@/api/ipc\"`)."
+                        "message": "Call the shell bridge through src/ts/react/api/ (e.g. `import * as ipc from \"@/api/ipc\"`)."
                     },
                     {
                         "object": "globalThis",
                         "property": "api",
-                        "message": "Call the shell bridge through src/js/react/api/ (e.g. `import * as ipc from \"@/api/ipc\"`)."
+                        "message": "Call the shell bridge through src/ts/react/api/ (e.g. `import * as ipc from \"@/api/ipc\"`)."
                     }
                 ]
             }

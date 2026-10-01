@@ -10,7 +10,7 @@
  * never bypasses the factory to reach the real API surface.
  */
 
-jest.mock('../../src/js/logger', () => {
+jest.mock('../../src/ts/logger', () => {
     const calls: { level: string; msg: unknown; data?: unknown }[] = [];
     const rec = (level: string) => (msg: unknown, data?: unknown) => calls.push({ level, msg, data });
     const cat = {
@@ -26,7 +26,7 @@ jest.mock('../../src/js/logger', () => {
     return { __calls: calls, withCategory: jest.fn(() => cat), CATEGORIES: {} };
 });
 
-jest.mock('../../src/js/settings', () => ({
+jest.mock('../../src/ts/settings', () => ({
     getSetting: jest.fn(() => 'tok'),
     setSetting: jest.fn(() => true),
     loadSettings: jest.fn(() => ({ mock: true, token: 'tok' })),
@@ -34,7 +34,7 @@ jest.mock('../../src/js/settings', () => ({
     flushPendingWrites: jest.fn(async () => {}),
 }));
 
-jest.mock('../../src/js/apiFactory', () => {
+jest.mock('../../src/ts/apiFactory', () => {
     const getActiveChallenges = jest.fn();
     const isAuthenticated = jest.fn(() => true);
     const applyBoost = jest.fn();
@@ -55,9 +55,9 @@ jest.mock('../../src/js/apiFactory', () => {
 // Mocked ONLY to prove the CLI never reaches the real API module directly —
 // in mock mode a direct import would fire a real boost request (the bug this
 // guards against). Every boost must flow through the middleware above.
-jest.mock('../../src/js/strategies/real/applyBoost', () => ({ applyBoost: jest.fn() }));
+jest.mock('../../src/ts/strategies/real/applyBoost', () => ({ applyBoost: jest.fn() }));
 
-jest.mock('../../src/js/ipc/actions.handlers', () => {
+jest.mock('../../src/ts/ipc/actions.handlers', () => {
     const handlers = {
         'apply-boost-to-entry': jest.fn(),
         'play-auto-turbo': jest.fn(),
@@ -66,25 +66,25 @@ jest.mock('../../src/js/ipc/actions.handlers', () => {
     return { __handlers: handlers, buildHandlers: () => handlers, register: jest.fn() };
 });
 
-jest.mock('../../src/js/ipc/voting.handlers', () => {
+jest.mock('../../src/ts/ipc/voting.handlers', () => {
     const handlers = { 'vote-on-challenge-manual': jest.fn() };
     return { __handlers: handlers, buildHandlers: () => handlers, register: jest.fn() };
 });
 
-jest.mock('../../src/js/scheduling/runScheduler', () => ({ createScheduler: jest.fn() }));
+jest.mock('../../src/ts/scheduling/runScheduler', () => ({ createScheduler: jest.fn() }));
 
-jest.mock('../../src/js/services/UpdateChecker', () => ({
+jest.mock('../../src/ts/services/UpdateChecker', () => ({
     checkForUpdates: jest.fn(),
     getReleasesUrl: jest.fn(() => 'https://github.com/owner/repo/releases/latest'),
 }));
 
-import loggerModule = require('../../src/js/logger');
+import loggerModule = require('../../src/ts/logger');
 const logger = jest.mocked(
     invalid<typeof loggerModule & { __calls: { level: string; msg: unknown; data?: unknown }[] }>(loggerModule),
 );
-import settingsModule = require('../../src/js/settings');
+import settingsModule = require('../../src/ts/settings');
 const settings = jest.mocked(settingsModule);
-import apiFactoryModule = require('../../src/js/apiFactory');
+import apiFactoryModule = require('../../src/ts/apiFactory');
 // The middleware whose methods the factory mock exposes as __-prefixed jest.fns.
 type Middleware = ReturnType<typeof apiFactoryModule.getMiddleware>;
 const apiFactory = jest.mocked(
@@ -98,33 +98,33 @@ const apiFactory = jest.mocked(
         }
     >(apiFactoryModule),
 );
-import boostApiModule = require('../../src/js/strategies/real/applyBoost');
+import boostApiModule = require('../../src/ts/strategies/real/applyBoost');
 const boostApi = jest.mocked(boostApiModule);
 // The handler-module mocks expose their jest.fn table for the assertions.
 type HandlersMock<M extends { buildHandlers: (...args: never[]) => object }> = {
     __handlers: jest.Mocked<ReturnType<M['buildHandlers']>>;
 };
 const actionsHandlers = invalid<HandlersMock<typeof actionsHandlersModule>>(
-    require('../../src/js/ipc/actions.handlers'),
+    require('../../src/ts/ipc/actions.handlers'),
 ).__handlers;
 const votingHandlers = invalid<HandlersMock<typeof votingHandlersModule>>(
-    require('../../src/js/ipc/voting.handlers'),
+    require('../../src/ts/ipc/voting.handlers'),
 ).__handlers;
-import updateCheckerModule = require('../../src/js/services/UpdateChecker');
+import updateCheckerModule = require('../../src/ts/services/UpdateChecker');
 const updateChecker = jest.mocked(updateCheckerModule);
-import type * as actionsModule from '../../src/js/cli/commands/actions';
-import type * as actionsHandlersModule from '../../src/js/ipc/actions.handlers';
-import type * as votingHandlersModule from '../../src/js/ipc/voting.handlers';
-import type * as votingModule from '../../src/js/cli/commands/voting';
-import type * as authModule from '../../src/js/cli/commands/auth';
-import type * as updateModule from '../../src/js/cli/commands/update';
+import type * as actionsModule from '../../src/ts/cli/commands/actions';
+import type * as actionsHandlersModule from '../../src/ts/ipc/actions.handlers';
+import type * as votingHandlersModule from '../../src/ts/ipc/voting.handlers';
+import type * as votingModule from '../../src/ts/cli/commands/voting';
+import type * as authModule from '../../src/ts/cli/commands/auth';
+import type * as updateModule from '../../src/ts/cli/commands/update';
 import { invalid } from '../helpers/invalid';
 
 const { boostChallenge, turboChallenge, fillChallenge } =
-    require('../../src/js/cli/commands/actions') as typeof actionsModule;
-const { voteChallengeManual, runVotingCycle } = require('../../src/js/cli/commands/voting') as typeof votingModule;
-const { handleLogout } = require('../../src/js/cli/commands/auth') as typeof authModule;
-const { checkUpdates } = require('../../src/js/cli/commands/update') as typeof updateModule;
+    require('../../src/ts/cli/commands/actions') as typeof actionsModule;
+const { voteChallengeManual, runVotingCycle } = require('../../src/ts/cli/commands/voting') as typeof votingModule;
+const { handleLogout } = require('../../src/ts/cli/commands/auth') as typeof authModule;
+const { checkUpdates } = require('../../src/ts/cli/commands/update') as typeof updateModule;
 
 const msgsAt = (level: string) => logger.__calls.filter((c) => c.level === level).map((c) => String(c.msg));
 const allMsgs = () => logger.__calls.map((c) => String(c.msg));

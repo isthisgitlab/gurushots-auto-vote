@@ -6,7 +6,7 @@
 import { render, screen, waitFor } from './helpers/test-utils';
 import { useSwapBacks } from '@/api/useSwapBacks';
 import { invalid } from '../helpers/invalid';
-import type { Challenge } from '../../src/js/types/gurushots';
+import type { Challenge } from '../../src/ts/types/gurushots';
 
 function Probe({ challenge }: { challenge: Challenge }) {
     const items = useSwapBacks(challenge);

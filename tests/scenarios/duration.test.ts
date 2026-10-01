@@ -2,9 +2,9 @@
  * Scenario durations: seconds or "5d" / "90m" / "1d 6h" strings.
  */
 
-import type * as durationModule from '../../src/js/scenarios/duration';
+import type * as durationModule from '../../src/ts/scenarios/duration';
 
-const { parseDuration, MAX_DURATION_SEC } = require('../../src/js/scenarios/duration') as typeof durationModule;
+const { parseDuration, MAX_DURATION_SEC } = require('../../src/ts/scenarios/duration') as typeof durationModule;
 
 describe('parseDuration', () => {
     test.each([

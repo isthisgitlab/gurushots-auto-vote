@@ -5,9 +5,9 @@
  */
 
 jest.mock('fs');
-jest.mock('../../src/js/services/semantic/diagnostics', () => ({ diagnostics: { read: jest.fn() } }));
+jest.mock('../../src/ts/services/semantic/diagnostics', () => ({ diagnostics: { read: jest.fn() } }));
 
-jest.mock('../../src/js/logger', () => {
+jest.mock('../../src/ts/logger', () => {
     const infoMock = jest.fn();
     const errorMock = jest.fn();
     return {
@@ -23,13 +23,13 @@ jest.mock('../../src/js/logger', () => {
 
 import fsModule = require('node:fs');
 const fs = jest.mocked(fsModule);
-import loggerModule = require('../../src/js/logger');
+import loggerModule = require('../../src/ts/logger');
 const logger = jest.mocked(invalid<typeof loggerModule & { __infoMock: jest.Mock<void, [string]> }>(loggerModule));
-import type * as diagnosticsModule from '../../src/js/services/semantic/diagnostics';
-import type * as logsModule from '../../src/js/cli/commands/logs';
+import type * as diagnosticsModule from '../../src/ts/services/semantic/diagnostics';
+import type * as logsModule from '../../src/ts/cli/commands/logs';
 import { invalid } from '../helpers/invalid';
-const { diagnostics } = jest.mocked(require('../../src/js/services/semantic/diagnostics') as typeof diagnosticsModule);
-const { showLogs } = require('../../src/js/cli/commands/logs') as typeof logsModule;
+const { diagnostics } = jest.mocked(require('../../src/ts/services/semantic/diagnostics') as typeof diagnosticsModule);
+const { showLogs } = require('../../src/ts/cli/commands/logs') as typeof logsModule;
 
 describe('CLI logs command', () => {
     beforeEach(() => jest.clearAllMocks());

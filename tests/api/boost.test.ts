@@ -4,26 +4,26 @@
  * Tests the boost application functionality.
  */
 
-import type * as boostModule from '../../src/js/api/boost';
-import type * as applyBoostModule from '../../src/js/strategies/real/applyBoost';
-import type * as api_clientModule from '../../src/js/api/api-client';
+import type * as boostModule from '../../src/ts/api/boost';
+import type * as applyBoostModule from '../../src/ts/strategies/real/applyBoost';
+import type * as api_clientModule from '../../src/ts/api/api-client';
 import { invalid } from '../helpers/invalid';
 
-const { applyBoostToEntry } = require('../../src/js/api/boost') as typeof boostModule;
-const { applyBoost } = require('../../src/js/strategies/real/applyBoost') as typeof applyBoostModule;
+const { applyBoostToEntry } = require('../../src/ts/api/boost') as typeof boostModule;
+const { applyBoost } = require('../../src/ts/strategies/real/applyBoost') as typeof applyBoostModule;
 
 // Mock settings: default boostImageIndex=1 so the picker targets entries[0]
 // and falls back backward (with wrap) past any turboed primary. Other
 // settings methods default to undefined so a future settings read added to
 // boost.ts will surface as `undefined` consistently rather than throwing.
-jest.mock('../../src/js/settings', () => ({
+jest.mock('../../src/ts/settings', () => ({
     getEffectiveSetting: jest.fn((key) => (key === 'boostImageIndex' ? 1 : undefined)),
     getSetting: jest.fn(() => undefined),
     setSetting: jest.fn(),
 }));
 
 // Mock the api-client module
-jest.mock('../../src/js/api/api-client', () => ({
+jest.mock('../../src/ts/api/api-client', () => ({
     makePostRequest: jest.fn(),
     createCommonHeaders: jest.fn((token: string | undefined) => ({
         'x-token': token || 'mock-token',
@@ -34,7 +34,7 @@ jest.mock('../../src/js/api/api-client', () => ({
 }));
 
 // Mock the logger module
-jest.mock('../../src/js/logger', () => ({
+jest.mock('../../src/ts/logger', () => ({
     withCategory: jest.fn(() => ({
         error: jest.fn(),
         info: jest.fn(),
@@ -58,7 +58,7 @@ jest.spyOn(console, 'error').mockImplementation();
 describe('boost', () => {
     const mockToken = 'test-token-123';
     const { makePostRequest, createCommonHeaders } = jest.mocked(
-        require('../../src/js/api/api-client') as typeof api_clientModule,
+        require('../../src/ts/api/api-client') as typeof api_clientModule,
     );
 
     beforeEach(() => {

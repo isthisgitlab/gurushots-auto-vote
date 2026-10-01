@@ -1,10 +1,10 @@
 /**
  * GUI-side (WebView) resolvers for the shared cadence math
- * (src/js/scheduling/thresholdWindow.ts), the async-IPC counterpart of
- * src/js/scheduling/nodeResolvers.ts: per-challenge values come back over
+ * (src/ts/scheduling/thresholdWindow.ts), the async-IPC counterpart of
+ * src/ts/scheduling/nodeResolvers.ts: per-challenge values come back over
  * the getEffectiveSetting IPC channel (react/api/ipc.ts) instead of the synchronous settings facade.
  * AutovoteContext injects these into the shared cadence chain
- * (src/js/scheduling/cadenceChain.ts) so the loop and math are written once.
+ * (src/ts/scheduling/cadenceChain.ts) so the loop and math are written once.
  */
 
 import { computeNextCycleDelayMs as computeNextDelayMs } from '../../scheduling/thresholdWindow';

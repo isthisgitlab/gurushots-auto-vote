@@ -1,5 +1,5 @@
-import type * as urlSafeModule from '../../src/js/format/urlSafe';
-const { isSafeExternalUrl } = require('../../src/js/format/urlSafe') as typeof urlSafeModule;
+import type * as urlSafeModule from '../../src/ts/format/urlSafe';
+const { isSafeExternalUrl } = require('../../src/ts/format/urlSafe') as typeof urlSafeModule;
 
 describe('isSafeExternalUrl', () => {
     test('accepts well-formed https URLs', () => {

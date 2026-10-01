@@ -3,11 +3,11 @@
  * behind autoExposureFillMax.
  */
 
-import logger = require('../../src/js/logger');
-import type * as currencyAutoStoreModule from '../../src/js/currencyAutoStore';
+import logger = require('../../src/ts/logger');
+import type * as currencyAutoStoreModule from '../../src/ts/currencyAutoStore';
 const { createAutoSpendLedger, createMemoryAutoSpendLedger } =
-    require('../../src/js/currencyAutoStore') as typeof currencyAutoStoreModule;
-import type { AutoSpendRecord } from '../../src/js/types/stores';
+    require('../../src/ts/currencyAutoStore') as typeof currencyAutoStoreModule;
+import type { AutoSpendRecord } from '../../src/ts/types/stores';
 import { invalid } from '../helpers/invalid';
 
 const rawStore = (initial: string | null) => {

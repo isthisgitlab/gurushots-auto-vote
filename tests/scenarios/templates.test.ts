@@ -4,13 +4,13 @@
  * validator accepts.
  */
 
-const { SCENARIO_TEMPLATES } = require('../../src/js/scenarios/templates') as typeof templatesModule;
-import vocabulary = require('../../src/js/scenarios/vocabulary');
-import type * as templatesModule from '../../src/js/scenarios/templates';
-import type * as scenarioSchemaModule from '../../src/js/settings/scenarioSchema';
-import type * as defaultsModule from '../../src/js/settings/defaults';
-const { validateScenario } = require('../../src/js/settings/scenarioSchema') as typeof scenarioSchemaModule;
-const { getDefaultSettings } = require('../../src/js/settings/defaults') as typeof defaultsModule;
+const { SCENARIO_TEMPLATES } = require('../../src/ts/scenarios/templates') as typeof templatesModule;
+import vocabulary = require('../../src/ts/scenarios/vocabulary');
+import type * as templatesModule from '../../src/ts/scenarios/templates';
+import type * as scenarioSchemaModule from '../../src/ts/settings/scenarioSchema';
+import type * as defaultsModule from '../../src/ts/settings/defaults';
+const { validateScenario } = require('../../src/ts/settings/scenarioSchema') as typeof scenarioSchemaModule;
+const { getDefaultSettings } = require('../../src/ts/settings/defaults') as typeof defaultsModule;
 
 const globalDefaults = getDefaultSettings().challengeSettings.globalDefaults;
 

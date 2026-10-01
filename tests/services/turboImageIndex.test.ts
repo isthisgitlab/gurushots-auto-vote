@@ -7,16 +7,16 @@
  *   - Sentinel value 0 always selects the last entry, regardless of count
  */
 
-import settingsModule = require('../../src/js/settings');
+import settingsModule = require('../../src/ts/settings');
 const settings = jest.mocked(settingsModule);
-import VotingLogic = require('../../src/js/services/VotingLogic');
+import VotingLogic = require('../../src/ts/services/VotingLogic');
 import type * as challengeFixturesModule from '../helpers/challengeFixtures';
-import type { RankingEntry } from '../../src/js/types/gurushots';
+import type { RankingEntry } from '../../src/ts/types/gurushots';
 import { invalid } from '../helpers/invalid';
 const { buildChallenge: buildBaseChallenge } =
     require('../helpers/challengeFixtures') as typeof challengeFixturesModule;
 
-jest.mock('../../src/js/settings');
+jest.mock('../../src/ts/settings');
 
 // Shared defaults already give id 'c1' and close_time 1_000_000.
 const buildChallenge = (entries: RankingEntry[]) =>

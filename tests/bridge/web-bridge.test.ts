@@ -6,9 +6,9 @@
  * stubbed on globalThis.
  */
 
-import type * as bridgeModule from '../../src/js/bridge/web';
-import type * as manifestModule from '../../src/js/ipc/manifest';
-import type { WindowApi } from '../../src/js/types/ipc';
+import type * as bridgeModule from '../../src/ts/bridge/web';
+import type * as manifestModule from '../../src/ts/ipc/manifest';
+import type { WindowApi } from '../../src/ts/types/ipc';
 import { invalid } from '../helpers/invalid';
 
 type FetchReply = { ok: boolean; status: number; json: () => Promise<unknown> };
@@ -55,7 +55,7 @@ beforeEach(() => {
     g.location = invalid({ reload: mockReload });
     g.open = mockOpen;
     jest.resetModules();
-    bridge = require('../../src/js/bridge/web') as typeof bridgeModule;
+    bridge = require('../../src/ts/bridge/web') as typeof bridgeModule;
     api = bridge.installWebBridge();
 });
 
@@ -97,7 +97,7 @@ describe('web bridge — invoke', () => {
     });
 
     test('every invoke channel is served by the server except the browser ones', async () => {
-        const { invokeChannels, kebabToCamel } = require('../../src/js/ipc/manifest') as typeof manifestModule;
+        const { invokeChannels, kebabToCamel } = require('../../src/ts/ipc/manifest') as typeof manifestModule;
         const methods = invalid<Record<string, (...args: unknown[]) => Promise<unknown>>>(api);
         for (const channel of invokeChannels) {
             if (bridge.BROWSER_CHANNELS.has(channel)) continue;

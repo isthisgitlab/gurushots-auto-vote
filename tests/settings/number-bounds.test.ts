@@ -7,10 +7,10 @@
  * range must be exactly what saving actually accepts.
  */
 
-import type * as schemaModule from '../../src/js/settings/schema';
-import type { SettingsSchemaEntry } from '../../src/js/settings/schema';
+import type * as schemaModule from '../../src/ts/settings/schema';
+import type { SettingsSchemaEntry } from '../../src/ts/settings/schema';
 
-const { SETTINGS_SCHEMA, validateSetting } = require('../../src/js/settings/schema') as typeof schemaModule;
+const { SETTINGS_SCHEMA, validateSetting } = require('../../src/ts/settings/schema') as typeof schemaModule;
 
 const numberSettings = Object.entries<SettingsSchemaEntry>(SETTINGS_SCHEMA).filter(
     ([, config]) => config.type === 'number',

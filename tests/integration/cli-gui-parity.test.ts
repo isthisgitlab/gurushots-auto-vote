@@ -5,25 +5,25 @@
  * in the CLI version, ensuring feature parity between the two interfaces.
  */
 
-const { getMiddleware, getApiStrategy } = require('../../src/js/apiFactory') as typeof apiFactoryModule;
+const { getMiddleware, getApiStrategy } = require('../../src/ts/apiFactory') as typeof apiFactoryModule;
 // The raw surfaces are not exported; the explicit override returns
 // the module-level singletons.
 const realApi = getApiStrategy({ mock: false });
 const mockApi = getApiStrategy({ mock: true });
-import settings = require('../../src/js/settings');
-import type * as apiFactoryModule from '../../src/js/apiFactory';
-import type * as BaseMiddlewareModule from '../../src/js/services/BaseMiddleware';
-const { BaseMiddleware } = require('../../src/js/services/BaseMiddleware') as typeof BaseMiddlewareModule;
+import settings = require('../../src/ts/settings');
+import type * as apiFactoryModule from '../../src/ts/apiFactory';
+import type * as BaseMiddlewareModule from '../../src/ts/services/BaseMiddleware';
+const { BaseMiddleware } = require('../../src/ts/services/BaseMiddleware') as typeof BaseMiddlewareModule;
 
 // Mock the API client for testing
-jest.mock('../../src/js/api/api-client', () => ({
+jest.mock('../../src/ts/api/api-client', () => ({
     makePostRequest: jest.fn(),
     createCommonHeaders: jest.fn(),
     FORM_CONTENT_TYPE: 'application/x-www-form-urlencoded',
 }));
 
 // Mock the logger
-jest.mock('../../src/js/logger', () => ({
+jest.mock('../../src/ts/logger', () => ({
     log: jest.fn(),
     warn: jest.fn(),
     error: jest.fn(),

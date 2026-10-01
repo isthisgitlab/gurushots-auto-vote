@@ -12,7 +12,7 @@
 import { render, screen, fireEvent, waitFor, act } from './helpers/test-utils';
 import { fireSettingsChanged } from './helpers/setup';
 import { ChallengeNav } from '@/components/app/ChallengeNav';
-import type { Challenge } from '../../src/js/types/gurushots';
+import type { Challenge } from '../../src/ts/types/gurushots';
 import { invalid } from '../helpers/invalid';
 
 const challenge = (id: number, title: string) => invalid<Challenge>({ id, title });

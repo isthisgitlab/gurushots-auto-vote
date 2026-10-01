@@ -18,7 +18,7 @@
 import { render, fireEvent } from './helpers/test-utils';
 import type { ComponentProps } from 'preact';
 import { SettingInput } from '@/components/app/SettingInput';
-import type { SerializableSchemaEntry } from '../../src/js/ipc/settings.handlers';
+import type { SerializableSchemaEntry } from '../../src/ts/ipc/settings.handlers';
 import { invalid } from '../helpers/invalid';
 
 const renderNumber = (over: Partial<ComponentProps<typeof SettingInput>> = {}) => {

@@ -8,20 +8,20 @@
  * against, on this second entry point.
  */
 
-jest.mock('../../src/js/settings', () => ({
+jest.mock('../../src/ts/settings', () => ({
     getSetting: jest.fn(() => 'tok'),
 }));
 
-jest.mock('../../src/js/services/manualVote', () => ({
+jest.mock('../../src/ts/services/manualVote', () => ({
     voteAllChallengesManual: jest.fn(async () => ({ voted: 0, skipped: 0 })),
 }));
 
-import settingsModule = require('../../src/js/settings');
+import settingsModule = require('../../src/ts/settings');
 const settings = jest.mocked(settingsModule);
-import type * as manualVoteModule from '../../src/js/services/manualVote';
-import type * as BaseMiddlewareModule from '../../src/js/services/BaseMiddleware';
-const { voteAllChallengesManual } = jest.mocked(require('../../src/js/services/manualVote') as typeof manualVoteModule);
-const { BaseMiddleware } = require('../../src/js/services/BaseMiddleware') as typeof BaseMiddlewareModule;
+import type * as manualVoteModule from '../../src/ts/services/manualVote';
+import type * as BaseMiddlewareModule from '../../src/ts/services/BaseMiddleware';
+const { voteAllChallengesManual } = jest.mocked(require('../../src/ts/services/manualVote') as typeof manualVoteModule);
+const { BaseMiddleware } = require('../../src/ts/services/BaseMiddleware') as typeof BaseMiddlewareModule;
 import { invalid } from '../helpers/invalid';
 
 // A partial API: cliVoteManual only reads the active challenges.

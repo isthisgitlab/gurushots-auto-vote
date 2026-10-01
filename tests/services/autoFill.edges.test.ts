@@ -6,13 +6,13 @@
  * pass-through, and the invalid-challenge / refreshed-with-room paths.
  */
 
-import type * as autoFillModule from '../../src/js/services/autoFill';
+import type * as autoFillModule from '../../src/ts/services/autoFill';
 import type * as challengeFixturesModule from '../helpers/challengeFixtures';
-import type { FetchErrorResult, FillDeps, FillLogger, FillSettings } from '../../src/js/types/autoFill';
-import type { LibraryPhoto, MemberIdentity } from '../../src/js/types/gurushots';
+import type { FetchErrorResult, FillDeps, FillLogger, FillSettings } from '../../src/ts/types/autoFill';
+import type { LibraryPhoto, MemberIdentity } from '../../src/ts/types/gurushots';
 import { invalid } from '../helpers/invalid';
 
-jest.mock('../../src/js/settings/storage', () => ({
+jest.mock('../../src/ts/settings/storage', () => ({
     createJsonStore: () => ({
         readRaw: () => null,
         writeRaw: () => {},
@@ -29,7 +29,7 @@ const {
     rankCandidatesForChallenge,
     maybeEmergencyFillChallenge,
     submitNewEntryForAction,
-} = require('../../src/js/services/autoFill') as typeof autoFillModule;
+} = require('../../src/ts/services/autoFill') as typeof autoFillModule;
 const { buildChallenge } = require('../helpers/challengeFixtures') as typeof challengeFixturesModule;
 
 const NOW = 1_000_000;
@@ -310,7 +310,7 @@ describe('submitNewEntryForAction', () => {
 });
 
 describe('negated-title fallback warning', () => {
-    const { fillChallengeNow } = require('../../src/js/services/autoFill') as typeof autoFillModule;
+    const { fillChallengeNow } = require('../../src/ts/services/autoFill') as typeof autoFillModule;
 
     test('when every eligible photo shows the excluded subject, the fill warns before going off-theme', async () => {
         const { logger, lines } = makeCapturingLogger();
@@ -392,7 +392,7 @@ describe('popularity-pick explanation after a refresh truncates the batch', () =
 });
 
 describe('themed search edge shapes', () => {
-    const { fetchCandidatesForChallenge } = require('../../src/js/services/autoFill') as typeof autoFillModule;
+    const { fetchCandidatesForChallenge } = require('../../src/ts/services/autoFill') as typeof autoFillModule;
     const LIB = [allowedPhoto('lib1'), allowedPhoto('lib2')];
 
     test('a search that answers with a non-array is treated as no hits', async () => {

@@ -13,14 +13,14 @@
  * overwritten.
  */
 
-import type * as schemaModule from '../../src/js/settings/schema';
-import type { SettingValues } from '../../src/js/settings/schema';
-import type { AppSettings } from '../../src/js/types/settings';
+import type * as schemaModule from '../../src/ts/settings/schema';
+import type { SettingValues } from '../../src/ts/settings/schema';
+import type { AppSettings } from '../../src/ts/types/settings';
 import type * as fsModule from 'node:fs';
-import type * as settingsModule from '../../src/js/settings';
+import type * as settingsModule from '../../src/ts/settings';
 import type * as challengeFixturesModule from '../helpers/challengeFixtures';
 
-const { validateSetting } = require('../../src/js/settings/schema') as typeof schemaModule;
+const { validateSetting } = require('../../src/ts/settings/schema') as typeof schemaModule;
 
 const { buildSettingsFixture: buildFixture } =
     require('../helpers/challengeFixtures') as typeof challengeFixturesModule;
@@ -49,7 +49,7 @@ describe('autoFillIntervalMinutes → autoFillSchedule migration in loadSettings
         // Re-require fs *after* resetModules so we share the fresh mock
         // instance that settings.ts will see.
         fs = jest.mocked(require('node:fs') as typeof fsModule);
-        settings = require('../../src/js/settings') as typeof settings;
+        settings = require('../../src/ts/settings') as typeof settings;
     });
 
     test('converts a global default of 15 minutes and deletes the legacy key', () => {

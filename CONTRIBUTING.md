@@ -46,12 +46,12 @@ Thank you for your interest in contributing to GuruShots Auto Vote! We welcome c
 
 ```
 src/
-├── js/
+├── ts/
 │   ├── api/          # Real GuruShots API client modules
 │   ├── bridge/       # Capacitor bridge (Android shell)
 │   ├── cli/          # CLI entry point and per-command modules
 │   ├── ipc/          # Electron IPC handlers
-│   ├── mock/         # Mock API counterparts to src/js/api/*
+│   ├── mock/         # Mock API counterparts to src/ts/api/*
 │   ├── react/        # React renderer (shared by Electron and Capacitor)
 │   ├── scheduling/   # Cron / interval scheduling
 │   ├── services/     # Shared voting & middleware logic
@@ -81,12 +81,12 @@ scripts/              # Development and build utilities
 
 ### Architecture
 
-The same core business logic in `src/js/` runs under three shells: **Electron (GUI)**, **CLI**, and **Capacitor (Android)**. Only the entry points, transport, and storage adapter are platform-specific.
+The same core business logic in `src/ts/` runs under three shells: **Electron (GUI)**, **CLI**, and **Capacitor (Android)**. Only the entry points, transport, and storage adapter are platform-specific.
 
-- **Entry points**: Electron `src/js/index.ts` (bundled into `out/main/app.js` by `scripts/build-main.ts`, loaded through `out/main/index.js`) · CLI `src/js/cli/cli.ts` · Electron preload `src/js/preload.ts` · Capacitor bridge `src/js/bridge/capacitor.ts`
-- **React renderer** (`src/js/react/`) is shared between Electron and Capacitor
-- **`apiFactory.ts`** selects real vs mock API implementations at runtime based on `settings.mock`. All business logic goes through the factory — do not import from `src/js/api/*` or `src/js/mock/*` directly
-- **Settings facade** lives at `src/js/settings.ts`. Schema + defaults + validation are in `src/js/settings/schema.ts`; persistence transport (fs on Electron/CLI, `@capacitor/preferences` on Android) is in `src/js/settings/storage.ts`
+- **Entry points**: Electron `src/ts/index.ts` (bundled into `out/main/app.js` by `scripts/build-main.ts`, loaded through `out/main/index.js`) · CLI `src/ts/cli/cli.ts` · Electron preload `src/ts/preload.ts` · Capacitor bridge `src/ts/bridge/capacitor.ts`
+- **React renderer** (`src/ts/react/`) is shared between Electron and Capacitor
+- **`apiFactory.ts`** selects real vs mock API implementations at runtime based on `settings.mock`. All business logic goes through the factory — do not import from `src/ts/api/*` or `src/ts/mock/*` directly
+- **Settings facade** lives at `src/ts/settings.ts`. Schema + defaults + validation are in `src/ts/settings/schema.ts`; persistence transport (fs on Electron/CLI, `@capacitor/preferences` on Android) is in `src/ts/settings/storage.ts`
 
 ## 📝 Code Guidelines
 
@@ -188,7 +188,7 @@ Before suggesting new features:
 
 ### Mock Mode Testing
 
-Mock mode is selected via the in-app setting (`mock: true`) and routes all API traffic through `src/js/mock/*`. See `src/js/apiFactory.ts` for the swap point. Start the app normally (`pnpm dev` or `pnpm cli:start`) with mock mode enabled in settings to exercise it.
+Mock mode is selected via the in-app setting (`mock: true`) and routes all API traffic through `src/ts/mock/*`. See `src/ts/apiFactory.ts` for the swap point. Start the app normally (`pnpm dev` or `pnpm cli:start`) with mock mode enabled in settings to exercise it.
 
 ### Manual Testing
 

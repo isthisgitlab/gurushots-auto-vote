@@ -10,12 +10,12 @@ import { entryPhotoUrl } from '../../format/photoUrl';
 import { finiteOr } from '../../numbers';
 
 // Re-exported from the shared core so the renderer, the CLI, and the voting pass
-// (services/votingOrchestrator.ts) all format durations identically — see src/js/format/duration.ts.
+// (services/votingOrchestrator.ts) all format durations identically — see src/ts/format/duration.ts.
 export { formatDuration };
 
 // Entry thumbnails. Re-exported here rather than imported straight into the
 // component so the renderer keeps one door onto the shared core, matching
-// formatDuration above — see src/js/format/photoUrl.ts for why the URL has to
+// formatDuration above — see src/ts/format/photoUrl.ts for why the URL has to
 // be built client-side at all.
 export { entryPhotoUrl };
 

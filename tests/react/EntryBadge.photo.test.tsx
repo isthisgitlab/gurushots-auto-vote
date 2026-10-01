@@ -2,7 +2,7 @@
  * Component tests for the entry thumbnail added to EntryBadge.tsx.
  *
  * The photo is built client-side from the entry's own ids (no API field
- * carries a URL — see src/js/format/photoUrl.ts), so the two behaviours worth
+ * carries a URL — see src/ts/format/photoUrl.ts), so the two behaviours worth
  * pinning are:
  *   - a well-formed entry renders a chip pointing at the CDN, and escalating
  *     to hover / click asks for progressively larger renders of the SAME photo;
@@ -12,7 +12,7 @@
 
 import { fireEvent, render, screen } from './helpers/test-utils';
 import { EntryBadge } from '@/components/app/EntryBadge';
-import type { RankingEntry } from '../../src/js/types/gurushots';
+import type { RankingEntry } from '../../src/ts/types/gurushots';
 import { invalid } from '../helpers/invalid';
 
 const mockBoostState = { applyBoost: jest.fn(), loading: false, error: null, clearError: jest.fn() };

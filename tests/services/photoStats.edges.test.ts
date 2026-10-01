@@ -7,7 +7,7 @@
 
 // Store whose read/write behaviour each test controls.
 const store: { read: () => string | null; write: (data: string) => void } = { read: () => null, write: () => {} };
-jest.mock('../../src/js/settings/storage', () => ({
+jest.mock('../../src/ts/settings/storage', () => ({
     createJsonStore: () => ({
         readRaw: () => store.read(),
         writeRaw: (data: string) => store.write(data),
@@ -16,19 +16,19 @@ jest.mock('../../src/js/settings/storage', () => ({
     }),
 }));
 
-jest.mock('../../src/js/logger', () => {
+jest.mock('../../src/ts/logger', () => {
     const level = { info: jest.fn(), error: jest.fn(), debug: jest.fn(), success: jest.fn(), warning: jest.fn() };
     return { withCategory: jest.fn(() => level), __level: level };
 });
 
-import photoStats = require('../../src/js/services/photoStats');
-import type { PickerPhoto } from '../../src/js/types/photoPicker';
-import type { PhotoStatsFile } from '../../src/js/services/photoStats';
-import type { CategoryLogger } from '../../src/js/logger';
-import type * as submissionsModule from '../../src/js/api/submissions';
+import photoStats = require('../../src/ts/services/photoStats');
+import type { PickerPhoto } from '../../src/ts/types/photoPicker';
+import type { PhotoStatsFile } from '../../src/ts/services/photoStats';
+import type { CategoryLogger } from '../../src/ts/logger';
+import type * as submissionsModule from '../../src/ts/api/submissions';
 import { invalid } from '../helpers/invalid';
 const { enrichCandidates, resetPassState, MAX_ENRICH_PER_FILL, MAX_ENRICH_PER_PASS, STATS_TTL_MS } = photoStats;
-const { __level: log } = invalid<{ __level: LevelMock }>(require('../../src/js/logger'));
+const { __level: log } = invalid<{ __level: LevelMock }>(require('../../src/ts/logger'));
 
 /** The per-category logger double the logger mock above hands out (and exposes as `__level`). */
 type LevelMock = {

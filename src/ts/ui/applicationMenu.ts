@@ -231,7 +231,7 @@ function openLogsWindow() {
             contextIsolation: true,
             // Same bundle as the main windows (scripts/build-react.ts): the
             // sandboxed preload cannot require() the relative channel manifest,
-            // so the raw src/js/preload.ts would leave this window without window.api.
+            // so the raw src/ts/preload.ts would leave this window without window.api.
             preload: appPath('dist', 'preload-bundle.js'),
         },
         show: false,

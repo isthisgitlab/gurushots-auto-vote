@@ -3,12 +3,12 @@
  * renderer's shared instance (translations/renderer.ts).
  */
 
-import english = require('../../src/js/translations/english');
-import latvian = require('../../src/js/translations/latvian');
-import type * as translatorModule from '../../src/js/translations/translator';
-import type * as rendererModule from '../../src/js/translations/renderer';
+import english = require('../../src/ts/translations/english');
+import latvian = require('../../src/ts/translations/latvian');
+import type * as translatorModule from '../../src/ts/translations/translator';
+import type * as rendererModule from '../../src/ts/translations/renderer';
 const { DEFAULT_LANGUAGE, createTranslator, isSupportedLanguage, resolveLanguage } =
-    require('../../src/js/translations/translator') as typeof translatorModule;
+    require('../../src/ts/translations/translator') as typeof translatorModule;
 
 describe('language helpers', () => {
     test('only en and lv are supported', () => {
@@ -79,14 +79,14 @@ describe('createTranslator', () => {
 
 describe('English fallback', () => {
     afterEach(() => {
-        jest.dontMock('../../src/js/translations/latvian');
+        jest.dontMock('../../src/ts/translations/latvian');
     });
 
     test('a key missing (or empty) in Latvian falls back to English', () => {
         jest.isolateModules(() => {
-            jest.doMock('../../src/js/translations/latvian', () => ({ logs: { title: '' }, common: {} }));
+            jest.doMock('../../src/ts/translations/latvian', () => ({ logs: { title: '' }, common: {} }));
             const { createTranslator: isolated } =
-                require('../../src/js/translations/translator') as typeof translatorModule;
+                require('../../src/ts/translations/translator') as typeof translatorModule;
             const translator = isolated();
             expect(translator.t('logs.title', 'lv')).toBe(english.logs.title);
             expect(translator.t('themes.dark', 'lv')).toBe(english.themes.dark);
@@ -97,9 +97,9 @@ describe('English fallback', () => {
 
 describe('renderer instance', () => {
     test('is a translator shared by every importer of the module', () => {
-        const { rendererTranslator } = require('../../src/js/translations/renderer') as typeof rendererModule;
+        const { rendererTranslator } = require('../../src/ts/translations/renderer') as typeof rendererModule;
         expect(
-            (require('../../src/js/translations/renderer') as typeof import('../../src/js/translations/renderer'))
+            (require('../../src/ts/translations/renderer') as typeof import('../../src/ts/translations/renderer'))
                 .rendererTranslator,
         ).toBe(rendererTranslator);
         expect(rendererTranslator.getCurrentLanguage()).toBe('en');

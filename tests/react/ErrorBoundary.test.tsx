@@ -8,7 +8,7 @@ import { useState } from 'react';
 import { ErrorBoundary } from '@/components/ui/ErrorBoundary';
 import { mockApi } from './helpers/setup';
 import { invalid } from '../helpers/invalid';
-import type { WindowApi } from '../../src/js/types/ipc';
+import type { WindowApi } from '../../src/ts/types/ipc';
 
 // Pin window.api per-test — the global test setup occasionally loses it
 // across files. Keeps this suite hermetic.

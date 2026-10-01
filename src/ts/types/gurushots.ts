@@ -166,7 +166,7 @@ export interface VoteImagesResponse {
 }
 
 // ---------------------------------------------------------------------------
-// Transport-layer payloads (src/js/api/*, mirrored by src/js/mock/*): the
+// Transport-layer payloads (src/ts/api/*, mirrored by src/ts/mock/*): the
 // action endpoints' bodies. A field is optional where a refusal or failure
 // body leaves it out.
 // ---------------------------------------------------------------------------

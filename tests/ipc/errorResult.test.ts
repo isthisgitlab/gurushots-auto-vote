@@ -4,9 +4,9 @@
  * itself throw to the renderer.
  */
 
-import type * as errorResultModule from '../../src/js/ipc/errorResult';
+import type * as errorResultModule from '../../src/ts/ipc/errorResult';
 
-const { errorResult } = require('../../src/js/ipc/errorResult') as typeof errorResultModule;
+const { errorResult } = require('../../src/ts/ipc/errorResult') as typeof errorResultModule;
 
 describe('errorResult', () => {
     test.each([

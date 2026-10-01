@@ -8,44 +8,44 @@
  * (900004 unlock/spend fails, 900005 submit fails).
  */
 
-jest.mock('../../src/js/metadata', () => ({ updateChallengeVoteMetadata: jest.fn(() => true) }));
-jest.mock('../../src/js/services/votingOrchestrator', () => ({
+jest.mock('../../src/ts/metadata', () => ({ updateChallengeVoteMetadata: jest.fn(() => true) }));
+jest.mock('../../src/ts/services/votingOrchestrator', () => ({
     runVotingPass: jest.fn(async () => ({ success: true, message: 'pass' })),
 }));
-jest.mock('../../src/js/services/joinChallenges', () => ({
+jest.mock('../../src/ts/services/joinChallenges', () => ({
     runJoinPass: jest.fn(async () => ({ ran: false, joined: 0, results: [] })),
     joinChallengeSingle: jest.fn(async () => ({ status: 'joined' })),
 }));
-jest.mock('../../src/js/services/missions', () => ({
+jest.mock('../../src/ts/services/missions', () => ({
     loadMissionNeeds: jest.fn(async () => null),
     registerMissionNeeds: jest.fn((_token: string, needs: missionsModule.MissionNeeds | null) =>
         needs ? jest.fn() : null,
     ),
 }));
 
-import loggerModule = require('../../src/js/logger');
+import loggerModule = require('../../src/ts/logger');
 const logger = jest.mocked(loggerModule);
-import metadataModule = require('../../src/js/metadata');
+import metadataModule = require('../../src/ts/metadata');
 const metadata = jest.mocked(metadataModule);
-import type * as votingOrchestratorModule from '../../src/js/services/votingOrchestrator';
-import type * as joinChallengesModule from '../../src/js/services/joinChallenges';
-import type * as missionsModule from '../../src/js/services/missions';
-import type * as indexModule from '../../src/js/mock/index';
-import type { Challenge } from '../../src/js/types/gurushots';
+import type * as votingOrchestratorModule from '../../src/ts/services/votingOrchestrator';
+import type * as joinChallengesModule from '../../src/ts/services/joinChallenges';
+import type * as missionsModule from '../../src/ts/services/missions';
+import type * as indexModule from '../../src/ts/mock/index';
+import type { Challenge } from '../../src/ts/types/gurushots';
 import { invalid } from '../helpers/invalid';
 
 /** The mock autocomplete called without a member id, as the no-token / term tests do. */
 type TwoArgAutocomplete = (token: string | null, term: unknown) => Promise<string[]>;
 const { runVotingPass } = jest.mocked(
-    require('../../src/js/services/votingOrchestrator') as typeof votingOrchestratorModule,
+    require('../../src/ts/services/votingOrchestrator') as typeof votingOrchestratorModule,
 );
 const { runJoinPass, joinChallengeSingle } = jest.mocked(
-    require('../../src/js/services/joinChallenges') as typeof joinChallengesModule,
+    require('../../src/ts/services/joinChallenges') as typeof joinChallengesModule,
 );
 const { loadMissionNeeds, registerMissionNeeds } = jest.mocked(
-    require('../../src/js/services/missions') as typeof missionsModule,
+    require('../../src/ts/services/missions') as typeof missionsModule,
 );
-const { mockApiClient, clearSessionCache } = require('../../src/js/mock/index') as typeof indexModule;
+const { mockApiClient, clearSessionCache } = require('../../src/ts/mock/index') as typeof indexModule;
 
 /** Resolve a promise that is gated on simulated latency. */
 const settle = async <T>(promise: Promise<T>): Promise<T> => {

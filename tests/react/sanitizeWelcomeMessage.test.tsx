@@ -1,5 +1,5 @@
 import { invalid } from '../helpers/invalid';
-import { sanitizeWelcomeMessage } from '../../src/js/react/utils/sanitizeWelcomeMessage';
+import { sanitizeWelcomeMessage } from '../../src/ts/react/utils/sanitizeWelcomeMessage';
 
 describe('sanitizeWelcomeMessage', () => {
     test('returns empty string for null, undefined, empty', () => {

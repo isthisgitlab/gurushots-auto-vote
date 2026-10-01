@@ -5,7 +5,7 @@
 import { render, screen } from './helpers/test-utils';
 import { CurrencyConfirmModal, currencyOutcomeText } from '@/components/app/CurrencyConfirmModal';
 import { mockTranslator } from './helpers/setup';
-import type { Bankroll } from '../../src/js/types/gurushots';
+import type { Bankroll } from '../../src/ts/types/gurushots';
 import { invalid } from '../helpers/invalid';
 
 const STRINGS: Record<string, string> = {

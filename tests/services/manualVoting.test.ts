@@ -7,14 +7,14 @@
  * and exposure ceiling (< 100%).
  */
 
-import VotingLogic = require('../../src/js/services/VotingLogic');
+import VotingLogic = require('../../src/ts/services/VotingLogic');
 import type * as challengeFixturesModule from '../helpers/challengeFixtures';
-import type { Challenge } from '../../src/js/types/gurushots';
+import type { Challenge } from '../../src/ts/types/gurushots';
 import { invalid } from '../helpers/invalid';
 const { buildChallenge: buildBaseChallenge } =
     require('../helpers/challengeFixtures') as typeof challengeFixturesModule;
 
-jest.mock('../../src/js/settings');
+jest.mock('../../src/ts/settings');
 
 const buildChallenge = ({
     exposureFactor,

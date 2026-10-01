@@ -11,40 +11,40 @@
  * before any `require` resolves.
  */
 
-jest.mock('../../src/js/settings');
-jest.mock('../../src/js/apiFactory');
-jest.mock('../../src/js/services/auth');
-jest.mock('../../src/js/services/VotingLogic');
-jest.mock('../../src/js/services/autoFill');
-jest.mock('../../src/js/windows/quitGuard', () => ({ rememberChallenges: jest.fn() }));
+jest.mock('../../src/ts/settings');
+jest.mock('../../src/ts/apiFactory');
+jest.mock('../../src/ts/services/auth');
+jest.mock('../../src/ts/services/VotingLogic');
+jest.mock('../../src/ts/services/autoFill');
+jest.mock('../../src/ts/windows/quitGuard', () => ({ rememberChallenges: jest.fn() }));
 
 import type { IpcMain } from 'electron';
 import { invalid } from '../helpers/invalid';
-import { claimTurboRun, releaseTurboRun } from '../../src/js/services/turboRunLock';
-import { registerMissionNeeds } from '../../src/js/services/missions';
+import { claimTurboRun, releaseTurboRun } from '../../src/ts/services/turboRunLock';
+import { registerMissionNeeds } from '../../src/ts/services/missions';
 
-import settingsModule = require('../../src/js/settings');
+import settingsModule = require('../../src/ts/settings');
 const settings = jest.mocked(settingsModule);
-import apiFactoryModule = require('../../src/js/apiFactory');
+import apiFactoryModule = require('../../src/ts/apiFactory');
 const apiFactory = jest.mocked(apiFactoryModule);
-import authModule = require('../../src/js/services/auth');
+import authModule = require('../../src/ts/services/auth');
 const auth = jest.mocked(authModule);
-import votingLogicModule = require('../../src/js/services/VotingLogic');
+import votingLogicModule = require('../../src/ts/services/VotingLogic');
 const votingLogic = jest.mocked(votingLogicModule);
-import autoFillModule = require('../../src/js/services/autoFill');
+import autoFillModule = require('../../src/ts/services/autoFill');
 const autoFill = jest.mocked(autoFillModule);
-import type * as quitGuardModule from '../../src/js/windows/quitGuard';
+import type * as quitGuardModule from '../../src/ts/windows/quitGuard';
 import type * as logCategoriesModule from '../helpers/logCategories';
-import type * as actions_handlersModule from '../../src/js/ipc/actions.handlers';
-import type * as autoClaimModule from '../../src/js/services/autoClaim';
-const { rememberChallenges } = jest.mocked(require('../../src/js/windows/quitGuard') as typeof quitGuardModule);
+import type * as actions_handlersModule from '../../src/ts/ipc/actions.handlers';
+import type * as autoClaimModule from '../../src/ts/services/autoClaim';
+const { rememberChallenges } = jest.mocked(require('../../src/ts/windows/quitGuard') as typeof quitGuardModule);
 const { logCategories } = require('../helpers/logCategories') as typeof logCategoriesModule;
 
 // The handler routes auth through the factory surfaces + the shared
 // extractAuthResult normalizer; exercise the real normalizer rather than a stub
 // so these tests pin the actual token-key handling.
 const { extractAuthResult: realExtractAuthResult } =
-    jest.requireActual<typeof import('../../src/js/services/auth')>('../../src/js/services/auth');
+    jest.requireActual<typeof import('../../src/ts/services/auth')>('../../src/ts/services/auth');
 
 const NOW = () => Math.floor(Date.now() / 1000);
 
@@ -81,7 +81,7 @@ const stubAuthGuardFail = () => {
 // long as every test awaits the calls it makes, the Set stays empty between
 // tests — no jest.resetModules() needed (and it would defeat module-top
 // jest.mock() bindings anyway by giving the handler fresh mock instances).
-const { buildHandlers } = require('../../src/js/ipc/actions.handlers') as typeof actions_handlersModule;
+const { buildHandlers } = require('../../src/ts/ipc/actions.handlers') as typeof actions_handlersModule;
 
 type Handlers = ReturnType<typeof buildHandlers>;
 // A zero-parameter handler invoked the way ipcMain does, with the event first.
@@ -555,7 +555,7 @@ describe('join-challenge', () => {
 describe('get-auto-claim-status', () => {
     test('exposes the shared claim clock without running a claim', async () => {
         settings.getEffectiveSetting = invalid(jest.fn(() => true));
-        const { resetClaimThrottle } = require('../../src/js/services/autoClaim') as typeof autoClaimModule;
+        const { resetClaimThrottle } = require('../../src/ts/services/autoClaim') as typeof autoClaimModule;
         resetClaimThrottle();
         await expect(
             invalid<WithEvent<Handlers['get-auto-claim-status']>>(buildHandlers()['get-auto-claim-status'])({}),
@@ -941,7 +941,7 @@ describe('log categories', () => {
 
 describe('register', () => {
     test('registers every action channel on ipcMain', async () => {
-        const { register } = require('../../src/js/ipc/actions.handlers') as typeof actions_handlersModule;
+        const { register } = require('../../src/ts/ipc/actions.handlers') as typeof actions_handlersModule;
         const channels = new Map<string, Parameters<IpcMain['handle']>[1]>();
         register(
             invalid({

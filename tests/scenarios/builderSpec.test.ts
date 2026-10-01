@@ -4,14 +4,14 @@
  * vocabulary piece is in the table.
  */
 
-import spec = require('../../src/js/scenarios/builderSpec');
-import vocabulary = require('../../src/js/scenarios/vocabulary');
-const { validateScenario } = require('../../src/js/settings/scenarioSchema') as typeof scenarioSchemaModule;
-const { getDefaultSettings } = require('../../src/js/settings/defaults') as typeof defaultsModule;
-import english = require('../../src/js/translations/english');
-import latvian = require('../../src/js/translations/latvian');
-import type * as scenarioSchemaModule from '../../src/js/settings/scenarioSchema';
-import type * as defaultsModule from '../../src/js/settings/defaults';
+import spec = require('../../src/ts/scenarios/builderSpec');
+import vocabulary = require('../../src/ts/scenarios/vocabulary');
+const { validateScenario } = require('../../src/ts/settings/scenarioSchema') as typeof scenarioSchemaModule;
+const { getDefaultSettings } = require('../../src/ts/settings/defaults') as typeof defaultsModule;
+import english = require('../../src/ts/translations/english');
+import latvian = require('../../src/ts/translations/latvian');
+import type * as scenarioSchemaModule from '../../src/ts/settings/scenarioSchema';
+import type * as defaultsModule from '../../src/ts/settings/defaults';
 
 const globalDefaults = getDefaultSettings().challengeSettings.globalDefaults;
 

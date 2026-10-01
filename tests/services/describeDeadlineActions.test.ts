@@ -9,16 +9,16 @@
  * and the boostBlocked empty-entry guard.
  */
 
-import settingsModule = require('../../src/js/settings');
+import settingsModule = require('../../src/ts/settings');
 const settings = jest.mocked(settingsModule);
-import VotingLogic = require('../../src/js/services/VotingLogic');
+import VotingLogic = require('../../src/ts/services/VotingLogic');
 import type * as challengeFixturesModule from '../helpers/challengeFixtures';
 const { buildChallenge: buildBaseChallenge } =
     require('../helpers/challengeFixtures') as typeof challengeFixturesModule;
-import type { Challenge, MemberBoost, MemberTurbo, RankingEntry } from '../../src/js/types/gurushots';
+import type { Challenge, MemberBoost, MemberTurbo, RankingEntry } from '../../src/ts/types/gurushots';
 import { invalid } from '../helpers/invalid';
 
-jest.mock('../../src/js/settings');
+jest.mock('../../src/ts/settings');
 
 const NOW = 1_000_000 - 100; // just before close_time below
 const CLOSE = 1_000_000;

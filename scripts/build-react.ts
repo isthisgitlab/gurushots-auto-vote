@@ -6,8 +6,8 @@ import path from 'node:path';
 import fs from 'node:fs';
 import { removeVisionWebAssets, stageVisionWebAssets } from './fetch-vision-model';
 
-const reactDir = path.join(__dirname, '..', 'src', 'js', 'react');
-const jsDir = path.join(__dirname, '..', 'src', 'js');
+const reactDir = path.join(__dirname, '..', 'src', 'ts', 'react');
+const tsDir = path.join(__dirname, '..', 'src', 'ts');
 const distDir = path.join(__dirname, '..', 'dist');
 
 // Entry points for each page
@@ -16,17 +16,17 @@ const entryPoints = {
     app: path.join(reactDir, 'pages', 'App.tsx'),
     logs: path.join(reactDir, 'pages', 'Logs.tsx'),
     capacitor: path.join(reactDir, 'pages', 'Capacitor.tsx'),
-    // Browser entry served by the web shell (`pnpm web`, src/js/web/server.ts).
+    // Browser entry served by the web shell (`pnpm web`, src/ts/web/server.ts).
     web: path.join(reactDir, 'pages', 'Web.tsx'),
     // Android background service entry — runs in a bare WebView (no
     // Capacitor runtime) owned by AutoVoteService. Not a React page.
-    headless: path.join(jsDir, 'headless', 'index.ts'),
+    headless: path.join(tsDir, 'headless', 'index.ts'),
     // Electron preload. Electron sandboxes preloads by default, and a
     // sandboxed preload's require() shim only resolves 'electron' + a few
     // builtins — NOT relative modules — so the shared channel manifest
-    // (src/js/ipc/manifest.ts) must be BUNDLED into the preload file the
+    // (src/ts/ipc/manifest.ts) must be BUNDLED into the preload file the
     // BrowserWindows load (dist/preload.js).
-    preload: path.join(jsDir, 'preload.ts'),
+    preload: path.join(tsDir, 'preload.ts'),
 };
 
 type EntryName = keyof typeof entryPoints;
@@ -53,7 +53,7 @@ const capacitorIndexHtml = `<!doctype html>
 </html>
 `;
 
-// Web shell document, served at / by src/js/web/server.ts. Same CSP as the
+// Web shell document, served at / by src/ts/web/server.ts. Same CSP as the
 // Electron pages: script-src 'self' keeps injected inline script from running
 // against the window.api surface.
 const webHtml = `<!doctype html>
@@ -112,7 +112,7 @@ async function buildReact() {
     fs.writeFileSync(path.join(distDir, 'index.html'), capacitorIndexHtml);
     // Background service document (loaded by AutoVoteService's WebView).
     fs.writeFileSync(path.join(distDir, 'headless.html'), headlessHtml);
-    // Web shell document (served by src/js/web/server.ts).
+    // Web shell document (served by src/ts/web/server.ts).
     fs.writeFileSync(path.join(distDir, 'web.html'), webHtml);
 
     // Ship the semantic-matching word-vector lexicon into the webDir so the
@@ -310,7 +310,7 @@ async function buildReact() {
             }
 
             if (contexts.length === 0) {
-                console.log('⚠️  No React entry points found. Create pages in src/js/react/pages/');
+                console.log('⚠️  No React entry points found. Create pages in src/ts/react/pages/');
                 return;
             }
 
@@ -354,7 +354,7 @@ async function buildReact() {
             }
 
             if (builtCount === 0) {
-                console.log('⚠️  No React entry points found. Create pages in src/js/react/pages/');
+                console.log('⚠️  No React entry points found. Create pages in src/ts/react/pages/');
             } else {
                 console.log(`\n🎉 React build completed! (${builtCount} bundles)`);
             }

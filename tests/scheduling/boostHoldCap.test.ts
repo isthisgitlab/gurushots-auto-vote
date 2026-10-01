@@ -6,12 +6,12 @@
  * computeNextCycleDelayMs (mode 'boost-hold').
  */
 
-import type * as thresholdWindowModule from '../../src/js/scheduling/thresholdWindow';
-import type { Challenge } from '../../src/js/types/gurushots';
+import type * as thresholdWindowModule from '../../src/ts/scheduling/thresholdWindow';
+import type { Challenge } from '../../src/ts/types/gurushots';
 import { invalid } from '../helpers/invalid';
 
 const { soonestBoostHoldEnd, computeNextCycleDelayMs } =
-    require('../../src/js/scheduling/thresholdWindow') as typeof thresholdWindowModule;
+    require('../../src/ts/scheduling/thresholdWindow') as typeof thresholdWindowModule;
 
 const NOW = 1_000_000;
 

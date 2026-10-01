@@ -3,24 +3,24 @@
  * translator core plus the language read from the settings facade.
  */
 
-import english = require('../../src/js/translations/english');
-import latvian = require('../../src/js/translations/latvian');
+import english = require('../../src/ts/translations/english');
+import latvian = require('../../src/ts/translations/latvian');
 import { invalid } from '../helpers/invalid';
 
-const SETTINGS = '../../src/js/settings';
-const LOGGER = '../../src/js/logger';
-const INDEX = '../../src/js/translations/index';
+const SETTINGS = '../../src/ts/settings';
+const LOGGER = '../../src/ts/logger';
+const INDEX = '../../src/ts/translations/index';
 
 /** Fresh module instance (the manager is module-level and reads settings on load). */
 const load = (getSetting: () => unknown) => {
     jest.resetModules();
     jest.doMock(SETTINGS, () => ({ getSetting: jest.fn(getSetting) }));
-    const logger = jest.mocked(require(LOGGER) as typeof import('../../src/js/logger'));
+    const logger = jest.mocked(require(LOGGER) as typeof import('../../src/ts/logger'));
     const log = { warning: jest.fn() };
     logger.withCategory.mockReturnValue(invalid(log));
     return {
-        ...(require(INDEX) as typeof import('../../src/js/translations/index')),
-        settings: jest.mocked(require(SETTINGS) as typeof import('../../src/js/settings')),
+        ...(require(INDEX) as typeof import('../../src/ts/translations/index')),
+        settings: jest.mocked(require(SETTINGS) as typeof import('../../src/ts/settings')),
         logger,
         log,
     };

@@ -6,19 +6,19 @@
  * (happy paths) and cli-currency.test.ts (the --yes confirmation gate).
  */
 
-jest.mock('../../src/js/logger', () => {
+jest.mock('../../src/ts/logger', () => {
     const calls: { level: string; msg: unknown }[] = [];
     const rec = (level: string) => (msg: unknown) => calls.push({ level, msg });
     const cat = { info: rec('info'), error: rec('error'), success: rec('success') };
     return { __calls: calls, withCategory: jest.fn(() => cat) };
 });
 
-jest.mock('../../src/js/apiFactory', () => {
+jest.mock('../../src/ts/apiFactory', () => {
     const mw = { isAuthenticated: jest.fn(() => true), getActiveChallenges: jest.fn(), applyBoost: jest.fn() };
     return { __mw: mw, getMiddleware: jest.fn(() => mw) };
 });
 
-jest.mock('../../src/js/ipc/actions.handlers', () => {
+jest.mock('../../src/ts/ipc/actions.handlers', () => {
     const handlers = {
         'apply-boost-to-entry': jest.fn(),
         'play-auto-turbo': jest.fn(),
@@ -28,7 +28,7 @@ jest.mock('../../src/js/ipc/actions.handlers', () => {
     return { __handlers: handlers, buildHandlers: () => handlers };
 });
 
-jest.mock('../../src/js/ipc/currency.handlers', () => {
+jest.mock('../../src/ts/ipc/currency.handlers', () => {
     const handlers = {
         'key-unlock-boost': jest.fn(),
         'preview-swap-photo': jest.fn(),
@@ -40,23 +40,23 @@ jest.mock('../../src/js/ipc/currency.handlers', () => {
     return { __handlers: handlers, buildHandlers: () => handlers };
 });
 
-import loggerModule = require('../../src/js/logger');
+import loggerModule = require('../../src/ts/logger');
 const logger = jest.mocked(invalid<typeof loggerModule & { __calls: { level: string; msg: unknown }[] }>(loggerModule));
 const { __mw: mw } = jest.mocked(
-    require('../../src/js/apiFactory') as typeof apiFactoryModule & {
+    require('../../src/ts/apiFactory') as typeof apiFactoryModule & {
         __mw: Pick<Middleware, 'isAuthenticated' | 'getActiveChallenges' | 'applyBoost'>;
     },
 );
 const h: jest.Mocked<EdgeHandlers> = {
     ...invalid<{ __handlers: jest.Mocked<Pick<ActionHandlers, ActionChannel>> }>(
-        require('../../src/js/ipc/actions.handlers'),
+        require('../../src/ts/ipc/actions.handlers'),
     ).__handlers,
-    ...invalid<{ __handlers: jest.Mocked<CurrencyHandlers> }>(require('../../src/js/ipc/currency.handlers')).__handlers,
+    ...invalid<{ __handlers: jest.Mocked<CurrencyHandlers> }>(require('../../src/ts/ipc/currency.handlers')).__handlers,
 };
-import actions = require('../../src/js/cli/commands/actions');
-import type * as apiFactoryModule from '../../src/js/apiFactory';
-import type * as actionsHandlersModule from '../../src/js/ipc/actions.handlers';
-import type * as currencyHandlersModule from '../../src/js/ipc/currency.handlers';
+import actions = require('../../src/ts/cli/commands/actions');
+import type * as apiFactoryModule from '../../src/ts/apiFactory';
+import type * as actionsHandlersModule from '../../src/ts/ipc/actions.handlers';
+import type * as currencyHandlersModule from '../../src/ts/ipc/currency.handlers';
 import { invalid } from '../helpers/invalid';
 
 type Middleware = ReturnType<typeof apiFactoryModule.getMiddleware>;

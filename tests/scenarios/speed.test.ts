@@ -3,18 +3,18 @@
  * the other entries, and the speed-based selector and conditions.
  */
 
-import type * as speedModule from '../../src/js/scenarios/speed';
-import type * as selectorsModule from '../../src/js/scenarios/selectors';
-import type * as conditionsModule from '../../src/js/scenarios/conditions';
-import type { VoteHistory } from '../../src/js/scenarios/speed';
-import type { Challenge } from '../../src/js/types/gurushots';
-import type { ComparisonOp, Duration, EntryCondition, ScenarioCondition } from '../../src/js/types/scenario';
+import type * as speedModule from '../../src/ts/scenarios/speed';
+import type * as selectorsModule from '../../src/ts/scenarios/selectors';
+import type * as conditionsModule from '../../src/ts/scenarios/conditions';
+import type { VoteHistory } from '../../src/ts/scenarios/speed';
+import type { Challenge } from '../../src/ts/types/gurushots';
+import type { ComparisonOp, Duration, EntryCondition, ScenarioCondition } from '../../src/ts/types/scenario';
 import { invalid } from '../helpers/invalid';
 
 const { recordVoteSample, votesPerHour, speedRatio, SAMPLE_SPACING_SEC, HISTORY_KEEP_SEC, MAX_SAMPLES } =
-    require('../../src/js/scenarios/speed') as typeof speedModule;
-const { selectEntry } = require('../../src/js/scenarios/selectors') as typeof selectorsModule;
-const { evaluateCondition } = require('../../src/js/scenarios/conditions') as typeof conditionsModule;
+    require('../../src/ts/scenarios/speed') as typeof speedModule;
+const { selectEntry } = require('../../src/ts/scenarios/selectors') as typeof selectorsModule;
+const { evaluateCondition } = require('../../src/ts/scenarios/conditions') as typeof conditionsModule;
 
 const NOW = 1_800_000_000;
 const H = 3600;

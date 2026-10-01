@@ -5,7 +5,7 @@
  * shipped vectors are covered by tagResolver.test.ts.
  */
 
-jest.mock('../../src/js/services/semantic/lexicon', () => ({
+jest.mock('../../src/ts/services/semantic/lexicon', () => ({
     isAvailable: jest.fn(async () => true),
     embed: jest.fn(() => new Float64Array([1, 0])),
     cosine: jest.fn(() => 0.99),
@@ -13,11 +13,11 @@ jest.mock('../../src/js/services/semantic/lexicon', () => ({
     concreteness: jest.fn(() => null),
 }));
 
-import lexiconModule = require('../../src/js/services/semantic/lexicon');
+import lexiconModule = require('../../src/ts/services/semantic/lexicon');
 const lexicon = jest.mocked(lexiconModule);
-import type * as tagResolverModule from '../../src/js/services/tagResolver';
+import type * as tagResolverModule from '../../src/ts/services/tagResolver';
 import { invalid } from '../helpers/invalid';
-const { resolveTermsToTags } = require('../../src/js/services/tagResolver') as typeof tagResolverModule;
+const { resolveTermsToTags } = require('../../src/ts/services/tagResolver') as typeof tagResolverModule;
 
 const challenge = { id: 1, title: 'Stairs', welcome_message: '' };
 const deps = (tags: string[]) => ({

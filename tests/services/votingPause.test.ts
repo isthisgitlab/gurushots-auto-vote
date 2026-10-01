@@ -16,15 +16,15 @@
  * through the real wallClock module with timezone mocked to 'UTC'.
  */
 
-import settingsModule = require('../../src/js/settings');
+import settingsModule = require('../../src/ts/settings');
 const settings = jest.mocked(settingsModule);
-import VotingLogic = require('../../src/js/services/VotingLogic');
+import VotingLogic = require('../../src/ts/services/VotingLogic');
 import type * as challengeFixturesModule from '../helpers/challengeFixtures';
 import { invalid } from '../helpers/invalid';
 const { buildChallenge: buildBaseChallenge } =
     require('../helpers/challengeFixtures') as typeof challengeFixturesModule;
 
-jest.mock('../../src/js/settings');
+jest.mock('../../src/ts/settings');
 
 const NOW = Math.floor(Date.UTC(2026, 0, 15, 12, 0, 0) / 1000);
 

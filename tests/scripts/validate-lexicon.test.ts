@@ -6,13 +6,13 @@
  * fatal path stops exactly where the real process would.
  */
 
-jest.mock('../../src/js/services/semantic/lexicon', () => ({
+jest.mock('../../src/ts/services/semantic/lexicon', () => ({
     __esModule: true,
-    ...jest.requireActual<typeof import('../../src/js/services/semantic/lexicon')>(
-        '../../src/js/services/semantic/lexicon',
+    ...jest.requireActual<typeof import('../../src/ts/services/semantic/lexicon')>(
+        '../../src/ts/services/semantic/lexicon',
     ),
 }));
-import lexiconModule = require('../../src/js/services/semantic/lexicon');
+import lexiconModule = require('../../src/ts/services/semantic/lexicon');
 const lexicon = jest.mocked(lexiconModule);
 import type * as validate_lexiconModule from '../../scripts/validate-lexicon';
 import type { ConceptsConfig } from '../../scripts/build-lexicon';

@@ -4,7 +4,7 @@
  * test mock's t() returns the key, so the button's title is 'logs.title'.
  */
 import { fireEvent, render, screen } from './helpers/test-utils';
-import type { RendererGlobals } from '../../src/js/types/capacitor';
+import type { RendererGlobals } from '../../src/ts/types/capacitor';
 import { Navbar } from '@/components/layout/Navbar';
 
 const g = globalThis as RendererGlobals;

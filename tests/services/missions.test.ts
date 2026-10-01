@@ -4,14 +4,14 @@
  * change-only summary log, and counting a landed action down.
  */
 
-jest.mock('../../src/js/logger', () => {
+jest.mock('../../src/ts/logger', () => {
     const level = { info: jest.fn(), warning: jest.fn() };
     return { withCategory: jest.fn(() => level), __level: level };
 });
-jest.mock('../../src/js/settings', () => ({ getEffectiveSetting: jest.fn() }));
+jest.mock('../../src/ts/settings', () => ({ getEffectiveSetting: jest.fn() }));
 
-import type { Mission } from '../../src/js/types/gurushots';
-import type { CategoryLogger } from '../../src/js/logger';
+import type { Mission } from '../../src/ts/types/gurushots';
+import type { CategoryLogger } from '../../src/ts/logger';
 import { invalid } from '../helpers/invalid';
 
 type LoggerMock = typeof loggerModule & {
@@ -21,11 +21,11 @@ type LoggerMock = typeof loggerModule & {
     };
 };
 
-import loggerModule = require('../../src/js/logger');
+import loggerModule = require('../../src/ts/logger');
 const logger = jest.mocked(invalid<LoggerMock>(loggerModule));
-import settingsModule = require('../../src/js/settings');
+import settingsModule = require('../../src/ts/settings');
 const settings = jest.mocked(settingsModule);
-import type * as missionsModule from '../../src/js/services/missions';
+import type * as missionsModule from '../../src/ts/services/missions';
 const {
     classifyMission,
     loadMissionNeeds,
@@ -33,7 +33,7 @@ const {
     registerMissionNeeds,
     recordManualTurboWin,
     resetMissionLog,
-} = require('../../src/js/services/missions') as typeof missionsModule;
+} = require('../../src/ts/services/missions') as typeof missionsModule;
 
 const NOW_MS = 1_790_514_858_000;
 const NOW_SEC = NOW_MS / 1000;

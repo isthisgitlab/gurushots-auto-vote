@@ -12,11 +12,11 @@
  *     un-namespaced shared store must never be purged by mock ids)
  */
 
-jest.mock('../../src/js/settings', () => ({
+jest.mock('../../src/ts/settings', () => ({
     getEffectiveSetting: jest.fn(() => false),
 }));
 
-jest.mock('../../src/js/services/VotingLogic', () => ({
+jest.mock('../../src/ts/services/VotingLogic', () => ({
     isWithinEmergencyWindow: jest.fn(() => false),
     shouldPlayAutoTurbo: jest.fn(() => false),
     isTurboEarnSaved: jest.fn(() => false),
@@ -28,7 +28,7 @@ jest.mock('../../src/js/services/VotingLogic', () => ({
     evaluateVotingDecision: jest.fn(() => ({ shouldVote: false, voteReason: 'test skip', targetExposure: 100 })),
 }));
 
-jest.mock('../../src/js/services/autoFill', () => ({
+jest.mock('../../src/ts/services/autoFill', () => ({
     maybeAutoFillChallenge: jest.fn(async () => 'skipped'),
     maybeEmergencyFillChallenge: jest.fn(async () => 'skipped'),
     submitNewEntryForAction: jest.fn(async () => ({ ok: false, reason: 'none' })),
@@ -36,27 +36,27 @@ jest.mock('../../src/js/services/autoFill', () => ({
     reflectEntryFlag: jest.fn(),
 }));
 
-jest.mock('../../src/js/voting/cancellation', () => ({
+jest.mock('../../src/ts/voting/cancellation', () => ({
     isCancelled: jest.fn(() => false),
     setCancelled: jest.fn(),
     reset: jest.fn(),
 }));
 
-import votingLogicModule = require('../../src/js/services/VotingLogic');
+import votingLogicModule = require('../../src/ts/services/VotingLogic');
 const votingLogic = jest.mocked(votingLogicModule);
-import autoFillModule = require('../../src/js/services/autoFill');
+import autoFillModule = require('../../src/ts/services/autoFill');
 const autoFill = jest.mocked(autoFillModule);
-import cancellationModule = require('../../src/js/voting/cancellation');
+import cancellationModule = require('../../src/ts/voting/cancellation');
 const cancellation = jest.mocked(cancellationModule);
-import type * as votingOrchestratorModule from '../../src/js/services/votingOrchestrator';
+import type * as votingOrchestratorModule from '../../src/ts/services/votingOrchestrator';
 import type * as challengeFixturesModule from '../helpers/challengeFixtures';
-import type * as settingsModule from '../../src/js/settings';
-import type { Challenge } from '../../src/js/types/gurushots';
-import type { VotingPassDeps } from '../../src/js/types/votingPass';
-import { claimTurboRun, releaseTurboRun } from '../../src/js/services/turboRunLock';
-import { recordManualTurboWin } from '../../src/js/services/missions';
+import type * as settingsModule from '../../src/ts/settings';
+import type { Challenge } from '../../src/ts/types/gurushots';
+import type { VotingPassDeps } from '../../src/ts/types/votingPass';
+import { claimTurboRun, releaseTurboRun } from '../../src/ts/services/turboRunLock';
+import { recordManualTurboWin } from '../../src/ts/services/missions';
 import { invalid } from '../helpers/invalid';
-const { runVotingPass } = require('../../src/js/services/votingOrchestrator') as typeof votingOrchestratorModule;
+const { runVotingPass } = require('../../src/ts/services/votingOrchestrator') as typeof votingOrchestratorModule;
 const { buildChallenge } = require('../helpers/challengeFixtures') as typeof challengeFixturesModule;
 
 const NOW = Math.floor(Date.now() / 1000);
@@ -449,7 +449,7 @@ describe('mock-parity behaviors on the shared path', () => {
     // getActiveChallenges there would silently keep boost/turbo fill-new on
     // stale pass-start data (no pre-submit live re-check).
     test('boost fill-new passes getActiveChallenges for the pre-submit live re-check', async () => {
-        const settings = jest.mocked(require('../../src/js/settings') as typeof settingsModule);
+        const settings = jest.mocked(require('../../src/ts/settings') as typeof settingsModule);
         const challenge = makeChallenge({
             member: {
                 boost: { state: 'AVAILABLE', timeout: NOW + 600 },
@@ -498,7 +498,7 @@ describe('mock-parity behaviors on the shared path', () => {
     // fill-new callers must NOT fire the fallback apply — it is a known-doomed
     // call that would only add a second failure log.
     test('boost fill-new challenge-gone → no fallback applyBoost call', async () => {
-        const settings = jest.mocked(require('../../src/js/settings') as typeof settingsModule);
+        const settings = jest.mocked(require('../../src/ts/settings') as typeof settingsModule);
         const challenge = makeChallenge({
             member: {
                 boost: { state: 'AVAILABLE', timeout: NOW + 600 },
@@ -540,7 +540,7 @@ describe('mock-parity behaviors on the shared path', () => {
     // challenge.member.ranking.entries and corrupting getSlotsRemaining plus
     // boost/turbo entry selection for the rest of the pass.
     test('boost fill-new success → reflectNewEntry called exactly once with the submitted id', async () => {
-        const settings = jest.mocked(require('../../src/js/settings') as typeof settingsModule);
+        const settings = jest.mocked(require('../../src/ts/settings') as typeof settingsModule);
         const challenge = makeChallenge({
             member: {
                 boost: { state: 'AVAILABLE', timeout: NOW + 600 },
@@ -693,7 +693,7 @@ describe('voting path', () => {
 });
 
 describe('voteOnNewEntry — gate, arm, record', () => {
-    const settings = jest.mocked(require('../../src/js/settings') as typeof settingsModule);
+    const settings = jest.mocked(require('../../src/ts/settings') as typeof settingsModule);
 
     /** Minimal in-memory tracker with call spies, matching the deps contract. */
     const makeTracker = (seed: Record<string, string[]> = {}) => {

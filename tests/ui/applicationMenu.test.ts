@@ -1,12 +1,12 @@
 /**
- * Native application menu (src/js/ui/applicationMenu.ts): template shape per
+ * Native application menu (src/ts/ui/applicationMenu.ts): template shape per
  * platform, translation lookup, and the Help-menu click actions (update check,
  * logs window, about dialog). Electron and AutoUpdater are mocked.
  */
 
 import type { BrowserWindowConstructorOptions, MessageBoxOptions } from 'electron';
-import type * as LoggerModule from '../../src/js/logger';
-import type * as MenuModule from '../../src/js/ui/applicationMenu';
+import type * as LoggerModule from '../../src/ts/logger';
+import type * as MenuModule from '../../src/ts/ui/applicationMenu';
 import { invalid } from '../helpers/invalid';
 
 /** The mocked electron's view of a menu template entry (what the tests read back). */
@@ -79,11 +79,11 @@ jest.mock('electron', () => {
 // The menu reads the Node translation manager's current language; a test
 // swaps `translate` to simulate a language switch.
 const mockTranslation = { translate: (k: string): string => k };
-jest.mock('../../src/js/translations/index', () => ({
+jest.mock('../../src/ts/translations/index', () => ({
     translationManager: { t: (k: string) => mockTranslation.translate(k) },
 }));
 
-jest.mock('../../src/js/services/AutoUpdater', () => ({
+jest.mock('../../src/ts/services/AutoUpdater', () => ({
     AutoUpdater: jest.fn().mockImplementation((win) => {
         mockAutoUpdaterCtor(win);
         return { checkForUpdates: mockAutoUpdaterCheck };
@@ -103,8 +103,8 @@ let menuModule: typeof MenuModule;
 function loadMenu() {
     jest.resetModules();
     electron = require('electron') as typeof electron;
-    logger = jest.mocked(require('../../src/js/logger') as typeof LoggerModule);
-    menuModule = require('../../src/js/ui/applicationMenu') as typeof menuModule;
+    logger = jest.mocked(require('../../src/ts/logger') as typeof LoggerModule);
+    menuModule = require('../../src/ts/ui/applicationMenu') as typeof menuModule;
 }
 
 function builtTemplate() {

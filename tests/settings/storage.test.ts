@@ -6,9 +6,9 @@
  * settings (incl. the token) stay in sync between app and background.
  */
 
-import type * as storageModule from '../../src/js/settings/storage';
+import type * as storageModule from '../../src/ts/settings/storage';
 import type { GetOptions, GetResult, SetOptions } from '@capacitor/preferences';
-import type { AndroidHeadlessStore } from '../../src/js/types/settings';
+import type { AndroidHeadlessStore } from '../../src/ts/types/settings';
 
 const g = globalThis as typeof globalThis & {
     Capacitor?: { isNativePlatform: () => boolean; getPlatform: () => string };
@@ -38,7 +38,7 @@ jest.mock(
     { virtual: true },
 );
 
-const { storage, createJsonStore } = require('../../src/js/settings/storage') as typeof storageModule;
+const { storage, createJsonStore } = require('../../src/ts/settings/storage') as typeof storageModule;
 
 describe('storage — headless service branch', () => {
     let store: HeadlessStoreDouble;
@@ -125,7 +125,7 @@ describe('storage — capacitor write-behind', () => {
         mockPrefGet.mockResolvedValue({ value: null });
         // isCapacitor() keys off globalThis.Capacitor.isNativePlatform.
         g.Capacitor = { isNativePlatform: () => true, getPlatform: () => 'android' };
-        const mod = require('../../src/js/settings/storage') as typeof storageModule;
+        const mod = require('../../src/ts/settings/storage') as typeof storageModule;
         capStorage = mod.storage;
         flushPendingWrites = mod.flushPendingWrites;
     });

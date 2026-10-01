@@ -5,9 +5,9 @@
  * with its collaborators doMock'ed.
  */
 
-import type { RendererGlobals } from '../../src/js/types/capacitor';
+import type { RendererGlobals } from '../../src/ts/types/capacitor';
 
-const SRC = '../../src/js';
+const SRC = '../../src/ts';
 
 const flush = async () => {
     for (let i = 0; i < 20; i += 1) await Promise.resolve();

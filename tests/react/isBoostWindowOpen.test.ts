@@ -6,9 +6,9 @@
  * the CLI status command both filter on this rule.
  */
 
-import type * as formattersModule from '../../src/js/react/utils/formatters';
+import type * as formattersModule from '../../src/ts/react/utils/formatters';
 
-const { isBoostWindowOpen } = require('../../src/js/react/utils/formatters') as typeof formattersModule;
+const { isBoostWindowOpen } = require('../../src/ts/react/utils/formatters') as typeof formattersModule;
 
 describe('isBoostWindowOpen', () => {
     const now = 1_000_000;

@@ -6,7 +6,7 @@
  * be pinned per scenario.
  */
 
-import type * as LoggerModule from '../../src/js/logger';
+import type * as LoggerModule from '../../src/ts/logger';
 import { invalid } from '../helpers/invalid';
 
 const LOGS_DIR = '/ud/logs';
@@ -55,8 +55,8 @@ const loadLogger = ({
     try {
         jest.isolateModules(() => {
             jest.doMock('fs', () => fs);
-            jest.doMock('../../src/js/runtime', () => runtime);
-            logger = jest.requireActual<typeof import('../../src/js/logger')>('../../src/js/logger');
+            jest.doMock('../../src/ts/runtime', () => runtime);
+            logger = jest.requireActual<typeof import('../../src/ts/logger')>('../../src/ts/logger');
         });
     } finally {
         process.argv = origArgv;
@@ -241,7 +241,7 @@ describe('periodic cleanup interval', () => {
     });
 
     test('the tsx source run via cli.ts is a CLI run too', () => {
-        const { fs } = loadLogger({ argv1: '/app/src/js/cli/cli.ts' });
+        const { fs } = loadLogger({ argv1: '/app/src/ts/cli/cli.ts' });
         fs.readdirSync.mockClear();
         jest.advanceTimersByTime(60 * 60 * 1000);
         expect(fs.readdirSync).toHaveBeenCalledTimes(1);

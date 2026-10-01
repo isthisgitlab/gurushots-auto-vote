@@ -9,8 +9,8 @@ import { fireEvent, render, screen, waitFor } from '@testing-library/preact';
 import { invalid } from '../helpers/invalid';
 import { pickOption } from './helpers/test-utils';
 
-import type { RendererGlobals } from '../../src/js/types/capacitor';
-import type { WindowApi } from '../../src/js/types/ipc';
+import type { RendererGlobals } from '../../src/ts/types/capacitor';
+import type { WindowApi } from '../../src/ts/types/ipc';
 import type * as LoginModule from '@/pages/Login';
 
 const API_METHODS = ['getSettings', 'getEnvironmentInfo', 'authenticate', 'setSetting', 'login'] as const;

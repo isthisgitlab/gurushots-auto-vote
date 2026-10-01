@@ -6,7 +6,7 @@
 import { act, render, screen, waitFor, fireEvent, within } from './helpers/test-utils';
 import type { ComponentProps } from 'preact';
 import { ScenarioBuilder } from '@/components/app/scenarioBuilder/ScenarioBuilder';
-import type { ScenarioDraft, ScenarioDraftRule } from '../../src/js/types/scenarioBuilder';
+import type { ScenarioDraft, ScenarioDraftRule } from '../../src/ts/types/scenarioBuilder';
 import { invalid } from '../helpers/invalid';
 
 /** The saved document as these tests read it: each phase they inspect has rules, and every action a type. */

@@ -2,9 +2,9 @@
  * mock/challenges.ts — the generated active-challenge list for mock mode.
  */
 
-import type * as challengesModule from '../../src/js/mock/challenges';
+import type * as challengesModule from '../../src/ts/mock/challenges';
 
-const { generateMockChallenges } = require('../../src/js/mock/challenges') as typeof challengesModule;
+const { generateMockChallenges } = require('../../src/ts/mock/challenges') as typeof challengesModule;
 
 afterEach(() => jest.restoreAllMocks());
 

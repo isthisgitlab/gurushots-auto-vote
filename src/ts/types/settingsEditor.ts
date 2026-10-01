@@ -1,6 +1,6 @@
 /**
  * Types shared by the settings-editing components (the global and
- * per-challenge settings modals and their fields, src/js/react/components/app/
+ * per-challenge settings modals and their fields, src/ts/react/components/app/
  * Setting*.jsx and friends). Type-only: nothing here exists at runtime.
  */
 import type { SerializableSchemaEntry } from '../ipc/settings.handlers';

@@ -6,9 +6,9 @@
 
 import axiosModule = require('axios');
 const axios = jest.mocked(axiosModule);
-import type * as UpdateCheckerModule from '../../src/js/services/UpdateChecker';
+import type * as UpdateCheckerModule from '../../src/ts/services/UpdateChecker';
 const { checkForUpdates, compareSemver, pickAsset, getReleasesUrl, REPO_OWNER, REPO_NAME } =
-    require('../../src/js/services/UpdateChecker') as typeof UpdateCheckerModule;
+    require('../../src/ts/services/UpdateChecker') as typeof UpdateCheckerModule;
 
 const LATEST_URL = `https://api.github.com/repos/${REPO_OWNER}/${REPO_NAME}/releases/latest`;
 const LIST_URL = `https://api.github.com/repos/${REPO_OWNER}/${REPO_NAME}/releases?per_page=10`;

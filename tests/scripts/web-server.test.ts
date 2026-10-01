@@ -5,12 +5,12 @@
  */
 
 import type * as scriptModule from '../../scripts/web-server';
-import type * as serverModule from '../../src/js/web/server';
+import type * as serverModule from '../../src/ts/web/server';
 
-jest.mock('../../src/js/web/server', () => ({ startWebServer: jest.fn() }));
+jest.mock('../../src/ts/web/server', () => ({ startWebServer: jest.fn() }));
 
 const { main, parsePort } = require('../../scripts/web-server') as typeof scriptModule;
-const server = jest.mocked(require('../../src/js/web/server') as typeof serverModule);
+const server = jest.mocked(require('../../src/ts/web/server') as typeof serverModule);
 
 describe('scripts/web-server.ts', () => {
     let logSpy: jest.SpiedFunction<typeof console.log>;

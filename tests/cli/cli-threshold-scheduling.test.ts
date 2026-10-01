@@ -1,18 +1,18 @@
 /**
  * CLI/Node threshold-entry calculation.
  *
- * The logic lives in src/js/scheduling/thresholdWindow.ts, consumed by
+ * The logic lives in src/ts/scheduling/thresholdWindow.ts, consumed by
  * runScheduler.ts with a synchronous settings.getEffectiveSetting resolver.
  * These tests import the real module and use a sync resolver to represent the
  * CLI/Node path. Real scheduler switch/revert behavior is covered by
  * tests/scheduling/runScheduler.test.ts.
  */
 
-import type * as thresholdWindowModule from '../../src/js/scheduling/thresholdWindow';
+import type * as thresholdWindowModule from '../../src/ts/scheduling/thresholdWindow';
 import { invalid } from '../helpers/invalid';
 
 const { calculateNextThresholdEntry } =
-    require('../../src/js/scheduling/thresholdWindow') as typeof thresholdWindowModule;
+    require('../../src/ts/scheduling/thresholdWindow') as typeof thresholdWindowModule;
 
 // CLI/Node resolver shape: synchronous return (settings.getEffectiveSetting).
 const resolveThreshold = () => 5;

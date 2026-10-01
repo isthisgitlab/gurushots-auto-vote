@@ -14,14 +14,14 @@ import { AutovoteProvider, useAutovote } from '@/contexts/AutovoteContext';
 import { mockApi } from './helpers/setup';
 import { invalid } from '../helpers/invalid';
 
-jest.mock('../../src/js/services/ForegroundServiceController', () => ({
+jest.mock('../../src/ts/services/ForegroundServiceController', () => ({
     __esModule: true,
     start: jest.fn().mockResolvedValue(undefined),
     stop: jest.fn().mockResolvedValue(undefined),
     update: jest.fn(),
 }));
 
-jest.mock('../../src/js/services/NativeAutovoteBridge', () => ({
+jest.mock('../../src/ts/services/NativeAutovoteBridge', () => ({
     __esModule: true,
     start: jest.fn().mockResolvedValue({ available: false }),
     stop: jest.fn().mockResolvedValue({ available: false }),

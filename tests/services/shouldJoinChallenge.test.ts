@@ -5,10 +5,10 @@
  * caps gate paid joins (both 0 = free only).
  */
 
-import type * as VotingLogicModule from '../../src/js/services/VotingLogic';
+import type * as VotingLogicModule from '../../src/ts/services/VotingLogic';
 import { invalid } from '../helpers/invalid';
 
-const { shouldJoinChallenge } = require('../../src/js/services/VotingLogic') as typeof VotingLogicModule;
+const { shouldJoinChallenge } = require('../../src/ts/services/VotingLogic') as typeof VotingLogicModule;
 
 type JoinParams = Parameters<typeof shouldJoinChallenge>[0];
 

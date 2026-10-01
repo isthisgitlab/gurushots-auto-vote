@@ -13,19 +13,19 @@ jest.mock('node:fs', () => {
 });
 jest.unmock('path');
 jest.unmock('node:path');
-jest.mock('../../src/js/runtime', () => ({
+jest.mock('../../src/ts/runtime', () => ({
     __esModule: true,
-    ...jest.requireActual<typeof import('../../src/js/runtime')>('../../src/js/runtime'),
+    ...jest.requireActual<typeof import('../../src/ts/runtime')>('../../src/ts/runtime'),
 }));
 
 import * as fs from 'node:fs';
 import * as os from 'node:os';
 import * as path from 'node:path';
-import type * as runtimeModule from '../../src/js/runtime';
-import type * as storageModule from '../../src/js/settings/storage';
+import type * as runtimeModule from '../../src/ts/runtime';
+import type * as storageModule from '../../src/ts/settings/storage';
 
-const runtime = require('../../src/js/runtime') as typeof runtimeModule;
-const { storage, createJsonStore } = require('../../src/js/settings/storage') as typeof storageModule;
+const runtime = require('../../src/ts/runtime') as typeof runtimeModule;
+const { storage, createJsonStore } = require('../../src/ts/settings/storage') as typeof storageModule;
 
 const modeOf = (p: string) => fs.statSync(p).mode & 0o777;
 

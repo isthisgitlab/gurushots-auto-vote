@@ -3,18 +3,18 @@
  * data the app cannot read never makes a condition true.
  */
 
-import type * as conditionsModule from '../../src/js/scenarios/conditions';
-import type * as selectorsModule from '../../src/js/scenarios/selectors';
-import type * as wallClockModule from '../../src/js/scheduling/wallClock';
-import type { Challenge, RankingEntry } from '../../src/js/types/gurushots';
-import type { ComparisonOp, EntryCondition, ScenarioCondition, ScenarioSelector } from '../../src/js/types/scenario';
+import type * as conditionsModule from '../../src/ts/scenarios/conditions';
+import type * as selectorsModule from '../../src/ts/scenarios/selectors';
+import type * as wallClockModule from '../../src/ts/scheduling/wallClock';
+import type { Challenge, RankingEntry } from '../../src/ts/types/gurushots';
+import type { ComparisonOp, EntryCondition, ScenarioCondition, ScenarioSelector } from '../../src/ts/types/scenario';
 import { invalid } from '../helpers/invalid';
-import type { ConditionContext } from '../../src/js/scenarios/conditions';
+import type { ConditionContext } from '../../src/ts/scenarios/conditions';
 
 const { evaluateCondition, allHold, firstFailing, compare } =
-    require('../../src/js/scenarios/conditions') as typeof conditionsModule;
-const { selectEntry } = require('../../src/js/scenarios/selectors') as typeof selectorsModule;
-const { epochForWallTime } = require('../../src/js/scheduling/wallClock') as typeof wallClockModule;
+    require('../../src/ts/scenarios/conditions') as typeof conditionsModule;
+const { selectEntry } = require('../../src/ts/scenarios/selectors') as typeof selectorsModule;
+const { epochForWallTime } = require('../../src/ts/scheduling/wallClock') as typeof wallClockModule;
 
 const TZ = 'Europe/Riga';
 const at = (y: number, m: number, d: number, hh: number, mm: number, tz = TZ) => epochForWallTime(y, m, d, hh, mm, tz);

@@ -1,6 +1,6 @@
 /**
  * Unit tests for the React autovote scheduler helpers
- * (src/js/react/contexts/autovoteScheduler.ts).
+ * (src/ts/react/contexts/autovoteScheduler.ts).
  *
  * These tests import the actual exports rather than re-declaring the logic,
  * so they exercise the real module (including the revert-to-normal-cadence
@@ -10,13 +10,13 @@
  * the node test environment has no `window`, so we inject a global stub.
  */
 
-import type * as autovoteSchedulerModule from '../../src/js/react/contexts/autovoteScheduler';
-import type { WindowApi } from '../../src/js/types/ipc';
-import type { Challenge } from '../../src/js/types/gurushots';
+import type * as autovoteSchedulerModule from '../../src/ts/react/contexts/autovoteScheduler';
+import type { WindowApi } from '../../src/ts/types/ipc';
+import type { Challenge } from '../../src/ts/types/gurushots';
 import { invalid } from '../helpers/invalid';
 
 const { computeNextCycleDelayMs } =
-    require('../../src/js/react/contexts/autovoteScheduler') as typeof autovoteSchedulerModule;
+    require('../../src/ts/react/contexts/autovoteScheduler') as typeof autovoteSchedulerModule;
 
 describe('autovoteScheduler helpers', () => {
     let getEffectiveSetting: jest.MockedFunction<WindowApi['getEffectiveSetting']>;

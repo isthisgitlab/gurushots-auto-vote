@@ -1,5 +1,5 @@
 /**
- * Types for the renderer's pure utils (src/js/react/utils/). Type-only:
+ * Types for the renderer's pure utils (src/ts/react/utils/). Type-only:
  * nothing here exists at runtime.
  */
 import type { Challenge, ChallengeMember, MemberRanking, RankingExposure } from './gurushots';

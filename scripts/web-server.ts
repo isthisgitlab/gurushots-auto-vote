@@ -1,11 +1,11 @@
 #!/usr/bin/env node
 
-// Serves the web UI (src/js/web/server.ts) on http://localhost:<port>/ from
+// Serves the web UI (src/ts/web/server.ts) on http://localhost:<port>/ from
 // the built renderer in dist/. `pnpm web` builds the CSS and bundles first;
 // pass --port=<n> (default 4400, 0 = any free port).
-import { startWebServer } from '../src/js/web/server';
-import { appPath } from '../src/js/appPaths';
-import { errorMessage } from '../src/js/errorMessage';
+import { startWebServer } from '../src/ts/web/server';
+import { appPath } from '../src/ts/appPaths';
+import { errorMessage } from '../src/ts/errorMessage';
 import { runIfMain } from './lib/run-if-main';
 
 const DEFAULT_PORT = 4400;

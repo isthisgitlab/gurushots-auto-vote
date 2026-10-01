@@ -13,8 +13,8 @@
 
 import { act, fireEvent, pickOption, render, screen, waitFor } from './helpers/test-utils';
 import { SettingsModal } from '@/components/app/SettingsModal';
-import type { TitleRule } from '../../src/js/types/settings';
-import type { UiResetHandler } from '../../src/js/types/settingsEditor';
+import type { TitleRule } from '../../src/ts/types/settings';
+import type { UiResetHandler } from '../../src/ts/types/settingsEditor';
 import type { useSettingsForm } from '@/hooks/useSettingsForm';
 import type { useSettingsSchema } from '@/api/useSettingsSchema';
 import { invalid } from '../helpers/invalid';

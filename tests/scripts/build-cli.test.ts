@@ -123,7 +123,7 @@ describe('build-cli', () => {
         await buildCli.bundleCli();
         expect(build).toHaveBeenCalledWith(
             expect.objectContaining({
-                entryPoints: [path.join(ROOT, 'src', 'js', 'cli', 'cli.ts')],
+                entryPoints: [path.join(ROOT, 'src', 'ts', 'cli', 'cli.ts')],
                 outfile: path.join(DIST_DIR, 'cli-bundled.js'),
                 platform: 'node',
                 format: 'cjs',

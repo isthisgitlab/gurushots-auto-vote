@@ -50,7 +50,7 @@ function ensureDir(p: string) {
 async function bundleCli() {
     console.log('🔨 Bundling CLI with esbuild...');
     await build({
-        entryPoints: [path.join(ROOT, 'src', 'js', 'cli', 'cli.ts')],
+        entryPoints: [path.join(ROOT, 'src', 'ts', 'cli', 'cli.ts')],
         bundle: true,
         platform: 'node',
         target: 'node26',
@@ -123,7 +123,7 @@ function generateSeaBlob(nodeBinary = process.execPath, { lite = false } = {}) {
     };
     // Embed the semantic-matching word-vector lexicon as a SEA asset so the
     // single binary can resolve it via node:sea.getAsset() — it is a runtime
-    // asset (loaded by src/js/services/semantic/assets.ts), never bundled into
+    // asset (loaded by src/ts/services/semantic/assets.ts), never bundled into
     // cli-bundled.js, so the JS-bundle budget is unaffected.
     const lexiconAsset = path.join(ROOT, 'src', 'assets', 'semantic-vectors.json');
     if (fs.existsSync(lexiconAsset)) {

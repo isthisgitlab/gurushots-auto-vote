@@ -17,16 +17,16 @@
  * so loadSettings/saveSettings round-trip without touching fs.
  */
 
-import type { AndroidHeadlessStore } from '../../src/js/types/settings';
-import settings = require('../../src/js/settings');
-import type * as intentProfilesModule from '../../src/js/settings/intentProfiles';
-import type * as schemaModule from '../../src/js/settings/schema';
-import type { SettingsSchemaEntry } from '../../src/js/settings/schema';
+import type { AndroidHeadlessStore } from '../../src/ts/types/settings';
+import settings = require('../../src/ts/settings');
+import type * as intentProfilesModule from '../../src/ts/settings/intentProfiles';
+import type * as schemaModule from '../../src/ts/settings/schema';
+import type { SettingsSchemaEntry } from '../../src/ts/settings/schema';
 const { INTENT_PROFILES, getIntentByName, intentValuesMatch } =
-    require('../../src/js/settings/intentProfiles') as typeof intentProfilesModule;
-const { validateSetting } = require('../../src/js/settings/schema') as typeof schemaModule;
+    require('../../src/ts/settings/intentProfiles') as typeof intentProfilesModule;
+const { validateSetting } = require('../../src/ts/settings/schema') as typeof schemaModule;
 
-jest.mock('../../src/js/logger', () => {
+jest.mock('../../src/ts/logger', () => {
     const scoped = { info: jest.fn(), error: jest.fn(), debug: jest.fn(), success: jest.fn(), warning: jest.fn() };
     return {
         info: jest.fn(),

@@ -7,7 +7,7 @@
  * module (newline / control-char / RTL / leading-dash / over-length).
  */
 
-import type * as deadlineNotificationsModule from '../../src/js/services/deadlineNotifications';
+import type * as deadlineNotificationsModule from '../../src/ts/services/deadlineNotifications';
 import { invalid } from '../helpers/invalid';
 
 const {
@@ -18,7 +18,7 @@ const {
     formatNotification,
     readNotificationConfig,
     ACTION_LABEL_KEY,
-} = require('../../src/js/services/deadlineNotifications') as typeof deadlineNotificationsModule;
+} = require('../../src/ts/services/deadlineNotifications') as typeof deadlineNotificationsModule;
 
 const NOW = 1_000_000;
 const ALL_ON = { autoFill: true, boost: true, turbo: true, emergencyFill: true };

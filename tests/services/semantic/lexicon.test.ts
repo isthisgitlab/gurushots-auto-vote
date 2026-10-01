@@ -21,17 +21,17 @@ const mockLexicon = JSON.parse(
     realFs.readFileSync(realPath.join(__dirname, '..', '..', '..', 'src', 'assets', 'semantic-vectors.json'), 'utf8'),
 ) as RawLexicon & { surfaces: Record<string, string> };
 
-jest.mock('../../../src/js/services/semantic/assets', () => ({
+jest.mock('../../../src/ts/services/semantic/assets', () => ({
     loadLexiconAsset: async () => mockLexicon,
     ASSET_NAME: 'semantic-vectors.json',
     __resetForTests: () => {},
 }));
 
-import lexicon = require('../../../src/js/services/semantic/lexicon');
-import type * as photoPickerModule from '../../../src/js/services/photoPicker';
-import type { RawLexicon } from '../../../src/js/types/semantic';
+import lexicon = require('../../../src/ts/services/semantic/lexicon');
+import type * as photoPickerModule from '../../../src/ts/services/photoPicker';
+import type { RawLexicon } from '../../../src/ts/types/semantic';
 import { invalid } from '../../helpers/invalid';
-const { SEMANTIC_MATCH_FLOOR } = require('../../../src/js/services/photoPicker') as typeof photoPickerModule;
+const { SEMANTIC_MATCH_FLOOR } = require('../../../src/ts/services/photoPicker') as typeof photoPickerModule;
 
 const FLOOR = SEMANTIC_MATCH_FLOOR / 100;
 

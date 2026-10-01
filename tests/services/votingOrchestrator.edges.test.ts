@@ -6,11 +6,11 @@
  * failure reporting.
  */
 
-jest.mock('../../src/js/settings', () => ({
+jest.mock('../../src/ts/settings', () => ({
     getEffectiveSetting: jest.fn(() => false),
 }));
 
-jest.mock('../../src/js/services/VotingLogic', () => ({
+jest.mock('../../src/ts/services/VotingLogic', () => ({
     shouldPlayAutoTurbo: jest.fn(() => false),
     isTurboEarnSaved: jest.fn(() => false),
     orderDeadlineActions: jest.fn(() => []),
@@ -25,7 +25,7 @@ jest.mock('../../src/js/services/VotingLogic', () => ({
     evaluateVotingDecision: jest.fn(() => ({ shouldVote: false, voteReason: 'test skip', targetExposure: 100 })),
 }));
 
-jest.mock('../../src/js/services/autoFill', () => ({
+jest.mock('../../src/ts/services/autoFill', () => ({
     maybeAutoFillChallenge: jest.fn(async () => 'skipped'),
     maybeEmergencyFillChallenge: jest.fn(async () => 'skipped'),
     submitNewEntryForAction: jest.fn(async () => ({ ok: false, reason: 'none' })),
@@ -33,28 +33,28 @@ jest.mock('../../src/js/services/autoFill', () => ({
     reflectEntryFlag: jest.fn(),
 }));
 
-jest.mock('../../src/js/voting/cancellation', () => ({
+jest.mock('../../src/ts/voting/cancellation', () => ({
     isCancelled: jest.fn(() => false),
     setCancelled: jest.fn(),
     reset: jest.fn(),
 }));
 
-import logger = require('../../src/js/logger');
-import settingsModule = require('../../src/js/settings');
+import logger = require('../../src/ts/logger');
+import settingsModule = require('../../src/ts/settings');
 const settings = jest.mocked(settingsModule);
-import votingLogicModule = require('../../src/js/services/VotingLogic');
+import votingLogicModule = require('../../src/ts/services/VotingLogic');
 const votingLogic = jest.mocked(votingLogicModule);
-import autoFillModule = require('../../src/js/services/autoFill');
+import autoFillModule = require('../../src/ts/services/autoFill');
 const autoFill = jest.mocked(autoFillModule);
-import type * as votingOrchestratorModule from '../../src/js/services/votingOrchestrator';
+import type * as votingOrchestratorModule from '../../src/ts/services/votingOrchestrator';
 import type * as challengeFixturesModule from '../helpers/challengeFixtures';
-import type * as entryAgeStoreModule from '../../src/js/entryAgeStore';
-import type { Challenge } from '../../src/js/types/gurushots';
-import type { VotingPassDeps } from '../../src/js/types/votingPass';
+import type * as entryAgeStoreModule from '../../src/ts/entryAgeStore';
+import type { Challenge } from '../../src/ts/types/gurushots';
+import type { VotingPassDeps } from '../../src/ts/types/votingPass';
 import { invalid } from '../helpers/invalid';
-const { runVotingPass } = require('../../src/js/services/votingOrchestrator') as typeof votingOrchestratorModule;
+const { runVotingPass } = require('../../src/ts/services/votingOrchestrator') as typeof votingOrchestratorModule;
 const { buildChallenge } = require('../helpers/challengeFixtures') as typeof challengeFixturesModule;
-const { createMemoryEntryAgeLedger } = require('../../src/js/entryAgeStore') as typeof entryAgeStoreModule;
+const { createMemoryEntryAgeLedger } = require('../../src/ts/entryAgeStore') as typeof entryAgeStoreModule;
 
 const NOW = Math.floor(Date.now() / 1000);
 

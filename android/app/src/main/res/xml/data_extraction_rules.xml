@@ -5,7 +5,7 @@
     transfer. Paired with android:allowBackup="false" this keeps the session token
     from being extractable via `adb backup`, Google auto-backup, or a restore onto
     another device — matching the deliberate 0o600 file-mode hardening applied to
-    the equivalent token store on Electron/CLI (src/js/settings/storage.js).
+    the equivalent token store on Electron/CLI (src/ts/settings/storage.ts).
 -->
 <data-extraction-rules>
     <cloud-backup>

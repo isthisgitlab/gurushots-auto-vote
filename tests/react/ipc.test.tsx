@@ -1,5 +1,5 @@
 /**
- * src/js/react/api/ipc.ts — the renderer's wrappers over the shell bridge:
+ * src/ts/react/api/ipc.ts — the renderer's wrappers over the shell bridge:
  * pass-throughs keep the bridge's arguments, results and rejections; the
  * optional subscription tolerates a host without the event; the logRenderer*
  * helpers are best-effort and never throw.

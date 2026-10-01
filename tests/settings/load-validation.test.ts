@@ -6,13 +6,13 @@
  * without fs.
  */
 
-import type { AndroidHeadlessStore } from '../../src/js/types/settings';
-import settings = require('../../src/js/settings');
-import type * as defaultsModule from '../../src/js/settings/defaults';
-const { getDefaultSettings } = require('../../src/js/settings/defaults') as typeof defaultsModule;
+import type { AndroidHeadlessStore } from '../../src/ts/types/settings';
+import settings = require('../../src/ts/settings');
+import type * as defaultsModule from '../../src/ts/settings/defaults';
+const { getDefaultSettings } = require('../../src/ts/settings/defaults') as typeof defaultsModule;
 
 const mockWarning = jest.fn<void, [message: string, data?: unknown]>();
-jest.mock('../../src/js/logger', () => ({
+jest.mock('../../src/ts/logger', () => ({
     info: jest.fn(),
     warning: jest.fn(),
     error: jest.fn(),

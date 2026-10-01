@@ -8,7 +8,7 @@ import { LogEntry, LogsEmptyState } from '@/components/logs/LogEntry';
 import { LogsNavbar } from '@/components/logs/LogsNavbar';
 import { mockApi, mockTranslator } from './helpers/setup';
 import { invalid } from '../helpers/invalid';
-import { createTranslator } from '../../src/js/translations/translator';
+import { createTranslator } from '../../src/ts/translations/translator';
 
 describe('LogEntry', () => {
     test('shows an existing log message in the selected Latvian language', async () => {

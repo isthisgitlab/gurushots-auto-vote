@@ -12,8 +12,8 @@
  */
 
 import type * as fsModule from 'node:fs';
-import type * as settingsModule from '../../src/js/settings';
-import type { AppSettings } from '../../src/js/types/settings';
+import type * as settingsModule from '../../src/ts/settings';
+import type { AppSettings } from '../../src/ts/types/settings';
 import type * as challengeFixturesModule from '../helpers/challengeFixtures';
 
 const { buildSettingsFixture: buildFixture } =
@@ -46,7 +46,7 @@ describe('time-unit migration in loadSettings', () => {
         // Re-require fs *after* resetModules so we share the fresh mock
         // instance that settings.ts will see.
         fs = jest.mocked(require('node:fs') as typeof fsModule);
-        settings = require('../../src/js/settings') as typeof settings;
+        settings = require('../../src/ts/settings') as typeof settings;
     });
 
     test('inflates minute-encoded global defaults by 60', () => {
@@ -215,7 +215,7 @@ describe('emergencyFill minute->second migration in loadSettings', () => {
         jest.resetModules();
         jest.clearAllMocks();
         fs = jest.mocked(require('node:fs') as typeof fsModule);
-        settings = require('../../src/js/settings') as typeof settings;
+        settings = require('../../src/ts/settings') as typeof settings;
     });
 
     test('inflates a minute-encoded global default by 60 (5 -> 300)', () => {

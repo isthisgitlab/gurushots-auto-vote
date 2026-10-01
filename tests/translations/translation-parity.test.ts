@@ -4,8 +4,8 @@
  * does NOT crash at runtime — t() silently falls back to English — so nothing
  * but this test catches the drift.
  */
-import english = require('../../src/js/translations/english');
-import latvian = require('../../src/js/translations/latvian');
+import english = require('../../src/ts/translations/english');
+import latvian = require('../../src/ts/translations/latvian');
 import type * as pathModule from 'node:path';
 import type * as fsModule from 'node:fs';
 import { invalid } from '../helpers/invalid';
@@ -67,9 +67,9 @@ describe('renderer translation keys exist', () => {
             return /\.(jsx?|tsx?|mjs)$/.test(d.name) ? [full] : [];
         });
 
-    test('every literal t() key in src/js/react resolves in english.ts', () => {
+    test('every literal t() key in src/ts/react resolves in english.ts', () => {
         const known = new Set(flattenKeys(english));
-        const root = path.join(__dirname, '../../src/js/react');
+        const root = path.join(__dirname, '../../src/ts/react');
         const missing = [];
         for (const file of listSources(root)) {
             const text = fs.readFileSync(file, 'utf8');

@@ -1,5 +1,5 @@
 /**
- * Edge paths of the thin IPC hooks in src/js/react/api/: the fallback error
+ * Edge paths of the thin IPC hooks in src/ts/react/api/: the fallback error
  * labels, the rejection / malformed-response branches, and the late-resolve
  * cancellation guards. Each hook is driven through the window.api mock.
  */
@@ -14,7 +14,7 @@ import { useMemberChallenges } from '@/api/useMemberChallenges';
 import { useSwapBacks } from '@/api/useSwapBacks';
 import { useActiveChallenges } from '@/api/useActiveChallenges';
 import { mockApi } from './helpers/setup';
-import type { Challenge } from '../../src/js/types/gurushots';
+import type { Challenge } from '../../src/ts/types/gurushots';
 import { invalid } from '../helpers/invalid';
 
 const deferred = () => {

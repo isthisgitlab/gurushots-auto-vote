@@ -8,16 +8,16 @@
  * semantic tier under tests written without it.
  */
 
-jest.mock('../../src/js/services/semantic/lexicon', () => ({
+jest.mock('../../src/ts/services/semantic/lexicon', () => ({
     __esModule: true,
-    ...jest.requireActual<typeof import('../../src/js/services/semantic/lexicon')>(
-        '../../src/js/services/semantic/lexicon',
+    ...jest.requireActual<typeof import('../../src/ts/services/semantic/lexicon')>(
+        '../../src/ts/services/semantic/lexicon',
     ),
 }));
 
 // See tests/services/tagResolver.test.ts — tests/setup.ts mocks `fs`, so the
 // loader must go through the real one or every semantic check passes vacuously.
-jest.mock('../../src/js/services/semantic/assets', () => {
+jest.mock('../../src/ts/services/semantic/assets', () => {
     const realFs = jest.requireActual<typeof import('node:fs')>('node:fs');
     const realPath = jest.requireActual<typeof import('node:path')>('node:path');
     const assetPath = realPath.join(__dirname, '..', '..', 'src', 'assets', 'semantic-vectors.json');
@@ -33,13 +33,13 @@ jest.mock('../../src/js/services/semantic/assets', () => {
 });
 
 const { fetchCandidatesForChallenge, __resetMemberIdCache } =
-    require('../../src/js/services/autoFill') as typeof autoFillModule;
-import lexiconModule = require('../../src/js/services/semantic/lexicon');
+    require('../../src/ts/services/autoFill') as typeof autoFillModule;
+import lexiconModule = require('../../src/ts/services/semantic/lexicon');
 const lexicon = jest.mocked(lexiconModule);
-import type * as autoFillModule from '../../src/js/services/autoFill';
-import type * as submissionsModule from '../../src/js/api/submissions';
-import type { Challenge } from '../../src/js/types/gurushots';
-import type { FillLogger } from '../../src/js/types/autoFill';
+import type * as autoFillModule from '../../src/ts/services/autoFill';
+import type * as submissionsModule from '../../src/ts/api/submissions';
+import type { Challenge } from '../../src/ts/types/gurushots';
+import type { FillLogger } from '../../src/ts/types/autoFill';
 import { invalid } from '../helpers/invalid';
 
 // getEligiblePhotos' options bag (its third, defaulted parameter).
