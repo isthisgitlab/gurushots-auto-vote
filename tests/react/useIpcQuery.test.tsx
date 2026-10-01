@@ -266,6 +266,18 @@ describe('useIpcQuery', () => {
             expect(result.current.data).toBeNull();
         });
 
+        test('unmount supersedes a response that settles before passive cleanup', async () => {
+            const { queryFn, calls } = deferredQuery();
+            const apply = jest.fn((_value: unknown, _tools: IpcQueryTools<unknown, Error>) => {});
+            const { unmount } = renderHook(() => useIpcQuery(queryFn, { latestOnly: true, apply }));
+
+            unmount();
+            calls[0].resolve('late');
+            await Promise.resolve();
+
+            expect(apply).not.toHaveBeenCalled();
+        });
+
         test('a call that settled current keeps its outcome when superseded during apply', async () => {
             let finishApply!: () => void;
             const apply = jest.fn(

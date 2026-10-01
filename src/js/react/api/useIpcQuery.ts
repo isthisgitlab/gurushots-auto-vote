@@ -1,4 +1,4 @@
-import { useState, useCallback, useEffect, useLayoutEffect, useRef } from 'react';
+import { useState, useCallback, useLayoutEffect, useRef } from 'react';
 
 import type { Dispatch, SetStateAction } from 'react';
 
@@ -197,7 +197,7 @@ function useAutoFetch(
         callIdRef,
     }: { enabled: boolean; subscribe: boolean; latestOnly: boolean; callIdRef: { current: number } },
 ) {
-    useEffect(() => {
+    useLayoutEffect(() => {
         if (!enabled) return undefined;
         // run() settles every failure into the error state.
         void refetch();
