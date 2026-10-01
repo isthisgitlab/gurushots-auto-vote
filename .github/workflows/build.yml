@@ -25,6 +25,12 @@ concurrency:
     group: release-${{ github.ref }}
     cancel-in-progress: false
 
+# onnxruntime-node's postinstall otherwise downloads the CUDA execution provider
+# from NuGet on every linux/x64 install; the app only runs ORT on cpu/wasm
+# (services/visionVerifier.ts), so it is dead weight and a NuGet outage fails the job.
+env:
+    ONNXRUNTIME_NODE_INSTALL: skip
+
 jobs:
     # NOT a duplicate of test.yml: workflows can't gate on each other
     # (GitHub Actions has no cross-workflow `needs`), so this job is the

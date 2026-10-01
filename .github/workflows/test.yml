@@ -18,6 +18,12 @@ concurrency:
     group: test-${{ github.workflow }}-${{ github.ref }}
     cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
+# onnxruntime-node's postinstall otherwise downloads the CUDA execution provider
+# from NuGet on every linux/x64 install; the app only runs ORT on cpu/wasm
+# (services/visionVerifier.ts), so it is dead weight and a NuGet outage fails the job.
+env:
+    ONNXRUNTIME_NODE_INSTALL: skip
+
 jobs:
     test:
         # Oxlint's JS plugin allocator crashes on the 5 GB ubuntu-slim runner.
