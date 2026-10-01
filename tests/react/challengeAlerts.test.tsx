@@ -1,6 +1,7 @@
 /**
  * Tests for the at-a-glance attention cues added for quick morning scanning:
- *   - utils/challengeAlerts: which running challenges count as low exposure
+ *   - utils/challengeAlerts: which running challenges count as low exposure or
+ *     as a missed boost a key can recover
  *   - LowExposureBanner: lists them lowest-first, hides when none
  *   - ChallengeCard: open boost → blue ring + pulsing badge; low exposure →
  *     red border + badge
@@ -9,7 +10,13 @@
  */
 
 import { render, screen } from './helpers/test-utils';
-import { isLowExposure, lowExposureChallenges, LOW_EXPOSURE_THRESHOLD } from '@/utils/challengeAlerts';
+import {
+    isLowExposure,
+    isMissedBoost,
+    lowExposureChallenges,
+    missedBoostChallenges,
+    LOW_EXPOSURE_THRESHOLD,
+} from '@/utils/challengeAlerts';
 import { LowExposureBanner } from '@/components/app/LowExposureBanner';
 import { ChallengeNav } from '@/components/app/ChallengeNav';
 import { ChallengeCard } from '@/components/app/ChallengeCard';
@@ -115,6 +122,80 @@ describe('challengeAlerts helpers', () => {
             nowSec(),
         );
         expect(list.map((c) => c.title)).toEqual(['Zero', 'Five']);
+    });
+});
+
+// Running, boost-enabled challenge whose boost state is configurable.
+const missed = (id: number, title: string, closeIn = 3600, state = 'MISSED') =>
+    invalid<Challenge>({
+        id,
+        title,
+        boost_enable: true,
+        start_time: nowSec() - 3600,
+        close_time: nowSec() + closeIn,
+        member: { boost: { state } },
+    });
+
+describe('isMissedBoost', () => {
+    test('is true for a running, boost-enabled challenge with a MISSED boost', () => {
+        expect(isMissedBoost(missed(1, 'a'), nowSec())).toBe(true);
+    });
+
+    test('is false for any other boost state', () => {
+        const now = nowSec();
+        expect(isMissedBoost(missed(1, 'a', 3600, 'LOCKED'), now)).toBe(false);
+        expect(isMissedBoost(missed(1, 'a', 3600, 'AVAILABLE'), now)).toBe(false);
+    });
+
+    test('is false when boost is not enabled for the challenge', () => {
+        const now = nowSec();
+        expect(isMissedBoost({ ...missed(1, 'a'), boost_enable: false }, now)).toBe(false);
+        expect(isMissedBoost(invalid({ ...missed(1, 'a'), boost_enable: undefined }), now)).toBe(false);
+    });
+
+    test('is false before start, after close, and for unreadable times', () => {
+        const now = nowSec();
+        expect(isMissedBoost({ ...missed(1, 'a'), start_time: now + 60 }, now)).toBe(false);
+        expect(isMissedBoost({ ...missed(1, 'a'), close_time: now - 60 }, now)).toBe(false);
+        expect(isMissedBoost({ ...missed(1, 'a'), close_time: NaN }, now)).toBe(false);
+        expect(isMissedBoost(invalid({ ...missed(1, 'a'), close_time: undefined }), now)).toBe(false);
+    });
+
+    test('a challenge starting exactly now counts as running', () => {
+        const now = nowSec();
+        expect(isMissedBoost({ ...missed(1, 'a'), start_time: now }, now)).toBe(true);
+    });
+
+    test('is false without a member or a challenge', () => {
+        const now = nowSec();
+        expect(isMissedBoost(invalid({ ...missed(1, 'a'), member: undefined }), now)).toBe(false);
+        expect(isMissedBoost(invalid(null), now)).toBe(false);
+    });
+});
+
+describe('missedBoostChallenges', () => {
+    test('lists only missed boosts, soonest close first, ties kept in input order', () => {
+        const list = missedBoostChallenges(
+            [
+                missed(1, 'Late', 7200),
+                missed(2, 'Fine', 100, 'LOCKED'),
+                missed(3, 'TieA', 600),
+                missed(4, 'Soon', 60),
+                missed(5, 'TieB', 600),
+            ],
+            nowSec(),
+        );
+        expect(list).toEqual([
+            { id: 4, title: 'Soon' },
+            { id: 3, title: 'TieA' },
+            { id: 5, title: 'TieB' },
+            { id: 1, title: 'Late' },
+        ]);
+    });
+
+    test('null and undefined input give an empty list', () => {
+        expect(missedBoostChallenges(null, nowSec())).toEqual([]);
+        expect(missedBoostChallenges(undefined, nowSec())).toEqual([]);
     });
 });
 

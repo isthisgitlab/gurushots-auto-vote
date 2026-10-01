@@ -2,9 +2,10 @@ import { useTranslation } from '@/contexts/TranslationContext';
 import { formatDuration } from '@/utils/formatters';
 import { openBoostWindows } from '../../../voting/boostWindow';
 import { useTick } from '@/hooks/useTick';
-import { lowExposureChallenges } from '@/utils/challengeAlerts';
+import { lowExposureChallenges, missedBoostChallenges } from '@/utils/challengeAlerts';
+import { scrollToChallenge } from '@/utils/scrollToChallenge';
 
-import type { ComponentChildren } from 'preact';
+import type { ComponentChildren, TargetedKeyboardEvent } from 'preact';
 import type { Bankroll, Challenge, MemberTurbo } from '../../../types/gurushots';
 
 // A turbo is "available" for this challenge when it's ready to apply (WON) or
@@ -67,6 +68,55 @@ function BankrollStats({ bankroll }: { bankroll: Bankroll }) {
     );
 }
 
+// DaisyUI's focus dropdown closes on blur, so Escape just drops focus. Attached
+// to the trigger and each entry button — the only focusable elements.
+const blurOnEscape = (e: TargetedKeyboardEvent<HTMLElement>) => {
+    if (e.key === 'Escape') e.currentTarget.blur();
+};
+
+/**
+ * "Boosts missed" stat that opens a jump list of the challenges whose boost can
+ * still be recovered with a key; each entry scrolls to its card (which takes
+ * focus, closing the menu). Navigation only — the spend happens on the card.
+ * No time-left text: the header has no tick, so it would freeze between
+ * refetches.
+ */
+function MissedBoostsJump({
+    missed,
+    bankroll,
+}: {
+    missed: ReturnType<typeof missedBoostChallenges>;
+    bankroll?: Bankroll | null;
+}) {
+    const { t } = useTranslation();
+    const noKeys = bankroll !== undefined && bankroll !== null && !(bankroll.keys > 0);
+    return (
+        <div className="dropdown">
+            <div className="btn btn-xs btn-soft btn-warning" role="button" tabIndex={0} onKeyDown={blurOnEscape}>
+                <span aria-hidden="true">💤</span>
+                <span className="font-semibold">{missed.length}</span>
+                <span>{t('app.statusHeaderMissedBoosts')}</span>
+                <span aria-hidden="true">▾</span>
+            </div>
+            <ul
+                tabIndex={-1}
+                className="dropdown-content menu z-[1] mt-1 p-2 shadow bg-base-100 rounded-box w-64 max-w-[calc(100vw-2rem)]"
+            >
+                <li className="menu-title">{noKeys ? t('app.missedBoostsNoKeys') : t('app.missedBoostsHint')}</li>
+                {missed.map((c) => (
+                    <li key={c.id}>
+                        <button type="button" onClick={() => scrollToChallenge(c.id)} onKeyDown={blurOnEscape}>
+                            <span className="truncate" title={c.title}>
+                                {c.title}
+                            </span>
+                        </button>
+                    </li>
+                ))}
+            </ul>
+        </div>
+    );
+}
+
 /**
  * Isolated 1Hz countdown for the next armed autovote cycle. Kept in its own
  * component so the per-second tick re-renders ONLY this node — never the parent
@@ -103,10 +153,11 @@ function HeaderCountdown({ icon, labelKey, ...countdown }: { icon: string; label
 
 /**
  * At-a-glance summary bar above the challenge list: active-challenge count,
- * boosts/turbos available right now, low-exposure challenges (only when there
- * are any), and the next armed autovote action.
+ * boosts/turbos available right now, missed boosts a key can recover and
+ * low-exposure challenges (each only when there are any), and the next armed
+ * autovote action.
  *
- * The three counts derive from the already-fetched, reference-stable
+ * The counts derive from the already-fetched, reference-stable
  * `challenges` array and recompute only when it changes — NO tick here, so the
  * header body never re-renders on the countdown's clock. Responsive: the row
  * wraps on narrow viewports rather than using wide DaisyUI `stat` blocks.
@@ -131,6 +182,7 @@ export function StatusHeader({
     const activeCount = list.length;
     const boostsAvailable = openBoostWindows(list, nowSec).length;
     const turbosAvailable = list.filter((c) => isTurboAvailable(c.member?.turbo, nowSec)).length;
+    const missedBoosts = missedBoostChallenges(list, nowSec);
     const lowExposureCount = lowExposureChallenges(list, nowSec).length;
 
     // Show the bar whenever there's a balance to display, even with no active
@@ -155,6 +207,7 @@ export function StatusHeader({
                 <HeaderStat icon="🏆" value={activeCount} label={t('app.statusHeaderActive')} />
                 <HeaderStat icon="🚀" value={boostsAvailable} label={t('app.statusHeaderBoosts')} />
                 <HeaderStat icon="⚡" value={turbosAvailable} label={t('app.statusHeaderTurbos')} />
+                {missedBoosts.length > 0 && <MissedBoostsJump missed={missedBoosts} bankroll={bankroll} />}
                 {lowExposureCount > 0 && <HeaderStat icon="👁" value={lowExposureCount} label={t('app.lowExposure')} />}
                 <HeaderCountdown icon="⏳" labelKey="app.statusHeaderNext" nextRunAt={nextRunAt} running={running} />
                 {autoClaimStatus?.enabled && (

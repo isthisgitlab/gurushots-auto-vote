@@ -1,13 +1,18 @@
+import { challengeAllows } from '../../voting/currencyActions';
 import type { Challenge } from '../../types/gurushots';
 import type { RankedChallenge } from '../../types/rendererUtils';
 /**
  * At-a-glance "needs attention" predicates for the challenge list, so a user
  * opening the app can spot what matters without reading every card: an open
- * boost window, and exposure that has run (nearly) dry. Pure and shared by
- * ChallengeCard, ChallengeNav, LowExposureBanner and StatusHeader so they can
- * never disagree on which challenges are flagged.
+ * boost window, a missed boost that a key can still recover, and exposure that
+ * has run (nearly) dry. Pure and shared by ChallengeCard, ChallengeNav,
+ * LowExposureBanner and StatusHeader so they can never disagree on which
+ * challenges are flagged.
  *
- * Display-only — the voting engine keeps its own per-challenge thresholds.
+ * The exposure predicate is display-only — the voting engine keeps its own
+ * per-challenge thresholds. The missed-boost predicate defers to
+ * `challengeAllows` in `voting/currencyActions`, the gate behind the card's
+ * Unlock button, so it never lists a challenge the card won't let you unlock.
  */
 
 // Exposure at or below this percentage is flagged. 10% catches the "about to
@@ -43,3 +48,30 @@ export const lowExposureChallenges = (
         .filter((c): c is RankedChallenge => isLowExposure(c, now))
         .map((c) => ({ id: c.id, title: c.title, exposure: c.member.ranking.exposure.exposure_factor }))
         .sort((a, b) => a.exposure - b.exposure);
+
+/**
+ * Whether a challenge's boost was missed but can still be recovered by spending
+ * a key. The challenge-side half of the card's key-unlock gate (running,
+ * boost-enabled) is reused as-is, so the two can't drift apart.
+ *
+ * @param challenge - Active challenge from the API
+ * @param now - Current time (Unix seconds)
+ */
+export const isMissedBoost = (challenge: Challenge, now: number): boolean =>
+    challenge?.member?.boost?.state === 'MISSED' && challengeAllows('key', challenge, now);
+
+/**
+ * Challenges with a recoverable missed boost as display entries, soonest
+ * closing first (stable for ties).
+ *
+ * @param challenges - Active challenges from the API
+ * @param now - Current time (Unix seconds)
+ */
+export const missedBoostChallenges = (
+    challenges: Challenge[] | null | undefined,
+    now: number,
+): Array<{ id: Challenge['id']; title: string }> =>
+    (challenges || [])
+        .filter((c) => isMissedBoost(c, now))
+        .sort((a, b) => a.close_time - b.close_time)
+        .map((c) => ({ id: c.id, title: c.title }));

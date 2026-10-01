@@ -1,7 +1,8 @@
-import { render, screen, act } from '@testing-library/preact';
+import { render, screen, act, fireEvent } from '@testing-library/preact';
 import { TranslationProvider } from '@/contexts/TranslationContext';
 import { StatusHeader } from '@/components/app/StatusHeader';
 import { openBoostWindows } from '../../src/js/voting/boostWindow';
+import { scrollToChallenge } from '@/utils/scrollToChallenge';
 import type { ComponentChild } from 'preact';
 import type { Bankroll, Challenge } from '../../src/js/types/gurushots';
 import { invalid } from '../helpers/invalid';
@@ -29,9 +30,26 @@ jest.mock('../../src/js/voting/boostWindow', () => ({
     ),
 }));
 
+jest.mock('@/utils/scrollToChallenge', () => ({ scrollToChallenge: jest.fn() }));
+
 const BASE_MS = 1_700_000_000_000;
 
 const wrap = (ui: ComponentChild) => render(<TranslationProvider>{ui}</TranslationProvider>);
+
+// A running, boost-enabled challenge with a MISSED boost, closing `closeIn` s from BASE_MS.
+const missedChallenge = (id: string, title: string, closeIn: number) => ({
+    id,
+    title,
+    boost_enable: true,
+    start_time: BASE_MS / 1000 - 3600,
+    close_time: BASE_MS / 1000 + closeIn,
+    member: { boost: { state: 'MISSED' }, turbo: { state: 'NONE' } },
+});
+
+const missedChallenges = invalid<Challenge[]>([
+    missedChallenge('late', 'Late one', 7200),
+    missedChallenge('soon', 'Soon one', 60),
+]);
 
 const oneChallenge = invalid<Challenge[]>([
     { id: 'c1', member: { boost: { state: 'NONE' }, turbo: { state: 'NONE' } } },
@@ -42,6 +60,7 @@ describe('StatusHeader', () => {
         jest.useFakeTimers();
         jest.setSystemTime(BASE_MS);
         jest.mocked(openBoostWindows).mockClear();
+        jest.mocked(scrollToChallenge).mockClear();
     });
     afterEach(() => {
         jest.useRealTimers();
@@ -129,7 +148,13 @@ describe('StatusHeader', () => {
     });
 
     test('the 1Hz countdown does NOT re-render the header body (challenge-list guard)', () => {
-        wrap(<StatusHeader challenges={oneChallenge} nextRunAt={BASE_MS + 120_000} running={true} />);
+        wrap(
+            <StatusHeader
+                challenges={invalid<Challenge[]>([...oneChallenge, missedChallenge('m', 'Missed', 7200)])}
+                nextRunAt={BASE_MS + 120_000}
+                running={true}
+            />,
+        );
         // Let mount-time provider transitions (TranslationProvider's ready flip)
         // settle, then snapshot the body-render count.
         act(() => jest.advanceTimersByTime(1100));
@@ -227,5 +252,77 @@ describe('StatusHeader', () => {
             (n) => n.textContent,
         );
         expect(stats).toEqual(['2', '—', '—', '7']);
+    });
+
+    describe('missed-boost jump list', () => {
+        const trigger = () => screen.getByRole('button', { name: /app\.statusHeaderMissedBoosts/ });
+
+        test('is absent when no boost is missed', () => {
+            wrap(<StatusHeader challenges={oneChallenge} nextRunAt={null} running={true} />);
+            expect(screen.queryByText('app.statusHeaderMissedBoosts')).toBeNull();
+        });
+
+        test('shows the count and label right after the turbos stat', () => {
+            const { container } = wrap(<StatusHeader challenges={missedChallenges} nextRunAt={null} running={true} />);
+            expect(trigger().textContent).toContain('2');
+            const stats = Array.from(container.querySelectorAll('.font-semibold')).map((n) => n.textContent);
+            // active, boosts, turbos, missed
+            expect(stats.slice(0, 4)).toEqual(['2', '0', '0', '2']);
+        });
+
+        test('lists the titles soonest-closing first', () => {
+            wrap(<StatusHeader challenges={missedChallenges} nextRunAt={null} running={true} />);
+            const entries = screen.getAllByRole('button').filter((b) => b.closest('ul'));
+            expect(entries.map((b) => b.textContent)).toEqual(['Soon one', 'Late one']);
+            expect(screen.getByTitle('Soon one')).toBeTruthy();
+        });
+
+        test('clicking an entry scrolls to its challenge', () => {
+            wrap(<StatusHeader challenges={missedChallenges} nextRunAt={null} running={true} />);
+            fireEvent.click(screen.getByText('Late one'));
+            expect(scrollToChallenge).toHaveBeenCalledWith('late');
+        });
+
+        test('the hint switches to no-keys when the balance has no keys', () => {
+            const { rerender } = wrap(
+                <StatusHeader
+                    challenges={missedChallenges}
+                    nextRunAt={null}
+                    running={true}
+                    bankroll={{ keys: 1, swaps: 0, fills: 0, coins: 0 }}
+                />,
+            );
+            expect(screen.getByText('app.missedBoostsHint')).toBeTruthy();
+            rerender(
+                <TranslationProvider>
+                    <StatusHeader
+                        challenges={missedChallenges}
+                        nextRunAt={null}
+                        running={true}
+                        bankroll={{ keys: 0, swaps: 0, fills: 0, coins: 0 }}
+                    />
+                </TranslationProvider>,
+            );
+            expect(screen.getByText('app.missedBoostsNoKeys')).toBeTruthy();
+            expect(screen.queryByText('app.missedBoostsHint')).toBeNull();
+        });
+
+        test('keeps the default hint without a bankroll', () => {
+            wrap(<StatusHeader challenges={missedChallenges} nextRunAt={null} running={true} />);
+            expect(screen.getByText('app.missedBoostsHint')).toBeTruthy();
+        });
+
+        test('Escape blurs the focused trigger and entry; other keys do not', () => {
+            wrap(<StatusHeader challenges={missedChallenges} nextRunAt={null} running={true} />);
+            const entry = screen.getByText('Soon one').closest('button')!;
+            for (const el of [trigger(), entry]) {
+                el.focus();
+                expect(document.activeElement).toBe(el);
+                fireEvent.keyDown(el, { key: 'ArrowDown' });
+                expect(document.activeElement).toBe(el);
+                fireEvent.keyDown(el, { key: 'Escape' });
+                expect(document.activeElement).not.toBe(el);
+            }
+        });
     });
 });
