@@ -141,7 +141,7 @@ export const app = {
     statusHeaderTurbos: 'Turbos ready',
     statusHeaderMissedBoosts: 'Boosts missed',
     missedBoostsHint:
-        'Unlock with a key on the challenge card; if a compact card has no {unlock} button, open {details}',
+        'On the challenge card, unlock with a key; if a compact card has no {unlock} button, open {details}',
     missedBoostsNoKeys: 'No keys left to unlock these',
     missedBoostsKeysUnknown: 'The {unlock} button can appear on the card once the key balance is available',
     statusHeaderNext: 'Next',

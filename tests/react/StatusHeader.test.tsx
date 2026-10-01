@@ -320,7 +320,7 @@ describe('StatusHeader', () => {
                 mockTranslator.t.mockImplementation((key) => byKey.get(key.replace(/^app\./, '')) ?? key);
             });
             afterEach(() => {
-                mockTranslator.t.mockImplementation(previousTranslator!);
+                mockTranslator.t.mockImplementation(previousTranslator);
             });
 
             const substituted = (template: string) =>
