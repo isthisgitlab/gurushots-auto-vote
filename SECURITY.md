@@ -2,7 +2,7 @@
 
 ## Supported Versions
 
-Security fixes go into the latest release from `master`. Pre-releases from `develop` are fixed by being superseded by the next build. For any older version, upgrade to the latest release.
+Security fixes go into the latest release from `master`. Pre-releases from `develop` get fixes only through the next pre-release; there are no backports. For any older version, upgrade to the latest release.
 
 ## Reporting a Vulnerability
 

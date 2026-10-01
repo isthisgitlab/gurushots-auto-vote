@@ -163,7 +163,7 @@ const getAppUserDataPath = () => {
                 );
                 userDataPath = path.join(process.cwd(), 'userData');
                 if (!fs.existsSync(userDataPath)) {
-                    fs.mkdirSync(userDataPath, { recursive: true });
+                    fs.mkdirSync(userDataPath, { recursive: true, mode: 0o700 });
                 }
             }
         }

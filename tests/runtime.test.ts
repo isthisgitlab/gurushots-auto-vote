@@ -77,6 +77,7 @@ describe('runtime app identity + user-data path (single source of truth)', () =>
 
         expect(result).toBe(`${process.cwd()}/userData`);
         expect(warnSpy).toHaveBeenCalledWith(expect.stringContaining('falling back to cwd/userData'));
+        expect(fs.mkdirSync).toHaveBeenLastCalledWith(`${process.cwd()}/userData`, { recursive: true, mode: 0o700 });
         warnSpy.mockRestore();
     });
 

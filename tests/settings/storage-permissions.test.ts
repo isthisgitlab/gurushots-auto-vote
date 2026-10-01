@@ -5,8 +5,12 @@
  * freshly created directory is 0o700.
  */
 
-jest.unmock('fs');
-jest.unmock('node:fs');
+// A partial mock of the real fs (a builtin's exports are not spy-able as is), so
+// the refused-chmod case can replace chmodSync while every other call is real.
+jest.mock('node:fs', () => {
+    const actual = jest.requireActual<typeof import('node:fs')>('node:fs');
+    return { __esModule: true, ...actual, default: actual };
+});
 jest.unmock('path');
 jest.unmock('node:path');
 jest.mock('../../src/js/runtime', () => ({
@@ -73,5 +77,21 @@ describePosix('userData JSON writers leave files owner-only', () => {
 
         expect(modeOf(userData)).toBe(0o700);
         expect(modeOf(path.join(userData, 'settings.json'))).toBe(0o600);
+    });
+
+    test('a chmod the filesystem refuses still lets the write land', () => {
+        fs.mkdirSync(userData);
+        const file = path.join(userData, 'settings.json');
+        fs.writeFileSync(file, '{}');
+        const realChmod = fs.chmodSync;
+        const chmodSpy = jest.spyOn(fs, 'chmodSync').mockImplementation((p, mode) => {
+            if (p === file) throw Object.assign(new Error('operation not permitted'), { code: 'EPERM' });
+            realChmod(p, mode);
+        });
+
+        expect(() => storage.writeRaw('{"token":"t"}')).not.toThrow();
+
+        expect(chmodSpy).toHaveBeenCalledWith(file, 0o600);
+        expect(fs.readFileSync(file, 'utf8')).toBe('{"token":"t"}');
     });
 });

@@ -59,14 +59,28 @@ describe('createJsonStore', () => {
             expect(store.readRaw()).toBe('{"a":1}');
         });
 
-        test('writeRaw writes with owner-only mode and re-applies it to an existing file', () => {
+        test('writeRaw writes with owner-only mode', () => {
             fs.existsSync.mockReturnValue(true);
             store.writeRaw('{"a":2}');
             expect(fs.writeFileSync).toHaveBeenCalledWith(expect.stringContaining('metadata.json'), '{"a":2}', {
                 encoding: 'utf8',
                 mode: 0o600,
             });
+        });
+
+        test('writeRaw tightens an existing file before writing into it', () => {
+            fs.existsSync.mockReturnValue(true);
+            store.writeRaw('{"a":2}');
+            expect(fs.chmodSync).toHaveBeenCalledTimes(1);
             expect(fs.chmodSync).toHaveBeenCalledWith(expect.stringContaining('metadata.json'), 0o600);
+            expect(fs.chmodSync.mock.invocationCallOrder[0]).toBeLessThan(fs.writeFileSync.mock.invocationCallOrder[0]);
+        });
+
+        test('writeRaw does not chmod a file it is about to create', () => {
+            fs.existsSync.mockReturnValue(false);
+            store.writeRaw('{"a":2}');
+            expect(fs.chmodSync).not.toHaveBeenCalled();
+            expect(fs.writeFileSync).toHaveBeenCalledTimes(1);
         });
 
         test('the file lives next to settings.json under the userData dir', () => {

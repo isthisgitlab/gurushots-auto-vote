@@ -65,16 +65,31 @@ const getCapacitorPreferences = (): PreferencesPlugin => {
 /**
  * Write a userData file owner-only (0o600), creating its directory 0o700.
  * The mode passed to writeFileSync only applies when the file is created, so
- * the explicit chmod is what keeps an already-existing file private. The
- * files can carry the auth token, which other local users must not read.
+ * an existing file is chmod'ed to 0o600 before the new content lands in it —
+ * the data is never written into a file other local users can read. A chmod
+ * the filesystem refuses (a file owned by another uid, a vfat/SMB/FUSE mount)
+ * is logged with the fix and does not fail the write: the data still persists.
+ * The files can carry the auth token. The file is rewritten in place rather
+ * than replaced by a rename, because settingsWatcher watches its inode.
  */
 const writeOwnerOnly = (filePath: string, data: string) => {
     const dir = path.dirname(filePath);
     if (!fs.existsSync(dir)) {
         fs.mkdirSync(dir, { recursive: true, mode: 0o700 });
     }
+    if (fs.existsSync(filePath)) {
+        try {
+            fs.chmodSync(filePath, 0o600);
+        } catch (err) {
+            const reason = err instanceof Error && 'code' in err ? String(err.code) : errorMessage(err);
+            logger
+                .withCategory('settings')
+                .warning(
+                    `Could not restrict ${filePath} to owner-only (${reason ?? 'unknown error'}); other local users may be able to read it. Run: chmod 600 "${filePath}"`,
+                );
+        }
+    }
     fs.writeFileSync(filePath, data, { encoding: 'utf8', mode: 0o600 });
-    fs.chmodSync(filePath, 0o600);
 };
 
 const storage = {
