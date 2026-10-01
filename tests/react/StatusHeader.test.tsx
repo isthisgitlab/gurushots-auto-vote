@@ -158,13 +158,13 @@ describe('StatusHeader', () => {
         // Let mount-time provider transitions (TranslationProvider's ready flip)
         // settle, then snapshot the body-render count.
         act(() => jest.advanceTimersByTime(1100));
+        expect(screen.getByRole('button', { name: /app\.statusHeaderMissedBoosts/ })).toBeTruthy();
         const baseline = jest.mocked(openBoostWindows).mock.calls.length;
         // From here only the countdown's 1Hz tick fires. If the tick leaked into
         // the header body, openBoostWindows (called once per body render) would
         // climb by ~3 over these 3 seconds.
         act(() => jest.advanceTimersByTime(3000));
         expect(screen.getByTestId('status-header').textContent).toContain('~1m'); // still ticking down
-        expect(screen.getByRole('button', { name: /app\.statusHeaderMissedBoosts/ })).toBeTruthy();
         expect(openBoostWindows).toHaveBeenCalledTimes(baseline);
     });
 
@@ -283,59 +283,19 @@ describe('StatusHeader', () => {
             expect(scrollToChallenge).toHaveBeenCalledWith('late');
         });
 
-        test('the hint switches to no-keys when the balance has no keys', () => {
-            const { rerender } = wrap(
-                <StatusHeader
-                    challenges={missedChallenges}
-                    nextRunAt={null}
-                    running={true}
-                    bankroll={{ keys: 1, swaps: 0, fills: 0, coins: 0 }}
-                />,
-            );
-            expect(screen.getByText('app.missedBoostsHint')).toBeTruthy();
-            rerender(
-                <TranslationProvider>
-                    <StatusHeader
-                        challenges={missedChallenges}
-                        nextRunAt={null}
-                        running={true}
-                        bankroll={{ keys: 0, swaps: 0, fills: 0, coins: 0 }}
-                    />
-                </TranslationProvider>,
-            );
-            expect(screen.getByText('app.missedBoostsNoKeys')).toBeTruthy();
-            expect(screen.queryByText('app.missedBoostsHint')).toBeNull();
-        });
+        const bankrollOf = (keys: number) => invalid<Bankroll>({ keys, swaps: 0, fills: 0, coins: 0 });
 
-        test('keeps the default hint without a bankroll', () => {
-            wrap(<StatusHeader challenges={missedChallenges} nextRunAt={null} running={true} />);
-            expect(screen.getByText('app.missedBoostsHint')).toBeTruthy();
-        });
-
-        test('keeps the default hint for a null bankroll', () => {
-            wrap(<StatusHeader challenges={missedChallenges} nextRunAt={null} running={true} bankroll={null} />);
-            expect(screen.getByText('app.missedBoostsHint')).toBeTruthy();
-        });
-
-        test('an unreadable key balance is not treated as zero keys', () => {
-            wrap(
-                <StatusHeader
-                    challenges={missedChallenges}
-                    nextRunAt={null}
-                    running={true}
-                    bankroll={invalid<Bankroll>({ keys: NaN, swaps: 0, fills: 0, coins: 0 })}
-                />,
-            );
-            expect(screen.getByText('app.missedBoostsHint')).toBeTruthy();
-            expect(screen.queryByText('app.missedBoostsNoKeys')).toBeNull();
-        });
-
-        test('the trigger is named by count and label, and described by the hint', () => {
-            wrap(<StatusHeader challenges={missedChallenges} nextRunAt={null} running={true} />);
-            const button = screen.getByRole('button', { name: '2 app.statusHeaderMissedBoosts' });
-            expect(button.getAttribute('aria-haspopup')).toBe('true');
-            const hint = document.getElementById(button.getAttribute('aria-describedby')!);
-            expect(hint?.textContent).toBe('app.missedBoostsHint');
+        test.each([
+            ['a key to spend', bankrollOf(1), 'app.missedBoostsHint'],
+            ['no keys left', bankrollOf(0), 'app.missedBoostsNoKeys'],
+            ['no bankroll', undefined, 'app.missedBoostsKeysUnknown'],
+            ['a null bankroll', null, 'app.missedBoostsKeysUnknown'],
+            ['an unreadable key balance (not zero keys)', bankrollOf(NaN), 'app.missedBoostsKeysUnknown'],
+        ])('the trigger is named by count and label and described by the hint for %s', (_state, bankroll, hint) => {
+            wrap(<StatusHeader challenges={missedChallenges} nextRunAt={null} running={true} bankroll={bankroll} />);
+            expect(
+                screen.getByRole('button', { name: '2 app.statusHeaderMissedBoosts', description: hint }),
+            ).toBeTruthy();
         });
 
         test('Escape blurs the focused trigger and entry; other keys do not', () => {

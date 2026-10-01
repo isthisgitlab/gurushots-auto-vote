@@ -78,7 +78,10 @@ const blurOnEscape = (e: TargetedKeyboardEvent<HTMLElement>) => {
 /**
  * "Boosts missed" stat that opens a jump list of the challenges whose boost can
  * still be recovered with a key; each entry scrolls to its card (which takes
- * focus, closing the menu). Navigation only — the spend happens on the card.
+ * focus, closing the menu). Navigation only — the spend happens on the card,
+ * where Unlock sits (under Details on a compact card). The hint line mirrors
+ * what the card can show: a key to spend, none left, or a balance that could
+ * not be read.
  * No time-left text: the header has no tick, so it would freeze between
  * refetches. Membership, like the other counts, refreshes on each challenge
  * refetch, so a challenge that closes in between stays listed until then.
@@ -94,14 +97,18 @@ function MissedBoostsJump({
     const { t } = useTranslation();
     const hintId = useId();
     // An unreadable balance (shown as '—') is not zero keys.
-    const noKeys = bankroll !== undefined && bankroll !== null && Number.isFinite(bankroll.keys) && bankroll.keys <= 0;
+    const keys = bankroll?.keys;
+    const hint = !Number.isFinite(keys)
+        ? t('app.missedBoostsKeysUnknown')
+        : Number(keys) > 0
+          ? t('app.missedBoostsHint')
+          : t('app.missedBoostsNoKeys');
     return (
         <div className="dropdown">
             <div
                 className="btn btn-sm btn-soft btn-warning"
                 role="button"
                 tabIndex={0}
-                aria-haspopup="true"
                 aria-describedby={hintId}
                 onKeyDown={blurOnEscape}
             >
@@ -115,11 +122,16 @@ function MissedBoostsJump({
                 className="dropdown-content menu z-[1] mt-1 p-2 shadow bg-base-100 rounded-box w-64 max-w-[calc(100vw-2rem)]"
             >
                 <li id={hintId} className="menu-title">
-                    {noKeys ? t('app.missedBoostsNoKeys') : t('app.missedBoostsHint')}
+                    {hint}
                 </li>
                 {missed.map((c) => (
                     <li key={c.id}>
-                        <button type="button" onClick={() => scrollToChallenge(c.id)} onKeyDown={blurOnEscape}>
+                        <button
+                            type="button"
+                            className="break-words"
+                            onClick={() => scrollToChallenge(c.id)}
+                            onKeyDown={blurOnEscape}
+                        >
                             {c.title}
                         </button>
                     </li>
