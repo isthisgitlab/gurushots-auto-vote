@@ -117,6 +117,10 @@ describe('classifyMission', () => {
         ['Vote on 400 photos', 'vote'],
         ['Vote on photos', 'vote'],
         ['Vote for 20 photos', 'vote'],
+        ['Vote on 1,000 photos', 'vote'],
+        ['Vote on 1 000 photos', 'vote'],
+        ['Vote on 1\u00a0000 photos', 'vote'],
+        ['Vote on 1.000 photos', 'vote'],
         ['Get 500 votes', null],
         ['Receive a vote for your photo', null],
     ])('%s → %s', (name, kind) => {

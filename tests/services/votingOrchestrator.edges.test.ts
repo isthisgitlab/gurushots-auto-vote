@@ -54,7 +54,8 @@ import type * as entryAgeStoreModule from '../../src/ts/entryAgeStore';
 import type { Challenge } from '../../src/ts/types/gurushots';
 import type { VotingPassDeps } from '../../src/ts/types/votingPass';
 import { invalid } from '../helpers/invalid';
-const { runVotingPass } = require('../../src/ts/services/votingOrchestrator') as typeof votingOrchestratorModule;
+const { runVotingPass, resetMissionVoteLog } =
+    require('../../src/ts/services/votingOrchestrator') as typeof votingOrchestratorModule;
 const { buildChallenge } = require('../helpers/challengeFixtures') as typeof challengeFixturesModule;
 const { createMemoryEntryAgeLedger } = require('../../src/ts/entryAgeStore') as typeof entryAgeStoreModule;
 
@@ -537,6 +538,7 @@ describe('vote mission', () => {
         `🗳️ Vote mission: ${left} left — no challenge can take votes now (all full, flash or held by your settings); retrying next cycle`;
 
     beforeEach(() => {
+        resetMissionVoteLog();
         decide(() => waiting);
     });
 
@@ -600,6 +602,33 @@ describe('vote mission', () => {
         expect(api.submitVotes).not.toHaveBeenCalled();
         expect(messages('info')).toContain(quotaLine(7));
         expect(jest.mocked(logger.withCategory)).toHaveBeenCalledWith('voting');
+    });
+
+    test('a challenge the normal rules already vote on takes no share of the split', async () => {
+        decide((id) => (id === 1 ? { shouldVote: true, voteReason: 'low', targetExposure: 80 } : waiting));
+        const api = makeApi([open(1), open(2)]);
+        await run(api, withVotes(60));
+        expect(api.submitVotes).toHaveBeenCalledTimes(2);
+        expect(api.submitVotes).toHaveBeenNthCalledWith(1, expect.any(Object), 'tok', 80, undefined);
+        expect(api.submitVotes).toHaveBeenNthCalledWith(2, expect.any(Object), 'tok', 100, 60);
+    });
+
+    test('the zero-quota line repeats only when something changed', async () => {
+        decide(() => ({ ...waiting, blocked: true }));
+        const api = makeApi([open(1)]);
+        await run(api, withVotes(7));
+        await run(api, withVotes(7));
+        expect(messages('info').filter((m) => m === quotaLine(7))).toHaveLength(1);
+
+        await run(api, withVotes(6));
+        expect(messages('info')).toContain(quotaLine(6));
+
+        // A cycle that voted ends the stall, so the next one is reported again.
+        decide(() => waiting);
+        await run(api, withVotes(6));
+        decide(() => ({ ...waiting, blocked: true }));
+        await run(api, withVotes(6));
+        expect(messages('info').filter((m) => m === quotaLine(6))).toHaveLength(2);
     });
 
     test('a challenge the normal rule already votes on gets no mission top-up', async () => {
@@ -684,7 +713,7 @@ describe('vote mission', () => {
             const { tracker, challenge } = withNewEntry();
             await run(makeApi([challenge]), { ...withVotes(10), entryTracker: tracker });
             expect(messages('info')).toContain(
-                '[Challenge 1: Mission 1] New entry detected — already eligible on its own',
+                '[Challenge 1: Mission 1] New entry detected — voting for the vote mission',
             );
         });
 

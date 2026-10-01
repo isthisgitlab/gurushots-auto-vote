@@ -36,7 +36,7 @@ const MISSION_KEYWORDS: ReadonlyArray<[MissionKind, RegExp]> = [
     ['fill', /\b(?:auto)?fills?\b/i],
     ['join', /\bjoin\b/i],
     // "Vote on 400 photos" — not "Fulfill 3 votes", "Get 500 votes" or "Receive a vote for your photo".
-    ['vote', /\bvote\s+(?:on|for)\s+(?:\d+\s+)?photos?\b/i],
+    ['vote', /\bvote\s+(?:on|for)\s+(?:\d[\d.,\s]*\s+)?photos?\b/i],
 ];
 
 // The all-star mission can't be automated, and its wording may well mention
@@ -156,9 +156,10 @@ const isMissionVoteCandidate = (challenge: Challenge, nowSec: number): boolean =
 /**
  * How many photos each eligible challenge votes on this cycle: what the vote
  * mission still needs, split evenly over the challenges that can take votes
- * (rounded up), or 0 when none can or nothing is needed. `isBlocked` is asked
- * last and a throw from it makes that challenge ineligible, so one malformed
- * challenge can't abort the pass.
+ * (rounded up), or 0 when none can or nothing is needed. `takesNoMissionVote`
+ * (a challenge that is blocked, or that the normal rules already vote on) is
+ * asked last, and a throw from it makes that challenge ineligible, so one
+ * malformed challenge can't abort the pass.
  *
  * @param nowSec epoch seconds
  */
@@ -166,13 +167,13 @@ const missionVoteQuota = (
     remaining: number,
     challenges: Challenge[],
     nowSec: number,
-    isBlocked: (challenge: Challenge) => boolean,
+    takesNoMissionVote: (challenge: Challenge) => boolean,
 ): number => {
     if (!(remaining > 0)) return 0;
     const eligible = challenges.filter((challenge) => {
         if (!isMissionVoteCandidate(challenge, nowSec)) return false;
         try {
-            return !isBlocked(challenge);
+            return !takesNoMissionVote(challenge);
         } catch {
             return false;
         }

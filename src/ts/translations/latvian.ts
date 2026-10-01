@@ -718,7 +718,7 @@ export const app = {
         'Kamēr aktīva misija „Use Fill”, lietotne izmanto uzpildes izaicinājumos, kuros redzamība ir zem 100 %, līdz misija izpildīta. Uzpilžu rezerve paliek neskarta. Pēc noklusējuma izslēgts.',
     missionVote: 'Balsot misijām',
     missionVoteDesc:
-        'Kamēr aktīva misija „Vote on photos”, lietotne balso katrā ciklā, negaidot jūsu redzamības slieksni — vēl nepieciešamās balsis tiek sadalītas pa jūsu izaicinājumiem, un katrā balso līdz 100 % redzamībai (arī beigu loga redzamības laikā); atlikums gaida nākamo ciklu. Flash izaicinājumi tiek izlaisti; Tikai Boost režīms, „Balsot tikai pēdējās minūtes laikā”, balsošanas pauze un plānotā balsošana joprojām darbojas. Pēc noklusējuma izslēgts.',
+        'Kamēr aktīva misija „Vote on photos”, lietotne balso katrā ciklā, negaidot jūsu redzamības slieksni — vēl nepieciešamās balsis tiek sadalītas pa jūsu izaicinājumiem, un katrā balso līdz 100 % redzamībai (arī beigu loga redzamības laikā); atlikums gaida nākamo ciklu. Flash izaicinājumi tiek izlaisti; Tikai Boost režīms, „Balsot tikai pēdējās minūtes laikā”, balsošanas pauze un „Tikai plānotā balsošana” joprojām darbojas. Pēc noklusējuma izslēgts.',
     notifyOnBoost: 'Paziņot pirms Boost',
     notifyOnBoostDesc: 'Brīdina pirms Boost izmantošanas, lai paspētu atstāt lietotni ieslēgtu.',
     notifyOnTurbo: 'Paziņot pirms Turbo',

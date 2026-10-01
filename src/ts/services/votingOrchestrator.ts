@@ -682,7 +682,11 @@ const detectNewEntry = (challenge: Challenge, entryTracker: EntryTracker | null)
  * repeat every cycle for the whole pause, directly above a "Skipping voting -
  * voting paused" line saying the opposite.
  */
-const describeNewEntryOutcome = ({ forcedByNewEntry, preservesNewEntryTrigger, shouldVote }: AutoVoteDecision) => {
+const describeNewEntryOutcome = (
+    { forcedByNewEntry, preservesNewEntryTrigger, shouldVote }: AutoVoteDecision,
+    missionVote: boolean,
+) => {
+    if (missionVote) return 'voting for the vote mission';
     if (forcedByNewEntry) return 'forcing a vote this cycle';
     if (preservesNewEntryTrigger) return 'vote deferred until the pause ends — trigger stays armed';
     return shouldVote ? 'already eligible on its own' : 'not voting this cycle';
@@ -932,7 +936,7 @@ const processChallenge = async (
         logger
             .withCategory('voting')
             .info(
-                `${logger.challengeTag(challenge)} New entry detected — ${describeNewEntryOutcome(voteDecision)}`,
+                `${logger.challengeTag(challenge)} New entry detected — ${describeNewEntryOutcome(voteDecision, missionVote !== null)}`,
                 null,
             );
     }
@@ -963,10 +967,21 @@ const processChallenge = async (
     return null;
 };
 
+// The last "no challenge can take votes" line logged, so a stall that lasts
+// cycles after cycle is reported once, and again after a cycle that voted.
+let lastVoteStall = '';
+
+// Test hook: forget the last logged stall.
+const resetMissionVoteLog = () => {
+    lastVoteStall = '';
+};
+
 /**
  * This cycle's per-challenge share of an active vote mission, over the whole
- * active list; 0 when there is none to do. A per-card "Run" never does mission
- * votes. Logs once when a mission is active but no challenge can take votes.
+ * active list; 0 when there is none to do. A single-challenge run never does
+ * mission votes. Logs when a mission is active but no challenge can take votes
+ * (not again until that changes). A challenge the normal rules already vote on
+ * takes no share: it gets no mission top-up.
  */
 const planMissionVotes = (
     missions: MissionNeeds | null,
@@ -976,19 +991,18 @@ const planMissionVotes = (
     const votesLeft = missions?.vote ?? 0;
     if (!(votesLeft > 0) || challengeIdFilter != null) return 0;
     const nowSec = Math.floor(Date.now() / 1000);
-    const quota = missionVoteQuota(
-        votesLeft,
-        allChallenges,
-        nowSec,
-        (challenge) => votingLogic.evaluateVotingDecision(challenge, nowSec).blocked === true,
-    );
-    if (quota === 0) {
-        logger
-            .withCategory('voting')
-            .info(
-                `🗳️ Vote mission: ${votesLeft} left — no challenge can take votes now (all full, flash or held by your settings); retrying next cycle`,
-                null,
-            );
+    const quota = missionVoteQuota(votesLeft, allChallenges, nowSec, (challenge) => {
+        const decision = votingLogic.evaluateVotingDecision(challenge, nowSec);
+        return decision.blocked === true || decision.shouldVote;
+    });
+    if (quota > 0) {
+        lastVoteStall = '';
+        return quota;
+    }
+    const stall = `🗳️ Vote mission: ${votesLeft} left — no challenge can take votes now (all full, flash or held by your settings); retrying next cycle`;
+    if (stall !== lastVoteStall) {
+        lastVoteStall = stall;
+        logger.withCategory('voting').info(stall, null);
     }
     return quota;
 };
@@ -1113,4 +1127,4 @@ const runVotingPass = async (
     }
 };
 
-export { runVotingPass };
+export { runVotingPass, resetMissionVoteLog };

@@ -704,7 +704,7 @@ export const app = {
         'While a "Use Fill" mission is active, spend fills on challenges below 100% exposure until the mission is done. Keeps your fill reserve. Off by default.',
     missionVote: 'Vote for Missions',
     missionVoteDesc:
-        'While a "Vote on photos" mission is active, vote every cycle instead of waiting for your exposure threshold — the votes still needed are split across your challenges, each voted up to 100% exposure (also during the Final Window Exposure period); whatever is left waits for the next cycle. Flash challenges are skipped; Only Boost Mode, Vote Only in Last Minute, Voting Pause and Scheduled Voting still apply. Off by default.',
+        'While a "Vote on photos" mission is active, vote every cycle instead of waiting for your exposure threshold — the votes still needed are split across your challenges, each voted up to 100% exposure (also during the Final Window Exposure period); whatever is left waits for the next cycle. Flash challenges are skipped; Only Boost Mode, Vote Only in Last Minute, Voting Pause and Scheduled Voting Only still apply. Off by default.',
     notifyOnBoost: 'Notify before boost',
     notifyOnBoostDesc: 'Warn before a boost is applied, so you can keep the app running.',
     notifyOnTurbo: 'Notify before turbo',

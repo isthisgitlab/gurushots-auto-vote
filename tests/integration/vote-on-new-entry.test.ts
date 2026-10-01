@@ -9,6 +9,9 @@
  * and hand `forcedByNewEntry` back out in the shape the retry rule reads.
  *
  * Only `settings` (to drive the gate) and the API endpoints are stubbed.
+ *
+ * The vote-mission block at the end runs the same real stack: a hard block
+ * (onlyBoost) gets no mission vote, a plain threshold-wait does.
  */
 
 jest.mock('../../src/ts/settings');
@@ -183,5 +186,56 @@ describe('voteOnNewEntry end-to-end through the real rule engine', () => {
         const after = makeApi(challengeWith(['a', 'b']));
         await runVotingPass('tok', null, deps(after, tracker));
         expect(after.submitVotes).not.toHaveBeenCalled();
+    });
+});
+
+describe('vote mission through the real rule engine', () => {
+    const waiting = (id: number) =>
+        buildChallenge({
+            id,
+            title: `Mission ${id}`,
+            type: 'regular',
+            start_time: NOW - 3600,
+            close_time: NOW + 7200,
+            max_photo_submits: 4,
+            member: {
+                boost: { state: 'LOCKED', timeout: 0 },
+                turbo: { state: 'NONE' },
+                ranking: { entries: [{ id: `e${id}` }], exposure: { exposure_factor: 95 } },
+            },
+        });
+
+    const makeMissionApi = (challenges: Challenge[]) => ({
+        ...makeApi(challenges[0]),
+        getActiveChallenges: jest.fn(async () => ({ challenges })),
+    });
+
+    const runMission = (api: ReturnType<typeof makeMissionApi>) =>
+        runVotingPass('tok', null, {
+            ...deps(api, createMemoryEntryTracker()),
+            missions: { join: 0, fill: 0, turbo: 0, vote: 40 },
+        });
+
+    test('onlyBoost is a hard block: no mission vote, and it takes no share of the split', async () => {
+        settings.getEffectiveSetting = invalid(
+            jest.fn((key: string, id: string | null) =>
+                key === 'onlyBoost' && id === '1' ? true : (SETTING_DEFAULTS as Record<string, unknown>)[key],
+            ),
+        );
+        const api = makeMissionApi([waiting(1), waiting(2)]);
+        await runMission(api);
+
+        expect(api.getVoteImages).toHaveBeenCalledTimes(1);
+        expect(api.getVoteImages).toHaveBeenCalledWith(expect.objectContaining({ id: 2 }), 'tok');
+        expect(api.submitVotes).toHaveBeenCalledTimes(1);
+        expect(api.submitVotes).toHaveBeenCalledWith(expect.anything(), 'tok', 100, 40);
+    });
+
+    test('plain threshold-waits split the remaining votes between them', async () => {
+        const api = makeMissionApi([waiting(1), waiting(2)]);
+        await runMission(api);
+
+        expect(api.submitVotes).toHaveBeenCalledTimes(2);
+        for (const call of api.submitVotes.mock.calls) expect(call).toEqual([expect.anything(), 'tok', 100, 20]);
     });
 });
