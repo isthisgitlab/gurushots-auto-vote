@@ -62,9 +62,9 @@ const getCapacitorPreferences = (): PreferencesPlugin => {
     return plugin;
 };
 
-// Paths whose refused chmod has been logged. A path is dropped again once a
-// chmod on it succeeds, so a file that stays unrestrictable warns once per
-// failure episode rather than on every write.
+// Paths whose refused chmod has been logged. A path is dropped again (and the
+// recovery logged) once a chmod on it succeeds, so a file that stays
+// unrestrictable warns once per failure episode rather than on every write.
 const warnedUnrestrictable = new Set<string>();
 
 /**
@@ -74,10 +74,10 @@ const warnedUnrestrictable = new Set<string>();
  * when that chmod succeeds the data is never written into a file other local
  * users can read. A chmod the filesystem refuses (a file owned by another uid,
  * a vfat/SMB/FUSE mount) is logged with what it needs, once per failure episode
- * (until a chmod on that path succeeds again), and does not fail the write:
- * the data still persists. The files can carry the auth token. The file is
- * rewritten in place rather than replaced by a rename, because
- * settingsWatcher watches its inode.
+ * (until a chmod on that path succeeds again, which is logged as the recovery),
+ * and does not fail the write: the data still persists. The files can carry
+ * the auth token. The file is rewritten in place rather than replaced by a
+ * rename, because settingsWatcher watches its inode.
  */
 const writeOwnerOnly = (filePath: string, data: string) => {
     const dir = path.dirname(filePath);
@@ -87,7 +87,9 @@ const writeOwnerOnly = (filePath: string, data: string) => {
     if (fs.existsSync(filePath)) {
         try {
             fs.chmodSync(filePath, 0o600);
-            warnedUnrestrictable.delete(filePath);
+            if (warnedUnrestrictable.delete(filePath)) {
+                logger.withCategory('settings').info(`Restricted ${filePath} to owner-only`);
+            }
         } catch (err) {
             if (!warnedUnrestrictable.has(filePath)) {
                 warnedUnrestrictable.add(filePath);

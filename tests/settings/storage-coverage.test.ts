@@ -195,9 +195,11 @@ describe('settings storage — edge cases', () => {
         });
 
         test('settings writeRaw tightens an existing file before writing into it', () => {
-            const { mod, fs } = loadStorage();
+            const { mod, fs, categoryLogger } = loadStorage();
             fs.existsSync.mockReturnValue(true);
             mod.storage.writeRaw('{}');
+            expect(categoryLogger.info).not.toHaveBeenCalled();
+            expect(categoryLogger.warning).not.toHaveBeenCalled();
             expect(fs.chmodSync).toHaveBeenCalledWith(`${USER_DATA}/settings.json`, 0o600);
             expect(fs.chmodSync.mock.invocationCallOrder[0]).toBeLessThan(fs.writeFileSync.mock.invocationCallOrder[0]);
         });
@@ -260,8 +262,11 @@ describe('settings storage — edge cases', () => {
                 return categoryLogger.warning.mock.calls.length;
             });
 
+            expect(fs.chmodSync).toHaveBeenCalledTimes(5);
             expect(fs.writeFileSync).toHaveBeenCalledTimes(5);
             expect(warningsAfterEachWrite).toEqual([1, 1, 1, 2, 2]);
+            expect(categoryLogger.info).toHaveBeenCalledTimes(1);
+            expect(categoryLogger.info).toHaveBeenCalledWith(`Restricted ${USER_DATA}/settings.json to owner-only`);
         });
 
         test('refused chmods on two different paths warn once each', () => {
