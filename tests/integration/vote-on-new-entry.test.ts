@@ -190,7 +190,7 @@ describe('voteOnNewEntry end-to-end through the real rule engine', () => {
 });
 
 describe('vote mission through the real rule engine', () => {
-    const waiting = (id: number) =>
+    const waiting = (id: number, exposure = 95) =>
         buildChallenge({
             id,
             title: `Mission ${id}`,
@@ -201,7 +201,7 @@ describe('vote mission through the real rule engine', () => {
             member: {
                 boost: { state: 'LOCKED', timeout: 0 },
                 turbo: { state: 'NONE' },
-                ranking: { entries: [{ id: `e${id}` }], exposure: { exposure_factor: 95 } },
+                ranking: { entries: [{ id: `e${id}` }], exposure: { exposure_factor: exposure } },
             },
         });
 
@@ -229,6 +229,18 @@ describe('vote mission through the real rule engine', () => {
         expect(api.getVoteImages).toHaveBeenCalledWith(expect.objectContaining({ id: 2 }), 'tok');
         expect(api.submitVotes).toHaveBeenCalledTimes(1);
         expect(api.submitVotes).toHaveBeenCalledWith(expect.anything(), 'tok', 100, 40);
+    });
+
+    test('a challenge the normal rule votes on takes no share, and gets no cap', async () => {
+        // 50% is below the 90% trigger (a normal vote); 95% is above it and below 100% (a wait).
+        const api = makeMissionApi([waiting(1, 50), waiting(2)]);
+        await runMission(api);
+
+        expect(api.getVoteImages).toHaveBeenNthCalledWith(1, expect.objectContaining({ id: 1 }), 'tok');
+        expect(api.getVoteImages).toHaveBeenNthCalledWith(2, expect.objectContaining({ id: 2 }), 'tok');
+        expect(api.submitVotes).toHaveBeenCalledTimes(2);
+        expect(api.submitVotes).toHaveBeenNthCalledWith(1, expect.anything(), 'tok', expect.any(Number), undefined);
+        expect(api.submitVotes).toHaveBeenNthCalledWith(2, expect.anything(), 'tok', 100, 40);
     });
 
     test('plain threshold-waits split the remaining votes between them', async () => {

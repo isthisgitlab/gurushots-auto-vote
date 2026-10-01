@@ -36,7 +36,7 @@ const MISSION_KEYWORDS: ReadonlyArray<[MissionKind, RegExp]> = [
     ['fill', /\b(?:auto)?fills?\b/i],
     ['join', /\bjoin\b/i],
     // "Vote on 400 photos" — not "Fulfill 3 votes", "Get 500 votes" or "Receive a vote for your photo".
-    ['vote', /\bvote\s+(?:on|for)\s+(?:\d[\d.,\s]*\s+)?photos?\b/i],
+    ['vote', /\bvote\s+(?:on|for)\s+(?:\d[\d.,\s]*\s)?photos?\b/i],
 ];
 
 // The all-star mission can't be automated, and its wording may well mention

@@ -613,22 +613,47 @@ describe('vote mission', () => {
         expect(api.submitVotes).toHaveBeenNthCalledWith(2, expect.any(Object), 'tok', 100, 60);
     });
 
-    test('the zero-quota line repeats only when something changed', async () => {
+    test('the zero-quota line is logged once per stall, however the count moves', async () => {
         decide(() => ({ ...waiting, blocked: true }));
         const api = makeApi([open(1)]);
         await run(api, withVotes(7));
         await run(api, withVotes(7));
-        expect(messages('info').filter((m) => m === quotaLine(7))).toHaveLength(1);
-
         await run(api, withVotes(6));
-        expect(messages('info')).toContain(quotaLine(6));
+        expect(messages('info').filter((m) => m.startsWith('🗳️ Vote mission'))).toEqual([quotaLine(7)]);
+    });
 
-        // A cycle that voted ends the stall, so the next one is reported again.
-        decide(() => waiting);
+    test.each([
+        ['a cycle with a quota', () => decide(() => waiting), 6],
+        [
+            'normal voting covering the mission',
+            () => decide(() => ({ shouldVote: true, voteReason: 'low', targetExposure: 80 })),
+            6,
+        ],
+        ['no vote mission', () => undefined, 0],
+    ])('%s ends the stall, so the next one is reported again', async (_name, between, left) => {
+        const stalled = () => decide(() => ({ ...waiting, blocked: true }));
+        const api = makeApi([open(1)]);
+        stalled();
         await run(api, withVotes(6));
+        between();
+        await run(api, withVotes(left));
+        stalled();
+        await run(api, withVotes(5));
+        expect(messages('info').filter((m) => m.startsWith('🗳️ Vote mission'))).toEqual([quotaLine(6), quotaLine(5)]);
+    });
+
+    test('a single-challenge run leaves the stall state untouched', async () => {
         decide(() => ({ ...waiting, blocked: true }));
+        const api = makeApi([open(1)]);
         await run(api, withVotes(6));
-        expect(messages('info').filter((m) => m === quotaLine(6))).toHaveLength(2);
+        await runVotingPass('tok', 1, {
+            api: invalid(api),
+            cleanupStaleMetadata: null,
+            interChallengeDelay: () => 0,
+            ...withVotes(4),
+        });
+        await run(api, withVotes(3));
+        expect(messages('info').filter((m) => m.startsWith('🗳️ Vote mission'))).toEqual([quotaLine(6)]);
     });
 
     test('a challenge the normal rule already votes on gets no mission top-up', async () => {
@@ -637,7 +662,16 @@ describe('vote mission', () => {
         await run(api, withVotes(50));
         expect(api.submitVotes).toHaveBeenCalledTimes(1);
         expect(api.submitVotes).toHaveBeenCalledWith(expect.any(Object), 'tok', 80, undefined);
-        expect(messages('info')).not.toContainEqual(expect.stringContaining('vote mission'));
+        expect(messages('info').filter((m) => /vote mission/i.test(m))).toEqual([]);
+    });
+
+    test('when every candidate votes normally the mission logs no stall line', async () => {
+        decide(() => ({ shouldVote: true, voteReason: 'low', targetExposure: 80 }));
+        const api = makeApi([open(1), open(2)]);
+        await run(api, withVotes(50));
+        expect(api.submitVotes).toHaveBeenCalledTimes(2);
+        for (const call of api.submitVotes.mock.calls) expect(call[3]).toBeUndefined();
+        expect(messages('info').filter((m) => /vote mission/i.test(m))).toEqual([]);
     });
 
     test('a per-card run never does mission votes', async () => {

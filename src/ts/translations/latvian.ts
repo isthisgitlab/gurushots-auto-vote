@@ -710,7 +710,7 @@ export const app = {
     missionSaveTurbos: 'Taupīt Turbo misijām',
     missionSaveTurbosDesc:
         'Neiegūst katra izaicinājuma Turbo uzreiz, lai misijai „Win Turbo” paliktu, ko iegūt. Pietaupīto Turbo lietotne iegūst, kad šī misija ir aktīva, vai stundu pirms tā automātiskās izmantošanas laika, tāpēc to joprojām iegūst un izmanto kā parasti. Pēc noklusējuma izslēgts.',
-    missionJoinEarly: 'Pievienoties agrāk misiju dēļ',
+    missionJoinEarly: 'Pievienoties nekavējoties misiju laikā',
     missionJoinEarlyDesc:
         'Kamēr aktīva misija „Join challenges” vai „Win Turbo”, lietotne pievienojas izaicinājumiem, negaidot automātiskās pievienošanās laiku (stundas pirms beigām / % no izaicinājuma), līdz misija izpildīta, — katrs jauns izaicinājums dod vēl vienu Turbo, ko iegūt. Tipu, tagu un monētu filtri joprojām darbojas. Pēc noklusējuma izslēgts.',
     missionUseFills: 'Izmantot uzpildes misijām',
@@ -718,7 +718,7 @@ export const app = {
         'Kamēr aktīva misija „Use Fill”, lietotne izmanto uzpildes izaicinājumos, kuros redzamība ir zem 100 %, līdz misija izpildīta. Uzpilžu rezerve paliek neskarta. Pēc noklusējuma izslēgts.',
     missionVote: 'Balsot misijām',
     missionVoteDesc:
-        'Kamēr aktīva misija „Vote on photos”, lietotne balso katrā ciklā, negaidot jūsu redzamības slieksni — vēl nepieciešamās balsis tiek sadalītas pa jūsu izaicinājumiem, un katrā balso līdz 100 % redzamībai (arī beigu loga redzamības laikā); atlikums gaida nākamo ciklu. Flash izaicinājumi tiek izlaisti; Tikai Boost režīms, „Balsot tikai pēdējās minūtes laikā”, balsošanas pauze un „Tikai plānotā balsošana” joprojām darbojas. Pēc noklusējuma izslēgts.',
+        'Kamēr aktīva misija „Vote on photos”, lietotne balso katrā ciklā, negaidot jūsu redzamības slieksni — vēl nepieciešamās balsis tiek sadalītas pa jūsu izaicinājumiem, un katrā balso līdz 100 % redzamībai (arī beigu loga redzamības laikā); atlikums gaida nākamo ciklu. Flash izaicinājumi tiek izlaisti; „Tikai Boost režīms”, „Balsot tikai pēdējās minūtes laikā”, balsošanas pauze un „Tikai plānotā balsošana” joprojām darbojas. Pēc noklusējuma izslēgts.',
     notifyOnBoost: 'Paziņot pirms Boost',
     notifyOnBoostDesc: 'Brīdina pirms Boost izmantošanas, lai paspētu atstāt lietotni ieslēgtu.',
     notifyOnTurbo: 'Paziņot pirms Turbo',
@@ -935,7 +935,7 @@ export const app = {
     finalWindowDurationDesc:
         'Cik ilgs ir beigu logs pirms izaicinājuma beigām. Beigu loga redzamības noteikums darbojas šajā logā. Pēc noklusējuma 1 stunda.',
     finalWindowDurationHelp:
-        'Beigu loga garums, skaitot atpakaļ no izaicinājuma beigu laika. Uzstādi 1 stundu, lai viss darbotos kā agrāk (fiksēta pēdējā stunda), vai saīsini/pagarini to, lai mainītu brīdi, kad sāk darboties beigu loga redzamības slieksnis un mērķis.',
+        'Beigu loga garums, skaitot atpakaļ no izaicinājuma beigu laika. Uzstādi 1 stundu, lai beigu logs būtu fiksēta pēdējā stunda, vai saīsini/pagarini to, lai mainītu brīdi, kad sāk darboties beigu loga redzamības slieksnis un mērķis.',
     finalWindowExposure: 'Beigu loga redzamība',
     finalWindowExposureDesc:
         'Redzamības līmenis, pie kura beigu logā sākas balsošana (tikai tad, ja ieslēgts „Izmantot beigu loga redzamību”). Tam jābūt vienādam ar redzamības uzstādījumu vai mazākam par to.',
