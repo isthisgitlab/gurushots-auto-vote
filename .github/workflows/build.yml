@@ -522,6 +522,11 @@ jobs:
             # workflow_dispatch via GITHUB_TOKEN — needed by the "Trigger Pages
             # rebuild" step below (gh workflow run dispatches pages.yml).
             actions: write
+            # id-token: write lets the "Attest build provenance" step request a
+            # Sigstore OIDC token to sign with; attestations: write lets it
+            # store the signed attestation against this repository.
+            id-token: write
+            attestations: write
 
         steps:
             - name: Checkout code
@@ -576,6 +581,26 @@ jobs:
                     echo "BUILD_DATE=" >> $GITHUB_OUTPUT
                   fi
 
+            - name: Attest build provenance
+              uses: actions/attest-build-provenance@4d101475d8b20a2381f78447822ac1eab6504dd8 # v4.2.2
+              with:
+                  subject-path: |
+                      artifacts/${{ steps.release_vars.outputs.ARTIFACT_PREFIX }}mac-builds/GuruShotsAutoVote-v*.dmg
+                      artifacts/${{ steps.release_vars.outputs.ARTIFACT_PREFIX }}mac-builds/GuruShotsAutoVote-v*.app.zip
+                      artifacts/${{ steps.release_vars.outputs.ARTIFACT_PREFIX }}linux-builds/GuruShotsAutoVote-v*.AppImage
+                      artifacts/${{ steps.release_vars.outputs.ARTIFACT_PREFIX }}win-builds/GuruShotsAutoVote-v*.exe
+                      artifacts/${{ steps.release_vars.outputs.ARTIFACT_PREFIX }}mac-builds/lite/GuruShotsAutoVote-v*.dmg
+                      artifacts/${{ steps.release_vars.outputs.ARTIFACT_PREFIX }}mac-builds/lite/GuruShotsAutoVote-v*.app.zip
+                      artifacts/${{ steps.release_vars.outputs.ARTIFACT_PREFIX }}linux-builds/lite/GuruShotsAutoVote-v*.AppImage
+                      artifacts/${{ steps.release_vars.outputs.ARTIFACT_PREFIX }}win-lite-builds/lite/GuruShotsAutoVote-v*.exe
+                      artifacts/${{ steps.release_vars.outputs.ARTIFACT_PREFIX }}mac-builds/cli/gurucli-v*-mac
+                      artifacts/${{ steps.release_vars.outputs.ARTIFACT_PREFIX }}mac-builds/cli/gurucli-v*-mac-lite
+                      artifacts/${{ steps.release_vars.outputs.ARTIFACT_PREFIX }}linux-builds/cli/gurucli-v*-linux
+                      artifacts/${{ steps.release_vars.outputs.ARTIFACT_PREFIX }}linux-builds/cli/gurucli-v*-linux-lite
+                      artifacts/${{ steps.release_vars.outputs.ARTIFACT_PREFIX }}linux-arm-builds/gurucli-v*-linux-arm
+                      artifacts/${{ steps.release_vars.outputs.ARTIFACT_PREFIX }}linux-arm-builds/gurucli-v*-linux-arm-lite
+                      artifacts/${{ steps.release_vars.outputs.ARTIFACT_PREFIX }}android-builds/GuruShotsAutoVote-v*.apk
+
             - name: Create Release
               uses: softprops/action-gh-release@efb35369e0ad2afab669f228072c1b0d510eae64 # v3.0.3
               with:
@@ -607,6 +632,7 @@ jobs:
                       - Commit: ${{ github.sha }}
                       - Version: ${{ steps.get_version.outputs.VERSION }}
                       - Version Bump Type: ${{ needs.version-bump.outputs.bump-type }}
+                      - Verify a download: `gh attestation verify <file> --repo isthisgitlab/gurushots-auto-vote`
                       ${{ steps.release_vars.outputs.BUILD_DATE }}
                   draft: false
                   prerelease: ${{ needs.version-bump.outputs.is-beta == 'true' }}

@@ -53,7 +53,7 @@ describe('runtime app identity + user-data path (single source of truth)', () =>
         const result = runtime.getAppUserDataPath();
 
         expect(result).toBe(runtime.getUserDataDir('gurushots-auto-vote-dev'));
-        expect(fs.mkdirSync).toHaveBeenCalledWith(result, { recursive: true });
+        expect(fs.mkdirSync).toHaveBeenCalledWith(result, { recursive: true, mode: 0o700 });
     });
 
     test('CLI branch skips mkdir when the directory already exists', () => {

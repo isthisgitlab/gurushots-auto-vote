@@ -62,6 +62,21 @@ const getCapacitorPreferences = (): PreferencesPlugin => {
     return plugin;
 };
 
+/**
+ * Write a userData file owner-only (0o600), creating its directory 0o700.
+ * The mode passed to writeFileSync only applies when the file is created, so
+ * the explicit chmod is what keeps an already-existing file private. The
+ * files can carry the auth token, which other local users must not read.
+ */
+const writeOwnerOnly = (filePath: string, data: string) => {
+    const dir = path.dirname(filePath);
+    if (!fs.existsSync(dir)) {
+        fs.mkdirSync(dir, { recursive: true, mode: 0o700 });
+    }
+    fs.writeFileSync(filePath, data, { encoding: 'utf8', mode: 0o600 });
+    fs.chmodSync(filePath, 0o600);
+};
+
 const storage = {
     /**
      * Returns the raw settings JSON string, or null if not yet written.
@@ -115,15 +130,7 @@ const storage = {
                 });
             return;
         }
-        const settingsPath = getSettingsPath();
-        const settingsDir = path.dirname(settingsPath);
-        if (!fs.existsSync(settingsDir)) {
-            fs.mkdirSync(settingsDir, { recursive: true });
-        }
-        // 0o600: the settings blob carries the auth token — no reason for
-        // other local users to be able to read it. (Only applies on create;
-        // pre-existing files keep their mode.)
-        fs.writeFileSync(settingsPath, data, { encoding: 'utf8', mode: 0o600 });
+        writeOwnerOnly(getSettingsPath(), data);
     },
 };
 
@@ -244,9 +251,9 @@ const writeHeadlessKey = (prefKey: string, data: string) => {
  * Generic platform-aware JSON store — the same transport pattern the
  * settings store above uses, packaged for other stores (metadata.ts).
  *
- *   - Electron/CLI: synchronous fs at userData/<fileName>, written with
- *     mode 0o600 (userData JSON can carry tokens/state that other local
- *     users have no business reading).
+ *   - Electron/CLI: synchronous fs at userData/<fileName>, left at mode
+ *     0o600 after every write (userData JSON can carry tokens/state that
+ *     other local users have no business reading).
  *   - Capacitor app WebView: hydrate-once cache (initializeAsync) +
  *     ordered async write-behind to @capacitor/preferences under prefKey.
  *   - Android headless service: the native keyed preference bridge persists
@@ -292,12 +299,7 @@ const createJsonStore = ({ fileName, prefKey }: { fileName: string; prefKey: str
                     });
                 return;
             }
-            const p = filePath();
-            const dir = path.dirname(p);
-            if (!fs.existsSync(dir)) {
-                fs.mkdirSync(dir, { recursive: true });
-            }
-            fs.writeFileSync(p, data, { encoding: 'utf8', mode: 0o600 });
+            writeOwnerOnly(filePath(), data);
         },
         /** Hydrate the Capacitor cache once at boot. No-op elsewhere. */
         initializeAsync: async () => {

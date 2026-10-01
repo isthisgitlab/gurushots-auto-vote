@@ -59,13 +59,14 @@ describe('createJsonStore', () => {
             expect(store.readRaw()).toBe('{"a":1}');
         });
 
-        test('writeRaw writes with owner-only mode', () => {
+        test('writeRaw writes with owner-only mode and re-applies it to an existing file', () => {
             fs.existsSync.mockReturnValue(true);
             store.writeRaw('{"a":2}');
             expect(fs.writeFileSync).toHaveBeenCalledWith(expect.stringContaining('metadata.json'), '{"a":2}', {
                 encoding: 'utf8',
                 mode: 0o600,
             });
+            expect(fs.chmodSync).toHaveBeenCalledWith(expect.stringContaining('metadata.json'), 0o600);
         });
 
         test('the file lives next to settings.json under the userData dir', () => {

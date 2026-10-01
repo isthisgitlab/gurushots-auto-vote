@@ -180,7 +180,7 @@ describe('settings storage — edge cases', () => {
             const { mod, fs } = loadStorage();
             fs.existsSync.mockReturnValue(false);
             mod.storage.writeRaw('{}');
-            expect(fs.mkdirSync).toHaveBeenCalledWith(USER_DATA, { recursive: true });
+            expect(fs.mkdirSync).toHaveBeenCalledWith(USER_DATA, { recursive: true, mode: 0o700 });
             expect(fs.writeFileSync).toHaveBeenCalledWith(`${USER_DATA}/settings.json`, '{}', {
                 encoding: 'utf8',
                 mode: 0o600,
@@ -199,7 +199,7 @@ describe('settings storage — edge cases', () => {
             fs.existsSync.mockReturnValue(false);
             const store = mod.createJsonStore({ fileName: 'metadata.json', prefKey: 'k' });
             store.writeRaw('{"a":1}');
-            expect(fs.mkdirSync).toHaveBeenCalledWith(USER_DATA, { recursive: true });
+            expect(fs.mkdirSync).toHaveBeenCalledWith(USER_DATA, { recursive: true, mode: 0o700 });
             expect(fs.writeFileSync).toHaveBeenCalledWith(`${USER_DATA}/metadata.json`, '{"a":1}', {
                 encoding: 'utf8',
                 mode: 0o600,

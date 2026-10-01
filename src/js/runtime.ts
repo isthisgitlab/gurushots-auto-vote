@@ -155,7 +155,7 @@ const getAppUserDataPath = () => {
         const fs = require('node:fs') as typeof import('node:fs');
         if (!fs.existsSync(userDataPath)) {
             try {
-                fs.mkdirSync(userDataPath, { recursive: true });
+                fs.mkdirSync(userDataPath, { recursive: true, mode: 0o700 });
             } catch (error) {
                 const mkdirError = error as NodeJS.ErrnoException;
                 console.warn(

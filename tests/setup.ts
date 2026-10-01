@@ -16,6 +16,7 @@ jest.mock('fs', () => ({
     appendFileSync: jest.fn(),
     readdirSync: jest.fn(),
     mkdirSync: jest.fn(),
+    chmodSync: jest.fn(),
 }));
 
 // Mock path operations. Spread the real module first so less-common
