@@ -67,10 +67,10 @@ function DetailHeader({
         <div className="flex flex-col gap-2">
             <div className="min-w-0">
                 <h3 className="font-bold text-base truncate">{challenge.title}</h3>
-                {/* Welcome message. truncate prevents long welcome text from forcing the card wider. sanitizeWelcomeMessage strips medium-editor toolbar leakage and allowlists safe tags. */}
+                {/* Welcome message. wrap-anywhere wraps the full text, including long unbroken words and URLs, so it never forces the card wider. sanitizeWelcomeMessage strips medium-editor toolbar leakage and allowlists safe tags. */}
                 {sanitizedWelcome && (
                     <div
-                        className="text-xs text-base-content/60 truncate"
+                        className="text-xs text-base-content/60 wrap-anywhere"
                         dangerouslySetInnerHTML={{ __html: sanitizedWelcome }} /* aislop-ignore-line -- sanitized */
                     />
                 )}
