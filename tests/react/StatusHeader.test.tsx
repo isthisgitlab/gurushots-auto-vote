@@ -283,19 +283,20 @@ describe('StatusHeader', () => {
             expect(scrollToChallenge).toHaveBeenCalledWith('late');
         });
 
-        const bankrollOf = (keys: number) => invalid<Bankroll>({ keys, swaps: 0, fills: 0, coins: 0 });
+        const bankrollOf = (keys: number): Bankroll => ({ keys, swaps: 0, fills: 0, coins: 0 });
 
         test.each([
             ['a key to spend', bankrollOf(1), 'app.missedBoostsHint'],
             ['no keys left', bankrollOf(0), 'app.missedBoostsNoKeys'],
+            ['a negative balance', bankrollOf(-1), 'app.missedBoostsNoKeys'],
+            ['an infinite balance, as the card gate reads it', bankrollOf(Infinity), 'app.missedBoostsHint'],
             ['no bankroll', undefined, 'app.missedBoostsKeysUnknown'],
             ['a null bankroll', null, 'app.missedBoostsKeysUnknown'],
             ['an unreadable key balance (not zero keys)', bankrollOf(NaN), 'app.missedBoostsKeysUnknown'],
         ])('the trigger is named by count and label and described by the hint for %s', (_state, bankroll, hint) => {
             wrap(<StatusHeader challenges={missedChallenges} nextRunAt={null} running={true} bankroll={bankroll} />);
-            expect(
-                screen.getByRole('button', { name: '2 app.statusHeaderMissedBoosts', description: hint }),
-            ).toBeTruthy();
+            const trigger = screen.getByRole('button', { name: '2 app.statusHeaderMissedBoosts', description: hint });
+            expect(trigger.hasAttribute('aria-haspopup')).toBe(false);
         });
 
         test('Escape blurs the focused trigger and entry; other keys do not', () => {

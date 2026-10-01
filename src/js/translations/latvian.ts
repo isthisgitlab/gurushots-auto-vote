@@ -141,9 +141,10 @@ export const app = {
     statusHeaderBoosts: 'Boost gatavi',
     statusHeaderTurbos: 'Turbo gatavi',
     statusHeaderMissedBoosts: 'Boost nokavēti',
-    missedBoostsHint: 'Atbloķē ar atslēgu izaicinājuma kartītē; kompaktā kartītē vispirms atver Detaļas',
+    missedBoostsHint:
+        'Atbloķē ar atslēgu izaicinājuma kartītē; ja kompaktā kartītē nav pogas {unlock}, atver {details}',
     missedBoostsNoKeys: 'Nav atslēgu, lai tos atbloķētu',
-    missedBoostsKeysUnknown: 'Atslēgu atlikums nav pieejams, tāpēc kartītē poga Atbloķēt vēl var nebūt redzama',
+    missedBoostsKeysUnknown: 'Poga {unlock} kartītē parādīsies, kad būs pieejams atslēgu atlikums',
     statusHeaderNext: 'Nākamā',
     statusHeaderNextClaim: 'Nākamā balvu saņemšana',
     statusHeaderNextClaimHint:

@@ -4,6 +4,7 @@ import { openBoostWindows } from '../../../voting/boostWindow';
 import { useTick } from '@/hooks/useTick';
 import { lowExposureChallenges, missedBoostChallenges } from '@/utils/challengeAlerts';
 import { scrollToChallenge } from '@/utils/scrollToChallenge';
+import { interp } from '@/utils/interp';
 import { useId } from 'react';
 
 import type { ComponentChildren, TargetedKeyboardEvent } from 'preact';
@@ -79,9 +80,9 @@ const blurOnEscape = (e: TargetedKeyboardEvent<HTMLElement>) => {
  * "Boosts missed" stat that opens a jump list of the challenges whose boost can
  * still be recovered with a key; each entry scrolls to its card (which takes
  * focus, closing the menu). Navigation only — the spend happens on the card,
- * where Unlock sits (under Details on a compact card). The hint line mirrors
- * what the card can show: a key to spend, none left, or a balance that could
- * not be read.
+ * where Unlock sits (if a compact card doesn't show Unlock, it is under
+ * Details). The hint line mirrors what the card can show: a key to spend, none
+ * left, or a balance that could not be read.
  * No time-left text: the header has no tick, so it would freeze between
  * refetches. Membership, like the other counts, refreshes on each challenge
  * refetch, so a challenge that closes in between stays listed until then.
@@ -96,13 +97,15 @@ function MissedBoostsJump({
 }) {
     const { t } = useTranslation();
     const hintId = useId();
-    // An unreadable balance (shown as '—') is not zero keys.
+    // Mirrors currencyActions' hasBalance, so the hint matches the card's Unlock button.
     const keys = bankroll?.keys;
-    const hint = !Number.isFinite(keys)
-        ? t('app.missedBoostsKeysUnknown')
-        : Number(keys) > 0
-          ? t('app.missedBoostsHint')
-          : t('app.missedBoostsNoKeys');
+    const labels = { unlock: t('app.currencyKeyUnlock'), details: t('app.details') };
+    const hint =
+        Number(keys) > 0
+            ? interp(t('app.missedBoostsHint'), labels)
+            : Number.isFinite(keys)
+              ? t('app.missedBoostsNoKeys')
+              : interp(t('app.missedBoostsKeysUnknown'), labels);
     return (
         <div className="dropdown">
             <div
@@ -128,7 +131,7 @@ function MissedBoostsJump({
                     <li key={c.id}>
                         <button
                             type="button"
-                            className="break-words"
+                            className="wrap-anywhere"
                             onClick={() => scrollToChallenge(c.id)}
                             onKeyDown={blurOnEscape}
                         >
