@@ -46,6 +46,8 @@ import votingLogicModule = require('../../src/ts/services/VotingLogic');
 const votingLogic = jest.mocked(votingLogicModule);
 import autoFillModule = require('../../src/ts/services/autoFill');
 const autoFill = jest.mocked(autoFillModule);
+import cancellationModule = require('../../src/ts/voting/cancellation');
+const cancellation = jest.mocked(cancellationModule);
 import type * as votingOrchestratorModule from '../../src/ts/services/votingOrchestrator';
 import type * as challengeFixturesModule from '../helpers/challengeFixtures';
 import type * as entryAgeStoreModule from '../../src/ts/entryAgeStore';
@@ -84,7 +86,7 @@ const withBoost = (boost: Record<string, unknown>, extra: Record<string, unknown
 const makeApi = (challenges: Challenge[]) => ({
     getActiveChallenges: jest.fn(async () => ({ challenges })),
     getVoteImages: jest.fn(async () => ({ images: [{ id: 'i1' }] })),
-    submitVotes: jest.fn(async () => ({ success: true })),
+    submitVotes: jest.fn(async (..._args: unknown[]) => ({ success: true })),
     applyBoost: jest.fn(async () => ({ success: true })),
     applyBoostToEntry: jest.fn(async () => ({ success: true })),
     applyTurbo: jest.fn(async () => ({ ok: true })),
@@ -510,5 +512,186 @@ describe('non-Error throws on the vote and pass level', () => {
         expect(result).toEqual({ success: false, error: 'Voting process failed' });
         // An empty rejection must still close the operation as failed, not completed.
         expect(log.endOperation).toHaveBeenCalledWith('voting-process', null, 'unknown error');
+    });
+});
+
+describe('vote mission', () => {
+    const open = (id: number, extra: Record<string, unknown> = {}) =>
+        buildChallenge({
+            id,
+            title: `Mission ${id}`,
+            type: 'regular',
+            start_time: NOW - 3600,
+            close_time: NOW + 3600,
+            member: {
+                boost: { state: 'LOCKED', timeout: 0 },
+                ranking: { entries: [], exposure: { exposure_factor: 40 } },
+            },
+            ...extra,
+        });
+    const waiting = { shouldVote: false, voteReason: 'below threshold', targetExposure: 100 };
+    const withVotes = (vote: number) => ({ missions: { join: 0, fill: 0, turbo: 0, vote } });
+    const decide = (byId: (id: number) => Record<string, unknown>) =>
+        votingLogic.evaluateVotingDecision.mockImplementation((challenge) => invalid(byId(Number(challenge?.id))));
+    const quotaLine = (left: number) =>
+        `🗳️ Vote mission: ${left} left — no challenge can take votes now (all full, flash or held by your settings); retrying next cycle`;
+
+    beforeEach(() => {
+        decide(() => waiting);
+    });
+
+    test('votes on a threshold-wait up to 100%, capped at the quota', async () => {
+        const api = makeApi([open(1)]);
+        const result = await run(api, withVotes(50));
+        expect(result.success).toBe(true);
+        expect(api.submitVotes).toHaveBeenCalledTimes(1);
+        expect(api.submitVotes).toHaveBeenCalledWith(
+            expect.objectContaining({ images: expect.any(Array) }),
+            'tok',
+            100,
+            50,
+        );
+        expect(messages('info')).toContain(
+            '[Challenge 1: Mission 1] Starting voting process - vote mission: 50 left at cycle start — voting on up to 50 photos',
+        );
+        expect(messages('info')).toContain('[Challenge 1: Mission 1] Submitting votes for 1 images');
+        expect(log.warning).not.toHaveBeenCalled();
+    });
+
+    test('the log shows the smaller of the pool and the cap', async () => {
+        const api = makeApi([open(1)]);
+        api.getVoteImages.mockResolvedValue({ images: [{ id: 'a' }, { id: 'b' }, { id: 'c' }] });
+        await run(api, withVotes(2));
+        expect(messages('info')).toContain('[Challenge 1: Mission 1] Submitting votes for 2 images');
+    });
+
+    test('splits the votes still needed over the challenges that can take them, rounding up', async () => {
+        const api = makeApi([open(1), open(2), open(3)]);
+        await run(api, withVotes(100));
+        expect(api.submitVotes).toHaveBeenCalledTimes(3);
+        for (const call of api.submitVotes.mock.calls) expect(call[3]).toBe(34);
+    });
+
+    test('a blocked challenge neither gets mission votes nor takes a share', async () => {
+        decide((id) => (id === 1 ? { ...waiting, blocked: true } : waiting));
+        const api = makeApi([open(1), open(2)]);
+        await run(api, withVotes(60));
+        expect(api.submitVotes).toHaveBeenCalledTimes(1);
+        expect(api.submitVotes.mock.calls[0][3]).toBe(60);
+        expect(api.getVoteImages).toHaveBeenCalledWith(expect.objectContaining({ id: 2 }), 'tok');
+    });
+
+    test.each([
+        ['flash', { type: 'flash' }],
+        ['full', { member: { ranking: { exposure: { exposure_factor: 100 } } } }],
+        ['not started', { start_time: NOW + 60 }],
+        ['closed', { close_time: NOW - 60 }],
+    ])('a %s challenge gets no mission votes and the pass logs the zero quota once', async (_name, extra) => {
+        const api = makeApi([open(1, extra), open(2, extra)]);
+        await run(api, withVotes(30));
+        expect(api.submitVotes).not.toHaveBeenCalled();
+        expect(messages('info').filter((m) => m === quotaLine(30))).toHaveLength(1);
+    });
+
+    test('every challenge blocked → the zero-quota line', async () => {
+        decide(() => ({ ...waiting, blocked: true }));
+        const api = makeApi([open(1)]);
+        await run(api, withVotes(7));
+        expect(api.submitVotes).not.toHaveBeenCalled();
+        expect(messages('info')).toContain(quotaLine(7));
+        expect(jest.mocked(logger.withCategory)).toHaveBeenCalledWith('voting');
+    });
+
+    test('a challenge the normal rule already votes on gets no mission top-up', async () => {
+        decide(() => ({ shouldVote: true, voteReason: 'low', targetExposure: 80 }));
+        const api = makeApi([open(1)]);
+        await run(api, withVotes(50));
+        expect(api.submitVotes).toHaveBeenCalledTimes(1);
+        expect(api.submitVotes).toHaveBeenCalledWith(expect.any(Object), 'tok', 80, undefined);
+        expect(messages('info')).not.toContainEqual(expect.stringContaining('vote mission'));
+    });
+
+    test('a per-card run never does mission votes', async () => {
+        const api = makeApi([open(1), open(2)]);
+        const result = await runVotingPass('tok', 1, {
+            api: invalid(api),
+            cleanupStaleMetadata: null,
+            interChallengeDelay: () => 0,
+            ...withVotes(50),
+        });
+        expect(result.success).toBe(true);
+        expect(votingLogic.evaluateVotingDecision).toHaveBeenCalledTimes(1);
+        expect(api.submitVotes).not.toHaveBeenCalled();
+        expect(messages('info')).not.toContain(quotaLine(50));
+    });
+
+    test('without a vote mission nothing is scanned: one decision per challenge', async () => {
+        const api = makeApi([open(1), open(2)]);
+        await run(api, withVotes(0));
+        await run(api);
+        expect(votingLogic.evaluateVotingDecision).toHaveBeenCalledTimes(4);
+        expect(api.submitVotes).not.toHaveBeenCalled();
+        expect(messages('info')).not.toContainEqual(expect.stringContaining('Vote mission'));
+    });
+
+    test('a null challenge and one whose decision throws do not stop the pass', async () => {
+        decide((id) => {
+            if (id === 2) throw new Error('malformed');
+            return waiting;
+        });
+        const api = makeApi([invalid<Challenge>(null), open(2), open(3)]);
+        const result = await run(api, withVotes(40));
+        expect(result.success).toBe(true);
+        expect(api.submitVotes).toHaveBeenCalledTimes(1);
+        expect(api.submitVotes.mock.calls[0][3]).toBe(40);
+        expect(api.getVoteImages).toHaveBeenCalledWith(expect.objectContaining({ id: 3 }), 'tok');
+    });
+
+    test('a cancel during the mission vote ends the pass', async () => {
+        const api = makeApi([open(1), open(2)]);
+        api.submitVotes.mockImplementation(async () => {
+            cancellation.isCancelled.mockReturnValue(true);
+            return { success: true };
+        });
+        try {
+            const result = await run(api, withVotes(10));
+            expect(result).toEqual(expect.objectContaining({ success: false, message: 'Voting cancelled by user' }));
+            expect(api.submitVotes).toHaveBeenCalledTimes(1);
+        } finally {
+            cancellation.isCancelled.mockReturnValue(false);
+        }
+    });
+
+    test('a mission vote that throws is closed as a failure and the pass continues', async () => {
+        const api = makeApi([open(1), open(2)]);
+        api.getVoteImages.mockRejectedValueOnce(new Error('images down'));
+        const result = await run(api, withVotes(10));
+        expect(result.success).toBe(true);
+        expect(log.endOperation).toHaveBeenCalledWith('vote-1', null, 'images down');
+        expect(api.submitVotes).toHaveBeenCalledTimes(1);
+    });
+
+    describe('new-entry log line', () => {
+        const withNewEntry = () => {
+            settings.getEffectiveSetting.mockImplementation((key) => key === 'voteOnNewEntry');
+            const tracker = { get: jest.fn(() => ['a']), set: jest.fn() };
+            const entries = [{ id: 'a' }, { id: 'b' }];
+            const challenge = open(1, { member: { ranking: { entries, exposure: { exposure_factor: 40 } } } });
+            return { tracker, challenge };
+        };
+
+        test('reflects the mission vote that actually runs', async () => {
+            const { tracker, challenge } = withNewEntry();
+            await run(makeApi([challenge]), { ...withVotes(10), entryTracker: tracker });
+            expect(messages('info')).toContain(
+                '[Challenge 1: Mission 1] New entry detected — already eligible on its own',
+            );
+        });
+
+        test('says not voting when no mission vote applies', async () => {
+            const { tracker, challenge } = withNewEntry();
+            await run(makeApi([challenge]), { entryTracker: tracker });
+            expect(messages('info')).toContain('[Challenge 1: Mission 1] New entry detected — not voting this cycle');
+        });
     });
 });

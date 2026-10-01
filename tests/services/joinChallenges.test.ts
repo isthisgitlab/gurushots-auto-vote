@@ -615,7 +615,7 @@ describe('runJoinPass — join window', () => {
 
         test('a join mission lifts the window until it is met, and each join counts it down', async () => {
             withJoinEarly(true);
-            const missions = { join: 2, fill: 0, turbo: 0 };
+            const missions = { join: 2, fill: 0, turbo: 0, vote: 0 };
             const res = await runJoinPass('tok', NOW_MS, farDeps(), missions);
             expect(statuses(res)).toEqual(['joined', 'joined', 'skipped:too-early']);
             expect(missions.join).toBe(0);
@@ -625,7 +625,7 @@ describe('runJoinPass — join window', () => {
             withJoinEarly(true);
             // 3 wins needed; one joined challenge holds a turbo still to win, two are used or won.
             const deps = farDeps(['FREE', 'USED', 'WON']);
-            const missions = { join: 0, fill: 0, turbo: 3 };
+            const missions = { join: 0, fill: 0, turbo: 3, vote: 0 };
             const res = await runJoinPass('tok', NOW_MS, deps, missions);
             expect(statuses(res)).toEqual(['joined', 'joined', 'skipped:too-early']);
             // A join is not a turbo win: the turbo mission counts down only when one is won.
@@ -647,7 +647,7 @@ describe('runJoinPass — join window', () => {
                 getActiveChallenges: jest.fn(async () => ({ challenges: [] })),
             });
 
-            const res = await runJoinPass('tok', NOW_MS, deps, { join: 0, fill: 0, turbo: 1 });
+            const res = await runJoinPass('tok', NOW_MS, deps, { join: 0, fill: 0, turbo: 1, vote: 0 });
 
             expect(res.results).toEqual([
                 { id: 2, status: 'joined' },
@@ -667,7 +667,7 @@ describe('runJoinPass — join window', () => {
                 getActiveChallenges: jest.fn(async () => ({ challenges: [] })),
             });
 
-            const res = await runJoinPass('tok', NOW_MS, deps, { join: 0, fill: 0, turbo: 1 });
+            const res = await runJoinPass('tok', NOW_MS, deps, { join: 0, fill: 0, turbo: 1, vote: 0 });
 
             expect(res.results.map((result) => result.id)).toEqual([2, 1, 3]);
             expect(deps.submitToChallenge).toHaveBeenCalledTimes(1);
@@ -689,7 +689,7 @@ describe('runJoinPass — join window', () => {
                 getActiveChallenges: jest.fn(async () => ({ challenges: [] })),
             });
 
-            const res = await runJoinPass('tok', NOW_MS, deps, { join: 0, fill: 0, turbo: 1 });
+            const res = await runJoinPass('tok', NOW_MS, deps, { join: 0, fill: 0, turbo: 1, vote: 0 });
 
             expect(res.results).toEqual([
                 { id: 3, status: 'skipped:close-time-unknown' },
@@ -704,7 +704,7 @@ describe('runJoinPass — join window', () => {
         test('turbos waiting in joined challenges (free, playing, on the timer) cover the mission', async () => {
             withJoinEarly(true);
             const deps = farDeps(['FREE', 'IN_PROGRESS', 'TIMER']);
-            const res = await runJoinPass('tok', NOW_MS, deps, { join: 0, fill: 0, turbo: 3 });
+            const res = await runJoinPass('tok', NOW_MS, deps, { join: 0, fill: 0, turbo: 3, vote: 0 });
             expect(statuses(res)).toEqual(['skipped:too-early', 'skipped:too-early', 'skipped:too-early']);
         });
 
@@ -730,6 +730,7 @@ describe('runJoinPass — join window', () => {
                 join: 0,
                 fill: 0,
                 turbo: 1,
+                vote: 0,
                 turboRequirements: [{ remaining: 1, expiresAtSec: NOW_SEC + 3 * HOUR }],
             });
 
@@ -785,6 +786,7 @@ describe('runJoinPass — join window', () => {
                     join: 0,
                     fill: 0,
                     turbo: 1,
+                    vote: 0,
                     turboRequirements: [{ remaining: 1, expiresAtSec: deadline }],
                 });
                 expect({ name, joined: res.joined }).toEqual({ name, joined: joins });
@@ -817,6 +819,7 @@ describe('runJoinPass — join window', () => {
                 join: 0,
                 fill: 0,
                 turbo: 4,
+                vote: 0,
                 turboRequirements: [
                     { remaining: 1, expiresAtSec: NOW_SEC + 2 * HOUR },
                     { remaining: 4, expiresAtSec: NOW_SEC + 24 * HOUR },
@@ -835,7 +838,7 @@ describe('runJoinPass — join window', () => {
 
         test('a challenge joined for a turbo mission stops the next cycle joining another for it', async () => {
             withJoinEarly(true);
-            const missions = { join: 0, fill: 0, turbo: 1 };
+            const missions = { join: 0, fill: 0, turbo: 1, vote: 0 };
             const first = await runJoinPass('tok', NOW_MS, farDeps([]), missions);
             expect(statuses(first)).toEqual(['joined', 'skipped:too-early', 'skipped:too-early']);
             // Next cycle: the new challenge's turbo is on its timer, the mission still needs 1.
@@ -851,7 +854,7 @@ describe('runJoinPass — join window', () => {
                     challenges: [null, { id: 1 }, { id: 2, member: {} }, { id: 3, member: { turbo: {} } }],
                 })),
             });
-            const res = await runJoinPass('tok', NOW_MS, deps, { join: 0, fill: 0, turbo: 1 });
+            const res = await runJoinPass('tok', NOW_MS, deps, { join: 0, fill: 0, turbo: 1, vote: 0 });
             expect(statuses(res)).toEqual(['joined', 'skipped:too-early']);
         });
 
@@ -863,20 +866,20 @@ describe('runJoinPass — join window', () => {
             });
             const none = makeDeps({ getMemberChallenges: jest.fn(async () => [far(1)]) });
             for (const deps of [failed, none]) {
-                const res = await runJoinPass('tok', NOW_MS, deps, { join: 0, fill: 0, turbo: 2 });
+                const res = await runJoinPass('tok', NOW_MS, deps, { join: 0, fill: 0, turbo: 2, vote: 0 });
                 expect(statuses(res)).toEqual(['skipped:too-early']);
             }
         });
 
         test('with both missions active, the larger need sets how many join early', async () => {
             withJoinEarly(true);
-            const res = await runJoinPass('tok', NOW_MS, farDeps(), { join: 1, fill: 0, turbo: 2 });
+            const res = await runJoinPass('tok', NOW_MS, farDeps(), { join: 1, fill: 0, turbo: 2, vote: 0 });
             expect(statuses(res)).toEqual(['joined', 'joined', 'skipped:too-early']);
         });
 
         test('keeps the window while the setting is off, even with missions needing joins', async () => {
             withJoinEarly(false);
-            const res = await runJoinPass('tok', NOW_MS, farDeps(), { join: 2, fill: 0, turbo: 2 });
+            const res = await runJoinPass('tok', NOW_MS, farDeps(), { join: 2, fill: 0, turbo: 2, vote: 0 });
             expect(statuses(res)).toEqual(['skipped:too-early', 'skipped:too-early', 'skipped:too-early']);
         });
 
@@ -888,7 +891,7 @@ describe('runJoinPass — join window', () => {
 
         test('a met mission leaves the window in place', async () => {
             withJoinEarly(true);
-            const res = await runJoinPass('tok', NOW_MS, farDeps(), { join: 0, fill: 0, turbo: 0 });
+            const res = await runJoinPass('tok', NOW_MS, farDeps(), { join: 0, fill: 0, turbo: 0, vote: 0 });
             expect(statuses(res)).toEqual(['skipped:too-early', 'skipped:too-early', 'skipped:too-early']);
             expect(earlyNotices()).toEqual([]);
         });

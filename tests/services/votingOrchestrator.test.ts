@@ -291,7 +291,7 @@ describe('mock-parity behaviors on the shared path', () => {
         const api = makeApi([makeChallenge()]);
         votingLogic.shouldPlayAutoTurbo.mockReturnValue(true);
         votingLogic.isTurboEarnSaved.mockReturnValueOnce(true);
-        const missions = { join: 0, fill: 0, turbo: 0 };
+        const missions = { join: 0, fill: 0, turbo: 0, vote: 0 };
         await runVotingPass('tok', null, deps(api, { missions }));
         expect(api.runTurboMiniGame).not.toHaveBeenCalled();
     });
@@ -303,7 +303,7 @@ describe('mock-parity behaviors on the shared path', () => {
         api.runTurboMiniGame
             .mockResolvedValueOnce({ played: 6, correct: 5, flipped: 0, doubleFailed: 1, won: false })
             .mockResolvedValueOnce({ played: 6, correct: 6, flipped: 0, doubleFailed: 0, won: true });
-        const missions = { join: 0, fill: 0, turbo: 1 };
+        const missions = { join: 0, fill: 0, turbo: 1, vote: 0 };
         await runVotingPass('tok', null, deps(api, { missions }));
         expect(api.runTurboMiniGame).toHaveBeenCalledTimes(2);
         expect(missions.turbo).toBe(0);
@@ -317,7 +317,7 @@ describe('mock-parity behaviors on the shared path', () => {
         const api = makeApi(list);
         votingLogic.shouldPlayAutoTurbo.mockReturnValue(true);
         votingLogic.isTurboEarnSaved.mockReturnValue(true);
-        const missions = { join: 0, fill: 0, turbo: 1 };
+        const missions = { join: 0, fill: 0, turbo: 1, vote: 0 };
         try {
             const result = await runVotingPass('tok', null, deps(api, { missions }));
             expect(api.runTurboMiniGame).toHaveBeenCalledTimes(1);
@@ -334,7 +334,7 @@ describe('mock-parity behaviors on the shared path', () => {
         const api = makeApi([invalid<Challenge>(null), sooner]);
         votingLogic.shouldPlayAutoTurbo.mockReturnValue(true);
         votingLogic.isTurboEarnSaved.mockReturnValue(true);
-        const missions = { join: 0, fill: 0, turbo: 1 };
+        const missions = { join: 0, fill: 0, turbo: 1, vote: 0 };
         try {
             const result = await runVotingPass('tok', null, deps(api, { missions }));
             expect(result.success).toBe(true);
@@ -352,7 +352,7 @@ describe('mock-parity behaviors on the shared path', () => {
             recordManualTurboWin('tok');
             return { played: 1, correct: 0, flipped: 1, doubleFailed: 0, won: false };
         });
-        const missions = { join: 0, fill: 0, turbo: 1 };
+        const missions = { join: 0, fill: 0, turbo: 1, vote: 0 };
         try {
             await runVotingPass('tok', null, deps(api, { missions }));
             expect(api.runTurboMiniGame).toHaveBeenCalledTimes(1);
@@ -371,11 +371,11 @@ describe('mock-parity behaviors on the shared path', () => {
         votingLogic.shouldPlayAutoTurbo.mockReturnValue(true);
         votingLogic.isTurboEarnSaved.mockReturnValue(true);
         api.runTurboMiniGame.mockResolvedValue({ played: 1, correct: 0, flipped: 1, doubleFailed: 0, won: false });
-        const missions = { join: 0, fill: 0, turbo: 1 };
+        const missions = { join: 0, fill: 0, turbo: 1, vote: 0 };
         const refreshMissionNeeds = jest
             .fn()
-            .mockResolvedValueOnce({ join: 0, fill: 0, turbo: 1 })
-            .mockResolvedValueOnce({ join: 0, fill: 0, turbo: 0 });
+            .mockResolvedValueOnce({ join: 0, fill: 0, turbo: 1, vote: 0 })
+            .mockResolvedValueOnce({ join: 0, fill: 0, turbo: 0, vote: 0 });
         try {
             await runVotingPass('tok', null, deps(api, { missions, refreshMissionNeeds }));
             expect(refreshMissionNeeds).toHaveBeenCalledTimes(2);
@@ -391,7 +391,7 @@ describe('mock-parity behaviors on the shared path', () => {
         const api = makeApi([makeChallenge()]);
         votingLogic.shouldPlayAutoTurbo.mockReturnValue(true);
         votingLogic.isTurboEarnSaved.mockReturnValue(true);
-        const missions = { join: 0, fill: 0, turbo: 1 };
+        const missions = { join: 0, fill: 0, turbo: 1, vote: 0 };
         const refreshMissionNeeds = jest.fn(async () => null);
         try {
             await runVotingPass('tok', null, deps(api, { missions, refreshMissionNeeds }));
@@ -405,7 +405,7 @@ describe('mock-parity behaviors on the shared path', () => {
     test('a turbo won outside a mission still counts toward one', async () => {
         const api = makeApi([makeChallenge()]);
         votingLogic.shouldPlayAutoTurbo.mockReturnValue(true);
-        const missions = { join: 0, fill: 0, turbo: 0 };
+        const missions = { join: 0, fill: 0, turbo: 0, vote: 0 };
         await runVotingPass('tok', null, deps(api, { missions }));
         expect(api.runTurboMiniGame).toHaveBeenCalledTimes(1);
         expect(missions.turbo).toBe(0);
@@ -687,7 +687,12 @@ describe('voting path', () => {
         );
         const result = await runVotingPass('tok', null, deps(api, { interChallengeDelay: delayFn }));
         expect(result.success).toBe(true);
-        expect(api.submitVotes).toHaveBeenCalledWith(expect.objectContaining({ images: expect.any(Array) }), 'tok', 87);
+        expect(api.submitVotes).toHaveBeenCalledWith(
+            expect.objectContaining({ images: expect.any(Array) }),
+            'tok',
+            87,
+            undefined,
+        );
         expect(delayFn).toHaveBeenCalledTimes(1);
     });
 });

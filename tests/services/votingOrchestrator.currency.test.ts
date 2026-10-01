@@ -168,7 +168,7 @@ describe('fill missions', () => {
 
     test('with no exposure-rule fill, a mission fill gets what the mission still needs and counts it down', async () => {
         currencyAuto.runMissionFill.mockResolvedValueOnce(true);
-        const missions = { join: 0, fill: 2, turbo: 0 };
+        const missions = { join: 0, fill: 2, turbo: 0, vote: 0 };
         await runWithMissions(missions);
         expect(currencyAuto.runMissionFill).toHaveBeenCalledWith(expect.objectContaining({ currency }), 2);
         expect(currencyAuto.runMissionFill.mock.invocationCallOrder[0]).toBeGreaterThan(
@@ -179,7 +179,7 @@ describe('fill missions', () => {
 
     test('an exposure-rule fill counts toward the mission and skips the mission fill', async () => {
         currencyAuto.runAutoExposureFill.mockResolvedValueOnce(true);
-        const missions = { join: 0, fill: 2, turbo: 0 };
+        const missions = { join: 0, fill: 2, turbo: 0, vote: 0 };
         await runWithMissions(missions);
         expect(currencyAuto.runMissionFill).not.toHaveBeenCalled();
         expect(missions.fill).toBe(1);
@@ -191,8 +191,49 @@ describe('fill missions', () => {
     });
 
     test('a mission fill that spent nothing leaves the mission as it was', async () => {
-        const missions = { join: 0, fill: 2, turbo: 0 };
+        const missions = { join: 0, fill: 2, turbo: 0, vote: 0 };
         await runWithMissions(missions);
         expect(missions.fill).toBe(2);
+    });
+});
+
+describe('vote missions', () => {
+    const missionChallenge = () =>
+        buildChallenge({
+            id: 101,
+            title: 'Currency',
+            type: 'regular',
+            start_time: NOW - 3600,
+            close_time: NOW + 3600,
+            member: { boost: { state: 'LOCKED' }, ranking: { entries: [], exposure: { exposure_factor: 10 } } },
+        });
+    const missionApi = (voteImages: { images: { id: string }[] }) => ({
+        getActiveChallenges: jest.fn(async () => ({ challenges: [missionChallenge()] })),
+        getVoteImages: jest.fn(async () => voteImages),
+        submitVotes: jest.fn(async () => ({ success: true })),
+    });
+    const runWithVoteMission = (api: ReturnType<typeof missionApi>) =>
+        runVotingPass('tok', null, {
+            api: invalid(api),
+            cleanupStaleMetadata: null,
+            interChallengeDelay: () => 0,
+            currency,
+            missions: { join: 0, fill: 0, turbo: 0, vote: 5 },
+        });
+
+    test('a capped mission pool is handed to the fill step whole', async () => {
+        const pool = { images: [{ id: 'i1' }, { id: 'i2' }, { id: 'i3' }] };
+        const api = missionApi(pool);
+        await runWithVoteMission(api);
+        expect(api.submitVotes).toHaveBeenCalledWith(pool, 'tok', 100, 5);
+        expect(currencyAuto.runAutoExposureFill).toHaveBeenCalledWith(expect.objectContaining({ currency }), pool);
+    });
+
+    test('a mission vote that threw skips the fill', async () => {
+        const api = missionApi({ images: [{ id: 'i1' }] });
+        api.submitVotes.mockRejectedValue(new Error('boom'));
+        await runWithVoteMission(api);
+        expect(api.submitVotes).toHaveBeenCalledTimes(1);
+        expect(currencyAuto.runAutoExposureFill).not.toHaveBeenCalled();
     });
 });

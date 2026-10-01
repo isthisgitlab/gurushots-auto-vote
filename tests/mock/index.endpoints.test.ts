@@ -344,7 +344,7 @@ describe('fetchChallengesAndVote — join pre-step', () => {
     });
 
     test('reads the missions over the mock endpoint and hands the same needs to the join pass and the vote', async () => {
-        const needs = { join: 1, fill: 0, turbo: 2 };
+        const needs = { join: 1, fill: 0, turbo: 2, vote: 0 };
         loadMissionNeeds.mockResolvedValueOnce(needs);
         const unregister = jest.fn();
         registerMissionNeeds.mockReturnValueOnce(unregister);
@@ -363,8 +363,8 @@ describe('fetchChallengesAndVote — join pre-step', () => {
         const original = Object.getOwnPropertyDescriptor(globalThis, '__GS_HEADLESS__');
         Object.assign(globalThis, { __GS_HEADLESS__: true });
         loadMissionNeeds
-            .mockResolvedValueOnce({ join: 0, fill: 0, turbo: 1 })
-            .mockResolvedValueOnce({ join: 0, fill: 0, turbo: 0 });
+            .mockResolvedValueOnce({ join: 0, fill: 0, turbo: 1, vote: 0 })
+            .mockResolvedValueOnce({ join: 0, fill: 0, turbo: 0, vote: 0 });
         try {
             await mockApiClient.fetchChallengesAndVote('tok');
             const refresh = runVotingPass.mock.calls.at(-1)![2].refreshMissionNeeds;

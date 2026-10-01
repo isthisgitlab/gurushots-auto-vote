@@ -26,6 +26,11 @@ export interface AutoVoteDecision {
      * cancelling it, so the orchestrator keeps the new-entry trigger armed.
      */
     preservesNewEntryTrigger?: boolean;
+    /**
+     * True when a block (the `skipReason` path) stopped the vote — as opposed to
+     * an ordinary "below the threshold" no. A vote mission leaves these alone.
+     */
+    blocked?: boolean;
 }
 
 interface ManualVoteDecision {
@@ -52,6 +57,7 @@ const evaluateVotingDecision = (
             targetExposure: r.targetExposure,
             forcedByNewEntry: false,
             preservesNewEntryTrigger: r.preservesNewEntryTrigger === true,
+            blocked: true,
         };
 
     const {

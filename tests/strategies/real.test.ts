@@ -368,7 +368,7 @@ describe('fetchChallengesAndVote', () => {
     });
 
     test('reads the missions once and hands the same needs to the join pre-step and the pass', async () => {
-        const needs = { join: 2, fill: 0, turbo: 1 };
+        const needs = { join: 2, fill: 0, turbo: 1, vote: 0 };
         loadMissionNeeds.mockResolvedValueOnce(needs);
         const unregister = jest.fn();
         registerMissionNeeds.mockReturnValueOnce(unregister);
@@ -392,8 +392,8 @@ describe('fetchChallengesAndVote', () => {
         const original = Object.getOwnPropertyDescriptor(globalThis, '__GS_HEADLESS__');
         Object.assign(globalThis, { __GS_HEADLESS__: true });
         loadMissionNeeds
-            .mockResolvedValueOnce({ join: 0, fill: 0, turbo: 1 })
-            .mockResolvedValueOnce({ join: 0, fill: 0, turbo: 0 });
+            .mockResolvedValueOnce({ join: 0, fill: 0, turbo: 1, vote: 0 })
+            .mockResolvedValueOnce({ join: 0, fill: 0, turbo: 0, vote: 0 });
         try {
             await fetchChallengesAndVote('tok');
             const refresh = runVotingPass.mock.calls.at(-1)![2].refreshMissionNeeds;

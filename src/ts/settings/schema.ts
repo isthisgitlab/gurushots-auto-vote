@@ -1542,6 +1542,18 @@ const SETTINGS_SCHEMA = {
         label: 'app.missionUseFills',
         description: 'app.missionUseFillsDesc',
     },
+    // Vote for missions: during a "Vote on N photos" mission, vote every cycle
+    // without waiting for the exposure threshold (see services/missions.ts).
+    missionVote: {
+        type: 'boolean',
+        default: false,
+        perChallenge: false,
+        validation: zBool,
+        validationOrder: 1,
+        group: 'missions',
+        label: 'app.missionVote',
+        description: 'app.missionVoteDesc',
+    },
 
     // --- Notifications ---
     // OS desktop/mobile "action coming up" warnings. All GLOBAL (perChallenge:

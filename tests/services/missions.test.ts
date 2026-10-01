@@ -1,5 +1,5 @@
 /**
- * Tests for services/missions.ts — recognising the join / fill / turbo
+ * Tests for services/missions.ts — recognising the join / fill / turbo / vote
  * missions by name, what each still needs, the per-kind settings gate, the
  * change-only summary log, and counting a landed action down.
  */
@@ -10,7 +10,7 @@ jest.mock('../../src/ts/logger', () => {
 });
 jest.mock('../../src/ts/settings', () => ({ getEffectiveSetting: jest.fn() }));
 
-import type { Mission } from '../../src/ts/types/gurushots';
+import type { Challenge, Mission } from '../../src/ts/types/gurushots';
 import type { CategoryLogger } from '../../src/ts/logger';
 import { invalid } from '../helpers/invalid';
 
@@ -30,6 +30,8 @@ const {
     classifyMission,
     loadMissionNeeds,
     consumeMission,
+    isMissionVoteCandidate,
+    missionVoteQuota,
     registerMissionNeeds,
     recordManualTurboWin,
     resetMissionLog,
@@ -49,7 +51,7 @@ const mission = (name: string, current: number, required: number, over: Partial<
 
 const enable = (...keys: string[]) =>
     settings.getEffectiveSetting.mockImplementation((key) => (keys.includes(key) ? true : undefined));
-const ALL = ['missionJoinEarly', 'missionUseFills', 'missionSaveTurbos'];
+const ALL = ['missionJoinEarly', 'missionUseFills', 'missionSaveTurbos', 'missionVote'];
 const infoMessages = () => logger.__level.info.mock.calls.map((c) => c[0]);
 
 beforeEach(() => {
@@ -59,9 +61,9 @@ beforeEach(() => {
 });
 
 test('manual Turbo wins update only active missions for the same account', () => {
-    const first = { join: 0, fill: 0, turbo: 2 };
-    const second = { join: 0, fill: 0, turbo: 2 };
-    const otherAccount = { join: 0, fill: 0, turbo: 1 };
+    const first = { join: 0, fill: 0, turbo: 2, vote: 0 };
+    const second = { join: 0, fill: 0, turbo: 2, vote: 0 };
+    const otherAccount = { join: 0, fill: 0, turbo: 1, vote: 0 };
     const stopFirst = registerMissionNeeds('tok', first);
     const stopSecond = registerMissionNeeds('tok', second);
     const stopOther = registerMissionNeeds('other', otherAccount);
@@ -81,7 +83,7 @@ test('manual Turbo wins update only active missions for the same account', () =>
 });
 
 test('nested registrations keep the same mission state active until both release it', () => {
-    const needs = { join: 0, fill: 0, turbo: 2 };
+    const needs = { join: 0, fill: 0, turbo: 2, vote: 0 };
     const stopOuter = registerMissionNeeds('tok', needs);
     const stopInner = registerMissionNeeds('tok', needs);
     try {
@@ -112,6 +114,11 @@ describe('classifyMission', () => {
         ['Get All Star', null],
         ['Join an All-Star challenge', null],
         ['Fulfill 3 votes', null],
+        ['Vote on 400 photos', 'vote'],
+        ['Vote on photos', 'vote'],
+        ['Vote for 20 photos', 'vote'],
+        ['Get 500 votes', null],
+        ['Receive a vote for your photo', null],
     ])('%s → %s', (name, kind) => {
         expect(classifyMission({ id: 1, name })).toBe(kind);
     });
@@ -130,12 +137,14 @@ describe('loadMissionNeeds', () => {
             mission('Join 7 challenges', 2, 7),
             mission('Use Fill 3 times', 1, 3),
             mission('Win Turbo 4 times', 0, 4),
+            mission('Vote on 400 photos', 100, 400),
             mission('Play 6 Duels', 0, 6),
         ]);
         await expect(loadMissionNeeds('tok', NOW_MS, d)).resolves.toEqual({
             join: 5,
             fill: 2,
             turbo: 4,
+            vote: 300,
             turboRequirements: [{ remaining: 4, expiresAtSec: NOW_SEC + 3600 }],
         });
         expect(d.getMyMissions).toHaveBeenCalledWith('tok');
@@ -152,7 +161,7 @@ describe('loadMissionNeeds', () => {
                 mission('Win Turbo 2 times', 0, 2, invalid({ expiration_timestamp: undefined, progress: null })),
             ]),
         );
-        expect(needs).toEqual({ join: 0, fill: 0, turbo: 0 });
+        expect(needs).toEqual({ join: 0, fill: 0, turbo: 0, vote: 0 });
     });
 
     test('a mission without an expiry stays active; the larger of two same-kind needs wins', async () => {
@@ -184,6 +193,7 @@ describe('loadMissionNeeds', () => {
             join: 0,
             fill: 0,
             turbo: 4,
+            vote: 0,
             turboRequirements: [
                 { remaining: 4, expiresAtSec: NOW_SEC + 4 * 3600 },
                 { remaining: 2, expiresAtSec: NOW_SEC + 2 * 3600 },
@@ -202,6 +212,7 @@ describe('loadMissionNeeds', () => {
             join: 0,
             fill: 0,
             turbo: 4,
+            vote: 0,
             turboRequirements: [{ remaining: 4, expiresAtSec: NOW_SEC + 3600 }],
         });
     });
@@ -217,6 +228,7 @@ describe('loadMissionNeeds', () => {
             join: 0,
             fill: 0,
             turbo: 3,
+            vote: 0,
             turboRequirements: [{ remaining: 3, expiresAtSec: NOW_SEC + 3600 }],
         });
     });
@@ -235,6 +247,7 @@ describe('loadMissionNeeds', () => {
             join: 0,
             fill: 0,
             turbo: 0,
+            vote: 0,
         });
         await expect(
             loadMissionNeeds('tok', NOW_MS, { getMyMissions: jest.fn().mockRejectedValue(new Error('down')) }),
@@ -258,14 +271,94 @@ describe('loadMissionNeeds', () => {
     });
 });
 
+describe('isMissionVoteCandidate', () => {
+    const open = (over: Record<string, unknown> = {}) =>
+        invalid<Challenge>({
+            id: 1,
+            type: 'regular',
+            start_time: NOW_SEC - 100,
+            close_time: NOW_SEC + 100,
+            member: { ranking: { exposure: { exposure_factor: 40 } } },
+            ...over,
+        });
+
+    test('a started, open, non-flash challenge below 100% is a candidate', () => {
+        expect(isMissionVoteCandidate(open(), NOW_SEC)).toBe(true);
+        expect(isMissionVoteCandidate(open({ member: {} }), NOW_SEC)).toBe(true);
+    });
+
+    test.each([
+        ['flash', { type: 'flash' }],
+        ['not started', { start_time: NOW_SEC }],
+        ['closed', { close_time: NOW_SEC }],
+        ['full', { member: { ranking: { exposure: { exposure_factor: 100 } } } }],
+    ])('%s is not', (_name, over) => {
+        expect(isMissionVoteCandidate(open(over), NOW_SEC)).toBe(false);
+    });
+
+    test('a null or malformed challenge is not, and never throws', () => {
+        expect(isMissionVoteCandidate(invalid(null), NOW_SEC)).toBe(false);
+        expect(isMissionVoteCandidate(invalid(undefined), NOW_SEC)).toBe(false);
+        expect(isMissionVoteCandidate(invalid({}), NOW_SEC)).toBe(false);
+        expect(isMissionVoteCandidate(open({ member: { ranking: null } }), NOW_SEC)).toBe(true);
+    });
+});
+
+describe('missionVoteQuota', () => {
+    const challenge = (id: number, over: Record<string, unknown> = {}) =>
+        invalid<Challenge>({ id, type: 'regular', start_time: NOW_SEC - 100, close_time: NOW_SEC + 100, ...over });
+    const never = () => false;
+
+    test('nothing remaining is 0 before any challenge is looked at', () => {
+        const isBlocked = jest.fn(never);
+        const list = [challenge(1)];
+        expect(missionVoteQuota(0, list, NOW_SEC, isBlocked)).toBe(0);
+        expect(missionVoteQuota(-3, list, NOW_SEC, isBlocked)).toBe(0);
+        expect(missionVoteQuota(NaN, list, NOW_SEC, isBlocked)).toBe(0);
+        expect(isBlocked).not.toHaveBeenCalled();
+    });
+
+    test('splits what is left over the eligible challenges, rounding up', () => {
+        expect(missionVoteQuota(400, [challenge(1), challenge(2), challenge(3)], NOW_SEC, never)).toBe(134);
+        expect(missionVoteQuota(2, [challenge(1), challenge(2), challenge(3)], NOW_SEC, never)).toBe(1);
+        expect(missionVoteQuota(7, [challenge(1)], NOW_SEC, never)).toBe(7);
+    });
+
+    test('a blocked challenge is left out of the split', () => {
+        const isBlocked = (c: Challenge) => c.id === 2;
+        expect(missionVoteQuota(100, [challenge(1), challenge(2)], NOW_SEC, isBlocked)).toBe(100);
+    });
+
+    test('a challenge that is not a candidate is never asked about being blocked', () => {
+        const isBlocked = jest.fn(never);
+        const flash = challenge(2, { type: 'flash' });
+        expect(missionVoteQuota(10, [challenge(1), flash], NOW_SEC, isBlocked)).toBe(10);
+        expect(isBlocked).toHaveBeenCalledTimes(1);
+    });
+
+    test('a throwing isBlocked makes only that challenge ineligible', () => {
+        const isBlocked = (c: Challenge) => {
+            if (c.id === 2) throw new Error('malformed');
+            return false;
+        };
+        expect(missionVoteQuota(10, [challenge(1), challenge(2)], NOW_SEC, isBlocked)).toBe(10);
+    });
+
+    test('nothing eligible is 0', () => {
+        expect(missionVoteQuota(10, [], NOW_SEC, never)).toBe(0);
+        expect(missionVoteQuota(10, [challenge(1)], NOW_SEC, () => true)).toBe(0);
+        expect(missionVoteQuota(10, [challenge(1, { type: 'flash' })], NOW_SEC, never)).toBe(0);
+    });
+});
+
 describe('consumeMission', () => {
     test('counts a landed action down, never below 0, and ignores null', () => {
-        const needs = { join: 1, fill: 0, turbo: 2 };
+        const needs = { join: 1, fill: 0, turbo: 2, vote: 0 };
         consumeMission(needs, 'turbo');
         consumeMission(needs, 'join');
         consumeMission(needs, 'join');
         consumeMission(needs, 'fill');
-        expect(needs).toEqual({ join: 0, fill: 0, turbo: 1 });
+        expect(needs).toEqual({ join: 0, fill: 0, turbo: 1, vote: 0 });
         expect(() => consumeMission(null, 'join')).not.toThrow();
     });
 });

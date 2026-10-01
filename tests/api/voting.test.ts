@@ -409,5 +409,61 @@ describe('voting', () => {
 
             expect(mockWarningFn).toHaveBeenCalledWith(expect.stringContaining('Insufficient images'), null);
         });
+
+        describe('maxVotes cap', () => {
+            const pool = (count: number, ratio = 1) =>
+                buildVoteImages(Array.from({ length: count }, (_, i) => ({ id: `img${i}`, ratio })));
+            const votedCount = () => countOccurrences(makePostRequest.mock.calls[0][2]!, '&image_ids[]=');
+            const insufficient = expect.stringContaining('Insufficient images');
+
+            test('votes on exactly the cap, never one more, and does not warn', async () => {
+                makePostRequest.mockResolvedValueOnce({ success: true });
+
+                await submitVotes(pool(10), 'test-token', 100, 4);
+
+                expect(votedCount()).toBe(4);
+                expect(mockWarningFn).not.toHaveBeenCalledWith(insufficient, expect.anything());
+            });
+
+            test('the exposure stop wins when the target is reached before the cap', async () => {
+                makePostRequest.mockResolvedValueOnce({ success: true });
+
+                await submitVotes(pool(10, 30), 'test-token', 100, 8);
+
+                expect(votedCount()).toBe(4);
+                expect(mockWarningFn).not.toHaveBeenCalledWith(insufficient, expect.anything());
+            });
+
+            test('still warns when the pool runs out at exactly the cap below the target', async () => {
+                makePostRequest.mockResolvedValueOnce({ success: true });
+
+                await submitVotes(pool(3), 'test-token', 100, 3);
+
+                expect(votedCount()).toBe(3);
+                expect(mockWarningFn).toHaveBeenCalledWith(insufficient, null);
+            });
+
+            test.each([
+                ['undefined', undefined],
+                ['zero', 0],
+                ['negative', -2],
+                ['NaN', NaN],
+                ['Infinity', Infinity],
+            ])('%s means no cap', async (_name, maxVotes) => {
+                makePostRequest.mockResolvedValueOnce({ success: true });
+
+                await submitVotes(pool(5), 'test-token', 100, maxVotes);
+
+                expect(votedCount()).toBe(5);
+            });
+
+            test('a fractional cap rounds down', async () => {
+                makePostRequest.mockResolvedValueOnce({ success: true });
+
+                await submitVotes(pool(5), 'test-token', 100, 2.9);
+
+                expect(votedCount()).toBe(2);
+            });
+        });
     });
 });

@@ -309,6 +309,19 @@ describe('voting pause in the auto rule chain', () => {
         expect(fillOnly.shouldVote).toBe(false);
         expect(fillOnly.preservesNewEntryTrigger).toBe(false);
     });
+
+    test('every skip-reason decision is flagged blocked; an ordinary wait is not', () => {
+        mockSettings({ ...pausedNow });
+        expect(VotingLogic.evaluateVotingDecision(buildChallenge({ closeInSeconds: 7200 }), NOW).blocked).toBe(true);
+
+        mockSettings({ onlyBoost: true });
+        expect(VotingLogic.evaluateVotingDecision(buildChallenge(), NOW).blocked).toBe(true);
+
+        mockSettings({ exposure: 0 });
+        const waiting = VotingLogic.evaluateVotingDecision(buildChallenge({ closeInSeconds: 7200 }), NOW);
+        expect(waiting.shouldVote).toBe(false);
+        expect(waiting.blocked).toBeUndefined();
+    });
 });
 
 describe('voting pause never abandons a closing challenge', () => {

@@ -1,9 +1,9 @@
 /**
  * Mission-aware automation. The main GuruShots mission slot rotates through
- * "Join N challenges", "Use Fill N times", "Win Turbo N times" and an all-star
- * mission (nothing to automate there). get_my_missions carries no type field,
- * so a mission is recognised by the keyword in its name; how many are still
- * needed comes from its progress, never from the text.
+ * "Join N challenges", "Use Fill N times", "Win Turbo N times", "Vote on N
+ * photos" and an all-star mission (nothing to automate there). get_my_missions
+ * carries no type field, so a mission is recognised by the keyword in its
+ * name; how many are still needed comes from its progress, never from the text.
  *
  * Read at the start of a voting cycle — only while one of the mission settings
  * is on — and handed to the join pre-step and the voting pass as a mutable
@@ -11,15 +11,19 @@
  * down (consumeMission), so the rest of the cycle doesn't overshoot on the
  * progress the server reported at its start. The headless Android pass also
  * refreshes progress before using a saved Turbo.
+ *
+ * A vote mission is spread over the challenges instead (missionVoteQuota): each
+ * cycle every challenge that can take votes votes its share of what is left, up
+ * to 100% exposure, without waiting for its threshold.
  */
 
 import * as logger from '../logger';
 import * as settings from '../settings';
 
-import type { Mission } from '../types/gurushots';
+import type { Challenge, Mission } from '../types/gurushots';
 import { errorMessage } from '../errorMessage';
 
-type MissionKind = 'join' | 'fill' | 'turbo';
+type MissionKind = 'join' | 'fill' | 'turbo' | 'vote';
 
 /** How many actions active missions still need, with each Turbo need paired to its deadline.
  */
@@ -31,6 +35,8 @@ const MISSION_KEYWORDS: ReadonlyArray<[MissionKind, RegExp]> = [
     ['turbo', /\bturbo/i],
     ['fill', /\b(?:auto)?fills?\b/i],
     ['join', /\bjoin\b/i],
+    // "Vote on 400 photos" — not "Fulfill 3 votes", "Get 500 votes" or "Receive a vote for your photo".
+    ['vote', /\bvote\s+(?:on|for)\s+(?:\d+\s+)?photos?\b/i],
 ];
 
 // The all-star mission can't be automated, and its wording may well mention
@@ -40,11 +46,12 @@ const ALL_STAR = /all.?star/i;
 // The settings that follow each mission kind. Joining early serves a turbo
 // mission too: a turbo is only winnable in a joined challenge.
 const MISSION_SETTINGS: Readonly<
-    Record<MissionKind, ReadonlyArray<'missionJoinEarly' | 'missionUseFills' | 'missionSaveTurbos'>>
+    Record<MissionKind, ReadonlyArray<'missionJoinEarly' | 'missionUseFills' | 'missionSaveTurbos' | 'missionVote'>>
 > = Object.freeze({
     join: ['missionJoinEarly'],
     fill: ['missionUseFills'],
     turbo: ['missionSaveTurbos', 'missionJoinEarly'],
+    vote: ['missionVote'],
 });
 
 const CLAIMABLE = 'CLAIM';
@@ -96,7 +103,7 @@ const readMissionNeeds = async (
     if (!token || enabled.length === 0) return null;
     const missions = await getMyMissions(token);
     const nowSec = Math.floor(nowMs / 1000);
-    const needs: MissionNeeds = { join: 0, fill: 0, turbo: 0 };
+    const needs: MissionNeeds = { join: 0, fill: 0, turbo: 0, vote: 0 };
     for (const mission of Array.isArray(missions) ? missions : []) {
         const kind = classifyMission(mission);
         if (!kind || !enabled.includes(kind)) continue;
@@ -131,6 +138,46 @@ const loadMissionNeeds = async (
         cat().warning(`could not read missions: ${errorMessage(error) || error}`, null);
         return null;
     }
+};
+
+/**
+ * Whether a vote mission may spend votes here: a started, still open, non-flash
+ * challenge below 100% exposure. Fully optional-chained, so a malformed
+ * challenge reads as "no" instead of throwing.
+ *
+ * @param nowSec epoch seconds
+ */
+const isMissionVoteCandidate = (challenge: Challenge, nowSec: number): boolean => {
+    if (challenge?.type === 'flash') return false;
+    if (!(challenge?.start_time < nowSec) || !(challenge?.close_time > nowSec)) return false;
+    return (challenge?.member?.ranking?.exposure?.exposure_factor ?? 0) < 100;
+};
+
+/**
+ * How many photos each eligible challenge votes on this cycle: what the vote
+ * mission still needs, split evenly over the challenges that can take votes
+ * (rounded up), or 0 when none can or nothing is needed. `isBlocked` is asked
+ * last and a throw from it makes that challenge ineligible, so one malformed
+ * challenge can't abort the pass.
+ *
+ * @param nowSec epoch seconds
+ */
+const missionVoteQuota = (
+    remaining: number,
+    challenges: Challenge[],
+    nowSec: number,
+    isBlocked: (challenge: Challenge) => boolean,
+): number => {
+    if (!(remaining > 0)) return 0;
+    const eligible = challenges.filter((challenge) => {
+        if (!isMissionVoteCandidate(challenge, nowSec)) return false;
+        try {
+            return !isBlocked(challenge);
+        } catch {
+            return false;
+        }
+    });
+    return eligible.length > 0 ? Math.ceil(remaining / eligible.length) : 0;
 };
 
 /**
@@ -169,6 +216,8 @@ export {
     classifyMission,
     loadMissionNeeds,
     consumeMission,
+    isMissionVoteCandidate,
+    missionVoteQuota,
     registerMissionNeeds,
     recordManualTurboWin,
     resetMissionLog,

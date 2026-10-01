@@ -45,6 +45,10 @@ const getVoteImages = async (challenge: Challenge, token: string): Promise<VoteI
     return response;
 };
 
+// A non-finite value or one below 1 means no cap.
+const voteCapOf = (maxVotes: number | undefined): number =>
+    typeof maxVotes === 'number' && Number.isFinite(maxVotes) && maxVotes >= 1 ? Math.floor(maxVotes) : Infinity;
+
 /**
  * Submits votes for images in a challenge
  *
@@ -56,12 +60,15 @@ const getVoteImages = async (challenge: Challenge, token: string): Promise<VoteI
  * @param voteImages - the pool getVoteImages returned
  * @param token - Authentication token
  * @param targetExposure - Target exposure percentage (default: 100)
+ * @param maxVotes - Most images to vote on (a vote mission's per-challenge share);
+ *   a non-finite value or one below 1 means no cap
  * @returns API response or undefined if submission failed
  */
 const submitVotes = async (
     voteImages: VoteImagesResponse,
     token: string,
     targetExposure: number = 100,
+    maxVotes?: number,
 ): Promise<SuccessResponse | undefined> => {
     const { challenge, voting, images } = voteImages;
     const startTime = Date.now();
@@ -108,6 +115,8 @@ const submitVotes = async (
 
     const votedImageIds = [];
     let unusableRatios = 0;
+    const voteCap = voteCapOf(maxVotes);
+    let capped = false;
 
     for (const image of uniqueImages) {
         // Keep this comparison as written rather than negating it. A caller can pass a
@@ -115,6 +124,10 @@ const submitVotes = async (
         // `number >= function`, so an inverted test would vote the whole pool instead of
         // standing down. See the thresholdFunction case in tests/api/voting.test.ts.
         if (!(exposure_factor < targetExposure)) break;
+        if (votedImageIds.length >= voteCap) {
+            capped = true;
+            break;
+        }
 
         votedImageIds.push(image.id);
         votedImages += `&image_ids[]=${encodeURIComponent(image.id)}`;
@@ -140,8 +153,8 @@ const submitVotes = async (
     }
 
     // Only a genuine shortfall is worth warning about — not an exhausted pool whose final
-    // image carried us past the target.
-    if (votedImageIds.length > 0 && exposure_factor < targetExposure) {
+    // image carried us past the target, nor a vote stopped by the maxVotes cap.
+    if (votedImageIds.length > 0 && exposure_factor < targetExposure && !capped) {
         logger
             .withCategory('voting')
             .warning(

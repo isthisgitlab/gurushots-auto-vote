@@ -117,7 +117,7 @@ describe('voteOnNewEntry end-to-end through the real rule engine', () => {
         const second = makeApi(challengeWith(['a', 'b'], 95));
         await runVotingPass('tok', null, deps(second, tracker));
         expect(second.submitVotes).toHaveBeenCalledTimes(1);
-        expect(second.submitVotes).toHaveBeenCalledWith(expect.anything(), 'tok', 100);
+        expect(second.submitVotes).toHaveBeenCalledWith(expect.anything(), 'tok', 100, undefined);
 
         // Pass 3: nothing new — quiet again.
         const third = makeApi(challengeWith(['a', 'b'], 95));

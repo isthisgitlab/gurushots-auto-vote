@@ -36,8 +36,9 @@
  *   automatic-fill counter. Mock passes in-memory ledgers for the same reason it passes
  *   cleanupStaleMetadata: null. Omitting it makes the automation inert.
  *   `missions` is what the active missions still need (services/missions.ts): a
- *   turbo win or a fill this pass counts down its mission. Omitted = no mission
- *   is followed.
+ *   turbo win or a fill this pass counts down its mission, and a vote mission
+ *   splits its remaining votes over the challenges (missionVoteQuota). Omitted =
+ *   no mission is followed.
  *   `challenges` is the full active list this cycle fetched (not the
  *   filtered subset) so callers can reuse it for threshold scheduling.
  */
@@ -49,7 +50,7 @@ import * as autoFill from './autoFill';
 import * as photoStats from './photoStats';
 import * as newEntryTracker from './newEntryTracker';
 import * as currencyAuto from './currencyAuto';
-import { consumeMission, registerMissionNeeds } from './missions';
+import { consumeMission, isMissionVoteCandidate, missionVoteQuota, registerMissionNeeds } from './missions';
 import { claimTurboRun, releaseTurboRun, turboRunSnapshot, wasManualTurboRunSince } from './turboRunLock';
 import { runScenarioStep } from './scenarioRunner';
 import * as cancellation from '../voting/cancellation';
@@ -499,6 +500,8 @@ export type PassContext = {
     scenarios: ScenarioDeps | null;
     missions: MissionNeeds | null;
     refreshMissionNeeds: (() => Promise<MissionNeeds | null>) | null;
+    /** Photos each eligible challenge votes on this cycle for a vote mission; 0 = none. */
+    missionVoteQuota: number;
     allChallenges: Challenge[];
     turboSnapshot: number;
 };
@@ -734,6 +737,7 @@ const submitVoteImages = async (
     targetExposure: number,
     pass: PassContext,
     onVoteLanded: () => void,
+    maxVotes?: number,
 ): Promise<VotingPassResult | null> => {
     // Check for cancellation before submitting votes
     if (cancellation.isCancelled()) {
@@ -742,10 +746,13 @@ const submitVoteImages = async (
 
     logger
         .withCategory('voting')
-        .info(`${logger.challengeTag(challenge)} Submitting votes for ${voteImages.images.length} images`, null);
+        .info(
+            `${logger.challengeTag(challenge)} Submitting votes for ${Math.min(voteImages.images.length, maxVotes ?? Infinity)} images`,
+            null,
+        );
 
     // Submit votes to target exposure (dynamic based on voting rules)
-    await pass.api.submitVotes(voteImages, pass.token, targetExposure);
+    await pass.api.submitVotes(voteImages, pass.token, targetExposure, maxVotes);
 
     // Check for cancellation before delay
     if (cancellation.isCancelled()) {
@@ -776,12 +783,15 @@ type VoteOutcome = {
  * `votePool` is the pool this pass voted from — handed to the exposure-fill
  * rule, which only spends when voting cannot reach its threshold. undefined =
  * voting didn't run (the rule fetches the pool itself); null = none.
+ *
+ * @param maxVotes - caps the photos voted on (a vote mission's share)
  */
 const voteOnChallenge = async (
     challenge: Challenge,
     decision: { shouldVote: boolean; voteReason: string; targetExposure: number },
     pass: PassContext,
     onVoteLanded: () => void,
+    maxVotes?: number,
 ): Promise<VoteOutcome> => {
     const outcome: VoteOutcome = { cancelled: null, voteThrew: false, votePool: undefined };
     if (!decision.shouldVote) {
@@ -812,6 +822,7 @@ const voteOnChallenge = async (
 
         // Get images to vote on
         const voteImages = await pass.api.getVoteImages(challenge, pass.token);
+        // A capped mission pool is handed to the fill step whole, like any other.
         outcome.votePool = voteImages ?? null;
         if (voteImages && voteImages.images) {
             outcome.cancelled = await submitVoteImages(
@@ -820,6 +831,7 @@ const voteOnChallenge = async (
                 decision.targetExposure,
                 pass,
                 onVoteLanded,
+                maxVotes,
             );
         } else {
             // No images is a valid "nothing to do" state — close the op as a
@@ -834,6 +846,33 @@ const voteOnChallenge = async (
         logger.withCategory('voting').endOperation(`vote-${challenge.id}`, null, failureText(error));
     }
     return outcome;
+};
+
+/**
+ * The vote a vote mission makes on a challenge the normal rules left waiting:
+ * a replacement decision (up to 100%) plus the photo cap, or null when the
+ * mission has no part here — no quota, the normal rule already votes, the
+ * decision is blocked, or the challenge can't take votes.
+ */
+const missionVoteDecision = (
+    challenge: Challenge,
+    decision: AutoVoteDecision,
+    pass: PassContext,
+    now: number,
+): { decision: AutoVoteDecision; maxVotes: number } | null => {
+    const quota = pass.missionVoteQuota;
+    if (!(quota >= 1) || decision.shouldVote || decision.blocked || !isMissionVoteCandidate(challenge, now)) {
+        return null;
+    }
+    return {
+        decision: {
+            shouldVote: true,
+            targetExposure: 100,
+            voteReason: `vote mission: ${pass.missions?.vote} left at cycle start — voting on up to ${quota} photos`,
+            forcedByNewEntry: false,
+        },
+        maxVotes: quota,
+    };
 };
 
 /**
@@ -885,18 +924,28 @@ const processChallenge = async (
     const entry = detectNewEntry(challenge, pass.entryTracker);
     // Use the centralized voting logic service
     const decision = votingLogic.evaluateVotingDecision(challenge, now, { hasNewEntry: entry.hasNewEntry });
+    // What actually runs: a vote mission may turn a threshold-wait into a capped vote.
+    const missionVote = missionVoteDecision(challenge, decision, pass, now);
+    const voteDecision = missionVote?.decision ?? decision;
 
     if (entry.hasNewEntry) {
         logger
             .withCategory('voting')
-            .info(`${logger.challengeTag(challenge)} New entry detected — ${describeNewEntryOutcome(decision)}`, null);
+            .info(
+                `${logger.challengeTag(challenge)} New entry detected — ${describeNewEntryOutcome(voteDecision)}`,
+                null,
+            );
     }
 
     // onVoteLanded fires only when a cancel follows a submit that already
     // landed, so it records the snapshot with voteThrew=false; calling it from
     // a failure path would disarm a forced-vote retry.
-    const vote = await voteOnChallenge(challenge, decision, pass, () =>
-        recordEntrySnapshot(pass.entryTracker, entry, decision, false),
+    const vote = await voteOnChallenge(
+        challenge,
+        voteDecision,
+        pass,
+        () => recordEntrySnapshot(pass.entryTracker, entry, decision, false),
+        missionVote?.maxVotes,
     );
     if (vote.cancelled) return vote.cancelled;
 
@@ -912,6 +961,36 @@ const processChallenge = async (
         if (filled) consumeMission(pass.missions, 'fill');
     }
     return null;
+};
+
+/**
+ * This cycle's per-challenge share of an active vote mission, over the whole
+ * active list; 0 when there is none to do. A per-card "Run" never does mission
+ * votes. Logs once when a mission is active but no challenge can take votes.
+ */
+const planMissionVotes = (
+    missions: MissionNeeds | null,
+    challengeIdFilter: string | number | null,
+    allChallenges: Challenge[],
+): number => {
+    const votesLeft = missions?.vote ?? 0;
+    if (!(votesLeft > 0) || challengeIdFilter != null) return 0;
+    const nowSec = Math.floor(Date.now() / 1000);
+    const quota = missionVoteQuota(
+        votesLeft,
+        allChallenges,
+        nowSec,
+        (challenge) => votingLogic.evaluateVotingDecision(challenge, nowSec).blocked === true,
+    );
+    if (quota === 0) {
+        logger
+            .withCategory('voting')
+            .info(
+                `🗳️ Vote mission: ${votesLeft} left — no challenge can take votes now (all full, flash or held by your settings); retrying next cycle`,
+                null,
+            );
+    }
+    return quota;
 };
 
 /**
@@ -979,6 +1058,7 @@ const runVotingPass = async (
             scenarios,
             missions,
             refreshMissionNeeds,
+            missionVoteQuota: planMissionVotes(missions, challengeIdFilter, allChallenges),
             allChallenges,
             turboSnapshot,
         };

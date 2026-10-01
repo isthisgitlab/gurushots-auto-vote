@@ -161,11 +161,12 @@ Everything above operates on challenges you've already joined. **Auto-join** (of
 
 ### Missions
 
-GuruShots' main mission rotates through **Join N challenges**, **Use Fill N times**, **Win Turbo N times** and an all-star mission. The app can help with the first three. Each has its own setting, all global and off by default. While any of them is on, the app reads your missions once per cycle, recognising each by its name and counting down as it joins, fills and wins turbos. The all-star mission can't be automated. Completed missions are claimed by **Auto-Claim Prizes** (`autoClaimPrizes`).
+GuruShots' main mission rotates through **Join N challenges**, **Use Fill N times**, **Win Turbo N times**, **Vote on N photos** and an all-star mission. The app can help with the first four. Each has its own setting, all global and off by default. While any of them is on, the app reads your missions once per cycle, recognising each by its name and counting down as it joins, fills, votes and wins turbos. The all-star mission can't be automated. Completed missions are claimed by **Auto-Claim Prizes** (`autoClaimPrizes`).
 
 - **Save Turbos for Missions (`missionSaveTurbos`).** Auto-earn normally wins each challenge's turbo the moment it opens, so a "Win Turbo" mission finds none left to win. With this on, an earnable turbo waits until such a mission is active, or until an hour before its `turboTime`. Every turbo is still earned and applied as before, just later. It needs auto-earn (`autoTurbo`) on and relies on a check at least once an hour (the GUI's maximum check interval).
 - **Join Early for Missions (`missionJoinEarly`).** During a "Join challenges" or "Win Turbo" mission, auto-join ignores its timing (`autoJoinWithinHoursOfEnd` / `autoJoinAfterPercentElapsed`) until the mission is done, so challenges it would join later anyway are joined now. For a turbo mission this adds turbos to win, since a turbo is only winnable in a joined challenge: it joins only as many as the mission is short of, counting the turbos already waiting in your challenges (including ones still on their timer). A new challenge's turbo can be won once its timer opens. Outside these missions auto-join works as usual. The type, tag and coin filters still apply, and auto-join itself must be on.
 - **Use Fills for Missions (`missionUseFills`).** During a "Use Fill" mission, the app spends fills on challenges below 100% exposure, at most one per challenge per cycle, until the mission is done. It keeps your fill reserve (`currencyReserveFills`).
+- **Vote for Missions (`missionVote`).** During a "Vote on photos" mission, every cycle splits the votes still needed over your challenges (rounded up) and votes that share on each one, without waiting for its exposure threshold. Voting stops at 100% exposure, also during the Final Window Exposure period, so a mission vote can go beyond the final-window target; whatever is left waits for the next cycle at the normal check interval, once exposure has decayed. Flash challenges and ones already at 100% are skipped, a challenge the normal rules already vote on gets no extra, and a per-card Run never does mission votes. Only Boost Mode, Vote Only in Last Minute, Voting Pause and Scheduled Voting still apply. Rounding up and normal votes can land a few votes past the mission's count.
 
 ### Challenge rules
 
@@ -279,6 +280,7 @@ Settings come in two layers. **App preferences** are global to the app. **Challe
 | `missionSaveTurbos` | `false` | bool           | Hold off earning turbos until a "Win Turbo" mission is active or the turbo's apply time is an hour away.                |
 | `missionJoinEarly`  | `false` | bool           | During a "Join challenges" or "Win Turbo" mission, auto-join without waiting for its timing, until the mission is done. |
 | `missionUseFills`   | `false` | bool           | During a "Use Fill" mission, spend fills on challenges below 100% exposure, until the mission is done.                  |
+| `missionVote`       | `false` | bool           | During a "Vote on photos" mission, vote every cycle up to 100% exposure without waiting for the threshold.              |
 
 ### Challenge settings
 
