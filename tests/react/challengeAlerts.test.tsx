@@ -157,6 +157,7 @@ describe('isMissedBoost', () => {
         const now = nowSec();
         expect(isMissedBoost({ ...missed(1, 'a'), start_time: now + 60 }, now)).toBe(false);
         expect(isMissedBoost({ ...missed(1, 'a'), close_time: now - 60 }, now)).toBe(false);
+        expect(isMissedBoost({ ...missed(1, 'a'), close_time: now }, now)).toBe(false);
         expect(isMissedBoost({ ...missed(1, 'a'), close_time: NaN }, now)).toBe(false);
         expect(isMissedBoost(invalid({ ...missed(1, 'a'), close_time: undefined }), now)).toBe(false);
     });

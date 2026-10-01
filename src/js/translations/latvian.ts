@@ -141,7 +141,7 @@ export const app = {
     statusHeaderBoosts: 'Boost gatavi',
     statusHeaderTurbos: 'Turbo gatavi',
     statusHeaderMissedBoosts: 'Boost nokavēti',
-    missedBoostsHint: 'Atgūsti ar atslēgu izaicinājuma kartītē',
+    missedBoostsHint: 'Atbloķē ar atslēgu izaicinājuma detalizētajā skatā',
     missedBoostsNoKeys: 'Nav atslēgu, lai tos atbloķētu',
     statusHeaderNext: 'Nākamā',
     statusHeaderNextClaim: 'Nākamā balvu saņemšana',

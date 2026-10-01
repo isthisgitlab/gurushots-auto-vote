@@ -140,7 +140,7 @@ export const app = {
     statusHeaderBoosts: 'Boosts ready',
     statusHeaderTurbos: 'Turbos ready',
     statusHeaderMissedBoosts: 'Boosts missed',
-    missedBoostsHint: 'Recover with a key on the challenge card',
+    missedBoostsHint: "Unlock with a key in the challenge's detailed view",
     missedBoostsNoKeys: 'No keys left to unlock these',
     statusHeaderNext: 'Next',
     statusHeaderNextClaim: 'Next claim',

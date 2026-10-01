@@ -4,6 +4,7 @@ import { openBoostWindows } from '../../../voting/boostWindow';
 import { useTick } from '@/hooks/useTick';
 import { lowExposureChallenges, missedBoostChallenges } from '@/utils/challengeAlerts';
 import { scrollToChallenge } from '@/utils/scrollToChallenge';
+import { useId } from 'react';
 
 import type { ComponentChildren, TargetedKeyboardEvent } from 'preact';
 import type { Bankroll, Challenge, MemberTurbo } from '../../../types/gurushots';
@@ -79,7 +80,9 @@ const blurOnEscape = (e: TargetedKeyboardEvent<HTMLElement>) => {
  * still be recovered with a key; each entry scrolls to its card (which takes
  * focus, closing the menu). Navigation only — the spend happens on the card.
  * No time-left text: the header has no tick, so it would freeze between
- * refetches.
+ * refetches. Membership, like the other counts, refreshes on each challenge
+ * refetch, so a challenge that closes in between stays listed until then.
+ * Opening is CSS-driven (focus), so the trigger carries no aria-expanded.
  */
 function MissedBoostsJump({
     missed,
@@ -89,10 +92,19 @@ function MissedBoostsJump({
     bankroll?: Bankroll | null;
 }) {
     const { t } = useTranslation();
-    const noKeys = bankroll !== undefined && bankroll !== null && !(bankroll.keys > 0);
+    const hintId = useId();
+    // An unreadable balance (shown as '—') is not zero keys.
+    const noKeys = bankroll !== undefined && bankroll !== null && Number.isFinite(bankroll.keys) && bankroll.keys <= 0;
     return (
         <div className="dropdown">
-            <div className="btn btn-xs btn-soft btn-warning" role="button" tabIndex={0} onKeyDown={blurOnEscape}>
+            <div
+                className="btn btn-sm btn-soft btn-warning"
+                role="button"
+                tabIndex={0}
+                aria-haspopup="true"
+                aria-describedby={hintId}
+                onKeyDown={blurOnEscape}
+            >
                 <span aria-hidden="true">💤</span>
                 <span className="font-semibold">{missed.length}</span>
                 <span>{t('app.statusHeaderMissedBoosts')}</span>
@@ -102,13 +114,13 @@ function MissedBoostsJump({
                 tabIndex={-1}
                 className="dropdown-content menu z-[1] mt-1 p-2 shadow bg-base-100 rounded-box w-64 max-w-[calc(100vw-2rem)]"
             >
-                <li className="menu-title">{noKeys ? t('app.missedBoostsNoKeys') : t('app.missedBoostsHint')}</li>
+                <li id={hintId} className="menu-title">
+                    {noKeys ? t('app.missedBoostsNoKeys') : t('app.missedBoostsHint')}
+                </li>
                 {missed.map((c) => (
                     <li key={c.id}>
                         <button type="button" onClick={() => scrollToChallenge(c.id)} onKeyDown={blurOnEscape}>
-                            <span className="truncate" title={c.title}>
-                                {c.title}
-                            </span>
+                            {c.title}
                         </button>
                     </li>
                 ))}
