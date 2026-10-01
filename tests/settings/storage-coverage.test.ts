@@ -224,7 +224,7 @@ describe('settings storage — edge cases', () => {
             });
             expect(categoryLogger.warning).toHaveBeenCalledTimes(1);
             expect(categoryLogger.warning).toHaveBeenCalledWith(
-                `Could not restrict ${USER_DATA}/settings.json to owner-only (EPERM); other local users may be able to read it. Make sure the file belongs to your user and is on a disk that supports file permissions (not a FAT, SMB or FUSE mount), then run: chmod 600 "${USER_DATA}/settings.json"`,
+                `Could not restrict ${USER_DATA}/settings.json to owner-only (EPERM); other local users may be able to read it. If it belongs to another user, run: sudo chown "$USER" "${USER_DATA}/settings.json". If it is on a FAT, SMB or FUSE mount, move the app data to a local disk. Then run: chmod 600 "${USER_DATA}/settings.json"`,
             );
         });
 
@@ -240,6 +240,25 @@ describe('settings storage — edge cases', () => {
 
             expect(fs.writeFileSync).toHaveBeenCalledTimes(2);
             expect(categoryLogger.warning).toHaveBeenCalledTimes(1);
+        });
+
+        test('a path warns again after a chmod on it succeeds, once per failure episode', () => {
+            const { mod, fs, categoryLogger } = loadStorage();
+            fs.existsSync.mockReturnValue(true);
+            const refuse = () => {
+                throw Object.assign(new Error('operation not permitted'), { code: 'EPERM' });
+            };
+            fs.chmodSync
+                .mockImplementationOnce(refuse)
+                .mockImplementationOnce(refuse)
+                .mockImplementationOnce(() => {})
+                .mockImplementationOnce(refuse)
+                .mockImplementationOnce(refuse);
+
+            for (let i = 0; i < 5; i++) mod.storage.writeRaw(`{"n":${i}}`);
+
+            expect(fs.writeFileSync).toHaveBeenCalledTimes(5);
+            expect(categoryLogger.warning).toHaveBeenCalledTimes(2);
         });
 
         test('refused chmods on two different paths warn once each', () => {

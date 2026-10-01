@@ -62,8 +62,9 @@ const getCapacitorPreferences = (): PreferencesPlugin => {
     return plugin;
 };
 
-// Paths whose refused chmod has been logged, so a file that stays unrestrictable
-// warns once per process rather than on every write.
+// Paths whose refused chmod has been logged. A path is dropped again once a
+// chmod on it succeeds, so a file that stays unrestrictable warns once per
+// failure episode rather than on every write.
 const warnedUnrestrictable = new Set<string>();
 
 /**
@@ -72,10 +73,11 @@ const warnedUnrestrictable = new Set<string>();
  * an existing file is chmod'ed to 0o600 before the new content lands in it:
  * when that chmod succeeds the data is never written into a file other local
  * users can read. A chmod the filesystem refuses (a file owned by another uid,
- * a vfat/SMB/FUSE mount) is logged once per path with what to check and does
- * not fail the write: the data still persists. The files can carry the auth
- * token. The file is rewritten in place rather than replaced by a rename,
- * because settingsWatcher watches its inode.
+ * a vfat/SMB/FUSE mount) is logged with what to do, once per failure episode
+ * (until a chmod on that path succeeds again), and does not fail the write:
+ * the data still persists. The files can carry the auth token. The file is
+ * rewritten in place rather than replaced by a rename, because
+ * settingsWatcher watches its inode.
  */
 const writeOwnerOnly = (filePath: string, data: string) => {
     const dir = path.dirname(filePath);
@@ -85,6 +87,7 @@ const writeOwnerOnly = (filePath: string, data: string) => {
     if (fs.existsSync(filePath)) {
         try {
             fs.chmodSync(filePath, 0o600);
+            warnedUnrestrictable.delete(filePath);
         } catch (err) {
             if (!warnedUnrestrictable.has(filePath)) {
                 warnedUnrestrictable.add(filePath);
@@ -95,7 +98,7 @@ const writeOwnerOnly = (filePath: string, data: string) => {
                 logger
                     .withCategory('settings')
                     .warning(
-                        `Could not restrict ${filePath} to owner-only (${reason}); other local users may be able to read it. Make sure the file belongs to your user and is on a disk that supports file permissions (not a FAT, SMB or FUSE mount), then run: chmod 600 "${filePath}"`,
+                        `Could not restrict ${filePath} to owner-only (${reason}); other local users may be able to read it. If it belongs to another user, run: sudo chown "$USER" "${filePath}". If it is on a FAT, SMB or FUSE mount, move the app data to a local disk. Then run: chmod 600 "${filePath}"`,
                     );
             }
         }
