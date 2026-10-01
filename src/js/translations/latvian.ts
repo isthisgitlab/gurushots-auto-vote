@@ -144,7 +144,7 @@ export const app = {
     missedBoostsHint:
         'Atbloķē ar atslēgu izaicinājuma kartītē; ja kompaktā kartītē nav pogas {unlock}, atver {details}',
     missedBoostsNoKeys: 'Nav atslēgu, lai tos atbloķētu',
-    missedBoostsKeysUnknown: 'Poga {unlock} kartītē parādīsies, kad būs pieejams atslēgu atlikums',
+    missedBoostsKeysUnknown: 'Poga {unlock} var parādīties, kad būs pieejams atslēgu atlikums',
     statusHeaderNext: 'Nākamā',
     statusHeaderNextClaim: 'Nākamā balvu saņemšana',
     statusHeaderNextClaimHint:

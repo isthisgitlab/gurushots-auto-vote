@@ -6,6 +6,9 @@ import { scrollToChallenge } from '@/utils/scrollToChallenge';
 import type { ComponentChild } from 'preact';
 import type { Bankroll, Challenge } from '../../src/js/types/gurushots';
 import { invalid } from '../helpers/invalid';
+import { mockTranslator } from './helpers/setup';
+import { app as englishApp } from '../../src/js/translations/english';
+import { app as latvianApp } from '../../src/js/translations/latvian';
 
 /**
  * StatusHeader: the aggregate summary bar. Two things matter:
@@ -295,8 +298,61 @@ describe('StatusHeader', () => {
             ['an unreadable key balance (not zero keys)', bankrollOf(NaN), 'app.missedBoostsKeysUnknown'],
         ])('the trigger is named by count and label and described by the hint for %s', (_state, bankroll, hint) => {
             wrap(<StatusHeader challenges={missedChallenges} nextRunAt={null} running={true} bankroll={bankroll} />);
-            const trigger = screen.getByRole('button', { name: '2 app.statusHeaderMissedBoosts', description: hint });
-            expect(trigger.hasAttribute('aria-haspopup')).toBe(false);
+            expect(
+                screen.getByRole('button', { name: '2 app.statusHeaderMissedBoosts', description: hint }),
+            ).toBeTruthy();
+        });
+
+        // The list is a plain ul of buttons, not an ARIA menu, so aria-haspopup (="menu") would misannounce it.
+        test('the trigger does not claim to open a menu', () => {
+            wrap(<StatusHeader challenges={missedChallenges} nextRunAt={null} running={true} />);
+            expect(trigger().hasAttribute('aria-haspopup')).toBe(false);
+        });
+
+        describe.each([
+            ['English', englishApp],
+            ['Latvian', latvianApp],
+        ])('with real %s strings', (_language, strings: Record<string, string>) => {
+            beforeEach(() => {
+                mockTranslator.t.mockImplementation((key) => strings[key.replace(/^app\./, '')] ?? key);
+            });
+            afterEach(() => {
+                mockTranslator.t.mockImplementation((key) => key);
+            });
+
+            const substituted = (template: string) =>
+                template.replace('{unlock}', strings.currencyKeyUnlock).replace('{details}', strings.details);
+
+            const descriptionOf = (bankroll: Bankroll | undefined) => {
+                wrap(
+                    <StatusHeader challenges={missedChallenges} nextRunAt={null} running={true} bankroll={bankroll} />,
+                );
+                const described = document.getElementById(
+                    screen
+                        .getByRole('button', { name: new RegExp(strings.statusHeaderMissedBoosts) })
+                        .getAttribute('aria-describedby')!,
+                );
+                return described!.textContent;
+            };
+
+            test('a key to spend fills in the Unlock and Details labels', () => {
+                const text = descriptionOf(bankrollOf(1));
+                expect(text).toBe(substituted(strings.missedBoostsHint));
+                expect(text).toContain(strings.currencyKeyUnlock);
+                expect(text).toContain(strings.details);
+                expect(text).not.toContain('{');
+            });
+
+            test('an unknown balance fills in the Unlock label', () => {
+                const text = descriptionOf(undefined);
+                expect(text).toBe(substituted(strings.missedBoostsKeysUnknown));
+                expect(text).toContain(strings.currencyKeyUnlock);
+                expect(text).not.toContain('{');
+            });
+
+            test('no keys left passes the string through unchanged', () => {
+                expect(descriptionOf(bankrollOf(0))).toBe(strings.missedBoostsNoKeys);
+            });
         });
 
         test('Escape blurs the focused trigger and entry; other keys do not', () => {
