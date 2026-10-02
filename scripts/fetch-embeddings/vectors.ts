@@ -1,3 +1,5 @@
+/** Pure vector math and vocabulary selection: parse, normalize, retrofit, stem assignment, quantize. */
+
 import { stem } from '../../src/ts/services/photoPicker';
 
 import type { ConceptsConfig } from '../build-lexicon';

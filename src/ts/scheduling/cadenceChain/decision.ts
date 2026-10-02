@@ -1,3 +1,5 @@
+/** The normal-vs-threshold wait decision and its plain-random-cadence error fallback. */
+
 import { getRandomCheckFrequencyMs, anchoredWaitMs, MIN_CYCLE_GAP_MS, OFFLINE_RETRY_MS } from '../randomDelay';
 import { computeNextCycleDelayMs } from '../thresholdWindow';
 import { DEFAULT_TIMEZONE } from '../../settings/uiDefaults';
@@ -17,7 +19,8 @@ export const DECISION_ERROR_MESSAGE = 'Error computing next cycle delay; using n
 // OFFLINE_RETRY_MS (the normal-mode wait ceiling applied while the API is
 // unreachable) is defined in ./randomDelay alongside the other cadence timing
 // constants so the Android headless loop can share it without importing the
-// chain; imported above and re-exported below for callers/tests.
+// chain; imported above, and re-exported by the ../cadenceChain facade for
+// callers/tests.
 
 /**
  * Normal-mode wait: anchored to the previous cycle's start, and — when this

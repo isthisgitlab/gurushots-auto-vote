@@ -1,3 +1,5 @@
+/** Host-injected dependency and result types of the cadence chain. */
+
 import type { ActiveChallengesResponse, Challenge } from '../../types/gurushots';
 import type {
     CadenceMode,

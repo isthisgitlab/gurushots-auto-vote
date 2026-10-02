@@ -1,3 +1,5 @@
+/** The per-cycle cadence decision (`computeNextCycleDelayMs`) over every wake source. Must stay free of settings I/O: the WebView bundle imports it. */
+
 import { soonestScheduledStart } from '../scheduledFill';
 import { soonestFinalWindowTopUpStart, soonestBoostPrefillStart } from './leadWindows';
 import { soonestCurrencyRuleStart, soonestScenarioWake, soonestBoostHoldEnd } from './ruleWakes';

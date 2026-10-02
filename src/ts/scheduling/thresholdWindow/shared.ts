@@ -1,3 +1,5 @@
+/** Types and helpers shared by the thresholdWindow sub-modules. Must stay free of settings I/O: the WebView bundle imports it. */
+
 import type { Challenge } from '../../types/gurushots';
 
 /**

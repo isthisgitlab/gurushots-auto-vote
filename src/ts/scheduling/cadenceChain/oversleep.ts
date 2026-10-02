@@ -1,3 +1,5 @@
+/** Detection and wording of timers that fire later than intended. */
+
 /**
  * How late a timer may fire before the chain calls it out.
  *

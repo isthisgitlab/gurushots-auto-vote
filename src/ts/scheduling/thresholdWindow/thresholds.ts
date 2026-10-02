@@ -1,3 +1,5 @@
+/** Last-minute threshold resolution and in-window / next-entry queries. Must stay free of settings I/O: the WebView bundle imports it. */
+
 import { eligibleChallenges } from '../scheduledFill';
 import { challengeLabel } from './shared';
 

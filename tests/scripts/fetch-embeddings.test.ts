@@ -26,6 +26,7 @@ import yauzl = require('yauzl');
 import type * as node_eventsModule from 'node:events';
 import type * as node_streamModule from 'node:stream';
 import type * as fetch_embeddingsModule from '../../scripts/fetch-embeddings';
+import type * as configModule from '../../scripts/fetch-embeddings/config';
 import type * as stored_zipModule from './helpers/stored-zip';
 import { invalid } from '../helpers/invalid';
 import type { MainOptions } from '../../scripts/fetch-embeddings';
@@ -41,6 +42,7 @@ type FakeOpenReadStream = (
 
 const { download, fetchHttpsOnly, main, run, sha256OfFile, streamEntryLines, ENTRY_NAME } =
     require('../../scripts/fetch-embeddings') as typeof fetch_embeddingsModule;
+const config = require('../../scripts/fetch-embeddings/config') as typeof configModule;
 const { makeStoredZip } = require('./helpers/stored-zip') as typeof stored_zipModule;
 
 const DIMS = 100;
@@ -90,6 +92,26 @@ describe('fetch-embeddings', () => {
     afterEach(() => {
         jest.restoreAllMocks();
         fs.rmSync(tmp, { recursive: true, force: true });
+    });
+
+    describe('config', () => {
+        const scriptsDir = path.join(__dirname, '..', '..', 'scripts');
+
+        test('default cache, zip and output paths resolve under scripts/', () => {
+            expect(config.CACHE_DIR).toBe(path.join(scriptsDir, '.cache'));
+            expect(config.ZIP_PATH).toBe(path.join(scriptsDir, '.cache', 'glove.6B.zip'));
+            expect(config.OUT_PATH).toBe(path.join(scriptsDir, 'lexicon-embeddings.json'));
+        });
+
+        test('production integrity pins and limits are fixed', () => {
+            expect(config.GLOVE_URL).toBe('https://nlp.stanford.edu/data/glove.6B.zip');
+            expect(new URL(config.GLOVE_URL).protocol).toBe('https:');
+            expect(config.ZIP_SHA256).toBe('617afb2fe6cbd085c235baf7a465b96f4112bd7f7ccb2b2cbd649fed9cbcf2fb');
+            expect(config.ENTRY_SHA256).toBe('95dde4dfd627ab26608d33e76d1195ec059734bd29089ea52cadb08d07c64544');
+            expect(config.MAX_DOWNLOAD_BYTES).toBe(1073741824);
+            expect(config.MAX_ENTRY_BYTES).toBe(1073741824);
+            expect(config.MAX_REDIRECTS).toBe(5);
+        });
     });
 
     describe('download', () => {

@@ -1,3 +1,5 @@
+/** Pinned GloVe source, integrity limits, output paths and pipeline tuning constants. */
+
 import path from 'node:path';
 
 export const GLOVE_URL = 'https://nlp.stanford.edu/data/glove.6B.zip';

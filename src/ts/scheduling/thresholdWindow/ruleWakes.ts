@@ -1,3 +1,5 @@
+/** Wake times for currency-automation rules, scenarios and boost holds. Must stay free of settings I/O: the WebView bundle imports it. */
+
 import { ruleOpensAt } from '../../voting/currencyAuto';
 import { nextWakeAt } from '../../scenarios/nextWake';
 import { startState } from '../../scenarios/evaluate';

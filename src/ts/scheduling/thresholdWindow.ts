@@ -8,14 +8,19 @@
  *   - Node:    settings.getEffectiveSetting('lastMinuteThreshold', id)  (sync)
  *   - WebView: window.api.getEffectiveSetting('lastMinuteThreshold', id) (async)
  *
- * So the math lives here once and takes a `resolveThreshold(idString)`
- * function that may return a number or a Promise<number>; both consumers wrap
- * it with their platform's resolver, so the part that actually drifts is
- * never duplicated. `computeNextCycleDelayMs` builds on these
- * to make the whole per-cycle cadence decision in one place, so every host
- * (CLI `runScheduler.ts`, GUI `AutovoteContext.tsx`, Android `headless/index.ts`)
- * drives a single setTimeout/alarm chain off the same rule rather than each
- * carrying its own boundary-switch timer.
+ * Every function takes a `resolveThreshold(idString)` (or the like) that may
+ * return a value or a Promise, so the part that actually drifts between
+ * platforms is never duplicated. This facade re-exports the sub-modules:
+ *   - thresholdWindow/thresholds      last-minute threshold queries
+ *   - thresholdWindow/leadWindows     pre-final-window top-up / pre-boost wakes
+ *   - thresholdWindow/ruleWakes       currency-rule, scenario and boost-hold wakes
+ *   - thresholdWindow/cadenceDecision `computeNextCycleDelayMs`, the whole
+ *                                     per-cycle cadence decision every host
+ *                                     (CLI `runScheduler.ts`, GUI
+ *                                     `AutovoteContext.tsx`, Android
+ *                                     `headless/index.ts`) drives its single
+ *                                     setTimeout/alarm chain from
+ *   - thresholdWindow/shared          types and helpers common to the above
  */
 
 export { calculateNextThresholdEntry, isAnyChallengeInThresholdWindow } from './thresholdWindow/thresholds';

@@ -1,3 +1,5 @@
+/** The cadence chain factory: guard ordering, timer arming and the stale-timer re-arm guard. */
+
 import { decideNextWaitOrFallBack } from './decision';
 import { oversleptBy } from './oversleep';
 

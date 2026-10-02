@@ -1,3 +1,5 @@
+/** Pre-final-window top-up and pre-boost prefill lead-window wakes. Must stay free of settings I/O: the WebView bundle imports it. */
+
 import { boostApplyThreshold } from '../../voting/boostWindow';
 import { resolveConfigsFailSoft, clampLeadSec, isSoonerUpcomingStart, leadWindowStart } from './shared';
 

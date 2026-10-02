@@ -1,3 +1,5 @@
+/** `main`/`run`: orchestrates download, verification, vocabulary selection and the intermediate write. */
+
 import fs from 'node:fs';
 import path from 'node:path';
 import { errorMessage } from '../../src/ts/errorMessage';

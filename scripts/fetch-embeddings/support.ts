@@ -1,3 +1,5 @@
+/** Fatal-exit and SHA-256 helpers shared across the pipeline. */
+
 import fs from 'node:fs';
 import crypto from 'node:crypto';
 

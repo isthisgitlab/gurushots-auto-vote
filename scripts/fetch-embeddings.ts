@@ -35,6 +35,13 @@
  *
  * GloVe 6B (Wikipedia 2014 + Gigaword 5) is released under the PDDL — see
  * https://nlp.stanford.edu/projects/glove/ (Pennington, Socher, Manning 2014).
+ *
+ * This file is the entry point and facade; the work lives in fetch-embeddings/:
+ *   - config    pinned URL, SHA-256 pins, size limits, output paths, tuning
+ *   - archive   https-only download and single-entry zip streaming
+ *   - vectors   parsing, vocabulary selection, normalize/retrofit/quantize
+ *   - pipeline  `main`/`run`, the orchestration
+ *   - support   fatal-exit and SHA-256 helpers
  */
 
 import { runIfMain } from './lib/run-if-main';
