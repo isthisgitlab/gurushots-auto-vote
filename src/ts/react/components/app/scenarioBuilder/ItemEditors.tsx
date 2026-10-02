@@ -143,6 +143,60 @@ function StatesInput({
 }
 
 /**
+ * A single-line input for one field; a number field reports a number, any other kind its text.
+ */
+function ValueInput({
+    type,
+    label,
+    value,
+    onChange,
+}: {
+    type: 'text' | 'number' | 'time';
+    label: string;
+    value: string | number | undefined;
+    onChange: ValueChange;
+}) {
+    return (
+        <input
+            {...(type === 'number'
+                ? { type: 'number' as const }
+                : type === 'time'
+                  ? { type: 'time' as const }
+                  : { type: 'text' as const })}
+            aria-label={label}
+            className={CONTROL}
+            value={value}
+            onChange={(e) => onChange(type === 'number' ? Number(e.currentTarget.value) : e.currentTarget.value)}
+        />
+    );
+}
+
+/**
+ * A select over a fixed list of choices; `onChange` gets the chosen option's raw text.
+ */
+function ChoiceSelect({
+    label,
+    value,
+    choices,
+    onChange,
+}: {
+    label: string;
+    value: string | number | undefined;
+    choices: { value: string | number; label: string | number }[];
+    onChange: (raw: string) => void;
+}) {
+    return (
+        <select aria-label={label} className={SELECT} value={value} onChange={(e) => onChange(e.currentTarget.value)}>
+            {choices.map((choice) => (
+                <option key={choice.value} value={choice.value}>
+                    {choice.label}
+                </option>
+            ))}
+        </select>
+    );
+}
+
+/**
  * The input for one field, by its kind. `item` is the whole item (entryValue reads its field).
  */
 function FieldInput({
@@ -168,65 +222,31 @@ function FieldInput({
     switch (field.kind) {
         case 'op':
             return (
-                <select
-                    aria-label={label}
-                    className={SELECT}
+                <ChoiceSelect
+                    label={label}
                     value={scalar}
-                    onChange={(e) => onChange(e.currentTarget.value)}
-                >
-                    {COMPARISON_OPS.map((op) => (
-                        <option key={op} value={op}>
-                            {op}
-                        </option>
-                    ))}
-                </select>
+                    choices={COMPARISON_OPS.map((op) => ({ value: op, label: op }))}
+                    onChange={onChange}
+                />
             );
         case 'number':
         case 'percent':
             return field.optional ? (
                 <OptionalText type="number" label={label} value={scalar} onChange={onChange} />
             ) : (
-                <input
-                    type="number"
-                    aria-label={label}
-                    className={CONTROL}
-                    value={scalar}
-                    onChange={(e) => onChange(Number(e.currentTarget.value))}
-                />
+                <ValueInput type="number" label={label} value={scalar} onChange={onChange} />
             );
         case 'duration':
         case 'slot':
             return field.optional ? (
                 <OptionalText label={label} value={scalar} onChange={onChange} />
             ) : (
-                <input
-                    type="text"
-                    aria-label={label}
-                    className={CONTROL}
-                    value={scalar}
-                    onChange={(e) => onChange(e.currentTarget.value)}
-                />
+                <ValueInput type="text" label={label} value={scalar} onChange={onChange} />
             );
         case 'time':
-            return (
-                <input
-                    type="time"
-                    aria-label={label}
-                    className={CONTROL}
-                    value={scalar}
-                    onChange={(e) => onChange(e.currentTarget.value)}
-                />
-            );
+            return <ValueInput type="time" label={label} value={scalar} onChange={onChange} />;
         case 'text':
-            return (
-                <input
-                    type="text"
-                    aria-label={label}
-                    className={CONTROL}
-                    value={scalar}
-                    onChange={(e) => onChange(e.currentTarget.value)}
-                />
-            );
+            return <ValueInput type="text" label={label} value={scalar} onChange={onChange} />;
         case 'states':
             return (
                 <StatesInput
@@ -239,33 +259,24 @@ function FieldInput({
             );
         case 'currency':
             return (
-                <select
-                    aria-label={label}
-                    className={SELECT}
+                <ChoiceSelect
+                    label={label}
                     value={scalar}
-                    onChange={(e) => onChange(e.currentTarget.value)}
-                >
-                    {CURRENCIES.map((currency) => (
-                        <option key={currency} value={currency}>
-                            {t(`app.sbCurrency_${currency}`)}
-                        </option>
-                    ))}
-                </select>
+                    choices={CURRENCIES.map((currency) => ({
+                        value: currency,
+                        label: t(`app.sbCurrency_${currency}`),
+                    }))}
+                    onChange={onChange}
+                />
             );
         case 'phase':
             return (
-                <select
-                    aria-label={label}
-                    className={SELECT}
+                <ChoiceSelect
+                    label={label}
                     value={scalar}
-                    onChange={(e) => onChange(e.currentTarget.value)}
-                >
-                    {phases.map((phase) => (
-                        <option key={phase} value={phase}>
-                            {phase}
-                        </option>
-                    ))}
-                </select>
+                    choices={phases.map((phase) => ({ value: phase, label: phase }))}
+                    onChange={onChange}
+                />
             );
         case 'selector':
             return <ItemEditor kind="selector" value={value} onChange={onChange} />;
@@ -273,38 +284,29 @@ function FieldInput({
             return <PhotoSourceInput label={label} value={value} onChange={onChange} />;
         case 'entryField':
             return (
-                <select
-                    aria-label={label}
-                    className={SELECT}
+                <ChoiceSelect
+                    label={label}
                     value={scalar}
-                    onChange={(e) => onChange(e.currentTarget.value)}
-                >
-                    {ENTRY_FIELDS.map((entryField) => (
-                        <option key={entryField} value={entryField}>
-                            {t(`app.sbEntryField_${entryField}`)}
-                        </option>
-                    ))}
-                </select>
+                    choices={ENTRY_FIELDS.map((entryField) => ({
+                        value: entryField,
+                        label: t(`app.sbEntryField_${entryField}`),
+                    }))}
+                    onChange={onChange}
+                />
             );
         case 'entryValue':
             return isOneOf(BOOLEAN_ENTRY_FIELDS, item.field) ? (
-                <select
-                    aria-label={label}
-                    className={SELECT}
+                <ChoiceSelect
+                    label={label}
                     value={String(value)}
-                    onChange={(e) => onChange(e.currentTarget.value === 'true')}
-                >
-                    <option value="true">{t('app.sbTrue')}</option>
-                    <option value="false">{t('app.sbFalse')}</option>
-                </select>
-            ) : (
-                <input
-                    type="number"
-                    aria-label={label}
-                    className={CONTROL}
-                    value={scalar}
-                    onChange={(e) => onChange(Number(e.currentTarget.value))}
+                    choices={[
+                        { value: 'true', label: t('app.sbTrue') },
+                        { value: 'false', label: t('app.sbFalse') },
+                    ]}
+                    onChange={(raw) => onChange(raw === 'true')}
                 />
+            ) : (
+                <ValueInput type="number" label={label} value={scalar} onChange={onChange} />
             );
         case 'boolean':
             return (
@@ -318,18 +320,15 @@ function FieldInput({
             );
         case 'slotIndex':
             return (
-                <select
-                    aria-label={label}
-                    className={SELECT}
+                <ChoiceSelect
+                    label={label}
                     value={scalar}
-                    onChange={(e) => onChange(Number(e.currentTarget.value))}
-                >
-                    {[1, 2, 3, 4, 0].map((index) => (
-                        <option key={index} value={index}>
-                            {index === 0 ? t('app.sbSlotLast') : index}
-                        </option>
-                    ))}
-                </select>
+                    choices={[1, 2, 3, 4, 0].map((index) => ({
+                        value: index,
+                        label: index === 0 ? t('app.sbSlotLast') : index,
+                    }))}
+                    onChange={(raw) => onChange(Number(raw))}
+                />
             );
         case 'conditions':
             return <ConditionList value={value} onChange={onChange} phases={phases} />;

@@ -7,6 +7,19 @@ import { StrokeIcon, ICON_PATHS } from '@/components/ui/StrokeIcon';
 export function LanguageSwitcher() {
     const { t, language, setLanguage } = useTranslation();
 
+    const languageItem = (code: string, label: string) => (
+        <li>
+            <button
+                type="button"
+                onClick={() => void setLanguage(code)}
+                className={language === code ? 'active' : ''}
+                aria-pressed={language === code}
+            >
+                {label}
+            </button>
+        </li>
+    );
+
     const displayLanguage = language === 'en' ? 'English' : 'Latviešu';
 
     return (
@@ -18,26 +31,8 @@ export function LanguageSwitcher() {
                     <span>{displayLanguage}</span>
                 </div>
                 <ul className="dropdown-content z-[1] menu p-2 shadow bg-base-100 rounded-box w-32">
-                    <li>
-                        <button
-                            type="button"
-                            onClick={() => void setLanguage('en')}
-                            className={language === 'en' ? 'active' : ''}
-                            aria-pressed={language === 'en'}
-                        >
-                            {t('common.languageEnglish')}
-                        </button>
-                    </li>
-                    <li>
-                        <button
-                            type="button"
-                            onClick={() => void setLanguage('lv')}
-                            className={language === 'lv' ? 'active' : ''}
-                            aria-pressed={language === 'lv'}
-                        >
-                            {t('common.languageLatvian')}
-                        </button>
-                    </li>
+                    {languageItem('en', t('common.languageEnglish'))}
+                    {languageItem('lv', t('common.languageLatvian'))}
                 </ul>
             </div>
         </div>
