@@ -18,4 +18,11 @@ const toRendererSettings = (stored: AppSettings): RendererSettings => {
     return { ...rest, hasToken: typeof token === 'string' && token !== '' };
 };
 
-export { toRendererSettings, isRendererHiddenKey };
+/**
+ * @param payload - a renderer-sent settings object; returns a copy without the
+ *   keys a renderer may not write.
+ */
+const withoutRendererHiddenKeys = (payload: object): Partial<AppSettings> =>
+    Object.fromEntries(Object.entries(payload).filter(([key]) => !isRendererHiddenKey(key)));
+
+export { toRendererSettings, isRendererHiddenKey, withoutRendererHiddenKeys };

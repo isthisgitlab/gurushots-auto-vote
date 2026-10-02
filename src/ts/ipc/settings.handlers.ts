@@ -20,14 +20,13 @@ try {
 import * as settings from '../settings';
 import { registerHandlers, type IpcHandlerMap, type IpcHandler } from './registerHandlers';
 import { errorResult } from './errorResult';
-import { toRendererSettings, isRendererHiddenKey } from './rendererSettings';
+import { toRendererSettings, isRendererHiddenKey, withoutRendererHiddenKeys } from './rendererSettings';
 import * as logger from '../logger';
 import * as apiFactory from '../apiFactory';
 import * as metadata from '../metadata';
 
 import type { IpcMain } from 'electron';
 import type { SettingsSchemaEntry } from '../settings/schema';
-import type { AppSettings } from '../types/settings';
 import type * as electronModule from 'electron';
 
 /**
@@ -178,10 +177,7 @@ const buildSettingsHandlers = ({ broadcastSettingsChange }: { broadcastSettingsC
             }
             // Only the object shape is checked here; the facade validates each
             // key. The token and its derived flag are not renderer-writable.
-            const writable = Object.fromEntries(
-                Object.entries(newSettings).filter(([key]) => !isRendererHiddenKey(key)),
-            );
-            const result = settings.saveSettings(writable as Partial<AppSettings>);
+            const result = settings.saveSettings(withoutRendererHiddenKeys(newSettings));
             if (result && typeof broadcastSettingsChange === 'function') {
                 broadcastSettingsChange(toRendererSettings(settings.loadSettings()));
             }
