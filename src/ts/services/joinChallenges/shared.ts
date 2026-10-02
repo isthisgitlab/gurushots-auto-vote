@@ -12,7 +12,7 @@ import type * as tagsApi from '../../api/tags';
 import type * as joinStateStore from '../../joinStateStore';
 
 /**
- * The join flow's endpoints and state (see the header).
+ * The join flow's endpoints and state (see joinChallenges.ts).
  */
 export interface JoinDeps {
     getMemberChallenges: typeof joinApi.getMemberChallenges;
@@ -39,8 +39,6 @@ type JoinOutcome = { status: string; charged: number; imageId?: string };
 
 type UnlockState = { charged: number; alreadyUnlocked: boolean };
 
-/** A caught value, read only for its message.
- */
 /**
  * The manual single join's result.
  */
@@ -54,7 +52,7 @@ type JoinSingleResult = {
 
 // Shared across the manual handler and the automatic pass IN THIS PROCESS so the
 // two cannot double-spend the same challenge. Module-level = one Set per process;
-// cross-process racing is bounded by the persisted claim (see header residual).
+// cross-process racing is bounded by the persisted claim and the unlock lock (performJoin.ts).
 const inFlight: Set<string> = new Set();
 
 const cat = () => logger.withCategory('join');

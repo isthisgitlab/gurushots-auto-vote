@@ -1,13 +1,14 @@
 /**
- * The manual single join.
+ * The manual single join, on the user's explicit request. A paid challenge needs
+ * explicit paid consent (`spendCoins`): without it nothing is spent and the cost
+ * is returned as `needs-confirm`. The live candidate and balance are re-read, so
+ * a stale renderer list cannot trigger a wasted spend.
  */
 
 import { errorMessage } from '../../errorMessage';
 import { cat } from './shared';
 import type { JoinDeps, JoinSingleResult } from './shared';
 import { performJoin } from './performJoin';
-
-// ---- manual single join (explicit paid consent) ----
 
 /**
  * Live balance check for a confirmed paid manual join.

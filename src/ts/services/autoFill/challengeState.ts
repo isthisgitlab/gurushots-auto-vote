@@ -21,14 +21,10 @@ const getSlotsRemaining = (challenge: Partial<Challenge> | null | undefined): nu
 };
 
 /**
- * Reflect a freshly submitted entry on the local challenge object so the rest of
- * this cycle sees the slot it consumed. Used by both the "fill-new" boost/turbo
- * path and the staggered/emergency auto-fill paths (which submit before a due
- * turbo/boost runs in timer order). The challenge isn't re-fetched mid-cycle, so
- * without this getSlotsRemaining would still count the just-used slot as free and
- * could over-submit, and a due turbo/boost couldn't act on the new entry. The
- * minimal shape carries the conflict flags that boost/turbo entry selection reads
- * (boosted/turbo).
+ * Appends a freshly submitted entry to the local challenge object. The challenge
+ * is not re-fetched mid-cycle, so this is what makes getSlotsRemaining count the
+ * consumed slot and lets a due turbo/boost act on the new entry. The entry
+ * carries the boosted/turbo flags that boost/turbo entry selection reads.
  */
 const reflectNewEntry = (
     challenge: Partial<Challenge> | null | undefined,

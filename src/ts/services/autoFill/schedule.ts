@@ -14,14 +14,8 @@ import type { FillSchedule } from '../scheduleRemap';
  * challenge fills its 2nd photo at the Image-4 row's time — see that module's
  * header for the rule). Both threshold computations below MUST go through
  * this so the fill trigger and the scheduler cadence always agree.
- *
- * @param schedule - the challenge's effective autoFillSchedule
- * @param maxPhotoSubmits - challenge.max_photo_submits
  */
-const getEffectiveScheduleRows = (
-    schedule: FillSchedule,
-    maxPhotoSubmits: number | undefined,
-): Array<{ count: number; seconds: number }> => remapScheduleRows(schedule, maxPhotoSubmits);
+const getEffectiveScheduleRows = remapScheduleRows;
 
 /**
  * Target entry count implied by the schedule for the time remaining: the

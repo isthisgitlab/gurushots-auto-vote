@@ -1,10 +1,6 @@
 /**
- * BaseMiddleware
- *
- * Wraps the active API surface (real or mock) with token handling
- * and exposes the same method names the renderer + CLI call into.
- * Common logic is shared between the cli/gui pairs via private
- * helpers; only logger category and return shape differ.
+ * BaseMiddleware — wraps the active API surface (real or mock) with token
+ * handling, under the method names the renderer and CLI call.
  */
 
 import * as settings from '../settings';

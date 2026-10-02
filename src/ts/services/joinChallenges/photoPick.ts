@@ -1,5 +1,5 @@
 /**
- * The entry photo pick for a join, reusing auto-fill's picker.
+ * The entry photo pick for a join, reusing auto-fill's picker and its tag rules.
  */
 
 import * as logger from '../../logger';
@@ -13,8 +13,6 @@ import { errorMessage } from '../../errorMessage';
 import { cat } from './shared';
 import type { JoinDeps } from './shared';
 import { resolveJoinSetting } from './settingsResolution';
-
-// ---- photo pick (reuses auto-fill's picker) ----
 
 // Same shortlist length the fill path hands the visual re-rank.
 const VISUAL_SHORTLIST = 12;

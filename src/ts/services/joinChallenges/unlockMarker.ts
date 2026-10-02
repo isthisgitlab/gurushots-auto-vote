@@ -1,13 +1,13 @@
 /**
- * The persisted unlock claim (idempotency).
+ * The persisted unlock claim (idempotency). A corrupt marker file must not look
+ * empty: that would forget a real unlock and let a retry re-charge, so the paid
+ * path treats an unreadable file as "cannot verify — do not spend".
  */
 
 import { isPlainObject } from '../../plainObject';
 import type { RawJsonStore } from '../../types/stores';
 import { errorMessage } from '../../errorMessage';
 import { cat } from './shared';
-
-// ---- persisted unlock marker (idempotency) ----
 
 // Read the marker map, distinguishing "empty/never-written" (ok:true, {}) from
 // "unreadable/corrupt" (ok:false). A corrupt file must NOT silently look empty:

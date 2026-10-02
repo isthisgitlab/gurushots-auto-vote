@@ -1,5 +1,6 @@
 /**
- * The automatic per-cycle join pass.
+ * The automatic per-cycle join pass: the balance and budget kept accurate as it
+ * spends, the join window, and the mission-driven early joins.
  */
 
 import * as logger from '../../logger';
@@ -19,8 +20,6 @@ import {
     warnMissingCloseTime,
 } from './settingsResolution';
 import { performJoin } from './performJoin';
-
-// ---- automatic per-cycle pass ----
 
 /**
  * Mutable per-pass join state: the balance and budget kept locally accurate as
@@ -239,6 +238,7 @@ const runJoinPass = async (
         candidates = await deps.getMemberChallenges(token, 'open');
     } catch (error) {
         cat().warning(`could not list open challenges: ${errorMessage(error) || error}`, null);
+        // aislop-ignore-next-line ai-slop/hidden-fallback -- logged via the join logger; the empty pass result is the documented contract
         return empty;
     }
     if (!Array.isArray(candidates) || candidates.length === 0) {

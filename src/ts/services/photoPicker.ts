@@ -1,23 +1,7 @@
 /**
- * GuruShots Auto Voter - Photo Picker
- *
- * Pure ranking used by the auto-fill flow to choose which of the user's
- * eligible photos to submit into a challenge. GOVERNING RULE: a theme match
- * always beats popularity — photoPicker/tiers.ts documents the tier order that
- * enforces it.
- *
- * Facade — the only module callers import. It re-exports the public surface of
- * the internal ./photoPicker/* modules:
- *
- *   stemming.ts    stopwords, stemmer, bounded tokeniser, stem matching,
- *                  user-tag normalisation
- *   title.ts       abstract title words, series subject, negated subjects,
- *                  letter challenges, open theme vs confirmed subject
- *   keywords.ts    challenge keywords, semantic theme words, image-model subject
- *                  words, server-side search terms
- *   labels.ts      photo label stems and the per-photo match counters
- *   tiers.ts       tier values, theme comparison, enrichment set, final sort
- *   candidates.ts  hard and exclusion filters, scored candidates, the one-call pick
+ * Photo Picker — pure ranking of the user's eligible photos for auto-fill. A
+ * theme match always beats popularity (the tier order is in photoPicker/tiers.ts).
+ * Callers import this facade; the ranking lives in ./photoPicker/*.
  */
 
 import { stem, tokenise, matches, tokeniseTagList } from './photoPicker/stemming';

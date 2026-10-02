@@ -1,5 +1,23 @@
 /**
- * The join itself, shared by the pass and the manual join.
+ * The join itself, shared by the automatic pass and the manual join.
+ *
+ * PAID-SPEND SAFETY (do not reorder):
+ *   1. Photo-first: resolve an eligible photo BEFORE any coins_unlock. No
+ *      photo ⇒ skip the candidate, never spend.
+ *   2. Idempotency: the unlock claim is persisted (joinStateStore) BEFORE
+ *      coins_unlock is called, and only cleared on a successful submit. A crash
+ *      the instant after the charge still leaves the claim on disk, so a later
+ *      pass retries submit ONLY — it never re-unlocks (re-charges). If the claim
+ *      cannot be written, no coins are spent.
+ *   3. In-flight lock: a module-level Set stops a manual click racing the cycle
+ *      pass (or itself) into a second coins_unlock WITHIN this process; a
+ *      cross-process lockfile (deps.acquireUnlockLock) covers the same race
+ *      across processes on real-fs platforms (GUI auto-join vs CLI `join --yes`
+ *      on one account). The unlock claim is re-read authoritatively under that
+ *      lock, and a corrupt/unreadable join-state refuses the spend (fail-safe).
+ *   4. Budget decrements only after a confirmed unlock (joinPass).
+ *   5. Cancellation is honored between candidates (joinPass) and before each
+ *      spend.
  */
 
 import * as logger from '../../logger';
@@ -9,8 +27,6 @@ import { cat, inFlight } from './shared';
 import type { JoinDeps, JoinOutcome, UnlockState } from './shared';
 import { clearUnlocked, isUnlocked, markUnlocked, readUnlockedState } from './unlockMarker';
 import { pickJoinPhoto } from './photoPick';
-
-// ---- the join itself (shared by pass + manual) ----
 
 const failedNoCharge = (): JoinOutcome => ({ status: 'failed-no-charge', charged: 0 });
 

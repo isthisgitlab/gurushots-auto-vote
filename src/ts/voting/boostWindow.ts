@@ -62,7 +62,7 @@ const openBoostWindows = (
  * Pure and settings-free so the two callers that need the same instant can share
  * one formula instead of each carrying a copy: services/VotingLogic
  * (getBoostThresholdSec, resolving the windows from settings) and
- * scheduling/thresholdWindow (the pre-boost cadence cap, whose config arrives via
+ * scheduling/thresholdWindow/leadWindows (the pre-boost cadence cap, whose config arrives via
  * a platform resolver and which must stay free of settings I/O for the WebView
  * bundle).
  *
@@ -100,7 +100,7 @@ const boostApplyThreshold = (
         return { thresholdSec: keyUnlockedBoostTimeSec, branch: 'key' };
     }
     if (b.state === 'AVAILABLE' && hasTimeout) {
-        return { thresholdSec: Number(closeTime) - timeout + boostTimeSec, branch: 'timer' };
+        return { thresholdSec: closeTime - timeout + boostTimeSec, branch: 'timer' };
     }
     return { thresholdSec: -Infinity, branch: null };
 };

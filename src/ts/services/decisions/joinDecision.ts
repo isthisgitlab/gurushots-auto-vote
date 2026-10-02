@@ -25,17 +25,15 @@ const resolveJoinWindow = (
     joinWithinSec: number,
     percentElapsed: number,
 ): { mode: 'percent' | 'hours' | 'off'; value: number } => {
-    const percent = Number(percentElapsed);
-    if (Number.isFinite(percent) && percent > 0) {
+    if (Number.isFinite(percentElapsed) && percentElapsed > 0) {
         // Clamp to the latest REACHABLE fraction. 100% is only true once
         // close_time has passed, and joinWindowRefusal rejects an already-closed
         // candidate before it reads the fraction at all — so a corrupted 100 (or
         // 1000) must degrade to "as late as possible", never to "never join".
-        return { mode: 'percent', value: Math.min(percent, MAX_REACHABLE_PERCENT_ELAPSED) };
+        return { mode: 'percent', value: Math.min(percentElapsed, MAX_REACHABLE_PERCENT_ELAPSED) };
     }
-    const withinSec = Number(joinWithinSec);
-    if (Number.isFinite(withinSec) && withinSec > 0) {
-        return { mode: 'hours', value: withinSec };
+    if (Number.isFinite(joinWithinSec) && joinWithinSec > 0) {
+        return { mode: 'hours', value: joinWithinSec };
     }
     return { mode: 'off', value: 0 };
 };
@@ -71,11 +69,10 @@ const joinWindowRefusal = (
     if (window.mode === 'off') return null;
 
     const closeTime = Number(challenge?.close_time);
-    const now = Number(nowSec);
-    if (!Number.isFinite(closeTime) || closeTime <= 0 || !Number.isFinite(now) || now <= 0) {
+    if (!Number.isFinite(closeTime) || closeTime <= 0 || !Number.isFinite(nowSec) || nowSec <= 0) {
         return 'close-time-unknown';
     }
-    const secondsLeft = closeTime - now;
+    const secondsLeft = closeTime - nowSec;
     // Already closed (a stale entry in the open list) — joining would burn a
     // submission on a dead challenge.
     if (secondsLeft <= 0) return 'already-closed';
@@ -89,7 +86,7 @@ const joinWindowRefusal = (
         if (durationSec <= 0) return 'start-time-unknown';
         // Clamp below at 0 so a challenge whose start_time is in the future
         // (clock skew) reads as 0% elapsed rather than negative.
-        const elapsedPct = (Math.max(0, now - startTime) / durationSec) * 100;
+        const elapsedPct = (Math.max(0, nowSec - startTime) / durationSec) * 100;
         return elapsedPct < window.value ? 'too-early' : null;
     }
 

@@ -76,34 +76,34 @@ beforeEach(() => {
 
 describe('numeric image ids', () => {
     test('preview finds the entry and returns the candidate', async () => {
-        const result = await handlers['preview-swap-photo'](null, 555, invalid(111));
+        const result = await handlers['preview-swap-photo'](null, 555, 111);
         expect(result).toEqual({ success: true, outcome: 'ok', candidate: { id: '333', member_id: 'mem1' } });
     });
 
     test('a previewed numeric candidate swaps through to the API as strings', async () => {
-        await handlers['preview-swap-photo'](null, 555, invalid(111));
-        const result = await handlers['swap-entry-photo'](null, 555, invalid(111), invalid(333), true);
+        await handlers['preview-swap-photo'](null, 555, 111);
+        const result = await handlers['swap-entry-photo'](null, 555, 111, 333, true);
         expect(result).toEqual({ success: true, outcome: 'ok' });
         expect(strategy.swapPhoto).toHaveBeenCalledWith(555, '111', '333', 'tok');
     });
 
     test('a numeric replacement equal to the replaced image is stale, nothing spent', async () => {
-        await handlers['preview-swap-photo'](null, 555, invalid(111));
-        const result = await handlers['swap-entry-photo'](null, 555, invalid(111), invalid(111), true);
+        await handlers['preview-swap-photo'](null, 555, 111);
+        const result = await handlers['swap-entry-photo'](null, 555, 111, 111, true);
         expect(result).toEqual({ success: false, outcome: 'stale-candidate', error: 'stale-candidate' });
         expect(strategy.swapPhoto).not.toHaveBeenCalled();
     });
 
     test('a candidate that became an entry after the preview is stale, nothing spent', async () => {
-        await handlers['preview-swap-photo'](null, 555, invalid(111));
+        await handlers['preview-swap-photo'](null, 555, 111);
         live = makeChallenge([OLD, OTHER, { id: 333, member_id: 'mem1' }]);
-        const result = await handlers['swap-entry-photo'](null, 555, invalid(111), invalid(333), true);
+        const result = await handlers['swap-entry-photo'](null, 555, 111, 333, true);
         expect(result).toEqual({ success: false, outcome: 'stale-candidate', error: 'stale-candidate' });
         expect(strategy.swapPhoto).not.toHaveBeenCalled();
     });
 
     test('an image that is not entered is not available, nothing spent', async () => {
-        const result = await handlers['preview-swap-photo'](null, 555, invalid(999));
+        const result = await handlers['preview-swap-photo'](null, 555, 999);
         expect(result).toEqual({ success: false, outcome: 'not-available', error: 'not-available' });
         expect(strategy.swapPhoto).not.toHaveBeenCalled();
     });

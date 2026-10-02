@@ -3,7 +3,7 @@ import type { Challenge, RankingEntry, VoteImagesResponse } from '../types/gurus
  * Rule math for the currency automation (automatic KEY unlock, photo SWAP and
  * exposure FILL). Pure and dependency-free — no settings, no services — so the
  * Node runners (services/currencyAuto.ts), the scheduler's wake-up cap
- * (scheduling/thresholdWindow.ts) and any renderer view all answer "is this rule
+ * (scheduling/thresholdWindow/ruleWakes.ts) and any renderer view all answer "is this rule
  * open?" identically.
  *
  * A rule's timing is up to three optional conditions, each 0 = off:
@@ -150,12 +150,10 @@ const votePoolReach = (voteImages: VoteImagesResponse): number | null => {
  * @param belowPct - the fill threshold
  */
 const fillBeatsVoting = (exposure: number, reach: number | null, belowPct: number): boolean => {
-    const current = Number(exposure);
-    const threshold = Number(belowPct);
-    if (!Number.isFinite(current) || !Number.isFinite(threshold)) return false;
-    if (current >= threshold) return false;
-    const reachable = reach === null ? current : reach;
-    return reachable < threshold;
+    if (!Number.isFinite(exposure) || !Number.isFinite(belowPct)) return false;
+    if (exposure >= belowPct) return false;
+    const reachable = reach === null ? exposure : reach;
+    return reachable < belowPct;
 };
 
 export { ruleOpensAt, isRuleOpen, isProtectedEntry, pickSwapTarget, votePoolReach, fillBeatsVoting };

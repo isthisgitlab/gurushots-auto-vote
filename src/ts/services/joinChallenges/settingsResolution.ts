@@ -1,5 +1,8 @@
 /**
- * Join settings resolved per candidate by rule.
+ * Join settings, resolved per candidate by RULE. Un-joined ids are not in the
+ * id cache (it is filled from get_my_active_challenges), so the id-keyed
+ * getEffectiveSetting(key, id) cannot see a rule for a challenge the user has
+ * not joined; the rules are matched against the candidate payload instead.
  */
 
 import * as logger from '../../logger';
@@ -7,8 +10,6 @@ import * as settings from '../../settings';
 import type { Challenge } from '../../types/gurushots';
 import type { ChallengeValues, TitleRule } from '../../types/settings';
 import { cat } from './shared';
-
-// ---- settings resolution (by RULE — un-joined ids are not in the id cache) ----
 
 /**
  * Resolve one setting for an un-joined candidate. The id-keyed

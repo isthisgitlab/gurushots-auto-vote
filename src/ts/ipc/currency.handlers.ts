@@ -116,8 +116,10 @@ const buildHandlers = () =>
 
         // Suggest the replacement a swap of `imageId` would use. Spends nothing;
         // the candidate is remembered so swap-entry-photo can require it.
-        'preview-swap-photo': async (event: unknown, challengeId: string | number, imageId: string) => {
+        'preview-swap-photo': async (event: unknown, challengeId: string | number, imageId: string | number) => {
             if (!isIdArg(challengeId) || !isIdArg(imageId)) return currencyFailure(CURRENCY_OUTCOME.invalidArgs);
+            // isIdArg admits numbers; the service and the preview key work on strings.
+            const image = String(imageId);
             try {
                 logger
                     .withCategory('currency')
@@ -127,13 +129,13 @@ const buildHandlers = () =>
                     );
                 const guard = auth.requireAuthToken('swap preview');
                 if (!guard.ok) return guard.response;
-                const result = await currencyActions.previewSwap(challengeId, imageId, guard.token, {
+                const result = await currencyActions.previewSwap(challengeId, image, guard.token, {
                     strategy: apiFactory.getApiStrategy(),
                     logger,
                     settings,
                 });
                 if (!result?.ok || !result.candidate) return currencyFailure(result?.outcome);
-                rememberSwapPreview(previewKey(challengeId, imageId), result.candidate.id);
+                rememberSwapPreview(previewKey(challengeId, image), result.candidate.id);
                 return { success: true as const, outcome: CURRENCY_OUTCOME.ok, candidate: result.candidate };
             } catch (error) {
                 logger.withCategory('currency').error('Error handling preview-swap-photo request:', error);
@@ -146,8 +148,8 @@ const buildHandlers = () =>
         'swap-entry-photo': async (
             event: unknown,
             challengeId: string | number,
-            imageId: string,
-            newImageId: string,
+            imageId: string | number,
+            newImageId: string | number,
             confirmed: boolean,
         ) => {
             logger
@@ -157,11 +159,14 @@ const buildHandlers = () =>
                     null,
                 );
             return runCurrencySpend('swap', [challengeId, imageId, newImageId], confirmed, async (token, strategy) => {
-                const previewed = takeSwapPreview(previewKey(challengeId, imageId));
-                if (previewed === null || previewed !== String(newImageId)) {
+                // Validated by runCurrencySpend, which admits numbers; the service works on strings.
+                const image = String(imageId);
+                const newImage = String(newImageId);
+                const previewed = takeSwapPreview(previewKey(challengeId, image));
+                if (previewed === null || previewed !== newImage) {
                     return { ok: false, outcome: CURRENCY_OUTCOME.staleCandidate };
                 }
-                return currencyActions.swapEntry(challengeId, imageId, newImageId, token, {
+                return currencyActions.swapEntry(challengeId, image, newImage, token, {
                     strategy,
                     logger,
                     ledger: ledgerFor(strategy),

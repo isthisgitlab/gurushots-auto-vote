@@ -180,7 +180,7 @@ const previewSwap = async (
 ): Promise<{ ok: false; outcome: string } | { ok: true; outcome: string; candidate: SwapCandidate }> => {
     const { blocked, challenge } = await checkLive('swap', challengeId, token, strategy);
     if (blocked) return { ok: false, outcome: blocked };
-    if (!entryIds(challenge).has(String(imageId))) {
+    if (!entryIds(challenge).has(imageId)) {
         return { ok: false, outcome: CURRENCY_OUTCOME.notAvailable };
     }
 
@@ -189,7 +189,7 @@ const previewSwap = async (
     resetPhotoStatsPassState();
     const id = String(challenge.id);
     const excludeIds = swapExcludedIds(challenge);
-    excludeIds.add(String(imageId));
+    excludeIds.add(imageId);
     if (excludeSwapped) {
         for (const swappedId of swappedOutIds(challenge)) excludeIds.add(swappedId);
     }
@@ -253,10 +253,10 @@ const swapEntry = async (
 ): Promise<SpendOutcome> => {
     const { blocked, challenge } = await checkLive('swap', challengeId, token, strategy);
     if (blocked) return { ok: false, outcome: blocked };
-    if (!entryIds(challenge).has(String(imageId))) {
+    if (!entryIds(challenge).has(imageId)) {
         return { ok: false, outcome: CURRENCY_OUTCOME.notAvailable };
     }
-    if (String(newImageId) === String(imageId) || swapExcludedIds(challenge).has(String(newImageId))) {
+    if (newImageId === imageId || swapExcludedIds(challenge).has(newImageId)) {
         return { ok: false, outcome: CURRENCY_OUTCOME.staleCandidate };
     }
     const oldEntry = findEntry(challenge, imageId);
@@ -264,7 +264,7 @@ const swapEntry = async (
         logger,
         'swap',
         challenge,
-        await strategy.swapPhoto(challenge.id, String(imageId), String(newImageId), token),
+        await strategy.swapPhoto(challenge.id, imageId, newImageId, token),
     );
     if (result.ok && ledger) ledger.onSwapped(challenge.id, oldEntry, newImageId);
     return result;
@@ -317,6 +317,7 @@ const fillExposure = async (
     if (blocked) return { ok: false, outcome: blocked };
     // The member id the endpoint wants is the profile id; every entry carries
     // the same id as member_id, which covers a failed profile lookup.
+    // aislop-ignore-next-line ai-slop/hidden-fallback -- warned via the currency logger below; apiFailed is the documented outcome
     const memberId =
         (await resolveMemberId(token, strategy.getCurrentMemberProfile, logger, 'currency')) ||
         entriesOf(challenge)[0]?.member_id ||
