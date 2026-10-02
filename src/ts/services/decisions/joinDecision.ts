@@ -4,7 +4,7 @@
  * caller resolves both. Part of the services/VotingLogic facade.
  */
 
-// Mirrors MAX_JOIN_PERCENT_ELAPSED in settings/schema.ts (which this
+// Mirrors MAX_JOIN_PERCENT_ELAPSED in settings/schema/validators.ts (which this
 // renderer-bundle-safe module cannot import) — change both together.
 const MAX_REACHABLE_PERCENT_ELAPSED = 99;
 

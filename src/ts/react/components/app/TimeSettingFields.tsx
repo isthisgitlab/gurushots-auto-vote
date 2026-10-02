@@ -43,7 +43,7 @@ export const SCHEDULED_FILL_MAX_ENTRIES = MAX_SCHEDULED_FILL_ENTRIES;
 
 // The schedule covers images 2–4: entry 1 always exists (joining a challenge
 // IS submitting a photo) and GuruShots challenges allow at most 4 images.
-// The seconds cap mirrors MAX_SCHEDULE_SECONDS in settings/schema.ts.
+// The seconds cap mirrors MAX_SCHEDULE_SECONDS in settings/schema/validators.ts.
 const SCHEDULE_COUNTS = [2, 3, 4];
 const SCHEDULE_MAX_SECONDS = 30 * 24 * 3600;
 const SCHEDULE_MAX_HOURS = SCHEDULE_MAX_SECONDS / 3600;

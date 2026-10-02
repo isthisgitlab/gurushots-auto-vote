@@ -18,18 +18,19 @@
  */
 
 // Maximum scheduled-fill trigger entries per challenge, for both the
-// times-of-day list and the before-end offsets list. schema.ts enforces it,
-// the cadence/decision paths slice to it defensively, and the UI stops
-// offering an "add" row at it.
+// times-of-day list and the before-end offsets list. schema/scheduledFill.ts
+// enforces it, the cadence/decision paths slice to it defensively, and the UI
+// stops offering an "add" row at it.
 const MAX_SCHEDULED_FILL_ENTRIES = 6;
 
-// Longest a single voting pause may last, in minutes (12h). schema.ts uses it
-// as votingPauseDurationMinutes' upper bound and getVotingPauseState clamps to
-// it on the decision side — deliberately the one bound the pause does NOT treat
-// as an advisory escape hatch. A hand-edited oversized fill window merely means
-// "always fill", but an oversized PAUSE window swallows every future cycle and
-// stops voting for good, so the two must not share a policy. Keep this and the
-// schema bound as the same constant so they can never drift apart.
+// Longest a single voting pause may last, in minutes (12h). schema/votingPause.ts
+// uses it as votingPauseDurationMinutes' upper bound and getVotingPauseState
+// clamps to it on the decision side — deliberately the one bound the pause does
+// NOT treat as an advisory escape hatch. A hand-edited oversized fill window
+// merely means "always fill", but an oversized PAUSE window swallows every
+// future cycle and stops voting for good, so the two must not share a policy.
+// Keep this and the schema bound as the same constant so they can never drift
+// apart.
 const MAX_VOTING_PAUSE_MINUTES = 720;
 
 export { MAX_SCHEDULED_FILL_ENTRIES, MAX_VOTING_PAUSE_MINUTES };

@@ -1,7 +1,7 @@
 /**
- * Tests for the hand-written (non-THIN_HANDLERS) channels in
+ * Tests for the hand-written (non-thin) channels in
  * settings.handlers.ts plus the Electron register() broadcast wiring.
- * The THIN_HANDLERS table is covered by settings.handlers.thin-table.test.ts.
+ * The thin-handler rows are covered by settings.handlers.thin-table.test.ts.
  *
  * Every channel here has a documented error fallback the renderer relies on
  * (default settings, false, a schema-shaped empty object, …) — the handlers

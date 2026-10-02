@@ -195,7 +195,8 @@ const saveSettings = (settings: Partial<AppSettings>): boolean => {
 };
 
 /**
- * Clean up obsolete settings that are no longer used
+ * Prune keys the schema does not define from the stored settings and write the
+ * result back when anything was removed.
  */
 const cleanupObsoleteSettings = () => {
     try {

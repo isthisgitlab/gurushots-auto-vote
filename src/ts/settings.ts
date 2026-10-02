@@ -2,12 +2,12 @@
  * Settings facade — the only module callers import. It re-exports the public
  * surface of the internal ./settings/* modules:
  *
- *   schema.ts             keys, defaults, validation, groups/tiers
+ *   schema.ts             keys, defaults, validation, groups/tiers (entries in schema/)
  *   storage.ts            persistence transport + runtime/environment detection
  *   defaults.ts           default blob and shared challenge-value helpers
  *   persistence.ts        load (merge + migrations + obsolete cleanup) / save,
  *                         top-level keys, window bounds
- *   migrations.ts         load-time migrations and obsolete-key prune
+ *   migrations.ts         load-time migrations and obsolete-key prune (steps in migrations/)
  *   challengeOverrides.ts global defaults, per-challenge overrides, effective values
  *   challengeFacts.ts     process-local cache of the active challenges' titles/facts
  *   titleRuleSanitize.ts  write-side validation of challenge rules
@@ -16,7 +16,7 @@
  *   profileStore.ts       profile names and value sanitization
  *   profiles.ts           named challenge-settings profiles
  *   titlePins.ts          persisted first-seen challenge-title pins
- *   scenarioSchema.ts     validation of user-defined scenario documents
+ *   scenarioSchema.ts     validation of user-defined scenario documents (scenarioSchema/)
  *   scenarios.ts          stored scenarios, JSON import/export
  *   scenarioOverlay.ts    the active scenario phase's settings layer
  *   reset.ts              reset helpers and "modified" checks

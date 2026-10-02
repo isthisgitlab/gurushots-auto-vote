@@ -263,9 +263,11 @@ const getEnvironmentInfo = () => {
 
 const readHeadlessKey = (prefKey: string, fallback: string | null): string | null => {
     try {
+        // aislop-ignore-next-line ai-slop/hidden-fallback -- an absent key is the caller's cached value; the read contract
         return headlessStore()?.readKey?.(prefKey) ?? fallback;
     } catch (err) {
         logger.withCategory('settings').error(`Headless ${prefKey} read failed:`, err);
+        // aislop-ignore-next-line ai-slop/hidden-fallback -- logged via the settings logger; the caller's cached value is the read contract
         return fallback;
     }
 };

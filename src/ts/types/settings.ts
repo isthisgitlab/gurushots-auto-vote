@@ -87,7 +87,7 @@ export interface ChallengeSettings {
     /** Challenge id -> sparse override map. */
     perChallenge: Record<string, ChallengeValues>;
     titleRules: TitleRule[];
-    /** Challenge id -> true where a manually applied profile replaces the rule profile. */
+    /** Challenge id -> true while a manually applied profile stands in for the title rule's profile. */
     titleProfileSuppressions: Record<string, boolean>;
     /** Profile display name -> sparse values. */
     profiles?: Record<string, ChallengeValues>;

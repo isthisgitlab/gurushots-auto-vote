@@ -1,8 +1,8 @@
 /**
- * Integrity test for the THIN_HANDLERS table in settings.handlers.ts.
+ * Integrity test for the thin-handler rows (thinRows) in settings.handlers.ts.
  *
- * The table bulk-registers passthrough handlers that delegate to a
- * settings.<method>(...args) call. Two things can go wrong silently:
+ * The rows bulk-register passthrough handlers that delegate to a
+ * settings.<method>(...args) call, looked up on each call. Two things can go wrong silently:
  *   1. A channel in the table points at a method that doesn't exist on
  *      settings — the handler then throws on every call.
  *   2. A channel's expected fallback drifts from what the renderer relies
@@ -30,7 +30,7 @@ const { buildHandlers } = require('../../src/ts/ipc/settings.handlers') as typeo
 type MockTable = Record<string, jest.Mock<unknown, unknown[]>>;
 type HandlerTable = Record<string, (...args: unknown[]) => unknown>;
 
-// Mirror of the THIN_HANDLERS table in src/ts/ipc/settings.handlers.ts.
+// Mirror of the thinRows() rows in src/ts/ipc/settings.handlers.ts.
 // Kept hand-authored on purpose: if a row changes there, this test must
 // be updated too — that's the contract.
 const EXPECTED_THIN_HANDLERS: [string, string, string | boolean | null][] = [
@@ -77,7 +77,7 @@ const CHANGE_BROADCAST_CHANNELS = [
     'reset-all-settings',
 ];
 
-describe('settings.handlers THIN_HANDLERS table', () => {
+describe('settings.handlers thin-handler rows', () => {
     beforeEach(() => {
         jest.clearAllMocks();
     });
@@ -109,6 +109,18 @@ describe('settings.handlers THIN_HANDLERS table', () => {
             expect(result).toBe(fallback);
         },
     );
+
+    test('a thin handler reaches the facade method current at call time, not at build time', async () => {
+        invalid<MockTable>(settings).getTitleRules = jest.fn().mockReturnValue('built-with');
+        const handlers = buildHandlers();
+        const swapped = jest.fn().mockReturnValue('swapped-in');
+        invalid<MockTable>(settings).getTitleRules = swapped;
+
+        const result = await invalid<HandlerTable>(handlers)['get-title-rules']({}, 'arg');
+
+        expect(swapped).toHaveBeenCalledWith('arg');
+        expect(result).toBe('swapped-in');
+    });
 
     test.each(CHANGE_BROADCAST_CHANNELS)('channel "%s" broadcasts a successful mutation', async (channel) => {
         const row = EXPECTED_THIN_HANDLERS.find(([candidate]) => candidate === channel);

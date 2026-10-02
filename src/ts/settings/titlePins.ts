@@ -70,9 +70,7 @@ const _addEntries = (adds: Record<string, string>): Array<[string, string]> =>
 const _warnPinCapOnce = (id: string) => {
     if (titlePinCapWarned) return;
     titlePinCapWarned = true;
-    const safeId = String(id)
-        .replace(/[\r\n\t]/g, ' ')
-        .slice(0, 80);
+    const safeId = id.replace(/[\r\n\t]/g, ' ').slice(0, 80);
     logger
         .withCategory('settings')
         .warning(`mergeTitlePins: pin cap of ${MAX_TITLE_PINS} reached — not pinning challenge ${safeId}`, null);
