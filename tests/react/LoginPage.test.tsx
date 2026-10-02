@@ -31,7 +31,7 @@ describe('Login page', () => {
         originals = Object.fromEntries(API_METHODS.map((m) => [m, window.api[m]]));
         window.api.getSettings = jest.fn().mockResolvedValue({});
         window.api.getEnvironmentInfo = jest.fn().mockResolvedValue({ defaultMock: false });
-        window.api.authenticate = jest.fn().mockResolvedValue({ success: true, token: 'tok' });
+        window.api.authenticate = jest.fn().mockResolvedValue({ success: true });
         window.api.setSetting = jest.fn().mockResolvedValue(undefined);
         (window.api as { login: WindowApi['login'] }).login = jest.fn().mockResolvedValue(undefined);
     });
@@ -126,12 +126,12 @@ describe('Login page', () => {
         expect(screen.getByText('login.mockModeInfo')).toBeTruthy();
     });
 
-    test('successful login saves token + mock mode and transitions (username not remembered)', async () => {
+    test('successful login saves mock mode (never the token) and transitions (username not remembered)', async () => {
         await renderReady();
         submit('alice', 'pw');
         await waitFor(() => expect(window.api.login).toHaveBeenCalledTimes(1));
         expect(window.api.authenticate).toHaveBeenCalledWith('alice', 'pw', false);
-        expect(window.api.setSetting).toHaveBeenCalledWith('token', 'tok');
+        expect(window.api.setSetting).not.toHaveBeenCalledWith('token', expect.anything());
         expect(window.api.setSetting).toHaveBeenCalledWith('mock', false);
         expect(window.api.setSetting).not.toHaveBeenCalledWith('lastUsername', 'alice');
     });

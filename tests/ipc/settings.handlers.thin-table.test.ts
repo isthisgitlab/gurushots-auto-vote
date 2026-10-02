@@ -125,7 +125,7 @@ describe('settings.handlers thin-handler rows', () => {
     test.each(CHANGE_BROADCAST_CHANNELS)('channel "%s" broadcasts a successful mutation', async (channel) => {
         const row = EXPECTED_THIN_HANDLERS.find(([candidate]) => candidate === channel);
         const method = row![1];
-        const snapshot = { challengeSettings: { changed: true } };
+        const snapshot = { token: 'secret', challengeSettings: { changed: true } };
         const broadcastSettingsChange = jest.fn();
         invalid<MockTable>(settings)[method] = jest.fn().mockReturnValue(true);
         settings.loadSettings.mockReturnValue(invalid(snapshot));
@@ -133,6 +133,6 @@ describe('settings.handlers thin-handler rows', () => {
         const handlers = buildHandlers({ broadcastSettingsChange });
         await invalid<HandlerTable>(handlers)[channel]({}, 'arg');
 
-        expect(broadcastSettingsChange).toHaveBeenCalledWith(snapshot);
+        expect(broadcastSettingsChange).toHaveBeenCalledWith({ challengeSettings: { changed: true }, hasToken: true });
     });
 });

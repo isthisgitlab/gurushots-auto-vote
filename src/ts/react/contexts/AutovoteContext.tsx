@@ -138,7 +138,7 @@ async function runRendererVotingCycle({
 
     try {
         const settings = await ipc.getSettings();
-        if (!settings.token) {
+        if (!settings.hasToken) {
             dispatch({ type: ACTIONS.SET_ERROR, payload: 'Not logged in' });
             return false;
         }
@@ -231,8 +231,7 @@ function createRendererCadenceChain({
             cycleTimerRef.current = handle;
         },
         loadSettings: () => ipc.getSettings(),
-        // loadSettings above is ipc.getSettings, whose token is always a string.
-        fetchChallenges: (settings) => ipc.getActiveChallenges(settings.token),
+        fetchChallenges: () => ipc.getActiveChallenges(),
         // The key-agnostic channel is typed `unknown`; the main process resolves
         // the schema-validated (numeric) effective value.
         resolveLastMinuteCheckMinutes: () =>
@@ -300,7 +299,7 @@ function useResumeOnMount(start: () => Promise<void>) {
                 const wasRunning = await ipc.getSetting('autovoteRunning');
                 if (!wasRunning) return;
                 const settings = await ipc.getSettings();
-                if (!settings?.token) return;
+                if (!settings?.hasToken) return;
                 await startRef.current();
             } catch {
                 /* ignore — leave UI in stopped state on failure */

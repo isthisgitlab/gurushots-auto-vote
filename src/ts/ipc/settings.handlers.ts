@@ -20,6 +20,7 @@ try {
 import * as settings from '../settings';
 import { registerHandlers, type IpcHandlerMap, type IpcHandler } from './registerHandlers';
 import { errorResult } from './errorResult';
+import { toRendererSettings, isRendererHiddenKey } from './rendererSettings';
 import * as logger from '../logger';
 import * as apiFactory from '../apiFactory';
 import * as metadata from '../metadata';
@@ -127,10 +128,10 @@ const CHANGE_BROADCAST_CHANNELS = new Set([
 const buildSettingsHandlers = ({ broadcastSettingsChange }: { broadcastSettingsChange?: BroadcastSettingsChange }) => ({
     'get-settings': async () => {
         try {
-            return settings.loadSettings();
+            return toRendererSettings(settings.loadSettings());
         } catch (error) {
             logger.withCategory('settings').error('Error handling get-settings request:', error);
-            return settings.getDefaultSettings();
+            return toRendererSettings(settings.getDefaultSettings());
         }
     },
 
@@ -139,6 +140,8 @@ const buildSettingsHandlers = ({ broadcastSettingsChange }: { broadcastSettingsC
             if (typeof key !== 'string') {
                 throw new Error('Invalid key type, expected string');
             }
+            // The token never reaches a renderer; hasToken lives on get-settings.
+            if (isRendererHiddenKey(key)) return null;
             return settings.getSetting(key);
         } catch (error) {
             logger.withCategory('settings').error(`Error handling get-setting request for key "${key}":`, error);
@@ -155,9 +158,11 @@ const buildSettingsHandlers = ({ broadcastSettingsChange }: { broadcastSettingsC
             if (typeof key !== 'string') {
                 throw new Error('Invalid key type, expected string');
             }
+            // A renderer can neither plant a token nor persist the derived hasToken.
+            if (isRendererHiddenKey(key)) return false;
             const result = settings.setSetting(key, value);
             if (result && typeof broadcastSettingsChange === 'function') {
-                broadcastSettingsChange(settings.loadSettings());
+                broadcastSettingsChange(toRendererSettings(settings.loadSettings()));
             }
             return result;
         } catch (error) {
@@ -171,10 +176,14 @@ const buildSettingsHandlers = ({ broadcastSettingsChange }: { broadcastSettingsC
             if (typeof newSettings !== 'object' || newSettings === null) {
                 throw new Error('Invalid settings type, expected object');
             }
-            // Only the object shape is checked here; the facade validates each key.
-            const result = settings.saveSettings(newSettings as Partial<AppSettings>);
+            // Only the object shape is checked here; the facade validates each
+            // key. The token and its derived flag are not renderer-writable.
+            const writable = Object.fromEntries(
+                Object.entries(newSettings).filter(([key]) => !isRendererHiddenKey(key)),
+            );
+            const result = settings.saveSettings(writable as Partial<AppSettings>);
             if (result && typeof broadcastSettingsChange === 'function') {
-                broadcastSettingsChange(newSettings);
+                broadcastSettingsChange(toRendererSettings(settings.loadSettings()));
             }
             return result;
         } catch (error) {
@@ -307,7 +316,7 @@ const buildThinHandlers = ({ broadcastSettingsChange }: { broadcastSettingsChang
             try {
                 const result = (lookup() as (...a: unknown[]) => unknown)(...args);
                 if (result && CHANGE_BROADCAST_CHANNELS.has(channel) && typeof broadcastSettingsChange === 'function') {
-                    broadcastSettingsChange(settings.loadSettings());
+                    broadcastSettingsChange(toRendererSettings(settings.loadSettings()));
                 }
                 return result;
             } catch (error) {

@@ -22,10 +22,14 @@ const handleGetAutoClaimStatus = (async () => {
     }
 }) satisfies IpcReplyFn;
 
-const handleGetActiveChallenges = (async (event: unknown, token: string): Promise<ActiveChallengesResponse> => {
+const handleGetActiveChallenges = (async (): Promise<ActiveChallengesResponse> => {
     try {
         logger.withCategory('api').debug('=== IPC get-active-challenges ===', null);
-        logger.withCategory('api').debug(`Token received: ${!!token}`, null);
+        // The token never travels from the renderer: it is read from the store.
+        // No token is the pre-login state, answered with the failed-fetch shape
+        // (the renderer polls this, so no warning per call).
+        const { token } = settings.loadSettings();
+        if (!token) return { challenges: [], fetchFailed: true };
         const strategy = apiFactory.getApiStrategy();
         const result: ActiveChallengesResponse = await strategy.getActiveChallenges(token);
         // Feeds the quit confirmation. A failed fetch keeps the previous
@@ -60,7 +64,7 @@ const handleAuthenticate = (async (event: unknown, username: string, password: s
         if (ok) {
             settings.setSetting('token', token);
             logger.withCategory('authentication').info('🔐 Authentication successful', { success: true });
-            return { success: true as const, token };
+            return { success: true as const };
         }
         logger.withCategory('authentication').info('🔐 Authentication failed', { error });
         return { success: false as const, error };

@@ -110,7 +110,7 @@ describe('AutovoteContext', () => {
         const now = Math.floor(Date.now() / 1000);
         const far = invalid<Challenge[]>([{ id: 1, title: 'Far', type: 'regular', close_time: now + 100_000 }]);
         jest.mocked(window.api.getSettings).mockResolvedValue(
-            invalid({ token: 'tok', checkFrequencyMin: 5, checkFrequencyMax: 5 }),
+            invalid({ hasToken: true, checkFrequencyMin: 5, checkFrequencyMax: 5 }),
         );
         jest.mocked(window.api.getSetting).mockResolvedValue(null);
         jest.mocked(window.api.setSetting).mockResolvedValue(invalid(undefined));
@@ -375,7 +375,7 @@ describe('AutovoteContext', () => {
             jest.mocked(window.api.runVotingCycle).mockResolvedValue(invalid({ success: true }));
             renderProvider();
             expect(await startAndRead()).toMatchObject({ error: null, cycles: 1 });
-            expect(window.api.getActiveChallenges).toHaveBeenCalledWith('tok');
+            expect(window.api.getActiveChallenges).toHaveBeenCalledWith();
         });
     });
 
@@ -412,8 +412,8 @@ describe('AutovoteContext', () => {
             const deps = captured.chainDeps!;
             await deps.loadSettings();
             expect(window.api.getSettings).toHaveBeenCalled();
-            await deps.fetchChallenges(invalid({ token: 'abc' }));
-            expect(window.api.getActiveChallenges).toHaveBeenCalledWith('abc');
+            await deps.fetchChallenges(invalid({}));
+            expect(window.api.getActiveChallenges).toHaveBeenCalledWith();
             await expect(deps.resolveLastMinuteCheckMinutes()).resolves.toBe(1);
             expect(window.api.getEffectiveSetting).toHaveBeenCalledWith('lastMinuteCheckFrequency', 'global');
         });

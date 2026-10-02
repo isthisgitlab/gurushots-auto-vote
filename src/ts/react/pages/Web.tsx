@@ -15,20 +15,19 @@ import type { RendererGlobals } from '../../types/capacitor';
 (globalThis as RendererGlobals).__capacitorBootstrap = true;
 
 import { installWebBridge, onShellEvent } from '../../bridge/web';
-import { getSetting, logRendererError } from '../api/ipc';
+import { getSettings, logRendererError } from '../api/ipc';
 import { errorMessage } from '../../errorMessage';
 import { mountForToken } from './mountForToken';
 
 const mountForCurrentAuthState = async () => {
-    let token = '';
+    let hasToken = false;
     try {
-        const stored = await getSetting('token');
-        token = typeof stored === 'string' ? stored : '';
+        hasToken = (await getSettings()).hasToken;
     } catch (err) {
         // Server unreachable: Login shows, and its own calls surface the error.
-        await logRendererError(`Web UI could not read the session token: ${errorMessage(err)}`);
+        await logRendererError(`Web UI could not read the session state: ${errorMessage(err)}`);
     }
-    mountForToken(token);
+    mountForToken(hasToken);
 };
 
 installWebBridge();

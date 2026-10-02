@@ -2,7 +2,7 @@ import { useState, useCallback, useEffect } from 'react';
 import { useIpcQuery } from './useIpcQuery';
 
 import type { WindowApi } from '../../types/ipc';
-import type { AppSettings, SettingValueOf } from '../../types/settings';
+import type { RendererSettings, SettingValueOf } from '../../types/settings';
 
 export type EnvironmentInfo = Awaited<ReturnType<WindowApi['getEnvironmentInfo']>>;
 
@@ -13,7 +13,7 @@ const fetchSettings = () => window.api.getSettings();
  * Follows React Query-like pattern for consistent data fetching
  */
 export function useSettings(): {
-    settings: AppSettings | null;
+    settings: RendererSettings | null;
     loading: boolean;
     error: Error | null;
     updateSetting: <K extends string>(key: K, value: SettingValueOf<K>) => Promise<void>;

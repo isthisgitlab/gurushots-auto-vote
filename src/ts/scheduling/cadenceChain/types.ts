@@ -26,9 +26,9 @@ export type CycleResult = Challenge[] | boolean | null | undefined;
 
 /**
  * The fields of a FRESH settings snapshot the chain reads (hosts hand over their
- * whole settings blob; `token` is what the GUI's fetchChallenges reads off it).
+ * whole settings blob).
  */
-type CadenceSettings = Pick<AppSettings, 'timezone' | 'checkFrequencyMin' | 'checkFrequencyMax' | 'token'>;
+type CadenceSettings = Pick<AppSettings, 'timezone' | 'checkFrequencyMin' | 'checkFrequencyMax'>;
 
 /**
  * The host transport `createCadenceChain` is built from (documented on the factory).

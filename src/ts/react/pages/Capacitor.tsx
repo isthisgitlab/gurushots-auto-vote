@@ -30,13 +30,13 @@ import { mountForToken } from './mountForToken';
 
 // Mount Login or App based on whether we have a token.
 const mountForCurrentAuthState = () => {
-    let token;
+    let hasToken;
     try {
-        token = getSetting('token') || '';
+        hasToken = !!getSetting('token');
     } catch {
-        token = '';
+        hasToken = false;
     }
-    mountForToken(token);
+    mountForToken(hasToken);
 };
 
 const bootstrap = async () => {

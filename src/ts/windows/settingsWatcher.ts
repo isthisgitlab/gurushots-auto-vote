@@ -17,6 +17,7 @@ import * as logger from '../logger';
 
 import type { AppSettings } from '../types/settings';
 import { errorMessage } from '../errorMessage';
+import { toRendererSettings } from '../ipc/rendererSettings';
 type SettingChange = { key: string; oldValue: string; newValue: string };
 
 // Debounce timeout shared across successive watchSettingsFile calls (the
@@ -270,9 +271,10 @@ function watchSettingsFile({
                     // A main window that is reloading re-reads everything
                     // anyway; the others (e.g. Logs) still have to follow a
                     // reload-required key such as the language.
+                    const rendererSettings = toRendererSettings(newSettings as AppSettings);
                     BrowserWindow.getAllWindows().forEach((win) => {
                         if (!win.isDestroyed() && !(reloadingMain && win === mainWindow)) {
-                            win.webContents.send('settings-changed', newSettings);
+                            win.webContents.send('settings-changed', rendererSettings);
                         }
                     });
                 }

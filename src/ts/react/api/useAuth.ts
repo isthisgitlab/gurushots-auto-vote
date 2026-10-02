@@ -6,7 +6,7 @@ import { errorMessage } from '../../errorMessage';
  * What `authenticate` resolves: the handler's result, or the envelope's
  * `{ success: false, error }` when the call threw.
  */
-export type AuthenticateResult = { success: true; token: string } | { success: false; error: string };
+export type AuthenticateResult = { success: true } | { success: false; error: string };
 
 // Always called with all three args by `authenticate` below, which owns the default.
 const invokeAuthenticate = (username: string, password: string, isMock: boolean) =>

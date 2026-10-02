@@ -114,6 +114,14 @@ export interface AppSettings extends ReturnType<typeof getUiDefaultSettings> {
     [key: string]: unknown;
 }
 
+/**
+ * The settings a renderer sees: the stored blob without its auth token, plus
+ * whether one exists. The token itself never leaves the main process.
+ */
+export type RendererSettings = {
+    [K in keyof AppSettings as K extends 'token' ? never : K]: AppSettings[K];
+} & { token?: never; hasToken: boolean };
+
 /** The Android headless-service bridge to the native settings store. */
 export interface AndroidHeadlessStore {
     read(): string | null;

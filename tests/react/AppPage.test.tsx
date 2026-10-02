@@ -144,7 +144,7 @@ describe('App page', () => {
         jest.mocked(window.api.getSettings).mockResolvedValue(
             invalid({
                 theme: 'dark',
-                token: 'tok',
+                hasToken: true,
                 mock: true,
                 timezone: 'Europe/Riga',
                 onboardingCompleted: true,

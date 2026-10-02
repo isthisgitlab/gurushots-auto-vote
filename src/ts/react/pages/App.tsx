@@ -224,7 +224,7 @@ function AppContent() {
 
     const timezone = settings?.timezone || DEFAULT_TIMEZONE;
     const isMock = settings?.mock || false;
-    const isLoggedIn = !!settings?.token;
+    const isLoggedIn = !!settings?.hasToken;
 
     return (
         <div className="min-h-screen bg-base-200">

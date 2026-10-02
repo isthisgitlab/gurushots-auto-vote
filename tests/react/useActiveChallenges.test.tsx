@@ -13,7 +13,7 @@ import { invalid } from '../helpers/invalid';
 describe('useActiveChallenges', () => {
     beforeEach(() => {
         window.api = invalid(mockApi);
-        mockApi.getSettings.mockReset().mockResolvedValue(invalid({ token: 'tok' }));
+        mockApi.getSettings.mockReset().mockResolvedValue(invalid({ hasToken: true }));
         mockApi.getActiveChallenges.mockReset().mockResolvedValue({ challenges: [] });
     });
 
@@ -74,7 +74,7 @@ describe('useActiveChallenges', () => {
     });
 
     test('a fetchFailed result without a token does NOT raise an error', async () => {
-        mockApi.getSettings.mockResolvedValue(invalid({ token: '' }));
+        mockApi.getSettings.mockResolvedValue(invalid({ hasToken: false }));
         mockApi.getActiveChallenges.mockResolvedValue({ challenges: [], fetchFailed: true });
 
         const { result } = renderHook(() => useActiveChallenges());
@@ -84,7 +84,7 @@ describe('useActiveChallenges', () => {
     });
 
     test('a null result without a token does NOT raise an error', async () => {
-        mockApi.getSettings.mockResolvedValue(invalid({ token: '' }));
+        mockApi.getSettings.mockResolvedValue(invalid({ hasToken: false }));
         mockApi.getActiveChallenges.mockResolvedValue(invalid(null));
 
         const { result } = renderHook(() => useActiveChallenges());

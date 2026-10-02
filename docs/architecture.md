@@ -216,6 +216,14 @@ Domain terms used throughout, in reader's terms:
 - Auth: `authenticate(email, password)` posts form-encoded credentials and returns the token payload
   (`api/login.ts`). The token is then threaded **explicitly** from caller to caller and injected as the
   `x-token` header — there is no refresh flow.
+- Token flow: the `authenticate` handler stores the token in the settings store and returns only
+  `{ success }`; the token lives only in the main process / that store. A renderer sees `RendererSettings`
+  (`types/settings.ts`): the settings without `token`, plus `hasToken`, built by `toRendererSettings`
+  (`ipc/rendererSettings.ts`) for `get-settings` and every `settings-changed` broadcast (including the file
+  watcher's). `get-setting` returns nothing for `token`/`hasToken`, `set-setting` refuses and `save-settings`
+  drops those keys, and `get-active-challenges` reads the token in main (no token → the failed-fetch list
+  shape). On Capacitor the renderer shares the JS realm with the handlers, so this is consistency, not a
+  security boundary there.
 - Retry/backoff is centralised: exponential backoff + jitter up to `apiMaxRetries` (default 3). Retryable =
   no-response/network, `ECONNABORTED` timeout, 429, any 5xx; every other 4xx is terminal. Honors a server
   `retry_after` / `Retry-After` (seconds). `MAX_RETRY_DELAY_MS = 30000` — a longer server cooldown returns

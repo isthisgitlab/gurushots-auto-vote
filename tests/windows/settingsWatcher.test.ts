@@ -100,7 +100,16 @@ describe('watchSettingsFile onSettingsChanged', () => {
         settings.loadSettings.mockReturnValue(invalid({ autovoteRunning: true }));
         await emitChange();
 
-        expect(mockSend).toHaveBeenCalledWith('settings-changed', { autovoteRunning: true });
+        expect(mockSend).toHaveBeenCalledWith('settings-changed', { autovoteRunning: true, hasToken: false });
+    });
+
+    test('broadcasts hasToken instead of the token itself', async () => {
+        watchSettingsFile(makeDeps(jest.fn()));
+
+        settings.loadSettings.mockReturnValue(invalid({ token: 'secret', autovoteRunning: true }));
+        await emitChange();
+
+        expect(mockSend).toHaveBeenCalledWith('settings-changed', { autovoteRunning: true, hasToken: true });
     });
 
     test('a throwing observer does not stop the broadcast', async () => {
@@ -112,7 +121,7 @@ describe('watchSettingsFile onSettingsChanged', () => {
         settings.loadSettings.mockReturnValue(invalid({ autovoteRunning: true }));
         await expect(emitChange()).resolves.toBeUndefined();
 
-        expect(mockSend).toHaveBeenCalledWith('settings-changed', { autovoteRunning: true });
+        expect(mockSend).toHaveBeenCalledWith('settings-changed', { autovoteRunning: true, hasToken: false });
     });
 
     test('an unreadable settings file does not fire the observer (nor blame it)', async () => {
@@ -139,7 +148,7 @@ describe('watchSettingsFile onSettingsChanged', () => {
         settings.loadSettings.mockReturnValue(invalid({ autovoteRunning: true }));
         await expect(emitChange()).resolves.toBeUndefined();
 
-        expect(mockSend).toHaveBeenCalledWith('settings-changed', { autovoteRunning: true });
+        expect(mockSend).toHaveBeenCalledWith('settings-changed', { autovoteRunning: true, hasToken: false });
     });
 
     test('returns null (and never watches) when there is no settings file yet', () => {
@@ -245,7 +254,7 @@ describe('watchSettingsFile change detection', () => {
         expect(settings.isReloadRequired).toHaveBeenCalledWith('ui');
         expect(reload).toHaveBeenCalledTimes(1);
         expect(mainSend).not.toHaveBeenCalled();
-        expect(mockSend).toHaveBeenCalledWith('settings-changed', { ui: { theme: 'dark' } });
+        expect(mockSend).toHaveBeenCalledWith('settings-changed', { ui: { theme: 'dark' }, hasToken: false });
         expect(infoLines()).toEqual([
             '🔄 Reload-required settings changed, reloading main window...',
             '  • ui.theme: light → dark (reload required)',
@@ -268,7 +277,7 @@ describe('watchSettingsFile change detection', () => {
 
         expect(reload).not.toHaveBeenCalled();
         expect(deadSend).not.toHaveBeenCalled();
-        expect(mockSend).toHaveBeenCalledWith('settings-changed', { language: 'lv' });
+        expect(mockSend).toHaveBeenCalledWith('settings-changed', { language: 'lv', hasToken: false });
     });
 
     test('logs null, object and array differences using a stable string form', async () => {

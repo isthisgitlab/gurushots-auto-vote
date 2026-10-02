@@ -47,7 +47,7 @@ describe('useAuth error channels', () => {
     });
 
     it('login failure after a successful authenticate surfaces the flow error', async () => {
-        jest.mocked(window.api.authenticate).mockResolvedValue({ success: true, token: 't' });
+        jest.mocked(window.api.authenticate).mockResolvedValue({ success: true });
         jest.mocked(window.api.login).mockRejectedValue(new Error('window transition died'));
         await act(async () => {
             await hook.authenticate('user', 'pw');
@@ -78,7 +78,7 @@ describe('useAuth error channels', () => {
         });
         expect(hook.error).toBe('transition died');
 
-        jest.mocked(window.api.authenticate).mockResolvedValue({ success: true, token: 't' });
+        jest.mocked(window.api.authenticate).mockResolvedValue({ success: true });
         await act(async () => {
             await hook.authenticate('user', 'pw');
         });

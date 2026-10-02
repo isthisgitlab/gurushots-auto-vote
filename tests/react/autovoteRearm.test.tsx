@@ -57,7 +57,7 @@ describe('AutovoteContext — rearmSchedule after a settings change', () => {
 
         jest.mocked(window.api.getSettings).mockImplementation(async () =>
             invalid({
-                token: 'tok',
+                hasToken: true,
                 checkFrequencyMin: checkFrequencyMinutes,
                 checkFrequencyMax: checkFrequencyMinutes,
             }),

@@ -2,7 +2,7 @@ import { useCallback, useRef } from 'react';
 import { useIpcQuery } from './useIpcQuery';
 
 import type { ActiveChallengesResponse, Challenge } from '../../types/gurushots';
-import type { AppSettings } from '../../types/settings';
+import type { RendererSettings } from '../../types/settings';
 import type { IpcQueryTools } from './useIpcQuery';
 
 /**
@@ -80,17 +80,17 @@ export function useActiveChallenges(autovoteRunning: boolean = false): {
 
     const queryFn = useCallback(async () => {
         const settings = await window.api.getSettings();
-        const result = await window.api.getActiveChallenges(settings.token);
+        const result = await window.api.getActiveChallenges();
         return { settings, result };
     }, []);
 
     const apply = useCallback(
         async (
-            { settings, result }: { settings: AppSettings; result: ActiveChallengesResponse },
+            { settings, result }: { settings: RendererSettings; result: ActiveChallengesResponse },
             { setData, setError }: IpcQueryTools<Challenge[], Error>,
             skipCleanup: boolean = false,
         ) => {
-            if (settings.token && (result == null || result.fetchFailed)) {
+            if (settings.hasToken && (result == null || result.fetchFailed)) {
                 setError(new Error('fetch_failed'));
                 return;
             }

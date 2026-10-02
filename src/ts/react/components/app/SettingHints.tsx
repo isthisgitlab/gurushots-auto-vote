@@ -5,7 +5,7 @@ import { DEFAULT_TIMEZONE } from '../../../settings/uiDefaults';
 
 import type { WindowHintPolicy, WindowHintState } from '@/utils/windowHints';
 import type { Challenge } from '../../../types/gurushots';
-import type { AppSettings } from '../../../types/settings';
+import type { RendererSettings } from '../../../types/settings';
 import type { HintsFor, RendererSchema, SettingHint, Translate } from '../../../types/settingsEditor';
 
 export type EffectiveOf = (key: string) => unknown;
@@ -360,7 +360,7 @@ export function challengeSettingHints({
     t,
 }: {
     effectiveOf: EffectiveOf;
-    appSettings: Pick<Partial<AppSettings>, 'timezone' | 'checkFrequencyMax'> | null | undefined;
+    appSettings: Pick<Partial<RendererSettings>, 'timezone' | 'checkFrequencyMax'> | null | undefined;
     challenge: Challenge | null | undefined;
     profileReplacesWarning: boolean;
     t: Translate;

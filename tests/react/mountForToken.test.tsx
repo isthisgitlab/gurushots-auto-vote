@@ -42,17 +42,17 @@ test('swapping trees unmounts the previous one and clears stale DOM', async () =
     root.appendChild(document.createElement('p'));
     document.body.appendChild(root);
 
-    mountForToken('');
+    mountForToken(false);
     await flush();
     expect(root.textContent).toBe('login');
 
-    mountForToken('tok');
+    mountForToken(true);
     await flush();
     expect(cleanups).toEqual(['login']);
     expect(root.textContent).toBe('app');
     expect(root.querySelector('p')).toBeNull();
 
-    mountForToken('');
+    mountForToken(false);
     await flush();
     expect(cleanups).toEqual(['login', 'app']);
     expect(root.textContent).toBe('login');

@@ -1,6 +1,6 @@
 /**
  * Web entry (pages/Web.tsx) — at module load installs the fetch/SSE bridge,
- * mounts Login or App from the token the server holds, and re-mounts on
+ * mounts Login or App from whether the server holds a token, and re-mounts on
  * login-success / logout. Each test loads the module in an isolated registry
  * with its collaborators doMock'ed.
  */
@@ -26,7 +26,7 @@ describe('Web entry', () => {
         document.body.innerHTML = '';
     });
 
-    const load = (getSetting: () => Promise<unknown>) => {
+    const load = (getSettings: () => Promise<unknown>) => {
         const m = {
             shell: {} as Record<string, () => void>,
             installWebBridge: jest.fn(),
@@ -34,7 +34,7 @@ describe('Web entry', () => {
                 m.shell[event] = cb;
                 return () => true;
             }),
-            getSetting: jest.fn(getSetting),
+            getSettings: jest.fn(getSettings),
             logRendererError: jest.fn(async (_message: string) => {}),
             mountApp: jest.fn(),
             mountLogin: jest.fn(),
@@ -44,7 +44,7 @@ describe('Web entry', () => {
                 installWebBridge: m.installWebBridge,
                 onShellEvent: m.onShellEvent,
             }));
-            jest.doMock('@/api/ipc', () => ({ getSetting: m.getSetting, logRendererError: m.logRendererError }));
+            jest.doMock('@/api/ipc', () => ({ getSettings: m.getSettings, logRendererError: m.logRendererError }));
             jest.doMock('@/pages/App', () => ({ mountApp: m.mountApp }));
             jest.doMock('@/pages/Login', () => ({ mountLogin: m.mountLogin }));
             require('@/pages/Web');
@@ -53,26 +53,26 @@ describe('Web entry', () => {
     };
 
     test('installs the bridge, then mounts App for a stored token', async () => {
-        const m = load(async () => 'tok');
+        const m = load(async () => ({ hasToken: true }));
         await flush();
         expect((globalThis as RendererGlobals).__capacitorBootstrap).toBe(true);
-        expect(m.installWebBridge.mock.invocationCallOrder[0]).toBeLessThan(m.getSetting.mock.invocationCallOrder[0]);
-        expect(m.getSetting).toHaveBeenCalledWith('token');
+        expect(m.installWebBridge.mock.invocationCallOrder[0]).toBeLessThan(m.getSettings.mock.invocationCallOrder[0]);
+        expect(m.getSettings).toHaveBeenCalledTimes(1);
         expect(m.mountApp).toHaveBeenCalledTimes(1);
         expect(m.mountLogin).not.toHaveBeenCalled();
     });
 
-    test('login-success and logout re-mount by the current token; a non-string token mounts Login', async () => {
-        const m = load(async () => undefined);
+    test('login-success and logout re-mount by the current token state', async () => {
+        const m = load(async () => ({ hasToken: false }));
         await flush();
         expect(m.mountLogin).toHaveBeenCalledTimes(1);
 
-        m.getSetting.mockResolvedValue('new-token');
+        m.getSettings.mockResolvedValue({ hasToken: true });
         m.shell['login-success']();
         await flush();
         expect(m.mountApp).toHaveBeenCalledTimes(1);
 
-        m.getSetting.mockResolvedValue('');
+        m.getSettings.mockResolvedValue({ hasToken: false });
         m.shell.logout();
         await flush();
         expect(m.mountLogin).toHaveBeenCalledTimes(2);
@@ -83,7 +83,7 @@ describe('Web entry', () => {
             throw new Error('fetch failed');
         });
         await flush();
-        expect(m.logRendererError).toHaveBeenCalledWith('Web UI could not read the session token: fetch failed');
+        expect(m.logRendererError).toHaveBeenCalledWith('Web UI could not read the session state: fetch failed');
         expect(m.mountLogin).toHaveBeenCalledTimes(1);
     });
 });

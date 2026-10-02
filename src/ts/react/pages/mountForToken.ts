@@ -10,14 +10,14 @@ import { mountApp } from './App';
 import { mountLogin } from './Login';
 
 /**
- * @param token - the stored auth token; empty mounts Login
+ * @param hasToken - whether a session token is stored; without one Login mounts
  */
-export const mountForToken = (token: string) => {
+export const mountForToken = (hasToken: boolean) => {
     const container = document.getElementById('root');
     if (container) {
         while (container.firstChild) container.removeChild(container.firstChild);
     }
-    if (token) {
+    if (hasToken) {
         mountApp();
     } else {
         mountLogin();

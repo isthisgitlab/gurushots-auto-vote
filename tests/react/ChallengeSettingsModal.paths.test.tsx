@@ -9,7 +9,7 @@ import { ChallengeSettingsModal } from '@/components/app/ChallengeSettingsModal'
 import { mockApi, mockTranslator } from './helpers/setup';
 import type { useSettingsSchema } from '@/api/useSettingsSchema';
 import type { Challenge } from '../../src/ts/types/gurushots';
-import type { AppSettings } from '../../src/ts/types/settings';
+import type { RendererSettings } from '../../src/ts/types/settings';
 import { invalid } from '../helpers/invalid';
 
 const field = (group: string, type: string, dflt: unknown) => ({
@@ -188,7 +188,7 @@ describe('loading', () => {
     });
 
     test('app settings that resolve or fail after close are ignored', async () => {
-        let resolve: (value: AppSettings) => void;
+        let resolve: (value: RendererSettings) => void;
         mockApi.getSettings.mockImplementation(() => new Promise((r) => (resolve = r)));
         const { rerender, onClose } = renderModal();
         rerender(<ChallengeSettingsModal isOpen={false} onClose={onClose} challengeId="1" challengeTitle="x" />);

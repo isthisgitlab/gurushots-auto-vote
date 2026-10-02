@@ -2,7 +2,7 @@ import { useState, useEffect, useCallback, useRef } from 'react';
 import { getUiDefaultSettings } from '../../settings/uiDefaults';
 import * as ipc from '@/api/ipc';
 
-import type { AppSettings } from '../../types/settings';
+import type { RendererSettings } from '../../types/settings';
 import type {
     RendererSchema,
     SettingChangeHandler,
@@ -68,7 +68,7 @@ export function useSettingsForm({
     isOpen: boolean;
     schema: RendererSchema | null | undefined;
     defaults: Record<string, unknown> | null | undefined;
-    settings: AppSettings | null | undefined;
+    settings: RendererSettings | null | undefined;
     refetchSettings: () => Promise<void>;
     refetchSchema: () => Promise<void>;
     updateSetting: (key: string, value: unknown) => Promise<void>;

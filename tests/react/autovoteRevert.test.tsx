@@ -58,7 +58,7 @@ describe('AutovoteContext — last-minute cadence reverts to normal', () => {
         activeChallenges = [{ id: 1, title: 'Closing Soon', type: 'regular', close_time: now + 300 }];
 
         jest.mocked(window.api.getSettings).mockResolvedValue(
-            invalid({ token: 'tok', checkFrequencyMin: 3, checkFrequencyMax: 3 }),
+            invalid({ hasToken: true, checkFrequencyMin: 3, checkFrequencyMax: 3 }),
         );
         jest.mocked(window.api.getSetting).mockResolvedValue(null); // no auto-resume on mount
         jest.mocked(window.api.getActiveChallenges).mockImplementation(async () =>

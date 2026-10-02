@@ -92,12 +92,13 @@ beforeEach(() => {
 });
 
 describe('get-active-challenges', () => {
-    test('delegates to strategy.getActiveChallenges with the token', async () => {
+    test('delegates to strategy.getActiveChallenges with the stored token', async () => {
+        setToken('tok');
         const strategy = stubStrategy({
             getActiveChallenges: jest.fn().mockResolvedValue({ challenges: [{ id: 1 }] }),
         });
         const handlers = buildHandlers();
-        const result = await handlers['get-active-challenges']({}, 'tok');
+        const result = await handlers['get-active-challenges']();
         expect(strategy.getActiveChallenges).toHaveBeenCalledWith('tok');
         expect(result).toEqual({ challenges: [{ id: 1 }] });
         // Feeds the quit-while-boost-window-open confirmation.
@@ -105,16 +106,18 @@ describe('get-active-challenges', () => {
     });
 
     test('a failed fetch keeps the quit guard on its previous list', async () => {
+        setToken('tok');
         stubStrategy({ getActiveChallenges: jest.fn().mockResolvedValue({ challenges: [], fetchFailed: true }) });
         const handlers = buildHandlers();
-        await handlers['get-active-challenges']({}, 'tok');
+        await handlers['get-active-challenges']();
         expect(rememberChallenges).not.toHaveBeenCalled();
     });
 
     test('tolerates a strategy that resolves nothing', async () => {
+        setToken('tok');
         stubStrategy({ getActiveChallenges: jest.fn().mockResolvedValue(undefined) });
         const handlers = buildHandlers();
-        await expect(handlers['get-active-challenges']({}, 'tok')).resolves.toBeUndefined();
+        await expect(handlers['get-active-challenges']()).resolves.toBeUndefined();
         expect(rememberChallenges).toHaveBeenCalledWith(undefined);
     });
 
@@ -123,13 +126,28 @@ describe('get-active-challenges', () => {
         // objects, never throw. get-active-challenges returns the same
         // { challenges, fetchFailed } shape the happy path uses so
         // useActiveChallenges' "always resolves a list shape" holds.
+        setToken('tok');
         stubStrategy({ getActiveChallenges: jest.fn().mockRejectedValue(new Error('fetch fail')) });
         const handlers = buildHandlers();
-        await expect(handlers['get-active-challenges']({}, 'tok')).resolves.toEqual({
+        await expect(handlers['get-active-challenges']()).resolves.toEqual({
             challenges: [],
             fetchFailed: true,
         });
     });
+});
+
+describe('get-active-challenges without a stored token', () => {
+    test.each([null, ''])(
+        'answers the failed-fetch list shape for %p without a request or a warning',
+        async (token) => {
+            setToken(token);
+            const strategy = stubStrategy();
+            const handlers = buildHandlers();
+            await expect(handlers['get-active-challenges']()).resolves.toEqual({ challenges: [], fetchFailed: true });
+            expect(strategy.getActiveChallenges).not.toHaveBeenCalled();
+            expect(rememberChallenges).not.toHaveBeenCalled();
+        },
+    );
 });
 
 describe('authenticate', () => {
@@ -150,14 +168,15 @@ describe('authenticate', () => {
         );
     });
 
-    test('mock path selects the mock surface and returns its token', async () => {
+    test('mock path selects the mock surface, stores its token and does not return it', async () => {
         mockSurface.authenticate.mockResolvedValue({ token: 'mock-token-xyz' });
         const handlers = buildHandlers();
         const result = await handlers.authenticate({}, 'user@example.com', 'pw', true);
         expect(apiFactory.getApiStrategy).toHaveBeenCalledWith({ mock: true });
         expect(mockSurface.authenticate).toHaveBeenCalledWith('user@example.com', 'pw');
         expect(realSurface.authenticate).not.toHaveBeenCalled();
-        expect(result).toEqual({ success: true, token: 'mock-token-xyz' });
+        expect(result).toEqual({ success: true });
+        expect(result).not.toHaveProperty('token');
         expect(settings.setSetting).toHaveBeenCalledWith('token', 'mock-token-xyz');
     });
 
@@ -173,7 +192,8 @@ describe('authenticate', () => {
         const result = await handlers.authenticate({}, 'user@example.com', 'pw', false);
         expect(apiFactory.getApiStrategy).toHaveBeenCalledWith({ mock: false });
         expect(realSurface.authenticate).toHaveBeenCalledWith('user@example.com', 'pw');
-        expect(result).toEqual({ success: true, token: 'real-token' });
+        expect(result).toEqual({ success: true });
+        expect(result).not.toHaveProperty('token');
         expect(settings.setSetting).toHaveBeenCalledWith('token', 'real-token');
     });
 
@@ -181,7 +201,8 @@ describe('authenticate', () => {
         realSurface.authenticate.mockResolvedValue(invalid({ access_token: 'alt-token' }));
         const handlers = buildHandlers();
         const result = await handlers.authenticate({}, 'u', 'p', false);
-        expect(result).toEqual({ success: true, token: 'alt-token' });
+        expect(result).toEqual({ success: true });
+        expect(settings.setSetting).toHaveBeenCalledWith('token', 'alt-token');
     });
 
     test('returns failure when API returns null', async () => {
