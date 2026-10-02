@@ -138,6 +138,51 @@ const voteOnSingleChallenge = (async (
     return { success: true as const, message: successReturnMsg };
 }) satisfies IpcReplyFn;
 
+const handleVoteAllChallengesManual = (async () => {
+    try {
+        logger.withCategory('voting').info('🔄 Starting manual vote all challenges (bypass thresholds)...', null);
+
+        const userSettings = settings.loadSettings();
+        if (!userSettings.token) {
+            logger.withCategory('authentication').warning('❌ No token found for manual voting', null);
+            return { success: false as const, error: 'No authentication token found' };
+        }
+
+        const strategy = apiFactory.getApiStrategy();
+
+        const challengesResponse: ActiveChallengesResponse | null = await strategy.getActiveChallenges(
+            userSettings.token,
+        );
+        if (!challengesResponse || !challengesResponse.challenges) {
+            logger.withCategory('challenges').warning('❌ Failed to fetch challenges for manual vote all', null);
+            return { success: false as const, error: 'Failed to fetch challenges' };
+        }
+
+        const challenges = challengesResponse.challenges;
+
+        logger.withCategory('voting').info(`📋 Found ${challenges.length} challenges to process`, null);
+
+        const { voted, skipped, total } = await voteAllChallengesManual(challenges, strategy, userSettings.token, {
+            onProgress: (current, totalCount, challenge) =>
+                logger
+                    .withCategory('voting')
+                    .progress(`Processing challenge ${current}/${totalCount}: ${challenge.title}`, current, totalCount),
+        });
+
+        const message = `Manual vote all completed: ${voted} voted, ${skipped} skipped out of ${total} challenges`;
+        logger.withCategory('voting').success(message, null);
+
+        return {
+            success: true as const,
+            message,
+            stats: { total, voted, skipped },
+        };
+    } catch (error) {
+        logger.withCategory('voting').error('Error handling vote-all-challenges-manual request:', error);
+        return errorResult(error, 'Failed to vote on all challenges manually');
+    }
+}) satisfies IpcReplyFn;
+
 const buildHandlers = () =>
     ({
         'gui-vote': async () => {
@@ -177,63 +222,7 @@ const buildHandlers = () =>
             }
         },
 
-        'vote-all-challenges-manual': async () => {
-            try {
-                logger
-                    .withCategory('voting')
-                    .info('🔄 Starting manual vote all challenges (bypass thresholds)...', null);
-
-                const userSettings = settings.loadSettings();
-                if (!userSettings.token) {
-                    logger.withCategory('authentication').warning('❌ No token found for manual voting', null);
-                    return { success: false as const, error: 'No authentication token found' };
-                }
-
-                const strategy = apiFactory.getApiStrategy();
-
-                const challengesResponse: ActiveChallengesResponse | null = await strategy.getActiveChallenges(
-                    userSettings.token,
-                );
-                if (!challengesResponse || !challengesResponse.challenges) {
-                    logger
-                        .withCategory('challenges')
-                        .warning('❌ Failed to fetch challenges for manual vote all', null);
-                    return { success: false as const, error: 'Failed to fetch challenges' };
-                }
-
-                const challenges = challengesResponse.challenges;
-
-                logger.withCategory('voting').info(`📋 Found ${challenges.length} challenges to process`, null);
-
-                const { voted, skipped, total } = await voteAllChallengesManual(
-                    challenges,
-                    strategy,
-                    userSettings.token,
-                    {
-                        onProgress: (current, totalCount, challenge) =>
-                            logger
-                                .withCategory('voting')
-                                .progress(
-                                    `Processing challenge ${current}/${totalCount}: ${challenge.title}`,
-                                    current,
-                                    totalCount,
-                                ),
-                    },
-                );
-
-                const message = `Manual vote all completed: ${voted} voted, ${skipped} skipped out of ${total} challenges`;
-                logger.withCategory('voting').success(message, null);
-
-                return {
-                    success: true as const,
-                    message,
-                    stats: { total, voted, skipped },
-                };
-            } catch (error) {
-                logger.withCategory('voting').error('Error handling vote-all-challenges-manual request:', error);
-                return errorResult(error, 'Failed to vote on all challenges manually');
-            }
-        },
+        'vote-all-challenges-manual': handleVoteAllChallengesManual,
 
         'should-cancel-voting': () => cancellation.isCancelled(),
 

@@ -1,6 +1,6 @@
 import { oneLine } from './format/logSafe';
 import { isSourceCode, getAppName, getContext, setContext, clearContext, devMode, cliMode } from './logger/context';
-import { currentLogFiles, getLogFilePaths, cleanupOldLogs } from './logger/files';
+import { currentLogFiles, cleanupOldLogs } from './logger/files';
 import { buildProgressMessage } from './logger/format';
 import { sanitizeForLog, sanitizeLogString, redactMessage } from './logger/sanitize';
 import { writeLog, startOperation, endOperation, getRecentLogs } from './logger/write';
@@ -183,8 +183,6 @@ export const getLogFile = () => currentLogFiles.app;
 export const getErrorLogFile = () => currentLogFiles.error;
 export const getApiLogFile = () => currentLogFiles.api;
 export const getSettingsLogFile = () => currentLogFiles.settings;
-/** @param date - YYYY-MM-DD */
-export const getLogFileForDate = (date: string) => getLogFilePaths(date);
 export const isCliMode = () => cliMode;
 export const isDevMode = () => devMode;
 export {

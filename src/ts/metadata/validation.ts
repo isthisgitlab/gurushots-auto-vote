@@ -204,6 +204,15 @@ const validateChallengeEntries = (metadata: Record<string, unknown>, validatedMe
     for (const [challengeId, entry] of Object.entries(metadata)) {
         if (challengeId === 'updateCheck') continue;
 
+        if (isUnsafeChallengeKey(challengeId)) {
+            logger
+                .withCategory('challenges')
+                .warning(`Removing metadata entry under reserved key "${oneLineId(challengeId)}"`);
+            removedCount++;
+            changed = true;
+            continue;
+        }
+
         const validation = validateMetadataEntry(entry);
         if (!validation.isValid) {
             logger

@@ -5,6 +5,8 @@
  *
  * Thin dispatcher: parses argv, routes to a command module, and owns
  * process-level concerns (init, exit codes, unhandled error handlers).
+ * The command table (name → handler) is cli/commandTable.ts, built from the
+ * handler factories in cli/commandKit.ts; `help` text is cli/help.ts.
  * The actual command logic lives in:
  *   - cli/commands/auth.ts     login flow
  *   - cli/commands/voting.ts   vote cycles, status, continuous mode

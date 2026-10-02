@@ -92,8 +92,8 @@ const getUserDataDir = (appName: string): string => {
     }
 };
 
-// --- App identity + resolved user-data path (single source of truth) ---
-// logger.ts and settings/storage.ts must resolve this identically: separate
+// App identity and the resolved user-data path have this one implementation.
+// logger.ts and settings/storage.ts must resolve it identically: separate
 // copies whose Electron dev branches disagree (`<userData>-dev` vs
 // `<parent>/gurushots-auto-vote-dev`) land logs and settings in different
 // directories whenever the userData basename differs from the package name.

@@ -45,9 +45,9 @@ if (!gotSingleInstanceLock) {
 // ensureExit (force-exit safety net) lives in windows/lifecycle.ts.
 
 // Register IPC handlers from their focused modules. Each module
-// receives the accessors it needs to read/write the shared
-// module-level state (appState.autoUpdater, appState.mainWindow). Lifecycle of those
-// objects stays in this file.
+// receives the accessors it needs to read/write the shared window and
+// updater state (index/state.ts). The windows' lifecycle lives in
+// index/windows.ts and the startup sequence in index/startup.ts.
 logIpc.register(ipcMain);
 updateIpc.register(ipcMain, {
     getAutoUpdater: () => appState.autoUpdater,

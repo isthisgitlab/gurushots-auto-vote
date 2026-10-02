@@ -29,6 +29,8 @@ export const errors = {
     dismiss: 'Dismiss',
     reload: 'Reload',
     fetchFailed: "Couldn't reach GuruShots — retrying automatically.",
+    actionInvalidArgs:
+        'The action could not run: the challenge or photo id is not valid. Reload the window and try again.',
 };
 // First-run onboarding
 export const onboarding = {

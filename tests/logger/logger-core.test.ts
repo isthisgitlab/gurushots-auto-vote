@@ -92,11 +92,17 @@ const lastEntry = (logger: typeof LoggerModule) => logger.getRecentLogs().at(-1)
 
 describe('module load: logs directory', () => {
     test('creates the logs dir under the resolved user-data path when missing', () => {
+        jest.setSystemTime(new Date('2026-01-02T12:00:00Z'));
         const fs = makeFs({ existsSync: jest.fn(() => false) });
         const { logger } = loadLogger({ fs });
 
         expect(fs.mkdirSync).toHaveBeenCalledWith(LOGS_DIR, { recursive: true });
-        expect(logger.getLogFileForDate('2026-01-02')).toEqual({
+        expect({
+            error: logger.getErrorLogFile(),
+            app: logger.getLogFile(),
+            api: logger.getApiLogFile(),
+            settings: logger.getSettingsLogFile(),
+        }).toEqual({
             error: `${LOGS_DIR}/errors-2026-01-02.log`,
             app: `${LOGS_DIR}/app-2026-01-02.log`,
             api: `${LOGS_DIR}/api-2026-01-02.log`,

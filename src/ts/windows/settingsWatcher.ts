@@ -5,9 +5,9 @@
  * `settings-changed` event to every other renderer window (so React hooks can
  * refetch without a full reload — catches CLI-originated changes).
  *
- * Separate from index.ts's createMainWindow — window creation has nothing
- * to do with file watching. The caller owns the returned fs.FSWatcher's
- * lifecycle (index.ts closes it when the main window closes).
+ * Separate from index/windows.ts's createMainWindow — window creation has
+ * nothing to do with file watching. The caller owns the returned fs.FSWatcher's
+ * lifecycle (index/windows.ts closes it when the main window closes).
  */
 
 import { BrowserWindow } from 'electron';

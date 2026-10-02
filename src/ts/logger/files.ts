@@ -3,6 +3,7 @@ import * as path from 'node:path';
 import * as runtime from '../runtime';
 import { errorMessage } from '../errorMessage';
 import { isElectronApp, startedViaCli, getUserDataPath } from './context';
+import { writeConsole } from './consoleSink';
 
 // Create logs directory in the same location as settings.
 // Wrapped in try/catch so the Capacitor WebView (no fs) can load the
@@ -17,16 +18,14 @@ try {
 } catch (err) {
     // Browser / Capacitor context — fs is a require shim. Logger falls
     // back to console output only; in-app log streaming uses sendLogToGUI.
-    console.debug('[logger] fs not available; skipping file-based logging:', errorMessage(err));
+    writeConsole('debug', '[logger] fs not available; skipping file-based logging:', errorMessage(err));
     logsDir = '';
 }
 
-// Get current date in YYYY-MM-DD format
 const getCurrentDate = () => {
     return new Date().toISOString().split('T')[0];
 };
 
-// Get log file paths for current date
 /**
  * @param date - YYYY-MM-DD
  */
@@ -85,7 +84,6 @@ const cleanupOldLogs = () => {
             let shouldDelete = false;
             let reason = '';
 
-            // Parse date from filename
             const fileDate = parseDateFromFilename(file);
 
             if (fileDate) {
@@ -97,7 +95,6 @@ const cleanupOldLogs = () => {
                     reason = tooOld ? 'age' : 'size';
                 }
             } else if (file.startsWith('api-debug-')) {
-                // Clean up old timestamped files
                 const fileAge = now.getTime() - stats.mtime.getTime();
                 shouldDelete = fileAge > 7 * 24 * 60 * 60 * 1000; // 7 days
                 reason = 'age';
@@ -105,18 +102,17 @@ const cleanupOldLogs = () => {
 
             if (shouldDelete) {
                 fs.unlinkSync(filePath);
-                console.log(`Cleaned up old log file: ${file} (${reason}, ${fileSizeMB.toFixed(2)} MB)`);
+                writeConsole('log', `Cleaned up old log file: ${file} (${reason}, ${fileSizeMB.toFixed(2)} MB)`);
             }
         });
     } catch (error) {
         // Silently ignore cleanup errors in test environments
         if (!runtime.isTest()) {
-            console.error('Error during log cleanup:', error);
+            writeConsole('error', 'Error during log cleanup:', error);
         }
     }
 };
 
-// Initialize cleanup on module load
 cleanupOldLogs();
 
 // Set up periodic cleanup (every hour) only in actual application contexts
@@ -131,7 +127,6 @@ process.on('exit', () => {
     }
 });
 
-// Get current log file paths
 const currentLogFiles = getLogFilePaths();
 
-export { logsDir, currentLogFiles, getLogFilePaths, cleanupOldLogs };
+export { logsDir, currentLogFiles, cleanupOldLogs };

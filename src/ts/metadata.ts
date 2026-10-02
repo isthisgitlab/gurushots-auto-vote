@@ -2,6 +2,18 @@ import type { ChallengeMetadataEntry, MetadataFile, UpdateCheckData } from './ty
 import * as logger from './logger';
 import { formatTimeHMS } from './dateFormat';
 import { createJsonStore } from './settings/storage';
+// Challenge ids come from the GuruShots API, so collapse CR/LF before interpolating
+// one into a message. These carry a bare id rather than the full `[Challenge …]`
+// tag, so they use the shared helper directly instead of logger.challengeTag.
+import { oneLine as oneLineId } from './format/logSafe';
+import { isPlainObject } from './plainObject';
+import {
+    MAX_TRACKED_ENTRY_IDS,
+    MAX_ENTRY_ID_LENGTH,
+    isUnsafeChallengeKey,
+    entryIdsFailureReason,
+    validateMetadata,
+} from './metadata/validation';
 
 // Platform-aware transport (fs on Electron/CLI, @capacitor/preferences on
 // the Android app WebView, in-memory on the headless service); raw fs would
@@ -29,19 +41,6 @@ const getDefaultMetadata = (): MetadataFile => {
  */
 const challengeEntry = (metadata: MetadataFile, challengeId: string | number): ChallengeMetadataEntry | undefined =>
     metadata[challengeId] as ChallengeMetadataEntry | undefined;
-
-// Challenge ids come from the GuruShots API, so collapse CR/LF before interpolating
-// one into a message. These carry a bare id rather than the full `[Challenge …]`
-// tag, so they use the shared helper directly instead of logger.challengeTag.
-import { oneLine as oneLineId } from './format/logSafe';
-import { isPlainObject } from './plainObject';
-import {
-    MAX_TRACKED_ENTRY_IDS,
-    MAX_ENTRY_ID_LENGTH,
-    isUnsafeChallengeKey,
-    entryIdsFailureReason,
-    validateMetadata,
-} from './metadata/validation';
 
 /**
  * Load metadata from file
@@ -226,7 +225,7 @@ const setChallengeEntryIds = (challengeId: string, entryIds: string[]): boolean 
         return true; // Unchanged — skip the whole-file rewrite
     }
 
-    metadata[challengeId] = { ...(existing || {}), entryIds };
+    metadata[challengeId] = { ...existing, entryIds };
     return saveMetadata(metadata);
 };
 

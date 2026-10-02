@@ -1,21 +1,9 @@
 /**
- * Capacitor bridge — populates window.api with the same surface that
- * preload.ts exposes on Electron, but consumes the IPC handlers
- * directly instead of going through ipcMain/ipcRenderer.
- *
- * Capacitor runs everything in one JavaScript context (the WebView), so
- * there is no main↔renderer split. The "handlers" are imported
- * functions; we wrap each in a thin shim that adapts the Electron
- * (event, ...args) signature to a (...args) call site.
- *
- * Event listeners (onUpdateChecking, onLogMessage, etc.) on Electron
- * are fed by webContents.send from the main process. On Capacitor
- * there is no main process; the bridge stands up an in-process
- * EventEmitter so the same .on() registration shape works and the
- * React code does not need to branch.
- *
- * This module is loaded only by the Capacitor renderer entry. It is
- * never reached on Electron, where preload.ts does the wiring.
+ * Capacitor bridge — populates window.api with the same surface preload.ts
+ * exposes on Electron, calling the IPC handler modules directly: Capacitor
+ * runs in one JavaScript context, so there is no main↔renderer split.
+ * Event listeners are fed by an in-process pub/sub instead of
+ * webContents.send. Loaded only by the Capacitor renderer entry.
  */
 
 // Bridge consumes only the IPC handler modules whose impls are
@@ -149,33 +137,29 @@ const buildAllHandlers = () => {
     };
 };
 
-const installBridge = (): WindowApi => {
-    // Seed the curated intent presets once (idempotent; never fatal). Mobile
-    // has no main-process startup, so the bridge install is the boot hook.
-    try {
-        settings.seedIntentProfiles();
-    } catch (err) {
-        logger.withCategory('settings').warning('Intent profile seeding failed (non-fatal):', err);
-    }
-    const handlers = buildAllHandlers();
-    const api: Record<string, (...args: never[]) => unknown> = {};
+type BridgeApi = Record<string, (...args: never[]) => unknown>;
 
-    // Map every handler to a window.api method using kebab → camel
-    for (const [channel, impl] of Object.entries(handlers)) {
+/**
+ * Map every handler to a window.api method using kebab → camel, plus the
+ * friendlier aliases preload exposes — mirrored from the shared manifest so the
+ * two shells can't drift.
+ */
+const addHandlerMethods = (api: BridgeApi) => {
+    for (const [channel, impl] of Object.entries(buildAllHandlers())) {
         api[kebabToCamel(channel)] = wrap(impl);
     }
-
-    // Preload exposes a couple of channels under friendlier aliases —
-    // mirror them from the shared manifest so the two shells can't drift.
     for (const [method, channel] of Object.entries(aliases)) {
         api[method] = api[kebabToCamel(channel)];
     }
+};
 
-    // Send-style methods (login-success / logout) are window-control
-    // hints in Electron's main process. On Capacitor they just toggle
-    // local React state; the bridge emits an event the app can listen
-    // to (or just no-ops, since the React app already drives navigation
-    // off the token in settings).
+/**
+ * Send-style methods (login-success / logout) are window-control hints in
+ * Electron's main process. On Capacitor they just toggle local React state; the
+ * bridge emits an event the app can listen to (or just no-ops, since the React
+ * app already drives navigation off the token in settings).
+ */
+const addSendMethods = (api: BridgeApi) => {
     api.login = () => emit(sendMethods.login);
     api.logout = async () => {
         try {
@@ -189,6 +173,67 @@ const installBridge = (): WindowApi => {
         }
         emit(sendMethods.logout);
     };
+};
+
+/**
+ * Event listeners, generated from the shared manifest. Each returns
+ * subscribe()'s unsubscribe, matching the Electron preload contract so
+ * React code does not branch per platform.
+ */
+const addEventMethods = (api: BridgeApi) => {
+    for (const [method, channel] of Object.entries(eventMethods)) {
+        api[method] = (cb: BridgeListener) => subscribe(channel, cb);
+    }
+};
+
+/**
+ * On mobile, reload-window is the WebView reloading itself.
+ */
+const reloadWindow = () => {
+    if (typeof globalThis.location?.reload === 'function') {
+        globalThis.location.reload();
+    }
+    return Promise.resolve({ success: true });
+};
+
+const openExternalUrl = (url: unknown) => {
+    // Same https-only scheme gate as the Electron handler (shared via
+    // format/urlSafe) — the two platforms must not diverge on this
+    // security control. Without it the Android path would open any
+    // scheme (intent:, file:, javascript:, app handlers).
+    if (!isSafeExternalUrl(url)) {
+        logger.withCategory('api').warning(`Refused openExternalUrl for non-https URL: ${url}`, null);
+        return Promise.resolve({ success: false, error: 'Only https:// URLs can be opened' });
+    }
+    // Use the native browser via Capacitor when present; fall back
+    // to window.open. Loaded lazily so non-Capacitor paths never
+    // resolve @capacitor/browser.
+    try {
+        const Cap = (globalThis as CapacitorGlobals).Capacitor;
+        if (Cap?.Plugins?.Browser?.open) {
+            // isSafeExternalUrl only passes a string.
+            return Cap.Plugins.Browser.open({ url: url as string });
+        }
+    } catch {
+        // fall through
+    }
+    if (typeof globalThis.open === 'function') {
+        globalThis.open(url as string, '_blank');
+    }
+    return Promise.resolve({ success: true });
+};
+
+const installBridge = (): WindowApi => {
+    // Seed the curated intent presets once (idempotent; never fatal). Mobile
+    // has no main-process startup, so the bridge install is the boot hook.
+    try {
+        settings.seedIntentProfiles();
+    } catch (err) {
+        logger.withCategory('settings').warning('Intent profile seeding failed (non-fatal):', err);
+    }
+    const api: BridgeApi = {};
+    addHandlerMethods(api);
+    addSendMethods(api);
 
     // Route logger fan-out into the in-process emitter so the Logs page
     // (useLogStream → onLogMessage) receives live entries. Electron does
@@ -197,49 +242,13 @@ const installBridge = (): WindowApi => {
     (globalThis as typeof globalThis & { sendLogToGUI?: GuiLogSink }).sendLogToGUI = (entry) =>
         emit('log-message', entry);
 
-    // Event listeners, generated from the shared manifest. Each returns
-    // subscribe()'s unsubscribe, matching the Electron preload contract so
-    // React code does not branch per platform.
-    for (const [method, channel] of Object.entries(eventMethods)) {
-        api[method] = (cb: BridgeListener) => subscribe(channel, cb);
-    }
+    addEventMethods(api);
 
-    // Window controls the React app sometimes asks for. On mobile,
-    // reload-window is the WebView reloading itself; refresh-menu and
+    // Window controls the React app sometimes asks for: refresh-menu and
     // openExternalUrl get reasonable Capacitor-native fallbacks.
-    api.reloadWindow = () => {
-        if (typeof globalThis.location?.reload === 'function') {
-            globalThis.location.reload();
-        }
-        return Promise.resolve({ success: true });
-    };
+    api.reloadWindow = reloadWindow;
     api.refreshMenu = () => Promise.resolve({ success: true }); // no menu on mobile
-    api.openExternalUrl = (url: unknown) => {
-        // Same https-only scheme gate as the Electron handler (shared via
-        // format/urlSafe) — the two platforms must not diverge on this
-        // security control. Without it the Android path would open any
-        // scheme (intent:, file:, javascript:, app handlers).
-        if (!isSafeExternalUrl(url)) {
-            logger.withCategory('api').warning(`Refused openExternalUrl for non-https URL: ${url}`, null);
-            return Promise.resolve({ success: false, error: 'Only https:// URLs can be opened' });
-        }
-        // Use the native browser via Capacitor when present; fall back
-        // to window.open. Loaded lazily so non-Capacitor paths never
-        // resolve @capacitor/browser.
-        try {
-            const Cap = (globalThis as CapacitorGlobals).Capacitor;
-            if (Cap?.Plugins?.Browser?.open) {
-                // isSafeExternalUrl only passes a string.
-                return Cap.Plugins.Browser.open({ url: url as string });
-            }
-        } catch {
-            // fall through
-        }
-        if (typeof globalThis.open === 'function') {
-            globalThis.open(url as string, '_blank');
-        }
-        return Promise.resolve({ success: true });
-    };
+    api.openExternalUrl = openExternalUrl;
 
     // Expose. The object is assembled by channel name from the shared
     // manifest, so the checker cannot follow it to WindowApi; the handlers it

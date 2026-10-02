@@ -6,6 +6,7 @@ import { InlineLoader } from '@/components/ui/LoadingSpinner';
 import { StatusBadge } from '@/components/ui/StatusBadge';
 import { interp } from '@/utils/interp';
 import * as ipc from '@/api/ipc';
+import { ipcErrorText } from '@/api/ipcErrorText';
 
 import type { Bankroll, Challenge } from '../../../types/gurushots';
 import { errorMessage } from '../../../errorMessage';
@@ -193,7 +194,8 @@ export function DiscoverSection({
                                                               coins: outcome.cost ?? cost,
                                                               have: outcome.coins,
                                                           })
-                                                        : outcome.error || t('app.discoverGenericError')}
+                                                        : ipcErrorText(outcome.error, t) ||
+                                                          t('app.discoverGenericError')}
                                                     {outcome.status === 'charged-pending-submit' && (
                                                         <button
                                                             className="btn btn-outline btn-sm ml-2"

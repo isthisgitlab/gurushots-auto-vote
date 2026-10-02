@@ -247,6 +247,32 @@ describe('EntryBadge — error auto-clear (5s timer)', () => {
     });
 });
 
+describe('EntryBadge — error text', () => {
+    const renderBadge = () =>
+        render(
+            <EntryBadge
+                {...noCallbacks}
+                entry={baseEntry()}
+                challengeId={777}
+                boostAvailable={true}
+                turboAvailable={false}
+            />,
+        );
+
+    test('shows a handler failure message as-is', () => {
+        mockBoostState.error = 'Boost failed';
+        renderBadge();
+        expect(screen.getByText('Boost failed')).toBeTruthy();
+    });
+
+    test('shows translated text for the invalid-args machine code', () => {
+        mockTurboState.error = 'invalid-args';
+        renderBadge();
+        expect(screen.queryByText('invalid-args')).toBeNull();
+        expect(screen.getByText('errors.actionInvalidArgs')).toBeTruthy();
+    });
+});
+
 describe('EntryBadge — error styling on button', () => {
     test('boost button gets btn-error class when there is a boost error', () => {
         mockBoostState.error = 'Boost failed';

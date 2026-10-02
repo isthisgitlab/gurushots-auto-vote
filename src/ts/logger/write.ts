@@ -1,6 +1,7 @@
 import * as fs from 'node:fs';
 import { oneLine, sentenceCaseLogMessage } from '../format/logSafe';
 import { getContext } from './context';
+import { writeConsole } from './consoleSink';
 import { logsDir, currentLogFiles } from './files';
 import { formatConsoleMessage, getTimeString, withIcon, LEVEL_ICONS } from './format';
 import { sanitizeForLog, redactMessage } from './sanitize';
@@ -88,7 +89,7 @@ const writeLog = (
             }
         }
 
-        console.log(formatConsoleMessage(level, message, context, getTimeString(), cat));
+        writeConsole('log', formatConsoleMessage(level, message, context, getTimeString(), cat));
 
         const guiSink = resolveGuiSink();
         if (guiSink) {
@@ -102,7 +103,7 @@ const writeLog = (
             });
         }
     } catch (error) {
-        console.error('Error writing log entry:', error);
+        writeConsole('error', 'Error writing log entry:', error);
     }
 };
 

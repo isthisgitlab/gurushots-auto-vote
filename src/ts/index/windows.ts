@@ -24,9 +24,13 @@ function holdForOpenBoosts(event: { preventDefault: () => void }, proceed: () =>
 
 /**
  * Creates a window with the shared web preferences and window-bounds
- * persistence. `extraWebPreferences` carries what only one window needs.
+ * persistence. `extraWebPreferences` carries the one preference only a window may set.
  */
-function createAppWindow(kind: 'login' | 'main', htmlFile: string, extraWebPreferences: WebPreferences = {}) {
+function createAppWindow(
+    kind: 'login' | 'main',
+    htmlFile: string,
+    extraWebPreferences: Pick<WebPreferences, 'backgroundThrottling'> = {},
+) {
     const bounds = settings.getWindowBounds(kind);
 
     const win = new BrowserWindow({
@@ -36,13 +40,15 @@ function createAppWindow(kind: 'login' | 'main', htmlFile: string, extraWebPrefe
         y: bounds.y,
         icon: appPath('src', 'assets', 'logo.png'),
         webPreferences: {
+            // Spread first: the security keys below can't be overridden by a caller.
+            ...extraWebPreferences,
             nodeIntegration: false,
             contextIsolation: true,
+            sandbox: true,
             // Bundled by scripts/build-react.ts — the sandboxed preload cannot
             // require() the relative channel manifest, so it ships pre-bundled.
             preload: appPath('dist', 'preload-bundle.js'),
             webSecurity: true,
-            ...extraWebPreferences,
             // Use a custom session partition to isolate storage
             partition: 'persist:gurushots',
         },
@@ -127,7 +133,7 @@ function createMainWindow() {
 
     // Watch settings file for changes and auto-reload with debouncing.
     // The watcher lives in windows/settingsWatcher.ts; accessors keep it
-    // reading the current window state this module owns.
+    // reading the current window state held in index/state.ts.
     appState.settingsWatcher = watchSettingsFile({
         getMainWindow: () => appState.mainWindow,
         getMainWindowCreatedTime: () => appState.mainWindowCreatedTime,

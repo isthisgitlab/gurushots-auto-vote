@@ -173,6 +173,15 @@ describe('edge paths', () => {
         expect(await screen.findByText('app.discoverGenericError')).toBeTruthy();
     });
 
+    test('an invalid-args failure shows the translated message, not the code', async () => {
+        window.api.joinChallenge = jest.fn().mockResolvedValue({ success: false, error: 'invalid-args' });
+        renderSection();
+        await screen.findByText('Free One');
+        fireEvent.click(screen.getByText('app.discoverJoin'));
+        expect(await screen.findByText('errors.actionInvalidArgs')).toBeTruthy();
+        expect(screen.queryByText('invalid-args')).toBeNull();
+    });
+
     test('the join button reads Joining while in flight', async () => {
         let resolve: ((value: Awaited<ReturnType<WindowApi['joinChallenge']>>) => void) | undefined;
         window.api.joinChallenge = jest.fn(() => new Promise((r) => (resolve = r)));

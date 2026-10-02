@@ -5,7 +5,7 @@
  * window swaps.
  *
  * Every collaborator is mocked; each test re-requires the entry point on a
- * fresh module registry (module-level window state lives in index.ts).
+ * fresh module registry (window state lives in index/state.ts).
  */
 
 import type { BrowserWindowConstructorOptions, Dialog, IpcMain, Rectangle, WebPreferences } from 'electron';
@@ -564,6 +564,7 @@ describe('login window', () => {
         expect(win.opts.webPreferences).toMatchObject({
             nodeIntegration: false,
             contextIsolation: true,
+            sandbox: true,
             webSecurity: true,
             partition: 'persist:gurushots',
         });
@@ -626,6 +627,12 @@ describe('main window', () => {
             expect(m.settings.getWindowBounds).toHaveBeenCalledWith('main');
             expect(win.opts).toMatchObject({ x: 10 });
             expect(win.opts.webPreferences.backgroundThrottling).toBe(false);
+            expect(win.opts.webPreferences).toMatchObject({
+                nodeIntegration: false,
+                contextIsolation: true,
+                sandbox: true,
+                webSecurity: true,
+            });
             expect(m.settings.getSetting).toHaveBeenCalledWith('autovoteRunning');
             expect(m.bg.syncBackgroundActivity).toHaveBeenLastCalledWith(true);
             expect(m.cat.warning).not.toHaveBeenCalled();

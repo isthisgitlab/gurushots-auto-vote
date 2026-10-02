@@ -411,6 +411,28 @@ describe('validation of stored metadata', () => {
         expect(warnings()).toEqual([expect.stringContaining('Removing invalid metadata entry for challenge 777')]);
     });
 
+    test('removes entries under reserved keys without touching the prototype', () => {
+        // JSON.parse makes "__proto__" an own key; an object literal here would set the prototype instead.
+        fs.existsSync.mockReturnValue(true);
+        fs.readFileSync.mockReturnValue(
+            '{"updateCheck":{"lastCheck":null,"skipVersion":null},"__proto__":{"exposureBump":5},"constructor":{"exposureBump":6},"888":{"exposureBump":1}}',
+        );
+        const writes = captureWrites();
+
+        const result = metadata.loadMetadata();
+
+        expect(Object.getPrototypeOf(result)).toBe(Object.prototype);
+        expect(Object.keys(result).sort()).toEqual(['888', 'updateCheck']);
+        expect(({} as { exposureBump?: number }).exposureBump).toBeUndefined();
+        expect(writes).toHaveLength(1);
+        expect(Object.keys(writes[0]).sort()).toEqual(['888', 'updateCheck']);
+        expect(warnings()).toEqual([
+            expect.stringContaining('reserved key "__proto__"'),
+            expect.stringContaining('reserved key "constructor"'),
+            'Cleaned up 2 invalid metadata entries total',
+        ]);
+    });
+
     test('logs a summary when more than one entry is removed', () => {
         setStoredMetadata({
             updateCheck: { lastCheck: null, skipVersion: null },

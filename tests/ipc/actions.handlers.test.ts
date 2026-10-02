@@ -406,26 +406,66 @@ describe('apply-turbo-to-entry', () => {
     });
 });
 
-describe('apply-turbo-to-entry — invalid args', () => {
-    test.each([
-        ['an object challenge id', { id: 1 }, 'i1'],
-        ['a NaN challenge id', NaN, 'i1'],
-        ['an empty challenge id', '', 'i1'],
-        ['an object image id', '123', { id: 1 }],
-        ['a NaN image id', '123', NaN],
-        ['an empty image id', '123', ''],
-    ])('refuses %s without calling applyTurbo', async (_label, challengeId, imageId) => {
-        stubAuthGuardOk();
-        const applyTurbo = jest.fn();
-        stubStrategy({ applyTurbo });
-        const handlers = buildHandlers();
-        const result = await handlers['apply-turbo-to-entry'](
-            {},
-            invalid<string>(challengeId),
-            invalid<string>(imageId),
+describe('id-taking action handlers — invalid args', () => {
+    const BAD_IDS: Array<[string, unknown]> = [
+        ['an object', { id: 1 }],
+        ['NaN', NaN],
+        ['an empty string', ''],
+        ['a string over the id length cap', 'x'.repeat(65)],
+    ];
+    const CHANNELS = [
+        [
+            'apply-turbo-to-entry',
+            (h: Handlers, id: unknown) => h['apply-turbo-to-entry']({}, invalid<string>(id), 'i1'),
+        ],
+        [
+            'apply-turbo-to-entry (image id)',
+            (h: Handlers, id: unknown) => h['apply-turbo-to-entry']({}, '123', invalid<string>(id)),
+        ],
+        ['play-auto-turbo', (h: Handlers, id: unknown) => h['play-auto-turbo']({}, invalid<string>(id), 'Title')],
+        ['fill-challenge-now', (h: Handlers, id: unknown) => h['fill-challenge-now']({}, invalid<string>(id), 'one')],
+        [
+            'apply-boost-to-entry',
+            (h: Handlers, id: unknown) => h['apply-boost-to-entry']({}, invalid<string>(id), 'i1'),
+        ],
+        [
+            'apply-boost-to-entry (image id)',
+            (h: Handlers, id: unknown) => h['apply-boost-to-entry']({}, '123', invalid<string>(id)),
+        ],
+        ['join-challenge', (h: Handlers, id: unknown) => h['join-challenge']({}, invalid<string>(id), false)],
+    ] as const;
+
+    describe.each(CHANNELS)('%s', (_channel, call) => {
+        test.each(BAD_IDS)(
+            'refuses %s with the invalid-args code before touching auth or the API',
+            async (_label, id) => {
+                stubAuthGuardOk();
+                const strategy = stubStrategy({ joinChallenge: jest.fn() });
+                settings.loadSettings = jest.fn();
+                const result = await call(buildHandlers(), id);
+                expect(result).toEqual({ success: false, error: 'invalid-args' });
+                expect(auth.requireAuthToken).not.toHaveBeenCalled();
+                expect(settings.loadSettings).not.toHaveBeenCalled();
+                expect(apiFactory.getApiStrategy).not.toHaveBeenCalled();
+                for (const fn of [
+                    strategy.applyTurbo,
+                    strategy.applyBoostToEntry,
+                    strategy.runTurboMiniGame,
+                    strategy.joinChallenge,
+                ]) {
+                    expect(fn).not.toHaveBeenCalled();
+                }
+                expect(autoFill.fillChallengeNow).not.toHaveBeenCalled();
+            },
         );
-        expect(result).toEqual({ success: false, error: 'Invalid challenge or image id' });
-        expect(applyTurbo).not.toHaveBeenCalled();
+    });
+
+    test('apply-turbo-to-entry passes valid numeric ids through to applyTurbo', async () => {
+        stubAuthGuardOk();
+        const strategy = stubStrategy({ applyTurbo: jest.fn().mockResolvedValue({ ok: true }) });
+        const result = await buildHandlers()['apply-turbo-to-entry']({}, 123, invalid<string>(456));
+        expect(result).toEqual({ success: true, message: 'Turbo applied successfully' });
+        expect(strategy.applyTurbo).toHaveBeenCalledWith(123, 456, 'tok');
     });
 });
 

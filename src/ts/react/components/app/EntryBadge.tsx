@@ -2,6 +2,7 @@ import type { Bankroll, Challenge, RankingEntry } from '../../../types/gurushots
 import type { SwapBackOffer } from '@/api/useSwapBacks';
 import { useTranslation } from '@/contexts/TranslationContext';
 import { useBoost } from '@/api/useBoost';
+import { ipcErrorText } from '@/api/ipcErrorText';
 import { useTurbo } from '@/api/useTurbo';
 import { useAutoClear } from '@/hooks/useAutoClear';
 import { getEntryStatus } from '@/utils/formatters';
@@ -132,7 +133,9 @@ export function EntryBadge({
                     )}
                 </span>
             )}
-            {(boostError || turboError) && <span className="text-error ml-1">{boostError || turboError}</span>}
+            {(boostError || turboError) && (
+                <span className="text-error ml-1">{ipcErrorText(boostError || turboError, t)}</span>
+            )}
         </div>
     );
 }

@@ -106,9 +106,9 @@
         ]
     },
     "overrides": [
-        // logger.ts and logger/ own the console, and build/dev scripts print to it.
+        // logger.ts and the logger's console sink own the console, and build/dev scripts print to it.
         {
-            "files": ["src/ts/logger.ts", "src/ts/logger/**", "scripts/**"],
+            "files": ["src/ts/logger.ts", "src/ts/logger/consoleSink.ts", "scripts/**"],
             "rules": {
                 "no-console": "off"
             }
