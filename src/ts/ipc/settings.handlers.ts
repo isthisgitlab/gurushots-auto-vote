@@ -124,6 +124,46 @@ const CHANGE_BROADCAST_CHANNELS = new Set([
     'reset-all-settings',
 ]);
 
+const handleGetSetting = async (key: unknown) => {
+    try {
+        if (typeof key !== 'string') {
+            throw new Error('Invalid key type, expected string');
+        }
+        // The token never reaches a renderer; hasToken lives on get-settings.
+        if (isRendererHiddenKey(key)) return null;
+        return settings.getSetting(key);
+    } catch (error) {
+        logger.withCategory('settings').error(`Error handling get-setting request for key "${key}":`, error);
+        // A non-string key reaches here too; indexing coerces it like any
+        // property access (and misses, falling back to null).
+        const defaultSettings = settings.getDefaultSettings() as Record<string, unknown>;
+        const k = key as string;
+        return defaultSettings[k] !== undefined ? defaultSettings[k] : null;
+    }
+};
+
+const handleSetSetting = async (
+    broadcastSettingsChange: BroadcastSettingsChange | undefined,
+    key: unknown,
+    value: unknown,
+) => {
+    try {
+        if (typeof key !== 'string') {
+            throw new Error('Invalid key type, expected string');
+        }
+        // A renderer can neither plant a token nor persist the derived hasToken.
+        if (isRendererHiddenKey(key)) return false;
+        const result = settings.setSetting(key, value);
+        if (result && typeof broadcastSettingsChange === 'function') {
+            broadcastSettingsChange(toRendererSettings(settings.loadSettings()));
+        }
+        return result;
+    } catch (error) {
+        logger.withCategory('settings').error(`Error handling set-setting request for key "${key}":`, error);
+        return false;
+    }
+};
+
 const buildSettingsHandlers = ({ broadcastSettingsChange }: { broadcastSettingsChange?: BroadcastSettingsChange }) => ({
     'get-settings': async () => {
         try {
@@ -134,41 +174,10 @@ const buildSettingsHandlers = ({ broadcastSettingsChange }: { broadcastSettingsC
         }
     },
 
-    'get-setting': async (event: unknown, key: unknown) => {
-        try {
-            if (typeof key !== 'string') {
-                throw new Error('Invalid key type, expected string');
-            }
-            // The token never reaches a renderer; hasToken lives on get-settings.
-            if (isRendererHiddenKey(key)) return null;
-            return settings.getSetting(key);
-        } catch (error) {
-            logger.withCategory('settings').error(`Error handling get-setting request for key "${key}":`, error);
-            // A non-string key reaches here too; indexing coerces it like any
-            // property access (and misses, falling back to null).
-            const defaultSettings = settings.getDefaultSettings() as Record<string, unknown>;
-            const k = key as string;
-            return defaultSettings[k] !== undefined ? defaultSettings[k] : null;
-        }
-    },
+    'get-setting': (event: unknown, key: unknown) => handleGetSetting(key),
 
-    'set-setting': async (event: unknown, key: unknown, value: unknown) => {
-        try {
-            if (typeof key !== 'string') {
-                throw new Error('Invalid key type, expected string');
-            }
-            // A renderer can neither plant a token nor persist the derived hasToken.
-            if (isRendererHiddenKey(key)) return false;
-            const result = settings.setSetting(key, value);
-            if (result && typeof broadcastSettingsChange === 'function') {
-                broadcastSettingsChange(toRendererSettings(settings.loadSettings()));
-            }
-            return result;
-        } catch (error) {
-            logger.withCategory('settings').error(`Error handling set-setting request for key "${key}":`, error);
-            return false;
-        }
-    },
+    'set-setting': (event: unknown, key: unknown, value: unknown) =>
+        handleSetSetting(broadcastSettingsChange, key, value),
 
     'save-settings': async (event: unknown, newSettings: unknown) => {
         try {

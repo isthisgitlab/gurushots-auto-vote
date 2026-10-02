@@ -33,9 +33,7 @@ const mockSessions = { default: fakeSession(), persistent: fakeSession() };
 
 jest.mock('electron', () => ({
     session: {
-        get defaultSession() {
-            return mockSessions.default;
-        },
+        defaultSession: mockSessions.default,
         fromPartition: jest.fn((partition: string) =>
             partition === 'persist:gurushots' ? mockSessions.persistent : null,
         ),
