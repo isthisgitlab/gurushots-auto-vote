@@ -1,4 +1,5 @@
 // Latvian log message translations. Kept separate so only the Logs UI loads the catalog.
+// aislop-ignore-file complexity/file-too-large -- flat translation dictionary; one file per language keeps key parity reviewable
 export const logMessages = {
     m00a400fe1b87: 'Lai iztērētu uzpildi, palaid vēlreiz: fill-exposure --challenge={0} --yes',
     m00a78f312ea3: 'Boost nav pieejams',

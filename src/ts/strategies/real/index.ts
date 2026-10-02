@@ -224,7 +224,7 @@ const fetchChallengesAndVote = async (
                 getImageData,
                 submitToChallenge,
                 runTurboMiniGame,
-                // votingOrchestrator copies these into fillDeps; without them the
+                // votingOrchestrator/context.ts copies these into fillDeps; without them the
                 // auto-fill path loses tag resolution in real mode only.
                 getCurrentMemberProfile,
                 searchTagAutocomplete,

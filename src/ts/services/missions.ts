@@ -61,8 +61,7 @@ const cat = () => logger.withCategory('missions');
 // The last summary logged, so an unchanged mission state isn't repeated every cycle.
 let lastSummary = '';
 
-// A manual Turbo win must count against the mission state used by any voting
-// pass currently running for the same account.
+// Mission needs of each in-flight voting pass, per account token, ref-counted.
 const activeNeedsByToken = new Map<string, Map<MissionNeeds, number>>();
 
 const classifyMission = (mission: Mission): MissionKind | null => {

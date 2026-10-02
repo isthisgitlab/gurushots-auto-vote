@@ -41,7 +41,7 @@ Domain terms used throughout, in reader's terms:
 
 ## 1. Voting decision engine
 
-- `runVotingPass(token, filter, deps)` (`services/votingOrchestrator.ts` — around L871) is the **one**
+- `runVotingPass(token, filter, deps)` (`services/votingOrchestrator.ts`; its per-phase runners live in `services/votingOrchestrator/`) is the **one**
   shared loop for both real and mock strategies. **Never fork it** — a fork re-introduces the real/mock
   drift the shared loop exists to remove. Inject strategy differences via `deps`.
 - The per-challenge action **runners are strictly sequential, never parallelised**: auto-fill mutates the
@@ -281,8 +281,8 @@ repeated six times is one that gets forgotten at one of them.
   challenge from a factory photo.
 - Both deps are **optional** in `fetchCandidatesForChallenge`; omit either and behavior is exactly the
   pre-resolution fallback. Nothing here can fail a fill. **That optionality is a safety net, not the
-  shipping state** — every real path supplies them: `strategies/real/index.ts` (the `api:` bundle `votingOrchestrator`
-  copies into `fillDeps`, and `joinDeps`), `ipc/actions.handlers.ts` (manual Fill Now), and both mock
+  shipping state** — every real path supplies them: `strategies/real/index.ts` (the `api:` bundle `buildFillDeps`
+  in `services/votingOrchestrator/context.ts` copies into `fillDeps`, and `joinDeps`), `ipc/actions.handlers.ts` (manual Fill Now), and both mock
   bundles. Note `runFillAttempt` rebuilds a fresh deps object for its
   `fetchCandidatesForChallenge` call rather than spreading `deps`, so a dep added upstream must be named
   there too or it is silently dropped for auto-fill, emergency fill and manual fill alike.

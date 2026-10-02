@@ -1,4 +1,5 @@
 // English translations for GuruShots Auto Vote
+// aislop-ignore-file complexity/file-too-large -- flat translation dictionary; one file per language keeps key parity reviewable
 // Common/shared translations
 export const common = {
     global: 'Global:',

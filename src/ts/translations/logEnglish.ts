@@ -1,4 +1,5 @@
 // English source templates for user-visible log messages.
+// aislop-ignore-file complexity/file-too-large -- flat translation dictionary; one file per language keeps key parity reviewable
 export const logMessages = {
     m00a400fe1b87: 'To spend the fill, re-run: fill-exposure --challenge={0} --yes',
     m00a78f312ea3: 'Boost not available',
