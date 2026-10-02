@@ -8,7 +8,7 @@ import type * as rewardsModule from '../../api/rewards';
 
 /** A claim endpoint taking `(id, token)`: confirms every claim, resolves false without a token. */
 const mockClaim = (name: string) =>
-    mockMethod<(id: string | number, token: string) => Promise<boolean>>(
+    mockMethod<typeof rewardsModule.claimChallengeResources | typeof rewardsModule.claimMissionPrize>(
         {
             name,
             tokenArg: 1,

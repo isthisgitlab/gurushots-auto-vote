@@ -6,7 +6,7 @@
 import { MINUTE, HOUR, DAY } from '../time';
 import type { ChallengeSpec } from './types';
 
-const SPECS_PART_1: ChallengeSpec[] = [
+const SPECS_PART_1: readonly ChallengeSpec[] = [
     {
         title: 'Ultimate Exposure',
         welcomeMessage:

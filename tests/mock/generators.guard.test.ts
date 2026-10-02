@@ -1,20 +1,22 @@
 /**
- * mock/challenges.ts + mock/voting.ts — deep-equal guards over the generated
- * mock payloads, with the clock and Math.random pinned to a seeded sequence so
+ * mock/challenges.ts + mock/voting.ts + mock/endpoints/join.ts — strict-equal
+ * guards over the generated mock payloads and the open-join rows, with the clock and Math.random pinned to a seeded sequence so
  * every branch of the generators is exercised and any change in the output
  * values, or in the order of random calls, fails.
  *
- * Expected output lives in tests/mock/__data__/*.json.
+ * Expected generator output lives in tests/mock/__data__/*.json; the join rows are inline.
  */
 
 import type * as challengesModule from '../../src/ts/mock/challenges';
 import type * as votingModule from '../../src/ts/mock/voting';
+import type * as joinModule from '../../src/ts/mock/endpoints/join';
 
 import type { Challenge } from '../../src/ts/types/gurushots';
 import { invalid } from '../helpers/invalid';
 
 const { generateMockChallenges } = require('../../src/ts/mock/challenges') as typeof challengesModule;
 const { generateMockVoteImages } = require('../../src/ts/mock/voting') as typeof votingModule;
+const { getMemberChallenges } = require('../../src/ts/mock/endpoints/join') as typeof joinModule;
 
 const PINNED_NOW_MS = Date.UTC(2026, 0, 15, 12, 0, 0);
 
@@ -43,7 +45,7 @@ describe('generated mock payload guards', () => {
     test('generateMockChallenges() output is unchanged', () => {
         pinClockAndRandom(20260115);
         const expected: unknown = require('./__data__/mockChallenges.json');
-        expect(generateMockChallenges()).toEqual(expected);
+        expect(generateMockChallenges()).toStrictEqual(expected);
     });
 
     test('generateMockVoteImages(...) output is unchanged across every url and challenge branch', () => {
@@ -70,6 +72,69 @@ describe('generated mock payload guards', () => {
         });
 
         const expected: unknown = require('./__data__/mockVoteImages.json');
-        expect(actual).toEqual(expected);
+        expect(actual).toStrictEqual(expected);
+    });
+
+    test('getMemberChallenges() open rows are unchanged', async () => {
+        jest.useFakeTimers({ now: PINNED_NOW_MS });
+        const pending = getMemberChallenges('token', 'open');
+        await jest.advanceTimersByTimeAsync(400);
+        await expect(pending).resolves.toStrictEqual([
+            {
+                id: 900001,
+                type: 'default',
+                join_coins: 0,
+                title: 'Mock Free Challenge',
+                url: 'mock-free',
+                start_time: 1768046400,
+                close_time: 1768489200,
+                entries: 40,
+                players: 25,
+            },
+            {
+                id: 900002,
+                type: 'flash',
+                join_coins: 100,
+                title: 'Mock Flash Challenge',
+                url: 'mock-flash',
+                start_time: 1768392000,
+                close_time: 1768651200,
+                entries: 80,
+                players: 50,
+            },
+            {
+                id: 900003,
+                type: 'default',
+                join_coins: 250,
+                title: 'Mock Paid Challenge',
+                url: 'mock-paid',
+                start_time: 1768305600,
+                close_time: 1768910400,
+                entries: 120,
+                players: 75,
+            },
+            {
+                id: 900004,
+                type: 'flash',
+                join_coins: 100,
+                title: 'Mock Unlock-Fails Challenge',
+                url: 'mock-fail',
+                start_time: 1768219200,
+                close_time: 1768737600,
+                entries: 160,
+                players: 100,
+            },
+            {
+                id: 900005,
+                type: 'flash',
+                join_coins: 100,
+                title: 'Mock Submit-Fails Challenge',
+                url: 'mock-submitfail',
+                start_time: 1768132800,
+                close_time: 1768824000,
+                entries: 200,
+                players: 125,
+            },
+        ]);
     });
 });

@@ -14,6 +14,7 @@ import * as logger from '../logger';
 import { runVotingPass } from '../services/votingOrchestrator';
 import { createMemoryEntryTracker } from '../services/newEntryTracker';
 import { runJoinPass, joinChallengeSingle } from '../services/joinChallenges';
+import type { JoinDeps } from '../services/joinChallenges';
 import { runClaimPass } from '../services/autoClaim';
 import { loadMissionNeeds, registerMissionNeeds } from '../services/missions';
 import * as runtime from '../runtime';
@@ -24,6 +25,7 @@ import { mockScenarioStateLedger } from '../scenarioStateStore';
 import { mockMethod } from './simulate';
 
 import type { MissionNeeds } from '../services/missions';
+import type { VotingPassDeps } from '../types/votingPass';
 import type { MockEndpoints } from './apiClient';
 import type * as realModule from '../strategies/real';
 import { errorMessage } from '../errorMessage';
@@ -99,7 +101,10 @@ const pickEndpoints = <C extends object, K extends keyof C>(client: C, names: re
  * single-process, so idempotency persistence and the cross-process lock are
  * unnecessary.
  */
-const mockJoinDeps = (client: MockEndpoints) => ({ ...pickEndpoints(client, JOIN_ENDPOINTS), joinStateStore: null });
+const mockJoinDeps = (client: MockEndpoints): JoinDeps => ({
+    ...pickEndpoints(client, JOIN_ENDPOINTS),
+    joinStateStore: null,
+});
 
 /**
  * The auto-join and hourly prize-claim pre-steps, mirroring the real strategy.
@@ -128,7 +133,7 @@ const runPreSteps = async (client: MockEndpoints, token: string, missions: Missi
  * ones — running cleanup here would purge the user's real voting
  * metadata.
  */
-const mockVotingPassDeps = (client: MockEndpoints, token: string, missions: MissionNeeds | null) => ({
+const mockVotingPassDeps = (client: MockEndpoints, token: string, missions: MissionNeeds | null): VotingPassDeps => ({
     api: pickEndpoints(client, VOTING_PASS_ENDPOINTS),
     cleanupStaleMetadata: null,
     // In-memory for the same reason cleanupStaleMetadata is null: the

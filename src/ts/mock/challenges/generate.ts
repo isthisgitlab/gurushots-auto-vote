@@ -1,3 +1,7 @@
+/**
+ * The session's mock challenge list: every spec built into a challenge with a session-stable id.
+ */
+
 import { buildChallenge } from './build';
 import { SPECS_PART_1 } from './specsPart1';
 import { SPECS_PART_2 } from './specsPart2';

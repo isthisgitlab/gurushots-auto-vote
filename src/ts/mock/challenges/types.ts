@@ -2,6 +2,7 @@
  * Shape of one mock challenge as authored in the spec tables.
  */
 
+/** Exposure drawn at generation time: min(cap, floor(random * spread) + base), i.e. base..base+spread-1 clamped to cap. */
 interface ExposureRange {
     cap: number;
     spread: number;
@@ -26,7 +27,7 @@ interface ChallengeSpec {
     title: string;
     welcomeMessage: string;
     url: string;
-    status: string;
+    status: 'active' | 'upcoming';
     startsIn: number;
     closesIn: number;
     joined: boolean;
@@ -35,13 +36,13 @@ interface ChallengeSpec {
     votes: number;
     maxPhotoSubmits: number;
     badge: string;
-    type: string;
+    type: 'default' | 'flash' | 'speed';
     tags: string[];
     prizesWorth: number;
     rankingLevels: [number, number, number, number, number];
     boostEnabled: boolean;
     timeLeft: { days: number; hours: number; minutes: number; seconds: number };
-    boost: { state: string; timeout: BoostTimeout };
+    boost: { state: 'AVAILABLE' | 'AVAILABLE_KEY' | 'LOCKED' | 'UNAVAILABLE' | 'USED'; timeout: BoostTimeout };
     turbo: { state: string; opensIn: number | null };
     total: {
         votes: number;

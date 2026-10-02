@@ -6,7 +6,7 @@
 import { HOUR } from '../time';
 import type { ChallengeSpec } from './types';
 
-const SPECS_PART_3: ChallengeSpec[] = [
+const SPECS_PART_3: readonly ChallengeSpec[] = [
     {
         title: 'Night Photography',
         welcomeMessage: 'Capture the beauty of the night',
