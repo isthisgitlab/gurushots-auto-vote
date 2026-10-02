@@ -1,0 +1,116 @@
+/**
+ * Curated "intent" presets, seeded into the named-profiles system on first
+ * run (see settings.ts `seedIntentProfiles`). Deliberately free of any
+ * dependency — NO zod — so it is safe to import into the renderer bundle
+ * (mirrors settings/limits.ts).
+ *
+ * Each bundle is SELF-CONTAINED: it sets both sides of every cross-field pair
+ * it touches (exposure/exposureTarget, finalWindowExposure/finalWindowExposureTarget)
+ * so `_sanitizeProfileValues` validates it as a set regardless of the user's
+ * customized global defaults. Values equal to a default are harmless — apply
+ * prunes them when writing the per-challenge override container.
+ *
+ * `name` is the stored profile key (identity — profiles are name-keyed like
+ * every profile, so an id rotation never loses it). `nameKey`/`descKey` are
+ * i18n keys used only for localized display in the picker; the stored name
+ * stays stable across languages so the built-in match keeps working.
+ */
+
+// Sentinel-family note: exposureTarget / finalWindowExposureTarget are family 2
+// (0 = "follow the trigger", rule still active); every *Time / *Fill value is
+// family 1 (0 = off). These bundles never conflate the two.
+interface IntentProfile {
+    id: string;
+    name: string;
+    nameKey: string;
+    descKey: string;
+    values: Record<string, unknown>;
+}
+
+const INTENT_PROFILES: IntentProfile[] = [
+    {
+        id: 'justParticipate',
+        name: 'Just Participate',
+        nameKey: 'app.intentJustParticipate',
+        descKey: 'app.intentJustParticipateDesc',
+        // Keep entries filled, but never spend a Boost or Turbo and don't chase
+        // exposure past the trigger.
+        values: {
+            exposure: 100,
+            exposureTarget: 0,
+            autoBoost: false,
+            useTurbo: false,
+            autoTurbo: false,
+            autoFill: true,
+        },
+    },
+    {
+        id: 'finishStrong',
+        name: 'Finish Strong',
+        nameKey: 'app.intentFinishStrong',
+        descKey: 'app.intentFinishStrongDesc',
+        // Spend Boost + Turbo and push exposure hard in the final window, but
+        // play the rest of the challenge normally (exposureTarget follows the
+        // trigger).
+        values: {
+            exposure: 100,
+            exposureTarget: 0,
+            autoBoost: true,
+            useTurbo: true,
+            autoTurbo: true,
+            useFinalWindowExposure: true,
+            finalWindowExposure: 100,
+            finalWindowExposureTarget: 100,
+        },
+    },
+    {
+        id: 'maxExposure',
+        name: 'Max Exposure',
+        nameKey: 'app.intentMaxExposure',
+        descKey: 'app.intentMaxExposureDesc',
+        // Push everything the whole way: vote to full exposure throughout, fill
+        // entries, and spend Boost + Turbo.
+        values: {
+            exposure: 100,
+            exposureTarget: 100,
+            autoBoost: true,
+            useTurbo: true,
+            autoTurbo: true,
+            autoFill: true,
+            useFinalWindowExposure: true,
+            finalWindowExposure: 100,
+            finalWindowExposureTarget: 100,
+        },
+    },
+];
+
+const _norm = (name: string | null | undefined): string => (typeof name === 'string' ? name.trim().toLowerCase() : '');
+
+/**
+ * The intent whose stored name matches `name` (trim+lowercase), or null.
+ */
+const getIntentByName = (name: string | null | undefined): IntentProfile | null => {
+    const n = _norm(name);
+    if (!n) return null;
+    return INTENT_PROFILES.find((intent) => _norm(intent.name) === n) || null;
+};
+
+/**
+ * True when a stored profile's values still equal the canonical intent bundle,
+ * i.e. the user hasn't edited it. Compares the union of keys so an added or
+ * removed key counts as "modified".
+ */
+const intentValuesMatch = (
+    intent: IntentProfile | null | undefined,
+    storedValues: Record<string, unknown> | null | undefined,
+): boolean => {
+    if (!intent || !storedValues || typeof storedValues !== 'object') return false;
+    const stored = storedValues as Record<string, unknown>;
+    const keys = new Set([...Object.keys(intent.values), ...Object.keys(stored)]);
+    for (const key of keys) {
+        if (intent.values[key] !== stored[key]) return false;
+    }
+    return true;
+};
+
+export { INTENT_PROFILES, getIntentByName, intentValuesMatch };

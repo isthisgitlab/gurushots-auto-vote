@@ -20,6 +20,12 @@ concurrency:
     group: pages
     cancel-in-progress: false
 
+# onnxruntime-node's postinstall otherwise downloads the CUDA execution provider
+# from NuGet on every linux/x64 install; the app only runs ORT on cpu/wasm
+# (services/visionVerifier.ts), so it is dead weight and a NuGet outage fails the job.
+env:
+    ONNXRUNTIME_NODE_INSTALL: skip
+
 jobs:
     build:
         runs-on: ubuntu-slim

@@ -9,8 +9,8 @@ alone doesn't spell out. For the three per-platform timer engines, see the compa
 _secondary hint_ ("around L204"), because this repo has high edit velocity and bare line ranges rot on the
 next unrelated edit. If a number is stale, search by name and update it here.
 
-**Path convention.** Paths are relative to `src/js/`; renderer paths keep their `react/…` segments
-(e.g. `react/components/ui/Modal.jsx`).
+**Path convention.** Paths are relative to `src/ts/`; renderer paths keep their `react/…` segments
+(e.g. `react/components/ui/Modal.tsx`).
 
 **Verified as of commit `e21931f`.** If a symbol has moved, trust the name over the line number and update
 this file.
@@ -41,20 +41,20 @@ Domain terms used throughout, in reader's terms:
 
 ## 1. Voting decision engine
 
-- `runVotingPass(token, filter, deps)` (`services/votingOrchestrator.js` — around L712) is the **one**
+- `runVotingPass(token, filter, deps)` (`services/votingOrchestrator.ts`; its per-phase runners live in `services/votingOrchestrator/`) is the **one**
   shared loop for both real and mock strategies. **Never fork it** — a fork re-introduces the real/mock
   drift the shared loop exists to remove. Inject strategy differences via `deps`.
 - The per-challenge action **runners are strictly sequential, never parallelised**: auto-fill mutates the
   shared challenge object (`reflectNewEntry`) so a later turbo/boost in the same cycle sees the new entry
   and the consumed slot.
-- The decision engine is `_runVotingRules()` (`services/decisions/ruleEngine.js` — around L65). Its precedence
+- The decision engine is `_runVotingRules()` (`services/decisions/ruleEngine.ts` — around L95). Its precedence
   order is load-bearing: onlyBoost → not-started / already-ended → flash (→100) → last-minute window
   (→100) → **pre-boost fill** (→100) → **voting pause** → scheduled-fill window → **pre-final-window top-up** →
   final-window rule → normal threshold. The **pre-boost fill** (`voteBeforeBoost`, default off) votes to
   **100%** for `voteBeforeBoostLeadMin` (1–59, default 15) minutes before an available Boost is auto-applied,
   so the Boost multiplies a full entry rather than a decayed one — a Boost is one per challenge and is spent
   on whatever the entry has at that instant. The apply instant is not re-derived: it comes from the same
-  `boostApplyThreshold` (`voting/boostWindow.js`) that `getBoostThresholdSec` uses, so the fill can never aim
+  `boostApplyThreshold` (`voting/boostWindow.ts`) that `getBoostThresholdSec` uses, so the fill can never aim
   at a moment the boost runner disagrees with. `getBoostPrefillState` gates it on the opt-in, `autoBoost`, a
   genuinely AVAILABLE boost, and the `0 = off` sentinel on whichever window the branch measures against
   (`boostTime` for a timer boost, `keyUnlockedBoostTime` for a key-unlocked one) — `boostApplyThreshold`
@@ -81,41 +81,40 @@ Domain terms used throughout, in reader's terms:
 - **Trigger ≠ target, and there are two _different_ sentinel families — do not merge them:**
     - `exposureTarget` / `finalWindowExposureTarget`: `0` or null means **"target == trigger"** — the rule
       stays **active**, it simply votes up to the trigger value.
-      `getEffectiveExposureTarget()` (`services/decisions/thresholds.js` — around L90); schema note in
-      `settings/schema.js` (around L87).
+      `getEffectiveExposureTarget()` (`services/decisions/thresholds.ts` — around L81); schema note in
+      the `exposureTarget` entry comment in `settings/schema/general.ts`.
     - `boostTime` / `emergencyFill` / `keyUnlockedBoostTime`: `0` means **feature off / never auto-apply**.
-      See the explicit comment in `getEffectiveKeyUnlockedBoostTime()` (`services/decisions/thresholds.js` — around
-      L129: _"An explicit 0 means 'never auto-apply', matching the 0-is-off convention boostTime and
-      emergencyFill already use"_), and `maybeEmergencyFillChallenge()` (`services/autoFill/emergencyFill.js` — around
-      L97: `emergencySeconds <= 0` → `'disabled'`).
+      See the explicit comment in `getEffectiveKeyUnlockedBoostTime()` (`services/decisions/thresholds.ts` — around
+      L120: _"An explicit 0 means 'never auto-apply', matching the 0-is-off convention boostTime and
+      emergencyFill already use"_), and `maybeEmergencyFillChallenge()` (`services/autoFill/emergencyFill.ts` — around
+      L102: `emergencySeconds <= 0` → `'disabled'`).
 - Magic constants: final-window width defaults to 3600 s — the `finalWindowDuration` setting's default
   (configurable 60 s … 30 d); key-unlock boost default window = 900 s when the setting is
   unusable (explicit `0` still = never).
-- Vote submission votes over a **Fisher-Yates-shuffled, de-duplicated** pool (structural termination — the
-  older rejection-sampling could loop forever on duplicate ids) and never posts an empty ballot
-  (`api/voting.js` — around L59, L155).
+- Vote submission votes over a **Fisher-Yates-shuffled, de-duplicated** pool (structural termination — rejection
+  sampling could loop forever on duplicate ids) and never posts an empty ballot
+  (`api/voting.ts` — around L61, L160).
 - **≤1 boost and ≤1 turbo per challenge, on different entries** — enforced by `pickEntryAvoidingConflict()`
-  (`services/decisions/entryPick.js` — around L33) plus a `reflectEntryFlag` marker. Entry-pick logic lives in
-  the shared decision core (behind the `VotingLogic` facade) rather than in `api/boost.js` so mock mode honours the same rule.
+  (`services/decisions/entryPick.ts` — around L24) plus a `reflectEntryFlag` marker. Entry-pick logic lives in
+  the shared decision core (behind the `VotingLogic` facade) rather than in `api/boost.ts` so mock mode honours the same rule.
 
 ## 2. Scheduling
 
-- `createCadenceChain()` (`scheduling/cadenceChain.js` — around L152) is a single recursive `setTimeout`
+- `createCadenceChain()` (`scheduling/cadenceChain/chain.ts`) is a single recursive `setTimeout`
   chain — **no cron** — shared by CLI, GUI, and Android headless. See `scheduling.md` for the three timer
   engines that drive it per platform.
-- The single cadence decision is `computeNextCycleDelayMs()` (`scheduling/thresholdWindow.js` — around
-  L390): modes `last-minute` / `approaching` / `scheduled` / `normal`, with the invariant **never sleep
+- The single cadence decision is `computeNextCycleDelayMs()` (`scheduling/thresholdWindow/cadenceDecision.ts`): modes `last-minute` / `approaching` / `scheduled` / `normal`, with the invariant **never sleep
   past an upcoming boundary**.
 - Double-fire guard: a **stale-timer identity check** (`getTimer() !== timeoutId`) ensures only the
   current timer re-arms, so a re-armed/stopped chain can't double-fire. There is no mutex around a
   _running_ cycle — safety comes from the single-chain design plus the cancellation flag.
-- Cancellation is a **global singleton flag** (`voting/cancellation.js`) checked at multiple checkpoints in
+- Cancellation is a **global singleton flag** (`voting/cancellation.ts`) checked at multiple checkpoints in
   the pass, and it propagates by **`return`, never `throw`** — precisely so a per-challenge try/catch can't
   swallow it.
 - `now` is re-read per challenge (a pass can take minutes, so a single clock would miss windows that open
   mid-pass).
-- **Auto-join is a pre-step of the pass, not a separate schedule.** `runJoinPass` (`services/joinChallenges.js`)
-  runs inside the shared `fetchChallengesAndVote` (`strategies/real/index.js` real / `mock/strategy.js` mock) before the
+- **Auto-join is a pre-step of the pass, not a separate schedule.** `runJoinPass` (`services/joinChallenges/joinPass.ts`)
+  runs inside the shared `fetchChallengesAndVote` (`strategies/real/index.ts` real / `mock/strategy.ts` mock) before the
   voting pass, so all three platforms get it without forking `runVotingPass`. It is skipped for a
   single-challenge run and never allowed to abort voting (its errors are caught and logged). The `autoJoin`
   enable is **resolved per candidate by rule (see challenge rules below) → master**, not a hard global gate —
@@ -149,11 +148,11 @@ Domain terms used throughout, in reader's terms:
   runtime range `minHours`/`maxHours` over `close_time` - `start_time` — and every condition present must
   hold (AND); a rule with none matches nothing, and a runtime condition fails closed when either time is
   unreadable. The pure matcher and the default order live in the dependency-free
-  `settings/challengeRules.js` so the renderer can use them too. Runtime exists because entry timing and
+  `settings/challengeRules.ts` so the renderer can use them too. Runtime exists because entry timing and
   tactics really track how long a challenge runs, and photo count is only an **imperfect proxy** for it: on
   the live account 4-photo defaults run 24h, 2-photo ones 48h and 3-photo ones 72h, yet 4-photo challenges
   also span 72h, 168h and 515.7h — so "4 photos" and "4 photos + at least 168h" are different rules.
-- **Resolution cascades per key (`ruleValuesFor` in `settings/ruleResolution.js`).** The matching rules are walked in list order and, for
+- **Resolution cascades per key (`ruleValuesFor` in `settings/ruleResolution.ts`).** The matching rules are walked in list order and, for
   each setting, the FIRST rule that sets it wins — its own inline value first, then (for the first rule
   naming a profile only) that profile's value; a key it leaves unset falls through to the next matching
   rule, then to the global default. Only **one profile** ever applies to a challenge, because profiles are
@@ -168,7 +167,7 @@ Domain terms used throughout, in reader's terms:
   (exact 3 > starts 2 > contains 1, +1 per class condition, then the longer pattern — the specificity ranking title rules were written against), then title-less rules
   by condition count, then photo count > runtime > type > tag — so "4 photos + 7 days" > "4 photos" >
   "7 days". The user can reorder freely in the editor or reset to this order; saving keeps the order given.
-  The one-time `_challengeRulesOrderedV1` migration applies this order to saved rules and appends the former
+  The one-time `_challengeRulesOrderedV1` migration applies this order to saved rules and appends the saved
   `categoryRules` below them; because the cascade lets a lower rule fill keys a higher one leaves unset, it
   logs a warning for every possibly-overlapping pair where that could newly switch `autoJoin`/`autoFill` on.
   Rules de-duplicate on the whole condition (last wins, at the first one's position), so `abc`/exact and
@@ -201,19 +200,21 @@ Domain terms used throughout, in reader's terms:
 
 ## 3. GuruShots API transport
 
-- **Layering**: `api/` is the transport layer — `api-client.js` plus one thin wrapper per endpoint, importing
-  nothing from `services/` (`api/voting.js` still records vote timestamps in `metadata.js`). The real-mode strategy composes those wrappers with the services in
-  `strategies/real/`: `index.js` (`fetchChallengesAndVote` with its join/claim pre-steps, manual join, the
-  Turbo mini-game), `applyBoost.js` (picks the entry via `pickBoostEntry`, posts it through
-  `api/boost.js#boostImage`, flags it `boosted`) and `activeChallenges.js` (coalesces concurrent
-  `getActiveChallenges` calls per token and pins first-seen titles via `services/challengeTitlePin.js` on a
-  successful fetch only). `apiFactory.js` assembles the real surface from these and selects it or
-  `mock/index.js#mockApiClient`.
-- All POSTs go through `makePostRequest()` (`api/api-client.js` — around L204). **Contract: it returns the
-  response body on success and `null` on ultimate failure — it never throws.** Every caller branches on
-  `null`, not on a catch.
+- **Layering**: `api/` is the transport layer — `api-client.ts` plus one thin wrapper per endpoint, importing
+  nothing from `services/` (`api/voting.ts` still records vote timestamps in `metadata.ts`). The real-mode strategy composes those wrappers with the services in
+  `strategies/real/`: `index.ts` (`fetchChallengesAndVote` with its mission read (`services/missions.ts`) and join/claim pre-steps, manual join, the
+  Turbo mini-game), `applyBoost.ts` (picks the entry via `pickBoostEntry`, posts it through
+  `api/boost.ts#boostImage`, flags it `boosted`) and `activeChallenges.ts` (coalesces concurrent
+  `getActiveChallenges` calls per token and pins first-seen titles via `services/challengeTitlePin.ts` on a
+  successful fetch only). `apiFactory.ts` assembles the real surface from these and selects it or
+  `mock/index.ts#mockApiClient`.
+- All POSTs go through `makePostRequest<T>()` (`api/api-client.ts` — around L260). **Contract: it returns the
+  response body as `T` on success and `null` on ultimate failure or when the body is not a JSON object — it
+  never throws.** Every caller branches on `null`, not on a catch. Only the object check is enforced: `T`
+  declares every field optional and each endpoint wrapper guards its reads (a tolerant reader — a strict
+  schema would turn harmless upstream drift into a failed request).
 - Auth: `authenticate(email, password)` posts form-encoded credentials and returns the token payload
-  (`api/login.js`). The token is then threaded **explicitly** from caller to caller and injected as the
+  (`api/login.ts`). The token is then threaded **explicitly** from caller to caller and injected as the
   `x-token` header — there is no refresh flow.
 - Retry/backoff is centralised: exponential backoff + jitter up to `apiMaxRetries` (default 3). Retryable =
   no-response/network, `ECONNABORTED` timeout, 429, any 5xx; every other 4xx is terminal. Honors a server
@@ -222,8 +223,8 @@ Domain terms used throughout, in reader's terms:
 - Custom (Android OkHttp) adapters **must** call `finalizeAdapterResponse()` to reject non-2xx — axios
   doesn't post-process adapter results, so otherwise an error body is handed back as "success."
 - `fetchFailed` vs empty: `getActiveChallenges` distinguishes an outage from an empty account so the
-  scheduler doesn't re-arm as if all is well (`services/votingOrchestrator.js`).
-- Join/bankroll endpoints (`api/join.js`, WEB profile): `get_member_challenges` (open/un-joined list),
+  scheduler doesn't re-arm as if all is well (`services/votingOrchestrator.ts`).
+- Join/bankroll endpoints (`api/join.ts`, WEB profile): `get_member_challenges` (open/un-joined list),
   `coins_unlock` (spends coins to open a paid challenge — **not** known to be idempotent), `get_bankroll`.
   `getBankroll` normalizes the currency array to `{keys,swaps,fills,coins}` and returns **`null` on failure
   — callers must distinguish that from a genuine zero balance** (the UI renders `—`, the handler returns
@@ -232,7 +233,7 @@ Domain terms used throughout, in reader's terms:
 ### 3a. Reading a challenge title
 
 A title rarely just names its subject, so three rules turn it into something searchable
-(`services/photoPicker/title.js`):
+(`services/photoPicker/title.ts`):
 
 - **Series prefix.** `"Color Hunt: Green"` is about green, not colour or hunting. Everything before a
   `:` / en dash / em dash is the series name, so the subject is what follows. A plain hyphen is NOT a
@@ -254,8 +255,8 @@ The user-editable `ignoreTitleWords` setting (master → profile → per-challen
 rules cannot know are noise — "Epic", "Dramatic", "Captivating". Matched against the RAW word before
 stemming, like `STOPWORDS`, so a user writing "captivating" does not have to know it stems to "captivat".
 The default is **seeded, not hardcoded**, so every word is visible and removable; "negative" is
-deliberately absent because "Negative Space" is a real subject. It is resolved ONCE in `runFillAttempt`
-(and once in `pickJoinPhoto`) rather than threaded from the six sites that read the tag settings — a value
+deliberately absent because "Negative Space" is a real subject. It is resolved ONCE in `loadFillCandidates`
+(`services/autoFill/pipeline/scoring.ts`; and once in `pickJoinPhoto`) rather than threaded from the six sites that read the tag settings — a value
 repeated six times is one that gets forgotten at one of them.
 
 ### 3b. Tag resolution (auto-fill candidate narrowing)
@@ -264,14 +265,14 @@ repeated six times is one that gets forgotten at one of them.
   `get_photos_private?search=` matches a library tag **EXACTLY** (`staircase` → 23 photos, `stair` → 0,
   `stairs` → 0), while `search_autocomplete` matches a **SUBSTRING** of a tag (`stair` → `["staircase"]`,
   `case` → `["staircase"]`, and `stairs` → `[]` because no tag _contains_ it).
-- Consequence, and the bug this fixes: a "Stairs" challenge stems to `stair`, the exact search misses, and
+- Consequence: a "Stairs" challenge stems to `stair`, the exact search misses, and
   auto-fill falls back to an unfiltered library walk ranked by popularity — an off-theme submission with no
-  explanation. `services/tagResolver.js` runs the miss path's terms through autocomplete to recover the real
+  explanation. `services/tagResolver.ts` runs the miss path's terms through autocomplete to recover the real
   tag. **It only runs after the exact search has already failed**, so a fill that works today pays nothing.
 - `search_autocomplete` needs `member_id`, which is a member identity — the account's `user_name` or its
   opaque id hash. **An email is rejected** (`Couldn't find username`), and the app logs in with one, so the
   login field is not a usable source: identity comes from `get_current_member_profile` (token-only) and is
-  memoised per token in `services/autoFill/memberIdentity.js`.
+  memoised per token in `services/autoFill/memberIdentity.ts`.
 - Resolution is guarded twice because substring matching is blunt: **bounded backoff** (a missing term is
   retried at most `MAX_BACKOFF_STEPS` shorter, never below the server's own 3-char floor) and **mandatory
   validation** — a candidate is kept only if it is a lexical match for the term or the lexicon puts it on
@@ -279,15 +280,15 @@ repeated six times is one that gets forgotten at one of them.
   challenge from a factory photo.
 - Both deps are **optional** in `fetchCandidatesForChallenge`; omit either and behavior is exactly the
   pre-resolution fallback. Nothing here can fail a fill. **That optionality is a safety net, not the
-  shipping state** — every real path supplies them: `strategies/real/index.js` (the `api:` bundle `votingOrchestrator`
-  copies into `fillDeps`, and `joinDeps`), `ipc/actions.handlers.js` (manual Fill Now), and both mock
-  bundles. Note `runFillAttempt` rebuilds a fresh deps object for its
+  shipping state** — every real path supplies them: `strategies/real/index.ts` (the `api:` bundle `buildFillDeps`
+  in `services/votingOrchestrator/context.ts` copies into `fillDeps`, and `joinDeps`), `ipc/actions/entries.ts` (manual Fill Now), and both mock
+  bundles. Note `loadFillCandidates` (`services/autoFill/pipeline/scoring.ts`) rebuilds a fresh deps object for its
   `fetchCandidatesForChallenge` call rather than spreading `deps`, so a dep added upstream must be named
   there too or it is silently dropped for auto-fill, emergency fill and manual fill alike.
 
 ## 4. Semantic / lexicon
 
-- `getSemanticScores()` (`services/semantic/index.js`) ranks **auto-fill candidate photos only — it is NOT
+- `getSemanticScores()` (`services/semantic/index.ts`) ranks **auto-fill candidate photos only — it is NOT
   part of the vote decision.** It scores each of a photo's labels against the challenge theme separately and
   keeps the **best** (max-pooling); words WITHIN one multi-word label are still mean-pooled.
 - **Both sides pool narrowly, and that is load-bearing.** A photo's labels are a bag in which one or two
@@ -297,10 +298,10 @@ repeated six times is one that gets forgotten at one of them.
   title only, **never `welcome_message`** — because body prose ("made of wood or stone, with people on them")
   drags the pooled theme off its own subject: same challenge, same tag, 0.94 → 0.25.
 - It **never breaks a fill**: any failure (missing asset, no theme text, no in-vocab labels) resolves to
-  `null` and the caller ranks lexically as before. `buildThemeKeywords()` returning `[]` — every title word
+  `null` and the caller ranks lexically. `buildThemeKeywords()` returning `[]` — every title word
   was boilerplate or contest cadence, e.g. "Guru of The Week" — is that "no theme text" case, on purpose.
-- `SEMANTIC_MATCH_FLOOR = 46` (`services/photoPicker/tiers.js`) is **build-gated by
-  `scripts/validate-lexicon.js`** (a statistical gate: `p99(unrelated) < FLOOR < p25(related)`), **not
+- `SEMANTIC_MATCH_FLOOR = 46` (`services/photoPicker/tiers.ts`) is **build-gated by
+  `scripts/validate-lexicon.ts`** (a statistical gate: `p99(unrelated) < FLOOR < p25(related)`), **not
   hand-tuned**. Scores below the floor are forced to 0 (sub-floor cosine is indistinguishable from vector
   noise), not merely ranked low. **The floor is calibrated per pooling shape** — the validator pools exactly
   as the matcher does, so changing one without re-deriving the other silently admits the noise tail.
@@ -309,12 +310,12 @@ repeated six times is one that gets forgotten at one of them.
 
 ### 4a. Visual re-rank (on-device image model)
 
-- `rankVisually()` (`services/visionVerifier.js`) runs a bundled, 8-bit quantized **SigLIP** model
+- `rankVisually()` (`services/visionVerifier.ts`) runs a bundled, 8-bit quantized **SigLIP** model
   (`zero-shot-image-classification`, `@huggingface/transformers`) over the **top 12 tag-ranked
   candidates** of every challenge. Like the lexicon it only orders photos — it is never part of the vote
-  decision. One call site feeds every submission path: `verifyFillPick()` in `services/autoFill/pipeline.js` (auto, emergency,
+  decision. One call site feeds every submission path: `verifyFillPick()` in `services/autoFill/pipeline/verify.ts` (auto, emergency,
   manual, and fill-new fills via `runFillAttempt`, plus swaps via `rankCandidatesForChallenge`), and
-  `pickJoinPhoto()` for auto-join.
+  `pickJoinPhoto()` (`services/joinChallenges/photoPick.ts`) for auto-join.
 - **Prompts come from the challenge, never a theme list**: `a photo of <subject>` from
   `visualSubjectWords()` (the title subject — series prefix, negated words and `ignoreTitleWords` removed,
   **unstemmed**, and deliberately without `abstractTitleWords`, which reads "leaves" as a verb) plus
@@ -327,19 +328,19 @@ repeated six times is one that gets forgotten at one of them.
   `ABSTAIN_LOGIT` for any prompt, or on any load/inference/URL failure. Both thresholds were calibrated on
   16 live challenges (2026-09-24) — re-measure against real shortlists before moving them.
 - **Packaging, per shell** — the model is fetched and sha256-pinned at build time by
-  `scripts/fetch-vision-model.js`; nothing downloads at runtime (`allowRemoteModels = false`).
+  `scripts/fetch-vision-model.ts`; nothing downloads at runtime (`allowRemoteModels = false`).
     - Electron: `extraResources` → `Resources/vision-model`, native `onnxruntime-node` in `app.asar.unpacked`.
       The Android-only copies under `dist/` and the standalone `onnxruntime-web` package are excluded from
-      the asar, and `scripts/afterPack.js` deletes other OS/CPU `onnxruntime-node` binaries.
+      the asar, and `scripts/afterPack.mts` deletes other OS/CPU `onnxruntime-node` binaries.
     - CLI: the build embeds a `pnpm deploy --prod` tree + model as a SEA asset (pruned to the host OS/CPU by
-      `pruneVisionRuntime`); `services/visionCliAssets.js` verifies its sha256, extracts it once per version
+      `pruneVisionRuntime`); `services/visionCliAssets.ts` verifies its sha256, extracts it once per version
       into `<userData>/vision/<sha>`, and removes finished copies from earlier versions unless one was marked in use
       within the last hour (an older CLI still running may not have loaded its model yet).
     - Android: `dist/` is the WebView root, so `vision-model/` and the single-threaded ORT WASM files are
       served from it and inference runs on the `wasm` device with one thread.
 - **Lite builds** (`build:<os>:lite`, `build:cli:<target>:lite`, `build:android:lite`) ship none of the above:
-  `scripts/electron-builder-lite.js` drops `extraResources` and the transformers/onnxruntime/sharp packages,
-  `build-cli.js --lite` embeds no runtime asset, and `build-react.js --lite` clears the model and WASM files from
+  `scripts/electron-builder-lite.ts` drops `extraResources` and the transformers/onnxruntime/sharp packages,
+  `build-cli.ts --lite` embeds no runtime asset, and `build-react.ts --lite` clears the model and WASM files from
   `dist/` and leaves transformers out of the bundles. `hasBundledModel()` (a fetch of
   `vision-model/config.json` on Android, the `vision-runtime.sha256` SEA asset on the CLI, the model folder
   otherwise; cached) makes `rankVisually()` keep the tag order without a warning. It also keeps updates on lite:
@@ -354,7 +355,7 @@ repeated six times is one that gets forgotten at one of them.
 - **Defensive optional-chaining on every per-challenge API read** — one unguarded throw dumps the entire
   remaining pass into the outer catch, so each per-challenge property access is optional-chained, and each
   challenge body is independently try/caught for isolation.
-- The new-entry tracker (`services/newEntryTracker.js`) compares entry ids as **SETS, not positions** — the
+- The new-entry tracker (`services/newEntryTracker.ts`) compares entry ids as **SETS, not positions** — the
   server reorders `member.ranking.entries` between polls, so a positional diff would force a vote every
   cycle. An empty entries array is **not** recorded over a non-empty baseline (a degraded API response must
   not poison the baseline).
@@ -362,7 +363,7 @@ repeated six times is one that gets forgotten at one of them.
   never match real ones — so mock mode passes `cleanupStaleMetadata: null` plus an in-memory tracker, or it
   would purge/pollute the user's real `metadata.json`. The join flow follows the same rule: mock passes a
   `null` join-state store and no cross-process lock.
-- **Paid-join money safety** (`services/joinChallenges.js`): the order is load-bearing — resolve an eligible
+- **Paid-join money safety** (`services/joinChallenges/performJoin.ts`, with the unlock claim in `unlockMarker.ts` and the in-flight lock in `shared.ts`): the order is load-bearing — resolve an eligible
   photo **before** any `coins_unlock` (no photo ⇒ skip, no spend); persist the unlock claim
   (`joinState.json`) **before** the charge so a crash can never let a later pass re-unlock (idempotent
   retry), and if the claim can't be written, don't spend; a per-process in-flight `Set` **plus** a
@@ -390,114 +391,115 @@ repeated six times is one that gets forgotten at one of them.
 
 ## 6. IPC contract
 
-- `ipc/manifest.js` is the **dependency-free single source of truth** for the whole `window.api` surface —
+- `ipc/manifest.ts` is the **dependency-free single source of truth** for the whole `window.api` surface —
   four lists: `invokeChannels`, `aliases`, `sendMethods`, `eventMethods`. Both shells generate from it:
-  Electron `preload.js` builds `contextBridge.exposeInMainWorld('api', …)`; Capacitor
-  `bridge/capacitor.js` builds the identical surface in-process.
-- **Drift is CI-enforced** by `tests/ipc/manifest.test.js` at the name level. Signatures travel through the
-  `WindowApi` type (`types/ipc.d.ts`, derived from the manifest lists and every `buildHandlers()`), so a
+  Electron `preload.ts` builds `contextBridge.exposeInMainWorld('api', …)`; Capacitor
+  `bridge/capacitor.ts` builds the identical surface in-process.
+- **Drift is CI-enforced** by `tests/ipc/manifest.test.ts` at the name level. Signatures travel through the
+  `WindowApi` type (`types/ipc.ts`, derived from the manifest lists and every `buildHandlers()`), so a
   renderer call in a type-checked file is checked against its handler's parameters and result — only as
-  precise as that handler's JSDoc.
-- Handler shape: every `ipc/*.handlers.js` exports `buildHandlers(deps) → {channel: impl}` **and**
-  `register(ipcMain)`. **CLI and Capacitor reuse the same handler modules** (`cli/commands/*.js` lazily
+  precise as that handler's type annotations.
+- Handler shape: every `ipc/*.handlers.ts` exports `buildHandlers(deps) → {channel: impl}` **and**
+  `register(ipcMain)`. **CLI and Capacitor reuse the same handler modules** (`cli/commands/*.ts` lazily
   require `buildHandlers()`) — never write a parallel implementation.
-- **Add a channel end-to-end**: (a) add the channel string to the right list in `manifest.js`; (b)
-  implement it in the matching `ipc/*.handlers.js` `buildHandlers()`; (c) Electron picks it up
-  automatically via `preload.js` + the module's `register()`; (d) ensure the handler module is in
-  `capacitor.js`'s spread for the Capacitor build.
+- **Add a channel end-to-end**: (a) add the channel string to the right list in `manifest.ts`; (b)
+  implement it in the matching `ipc/*.handlers.ts` `buildHandlers()`; (c) Electron picks it up
+  automatically via `preload.ts` + the module's `register()`; (d) ensure the handler module is in
+  `capacitor.ts`'s spread for the Capacitor build.
 - Handlers **never throw to the renderer** — they return a tagged `{ success, error }` object. Shared
-  preconditions use a Result guard: `requireAuthToken()` (`services/auth.js`) returns
+  preconditions use a Result guard: `requireAuthToken()` (`services/auth.ts`) returns
   `{ ok: true, token, settings }` or `{ ok: false, response }`, and callers do
   `if (!guard.ok) return guard.response;`.
 - Handlers explicitly **whitelist** the fields returned to the renderer so internal result shapes don't
-  leak (`safeResult` / `safeRaw` in `ipc/actions.handlers.js`).
+  leak (`toSafeTurboResult` in `ipc/actions/turbo.ts`; apply-turbo returns only a sanitised message, and
+  its raw response reaches the log only as the redacted `safeRaw` summary).
 
 ## 7. Persistence & platform detection
 
-- **Don't hand-roll `fs`.** `createJsonStore({fileName, prefKey})` (`settings/storage.js` — around L239) is
+- **Don't hand-roll `fs`.** `createJsonStore({fileName, prefKey})` (`settings/storage.ts` — around L253) is
   the reusable three-platform JSON store: sync fs at `userData/<fileName>` (mode `0o600`) on Electron/CLI,
   hydrate-once cache + ordered async write-behind to `@capacitor/preferences` on Capacitor, in-memory only
-  on the Android headless service. `metadata.js` and `joinStateStore.js` (paid-unlock idempotency markers)
+  on the Android headless service. `metadata.ts` and `joinStateStore.ts` (paid-unlock idempotency markers)
   are the other consumers.
 - Write-behind is **ordered** (writes chain onto a promise) and `flushPendingWrites()` awaits durability
   before session invalidation. On Capacitor, `initializeAsync()` must be awaited before the first sync
   read — **each store hydrates independently**, so a new store must be wired into the Capacitor bootstrap
-  (`react/pages/Capacitor.jsx`) or its markers are invisible after relaunch. `joinState` is wired there
+  (`react/pages/Capacitor.tsx`) or its markers are invisible after relaunch. `joinState` is wired there
   alongside settings + metadata; skipping it would double-charge a paid retry on Android.
-- Platform detection has two sides: **node-side** via `runtime.js` (`isCapacitor()`, `isHeadlessService()`,
+- Platform detection has two sides: **node-side** via `runtime.ts` (`isCapacitor()`, `isHeadlessService()`,
   `getPlatform()`, `getAppUserDataPath()` — the single path resolver shared with the logger); **renderer-
   side** via `globalThis.Capacitor?.isNativePlatform?.() === true` inline, to keep node out of the browser
   bundle.
-- **The Electron main process runs from a bundle.** `scripts/build-main.js` bundles `src/js/index.js` into
+- **The Electron main process runs from a bundle.** `scripts/build-main.ts` bundles `src/ts/index.ts` into
   `out/main/app.js` with a linked source map, loaded by the `out/main/index.js` stub (package.json `main`)
-  that turns source maps on first so main-process stack traces point at `src/js`. Every package import stays
-  a runtime require from the shipped `node_modules`; `src/js` itself is not packaged, and `out/` stays out of
+  that turns source maps on first so main-process stack traces point at `src/ts`. Every package import stays
+  a runtime require from the shipped `node_modules`; `src/ts` itself is not packaged, and `out/` stays out of
   `dist/` (Capacitor's webDir, which ships in the APK). Inside the bundle every module shares the bundle's
   `__dirname`, so paths to the app's own files (HTML pages, preload bundle, assets, the dev model cache) come
-  from `appPath(...)` (`appPaths.js`), which resolves the root as `__dirname/../..` — valid because the bundle
-  sits at the same depth below the root as `src/js/`.
+  from `appPath(...)` (`appPaths.ts`), which resolves the root as `__dirname/../..` — valid because the bundle
+  sits at the same depth below the root as `src/ts/`.
 
 ## 8. Renderer / UI conventions
 
 - **All backend calls go through `window.api.*`** — there is zero Electron-vs-Capacitor branching in
-  components. Build on the shared envelopes: `react/api/useIpcQuery.js` (data/loading/error + stable
-  `refetch`, optional subscribe) and `react/api/useAsyncIpcAction.js` (loading + `{success,error}`
+  components. Build on the shared envelopes: `react/api/useIpcQuery.ts` (data/loading/error + stable
+  `refetch`, optional subscribe) and `react/api/useAsyncIpcAction.ts` (loading + `{success,error}`
   handling). `useSettings`, `useActiveChallenges`, `useAuth`, `useBoost`, etc. all build on these. One-shot
-  calls, event subscriptions and best-effort logging go through `react/api/ipc.js` (`logRendererError` never
-  throws). Nothing else under `src/js/react/` touches `window.api`; Oxlint enforces it.
+  calls, event subscriptions and best-effort logging go through `react/api/ipc.ts` (`logRendererError` never
+  throws). Nothing else under `src/ts/react/` touches `window.api`; Oxlint enforces it.
 - **Settings changes reach every window.** A successful `set-setting` / `save-settings` broadcasts
   `settings-changed` to every open window (Electron) or the in-process bus (Capacitor); `useIpcQuery`
   subscribers refetch in the background without toggling `loading`, and the translation provider reads
   `language` straight from the payload.
 - **No router.** "Pages" are separate mount entry points chosen by auth state: `mountApp()` / `mountLogin()`
-  (`react/pages/App.jsx`). Electron swaps native windows; Capacitor swaps React trees into `#root`.
+  (`react/pages/App.tsx`). Electron swaps native windows; Capacitor swaps React trees into `#root`.
 - **No toast library.** Error surfaces are: inline DaisyUI `alert` banners with a translated message; and
-  `react/components/ui/ErrorBoundary.jsx` (an `alert alert-error` with Dismiss/Reload) wrapped around every
+  `react/components/ui/ErrorBoundary.tsx` (an `alert alert-error` with Dismiss/Reload) wrapped around every
   major subtree. Action failures generally log via `ipc.logRendererError` rather than showing a banner.
 - **Error-message content quality (UX).** User-facing error text follows _what happened → why → what to do
   next_, uses a translated string, and **never** dumps raw HTTP status codes or internal result shapes at
   the user — internal detail goes to `logError`, not the UI.
 - **Reuse the `react/components/ui/` primitives** rather than re-rolling: `Modal` (+`ModalActions`),
   `AsyncActionButton`, `StatusBadge` (+`ConnectionBadge`), `LoadingSpinner`,
-  `ResetButton`. New modals **must** go through `ui/Modal.jsx` (around L29–100) — it owns the a11y bar:
+  `ResetButton`. New modals **must** go through `ui/Modal.tsx` (around L34–166) — it owns the a11y bar:
   `role="dialog"` / `aria-modal`, a full Tab/Shift+Tab focus trap, focus-move-in on open and restore on
   close, Escape-to-close, and body-scroll lock.
 - **Theme** = a `data-theme` attribute on `document.documentElement`, sourced from the `theme` setting
   (DaisyUI). There is **no `dark:` Tailwind variant** in the codebase — theming is entirely `data-theme`.
-- **High-frequency updates** use `@preact/signals` (`react/hooks/useTimers.js`): a single 1 s interval
+- **High-frequency updates** use `@preact/signals` (`react/hooks/useTimers.ts`): a single 1 s interval
   mutates `signal.value` in place so the challenge list does **not** re-render every tick. `useTick` is the
   shared per-second wall-clock re-render.
 - The same tree runs under Electron Chromium, the Capacitor WebView, and happy-dom in tests — so code
   deliberately avoids Node-only APIs in favour of `window.api`, `CustomEvent`, and signals (see the note in
-  `react/contexts/AutovoteContext.jsx`), which behave identically across all three.
+  `react/contexts/AutovoteContext.tsx`), which behave identically across all three.
 
 ## 9. i18n
 
 - **User-facing strings are mandatory-translated.** They come from `useTranslation().t('namespace.key')`;
-  raw literals in JSX are effectively absent. Add every new key to **both** `translations/english.js` and
-  `translations/latvian.js`, under the existing namespaces (`common` / `errors` / `onboarding` / `menu` /
+  raw literals in JSX are effectively absent. Add every new key to **both** `translations/english.ts` and
+  `translations/latvian.ts`, under the existing namespaces (`common` / `errors` / `onboarding` / `menu` /
   `login` / `app` / `logs`). Languages: `en` and `lv` only.
 - **Internal / log / error-prefix strings stay English** (not translated) — e.g. the fallback strings
-  inside `useAsyncIpcAction.js` and the action hooks are English literals by design.
+  inside `useAsyncIpcAction.ts` and the action hooks are English literals by design.
 - Non-hook contexts (class components, primitives, the deadline notifier) use the bundled
-  `translations/renderer.js` translator (`ui/Modal.jsx`, `ui/ErrorBoundary.jsx`), because they can't call
-  the hook. The dependency-free core is `translations/translator.js`; the renderer persists the language
-  through `window.api`, the Node side (`translations/index.js`) through the settings facade.
+  `translations/renderer.ts` translator (`ui/Modal.tsx`, `ui/ErrorBoundary.tsx`), because they can't call
+  the hook. The dependency-free core is `translations/translator.ts`; the renderer persists the language
+  through `window.api`, the Node side (`translations/index.ts`) through the settings facade.
 
 ## 10. Security (renderer / main) — state the limits, don't over-promise
 
-- Every `BrowserWindow` uses `contextIsolation: on`, `nodeIntegration: off`, `webSecurity: on`
-  (`index.js`), and the renderer is exposed only `window.api` via `contextBridge`, never `ipcRenderer`.
-  **Sandboxing here is Electron's default-on behavior** (unset `sandbox` + `nodeIntegration:false`), _not_
-  an explicit flag at those lines — a spot-checker won't find the word "sandbox" there. Regressing
-  context-isolation / node-integration is a classic severe-vuln class.
-- A defense-in-depth **sender-frame trust check** (`isTrustedSender`, `ipc/registerHandlers.js`) refuses
+- The login and main windows set `contextIsolation: on`, `nodeIntegration: off`, `webSecurity: on`
+  and `sandbox: on` explicitly (`index/windows.ts`, after any caller-supplied preferences so a caller
+  can't override them). The Logs window (`ui/applicationMenu.ts`) sets `contextIsolation` and
+  `nodeIntegration` and relies on Electron's defaults for `sandbox` and `webSecurity`. The renderer is exposed only `window.api` via `contextBridge`, never
+  `ipcRenderer`. Regressing context-isolation / node-integration / sandbox is a classic severe-vuln class.
+- A defense-in-depth **sender-frame trust check** (`isTrustedSender`, `ipc/registerHandlers.ts`) refuses
   any invoke from a non-main-frame or non-`file://` origin, and is reused by the manual `ipcMain.on`
   channels.
 - The settings/token file is written mode `0o600` — but **only at creation. A pre-existing or
   backup-restored file keeps whatever mode it already had** (the source says as much); don't state 0600 as
   an always-guarantee.
-- **Log redaction (`logger.js`) is two-layer but credential-key-keyed, not exhaustive.** `sanitizeForLog`
+- **Log redaction (`logger/sanitize.ts`, through the `logger.ts` facade) is two-layer but credential-key-keyed, not exhaustive.** `sanitizeForLog`
   recursively redacts an **allowlist** of sensitive object keys; `redactMessage` scrubs
   `token=…` / `password=…`-style fragments folded into message strings. Both run on every entry, and
   untrusted API strings additionally pass through `logger.sanitizeLogString()` before interpolation. The
@@ -510,10 +512,10 @@ repeated six times is one that gets forgotten at one of them.
 
 A **scenario** is a user-written, multi-day playbook for a challenge: named **phases**, each with a
 **settings overlay** and ordered **rules** (`if` conditions → `do` actions, a `repeat` mode). The app
-hard-codes no tactic; `scenarios/vocabulary.js` is the one list of conditions, entry selectors, actions and
-caps (dependency-free, renderer-safe), and `scenarios/templates.js` holds editable examples.
+hard-codes no tactic; `scenarios/vocabulary.ts` is the one list of conditions, entry selectors, actions and
+caps (dependency-free, renderer-safe), and `scenarios/templates.ts` holds editable examples.
 
-- **Documents** (`settings/scenarios.js`, `settings/scenarioSchema.js`, via the facade): stored name-keyed
+- **Documents** (`settings/scenarios.ts`, `settings/scenarioSchema.ts`, via the facade): stored name-keyed
   in `challengeSettings.scenarios` (so the Android background service has them) and re-validated on read.
   A shared file is untrusted input: size-capped before parsing, strict zod shapes (unknown keys rejected),
   bounded non-reserved names, resolvable `start` / `goto` / memory slots, and phase settings limited to
@@ -524,21 +526,21 @@ caps (dependency-free, renderer-safe), and `scenarios/templates.js` holds editab
   profile). An unknown name runs nothing and is logged.
 - **Overlay precedence**: while a challenge is in a phase, that phase's `settings` sit **above** every other
   layer of `getEffectiveSetting` for that challenge, the manual override included
-  (`settings/scenarioOverlay.js`). Leaving the phase restores normal values; nothing is copied into stored
+  (`settings/scenarioOverlay.ts`). Leaving the phase restores normal values; nothing is copied into stored
   overrides; the `scenario` key itself is never overlaid. No overlay while the state is unreadable, belongs
   to another scenario, or names a phase the scenario no longer has.
-- **Runtime state** (`scenarioStateStore.js`, per challenge: phase, memory, fired markers, in-flight action,
+- **Runtime state** (`scenarioStateStore.ts`, per challenge: phase, memory, fired markers, in-flight action,
   spends, last action/error). An unreadable file or malformed record reads as **corrupt, never as a fresh
   start** — the challenge halts until `scenario-reset`, because replaying a plan could repeat spends. Mock
   mode uses the in-memory ledger. Android persists it through the native keyed bridge
   (`gs_scenario_state`); the app WebView `refreshAsync`es it before status reads, resets and each in-app
   pass, and when the native service is available only the background service advances scenarios
-  (`backgroundServiceOwnsScenarios`).
-- **Engine** (`scenarios/conditions.js`, `selectors.js`, `evaluate.js`, `nextWake.js`, pure): unknown data
+  (`backgroundServiceOwnsScenarios`, `services/scenarioRunner/step.ts`).
+- **Engine** (`scenarios/conditions.ts`, `selectors.ts`, `evaluate.ts`, `nextWake.ts`, pure): unknown data
   fails closed (never makes a condition true); entry ids are compared as strings, never by position (except
   the explicit `slot` selector); an in-flight rule resumes first; a phase or in-flight rule the edited
   scenario no longer has **halts** the challenge instead of guessing.
-- **Runner contract** (`services/scenarioRunner.js`, first step of `processChallenge`, never throws): the
+- **Runner contract** (`services/scenarioRunner/{step,rule,actions,support}.ts`, first step of `processChallenge`, never throws): the
   challenge is re-read live and the action's entry re-resolved before every action; a gone target skips the
   action. Once one action of a rule lands the rule is **committed** and its progress persisted after every
   action, so a crash never repeats a spend that landed. A committed rule then passes over a **skipped** step
@@ -548,21 +550,21 @@ caps (dependency-free, renderer-safe), and `scenarios/templates.js` holds editab
   fire, so a skip never uses up a `once` rule. A `goto` takes effect when the rule finishes. No spend cap: each rule
   fires at most once per pass and a `goto` chain stops on revisiting a phase in that pass; spends honour the
   user's `currencyReserve*` (shared `reserveAllows`) and the scenario's optional `limits`.
-- **Vote speed** (`scenarios/speed.js`): the runner samples every entry's votes once per pass into the state's
+- **Vote speed** (`scenarios/speed.ts`): the runner samples every entry's votes once per pass into the state's
   `history`, keyed by photo id (a swapped-out photo keeps its history). `votesPerHour` / `speedRatio` and the
   `fastest` selector read it; a speed with under 10 minutes of history, or nothing to compare with, is null and
   fails closed.
-- **Notices** (`services/scenarioNotifications.js`, pure): a `notify` action — and a halt — appends to the state's
+- **Notices** (`services/scenarioNotifications.ts`, pure): a `notify` action — and a halt — appends to the state's
   bounded `outbox`; each host's per-cycle notifier (CLI `nodeNotify.createNodeScenarioNotifier`, desktop
-  `react/notifications/scenarioNotifier.js`, composed with the deadline notifier) shows only notices created
+  `react/notifications/scenarioNotifier.ts`, composed with the deadline notifier) shows only notices created
   after it started, each once, gated by `notifyOnScenario`. Native Android delivers none, as for deadlines.
-- **Simulation** (`scenarios/simulate.js`, pure): a what-if timeline jumping between the engine's own wake-ups,
+- **Simulation** (`scenarios/simulate.ts`, pure): a what-if timeline jumping between the engine's own wake-ups,
   chaining rules like the runner; assumes every step succeeds and live data holds still, and says why it stopped.
   IPC `simulate-scenario` (stored scenario, or an unsaved draft via `settings.checkScenario`), CLI
   `scenario-simulate`, and the builder.
-- **Builder** (`react/components/app/scenarioBuilder/`): forms generated from `scenarios/builderSpec.js` (every
+- **Builder** (`react/components/app/scenarioBuilder/`): forms generated from `scenarios/builderSpec.ts` (every
   condition / action / selector's fields and kinds — a test checks every default against the validator) over
-  pure draft edits in `scenarios/builderModel.js`; it never validates itself — save and simulate do.
-- **Surfaces**: IPC `ipc/scenarios.handlers.js` (the CLI reuses it), CLI `cli/commands/scenarios.js`,
+  pure draft edits in `scenarios/builderModel.ts`; it never validates itself — save and simulate do.
+- **Surfaces**: IPC `ipc/scenarios.handlers.ts` (the CLI reuses it), CLI `cli/commands/scenarios.ts`,
   GUI `ScenariosSection` (+ the builder), the `scenario` field in `SettingInput`, and the card
   `ScenarioStatusLine`.

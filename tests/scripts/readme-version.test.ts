@@ -1,0 +1,268 @@
+/**
+ * Unit tests for scripts/readme-version.ts (`pnpm update:readme` /
+ * `pnpm verify:readme`).
+ *
+ * fs is an in-memory file map, so the real READMEs and usage guides
+ * are never read or rewritten. The script does its work at require time, so
+ * each case requires it in an isolated registry with argv set and
+ * process.exit stubbed to throw (stopping control where the process would).
+ */
+
+import type * as pathModule from 'node:path';
+
+const realPath: typeof pathModule = jest.requireActual<typeof import('path')>('path');
+
+jest.mock('path', () => jest.requireActual<typeof import('path')>('path'));
+
+// Shared instance so the copy required inside jest.isolateModules is this one.
+const mockFiles = new Map<string, string>();
+const mockFs = {
+    readFileSync: jest.fn((p: string) => {
+        if (!mockFiles.has(p)) throw Object.assign(new Error(`ENOENT: ${p}`), { code: 'ENOENT' });
+        return mockFiles.get(p);
+    }),
+    writeFileSync: jest.fn((p: string, data: string) => {
+        mockFiles.set(p, data);
+    }),
+};
+jest.mock('fs', () => mockFs);
+
+const ROOT = realPath.join(__dirname, '..', '..');
+const PKG = realPath.join(ROOT, 'package.json');
+const README = realPath.join(ROOT, 'README.md');
+const README_LV = realPath.join(ROOT, 'README.lv.md');
+const USAGE = realPath.join(ROOT, 'docs/usage.md');
+const USAGE_LV = realPath.join(ROOT, 'docs/usage.lv.md');
+const DL = 'https://github.com/isthisgitlab/gurushots-auto-vote/releases/latest/download';
+
+const guiSection = (v: string, label = 'Latest Version') =>
+    [
+        `**${label}: v${v}**`,
+        `- GuruShotsAutoVote-v${v}-x64.exe`,
+        `- GuruShotsAutoVote-v${v}-arm64.dmg`,
+        `- GuruShotsAutoVote-v${v}-arm64.app.zip`,
+        `- GuruShotsAutoVote-v${v}-x86_64.AppImage`,
+        `- GuruShotsAutoVote-v${v}-arm64.AppImage`,
+        `- GuruShotsAutoVote-v${v}.apk`,
+        `- GuruShotsAutoVote-v${v}-x64-lite.exe`,
+        `- GuruShotsAutoVote-v${v}-arm64-lite.dmg`,
+        `- GuruShotsAutoVote-v${v}-arm64-lite.app.zip`,
+        `- GuruShotsAutoVote-v${v}-x86_64-lite.AppImage`,
+        `- GuruShotsAutoVote-v${v}-arm64-lite.AppImage`,
+        `${DL}/GuruShotsAutoVote-v${v}-lite.apk`,
+        `${DL}/GuruShotsAutoVote-v${v}-x64.exe`,
+        `${DL}/GuruShotsAutoVote-v${v}-arm64.dmg`,
+        `${DL}/GuruShotsAutoVote-v${v}-arm64.app.zip`,
+        `${DL}/GuruShotsAutoVote-v${v}-x86_64.AppImage`,
+        `${DL}/GuruShotsAutoVote-v${v}-arm64.AppImage`,
+        `${DL}/GuruShotsAutoVote-v${v}.apk`,
+        `chmod +x GuruShotsAutoVote-v${v}-*.AppImage`,
+        `./GuruShotsAutoVote-v${v}-*.AppImage`,
+    ].join('\n');
+
+const cliSection = (v: string) =>
+    [
+        '## CLI Applications',
+        `${DL}/gurucli-v${v}-mac`,
+        `${DL}/gurucli-v${v}-linux-arm`,
+        `${DL}/gurucli-v${v}-linux`,
+        `${DL}/gurucli-v${v}-linux-arm-lite`,
+        `./gurucli-v${v}-[platform]`,
+    ].join('\n');
+
+const readme = (v: string) => `${guiSection(v)}\n${cliSection(v)}\n`;
+// The Latvian guide localizes the version label (`Jaunākā versija`) and the CLI placeholder (`[platforma]`).
+const readmeLv = (v: string) =>
+    `${guiSection(v, 'Jaunākā versija')}\n${cliSection(v).replace('[platform]', '[platforma]')}\n`;
+
+class ExitCalled extends Error {
+    declare code: string | number | null | undefined;
+
+    constructor(code: string | number | null | undefined) {
+        super(`exit ${code}`);
+        this.code = code;
+    }
+}
+
+describe('scripts/readme-version.ts', () => {
+    const originalArgv = process.argv;
+    let logSpy: jest.SpiedFunction<typeof console.log>;
+    let errorSpy: jest.SpiedFunction<typeof console.error>;
+
+    beforeEach(() => {
+        mockFiles.clear();
+        logSpy = jest.spyOn(console, 'log').mockImplementation(() => {});
+        errorSpy = jest.spyOn(console, 'error').mockImplementation(() => {});
+        jest.spyOn(process, 'exit').mockImplementation((code) => {
+            throw new ExitCalled(code);
+        });
+        setVersion('2.0.0');
+    });
+
+    afterEach(() => {
+        process.argv = originalArgv;
+        jest.restoreAllMocks();
+    });
+
+    function setVersion(version: string | undefined) {
+        mockFiles.set(PKG, JSON.stringify(version === undefined ? { name: 'x' } : { name: 'x', version }));
+    }
+
+    /** Runs the script; resolves to the exit code, or null when it returned normally. */
+    const run = (args: string[] = []) => {
+        process.argv = ['node', 'scripts/readme-version.ts', ...args];
+        try {
+            jest.isolateModules(() => {
+                require('../../scripts/readme-version');
+            });
+        } catch (err) {
+            if (err instanceof ExitCalled) return err.code;
+            throw err;
+        }
+        return null;
+    };
+
+    const out = () => logSpy.mock.calls.map((c) => c.join(' ')).join('\n');
+    const err = () => errorSpy.mock.calls.map((c) => c.join(' ')).join('\n');
+
+    test('exits 1 when package.json has no version', () => {
+        setVersion(undefined);
+
+        expect(run()).toBe(1);
+        expect(err()).toContain('No version in package.json');
+    });
+
+    test('rethrows a README read failure other than a missing file', () => {
+        mockFiles.set(README, readme('2.0.0'));
+        mockFs.readFileSync.mockImplementationOnce((p) => mockFiles.get(p)); // package.json
+        mockFs.readFileSync.mockImplementationOnce(() => {
+            throw Object.assign(new Error('EACCES: permission denied'), { code: 'EACCES' });
+        });
+
+        expect(() => run(['--check'])).toThrow('EACCES');
+    });
+
+    describe('update mode', () => {
+        test('rewrites every stale occurrence in the READMEs and usage guides', () => {
+            mockFiles.set(README, readme('1.8.2'));
+            mockFiles.set(README_LV, readmeLv('1.8.2-beta.1'));
+            mockFiles.set(USAGE, './gurucli-v1.8.2-[platform] run\n');
+            mockFiles.set(USAGE_LV, './gurucli-v1.8.2-[platforma] run\n');
+
+            expect(run()).toBeNull();
+
+            expect(mockFiles.get(README)).toBe(readme('2.0.0'));
+            expect(mockFiles.get(README_LV)).toBe(readmeLv('2.0.0'));
+            expect(mockFiles.get(USAGE)).toBe('./gurucli-v2.0.0-[platform] run\n');
+            expect(mockFiles.get(USAGE_LV)).toBe('./gurucli-v2.0.0-[platforma] run\n');
+            // -linux-arm must not be clobbered by the bare -linux rule, nor the
+            // lite APK by the full one (its `-lite` reads like a prerelease tag).
+            expect(mockFiles.get(README)).toContain('gurucli-v2.0.0-linux-arm');
+            expect(mockFiles.get(README)).toContain('GuruShotsAutoVote-v2.0.0-lite.apk');
+            expect(out()).toContain('✓ README.md: 28 occurrence(s) updated to v2.0.0');
+            expect(out()).toContain('✓ README.lv.md: 28 occurrence(s) updated');
+            expect(out()).toContain('58 total replacement(s) for v2.0.0.');
+        });
+
+        test('reports files already at the current version without writing', () => {
+            mockFiles.set(README, readme('2.0.0'));
+
+            expect(run()).toBeNull();
+
+            expect(mockFs.writeFileSync).not.toHaveBeenCalled();
+            expect(out()).toContain('✓ README.md: already at v2.0.0');
+            expect(out()).toContain('0 total replacement(s) for v2.0.0.');
+        });
+
+        test('treats a file with no matches as already current', () => {
+            mockFiles.set(README, 'nothing versioned here\n');
+
+            expect(run()).toBeNull();
+            expect(mockFs.writeFileSync).not.toHaveBeenCalled();
+            expect(out()).toContain('✓ README.md: already at v2.0.0');
+        });
+
+        test('rewrites the Latvian version label and keeps it', () => {
+            mockFiles.set(README_LV, '**Jaunākā versija: v1.0.0**\n');
+
+            expect(run()).toBeNull();
+            expect(mockFiles.get(README_LV)).toBe('**Jaunākā versija: v2.0.0**\n');
+        });
+
+        test('escapes $ in the version so it is not read as a replacement back-reference', () => {
+            setVersion('2.0.0-rc$&');
+            mockFiles.set(README, '**Latest Version: v1.0.0**\n');
+
+            expect(run()).toBeNull();
+            expect(mockFiles.get(README)).toBe('**Latest Version: v2.0.0-rc$&**\n');
+        });
+    });
+
+    describe('--check mode', () => {
+        test('passes when READMEs and usage guides match', () => {
+            mockFiles.set(README, readme('2.0.0'));
+            mockFiles.set(README_LV, readmeLv('2.0.0'));
+            mockFiles.set(USAGE, './gurucli-v2.0.0-[platform] run\n');
+            mockFiles.set(USAGE_LV, './gurucli-v2.0.0-[platforma] run\n');
+
+            expect(run(['--check'])).toBeNull();
+
+            expect(out()).toContain('✓ README.md: matches v2.0.0');
+            expect(out()).toContain('✓ README.lv.md: matches v2.0.0');
+            expect(out()).toContain('✓ docs/usage.md: matches v2.0.0');
+            expect(out()).toContain('✓ docs/usage.lv.md: matches v2.0.0');
+            expect(out()).not.toContain('total replacement');
+            expect(err()).toBe('');
+            expect(mockFs.writeFileSync).not.toHaveBeenCalled();
+        });
+
+        test('fails on stale occurrences without writing', () => {
+            mockFiles.set(README, readme('1.8.2'));
+
+            expect(run(['--check'])).toBe(1);
+
+            expect(err()).toMatch(/✗ README\.md: 1 occurrence\(s\) of .* do not match v2\.0\.0/);
+            expect(err()).toContain('Run `pnpm run update:readme` to fix.');
+            expect(mockFs.writeFileSync).not.toHaveBeenCalled();
+        });
+
+        test('fails on a stale Latvian version label', () => {
+            mockFiles.set(README_LV, readmeLv('1.8.2'));
+
+            expect(run(['--check'])).toBe(1);
+
+            expect(err()).toContain('✗ README.lv.md:');
+            expect(mockFs.writeFileSync).not.toHaveBeenCalled();
+        });
+
+        test('fails when a usage guide has a stale CLI example', () => {
+            mockFiles.set(USAGE, './gurucli-v1.8.2-[platform] run\n');
+
+            expect(run(['--check'])).toBe(1);
+
+            expect(err()).toContain('✗ docs/usage.md: 1 occurrence(s)');
+            expect(mockFs.writeFileSync).not.toHaveBeenCalled();
+        });
+
+        test('fails when a required section is missing', () => {
+            mockFiles.set(README, `${guiSection('2.0.0').replace(/.*\.apk\n/g, '')}\n${cliSection('2.0.0')}\n`);
+
+            expect(run(['--check'])).toBe(1);
+            expect(err()).toContain('required pattern');
+            expect(err()).toContain('has zero matches');
+        });
+
+        test('only requires CLI patterns in files that already have a CLI section', () => {
+            // A "gurucli-v" reference alone marks the file as having a CLI section.
+            mockFiles.set(README, `${guiSection('2.0.0')}\ngurucli-v2.0.0-mac\n`);
+            // No CLI marker at all: the cli rules stay optional.
+            mockFiles.set(README_LV, `${guiSection('2.0.0')}\n`);
+
+            expect(run(['--check'])).toBe(1);
+            const errors = err();
+            expect(errors).toContain('✗ README.md: required pattern /gurucli-v');
+            expect(errors).not.toContain('README.lv.md');
+            expect(out()).toContain('README.lv.md: matches v2.0.0');
+        });
+    });
+});

@@ -1,0 +1,774 @@
+/**
+ * Shared last-minute threshold math used by both schedulers (runScheduler.ts
+ * for CLI/Android, autovoteScheduler.ts for the GUI). The only platform
+ * difference is how a per-challenge threshold is resolved — sync
+ * settings.getEffectiveSetting on Node vs async window.api.getEffectiveSetting
+ * in the WebView — so the core takes a `resolveThreshold` function and works
+ * with either.
+ *
+ * These cases run against BOTH a synchronous and an asynchronous resolver to
+ * prove the core behaves identically on each platform.
+ */
+
+import type * as thresholdWindowModule from '../../src/ts/scheduling/thresholdWindow';
+import type { Challenge } from '../../src/ts/types/gurushots';
+import { invalid } from '../helpers/invalid';
+
+// Partial resolver configs (fields the case never reaches left out).
+type FinalWindowTopUpConfig = Awaited<ReturnType<thresholdWindowModule.ResolveFinalWindowTopUp>>;
+type BoostPrefillConfig = Awaited<ReturnType<thresholdWindowModule.ResolveBoostPrefill>>;
+
+const { calculateNextThresholdEntry, isAnyChallengeInThresholdWindow, computeNextCycleDelayMs } =
+    require('../../src/ts/scheduling/thresholdWindow') as typeof thresholdWindowModule;
+
+// Two resolver shapes: Node (sync return) and WebView (Promise). Both yield 5.
+const resolvers = {
+    'sync resolver (Node)': () => 5,
+    'async resolver (WebView)': () => Promise.resolve(5),
+};
+
+describe.each(Object.entries(resolvers))('thresholdWindow with %s', (_label, resolveThreshold) => {
+    describe('calculateNextThresholdEntry', () => {
+        it('returns the soonest challenge to cross its last-minute boundary', async () => {
+            const now = Math.floor(Date.now() / 1000);
+            const challenges = [
+                { id: 1, title: 'C1', type: 'regular', close_time: now + 3600 },
+                { id: 2, title: 'C2', type: 'regular', close_time: now + 1800 }, // soonest entry
+                { id: 3, title: 'Flash', type: 'flash', close_time: now + 1200 },
+            ];
+
+            const result = await calculateNextThresholdEntry(invalid(challenges), now, resolveThreshold);
+
+            expect(result).not.toBeNull();
+            expect(result!.challengeId).toBe(2);
+            expect(result!.entryTime).toBe(now + 1800 - 300);
+            expect(result!.lastMinuteThreshold).toBe(5);
+        });
+
+        it('skips flash challenges', async () => {
+            const now = Math.floor(Date.now() / 1000);
+            const challenges = [{ id: 1, title: 'Flash', type: 'flash', close_time: now + 1800 }];
+            expect(await calculateNextThresholdEntry(invalid(challenges), now, resolveThreshold)).toBeNull();
+        });
+
+        it('skips already-closed challenges', async () => {
+            const now = Math.floor(Date.now() / 1000);
+            const challenges = [{ id: 1, title: 'Ended', type: 'regular', close_time: now - 3600 }];
+            expect(await calculateNextThresholdEntry(invalid(challenges), now, resolveThreshold)).toBeNull();
+        });
+
+        it('returns null when the only challenge is already inside its window', async () => {
+            const now = Math.floor(Date.now() / 1000);
+            const challenges = [{ id: 1, title: 'Closing', type: 'regular', close_time: now + 120 }];
+            expect(await calculateNextThresholdEntry(invalid(challenges), now, resolveThreshold)).toBeNull();
+        });
+
+        it('passes the challenge id as a string to the resolver', async () => {
+            const now = Math.floor(Date.now() / 1000);
+            const spy = jest.fn(() => 5);
+            await calculateNextThresholdEntry(
+                invalid([{ id: 7, title: 'X', type: 'regular', close_time: now + 1800 }]),
+                now,
+                spy,
+            );
+            expect(spy).toHaveBeenCalledWith('7');
+        });
+    });
+
+    describe('isAnyChallengeInThresholdWindow', () => {
+        it('is true when a non-flash challenge is within threshold*60 of close', async () => {
+            const now = Math.floor(Date.now() / 1000);
+            const challenges = [{ id: 1, title: 'Closing', type: 'regular', close_time: now + 120 }];
+            expect(await isAnyChallengeInThresholdWindow(invalid(challenges), now, resolveThreshold)).toBe(true);
+        });
+
+        it('is true at the inclusive boundary (close_time - now === threshold*60)', async () => {
+            const now = Math.floor(Date.now() / 1000);
+            const challenges = [{ id: 1, title: 'Boundary', type: 'regular', close_time: now + 300 }];
+            expect(await isAnyChallengeInThresholdWindow(invalid(challenges), now, resolveThreshold)).toBe(true);
+        });
+
+        it('is false when every challenge is further out than its window', async () => {
+            const now = Math.floor(Date.now() / 1000);
+            const challenges = [
+                { id: 1, title: 'Far', type: 'regular', close_time: now + 3600 },
+                { id: 2, title: 'Also far', type: 'regular', close_time: now + 1800 },
+            ];
+            expect(await isAnyChallengeInThresholdWindow(invalid(challenges), now, resolveThreshold)).toBe(false);
+        });
+
+        it('ignores flash and already-closed challenges', async () => {
+            const now = Math.floor(Date.now() / 1000);
+            const challenges = [
+                { id: 1, title: 'Flash closing', type: 'flash', close_time: now + 60 },
+                { id: 2, title: 'Closed', type: 'regular', close_time: now - 10 },
+            ];
+            expect(await isAnyChallengeInThresholdWindow(invalid(challenges), now, resolveThreshold)).toBe(false);
+        });
+
+        it('is false for an empty challenge list', async () => {
+            const now = Math.floor(Date.now() / 1000);
+            expect(await isAnyChallengeInThresholdWindow([], now, resolveThreshold)).toBe(false);
+        });
+    });
+
+    describe('computeNextCycleDelayMs', () => {
+        const NORMAL = 3 * 60_000; // 3 min rolled random delay
+        const FAST = 1; // lastMinuteCheckMinutes
+        const MIN_GAP = 5_000;
+        const opts = (extra?: Partial<Parameters<typeof computeNextCycleDelayMs>[2]>) => ({
+            resolveThreshold,
+            normalDelayMs: NORMAL,
+            lastMinuteCheckMinutes: FAST,
+            minGapMs: MIN_GAP,
+            ...extra,
+        });
+
+        it('uses the fixed fast cadence when a challenge is already in-window', async () => {
+            const now = Math.floor(Date.now() / 1000);
+            const challenges = [{ id: 1, title: 'Closing', type: 'regular', close_time: now + 120 }];
+            const result = await computeNextCycleDelayMs(invalid(challenges), now, opts());
+            expect(result.mode).toBe('last-minute');
+            expect(result.delayMs).toBe(FAST * 60_000);
+        });
+
+        it('caps the delay to the soonest upcoming boundary when it is sooner than the random delay', async () => {
+            // Challenge closes in 17 min,
+            // per-challenge threshold 16 min → boundary is 60s away. With a 3-min
+            // random delay we must cap to ~60s, not overshoot to 3 min.
+            const now = Math.floor(Date.now() / 1000);
+            const closeIn17m = now + 17 * 60;
+            const sixteenMin = () => 16;
+            const challenges = [{ id: 126202, title: 'Cats', type: 'regular', close_time: closeIn17m }];
+            const result = await computeNextCycleDelayMs(
+                invalid(challenges),
+                now,
+                opts({ resolveThreshold: sixteenMin }),
+            );
+            expect(result.mode).toBe('approaching');
+            expect(result.delayMs).toBe(60_000); // (17 - 16) min to the boundary
+            expect(result.nextEntry!.challengeId).toBe(126202);
+        });
+
+        it('keeps the normal random delay when the boundary is further than one delay out', async () => {
+            const now = Math.floor(Date.now() / 1000);
+            // close in 1h, threshold 5 → boundary 55 min out, well beyond the 3-min delay
+            const challenges = [{ id: 1, title: 'Far', type: 'regular', close_time: now + 3600 }];
+            const result = await computeNextCycleDelayMs(invalid(challenges), now, opts());
+            expect(result.mode).toBe('normal');
+            expect(result.delayMs).toBe(NORMAL);
+        });
+
+        it('returns the normal delay when there are no eligible challenges', async () => {
+            const now = Math.floor(Date.now() / 1000);
+            const challenges = [{ id: 1, title: 'Flash', type: 'flash', close_time: now + 120 }];
+            const result = await computeNextCycleDelayMs(invalid(challenges), now, opts());
+            expect(result.mode).toBe('normal');
+            expect(result.delayMs).toBe(NORMAL);
+            expect(result.nextEntry).toBeNull();
+        });
+
+        it('floors the approaching delay at minGapMs when the boundary is essentially here', async () => {
+            const now = Math.floor(Date.now() / 1000);
+            // close in 5 min + 1s, threshold 5 → boundary 1s away, below the 5s floor
+            const challenges = [{ id: 1, title: 'Imminent', type: 'regular', close_time: now + 301 }];
+            const result = await computeNextCycleDelayMs(invalid(challenges), now, opts());
+            expect(result.mode).toBe('approaching');
+            expect(result.delayMs).toBe(MIN_GAP);
+        });
+
+        it('treats the exact boundary (close_time - now === threshold*60) as in-window, not approaching', async () => {
+            const now = Math.floor(Date.now() / 1000);
+            // resolver returns 5 (min) → 300s window; close in exactly 300s sits
+            // on the inclusive boundary, so it is in-window (last-minute), and
+            // calculateNextThresholdEntry would (correctly) report no future entry.
+            const challenges = [{ id: 1, title: 'Boundary', type: 'regular', close_time: now + 300 }];
+            const result = await computeNextCycleDelayMs(invalid(challenges), now, opts());
+            expect(result.mode).toBe('last-minute');
+            expect(result.delayMs).toBe(FAST * 60_000);
+        });
+
+        it('prefers last-minute when one challenge is in-window even if another is only approaching', async () => {
+            const now = Math.floor(Date.now() / 1000);
+            // Both have a 5-min (300s) window. #1 is approaching (entry 60s out),
+            // #2 is already in-window. The in-window challenge must win.
+            const challenges = [
+                { id: 1, title: 'Approaching', type: 'regular', close_time: now + 360 },
+                { id: 2, title: 'In window', type: 'regular', close_time: now + 120 },
+            ];
+            const result = await computeNextCycleDelayMs(invalid(challenges), now, opts());
+            expect(result.mode).toBe('last-minute');
+            expect(result.delayMs).toBe(FAST * 60_000);
+        });
+
+        it('floors the fast cadence at minGapMs', async () => {
+            const now = Math.floor(Date.now() / 1000);
+            const challenges = [{ id: 1, title: 'Closing', type: 'regular', close_time: now + 60 }];
+            // lastMinuteCheckMinutes so small its ms value is under the floor
+            const result = await computeNextCycleDelayMs(
+                invalid(challenges),
+                now,
+                opts({ lastMinuteCheckMinutes: 0.001 }),
+            );
+            expect(result.mode).toBe('last-minute');
+            expect(result.delayMs).toBe(MIN_GAP);
+        });
+
+        describe('scheduled-fill cap', () => {
+            // The scheduled-fill resolver mirrors the threshold resolver's dual
+            // shape: sync on Node, Promise on the WebView. Reuse the outer
+            // describe.each's shape by wrapping the config the same way.
+            const wrap = <T>(config: T) => (resolveThreshold() instanceof Promise ? Promise.resolve(config) : config);
+            const off = { enabled: false, timesOfDay: [], beforeEndSecs: [] };
+
+            it('omitting the opts leaves results identical', async () => {
+                const now = Math.floor(Date.now() / 1000);
+                const challenges = [{ id: 1, title: 'Far', type: 'regular', close_time: now + 3600 }];
+                const result = await computeNextCycleDelayMs(invalid(challenges), now, opts());
+                expect(result.mode).toBe('normal');
+                expect(result.delayMs).toBe(NORMAL);
+                expect(result.nextScheduled).toBeNull();
+            });
+
+            it('caps the delay to an upcoming before-end window start', async () => {
+                const now = Math.floor(Date.now() / 1000);
+                // Close in 1h, before-end 58 min → start 120s away, sooner than
+                // the 3-min random delay and the 55-min threshold boundary.
+                const challenges = [{ id: 9, title: 'Sched', type: 'regular', close_time: now + 3600 }];
+                const result = await computeNextCycleDelayMs(invalid(challenges), now, {
+                    ...opts(),
+                    resolveScheduledFill: () => wrap({ enabled: true, timesOfDay: [], beforeEndSecs: [3480] }),
+                    timezone: 'UTC',
+                });
+                expect(result.mode).toBe('scheduled');
+                expect(result.delayMs).toBe(120_000);
+                expect(result.nextScheduled).toMatchObject({ challengeId: 9, form: 'before-end' });
+            });
+
+            it('caps the delay to an upcoming time-of-day start', async () => {
+                // Fixed epoch: 12:00 UTC → a 12:01 daily time starts 60s out.
+                const now = Math.floor(Date.UTC(2026, 0, 15, 12, 0, 0) / 1000);
+                const challenges = [{ id: 9, title: 'Sched', type: 'regular', close_time: now + 3600 }];
+                const result = await computeNextCycleDelayMs(invalid(challenges), now, {
+                    ...opts(),
+                    resolveScheduledFill: () => wrap({ enabled: true, timesOfDay: ['12:01'], beforeEndSecs: [] }),
+                    timezone: 'UTC',
+                });
+                expect(result.mode).toBe('scheduled');
+                expect(result.delayMs).toBe(60_000);
+                expect(result.nextScheduled).toMatchObject({ challengeId: 9, form: 'time-of-day' });
+            });
+
+            it('does not cap when the scheduled start is beyond the normal delay', async () => {
+                const now = Math.floor(Date.now() / 1000);
+                // Close in 2h, before-end 30 min → start 90 min out, beyond the 3-min delay.
+                const challenges = [{ id: 9, title: 'Sched', type: 'regular', close_time: now + 7200 }];
+                const result = await computeNextCycleDelayMs(invalid(challenges), now, {
+                    ...opts(),
+                    resolveScheduledFill: () => wrap({ enabled: true, timesOfDay: [], beforeEndSecs: [1800] }),
+                    timezone: 'UTC',
+                });
+                expect(result.mode).toBe('normal');
+                expect(result.delayMs).toBe(NORMAL);
+            });
+
+            it('the sooner of a threshold boundary and a scheduled start wins', async () => {
+                const now = Math.floor(Date.now() / 1000);
+                // Threshold boundary: close in 17 min, threshold 16 → 60s away.
+                // Scheduled start: before-end 15 min → 120s away. Boundary wins.
+                const challenges = [{ id: 5, title: 'Both', type: 'regular', close_time: now + 17 * 60 }];
+                const boundaryWins = await computeNextCycleDelayMs(invalid(challenges), now, {
+                    ...opts({ resolveThreshold: () => 16 }),
+                    resolveScheduledFill: () => wrap({ enabled: true, timesOfDay: [], beforeEndSecs: [15 * 60] }),
+                    timezone: 'UTC',
+                });
+                expect(boundaryWins.mode).toBe('approaching');
+                expect(boundaryWins.delayMs).toBe(60_000);
+
+                // Flip it: scheduled start 30s away beats the 60s boundary.
+                const scheduledWins = await computeNextCycleDelayMs(invalid(challenges), now, {
+                    ...opts({ resolveThreshold: () => 16 }),
+                    resolveScheduledFill: () => wrap({ enabled: true, timesOfDay: [], beforeEndSecs: [17 * 60 - 30] }),
+                    timezone: 'UTC',
+                });
+                expect(scheduledWins.mode).toBe('scheduled');
+                expect(scheduledWins.delayMs).toBe(30_000);
+            });
+
+            it('ignores a time-of-day occurrence that lands after close_time', async () => {
+                // 12:00 UTC, challenge closes in 30 min — a 13:00 daily time can
+                // never fire for it, so the cadence stays normal.
+                const now = Math.floor(Date.UTC(2026, 0, 15, 12, 0, 0) / 1000);
+                const challenges = [{ id: 9, title: 'Sched', type: 'regular', close_time: now + 1800 }];
+                const result = await computeNextCycleDelayMs(invalid(challenges), now, {
+                    ...opts({ resolveThreshold: () => 5 }),
+                    resolveScheduledFill: () => wrap({ enabled: true, timesOfDay: ['13:00'], beforeEndSecs: [] }),
+                    timezone: 'UTC',
+                });
+                expect(result.mode).toBe('normal');
+                expect(result.nextScheduled).toBeNull();
+            });
+
+            it('a window narrower than the normal cadence still gets a cycle exactly at its start', async () => {
+                const now = Math.floor(Date.now() / 1000);
+                // 5-minute window starting 100s out — narrower than the 3-min
+                // cadence; the cap must land a cycle at the start regardless.
+                const challenges = [{ id: 9, title: 'Sched', type: 'regular', close_time: now + 3600 }];
+                const result = await computeNextCycleDelayMs(invalid(challenges), now, {
+                    ...opts(),
+                    resolveScheduledFill: () => wrap({ enabled: true, timesOfDay: [], beforeEndSecs: [3500] }),
+                    timezone: 'UTC',
+                });
+                expect(result.mode).toBe('scheduled');
+                expect(result.delayMs).toBe(100_000);
+            });
+
+            it('a challenge with both forms contributes the earlier start', async () => {
+                const now = Math.floor(Date.UTC(2026, 0, 15, 12, 0, 0) / 1000);
+                // time-of-day 12:05 → 300s out; before-end → 120s out. Min wins.
+                const challenges = [{ id: 9, title: 'Both forms', type: 'regular', close_time: now + 3600 }];
+                const result = await computeNextCycleDelayMs(invalid(challenges), now, {
+                    ...opts(),
+                    resolveScheduledFill: () => wrap({ enabled: true, timesOfDay: ['12:05'], beforeEndSecs: [3480] }),
+                    timezone: 'UTC',
+                });
+                expect(result.mode).toBe('scheduled');
+                expect(result.delayMs).toBe(120_000);
+                expect(result.nextScheduled!.form).toBe('before-end');
+            });
+
+            it('multiple time entries: the soonest upcoming occurrence wins, not list order', async () => {
+                // 20:00 UTC with times ['09:00', '21:30'] → the cap targets
+                // today 21:30 (90 min out), not tomorrow 09:00. normalDelayMs
+                // is raised so the cap is what binds.
+                const now = Math.floor(Date.UTC(2026, 0, 15, 20, 0, 0) / 1000);
+                const challenges = [{ id: 9, title: 'Multi', type: 'regular', close_time: now + 48 * 3600 }];
+                const result = await computeNextCycleDelayMs(invalid(challenges), now, {
+                    ...opts({ normalDelayMs: 4 * 3600_000 }),
+                    resolveScheduledFill: () =>
+                        wrap({ enabled: true, timesOfDay: ['09:00', '21:30'], beforeEndSecs: [] }),
+                    timezone: 'UTC',
+                });
+                expect(result.mode).toBe('scheduled');
+                expect(result.delayMs).toBe(90 * 60_000);
+                expect(result.nextScheduled!.form).toBe('time-of-day');
+            });
+
+            it('multiple before-end entries: the earliest upcoming window start wins (issue case: 4h and 10h)', async () => {
+                // Close in 11h with offsets [4h, 10h] → the 10h window opens
+                // in 1h; that start binds, not the 4h one (7h out).
+                const now = Math.floor(Date.now() / 1000);
+                const challenges = [{ id: 9, title: 'Twice', type: 'regular', close_time: now + 11 * 3600 }];
+                const result = await computeNextCycleDelayMs(invalid(challenges), now, {
+                    ...opts({ normalDelayMs: 4 * 3600_000 }),
+                    resolveScheduledFill: () =>
+                        wrap({ enabled: true, timesOfDay: [], beforeEndSecs: [4 * 3600, 10 * 3600] }),
+                    timezone: 'UTC',
+                });
+                expect(result.mode).toBe('scheduled');
+                expect(result.delayMs).toBe(3600_000);
+                expect(result.nextScheduled!.form).toBe('before-end');
+            });
+
+            it('a corrupt entry inside a list is ignored while siblings still cap', async () => {
+                const now = Math.floor(Date.now() / 1000);
+                const challenges = [{ id: 9, title: 'Mixed', type: 'regular', close_time: now + 3600 }];
+                const result = await computeNextCycleDelayMs(invalid(challenges), now, {
+                    ...opts(),
+                    resolveScheduledFill: () =>
+                        wrap({ enabled: true, timesOfDay: ['25:99'], beforeEndSecs: [-5, 3600 - 120] }),
+                    timezone: 'UTC',
+                });
+                expect(result.mode).toBe('scheduled');
+                expect(result.delayMs).toBe(120_000);
+            });
+
+            it('floors the scheduled cap at minGapMs', async () => {
+                const now = Math.floor(Date.now() / 1000);
+                // Start 1s away — below the 5s floor.
+                const challenges = [{ id: 9, title: 'Imminent', type: 'regular', close_time: now + 3600 }];
+                const result = await computeNextCycleDelayMs(invalid(challenges), now, {
+                    ...opts(),
+                    resolveScheduledFill: () => wrap({ enabled: true, timesOfDay: [], beforeEndSecs: [3599] }),
+                    timezone: 'UTC',
+                });
+                expect(result.mode).toBe('scheduled');
+                expect(result.delayMs).toBe(MIN_GAP);
+            });
+
+            it('disabled or corrupt configs are skipped without throwing', async () => {
+                const now = Math.floor(Date.now() / 1000);
+                const challenges = [
+                    { id: 1, title: 'Off', type: 'regular', close_time: now + 3600 },
+                    { id: 2, title: 'Throws', type: 'regular', close_time: now + 3600 },
+                ];
+                const result = await computeNextCycleDelayMs(invalid(challenges), now, {
+                    ...opts(),
+                    resolveScheduledFill: (id) => {
+                        if (id === '2') throw new Error('corrupt');
+                        return wrap(off);
+                    },
+                    timezone: 'UTC',
+                });
+                expect(result.mode).toBe('normal');
+                expect(result.nextScheduled).toBeNull();
+            });
+        });
+
+        describe('pre-final-window top-up cap', () => {
+            // Same dual-shape wrap as the scheduled-fill cap: sync on Node,
+            // Promise on the WebView.
+            const wrap = <T>(config: T) => (resolveThreshold() instanceof Promise ? Promise.resolve(config) : config);
+            // Window START = close_time - (3600 + leadSec); the cap lands a cycle there.
+            const on = (leadSec: number) => () => wrap(invalid<FinalWindowTopUpConfig>({ enabled: true, leadSec }));
+
+            it('omitting the resolver leaves results identical', async () => {
+                const now = Math.floor(Date.now() / 1000);
+                const challenges = [{ id: 1, title: 'Far', type: 'regular', close_time: now + 7200 }];
+                const result = await computeNextCycleDelayMs(invalid(challenges), now, opts());
+                expect(result.mode).toBe('normal');
+                expect(result.delayMs).toBe(NORMAL);
+                expect(result.nextFinalWindowTopUp).toBeNull();
+            });
+
+            it('caps the delay to an upcoming top-up window start', async () => {
+                const now = Math.floor(Date.now() / 1000);
+                // Close in 4620s, lead 15 min (900s) → start = close-4500 = 120s away,
+                // sooner than the 3-min random delay and the 62-min threshold boundary.
+                const challenges = [{ id: 9, title: 'TopUp', type: 'regular', close_time: now + 4620 }];
+                const result = await computeNextCycleDelayMs(invalid(challenges), now, {
+                    ...opts(),
+                    resolveFinalWindowTopUp: on(900),
+                });
+                expect(result.mode).toBe('pre-final-window');
+                expect(result.delayMs).toBe(120_000);
+                expect(result.nextFinalWindowTopUp).toMatchObject({ challengeId: 9, leadMin: 15 });
+            });
+
+            it('does not cap when the window start is beyond the normal delay', async () => {
+                const now = Math.floor(Date.now() / 1000);
+                // Close in 3h, lead 15 min → start ~2h5m out, beyond the 3-min delay.
+                const challenges = [{ id: 9, title: 'Far', type: 'regular', close_time: now + 3 * 3600 }];
+                const result = await computeNextCycleDelayMs(invalid(challenges), now, {
+                    ...opts(),
+                    resolveFinalWindowTopUp: on(900),
+                });
+                expect(result.mode).toBe('normal');
+                expect(result.delayMs).toBe(NORMAL);
+            });
+
+            it('a non-positive/NaN leadSec falls back to the 15-min default', async () => {
+                const now = Math.floor(Date.now() / 1000);
+                // leadSec 0 → fallback 900s → start = close-4500. Close+4620 → 120s away.
+                const challenges = [{ id: 9, title: 'BadLead', type: 'regular', close_time: now + 4620 }];
+                const result = await computeNextCycleDelayMs(invalid(challenges), now, {
+                    ...opts(),
+                    resolveFinalWindowTopUp: on(0),
+                });
+                expect(result.mode).toBe('pre-final-window');
+                expect(result.delayMs).toBe(120_000);
+                expect(result.nextFinalWindowTopUp!.leadMin).toBe(15);
+            });
+
+            it('the sooner of a threshold boundary and a top-up start wins', async () => {
+                const now = Math.floor(Date.now() / 1000);
+                // Threshold boundary: close in 4560s, threshold 75m → 60s away.
+                // Top-up start: lead 900s → close-4500 = 60s... make boundary win at 60s
+                // vs top-up 120s: close 4620 gives top-up start 120s.
+                const challenges = [{ id: 5, title: 'Both', type: 'regular', close_time: now + 4620 }];
+                const boundaryWins = await computeNextCycleDelayMs(invalid(challenges), now, {
+                    ...opts({ resolveThreshold: () => 76 }), // 76m → boundary at close-4560 = 60s
+                    resolveFinalWindowTopUp: on(900), // top-up start at close-4500 = 120s
+                });
+                expect(boundaryWins.mode).toBe('approaching');
+                expect(boundaryWins.delayMs).toBe(60_000);
+
+                // Flip it: a wider lead pulls the top-up start earlier than the boundary.
+                const topUpWins = await computeNextCycleDelayMs(invalid(challenges), now, {
+                    ...opts({ resolveThreshold: () => 76 }), // boundary still 60s
+                    resolveFinalWindowTopUp: on(990), // start at close-4590 = 30s
+                });
+                expect(topUpWins.mode).toBe('pre-final-window');
+                expect(topUpWins.delayMs).toBe(30_000);
+            });
+
+            it('the sooner of a scheduled start and a top-up start wins', async () => {
+                const now = Math.floor(Date.now() / 1000);
+                const challenges = [{ id: 7, title: 'SchedVsTopUp', type: 'regular', close_time: now + 4620 }];
+                // Scheduled before-end start at close-4560 = 60s; top-up at close-4500 = 120s.
+                const result = await computeNextCycleDelayMs(invalid(challenges), now, {
+                    ...opts(),
+                    resolveScheduledFill: () => wrap({ enabled: true, timesOfDay: [], beforeEndSecs: [4560] }),
+                    timezone: 'UTC',
+                    resolveFinalWindowTopUp: on(900),
+                });
+                expect(result.mode).toBe('scheduled');
+                expect(result.delayMs).toBe(60_000);
+            });
+
+            it('floors the top-up cap at minGapMs', async () => {
+                const now = Math.floor(Date.now() / 1000);
+                // Start 1s away — below the 5s floor.
+                const challenges = [{ id: 9, title: 'Imminent', type: 'regular', close_time: now + 4501 }];
+                const result = await computeNextCycleDelayMs(invalid(challenges), now, {
+                    ...opts(),
+                    resolveFinalWindowTopUp: on(900),
+                });
+                expect(result.mode).toBe('pre-final-window');
+                expect(result.delayMs).toBe(MIN_GAP);
+            });
+
+            it('disabled or throwing configs are skipped without throwing', async () => {
+                const now = Math.floor(Date.now() / 1000);
+                const challenges = [
+                    { id: 1, title: 'Off', type: 'regular', close_time: now + 4620 },
+                    { id: 2, title: 'Throws', type: 'regular', close_time: now + 4620 },
+                ];
+                const result = await computeNextCycleDelayMs(invalid(challenges), now, {
+                    ...opts(),
+                    resolveFinalWindowTopUp: (id) => {
+                        if (id === '2') throw new Error('corrupt');
+                        return wrap(invalid<FinalWindowTopUpConfig>({ enabled: false, leadSec: 900 }));
+                    },
+                });
+                expect(result.mode).toBe('normal');
+                expect(result.nextFinalWindowTopUp).toBeNull();
+            });
+
+            it('skips flash and already-closed challenges', async () => {
+                const now = Math.floor(Date.now() / 1000);
+                const challenges = [
+                    { id: 1, title: 'Flash', type: 'flash', close_time: now + 4620 },
+                    { id: 2, title: 'Closed', type: 'regular', close_time: now - 10 },
+                ];
+                const result = await computeNextCycleDelayMs(invalid(challenges), now, {
+                    ...opts(),
+                    resolveFinalWindowTopUp: on(900),
+                });
+                expect(result.mode).toBe('normal');
+                expect(result.nextFinalWindowTopUp).toBeNull();
+            });
+
+            it('honors an explicit non-default durationSec for the window start', async () => {
+                const now = Math.floor(Date.now() / 1000);
+                // durationSec 1800 (half the 3600 default), lead 900 → start = close-2700.
+                // close+2820 → start 120s away. With the default 3600 this same close_time
+                // would put the start 1680s in the PAST (no future cap → 'normal'), so a
+                // pre-final-window cap here proves the 1800 finalWindowDuration was used.
+                const challenges = [{ id: 9, title: 'HalfHour', type: 'regular', close_time: now + 2820 }];
+                const result = await computeNextCycleDelayMs(invalid(challenges), now, {
+                    ...opts(),
+                    resolveFinalWindowTopUp: () => wrap({ enabled: true, leadSec: 900, durationSec: 1800 }),
+                });
+                expect(result.mode).toBe('pre-final-window');
+                expect(result.delayMs).toBe(120_000);
+                expect(result.nextFinalWindowTopUp).toMatchObject({ challengeId: 9, leadMin: 15 });
+            });
+
+            it('falls back to the 3600 default when durationSec is sub-60 or non-finite', async () => {
+                const now = Math.floor(Date.now() / 1000);
+                // Same geometry as the default-duration cases: lead 900 + fallback 3600 →
+                // start = close-4500 = 120s away for close+4620. Were the corrupt
+                // durationSec (30, NaN) honored the start would sit far out (→ 'normal'),
+                // so a pre-final-window cap proves the 3600 fallback took effect.
+                const challenges = [{ id: 9, title: 'BadDuration', type: 'regular', close_time: now + 4620 }];
+                for (const badDuration of [30, Number.NaN]) {
+                    const result = await computeNextCycleDelayMs(invalid(challenges), now, {
+                        ...opts(),
+                        resolveFinalWindowTopUp: () => wrap({ enabled: true, leadSec: 900, durationSec: badDuration }),
+                    });
+                    expect(result.mode).toBe('pre-final-window');
+                    expect(result.delayMs).toBe(120_000);
+                }
+            });
+        });
+
+        describe('pre-boost fill cap', () => {
+            // Same dual-shape wrap as the caps above: sync on Node, Promise on the WebView.
+            const wrap = <T>(config: T) => (resolveThreshold() instanceof Promise ? Promise.resolve(config) : config);
+            const on =
+                (extra = {}) =>
+                () =>
+                    wrap({ enabled: true, leadSec: 900, boostTimeSec: 3600, keyUnlockedBoostTimeSec: 900, ...extra });
+
+            // Timer-branch geometry used throughout: apply instant in
+            // seconds-before-close = close_time - boost.timeout + boostTimeSec. With
+            // close+7200, timeout+4620 and boostTimeSec 3600 that is 6180s before
+            // close, so the 900s lead window opens at close-7080 = now+120 — inside
+            // the 3-min random delay, and well ahead of the 5-min threshold boundary.
+            const timerBoost = (now: number): Challenge[] =>
+                invalid([
+                    {
+                        id: 9,
+                        title: 'Boosting',
+                        type: 'regular',
+                        close_time: now + 7200,
+                        member: { boost: { state: 'AVAILABLE', timeout: now + 4620 } },
+                    },
+                ]);
+
+            it('omitting the resolver leaves results identical', async () => {
+                const now = Math.floor(Date.now() / 1000);
+                const result = await computeNextCycleDelayMs(timerBoost(now), now, opts());
+                expect(result.mode).toBe('normal');
+                expect(result.delayMs).toBe(NORMAL);
+                expect(result.nextBoostPrefill).toBeNull();
+            });
+
+            it('caps the delay to an upcoming pre-boost window start', async () => {
+                const now = Math.floor(Date.now() / 1000);
+                const result = await computeNextCycleDelayMs(timerBoost(now), now, {
+                    ...opts(),
+                    resolveBoostPrefill: on(),
+                });
+                expect(result.mode).toBe('pre-boost');
+                expect(result.delayMs).toBe(120_000);
+                expect(result.nextBoostPrefill).toMatchObject({ challengeId: 9, leadMin: 15 });
+            });
+
+            it('does not cap when disabled', async () => {
+                const now = Math.floor(Date.now() / 1000);
+                const result = await computeNextCycleDelayMs(timerBoost(now), now, {
+                    ...opts(),
+                    resolveBoostPrefill: () =>
+                        wrap(invalid<BoostPrefillConfig>({ enabled: false, leadSec: 900, boostTimeSec: 3600 })),
+                });
+                expect(result.mode).toBe('normal');
+                expect(result.nextBoostPrefill).toBeNull();
+            });
+
+            it('honours the 0 = off sentinel on boostTime, so it never wakes for a boost that will not fire', async () => {
+                const now = Math.floor(Date.now() / 1000);
+                const result = await computeNextCycleDelayMs(timerBoost(now), now, {
+                    ...opts(),
+                    resolveBoostPrefill: on({ boostTimeSec: 0 }),
+                });
+                expect(result.mode).toBe('normal');
+                expect(result.nextBoostPrefill).toBeNull();
+            });
+
+            it('skips a challenge with no boost available to apply', async () => {
+                const now = Math.floor(Date.now() / 1000);
+                const challenges = [
+                    {
+                        id: 9,
+                        title: 'NoBoost',
+                        type: 'regular',
+                        close_time: now + 7200,
+                        member: { boost: { state: 'NONE', timeout: 0 } },
+                    },
+                ];
+                const result = await computeNextCycleDelayMs(invalid(challenges), now, {
+                    ...opts(),
+                    resolveBoostPrefill: on(),
+                });
+                expect(result.mode).toBe('normal');
+                expect(result.nextBoostPrefill).toBeNull();
+            });
+
+            it('measures a key-unlocked boost against close time', async () => {
+                const now = Math.floor(Date.now() / 1000);
+                // Applies with 900s left, lead 900 → window opens at close-1800 = now+120.
+                const challenges = [
+                    {
+                        id: 9,
+                        title: 'KeyBoost',
+                        type: 'regular',
+                        close_time: now + 1920,
+                        member: { boost: { state: 'AVAILABLE_KEY' } },
+                    },
+                ];
+                const result = await computeNextCycleDelayMs(invalid(challenges), now, {
+                    ...opts(),
+                    resolveBoostPrefill: on(),
+                });
+                expect(result.mode).toBe('pre-boost');
+                expect(result.delayMs).toBe(120_000);
+            });
+
+            it('a corrupt leadSec falls back to the 15-min default', async () => {
+                const now = Math.floor(Date.now() / 1000);
+                const result = await computeNextCycleDelayMs(timerBoost(now), now, {
+                    ...opts(),
+                    resolveBoostPrefill: on({ leadSec: Number.NaN }),
+                });
+                expect(result.mode).toBe('pre-boost');
+                expect(result.delayMs).toBe(120_000);
+                expect(result.nextBoostPrefill!.leadMin).toBe(15);
+            });
+
+            it('falls back to the 900s default for a corrupt keyUnlockedBoostTimeSec, matching the rule side', async () => {
+                const now = Math.floor(Date.now() / 1000);
+                // Rule side (getEffectiveKeyUnlockedBoostTime) falls back to 900 for a
+                // missing/NaN value; skipping the challenge here instead would arm the
+                // rule for a boundary the scheduler never wakes for.
+                const challenges = [
+                    {
+                        id: 9,
+                        title: 'KeyBoost',
+                        type: 'regular',
+                        close_time: now + 1920,
+                        member: { boost: { state: 'AVAILABLE_KEY' } },
+                    },
+                ];
+                const result = await computeNextCycleDelayMs(invalid(challenges), now, {
+                    ...opts(),
+                    resolveBoostPrefill: on({ keyUnlockedBoostTimeSec: Number.NaN }),
+                });
+                expect(result.mode).toBe('pre-boost');
+                expect(result.delayMs).toBe(120_000);
+            });
+
+            it('skips malformed data where the boost outlives the challenge', async () => {
+                const now = Math.floor(Date.now() / 1000);
+                // timeout after close → apply instant negative; mirrors the rule-side
+                // guard asserted in tests/services/boostPrefill.test.ts.
+                const challenges = [
+                    {
+                        id: 9,
+                        title: 'Malformed',
+                        type: 'regular',
+                        close_time: now + 3600,
+                        member: { boost: { state: 'AVAILABLE', timeout: now + 7200 } },
+                    },
+                ];
+                const result = await computeNextCycleDelayMs(invalid(challenges), now, {
+                    ...opts(),
+                    resolveBoostPrefill: on({ boostTimeSec: 60 }),
+                });
+                expect(result.mode).toBe('normal');
+                expect(result.nextBoostPrefill).toBeNull();
+            });
+
+            it('a nearer pre-final-window cap wins, but nextBoostPrefill is still reported', async () => {
+                const now = Math.floor(Date.now() / 1000);
+                // Pre-boost window opens at now+120 (see timerBoost); the top-up window
+                // for the same challenge (close+7200, lead 900, duration 3600) opens at
+                // close-4500 = now+2700 — later. Invert it by giving the top-up a much
+                // wider lead so it opens sooner: duration 3600 + lead 3540 → now+60.
+                const result = await computeNextCycleDelayMs(timerBoost(now), now, {
+                    ...opts(),
+                    resolveBoostPrefill: on(),
+                    resolveFinalWindowTopUp: () => wrap({ enabled: true, leadSec: 3540, durationSec: 3600 }),
+                });
+                expect(result.mode).toBe('pre-final-window');
+                expect(result.delayMs).toBe(60_000);
+                // Informational: the pre-boost boundary is still computed and surfaced
+                // even though a nearer cap won.
+                expect(result.nextBoostPrefill).toMatchObject({ challengeId: 9 });
+            });
+
+            it('a throwing resolver is skipped rather than killing the decision', async () => {
+                const now = Math.floor(Date.now() / 1000);
+                const result = await computeNextCycleDelayMs(timerBoost(now), now, {
+                    ...opts(),
+                    resolveBoostPrefill: () => {
+                        throw new Error('boom');
+                    },
+                });
+                expect(result.mode).toBe('normal');
+                expect(result.nextBoostPrefill).toBeNull();
+            });
+        });
+    });
+});

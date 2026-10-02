@@ -1,0 +1,418 @@
+/**
+ * Tests for the lexicon build pipeline's pure functions — the logic that
+ * decides what ships in the semantic vector asset, exercised against small
+ * fixtures (the network download and zip streaming stay manual, un-CI'd).
+ *
+ * Two fatal gates matter most:
+ *   - a word claimed by two clusters (authoring mistake -> collision)
+ *   - an authored word missing from the intermediate (stale intermediate)
+ * Both must be REPORTED by the pure layer so the script entry points can fail
+ * the build; a silent pass here means degraded vectors ship undetected.
+ */
+
+import crypto = require('node:crypto');
+import type * as build_lexiconModule from '../../scripts/build-lexicon';
+import type * as validate_lexiconModule from '../../scripts/validate-lexicon';
+import type * as fetch_embeddingsModule from '../../scripts/fetch-embeddings';
+import type * as stored_zipModule from './helpers/stored-zip';
+import type { ConceptsConfig } from '../../scripts/build-lexicon';
+import { invalid } from '../helpers/invalid';
+const { buildAsset, buildConcreteAxis } = require('../../scripts/build-lexicon') as typeof build_lexiconModule;
+const { percentile, validateConfigRefs } = require('../../scripts/validate-lexicon') as typeof validate_lexiconModule;
+const {
+    collectAuthoredWords,
+    parseGloveLine,
+    normalize,
+    retrofit,
+    assignStems,
+    quantizePack,
+    streamEntryLines,
+    GENERIC_TOKEN_RE,
+    ENTRY_NAME,
+} = require('../../scripts/fetch-embeddings') as typeof fetch_embeddingsModule;
+const { makeStoredZip } = require('./helpers/stored-zip') as typeof stored_zipModule;
+
+type Concept = ConceptsConfig['concepts'][number];
+type Intermediate = NonNullable<Parameters<typeof buildAsset>[0]>;
+
+const vec = (...xs: number[]) => Float64Array.from(xs);
+
+describe('build-lexicon buildAsset', () => {
+    const intermediate: Intermediate = {
+        dims: 4,
+        scale: 0.01,
+        meanCentered: true,
+        source: invalid({ url: 'https://example.test/glove.zip', entrySha256: 'abc' }),
+        // Stem keys for: cat, kitten, dog (stemmed forms of the fixture words)
+        packed: { cat: 'AAAA', kitten: 'AAAA', dog: 'AAAA' },
+    };
+
+    test('assembles a v2 asset carrying the intermediate through verbatim', () => {
+        const concepts = { concepts: [{ id: 'cat', parent: 'pet', words: ['cat', 'kitten'] }] };
+        const { output, missing, collisions } = buildAsset(intermediate, concepts);
+        expect(missing).toEqual([]);
+        expect(collisions).toEqual([]);
+        expect(output.version).toBe(2);
+        expect(output.dims).toBe(4);
+        expect(output.scale).toBe(0.01);
+        expect(output.source).toBe(intermediate.source);
+        expect(output.packed).toBe(intermediate.packed);
+    });
+
+    test('reports an authored word whose stem is missing from the intermediate', () => {
+        const concepts = { concepts: [{ id: 'bird', parent: 'bird', words: ['bird'] }] };
+        const { missing } = buildAsset(intermediate, concepts);
+        expect(missing).toHaveLength(1);
+        expect(missing[0]).toContain('bird');
+    });
+
+    test('reports a missing extraWords entry too', () => {
+        const concepts = { concepts: [], extraWords: ['sofa'] };
+        const { missing } = buildAsset(intermediate, concepts);
+        expect(missing).toHaveLength(1);
+        expect(missing[0]).toContain('extraWords');
+    });
+
+    test('reports a stem claimed by two different clusters', () => {
+        const concepts = {
+            concepts: [
+                { id: 'cat', parent: 'pet', words: ['cat'] },
+                { id: 'feline', parent: 'wild', words: ['cats'] }, // stems to "cat" as well
+            ],
+        };
+        const { collisions } = buildAsset(intermediate, concepts);
+        expect(collisions).toHaveLength(1);
+        expect(collisions[0]).toContain('cat');
+    });
+
+    test('the same word twice in ONE cluster is not a collision', () => {
+        const concepts = { concepts: [{ id: 'cat', parent: 'pet', words: ['cat', 'cats'] }] };
+        expect(buildAsset(intermediate, concepts).collisions).toEqual([]);
+    });
+});
+
+describe('build-lexicon concreteness axis', () => {
+    // Real 4-d int8 vectors (base64 of the two's-complement bytes), unlike the
+    // 'AAAA' placeholders above, which decode to the wrong length and are skipped.
+    const pack = (...bytes: number[]) => Buffer.from(Int8Array.from(bytes).buffer).toString('base64');
+    const asset = {
+        dims: 4,
+        scale: 0.01,
+        packed: {
+            cat: pack(100, 0, 0, 0),
+            dog: pack(0, 100, 0, 0),
+            idea: pack(0, 0, 100, 0),
+            same: pack(100, 0, 0, 0),
+        },
+    };
+    const concepts = (concreteness: ConceptsConfig['concreteness'], extra: Concept[] = []) => ({
+        concepts: [
+            { id: 'cat', parent: 'pet', words: ['cat'] },
+            { id: 'dog', parent: 'emotion', words: ['dog'] },
+            invalid<Concept>({ id: 'empty', parent: 'pet' }),
+            ...extra,
+        ],
+        concreteness,
+    });
+    const authored = (c: ConceptsConfig) => collectAuthoredWords(c).bySurface;
+    const axisOf = (c: ConceptsConfig) => buildConcreteAxis(asset, c, authored(c));
+
+    test('no concreteness block ships no axis and reports nothing', () => {
+        expect(axisOf(concepts(undefined))).toEqual({ axis: undefined, missing: [], collisions: [] });
+        expect(buildAsset({ ...asset }, concepts(undefined)).output).not.toHaveProperty('concreteAxis');
+    });
+
+    test('points from the anchor mean to the concrete mean, skipping excluded parents', () => {
+        const c = concepts({ excludeParents: ['emotion'], abstractAnchors: ['Idea'] });
+        const { axis, missing, collisions } = axisOf(c);
+        expect(missing).toEqual([]);
+        expect(collisions).toEqual([]);
+        // cat (1,0,0,0) minus idea (0,0,1,0), normalised; dog's parent is excluded.
+        expect(axis).toEqual([0.707107, 0, -0.707107, 0]);
+        expect(buildAsset(asset, c).output.concreteAxis).toEqual(axis);
+    });
+
+    test('without excludeParents every concept word joins the concrete pole', () => {
+        const { axis } = axisOf(concepts({ abstractAnchors: ['idea'] }));
+        expect(axis![1]).toBeGreaterThan(0);
+    });
+
+    test('reports an anchor with no vector as missing, and ships no axis without anchors', () => {
+        const c = concepts({ abstractAnchors: ['ghost'] });
+        const { axis, missing } = axisOf(c);
+        expect(axis).toBeUndefined();
+        expect(missing).toEqual(['ghost (stem "ghost", abstractAnchors)']);
+        expect(buildAsset(asset, c).missing).toContain('ghost (stem "ghost", abstractAnchors)');
+        expect(axisOf(concepts({})).axis).toBeUndefined();
+    });
+
+    test('reports an anchor that is also an authored concept word as a collision', () => {
+        const c = concepts({ abstractAnchors: ['cat'] });
+        expect(axisOf(c).collisions).toEqual(['cat (abstract anchor is also a cat word)']);
+        expect(buildAsset(asset, c).collisions).toEqual(['cat (abstract anchor is also a cat word)']);
+    });
+
+    test('identical poles collapse to a zero axis instead of dividing by zero', () => {
+        const { axis } = axisOf(concepts({ excludeParents: ['emotion'], abstractAnchors: ['same'] }));
+        expect(axis).toEqual([0, 0, 0, 0]);
+    });
+
+    test('tolerates a concepts file with no concept list', () => {
+        expect(
+            buildConcreteAxis(asset, invalid({ concreteness: { abstractAnchors: ['idea'] } }), new Map()).axis,
+        ).toBeUndefined();
+    });
+});
+
+describe('fetch-embeddings pure pipeline', () => {
+    test('collectAuthoredWords maps surfaces to owners and flags cross-cluster stem collisions', () => {
+        const { bySurface, collisions } = collectAuthoredWords({
+            concepts: [
+                { id: 'cat', parent: 'pet', words: ['Cat', 'kitten'] },
+                { id: 'flower', parent: 'plant', words: ['roses'] }, // "roses" stems to "rose"
+                { id: 'rosecolor', parent: 'color', words: ['rose'] },
+            ],
+            extraWords: ['sofa'],
+        });
+        expect(bySurface.get('cat')).toBe('cat');
+        expect(bySurface.get('sofa')).toBe('extraWords');
+        expect(collisions).toHaveLength(1);
+        expect(collisions[0]).toContain('rose');
+    });
+
+    test('skies/ski is NOT a collision — they are different concepts', () => {
+        // "skies" must stem to "sky", not "ski": the '-ies' rule has to cover
+        // 5-letter words, or "skies" falls through to '-es' and a "Dramatic
+        // Skies" challenge cannot match a "Sky" label.
+        const { collisions } = collectAuthoredWords({
+            concepts: [
+                { id: 'sky', parent: 'sky', words: ['skies'] },
+                { id: 'skiing', parent: 'wintersport', words: ['ski'] },
+            ],
+        });
+        expect(collisions).toEqual([]);
+    });
+
+    test('parseGloveLine parses a valid line and rejects malformed ones', () => {
+        expect(parseGloveLine('cat 0.5 -0.25', 2)).toEqual({ token: 'cat', vec: vec(0.5, -0.25) });
+        expect(parseGloveLine('cat 0.5', 2)).toBeNull(); // wrong dims
+        expect(parseGloveLine('cat 0.5 abc', 2)).toBeNull(); // non-numeric
+        expect(parseGloveLine('', 2)).toBeNull();
+    });
+
+    test('GENERIC_TOKEN_RE admits plain lowercase words only', () => {
+        expect(GENERIC_TOKEN_RE.test('cat')).toBe(true);
+        expect(GENERIC_TOKEN_RE.test('a')).toBe(false); // too short
+        expect(GENERIC_TOKEN_RE.test("o'clock")).toBe(false);
+        expect(GENERIC_TOKEN_RE.test('café')).toBe(false);
+        expect(GENERIC_TOKEN_RE.test('x'.repeat(21))).toBe(false); // too long
+    });
+
+    test('normalize produces a unit vector', () => {
+        const v = vec(3, 4);
+        normalize(v);
+        expect(v[0]).toBeCloseTo(0.6);
+        expect(v[1]).toBeCloseTo(0.8);
+    });
+
+    test('retrofit pulls cluster members toward each other and leaves others alone', () => {
+        const a = vec(1, 0);
+        const b = vec(0, 1);
+        const lone = vec(-1, 0);
+        const extra = vec(0, -1);
+        const rows = [
+            { token: 'cat', vec: a, isAuthored: true },
+            { token: 'kitten', vec: b, isAuthored: true },
+            { token: 'cactus', vec: lone, isAuthored: true },
+            { token: 'sofa', vec: extra, isAuthored: true },
+            { token: 'the', vec: vec(0.5, 0.5), isAuthored: false },
+        ];
+        const authored = new Map([
+            ['cat', 'cat'],
+            ['kitten', 'cat'],
+            ['cactus', 'cactus'],
+            ['sofa', 'extraWords'],
+        ]);
+        const count = retrofit(rows, authored, 0.5);
+        expect(count).toBe(2); // only the two-member cat cluster moved
+        const cosine = (x: Float64Array, y: Float64Array) => x[0] * y[0] + x[1] * y[1];
+        expect(cosine(a, b)).toBeGreaterThan(0.5); // was 0 before the blend
+        expect(Array.from(lone)).toEqual([-1, 0]); // single-word cluster untouched
+        expect(Array.from(extra)).toEqual([0, -1]); // extraWords untouched
+        expect(retrofit(rows, authored, 0)).toBe(0); // beta 0 is a no-op
+    });
+
+    test('assignStems: authored words beat more-frequent generic tokens on the same stem', () => {
+        const rows = [
+            // Generic "boxing" is FIRST (more frequent) but the authored word
+            // must still own the shared stem.
+            { token: 'boxing', vec: vec(1, 0), isAuthored: false }, // stems to "box"
+            { token: 'box', vec: vec(0, 1), isAuthored: true },
+        ];
+        const { stems } = assignStems(rows, 0.4);
+        expect(stems.get('box')!.token).toBe('box');
+        expect(stems.get('box')!.isAuthored).toBe(true);
+    });
+
+    test('assignStems: generic-vs-generic keeps the more frequent word and counts disagreeing merges as bad', () => {
+        const rows = [
+            { token: 'day', vec: vec(1, 0), isAuthored: false },
+            { token: 'days', vec: vec(1, 0), isAuthored: false }, // same lemma, cosine 1 — benign
+            { token: 'dayed', vec: vec(-1, 0), isAuthored: false }, // fake word, opposite vector — bad merge
+        ];
+        const { stems, merges, badMerges, badSamples } = assignStems(rows, 0.4);
+        expect(stems.get('day')!.token).toBe('day'); // first (most frequent) wins
+        expect(merges).toBe(2);
+        expect(badMerges).toBe(1);
+        expect(badSamples[0]).toContain('dayed');
+    });
+
+    test('quantizePack round-trips through the runtime signed-byte decode', () => {
+        const stems = new Map([
+            ['pos', { vec: vec(1, 0.5) }],
+            ['neg', { vec: vec(-1, -0.25) }],
+        ]);
+        const { scale, packed } = quantizePack(stems, 2);
+        expect(scale).toBeCloseTo(1 / 127);
+        const decode = (b64: string) => {
+            const buf = Buffer.from(b64, 'base64');
+            return new Int8Array(buf.buffer, buf.byteOffset, buf.length);
+        };
+        expect(Array.from(decode(packed.pos))).toEqual([127, 64]);
+        expect(Array.from(decode(packed.neg))).toEqual([-127, -32]);
+    });
+});
+
+describe('streamEntryLines — zip extraction guards (no fs, via Buffer source)', () => {
+    const CONTENT = 'cat 0.5 0.25\ndog 1 2\n';
+
+    test('streams the pinned entry line-by-line and returns its SHA-256', async () => {
+        const zip = makeStoredZip([
+            ['other.txt', 'ignore me'],
+            [ENTRY_NAME, CONTENT],
+        ]);
+        const lines: string[] = [];
+        const sha = await streamEntryLines(zip, (l) => lines.push(l));
+        expect(lines).toEqual(['cat 0.5 0.25', 'dog 1 2']);
+        expect(sha).toBe(crypto.createHash('sha256').update(CONTENT).digest('hex'));
+    });
+
+    test('rejects when the pinned entry is absent from the archive', async () => {
+        const zip = makeStoredZip([['other.txt', 'nope']]);
+        await expect(streamEntryLines(zip, () => {})).rejects.toThrow(/not found/);
+    });
+
+    test('rejects a corrupt archive instead of hanging or throwing raw', async () => {
+        await expect(streamEntryLines(Buffer.from('this is not a zip'), () => {})).rejects.toThrow();
+    });
+
+    test('rejects a decompression bomb by its declared inflated size before reading any data', async () => {
+        const zip = makeStoredZip([[ENTRY_NAME, CONTENT]], { usizeOverride: 0x7fffffff }); // ~2 GiB declared
+        const onLine = jest.fn();
+        await expect(streamEntryLines(zip, onLine)).rejects.toThrow(/declares/);
+        expect(onLine).not.toHaveBeenCalled();
+    });
+});
+
+describe('validate-lexicon pure helpers', () => {
+    const config = {
+        organizationalParents: ['object'],
+        unrelatedParents: [['pet', 'object']],
+        nearMissPairs: [['cat', 'toy']],
+        concepts: [
+            { id: 'cat', parent: 'pet', words: ['cat'] },
+            { id: 'toy', parent: 'object', words: ['toy'] },
+        ],
+    };
+
+    test('a consistent eval config produces no errors', () => {
+        expect(validateConfigRefs(config)).toEqual([]);
+    });
+
+    test('flags unknown parents and concept ids that would silently match nothing', () => {
+        const broken = {
+            ...config,
+            organizationalParents: ['objct'],
+            unrelatedParents: [['pet', 'objects']],
+            nearMissPairs: [['cat', 'toys']],
+        };
+        const errors = validateConfigRefs(broken);
+        expect(errors).toHaveLength(3);
+        expect(errors.join('\n')).toContain('objct');
+        expect(errors.join('\n')).toContain('objects');
+        expect(errors.join('\n')).toContain('toys');
+    });
+
+    test('percentile picks by rank on a sorted array (and is undefined on empty — main guards that)', () => {
+        expect(percentile([1, 2, 3, 4], 50)).toBe(3);
+        expect(percentile([1, 2, 3, 4], 99)).toBe(4);
+        expect(percentile([7], 5)).toBe(7);
+        expect(percentile([], 50)).toBeUndefined();
+    });
+});
+
+describe('pure pipeline edge cases', () => {
+    test('buildAsset tolerates a missing intermediate and skips stems too short to key', () => {
+        const { output, missing } = buildAsset(null, { concepts: [{ id: 'x', parent: 'p', words: ['', 'a'] }] });
+        expect(missing).toEqual([]);
+        expect(output).toMatchObject({ packed: {}, meanCentered: false, retrofitBeta: 0 });
+        expect(output.source).toBeUndefined();
+        expect(output.dims).toBeUndefined();
+        expect(output.scale).toBeUndefined();
+    });
+
+    test('buildAsset defaults packed and carries a finite retrofitBeta through', () => {
+        const { output, missing } = buildAsset({ dims: 2, retrofitBeta: 0.5 }, { concepts: [] });
+        expect(missing).toEqual([]);
+        expect(output.packed).toEqual({});
+        expect(output.retrofitBeta).toBe(0.5);
+    });
+
+    test('collectAuthoredWords tolerates a null config and word-less concepts', () => {
+        expect(collectAuthoredWords(null).bySurface.size).toBe(0);
+        const { bySurface, collisions } = collectAuthoredWords(
+            invalid({ concepts: [{ id: 'x' }, { id: 'y', words: ['', 'a', 'a'] }] }),
+        );
+        expect([...bySurface.keys()]).toEqual(['', 'a']);
+        expect(collisions).toEqual([]);
+    });
+
+    test('normalize leaves a zero vector at zero instead of dividing by zero', () => {
+        const v = vec(0, 0);
+        normalize(v);
+        expect(Array.from(v)).toEqual([0, 0]);
+    });
+
+    test('retrofit ignores an authored row with no known owner', () => {
+        const rows = [{ token: 'ghost', vec: vec(1, 0), isAuthored: true }];
+        expect(retrofit(rows, new Map(), 0.5)).toBe(0);
+    });
+
+    test('assignStems skips unkeyable tokens, lets the first authored row win, and caps bad samples at 20', () => {
+        const rows = [
+            { token: '', vec: vec(1, 0), isAuthored: false },
+            { token: 'a', vec: vec(1, 0), isAuthored: false },
+            { token: 'cat', vec: vec(1, 0), isAuthored: true },
+            { token: 'cats', vec: vec(0, 1), isAuthored: true },
+            { token: 'day', vec: vec(1, 0), isAuthored: false },
+        ];
+        for (let i = 0; i < 22; i++) rows.push({ token: 'days', vec: vec(-1, 0), isAuthored: false });
+        const { stems, merges, badMerges, badSamples } = assignStems(rows, 0.4);
+        expect([...stems.keys()]).toEqual(['cat', 'day']);
+        expect(stems.get('cat')!.token).toBe('cat');
+        expect(merges).toBe(22);
+        expect(badMerges).toBe(22);
+        expect(badSamples).toHaveLength(20);
+    });
+
+    test('quantizePack falls back to a unit scale for an empty or all-zero table', () => {
+        expect(quantizePack(new Map(), 2)).toEqual({ scale: 1 / 127, packed: {} });
+    });
+
+    test('validateConfigRefs tolerates an empty config and null concept entries', () => {
+        expect(validateConfigRefs(invalid({}))).toEqual([]);
+        expect(validateConfigRefs(invalid({ concepts: [null, { id: 'x' }], organizationalParents: ['p'] }))).toEqual([
+            'organizationalParents references unknown parent "p"',
+        ]);
+    });
+});

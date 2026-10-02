@@ -14,7 +14,7 @@ import org.json.JSONObject
  * Capacitor's Preferences plugin stores values in a SharedPreferences
  * file named "CapacitorStorage" by default, where each key maps to a
  * String value. Our entire settings JSON is stored under the single
- * key "gurushots-settings" (see SETTINGS_KEY in src/js/settings.js).
+ * key "gurushots-settings" (see SETTINGS_KEY in src/ts/settings.ts).
  */
 object AutoVoteSettings {
 

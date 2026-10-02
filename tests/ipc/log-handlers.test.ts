@@ -1,0 +1,223 @@
+/**
+ * log.handlers stream lifecycle. The Capacitor bridge calls these handlers
+ * with a null IPC event (single-process WebView), so start/stop-log-stream
+ * must not throw on a missing event.sender. The Electron path still
+ * registers a webContents and fans log entries out to it.
+ */
+
+import type * as loggerModule from '../../src/ts/logger';
+import type * as logHandlersModule from '../../src/ts/ipc/log.handlers';
+import type { IpcMain } from 'electron';
+import { invalid } from '../helpers/invalid';
+
+// The factory below also exposes the per-category loggers it hands out.
+type CategoryMock = jest.Mocked<Pick<loggerModule.CategoryLogger, 'debug' | 'error' | 'warning' | 'api'>>;
+type MockedLogger = jest.MockedObject<typeof loggerModule> & { categories: Record<string, CategoryMock> };
+type Handlers = ReturnType<typeof logHandlersModule.buildHandlers>;
+type ChannelImpl = Parameters<IpcMain['handle']>[1];
+const g = global as typeof global & { sendLogToGUI?: unknown };
+
+jest.mock('../../src/ts/logger', () => {
+    const categories: Record<string, CategoryMock> = {};
+    const withCategory = jest.fn((name: string) => {
+        categories[name] = categories[name] || {
+            debug: jest.fn(),
+            error: jest.fn(),
+            warning: jest.fn(),
+            api: jest.fn(),
+        };
+        return categories[name];
+    });
+    return {
+        categories,
+        withCategory,
+        setContext: jest.fn(),
+        clearContext: jest.fn(),
+        getLogFile: jest.fn(() => '/logs/app.log'),
+        getErrorLogFile: jest.fn(() => '/logs/error.log'),
+        getApiLogFile: jest.fn(() => '/logs/api.log'),
+        getRecentLogs: jest.fn(() => [{ seq: 1, message: 'old' }]),
+    };
+});
+
+describe('log.handlers — stream lifecycle', () => {
+    let logHandlers: typeof logHandlersModule;
+    let handlers: Handlers;
+
+    // Re-require per test so the module-level logStreamWindows set starts
+    // empty each time — no registered webContents bleeds across tests.
+    beforeEach(() => {
+        jest.resetModules();
+        logHandlers = require('../../src/ts/ipc/log.handlers') as typeof logHandlers;
+        handlers = logHandlers.buildHandlers();
+    });
+
+    test('start/stop-log-stream acknowledge with no IPC event (Capacitor path)', async () => {
+        await expect(handlers['start-log-stream'](null)).resolves.toEqual({ success: true });
+        await expect(handlers['stop-log-stream'](null)).resolves.toEqual({ success: true });
+        await expect(handlers['start-log-stream'](undefined)).resolves.toEqual({ success: true });
+        await expect(handlers['start-log-stream'](invalid({}))).resolves.toEqual({ success: true });
+        await expect(handlers['stop-log-stream'](invalid({}))).resolves.toEqual({ success: true });
+    });
+
+    test('Electron path registers a webContents and fans entries out to it', async () => {
+        const sender = { on: jest.fn(), send: jest.fn(), isDestroyed: () => false };
+        await handlers['start-log-stream'](invalid({ sender }));
+
+        logHandlers.sendLogToGUI(invalid({ seq: 1, message: 'hi' }));
+        expect(sender.send).toHaveBeenCalledWith('log-message', { seq: 1, message: 'hi' });
+
+        await handlers['stop-log-stream'](invalid({ sender }));
+        sender.send.mockClear();
+        logHandlers.sendLogToGUI(invalid({ seq: 2, message: 'bye' }));
+        expect(sender.send).not.toHaveBeenCalled();
+    });
+});
+
+describe('log.handlers — renderer log writes and file lookups', () => {
+    let logger: MockedLogger;
+    let handlers: Handlers;
+
+    beforeEach(() => {
+        jest.resetModules();
+        logger = require('../../src/ts/logger') as typeof logger;
+        handlers = (
+            require('../../src/ts/ipc/log.handlers') as typeof import('../../src/ts/ipc/log.handlers')
+        ).buildHandlers();
+    });
+
+    test.each([
+        ['log-debug', 'ui', 'debug'],
+        ['log-error', 'ui', 'error'],
+        ['log-warning', 'ui', 'warning'],
+        ['log-api', 'api', 'api'],
+    ] as const)('%s logs under the GUI context via %s.%s and clears the context', async (channel, category, level) => {
+        const data = { k: 1 };
+        await expect(handlers[channel](invalid({}), 'msg', data)).resolves.toEqual({ success: true });
+
+        expect(logger.setContext).toHaveBeenCalledWith('GUI');
+        expect(logger.withCategory).toHaveBeenCalledWith(category);
+        expect(logger.categories[category][level]).toHaveBeenCalledWith('msg', data);
+        expect(logger.clearContext).toHaveBeenCalledTimes(1);
+        // Context is set before the write and cleared after it.
+        expect(logger.setContext.mock.invocationCallOrder[0]).toBeLessThan(
+            logger.clearContext.mock.invocationCallOrder[0],
+        );
+    });
+
+    test.each([
+        ['get-log-file', '/logs/app.log'],
+        ['get-error-log-file', '/logs/error.log'],
+        ['get-api-log-file', '/logs/api.log'],
+    ] as const)('%s returns the logger path', async (channel, expected) => {
+        await expect(handlers[channel]()).resolves.toBe(expected);
+    });
+
+    test('get-log-backlog returns the recent log ring', async () => {
+        await expect(handlers['get-log-backlog']()).resolves.toEqual([{ seq: 1, message: 'old' }]);
+    });
+});
+
+describe('log.handlers — stream edge cases and register', () => {
+    let logHandlers: typeof logHandlersModule;
+    let handlers: Handlers;
+    let logger: MockedLogger;
+
+    beforeEach(() => {
+        jest.resetModules();
+        logger = require('../../src/ts/logger') as typeof logger;
+        logHandlers = require('../../src/ts/ipc/log.handlers') as typeof logHandlers;
+        handlers = logHandlers.buildHandlers();
+    });
+
+    afterEach(() => {
+        delete g.sendLogToGUI;
+    });
+
+    test('a destroyed webContents is unregistered via its destroyed event', async () => {
+        const listeners: Record<string, () => void> = {};
+        const sender = {
+            on: jest.fn((evt: string, cb: () => void) => {
+                listeners[evt] = cb;
+            }),
+            send: jest.fn(),
+            isDestroyed: () => false,
+        };
+        await handlers['start-log-stream'](invalid({ sender }));
+        expect(sender.on).toHaveBeenCalledWith('destroyed', expect.any(Function));
+
+        listeners.destroyed();
+        logHandlers.sendLogToGUI(invalid({ seq: 3 }));
+        expect(sender.send).not.toHaveBeenCalled();
+    });
+
+    test('sendLogToGUI skips a webContents that reports isDestroyed()', async () => {
+        const live = { on: jest.fn(), send: jest.fn(), isDestroyed: () => false };
+        const dead = { on: jest.fn(), send: jest.fn(), isDestroyed: () => true };
+        await handlers['start-log-stream'](invalid({ sender: live }));
+        await handlers['start-log-stream'](invalid({ sender: dead }));
+
+        logHandlers.sendLogToGUI(invalid({ seq: 4 }));
+        expect(live.send).toHaveBeenCalledWith('log-message', { seq: 4 });
+        expect(dead.send).not.toHaveBeenCalled();
+    });
+
+    test('start-log-stream returns the error envelope when the sender cannot be subscribed', async () => {
+        const sender = {
+            on: jest.fn(() => {
+                throw new Error('gone');
+            }),
+        };
+        await expect(handlers['start-log-stream'](invalid({ sender }))).resolves.toEqual({
+            success: false,
+            error: 'gone',
+        });
+        expect(logger.categories.ui.error).toHaveBeenCalledWith('Error starting log stream:', expect.any(Error));
+    });
+
+    test('stop-log-stream returns the error envelope when reading the sender throws', async () => {
+        const event = {
+            get sender() {
+                throw new Error('disposed');
+            },
+        };
+        await expect(handlers['stop-log-stream'](invalid(event))).resolves.toEqual({
+            success: false,
+            error: 'disposed',
+        });
+        expect(logger.categories.ui.error).toHaveBeenCalledWith('Error stopping log stream:', expect.any(Error));
+    });
+
+    test('start-log-stream falls back to a fixed message when the sender throws null', async () => {
+        const sender = {
+            on: jest.fn(() => {
+                throw null;
+            }),
+        };
+        await expect(handlers['start-log-stream'](invalid({ sender }))).resolves.toEqual({
+            success: false,
+            error: 'Failed to start log stream',
+        });
+    });
+
+    test('stop-log-stream falls back to a fixed message when reading the sender throws null', async () => {
+        const event = {
+            get sender() {
+                throw null;
+            },
+        };
+        await expect(handlers['stop-log-stream'](invalid(event))).resolves.toEqual({
+            success: false,
+            error: 'Failed to stop log stream',
+        });
+    });
+
+    test('register wires every channel and installs the global fan-out hook', async () => {
+        const channels = new Map<string, ChannelImpl>();
+        logHandlers.register(invalid({ handle: (channel: string, impl: ChannelImpl) => channels.set(channel, impl) }));
+
+        expect([...channels.keys()].sort()).toEqual(Object.keys(handlers).sort());
+        expect(g.sendLogToGUI).toBe(logHandlers.sendLogToGUI);
+        await expect(channels.get('get-log-file')!(invalid(undefined))).resolves.toBe('/logs/app.log');
+    });
+});

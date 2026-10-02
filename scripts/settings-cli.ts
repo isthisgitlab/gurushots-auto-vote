@@ -1,0 +1,355 @@
+#!/usr/bin/env node
+
+import * as settings from '../src/ts/settings';
+import * as logger from '../src/ts/logger';
+import {
+    dumpSchema,
+    listGlobalDefaults,
+    setSetting,
+    setGlobalDefault,
+    resetSetting,
+    resetGlobalDefault,
+    resetAllSettings,
+} from '../src/ts/cli/commands/settings';
+import { spawn } from 'node:child_process';
+import { errorMessage } from '../src/ts/errorMessage';
+
+/**
+ * CLI Settings Management Script
+ *
+ * Usage:
+ *   pnpm settings:get [key]     - Get setting value (or all if no key provided)
+ *   pnpm settings:set key value - Set setting value
+ *
+ * Sensitive keys (token etc.) print as [REDACTED]; pass --reveal to `get`
+ * to print the raw value.
+ *
+ * Output note (deliberate): `get` prints plain console lines (pipeable,
+ * no timestamps — it is the read/inspect path), while the mutating
+ * commands delegate to src/ts/cli/commands/settings.ts and emit through
+ * the shared logger (timestamped, colored) exactly like the main CLI.
+ *
+ * Examples:
+ *   pnpm settings:get            # Get all settings
+ *   pnpm settings:get theme      # Get theme setting
+ *   pnpm settings:set theme dark # Set theme to dark
+ *   pnpm settings:set challengeSettings.globalDefaults.boostTime 7200
+ */
+
+// --reveal opts `get` out of sensitive-key redaction (the legitimate
+// read-my-own-token workflow). Strip it before positional parsing so it
+// can appear anywhere in the arg list.
+const cliArgs = process.argv.slice(2).filter((arg) => arg !== '--reveal');
+const reveal = process.argv.includes('--reveal');
+
+const command = cliArgs[0];
+const key = cliArgs[1];
+const value = cliArgs[2];
+
+// Settings whose change only takes effect after a GUI reload.
+const UI_SETTINGS = ['theme', 'language', 'timezone'];
+
+// Helper function to get nested property value
+function getNestedProperty(obj: object, path: string): unknown {
+    return path.split('.').reduce<unknown>((current, key) => {
+        // A primitive `current` indexes to undefined at runtime, same as a missing key.
+        const node = current as Record<string, unknown> | undefined;
+        return node && node[key] !== undefined ? node[key] : undefined;
+    }, obj);
+}
+
+// Helper function to format output
+function formatValue(value: unknown, indent = 0): string {
+    const spaces = '  '.repeat(indent);
+
+    if (value === null) return 'null';
+    if (value === undefined) return 'undefined';
+
+    if (typeof value === 'object' && !Array.isArray(value)) {
+        if (Object.keys(value).length === 0) {
+            return '{}';
+        }
+
+        let result = '{\n';
+        Object.entries(value).forEach(([k, v]) => {
+            result += `${spaces}  ${k}: ${formatValue(v, indent + 1)}\n`;
+        });
+        result += `${spaces}}`;
+        return result;
+    }
+
+    if (Array.isArray(value)) {
+        if (value.length === 0) {
+            return '[]';
+        }
+        return '[' + value.map((v) => JSON.stringify(v)).join(', ') + ']';
+    }
+
+    return JSON.stringify(value);
+}
+
+// Function to check if Electron GUI is running
+function isElectronRunning() {
+    return new Promise<boolean>((resolve) => {
+        // Named `child`, NOT `process` — shadowing the global here would make
+        // any future `process.*` reference in this function silently hit the
+        // child process instead.
+        const child = spawn('pgrep', ['-f', 'electron.*gurushots-auto-vote'], { stdio: 'pipe' });
+
+        // Add timeout to prevent hanging
+        const timeout = setTimeout(() => {
+            child.kill();
+            resolve(false);
+        }, 2000); // 2 second timeout
+
+        child.on('close', (code) => {
+            clearTimeout(timeout);
+            resolve(code === 0);
+        });
+
+        child.on('error', () => {
+            clearTimeout(timeout);
+            resolve(false);
+        });
+    });
+}
+
+// Function to inform about GUI auto-reload
+async function informAboutGuiReload() {
+    try {
+        const isRunning = await isElectronRunning();
+        if (isRunning) {
+            console.log('🔄 GUI detected - changes will be applied automatically');
+        }
+    } catch {
+        // Silently ignore errors - GUI might not be running
+    }
+}
+
+function runGet() {
+    const allSettings = settings.loadSettings();
+
+    // Redact sensitive keys (token etc.) unless --reveal was
+    // passed — sanitizeForLog deep-masks by key name, so nested
+    // sensitive values inside objects are covered too.
+    const forDisplay = (val: unknown, keyName: string | null = null) => {
+        if (reveal) return val;
+        const wrapped = keyName === null ? val : { [keyName]: val };
+        const masked = logger.sanitizeForLog(wrapped);
+        // With a keyName, `wrapped` is a record, so `masked` is one too.
+        return keyName === null ? masked : (masked as Record<string, unknown>)[keyName];
+    };
+
+    if (!key) {
+        // Show all settings
+        console.log('All Settings:');
+        console.log(formatValue(forDisplay(allSettings)));
+    } else {
+        // Show specific setting
+        const value = getNestedProperty(allSettings, key);
+        if (value === undefined) {
+            console.error(`Setting '${key}' not found`);
+            process.exit(1);
+        } else {
+            const leafKey = key.split('.').pop();
+            console.log(`${key}: ${formatValue(forDisplay(value, leafKey))}`);
+        }
+    }
+}
+
+async function runSet() {
+    if (!key || value === undefined) {
+        console.error('Usage: pnpm settings:set <key> <value>');
+        console.error('Example: pnpm settings:set theme dark');
+        process.exit(1);
+    }
+
+    // Delegate to the shared CLI command module — this script owns
+    // only argv semantics, GUI-reload notice, and exit codes.
+    if (key.startsWith('challengeSettings.globalDefaults.')) {
+        const settingKey = key.replace('challengeSettings.globalDefaults.', '');
+        if (!setGlobalDefault(settingKey, value)) {
+            process.exit(1);
+        }
+        await informAboutGuiReload();
+    } else if (key.includes('.')) {
+        // Arbitrary nested writes would poke raw JSON into the
+        // settings blob, bypassing schema validation entirely, so
+        // only the supported forms are accepted.
+        console.error(`❌ Unsupported nested key '${key}'`);
+        console.error('   Supported forms:');
+        console.error('     pnpm settings:set <topLevelKey> <value>');
+        console.error('     pnpm settings:set challengeSettings.globalDefaults.<schemaKey> <value>');
+        console.error('     pnpm settings:set-global <schemaKey> <value>');
+        process.exit(1);
+    } else {
+        if (!setSetting(key, value)) {
+            process.exit(1);
+        }
+        if (UI_SETTINGS.includes(key)) {
+            await informAboutGuiReload();
+        }
+    }
+}
+
+async function runReset() {
+    if (!key) {
+        console.error('Usage: pnpm settings:reset <key>');
+        console.error('Example: pnpm settings:reset theme');
+        process.exit(1);
+    }
+
+    if (!resetSetting(key)) {
+        process.exit(1);
+    }
+    if (UI_SETTINGS.includes(key)) {
+        await informAboutGuiReload();
+    }
+}
+
+async function runResetGlobal() {
+    if (!key) {
+        console.error('Usage: pnpm settings:reset-global <settingKey>');
+        console.error('Example: pnpm settings:reset-global boostTime');
+        process.exit(1);
+    }
+
+    if (!resetGlobalDefault(key)) {
+        process.exit(1);
+    }
+    await informAboutGuiReload();
+}
+
+async function runSetGlobal() {
+    if (!key || value === undefined) {
+        console.error('Usage: pnpm settings:set-global <settingKey> <value>');
+        console.error('Example: pnpm settings:set-global exposure 80');
+        console.error('Example: pnpm settings:set-global finalWindowExposure 70');
+        process.exit(1);
+    }
+
+    if (!setGlobalDefault(key, value)) {
+        process.exit(1);
+    }
+    await informAboutGuiReload();
+}
+
+async function runResetAll() {
+    const confirmMessage =
+        'Are you sure you want to reset ALL settings to their default values?\nThis will reset all UI settings, global challenge defaults, window positions, and preferences.\nOnly your login token, last update check time, mock mode setting, and API headers will be preserved.\nType "yes" to confirm:';
+
+    console.log(confirmMessage);
+
+    // In a real CLI, we'd use readline, but for pnpm scripts this is a simple confirmation
+    if (key !== 'yes') {
+        console.log('Reset cancelled. To confirm, run: pnpm settings:reset-all yes');
+        process.exit(0);
+    }
+
+    // The facade's resetAllSettings already restores the schema
+    // global defaults too (it rebuilds from getDefaultSettings and
+    // preserves token/mock/apiHeaders), so no separate
+    // resetAllGlobalDefaults call is needed.
+    if (!resetAllSettings()) {
+        process.exit(1);
+    }
+    await informAboutGuiReload();
+}
+
+function printHelp() {
+    console.log('Settings CLI Help');
+    console.log('================');
+    console.log('');
+    console.log('Available commands:');
+    console.log('  pnpm settings:get [key] [--reveal]  - Get setting value (all if no key)');
+    console.log('                                        Sensitive keys (token etc.) print as');
+    console.log('                                        [REDACTED] unless --reveal is passed');
+    console.log('  pnpm settings:set <key> <value>     - Set setting value');
+    console.log('  pnpm settings:set-global <key> <val> - Set global default (with validation)');
+    console.log('  pnpm settings:reset <key>           - Reset setting to default value');
+    console.log('  pnpm settings:reset-global <key>    - Reset global default to schema default');
+    console.log('  pnpm settings:reset-all yes         - Reset all settings to defaults');
+    console.log('  pnpm settings:schema                - Show settings schema');
+    console.log('  pnpm settings:global-defaults       - Show global defaults');
+    console.log('  pnpm settings:help                  - Show this help');
+    console.log('  pnpm gui:refresh                 - Get info about refreshing GUI');
+    console.log('');
+    console.log('Examples:');
+    console.log('  pnpm settings:get');
+    console.log('  pnpm settings:get theme');
+    console.log('  pnpm settings:set theme dark');
+    console.log('  pnpm settings:set stayLoggedIn true');
+    console.log('  pnpm settings:set-global exposure 80');
+    console.log('  pnpm settings:set-global finalWindowExposure 70');
+    console.log('  pnpm settings:set challengeSettings.globalDefaults.boostTime 7200');
+    console.log('  pnpm settings:reset theme');
+    console.log('  pnpm settings:reset-global boostTime');
+    console.log('  pnpm settings:reset-all yes');
+    console.log('');
+    console.log('Notes:');
+    console.log('  - Values are automatically parsed (JSON, numbers, booleans)');
+    console.log(
+        '  - Dot notation reads nested properties (get); set only takes challengeSettings.globalDefaults.<key>',
+    );
+    console.log('  - CLI only supports global settings, not per-challenge overrides');
+    console.log('  - GUI refresh (Ctrl+R / Cmd+R) needed for theme/language/timezone changes');
+    console.log('  - Individual reset commands preserve current values until saved');
+    console.log('  - Reset-all preserves only login token, last update check, mock mode, and API headers');
+}
+
+async function main() {
+    try {
+        switch (command) {
+            case 'get':
+                runGet();
+                break;
+
+            case 'set':
+                await runSet();
+                break;
+
+            case 'schema':
+                // Shared with the main CLI (src/ts/cli/commands/settings.ts).
+                dumpSchema();
+                break;
+
+            case 'global-defaults':
+                // Shared with the main CLI (src/ts/cli/commands/settings.ts).
+                listGlobalDefaults();
+                break;
+
+            case 'reset':
+                await runReset();
+                break;
+
+            case 'reset-global':
+                await runResetGlobal();
+                break;
+
+            case 'set-global':
+                await runSetGlobal();
+                break;
+
+            case 'reset-all':
+                await runResetAll();
+                break;
+
+            case 'help':
+            default:
+                printHelp();
+                break;
+        }
+    } catch (error) {
+        console.error('❌ Error:', errorMessage(error));
+        process.exit(1);
+    }
+}
+
+main()
+    .then(() => {
+        process.exit(0);
+    })
+    .catch((error: unknown) => {
+        console.error('❌ Unhandled error:', errorMessage(error));
+        process.exit(1);
+    });

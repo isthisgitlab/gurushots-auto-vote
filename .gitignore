@@ -97,7 +97,7 @@ out
 .nuxt
 dist
 
-# GitHub Pages static site output (scripts/build-site.js)
+# GitHub Pages static site output (scripts/build-site.ts)
 dist-site/
 
 # Gatsby files

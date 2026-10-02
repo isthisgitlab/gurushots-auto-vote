@@ -1,7 +1,7 @@
 {
     "$schema": "./node_modules/oxlint/configuration_schema.json",
-    "plugins": ["eslint", "typescript", "react", "jsx-a11y"],
-    "jsPlugins": ["./scripts/lint/a11y-local.js"],
+    "plugins": ["eslint", "typescript", "react", "jsx-a11y", "unicorn"],
+    "jsPlugins": ["./scripts/lint/a11y-local.mts"],
     // Every category off: the rules below are listed explicitly, mirroring
     // eslint:recommended plus this project's rules, so an Oxlint upgrade never
     // enables new rules on its own.
@@ -22,10 +22,10 @@
         "es2024": true
     },
     // Type-only declaration files carry no code to lint; tsc checks them.
-    "ignorePatterns": ["src/js/types/**"],
+    "ignorePatterns": ["src/ts/types/**"],
     // eslint:recommended (Oxlint lacks only no-dupe-args and no-octal, both
-    // syntax errors in the strict src/js modules), plus: logging goes through
-    // src/js/logger.js (console.warn/error stay for bootstrap code that runs before
+    // syntax errors in the strict src/ts modules), plus: logging goes through
+    // src/ts/logger.ts (console.warn/error stay for bootstrap code that runs before
     // the logger exists), and _-prefixed args / catch bindings are deliberately
     // unused. No formatting rules anywhere: Prettier owns formatting.
     "rules": {
@@ -97,6 +97,7 @@
         "require-yield": "error",
         "use-isnan": "error",
         "valid-typeof": "error",
+        "unicorn/prefer-node-protocol": "error",
         "no-console": [
             "error",
             {
@@ -105,16 +106,33 @@
         ]
     },
     "overrides": [
-        // logger.js owns the console, and build/dev scripts print to it.
+        // The logger's console sink owns the console, and build/dev scripts print to it.
         {
-            "files": ["src/js/logger.js", "scripts/**"],
+            "files": ["src/ts/logger/consoleSink.ts", "scripts/**"],
             "rules": {
                 "no-console": "off"
             }
         },
-        // src/js/ui (the application menu) is linted with browser and Node globals.
+        // TypeScript resolves every identifier in the strict tsc programs, type
+        // queries such as `typeof ServiceWorkerContainer` included, which
+        // no-undef cannot see; the compiler's check replaces it.
         {
-            "files": ["src/js/ui/**/*.js"],
+            "files": [
+                "src/ts/**/*.ts",
+                "src/ts/**/*.tsx",
+                "scripts/**/*.ts",
+                "scripts/**/*.mts",
+                "tests/**/*.ts",
+                "tests/**/*.tsx",
+                "tests/**/*.cts"
+            ],
+            "rules": {
+                "no-undef": "off"
+            }
+        },
+        // src/ts/ui (the application menu) is linted with browser and Node globals.
+        {
+            "files": ["src/ts/ui/**/*.ts"],
             "env": {
                 "browser": true,
                 "node": true
@@ -123,21 +141,50 @@
                 "no-undef": "off"
             }
         },
-        // Settings facade boundary. settings.js is the only public entry point; the
+        // Settings facade boundary. settings.ts is the only public entry point; the
         // modules behind it under settings/ share mutable state (load-once guards,
-        // active-challenge caches) that a direct import would bypass. settings/schema,
-        // storage, limits, uiDefaults and challengeRules stay importable.
+        // active-challenge caches) that a direct import would bypass. The settings/schema
+        // facade (not its schema/* group modules), storage, limits, uiDefaults and
+        // challengeRules stay importable.
         {
-            "files": ["src/js/**/*.js", "src/js/**/*.jsx", "scripts/**/*.js"],
-            "excludeFiles": ["src/js/settings.js", "src/js/settings/**"],
+            "files": ["src/ts/**/*.ts", "src/ts/**/*.tsx", "scripts/**/*.ts", "scripts/**/*.mts"],
+            "excludeFiles": ["src/ts/settings.ts", "src/ts/settings/**"],
             "rules": {
                 "no-restricted-imports": [
                     "error",
                     {
                         "patterns": [
                             {
-                                "regex": "settings/(challengeFacts|challengeOverrides|defaults|migrations|persistence|profileStore|profiles|reset|ruleResolution|scenarioOverlay|scenarioSchema|scenarios|titlePins|titleRuleSanitize|titleRules)(\\.js)?$",
-                                "message": "Settings internals are private to the facade — import settings.js instead."
+                                "regex": "(^|/)logger/consoleSink(\\.js)?$",
+                                "message": "consoleSink is the logger's unredacted console path — only src/ts/logger/ may import it; log through the logger."
+                            },
+                            {
+                                "regex": "settings/(challengeFacts|challengeOverrides|defaults|migrations|persistence|profileStore|profiles|reset|ruleResolution|scenarioOverlay|scenarioSchema|scenarios|titlePins|titleRuleSanitize|titleRules)(/[^/]+)?(\\.js)?$",
+                                "message": "Settings internals are private to the facade — import settings.ts instead.",
+                                "allowTypeImports": true
+                            },
+                            {
+                                "regex": "settings/schema/[^/]+(\\.js)?$",
+                                "message": "The schema's group modules are private — import settings/schema (the schema facade) instead.",
+                                "allowTypeImports": true
+                            }
+                        ]
+                    }
+                ]
+            }
+        },
+        // The settings facade's own files are excluded from the override above, but
+        // still must not reach the logger's unredacted console path.
+        {
+            "files": ["src/ts/settings.ts", "src/ts/settings/**"],
+            "rules": {
+                "no-restricted-imports": [
+                    "error",
+                    {
+                        "patterns": [
+                            {
+                                "regex": "(^|/)logger/consoleSink(\\.js)?$",
+                                "message": "consoleSink is the logger's unredacted console path — only src/ts/logger/ may import it; log through the logger."
                             }
                         ]
                     }
@@ -147,7 +194,7 @@
         // The type-aware promise rules (via oxlint-tsgolint, over the tsconfig
         // program) and the core rules that went with them.
         {
-            "files": ["src/js/**/*.js", "src/js/**/*.jsx"],
+            "files": ["src/ts/**/*.ts", "src/ts/**/*.tsx"],
             "rules": {
                 "no-var": "error",
                 "prefer-const": "error",
@@ -156,6 +203,28 @@
                 "typescript/await-thenable": "error",
                 "typescript/no-floating-promises": "error",
                 "typescript/no-misused-promises": "error"
+            }
+        },
+        // No `any`, written or leaked: an untyped value (a lazy require,
+        // JSON.parse, a library's loose signature, an untyped jest.fn()) must be
+        // typed before it is used, in the app, the scripts and the tests alike.
+        {
+            "files": [
+                "src/ts/**/*.ts",
+                "src/ts/**/*.tsx",
+                "scripts/**/*.ts",
+                "scripts/**/*.mts",
+                "tests/**/*.ts",
+                "tests/**/*.tsx",
+                "tests/**/*.cts"
+            ],
+            "rules": {
+                "typescript/no-explicit-any": "error",
+                "typescript/no-unsafe-argument": "error",
+                "typescript/no-unsafe-assignment": "error",
+                "typescript/no-unsafe-call": "error",
+                "typescript/no-unsafe-member-access": "error",
+                "typescript/no-unsafe-return": "error"
             }
         },
         // Renderer (Preact via preact/compat).
@@ -172,7 +241,7 @@
         //   whose text is {t('…')} — every label in this translated UI — so an orphan
         //   <label> would otherwise pass.
         {
-            "files": ["src/js/react/**/*.js", "src/js/react/**/*.jsx"],
+            "files": ["src/ts/react/**/*.ts", "src/ts/react/**/*.tsx"],
             "env": {
                 "browser": true
             },
@@ -197,8 +266,18 @@
                                 "message": "nodeNotify is a Node-only (child_process) delivery module — never import it into the renderer bundle."
                             },
                             {
-                                "regex": "settings/(challengeFacts|challengeOverrides|defaults|migrations|persistence|profileStore|profiles|reset|ruleResolution|scenarioOverlay|scenarioSchema|scenarios|titlePins|titleRuleSanitize|titleRules)(\\.js)?$",
-                                "message": "Settings internals are private to the facade — import settings.js instead."
+                                "regex": "(^|/)logger/consoleSink(\\.js)?$",
+                                "message": "consoleSink is the logger's unredacted console path — only src/ts/logger/ may import it; log through the logger."
+                            },
+                            {
+                                "regex": "settings/(challengeFacts|challengeOverrides|defaults|migrations|persistence|profileStore|profiles|reset|ruleResolution|scenarioOverlay|scenarioSchema|scenarios|titlePins|titleRuleSanitize|titleRules)(/[^/]+)?(\\.js)?$",
+                                "message": "Settings internals are private to the facade — import settings.ts instead.",
+                                "allowTypeImports": true
+                            },
+                            {
+                                "regex": "settings/schema/[^/]+(\\.js)?$",
+                                "message": "The schema's group modules are private — import settings/schema (the schema facade) instead.",
+                                "allowTypeImports": true
                             }
                         ]
                     }
@@ -311,23 +390,23 @@
             }
         },
         // Renderer IPC boundary: components, hooks and contexts reach the shell
-        // bridge only through src/js/react/api/, so the bridge surface stays in one
+        // bridge only through src/ts/react/api/, so the bridge surface stays in one
         // place and no component grows per-platform branching.
         {
-            "files": ["src/js/react/**/*.js", "src/js/react/**/*.jsx"],
-            "excludeFiles": ["src/js/react/api/**"],
+            "files": ["src/ts/react/**/*.ts", "src/ts/react/**/*.tsx"],
+            "excludeFiles": ["src/ts/react/api/**"],
             "rules": {
                 "no-restricted-properties": [
                     "error",
                     {
                         "object": "window",
                         "property": "api",
-                        "message": "Call the shell bridge through src/js/react/api/ (e.g. `import * as ipc from \"@/api/ipc\"`)."
+                        "message": "Call the shell bridge through src/ts/react/api/ (e.g. `import * as ipc from \"@/api/ipc\"`)."
                     },
                     {
                         "object": "globalThis",
                         "property": "api",
-                        "message": "Call the shell bridge through src/js/react/api/ (e.g. `import * as ipc from \"@/api/ipc\"`)."
+                        "message": "Call the shell bridge through src/ts/react/api/ (e.g. `import * as ipc from \"@/api/ipc\"`)."
                     }
                 ]
             }

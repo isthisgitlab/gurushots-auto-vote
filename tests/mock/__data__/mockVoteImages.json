@@ -1,0 +1,1766 @@
+[
+    {
+        "label": "street, no challenge",
+        "output": {
+            "challenge": {
+                "id": 5752,
+                "title": "Street Photography",
+                "url": "street-photography-2024"
+            },
+            "voting": {
+                "exposure": {
+                    "exposure_factor": 49,
+                    "max_exposure": 100
+                }
+            },
+            "images": [
+                {
+                    "id": "vote_img_001",
+                    "image_url": "https://example.com/vote1.jpg",
+                    "photographer": "James Wilson",
+                    "title": "Street Portrait",
+                    "ratio": 5.6,
+                    "votes": 10
+                },
+                {
+                    "id": "vote_img_002",
+                    "image_url": "https://example.com/vote2.jpg",
+                    "photographer": "Tom Miller",
+                    "title": "Morning Commute",
+                    "ratio": 3.3,
+                    "votes": 47
+                },
+                {
+                    "id": "vote_img_003",
+                    "image_url": "https://example.com/vote3.jpg",
+                    "photographer": "Robert Chen",
+                    "title": "Street Portrait",
+                    "ratio": 3.6,
+                    "votes": 52
+                },
+                {
+                    "id": "vote_img_004",
+                    "image_url": "https://example.com/vote4.jpg",
+                    "photographer": "Emma Taylor",
+                    "title": "Night Scene",
+                    "ratio": 3.1,
+                    "votes": 21
+                },
+                {
+                    "id": "vote_img_005",
+                    "image_url": "https://example.com/vote5.jpg",
+                    "photographer": "David Brown",
+                    "title": "Night Scene",
+                    "ratio": 5.5,
+                    "votes": 22
+                },
+                {
+                    "id": "vote_img_006",
+                    "image_url": "https://example.com/vote6.jpg",
+                    "photographer": "Lisa Davis",
+                    "title": "Street Food",
+                    "ratio": 3.9,
+                    "votes": 18
+                },
+                {
+                    "id": "vote_img_007",
+                    "image_url": "https://example.com/vote7.jpg",
+                    "photographer": "Mike Johnson",
+                    "title": "City Lights",
+                    "ratio": 5.4,
+                    "votes": 52
+                },
+                {
+                    "id": "vote_img_008",
+                    "image_url": "https://example.com/vote8.jpg",
+                    "photographer": "Robert Chen",
+                    "title": "Street Art",
+                    "ratio": 5.9,
+                    "votes": 30
+                },
+                {
+                    "id": "vote_img_009",
+                    "image_url": "https://example.com/vote9.jpg",
+                    "photographer": "Alex Thompson",
+                    "title": "Urban Architecture",
+                    "ratio": 3.4,
+                    "votes": 27
+                },
+                {
+                    "id": "vote_img_010",
+                    "image_url": "https://example.com/vote10.jpg",
+                    "photographer": "Emma Taylor",
+                    "title": "Morning Commute",
+                    "ratio": 3.6,
+                    "votes": 11
+                },
+                {
+                    "id": "vote_img_011",
+                    "image_url": "https://example.com/vote11.jpg",
+                    "photographer": "John Doe",
+                    "title": "Street Portrait",
+                    "ratio": 5.1,
+                    "votes": 50
+                },
+                {
+                    "id": "vote_img_012",
+                    "image_url": "https://example.com/vote12.jpg",
+                    "photographer": "Robert Chen",
+                    "title": "Urban Life",
+                    "ratio": 5.4,
+                    "votes": 55
+                },
+                {
+                    "id": "vote_img_013",
+                    "image_url": "https://example.com/vote13.jpg",
+                    "photographer": "Mike Johnson",
+                    "title": "Urban Life",
+                    "ratio": 4.7,
+                    "votes": 52
+                },
+                {
+                    "id": "vote_img_014",
+                    "image_url": "https://example.com/vote14.jpg",
+                    "photographer": "Chris Anderson",
+                    "title": "Street Market",
+                    "ratio": 4.5,
+                    "votes": 19
+                },
+                {
+                    "id": "vote_img_015",
+                    "image_url": "https://example.com/vote15.jpg",
+                    "photographer": "Maria Rodriguez",
+                    "title": "Street Portrait",
+                    "ratio": 4.8,
+                    "votes": 20
+                },
+                {
+                    "id": "vote_img_016",
+                    "image_url": "https://example.com/vote16.jpg",
+                    "photographer": "James Wilson",
+                    "title": "Street Art",
+                    "ratio": 3.2,
+                    "votes": 29
+                },
+                {
+                    "id": "vote_img_017",
+                    "image_url": "https://example.com/vote17.jpg",
+                    "photographer": "Anna Garcia",
+                    "title": "Street Food",
+                    "ratio": 5.1,
+                    "votes": 31
+                },
+                {
+                    "id": "vote_img_018",
+                    "image_url": "https://example.com/vote18.jpg",
+                    "photographer": "Tom Miller",
+                    "title": "Morning Commute",
+                    "ratio": 5.6,
+                    "votes": 16
+                },
+                {
+                    "id": "vote_img_019",
+                    "image_url": "https://example.com/vote19.jpg",
+                    "photographer": "John Doe",
+                    "title": "Street Market",
+                    "ratio": 5,
+                    "votes": 11
+                },
+                {
+                    "id": "vote_img_020",
+                    "image_url": "https://example.com/vote20.jpg",
+                    "photographer": "Robert Chen",
+                    "title": "Morning Commute",
+                    "ratio": 3.9,
+                    "votes": 53
+                },
+                {
+                    "id": "vote_img_021",
+                    "image_url": "https://example.com/vote21.jpg",
+                    "photographer": "Sophie Martin",
+                    "title": "Night Scene",
+                    "ratio": 3.3,
+                    "votes": 55
+                },
+                {
+                    "id": "vote_img_022",
+                    "image_url": "https://example.com/vote22.jpg",
+                    "photographer": "David Brown",
+                    "title": "Morning Commute",
+                    "ratio": 3.4,
+                    "votes": 15
+                },
+                {
+                    "id": "vote_img_023",
+                    "image_url": "https://example.com/vote23.jpg",
+                    "photographer": "David Brown",
+                    "title": "Urban Life",
+                    "ratio": 3.3,
+                    "votes": 18
+                }
+            ]
+        }
+    },
+    {
+        "label": "portrait, no challenge",
+        "output": {
+            "challenge": {
+                "id": 3411,
+                "title": "Portrait Photography",
+                "url": "portrait-photography-2024"
+            },
+            "voting": {
+                "exposure": {
+                    "exposure_factor": 23,
+                    "max_exposure": 100
+                }
+            },
+            "images": [
+                {
+                    "id": "vote_img_001",
+                    "image_url": "https://example.com/vote1.jpg",
+                    "photographer": "David Brown",
+                    "title": "Smile of Joy",
+                    "ratio": 4,
+                    "votes": 42
+                },
+                {
+                    "id": "vote_img_002",
+                    "image_url": "https://example.com/vote2.jpg",
+                    "photographer": "Alex Thompson",
+                    "title": "Young Dreamer",
+                    "ratio": 5.6,
+                    "votes": 43
+                },
+                {
+                    "id": "vote_img_003",
+                    "image_url": "https://example.com/vote3.jpg",
+                    "photographer": "Lisa Davis",
+                    "title": "Smile of Joy",
+                    "ratio": 3.3,
+                    "votes": 41
+                },
+                {
+                    "id": "vote_img_004",
+                    "image_url": "https://example.com/vote4.jpg",
+                    "photographer": "Emma Taylor",
+                    "title": "Musician Focus",
+                    "ratio": 5,
+                    "votes": 38
+                },
+                {
+                    "id": "vote_img_005",
+                    "image_url": "https://example.com/vote5.jpg",
+                    "photographer": "Tom Miller",
+                    "title": "Chef at Work",
+                    "ratio": 5.9,
+                    "votes": 36
+                },
+                {
+                    "id": "vote_img_006",
+                    "image_url": "https://example.com/vote6.jpg",
+                    "photographer": "Chris Anderson",
+                    "title": "Contemplation",
+                    "ratio": 5.1,
+                    "votes": 35
+                },
+                {
+                    "id": "vote_img_007",
+                    "image_url": "https://example.com/vote7.jpg",
+                    "photographer": "John Doe",
+                    "title": "Elderly Grace",
+                    "ratio": 5.4,
+                    "votes": 35
+                },
+                {
+                    "id": "vote_img_008",
+                    "image_url": "https://example.com/vote8.jpg",
+                    "photographer": "Chris Anderson",
+                    "title": "Young Dreamer",
+                    "ratio": 5.4,
+                    "votes": 51
+                },
+                {
+                    "id": "vote_img_009",
+                    "image_url": "https://example.com/vote9.jpg",
+                    "photographer": "Tom Miller",
+                    "title": "Chef at Work",
+                    "ratio": 3.2,
+                    "votes": 35
+                },
+                {
+                    "id": "vote_img_010",
+                    "image_url": "https://example.com/vote10.jpg",
+                    "photographer": "Tom Miller",
+                    "title": "Eyes of Wisdom",
+                    "ratio": 3.8,
+                    "votes": 25
+                },
+                {
+                    "id": "vote_img_011",
+                    "image_url": "https://example.com/vote11.jpg",
+                    "photographer": "Robert Chen",
+                    "title": "Eyes of Wisdom",
+                    "ratio": 6,
+                    "votes": 28
+                },
+                {
+                    "id": "vote_img_012",
+                    "image_url": "https://example.com/vote12.jpg",
+                    "photographer": "Anna Garcia",
+                    "title": "Dancer Movement",
+                    "ratio": 4.9,
+                    "votes": 57
+                },
+                {
+                    "id": "vote_img_013",
+                    "image_url": "https://example.com/vote13.jpg",
+                    "photographer": "Mike Johnson",
+                    "title": "Young Dreamer",
+                    "ratio": 4.2,
+                    "votes": 34
+                },
+                {
+                    "id": "vote_img_014",
+                    "image_url": "https://example.com/vote14.jpg",
+                    "photographer": "Lisa Davis",
+                    "title": "Dancer Movement",
+                    "ratio": 3.7,
+                    "votes": 54
+                },
+                {
+                    "id": "vote_img_015",
+                    "image_url": "https://example.com/vote15.jpg",
+                    "photographer": "Lisa Davis",
+                    "title": "Smile of Joy",
+                    "ratio": 3.7,
+                    "votes": 29
+                },
+                {
+                    "id": "vote_img_016",
+                    "image_url": "https://example.com/vote16.jpg",
+                    "photographer": "Tom Miller",
+                    "title": "Eyes of Wisdom",
+                    "ratio": 4.5,
+                    "votes": 17
+                }
+            ]
+        }
+    },
+    {
+        "label": "landscape, no challenge",
+        "output": {
+            "challenge": {
+                "id": 9151,
+                "title": "Landscape Photography",
+                "url": "landscape-photography-2024"
+            },
+            "voting": {
+                "exposure": {
+                    "exposure_factor": 38,
+                    "max_exposure": 100
+                }
+            },
+            "images": [
+                {
+                    "id": "vote_img_001",
+                    "image_url": "https://example.com/vote1.jpg",
+                    "photographer": "Chris Anderson",
+                    "title": "Alpine Lake",
+                    "ratio": 4.2,
+                    "votes": 34
+                },
+                {
+                    "id": "vote_img_002",
+                    "image_url": "https://example.com/vote2.jpg",
+                    "photographer": "Anna Garcia",
+                    "title": "Desert Dunes",
+                    "ratio": 3.6,
+                    "votes": 54
+                },
+                {
+                    "id": "vote_img_003",
+                    "image_url": "https://example.com/vote3.jpg",
+                    "photographer": "Jane Smith",
+                    "title": "Snowy Summit",
+                    "ratio": 4.3,
+                    "votes": 10
+                },
+                {
+                    "id": "vote_img_004",
+                    "image_url": "https://example.com/vote4.jpg",
+                    "photographer": "James Wilson",
+                    "title": "Desert Dunes",
+                    "ratio": 4,
+                    "votes": 20
+                },
+                {
+                    "id": "vote_img_005",
+                    "image_url": "https://example.com/vote5.jpg",
+                    "photographer": "John Doe",
+                    "title": "Desert Dunes",
+                    "ratio": 3.2,
+                    "votes": 27
+                },
+                {
+                    "id": "vote_img_006",
+                    "image_url": "https://example.com/vote6.jpg",
+                    "photographer": "James Wilson",
+                    "title": "River Bend",
+                    "ratio": 4.8,
+                    "votes": 33
+                },
+                {
+                    "id": "vote_img_007",
+                    "image_url": "https://example.com/vote7.jpg",
+                    "photographer": "Tom Miller",
+                    "title": "Ocean Sunset",
+                    "ratio": 3.5,
+                    "votes": 34
+                },
+                {
+                    "id": "vote_img_008",
+                    "image_url": "https://example.com/vote8.jpg",
+                    "photographer": "David Brown",
+                    "title": "Snowy Summit",
+                    "ratio": 4.1,
+                    "votes": 28
+                },
+                {
+                    "id": "vote_img_009",
+                    "image_url": "https://example.com/vote9.jpg",
+                    "photographer": "Emma Taylor",
+                    "title": "Alpine Lake",
+                    "ratio": 5.6,
+                    "votes": 24
+                },
+                {
+                    "id": "vote_img_010",
+                    "image_url": "https://example.com/vote10.jpg",
+                    "photographer": "Robert Chen",
+                    "title": "River Bend",
+                    "ratio": 4.7,
+                    "votes": 31
+                },
+                {
+                    "id": "vote_img_011",
+                    "image_url": "https://example.com/vote11.jpg",
+                    "photographer": "Chris Anderson",
+                    "title": "Mountain Peak",
+                    "ratio": 4.6,
+                    "votes": 53
+                },
+                {
+                    "id": "vote_img_012",
+                    "image_url": "https://example.com/vote12.jpg",
+                    "photographer": "James Wilson",
+                    "title": "Alpine Lake",
+                    "ratio": 3.7,
+                    "votes": 39
+                },
+                {
+                    "id": "vote_img_013",
+                    "image_url": "https://example.com/vote13.jpg",
+                    "photographer": "Emma Taylor",
+                    "title": "Golden Fields",
+                    "ratio": 3.3,
+                    "votes": 12
+                },
+                {
+                    "id": "vote_img_014",
+                    "image_url": "https://example.com/vote14.jpg",
+                    "photographer": "Jane Smith",
+                    "title": "Golden Fields",
+                    "ratio": 4.9,
+                    "votes": 11
+                },
+                {
+                    "id": "vote_img_015",
+                    "image_url": "https://example.com/vote15.jpg",
+                    "photographer": "Jane Smith",
+                    "title": "Ocean Sunset",
+                    "ratio": 3.6,
+                    "votes": 48
+                },
+                {
+                    "id": "vote_img_016",
+                    "image_url": "https://example.com/vote16.jpg",
+                    "photographer": "Anna Garcia",
+                    "title": "Ocean Sunset",
+                    "ratio": 5.5,
+                    "votes": 59
+                },
+                {
+                    "id": "vote_img_017",
+                    "image_url": "https://example.com/vote17.jpg",
+                    "photographer": "Lisa Davis",
+                    "title": "Mountain Peak",
+                    "ratio": 3.1,
+                    "votes": 15
+                },
+                {
+                    "id": "vote_img_018",
+                    "image_url": "https://example.com/vote18.jpg",
+                    "photographer": "Maria Rodriguez",
+                    "title": "Coastal Cliffs",
+                    "ratio": 3.8,
+                    "votes": 35
+                },
+                {
+                    "id": "vote_img_019",
+                    "image_url": "https://example.com/vote19.jpg",
+                    "photographer": "Sophie Martin",
+                    "title": "Valley Mist",
+                    "ratio": 4.3,
+                    "votes": 12
+                }
+            ]
+        }
+    },
+    {
+        "label": "macro, no challenge",
+        "output": {
+            "challenge": {
+                "id": 1813,
+                "title": "Macro Photography",
+                "url": "macro-photography-2024"
+            },
+            "voting": {
+                "exposure": {
+                    "exposure_factor": 23,
+                    "max_exposure": 100
+                }
+            },
+            "images": [
+                {
+                    "id": "vote_img_001",
+                    "image_url": "https://example.com/vote1.jpg",
+                    "photographer": "Sarah Wilson",
+                    "title": "Bark Texture",
+                    "ratio": 5.8,
+                    "votes": 37
+                },
+                {
+                    "id": "vote_img_002",
+                    "image_url": "https://example.com/vote2.jpg",
+                    "photographer": "James Wilson",
+                    "title": "Water Droplet",
+                    "ratio": 6,
+                    "votes": 59
+                },
+                {
+                    "id": "vote_img_003",
+                    "image_url": "https://example.com/vote3.jpg",
+                    "photographer": "Mike Johnson",
+                    "title": "Insect Eye",
+                    "ratio": 5.8,
+                    "votes": 29
+                },
+                {
+                    "id": "vote_img_004",
+                    "image_url": "https://example.com/vote4.jpg",
+                    "photographer": "Mike Johnson",
+                    "title": "Bark Texture",
+                    "ratio": 6,
+                    "votes": 18
+                },
+                {
+                    "id": "vote_img_005",
+                    "image_url": "https://example.com/vote5.jpg",
+                    "photographer": "Lisa Davis",
+                    "title": "Butterfly Wing",
+                    "ratio": 4,
+                    "votes": 25
+                },
+                {
+                    "id": "vote_img_006",
+                    "image_url": "https://example.com/vote6.jpg",
+                    "photographer": "Sophie Martin",
+                    "title": "Leaf Veins",
+                    "ratio": 5.3,
+                    "votes": 59
+                },
+                {
+                    "id": "vote_img_007",
+                    "image_url": "https://example.com/vote7.jpg",
+                    "photographer": "Mike Johnson",
+                    "title": "Leaf Veins",
+                    "ratio": 5,
+                    "votes": 53
+                },
+                {
+                    "id": "vote_img_008",
+                    "image_url": "https://example.com/vote8.jpg",
+                    "photographer": "Sophie Martin",
+                    "title": "Dew Drop",
+                    "ratio": 6,
+                    "votes": 42
+                },
+                {
+                    "id": "vote_img_009",
+                    "image_url": "https://example.com/vote9.jpg",
+                    "photographer": "David Brown",
+                    "title": "Feather Detail",
+                    "ratio": 4.3,
+                    "votes": 38
+                },
+                {
+                    "id": "vote_img_010",
+                    "image_url": "https://example.com/vote10.jpg",
+                    "photographer": "Lisa Davis",
+                    "title": "Dew Drop",
+                    "ratio": 4.5,
+                    "votes": 11
+                },
+                {
+                    "id": "vote_img_011",
+                    "image_url": "https://example.com/vote11.jpg",
+                    "photographer": "Alex Thompson",
+                    "title": "Leaf Veins",
+                    "ratio": 3.8,
+                    "votes": 48
+                },
+                {
+                    "id": "vote_img_012",
+                    "image_url": "https://example.com/vote12.jpg",
+                    "photographer": "James Wilson",
+                    "title": "Dew Drop",
+                    "ratio": 3.2,
+                    "votes": 42
+                },
+                {
+                    "id": "vote_img_013",
+                    "image_url": "https://example.com/vote13.jpg",
+                    "photographer": "Sarah Wilson",
+                    "title": "Insect Eye",
+                    "ratio": 5.4,
+                    "votes": 16
+                },
+                {
+                    "id": "vote_img_014",
+                    "image_url": "https://example.com/vote14.jpg",
+                    "photographer": "Emma Taylor",
+                    "title": "Water Droplet",
+                    "ratio": 5.7,
+                    "votes": 46
+                },
+                {
+                    "id": "vote_img_015",
+                    "image_url": "https://example.com/vote15.jpg",
+                    "photographer": "Alex Thompson",
+                    "title": "Flower Petals",
+                    "ratio": 5.5,
+                    "votes": 28
+                },
+                {
+                    "id": "vote_img_016",
+                    "image_url": "https://example.com/vote16.jpg",
+                    "photographer": "David Brown",
+                    "title": "Bark Texture",
+                    "ratio": 5.6,
+                    "votes": 30
+                },
+                {
+                    "id": "vote_img_017",
+                    "image_url": "https://example.com/vote17.jpg",
+                    "photographer": "Tom Miller",
+                    "title": "Flower Petals",
+                    "ratio": 3.4,
+                    "votes": 34
+                },
+                {
+                    "id": "vote_img_018",
+                    "image_url": "https://example.com/vote18.jpg",
+                    "photographer": "Sarah Wilson",
+                    "title": "Dew Drop",
+                    "ratio": 5.8,
+                    "votes": 20
+                }
+            ]
+        }
+    },
+    {
+        "label": "wildlife, no challenge",
+        "output": {
+            "challenge": {
+                "id": 6826,
+                "title": "Wildlife Photography",
+                "url": "wildlife-photography-2024"
+            },
+            "voting": {
+                "exposure": {
+                    "exposure_factor": 32,
+                    "max_exposure": 100
+                }
+            },
+            "images": [
+                {
+                    "id": "vote_img_001",
+                    "image_url": "https://example.com/vote1.jpg",
+                    "photographer": "David Brown",
+                    "title": "Dolphin Jump",
+                    "ratio": 4.9,
+                    "votes": 37
+                },
+                {
+                    "id": "vote_img_002",
+                    "image_url": "https://example.com/vote2.jpg",
+                    "photographer": "John Doe",
+                    "title": "Tiger Stare",
+                    "ratio": 4.9,
+                    "votes": 28
+                },
+                {
+                    "id": "vote_img_003",
+                    "image_url": "https://example.com/vote3.jpg",
+                    "photographer": "James Wilson",
+                    "title": "Elephant Family",
+                    "ratio": 5.7,
+                    "votes": 10
+                },
+                {
+                    "id": "vote_img_004",
+                    "image_url": "https://example.com/vote4.jpg",
+                    "photographer": "David Brown",
+                    "title": "Gorilla Strength",
+                    "ratio": 3.2,
+                    "votes": 19
+                },
+                {
+                    "id": "vote_img_005",
+                    "image_url": "https://example.com/vote5.jpg",
+                    "photographer": "Emma Taylor",
+                    "title": "Dolphin Jump",
+                    "ratio": 3.7,
+                    "votes": 28
+                },
+                {
+                    "id": "vote_img_006",
+                    "image_url": "https://example.com/vote6.jpg",
+                    "photographer": "Lisa Davis",
+                    "title": "Tiger Stare",
+                    "ratio": 3.3,
+                    "votes": 46
+                },
+                {
+                    "id": "vote_img_007",
+                    "image_url": "https://example.com/vote7.jpg",
+                    "photographer": "Anna Garcia",
+                    "title": "Shark Hunt",
+                    "ratio": 5,
+                    "votes": 44
+                },
+                {
+                    "id": "vote_img_008",
+                    "image_url": "https://example.com/vote8.jpg",
+                    "photographer": "Lisa Davis",
+                    "title": "Shark Hunt",
+                    "ratio": 3.3,
+                    "votes": 10
+                },
+                {
+                    "id": "vote_img_009",
+                    "image_url": "https://example.com/vote9.jpg",
+                    "photographer": "Robert Chen",
+                    "title": "Lion Pride",
+                    "ratio": 3.5,
+                    "votes": 21
+                },
+                {
+                    "id": "vote_img_010",
+                    "image_url": "https://example.com/vote10.jpg",
+                    "photographer": "Sarah Wilson",
+                    "title": "Wolf Pack",
+                    "ratio": 5.8,
+                    "votes": 56
+                },
+                {
+                    "id": "vote_img_011",
+                    "image_url": "https://example.com/vote11.jpg",
+                    "photographer": "Alex Thompson",
+                    "title": "Penguin Colony",
+                    "ratio": 4.4,
+                    "votes": 23
+                },
+                {
+                    "id": "vote_img_012",
+                    "image_url": "https://example.com/vote12.jpg",
+                    "photographer": "Tom Miller",
+                    "title": "Owl Wisdom",
+                    "ratio": 5.4,
+                    "votes": 45
+                },
+                {
+                    "id": "vote_img_013",
+                    "image_url": "https://example.com/vote13.jpg",
+                    "photographer": "David Brown",
+                    "title": "Penguin Colony",
+                    "ratio": 5.6,
+                    "votes": 49
+                },
+                {
+                    "id": "vote_img_014",
+                    "image_url": "https://example.com/vote14.jpg",
+                    "photographer": "Robert Chen",
+                    "title": "Elephant Family",
+                    "ratio": 4.1,
+                    "votes": 58
+                },
+                {
+                    "id": "vote_img_015",
+                    "image_url": "https://example.com/vote15.jpg",
+                    "photographer": "Jane Smith",
+                    "title": "Gorilla Strength",
+                    "ratio": 4,
+                    "votes": 25
+                },
+                {
+                    "id": "vote_img_016",
+                    "image_url": "https://example.com/vote16.jpg",
+                    "photographer": "Sophie Martin",
+                    "title": "Wolf Pack",
+                    "ratio": 3.2,
+                    "votes": 59
+                }
+            ]
+        }
+    },
+    {
+        "label": "architecture, no challenge",
+        "output": {
+            "challenge": {
+                "id": 7419,
+                "title": "Architecture Photography",
+                "url": "architecture-photography-2024"
+            },
+            "voting": {
+                "exposure": {
+                    "exposure_factor": 22,
+                    "max_exposure": 100
+                }
+            },
+            "images": [
+                {
+                    "id": "vote_img_001",
+                    "image_url": "https://example.com/vote1.jpg",
+                    "photographer": "Robert Chen",
+                    "title": "Ancient Temple",
+                    "ratio": 4.7,
+                    "votes": 44
+                },
+                {
+                    "id": "vote_img_002",
+                    "image_url": "https://example.com/vote2.jpg",
+                    "photographer": "David Brown",
+                    "title": "Glass Facade",
+                    "ratio": 3.4,
+                    "votes": 55
+                },
+                {
+                    "id": "vote_img_003",
+                    "image_url": "https://example.com/vote3.jpg",
+                    "photographer": "Sarah Wilson",
+                    "title": "Historic Castle",
+                    "ratio": 3.4,
+                    "votes": 56
+                },
+                {
+                    "id": "vote_img_004",
+                    "image_url": "https://example.com/vote4.jpg",
+                    "photographer": "Lisa Davis",
+                    "title": "Contemporary Museum",
+                    "ratio": 3.3,
+                    "votes": 21
+                },
+                {
+                    "id": "vote_img_005",
+                    "image_url": "https://example.com/vote5.jpg",
+                    "photographer": "Emma Taylor",
+                    "title": "Steel Structure",
+                    "ratio": 4.7,
+                    "votes": 41
+                },
+                {
+                    "id": "vote_img_006",
+                    "image_url": "https://example.com/vote6.jpg",
+                    "photographer": "Sarah Wilson",
+                    "title": "Glass Facade",
+                    "ratio": 3.2,
+                    "votes": 29
+                },
+                {
+                    "id": "vote_img_007",
+                    "image_url": "https://example.com/vote7.jpg",
+                    "photographer": "Mike Johnson",
+                    "title": "Stone Bridge",
+                    "ratio": 4.6,
+                    "votes": 35
+                },
+                {
+                    "id": "vote_img_008",
+                    "image_url": "https://example.com/vote8.jpg",
+                    "photographer": "Sarah Wilson",
+                    "title": "Contemporary Museum",
+                    "ratio": 5.7,
+                    "votes": 44
+                },
+                {
+                    "id": "vote_img_009",
+                    "image_url": "https://example.com/vote9.jpg",
+                    "photographer": "Tom Miller",
+                    "title": "Modern Skyscraper",
+                    "ratio": 5.9,
+                    "votes": 34
+                },
+                {
+                    "id": "vote_img_010",
+                    "image_url": "https://example.com/vote10.jpg",
+                    "photographer": "Mike Johnson",
+                    "title": "Modern Skyscraper",
+                    "ratio": 4.2,
+                    "votes": 41
+                },
+                {
+                    "id": "vote_img_011",
+                    "image_url": "https://example.com/vote11.jpg",
+                    "photographer": "Anna Garcia",
+                    "title": "Gothic Cathedral",
+                    "ratio": 5.1,
+                    "votes": 30
+                },
+                {
+                    "id": "vote_img_012",
+                    "image_url": "https://example.com/vote12.jpg",
+                    "photographer": "Jane Smith",
+                    "title": "Steel Structure",
+                    "ratio": 3.6,
+                    "votes": 44
+                },
+                {
+                    "id": "vote_img_013",
+                    "image_url": "https://example.com/vote13.jpg",
+                    "photographer": "Tom Miller",
+                    "title": "Steel Structure",
+                    "ratio": 5.8,
+                    "votes": 51
+                },
+                {
+                    "id": "vote_img_014",
+                    "image_url": "https://example.com/vote14.jpg",
+                    "photographer": "David Brown",
+                    "title": "Ancient Temple",
+                    "ratio": 5,
+                    "votes": 15
+                },
+                {
+                    "id": "vote_img_015",
+                    "image_url": "https://example.com/vote15.jpg",
+                    "photographer": "Tom Miller",
+                    "title": "Gothic Cathedral",
+                    "ratio": 3,
+                    "votes": 24
+                },
+                {
+                    "id": "vote_img_016",
+                    "image_url": "https://example.com/vote16.jpg",
+                    "photographer": "Jane Smith",
+                    "title": "Stone Bridge",
+                    "ratio": 4.5,
+                    "votes": 43
+                },
+                {
+                    "id": "vote_img_017",
+                    "image_url": "https://example.com/vote17.jpg",
+                    "photographer": "Maria Rodriguez",
+                    "title": "Ancient Temple",
+                    "ratio": 5.6,
+                    "votes": 13
+                },
+                {
+                    "id": "vote_img_018",
+                    "image_url": "https://example.com/vote18.jpg",
+                    "photographer": "Sarah Wilson",
+                    "title": "Ancient Temple",
+                    "ratio": 3.6,
+                    "votes": 59
+                },
+                {
+                    "id": "vote_img_019",
+                    "image_url": "https://example.com/vote19.jpg",
+                    "photographer": "Lisa Davis",
+                    "title": "Modern Skyscraper",
+                    "ratio": 5.5,
+                    "votes": 42
+                }
+            ]
+        }
+    },
+    {
+        "label": "unknown url, no challenge",
+        "output": {
+            "challenge": {
+                "id": 2833,
+                "title": "No Such Challenge",
+                "url": "no-such-challenge"
+            },
+            "voting": {
+                "exposure": {
+                    "exposure_factor": 35,
+                    "max_exposure": 100
+                }
+            },
+            "images": [
+                {
+                    "id": "vote_img_001",
+                    "image_url": "https://example.com/vote1.jpg",
+                    "photographer": "Sarah Wilson",
+                    "title": "City Reflection",
+                    "ratio": 5.9,
+                    "votes": 54
+                },
+                {
+                    "id": "vote_img_002",
+                    "image_url": "https://example.com/vote2.jpg",
+                    "photographer": "Alex Thompson",
+                    "title": "City Lights",
+                    "ratio": 4.2,
+                    "votes": 31
+                },
+                {
+                    "id": "vote_img_003",
+                    "image_url": "https://example.com/vote3.jpg",
+                    "photographer": "Sarah Wilson",
+                    "title": "Morning Commute",
+                    "ratio": 5.6,
+                    "votes": 15
+                },
+                {
+                    "id": "vote_img_004",
+                    "image_url": "https://example.com/vote4.jpg",
+                    "photographer": "Robert Chen",
+                    "title": "City Reflection",
+                    "ratio": 4.8,
+                    "votes": 14
+                },
+                {
+                    "id": "vote_img_005",
+                    "image_url": "https://example.com/vote5.jpg",
+                    "photographer": "Chris Anderson",
+                    "title": "City Lights",
+                    "ratio": 5.8,
+                    "votes": 38
+                },
+                {
+                    "id": "vote_img_006",
+                    "image_url": "https://example.com/vote6.jpg",
+                    "photographer": "Robert Chen",
+                    "title": "Night Scene",
+                    "ratio": 5.2,
+                    "votes": 18
+                },
+                {
+                    "id": "vote_img_007",
+                    "image_url": "https://example.com/vote7.jpg",
+                    "photographer": "Robert Chen",
+                    "title": "Urban Life",
+                    "ratio": 3.3,
+                    "votes": 59
+                },
+                {
+                    "id": "vote_img_008",
+                    "image_url": "https://example.com/vote8.jpg",
+                    "photographer": "Chris Anderson",
+                    "title": "Urban Life",
+                    "ratio": 3.1,
+                    "votes": 53
+                },
+                {
+                    "id": "vote_img_009",
+                    "image_url": "https://example.com/vote9.jpg",
+                    "photographer": "Mike Johnson",
+                    "title": "Urban Architecture",
+                    "ratio": 3.1,
+                    "votes": 22
+                },
+                {
+                    "id": "vote_img_010",
+                    "image_url": "https://example.com/vote10.jpg",
+                    "photographer": "Alex Thompson",
+                    "title": "Street Food",
+                    "ratio": 5.8,
+                    "votes": 56
+                },
+                {
+                    "id": "vote_img_011",
+                    "image_url": "https://example.com/vote11.jpg",
+                    "photographer": "Maria Rodriguez",
+                    "title": "Street Portrait",
+                    "ratio": 4.4,
+                    "votes": 56
+                },
+                {
+                    "id": "vote_img_012",
+                    "image_url": "https://example.com/vote12.jpg",
+                    "photographer": "Sophie Martin",
+                    "title": "Street Market",
+                    "ratio": 5.2,
+                    "votes": 34
+                },
+                {
+                    "id": "vote_img_013",
+                    "image_url": "https://example.com/vote13.jpg",
+                    "photographer": "Jane Smith",
+                    "title": "Urban Architecture",
+                    "ratio": 4.5,
+                    "votes": 25
+                },
+                {
+                    "id": "vote_img_014",
+                    "image_url": "https://example.com/vote14.jpg",
+                    "photographer": "Maria Rodriguez",
+                    "title": "Urban Life",
+                    "ratio": 5.8,
+                    "votes": 54
+                },
+                {
+                    "id": "vote_img_015",
+                    "image_url": "https://example.com/vote15.jpg",
+                    "photographer": "John Doe",
+                    "title": "Street Portrait",
+                    "ratio": 5,
+                    "votes": 12
+                },
+                {
+                    "id": "vote_img_016",
+                    "image_url": "https://example.com/vote16.jpg",
+                    "photographer": "Lisa Davis",
+                    "title": "City Lights",
+                    "ratio": 4.5,
+                    "votes": 11
+                },
+                {
+                    "id": "vote_img_017",
+                    "image_url": "https://example.com/vote17.jpg",
+                    "photographer": "Mike Johnson",
+                    "title": "City Reflection",
+                    "ratio": 5,
+                    "votes": 35
+                },
+                {
+                    "id": "vote_img_018",
+                    "image_url": "https://example.com/vote18.jpg",
+                    "photographer": "Jane Smith",
+                    "title": "Street Portrait",
+                    "ratio": 3.7,
+                    "votes": 29
+                }
+            ]
+        }
+    },
+    {
+        "label": "real challenge with exposure",
+        "output": {
+            "challenge": {
+                "id": 131353,
+                "title": "Ultimate Exposure",
+                "url": "ultimate-exposure82"
+            },
+            "voting": {
+                "exposure": {
+                    "exposure_factor": 70,
+                    "max_exposure": 100
+                }
+            },
+            "images": [
+                {
+                    "id": "vote_img_001",
+                    "image_url": "https://example.com/vote1.jpg",
+                    "photographer": "Sarah Wilson",
+                    "title": "Urban Life",
+                    "ratio": 4.3,
+                    "votes": 17
+                },
+                {
+                    "id": "vote_img_002",
+                    "image_url": "https://example.com/vote2.jpg",
+                    "photographer": "John Doe",
+                    "title": "Urban Life",
+                    "ratio": 4.8,
+                    "votes": 10
+                },
+                {
+                    "id": "vote_img_003",
+                    "image_url": "https://example.com/vote3.jpg",
+                    "photographer": "Maria Rodriguez",
+                    "title": "Urban Life",
+                    "ratio": 3.5,
+                    "votes": 56
+                },
+                {
+                    "id": "vote_img_004",
+                    "image_url": "https://example.com/vote4.jpg",
+                    "photographer": "James Wilson",
+                    "title": "Night Scene",
+                    "ratio": 5.6,
+                    "votes": 55
+                },
+                {
+                    "id": "vote_img_005",
+                    "image_url": "https://example.com/vote5.jpg",
+                    "photographer": "Chris Anderson",
+                    "title": "Night Scene",
+                    "ratio": 5.7,
+                    "votes": 16
+                },
+                {
+                    "id": "vote_img_006",
+                    "image_url": "https://example.com/vote6.jpg",
+                    "photographer": "Emma Taylor",
+                    "title": "City Reflection",
+                    "ratio": 5,
+                    "votes": 53
+                },
+                {
+                    "id": "vote_img_007",
+                    "image_url": "https://example.com/vote7.jpg",
+                    "photographer": "John Doe",
+                    "title": "Street Portrait",
+                    "ratio": 5.2,
+                    "votes": 13
+                },
+                {
+                    "id": "vote_img_008",
+                    "image_url": "https://example.com/vote8.jpg",
+                    "photographer": "Robert Chen",
+                    "title": "City Reflection",
+                    "ratio": 3.4,
+                    "votes": 44
+                },
+                {
+                    "id": "vote_img_009",
+                    "image_url": "https://example.com/vote9.jpg",
+                    "photographer": "Alex Thompson",
+                    "title": "Street Art",
+                    "ratio": 3.1,
+                    "votes": 28
+                },
+                {
+                    "id": "vote_img_010",
+                    "image_url": "https://example.com/vote10.jpg",
+                    "photographer": "Sophie Martin",
+                    "title": "Urban Architecture",
+                    "ratio": 3.3,
+                    "votes": 49
+                },
+                {
+                    "id": "vote_img_011",
+                    "image_url": "https://example.com/vote11.jpg",
+                    "photographer": "John Doe",
+                    "title": "Night Scene",
+                    "ratio": 4.4,
+                    "votes": 26
+                },
+                {
+                    "id": "vote_img_012",
+                    "image_url": "https://example.com/vote12.jpg",
+                    "photographer": "Anna Garcia",
+                    "title": "Night Scene",
+                    "ratio": 4.4,
+                    "votes": 40
+                },
+                {
+                    "id": "vote_img_013",
+                    "image_url": "https://example.com/vote13.jpg",
+                    "photographer": "Lisa Davis",
+                    "title": "Street Market",
+                    "ratio": 4.6,
+                    "votes": 20
+                },
+                {
+                    "id": "vote_img_014",
+                    "image_url": "https://example.com/vote14.jpg",
+                    "photographer": "Sophie Martin",
+                    "title": "Street Food",
+                    "ratio": 4.5,
+                    "votes": 33
+                },
+                {
+                    "id": "vote_img_015",
+                    "image_url": "https://example.com/vote15.jpg",
+                    "photographer": "Jane Smith",
+                    "title": "Night Scene",
+                    "ratio": 4.7,
+                    "votes": 38
+                },
+                {
+                    "id": "vote_img_016",
+                    "image_url": "https://example.com/vote16.jpg",
+                    "photographer": "James Wilson",
+                    "title": "Street Food",
+                    "ratio": 4.9,
+                    "votes": 21
+                },
+                {
+                    "id": "vote_img_017",
+                    "image_url": "https://example.com/vote17.jpg",
+                    "photographer": "Tom Miller",
+                    "title": "City Lights",
+                    "ratio": 4.2,
+                    "votes": 27
+                },
+                {
+                    "id": "vote_img_018",
+                    "image_url": "https://example.com/vote18.jpg",
+                    "photographer": "Lisa Davis",
+                    "title": "Morning Commute",
+                    "ratio": 5,
+                    "votes": 23
+                },
+                {
+                    "id": "vote_img_019",
+                    "image_url": "https://example.com/vote19.jpg",
+                    "photographer": "Sophie Martin",
+                    "title": "Morning Commute",
+                    "ratio": 4.2,
+                    "votes": 10
+                },
+                {
+                    "id": "vote_img_020",
+                    "image_url": "https://example.com/vote20.jpg",
+                    "photographer": "Sarah Wilson",
+                    "title": "Street Portrait",
+                    "ratio": 5.4,
+                    "votes": 12
+                },
+                {
+                    "id": "vote_img_021",
+                    "image_url": "https://example.com/vote21.jpg",
+                    "photographer": "Mike Johnson",
+                    "title": "Street Market",
+                    "ratio": 4.9,
+                    "votes": 12
+                },
+                {
+                    "id": "vote_img_022",
+                    "image_url": "https://example.com/vote22.jpg",
+                    "photographer": "Anna Garcia",
+                    "title": "Street Market",
+                    "ratio": 4.7,
+                    "votes": 27
+                },
+                {
+                    "id": "vote_img_023",
+                    "image_url": "https://example.com/vote23.jpg",
+                    "photographer": "Tom Miller",
+                    "title": "Morning Commute",
+                    "ratio": 4.3,
+                    "votes": 52
+                },
+                {
+                    "id": "vote_img_024",
+                    "image_url": "https://example.com/vote24.jpg",
+                    "photographer": "Sophie Martin",
+                    "title": "Street Food",
+                    "ratio": 4.6,
+                    "votes": 52
+                }
+            ]
+        }
+    },
+    {
+        "label": "second real challenge",
+        "output": {
+            "challenge": {
+                "id": 131354,
+                "title": "Wood & Metal Combinations",
+                "url": "wood-metal-combinations"
+            },
+            "voting": {
+                "exposure": {
+                    "exposure_factor": 95,
+                    "max_exposure": 100
+                }
+            },
+            "images": [
+                {
+                    "id": "vote_img_001",
+                    "image_url": "https://example.com/vote1.jpg",
+                    "photographer": "Robert Chen",
+                    "title": "Leaf Veins",
+                    "ratio": 5.6,
+                    "votes": 32
+                },
+                {
+                    "id": "vote_img_002",
+                    "image_url": "https://example.com/vote2.jpg",
+                    "photographer": "Chris Anderson",
+                    "title": "Butterfly Wing",
+                    "ratio": 4.1,
+                    "votes": 54
+                },
+                {
+                    "id": "vote_img_003",
+                    "image_url": "https://example.com/vote3.jpg",
+                    "photographer": "Lisa Davis",
+                    "title": "Spider Web",
+                    "ratio": 5.4,
+                    "votes": 21
+                },
+                {
+                    "id": "vote_img_004",
+                    "image_url": "https://example.com/vote4.jpg",
+                    "photographer": "John Doe",
+                    "title": "Crystal Formation",
+                    "ratio": 5.7,
+                    "votes": 39
+                },
+                {
+                    "id": "vote_img_005",
+                    "image_url": "https://example.com/vote5.jpg",
+                    "photographer": "Lisa Davis",
+                    "title": "Leaf Veins",
+                    "ratio": 4.9,
+                    "votes": 18
+                },
+                {
+                    "id": "vote_img_006",
+                    "image_url": "https://example.com/vote6.jpg",
+                    "photographer": "Alex Thompson",
+                    "title": "Flower Petals",
+                    "ratio": 5.9,
+                    "votes": 39
+                },
+                {
+                    "id": "vote_img_007",
+                    "image_url": "https://example.com/vote7.jpg",
+                    "photographer": "Alex Thompson",
+                    "title": "Dew Drop",
+                    "ratio": 4.1,
+                    "votes": 27
+                },
+                {
+                    "id": "vote_img_008",
+                    "image_url": "https://example.com/vote8.jpg",
+                    "photographer": "Lisa Davis",
+                    "title": "Feather Detail",
+                    "ratio": 4.3,
+                    "votes": 44
+                },
+                {
+                    "id": "vote_img_009",
+                    "image_url": "https://example.com/vote9.jpg",
+                    "photographer": "John Doe",
+                    "title": "Insect Eye",
+                    "ratio": 5.2,
+                    "votes": 26
+                },
+                {
+                    "id": "vote_img_010",
+                    "image_url": "https://example.com/vote10.jpg",
+                    "photographer": "Maria Rodriguez",
+                    "title": "Bark Texture",
+                    "ratio": 4.5,
+                    "votes": 56
+                },
+                {
+                    "id": "vote_img_011",
+                    "image_url": "https://example.com/vote11.jpg",
+                    "photographer": "Robert Chen",
+                    "title": "Bark Texture",
+                    "ratio": 5.2,
+                    "votes": 21
+                },
+                {
+                    "id": "vote_img_012",
+                    "image_url": "https://example.com/vote12.jpg",
+                    "photographer": "Lisa Davis",
+                    "title": "Leaf Veins",
+                    "ratio": 4.5,
+                    "votes": 15
+                },
+                {
+                    "id": "vote_img_013",
+                    "image_url": "https://example.com/vote13.jpg",
+                    "photographer": "Sophie Martin",
+                    "title": "Water Droplet",
+                    "ratio": 4.6,
+                    "votes": 18
+                },
+                {
+                    "id": "vote_img_014",
+                    "image_url": "https://example.com/vote14.jpg",
+                    "photographer": "Robert Chen",
+                    "title": "Butterfly Wing",
+                    "ratio": 4.6,
+                    "votes": 36
+                },
+                {
+                    "id": "vote_img_015",
+                    "image_url": "https://example.com/vote15.jpg",
+                    "photographer": "Tom Miller",
+                    "title": "Insect Eye",
+                    "ratio": 4.9,
+                    "votes": 18
+                },
+                {
+                    "id": "vote_img_016",
+                    "image_url": "https://example.com/vote16.jpg",
+                    "photographer": "Mike Johnson",
+                    "title": "Butterfly Wing",
+                    "ratio": 4,
+                    "votes": 33
+                },
+                {
+                    "id": "vote_img_017",
+                    "image_url": "https://example.com/vote17.jpg",
+                    "photographer": "Chris Anderson",
+                    "title": "Leaf Veins",
+                    "ratio": 3.2,
+                    "votes": 58
+                },
+                {
+                    "id": "vote_img_018",
+                    "image_url": "https://example.com/vote18.jpg",
+                    "photographer": "Mike Johnson",
+                    "title": "Leaf Veins",
+                    "ratio": 3,
+                    "votes": 45
+                },
+                {
+                    "id": "vote_img_019",
+                    "image_url": "https://example.com/vote19.jpg",
+                    "photographer": "Tom Miller",
+                    "title": "Water Droplet",
+                    "ratio": 4.1,
+                    "votes": 37
+                },
+                {
+                    "id": "vote_img_020",
+                    "image_url": "https://example.com/vote20.jpg",
+                    "photographer": "Maria Rodriguez",
+                    "title": "Butterfly Wing",
+                    "ratio": 5.4,
+                    "votes": 12
+                },
+                {
+                    "id": "vote_img_021",
+                    "image_url": "https://example.com/vote21.jpg",
+                    "photographer": "John Doe",
+                    "title": "Bark Texture",
+                    "ratio": 3.7,
+                    "votes": 45
+                },
+                {
+                    "id": "vote_img_022",
+                    "image_url": "https://example.com/vote22.jpg",
+                    "photographer": "Anna Garcia",
+                    "title": "Feather Detail",
+                    "ratio": 3.5,
+                    "votes": 49
+                },
+                {
+                    "id": "vote_img_023",
+                    "image_url": "https://example.com/vote23.jpg",
+                    "photographer": "David Brown",
+                    "title": "Spider Web",
+                    "ratio": 3.4,
+                    "votes": 20
+                }
+            ]
+        }
+    },
+    {
+        "label": "challenge without exposure",
+        "output": {
+            "challenge": {
+                "id": 9,
+                "title": "No Exposure",
+                "url": "no-exposure"
+            },
+            "voting": {
+                "exposure": {
+                    "exposure_factor": 48,
+                    "max_exposure": 100
+                }
+            },
+            "images": [
+                {
+                    "id": "vote_img_001",
+                    "image_url": "https://example.com/vote1.jpg",
+                    "photographer": "Anna Garcia",
+                    "title": "Dolphin Jump",
+                    "ratio": 4.3,
+                    "votes": 45
+                },
+                {
+                    "id": "vote_img_002",
+                    "image_url": "https://example.com/vote2.jpg",
+                    "photographer": "David Brown",
+                    "title": "Gorilla Strength",
+                    "ratio": 4.1,
+                    "votes": 11
+                },
+                {
+                    "id": "vote_img_003",
+                    "image_url": "https://example.com/vote3.jpg",
+                    "photographer": "David Brown",
+                    "title": "Owl Wisdom",
+                    "ratio": 3.7,
+                    "votes": 46
+                },
+                {
+                    "id": "vote_img_004",
+                    "image_url": "https://example.com/vote4.jpg",
+                    "photographer": "David Brown",
+                    "title": "Eagle Flight",
+                    "ratio": 5.2,
+                    "votes": 41
+                },
+                {
+                    "id": "vote_img_005",
+                    "image_url": "https://example.com/vote5.jpg",
+                    "photographer": "Mike Johnson",
+                    "title": "Shark Hunt",
+                    "ratio": 5.4,
+                    "votes": 42
+                },
+                {
+                    "id": "vote_img_006",
+                    "image_url": "https://example.com/vote6.jpg",
+                    "photographer": "Robert Chen",
+                    "title": "Tiger Stare",
+                    "ratio": 4,
+                    "votes": 22
+                },
+                {
+                    "id": "vote_img_007",
+                    "image_url": "https://example.com/vote7.jpg",
+                    "photographer": "Sophie Martin",
+                    "title": "Shark Hunt",
+                    "ratio": 4,
+                    "votes": 39
+                },
+                {
+                    "id": "vote_img_008",
+                    "image_url": "https://example.com/vote8.jpg",
+                    "photographer": "Robert Chen",
+                    "title": "Wolf Pack",
+                    "ratio": 5.6,
+                    "votes": 28
+                },
+                {
+                    "id": "vote_img_009",
+                    "image_url": "https://example.com/vote9.jpg",
+                    "photographer": "Robert Chen",
+                    "title": "Owl Wisdom",
+                    "ratio": 3.2,
+                    "votes": 33
+                },
+                {
+                    "id": "vote_img_010",
+                    "image_url": "https://example.com/vote10.jpg",
+                    "photographer": "Sophie Martin",
+                    "title": "Tiger Stare",
+                    "ratio": 4.9,
+                    "votes": 38
+                },
+                {
+                    "id": "vote_img_011",
+                    "image_url": "https://example.com/vote11.jpg",
+                    "photographer": "Chris Anderson",
+                    "title": "Gorilla Strength",
+                    "ratio": 3.8,
+                    "votes": 39
+                },
+                {
+                    "id": "vote_img_012",
+                    "image_url": "https://example.com/vote12.jpg",
+                    "photographer": "David Brown",
+                    "title": "Penguin Colony",
+                    "ratio": 3.5,
+                    "votes": 19
+                },
+                {
+                    "id": "vote_img_013",
+                    "image_url": "https://example.com/vote13.jpg",
+                    "photographer": "Sarah Wilson",
+                    "title": "Shark Hunt",
+                    "ratio": 4.4,
+                    "votes": 30
+                },
+                {
+                    "id": "vote_img_014",
+                    "image_url": "https://example.com/vote14.jpg",
+                    "photographer": "Anna Garcia",
+                    "title": "Shark Hunt",
+                    "ratio": 5.1,
+                    "votes": 52
+                },
+                {
+                    "id": "vote_img_015",
+                    "image_url": "https://example.com/vote15.jpg",
+                    "photographer": "Mike Johnson",
+                    "title": "Lion Pride",
+                    "ratio": 5,
+                    "votes": 29
+                },
+                {
+                    "id": "vote_img_016",
+                    "image_url": "https://example.com/vote16.jpg",
+                    "photographer": "Maria Rodriguez",
+                    "title": "Wolf Pack",
+                    "ratio": 5.1,
+                    "votes": 35
+                },
+                {
+                    "id": "vote_img_017",
+                    "image_url": "https://example.com/vote17.jpg",
+                    "photographer": "Alex Thompson",
+                    "title": "Eagle Flight",
+                    "ratio": 3,
+                    "votes": 16
+                },
+                {
+                    "id": "vote_img_018",
+                    "image_url": "https://example.com/vote18.jpg",
+                    "photographer": "Maria Rodriguez",
+                    "title": "Tiger Stare",
+                    "ratio": 3.1,
+                    "votes": 56
+                },
+                {
+                    "id": "vote_img_019",
+                    "image_url": "https://example.com/vote19.jpg",
+                    "photographer": "Robert Chen",
+                    "title": "Dolphin Jump",
+                    "ratio": 4.9,
+                    "votes": 14
+                },
+                {
+                    "id": "vote_img_020",
+                    "image_url": "https://example.com/vote20.jpg",
+                    "photographer": "Alex Thompson",
+                    "title": "Shark Hunt",
+                    "ratio": 3.1,
+                    "votes": 58
+                },
+                {
+                    "id": "vote_img_021",
+                    "image_url": "https://example.com/vote21.jpg",
+                    "photographer": "Sophie Martin",
+                    "title": "Shark Hunt",
+                    "ratio": 3.7,
+                    "votes": 33
+                },
+                {
+                    "id": "vote_img_022",
+                    "image_url": "https://example.com/vote22.jpg",
+                    "photographer": "David Brown",
+                    "title": "Penguin Colony",
+                    "ratio": 3.6,
+                    "votes": 25
+                }
+            ]
+        }
+    }
+]

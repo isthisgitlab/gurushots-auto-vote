@@ -1,0 +1,360 @@
+/**
+ * GuruShots Auto Voter - Core API Client
+ *
+ * This module provides the core HTTP client functionality and common headers
+ * for all API interactions with GuruShots.
+ */
+
+import axios from 'axios';
+import * as logger from '../logger';
+import { generateRandomHeaders } from './randomizer';
+import { sleep } from '../timing';
+import * as settings from '../settings';
+import * as runtime from '../runtime';
+import { FORM_CONTENT_TYPE } from './constants';
+import { isPlainObject } from '../plainObject';
+
+import type { AxiosAdapter, AxiosRequestConfig, AxiosResponse } from 'axios';
+
+/**
+ * Request headers as the api/ modules build them. A value may be undefined
+ * (login sends no token); axios drops it.
+ */
+type RequestHeaders = Record<string, string | undefined>;
+
+/**
+ * What a failed axios call rejects with, as far as the retry layer reads it.
+ */
+interface RequestFailure {
+    message?: string;
+    code?: string;
+    response?: { status?: number; data?: { retry_after?: unknown }; headers?: Record<string, unknown> };
+}
+
+/**
+ * The native bridge globals of the Android headless-service WebView.
+ */
+interface HeadlessHttpGlobals {
+    __gsResolveHeadlessHttp?: (id: number, resultJson: string) => void;
+    AndroidHeadlessHttp: {
+        request: (id: number, method: string, url: string, headersJson: string, body: string) => void;
+    };
+}
+
+// A custom axios adapter must enforce validateStatus itself — axios does not
+// post-process an adapter's resolved value — so non-2xx responses must reject
+// with the response attached. That's what lets makePostRequest's retry/backoff
+// classify 429/5xx as retryable and surface other 4xx (e.g. invalid token) as
+// terminal, instead of handing an error body back to callers as a "success".
+// Shared by both the Capacitor and headless adapters below.
+const finalizeAdapterResponse = (response: AxiosResponse): AxiosResponse => {
+    if (response.status >= 200 && response.status < 300) return response;
+    const err = new Error(`Request failed with status code ${response.status}`) as Error & { response?: AxiosResponse };
+    err.response = response;
+    throw err;
+};
+
+// Capacitor adapter: routes axios requests through CapacitorHttp's native
+// OkHttp client (Android) so we can set headers that browser fetch can't
+// (host, user-agent, etc. — the iOS-spoof in randomizer.ts depends on it).
+// Lazy-loaded so Electron / CLI builds never resolve @capacitor/core.
+let capacitorAdapter: AxiosAdapter | null = null;
+const getCapacitorHttpAdapter = (): AxiosAdapter => {
+    if (capacitorAdapter) return capacitorAdapter;
+    const { CapacitorHttp } = require('@capacitor/core') as typeof import('@capacitor/core');
+    capacitorAdapter = async (config) => {
+        const response = await CapacitorHttp.request({
+            method: (config.method || 'get').toUpperCase(),
+            url: config.url as string,
+            headers: config.headers,
+            data: config.data as unknown,
+            connectTimeout: config.timeout,
+            readTimeout: config.timeout,
+        });
+        // Throwing here surfaces as a rejection from this async adapter, so a
+        // 429/5xx on the foreground path reaches the retry layer instead
+        // of being mistaken for a successful response.
+        return finalizeAdapterResponse({
+            data: response.data as unknown,
+            status: response.status,
+            statusText: '',
+            headers: response.headers || {},
+            config,
+        });
+    };
+    return capacitorAdapter;
+};
+
+// Headless background-service adapter: routes axios through a native
+// @JavascriptInterface (AndroidHeadlessHttp) backed by OkHttp, since the
+// bare service WebView has no Capacitor runtime / CapacitorHttp.
+//
+// Asynchronous by design: a synchronous bridge would block the WebView's
+// JS thread for the whole network round-trip. Instead `request` returns
+// immediately, native runs OkHttp off-thread, and posts the result back
+// by calling globalThis.__gsResolveHeadlessHttp(id, resultJson) — where
+// resultJson is a JSON string { status, body, headers }.
+let headlessReqSeq = 0;
+const headlessPending: Map<number, (resultJson: string) => void> = new Map();
+const headlessGlobals = globalThis as typeof globalThis & HeadlessHttpGlobals;
+const ensureHeadlessResolver = () => {
+    if (headlessGlobals.__gsResolveHeadlessHttp) return;
+    headlessGlobals.__gsResolveHeadlessHttp = (id, resultJson) => {
+        const cb = headlessPending.get(id);
+        if (cb) {
+            headlessPending.delete(id);
+            cb(resultJson);
+        }
+    };
+};
+
+let headlessAdapter: AxiosAdapter | null = null;
+const getHeadlessHttpAdapter = (): AxiosAdapter => {
+    if (headlessAdapter) return headlessAdapter;
+    ensureHeadlessResolver();
+    headlessAdapter = (config) =>
+        new Promise((resolve, reject) => {
+            const id = ++headlessReqSeq;
+            headlessPending.set(id, (resultJson) => {
+                try {
+                    // The AndroidHeadlessHttp result contract (see the adapter note above).
+                    const parsed = JSON.parse(resultJson) as {
+                        error?: string;
+                        status: number;
+                        body: string;
+                        headers?: Record<string, string>;
+                    };
+                    // A transport/network failure on the native side — reject so
+                    // the retry layer treats it as a (retryable) no-response error.
+                    if (parsed.error) {
+                        reject(new Error(parsed.error));
+                        return;
+                    }
+                    // The API returns JSON; parse the body so callers get an
+                    // object, matching CapacitorHttp/axios. Leave non-JSON as-is.
+                    let data: unknown = parsed.body;
+                    try {
+                        data = JSON.parse(parsed.body);
+                    } catch {
+                        /* non-JSON body — return the raw string */
+                    }
+                    const response = {
+                        data,
+                        status: parsed.status,
+                        statusText: '',
+                        headers: parsed.headers || {},
+                        config,
+                    };
+                    // finalizeAdapterResponse throws on non-2xx (with the
+                    // response attached) — that throw is caught by the
+                    // surrounding catch below and rejected, so the retry/backoff
+                    // layer classifies it; otherwise we resolve the 2xx response.
+                    const finalized = finalizeAdapterResponse(response);
+                    resolve(finalized);
+                } catch (err) {
+                    reject(err);
+                }
+            });
+            const body = typeof config.data === 'string' ? config.data : config.data ? JSON.stringify(config.data) : '';
+            headlessGlobals.AndroidHeadlessHttp.request(
+                id,
+                (config.method || 'get').toUpperCase(),
+                config.url as string,
+                JSON.stringify(config.headers || {}),
+                body,
+            );
+        });
+    return headlessAdapter;
+};
+
+// Upper bound on how long a single request will block while retrying.
+// A server-sent cooldown longer than this (e.g. a multi-minute 429
+// Retry-After) is left for the scheduler's next cycle rather than
+// stalling the current one.
+const MAX_RETRY_DELAY_MS = 30_000;
+
+// Smallest delay we'll wait before a retry, even if the server asks for
+// less (or 0) — guards against a misbehaving server spinning the loop.
+const MIN_RETRY_DELAY_MS = 100;
+
+// Coerce a user/CLI-supplied setting to a non-negative integer, falling
+// back to the default for missing / negative / non-numeric values. The
+// retry knobs aren't in the schema, so this is the only guard against a
+// bad `set-setting apiMaxRetries -1` turning the loop into a no-op (or a
+// NaN bound that never terminates).
+const coerceNonNegInt = (value: unknown, fallback: number): number => {
+    if (value == null) return fallback; // undefined/null → default, not Number(null)===0
+    const n = Number(value);
+    return Number.isFinite(n) && n >= 0 ? Math.floor(n) : fallback;
+};
+
+/**
+ * Whether a failed request is worth retrying. Transient conditions —
+ * no response (network drop), a client timeout, a 429, or any 5xx —
+ * are retryable; every other 4xx (bad request, invalid token, …) is
+ * a definitive answer and is not retried.
+ */
+const isRetryableError = (error: RequestFailure | null | undefined): boolean => {
+    // A TypeError (or similar) means an adapter/programmer bug, not a
+    // transient network failure — retrying it just wastes the backoff. So
+    // does a rejection with no error object at all (a custom adapter
+    // rejecting with null/undefined).
+    if (error == null || error instanceof TypeError) return false;
+    if (!error.response) return true; // network error / no response
+    if (error.code === 'ECONNABORTED') return true; // client timeout
+    const status = error.response.status;
+    return status === 429 || (typeof status === 'number' && status >= 500);
+};
+
+/**
+ * Server-requested cooldown in ms, read from a `retry_after` body field
+ * or a `Retry-After` header (both expressed in seconds), or null when
+ * the server didn't ask for one.
+ */
+const getRetryAfterMs = (error: RequestFailure): number | null => {
+    const fromBody = error.response?.data?.retry_after;
+    if (typeof fromBody === 'number' && Number.isFinite(fromBody) && fromBody >= 0) {
+        return fromBody * 1000;
+    }
+    const fromHeader = error.response?.headers?.['retry-after'];
+    if (fromHeader != null) {
+        const seconds = Number(fromHeader);
+        if (Number.isFinite(seconds) && seconds >= 0) return seconds * 1000;
+    }
+    return null;
+};
+
+/**
+ * The one place a 2xx body becomes a response type. Anything that is not a
+ * JSON object (an HTML error page, a bare string, an array) is no GuruShots
+ * response and reads as a failed request. The fields stay unverified on
+ * purpose: T declares them optional and each endpoint wrapper guards its
+ * reads, so upstream drift in one field degrades that read instead of
+ * rejecting the whole response.
+ */
+const responseObject = <T extends object>(url: string, body: unknown): T | null => {
+    if (isPlainObject(body)) return body as T;
+    logger.withCategory('api').warning('API response body is not a JSON object', {
+        url,
+        type: Array.isArray(body) ? 'array' : typeof body,
+    });
+    return null;
+};
+
+/**
+ * Makes a POST request to the GuruShots API
+ *
+ * Transient failures (network drop, timeout, 429, 5xx) are retried with
+ * exponential backoff + jitter up to `apiMaxRetries` times so an
+ * unattended voting cycle survives a momentary blip. The contract is
+ * unchanged: the resolved response body on success, `null` on ultimate
+ * failure — callers continue to branch on `null`.
+ *
+ * @param url - The API endpoint URL
+ * @param headers - Request headers including authentication token
+ * @param data - URL-encoded form data (default: empty string)
+ * @returns The response body as `T` (the shape the endpoint wrapper reads, all
+ *   fields optional), or null if the request failed or the body was not a JSON
+ *   object. Only the object check is enforced: the wrapper guards every read.
+ */
+const makePostRequest = async <T extends object>(
+    url: string,
+    headers: RequestHeaders,
+    data: string = '',
+): Promise<T | null> => {
+    const maxRetries = coerceNonNegInt(settings.getSetting('apiMaxRetries'), 3);
+    const baseDelayMs = coerceNonNegInt(settings.getSetting('apiRetryBaseDelayMs'), 1000);
+
+    for (let attempt = 0; ; attempt++) {
+        const startTime = Date.now();
+
+        // Log the request with enhanced context
+        logger.withCategory('api').apiRequest('POST', url);
+
+        try {
+            const requestConfig: AxiosRequestConfig = {
+                method: 'post',
+                url,
+                headers,
+                data,
+                timeout: settings.getSetting('apiTimeout') * 1000, // Convert seconds to milliseconds
+            };
+            if (runtime.isHeadlessService()) {
+                requestConfig.adapter = getHeadlessHttpAdapter();
+            } else if (runtime.isCapacitor()) {
+                requestConfig.adapter = getCapacitorHttpAdapter();
+            }
+            const response = await axios(requestConfig);
+
+            const duration = Date.now() - startTime;
+
+            // Log successful response with full data
+            logger.withCategory('api').api('API Response', {
+                method: 'POST',
+                url: url,
+                status: response.status,
+                duration: duration,
+                responseData: response.data as unknown,
+            });
+
+            return responseObject<T>(url, response.data);
+        } catch (caught) {
+            const error = caught as RequestFailure | null | undefined;
+            const duration = Date.now() - startTime;
+            const status = error?.response?.status || 'NO_RESPONSE';
+
+            // Log failed response with full error details
+            logger.withCategory('api').api('API Error Response', {
+                method: 'POST',
+                url: url,
+                status: status,
+                duration: duration,
+                error: error?.message,
+                responseData: error?.response?.data || null,
+                timeout: error?.code === 'ECONNABORTED',
+            });
+
+            if (!isRetryableError(error) || attempt >= maxRetries) {
+                return null; // Return null instead of throwing to prevent crashing
+            }
+
+            // Honor an explicit server cooldown when present, else use
+            // exponential backoff with jitter. A cooldown longer than the
+            // in-call cap is deferred to the next scheduled cycle.
+            // isRetryableError already rejected a null/undefined failure.
+            const cooldownMs = getRetryAfterMs(error as RequestFailure);
+            let delayMs;
+            if (cooldownMs != null) {
+                if (cooldownMs > MAX_RETRY_DELAY_MS) return null;
+                delayMs = Math.max(cooldownMs, MIN_RETRY_DELAY_MS);
+            } else {
+                delayMs = Math.min(baseDelayMs * 2 ** attempt + Math.random() * baseDelayMs, MAX_RETRY_DELAY_MS);
+            }
+
+            logger.withCategory('api').warning('Retrying API request after transient failure', {
+                url,
+                status,
+                attempt: attempt + 1,
+                maxRetries,
+                delayMs: Math.round(delayMs),
+            });
+
+            await sleep(delayMs);
+        }
+    }
+};
+
+/**
+ * Creates common headers for all API requests to GuruShots
+ *
+ * These headers mimic an iOS device to ensure compatibility with the API.
+ * The x-token header is populated from the provided token parameter.
+ *
+ * @param token - Authentication token (undefined for login)
+ * @returns Headers object for API requests
+ */
+const createCommonHeaders = (token: string | undefined): RequestHeaders => {
+    return generateRandomHeaders(token);
+};
+
+export { makePostRequest, createCommonHeaders, FORM_CONTENT_TYPE };

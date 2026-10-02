@@ -1,0 +1,37 @@
+/**
+ * GuruShots Auto Voter - Mock Authentication Data
+ *
+ * Mock responses for authentication operations
+ */
+
+/**
+ * Mock successful login response
+ */
+const mockLoginSuccess = {
+    token: 'mock-auth-token',
+    user: {
+        id: 12345,
+        email: 'test@example.com',
+        username: 'testuser',
+        display_name: 'Test User',
+        avatar: 'https://example.com/avatar.jpg',
+        level: 5,
+        points: 1250,
+    },
+    settings: {
+        notifications: true,
+        email_notifications: false,
+        language: 'en',
+    },
+};
+
+/**
+ * Mock failed login response
+ */
+const mockLoginFailure = {
+    error: 'Invalid credentials',
+    code: 'AUTH_FAILED',
+    message: 'Email or password is incorrect',
+};
+
+export { mockLoginSuccess, mockLoginFailure };

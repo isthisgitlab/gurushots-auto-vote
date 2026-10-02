@@ -1,0 +1,105 @@
+/**
+ * Jest Setup File
+ *
+ * This file contains global setup configuration for Jest tests.
+ * It mocks external dependencies and sets up common test utilities.
+ */
+
+// Mock axios for all tests to prevent real HTTP calls
+jest.mock('axios', () => jest.fn());
+
+// Mock fs operations if needed
+jest.mock('fs', () => ({
+    existsSync: jest.fn(),
+    readFileSync: jest.fn(),
+    writeFileSync: jest.fn(),
+    appendFileSync: jest.fn(),
+    readdirSync: jest.fn(),
+    mkdirSync: jest.fn(),
+    chmodSync: jest.fn(),
+}));
+
+// Mock path operations. Spread the real module first so less-common
+// methods (basename, extname, sep, …) keep working — a partial mock here
+// silently returns undefined for anything it omits. `default` is the mock
+// itself, so a default import (`import path from 'node:path'`) sees the same
+// stubs as a namespace import.
+jest.mock('path', () => {
+    const mocked = {
+        __esModule: true,
+        ...jest.requireActual<typeof import('path')>('path'),
+        join: jest.fn((...args) => args.join('/')),
+        dirname: jest.fn(),
+        resolve: jest.fn(),
+    };
+    return Object.assign(mocked, { default: mocked });
+});
+
+// Mock logger to prevent fs/path dependency issues in tests
+jest.mock('../src/ts/logger', () => ({
+    info: jest.fn(),
+    error: jest.fn(),
+    debug: jest.fn(),
+    success: jest.fn(),
+    warning: jest.fn(),
+    api: jest.fn(),
+    startOperation: jest.fn(),
+    endOperation: jest.fn(),
+    apiRequest: jest.fn(),
+    apiResponse: jest.fn(),
+    progress: jest.fn(),
+    cliInfo: jest.fn(),
+    cliError: jest.fn(),
+    cliSuccess: jest.fn(),
+    cliDebug: jest.fn(),
+    cliWarning: jest.fn(),
+    isDevMode: jest.fn(() => false),
+    // Runtime detection helpers (canonical source) — settings.ts destructures these from logger.
+    isSourceCode: jest.fn(() => true),
+    getAppName: jest.fn(() => 'gurushots-auto-vote-dev'),
+    challengeTag: jest.fn(
+        (c: { id?: string | number; title?: string } | string | number | null | undefined, t?: string | null) =>
+            c && typeof c === 'object'
+                ? `[Challenge ${c.id ?? 'unknown'}: ${c.title ?? 'unknown'}]`
+                : `[Challenge ${c ?? 'unknown'}: ${t ?? 'unknown'}]`,
+    ),
+    getRecentLogs: jest.fn(() => []),
+    // Faithful implementation — production code interpolates its return value
+    // into log/messages, so a bare jest.fn() would break those call sites.
+    sanitizeLogString: jest.fn((value: unknown, maxLength: number = 200) =>
+        String(value ?? '')
+            .replace(/[\r\n\t]/g, ' ')
+            .slice(0, maxLength),
+    ),
+    CATEGORIES: {
+        SETTINGS: 'settings',
+        AUTHENTICATION: 'authentication',
+        VOTING: 'voting',
+        CHALLENGES: 'challenges',
+        API: 'api',
+        UI: 'ui',
+        TRANSLATION: 'translation',
+        MIDDLEWARE: 'middleware',
+        UPDATE: 'update',
+    },
+    withCategory: jest.fn(() => ({
+        info: jest.fn(),
+        error: jest.fn(),
+        debug: jest.fn(),
+        success: jest.fn(),
+        warning: jest.fn(),
+        api: jest.fn(),
+        apiRequest: jest.fn(),
+        startOperation: jest.fn(),
+        endOperation: jest.fn(),
+        progress: jest.fn(),
+    })),
+}));
+
+// Global test timeout
+jest.setTimeout(10000);
+
+// Suppress console logs during tests unless explicitly testing them
+beforeEach(() => {
+    jest.clearAllMocks();
+});

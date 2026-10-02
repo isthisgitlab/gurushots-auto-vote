@@ -1,0 +1,108 @@
+/**
+ * translations/translator.ts — the dependency-free translator core — and the
+ * renderer's shared instance (translations/renderer.ts).
+ */
+
+import english = require('../../src/ts/translations/english');
+import latvian = require('../../src/ts/translations/latvian');
+import type * as translatorModule from '../../src/ts/translations/translator';
+import type * as rendererModule from '../../src/ts/translations/renderer';
+const { DEFAULT_LANGUAGE, createTranslator, isSupportedLanguage, resolveLanguage } =
+    require('../../src/ts/translations/translator') as typeof translatorModule;
+
+describe('language helpers', () => {
+    test('only en and lv are supported', () => {
+        expect(isSupportedLanguage('en')).toBe(true);
+        expect(isSupportedLanguage('lv')).toBe(true);
+        expect(isSupportedLanguage('de')).toBe(false);
+        expect(isSupportedLanguage('constructor')).toBe(false);
+        expect(isSupportedLanguage(null)).toBe(false);
+    });
+
+    test('resolveLanguage keeps a supported code and defaults anything else to English', () => {
+        expect(DEFAULT_LANGUAGE).toBe('en');
+        expect(resolveLanguage('lv')).toBe('lv');
+        expect(resolveLanguage('de')).toBe('en');
+        expect(resolveLanguage(undefined)).toBe('en');
+    });
+});
+
+describe('createTranslator', () => {
+    let translator: ReturnType<typeof createTranslator>;
+    beforeEach(() => {
+        translator = createTranslator();
+    });
+
+    test('starts in English', () => {
+        expect(translator.getCurrentLanguage()).toBe('en');
+        expect(translator.t('themes.dark')).toBe(english.themes.dark);
+    });
+
+    test('setCurrentLanguage switches the default language of t()', () => {
+        translator.setCurrentLanguage('lv');
+        expect(translator.getCurrentLanguage()).toBe('lv');
+        expect(translator.t('themes.dark')).toBe(latvian.themes.dark);
+    });
+
+    test('setCurrentLanguage resolves an unsupported language to English', () => {
+        translator.setCurrentLanguage('lv');
+        translator.setCurrentLanguage('de');
+        expect(translator.getCurrentLanguage()).toBe('en');
+    });
+
+    test('an explicit language overrides the current one', () => {
+        expect(translator.t('logs.title', 'lv')).toBe(latvian.logs.title);
+        translator.setCurrentLanguage('lv');
+        expect(translator.t('logs.title', 'en')).toBe(english.logs.title);
+    });
+
+    test('an unknown language translates in English', () => {
+        expect(translator.t('logs.title', 'de')).toBe(english.logs.title);
+    });
+
+    test('a key naming a group of strings, not one string, returns the key itself', () => {
+        expect(translator.t('logs')).toBe('logs');
+    });
+
+    test('a missing key returns the key itself', () => {
+        expect(translator.t('logs.nope')).toBe('logs.nope');
+        expect(translator.t('nope.deeper.still', 'lv')).toBe('nope.deeper.still');
+        expect(translator.t('logs.title.extra')).toBe('logs.title.extra');
+    });
+
+    test('translators hold independent languages', () => {
+        const other = createTranslator();
+        translator.setCurrentLanguage('lv');
+        expect(other.getCurrentLanguage()).toBe('en');
+    });
+});
+
+describe('English fallback', () => {
+    afterEach(() => {
+        jest.dontMock('../../src/ts/translations/latvian');
+    });
+
+    test('a key missing (or empty) in Latvian falls back to English', () => {
+        jest.isolateModules(() => {
+            jest.doMock('../../src/ts/translations/latvian', () => ({ logs: { title: '' }, common: {} }));
+            const { createTranslator: isolated } =
+                require('../../src/ts/translations/translator') as typeof translatorModule;
+            const translator = isolated();
+            expect(translator.t('logs.title', 'lv')).toBe(english.logs.title);
+            expect(translator.t('themes.dark', 'lv')).toBe(english.themes.dark);
+            expect(translator.t('app.title', 'lv')).toBe(english.app.title);
+        });
+    });
+});
+
+describe('renderer instance', () => {
+    test('is a translator shared by every importer of the module', () => {
+        const { rendererTranslator } = require('../../src/ts/translations/renderer') as typeof rendererModule;
+        expect(
+            (require('../../src/ts/translations/renderer') as typeof import('../../src/ts/translations/renderer'))
+                .rendererTranslator,
+        ).toBe(rendererTranslator);
+        expect(rendererTranslator.getCurrentLanguage()).toBe('en');
+        expect(rendererTranslator.t('themes.dark', 'lv')).toBe(latvian.themes.dark);
+    });
+});

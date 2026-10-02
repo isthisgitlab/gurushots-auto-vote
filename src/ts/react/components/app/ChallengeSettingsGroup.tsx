@@ -1,0 +1,182 @@
+import { useTranslation } from '@/contexts/TranslationContext';
+import { SETTINGS_GRID_CLASS, SETTING_CELL_CLASS } from '@/utils/groupSettings';
+import { getGroupApplicability } from '@/utils/challengeApplicability';
+import { formatSettingDefault } from '@/utils/formatters';
+import { getScheduleShift } from '../../../services/scheduleRemap';
+import { SettingHelp } from '@/components/ui/SettingHelp';
+import { SettingInput, SettingLabel } from './SettingInput';
+import { SettingHintList } from './SettingHints';
+
+import type { SerializableSchemaEntry } from '../../../ipc/settings.handlers';
+import type { useChallengeOverrides } from '@/hooks/useChallengeOverrides';
+import type { Challenge } from '../../../types/gurushots';
+import type { FillSchedule } from '../../../services/scheduleRemap';
+import type { HintsFor } from '../../../types/settingsEditor';
+
+/**
+ * What every cell of a per-challenge settings group reads: the challenge, the
+ * global defaults, useChallengeOverrides' state and the modal's hint resolver.
+ */
+export interface ChallengeGroupContext {
+    challenge: Challenge | null | undefined;
+    defaults: Record<string, unknown> | null | undefined;
+    form: ReturnType<typeof useChallengeOverrides>;
+    hintsFor: HintsFor;
+}
+
+/**
+ * Where a setting's shown value comes from: override, title-rule profile, or the global default.
+ */
+function ValueSourceBadge({ hasOverride, hasProfileValue }: { hasOverride: boolean; hasProfileValue: boolean }) {
+    const { t } = useTranslation();
+    if (hasOverride) return <span className="badge badge-accent badge-sm">{t('app.overridden')}</span>;
+    if (hasProfileValue) return <span className="badge badge-info badge-sm">{t('app.usingProfile')}</span>;
+    return <span className="badge badge-ghost badge-sm">{t('app.usingGlobal')}</span>;
+}
+
+/**
+ * How many image slots the auto-fill schedule shifts by on this challenge.
+ * Live, render-time hint (same spirit as getGroupApplicability): when this
+ * challenge allows fewer photos than the schedule covers, the schedule
+ * end-aligns at runtime (scheduleRemap) — say so where a user puzzled by a
+ * fill time would look.
+ *
+ * The `>= 2` gate does double duty. Null guard: `challenge` goes null when it
+ * drops off the live 60s poll while the modal is open (App.tsx derives it as
+ * find(...) ?? null), and without the gate getScheduleShift would treat max as
+ * 0 and render the hint into a null dereference. Accuracy guard: on a
+ * single-photo challenge every remapped row lands below count 2 and is
+ * dropped, so no image time governs anything — a "final photo uses the Image
+ * N time" hint would be false.
+ */
+function scheduleShiftOf(key: string, value: unknown, challenge: Challenge | null | undefined): number {
+    if (key !== 'autoFillSchedule') return 0;
+    const max = challenge?.max_photo_submits;
+    // Number.isInteger does not narrow: an integer here is a number. The form
+    // holds this key's value, a schedule.
+    return Number.isInteger(max) && (max as number) >= 2 ? getScheduleShift(value as FillSchedule, max) : 0;
+}
+
+function ChallengeSettingCell({
+    settingKey: key,
+    config,
+    applicable,
+    challenge,
+    defaults,
+    form,
+    hintsFor,
+}: ChallengeGroupContext & { settingKey: string; config: SerializableSchemaEntry; applicable: boolean }) {
+    const { t } = useTranslation();
+    const hasOverride = key in form.overrides;
+    const hasProfileValue = Object.prototype.hasOwnProperty.call(form.profileValues, key);
+    const currentValue = hasOverride ? form.overrides[key] : form.inheritedOf(key);
+    const scheduleShift = scheduleShiftOf(key, currentValue, challenge);
+    const inputId = `challenge-setting-${key}`;
+    // Only read when scheduleShift > 0, i.e. for a challenge with an integer
+    // max_photo_submits ≥ 2 (see scheduleShiftOf).
+    const shiftedChallenge = challenge as Challenge & { max_photo_submits: number };
+
+    return (
+        <div className={SETTING_CELL_CLASS}>
+            <SettingLabel inputId={inputId} type={config.type}>
+                <span className="font-medium">{t(config.label)}</span>
+                <div className="flex gap-1">
+                    <ValueSourceBadge hasOverride={hasOverride} hasProfileValue={hasProfileValue} />
+                </div>
+            </SettingLabel>
+            <p className="text-xs text-base-content/60 mb-2">{t(config.description)}</p>
+            <SettingHelp helpKey={config.helpKey} />
+            <SettingInput
+                id={inputId}
+                settingKey={key}
+                config={config}
+                value={currentValue}
+                onChange={form.changeOverride}
+                onReset={applicable && hasOverride ? form.clearOverride : null}
+                disabled={!applicable}
+            />
+            {scheduleShift > 0 && (
+                <p className="text-xs text-info mt-1">
+                    {t('app.autoFillScheduleShiftHint')
+                        .replace('{0}', String(shiftedChallenge.max_photo_submits))
+                        .replace('{1}', String(shiftedChallenge.max_photo_submits + scheduleShift))}
+                </p>
+            )}
+            <SettingHintList hints={hintsFor(key)} />
+            <p className={`text-xs mt-1 ${hasOverride ? 'text-base-content/70' : 'text-base-content/40'}`}>
+                {t('app.globalDefault')}: {formatSettingDefault(defaults?.[key] ?? config.default, config, t)}
+            </p>
+        </div>
+    );
+}
+
+/**
+ * One settings group of the per-challenge modal. A group whose action can no
+ * longer apply to this challenge (boost/turbo already used, all entry slots
+ * full) is greyed out and its inputs disabled — a live, render-time hint
+ * derived from the challenge prop, never persisted.
+ *
+ * `form` is useChallengeOverrides' state; `hintsFor(key)` the modal's
+ * per-setting hint resolver.
+ */
+export function ChallengeSettingsGroup({
+    id,
+    label,
+    entries,
+    challenge,
+    defaults,
+    form,
+    hintsFor,
+}: ChallengeGroupContext & { id: string; label: string; entries: Array<[string, SerializableSchemaEntry]> }) {
+    const { t } = useTranslation();
+    const { applicable, reasonKey } = getGroupApplicability(id, challenge);
+    // When a group can't apply, tie its heading + reason note to the section
+    // via role="group"/aria-* so assistive tech announces *why* the inputs are
+    // disabled, not just that they are (WCAG 1.3.1 — the relationship must be
+    // programmatic, not only visual).
+    const headingId = `challenge-group-${id}`;
+    const reasonId = applicable ? undefined : `challenge-group-reason-${id}`;
+
+    return (
+        <div
+            role={applicable ? undefined : 'group'}
+            aria-labelledby={applicable ? undefined : headingId}
+            aria-describedby={reasonId}
+        >
+            <h5
+                id={headingId}
+                className="font-semibold text-base mb-3 border-b border-base-300 pb-2 flex items-center justify-between gap-2"
+            >
+                <span>{t(label)}</span>
+                {!applicable && <span className="badge badge-ghost badge-sm">{t('app.notApplicable')}</span>}
+            </h5>
+            {/* Heading, badge and reason note stay at full opacity so the *why*
+                remains readable; only the inert inputs below are dimmed. Dimming
+                the whole group would compound with the muted text colours and
+                push the explanation below WCAG AA contrast. */}
+            {!applicable && (
+                <div id={reasonId} className="mb-3">
+                    {/* A not-applicable group always carries its reason key. */}
+                    <p className="text-xs text-base-content/80">{t(reasonKey as string)}</p>
+                    {/* Reassure that a stored override on this (now-inert) group is
+                        not lost — the "Overridden" badge below still shows it. */}
+                    <p className="text-xs text-base-content/70 mt-0.5">{t('app.notApplicableHint')}</p>
+                </div>
+            )}
+            <div className={applicable ? SETTINGS_GRID_CLASS : `${SETTINGS_GRID_CLASS} opacity-60`}>
+                {entries.map(([key, config]) => (
+                    <ChallengeSettingCell
+                        key={key}
+                        settingKey={key}
+                        config={config}
+                        applicable={applicable}
+                        challenge={challenge}
+                        defaults={defaults}
+                        form={form}
+                        hintsFor={hintsFor}
+                    />
+                ))}
+            </div>
+        </div>
+    );
+}

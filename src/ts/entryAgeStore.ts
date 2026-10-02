@@ -1,0 +1,241 @@
+/**
+ * When each entry of a challenge entered it, so a boost can wait until its target
+ * photo has been in the challenge for `boostFreshEntryWait` (a boost spent on a
+ * photo the moment it is entered gets few votes). The API reports no entry time,
+ * so the app records one: the instant it first sees an entry id — its own submit
+ * reflected into the pass, or the first poll after a manual one.
+ *
+ * Also remembers the photo a boost fill-new submitted and is waiting on
+ * (`pending`), so the next pass boosts that photo instead of submitting another.
+ *
+ * Shape, keyed by challenge id:
+ *   { "<challengeId>": { closeTime, entered: { "<imageId>": unixSec }, pending } }
+ * An `entered` time of 0 means "already there when the app first saw the
+ * challenge" — its age is unknown, so it never holds a boost.
+ *
+ * Same platform-aware transport as currencyAutoStore, so on Capacitor its cache
+ * MUST be hydrated at boot (initializeEntryAgesAsync, wired in Capacitor.tsx).
+ * Mock mode uses createMemoryEntryAgeLedger() and never touches the file.
+ */
+
+import type { EntryAgeRecord, RawJsonStore } from './types/stores';
+import type { Challenge } from './types/gurushots';
+import * as logger from './logger';
+import { createJsonStore } from './settings/storage';
+import { isPlainObject } from './plainObject';
+import { finiteOr } from './numbers';
+
+const entryAgeStore = createJsonStore({ fileName: 'entryAges.json', prefKey: 'gs_entry_ages' });
+
+// How long a pending fill-new photo may be missing from the challenge listing
+// before it counts as not entered. Covers listing lag after a submit; past it, a
+// submit that never landed stops blocking the boost.
+const PENDING_GRACE_SEC = 600;
+type StoredEntryAgeRecord = EntryAgeRecord & { uncertain: string[] };
+
+/**
+ * @param r - an untrusted parsed-JSON value
+ */
+const isRecord = (r: unknown): r is EntryAgeRecord =>
+    isPlainObject(r) && Number.isFinite(r.closeTime) && isPlainObject(r.entered);
+
+/** @param challenge @returns */
+const entryIdsOf = (challenge: Challenge): string[] =>
+    (Array.isArray(challenge?.member?.ranking?.entries) ? challenge.member.ranking.entries : [])
+        .map((entry) => entry?.id)
+        .filter((id) => id !== undefined && id !== null && id !== '')
+        .map(String);
+
+/**
+ * The stored state. An unreadable or corrupt file reads as empty — every entry's
+ * age is then unknown, which only means a boost is not held; it never blocks one.
+ */
+const readState = (store: RawJsonStore): Record<string, StoredEntryAgeRecord> => {
+    try {
+        const parsed: unknown = JSON.parse(store.readRaw() || '{}');
+        if (!isPlainObject(parsed)) return {};
+        const state: Record<string, StoredEntryAgeRecord> = {};
+        for (const [id, record] of Object.entries(parsed)) {
+            if (isRecord(record)) {
+                state[id] = {
+                    ...record,
+                    uncertain: Array.isArray(record.uncertain)
+                        ? record.uncertain.slice(0, 64).filter((value): value is string => typeof value === 'string')
+                        : [],
+                };
+            }
+        }
+        return state;
+    } catch (error) {
+        logger
+            .withCategory('boost')
+            .warning(`entry-age ledger unreadable: ${(error as Error | undefined)?.message || error}`, null);
+        return {};
+    }
+};
+
+/**
+ * Write `record` for `challengeId`, dropping every challenge that has closed.
+ * @param now - Unix seconds
+ */
+const writeState = (
+    store: RawJsonStore,
+    state: Record<string, StoredEntryAgeRecord>,
+    challengeId: string,
+    record: StoredEntryAgeRecord,
+    now: number,
+) => {
+    const next: Record<string, StoredEntryAgeRecord> = {};
+    for (const [id, existing] of Object.entries(state)) {
+        if (existing.closeTime > now) next[id] = existing;
+    }
+    next[challengeId] = record;
+    store.writeRaw(JSON.stringify(next));
+};
+
+/**
+ * The record `challenge` should now hold: an id seen for the first time is
+ * stamped `now` (or 0 on the challenge's first sighting), an id no longer
+ * entered is forgotten. Null when nothing changed from `existing`.
+ * @param now - Unix seconds
+ */
+const observedRecord = (
+    existing: StoredEntryAgeRecord | undefined,
+    challenge: Challenge,
+    now: number,
+): StoredEntryAgeRecord | null => {
+    const ids = entryIdsOf(challenge);
+    const entered: Record<string, number> = {};
+    for (const id of ids) {
+        entered[id] = finiteOr(existing?.entered[id], existing ? now : 0);
+    }
+    // The listing can lag a submit, so a pending photo missing from this poll
+    // is kept (with its entry time) for PENDING_GRACE_SEC — dropping it at once
+    // would make the next boost fill-new submit a second photo.
+    const pendingAt = existing?.pending ? existing.entered[existing.pending] : undefined;
+    const keepPending =
+        existing?.pending != null &&
+        (ids.includes(existing.pending) ||
+            (Number.isFinite(pendingAt) && now - Number(pendingAt) <= PENDING_GRACE_SEC));
+    const pending = keepPending ? (existing?.pending as string) : null;
+    if (pending && !(pending in entered)) entered[pending] = Number(pendingAt);
+    const uncertain = existing
+        ? existing.uncertain.filter(
+              (id) =>
+                  id in entered ||
+                  (Number.isFinite(existing.entered[id]) && now - existing.entered[id] <= PENDING_GRACE_SEC),
+          )
+        : [];
+    const unchanged =
+        existing &&
+        existing.pending === pending &&
+        existing.uncertain.length === uncertain.length &&
+        Object.keys(existing.entered).length === Object.keys(entered).length &&
+        Object.keys(entered).every((id) => existing.entered[id] === entered[id]);
+    return unchanged ? null : { closeTime: Number(challenge.close_time), entered, pending, uncertain };
+};
+
+/**
+ * Ledger over a raw-JSON store ({readRaw, writeRaw}).
+ */
+const createEntryAgeLedger = (store: RawJsonStore) => ({
+    /**
+     * Record the current entries of `challenge`. Writes only when something changed.
+     * @param now - Unix seconds
+     */
+    observe: (challenge: Challenge, now: number) => {
+        const challengeId = String(challenge?.id ?? '');
+        if (!challengeId) return;
+        const state = readState(store);
+        const record = observedRecord(state[challengeId], challenge, now);
+        if (record) writeState(store, state, challengeId, record, now);
+    },
+
+    /**
+     * When the entry entered the challenge (Unix seconds), 0 when that is
+     * unknown, null when the entry isn't recorded.
+     */
+    enteredAt: (challengeId: string | number, imageId: string | number): number | null => {
+        const at = readState(store)[String(challengeId)]?.entered[String(imageId)];
+        return finiteOr(at, null);
+    },
+
+    /**
+     * The photo a boost fill-new submitted and is waiting to boost, if any.
+     */
+    pending: (challengeId: string | number): string | null => readState(store)[String(challengeId)]?.pending ?? null,
+
+    isUncertain: (challengeId: string | number, imageId: string | number): boolean =>
+        readState(store)[String(challengeId)]?.uncertain?.includes(String(imageId)) === true,
+
+    markUncertain: (challenge: Challenge, imageId: string | number, now: number) => {
+        const challengeId = String(challenge.id);
+        const state = readState(store);
+        const current = state[challengeId];
+        const id = String(imageId);
+        if (current?.uncertain.includes(id)) return;
+        writeState(
+            store,
+            state,
+            challengeId,
+            {
+                closeTime: Number(challenge.close_time),
+                entered: { ...current?.entered, [id]: now },
+                pending: current?.pending ?? null,
+                uncertain: [...(current?.uncertain ?? []), id],
+            },
+            now,
+        );
+    },
+
+    /**
+     * Record a photo a boost fill-new just submitted: entered `now`, and the
+     * one the boost is waiting on.
+     * @param now - Unix seconds
+     */
+    markPending: (challenge: Challenge, imageId: string | number, now: number) => {
+        const challengeId = String(challenge.id);
+        const state = readState(store);
+        const entered = { ...state[challengeId]?.entered, [String(imageId)]: now };
+        writeState(
+            store,
+            state,
+            challengeId,
+            {
+                closeTime: Number(challenge.close_time),
+                entered,
+                pending: String(imageId),
+                uncertain: state[challengeId]?.uncertain ?? [],
+            },
+            now,
+        );
+    },
+
+    /**
+     * The boost landed (or gave up): stop waiting on a pending photo.
+     * @param now - Unix seconds
+     */
+    clearPending: (challengeId: string | number, now: number) => {
+        const state = readState(store);
+        const record = state[String(challengeId)];
+        if (!record?.pending) return;
+        writeState(store, state, String(challengeId), { ...record, pending: null }, now);
+    },
+});
+
+/** Ledger over an in-memory store — mock mode, tests. */
+const createMemoryEntryAgeLedger = () => {
+    let raw: string | null = null;
+    return createEntryAgeLedger({
+        readRaw: () => raw,
+        writeRaw: (data) => {
+            raw = data;
+        },
+    });
+};
+
+const entryAgeLedger = createEntryAgeLedger(entryAgeStore);
+
+export const initializeEntryAgesAsync = entryAgeStore.initializeAsync;
+export const flushEntryAgeWrites = entryAgeStore.flushPendingWrites;
+export { entryAgeLedger, createEntryAgeLedger, createMemoryEntryAgeLedger };

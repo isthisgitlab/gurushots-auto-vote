@@ -1,0 +1,78 @@
+/**
+ * Auto-fill — schedule-row validation and the end-aligned threshold math that
+ * the staggered fill trigger and the scheduler cadence share.
+ */
+
+import { remapScheduleRows } from '../scheduleRemap';
+import { finiteOr } from '../../numbers';
+
+import type { FillSchedule } from '../scheduleRemap';
+
+/**
+ * The schedule as it effectively applies to one challenge: its rows
+ * end-aligned to the challenge's photo limit by scheduleRemap (a 2-image
+ * challenge fills its 2nd photo at the Image-4 row's time — see that module's
+ * header for the rule). Both threshold computations below MUST go through
+ * this so the fill trigger and the scheduler cadence always agree.
+ */
+const getEffectiveScheduleRows = remapScheduleRows;
+
+/**
+ * Target entry count implied by the schedule for the time remaining: the
+ * largest row count whose threshold has been reached, over the END-ALIGNED
+ * effective rows (getEffectiveScheduleRows — a 2-image challenge's 2nd photo
+ * follows the Image-4 row's time), each row clamped to the challenge's
+ * max_photo_submits as a residual safety net. Row order is irrelevant.
+ * Returns 0 for an empty/invalid schedule, a non-finite secondsRemaining, or
+ * a non-finite max (never NaN — a NaN would poison orderDeadlineActions'
+ * sort downstream).
+ *
+ * @param schedule - the challenge's effective autoFillSchedule
+ * @param maxPhotoSubmits - challenge.max_photo_submits
+ */
+const resolveScheduleTarget = (
+    schedule: FillSchedule,
+    secondsRemaining: number,
+    maxPhotoSubmits: number | undefined,
+): number => {
+    const max = finiteOr(maxPhotoSubmits, 0);
+    if (!Number.isFinite(secondsRemaining)) return 0;
+    let target = 0;
+    for (const row of getEffectiveScheduleRows(schedule, maxPhotoSubmits)) {
+        if (secondsRemaining <= row.seconds) {
+            target = Math.max(target, Math.min(row.count, max));
+        }
+    }
+    return target;
+};
+
+/**
+ * Seconds-before-close at which the next auto-fill becomes due: the largest
+ * threshold among END-ALIGNED effective rows (getEffectiveScheduleRows) whose
+ * clamped count exceeds the current entry count. 0 when no further row can
+ * ever apply (schedule empty/invalid, or every remaining row is already
+ * satisfied / shifted away). Used by VotingLogic's orderDeadlineActions so
+ * fills sort against boost/turbo/emergency correctly; the same defensive
+ * rules as resolveScheduleTarget apply.
+ *
+ * @param schedule - the challenge's effective autoFillSchedule
+ * @param entryCount - current number of entries
+ * @param maxPhotoSubmits - challenge.max_photo_submits
+ */
+const getNextScheduleThresholdSec = (
+    schedule: FillSchedule,
+    entryCount: number,
+    maxPhotoSubmits: number | undefined,
+): number => {
+    const max = finiteOr(maxPhotoSubmits, 0);
+    const count = finiteOr(entryCount, 0);
+    let threshold = 0;
+    for (const row of getEffectiveScheduleRows(schedule, maxPhotoSubmits)) {
+        if (Math.min(row.count, max) > count) {
+            threshold = Math.max(threshold, row.seconds);
+        }
+    }
+    return threshold;
+};
+
+export { resolveScheduleTarget, getNextScheduleThresholdSec };

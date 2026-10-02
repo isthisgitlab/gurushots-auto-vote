@@ -1,0 +1,151 @@
+/**
+ * IPC handlers for the auto-updater. The AutoUpdater instance and the
+ * main BrowserWindow reference live in index.ts; we receive
+ * accessors so we can read/write them without owning the lifecycle.
+ *
+ * Lifecycle ownership is in index.ts because the AutoUpdater is
+ * created lazily on the first manual `check-for-updates`, and the
+ * main window's setup path needs to wire the same instance via
+ * `autoUpdater.setMainWindow`.
+ */
+
+import * as logger from '../logger';
+import { registerHandlers } from './registerHandlers';
+import { errorResult } from './errorResult';
+import { AutoUpdater } from '../services/AutoUpdater';
+import { getReleasesUrl } from '../services/UpdateChecker';
+
+import type { BrowserWindow, IpcMain } from 'electron';
+import type { IpcHandlerMap } from './registerHandlers';
+import type { UpdateSummary } from '../services/AutoUpdater';
+
+interface UpdateHandlerDeps {
+    getAutoUpdater: () => AutoUpdater | null;
+    setAutoUpdater: (autoUpdater: AutoUpdater) => void;
+    getMainWindow: () => BrowserWindow | null;
+}
+
+// Lazily construct the shared instance on first use (windowed — unlike
+// index/startup.ts's deliberate pre-window startup construction) and register it
+// back through the accessor so index.ts keeps lifecycle ownership.
+const ensureUpdater = ({ getAutoUpdater, setAutoUpdater, getMainWindow }: UpdateHandlerDeps) => {
+    let autoUpdater = getAutoUpdater();
+    if (!autoUpdater) {
+        autoUpdater = new AutoUpdater(getMainWindow());
+        setAutoUpdater(autoUpdater);
+    }
+    return autoUpdater;
+};
+
+// Guard for handlers that must NOT lazily construct: yields either the
+// existing instance or the standard "not initialized" failure result.
+const requireUpdater = ({
+    getAutoUpdater,
+}: UpdateHandlerDeps):
+    | { autoUpdater: AutoUpdater; failure: null }
+    | { autoUpdater: null; failure: { success: false; error: string } } => {
+    const autoUpdater = getAutoUpdater();
+    return autoUpdater
+        ? { autoUpdater, failure: null }
+        : { autoUpdater: null, failure: { success: false as const, error: 'AutoUpdater not initialized' } };
+};
+
+const buildUpdateFlowHandlers = (deps: UpdateHandlerDeps) => ({
+    // Typed as the summary both shells return (bridge/capacitor.ts implements it too).
+    'check-for-updates': async (): Promise<
+        { success: true; updateInfo: UpdateSummary | null } | { success: false; error: string }
+    > => {
+        try {
+            const updateInfo = await ensureUpdater(deps).checkForUpdates(true);
+            return { success: true as const, updateInfo };
+        } catch (error) {
+            logger.withCategory('update').error('Error checking for updates:', error);
+            return errorResult(error, 'Failed to check for updates');
+        }
+    },
+
+    'download-update': async () => {
+        const { autoUpdater, failure } = requireUpdater(deps);
+        try {
+            if (failure) {
+                return failure;
+            }
+            await autoUpdater.downloadUpdate();
+            return { success: true as const };
+        } catch (error) {
+            logger.withCategory('update').error('Error downloading update:', error);
+            return {
+                ...errorResult(error, 'Failed to download update'),
+                fallbackUrl: getReleasesUrl(),
+            };
+        }
+    },
+
+    'install-update': async () => {
+        try {
+            const { autoUpdater, failure } = requireUpdater(deps);
+            if (failure) {
+                return failure;
+            }
+            autoUpdater.quitAndInstall();
+            return { success: true as const };
+        } catch (error) {
+            logger.withCategory('update').error('Error installing update:', error);
+            return errorResult(error, 'Failed to install update');
+        }
+    },
+});
+
+const buildUpdateStateHandlers = (deps: UpdateHandlerDeps) => ({
+    'skip-update-version': async () => {
+        try {
+            const { autoUpdater, failure } = requireUpdater(deps);
+            if (failure) {
+                return failure;
+            }
+            const updateInfo = autoUpdater.getUpdateInfo();
+            if (updateInfo) {
+                autoUpdater.skipVersion(updateInfo.latestVersion);
+                return { success: true as const };
+            }
+            return { success: false as const, error: 'No update info available' };
+        } catch (error) {
+            logger.withCategory('update').error('Error skipping update version:', error);
+            return errorResult(error, 'Failed to skip update version');
+        }
+    },
+
+    'clear-skip-version': async () => {
+        try {
+            ensureUpdater(deps).clearSkipVersion();
+            return { success: true as const };
+        } catch (error) {
+            logger.withCategory('update').error('Error clearing skip version:', error);
+            return errorResult(error, 'Failed to clear skipped version');
+        }
+    },
+
+    'get-releases-url': () => {
+        return { success: true as const, url: getReleasesUrl() };
+    },
+
+    'can-auto-update': () => {
+        const autoUpdater = deps.getAutoUpdater();
+        if (autoUpdater) {
+            return { success: true as const, canAutoUpdate: autoUpdater.canAutoUpdate() };
+        }
+        return { success: false as const, canAutoUpdate: false };
+    },
+});
+
+const buildHandlers = (deps: UpdateHandlerDeps) =>
+    ({
+        ...buildUpdateFlowHandlers(deps),
+        ...buildUpdateStateHandlers(deps),
+    }) satisfies IpcHandlerMap;
+
+const register = (ipcMain: IpcMain, deps: UpdateHandlerDeps) => {
+    registerHandlers(ipcMain, buildHandlers(deps));
+};
+
+export { register, buildHandlers };

@@ -1,0 +1,148 @@
+/**
+ * Headless background entry point (Android foreground service).
+ *
+ * Loaded in a bare WebView owned by AutoVoteService — there is NO
+ * Capacitor runtime here. `headless.html` sets `window.__GS_HEADLESS__`
+ * so runtime.isHeadlessService() is true, which routes the settings and
+ * HTTP layers through the native @JavascriptInterface bridges
+ * (AndroidHeadlessStore / AndroidHeadlessHttp) instead of
+ * @capacitor/preferences / CapacitorHttp.
+ *
+ * The native service calls `GS.runOneCycle()` on each AlarmManager tick.
+ * We run ONE full voting cycle via the existing orchestrator
+ * (fetchChallengesAndVote — boost/turbo/auto-fill/vote, i.e. full parity
+ * with the desktop scheduler), compute the next cadence with the shared
+ * threshold/random-delay helpers, and report {ok, nextDelayMs, ...} back
+ * through AndroidHeadlessBridge.onCycleComplete so the service can
+ * schedule the next alarm. Reusing the JS keeps a single source of truth
+ * rather than re-porting the strategy to Kotlin.
+ */
+
+import * as settings from '../settings';
+import * as apiFactory from '../apiFactory';
+import * as logger from '../logger';
+import { getRandomCheckFrequencyMs, MIN_CYCLE_GAP_MS, OFFLINE_RETRY_MS } from '../scheduling/randomDelay';
+import { computeNextCycleDelayMs } from '../scheduling/thresholdWindow';
+import {
+    resolveThreshold,
+    resolveScheduledFill,
+    resolveFinalWindowTopUp,
+    resolveBoostPrefill,
+    resolveCurrencyAuto,
+    resolveScenarioWake,
+} from '../scheduling/nodeResolvers';
+import { DEFAULT_TIMEZONE } from '../settings/uiDefaults';
+
+import type { ActiveChallengesResponse, Challenge } from '../types/gurushots';
+import type { HeadlessGlobals } from '../types/capacitor';
+import { errorMessage } from '../errorMessage';
+
+const log = (msg: string, data?: unknown) => logger.withCategory('voting').info(`[headless] ${msg}`, data);
+
+/**
+ * Mirror the scheduler's cadence decision for a single tick via the shared
+ * computeNextCycleDelayMs: fixed last-minute frequency when a challenge is
+ * inside its window, otherwise a fresh random delay capped to the soonest
+ * upcoming threshold boundary so the next AlarmManager tick lands on it instead
+ * of overshooting. Returned to native so AlarmManager schedules accordingly.
+ *
+ * `prefetched` reuses the challenge list runOneCycle's fetchChallengesAndVote
+ * already fetched, avoiding a duplicate getActiveChallenges request. A non-array
+ * (e.g. the vote step threw before fetching, or the cycle failed) falls back to
+ * a fresh fetch — and that fresh fetch keeps the fetchFailed flag, not just the
+ * list, so a persistent outage caps the wait to a short retry instead of the
+ * full (possibly very long) normal cadence. This mirrors the cadence chain's
+ * offline-retry cap; the headless loop schedules its own AlarmManager ticks but
+ * must recover on the same beat.
+ */
+const computeNextDelayMs = async (token: string, prefetched: Challenge[] | null = null): Promise<number> => {
+    const userSettings = settings.loadSettings();
+    try {
+        let list: Challenge[];
+        let fetchFailedNow = false;
+        if (Array.isArray(prefetched)) {
+            list = prefetched;
+        } else {
+            const fetched: ActiveChallengesResponse | null = await apiFactory
+                .getApiStrategy()
+                .getActiveChallenges(token);
+            list = fetched?.challenges || [];
+            fetchFailedNow = fetched?.fetchFailed === true;
+        }
+        const now = Math.floor(Date.now() / 1000);
+        const lastMinuteCheckMinutes = Number(settings.getEffectiveSetting('lastMinuteCheckFrequency', 'global')) || 1;
+        const { delayMs, mode } = await computeNextCycleDelayMs(list, now, {
+            resolveThreshold,
+            normalDelayMs: getRandomCheckFrequencyMs(userSettings),
+            lastMinuteCheckMinutes,
+            minGapMs: MIN_CYCLE_GAP_MS,
+            resolveScheduledFill,
+            timezone: userSettings.timezone || DEFAULT_TIMEZONE,
+            resolveFinalWindowTopUp,
+            resolveBoostPrefill,
+            resolveCurrencyAuto,
+            resolveScenarioWake,
+        });
+        // API still down (this tick's own fetch failed): cap the wait to a short
+        // retry so recovery tracks reconnection, not the full normal cadence.
+        // Only reachable in normal mode — a failed fetch yields an empty list,
+        // and an empty list never has a threshold/scheduled window to approach.
+        if (fetchFailedNow && mode === 'normal') {
+            return Math.min(delayMs, OFFLINE_RETRY_MS);
+        }
+        return delayMs;
+    } catch (err) {
+        log('next-delay computation failed; using normal cadence', errorMessage(err) ?? String(err));
+        return getRandomCheckFrequencyMs(userSettings);
+    }
+};
+
+const reportComplete = (payload: object) => {
+    try {
+        (globalThis as HeadlessGlobals).AndroidHeadlessBridge?.onCycleComplete(JSON.stringify(payload));
+    } catch (err) {
+        log('onCycleComplete failed', errorMessage(err));
+    }
+};
+
+const fallbackDelay = () => getRandomCheckFrequencyMs(settings.loadSettings());
+
+const runOneCycle = async () => {
+    try {
+        const token = settings.getSetting('token');
+        if (!token) {
+            log('no token — skipping cycle (log in via the app first)');
+            return reportComplete({ ok: false, error: 'no-token', nextDelayMs: fallbackDelay() });
+        }
+        if (settings.getSetting('mock')) {
+            log('mock mode — headless cycle is a no-op');
+            return reportComplete({ ok: true, skipped: 'mock', nextDelayMs: fallbackDelay() });
+        }
+
+        log('cycle starting');
+        const result: { success?: boolean; message?: string; error?: string; challenges?: Challenge[] } | null =
+            await apiFactory.getApiStrategy().fetchChallengesAndVote(token);
+        const ok = result ? result.success !== false : false;
+        // Only reuse the cycle's list when it succeeded. On an outage the
+        // orchestrator returns `{ success: false, challenges: [] }`, and that
+        // empty list would look like "nothing to vote on" to computeNextDelayMs
+        // and arm a full normal-cadence wait; passing null instead forces a
+        // fresh fetch there, which detects fetchFailed and caps the retry.
+        const nextDelayMs = await computeNextDelayMs(token, ok ? result?.challenges : null);
+        log('cycle complete', { ok, nextDelayMs });
+        reportComplete({ ok, message: (result && (result.message || result.error)) || null, nextDelayMs });
+    } catch (err) {
+        const thrown = errorMessage(err);
+        log('cycle threw', thrown);
+        reportComplete({
+            ok: false,
+            error: thrown || 'cycle-failed',
+            nextDelayMs: fallbackDelay(),
+        });
+    }
+};
+
+(globalThis as HeadlessGlobals).GS = { runOneCycle };
+log('headless bundle loaded');
+
+export { runOneCycle, computeNextDelayMs };

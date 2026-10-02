@@ -1,0 +1,1005 @@
+/**
+ * Settings facade edge cases: corrupt/legacy persisted blobs (missing or null
+ * challengeSettings containers), rejection paths of the mutation helpers,
+ * cleanup + reset helpers, title-pin fallbacks and the named-profile guards.
+ *
+ * Drives the in-memory headless-store seam (same as title-tag-rules.test.ts)
+ * so loadSettings/saveSettings round-trip without touching fs. `seed()` writes
+ * a raw persisted blob; `saved()` reads back what the facade last persisted.
+ */
+
+jest.mock('../../src/ts/logger', () => {
+    const cat = { info: jest.fn(), error: jest.fn(), debug: jest.fn(), success: jest.fn(), warning: jest.fn() };
+    return {
+        info: jest.fn(),
+        warning: jest.fn(),
+        error: jest.fn(),
+        debug: jest.fn(),
+        isDevMode: jest.fn(() => false),
+        isSourceCode: jest.fn(() => true),
+        getAppName: jest.fn(() => 'gurushots-auto-vote-dev'),
+        withCategory: jest.fn(() => cat),
+        __cat: cat,
+    };
+});
+
+import settings = require('../../src/ts/settings');
+import loggerModule = require('../../src/ts/logger');
+const logger = jest.mocked(loggerModule);
+import type * as settingsModule from '../../src/ts/settings';
+import type * as node_fsModule from 'node:fs';
+import type { CategoryLogger } from '../../src/ts/logger';
+import type { AndroidHeadlessStore, AppSettings } from '../../src/ts/types/settings';
+import { invalid } from '../helpers/invalid';
+
+const g = globalThis as typeof globalThis & {
+    __GS_HEADLESS__?: boolean;
+    AndroidHeadlessStore?: AndroidHeadlessStore;
+};
+
+/** In-memory stand-in for the native headless bridge. */
+type HeadlessStoreDouble = {
+    value: string | null;
+    read: jest.Mock<string | null, []>;
+    write: jest.Mock<void, [string]>;
+};
+
+/** The shared category logger the logger mock above exposes as `__cat`. */
+type CatDouble = jest.Mocked<Pick<CategoryLogger, 'info' | 'error' | 'debug' | 'success' | 'warning'>>;
+
+const cat = invalid<typeof logger & { __cat: CatDouble }>(logger).__cat;
+
+describe('settings facade — edge cases', () => {
+    let store: HeadlessStoreDouble;
+    // Seed a raw blob, then let one load apply the (write-on-change) load-time
+    // migrations so a test's write assertions only see the call under test.
+    const seed = (obj: unknown) => {
+        store.value = JSON.stringify(obj);
+        settings.loadSettings();
+        store.write.mockClear();
+    };
+    const saved = () => JSON.parse(store.value!) as AppSettings;
+
+    beforeAll(() => {
+        // Burn the once-per-process obsolete-settings cleanup so it never
+        // rewrites a blob seeded by an individual test below.
+        const warmup = JSON.stringify({ challengeSettings: { globalDefaults: {} } });
+        g.__GS_HEADLESS__ = true;
+        g.AndroidHeadlessStore = { read: () => warmup, write: () => {} };
+        settings.loadSettings();
+    });
+
+    beforeEach(() => {
+        g.__GS_HEADLESS__ = true;
+        store = {
+            value: null,
+            read: jest.fn(() => store.value),
+            write: jest.fn((d) => {
+                store.value = d;
+            }),
+        };
+        g.AndroidHeadlessStore = store;
+        settings.rememberChallengeTitles([]);
+        jest.clearAllMocks();
+    });
+
+    afterAll(() => {
+        delete g.__GS_HEADLESS__;
+        delete g.AndroidHeadlessStore;
+    });
+
+    describe('load / save', () => {
+        test('a corrupt settings blob falls back to defaults and logs the parse error', () => {
+            store.value = '{not json';
+            const loaded = settings.loadSettings();
+            expect(loaded).toEqual(settings.getDefaultSettings());
+            expect(cat.error).toHaveBeenCalledWith('Error loading settings:', expect.any(SyntaxError));
+        });
+
+        test('saveSettings reports false instead of throwing on an unserializable value', () => {
+            seed({ theme: 'dark' });
+            expect(settings.saveSettings({ big: 1n })).toBe(false);
+            expect(cat.error).toHaveBeenCalledWith('Error saving settings:', expect.any(TypeError));
+            expect(saved().theme).toBe('dark');
+        });
+
+        test('a non-object stored profile does not break the load-time migrations', () => {
+            seed({ challengeSettings: { globalDefaults: {}, profiles: { Broken: 5, Ok: { exposure: 70 } } } });
+            const loaded = settings.loadSettings();
+            expect(loaded.challengeSettings.profiles!.Broken).toBe(5);
+            expect(loaded.challengeSettings.profiles!.Ok).toEqual({ exposure: 70 });
+        });
+
+        test('getSetting / setSetting round-trip a top-level key', () => {
+            seed({});
+            expect(settings.setSetting('theme', 'dark')).toBe(true);
+            expect(settings.getSetting('theme')).toBe('dark');
+        });
+
+        test('isReloadRequired: UI keys and per-challenge keys reload, others do not', () => {
+            expect(settings.isReloadRequired('theme')).toBe(true);
+            expect(settings.isReloadRequired('exposure')).toBe(true);
+            expect(settings.isReloadRequired('lastMinuteCheckFrequency')).toBeFalsy();
+            expect(settings.isReloadRequired('token')).toBeFalsy();
+        });
+    });
+
+    describe('window bounds', () => {
+        test('saveWindowBounds recreates a missing windowBounds container', () => {
+            seed({ windowBounds: null });
+            const bounds = { x: 1, y: 2, width: 300, height: 400 };
+            expect(settings.saveWindowBounds('main', bounds)).toBe(true);
+            expect(saved().windowBounds).toEqual({ main: bounds });
+            expect(settings.getWindowBounds('main')).toEqual(bounds);
+
+            // An existing container keeps the other window's bounds.
+            const login = { x: 5, y: 6, width: 700, height: 800 };
+            expect(settings.saveWindowBounds('login', login)).toBe(true);
+            expect(saved().windowBounds).toEqual({ main: bounds, login });
+        });
+
+        test('getWindowBounds falls back to the default for a missing container or window', () => {
+            const defaults = settings.getDefaultSettings().windowBounds;
+            seed({ windowBounds: null });
+            expect(settings.getWindowBounds('login')).toEqual(defaults.login);
+            seed({ windowBounds: { main: { width: 1 } } });
+            expect(settings.getWindowBounds('login')).toEqual(defaults.login);
+        });
+    });
+
+    describe('global defaults', () => {
+        test('getGlobalDefault falls back to the schema default when containers are missing', () => {
+            seed({ challengeSettings: null });
+            expect(settings.getGlobalDefault('exposure')).toBe(100);
+            seed({ challengeSettings: { globalDefaults: { exposure: 70 } } });
+            expect(settings.getGlobalDefault('exposure')).toBe(70);
+            expect(settings.getGlobalDefault('exposureTarget')).toBe(0);
+            expect(settings.getGlobalDefault('noSuchKey')).toBeUndefined();
+        });
+
+        test('setGlobalDefault rejects unknown keys and invalid values without writing', () => {
+            seed({ challengeSettings: { globalDefaults: { exposure: 70 } } });
+            expect(settings.setGlobalDefault('noSuchKey', 1)).toBe(false);
+            expect(settings.setGlobalDefault('exposure', 500)).toBe(false);
+            // Context validation: target below the stored trigger.
+            expect(settings.setGlobalDefault('exposureTarget', 50)).toBe(false);
+            expect(store.write).not.toHaveBeenCalled();
+            expect(cat.error).toHaveBeenCalledWith('Invalid setting key: noSuchKey', null);
+        });
+
+        test('setGlobalDefault saves into a blob stored without challengeSettings or its globalDefaults', () => {
+            seed({ challengeSettings: null });
+            expect(settings.setGlobalDefault('exposure', 80)).toBe(true);
+            expect(saved().challengeSettings.globalDefaults.exposure).toBe(80);
+            expect(saved().challengeSettings.perChallenge).toEqual({});
+
+            seed({ challengeSettings: { perChallenge: {} } });
+            expect(settings.setGlobalDefault('exposure', 60)).toBe(true);
+            expect(saved().challengeSettings.globalDefaults.exposure).toBe(60);
+        });
+
+        test('resetGlobalDefault restores the schema default and rejects unknown keys', () => {
+            seed({ challengeSettings: { globalDefaults: { exposure: 70 } } });
+            expect(settings.isGlobalDefaultModified('exposure')).toBe(true);
+            expect(settings.resetGlobalDefault('exposure')).toBe(true);
+            expect(saved().challengeSettings.globalDefaults.exposure).toBe(100);
+            expect(settings.isGlobalDefaultModified('exposure')).toBe(false);
+            expect(settings.resetGlobalDefault('noSuchKey')).toBe(false);
+            expect(settings.isGlobalDefaultModified('noSuchKey')).toBe(false);
+        });
+
+        test('resetAllGlobalDefaults rebuilds every schema key even from a null container', () => {
+            seed({ challengeSettings: null });
+            expect(settings.resetAllGlobalDefaults()).toBe(true);
+            const gd = saved().challengeSettings.globalDefaults;
+            for (const key of Object.keys(settings.SETTINGS_SCHEMA)) {
+                expect(gd[key]).toEqual(settings.SETTINGS_SCHEMA[key as keyof typeof settings.SETTINGS_SCHEMA].default);
+            }
+        });
+
+        test('resetAllGlobalDefaults keeps per-challenge overrides', () => {
+            seed({ challengeSettings: { globalDefaults: { exposure: 70 }, perChallenge: { c1: { exposure: 60 } } } });
+            expect(settings.resetAllGlobalDefaults()).toBe(true);
+            const cs = saved().challengeSettings;
+            expect(cs.globalDefaults.exposure).toBe(100);
+            expect(cs.perChallenge).toEqual({ c1: { exposure: 60 } });
+        });
+    });
+
+    describe('per-challenge overrides', () => {
+        test('getChallengeOverride returns null when challengeSettings is missing', () => {
+            seed({ challengeSettings: null });
+            expect(settings.getChallengeOverride('exposure', 'c1')).toBeNull();
+        });
+
+        test('setChallengeOverride rejects unknown and global-only keys', () => {
+            seed({});
+            expect(settings.setChallengeOverride('noSuchKey', 'c1', 1)).toBe(false);
+            expect(settings.setChallengeOverride('lastMinuteCheckFrequency', 'c1', 2)).toBe(false);
+            expect(store.write).not.toHaveBeenCalled();
+        });
+
+        test('setChallengeOverride rebuilds missing containers', () => {
+            seed({ challengeSettings: null });
+            expect(settings.setChallengeOverride('exposure', 'c1', 70)).toBe(true);
+            expect(saved().challengeSettings.perChallenge.c1).toEqual({ exposure: 70 });
+
+            seed({ challengeSettings: { globalDefaults: {} } });
+            expect(settings.setChallengeOverride('exposure', 'c2', 60)).toBe(true);
+            expect(saved().challengeSettings.perChallenge).toEqual({ c2: { exposure: 60 } });
+        });
+
+        test('setChallengeOverrides rejects a blank id or a non-object payload', () => {
+            seed({});
+            expect(settings.setChallengeOverrides(null, { exposure: 70 })).toBe(false);
+            expect(settings.setChallengeOverrides('   ', { exposure: 70 })).toBe(false);
+            expect(settings.setChallengeOverrides('c1', null)).toBe(false);
+            expect(settings.setChallengeOverrides('c1', [70])).toBe(false);
+            expect(settings.setChallengeOverrides('c1', 'x')).toBe(false);
+            expect(store.write).not.toHaveBeenCalled();
+        });
+
+        test('setChallengeOverrides rebuilds a null container and rejects an invalid combination', () => {
+            seed({ challengeSettings: null });
+            expect(settings.setChallengeOverrides(' c1 ', { exposure: 70 })).toBe(true);
+            expect(saved().challengeSettings.perChallenge.c1).toEqual({ exposure: 70 });
+
+            // exposureTarget must be 0 or >= exposure.
+            expect(settings.setChallengeOverrides('c1', { exposureTarget: 50 })).toBe(false);
+            expect(saved().challengeSettings.perChallenge.c1).toEqual({ exposure: 70 });
+        });
+
+        test('removeChallengeOverride is a no-op when there is nothing to remove', () => {
+            seed({ challengeSettings: null });
+            expect(settings.removeChallengeOverride('exposure', 'c1')).toBe(true);
+            seed({ challengeSettings: { globalDefaults: {}, perChallenge: { c1: { exposure: 70 } } } });
+            expect(settings.removeChallengeOverride('exposureTarget', 'c1')).toBe(true);
+            expect(store.write).not.toHaveBeenCalled();
+        });
+
+        test('removeChallengeOverride refuses a removal that would leave an invalid combination', () => {
+            seed({
+                challengeSettings: {
+                    globalDefaults: { exposure: 50, exposureTarget: 60 },
+                    perChallenge: { c1: { exposure: 40, exposureTarget: 45 } },
+                },
+            });
+            // Dropping exposure would inherit 50 with the override target 45 < 50.
+            expect(settings.removeChallengeOverride('exposure', 'c1')).toBe(false);
+            expect(store.write).not.toHaveBeenCalled();
+            // Dropping the target inherits 60 >= 40 — fine.
+            expect(settings.removeChallengeOverride('exposureTarget', 'c1')).toBe(true);
+            expect(saved().challengeSettings.perChallenge.c1).toEqual({ exposure: 40 });
+        });
+
+        test('getEffectiveSetting guards unknown keys and missing containers', () => {
+            seed({ challengeSettings: null });
+            expect(settings.getEffectiveSetting('noSuchKey', 'c1')).toBeUndefined();
+            expect(settings.getEffectiveSetting('exposure')).toBe(100);
+            seed({ challengeSettings: { perChallenge: {} } });
+            expect(settings.getEffectiveSetting('exposure', 'c1')).toBe(100);
+        });
+
+        test('getChallengeOverrides filters unknown keys and ignores non-object containers', () => {
+            seed({
+                challengeSettings: {
+                    globalDefaults: {},
+                    perChallenge: { c1: { exposure: 70, bogus: 1, lastMinuteCheckFrequency: 2 }, c2: [1, 2] },
+                },
+            });
+            expect(settings.getChallengeOverrides('c1')).toEqual({ exposure: 70 });
+            expect(settings.getChallengeOverrides('c2')).toEqual({});
+            expect(settings.getChallengeOverrides('missing')).toEqual({});
+        });
+
+        test('replaceChallengeOverrides validates id, flag and payload', () => {
+            seed({});
+            expect(settings.replaceChallengeOverrides('', { exposure: 70 })).toBe(false);
+            expect(settings.replaceChallengeOverrides(undefined, { exposure: 70 })).toBe(false);
+            expect(settings.replaceChallengeOverrides('c1', { exposure: 70 }, 'yes')).toBe(false);
+            expect(settings.replaceChallengeOverrides('c1', [70])).toBe(false);
+            expect(settings.replaceChallengeOverrides('c1', { bogus: 1 })).toBe(false);
+            expect(settings.replaceChallengeOverrides('c1', { exposure: 50, exposureTarget: 40 })).toBe(false);
+            expect(store.write).not.toHaveBeenCalled();
+        });
+
+        test('replaceChallengeOverrides rebuilds a null container and stores only non-inherited values', () => {
+            seed({ challengeSettings: null });
+            expect(settings.replaceChallengeOverrides('c1', { exposure: 70, exposureTarget: 0 })).toBe(true);
+            const cs = saved().challengeSettings;
+            expect(cs.perChallenge.c1).toEqual({ exposure: 70 });
+            expect(cs.titleProfileSuppressions).toEqual({});
+        });
+    });
+
+    describe('active challenge titles / tags cache', () => {
+        const PROFILE_SETUP = {
+            globalDefaults: {},
+            profiles: { P: { exposure: 70 } },
+        };
+
+        test('rememberChallengeTitles rejects a non-array', () => {
+            expect(settings.rememberChallengeTitles(invalid('nope'))).toBe(false);
+            expect(settings.rememberChallengeTitles(null)).toBe(false);
+        });
+
+        test('only bounded, first-seen observations enter the cache', () => {
+            seed({
+                challengeSettings: {
+                    ...PROFILE_SETUP,
+                    titlePins: { c: 'Alpha' },
+                    titleRules: [
+                        { title: 'Alpha', profile: 'P' },
+                        { title: 'T', profile: 'P' },
+                    ],
+                },
+            });
+            expect(
+                settings.rememberChallengeTitles(
+                    invalid([
+                        { id: null, title: 'Alpha' },
+                        { id: '', title: 'Alpha' },
+                        { id: 'a', title: '  T  ' },
+                        { id: 'a', title: 'Alpha' }, // duplicate id — first row wins
+                        { id: 'b', title: 5 },
+                        { id: 'c', title: 'y'.repeat(201) }, // over-length → explicit miss
+                    ]),
+                ),
+            ).toBe(true);
+
+            expect(settings.getEffectiveSetting('exposure', 'a')).toBe(70);
+            expect(settings.getEffectiveSetting('exposure', 'b')).toBe(100);
+            // The explicit miss must NOT fall back to the persisted pin.
+            expect(settings.getEffectiveSetting('exposure', 'c')).toBe(100);
+        });
+
+        test('challenge tags are trimmed and bounded; junk entries are dropped', () => {
+            seed({
+                challengeSettings: {
+                    ...PROFILE_SETUP,
+                    titleRules: [{ challengeTag: 'exhibition', profile: 'P' }],
+                },
+            });
+            settings.rememberChallengeTitles(
+                invalid([
+                    { id: 'a', title: 'Whatever', tags: [5, '   ', 'x'.repeat(201), '  Exhibition '] },
+                    { id: 'b', title: 'Other', tags: 'Exhibition' },
+                ]),
+            );
+            expect(settings.getEffectiveSetting('exposure', 'a')).toBe(70);
+            expect(settings.getEffectiveSetting('exposure', 'b')).toBe(100);
+            expect(settings.getTitleProfile('Nope', 'a')).toEqual({
+                name: 'P',
+                values: { exposure: 70 },
+                suppressed: false,
+            });
+        });
+
+        test('persisted title pins resolve a title profile for an id missing from the live cache', () => {
+            seed({
+                challengeSettings: {
+                    ...PROFILE_SETUP,
+                    titlePins: { c1: 'Alpha', c2: 5, c3: 'z'.repeat(200) },
+                    titleRules: [
+                        { title: 'Alpha', profile: 'P' },
+                        { title: 'z'.repeat(200), profile: 'P' },
+                    ],
+                },
+            });
+            expect(settings.getEffectiveSetting('exposure', 'c1')).toBe(70);
+            // Non-string pin, boundary-length (possibly truncated) pin, unknown id.
+            expect(settings.getEffectiveSetting('exposure', 'c2')).toBe(100);
+            expect(settings.getEffectiveSetting('exposure', 'c3')).toBe(100);
+            expect(settings.getEffectiveSetting('exposure', 'c4')).toBe(100);
+        });
+    });
+
+    describe('title rules', () => {
+        test('getTitleRules tolerates a non-array stored value', () => {
+            seed({ _challengeRulesOrderedV1: true, challengeSettings: { globalDefaults: {}, titleRules: 'x' } });
+            expect(settings.getTitleRules()).toEqual([]);
+        });
+
+        test('a title-keyed rule never matches a challenge known only by tags; condition-less rules are ignored', () => {
+            seed({
+                challengeSettings: {
+                    globalDefaults: {},
+                    titleRules: [
+                        { autoJoin: true },
+                        { title: 'Alpha', autoJoin: true },
+                        { challengeTag: 'Exhibition', autoJoin: false },
+                    ],
+                },
+            });
+            expect(settings.resolveRuleSetting('autoJoin', { tags: ['exhibition'] })).toEqual({ value: false });
+            expect(settings.resolveRuleSetting('autoJoin', { tags: ['comm'] })).toBeNull();
+        });
+
+        test('resolveRuleSetting re-validates a hand-edited inline value', () => {
+            seed({ challengeSettings: { globalDefaults: {}, titleRules: [{ title: 'Alpha', autoJoin: 'yes' }] } });
+            expect(settings.resolveRuleSetting('autoJoin', 'Alpha')).toBeNull();
+        });
+
+        test('setTitleRules rejects invalid tag-only rules', () => {
+            seed({});
+            expect(settings.setTitleRules([{ challengeTag: 'x'.repeat(201), mustIncludeTags: ['a'] }])).toBe(false);
+            expect(
+                settings.setTitleRules([{ challengeTag: 'Exhibition', match: 'regex', mustIncludeTags: ['a'] }]),
+            ).toBe(false);
+            expect(settings.setTitleRules([{ challengeTag: 'Exhibition', autoJoin: 'yes' }])).toBe(false);
+            expect(store.write).not.toHaveBeenCalled();
+            expect(cat.error).toHaveBeenCalledWith(
+                expect.stringContaining('Title rule rejected for "Exhibition"'),
+                null,
+            );
+        });
+
+        test('setTitleRules treats a non-array tag list as empty and rebuilds a null container', () => {
+            seed({ challengeSettings: null });
+            expect(
+                settings.setTitleRules([{ title: 'Alpha', mustIncludeTags: 'not-a-list', shouldIncludeTags: ['b'] }]),
+            ).toBe(true);
+            expect(saved().challengeSettings.titleRules).toEqual([
+                { title: 'Alpha', mustIncludeTags: [], shouldIncludeTags: ['b'] },
+            ]);
+        });
+
+        test('setTitleRules rejects a profile whose stored values are invalid', () => {
+            seed({ challengeSettings: { globalDefaults: {}, profiles: { P: { exposure: 'bad' } } } });
+            expect(settings.setTitleRules([{ title: 'Alpha', profile: 'P' }])).toBe(false);
+            expect(store.write).not.toHaveBeenCalled();
+        });
+
+        test('profile/override composition: missing, suppressed, unrelated and conflicting overrides', () => {
+            const base = {
+                globalDefaults: {},
+                profiles: { P: { exposure: 70 } },
+                titlePins: { c1: 'Alpha' },
+            };
+            // No perChallenge container at all.
+            seed({ challengeSettings: { ...base, perChallenge: null } });
+            expect(settings.setTitleRules([{ title: 'Alpha', profile: 'P' }])).toBe(true);
+
+            // A conflicting override on a challenge the rule applies to fails closed.
+            const conflicting = { exposureTarget: 60 };
+            seed({ challengeSettings: { ...base, perChallenge: { c1: conflicting } } });
+            expect(settings.setTitleRules([{ title: 'Alpha', profile: 'P' }])).toBe(false);
+
+            // ...unless that challenge suppresses its title profile.
+            seed({
+                challengeSettings: {
+                    ...base,
+                    perChallenge: { c1: conflicting },
+                    titleProfileSuppressions: { c1: true },
+                },
+            });
+            expect(settings.setTitleRules([{ title: 'Alpha', profile: 'P' }])).toBe(true);
+
+            // Overrides on a challenge the rule does not reach are not checked.
+            seed({ challengeSettings: { ...base, perChallenge: { c9: conflicting } } });
+            expect(settings.setTitleRules([{ title: 'Alpha', profile: 'P' }])).toBe(true);
+        });
+
+        test('getTitleProfile: non-array rules and a dangling profile reference resolve to null', () => {
+            seed({
+                _challengeRulesOrderedV1: true,
+                challengeSettings: { globalDefaults: {}, titleRules: null, profiles: { P: {} } },
+            });
+            expect(settings.getTitleProfile('Alpha')).toBeNull();
+            seed({ challengeSettings: { globalDefaults: {}, titleRules: [{ title: 'Alpha', profile: 'Missing' }] } });
+            expect(settings.getTitleProfile({ title: 'Alpha' })).toBeNull();
+        });
+
+        test('getTitleProfile accepts a challenge object and reports suppression for an id', () => {
+            seed({
+                challengeSettings: {
+                    globalDefaults: {},
+                    profiles: { P: { exposure: 70 } },
+                    titleRules: [{ title: 'Alpha', profile: 'P' }],
+                    titleProfileSuppressions: { c1: true },
+                },
+            });
+            expect(settings.getTitleProfile({ title: 'Alpha', tags: [] })).toEqual({
+                name: 'P',
+                values: { exposure: 70 },
+            });
+            expect(settings.getTitleProfile({ title: 'Alpha' }, 'c1')).toEqual({
+                name: 'P',
+                values: { exposure: 70 },
+                suppressed: true,
+            });
+        });
+    });
+
+    describe('effective tag / ignore-word lists', () => {
+        test('rule tags union onto the base list, skipping non-string entries', () => {
+            seed({
+                challengeSettings: {
+                    globalDefaults: { mustIncludeTags: ['a', 'b'] },
+                    titleRules: [{ title: 'Alpha', mustIncludeTags: ['b', 5, 'c'], shouldIncludeTags: [] }],
+                },
+            });
+            expect(settings.getEffectiveTagSetting('mustIncludeTags', { title: 'Alpha' })).toEqual(['a', 'b', 'c']);
+            // No rule tags → base passes through untouched.
+            expect(settings.getEffectiveTagSetting('shouldIncludeTags', { title: 'Alpha' })).toEqual([]);
+            // Non-tag key → plain effective value.
+            expect(settings.getEffectiveTagSetting('exposure', { title: 'Alpha' })).toBe(100);
+        });
+
+        test('a stored null tag list is dropped on load; the rule tags still come through', () => {
+            seed({
+                challengeSettings: {
+                    globalDefaults: { mustIncludeTags: null },
+                    titleRules: [{ title: 'Alpha', mustIncludeTags: ['x'] }],
+                },
+            });
+            expect(settings.getEffectiveTagSetting('mustIncludeTags', { id: 7, title: 'Alpha' })).toEqual(['x']);
+        });
+
+        test('getEffectiveIgnoreTitleWords returns the list, or null when empty', () => {
+            seed({
+                challengeSettings: {
+                    globalDefaults: { ignoreTitleWords: ['epic'] },
+                    perChallenge: { 5: { ignoreTitleWords: [] } },
+                },
+            });
+            expect(settings.getEffectiveIgnoreTitleWords({ title: 'x' })).toEqual(['epic']);
+            expect(settings.getEffectiveIgnoreTitleWords({ id: 5 })).toBeNull();
+            expect(settings.getEffectiveIgnoreTitleWords(null)).toEqual(['epic']);
+        });
+    });
+
+    describe('category-rule migration', () => {
+        test('category rules move below the title rules, most conditions first, and the key is dropped', () => {
+            seed({
+                challengeSettings: {
+                    globalDefaults: {},
+                    titleRules: [
+                        { challengeTag: 'Exhibition', mustIncludeTags: ['x'], shouldIncludeTags: [] },
+                        { title: 'Alpha', match: 'contains', mustIncludeTags: ['a'], shouldIncludeTags: [] },
+                        { title: 'Alpha Beta', mustIncludeTags: ['b'], shouldIncludeTags: [] },
+                    ],
+                    categoryRules: [
+                        { type: 'flash', autoJoinWithinHoursOfEnd: 2 },
+                        null,
+                        { type: 'default', pics: 4, autoJoinAfterPercentElapsed: 75, stray: 1 },
+                    ],
+                },
+            });
+            const stored = saved();
+            expect(stored._challengeRulesOrderedV1).toBe(true);
+            expect(stored.challengeSettings.categoryRules).toBeUndefined();
+            expect(stored.challengeSettings.titleRules).toEqual([
+                { title: 'Alpha Beta', mustIncludeTags: ['b'], shouldIncludeTags: [] },
+                { title: 'Alpha', match: 'contains', mustIncludeTags: ['a'], shouldIncludeTags: [] },
+                { challengeTag: 'Exhibition', mustIncludeTags: ['x'], shouldIncludeTags: [] },
+                {
+                    title: '',
+                    mustIncludeTags: [],
+                    shouldIncludeTags: [],
+                    type: 'default',
+                    pics: 4,
+                    autoJoinAfterPercentElapsed: 75,
+                },
+                { title: '', mustIncludeTags: [], shouldIncludeTags: [], type: 'flash', autoJoinWithinHoursOfEnd: 2 },
+            ]);
+            expect(cat.info).toHaveBeenCalledWith('Moved 2 category rule(s) into the challenge rules list', null);
+            // A migrated category rule keeps working through the unified resolver.
+            expect(settings.resolveRuleSetting('autoJoinWithinHoursOfEnd', { title: 'Zeta', type: 'flash' })).toEqual({
+                value: 2,
+            });
+        });
+
+        test('warns when a lower rule could now switch auto-join / auto-submit on under a higher one', () => {
+            seed({
+                challengeSettings: {
+                    globalDefaults: {},
+                    profiles: { P: { exposure: 70 }, Joiner: { autoFill: true } },
+                    titleRules: [
+                        // Tag rule: ranked below the title rule by the migration.
+                        { challengeTag: 'Exhibition', autoJoin: true, mustIncludeTags: [], shouldIncludeTags: [] },
+                        { title: 'Seaside', profile: 'P', mustIncludeTags: [], shouldIncludeTags: [] },
+                    ],
+                },
+            });
+            expect(cat.warning).toHaveBeenCalledWith(
+                'Challenge rules: "Exhibition" can also turn autoJoin on for challenges matched by "Seaside" — review the rule order',
+                null,
+            );
+
+            // A lower rule's PROFILE counts only when the higher rule names none.
+            cat.warning.mockClear();
+            seed({
+                challengeSettings: {
+                    globalDefaults: {},
+                    profiles: { Joiner: { autoFill: true } },
+                    titleRules: [
+                        { title: 'Sea', match: 'contains', mustIncludeTags: ['x'], shouldIncludeTags: [] },
+                        { challengeTag: 'Comm', profile: 'Joiner', mustIncludeTags: [], shouldIncludeTags: [] },
+                    ],
+                },
+            });
+            expect(cat.warning).toHaveBeenCalledWith(expect.stringContaining('"Comm" can also turn autoFill on'), null);
+        });
+
+        test('a rule without a profile never reads the profile named "undefined"', () => {
+            // The higher rule names no profile, so nothing of its own decides
+            // autoJoin; a stored profile literally called "undefined" must not
+            // stand in for the missing name and swallow the warning.
+            seed({
+                challengeSettings: {
+                    globalDefaults: {},
+                    profiles: { undefined: { autoJoin: false } },
+                    titleRules: [
+                        { title: 'Sea', match: 'contains', mustIncludeTags: ['x'], shouldIncludeTags: [] },
+                        { challengeTag: 'Comm', autoJoin: true, mustIncludeTags: [], shouldIncludeTags: [] },
+                    ],
+                },
+            });
+            expect(cat.warning).toHaveBeenCalledWith(
+                expect.stringContaining('"Comm" can also turn autoJoin on for challenges matched by "Sea"'),
+                null,
+            );
+        });
+
+        test.each([
+            [
+                'disjoint exact titles',
+                [
+                    { title: 'Alpha', mustIncludeTags: ['a'] },
+                    { title: 'Beta', autoJoin: true },
+                ],
+            ],
+            [
+                'different photo counts',
+                [
+                    { title: '', pics: 4, mustIncludeTags: ['a'] },
+                    { title: '', pics: 2, autoFill: true },
+                ],
+            ],
+            [
+                'different types',
+                [
+                    { title: '', type: 'flash', mustIncludeTags: ['a'] },
+                    { title: '', type: 'speed', autoFill: true },
+                ],
+            ],
+            [
+                "the higher rule's profile decides the key",
+                [
+                    { title: 'Gamma', match: 'starts', profile: 'P' },
+                    { challengeTag: 'Comm', profile: 'Joiner' },
+                ],
+            ],
+            [
+                'an explicit false',
+                [{ title: 'Delta', mustIncludeTags: ['a'] }, { challengeTag: 'Turbo', autoJoin: false }, null],
+            ],
+        ])('no fall-through warning for %s', (_label, titleRules) => {
+            seed({
+                challengeSettings: {
+                    globalDefaults: {},
+                    profiles: { P: { autoJoin: false }, Joiner: { autoJoin: true }, Broken: null },
+                    titleRules,
+                },
+            });
+            expect(cat.warning).not.toHaveBeenCalledWith(expect.stringContaining('can also turn'), null);
+        });
+
+        test('runs once, tolerates missing lists and a corrupt container, and logs nothing without categories', () => {
+            seed({ challengeSettings: { globalDefaults: {} } });
+            expect(saved().challengeSettings.titleRules).toEqual([]);
+            expect(cat.info).not.toHaveBeenCalledWith(expect.stringContaining('category rule'), null);
+
+            seed({ challengeSettings: 'corrupt' });
+            expect(saved()._challengeRulesOrderedV1).toBe(true);
+
+            // Flag already set: a later categoryRules key is left alone.
+            seed({ _challengeRulesOrderedV1: true, challengeSettings: { globalDefaults: {}, categoryRules: [] } });
+            expect(saved().challengeSettings.categoryRules).toEqual([]);
+        });
+    });
+
+    describe('title pins', () => {
+        test('mergeTitlePins rebuilds a null container and drops corrupt stored pins', () => {
+            seed({ challengeSettings: null });
+            expect(settings.mergeTitlePins({ a: 'A' }, [])).toBe(true);
+            expect(saved().challengeSettings.titlePins).toEqual({ a: 'A' });
+
+            seed({
+                challengeSettings: { globalDefaults: {}, titlePins: { x: '', y: 5, z: 'q'.repeat(200), ok: 'Ok' } },
+            });
+            expect(settings.mergeTitlePins({ b: 'B' })).toBe(true);
+            expect(saved().challengeSettings.titlePins).toEqual({ ok: 'Ok', b: 'B' });
+        });
+
+        test('the pin-cap warning fires once while the map stays saturated', () => {
+            const pins: Record<string, string> = {};
+            for (let i = 0; i < 500; i++) pins[`id${i}`] = `T${i}`;
+            seed({ challengeSettings: { globalDefaults: {}, titlePins: pins } });
+
+            settings.mergeTitlePins({ extra1: 'E1' });
+            settings.mergeTitlePins({ extra2: 'E2' });
+            const capWarnings = cat.warning.mock.calls.filter(([msg]) => String(msg).includes('pin cap'));
+            expect(capWarnings).toHaveLength(1);
+            expect(capWarnings[0][0]).toContain('extra1');
+            expect(Object.keys(saved().challengeSettings.titlePins!)).toHaveLength(500);
+            expect(saved().challengeSettings.titlePins!.extra2).toBeUndefined();
+        });
+    });
+
+    describe('named profiles', () => {
+        test('getChallengeProfiles skips reserved names and drops invalid/oversized values silently', () => {
+            const huge: Record<string, number> = {};
+            for (let i = 0; i < 101; i++) huge[`k${i}`] = i;
+            seed({
+                challengeSettings: {
+                    globalDefaults: {},
+                    profiles: { constructor: { exposure: 70 }, Good: { exposure: 70, exposureTarget: 5 }, Huge: huge },
+                },
+            });
+            expect(settings.getChallengeProfiles()).toEqual({ Good: { exposure: 70 }, Huge: {} });
+        });
+
+        test('saveChallengeProfile rejects an oversized payload', () => {
+            seed({});
+            const huge: Record<string, number> = {};
+            for (let i = 0; i < 101; i++) huge[`k${i}`] = i;
+            expect(settings.saveChallengeProfile('Big', huge)).toBe(false);
+            expect(store.write).not.toHaveBeenCalled();
+        });
+
+        test('saveChallengeProfile rebuilds a null container and drops reserved stored names', () => {
+            seed({ challengeSettings: null });
+            expect(settings.saveChallengeProfile('Mine', { exposure: 70 })).toBe(true);
+            expect(saved().challengeSettings.profiles).toEqual({ Mine: { exposure: 70 } });
+
+            seed({ challengeSettings: { globalDefaults: {}, profiles: { constructor: { exposure: 1 }, A: {} } } });
+            expect(settings.saveChallengeProfile('B', {})).toBe(true);
+            expect(Object.keys(saved().challengeSettings.profiles!)).toEqual(['A', 'B']);
+        });
+
+        test('overwriting a profile tolerates non-array rules and renames only its own assignments', () => {
+            seed({
+                _challengeRulesOrderedV1: true,
+                challengeSettings: { globalDefaults: {}, profiles: { A: {} }, titleRules: 'x' },
+            });
+            expect(settings.saveChallengeProfile('a', { exposure: 70 })).toBe(true);
+            expect(saved().challengeSettings.profiles).toEqual({ a: { exposure: 70 } });
+
+            seed({
+                challengeSettings: {
+                    globalDefaults: {},
+                    profiles: { A: {}, B: {} },
+                    titleRules: [
+                        { title: 'X', profile: 'A', mustIncludeTags: [], shouldIncludeTags: [] },
+                        { title: 'Y', profile: 'B', mustIncludeTags: [], shouldIncludeTags: [] },
+                    ],
+                },
+            });
+            expect(settings.saveChallengeProfile('a', { exposure: 70 })).toBe(true);
+            const rules = saved().challengeSettings.titleRules;
+            expect(rules.map((r) => r.profile)).toEqual(['a', 'B']);
+        });
+
+        test("deleteChallengeProfile skips reserved stored keys and keeps other profiles' rules", () => {
+            seed({
+                challengeSettings: {
+                    globalDefaults: {},
+                    profiles: { constructor: {}, A: {}, B: {} },
+                    titleRules: [
+                        { title: 'X', profile: 'A' },
+                        { title: 'Y', profile: 'B' },
+                    ],
+                },
+            });
+            expect(settings.deleteChallengeProfile('a')).toBe(true);
+            const cs = saved().challengeSettings;
+            expect(cs.profiles!.A).toBeUndefined();
+            expect(cs.titleRules).toEqual([{ title: 'Y', profile: 'B' }]);
+
+            seed({
+                _challengeRulesOrderedV1: true,
+                challengeSettings: { globalDefaults: {}, profiles: { A: {} }, titleRules: null },
+            });
+            expect(settings.deleteChallengeProfile('A')).toBe(true);
+            expect(saved().challengeSettings.profiles).toEqual({});
+        });
+
+        test('applyChallengeProfile rejects a blank or reserved profile name', () => {
+            seed({ challengeSettings: { globalDefaults: {}, profiles: { A: {} } } });
+            expect(settings.applyChallengeProfile('', 'c1')).toBe(false);
+            expect(settings.applyChallengeProfile('__proto__', 'c1')).toBe(false);
+            expect(store.write).not.toHaveBeenCalled();
+            expect(cat.error).toHaveBeenCalledWith('Invalid profile name: "__proto__"', null);
+        });
+
+        test('seedIntentProfiles marks an intent that cannot be saved on this install as seeded', () => {
+            // Global final-window settings that are self-inconsistent make the one
+            // intent that inherits them (Just Participate) fail validation.
+            seed({
+                challengeSettings: {
+                    globalDefaults: {
+                        useFinalWindowExposure: true,
+                        finalWindowExposure: 90,
+                        finalWindowExposureTarget: 50,
+                    },
+                },
+            });
+            expect(settings.seedIntentProfiles()).toBe(true);
+            const cs = saved().challengeSettings;
+            expect(cs.profiles!['Just Participate']).toBeUndefined();
+            expect(cs.profiles!['Finish Strong']).toBeDefined();
+            expect(cs.seededProfiles).toContain('just participate');
+            expect(cat.warning).toHaveBeenCalledWith(
+                expect.stringContaining('Skipped seeding intent profile "Just Participate"'),
+            );
+        });
+    });
+
+    describe('cleanup', () => {
+        test('cleanupStaleChallengeSetting: nothing to do without a container or stale ids', () => {
+            seed({ challengeSettings: null });
+            expect(settings.cleanupStaleChallengeSetting(['c1'])).toBe(true);
+            seed({ challengeSettings: { globalDefaults: {}, perChallenge: { c1: { exposure: 70 } } } });
+            expect(settings.cleanupStaleChallengeSetting(['c1'])).toBe(true);
+            expect(store.write).not.toHaveBeenCalled();
+        });
+
+        test('cleanupStaleChallengeSetting prunes stale overrides and suppressions', () => {
+            seed({
+                challengeSettings: {
+                    globalDefaults: {},
+                    perChallenge: { c1: { exposure: 70 }, old: { exposure: 60 } },
+                    titleProfileSuppressions: { c1: true, gone: true },
+                },
+            });
+            expect(settings.cleanupStaleChallengeSetting(['c1'])).toBe(true);
+            const cs = saved().challengeSettings;
+            expect(cs.perChallenge).toEqual({ c1: { exposure: 70 } });
+            expect(cs.titleProfileSuppressions).toEqual({ c1: true });
+        });
+
+        test('cleanupStaleChallengeSetting handles missing maps', () => {
+            seed({ challengeSettings: { globalDefaults: {}, titleProfileSuppressions: { gone: true } } });
+            expect(settings.cleanupStaleChallengeSetting([])).toBe(true);
+            expect(saved().challengeSettings.titleProfileSuppressions).toEqual({});
+        });
+
+        test('cleanupObsoleteSettings drops unknown keys and empty override containers', () => {
+            seed({
+                boostConfig: { x: 1 },
+                challengeSettings: {
+                    globalDefaults: { exposure: 70, bogus: 1 },
+                    perChallenge: { c1: { bogus: 1 }, c2: { exposure: 60, junk: 2 }, c3: {} },
+                },
+            });
+            settings.cleanupObsoleteSettings();
+            const out = saved();
+            expect(out.challengeSettings.globalDefaults).toEqual({ exposure: 70 });
+            expect(out.challengeSettings.perChallenge).toEqual({ c2: { exposure: 60 } });
+            expect(out).not.toHaveProperty('boostConfig');
+        });
+
+        test('cleanupObsoleteSettings leaves a clean or container-less blob alone', () => {
+            seed({ challengeSettings: null });
+            settings.cleanupObsoleteSettings();
+            seed({ challengeSettings: { globalDefaults: null, perChallenge: null } });
+            settings.cleanupObsoleteSettings();
+            seed({ challengeSettings: { globalDefaults: { exposure: 70 }, perChallenge: { c1: { exposure: 60 } } } });
+            settings.cleanupObsoleteSettings();
+            expect(store.write).not.toHaveBeenCalled();
+        });
+
+        test('load-time cleanup runs once per process on the first load', () => {
+            jest.isolateModules(() => {
+                const fresh = require('../../src/ts/settings') as typeof settingsModule;
+                store.value = JSON.stringify({ challengeSettings: { globalDefaults: { exposure: 70, bogus: 1 } } });
+                fresh.loadSettings();
+                expect(saved().challengeSettings.globalDefaults).toEqual({ exposure: 70 });
+                // Second load in the same process: cleanup already ran, so the
+                // unknown key is no longer stripped.
+                store.value = JSON.stringify({ challengeSettings: { globalDefaults: { exposure: 70, bogus: 1 } } });
+                expect(fresh.loadSettings().challengeSettings.globalDefaults.bogus).toBe(1);
+            });
+        });
+    });
+
+    describe('reset / modified helpers', () => {
+        test('resetSetting restores a top-level default and rejects unknown keys', () => {
+            seed({ theme: 'weird-theme' });
+            expect(settings.isSettingModified('theme')).toBe(true);
+            expect(settings.resetSetting('theme')).toBe(true);
+            expect(saved().theme).toBe(settings.getDefaultSettings().theme);
+            expect(settings.isSettingModified('theme')).toBe(false);
+
+            expect(settings.resetSetting('noSuchKey')).toBe(false);
+            expect(settings.isSettingModified('noSuchKey')).toBe(false);
+        });
+
+        test('resetAllSettings keeps token/mock/apiHeaders and resets everything else', () => {
+            seed({ token: 'tok', mock: true, apiHeaders: { a: 1 }, theme: 'weird-theme' });
+            expect(settings.resetAllSettings()).toBe(true);
+            const out = saved();
+            expect(out.token).toBe('tok');
+            expect(out.mock).toBe(true);
+            expect(out.apiHeaders).toEqual({ a: 1 });
+            expect(out.theme).toBe(settings.getDefaultSettings().theme);
+        });
+    });
+
+    describe('guards on hand-edited or unusual input', () => {
+        test('a global-only key inside a stored override is ignored when composing a title profile', () => {
+            seed({
+                challengeSettings: {
+                    globalDefaults: {},
+                    profiles: { P: { exposure: 70 } },
+                    titlePins: { c1: 'Alpha' },
+                    perChallenge: { c1: { lastMinuteCheckFrequency: 'junk' } },
+                },
+            });
+            expect(settings.setTitleRules([{ title: 'Alpha', profile: 'P' }])).toBe(true);
+        });
+
+        test('a null challenge id never inherits a title profile through a pin keyed "null"', () => {
+            seed({
+                challengeSettings: {
+                    globalDefaults: {},
+                    profiles: { P: { exposure: 70 } },
+                    titlePins: { null: 'Alpha' },
+                    titleRules: [{ title: 'Alpha', profile: 'P' }],
+                },
+            });
+            settings.rememberChallengeTitles([{ id: 'null', title: 'Alpha', tags: ['x'] }]);
+            // 70 differs from the (un-inherited) global 100, so it is stored rather
+            // than cleared as "equal to the inherited profile value".
+            expect(settings.setChallengeOverride('exposure', invalid(null), 70)).toBe(true);
+            expect(saved().challengeSettings.perChallenge.null).toEqual({ exposure: 70 });
+        });
+    });
+
+    describe('persistence failures (fs transport)', () => {
+        let fs: jest.MockedObject<typeof node_fsModule>;
+        // A blob that already went through the load-time migrations, so a
+        // re-load performs no write of its own.
+        const migratedBlob = (obj: unknown) => {
+            seed(obj);
+            return store.value!;
+        };
+        const useFailingDisk = (blob: string) => {
+            fs = jest.mocked(require('node:fs') as typeof node_fsModule);
+            delete g.__GS_HEADLESS__;
+            fs.existsSync.mockReturnValue(true);
+            fs.readFileSync.mockReturnValue(blob);
+            fs.writeFileSync.mockImplementation(() => {
+                throw new Error('EROFS');
+            });
+        };
+
+        afterEach(() => {
+            fs.existsSync.mockReset();
+            fs.readFileSync.mockReset();
+            fs.writeFileSync.mockReset();
+        });
+
+        test('cleanupObsoleteSettings logs a failed write instead of throwing', () => {
+            useFailingDisk(migratedBlob({ challengeSettings: { globalDefaults: { exposure: 70, bogus: 1 } } }));
+            expect(() => settings.cleanupObsoleteSettings()).not.toThrow();
+            expect(fs.writeFileSync).toHaveBeenCalled();
+            expect(cat.error).toHaveBeenCalledWith('Error during settings cleanup:', expect.any(Error));
+        });
+
+        test('resetAllSettings reports a failed save and skips the follow-up cleanup', () => {
+            useFailingDisk(migratedBlob({ challengeSettings: { globalDefaults: {} } }));
+            expect(settings.resetAllSettings()).toBe(false);
+            expect(fs.writeFileSync).toHaveBeenCalledTimes(1);
+        });
+
+        test('seedIntentProfiles reports the skipped profiles when every write fails', () => {
+            const blob = migratedBlob({});
+            useFailingDisk(blob);
+            expect(settings.seedIntentProfiles()).toBe(false);
+            expect(cat.warning).toHaveBeenCalledWith(expect.stringContaining('Skipped seeding intent profile'));
+        });
+    });
+});

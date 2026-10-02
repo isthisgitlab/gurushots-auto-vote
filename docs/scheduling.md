@@ -3,7 +3,7 @@
 This app runs the voting cycle on three different shells (CLI, Electron,
 Android). The **cadence decision** — how long to wait before the next
 cycle — is shared via `computeNextCycleDelayMs` in
-`src/js/scheduling/thresholdWindow.js`. The **timer engine** that acts on
+`src/ts/scheduling/thresholdWindow/cadenceDecision.ts`. The **timer engine** that acts on
 that decision is per-shell, because each shell has a different process
 model. Future contributors should keep the decision shared and resist
 re-introducing a separate boundary-switch timer per host.
@@ -40,18 +40,18 @@ nextCurrencyRule, nextScenarioWake, nextBoostHold }`:
   returned none) carries no holds; the boost then goes on the next ordinary
   cycle.
 - **currency-rule**: the soonest opening of an enabled automatic key / swap /
-  fill rule (`voting/currencyAuto.js` `ruleOpensAt`) → wait is capped to it.
+  fill rule (`voting/currencyAuto.ts` `ruleOpensAt`) → wait is capped to it.
   Unlike the modes above it considers every still-open challenge, flash
   included.
 - **scenario**: the soonest instant a user-defined scenario's time condition
   can flip — a daily window opening or closing, a before-end / after-start /
   percent / in-phase bound, or local midnight for a once-per-day rule that
-  already fired (`scenarios/nextWake.js`, the same function the runner's
+  already fired (`scenarios/nextWake.ts`, the same function the runner's
   engine uses, so the scheduler and the runner cannot disagree). A plan that
   has not started yet is judged from its start phase. Every still-open
   challenge counts, flash included. Resolvers: `nodeResolvers.resolveScenarioWake`
-  (over `services/scenarioStatus.js`) and its IPC twin in
-  `react/contexts/autovoteScheduler.js` (`get-scenario-status`).
+  (over `services/scenarioStatus.ts`) and its IPC twin in
+  `react/contexts/autovoteScheduler.ts` (`get-scenario-status`).
 - **normal**: otherwise the random delay in `[checkFrequencyMin,
 checkFrequencyMax]`.
 
@@ -59,11 +59,11 @@ Every result is floored at `MIN_CYCLE_GAP_MS`. The host rolls the random
 delay and resolves `lastMinuteCheckFrequency`/per-challenge thresholds with
 its own resolver (sync settings read on Node, async IPC in the WebView).
 
-This is what fixed the bug where the next cycle could sleep past a
-challenge's last-minute boundary and start the final voting push late.
+This keeps the next cycle from sleeping past a challenge's last-minute
+boundary, so the final voting push starts on time.
 
 **Flash challenges never drive the cadence.** `eligibleChallenges`
-(`scheduling/scheduledFill.js`) filters `type !== 'flash'`, so a flash
+(`scheduling/scheduledFill.ts`) filters `type !== 'flash'`, so a flash
 challenge's close time cannot shorten the sleep — even though
 `_runVotingRules` votes flash to 100% on every cycle. This is deliberate:
 flash is an always-vote rule with no exposure threshold, so there is no
@@ -78,7 +78,7 @@ Per-challenge scheduled fill (issue #26) lets a challenge be voted to 100%
 at chosen wall-clock instants instead of (or on top of) the exposure
 threshold. Two trigger LISTS, all entries OR'd: recurring times-of-day
 (`scheduledFillTime`, each 'HH:MM' entry interpreted in the app `timezone`
-setting via `src/js/scheduling/wallClock.js`, **not** device-local time)
+setting via `src/ts/scheduling/wallClock.ts`, **not** device-local time)
 and one-shot seconds-before-close offsets (`scheduledFillBeforeEnd`) —
 e.g. `[14400, 36000]` fills at 4h and 10h before the end. Every entry
 opens its own window sharing `scheduledFillWindowMinutes`; entries are
@@ -90,14 +90,14 @@ migrates to an explicit `[]`, never deleted, so it keeps shadowing a
 configured global default.
 
 The decision side lives in `getScheduledFillState`
-(`src/js/services/decisions/triggerWindows.js`): during a window
+(`src/ts/services/decisions/triggerWindows.ts`): during a window
 `[start, start + scheduledFillWindowMinutes]` the challenge votes to
 100/100 like the last-minute rule; with `scheduledFillReplaces` on, the
 normal and final-window threshold rules are blocked outside the windows
 (flash and last-minute always win, manual voting is unaffected).
 
 The cadence side lives in `soonestScheduledStart`
-(`src/js/scheduling/scheduledFill.js`), fed to `computeNextCycleDelayMs`
+(`src/ts/scheduling/scheduledFill.ts`), fed to `computeNextCycleDelayMs`
 through a second injected resolver (`resolveScheduledFill`, sync on Node /
 async IPC on the WebView) plus the `timezone` scalar — both optional, so
 hosts that don't pass them keep byte-identical behavior. The cap targets
@@ -115,14 +115,14 @@ Deliberate semantics and caveats:
 - **DST**: around a daylight-saving switch the actual instant of a
   time-of-day fill can shift by up to an hour on the changeover day
   (spring-forward nonexistent times resolve nearby; fall-back ambiguity
-  resolves deterministically). Documented in `wallClock.js`.
+  resolves deterministically). Documented in `wallClock.ts`.
 - **Timezone changes mid-run** take effect on the next cycle: the decision
   path re-reads `settings.getSetting('timezone')` every evaluation, and
   `timezone` is already in the renderer's reload-required list.
 - **Fail-soft**: corrupt persisted values (hand-edited settings.json)
   degrade that one challenge's scheduled fill to "off" — the string key is
   type-guarded, numeric corruption coerces to `NaN`-false, an unknown
-  timezone falls back to UTC inside `wallClock.js`, and
+  timezone falls back to UTC inside `wallClock.ts`, and
   `getScheduledFillState` is wrapped in try/catch so the per-challenge
   voting loop can never be aborted by one bad override.
 
@@ -139,7 +139,7 @@ the next round opens. The triggers mirror scheduled fill exactly — daily
 A 01:30–06:00 night pause is `votingPauseTime: ['01:30']` with a duration of 270.
 
 The decision side lives in `getVotingPauseState`
-(`src/js/services/decisions/triggerWindows.js`), which shares `_triggerWindowState` with
+(`src/ts/services/decisions/triggerWindows.ts`), which shares `_triggerWindowState` with
 `getScheduledFillState` so the two can never drift on entry/corruption
 semantics. Its branch in `_runVotingRules` sits **below** flash, last-minute
 and the pre-boost fill (a challenge that really closes mid-pause still gets its
@@ -187,7 +187,7 @@ where `finalWindowDuration` is the configurable final-window width (default
 (1–59 min, default 15). Only active when `useFinalWindowExposure` is on.
 
 The decision side lives in `_runVotingRules`
-(`src/js/services/decisions/ruleEngine.js`): its pre-final-window branch sits **above**
+(`src/ts/services/decisions/ruleEngine.ts`): its pre-final-window branch sits **above**
 the final-window rule and **below** scheduled-fill/last-minute in the
 load-bearing precedence, so during the lead minutes after the boundary —
 where the top-up and final-window windows overlap — the top-up wins and votes
@@ -198,7 +198,7 @@ the window still tops up; a window fully missed while the app was down is
 skipped with no catch-up, exactly like scheduled fill).
 
 The cadence side lives in `soonestFinalWindowTopUpStart`
-(`src/js/scheduling/thresholdWindow.js`), fed to `computeNextCycleDelayMs`
+(`src/ts/scheduling/thresholdWindow/leadWindows.ts`), fed to `computeNextCycleDelayMs`
 through a third injected resolver (`resolveFinalWindowTopUp`, sync on Node /
 async IPC on the WebView) returning `{enabled, leadSec, durationSec}` per challenge.
 Unlike scheduled fill, this resolver takes **no `timezone`** and is threaded
@@ -229,7 +229,7 @@ Deliberate semantics and caveats:
 Per-challenge pre-boost fill (`voteBeforeBoost`, default off) votes a challenge
 to **100%** for `voteBeforeBoostLeadMin` (1–59, default 15) minutes before an
 available Boost is auto-applied, so the Boost multiplies a full entry rather
-than a decayed one. The cadence side is `soonestBoostPrefillStart`, fed by a
+than a decayed one. The cadence side is `soonestBoostPrefillStart` (`scheduling/thresholdWindow/leadWindows.ts`), fed by a
 fourth injected resolver (`resolveBoostPrefill`, sync on Node / async IPC on the
 WebView) returning `{enabled, leadSec, boostTimeSec, keyUnlockedBoostTimeSec}`
 per challenge. The cap targets the soonest upcoming window **start**
@@ -240,11 +240,11 @@ Deliberate semantics and caveats:
 
 - **Live state, unlike every other boundary**: the apply instant comes from the
   challenge's own `member.boost` via the shared `boostApplyThreshold`
-  (`voting/boostWindow.js`), not from `close_time` alone, so this boundary can
+  (`voting/boostWindow.ts`), not from `close_time` alone, so this boundary can
   appear, move or vanish as the Boost's timer is refreshed server-side. That is
   fine — it is recomputed from scratch every cycle and the rule re-checks the
   same window before acting. The resolver carries only settings, keeping
-  `thresholdWindow.js` free of settings I/O for the WebView bundle.
+  `thresholdWindow/` (the facade and every sub-module) free of settings I/O for the WebView bundle.
 - **Sentinel parity**: the `0 = off` sentinel on `boostTime` (timer boost) and
   `keyUnlockedBoostTime` (key-unlocked) is honoured in **both**
   `soonestBoostPrefillStart` and `VotingLogic.getBoostPrefillState`, so the
@@ -261,8 +261,8 @@ Deliberate semantics and caveats:
 
 ## CLI — runScheduler (single setTimeout chain)
 
-- **Owner**: `src/js/scheduling/runScheduler.js`
-- **Started by**: `src/js/cli/cli.js` `start` command
+- **Owner**: `src/ts/scheduling/runScheduler.ts`
+- **Started by**: `src/ts/cli/cli.ts` `start` command
 - **Cadence**: one recursive `setTimeout` chain. After each cycle,
   `scheduleNext` calls `computeNextCycleDelayMs` and arms a single timer.
   Normal-mode waits are anchored to the previous cycle _start_ (so the gap
@@ -275,12 +275,12 @@ Deliberate semantics and caveats:
 
 ## Electron — UI-driven AutovoteContext
 
-- **Owner**: `src/js/react/contexts/AutovoteContext.jsx`
+- **Owner**: `src/ts/react/contexts/AutovoteContext.tsx`
 - **Started by**: the Start / Stop button in the React UI (or auto-
   resume on mount when the persisted `autovoteRunning` flag is true).
 - **Cadence**: a single recursive `setTimeout` chain (`cycleTimerRef` +
   `scheduleNext`) driven by the same `computeNextCycleDelayMs` decision,
-  bound to the async IPC resolver via `autovoteScheduler.js`. No separate
+  bound to the async IPC resolver via `autovoteScheduler.ts`. No separate
   interval/boundary timer.
 - **Lifecycle**: tied to the renderer window. Closing the window stops
   the loop. The persisted `autovoteRunning` flag means a relaunch
@@ -291,9 +291,9 @@ Deliberate semantics and caveats:
   with no error and no log line, and both must stay defeated:
     - Chromium throttles, then outright **freezes**, timers on a
       hidden/occluded page → `backgroundThrottling: false` on the main
-      window (`src/js/index.js`).
+      window (`src/ts/index/windows.ts`).
     - macOS **App Nap** suspends the whole process, which no renderer flag
-      can reach → `src/js/windows/backgroundActivity.js` holds a
+      can reach → `src/ts/windows/backgroundActivity.ts` holds a
       `prevent-app-suspension` power-save blocker for exactly as long as
       `autovoteRunning` is true. Main learns the flag from the settings
       watcher's `onSettingsChanged` hook (the renderer already persists it
@@ -303,7 +303,7 @@ Deliberate semantics and caveats:
       and release so it is never a silent behaviour.
 
     Two sharp edges in that `onSettingsChanged` wiring, both already handled
-    in `index.js` — keep them handled:
+    in `index.ts` — keep them handled:
     - The watcher's debounce handle is **module-level and outlives
       `close()`**, so a callback armed before a window teardown still fires
       after it. The observer must re-check the window is alive before acting,
@@ -316,14 +316,14 @@ Deliberate semantics and caveats:
       syncs.
 
     When a timer _does_ fire far past its due time anyway, `cadenceChain`'s
-    `log.overslept` hook reports it as a warning on both hosts, using the
-    shared `formatOversleptMessage` so the two surfaces cannot drift. Without
+    `log.overslept` hook (`scheduling/cadenceChain/chain.ts`) reports it as a warning on both hosts, using the
+    shared `formatOversleptMessage` (`scheduling/cadenceChain/oversleep.ts`) so the two surfaces cannot drift. Without
     it the failure is invisible: the only symptom is a challenge that closed
-    with an unfilled slot, and nothing in the log says why. This was a real
-    regression — a 51-minute gap on a 3–4 minute cadence swallowed a
-    challenge's last scheduled fill _and_ its emergency-fill window.
+    with an unfilled slot, and nothing in the log says why. A 51-minute gap on a
+    3–4 minute cadence, for example, can swallow a challenge's last
+    scheduled fill _and_ its emergency-fill window.
 
-    `oversleptBy` reports a stall that is over a minute late **and** either
+    `oversleptBy` (`scheduling/cadenceChain/oversleep.ts`) reports a stall that is over a minute late **and** either
     more than half the intended wait **or** more than five minutes outright.
     The second clause is not redundant: `checkFrequencyMin/Max` have no upper
     bound, so on a long cadence a deadline-costing stall can still be a small
@@ -331,16 +331,16 @@ Deliberate semantics and caveats:
 
 ## Android — native Foreground Service + AlarmManager
 
-- **Owner**: `src/js/services/NativeAutovoteBridge.js` (JS bridge to
+- **Owner**: `src/ts/services/NativeAutovoteBridge.ts` (JS bridge to
   the custom Capacitor plugin `AutoVoteBackground`).
-- **Fallback**: `src/js/services/ForegroundServiceController.js` runs
+- **Fallback**: `src/ts/services/ForegroundServiceController.ts` runs
   the foreground notification only — used when the native plugin is
   not available on a given build.
 - **Cadence**: the _timing engine_ is owned by the native plugin (Java
   side), which uses `AlarmManager.setExactAndAllowWhileIdle()` to fire
   cycles even when the WebView process is dead and the device is in Doze.
-  The _next-delay decision_ is still the shared one: the headless JS entry
-  (`src/js/headless/index.js`) runs one cycle per alarm and reports
+  The _next-delay decision_ is the shared one: the headless JS entry
+  (`src/ts/headless/index.ts`) runs one cycle per alarm and reports
   `nextDelayMs` from `computeNextCycleDelayMs` back to the plugin, which
   schedules the next alarm accordingly. The JS-side `AutovoteContext` cycle
   still runs while the app is open so the user gets immediate visual
@@ -366,8 +366,8 @@ engine_ stays per-shell:
   AlarmManager survives that and Doze deep-sleep.
 
 What they DO share is the cadence _decision_ (`computeNextCycleDelayMs`)
-and what a "cycle" means (`services/manualVote.js` for the manual to-100%
-path, `strategies/real/index.js#fetchChallengesAndVote` for the auto-strategy path).
+and what a "cycle" means (`services/manualVote.ts` for the manual to-100%
+path, `strategies/real/index.ts#fetchChallengesAndVote` for the auto-strategy path).
 Sharing the decision is what keeps last-minute entry timing correct on all
 three; sharing the timer engine would force the lowest common denominator
 (the Android constraints), which would be wrong for CLI and Electron.

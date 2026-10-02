@@ -1,0 +1,215 @@
+/**
+ * BaseMiddleware — wraps the active API surface (real or mock) with token
+ * handling, under the method names the renderer and CLI call.
+ */
+
+import * as settings from '../settings';
+import * as logger from '../logger';
+import { failureText } from '../format/logSafe';
+import * as cancellation from '../voting/cancellation';
+import { extractAuthResult, clearAuthToken } from './auth';
+import { voteAllChallengesManual } from './manualVote';
+
+import type { ApiStrategy } from '../apiFactory';
+import type { Challenge } from '../types/gurushots';
+import { errorMessage } from '../errorMessage';
+
+const requireToken = () => {
+    const token = settings.getSetting('token');
+    if (!token) throw new Error('No authentication token found');
+    return token;
+};
+
+class BaseMiddleware {
+    apiStrategy: ApiStrategy;
+
+    constructor(apiStrategy: ApiStrategy) {
+        this.apiStrategy = apiStrategy;
+    }
+
+    async _login(email: string, password: string) {
+        const response = await this.apiStrategy.authenticate(email, password);
+        // Token extraction is shared with the GUI IPC handler via
+        // extractAuthResult so CLI and GUI accept the same token keys /
+        // success indicators.
+        const { ok, token } = extractAuthResult(response);
+        if (ok) {
+            settings.setSetting('token', token);
+            return { ok: true, token, response };
+        }
+        return { ok: false, token: null, response };
+    }
+
+    async cliLogin(email: string, password: string) {
+        logger.withCategory('authentication').info('=== GuruShots Auto Voter - CLI Login ===', null);
+        logger.withCategory('authentication').startOperation('cli-login', 'CLI Authentication');
+        try {
+            const { ok, token } = await this._login(email, password);
+            if (ok) {
+                logger.withCategory('authentication').endOperation('cli-login', 'Authentication successful');
+                logger.withCategory('authentication').success('Token obtained and saved to settings');
+                return { success: true, token };
+            }
+            logger.withCategory('authentication').endOperation('cli-login', null, 'Invalid credentials');
+            return { success: false, error: 'Login failed. Please check your credentials.' };
+        } catch (error) {
+            logger.withCategory('authentication').endOperation('cli-login', null, failureText(error));
+            return { success: false, error: failureText(error) };
+        }
+    }
+
+    async guiLogin(email: string, password: string) {
+        try {
+            const { ok, token, response } = await this._login(email, password);
+            if (ok) return { success: true, token, data: response };
+            return { success: false, error: 'Invalid credentials' };
+        } catch (error) {
+            return {
+                success: false,
+                error: errorMessage(error) || 'Authentication failed',
+            };
+        }
+    }
+
+    async _runVote(challengeId: string | number | null = null) {
+        const token = settings.getSetting('token');
+        if (!token) {
+            return { ok: false, error: 'No authentication token found. Please login first.' };
+        }
+        const result = await this.apiStrategy.fetchChallengesAndVote(token, challengeId);
+        return { ok: true, result };
+    }
+
+    /**
+     * IPC-shaped voting cycle entry. Resets cancellation state, runs the
+     * strategy, and returns `{ success, message } | { success: false, error }`
+     * matching what the renderer expects. `challengeId` is optional; null/undefined
+     * means run the full active set.
+     */
+    async runVotingCycle(challengeId: string | number | null = null) {
+        cancellation.reset();
+        const { ok, error, result } = await this._runVote(challengeId);
+        if (!ok) {
+            logger.withCategory('authentication').warning(`❌ ${error}`, null);
+            return { success: false, error };
+        }
+        if (result && result.success) {
+            // Surface the fetched challenge list so the renderer's threshold
+            // scheduler can reuse it instead of issuing a second IPC fetch.
+            return {
+                success: true,
+                message: result.message || 'Voting cycle completed successfully',
+                challenges: result.challenges,
+            };
+        }
+        // Forward the list even on a non-error failure (cancelled / inactive
+        // filtered challenge); consumers still
+        // guard with Array.isArray and fall back to fetching when it's absent.
+        return { success: false, error: result?.error || 'Voting cycle failed', challenges: result?.challenges };
+    }
+
+    /**
+     * Token-or-null helper for CLI voting paths. Logs the standard
+     * "please login first" pair under authentication when missing so
+     * cliVote and cliVoteManual share one error surface.
+     */
+    _requireCliToken() {
+        const token = settings.getSetting('token');
+        if (!token) {
+            logger.withCategory('authentication').error('No authentication token found. Please login first', null);
+            logger.withCategory('authentication').info('Run the login command to authenticate', null);
+            return null;
+        }
+        return token;
+    }
+
+    async cliVote(challengeId: string | number | null = null) {
+        const scopeLabel = challengeId == null ? '' : ` (challenge ${challengeId})`;
+        logger.withCategory('voting').info(`=== GuruShots Auto Voter - CLI Voting${scopeLabel} ===`, null);
+        const token = this._requireCliToken();
+        if (!token) return { success: false, error: 'No authentication token found' };
+        logger.withCategory('voting').startOperation('cli-vote', `CLI Voting Process${scopeLabel}`);
+        try {
+            // Return the strategy result so the scheduler can reuse its
+            // already-fetched challenge list for threshold scheduling instead
+            // of issuing a second getActiveChallenges request.
+            const result = await this.apiStrategy.fetchChallengesAndVote(token, challengeId);
+            // Reflect the actual outcome in the operation log — a non-error
+            // failure (e.g. cancelled, or a filtered challenge that isn't active)
+            // must not be reported as a success.
+            if (result && result.success === false) {
+                logger
+                    .withCategory('voting')
+                    .endOperation(
+                        'cli-vote',
+                        null,
+                        result.error || result.message || 'Voting process did not complete',
+                    );
+            } else {
+                logger.withCategory('voting').endOperation('cli-vote', 'Voting process completed successfully');
+            }
+            return result;
+        } catch (error) {
+            logger.withCategory('voting').endOperation('cli-vote', null, failureText(error));
+            return { success: false, error: failureText(error) };
+        }
+    }
+
+    /**
+     * Manual voting cycle for the CLI: vote every active challenge to 100%
+     * regardless of threshold settings. Shares the whole per-challenge loop
+     * (`voteAllChallengesManual`) with the IPC `vote-all-challenges-manual`
+     * handler, so eligibility, image fetch, submit, stagger, and outcome
+     * logging live in one place.
+     */
+    async cliVoteManual() {
+        logger.withCategory('voting').info('=== GuruShots Auto Voter - CLI Manual Voting (vote-to-100%) ===', null);
+        const token = this._requireCliToken();
+        if (!token) return;
+        logger.withCategory('voting').startOperation('cli-vote-manual', 'CLI Manual Voting Process');
+        try {
+            const challengesResponse = await this.apiStrategy.getActiveChallenges(token);
+            // fetchFailed is the load-bearing check: getActiveChallenges always resolves a
+            // list shape, so `!challengesResponse.challenges` can never be true on failure;
+            // without it an outage would fall through to voting an empty list, reporting
+            // "0 voted, 0 skipped of 0" as if there were simply nothing to do.
+            if (!challengesResponse || challengesResponse.fetchFailed || !challengesResponse.challenges) {
+                logger.withCategory('challenges').warning('Failed to fetch challenges for manual voting', null);
+                logger.withCategory('voting').endOperation('cli-vote-manual', null, 'failed to fetch challenges');
+                return;
+            }
+            const challenges = challengesResponse.challenges;
+            const { voted, skipped } = await voteAllChallengesManual(challenges, this.apiStrategy, token);
+            const summary = `Manual vote: ${voted} voted, ${skipped} skipped of ${challenges.length}`;
+            logger.withCategory('voting').endOperation('cli-vote-manual', summary);
+        } catch (error) {
+            logger.withCategory('voting').endOperation('cli-vote-manual', null, failureText(error));
+        }
+    }
+
+    async guiVote() {
+        const result = await this._runVote();
+        if (!result.ok) return { success: false, error: result.error };
+        return { success: true, data: 'Voting process completed successfully!' };
+    }
+
+    isAuthenticated() {
+        const token = settings.getSetting('token');
+        return !!(token && token.trim() !== '');
+    }
+
+    async logout() {
+        await clearAuthToken();
+        logger.withCategory('authentication').success('Logged out successfully', null, null);
+    }
+
+    getActiveChallenges() {
+        return this.apiStrategy.getActiveChallenges(requireToken());
+    }
+
+    applyBoost(challenge: Challenge) {
+        return this.apiStrategy.applyBoost(challenge, requireToken());
+    }
+}
+
+export { BaseMiddleware };

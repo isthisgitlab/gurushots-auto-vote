@@ -1,21 +1,18 @@
 @import 'tailwindcss' source(none);
 
 @source "../../src/html/**/*.html";
-@source "../../src/js/**/*.js";
-@source "../../src/js/**/*.jsx";
+@source "../../src/ts/**/*.ts";
+@source "../../src/ts/**/*.tsx";
 @plugin "daisyui" {
-    themes: light, dark;
+    themes: all;
     base: true;
     styled: true;
     utils: true;
     logs: false;
 }
 
-@theme {
-    --color-latvian: #960018;
-}
-
 :root {
+    --color-latvian: #960018;
     scrollbar-color: color-mix(in oklch, currentColor 0%, var(--color-latvian)) transparent;
 }
 
@@ -58,53 +55,41 @@ body {
     background-color: var(--color-latvian);
 }
 
-.text-latvian {
+/* Brand red as text: on a dark theme (every DaisyUI theme sets color-scheme)
+ * the raw brand red is unreadable, so it is lightened there. A @utility, not a
+ * plain class, so variants such as hover:text-latvian get the same rule. */
+@utility text-latvian {
     color: var(--color-latvian);
+    @supports (color: light-dark(red, red)) {
+        color: light-dark(var(--color-latvian), color-mix(in oklch, var(--color-latvian) 55%, white));
+    }
 }
 
 .border-latvian {
     border-color: var(--color-latvian);
 }
 
-.progress-latvian::-webkit-progress-value {
-    background-color: var(--color-latvian);
-}
-
-.progress-latvian::-moz-progress-bar {
-    background-color: var(--color-latvian);
-}
-
 .badge-allstar {
     --badge-color: #1c1c1c;
-    --badge-fg: var(--color-base-100);
+    --badge-fg: white;
 }
 
 .badge-elite {
     --badge-color: #234f64;
-    --badge-fg: var(--color-base-100);
+    --badge-fg: white;
 }
 
 .badge-premier {
     --badge-color: #853445;
-    --badge-fg: var(--color-base-100);
+    --badge-fg: white;
 }
 
 .badge-skilled {
     --badge-color: #0a655c;
-    --badge-fg: var(--color-base-100);
+    --badge-fg: white;
 }
 
 .badge-popular {
     --badge-color: #2c7fa6;
-    --badge-fg: var(--color-base-100);
-}
-
-[data-theme='dark'] {
-    .badge-allstar,
-    .badge-elite,
-    .badge-premier,
-    .badge-skilled,
-    .badge-popular {
-        --badge-fg: var(--color-base-content);
-    }
+    --badge-fg: white;
 }

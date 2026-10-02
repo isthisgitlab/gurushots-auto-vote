@@ -1,8 +1,8 @@
 {
-    // TypeScript is used here as a CHECKER ONLY — never as a compiler (noEmit).
-    // checkJs is on: every .js/.jsx file in the program is strictly
-    // type-checked through its JSDoc, and the .d.ts files under src/js/types
-    // carry the shared shapes.
+    // TypeScript is used here as a CHECKER ONLY — never as a compiler (noEmit):
+    // esbuild bundles and swc (tests) / tsx (scripts) run the .ts/.tsx sources
+    // directly. Every file under src/ts is TypeScript and strictly checked;
+    // the type-only modules under src/ts/types carry the shared shapes.
     "compilerOptions": {
         "target": "es2025",
         // One program covers the core and the renderer: the renderer bundles
@@ -11,27 +11,33 @@
         "lib": ["es2025", "dom", "dom.iterable"],
         // Bundler resolution matches how the code is loaded: esbuild bundles
         // the renderer, preload, Capacitor bridge and CLI, and swc compiles the
-        // tests. require()/module.exports and import/export both type-check.
+        // tests.
         "module": "preserve",
         "moduleResolution": "bundler",
         "jsx": "preserve",
         "jsxImportSource": "preact",
         "paths": {
-            "@/*": ["./src/js/react/*"],
+            "@/*": ["./src/ts/react/*"],
             "react": ["./node_modules/preact/compat"],
             "react-dom": ["./node_modules/preact/compat"],
             "react-dom/client": ["./node_modules/preact/compat/client"]
         },
         "types": ["node"],
-        "allowJs": true,
-        "checkJs": true,
         "noEmit": true,
         "strict": true,
+        "noImplicitOverride": true,
+        "noImplicitReturns": true,
+        "noFallthroughCasesInSwitch": true,
+        "noUnusedLocals": true,
+        // Every file is compiled on its own (esbuild, swc, tsx), so type-only
+        // imports must say so and nothing may need whole-program information.
+        "verbatimModuleSyntax": true,
+        "isolatedModules": true,
         "esModuleInterop": true,
         "resolveJsonModule": true,
         "skipLibCheck": true,
         "forceConsistentCasingInFileNames": true
     },
-    "include": ["src/js/**/*.js", "src/js/**/*.jsx", "src/js/**/*.ts", "src/js/**/*.tsx"],
-    "exclude": ["node_modules", "dist", "build", "coverage", "android", "**/*.test.js"]
+    "include": ["src/ts/**/*.ts", "src/ts/**/*.tsx", "scripts/**/*.ts", "scripts/**/*.mts"],
+    "exclude": ["node_modules", "dist", "build", "coverage", "android"]
 }

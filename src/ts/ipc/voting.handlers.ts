@@ -1,0 +1,257 @@
+/**
+ * Voting-cycle IPC handlers. Covers the entry points the renderer
+ * uses to drive a voting pass:
+ *   - gui-vote: middleware vote, used by the GUI's main vote button
+ *   - run-voting-cycle: full per-challenge cycle (autovote core)
+ *   - run-voting-cycle-for-challenge: same strategy, scoped to one challenge
+ *   - vote-all-challenges-manual: bypass all thresholds
+ *   - vote-on-challenge / vote-on-challenge-manual: target one
+ *     challenge; the two channels carry slightly different log wording
+ *     but exercise the same code path
+ *   - should-cancel-voting / set-cancel-voting: cancellation-flag
+ *     read/write, delegated to voting/cancellation.ts
+ */
+
+import * as settings from '../settings';
+import { registerHandlers } from './registerHandlers';
+import { errorResult } from './errorResult';
+import * as logger from '../logger';
+import * as apiFactory from '../apiFactory';
+import * as cancellation from '../voting/cancellation';
+import { submitVotesForChallenge, voteAllChallengesManual } from '../services/manualVote';
+import { findActiveChallenge } from '../services/findActiveChallenge';
+
+import type { IpcMain } from 'electron';
+import type { IpcHandlerMap, IpcReplyFn } from './registerHandlers';
+import type { ActiveChallengesResponse } from '../types/gurushots';
+
+// Run one full strategy pass — global when challengeId is null, scoped
+// to a single card otherwise. Delegates to BaseMiddleware so the
+// auth-check, cancellation-reset, and IPC-envelope shape live in one
+// place that the gui-vote handler also reaches via guiVote().
+const runStrategyOnceViaMiddleware = (challengeId: string | number | null) =>
+    apiFactory.getMiddleware().runVotingCycle(challengeId);
+
+// Single-target vote entry shared by vote-on-challenge and
+// vote-on-challenge-manual. The two channels differ only in log wording;
+// the `manual` flag flips those wording bits.
+/**
+ * @param challengeId - Renderer-supplied; validated below.
+ * @param challengeTitle - Renderer-supplied; validated below.
+ */
+const voteOnSingleChallenge = (async (
+    challengeId: string | number,
+    challengeTitle: string,
+    { manual }: { manual: boolean },
+) => {
+    // IPC boundary — validate inputs from the renderer. Without these
+    // checks, parseInt(undefined) below returns NaN and the find() call
+    // produces a misleading "Challenge not found" error.
+    if (challengeId == null || challengeId === '' || Number.isNaN(Number(challengeId))) {
+        return { success: false as const, error: 'Invalid challenge ID' };
+    }
+    if (typeof challengeTitle !== 'string' || challengeTitle.length === 0) {
+        return { success: false as const, error: 'Challenge title is required' };
+    }
+
+    const requestPrefix = manual ? '🔄 Manual vote on challenge request' : '🔄 Vote on challenge request';
+    logger
+        .withCategory(logger.CATEGORIES.VOTING)
+        .info(`${requestPrefix}: ID=${challengeId}, Title="${challengeTitle}"`, null);
+
+    const userSettings = settings.loadSettings();
+    if (!userSettings.token) {
+        const noTokenMsg = manual ? '❌ No token found for manual voting' : '❌ No token found for voting';
+        logger.withCategory('authentication').warning(noTokenMsg, null);
+        return { success: false as const, error: 'No authentication token found' };
+    }
+
+    const strategy = apiFactory.getApiStrategy();
+    const challengesResponse: ActiveChallengesResponse | null = await strategy.getActiveChallenges(userSettings.token);
+
+    if (!challengesResponse || !challengesResponse.challenges) {
+        const fetchMsg = manual
+            ? '❌ Failed to fetch challenges for manual voting'
+            : '❌ Failed to fetch challenges for voting';
+        logger.withCategory('challenges').warning(fetchMsg, null);
+        return { success: false as const, error: 'Failed to fetch challenges' };
+    }
+
+    logger
+        .withCategory('challenges')
+        .debug(`📋 Found challenges: [${challengesResponse.challenges.map((c) => `${c.id}:"${c.title}"`).join(', ')}]`);
+    logger.withCategory('challenges').debug('🔍 Looking for challenge ID:', challengeId);
+
+    // String-to-String comparison via the shared helper — the API is not
+    // consistent about the id type, and parseInt-based equality misses
+    // string ids entirely.
+    const challenge = findActiveChallenge(challengesResponse.challenges, challengeId);
+    logger
+        .withCategory(logger.CATEGORIES.CHALLENGES)
+        .debug(
+            `🎯 Challenge found: ${challenge ? `ID=${challenge.id}, Title="${challenge.title}"` : 'NOT FOUND'}`,
+            null,
+        );
+
+    if (!challenge) {
+        logger
+            .withCategory(logger.CATEGORIES.CHALLENGES)
+            .warning('❌ Challenge not found:', { challengeId, challengeTitle });
+        return { success: false as const, error: `Challenge "${challengeTitle}" not found` };
+    }
+
+    const now = Math.floor(Date.now() / 1000);
+    if (challenge.start_time >= now) {
+        return { success: false as const, error: `Challenge "${challengeTitle}" has not started yet` };
+    }
+
+    const startMsg = manual
+        ? `🗳️ ${logger.challengeTag(challenge)} Starting manual voting process`
+        : `🗳️ ${logger.challengeTag(challenge)} Starting voting process`;
+    logger.withCategory('voting').info(startMsg, null);
+
+    const result = await submitVotesForChallenge(challenge, strategy, userSettings.token, now);
+    if (result.outcome === 'not-eligible') {
+        return { success: false as const, error: result.errorMessage };
+    }
+
+    logger
+        .withCategory('voting')
+        .debug(
+            `📸 Vote images received: ${result.outcome === 'no-images' ? 'No vote images' : `Count=${result.imageCount}`}`,
+            null,
+        );
+
+    if (result.outcome === 'no-images') {
+        const noImagesMsg = manual ? '⚠️ No vote images available for manual voting' : '⚠️ No vote images available';
+        logger.withCategory('voting').warning(noImagesMsg, null);
+    } else {
+        const submittingMsg = manual ? '✅ Submitting manual votes...' : '✅ Submitting votes...';
+        logger.withCategory('voting').info(submittingMsg, null);
+        const successMsg = manual ? '✅ Manual votes submitted successfully' : '✅ Votes submitted successfully';
+        logger.withCategory('voting').success(successMsg);
+    }
+
+    const successReturnMsg = manual
+        ? `Successfully voted on challenge "${challengeTitle}" manually`
+        : `Successfully voted on challenge "${challengeTitle}"`;
+    return { success: true as const, message: successReturnMsg };
+}) satisfies IpcReplyFn;
+
+const handleVoteAllChallengesManual = (async () => {
+    try {
+        logger.withCategory('voting').info('🔄 Starting manual vote all challenges (bypass thresholds)...', null);
+
+        const userSettings = settings.loadSettings();
+        if (!userSettings.token) {
+            logger.withCategory('authentication').warning('❌ No token found for manual voting', null);
+            return { success: false as const, error: 'No authentication token found' };
+        }
+
+        const strategy = apiFactory.getApiStrategy();
+
+        const challengesResponse: ActiveChallengesResponse | null = await strategy.getActiveChallenges(
+            userSettings.token,
+        );
+        if (!challengesResponse || !challengesResponse.challenges) {
+            logger.withCategory('challenges').warning('❌ Failed to fetch challenges for manual vote all', null);
+            return { success: false as const, error: 'Failed to fetch challenges' };
+        }
+
+        const challenges = challengesResponse.challenges;
+
+        logger.withCategory('voting').info(`📋 Found ${challenges.length} challenges to process`, null);
+
+        const { voted, skipped, total } = await voteAllChallengesManual(challenges, strategy, userSettings.token, {
+            onProgress: (current, totalCount, challenge) =>
+                logger
+                    .withCategory('voting')
+                    .progress(`Processing challenge ${current}/${totalCount}: ${challenge.title}`, current, totalCount),
+        });
+
+        const message = `Manual vote all completed: ${voted} voted, ${skipped} skipped out of ${total} challenges`;
+        logger.withCategory('voting').success(message, null);
+
+        return {
+            success: true as const,
+            message,
+            stats: { total, voted, skipped },
+        };
+    } catch (error) {
+        logger.withCategory('voting').error('Error handling vote-all-challenges-manual request:', error);
+        return errorResult(error, 'Failed to vote on all challenges manually');
+    }
+}) satisfies IpcReplyFn;
+
+const buildHandlers = () =>
+    ({
+        'gui-vote': async () => {
+            try {
+                const userSettings = settings.loadSettings();
+                if (!userSettings.token) {
+                    return { success: false as const, error: 'No authentication token found' };
+                }
+                const middleware = apiFactory.getMiddleware();
+                return await middleware.guiVote();
+            } catch (error) {
+                logger.withCategory('voting').error('Error handling gui-vote request:', error);
+                return errorResult(error, 'Failed to load challenges');
+            }
+        },
+
+        'run-voting-cycle': async () => {
+            try {
+                logger.withCategory('voting').info('🔄 Starting voting cycle...', null);
+                return await runStrategyOnceViaMiddleware(null);
+            } catch (error) {
+                logger.withCategory('voting').error('Error handling run-voting-cycle request:', error);
+                return errorResult(error, 'Failed to run voting cycle');
+            }
+        },
+
+        'run-voting-cycle-for-challenge': async (_event: unknown, challengeId: string | number) => {
+            try {
+                if (challengeId == null || challengeId === '') {
+                    return { success: false as const, error: 'challengeId is required' };
+                }
+                logger.withCategory('voting').info(`🔄 Starting single-challenge cycle: ${challengeId}`, null);
+                return await runStrategyOnceViaMiddleware(challengeId);
+            } catch (error) {
+                logger.withCategory('voting').error('Error handling run-voting-cycle-for-challenge request:', error);
+                return errorResult(error, 'Failed to run voting cycle');
+            }
+        },
+
+        'vote-all-challenges-manual': handleVoteAllChallengesManual,
+
+        'should-cancel-voting': () => cancellation.isCancelled(),
+
+        'set-cancel-voting': (event: unknown, shouldCancel: boolean) => {
+            cancellation.setCancelled(shouldCancel === true);
+            return cancellation.isCancelled();
+        },
+
+        'vote-on-challenge': async (event: unknown, challengeId: string | number, challengeTitle: string) => {
+            try {
+                return await voteOnSingleChallenge(challengeId, challengeTitle, { manual: false });
+            } catch (error) {
+                logger.withCategory('voting').error('Error handling vote-on-challenge request:', error);
+                return errorResult(error, 'Failed to vote on challenge');
+            }
+        },
+
+        'vote-on-challenge-manual': async (event: unknown, challengeId: string | number, challengeTitle: string) => {
+            try {
+                return await voteOnSingleChallenge(challengeId, challengeTitle, { manual: true });
+            } catch (error) {
+                logger.withCategory('voting').error('Error handling vote-on-challenge-manual request:', error);
+                return errorResult(error, 'Failed to vote on challenge manually');
+            }
+        },
+    }) satisfies IpcHandlerMap;
+
+const register = (ipcMain: IpcMain) => {
+    registerHandlers(ipcMain, buildHandlers());
+};
+
+export { register, buildHandlers };

@@ -1,0 +1,1157 @@
+/**
+ * votingOrchestrator — the single voting-pass loop both API strategies run.
+ *
+ * Covers the contracts the unfork must never regress:
+ *   - deadline actions dispatch in orderDeadlineActions' order, sequentially
+ *   - every cancellation checkpoint (per-challenge, between actions, before
+ *     vote, before submit, after submit) aborts with the shared envelope
+ *   - empty-list and challengeIdFilter hit/miss envelopes
+ *   - the three behaviors mock mode gained in the unfork (turbo-earn,
+ *     auto-fill, emergency fill) actually execute on the shared path
+ *   - cleanupStaleMetadata runs only when injected (null in mock mode — the
+ *     un-namespaced shared store must never be purged by mock ids)
+ */
+
+jest.mock('../../src/ts/settings', () => ({
+    getEffectiveSetting: jest.fn(() => false),
+}));
+
+jest.mock('../../src/ts/services/VotingLogic', () => ({
+    isWithinEmergencyWindow: jest.fn(() => false),
+    shouldPlayAutoTurbo: jest.fn(() => false),
+    isTurboEarnSaved: jest.fn(() => false),
+    orderDeadlineActions: jest.fn(() => []),
+    shouldApplyBoost: jest.fn(() => false),
+    resolveBoostFillNewMode: jest.fn(() => 'no'),
+    shouldApplyTurbo: jest.fn(() => ({ apply: false })),
+    getEffectiveBoostTime: jest.fn(() => 3600),
+    evaluateVotingDecision: jest.fn(() => ({ shouldVote: false, voteReason: 'test skip', targetExposure: 100 })),
+}));
+
+jest.mock('../../src/ts/services/autoFill', () => ({
+    maybeAutoFillChallenge: jest.fn(async () => 'skipped'),
+    maybeEmergencyFillChallenge: jest.fn(async () => 'skipped'),
+    submitNewEntryForAction: jest.fn(async () => ({ ok: false, reason: 'none' })),
+    reflectNewEntry: jest.fn(),
+    reflectEntryFlag: jest.fn(),
+}));
+
+jest.mock('../../src/ts/voting/cancellation', () => ({
+    isCancelled: jest.fn(() => false),
+    setCancelled: jest.fn(),
+    reset: jest.fn(),
+}));
+
+import votingLogicModule = require('../../src/ts/services/VotingLogic');
+const votingLogic = jest.mocked(votingLogicModule);
+import autoFillModule = require('../../src/ts/services/autoFill');
+const autoFill = jest.mocked(autoFillModule);
+import cancellationModule = require('../../src/ts/voting/cancellation');
+const cancellation = jest.mocked(cancellationModule);
+import type * as votingOrchestratorModule from '../../src/ts/services/votingOrchestrator';
+import type * as challengeFixturesModule from '../helpers/challengeFixtures';
+import type * as settingsModule from '../../src/ts/settings';
+import type { Challenge } from '../../src/ts/types/gurushots';
+import type { VotingPassDeps } from '../../src/ts/types/votingPass';
+import { claimTurboRun, releaseTurboRun } from '../../src/ts/services/turboRunLock';
+import { recordManualTurboWin } from '../../src/ts/services/missions';
+import { invalid } from '../helpers/invalid';
+const { runVotingPass } = require('../../src/ts/services/votingOrchestrator') as typeof votingOrchestratorModule;
+const { buildChallenge } = require('../helpers/challengeFixtures') as typeof challengeFixturesModule;
+
+const NOW = Math.floor(Date.now() / 1000);
+
+const makeChallenge = (over: Record<string, unknown> = {}) =>
+    buildChallenge({
+        id: 101,
+        title: 'Orchestrated',
+        close_time: NOW + 3600,
+        member: {
+            boost: { state: 'LOCKED', timeout: 0 },
+            ranking: { entries: [], exposure: { exposure_factor: 100 } },
+        },
+        ...over,
+    });
+
+const makeApi = (challenges: Challenge[]) => ({
+    getActiveChallenges: jest.fn(async () => ({ challenges })),
+    getVoteImages: jest.fn(async () => ({ images: [{ id: 'i1' }] })),
+    submitVotes: jest.fn(async () => ({ success: true })),
+    applyBoost: jest.fn(async () => ({ success: true })),
+    applyBoostToEntry: jest.fn(async () => ({ success: true })),
+    applyTurbo: jest.fn(async () => ({ ok: true })),
+    getEligiblePhotos: jest.fn(async () => ({ images: [] })),
+    submitToChallenge: jest.fn(async () => ({ success: true })),
+    runTurboMiniGame: jest.fn(async () => ({ played: 1, correct: 1, flipped: 0, doubleFailed: 0, won: true })),
+});
+
+const deps = (api: ReturnType<typeof makeApi>, over: Partial<VotingPassDeps> = {}) => ({
+    api: invalid<VotingPassDeps['api']>(api),
+    cleanupStaleMetadata: null,
+    interChallengeDelay: () => 0,
+    ...over,
+});
+
+beforeEach(() => {
+    jest.clearAllMocks();
+    cancellation.isCancelled.mockReturnValue(false);
+    votingLogic.shouldPlayAutoTurbo.mockReturnValue(false);
+    votingLogic.orderDeadlineActions.mockReturnValue([]);
+    votingLogic.evaluateVotingDecision.mockReturnValue(
+        invalid({
+            shouldVote: false,
+            voteReason: 'test skip',
+            targetExposure: 100,
+        }),
+    );
+});
+
+describe('envelopes', () => {
+    test('empty active list returns success with the empty list', async () => {
+        const api = makeApi([]);
+        const result = await runVotingPass('tok', null, deps(api));
+        expect(result).toEqual({ success: true, message: 'No active challenges found', challenges: [] });
+    });
+
+    test('challengeIdFilter miss returns failure but still carries the full list', async () => {
+        const list = [makeChallenge({ id: 1 }), makeChallenge({ id: 2 })];
+        const api = makeApi(list);
+        const result = await runVotingPass('tok', '999', deps(api));
+        expect(result.success).toBe(false);
+        expect(result.error).toBe('Challenge 999 is not active');
+        expect(result.challenges).toBe(list);
+    });
+
+    test('challengeIdFilter hit processes only the matching challenge but returns the full list', async () => {
+        const list = [makeChallenge({ id: 1 }), makeChallenge({ id: 2 })];
+        const api = makeApi(list);
+        const result = await runVotingPass('tok', 2, deps(api));
+        expect(result.success).toBe(true);
+        expect(result.challenges).toBe(list);
+        expect(votingLogic.evaluateVotingDecision).toHaveBeenCalledTimes(1);
+        expect(votingLogic.evaluateVotingDecision.mock.calls[0][0].id).toBe(2);
+    });
+
+    test('an endpoint throw resolves to the failure envelope, never a rejection', async () => {
+        const api = makeApi([]);
+        api.getActiveChallenges.mockRejectedValue(new Error('network down'));
+        const result = await runVotingPass('tok', null, deps(api));
+        expect(result).toEqual({ success: false, error: 'network down' });
+    });
+});
+
+describe('metadata cleanup injection', () => {
+    test('runs the injected cleanup against the FULL list before filtering', async () => {
+        const list = [makeChallenge({ id: 1 }), makeChallenge({ id: 2 })];
+        const api = makeApi(list);
+        const cleanup = jest.fn(() => true);
+        await runVotingPass('tok', 2, deps(api, { cleanupStaleMetadata: cleanup }));
+        expect(cleanup).toHaveBeenCalledWith(['1', '2']);
+    });
+
+    test('mock mode (null) never touches metadata cleanup', async () => {
+        const api = makeApi([makeChallenge()]);
+        await runVotingPass('tok', null, deps(api));
+        // Nothing to assert beyond "did not throw and completed" — the null
+        // injection point is the guarantee; the mock binder test pins that
+        // mock/strategy.ts actually passes null.
+    });
+});
+
+describe('deadline-action dispatch', () => {
+    test('actions run sequentially in orderDeadlineActions order', async () => {
+        const api = makeApi([makeChallenge()]);
+        const order: string[] = [];
+        votingLogic.orderDeadlineActions.mockReturnValue(
+            invalid([{ action: 'autoFill' }, { action: 'emergencyFill' }, { action: 'turbo' }]),
+        );
+        autoFill.maybeAutoFillChallenge.mockImplementation(async () => {
+            order.push('autoFill');
+            return 'skipped';
+        });
+        autoFill.maybeEmergencyFillChallenge.mockImplementation(async () => {
+            order.push('emergencyFill');
+            return 'skipped';
+        });
+        votingLogic.shouldApplyTurbo.mockImplementation(() => {
+            order.push('turbo');
+            return invalid({ apply: false });
+        });
+
+        await runVotingPass('tok', null, deps(api));
+        expect(order).toEqual(['autoFill', 'emergencyFill', 'turbo']);
+    });
+
+    test('an unknown action key degrades to a skip instead of throwing', async () => {
+        const api = makeApi([makeChallenge()]);
+        votingLogic.orderDeadlineActions.mockReturnValue(invalid([{ action: 'somethingNew' }]));
+        const result = await runVotingPass('tok', null, deps(api));
+        expect(result.success).toBe(true);
+    });
+});
+
+describe('mock-parity behaviors on the shared path', () => {
+    test('turbo-earn plays the mini-game ahead of deadline actions when eligible', async () => {
+        const api = makeApi([makeChallenge()]);
+        votingLogic.shouldPlayAutoTurbo.mockReturnValue(true);
+        await runVotingPass('tok', null, deps(api));
+        expect(api.runTurboMiniGame).toHaveBeenCalledTimes(1);
+    });
+
+    test('a Turbo won when application is due is applied in the same pass', async () => {
+        const challenge = makeChallenge({
+            close_time: NOW + 600,
+            member: {
+                turbo: { state: 'FREE' },
+                boost: { state: 'LOCKED', timeout: 0 },
+                ranking: { entries: [{ id: 'entry-1' }], exposure: { exposure_factor: 100 } },
+            },
+        });
+        const api = makeApi([challenge]);
+        votingLogic.shouldPlayAutoTurbo.mockReturnValue(true);
+        votingLogic.orderDeadlineActions.mockReturnValue(invalid([{ action: 'turbo' }]));
+        votingLogic.shouldApplyTurbo.mockImplementation((current) => ({
+            apply: current.member?.turbo?.state === 'WON',
+            imageId: 'entry-1',
+            fillNew: false,
+            reason: 'apply window open',
+        }));
+
+        await runVotingPass('tok', null, deps(api));
+
+        expect(api.runTurboMiniGame).toHaveBeenCalledTimes(1);
+        expect(api.applyTurbo).toHaveBeenCalledWith(101, 'entry-1', 'tok');
+        expect(api.runTurboMiniGame.mock.invocationCallOrder[0]).toBeLessThan(
+            api.applyTurbo.mock.invocationCallOrder[0],
+        );
+    });
+
+    test('a Turbo that was not won is not applied when application is due', async () => {
+        const challenge = makeChallenge({
+            member: { turbo: { state: 'FREE' }, ranking: { entries: [{ id: 'entry-1' }] } },
+        });
+        const api = makeApi([challenge]);
+        api.runTurboMiniGame.mockResolvedValue({ played: 1, correct: 0, flipped: 1, doubleFailed: 0, won: false });
+        votingLogic.shouldPlayAutoTurbo.mockReturnValue(true);
+        votingLogic.orderDeadlineActions.mockReturnValue(invalid([{ action: 'turbo' }]));
+        votingLogic.shouldApplyTurbo.mockImplementation((current) => ({
+            apply: current.member?.turbo?.state === 'WON',
+            imageId: 'entry-1',
+            fillNew: false,
+            reason: 'apply window open',
+        }));
+
+        await runVotingPass('tok', null, deps(api));
+
+        expect(challenge.member?.turbo?.state).toBe('FREE');
+        expect(api.applyTurbo).not.toHaveBeenCalled();
+    });
+
+    test('a confirmed Turbo win tolerates a missing member payload', async () => {
+        const api = makeApi([makeChallenge({ member: undefined })]);
+        votingLogic.shouldPlayAutoTurbo.mockReturnValue(true);
+
+        const result = await runVotingPass('tok', null, deps(api));
+
+        expect(result.success).toBe(true);
+        expect(api.runTurboMiniGame).toHaveBeenCalledTimes(1);
+    });
+
+    test('an autovote cycle skips a mini-game already claimed by a manual run', async () => {
+        const api = makeApi([makeChallenge()]);
+        votingLogic.shouldPlayAutoTurbo.mockReturnValue(true);
+        expect(claimTurboRun(101)).toBe(true);
+        try {
+            await runVotingPass('tok', null, deps(api));
+            expect(api.runTurboMiniGame).not.toHaveBeenCalled();
+        } finally {
+            releaseTurboRun(101, 'manual');
+        }
+        await runVotingPass('tok', null, deps(api));
+        expect(api.runTurboMiniGame).toHaveBeenCalledTimes(1);
+    });
+
+    test('manual play after the active-list fetch invalidates that challenge for this cycle', async () => {
+        const api = makeApi([makeChallenge({ id: 101 }), makeChallenge({ id: 102 })]);
+        votingLogic.shouldPlayAutoTurbo.mockReturnValue(true);
+        const cleanup = jest.fn(() => {
+            expect(claimTurboRun(101)).toBe(true);
+            releaseTurboRun(101, 'manual');
+            return true;
+        });
+        await runVotingPass('tok', null, deps(api, { cleanupStaleMetadata: cleanup }));
+        expect(api.runTurboMiniGame).toHaveBeenCalledTimes(1);
+        expect(api.runTurboMiniGame).toHaveBeenCalledWith(expect.objectContaining({ id: 102 }), 'tok');
+
+        await runVotingPass('tok', null, deps(api));
+        expect(api.runTurboMiniGame).toHaveBeenCalledTimes(3);
+    });
+
+    test('a turbo saved for a mission is not earned while no turbo mission wants it', async () => {
+        const api = makeApi([makeChallenge()]);
+        votingLogic.shouldPlayAutoTurbo.mockReturnValue(true);
+        votingLogic.isTurboEarnSaved.mockReturnValueOnce(true);
+        const missions = { join: 0, fill: 0, turbo: 0, vote: 0 };
+        await runVotingPass('tok', null, deps(api, { missions }));
+        expect(api.runTurboMiniGame).not.toHaveBeenCalled();
+    });
+
+    test('an active turbo mission earns a saved turbo and a win counts it down', async () => {
+        const api = makeApi([makeChallenge({ id: 1 }), makeChallenge({ id: 2 })]);
+        votingLogic.shouldPlayAutoTurbo.mockReturnValue(true);
+        votingLogic.isTurboEarnSaved.mockReturnValue(true);
+        api.runTurboMiniGame
+            .mockResolvedValueOnce({ played: 6, correct: 5, flipped: 0, doubleFailed: 1, won: false })
+            .mockResolvedValueOnce({ played: 6, correct: 6, flipped: 0, doubleFailed: 0, won: true });
+        const missions = { join: 0, fill: 0, turbo: 1, vote: 0 };
+        await runVotingPass('tok', null, deps(api, { missions }));
+        expect(api.runTurboMiniGame).toHaveBeenCalledTimes(2);
+        expect(missions.turbo).toBe(0);
+        votingLogic.isTurboEarnSaved.mockReturnValue(false);
+    });
+
+    test('an active turbo mission earns the soonest-ending challenge first', async () => {
+        const later = makeChallenge({ id: 1, close_time: NOW + 7200 });
+        const sooner = makeChallenge({ id: 2, close_time: NOW + 1800 });
+        const list = [later, sooner];
+        const api = makeApi(list);
+        votingLogic.shouldPlayAutoTurbo.mockReturnValue(true);
+        votingLogic.isTurboEarnSaved.mockReturnValue(true);
+        const missions = { join: 0, fill: 0, turbo: 1, vote: 0 };
+        try {
+            const result = await runVotingPass('tok', null, deps(api, { missions }));
+            expect(api.runTurboMiniGame).toHaveBeenCalledTimes(1);
+            expect(api.runTurboMiniGame).toHaveBeenCalledWith(sooner, 'tok');
+            expect(missions.turbo).toBe(0);
+            expect(result.challenges).toBe(list);
+        } finally {
+            votingLogic.isTurboEarnSaved.mockReturnValue(false);
+        }
+    });
+
+    test('a malformed challenge does not stop a later turbo mission run', async () => {
+        const sooner = makeChallenge({ id: 2, close_time: NOW + 1800 });
+        const api = makeApi([invalid<Challenge>(null), sooner]);
+        votingLogic.shouldPlayAutoTurbo.mockReturnValue(true);
+        votingLogic.isTurboEarnSaved.mockReturnValue(true);
+        const missions = { join: 0, fill: 0, turbo: 1, vote: 0 };
+        try {
+            const result = await runVotingPass('tok', null, deps(api, { missions }));
+            expect(result.success).toBe(true);
+            expect(api.runTurboMiniGame).toHaveBeenCalledWith(sooner, 'tok');
+        } finally {
+            votingLogic.isTurboEarnSaved.mockReturnValue(false);
+        }
+    });
+
+    test('a manual win during the pass saves the next challenge when one mission win remains', async () => {
+        const api = makeApi([makeChallenge({ id: 1 }), makeChallenge({ id: 2 })]);
+        votingLogic.shouldPlayAutoTurbo.mockReturnValue(true);
+        votingLogic.isTurboEarnSaved.mockReturnValue(true);
+        api.runTurboMiniGame.mockImplementation(async () => {
+            recordManualTurboWin('tok');
+            return { played: 1, correct: 0, flipped: 1, doubleFailed: 0, won: false };
+        });
+        const missions = { join: 0, fill: 0, turbo: 1, vote: 0 };
+        try {
+            await runVotingPass('tok', null, deps(api, { missions }));
+            expect(api.runTurboMiniGame).toHaveBeenCalledTimes(1);
+            expect(api.runTurboMiniGame).toHaveBeenCalledWith(expect.objectContaining({ id: 1 }), 'tok');
+            expect(missions.turbo).toBe(0);
+            missions.turbo = 1;
+            recordManualTurboWin('tok');
+            expect(missions.turbo).toBe(1);
+        } finally {
+            votingLogic.isTurboEarnSaved.mockReturnValue(false);
+        }
+    });
+
+    test('a headless pass refreshes mission wins before each saved Turbo decision', async () => {
+        const api = makeApi([makeChallenge({ id: 1 }), makeChallenge({ id: 2 })]);
+        votingLogic.shouldPlayAutoTurbo.mockReturnValue(true);
+        votingLogic.isTurboEarnSaved.mockReturnValue(true);
+        api.runTurboMiniGame.mockResolvedValue({ played: 1, correct: 0, flipped: 1, doubleFailed: 0, won: false });
+        const missions = { join: 0, fill: 0, turbo: 1, vote: 0 };
+        const refreshMissionNeeds = jest
+            .fn()
+            .mockResolvedValueOnce({ join: 0, fill: 0, turbo: 1, vote: 0 })
+            .mockResolvedValueOnce({ join: 0, fill: 0, turbo: 0, vote: 0 });
+        try {
+            await runVotingPass('tok', null, deps(api, { missions, refreshMissionNeeds }));
+            expect(refreshMissionNeeds).toHaveBeenCalledTimes(2);
+            expect(api.runTurboMiniGame).toHaveBeenCalledTimes(1);
+            expect(api.runTurboMiniGame).toHaveBeenCalledWith(expect.objectContaining({ id: 1 }), 'tok');
+            expect(missions.turbo).toBe(0);
+        } finally {
+            votingLogic.isTurboEarnSaved.mockReturnValue(false);
+        }
+    });
+
+    test('a headless pass keeps a saved Turbo when mission progress cannot be refreshed', async () => {
+        const api = makeApi([makeChallenge()]);
+        votingLogic.shouldPlayAutoTurbo.mockReturnValue(true);
+        votingLogic.isTurboEarnSaved.mockReturnValue(true);
+        const missions = { join: 0, fill: 0, turbo: 1, vote: 0 };
+        const refreshMissionNeeds = jest.fn(async () => null);
+        try {
+            await runVotingPass('tok', null, deps(api, { missions, refreshMissionNeeds }));
+            expect(api.runTurboMiniGame).not.toHaveBeenCalled();
+            expect(missions.turbo).toBe(1);
+        } finally {
+            votingLogic.isTurboEarnSaved.mockReturnValue(false);
+        }
+    });
+
+    test('a turbo won outside a mission still counts toward one', async () => {
+        const api = makeApi([makeChallenge()]);
+        votingLogic.shouldPlayAutoTurbo.mockReturnValue(true);
+        const missions = { join: 0, fill: 0, turbo: 0, vote: 0 };
+        await runVotingPass('tok', null, deps(api, { missions }));
+        expect(api.runTurboMiniGame).toHaveBeenCalledTimes(1);
+        expect(missions.turbo).toBe(0);
+    });
+
+    test('auto-fill executes with the injected endpoint pair', async () => {
+        const challenge = makeChallenge();
+        const api = makeApi([challenge]);
+        votingLogic.orderDeadlineActions.mockReturnValue(invalid([{ action: 'autoFill' }]));
+        await runVotingPass('tok', null, deps(api));
+        expect(autoFill.maybeAutoFillChallenge).toHaveBeenCalledWith(
+            challenge,
+            'tok',
+            expect.any(Number),
+            expect.objectContaining({
+                getEligiblePhotos: api.getEligiblePhotos,
+                submitToChallenge: api.submitToChallenge,
+                getActiveChallenges: api.getActiveChallenges,
+            }),
+        );
+    });
+
+    test('emergency fill executes with the injected endpoint pair', async () => {
+        const challenge = makeChallenge();
+        const api = makeApi([challenge]);
+        votingLogic.orderDeadlineActions.mockReturnValue(invalid([{ action: 'emergencyFill' }]));
+        await runVotingPass('tok', null, deps(api));
+        expect(autoFill.maybeEmergencyFillChallenge).toHaveBeenCalledWith(
+            challenge,
+            'tok',
+            expect.any(Number),
+            expect.objectContaining({
+                getEligiblePhotos: api.getEligiblePhotos,
+                submitToChallenge: api.submitToChallenge,
+                getActiveChallenges: api.getActiveChallenges,
+            }),
+        );
+    });
+
+    // The two fill-new sites had no deps-shape coverage at all — a forgotten
+    // getActiveChallenges there would silently keep boost/turbo fill-new on
+    // stale pass-start data (no pre-submit live re-check).
+    test('boost fill-new passes getActiveChallenges for the pre-submit live re-check', async () => {
+        const settings = jest.mocked(require('../../src/ts/settings') as typeof settingsModule);
+        const challenge = makeChallenge({
+            member: {
+                boost: { state: 'AVAILABLE', timeout: NOW + 600 },
+                ranking: { entries: [], exposure: { exposure_factor: 100 } },
+            },
+        });
+        const api = makeApi([challenge]);
+        votingLogic.orderDeadlineActions.mockReturnValue(invalid([{ action: 'boost' }]));
+        votingLogic.shouldApplyBoost.mockReturnValue(true);
+        votingLogic.resolveBoostFillNewMode.mockReturnValue('always');
+        settings.getEffectiveSetting.mockImplementation((key) => key === 'boostFillNew');
+        try {
+            await runVotingPass('tok', null, deps(api));
+            expect(autoFill.submitNewEntryForAction).toHaveBeenCalledWith(
+                challenge,
+                'tok',
+                expect.objectContaining({
+                    getEligiblePhotos: api.getEligiblePhotos,
+                    submitToChallenge: api.submitToChallenge,
+                    getActiveChallenges: api.getActiveChallenges,
+                }),
+            );
+        } finally {
+            settings.getEffectiveSetting.mockImplementation(() => false);
+        }
+    });
+
+    test('turbo fill-new passes getActiveChallenges for the pre-submit live re-check', async () => {
+        const challenge = makeChallenge();
+        const api = makeApi([challenge]);
+        votingLogic.orderDeadlineActions.mockReturnValue(invalid([{ action: 'turbo' }]));
+        votingLogic.shouldApplyTurbo.mockReturnValue(invalid({ apply: true, fillNew: true, imageId: null }));
+        await runVotingPass('tok', null, deps(api));
+        expect(autoFill.submitNewEntryForAction).toHaveBeenCalledWith(
+            challenge,
+            'tok',
+            expect.objectContaining({
+                getEligiblePhotos: api.getEligiblePhotos,
+                submitToChallenge: api.submitToChallenge,
+                getActiveChallenges: api.getActiveChallenges,
+            }),
+        );
+    });
+
+    // When the live re-check says the challenge left the active list, the
+    // fill-new callers must NOT fire the fallback apply — it is a known-doomed
+    // call that would only add a second failure log.
+    test('boost fill-new challenge-gone → no fallback applyBoost call', async () => {
+        const settings = jest.mocked(require('../../src/ts/settings') as typeof settingsModule);
+        const challenge = makeChallenge({
+            member: {
+                boost: { state: 'AVAILABLE', timeout: NOW + 600 },
+                ranking: { entries: [], exposure: { exposure_factor: 100 } },
+            },
+        });
+        const api = makeApi([challenge]);
+        votingLogic.orderDeadlineActions.mockReturnValue(invalid([{ action: 'boost' }]));
+        votingLogic.shouldApplyBoost.mockReturnValue(true);
+        votingLogic.resolveBoostFillNewMode.mockReturnValue('always');
+        autoFill.submitNewEntryForAction.mockResolvedValueOnce({ ok: false, imageId: null, reason: 'challenge-gone' });
+        settings.getEffectiveSetting.mockImplementation((key) => key === 'boostFillNew');
+        try {
+            const result = await runVotingPass('tok', null, deps(api));
+            expect(result.success).toBe(true);
+            expect(api.applyBoost).not.toHaveBeenCalled();
+            expect(api.applyBoostToEntry).not.toHaveBeenCalled();
+        } finally {
+            settings.getEffectiveSetting.mockImplementation(() => false);
+        }
+    });
+
+    test('turbo fill-new challenge-gone → no fallback applyTurbo call', async () => {
+        const challenge = makeChallenge();
+        const api = makeApi([challenge]);
+        votingLogic.orderDeadlineActions.mockReturnValue(invalid([{ action: 'turbo' }]));
+        votingLogic.shouldApplyTurbo.mockReturnValue(invalid({ apply: true, fillNew: true, imageId: 'existing-1' }));
+        autoFill.submitNewEntryForAction.mockResolvedValueOnce({ ok: false, imageId: null, reason: 'challenge-gone' });
+        const result = await runVotingPass('tok', null, deps(api));
+        expect(result.success).toBe(true);
+        expect(api.applyTurbo).not.toHaveBeenCalled();
+    });
+
+    // Exactly-once reflection contract: submitNewEntryForAction deliberately
+    // does NOT reflect internally (pinned in tests/services/autoFill.test.ts)
+    // — the orchestrator is the one and only place that reflects a successful
+    // fill-new. If reflection ever moved inside submitNewEntryForAction these
+    // sites would reflect twice, duplicating the entry in
+    // challenge.member.ranking.entries and corrupting getSlotsRemaining plus
+    // boost/turbo entry selection for the rest of the pass.
+    test('boost fill-new success → reflectNewEntry called exactly once with the submitted id', async () => {
+        const settings = jest.mocked(require('../../src/ts/settings') as typeof settingsModule);
+        const challenge = makeChallenge({
+            member: {
+                boost: { state: 'AVAILABLE', timeout: NOW + 600 },
+                ranking: { entries: [], exposure: { exposure_factor: 100 } },
+            },
+        });
+        const api = makeApi([challenge]);
+        votingLogic.orderDeadlineActions.mockReturnValue(invalid([{ action: 'boost' }]));
+        votingLogic.shouldApplyBoost.mockReturnValue(true);
+        votingLogic.resolveBoostFillNewMode.mockReturnValue('always');
+        autoFill.submitNewEntryForAction.mockResolvedValueOnce({ ok: true, imageId: 'fresh-1', reason: 'submitted' });
+        settings.getEffectiveSetting.mockImplementation((key) => key === 'boostFillNew');
+        try {
+            await runVotingPass('tok', null, deps(api));
+            expect(autoFill.reflectNewEntry).toHaveBeenCalledTimes(1);
+            expect(autoFill.reflectNewEntry).toHaveBeenCalledWith(challenge, 'fresh-1');
+            expect(api.applyBoostToEntry).toHaveBeenCalledWith('101', 'fresh-1', 'tok');
+        } finally {
+            settings.getEffectiveSetting.mockImplementation(() => false);
+        }
+    });
+
+    test('turbo fill-new success → reflectNewEntry called exactly once with the submitted id', async () => {
+        const challenge = makeChallenge();
+        const api = makeApi([challenge]);
+        votingLogic.orderDeadlineActions.mockReturnValue(invalid([{ action: 'turbo' }]));
+        votingLogic.shouldApplyTurbo.mockReturnValue(invalid({ apply: true, fillNew: true, imageId: null }));
+        autoFill.submitNewEntryForAction.mockResolvedValueOnce({ ok: true, imageId: 'fresh-2', reason: 'submitted' });
+        await runVotingPass('tok', null, deps(api));
+        expect(autoFill.reflectNewEntry).toHaveBeenCalledTimes(1);
+        expect(autoFill.reflectNewEntry).toHaveBeenCalledWith(challenge, 'fresh-2');
+    });
+
+    // On-conflict turbo fill-new fires only when the sole entry is already
+    // boosted (turbo can never share it). If the fresh submit then fails for a
+    // non-gone reason, imageId stays null and the only existing entry is not a
+    // valid fallback — applying turbo to it would fail with "already has Boost".
+    // The orchestrator must skip cleanly and NOT call applyTurbo on that entry.
+    test('turbo fill-new-on-conflict submit failure → skips without applyTurbo (no valid fallback)', async () => {
+        const challenge = makeChallenge({
+            member: {
+                boost: { state: 'LOCKED', timeout: 0 },
+                turbo: { state: 'WON' },
+                ranking: { entries: [{ id: 'e1', boosted: true }], exposure: { exposure_factor: 100 } },
+            },
+        });
+        const api = makeApi([challenge]);
+        votingLogic.orderDeadlineActions.mockReturnValue(invalid([{ action: 'turbo' }]));
+        votingLogic.shouldApplyTurbo.mockReturnValue({
+            apply: true,
+            fillNew: true,
+            imageId: null,
+            reason: 'eligible (fill-new on conflict)',
+        });
+        autoFill.submitNewEntryForAction.mockResolvedValueOnce({ ok: false, imageId: null, reason: 'none' });
+        const result = await runVotingPass('tok', null, deps(api));
+        expect(result.success).toBe(true);
+        expect(api.applyTurbo).not.toHaveBeenCalled();
+        expect(autoFill.reflectNewEntry).not.toHaveBeenCalled();
+    });
+});
+
+describe('cancellation checkpoints', () => {
+    const CANCELLED = { success: false, message: 'Voting cancelled by user' };
+
+    test('1: before processing a challenge', async () => {
+        const api = makeApi([makeChallenge()]);
+        cancellation.isCancelled.mockReturnValue(true);
+        const result = await runVotingPass('tok', null, deps(api));
+        expect(result).toMatchObject(CANCELLED);
+        expect(votingLogic.evaluateVotingDecision).not.toHaveBeenCalled();
+    });
+
+    test('2: between deadline actions', async () => {
+        const api = makeApi([makeChallenge()]);
+        votingLogic.orderDeadlineActions.mockReturnValue(invalid([{ action: 'autoFill' }]));
+        cancellation.isCancelled.mockReturnValueOnce(false).mockReturnValue(true);
+        const result = await runVotingPass('tok', null, deps(api));
+        expect(result).toMatchObject(CANCELLED);
+        expect(autoFill.maybeAutoFillChallenge).not.toHaveBeenCalled();
+    });
+
+    test('3: before voting starts', async () => {
+        const api = makeApi([makeChallenge()]);
+        votingLogic.evaluateVotingDecision.mockReturnValue(
+            invalid({
+                shouldVote: true,
+                voteReason: 'below threshold',
+                targetExposure: 100,
+            }),
+        );
+        cancellation.isCancelled.mockReturnValueOnce(false).mockReturnValue(true);
+        const result = await runVotingPass('tok', null, deps(api));
+        expect(result).toMatchObject(CANCELLED);
+        expect(api.getVoteImages).not.toHaveBeenCalled();
+    });
+
+    test('4: after fetching images, before submitting votes', async () => {
+        const api = makeApi([makeChallenge()]);
+        votingLogic.evaluateVotingDecision.mockReturnValue(
+            invalid({
+                shouldVote: true,
+                voteReason: 'below threshold',
+                targetExposure: 100,
+            }),
+        );
+        cancellation.isCancelled.mockReturnValueOnce(false).mockReturnValueOnce(false).mockReturnValue(true);
+        const result = await runVotingPass('tok', null, deps(api));
+        expect(result).toMatchObject(CANCELLED);
+        expect(api.getVoteImages).toHaveBeenCalled();
+        expect(api.submitVotes).not.toHaveBeenCalled();
+    });
+
+    test('5: after submitting votes, before the inter-challenge delay', async () => {
+        const api = makeApi([makeChallenge()]);
+        votingLogic.evaluateVotingDecision.mockReturnValue(
+            invalid({
+                shouldVote: true,
+                voteReason: 'below threshold',
+                targetExposure: 100,
+            }),
+        );
+        cancellation.isCancelled
+            .mockReturnValueOnce(false)
+            .mockReturnValueOnce(false)
+            .mockReturnValueOnce(false)
+            .mockReturnValue(true);
+        const result = await runVotingPass('tok', null, deps(api));
+        expect(result).toMatchObject(CANCELLED);
+        expect(api.submitVotes).toHaveBeenCalled();
+    });
+});
+
+describe('voting path', () => {
+    test('votes to the evaluated target and paces via the injected delay', async () => {
+        const api = makeApi([makeChallenge()]);
+        const delayFn = jest.fn(() => 0);
+        votingLogic.evaluateVotingDecision.mockReturnValue(
+            invalid({
+                shouldVote: true,
+                voteReason: 'below threshold',
+                targetExposure: 87,
+            }),
+        );
+        const result = await runVotingPass('tok', null, deps(api, { interChallengeDelay: delayFn }));
+        expect(result.success).toBe(true);
+        expect(api.submitVotes).toHaveBeenCalledWith(
+            expect.objectContaining({ images: expect.any(Array) }),
+            'tok',
+            87,
+            undefined,
+        );
+        expect(delayFn).toHaveBeenCalledTimes(1);
+    });
+});
+
+describe('voteOnNewEntry — gate, arm, record', () => {
+    const settings = jest.mocked(require('../../src/ts/settings') as typeof settingsModule);
+
+    /** Minimal in-memory tracker with call spies, matching the deps contract. */
+    const makeTracker = (seed: Record<string, string[]> = {}) => {
+        const store = new Map(Object.entries(seed));
+        return {
+            get: jest.fn((id: string) => (store.has(id) ? store.get(id)! : null)),
+            set: jest.fn((id: string, ids: string[]) => store.set(id, [...ids])),
+            store,
+        };
+    };
+
+    /** A challenge carrying real entry objects, since detection reads their ids. */
+    const withEntries = (ids: string[]) =>
+        makeChallenge({
+            member: {
+                boost: { state: 'LOCKED', timeout: 0 },
+                ranking: { entries: ids.map((id) => ({ id })), exposure: { exposure_factor: 100 } },
+            },
+        });
+
+    /** The gate reads voteOnNewEntry off settings; everything else stays false. */
+    const enableSetting = (value = true) =>
+        settings.getEffectiveSetting.mockImplementation((key) => (key === 'voteOnNewEntry' ? value : false));
+
+    const lastDecisionOptions = () => votingLogic.evaluateVotingDecision.mock.calls.at(-1)?.[2];
+
+    beforeEach(() => {
+        settings.getEffectiveSetting.mockImplementation(() => false);
+    });
+
+    test('setting off: the tracker is never read or written', async () => {
+        const api = makeApi([withEntries(['a'])]);
+        const tracker = makeTracker();
+
+        await runVotingPass('tok', null, deps(api, { entryTracker: tracker }));
+
+        expect(tracker.get).not.toHaveBeenCalled();
+        expect(tracker.set).not.toHaveBeenCalled();
+        expect(lastDecisionOptions()).toEqual({ hasNewEntry: false });
+    });
+
+    test('no entryTracker injected: feature is inert even with the setting on', async () => {
+        enableSetting();
+        const api = makeApi([withEntries(['a'])]);
+
+        const result = await runVotingPass('tok', null, deps(api));
+
+        expect(result.success).toBe(true);
+        expect(lastDecisionOptions()).toEqual({ hasNewEntry: false });
+    });
+
+    test('first sight records a baseline and does not force a vote', async () => {
+        enableSetting();
+        const api = makeApi([withEntries(['a', 'b'])]);
+        const tracker = makeTracker();
+
+        await runVotingPass('tok', null, deps(api, { entryTracker: tracker }));
+
+        expect(lastDecisionOptions()).toEqual({ hasNewEntry: false });
+        expect(tracker.set).toHaveBeenCalledWith('101', ['a', 'b']);
+    });
+
+    test('an entry added between passes is detected on the next pass', async () => {
+        enableSetting();
+        const api = makeApi([withEntries(['a', 'b'])]);
+        const tracker = makeTracker({ 101: ['a'] });
+
+        await runVotingPass('tok', null, deps(api, { entryTracker: tracker }));
+
+        expect(lastDecisionOptions()).toEqual({ hasNewEntry: true });
+        expect(tracker.set).toHaveBeenCalledWith('101', ['a', 'b']);
+    });
+
+    test('an entry added by auto-fill within the same pass is detected in that pass', async () => {
+        // The whole reason detection runs after the deadline runners: reflectNewEntry
+        // mutates the shared challenge object, so the fill lands before the decision.
+        enableSetting();
+        const challenge = withEntries(['a']);
+        const api = makeApi([challenge]);
+        const tracker = makeTracker({ 101: ['a'] });
+        votingLogic.orderDeadlineActions.mockReturnValue([{ action: 'autoFill', thresholdSec: 900 }]);
+        autoFill.maybeAutoFillChallenge.mockImplementation(async (c) => {
+            c.member!.ranking!.entries!.push({ id: 'fresh' });
+            return 'submitted';
+        });
+
+        await runVotingPass('tok', null, deps(api, { entryTracker: tracker }));
+
+        expect(lastDecisionOptions()).toEqual({ hasNewEntry: true });
+        expect(tracker.set).toHaveBeenCalledWith('101', ['a', 'fresh']);
+    });
+
+    test('a reordered entries array is not a new entry and does not fire', async () => {
+        enableSetting();
+        const api = makeApi([withEntries(['b', 'a'])]);
+        const tracker = makeTracker({ 101: ['a', 'b'] });
+
+        await runVotingPass('tok', null, deps(api, { entryTracker: tracker }));
+
+        expect(lastDecisionOptions()).toEqual({ hasNewEntry: false });
+    });
+
+    test('a challenge with no usable entries array is skipped entirely', async () => {
+        enableSetting();
+        const challenge = makeChallenge();
+        challenge.member!.ranking!.entries = undefined;
+        const api = makeApi([challenge]);
+        const tracker = makeTracker();
+
+        await runVotingPass('tok', null, deps(api, { entryTracker: tracker }));
+
+        expect(tracker.get).not.toHaveBeenCalled();
+        expect(tracker.set).not.toHaveBeenCalled();
+    });
+
+    test('a forced vote that throws leaves the snapshot unwritten so the next pass retries', async () => {
+        enableSetting();
+        const api = makeApi([withEntries(['a', 'b'])]);
+        api.submitVotes.mockRejectedValue(new Error('network went away'));
+        const tracker = makeTracker({ 101: ['a'] });
+        votingLogic.evaluateVotingDecision.mockReturnValue({
+            shouldVote: true,
+            voteReason: 'new entry detected',
+            targetExposure: 100,
+            forcedByNewEntry: true,
+        });
+
+        const result = await runVotingPass('tok', null, deps(api, { entryTracker: tracker }));
+
+        expect(result.success).toBe(true);
+        expect(tracker.set).not.toHaveBeenCalled();
+        expect(tracker.store.get('101')).toEqual(['a']); // still armed
+    });
+
+    test('a NON-forced vote that throws still records the snapshot', async () => {
+        // Organic eligibility recurs by itself next cycle — there is no trigger to
+        // preserve, so holding the snapshot back would only re-fire pointlessly.
+        enableSetting();
+        const api = makeApi([withEntries(['a', 'b'])]);
+        api.submitVotes.mockRejectedValue(new Error('network went away'));
+        const tracker = makeTracker({ 101: ['a'] });
+        votingLogic.evaluateVotingDecision.mockReturnValue({
+            shouldVote: true,
+            voteReason: 'below threshold',
+            targetExposure: 100,
+            forcedByNewEntry: false,
+        });
+
+        await runVotingPass('tok', null, deps(api, { entryTracker: tracker }));
+
+        expect(tracker.set).toHaveBeenCalledWith('101', ['a', 'b']);
+    });
+
+    test('"no vote images" on a forced decision still records', async () => {
+        // Not a throw: treating it as failure would force a getVoteImages call every
+        // cycle forever on a challenge that never has any.
+        enableSetting();
+        const api = makeApi([withEntries(['a', 'b'])]);
+        api.getVoteImages.mockResolvedValue(invalid({ images: null }));
+        const tracker = makeTracker({ 101: ['a'] });
+        votingLogic.evaluateVotingDecision.mockReturnValue({
+            shouldVote: true,
+            voteReason: 'new entry detected',
+            targetExposure: 100,
+            forcedByNewEntry: true,
+        });
+
+        await runVotingPass('tok', null, deps(api, { entryTracker: tracker }));
+
+        expect(tracker.set).toHaveBeenCalledWith('101', ['a', 'b']);
+    });
+
+    test('a blocked decision consumes the trigger and does not vote', async () => {
+        enableSetting();
+        const api = makeApi([withEntries(['a', 'b'])]);
+        const tracker = makeTracker({ 101: ['a'] });
+        votingLogic.evaluateVotingDecision.mockReturnValue({
+            shouldVote: false,
+            voteReason: 'boost-only mode enabled',
+            targetExposure: 100,
+            forcedByNewEntry: false,
+        });
+
+        await runVotingPass('tok', null, deps(api, { entryTracker: tracker }));
+
+        expect(api.submitVotes).not.toHaveBeenCalled();
+        expect(tracker.set).toHaveBeenCalledWith('101', ['a', 'b']);
+    });
+
+    test('a pause DEFERS the trigger instead of consuming it, and the vote lands once it lifts', async () => {
+        // The voting pause is the one block that lifts into the NORMAL threshold
+        // rule, which won't vote while exposure is at/above the trigger — so
+        // consuming the trigger here would drop a photo submitted mid-pause
+        // rather than postponing its vote. Asserted end-to-end because the
+        // VotingLogic-level flag is only half the mechanism; the orchestrator's
+        // recordEntrySnapshot guard is the half that actually preserves it.
+        enableSetting();
+        const tracker = makeTracker({ 101: ['a'] });
+
+        // Pass 1 — inside the pause: blocked, and the baseline must NOT advance.
+        votingLogic.evaluateVotingDecision.mockReturnValue({
+            shouldVote: false,
+            voteReason: 'voting paused: inside configured pause window',
+            targetExposure: 100,
+            forcedByNewEntry: false,
+            preservesNewEntryTrigger: true,
+        });
+        const pausedApi = makeApi([withEntries(['a', 'b'])]);
+        await runVotingPass('tok', null, deps(pausedApi, { entryTracker: tracker }));
+
+        expect(pausedApi.submitVotes).not.toHaveBeenCalled();
+        expect(tracker.set).not.toHaveBeenCalled();
+
+        // Pass 2 — pause over: the still-armed trigger forces the vote, and only
+        // now does the baseline advance.
+        votingLogic.evaluateVotingDecision.mockReturnValue({
+            shouldVote: true,
+            voteReason: 'new entry detected',
+            targetExposure: 100,
+            forcedByNewEntry: true,
+        });
+        const resumedApi = makeApi([withEntries(['a', 'b'])]);
+        await runVotingPass('tok', null, deps(resumedApi, { entryTracker: tracker }));
+
+        expect(resumedApi.submitVotes).toHaveBeenCalled();
+        expect(tracker.set).toHaveBeenCalledWith('101', ['a', 'b']);
+    });
+
+    test('preservesNewEntryTrigger without a new entry still records the baseline', async () => {
+        // The guard is gated on hasNewEntry: a pause with nothing new to defer
+        // must not freeze the baseline forever, or the first entry seen after
+        // the pause would look "new" on every later cycle.
+        enableSetting();
+        const api = makeApi([withEntries(['a'])]);
+        const tracker = makeTracker({ 101: ['a'] });
+        votingLogic.evaluateVotingDecision.mockReturnValue({
+            shouldVote: false,
+            voteReason: 'voting paused: inside configured pause window',
+            targetExposure: 100,
+            forcedByNewEntry: false,
+            preservesNewEntryTrigger: true,
+        });
+
+        await runVotingPass('tok', null, deps(api, { entryTracker: tracker }));
+
+        expect(tracker.set).toHaveBeenCalledWith('101', ['a']);
+    });
+
+    test('disable then re-enable fires exactly one catch-up vote, then goes quiet', async () => {
+        const tracker = makeTracker();
+
+        // Pass 1 — enabled, establishes the baseline.
+        enableSetting();
+        await runVotingPass('tok', null, deps(makeApi([withEntries(['a'])]), { entryTracker: tracker }));
+        expect(tracker.store.get('101')).toEqual(['a']);
+
+        // Pass 2 — disabled. Entries change, but nothing is read or written, so the
+        // stored snapshot goes stale.
+        enableSetting(false);
+        tracker.set.mockClear();
+        await runVotingPass('tok', null, deps(makeApi([withEntries(['a', 'b'])]), { entryTracker: tracker }));
+        expect(tracker.set).not.toHaveBeenCalled();
+        expect(tracker.store.get('101')).toEqual(['a']);
+
+        // Pass 3 — re-enabled against the stale baseline: one catch-up fire.
+        enableSetting();
+        await runVotingPass('tok', null, deps(makeApi([withEntries(['a', 'b'])]), { entryTracker: tracker }));
+        expect(lastDecisionOptions()).toEqual({ hasNewEntry: true });
+
+        // Pass 4 — snapshot is current again, so it stays quiet.
+        await runVotingPass('tok', null, deps(makeApi([withEntries(['a', 'b'])]), { entryTracker: tracker }));
+        expect(lastDecisionOptions()).toEqual({ hasNewEntry: false });
+    });
+
+    test('a transient empty entries array does not overwrite a good baseline', async () => {
+        // A partial/degraded poll must not poison the snapshot: recording [] would
+        // make the unchanged entries look brand new on the very next poll.
+        enableSetting();
+        const tracker = makeTracker({ 101: ['a', 'b'] });
+
+        await runVotingPass('tok', null, deps(makeApi([withEntries([])]), { entryTracker: tracker }));
+        expect(tracker.set).not.toHaveBeenCalled();
+        expect(tracker.store.get('101')).toEqual(['a', 'b']);
+
+        // The next poll returns the same entries — nothing new.
+        await runVotingPass('tok', null, deps(makeApi([withEntries(['a', 'b'])]), { entryTracker: tracker }));
+        expect(lastDecisionOptions()).toEqual({ hasNewEntry: false });
+    });
+
+    test('a brand-new challenge with zero entries still records an empty baseline', async () => {
+        enableSetting();
+        const tracker = makeTracker();
+
+        await runVotingPass('tok', null, deps(makeApi([withEntries([])]), { entryTracker: tracker }));
+
+        expect(tracker.set).toHaveBeenCalledWith('101', []);
+    });
+
+    test('cancellation right after a successful forced vote still records', async () => {
+        // The vote landed, so the trigger is spent. Bailing without recording would
+        // re-force the identical vote on the next pass.
+        enableSetting();
+        const api = makeApi([withEntries(['a', 'b'])]);
+        const tracker = makeTracker({ 101: ['a'] });
+        votingLogic.evaluateVotingDecision.mockReturnValue({
+            shouldVote: true,
+            voteReason: 'new entry detected',
+            targetExposure: 100,
+            forcedByNewEntry: true,
+        });
+        // false at: per-challenge, pre-vote, pre-submit; then true after submission.
+        cancellation.isCancelled
+            .mockReturnValueOnce(false)
+            .mockReturnValueOnce(false)
+            .mockReturnValueOnce(false)
+            .mockReturnValue(true);
+
+        await runVotingPass('tok', null, deps(api, { entryTracker: tracker }));
+
+        expect(api.submitVotes).toHaveBeenCalled();
+        expect(tracker.set).toHaveBeenCalledWith('101', ['a', 'b']);
+    });
+
+    test('tracks each challenge in a multi-challenge pass independently', async () => {
+        enableSetting();
+        const first = withEntries(['a']);
+        const second = makeChallenge({
+            id: 202,
+            member: {
+                boost: { state: 'LOCKED', timeout: 0 },
+                ranking: { entries: [{ id: 'x' }, { id: 'y' }], exposure: { exposure_factor: 100 } },
+            },
+        });
+        const api = makeApi([first, second]);
+        const tracker = makeTracker({ 101: ['a'], 202: ['x'] });
+
+        await runVotingPass('tok', null, deps(api, { entryTracker: tracker }));
+
+        // 101 unchanged, 202 gained an entry — the decisions must not bleed together.
+        const options = votingLogic.evaluateVotingDecision.mock.calls.map((c) => c[2]);
+        expect(options).toEqual([{ hasNewEntry: false }, { hasNewEntry: true }]);
+        expect(tracker.set).toHaveBeenCalledWith('101', ['a']);
+        expect(tracker.set).toHaveBeenCalledWith('202', ['x', 'y']);
+    });
+
+    test('a single-challenge filtered run tracks only the filtered challenge', async () => {
+        enableSetting();
+        const first = withEntries(['a', 'b']);
+        const second = makeChallenge({
+            id: 202,
+            member: {
+                boost: { state: 'LOCKED', timeout: 0 },
+                ranking: { entries: [{ id: 'x' }], exposure: { exposure_factor: 100 } },
+            },
+        });
+        const tracker = makeTracker({ 101: ['a'], 202: ['x'] });
+
+        await runVotingPass('tok', 101, deps(makeApi([first, second]), { entryTracker: tracker }));
+
+        expect(tracker.set).toHaveBeenCalledTimes(1);
+        expect(tracker.set).toHaveBeenCalledWith('101', ['a', 'b']);
+    });
+
+    test('a per-challenge override behaves the same as the global default', async () => {
+        // The gate reads the EFFECTIVE value, so an override flip must be equivalent.
+        const tracker = makeTracker({ 101: ['a'] });
+        settings.getEffectiveSetting.mockImplementation((key, challengeId) =>
+            key === 'voteOnNewEntry' ? challengeId === '101' : false,
+        );
+
+        await runVotingPass('tok', null, deps(makeApi([withEntries(['a', 'b'])]), { entryTracker: tracker }));
+
+        expect(settings.getEffectiveSetting).toHaveBeenCalledWith('voteOnNewEntry', '101');
+        expect(lastDecisionOptions()).toEqual({ hasNewEntry: true });
+    });
+});
+
+describe('failed challenge fetch', () => {
+    // makePostRequest resolves null once retries are exhausted (the GuruShots API returning
+    // 5xx for a while is the realistic trigger). challenges.ts turns that into an empty list,
+    // which must stay distinguishable from "you have no active challenges" — otherwise an outage
+    // closes the pass as a success and the scheduler re-arms as if everything were healthy.
+    test('reports a failure instead of a successful empty pass', async () => {
+        const api = makeApi([]);
+        api.getActiveChallenges = jest.fn(async () => ({ challenges: [], fetchFailed: true }));
+
+        const result = await runVotingPass('tok', null, deps(api));
+
+        expect(result.success).toBe(false);
+        expect(result.error).toMatch(/could not load active challenges/i);
+    });
+
+    test('a genuinely empty account still reports success', async () => {
+        const api = makeApi([]);
+
+        const result = await runVotingPass('tok', null, deps(api));
+
+        expect(result).toEqual({ success: true, message: 'No active challenges found', challenges: [] });
+    });
+});
+
+describe('per-challenge error isolation', () => {
+    // A throw inside the per-challenge body must not escape into runVotingPass's single outer
+    // catch, which would abandon every remaining challenge in the pass.
+    test('a challenge that throws is skipped, and the rest of the pass still runs', async () => {
+        const api = makeApi([makeChallenge({ id: 1 }), makeChallenge({ id: 2 })]);
+        votingLogic.evaluateVotingDecision
+            .mockImplementationOnce(() => {
+                throw new Error('malformed challenge payload');
+            })
+            .mockReturnValue(invalid({ shouldVote: false, voteReason: 'test skip', targetExposure: 100 }));
+
+        const result = await runVotingPass('tok', null, deps(api));
+
+        expect(votingLogic.evaluateVotingDecision).toHaveBeenCalledTimes(2);
+        expect(result.success).toBe(true);
+    });
+
+    // The cancellation checkpoints inside that body use `return`, which a try/catch does not
+    // intercept — but a careless `catch` around them would still have to not swallow it.
+    test('cancellation still aborts the whole pass rather than being caught per challenge', async () => {
+        const list = [makeChallenge({ id: 1 }), makeChallenge({ id: 2 })];
+        const api = makeApi(list);
+        cancellation.isCancelled.mockReturnValue(true);
+
+        const result = await runVotingPass('tok', null, deps(api));
+
+        expect(result).toEqual({
+            success: false,
+            message: 'Voting cancelled by user',
+            challenges: list,
+        });
+        expect(votingLogic.evaluateVotingDecision).not.toHaveBeenCalled();
+    });
+});
+
+describe('per-challenge clock', () => {
+    // `now` must not be captured once before the loop and reused for every challenge's
+    // deadline actions and voting decision. A pass can run for minutes (2-5s inter-challenge
+    // delay, retries, paginated library walks), so every challenge after the first would be
+    // judged against a clock stuck in the past — missing windows that open mid-pass.
+    test('re-reads the clock for each challenge instead of freezing it for the pass', async () => {
+        const api = makeApi([makeChallenge({ id: 1 }), makeChallenge({ id: 2 })]);
+        const base = Date.now();
+        let tick = 0;
+        const spy = jest.spyOn(Date, 'now').mockImplementation(() => base + tick++ * 60_000);
+
+        await runVotingPass('tok', null, deps(api));
+
+        const observed = votingLogic.evaluateVotingDecision.mock.calls.map((call) => call[1]);
+        expect(observed).toHaveLength(2);
+        expect(observed[1]).toBeGreaterThan(observed[0]);
+
+        spy.mockRestore();
+    });
+});

@@ -1,0 +1,57 @@
+/**
+ * Real-strategy active-challenge read: the api/challenges fetch plus
+ * first-seen title pinning, with concurrent calls coalesced per token.
+ */
+
+import { fetchActiveChallenges } from '../../api/challenges';
+import { pinChallengeTitles } from '../../services/challengeTitlePin';
+
+import type { ActiveChallengesResponse } from '../../types/gurushots';
+
+/**
+ * One fetch, then pin first-seen titles onto a successful response. A failed
+ * fetch (flagged `fetchFailed`) must never reach the pin/prune logic — a
+ * network blip would wipe pins. The server mutates `title` while an event
+ * (turbo) is active; pinning keeps display and title-rule matching stable
+ * (see services/challengeTitlePin).
+ */
+const fetchAndPin = async (token: string): Promise<ActiveChallengesResponse> => {
+    const response = await fetchActiveChallenges(token);
+    if (!response.fetchFailed && Array.isArray(response.challenges)) {
+        pinChallengeTitles(response.challenges);
+    }
+    return response;
+};
+
+// In-flight request coalescing. Independent consumers can want the current
+// active-challenge list at the same instant — e.g. a UI challenges refresh
+// racing an in-progress voting cycle. We share the in-flight promise per token
+// and clear it as soon as the request settles, so only genuinely *concurrent*
+// calls are merged (and pinned once); a later (sequential) call still hits the
+// network for fresh data. No resolved-result caching, so this never serves
+// stale challenge state.
+const inFlightByToken: Map<string, Promise<ActiveChallengesResponse>> = new Map();
+
+/**
+ * Fetches all active challenges for the authenticated user, coalescing
+ * concurrent calls for the same token into one request.
+ *
+ * @param token - Authentication token
+ * @returns Response containing array of active challenges
+ *                   or empty challenges array if request fails
+ */
+const getActiveChallenges = (token: string): Promise<ActiveChallengesResponse> => {
+    const key = token || '';
+    const existing = inFlightByToken.get(key);
+    if (existing) {
+        return existing;
+    }
+
+    const request = fetchAndPin(token).finally(() => {
+        inFlightByToken.delete(key);
+    });
+    inFlightByToken.set(key, request);
+    return request;
+};
+
+export { getActiveChallenges };

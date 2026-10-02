@@ -5,11 +5,14 @@
 pre-commit:
     parallel: false
     commands:
+        no-javascript:
+            glob: '*.{js,jsx,mjs,cjs}'
+            run: 'echo "JavaScript is not allowed, this codebase is TypeScript. Rename to .ts/.tsx/.mts/.cts:" {staged_files} >&2 && exit 1'
         oxlint:
-            glob: '*.{js,jsx,mjs,cjs,ts,tsx}'
-            run: pnpm exec oxlint --fix {staged_files}
+            glob: '*.{ts,tsx,mts,cts}'
+            run: pnpm exec oxlint --fix --no-error-on-unmatched-pattern {staged_files}
             stage_fixed: true
         prettier:
-            glob: '*.{js,jsx,mjs,ts,tsx,json,jsonc,css,md,yml,yaml,html}'
+            glob: '*.{ts,tsx,mts,cts,json,jsonc,css,md,yml,yaml,html}'
             run: pnpm exec prettier --write {staged_files}
             stage_fixed: true

@@ -1,0 +1,104 @@
+/**
+ * Per-challenge override auto-clear for reference-typed settings.
+ *
+ * _applyChallengeOverride prunes an override that equals the effective global
+ * default. The comparison is by content (valuesEqual): under reference
+ * equality, array-typed settings (mustIncludeTags/shouldIncludeTags) would
+ * never match their default and a "set back to default" override would be
+ * stored forever instead of cleared. These tests assert the observable
+ * boundary: getChallengeOverride / getEffectiveSetting stop reporting an
+ * override once the value matches the default again.
+ *
+ * Drives the in-memory headless-store seam (same as title-tag-rules.test.ts)
+ * so the facade's loadSettings/saveSettings round-trip without touching fs.
+ */
+
+import type { AndroidHeadlessStore } from '../../src/ts/types/settings';
+import settings = require('../../src/ts/settings');
+
+jest.mock('../../src/ts/logger', () => ({
+    info: jest.fn(),
+    warning: jest.fn(),
+    error: jest.fn(),
+    debug: jest.fn(),
+    api: jest.fn(),
+    startOperation: jest.fn(),
+    endOperation: jest.fn(),
+    apiRequest: jest.fn(),
+    apiResponse: jest.fn(),
+    isDevMode: jest.fn(() => false),
+    isSourceCode: jest.fn(() => true),
+    getAppName: jest.fn(() => 'gurushots-auto-vote-dev'),
+    withCategory: jest.fn(() => ({
+        info: jest.fn(),
+        error: jest.fn(),
+        debug: jest.fn(),
+        success: jest.fn(),
+        warning: jest.fn(),
+    })),
+}));
+
+describe('settings facade — override auto-clear vs global default', () => {
+    const headlessGlobals = globalThis as typeof globalThis & {
+        __GS_HEADLESS__?: boolean;
+        AndroidHeadlessStore?: AndroidHeadlessStore;
+    };
+    let store: { value: string | null; read: jest.Mock<string | null, []>; write: jest.Mock<void, [string]> };
+    const challengeId = '123456';
+
+    beforeEach(() => {
+        headlessGlobals.__GS_HEADLESS__ = true;
+        store = {
+            value: null,
+            read: jest.fn(() => store.value),
+            write: jest.fn((d) => {
+                store.value = d;
+            }),
+        };
+        headlessGlobals.AndroidHeadlessStore = store;
+    });
+
+    afterEach(() => {
+        delete headlessGlobals.__GS_HEADLESS__;
+        delete headlessGlobals.AndroidHeadlessStore;
+    });
+
+    describe('array-typed setting (mustIncludeTags, schema default [])', () => {
+        it('stores an override that differs from the default', () => {
+            expect(settings.setChallengeOverride('mustIncludeTags', challengeId, ['macro'])).toBe(true);
+            expect(settings.getChallengeOverride('mustIncludeTags', challengeId)).toEqual(['macro']);
+            expect(settings.getEffectiveSetting('mustIncludeTags', challengeId)).toEqual(['macro']);
+        });
+
+        it('clears the override when set back to a value equal to the default', () => {
+            settings.setChallengeOverride('mustIncludeTags', challengeId, ['macro']);
+            // A fresh [] is content-equal but not reference-equal to the
+            // schema default — the exact case a !== compare gets wrong.
+            expect(settings.setChallengeOverride('mustIncludeTags', challengeId, [])).toBe(true);
+            expect(settings.getChallengeOverride('mustIncludeTags', challengeId)).toBeNull();
+        });
+
+        it('never stores an override equal to the default in the first place', () => {
+            expect(settings.setChallengeOverride('mustIncludeTags', challengeId, [])).toBe(true);
+            expect(settings.getChallengeOverride('mustIncludeTags', challengeId)).toBeNull();
+        });
+
+        it('clears against a user-modified global default, not just the schema default', () => {
+            settings.setGlobalDefault('mustIncludeTags', ['street']);
+            settings.setChallengeOverride('mustIncludeTags', challengeId, ['macro']);
+            expect(settings.setChallengeOverride('mustIncludeTags', challengeId, ['street'])).toBe(true);
+            expect(settings.getChallengeOverride('mustIncludeTags', challengeId)).toBeNull();
+            expect(settings.getEffectiveSetting('mustIncludeTags', challengeId)).toEqual(['street']);
+        });
+    });
+
+    describe('primitive setting keeps its existing behavior', () => {
+        it('still sets and clears a numeric override (exposure)', () => {
+            const defaultValue = settings.getGlobalDefault('exposure');
+            expect(settings.setChallengeOverride('exposure', challengeId, defaultValue === 90 ? 80 : 90)).toBe(true);
+            expect(settings.getChallengeOverride('exposure', challengeId)).not.toBeNull();
+            expect(settings.setChallengeOverride('exposure', challengeId, defaultValue)).toBe(true);
+            expect(settings.getChallengeOverride('exposure', challengeId)).toBeNull();
+        });
+    });
+});

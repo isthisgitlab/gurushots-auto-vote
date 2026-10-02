@@ -1,0 +1,200 @@
+/**
+ * Jest setup for React tests
+ * Mocks browser globals and window.api
+ */
+
+import type * as manifestModule from '../../../src/ts/ipc/manifest';
+import type { WindowApi } from '../../../src/ts/types/ipc';
+
+const { invokeChannels, aliases, sendMethods, eventMethods, kebabToCamel } =
+    require('../../../src/ts/ipc/manifest') as typeof manifestModule;
+
+// Mock window.api for IPC calls. The base surface is GENERATED from the
+// shared channel manifest so every method preload/capacitor would expose
+// exists here too (a hook calling a brand-new channel can never hit
+// `undefined is not a function` in tests). The literal object below then
+// overrides the methods whose tests need tailored resolved values. Each method
+// is typed as the jest mock of the real window.api method.
+type MockApi = { -readonly [K in keyof WindowApi]: jest.MockedFunction<WindowApi[K]> };
+const mockApi = {} as MockApi;
+// Filled by name from the manifest lists, which the checker cannot follow.
+const byName = mockApi as Record<string, unknown>;
+for (const channel of invokeChannels) {
+    byName[kebabToCamel(channel)] = jest.fn().mockResolvedValue(undefined);
+}
+for (const method of Object.keys(aliases)) {
+    byName[method] = jest.fn().mockResolvedValue(undefined);
+}
+for (const method of Object.keys(sendMethods)) {
+    byName[method] = jest.fn().mockResolvedValue(undefined);
+}
+for (const method of Object.keys(eventMethods)) {
+    byName[method] = jest.fn();
+}
+
+Object.assign(mockApi, {
+    // Settings
+    getSettings: jest.fn().mockResolvedValue({}),
+    getSetting: jest.fn().mockResolvedValue(null),
+    setSetting: jest.fn().mockResolvedValue(undefined),
+    saveSettings: jest.fn().mockResolvedValue(undefined),
+    getEnvironmentInfo: jest.fn().mockResolvedValue({
+        nodeEnv: 'test',
+        dev: true,
+        prod: false,
+        defaultMock: false,
+        platform: 'darwin',
+    }),
+    // Match the real IPC shape — { schema, defaults }. Returning a bare
+    // `{}` makes hooks that destructure `{ schema }` early-return, which
+    // silently masks any reload path under test.
+    getSettingsSchema: jest.fn().mockResolvedValue({ schema: {}, defaults: {} }),
+
+    // Authentication
+    authenticate: jest.fn().mockResolvedValue({ success: true }),
+    login: jest.fn().mockResolvedValue(undefined),
+    logout: jest.fn().mockResolvedValue(undefined),
+
+    // Challenges
+    getActiveChallenges: jest.fn().mockResolvedValue({ challenges: [] }),
+
+    // Voting
+    runVotingCycle: jest.fn().mockResolvedValue({ success: true }),
+    runVotingCycleForChallenge: jest.fn().mockResolvedValue({ success: true }),
+    voteOnChallenge: jest.fn().mockResolvedValue({ success: true }),
+    voteOnChallengeManual: jest.fn().mockResolvedValue({ success: true }),
+    voteAllChallengesManual: jest.fn().mockResolvedValue({ success: true }),
+    shouldCancelVoting: jest.fn().mockResolvedValue(false),
+    setCancelVoting: jest.fn().mockResolvedValue(undefined),
+
+    // Boost — preload exposes both names; hooks call applyBoost.
+    applyBoost: jest.fn().mockResolvedValue({ success: true }),
+    applyBoostToEntry: jest.fn().mockResolvedValue({ success: true }),
+    getBoostThreshold: jest.fn().mockResolvedValue(30),
+
+    // Turbo
+    applyTurbo: jest.fn().mockResolvedValue({ success: true }),
+    playAutoTurbo: jest.fn().mockResolvedValue({ success: true }),
+
+    // Auto-fill
+    fillChallengeNow: jest.fn().mockResolvedValue({ success: true, submitted: 0, skipped: 0 }),
+
+    // Per-challenge overrides
+    getChallengeOverride: jest.fn().mockResolvedValue(null),
+    getChallengeOverrides: jest.fn().mockResolvedValue({}),
+    replaceChallengeOverrides: jest.fn().mockResolvedValue(true),
+    setChallengeOverride: jest.fn().mockResolvedValue(true),
+    removeChallengeOverride: jest.fn().mockResolvedValue(true),
+    cleanupStaleChallengeSetting: jest.fn().mockResolvedValue(true),
+    cleanupStaleMetadata: jest.fn().mockResolvedValue(true),
+
+    // Logging
+    logDebug: jest.fn().mockResolvedValue(undefined),
+    logError: jest.fn().mockResolvedValue(undefined),
+    logWarning: jest.fn().mockResolvedValue(undefined),
+    logApi: jest.fn().mockResolvedValue(undefined),
+
+    // Log stream
+    startLogStream: jest.fn().mockResolvedValue({ success: true }),
+    stopLogStream: jest.fn().mockResolvedValue(undefined),
+    onLogMessage: jest.fn(),
+    getLogBacklog: jest.fn().mockResolvedValue([]),
+
+    // Update
+    checkForUpdates: jest.fn().mockResolvedValue(undefined),
+    downloadUpdate: jest.fn().mockResolvedValue(undefined),
+    installUpdate: jest.fn().mockResolvedValue(undefined),
+    skipUpdateVersion: jest.fn().mockResolvedValue(undefined),
+    canAutoUpdate: jest.fn().mockResolvedValue(true),
+    getReleasesUrl: jest.fn().mockResolvedValue('https://github.com/releases'),
+    onUpdateAvailable: jest.fn(),
+    onDownloadProgress: jest.fn(),
+    onUpdateDownloaded: jest.fn(),
+    onUpdateError: jest.fn(),
+
+    // Menu
+    refreshMenu: jest.fn().mockResolvedValue(undefined),
+
+    // External
+    openExternalUrl: jest.fn().mockResolvedValue(undefined),
+
+    // Window
+    reloadWindow: jest.fn().mockResolvedValue(undefined),
+
+    // Settings events — a real multi-listener registry (see below), because
+    // several subscribers share the one channel on a page (TranslationProvider
+    // alongside the component under test).
+    onSettingsChanged: jest.fn(),
+
+    // Effective settings
+    getEffectiveSetting: jest.fn().mockResolvedValue(null),
+    getGlobalDefault: jest.fn().mockResolvedValue(null),
+    setGlobalDefault: jest.fn().mockResolvedValue(undefined),
+
+    // Title-keyed tag rules
+    getTitleRules: jest.fn().mockResolvedValue([]),
+    setTitleRules: jest.fn().mockResolvedValue(true),
+    getTitleProfile: jest.fn().mockResolvedValue(null),
+
+    // Challenge profiles
+    getChallengeProfiles: jest.fn().mockResolvedValue({}),
+    saveChallengeProfile: jest.fn().mockResolvedValue(true),
+    deleteChallengeProfile: jest.fn().mockResolvedValue(true),
+    applyChallengeProfile: jest.fn().mockResolvedValue(true),
+
+    // User-defined scenarios — none stored, and no challenge has one.
+    getScenarios: jest.fn().mockResolvedValue({ success: true, scenarios: {}, templates: [] }),
+    getScenarioStatus: jest.fn().mockResolvedValue({ success: true, assigned: '' }),
+});
+
+// Every live settings-changed listener. Each registration gets its own
+// unsubscribe (a jest.fn, so tests can assert on it) that removes only that
+// listener, like the preload and Capacitor bridges.
+type SettingsListener = (payload?: object) => void;
+const settingsListeners = new Set<SettingsListener>();
+const subscribeSettingsListener = (listener: SettingsListener) => {
+    settingsListeners.add(listener);
+    return jest.fn(() => {
+        settingsListeners.delete(listener);
+    });
+};
+
+/**
+ * Broadcast a settings-changed event to every registered listener, the way a
+ * successful settings write does.
+ */
+function fireSettingsChanged(payload?: object) {
+    for (const listener of [...settingsListeners]) listener(payload);
+}
+
+// Mock the page translator (translations/renderer.ts) that TranslationProvider,
+// ErrorBoundary and Modal translate through. `t` returns the key so tests can
+// assert on keys ('app.save'); override it per test with mockImplementation.
+const mockTranslator = {
+    t: jest.fn((key: string) => key),
+    getCurrentLanguage: jest.fn().mockReturnValue('en'),
+    setCurrentLanguage: jest.fn(),
+};
+jest.mock('../../../src/ts/translations/renderer', () => ({ rendererTranslator: mockTranslator }));
+
+// Set up global mocks. Augment the test-env window in place rather than
+// replacing it with a plain object — spreading `{...window}` only copies
+// own-enumerable props and drops prototype methods like dispatchEvent /
+// addEventListener (happy-dom defines them on the prototype). Object.assign
+// keeps the real DOM surface intact while attaching the IPC mocks.
+Object.assign(global.window, {
+    api: mockApi,
+});
+
+// Reset all mocks before each test. The settings-changed registry starts
+// empty with its default implementation back in place (a file's own
+// beforeEach can still override it).
+beforeEach(() => {
+    jest.clearAllMocks();
+    settingsListeners.clear();
+    // The registry calls each listener with the new settings, as the shells do.
+    mockApi.onSettingsChanged = jest.fn((callback) => subscribeSettingsListener(callback as SettingsListener));
+});
+
+// Export mocks for use in tests
+export { mockApi, mockTranslator, fireSettingsChanged };
