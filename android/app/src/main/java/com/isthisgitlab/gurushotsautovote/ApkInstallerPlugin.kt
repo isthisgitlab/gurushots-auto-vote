@@ -71,7 +71,7 @@ class ApkInstallerPlugin : Plugin() {
     }
 
     /**
-     * Streams the APK to cacheDir/update.apk, emitting `downloadProgress`
+     * Streams the APK to cacheDir/updates/update.apk, emitting `downloadProgress`
      * events ({ percent }) as it goes. Throws on any HTTP / IO failure so
      * the caller can reject and the JS bridge can fall back to the browser.
      */
@@ -85,7 +85,8 @@ class ApkInstallerPlugin : Plugin() {
             val body = response.body
             val total = body.contentLength()
 
-            val outFile = File(context.cacheDir, "update.apk")
+            val updatesDir = File(context.cacheDir, "updates").apply { mkdirs() }
+            val outFile = File(updatesDir, "update.apk")
             // Drop any stale download so a partial file can never be installed.
             if (outFile.exists()) {
                 outFile.delete()

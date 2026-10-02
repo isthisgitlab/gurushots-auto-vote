@@ -57,7 +57,7 @@ jobs:
 
         steps:
             - name: Checkout code
-              uses: actions/checkout@v7
+              uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
 
             # src/ts uses ESM syntax but is transpiled under the root CommonJS
             # package at runtime. Give CodeQL its source module boundary so
@@ -68,7 +68,7 @@ jobs:
 
             - name: Setup Java (JDK 21 — required by Capacitor 8 plugins' kotlin jvmToolchain)
               if: matrix.language == 'java-kotlin'
-              uses: actions/setup-java@v6
+              uses: actions/setup-java@de7274f081f381c8f8158605e0321c36c376e2e6 # v6
               with:
                   distribution: 'temurin'
                   java-version: '21'
@@ -107,7 +107,7 @@ jobs:
               run: ./gradlew --no-daemon --no-build-cache assembleDebug
 
             - name: Initialize CodeQL
-              uses: github/codeql-action/init@v4
+              uses: github/codeql-action/init@2892aa5e19bbd11bc0cff5427e3b750a04d9e3c2 # v4
               with:
                   languages: ${{ matrix.language }}
                   build-mode: ${{ matrix.build-mode }}
@@ -149,6 +149,6 @@ jobs:
                   ./gradlew --no-daemon --no-build-cache :app:assembleDebug
 
             - name: Perform CodeQL analysis
-              uses: github/codeql-action/analyze@v4
+              uses: github/codeql-action/analyze@2892aa5e19bbd11bc0cff5427e3b750a04d9e3c2 # v4
               with:
                   category: '/language:${{ matrix.language }}'

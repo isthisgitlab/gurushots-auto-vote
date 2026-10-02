@@ -89,7 +89,7 @@ class ApkInstallerPluginTest {
         }
     }
 
-    private fun apkFile() = File(app.cacheDir, "update.apk")
+    private fun apkFile() = File(File(app.cacheDir, "updates"), "update.apk")
 
     @Test
     fun rejectsMissingUrl() {
@@ -109,6 +109,7 @@ class ApkInstallerPluginTest {
     @Test
     fun downloadsWithProgressAndLaunchesInstaller() {
         // A stale partial download must be replaced, never appended to.
+        apkFile().parentFile!!.mkdirs()
         apkFile().writeText("stale")
         val payload = ByteArray(1_000_000) { (it % 251).toByte() }
         server.enqueue(MockResponse.Builder().code(200).body(Buffer().write(payload)).build())

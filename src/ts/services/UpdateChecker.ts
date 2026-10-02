@@ -33,6 +33,9 @@ type GithubRelease = {
 const REPO_OWNER = 'isthisgitlab';
 const REPO_NAME = 'gurushots-auto-vote';
 
+// Longest a release lookup may take; overridable per call through `opts.timeoutMs`.
+const DEFAULT_TIMEOUT_MS = 15_000;
+
 const releasesLatestUrl = () => `https://api.github.com/repos/${REPO_OWNER}/${REPO_NAME}/releases/latest`;
 const releasesListUrl = (perPage: number) =>
     `https://api.github.com/repos/${REPO_OWNER}/${REPO_NAME}/releases?per_page=${perPage}`;
@@ -87,12 +90,19 @@ const pickAsset = (release: GithubRelease | null | undefined, suffix: string): G
  * @param opts.isBetaChannel - When true, picks the newest prerelease instead of the production latest.
  * @param opts.assetSuffix - File suffix to pick from release assets (e.g. '.apk'). If omitted,
  *   downloadUrl falls back to the release HTML page so the user can download manually.
+ * @param opts.timeoutMs - Per-request timeout in ms; defaults to 15 seconds.
  */
 const checkForUpdates = async ({
     currentVersion,
     isBetaChannel = false,
     assetSuffix = null,
-}: { currentVersion?: string; isBetaChannel?: boolean; assetSuffix?: string | null } = {}): Promise<
+    timeoutMs = DEFAULT_TIMEOUT_MS,
+}: {
+    currentVersion?: string;
+    isBetaChannel?: boolean;
+    assetSuffix?: string | null;
+    timeoutMs?: number;
+} = {}): Promise<
     {
         downloadUrl: string | null;
         isPrerelease: boolean;
@@ -115,11 +125,11 @@ const checkForUpdates = async ({
     try {
         let release: GithubRelease | null = null;
         if (isBetaChannel) {
-            const { data } = await axios.get<GithubRelease[] | null>(releasesListUrl(10));
+            const { data } = await axios.get<GithubRelease[] | null>(releasesListUrl(10), { timeout: timeoutMs });
             // Newest matching prerelease (sorted by published_at descending in GitHub API).
             release = (data || []).find((r) => r.prerelease) || null;
         } else {
-            const { data } = await axios.get<GithubRelease | null>(releasesLatestUrl());
+            const { data } = await axios.get<GithubRelease | null>(releasesLatestUrl(), { timeout: timeoutMs });
             release = data || null;
         }
         if (!release || !release.tag_name) return empty;

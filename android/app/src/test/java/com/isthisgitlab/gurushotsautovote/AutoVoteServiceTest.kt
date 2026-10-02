@@ -736,6 +736,48 @@ class AutoVoteServiceTest {
     }
 
     @Test
+    fun defaultHttpClientDoesNotFollowRedirects() {
+        val client = originalFactory()
+        assertFalse(client.followRedirects)
+        assertFalse(client.followSslRedirects)
+    }
+
+    @Test
+    fun serverErrorIsPassedThroughWithoutARedirectLog() {
+        val s = startServer()
+        s.enqueue(MockResponse.Builder().code(503).body("busy").build())
+        val svc = startedAndReady()
+
+        svc.HeadlessHttp().request(22, "POST", "https://api.gurushots.com/x", "{}", "")
+
+        assertEquals(503, httpResolution(svc, 22).getInt("status"))
+        assertTrue(ShadowLog.getLogsForTag(AutoVoteService.TAG).none { it.msg.contains("redirect not followed") })
+    }
+
+    @Test
+    fun redirectToANonAllowlistedHostIsNotFollowedAndIsLogged() {
+        val s = MockWebServer()
+        s.start()
+        server = s
+        // The real default client, with only the host rerouted to the mock server.
+        AutoVoteService.httpClientFactory = { TestSupport.reroutingClient(s, builder = originalFactory().newBuilder()) }
+        s.enqueue(MockResponse.Builder().code(302).addHeader("Location", "https://evil.example/steal").build())
+        val svc = startedAndReady()
+
+        svc.HeadlessHttp().request(21, "POST", "https://api.gurushots.com/x", """{"x-token":"tok"}""", "")
+
+        val res = httpResolution(svc, 21)
+        assertEquals(302, res.getInt("status"))
+        assertEquals("https://evil.example/steal", res.getJSONObject("headers").getString("location"))
+        assertEquals(1, s.requestCount)
+        assertTrue(
+            ShadowLog.getLogsForTag(AutoVoteService.TAG).any {
+                it.msg.contains("302") && it.msg.contains("redirect not followed") && it.msg.contains("https://evil.example/steal")
+            },
+        )
+    }
+
+    @Test
     fun postRequestIsForwardedAndResponseResolved() {
         val s = startServer()
         s.enqueue(

@@ -35,8 +35,11 @@ internal object TestSupport {
      * to [server] over plain HTTP — lets production code keep its hard-coded
      * https://api.gurushots.com URLs while tests assert against MockWebServer.
      */
-    fun reroutingClient(server: MockWebServer, extra: Interceptor? = null): OkHttpClient {
-        val builder = OkHttpClient.Builder()
+    fun reroutingClient(
+        server: MockWebServer,
+        extra: Interceptor? = null,
+        builder: OkHttpClient.Builder = OkHttpClient.Builder(),
+    ): OkHttpClient {
         if (extra != null) builder.addInterceptor(extra)
         builder.addInterceptor { chain ->
             val original = chain.request()

@@ -186,6 +186,7 @@ describe('api-client', () => {
                 headers: headers,
                 data: mockData,
                 timeout: 30000,
+                maxRedirects: 0,
             });
 
             expect(result).toEqual(mockResponse.data);
@@ -209,6 +210,7 @@ describe('api-client', () => {
                 headers: headers,
                 data: '',
                 timeout: 30000,
+                maxRedirects: 0,
             });
 
             expect(result).toEqual(mockResponse.data);
@@ -393,6 +395,7 @@ describe('api-client', () => {
                 data: 'payload',
                 connectTimeout: 12345,
                 readTimeout: 12345,
+                disableRedirects: true,
             });
             expect(adapterResult.data).toEqual({ hello: 'native' });
             expect(adapterResult.status).toBe(201);

@@ -42,6 +42,7 @@ const ROOT = path.join(__dirname, '..');
 const DIST_DIR = path.join(ROOT, 'dist');
 const BUILD_DIR = path.join(ROOT, 'build', 'cli');
 const NODE_CACHE_DIR = path.join(ROOT, '.cache', 'node-binaries');
+const NODE_EXTRACT_DIR = path.join(ROOT, '.cache', 'node-extract');
 
 function ensureDir(p: string) {
     if (!fs.existsSync(p)) fs.mkdirSync(p, { recursive: true });
@@ -142,35 +143,69 @@ function generateSeaBlob(nodeBinary = process.execPath, { lite = false } = {}) {
     return seaBlobPath;
 }
 
-// Always download the official nodejs.org Node binary rather than using process.execPath.
-// Local Homebrew (and some package-manager Node installs) are dynamically linked to host
-// dylibs and produce non-portable binaries when used as the SEA injection target.
-async function getOfficialNodeBinary(plat: NodeJS.Platform, arch: NodeJS.Architecture) {
-    const ver = TARGET_NODE_VERSION;
-    const ext = plat === 'darwin' ? 'tar.gz' : 'tar.xz';
-    const tarName = `node-v${ver}-${plat}-${arch}.${ext}`;
-    const extractDir = path.join(NODE_CACHE_DIR, `node-v${ver}-${plat}-${arch}`);
-    const binaryPath = path.join(extractDir, 'bin', 'node');
+const NODE_DIST_URL = `https://nodejs.org/dist/v${TARGET_NODE_VERSION}`;
+const NODE_DOWNLOAD_ATTEMPTS = 2;
 
-    if (fs.existsSync(binaryPath)) {
-        return binaryPath;
-    }
+const sha256Hex = (data: Buffer) => crypto.createHash('sha256').update(data).digest('hex');
 
-    ensureDir(NODE_CACHE_DIR);
-
-    const url = `https://nodejs.org/dist/v${ver}/${tarName}`;
-    console.log(`⬇️  Downloading ${tarName}...`);
+async function fetchOk(url: string) {
     const res = await fetch(url);
     if (!res.ok) {
         throw new Error(`Failed to download ${url}: HTTP ${res.status}`);
     }
-    const buf = Buffer.from(await res.arrayBuffer());
+    return res;
+}
 
-    // Extract straight from memory: the extracted directory is the cache, so the
-    // tarball never needs to touch disk.
+// Always use the official nodejs.org Node binary rather than process.execPath.
+// Local Homebrew (and some package-manager Node installs) are dynamically linked to host
+// dylibs and produce non-portable binaries when used as the SEA injection target.
+// Only the tarball is cached; it is checked against nodejs.org's SHASUMS256.txt on every
+// build and extracted fresh, so a stale or tampered extracted directory is never trusted.
+// This verifies integrity against nodejs.org's published sums (catches a corrupted/poisoned
+// cache or download), not authenticity (no GPG).
+async function getOfficialNodeBinary(plat: NodeJS.Platform, arch: NodeJS.Architecture) {
+    const ver = TARGET_NODE_VERSION;
+    const ext = plat === 'darwin' ? 'tar.gz' : 'tar.xz';
+    const baseName = `node-v${ver}-${plat}-${arch}`;
+    const tarName = `${baseName}.${ext}`;
+    const tarUrl = `${NODE_DIST_URL}/${tarName}`;
+    const tarPath = path.join(NODE_CACHE_DIR, tarName);
+    const extractDir = path.join(NODE_EXTRACT_DIR, baseName);
+    const binaryPath = path.join(extractDir, 'bin', 'node');
+
+    ensureDir(NODE_CACHE_DIR);
+
+    const sums = await (await fetchOk(`${NODE_DIST_URL}/SHASUMS256.txt`)).text();
+    const expected = sums
+        .split('\n')
+        .map((line) => line.trim().split(/\s+/))
+        .find(([, name]) => name === tarName)?.[0];
+    if (!expected) {
+        throw new Error(`No checksum for ${tarName} in ${NODE_DIST_URL}/SHASUMS256.txt`);
+    }
+
+    let actual = '';
+    for (let attempt = 0; attempt < NODE_DOWNLOAD_ATTEMPTS && actual !== expected; attempt++) {
+        let data: Buffer;
+        if (fs.existsSync(tarPath)) {
+            data = fs.readFileSync(tarPath);
+        } else {
+            console.log(`⬇️  Downloading ${tarName}...`);
+            data = Buffer.from(await (await fetchOk(tarUrl)).arrayBuffer());
+            fs.writeFileSync(tarPath, data);
+        }
+        actual = sha256Hex(data);
+        if (actual !== expected) fs.rmSync(tarPath, { force: true });
+    }
+    if (actual !== expected) {
+        throw new Error(`Checksum mismatch for ${tarUrl}: expected ${expected}, got ${actual}`);
+    }
+
     console.log(`📂 Extracting ${tarName}...`);
+    fs.rmSync(extractDir, { recursive: true, force: true });
+    ensureDir(NODE_EXTRACT_DIR);
     const flag = ext === 'tar.gz' ? '-xzf' : '-xJf';
-    execFileSync('tar', [flag, '-', '-C', NODE_CACHE_DIR], { input: buf, stdio: ['pipe', 'inherit', 'inherit'] });
+    execFileSync('tar', [flag, tarPath, '-C', NODE_EXTRACT_DIR], { stdio: 'inherit' });
 
     if (!fs.existsSync(binaryPath)) {
         throw new Error(`Extracted Node binary not found at ${binaryPath}`);

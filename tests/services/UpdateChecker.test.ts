@@ -105,7 +105,7 @@ describe('UpdateChecker', () => {
 
             const result = await checkForUpdates({ currentVersion: '1.0.0', assetSuffix: '.apk' });
 
-            expect(axios.get).toHaveBeenCalledWith(LATEST_URL);
+            expect(axios.get).toHaveBeenCalledWith(LATEST_URL, { timeout: 15000 });
             expect(result).toEqual({
                 updateAvailable: true,
                 version: '2.0.0',
@@ -148,6 +148,16 @@ describe('UpdateChecker', () => {
             await expect(checkForUpdates({ currentVersion: '1.0.0' })).resolves.toEqual(empty);
         });
 
+        it('passes a caller-supplied timeout to both release lookups', async () => {
+            axios.get.mockResolvedValue({ data: null });
+
+            await checkForUpdates({ currentVersion: '1.0.0', timeoutMs: 2500 });
+            await checkForUpdates({ currentVersion: '1.0.0', isBetaChannel: true, timeoutMs: 2500 });
+
+            expect(axios.get).toHaveBeenNthCalledWith(1, LATEST_URL, { timeout: 2500 });
+            expect(axios.get).toHaveBeenNthCalledWith(2, LIST_URL, { timeout: 2500 });
+        });
+
         it('picks the newest prerelease on the beta channel', async () => {
             axios.get.mockResolvedValue({
                 data: [
@@ -159,7 +169,7 @@ describe('UpdateChecker', () => {
 
             const result = await checkForUpdates({ currentVersion: '1.5.0', isBetaChannel: true });
 
-            expect(axios.get).toHaveBeenCalledWith(LIST_URL);
+            expect(axios.get).toHaveBeenCalledWith(LIST_URL, { timeout: 15000 });
             expect(result).toMatchObject({
                 updateAvailable: true,
                 version: '1.6.0-beta.1',

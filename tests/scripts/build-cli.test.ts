@@ -23,6 +23,7 @@ import fsModule = require('node:fs');
 const fs = jest.mocked(fsModule);
 const realReadFileSync = fs.readFileSync;
 import pathModule = require('node:path');
+import crypto = require('node:crypto');
 const path = jest.mocked(pathModule);
 const { build } = jest.mocked(require('esbuild') as typeof esbuildModule);
 const { execFileSync } = jest.mocked(require('node:child_process') as typeof node_child_processModule);
@@ -47,41 +48,82 @@ const SEA_BLOB = path.join(BUILD_DIR, 'sea-prep.blob');
 const POSTJECT = path.join(ROOT, 'node_modules', '.bin', 'postject');
 const NODE_VER = process.versions.node;
 
-const extractDir = (plat: string, arch: string) => path.join(NODE_CACHE_DIR, `node-v${NODE_VER}-${plat}-${arch}`);
+const NODE_EXTRACT_DIR = path.join(ROOT, '.cache', 'node-extract');
+const NODE_DIST = `https://nodejs.org/dist/v${NODE_VER}`;
+const NODE_TARBALL = Buffer.from('node tarball');
+const NODE_TARBALL_SHA = crypto.createHash('sha256').update(NODE_TARBALL).digest('hex');
+const TARBALL_NAMES = ['darwin', 'linux'].flatMap((plat) =>
+    ['arm64', 'x64'].map((arch) => `node-v${NODE_VER}-${plat}-${arch}.${plat === 'darwin' ? 'tar.gz' : 'tar.xz'}`),
+);
+const SHASUMS = TARBALL_NAMES.map((name) => `${NODE_TARBALL_SHA}  ${name}\n`).join('');
+
+const tarballName = (plat: string, arch: string) =>
+    `node-v${NODE_VER}-${plat}-${arch}.${plat === 'darwin' ? 'tar.gz' : 'tar.xz'}`;
+const tarballPath = (plat: string, arch: string) => path.join(NODE_CACHE_DIR, tarballName(plat, arch));
+const extractDir = (plat: string, arch: string) => path.join(NODE_EXTRACT_DIR, `node-v${NODE_VER}-${plat}-${arch}`);
 const nodeBinary = (plat: string, arch: string) => path.join(extractDir(plat, arch), 'bin', 'node');
+
+// Serves SHASUMS256.txt plus each tarball download in turn (the last one repeats).
+const stubNodeDist = ({ sums = SHASUMS, downloads = [NODE_TARBALL] }: { sums?: string; downloads?: Buffer[] } = {}) => {
+    let served = 0;
+    jest.mocked(global.fetch).mockImplementation(
+        invalid(async (url: string) => {
+            if (url.endsWith('/SHASUMS256.txt')) return { ok: true, text: async () => sums };
+            const body = downloads[Math.min(served++, downloads.length - 1)];
+            return { ok: true, arrayBuffer: async () => new Uint8Array(body).buffer };
+        }),
+    );
+};
 
 describe('build-cli', () => {
     let existing: Set<PathLike>;
+    let files: Map<string, Buffer>;
     let exitSpy: jest.SpiedFunction<typeof process.exit>;
     let logSpy: jest.SpiedFunction<typeof console.log>;
     let errorSpy: jest.SpiedFunction<typeof console.error>;
     let originalFetch: typeof global.fetch;
 
+    // Stands in for `tar -x`: the extracted tree gains its bin/node.
+    const stubTar = () =>
+        execFileSync.mockImplementation(
+            invalid((command: string, args: string[]) => {
+                if (command !== 'tar') return;
+                const baseName = path.basename(args[1]).replace(/\.tar\.(gz|xz)$/, '');
+                existing.add(path.join(NODE_EXTRACT_DIR, baseName, 'bin', 'node'));
+            }),
+        );
+
     beforeEach(() => {
         existing = new Set();
+        files = new Map();
         build.mockReset().mockResolvedValue(invalid(undefined));
         execFileSync.mockReset();
         jest.spyOn(fs, 'existsSync').mockImplementation((p) => existing.has(p));
         jest.spyOn(fs, 'mkdirSync').mockImplementation((p) => {
             existing.add(p);
         });
-        jest.spyOn(fs, 'writeFileSync').mockImplementation((p) => {
+        jest.spyOn(fs, 'writeFileSync').mockImplementation((p, data) => {
             existing.add(p);
+            files.set(String(p), Buffer.from(data as Uint8Array | string));
         });
         jest.spyOn(fs, 'copyFileSync').mockImplementation(() => {});
         jest.spyOn(fs, 'cpSync').mockImplementation(() => {});
-        jest.spyOn(fs, 'rmSync').mockImplementation(() => {});
-        jest.spyOn(fs, 'readFileSync').mockImplementation((file, ...args) =>
-            String(file).endsWith('vision-runtime.tar.gz')
-                ? Buffer.from('test archive')
-                : realReadFileSync(file, ...args),
-        );
+        jest.spyOn(fs, 'rmSync').mockImplementation((p) => {
+            existing.delete(p);
+            files.delete(String(p));
+        });
+        jest.spyOn(fs, 'readFileSync').mockImplementation((file, ...args) => {
+            if (String(file).endsWith('vision-runtime.tar.gz')) return Buffer.from('test archive');
+            return files.get(String(file)) ?? realReadFileSync(file, ...args);
+        });
         jest.spyOn(fs, 'chmodSync').mockImplementation(() => {});
         exitSpy = jest.spyOn(process, 'exit').mockImplementation(invalid(() => undefined));
         logSpy = jest.spyOn(console, 'log').mockImplementation(() => {});
         errorSpy = jest.spyOn(console, 'error').mockImplementation(() => {});
         originalFetch = global.fetch;
         global.fetch = jest.fn();
+        stubNodeDist();
+        stubTar();
     });
 
     afterEach(() => {
@@ -172,57 +214,103 @@ describe('build-cli', () => {
     });
 
     describe('getOfficialNodeBinary', () => {
-        test('returns a cached binary without downloading or extracting', async () => {
-            existing.add(nodeBinary('darwin', 'arm64'));
+        const fetchedUrls = () => jest.mocked(global.fetch).mock.calls.map(([url]) => String(url));
+        const extractCalls = () => execFileSync.mock.calls.filter(([command]) => command === 'tar');
+
+        test('downloads, verifies and extracts a darwin gzip tarball from the cache dir', async () => {
             await expect(buildCli.getOfficialNodeBinary('darwin', 'arm64')).resolves.toBe(
                 nodeBinary('darwin', 'arm64'),
             );
-            expect(global.fetch).not.toHaveBeenCalled();
+            expect(fetchedUrls()).toEqual([
+                `${NODE_DIST}/SHASUMS256.txt`,
+                `${NODE_DIST}/${tarballName('darwin', 'arm64')}`,
+            ]);
+            expect(fs.mkdirSync).toHaveBeenCalledWith(NODE_CACHE_DIR, { recursive: true });
+            expect(fs.writeFileSync).toHaveBeenCalledWith(tarballPath('darwin', 'arm64'), NODE_TARBALL);
+            expect(fs.rmSync).toHaveBeenCalledWith(extractDir('darwin', 'arm64'), { recursive: true, force: true });
+            expect(extractCalls()).toEqual([
+                ['tar', ['-xzf', tarballPath('darwin', 'arm64'), '-C', NODE_EXTRACT_DIR], { stdio: 'inherit' }],
+            ]);
+        });
+
+        test('extracts a linux xz tarball', async () => {
+            await expect(buildCli.getOfficialNodeBinary('linux', 'x64')).resolves.toBe(nodeBinary('linux', 'x64'));
+            expect(extractCalls()).toEqual([
+                ['tar', ['-xJf', tarballPath('linux', 'x64'), '-C', NODE_EXTRACT_DIR], { stdio: 'inherit' }],
+            ]);
+        });
+
+        test('reuses a cached tarball whose hash matches, but still extracts fresh', async () => {
+            existing.add(tarballPath('linux', 'x64'));
+            files.set(tarballPath('linux', 'x64'), NODE_TARBALL);
+            existing.add(nodeBinary('linux', 'x64'));
+            await expect(buildCli.getOfficialNodeBinary('linux', 'x64')).resolves.toBe(nodeBinary('linux', 'x64'));
+            expect(fetchedUrls()).toEqual([`${NODE_DIST}/SHASUMS256.txt`]);
+            expect(fs.writeFileSync).not.toHaveBeenCalled();
+            expect(fs.rmSync).toHaveBeenCalledWith(extractDir('linux', 'x64'), { recursive: true, force: true });
+            expect(extractCalls()).toHaveLength(1);
+        });
+
+        test('a corrupt cached tarball is deleted and downloaded again', async () => {
+            existing.add(tarballPath('linux', 'x64'));
+            files.set(tarballPath('linux', 'x64'), Buffer.from('corrupted'));
+            await expect(buildCli.getOfficialNodeBinary('linux', 'x64')).resolves.toBe(nodeBinary('linux', 'x64'));
+            expect(fs.rmSync).toHaveBeenCalledWith(tarballPath('linux', 'x64'), { force: true });
+            expect(fetchedUrls()).toEqual([
+                `${NODE_DIST}/SHASUMS256.txt`,
+                `${NODE_DIST}/${tarballName('linux', 'x64')}`,
+            ]);
+            expect(files.get(tarballPath('linux', 'x64'))).toEqual(NODE_TARBALL);
+        });
+
+        test('a bad download is retried once and then accepted when the hash matches', async () => {
+            stubNodeDist({ downloads: [Buffer.from('poisoned'), NODE_TARBALL] });
+            await expect(buildCli.getOfficialNodeBinary('linux', 'x64')).resolves.toBe(nodeBinary('linux', 'x64'));
+            expect(fetchedUrls().filter((url) => url.endsWith('.tar.xz'))).toHaveLength(2);
+            expect(extractCalls()).toHaveLength(1);
+        });
+
+        test('fails closed naming the URL, expected and actual hashes after two mismatches', async () => {
+            const bad = Buffer.from('poisoned');
+            const badSha = crypto.createHash('sha256').update(bad).digest('hex');
+            stubNodeDist({ downloads: [bad] });
+            const url = `${NODE_DIST}/${tarballName('linux', 'x64')}`;
+            const failure = buildCli.getOfficialNodeBinary('linux', 'x64');
+            await expect(failure).rejects.toThrow(url);
+            await expect(failure).rejects.toThrow(`expected ${NODE_TARBALL_SHA}, got ${badSha}`);
+            expect(fetchedUrls().filter((u) => u.endsWith('.tar.xz'))).toHaveLength(2);
+            expect(files.has(tarballPath('linux', 'x64'))).toBe(false);
+            expect(extractCalls()).toHaveLength(0);
+        });
+
+        test('throws when SHASUMS256.txt has no line for the tarball', async () => {
+            stubNodeDist({ sums: `${NODE_TARBALL_SHA}  node-v0.0.0-other.tar.gz\n` });
+            await expect(buildCli.getOfficialNodeBinary('linux', 'x64')).rejects.toThrow(
+                `No checksum for ${tarballName('linux', 'x64')}`,
+            );
+            expect(fetchedUrls()).toEqual([`${NODE_DIST}/SHASUMS256.txt`]);
+        });
+
+        test('throws on a failed SHASUMS256.txt download', async () => {
+            jest.mocked(global.fetch).mockResolvedValue(invalid({ ok: false, status: 503 }));
+            await expect(buildCli.getOfficialNodeBinary('linux', 'arm64')).rejects.toThrow('HTTP 503');
             expect(execFileSync).not.toHaveBeenCalled();
         });
 
-        test('downloads and extracts a darwin gzip tarball from memory', async () => {
-            const tarName = `node-v${NODE_VER}-darwin-arm64.tar.gz`;
-            jest.mocked(global.fetch).mockResolvedValue(
-                invalid({ ok: true, arrayBuffer: async () => new Uint8Array([4, 5]).buffer }),
+        test('throws on a failed tarball download', async () => {
+            jest.mocked(global.fetch).mockImplementation(
+                invalid(async (url: string) =>
+                    url.endsWith('/SHASUMS256.txt')
+                        ? { ok: true, text: async () => SHASUMS }
+                        : { ok: false, status: 404 },
+                ),
             );
-            execFileSync.mockImplementation(invalid(() => existing.add(nodeBinary('darwin', 'arm64'))));
-            await expect(buildCli.getOfficialNodeBinary('darwin', 'arm64')).resolves.toBe(
-                nodeBinary('darwin', 'arm64'),
-            );
-            expect(global.fetch).toHaveBeenCalledWith(`https://nodejs.org/dist/v${NODE_VER}/${tarName}`);
-            expect(fs.mkdirSync).toHaveBeenCalledWith(NODE_CACHE_DIR, { recursive: true });
-            expect(fs.writeFileSync).not.toHaveBeenCalled();
-            expect(execFileSync).toHaveBeenCalledWith('tar', ['-xzf', '-', '-C', NODE_CACHE_DIR], {
-                input: Buffer.from([4, 5]),
-                stdio: ['pipe', 'inherit', 'inherit'],
-            });
-        });
-
-        test('downloads and extracts a linux xz tarball from memory', async () => {
-            const tarName = `node-v${NODE_VER}-linux-x64.tar.xz`;
-            jest.mocked(global.fetch).mockResolvedValue(
-                invalid({ ok: true, arrayBuffer: async () => new Uint8Array([1, 2, 3]).buffer }),
-            );
-            execFileSync.mockImplementation(invalid(() => existing.add(nodeBinary('linux', 'x64'))));
-            await expect(buildCli.getOfficialNodeBinary('linux', 'x64')).resolves.toBe(nodeBinary('linux', 'x64'));
-            expect(global.fetch).toHaveBeenCalledWith(`https://nodejs.org/dist/v${NODE_VER}/${tarName}`);
-            expect(execFileSync).toHaveBeenCalledWith('tar', ['-xJf', '-', '-C', NODE_CACHE_DIR], {
-                input: Buffer.from([1, 2, 3]),
-                stdio: ['pipe', 'inherit', 'inherit'],
-            });
-        });
-
-        test('throws on a failed download', async () => {
-            jest.mocked(global.fetch).mockResolvedValue(invalid({ ok: false, status: 404 }));
             await expect(buildCli.getOfficialNodeBinary('linux', 'arm64')).rejects.toThrow('HTTP 404');
             expect(execFileSync).not.toHaveBeenCalled();
         });
 
         test('throws when extraction does not produce the binary', async () => {
-            jest.mocked(global.fetch).mockResolvedValue(
-                invalid({ ok: true, arrayBuffer: async () => new ArrayBuffer(0) }),
-            );
+            execFileSync.mockReset();
             await expect(buildCli.getOfficialNodeBinary('linux', 'x64')).rejects.toThrow(
                 `Extracted Node binary not found at ${nodeBinary('linux', 'x64')}`,
             );
@@ -231,7 +319,6 @@ describe('build-cli', () => {
 
     describe('buildPlatform', () => {
         test('darwin: preserves native addon symbols, injects with the Mach-O segment and ad-hoc signs', async () => {
-            existing.add(nodeBinary('darwin', 'arm64'));
             const out = path.join(BUILD_DIR, 'gurucli-vX-mac');
             await buildCli.buildPlatform(
                 invalid({ output: 'gurucli-vX-mac', plat: 'darwin', arch: 'arm64' }),
@@ -239,7 +326,7 @@ describe('build-cli', () => {
             );
             expect(fs.copyFileSync).toHaveBeenCalledWith(nodeBinary('darwin', 'arm64'), out);
             expect(fs.chmodSync).toHaveBeenCalledWith(out, 0o755);
-            expect(execFileSync.mock.calls).toEqual([
+            expect(execFileSync.mock.calls.filter(([command]) => command !== 'tar')).toEqual([
                 [
                     POSTJECT,
                     [
@@ -259,10 +346,9 @@ describe('build-cli', () => {
         });
 
         test('linux: preserves native addon symbols, no Mach-O segment or codesign', async () => {
-            existing.add(nodeBinary('linux', 'x64'));
             const out = path.join(BUILD_DIR, 'gurucli-vX-linux');
             await buildCli.buildPlatform(invalid({ output: 'gurucli-vX-linux', plat: 'linux', arch: 'x64' }), SEA_BLOB);
-            expect(execFileSync.mock.calls).toEqual([
+            expect(execFileSync.mock.calls.filter(([command]) => command !== 'tar')).toEqual([
                 [
                     POSTJECT,
                     [
@@ -284,7 +370,6 @@ describe('build-cli', () => {
 
         beforeEach(() => {
             originalArgv = process.argv;
-            for (const { plat, arch } of buildCli.platforms) existing.add(nodeBinary(plat, arch));
         });
 
         afterEach(() => {

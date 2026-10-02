@@ -263,12 +263,53 @@ describe('retry classification', () => {
     });
 });
 
-describe('response body', () => {
-    const warnings = () =>
-        jest
-            .mocked(logger.withCategory)
-            .mock.results.flatMap((r) => jest.mocked(r.value as CategoryLogger).warning.mock.calls);
+const warnings = () =>
+    jest
+        .mocked(logger.withCategory)
+        .mock.results.flatMap((r) => jest.mocked(r.value as CategoryLogger).warning.mock.calls);
 
+describe('redirects', () => {
+    test('requests are sent with redirects disabled', async () => {
+        axios.mockResolvedValueOnce({ status: 200, headers: {}, data: {} });
+
+        await makePostRequest(URL, {}, '');
+
+        expect(axios).toHaveBeenCalledWith(expect.objectContaining({ maxRedirects: 0 }));
+    });
+
+    test.each<[string, Record<string, string>, string | undefined]>([
+        ['lowercase location', { location: 'https://evil.example/x' }, 'https://evil.example/x'],
+        ['capitalised Location (native adapters)', { Location: 'https://evil.example/y' }, 'https://evil.example/y'],
+        ['no location', { 'content-type': 'text/html' }, undefined],
+    ])(
+        'a 302 with %s is not followed, not retried, and logged without the headers',
+        async (_label, headers, location) => {
+            axios.mockRejectedValue(httpError(302, '', headers));
+
+            await expect(makePostRequest(URL, { 'x-token': 'secret' }, '')).resolves.toBeNull();
+
+            expect(axios).toHaveBeenCalledTimes(1);
+            expect(warnings()).toEqual([
+                ['API request answered with a redirect, not followed', { url: URL, status: 302, location }],
+            ]);
+            expect(JSON.stringify(warnings())).not.toContain('secret');
+        },
+    );
+
+    test('a 3xx rejection with no response headers logs an undefined location', async () => {
+        const err: Error & { response?: unknown } = new Error('Request failed with status code 301');
+        err.response = { status: 301 };
+        axios.mockRejectedValue(err);
+
+        await expect(makePostRequest(URL, {}, '')).resolves.toBeNull();
+
+        expect(warnings()).toEqual([
+            ['API request answered with a redirect, not followed', { url: URL, status: 301, location: undefined }],
+        ]);
+    });
+});
+
+describe('response body', () => {
     test.each<[string, unknown, string]>([
         ['an HTML page', '<html>maintenance</html>', 'string'],
         ['an empty body', '', 'string'],

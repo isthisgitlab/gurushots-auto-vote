@@ -70,6 +70,7 @@ const getCapacitorHttpAdapter = (): AxiosAdapter => {
             data: config.data as unknown,
             connectTimeout: config.timeout,
             readTimeout: config.timeout,
+            disableRedirects: true,
         });
         // Throwing here surfaces as a rejection from this async adapter, so a
         // 429/5xx on the foreground path reaches the retry layer instead
@@ -242,6 +243,20 @@ const responseObject = <T extends object>(url: string, body: unknown): T | null 
 };
 
 /**
+ * Names a 3xx answer (status and Location only, never the headers object) —
+ * requests are sent with redirects disabled, so it surfaces as a failure.
+ */
+const warnIfRedirect = (url: string, response: RequestFailure['response']): void => {
+    const status = response?.status;
+    if (typeof status !== 'number' || status < 300 || status >= 400) return;
+    logger.withCategory('api').warning('API request answered with a redirect, not followed', {
+        url,
+        status,
+        location: response?.headers?.location ?? response?.headers?.Location,
+    });
+};
+
+/**
  * Makes a POST request to the GuruShots API
  *
  * Transient failures (network drop, timeout, 429, 5xx) are retried with
@@ -278,6 +293,8 @@ const makePostRequest = async <T extends object>(
                 headers,
                 data,
                 timeout: settings.getSetting('apiTimeout') * 1000, // Convert seconds to milliseconds
+                // The API never redirects; following one would replay the x-token header at the target.
+                maxRedirects: 0,
             };
             if (runtime.isHeadlessService()) {
                 requestConfig.adapter = getHeadlessHttpAdapter();
@@ -313,6 +330,8 @@ const makePostRequest = async <T extends object>(
                 responseData: error?.response?.data || null,
                 timeout: error?.code === 'ECONNABORTED',
             });
+
+            warnIfRedirect(url, error?.response);
 
             if (!isRetryableError(error) || attempt >= maxRetries) {
                 return null; // Return null instead of throwing to prevent crashing

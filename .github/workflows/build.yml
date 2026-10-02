@@ -42,7 +42,7 @@ jobs:
         timeout-minutes: 20
         steps:
             - name: Checkout code
-              uses: actions/checkout@v7
+              uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
 
             - name: Setup build environment
               uses: ./.github/actions/setup-build
@@ -76,7 +76,7 @@ jobs:
         timeout-minutes: 30
         steps:
             - name: Checkout code
-              uses: actions/checkout@v7
+              uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
 
             - name: Setup build environment
               uses: ./.github/actions/setup-build
@@ -84,7 +84,7 @@ jobs:
                   cache-vision-model: 'true'
 
             - name: Setup Java (JDK 21 — required by Capacitor 8 plugins' kotlin jvmToolchain)
-              uses: actions/setup-java@v6
+              uses: actions/setup-java@de7274f081f381c8f8158605e0321c36c376e2e6 # v6
               with:
                   distribution: 'temurin'
                   java-version: '21'
@@ -156,7 +156,7 @@ jobs:
 
         steps:
             - name: Checkout code
-              uses: actions/checkout@v7
+              uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
 
             - name: Setup build environment
               uses: ./.github/actions/setup-build
@@ -216,7 +216,7 @@ jobs:
                   echo "NEW_VERSION=$NEW_VERSION" >> $GITHUB_OUTPUT
 
             - name: Upload bumped package.json
-              uses: actions/upload-artifact@v7
+              uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
               with:
                   name: bumped-package
                   path: package.json
@@ -246,7 +246,7 @@ jobs:
 
         steps:
             - name: Checkout code
-              uses: actions/checkout@v7
+              uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
 
             - name: Setup build environment
               uses: ./.github/actions/setup-build
@@ -322,11 +322,11 @@ jobs:
             # No `cache:` here — the composite already restored the pnpm cache earlier in this job.
             - name: Setup Node.js 26 for CLI builds
               if: matrix.platform != 'win'
-              uses: actions/setup-node@v7
+              uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7
               with:
                   node-version: '26'
 
-            # Cache the official nodejs.org binary that build-cli.ts pulls into
+            # Cache the official nodejs.org tarball that build-cli.ts pulls into
             # .cache/node-binaries (see the build-cli-arm job for the rationale).
             - name: Resolve Node version for CLI-binary cache key
               if: matrix.platform != 'win'
@@ -337,7 +337,7 @@ jobs:
               if: matrix.platform != 'win'
               uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
               with:
-                  path: .cache/node-binaries
+                  path: .cache/node-binaries/node-v*.tar.*
                   key: node-sea-${{ runner.os }}-${{ runner.arch }}-${{ steps.node-ver.outputs.v }}
 
             - name: Build CLI app (macOS/Linux only)
@@ -357,7 +357,7 @@ jobs:
               run: pnpm size:cli
 
             - name: Upload build artifacts
-              uses: actions/upload-artifact@v7
+              uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
               with:
                   name: ${{ needs.version-bump.outputs.is-beta == 'true' && 'develop-' || '' }}${{ matrix.platform }}${{ matrix.variant == 'lite' && '-lite' || '' }}-builds
                   path: |
@@ -382,7 +382,7 @@ jobs:
 
         steps:
             - name: Checkout code
-              uses: actions/checkout@v7
+              uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
 
             - name: Setup build environment
               uses: ./.github/actions/setup-build
@@ -392,15 +392,17 @@ jobs:
 
             # No `cache:` — the composite already restored the pnpm cache for this job.
             - name: Setup Node.js 26 for CLI build
-              uses: actions/setup-node@v7
+              uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7
               with:
                   node-version: '26'
 
-            # build-cli.ts downloads the official nodejs.org binary for
+            # build-cli.ts downloads the official nodejs.org tarball for
             # TARGET_NODE_VERSION (= process.versions.node) into
             # .cache/node-binaries. Cache it so each release doesn't re-pull the
             # ~40 MB tarball from nodejs.org. Keyed on the resolved Node version
-            # + arch so a version bump or a wrong-arch binary can never be served.
+            # + arch so a version bump or a wrong-arch tarball can never be served;
+            # build-cli.ts re-checks it against nodejs.org's SHASUMS256.txt and
+            # extracts it fresh on every build.
             - name: Resolve Node version for CLI-binary cache key
               id: node-ver
               run: echo "v=$(node -p 'process.versions.node')" >> "$GITHUB_OUTPUT"
@@ -408,7 +410,7 @@ jobs:
             - name: Cache official Node binaries (CLI SEA)
               uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
               with:
-                  path: .cache/node-binaries
+                  path: .cache/node-binaries/node-v*.tar.*
                   key: node-sea-${{ runner.os }}-${{ runner.arch }}-${{ steps.node-ver.outputs.v }}
 
             - name: Build CLI Linux ARM app (native arm64 runner)
@@ -425,7 +427,7 @@ jobs:
               run: pnpm size:cli
 
             - name: Upload Linux ARM CLI artifact
-              uses: actions/upload-artifact@v7
+              uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
               with:
                   name: ${{ needs.version-bump.outputs.is-beta == 'true' && 'develop-linux-arm-builds' || 'linux-arm-builds' }}
                   path: build/cli/gurucli-v*-linux-arm*
@@ -438,7 +440,7 @@ jobs:
         if: github.event_name == 'push'
         steps:
             - name: Checkout code
-              uses: actions/checkout@v7
+              uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
 
             - name: Setup build environment
               uses: ./.github/actions/setup-build
@@ -447,7 +449,7 @@ jobs:
                   cache-vision-model: 'true'
 
             - name: Setup Java (JDK 21 — required by Capacitor 8 plugins' kotlin jvmToolchain)
-              uses: actions/setup-java@v6
+              uses: actions/setup-java@de7274f081f381c8f8158605e0321c36c376e2e6 # v6
               with:
                   distribution: 'temurin'
                   java-version: '21'
@@ -501,7 +503,7 @@ jobs:
                   done
 
             - name: Upload Android artifact
-              uses: actions/upload-artifact@v7
+              uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
               with:
                   name: ${{ needs.version-bump.outputs.is-beta == 'true' && 'develop-android-builds' || 'android-builds' }}
                   path: build/GuruShotsAutoVote-v*.apk
@@ -569,7 +571,7 @@ jobs:
 
         steps:
             - name: Checkout code
-              uses: actions/checkout@v7
+              uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
               with:
                   ref: ${{ github.ref_name }}
 

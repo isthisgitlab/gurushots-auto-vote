@@ -97,6 +97,9 @@ class AutoVoteService : Service() {
                 .readTimeout(30, TimeUnit.SECONDS)
                 .writeTimeout(30, TimeUnit.SECONDS)
                 .retryOnConnectionFailure(true)
+                // The API never redirects; following one would replay the x-token header at the target.
+                .followRedirects(false)
+                .followSslRedirects(false)
                 .build()
         }
     }
@@ -315,6 +318,9 @@ class AutoVoteService : Service() {
                     // otherwise JS only recovers via its own request timeout.
                     try {
                         response.use { resp ->
+                            if (resp.code in 300..399) {
+                                Log.w(TAG, "API request answered ${resp.code}, redirect not followed (Location: ${resp.header("Location")})")
+                            }
                             val bodyStr = resp.body.string()
                             val headersObj = JSONObject()
                             for (name in resp.headers.names()) headersObj.put(name.lowercase(Locale.US), resp.header(name))
