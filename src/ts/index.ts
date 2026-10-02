@@ -1,9 +1,6 @@
-import { app, BrowserWindow, dialog, ipcMain, powerMonitor } from 'electron';
-import { appPath } from './appPaths';
+import { app, ipcMain } from 'electron';
 import * as settings from './settings';
-import { initializeHeaders } from './api/randomizer';
 import * as logger from './logger';
-import { AutoUpdater } from './services/AutoUpdater';
 import { clearAuthToken } from './services/auth';
 import * as logIpc from './ipc/log.handlers';
 import * as updateIpc from './ipc/update.handlers';
@@ -16,13 +13,12 @@ import * as currencyIpc from './ipc/currency.handlers';
 import * as scenariosIpc from './ipc/scenarios.handlers';
 import { isTrustedSender } from './ipc/registerHandlers';
 import { ensureExit, focusExistingWindow, clearTokenOnQuit } from './windows/lifecycle';
-import { watchSettingsFile } from './windows/settingsWatcher';
-import { syncBackgroundActivity } from './windows/backgroundActivity';
-import { holdQuitForOpenBoosts, bypassQuitGuard, resetQuitGuard } from './windows/quitGuard';
-import { createApplicationMenu } from './ui/applicationMenu';
-import { translationManager } from './translations/index';
-import type { FSWatcher } from 'node:fs';
-import type { WebPreferences } from 'electron';
+import { bypassQuitGuard } from './windows/quitGuard';
+import { appState } from './index/state';
+import { holdForOpenBoosts, createLoginWindow, createMainWindow } from './index/windows';
+import { onReady } from './index/startup';
+
+import type { AutoUpdater } from './services/AutoUpdater';
 
 // Disable service workers at the application level. Kept deliberately:
 // with contextIsolation on, the preload.ts register() patch only covers
@@ -48,35 +44,21 @@ if (!gotSingleInstanceLock) {
 
 // ensureExit (force-exit safety net) lives in windows/lifecycle.ts.
 
-// Keep a global reference of the windows to prevent them from being garbage collected
-let loginWindow: BrowserWindow | null = null;
-let mainWindow: BrowserWindow | null = null;
-
-// Settings file watcher (created per main window by watchSettingsFile;
-// the debounce timeout lives in windows/settingsWatcher.ts)
-let settingsWatcher: FSWatcher | null = null;
-
-// Global AutoUpdater instance
-let autoUpdater: AutoUpdater | null = null;
-
-// Track main window creation time to prevent reload during login
-let mainWindowCreatedTime: number | null = null;
-
 // Register IPC handlers from their focused modules. Each module
 // receives the accessors it needs to read/write the shared
-// module-level state (autoUpdater, mainWindow). Lifecycle of those
+// module-level state (appState.autoUpdater, appState.mainWindow). Lifecycle of those
 // objects stays in this file.
 logIpc.register(ipcMain);
 updateIpc.register(ipcMain, {
-    getAutoUpdater: () => autoUpdater,
+    getAutoUpdater: () => appState.autoUpdater,
     setAutoUpdater: (v: AutoUpdater) => {
-        autoUpdater = v;
+        appState.autoUpdater = v;
     },
-    getMainWindow: () => mainWindow,
+    getMainWindow: () => appState.mainWindow,
 });
 miscIpc.register(ipcMain, {
-    getMainWindow: () => mainWindow,
-    getLoginWindow: () => loginWindow,
+    getMainWindow: () => appState.mainWindow,
+    getLoginWindow: () => appState.loginWindow,
 });
 settingsIpc.register(ipcMain);
 votingIpc.register(ipcMain);
@@ -85,182 +67,12 @@ computationsIpc.register(ipcMain);
 currencyIpc.register(ipcMain);
 scenariosIpc.register(ipcMain);
 
-// Hold a quit or main-window close that would forfeit an open boost window
-// and ask first; `proceed` re-issues it once confirmed. See windows/quitGuard.ts.
-function holdForOpenBoosts(event: { preventDefault: () => void }, proceed: () => void) {
-    return holdQuitForOpenBoosts(event, {
-        autovoteRunning: settings.getSetting('autovoteRunning') === true,
-        dialog,
-        parent: mainWindow,
-        t: (key) => translationManager.t(key),
-        proceed,
-    });
-}
-
-/**
- * Creates a window with the shared web preferences and window-bounds
- * persistence. `extraWebPreferences` carries what only one window needs.
- */
-function createAppWindow(kind: 'login' | 'main', htmlFile: string, extraWebPreferences: WebPreferences = {}) {
-    const bounds = settings.getWindowBounds(kind);
-
-    const win = new BrowserWindow({
-        width: bounds.width,
-        height: bounds.height,
-        x: bounds.x,
-        y: bounds.y,
-        icon: appPath('src', 'assets', 'logo.png'),
-        webPreferences: {
-            nodeIntegration: false,
-            contextIsolation: true,
-            // Bundled by scripts/build-react.ts — the sandboxed preload cannot
-            // require() the relative channel manifest, so it ships pre-bundled.
-            preload: appPath('dist', 'preload-bundle.js'),
-            webSecurity: true,
-            ...extraWebPreferences,
-            // Use a custom session partition to isolate storage
-            partition: 'persist:gurushots',
-        },
-    });
-
-    win.loadFile(appPath('src', 'html', htmlFile)).catch((error) => {
-        logger.withCategory('ui').error(`Failed to load ${kind} window content:`, error);
-    });
-
-    // Ensure window is visible on screen
-    win.once('ready-to-show', () => {
-        if (!win.isVisible()) {
-            win.center();
-        }
-    });
-
-    // Save window bounds when window is moved or resized
-    win.on('resize', () => {
-        settings.saveWindowBounds(kind, win.getBounds());
-    });
-
-    win.on('move', () => {
-        settings.saveWindowBounds(kind, win.getBounds());
-    });
-
-    return win;
-}
-
-function createLoginWindow() {
-    loginWindow = createAppWindow('login', 'login.html');
-
-    // Open DevTools in development mode (optional)
-    // loginWindow.webContents.openDevTools();
-
-    loginWindow.on('closed', () => {
-        loginWindow = null;
-    });
-}
-
-function createMainWindow() {
-    // Track when main window is created to prevent reload during login
-    mainWindowCreatedTime = Date.now();
-
-    mainWindow = createAppWindow('main', 'app.html', {
-        // The auto-vote cadence chain is a recursive setTimeout living in
-        // THIS renderer, and Chromium throttles then freezes timers on a
-        // hidden page — which silently stalls the voting loop. Rationale,
-        // measurements and the App Nap counterpart: see
-        // docs/scheduling.md "Staying schedulable" and
-        // windows/backgroundActivity.ts. Do not re-enable.
-        backgroundThrottling: false,
-    });
-
-    // Set main window reference for AutoUpdater IPC events
-    if (autoUpdater) {
-        autoUpdater.setMainWindow(mainWindow);
-    }
-
-    // Closing the main window stops the cadence chain on every platform (on
-    // macOS without quitting), so it forfeits a pending boost just like a quit.
-    const win = mainWindow;
-    win.on('close', (event) => {
-        holdForOpenBoosts(event, () => {
-            if (!win.isDestroyed()) win.close();
-        });
-    });
-    // Windows log-off / shutdown: the OS is ending the session, not the user.
-    win.on('query-session-end', bypassQuitGuard);
-
-    mainWindow.on('closed', () => {
-        mainWindow = null;
-        resetQuitGuard();
-        // Stop watching settings file when window closes
-        if (settingsWatcher) {
-            settingsWatcher.close();
-            settingsWatcher = null;
-        }
-        // No renderer, no cadence chain — release the assertion. A relaunch or
-        // a re-created window re-adopts it from the persisted flag above.
-        syncBackgroundActivity(false);
-    });
-
-    // Watch settings file for changes and auto-reload with debouncing.
-    // The watcher lives in windows/settingsWatcher.ts; accessors keep it
-    // reading the current window state this module owns.
-    settingsWatcher = watchSettingsFile({
-        getMainWindow: () => mainWindow,
-        getMainWindowCreatedTime: () => mainWindowCreatedTime,
-        // The renderer persists `autovoteRunning` on every start/stop, so the
-        // settings file IS the signal — no extra IPC channel is needed to keep
-        // the power-save blocker in step with the running session.
-        onSettingsChanged: (newSettings) => {
-            // Liveness check, matching what the watcher's own reload and
-            // broadcast paths do. Its debounce handle is module-level and
-            // survives `close()`, so a callback armed by a routine write (a
-            // window move alone triggers one) can land AFTER 'closed' already
-            // released the blocker — re-arming an assertion for a session with
-            // no window and no cadence chain, which nothing would then release.
-            if (!mainWindow || mainWindow.isDestroyed()) return;
-            syncBackgroundActivity(newSettings.autovoteRunning === true);
-        },
-    });
-
-    // Adopt whatever the persisted flag already says: AutovoteContext
-    // auto-resumes a session that was running when the app last closed, and
-    // that resume does not re-write the flag (it is already true), so the
-    // watcher above would never fire for it.
-    //
-    // This is also the ONLY sync if watchSettingsFile returned null (no
-    // settings.json yet), so say so rather than leaving a silent pin — the
-    // login flow writes settings before this window exists, which is why that
-    // path is not expected in practice.
-    syncBackgroundActivity(settings.getSetting('autovoteRunning') === true);
-    if (!settingsWatcher) {
-        logger
-            .withCategory('settings')
-            .warning(
-                'No settings watcher (settings file missing at window creation) — auto-vote power management will not follow later start/stop changes until the app is restarted',
-            );
-    }
-}
-
-// Check if we should auto-login based on saved token
-function checkAutoLogin() {
-    const userSettings = settings.loadSettings();
-
-    // If we have a token and stay logged in is enabled, auto-login
-    if (userSettings.token && userSettings.stayLoggedIn) {
-        createMainWindow();
-        return true;
-    }
-
-    // Otherwise, show the login window
-    createLoginWindow();
-    return false;
-}
-
 if (gotSingleInstanceLock) {
     // Registered synchronously, not inside whenReady: second-instance can
     // fire while the primary is still booting, and an event emitted before
     // a listener exists is lost, not queued.
     app.on('second-instance', () => {
-        const windowToFocus = mainWindow ?? loginWindow;
+        const windowToFocus = appState.mainWindow ?? appState.loginWindow;
         if (windowToFocus) {
             logger.withCategory('ui').info('Second instance launch blocked — focusing existing window.', null);
         } else {
@@ -277,94 +89,7 @@ if (gotSingleInstanceLock) {
 
     // When Electron has finished initialization
     app.whenReady()
-        .then(async () => {
-            logger.withCategory('ui').info(`[App] UserData path: ${settings.getUserDataPath()}`, null);
-
-            initializeHeaders();
-
-            // Seed the curated intent presets once (idempotent; never fatal).
-            try {
-                settings.seedIntentProfiles();
-            } catch (err) {
-                logger.withCategory('settings').warning('Intent profile seeding failed (non-fatal):', err);
-            }
-
-            logger.cleanup();
-
-            createApplicationMenu();
-
-            // Linux/macOS shutdown or reboot: never veto the OS with a dialog.
-            powerMonitor.on('shutdown', bypassQuitGuard);
-
-            // Check if we should auto-login and run update check before creating main window
-            const userSettings = settings.loadSettings();
-            const shouldAutoLogin = userSettings.token && userSettings.stayLoggedIn;
-
-            // Initialize global AutoUpdater instance. Deliberately constructed
-            // WITHOUT a window — unlike the windowed constructions in
-            // ipc/update.handlers.ts and ui/applicationMenu.ts — because the
-            // startup check below runs before any window exists (pre-window so
-            // an update prompt can't race the main window's challenge load and
-            // double-load challenges).
-            autoUpdater = new AutoUpdater();
-
-            // Background update check shared by both startup paths — never
-            // lets an update-check failure break app startup.
-            const safeCheckForUpdates = async () => {
-                try {
-                    // Set just above; update.handlers may replace it, never with null.
-                    await (autoUpdater as AutoUpdater).checkForUpdates(false);
-                } catch (error) {
-                    logger.withCategory('update').error('Error during update check:', error);
-                }
-            };
-
-            // If auto-login is enabled, check for updates before creating the main window
-            if (shouldAutoLogin) {
-                // Check for updates immediately (no delay) to prevent double challenge loading
-                await safeCheckForUpdates();
-            }
-
-            // Synchronous — the window exists before the handlers below are registered.
-            checkAutoLogin();
-
-            // If not auto-login, check for updates after login window is shown
-            if (!shouldAutoLogin) {
-                // Check for updates after a short delay to not block app startup
-                setTimeout(() => {
-                    void safeCheckForUpdates();
-                }, 3000); // 3 second delay
-            }
-
-            // On macOS, re-create a window when dock icon is clicked and no windows are open
-            app.on('activate', () => {
-                if (BrowserWindow.getAllWindows().length === 0) {
-                    checkAutoLogin();
-                }
-            });
-
-            // Handle SIGINT and SIGTERM signals to ensure clean exit
-            process.on('SIGINT', () => {
-                logger.withCategory('ui').info('Received SIGINT signal. Exiting...', null);
-                bypassQuitGuard();
-                app.quit();
-                // Use the global force exit handler to ensure the process terminates
-                ensureExit('SIGINT');
-            });
-
-            process.on('SIGTERM', () => {
-                logger.withCategory('ui').info('Received SIGTERM signal. Exiting...', null);
-                bypassQuitGuard();
-                app.quit();
-                // Use the global force exit handler to ensure the process terminates
-                ensureExit('SIGTERM');
-            });
-
-            // Set up a global force exit handler to ensure the process always terminates
-            process.on('exit', (code) => {
-                logger.withCategory('ui').info(`Process exiting with code: ${code}`, null);
-            });
-        })
+        .then(onReady)
         .catch((error) => {
             // The main process has no global unhandledRejection handler (unlike the
             // CLI), so a throw anywhere in the bootstrap above would otherwise vanish.
@@ -416,8 +141,8 @@ ipcMain.on('login-success', (event) => {
         return;
     }
     // Close login window
-    if (loginWindow) {
-        loginWindow.close();
+    if (appState.loginWindow) {
+        appState.loginWindow.close();
     }
     createMainWindow();
 });
@@ -430,7 +155,7 @@ ipcMain.on('logout', (event) => {
         logger.withCategory('api').warning("Refused IPC 'logout' from untrusted frame", null);
         return;
     }
-    if (!mainWindow) return;
+    if (!appState.mainWindow) return;
 
     void (async () => {
         // Always clear the token on logout (regardless of stay logged in setting)
@@ -449,9 +174,9 @@ ipcMain.on('logout', (event) => {
             // a destroyed window inside .finally() threw an unhandled rejection in the main
             // process, which has no global handler. Nothing left to tear down in that case,
             // so just make sure they land back on a login window.
-            if (!mainWindow || mainWindow.isDestroyed()) {
-                if (loginWindow) {
-                    loginWindow.focus();
+            if (!appState.mainWindow || appState.mainWindow.isDestroyed()) {
+                if (appState.loginWindow) {
+                    appState.loginWindow.focus();
                 } else {
                     createLoginWindow();
                 }
@@ -459,10 +184,10 @@ ipcMain.on('logout', (event) => {
             }
 
             // Open the login window only after the main window is fully closed
-            mainWindow.once('closed', () => {
+            appState.mainWindow.once('closed', () => {
                 // If a login window is already open, just focus it instead of creating a second one
-                if (loginWindow) {
-                    loginWindow.focus();
+                if (appState.loginWindow) {
+                    appState.loginWindow.focus();
                 } else {
                     createLoginWindow();
                 }
@@ -470,7 +195,7 @@ ipcMain.on('logout', (event) => {
 
             // Close main window — logging out is its own confirmation.
             bypassQuitGuard();
-            mainWindow.close();
+            appState.mainWindow.close();
         });
 });
 
