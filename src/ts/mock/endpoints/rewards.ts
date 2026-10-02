@@ -6,6 +6,20 @@
 import { simulateApiResponse, mockMethod } from '../simulate';
 import type * as rewardsModule from '../../api/rewards';
 
+/** A claim endpoint taking `(id, token)`: confirms every claim, resolves false without a token. */
+const mockClaim = (name: string) =>
+    mockMethod<(id: string | number, token: string) => Promise<boolean>>(
+        {
+            name,
+            tokenArg: 1,
+            onNoToken: () => false,
+        },
+        async () => {
+            await simulateApiResponse({}, 200);
+            return true;
+        },
+    );
+
 /**
  * Simulate /rest/get_my_completed_challenges: one finished challenge with
  * unclaimed rewards (claim_state CLAIM) and one already claimed, shaped like
@@ -33,17 +47,7 @@ const getMyCompletedChallenges: typeof rewardsModule.getMyCompletedChallenges = 
 /**
  * Simulate /rest/claim_resources — always confirms.
  */
-const claimChallengeResources: typeof rewardsModule.claimChallengeResources = mockMethod(
-    {
-        name: 'claimChallengeResources',
-        tokenArg: 1,
-        onNoToken: () => false,
-    },
-    async () => {
-        await simulateApiResponse({}, 200);
-        return true;
-    },
-);
+const claimChallengeResources: typeof rewardsModule.claimChallengeResources = mockClaim('claimChallengeResources');
 
 /**
  * Simulate /rest/get_my_missions: one completed mission (claim_state CLAIM)
@@ -87,16 +91,6 @@ const getMyMissions: typeof rewardsModule.getMyMissions = mockMethod(
 /**
  * Simulate /rest/claim_mission_prizes — always confirms.
  */
-const claimMissionPrize: typeof rewardsModule.claimMissionPrize = mockMethod(
-    {
-        name: 'claimMissionPrize',
-        tokenArg: 1,
-        onNoToken: () => false,
-    },
-    async () => {
-        await simulateApiResponse({}, 200);
-        return true;
-    },
-);
+const claimMissionPrize: typeof rewardsModule.claimMissionPrize = mockClaim('claimMissionPrize');
 
 export { getMyCompletedChallenges, claimChallengeResources, getMyMissions, claimMissionPrize };

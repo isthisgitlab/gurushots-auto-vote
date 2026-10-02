@@ -23,6 +23,7 @@ import { createMemoryEntryAgeLedger } from '../entryAgeStore';
 import { mockScenarioStateLedger } from '../scenarioStateStore';
 import { mockMethod } from './simulate';
 
+import type { MissionNeeds } from '../services/missions';
 import type { MockEndpoints } from './apiClient';
 import type * as realModule from '../strategies/real';
 import { errorMessage } from '../errorMessage';
@@ -92,16 +93,74 @@ const pickEndpoints = <C extends object, K extends keyof C>(client: C, names: re
     Object.fromEntries(names.map((name) => [name, client[name]])) as Pick<C, K>;
 
 /**
+ * Join deps over the mock endpoints. joinStateStore is null — mock mode must
+ * never touch real persisted state (same rationale as cleanupStaleMetadata:null).
+ * No acquireUnlockLock either: mock spends no real coins and runs
+ * single-process, so idempotency persistence and the cross-process lock are
+ * unnecessary.
+ */
+const mockJoinDeps = (client: MockEndpoints) => ({ ...pickEndpoints(client, JOIN_ENDPOINTS), joinStateStore: null });
+
+/**
+ * The auto-join and hourly prize-claim pre-steps, mirroring the real strategy.
+ * Neither aborts voting.
+ */
+const runPreSteps = async (client: MockEndpoints, token: string, missions: MissionNeeds | null) => {
+    // Auto-join pre-step (gated by the default-off autoJoin setting).
+    try {
+        await runJoinPass(token, Date.now(), mockJoinDeps(client), missions);
+    } catch (error) {
+        logger.withCategory('join').warning(`Mock join pass errored: ${errorMessage(error) || error}`, null);
+    }
+    // Hourly prize-claim pre-step (default-off autoClaimPrizes), as in real.
+    try {
+        await runClaimPass(token, Date.now(), pickEndpoints(client, CLAIM_ENDPOINTS));
+    } catch (error) {
+        logger.withCategory('claim').warning(`Mock claim pass errored: ${errorMessage(error) || error}`, null);
+    }
+};
+
+/**
+ * Deps for runVotingPass over the mock endpoints.
+ *
+ * cleanupStaleMetadata is deliberately null: the metadata store is
+ * shared and un-namespaced, and mock challenge ids never match real
+ * ones — running cleanup here would purge the user's real voting
+ * metadata.
+ */
+const mockVotingPassDeps = (client: MockEndpoints, token: string, missions: MissionNeeds | null) => ({
+    api: pickEndpoints(client, VOTING_PASS_ENDPOINTS),
+    cleanupStaleMetadata: null,
+    // In-memory for the same reason cleanupStaleMetadata is null: the
+    // metadata store is shared and un-namespaced, and mock challenge ids
+    // never match real ones, so persisting mock entry snapshots would
+    // accumulate junk in the user's real metadata.json that nothing prunes.
+    entryTracker: mockEntryTracker,
+    // In-memory: mock mode must never touch the real entryAges file.
+    entryAges: mockEntryAgeLedger,
+    // Short fixed spacing — mock cycles should stay fast.
+    interChallengeDelay: () => 500,
+    // Mock spends over the mock endpoints, with in-memory ledgers — mock
+    // mode must never touch the real swap-back / auto-spend files.
+    currency: {
+        strategy: pickEndpoints(client, CURRENCY_ENDPOINTS),
+        swapLedger: mockSwapBackLedger,
+        spendLedger: mockAutoSpendLedger,
+    },
+    // In-memory scenario state — mock mode never touches scenarioState.json.
+    // The Android background service does nothing in mock mode, so the
+    // in-app loop always runs mock scenarios.
+    scenarios: { ledger: mockScenarioStateLedger },
+    missions,
+    refreshMissionNeeds: runtime.isHeadlessService()
+        ? () => loadMissionNeeds(token, Date.now(), { getMyMissions: client.getMyMissions })
+        : null,
+});
+
+/**
  * @param client - the assembled mock endpoints
  */
 const createMockStrategy = (client: MockEndpoints) => {
-    // Join deps over the mock endpoints. joinStateStore is null — mock mode must
-    // never touch real persisted state (same rationale as cleanupStaleMetadata:null).
-    // No acquireUnlockLock either: mock spends no real coins and runs
-    // single-process, so idempotency persistence and the cross-process lock are
-    // unnecessary.
-    const mockJoinDeps = () => ({ ...pickEndpoints(client, JOIN_ENDPOINTS), joinStateStore: null });
-
     /**
      * Simulate a manual single join, running the SAME service the real strategy
      * runs (services/joinChallenges.ts) over the mock endpoints, with a null
@@ -119,7 +178,7 @@ const createMockStrategy = (client: MockEndpoints) => {
             onNoToken: (challengeId) => ({ status: 'not-authenticated', challengeId, cost: 0 }),
         },
         async (challengeId, spendCoins, token) =>
-            joinChallengeSingle(challengeId, token, mockJoinDeps(), { spendCoins: spendCoins === true }),
+            joinChallengeSingle(challengeId, token, mockJoinDeps(client), { spendCoins: spendCoins === true }),
     );
 
     /**
@@ -128,11 +187,6 @@ const createMockStrategy = (client: MockEndpoints) => {
      * endpoints, so mock mode exercises auto-fill, emergency fill,
      * turbo-earn, timer-ordered deadline actions, and the shared
      * cancellation/logging path instead of a hand-maintained fork.
-     *
-     * cleanupStaleMetadata is deliberately null: the metadata store is
-     * shared and un-namespaced, and mock challenge ids never match real
-     * ones — running cleanup here would purge the user's real voting
-     * metadata.
      */
     const fetchChallengesAndVote = async (token: string, challengeIdFilter: string | number | null = null) => {
         logger.withCategory('voting').api('Mock fetchChallengesAndVote', null);
@@ -147,53 +201,9 @@ const createMockStrategy = (client: MockEndpoints) => {
         const missions = await loadMissionNeeds(token, Date.now(), { getMyMissions: client.getMyMissions });
         const unregisterMissionNeeds = registerMissionNeeds(token, missions);
         try {
-            // Auto-join pre-step (gated by the default-off autoJoin setting), mirroring
-            // the real strategy. Skipped for a single-challenge run; never aborts voting.
-            if (challengeIdFilter === null) {
-                try {
-                    await runJoinPass(token, Date.now(), mockJoinDeps(), missions);
-                } catch (error) {
-                    logger
-                        .withCategory('join')
-                        .warning(`Mock join pass errored: ${errorMessage(error) || error}`, null);
-                }
-                // Hourly prize-claim pre-step (default-off autoClaimPrizes), as in real.
-                try {
-                    await runClaimPass(token, Date.now(), pickEndpoints(client, CLAIM_ENDPOINTS));
-                } catch (error) {
-                    logger
-                        .withCategory('claim')
-                        .warning(`Mock claim pass errored: ${errorMessage(error) || error}`, null);
-                }
-            }
-            return await runVotingPass(token, challengeIdFilter, {
-                api: pickEndpoints(client, VOTING_PASS_ENDPOINTS),
-                cleanupStaleMetadata: null,
-                // In-memory for the same reason cleanupStaleMetadata is null: the
-                // metadata store is shared and un-namespaced, and mock challenge ids
-                // never match real ones, so persisting mock entry snapshots would
-                // accumulate junk in the user's real metadata.json that nothing prunes.
-                entryTracker: mockEntryTracker,
-                // In-memory: mock mode must never touch the real entryAges file.
-                entryAges: mockEntryAgeLedger,
-                // Short fixed spacing — mock cycles should stay fast.
-                interChallengeDelay: () => 500,
-                // Mock spends over the mock endpoints, with in-memory ledgers — mock
-                // mode must never touch the real swap-back / auto-spend files.
-                currency: {
-                    strategy: pickEndpoints(client, CURRENCY_ENDPOINTS),
-                    swapLedger: mockSwapBackLedger,
-                    spendLedger: mockAutoSpendLedger,
-                },
-                // In-memory scenario state — mock mode never touches scenarioState.json.
-                // The Android background service does nothing in mock mode, so the
-                // in-app loop always runs mock scenarios.
-                scenarios: { ledger: mockScenarioStateLedger },
-                missions,
-                refreshMissionNeeds: runtime.isHeadlessService()
-                    ? () => loadMissionNeeds(token, Date.now(), { getMyMissions: client.getMyMissions })
-                    : null,
-            });
+            // Skipped for a single-challenge run.
+            if (challengeIdFilter === null) await runPreSteps(client, token, missions);
+            return await runVotingPass(token, challengeIdFilter, mockVotingPassDeps(client, token, missions));
         } finally {
             unregisterMissionNeeds?.();
         }

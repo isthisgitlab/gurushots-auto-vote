@@ -93,7 +93,7 @@ const mockMethod = <F extends (...args: never[]) => Promise<unknown>>(
     };
     // `method` takes F's parameters and resolves F's result; the checker cannot
     // relate that to the generic F itself.
-    return method as unknown as F;
+    return method as F;
 };
 
 export { simulateApiResponse, simulateApiError, mockMethod };

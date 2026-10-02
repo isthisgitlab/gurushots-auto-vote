@@ -5,7 +5,46 @@
 
 import * as logger from '../../logger';
 import { simulateApiResponse, mockMethod } from '../simulate';
+import { HOUR, DAY } from '../time';
 import type * as joinModule from '../../api/join';
+
+type OpenChallengeRow = [
+    id: number,
+    type: string,
+    join_coins: number,
+    title: string,
+    url: string,
+    startedAgo: number,
+    closesIn: number,
+    entries: number,
+    players: number,
+];
+
+/** An open challenge whose start and close are offsets (seconds) from `nowSec`. */
+const openChallenge = (nowSec: number, row: OpenChallengeRow) => {
+    const [id, type, join_coins, title, url, startedAgo, closesIn, entries, players] = row;
+    return {
+        id,
+        type,
+        join_coins,
+        title,
+        url,
+        start_time: nowSec - startedAgo,
+        close_time: nowSec + closesIn,
+        entries,
+        players,
+    };
+};
+
+const OPEN_CHALLENGE_ROWS: OpenChallengeRow[] = [
+    [900001, 'default', 0, 'Mock Free Challenge', 'mock-free', 5 * DAY, 3 * HOUR, 40, 25],
+    [900002, 'flash', 100, 'Mock Flash Challenge', 'mock-flash', DAY, 2 * DAY, 80, 50],
+    [900003, 'default', 250, 'Mock Paid Challenge', 'mock-paid', 2 * DAY, 5 * DAY, 120, 75],
+    [900004, 'flash', 100, 'Mock Unlock-Fails Challenge', 'mock-fail', 3 * DAY, 3 * DAY, 160, 100],
+    // 900005: unlock succeeds but submit fails → exercises the
+    // "coins charged but not joined" (charged-pending-submit) UI/CLI path.
+    [900005, 'flash', 100, 'Mock Submit-Fails Challenge', 'mock-submitfail', 4 * DAY, 4 * DAY, 200, 125],
+];
 
 /**
  * Simulate /rest/get_member_challenges (un-joined "open" challenges).
@@ -33,65 +72,7 @@ const getMemberChallenges: typeof joinModule.getMemberChallenges = mockMethod(
         // exercisable in mock mode: 900001 ends in 3h (inside any window),
         // the rest end in 2-5 days (outside a 24h one).
         const nowSec = Math.floor(Date.now() / 1000);
-        return [
-            {
-                id: 900001,
-                type: 'default',
-                join_coins: 0,
-                title: 'Mock Free Challenge',
-                url: 'mock-free',
-                start_time: nowSec - 5 * 86400,
-                close_time: nowSec + 3 * 3600,
-                entries: 40,
-                players: 25,
-            },
-            {
-                id: 900002,
-                type: 'flash',
-                join_coins: 100,
-                title: 'Mock Flash Challenge',
-                url: 'mock-flash',
-                start_time: nowSec - 1 * 86400,
-                close_time: nowSec + 2 * 86400,
-                entries: 80,
-                players: 50,
-            },
-            {
-                id: 900003,
-                type: 'default',
-                join_coins: 250,
-                title: 'Mock Paid Challenge',
-                url: 'mock-paid',
-                start_time: nowSec - 2 * 86400,
-                close_time: nowSec + 5 * 86400,
-                entries: 120,
-                players: 75,
-            },
-            {
-                id: 900004,
-                type: 'flash',
-                join_coins: 100,
-                title: 'Mock Unlock-Fails Challenge',
-                url: 'mock-fail',
-                start_time: nowSec - 3 * 86400,
-                close_time: nowSec + 3 * 86400,
-                entries: 160,
-                players: 100,
-            },
-            // 900005: unlock succeeds but submit fails → exercises the
-            // "coins charged but not joined" (charged-pending-submit) UI/CLI path.
-            {
-                id: 900005,
-                type: 'flash',
-                join_coins: 100,
-                title: 'Mock Submit-Fails Challenge',
-                url: 'mock-submitfail',
-                start_time: nowSec - 4 * 86400,
-                close_time: nowSec + 4 * 86400,
-                entries: 200,
-                players: 125,
-            },
-        ];
+        return OPEN_CHALLENGE_ROWS.map((row) => openChallenge(nowSec, row));
     },
 );
 
