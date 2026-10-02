@@ -112,7 +112,7 @@ jobs:
                   languages: ${{ matrix.language }}
                   build-mode: ${{ matrix.build-mode }}
                   queries: security-and-quality
-                  # Rules that flag the Android app's design rather than a defect:
+                  # Rules that flag the app's design rather than a defect:
                   # - javascript-enabled / addjavascriptinterface: the headless
                   #   voting WebView (AutoVoteService) exists to run the bundled JS
                   #   through its native bridges. It loads only the packaged
@@ -122,6 +122,12 @@ jobs:
                   #   handed to an APK install intent, i.e. on every in-app
                   #   updater (ApkInstallerPlugin). The system installer still asks
                   #   the user, and Android rejects an update signed with another key.
+                  # - file-access-to-http: the auth token persisted in the settings
+                  #   file is sent to the GuruShots API, which is the app's purpose;
+                  #   request URLs come from the hard-coded api.gurushots.com base.
+                  # - http-to-file-access: API responses are written to the app's
+                  #   own log files at fixed paths, after sanitizeForLog/redactMessage
+                  #   and CR/LF collapse.
                   config: |
                       query-filters:
                           - exclude:
@@ -129,6 +135,8 @@ jobs:
                                     - java/android/websettings-javascript-enabled
                                     - java/android/webview-addjavascriptinterface
                                     - java/android/arbitrary-apk-installation
+                                    - js/file-access-to-http
+                                    - js/http-to-file-access
 
             # Clean only :app, leaving the prebuilt plugin subprojects up to
             # date. --no-build-cache prevents restoring app classes from cache;
