@@ -167,9 +167,9 @@ jobs:
               id: is_beta
               run: |
                   if [[ "${{ github.ref }}" == "refs/heads/develop" ]]; then
-                    echo "IS_BETA=true" >> $GITHUB_OUTPUT
+                    echo "IS_BETA=true" >> "$GITHUB_OUTPUT"
                   else
-                    echo "IS_BETA=false" >> $GITHUB_OUTPUT
+                    echo "IS_BETA=false" >> "$GITHUB_OUTPUT"
                   fi
 
             - name: Determine version bump type
@@ -181,13 +181,13 @@ jobs:
                   COMMIT_MSG: ${{ github.event.head_commit.message }}
               run: |
                   if [[ "$COMMIT_MSG" =~ \[major\] ]]; then
-                    echo "BUMP_TYPE=major" >> $GITHUB_OUTPUT
+                    echo "BUMP_TYPE=major" >> "$GITHUB_OUTPUT"
                   elif [[ "$COMMIT_MSG" =~ \[minor\] ]]; then
-                    echo "BUMP_TYPE=minor" >> $GITHUB_OUTPUT
+                    echo "BUMP_TYPE=minor" >> "$GITHUB_OUTPUT"
                   elif [[ "$COMMIT_MSG" =~ \[patch\] ]]; then
-                    echo "BUMP_TYPE=patch" >> $GITHUB_OUTPUT
+                    echo "BUMP_TYPE=patch" >> "$GITHUB_OUTPUT"
                   else
-                    echo "BUMP_TYPE=patch" >> $GITHUB_OUTPUT
+                    echo "BUMP_TYPE=patch" >> "$GITHUB_OUTPUT"
                   fi
 
             - name: Bump version
@@ -209,11 +209,11 @@ jobs:
                       pnpm version prerelease --preid=beta --no-git-tag-version --no-git-checks
                     fi
                   else
-                    pnpm version $BUMP_TYPE --no-git-tag-version --no-git-checks
+                    pnpm version "$BUMP_TYPE" --no-git-tag-version --no-git-checks
                   fi
 
                   NEW_VERSION=$(node -p "require('./package.json').version")
-                  echo "NEW_VERSION=$NEW_VERSION" >> $GITHUB_OUTPUT
+                  echo "NEW_VERSION=$NEW_VERSION" >> "$GITHUB_OUTPUT"
 
             - name: Upload bumped package.json
               uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
@@ -494,12 +494,12 @@ jobs:
                     if [ "$VARIANT" = lite ]; then pnpm build:prep:lite; SUFFIX=-lite; else pnpm build:prep; SUFFIX=; fi
                     pnpm exec cap sync android
                     (cd android && ./gradlew assembleRelease \
-                      -Pandroid.injected.signing.store.file=$(pwd)/app/release.jks \
-                      -Pandroid.injected.signing.store.password=$KEYSTORE_PASSWORD \
-                      -Pandroid.injected.signing.key.alias=$KEY_ALIAS \
-                      -Pandroid.injected.signing.key.password=$KEY_PASSWORD)
+                      "-Pandroid.injected.signing.store.file=$(pwd)/app/release.jks" \
+                      "-Pandroid.injected.signing.store.password=$KEYSTORE_PASSWORD" \
+                      "-Pandroid.injected.signing.key.alias=$KEY_ALIAS" \
+                      "-Pandroid.injected.signing.key.password=$KEY_PASSWORD")
                     mv android/app/build/outputs/apk/release/app-release.apk \
-                       build/GuruShotsAutoVote-v${VERSION}${SUFFIX}.apk
+                       "build/GuruShotsAutoVote-v${VERSION}${SUFFIX}.apk"
                   done
 
             - name: Upload Android artifact
@@ -583,7 +583,7 @@ jobs:
 
             - name: Get version from package.json
               id: get_version
-              run: echo "VERSION=$(node -p "require('./package.json').version")" >> $GITHUB_OUTPUT
+              run: echo "VERSION=$(node -p "require('./package.json').version")" >> "$GITHUB_OUTPUT"
 
             - name: Update README with current version
               run: pnpm update:readme
@@ -595,7 +595,7 @@ jobs:
               id: release_name
               run: |
                   VERSION="${{ steps.get_version.outputs.VERSION }}"
-                  echo "RELEASE_NAME=v$VERSION" >> $GITHUB_OUTPUT
+                  echo "RELEASE_NAME=v$VERSION" >> "$GITHUB_OUTPUT"
 
             - name: Download all build artifacts
               uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
@@ -609,17 +609,21 @@ jobs:
 
                   # Set title prefix
                   if [[ "$IS_BETA" == "true" ]]; then
-                    echo "TITLE_PREFIX=Pre-Release" >> $GITHUB_OUTPUT
-                    echo "BODY_PREFIX=🧪 Pre-Release" >> $GITHUB_OUTPUT
-                    echo "ARTIFACT_PREFIX=develop-" >> $GITHUB_OUTPUT
-                    echo "WARNING_TEXT=### ⚠️ Important! This is a **pre-release** from the develop branch. Use at your own risk." >> $GITHUB_OUTPUT
-                    echo "BUILD_DATE=Build Date: $(date -u +"%Y-%m-%d %H:%M:%S UTC")" >> $GITHUB_OUTPUT
+                    {
+                      echo "TITLE_PREFIX=Pre-Release"
+                      echo "BODY_PREFIX=🧪 Pre-Release"
+                      echo "ARTIFACT_PREFIX=develop-"
+                      echo "WARNING_TEXT=### ⚠️ Important! This is a **pre-release** from the develop branch. Use at your own risk."
+                      echo "BUILD_DATE=Build Date: $(date -u +"%Y-%m-%d %H:%M:%S UTC")"
+                    } >> "$GITHUB_OUTPUT"
                   else
-                    echo "TITLE_PREFIX=Release" >> $GITHUB_OUTPUT
-                    echo "BODY_PREFIX=📦 Release" >> $GITHUB_OUTPUT
-                    echo "ARTIFACT_PREFIX=" >> $GITHUB_OUTPUT
-                    echo "WARNING_TEXT=" >> $GITHUB_OUTPUT
-                    echo "BUILD_DATE=" >> $GITHUB_OUTPUT
+                    {
+                      echo "TITLE_PREFIX=Release"
+                      echo "BODY_PREFIX=📦 Release"
+                      echo "ARTIFACT_PREFIX="
+                      echo "WARNING_TEXT="
+                      echo "BUILD_DATE="
+                    } >> "$GITHUB_OUTPUT"
                   fi
 
             - name: Create Release

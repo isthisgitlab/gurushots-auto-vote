@@ -107,6 +107,20 @@ class ApkInstallerPluginTest {
     }
 
     @Test
+    fun removesTheLegacyApkLeftAtTheCacheRoot() {
+        val legacy = File(app.cacheDir, "update.apk")
+        legacy.writeText("from an older build")
+        server.enqueue(MockResponse.Builder().code(200).body("new").build())
+
+        val call = callFor(server.url("/app.apk").toString())
+        plugin.downloadAndInstall(call)
+        awaitSettled()
+
+        assertFalse(legacy.exists())
+        assertEquals("new", apkFile().readText())
+    }
+
+    @Test
     fun downloadsWithProgressAndLaunchesInstaller() {
         // A stale partial download must be replaced, never appended to.
         apkFile().parentFile!!.mkdirs()

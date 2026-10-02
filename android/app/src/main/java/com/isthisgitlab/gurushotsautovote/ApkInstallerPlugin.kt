@@ -85,6 +85,8 @@ class ApkInstallerPlugin : Plugin() {
             val body = response.body
             val total = body.contentLength()
 
+            // An install upgraded from an older build still has its APK at the cache root.
+            File(context.cacheDir, "update.apk").delete()
             val updatesDir = File(context.cacheDir, "updates").apply { mkdirs() }
             val outFile = File(updatesDir, "update.apk")
             // Drop any stale download so a partial file can never be installed.
