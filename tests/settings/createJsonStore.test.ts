@@ -23,6 +23,7 @@ jest.mock(
 import fsModule = require('node:fs');
 const fs = jest.mocked(fsModule);
 import type * as storageModule from '../../src/ts/settings/storage';
+import * as logger from '../../src/ts/logger';
 
 const g = globalThis as typeof globalThis & {
     Capacitor?: { isNativePlatform: () => boolean; getPlatform: () => string };
@@ -68,7 +69,7 @@ describe('createJsonStore', () => {
             });
         });
 
-        test('writeRaw tightens an existing file before writing into it', () => {
+        test('writeRaw chmods the file to 0o600 before writing into it', () => {
             store.writeRaw('{"a":2}');
             expect(fs.chmodSync).toHaveBeenCalledTimes(1);
             expect(fs.chmodSync).toHaveBeenCalledWith(expect.stringContaining('metadata.json'), 0o600);
@@ -81,6 +82,14 @@ describe('createJsonStore', () => {
             });
             store.writeRaw('{"a":2}');
             expect(fs.writeFileSync).toHaveBeenCalledTimes(1);
+            expect(fs.writeFileSync).toHaveBeenCalledWith(expect.stringContaining('metadata.json'), '{"a":2}', {
+                encoding: 'utf8',
+                mode: 0o600,
+            });
+            const warnings = jest
+                .mocked(logger.withCategory)
+                .mock.results.flatMap((r) => (r.type === 'return' ? jest.mocked(r.value.warning).mock.calls : []));
+            expect(warnings).toEqual([]);
         });
 
         test('the file lives next to settings.json under the userData dir', () => {

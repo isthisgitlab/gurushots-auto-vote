@@ -72,13 +72,16 @@ const warnedUnrestrictable = new Set<string>();
  * The mode passed to writeFileSync only applies when the file is created, so
  * an existing file is chmod'ed to 0o600 before the new content lands in it:
  * when that chmod succeeds the data is never written into a file other local
- * users can read. A chmod that finds no file (ENOENT) is skipped, since the
- * write then creates it with 0o600. A chmod the filesystem refuses (a file
- * owned by another uid, a vfat/SMB/FUSE mount) is logged with what it needs,
- * once per failure episode (until a chmod on that path succeeds again, which
- * is logged as the recovery), and does not fail the write: the data still
- * persists. The files can carry the auth token. The file is rewritten in place
- * rather than replaced by a rename, because settingsWatcher watches its inode.
+ * users can read. A chmod that reaches no file (ENOENT: it does not exist yet;
+ * EACCES: a directory on its path cannot be searched) is skipped silently: the
+ * write then creates it with 0o600 or fails with its own error, and a "could
+ * not restrict" warning would point at the wrong fix. A chmod the filesystem
+ * refuses (a file owned by another uid, a vfat/SMB/FUSE mount) is logged with
+ * what it needs, once per failure episode (until a chmod on that path succeeds
+ * again, which is logged as the recovery), and does not fail the write: the
+ * data still persists. The files can carry the auth token. The file is
+ * rewritten in place rather than replaced by a rename, because settingsWatcher
+ * watches its inode.
  */
 const writeOwnerOnly = (filePath: string, data: string) => {
     const dir = path.dirname(filePath);
@@ -92,7 +95,7 @@ const writeOwnerOnly = (filePath: string, data: string) => {
         }
     } catch (err) {
         const code = err instanceof Error && 'code' in err && typeof err.code === 'string' ? err.code : undefined;
-        if (code !== 'ENOENT' && !warnedUnrestrictable.has(filePath)) {
+        if (code !== 'ENOENT' && code !== 'EACCES' && !warnedUnrestrictable.has(filePath)) {
             warnedUnrestrictable.add(filePath);
             const reason = code ?? errorMessage(err) ?? 'unknown error';
             logger

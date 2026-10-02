@@ -194,7 +194,7 @@ describe('settings storage — edge cases', () => {
             expect(fs.readFileSync).not.toHaveBeenCalled();
         });
 
-        test('settings writeRaw tightens an existing file before writing into it', () => {
+        test('settings writeRaw chmods the file to 0o600 before writing into it', () => {
             const { mod, fs, categoryLogger } = loadStorage();
             mod.storage.writeRaw('{}');
             expect(categoryLogger.info).not.toHaveBeenCalled();
@@ -207,6 +207,20 @@ describe('settings storage — edge cases', () => {
             const { mod, fs, categoryLogger } = loadStorage();
             fs.chmodSync.mockImplementationOnce(() => {
                 throw Object.assign(new Error('no such file or directory'), { code: 'ENOENT' });
+            });
+            mod.storage.writeRaw('{}');
+            expect(categoryLogger.warning).not.toHaveBeenCalled();
+            expect(categoryLogger.info).not.toHaveBeenCalled();
+            expect(fs.writeFileSync).toHaveBeenCalledWith(`${USER_DATA}/settings.json`, '{}', {
+                encoding: 'utf8',
+                mode: 0o600,
+            });
+        });
+
+        test('a chmod that cannot search the path (EACCES) is skipped silently and the write is still attempted', () => {
+            const { mod, fs, categoryLogger } = loadStorage();
+            fs.chmodSync.mockImplementationOnce(() => {
+                throw Object.assign(new Error('permission denied'), { code: 'EACCES' });
             });
             mod.storage.writeRaw('{}');
             expect(categoryLogger.warning).not.toHaveBeenCalled();
