@@ -33,14 +33,14 @@ const getPlugin = () => {
     }
 };
 
-const start = async () => {
+const callPlugin = async (action: 'start' | 'stop' | 'getStatus', logFailure: boolean) => {
     const plugin = getPlugin();
     if (!plugin) return { running: false, available: false };
     try {
-        const result = await plugin.start();
+        const result = await plugin[action]();
         return { ...result, available: true };
     } catch (err) {
-        logger.withCategory('voting').error('AutoVoteBackground.start failed', err);
+        if (logFailure) logger.withCategory('voting').error(`AutoVoteBackground.${action} failed`, err);
         return {
             running: false,
             available: true,
@@ -49,36 +49,11 @@ const start = async () => {
     }
 };
 
-const stop = async () => {
-    const plugin = getPlugin();
-    if (!plugin) return { running: false, available: false };
-    try {
-        const result = await plugin.stop();
-        return { ...result, available: true };
-    } catch (err) {
-        logger.withCategory('voting').error('AutoVoteBackground.stop failed', err);
-        return {
-            running: false,
-            available: true,
-            error: errorMessage(err),
-        };
-    }
-};
+const start = () => callPlugin('start', true);
 
-const getStatus = async () => {
-    const plugin = getPlugin();
-    if (!plugin) return { running: false, available: false };
-    try {
-        const result = await plugin.getStatus();
-        return { ...result, available: true };
-    } catch (err) {
-        return {
-            running: false,
-            available: true,
-            error: errorMessage(err),
-        };
-    }
-};
+const stop = () => callPlugin('stop', true);
+
+const getStatus = () => callPlugin('getStatus', false);
 
 const isAvailable = () => getPlugin() !== null;
 

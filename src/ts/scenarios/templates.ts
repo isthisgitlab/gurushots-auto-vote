@@ -8,6 +8,16 @@
  * validateScenario (tests/scenarios/templates.test.ts).
  */
 
+const LOWERED_EXPOSURE_SETTINGS = {
+    exposure: 10,
+    exposureTarget: 12,
+    // Off here, so a final-window trigger above 10% in the
+    // global defaults cannot conflict with the lowered exposure.
+    useFinalWindowExposure: false,
+    autoFill: false,
+    autoBoost: false,
+};
+
 const SCENARIO_TEMPLATES = [
     {
         id: 'exhibitionDoubleDip',
@@ -19,15 +29,7 @@ const SCENARIO_TEMPLATES = [
             start: 'buildup',
             phases: {
                 buildup: {
-                    settings: {
-                        exposure: 10,
-                        exposureTarget: 12,
-                        // Off here, so a final-window trigger above 10% in the
-                        // global defaults cannot conflict with the lowered exposure.
-                        useFinalWindowExposure: false,
-                        autoFill: false,
-                        autoBoost: false,
-                    },
+                    settings: LOWERED_EXPOSURE_SETTINGS,
                     rules: [
                         {
                             id: 'daily-entry',
@@ -90,15 +92,7 @@ const SCENARIO_TEMPLATES = [
                     ],
                 },
                 holding: {
-                    settings: {
-                        exposure: 10,
-                        exposureTarget: 12,
-                        // Off here, so a final-window trigger above 10% in the
-                        // global defaults cannot conflict with the lowered exposure.
-                        useFinalWindowExposure: false,
-                        autoFill: false,
-                        autoBoost: false,
-                    },
+                    settings: LOWERED_EXPOSURE_SETTINGS,
                     rules: [
                         {
                             id: 'comeback',
