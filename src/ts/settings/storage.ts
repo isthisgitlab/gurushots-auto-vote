@@ -72,37 +72,34 @@ const warnedUnrestrictable = new Set<string>();
  * The mode passed to writeFileSync only applies when the file is created, so
  * an existing file is chmod'ed to 0o600 before the new content lands in it:
  * when that chmod succeeds the data is never written into a file other local
- * users can read. A chmod the filesystem refuses (a file owned by another uid,
- * a vfat/SMB/FUSE mount) is logged with what it needs, once per failure episode
- * (until a chmod on that path succeeds again, which is logged as the recovery),
- * and does not fail the write: the data still persists. The files can carry
- * the auth token. The file is rewritten in place rather than replaced by a
- * rename, because settingsWatcher watches its inode.
+ * users can read. A chmod that finds no file (ENOENT) is skipped, since the
+ * write then creates it with 0o600. A chmod the filesystem refuses (a file
+ * owned by another uid, a vfat/SMB/FUSE mount) is logged with what it needs,
+ * once per failure episode (until a chmod on that path succeeds again, which
+ * is logged as the recovery), and does not fail the write: the data still
+ * persists. The files can carry the auth token. The file is rewritten in place
+ * rather than replaced by a rename, because settingsWatcher watches its inode.
  */
 const writeOwnerOnly = (filePath: string, data: string) => {
     const dir = path.dirname(filePath);
     if (!fs.existsSync(dir)) {
         fs.mkdirSync(dir, { recursive: true, mode: 0o700 });
     }
-    if (fs.existsSync(filePath)) {
-        try {
-            fs.chmodSync(filePath, 0o600);
-            if (warnedUnrestrictable.delete(filePath)) {
-                logger.withCategory('settings').info(`Restricted ${filePath} to owner-only`);
-            }
-        } catch (err) {
-            if (!warnedUnrestrictable.has(filePath)) {
-                warnedUnrestrictable.add(filePath);
-                const reason =
-                    err instanceof Error && 'code' in err && typeof err.code === 'string'
-                        ? err.code
-                        : (errorMessage(err) ?? 'unknown error');
-                logger
-                    .withCategory('settings')
-                    .warning(
-                        `Could not restrict ${filePath} to owner-only (${reason}); other local users may be able to read it. It must be a regular file owned by the account this app runs as, on a filesystem that supports permissions (not FAT, SMB or FUSE); once it is, the next save restricts it automatically.`,
-                    );
-            }
+    try {
+        fs.chmodSync(filePath, 0o600);
+        if (warnedUnrestrictable.delete(filePath)) {
+            logger.withCategory('settings').info(`Restricted ${filePath} to owner-only`);
+        }
+    } catch (err) {
+        const code = err instanceof Error && 'code' in err && typeof err.code === 'string' ? err.code : undefined;
+        if (code !== 'ENOENT' && !warnedUnrestrictable.has(filePath)) {
+            warnedUnrestrictable.add(filePath);
+            const reason = code ?? errorMessage(err) ?? 'unknown error';
+            logger
+                .withCategory('settings')
+                .warning(
+                    `Could not restrict ${filePath} to owner-only (${reason}); other local users may be able to read it. It must be a regular file owned by the account this app runs as, on a filesystem that supports permissions (not FAT, SMB or FUSE); once it is, the next save restricts it automatically.`,
+                );
         }
     }
     fs.writeFileSync(filePath, data, { encoding: 'utf8', mode: 0o600 });

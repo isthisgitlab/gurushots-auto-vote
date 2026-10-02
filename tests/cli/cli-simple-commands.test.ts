@@ -60,6 +60,7 @@ jest.mock('../../src/ts/services/UpdateChecker', () => ({
 const mockHasBundledModel = jest.fn(async () => true);
 jest.mock('../../src/ts/services/visionVerifier', () => ({ hasBundledModel: mockHasBundledModel }));
 
+import { invalid } from '../helpers/invalid';
 import fsModule = require('node:fs');
 const fs = jest.mocked(fsModule);
 import loggerModule = require('../../src/ts/logger');
@@ -102,7 +103,6 @@ import type * as bankrollModule from '../../src/ts/cli/commands/bankroll';
 import type * as joinModule from '../../src/ts/cli/commands/join';
 import type * as updateModule from '../../src/ts/cli/commands/update';
 import type * as logsModule from '../../src/ts/cli/commands/logs';
-import { invalid } from '../helpers/invalid';
 const pkg = jest.requireActual<typeof import('../../package.json')>('../../package.json');
 
 const { handleLogin, handleLogout } = require('../../src/ts/cli/commands/auth') as typeof authCommandsModule;

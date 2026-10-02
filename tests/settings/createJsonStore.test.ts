@@ -69,17 +69,17 @@ describe('createJsonStore', () => {
         });
 
         test('writeRaw tightens an existing file before writing into it', () => {
-            fs.existsSync.mockReturnValue(true);
             store.writeRaw('{"a":2}');
             expect(fs.chmodSync).toHaveBeenCalledTimes(1);
             expect(fs.chmodSync).toHaveBeenCalledWith(expect.stringContaining('metadata.json'), 0o600);
             expect(fs.chmodSync.mock.invocationCallOrder[0]).toBeLessThan(fs.writeFileSync.mock.invocationCallOrder[0]);
         });
 
-        test('writeRaw does not chmod a file it is about to create', () => {
-            fs.existsSync.mockReturnValue(false);
+        test('writeRaw still creates a file whose chmod finds nothing (ENOENT)', () => {
+            fs.chmodSync.mockImplementationOnce(() => {
+                throw Object.assign(new Error('no such file or directory'), { code: 'ENOENT' });
+            });
             store.writeRaw('{"a":2}');
-            expect(fs.chmodSync).not.toHaveBeenCalled();
             expect(fs.writeFileSync).toHaveBeenCalledTimes(1);
         });
 

@@ -21,13 +21,13 @@ jest.mock('../../src/ts/logger', () => {
     };
 });
 
+import { invalid } from '../helpers/invalid';
 import fsModule = require('node:fs');
 const fs = jest.mocked(fsModule);
 import loggerModule = require('../../src/ts/logger');
 const logger = jest.mocked(invalid<typeof loggerModule & { __infoMock: jest.Mock<void, [string]> }>(loggerModule));
 import type * as diagnosticsModule from '../../src/ts/services/semantic/diagnostics';
 import type * as logsModule from '../../src/ts/cli/commands/logs';
-import { invalid } from '../helpers/invalid';
 const { diagnostics } = jest.mocked(require('../../src/ts/services/semantic/diagnostics') as typeof diagnosticsModule);
 const { showLogs } = require('../../src/ts/cli/commands/logs') as typeof logsModule;
 

@@ -52,6 +52,7 @@ jest.mock('../../src/ts/ipc/currency.handlers', () => {
     return { __handlers: handlers, buildHandlers: () => handlers, register: jest.fn() };
 });
 
+import { invalid } from '../helpers/invalid';
 import loggerModule = require('../../src/ts/logger');
 const logger = jest.mocked(
     invalid<typeof loggerModule & { __calls: { level: string; msg: unknown; data?: unknown }[] }>(loggerModule),
@@ -68,7 +69,6 @@ const apiFactory = jest.mocked(
     >(apiFactoryModule),
 );
 import type * as actionsModule from '../../src/ts/cli/commands/actions';
-import { invalid } from '../helpers/invalid';
 // Both handler mocks, merged into one table the describe.each rows index by
 // channel name: every entry is an async handler the tests treat alike.
 type HandlerTable = Record<string, jest.Mock<Promise<unknown>, unknown[]>>;

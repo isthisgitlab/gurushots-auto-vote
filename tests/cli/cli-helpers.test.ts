@@ -19,6 +19,7 @@ jest.mock('../../src/ts/apiFactory', () => {
 
 jest.mock('node:readline', () => ({ createInterface: jest.fn(() => ({ tag: 'rl' })) }));
 
+import { invalid } from '../helpers/invalid';
 import loggerModule = require('../../src/ts/logger');
 const logger = jest.mocked(invalid<typeof loggerModule & { __calls: { level: string; msg: unknown }[] }>(loggerModule));
 import apiFactoryModule = require('../../src/ts/apiFactory');
@@ -34,7 +35,6 @@ const readline = jest.mocked(readlineModule);
 import type * as guardsModule from '../../src/ts/cli/guards';
 import type * as promptsModule from '../../src/ts/cli/prompts';
 import type * as parseValueModule from '../../src/ts/cli/parseValue';
-import { invalid } from '../helpers/invalid';
 const { ensureAuthenticated, requireProfileArgs, requireChallenge } =
     require('../../src/ts/cli/guards') as typeof guardsModule;
 const { createReadlineInterface, askYesNo, askInput, askSecret } =

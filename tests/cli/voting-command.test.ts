@@ -45,6 +45,7 @@ jest.mock('../../src/ts/ipc/voting.handlers', () => {
     return { __handlers: handlers, buildHandlers: () => handlers };
 });
 
+import { invalid } from '../helpers/invalid';
 import loggerModule = require('../../src/ts/logger');
 const logger = jest.mocked(
     invalid<typeof loggerModule & { __calls: { level: string; msg: unknown; data?: unknown }[] }>(loggerModule),
@@ -57,7 +58,6 @@ import type * as boostWindowModule from '../../src/ts/voting/boostWindow';
 import type * as authModule from '../../src/ts/services/auth';
 import type * as votingModule from '../../src/ts/cli/commands/voting';
 import type * as votingHandlersModule from '../../src/ts/ipc/voting.handlers';
-import { invalid } from '../helpers/invalid';
 const { __mw: mw } = jest.mocked(
     require('../../src/ts/apiFactory') as typeof apiFactoryModule & {
         __mw: jest.Mocked<

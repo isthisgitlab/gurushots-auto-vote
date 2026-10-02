@@ -196,7 +196,6 @@ describe('settings storage — edge cases', () => {
 
         test('settings writeRaw tightens an existing file before writing into it', () => {
             const { mod, fs, categoryLogger } = loadStorage();
-            fs.existsSync.mockReturnValue(true);
             mod.storage.writeRaw('{}');
             expect(categoryLogger.info).not.toHaveBeenCalled();
             expect(categoryLogger.warning).not.toHaveBeenCalled();
@@ -204,16 +203,39 @@ describe('settings storage — edge cases', () => {
             expect(fs.chmodSync.mock.invocationCallOrder[0]).toBeLessThan(fs.writeFileSync.mock.invocationCallOrder[0]);
         });
 
-        test('settings writeRaw does not chmod a file it is about to create', () => {
-            const { mod, fs } = loadStorage();
-            fs.existsSync.mockReturnValue(false);
+        test('settings writeRaw skips a chmod that finds no file (ENOENT) silently and still creates it', () => {
+            const { mod, fs, categoryLogger } = loadStorage();
+            fs.chmodSync.mockImplementationOnce(() => {
+                throw Object.assign(new Error('no such file or directory'), { code: 'ENOENT' });
+            });
             mod.storage.writeRaw('{}');
-            expect(fs.chmodSync).not.toHaveBeenCalled();
+            expect(categoryLogger.warning).not.toHaveBeenCalled();
+            expect(categoryLogger.info).not.toHaveBeenCalled();
+            expect(fs.writeFileSync).toHaveBeenCalledWith(`${USER_DATA}/settings.json`, '{}', {
+                encoding: 'utf8',
+                mode: 0o600,
+            });
+        });
+
+        test('an ENOENT chmod leaves an open failure episode alone, so the next refusal still does not re-warn', () => {
+            const { mod, fs, categoryLogger } = loadStorage();
+            const refuse = () => {
+                throw Object.assign(new Error('operation not permitted'), { code: 'EPERM' });
+            };
+            const missing = () => {
+                throw Object.assign(new Error('no such file or directory'), { code: 'ENOENT' });
+            };
+            fs.chmodSync.mockImplementationOnce(refuse).mockImplementationOnce(missing).mockImplementationOnce(refuse);
+            mod.storage.writeRaw('{}');
+            mod.storage.writeRaw('{}');
+            mod.storage.writeRaw('{}');
+            expect(fs.writeFileSync).toHaveBeenCalledTimes(3);
+            expect(categoryLogger.warning).toHaveBeenCalledTimes(1);
+            expect(categoryLogger.info).not.toHaveBeenCalled();
         });
 
         test('a refused chmod (EPERM) is logged with what to check and the data is still written', () => {
             const { mod, fs, categoryLogger } = loadStorage();
-            fs.existsSync.mockReturnValue(true);
             fs.chmodSync.mockImplementationOnce(() => {
                 throw Object.assign(new Error('operation not permitted'), { code: 'EPERM' });
             });
@@ -232,7 +254,6 @@ describe('settings storage — edge cases', () => {
 
         test('repeated refused chmods on the same path warn once but every write still lands', () => {
             const { mod, fs, categoryLogger } = loadStorage();
-            fs.existsSync.mockReturnValue(true);
             fs.chmodSync.mockImplementation(() => {
                 throw Object.assign(new Error('operation not permitted'), { code: 'EPERM' });
             });
@@ -246,7 +267,6 @@ describe('settings storage — edge cases', () => {
 
         test('a path warns again after a chmod on it succeeds, once per failure episode', () => {
             const { mod, fs, categoryLogger } = loadStorage();
-            fs.existsSync.mockReturnValue(true);
             const refuse = () => {
                 throw Object.assign(new Error('operation not permitted'), { code: 'EPERM' });
             };
@@ -277,7 +297,6 @@ describe('settings storage — edge cases', () => {
         test('refused chmods on two different paths warn once each', () => {
             const { mod, fs, categoryLogger } = loadStorage();
             const store = mod.createJsonStore({ fileName: 'metadata.json', prefKey: 'k' });
-            fs.existsSync.mockReturnValue(true);
             fs.chmodSync.mockImplementation(() => {
                 throw Object.assign(new Error('operation not permitted'), { code: 'EPERM' });
             });
@@ -298,7 +317,6 @@ describe('settings storage — edge cases', () => {
             const other = mod.createJsonStore({ fileName: 'other.json', prefKey: 'o' });
             const third = mod.createJsonStore({ fileName: 'third.json', prefKey: 't' });
             const fourth = mod.createJsonStore({ fileName: 'fourth.json', prefKey: 'f' });
-            fs.existsSync.mockReturnValue(true);
             fs.chmodSync
                 .mockImplementationOnce(() => {
                     throw new Error('read-only mount');

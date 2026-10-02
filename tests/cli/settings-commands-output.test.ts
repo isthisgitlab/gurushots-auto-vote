@@ -43,12 +43,12 @@ jest.mock('../../src/ts/settings', () => ({
     deleteChallengeProfile: jest.fn(),
 }));
 
+import { invalid } from '../helpers/invalid';
 import loggerModule = require('../../src/ts/logger');
 const logger = jest.mocked(invalid<typeof loggerModule & { __calls: { level: string; msg: unknown }[] }>(loggerModule));
 import settingsModule = require('../../src/ts/settings');
 const settings = jest.mocked(settingsModule);
 import cmd = require('../../src/ts/cli/commands/settings');
-import { invalid } from '../helpers/invalid';
 
 const msgs = (level: string) => logger.__calls.filter((c) => c.level === level).map((c) => String(c.msg));
 const boom = () => {

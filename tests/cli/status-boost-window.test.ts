@@ -51,6 +51,7 @@ jest.mock('../../src/ts/apiFactory', () => {
     };
 });
 
+import { invalid } from '../helpers/invalid';
 import loggerModule = require('../../src/ts/logger');
 const logger = jest.mocked(invalid<typeof loggerModule & { __infoMock: jest.Mock<void, [unknown]> }>(loggerModule));
 import apiFactoryModule = require('../../src/ts/apiFactory');
@@ -64,7 +65,6 @@ const apiFactory = jest.mocked(
     >(apiFactoryModule),
 );
 import type * as votingModule from '../../src/ts/cli/commands/voting';
-import { invalid } from '../helpers/invalid';
 import type { Challenge } from '../../src/ts/types/gurushots';
 const { showStatus } = require('../../src/ts/cli/commands/voting') as typeof votingModule;
 

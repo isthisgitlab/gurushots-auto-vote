@@ -40,6 +40,7 @@ jest.mock('../../src/ts/ipc/currency.handlers', () => {
     return { __handlers: handlers, buildHandlers: () => handlers };
 });
 
+import { invalid } from '../helpers/invalid';
 import loggerModule = require('../../src/ts/logger');
 const logger = jest.mocked(invalid<typeof loggerModule & { __calls: { level: string; msg: unknown }[] }>(loggerModule));
 const { __mw: mw } = jest.mocked(
@@ -57,7 +58,6 @@ import actions = require('../../src/ts/cli/commands/actions');
 import type * as apiFactoryModule from '../../src/ts/apiFactory';
 import type * as actionsHandlersModule from '../../src/ts/ipc/actions.handlers';
 import type * as currencyHandlersModule from '../../src/ts/ipc/currency.handlers';
-import { invalid } from '../helpers/invalid';
 
 type Middleware = ReturnType<typeof apiFactoryModule.getMiddleware>;
 type ActionHandlers = ReturnType<typeof actionsHandlersModule.buildHandlers>;

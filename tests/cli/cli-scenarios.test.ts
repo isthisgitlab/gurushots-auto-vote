@@ -28,6 +28,7 @@ jest.mock('../../src/ts/ipc/scenarios.handlers', () => {
 });
 jest.mock('node:fs', () => ({ readFileSync: jest.fn(), writeFileSync: jest.fn() }));
 
+import { invalid } from '../helpers/invalid';
 import fsModule = require('node:fs');
 const fs = jest.mocked(fsModule);
 import loggerModule = require('../../src/ts/logger');
@@ -40,7 +41,6 @@ const { __handlers: h } = jest.mocked(
 import cmd = require('../../src/ts/cli/commands/scenarios');
 import type * as scenarios_handlersModule from '../../src/ts/ipc/scenarios.handlers';
 import type { ScenarioIssue } from '../../src/ts/settings/scenarioSchema';
-import { invalid } from '../helpers/invalid';
 
 const lines = (level?: string) => logger.__calls.filter((c) => !level || c.level === level).map((c) => c.msg);
 const text = (level?: string) => lines(level).join('\n');

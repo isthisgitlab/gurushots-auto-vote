@@ -78,6 +78,7 @@ jest.mock('../../src/ts/services/UpdateChecker', () => ({
     getReleasesUrl: jest.fn(() => 'https://github.com/owner/repo/releases/latest'),
 }));
 
+import { invalid } from '../helpers/invalid';
 import loggerModule = require('../../src/ts/logger');
 const logger = jest.mocked(
     invalid<typeof loggerModule & { __calls: { level: string; msg: unknown; data?: unknown }[] }>(loggerModule),
@@ -118,7 +119,6 @@ import type * as votingHandlersModule from '../../src/ts/ipc/voting.handlers';
 import type * as votingModule from '../../src/ts/cli/commands/voting';
 import type * as authModule from '../../src/ts/cli/commands/auth';
 import type * as updateModule from '../../src/ts/cli/commands/update';
-import { invalid } from '../helpers/invalid';
 
 const { boostChallenge, turboChallenge, fillChallenge } =
     require('../../src/ts/cli/commands/actions') as typeof actionsModule;
