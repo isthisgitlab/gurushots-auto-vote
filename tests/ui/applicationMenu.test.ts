@@ -7,17 +7,17 @@
 import type { BrowserWindowConstructorOptions, MessageBoxOptions } from 'electron';
 import type * as LoggerModule from '../../src/ts/logger';
 import type * as MenuModule from '../../src/ts/ui/applicationMenu';
+import type * as StateModule from '../../src/ts/index/state';
 import { invalid } from '../helpers/invalid';
 
 /** The mocked electron's view of a menu template entry (what the tests read back). */
 type MenuEntry = { label?: string; role?: string; submenu?: MenuEntry[]; click?: () => unknown };
-/** A window the tests push into `BrowserWindow.getAllWindows()`. */
-type ListedWindow = { getTitle: () => string; isDestroyed?: () => boolean; focus?: jest.Mock<void, []> };
 /** A window constructed through the mocked `new BrowserWindow(...)`. */
 type CreatedWindow = {
     opts: BrowserWindowConstructorOptions;
     handlers: Record<string, () => void>;
     loadFile: jest.Mock<Promise<void>, [string]>;
+    focus: jest.Mock<void, []>;
     show: jest.Mock<void, []>;
 };
 /** Shape of the `electron` mock factory below. */
@@ -28,45 +28,41 @@ type ElectronMock = {
     };
     dialog: { showMessageBox: jest.Mock<Promise<{ response: number }>, [MessageBoxOptions]> };
     app: { getName: jest.Mock<string, []> };
-    BrowserWindow: { created: CreatedWindow[]; windows: ListedWindow[]; nextLoadResult: Promise<void> | null };
+    BrowserWindow: { created: CreatedWindow[]; nextLoadResult: Promise<void> | null };
 };
 
 const mockAutoUpdaterCheck = jest.fn();
 const mockAutoUpdaterCtor = jest.fn();
 
 jest.mock('electron', () => {
-    const windows: ListedWindow[] = [];
     class BrowserWindow {
         declare opts: BrowserWindowConstructorOptions;
         declare handlers: Record<string, () => void>;
         declare loadFile: jest.Mock<Promise<void>, [string]>;
+        declare on: jest.Mock<void, [string, () => void]>;
         declare once: jest.Mock<void, [string, () => void]>;
         declare show: jest.Mock<void, []>;
         declare focus: jest.Mock<void, []>;
-        declare getTitle: () => string | undefined;
         declare isDestroyed: () => boolean;
         declare static created: BrowserWindow[];
-        declare static windows: ListedWindow[];
         declare static nextLoadResult: Promise<void> | null;
         constructor(opts: BrowserWindowConstructorOptions) {
             this.opts = opts;
             this.handlers = {};
             this.loadFile = jest.fn<Promise<void>, [string]>(() => BrowserWindow.nextLoadResult ?? Promise.resolve());
+            this.on = jest.fn((ev, cb) => {
+                this.handlers[ev] = cb;
+            });
             this.once = jest.fn((ev, cb) => {
                 this.handlers[ev] = cb;
             });
             this.show = jest.fn<void, []>();
             this.focus = jest.fn<void, []>();
-            this.getTitle = () => opts.title;
             this.isDestroyed = () => false;
             BrowserWindow.created.push(this);
         }
-        static getAllWindows() {
-            return windows;
-        }
     }
     BrowserWindow.created = [];
-    BrowserWindow.windows = windows;
     BrowserWindow.nextLoadResult = null;
     return {
         Menu: { buildFromTemplate: jest.fn((tpl: MenuEntry[]) => ({ tpl })), setApplicationMenu: jest.fn() },
@@ -99,12 +95,17 @@ const setPlatform = (p: NodeJS.Platform) =>
     Object.defineProperty(process, 'platform', { value: p, configurable: true });
 
 let menuModule: typeof MenuModule;
+let appState: typeof StateModule.appState;
+/** A window as the update check sees it: only `isDestroyed` is read. */
+const listedWindow = (destroyed = false) =>
+    invalid<NonNullable<typeof appState.mainWindow>>({ isDestroyed: () => destroyed });
 
 function loadMenu() {
     jest.resetModules();
     electron = require('electron') as typeof electron;
     logger = jest.mocked(require('../../src/ts/logger') as typeof LoggerModule);
     menuModule = require('../../src/ts/ui/applicationMenu') as typeof menuModule;
+    appState = (require('../../src/ts/index/state') as typeof StateModule).appState;
 }
 
 function builtTemplate() {
@@ -201,11 +202,10 @@ describe('createApplicationMenu', () => {
 describe('Help → Check for Updates', () => {
     beforeEach(() => menuModule.createApplicationMenu());
 
-    it('passes the first live non-Logs window to AutoUpdater and logs when an update exists', async () => {
-        const logsWin = { getTitle: () => 'Logs', isDestroyed: () => false };
-        const deadWin = { getTitle: () => 'Main', isDestroyed: () => true };
-        const mainWin = { getTitle: () => 'Main', isDestroyed: () => false };
-        electron.BrowserWindow.windows.push(logsWin, deadWin, mainWin);
+    it('passes the main window to AutoUpdater and logs when an update exists', async () => {
+        const mainWin = listedWindow();
+        appState.mainWindow = mainWin;
+        appState.loginWindow = listedWindow();
         mockAutoUpdaterCheck.mockResolvedValue({ latestVersion: '9.9.9' });
         const info = jest.fn();
         const spy = logger.withCategory.mockReturnValue(invalid({ info, error: jest.fn() }));
@@ -217,6 +217,26 @@ describe('Help → Check for Updates', () => {
         expect(spy).toHaveBeenCalledWith('update');
         expect(info).toHaveBeenCalledWith('Update available from menu check:', '9.9.9');
         expect(electron.dialog.showMessageBox).not.toHaveBeenCalled();
+    });
+
+    it('falls back to the login window when there is no main window', async () => {
+        const loginWin = listedWindow();
+        appState.loginWindow = loginWin;
+        mockAutoUpdaterCheck.mockResolvedValue(null);
+
+        await helpItem('menu.checkForUpdates').click!();
+
+        expect(mockAutoUpdaterCtor).toHaveBeenCalledWith(loginWin);
+    });
+
+    it('never targets a destroyed window, nor the Logs window', async () => {
+        appState.mainWindow = listedWindow(true);
+        mockAutoUpdaterCheck.mockResolvedValue(null);
+        helpItem('menu.logs').click!();
+
+        await helpItem('menu.checkForUpdates').click!();
+
+        expect(mockAutoUpdaterCtor).toHaveBeenCalledWith(undefined);
     });
 
     it('shows the "no updates" dialog when the check returns nothing', async () => {
@@ -270,17 +290,34 @@ describe('Help → About', () => {
 describe('Help → Logs', () => {
     beforeEach(() => menuModule.createApplicationMenu());
 
-    it('focuses an existing Logs window instead of opening another', () => {
-        const existing = { getTitle: () => 'Logs', focus: jest.fn() };
-        electron.BrowserWindow.windows.push({ getTitle: () => 'Main' }, existing);
-
+    it('focuses the open Logs window instead of opening another', () => {
+        helpItem('menu.logs').click!();
         helpItem('menu.logs').click!();
 
-        expect(existing.focus).toHaveBeenCalled();
-        expect(electron.BrowserWindow.created).toHaveLength(0);
+        expect(electron.BrowserWindow.created).toHaveLength(1);
+        expect(electron.BrowserWindow.created[0].focus).toHaveBeenCalledTimes(1);
     });
 
-    it('opens a hidden, isolated Logs window and shows it once ready', async () => {
+    it('opens a new Logs window once the previous one has closed', () => {
+        helpItem('menu.logs').click!();
+        electron.BrowserWindow.created[0].handlers['closed']();
+        helpItem('menu.logs').click!();
+
+        expect(electron.BrowserWindow.created).toHaveLength(2);
+    });
+
+    it("keeps a stale window's 'closed' from clearing the current Logs window", () => {
+        helpItem('menu.logs').click!();
+        const first = electron.BrowserWindow.created[0];
+        first.handlers['closed']();
+        helpItem('menu.logs').click!();
+        first.handlers['closed']();
+        helpItem('menu.logs').click!();
+
+        expect(electron.BrowserWindow.created).toHaveLength(2);
+    });
+
+    it('opens a hidden, sandboxed, isolated Logs window and shows it once ready', async () => {
         helpItem('menu.logs').click!();
 
         expect(electron.BrowserWindow.created).toHaveLength(1);
@@ -288,7 +325,7 @@ describe('Help → Logs', () => {
         expect(win.opts).toMatchObject({
             title: 'Logs',
             show: false,
-            webPreferences: { nodeIntegration: false, contextIsolation: true },
+            webPreferences: { nodeIntegration: false, contextIsolation: true, sandbox: true },
         });
         expect(win.loadFile.mock.calls[0][0]).toMatch(/html[/\\]logs\.html$/);
         expect(win.show).not.toHaveBeenCalled();

@@ -8,12 +8,16 @@ import { bypassQuitGuard } from '../windows/quitGuard';
 import { createApplicationMenu } from '../ui/applicationMenu';
 import { appState } from './state';
 import { checkAutoLogin } from './windows';
+import { installPermissionHandlers } from './permissions';
 
 /**
  * Everything that runs once Electron has finished initialization.
  */
 async function onReady() {
     logger.withCategory('ui').info(`[App] UserData path: ${settings.getUserDataPath()}`, null);
+
+    // Before any window exists: a page must never see Electron's grant-by-default.
+    installPermissionHandlers();
 
     initializeHeaders();
 

@@ -1,5 +1,5 @@
 import type * as urlSafeModule from '../../src/ts/format/urlSafe';
-const { isSafeExternalUrl } = require('../../src/ts/format/urlSafe') as typeof urlSafeModule;
+const { isSafeExternalUrl, isOpenableLinkUrl } = require('../../src/ts/format/urlSafe') as typeof urlSafeModule;
 
 describe('isSafeExternalUrl', () => {
     test('accepts well-formed https URLs', () => {
@@ -38,5 +38,39 @@ describe('isSafeExternalUrl', () => {
         expect(isSafeExternalUrl(123)).toBe(false);
         expect(isSafeExternalUrl('')).toBe(false);
         expect(isSafeExternalUrl({})).toBe(false);
+    });
+});
+
+describe('isOpenableLinkUrl', () => {
+    test('accepts https, http and mailto links', () => {
+        expect(isOpenableLinkUrl('https://gurushots.com/x?y=1#z')).toBe(true);
+        expect(isOpenableLinkUrl('http://example.com/')).toBe(true);
+        expect(isOpenableLinkUrl('HTTP://EXAMPLE.com/')).toBe(true);
+        expect(isOpenableLinkUrl('mailto:someone@example.com?subject=Hi')).toBe(true);
+    });
+
+    test('rejects every other scheme', () => {
+        for (const url of [
+            'file:///etc/passwd',
+            'javascript:alert(1)',
+            'data:text/html,<script>alert(1)</script>',
+            'intent://scan/#Intent;scheme=x;end',
+            'ftp://example.com',
+            'tel:+371000000',
+            'blob:https://example.com/id',
+        ]) {
+            expect(isOpenableLinkUrl(url)).toBe(false);
+        }
+    });
+
+    test('rejects web URLs with embedded credentials', () => {
+        expect(isOpenableLinkUrl('https://gurushots.com@evil.com/')).toBe(false);
+        expect(isOpenableLinkUrl('http://user:pass@evil.com/')).toBe(false);
+    });
+
+    test('rejects strings that do not parse as URLs', () => {
+        expect(isOpenableLinkUrl('')).toBe(false);
+        expect(isOpenableLinkUrl('not a url')).toBe(false);
+        expect(isOpenableLinkUrl('https://')).toBe(false);
     });
 });

@@ -490,12 +490,35 @@ repeated six times is one that gets forgotten at one of them.
 
 - The login and main windows set `contextIsolation: on`, `nodeIntegration: off`, `webSecurity: on`
   and `sandbox: on` explicitly (`index/windows.ts`, after any caller-supplied preferences so a caller
-  can't override them). The Logs window (`ui/applicationMenu.ts`) sets `contextIsolation` and
-  `nodeIntegration` and relies on Electron's defaults for `sandbox` and `webSecurity`. The renderer is exposed only `window.api` via `contextBridge`, never
+  can't override them). The Logs window (`ui/applicationMenu.ts`) sets `contextIsolation`,
+  `nodeIntegration` and `sandbox` explicitly and relies on Electron's default for `webSecurity`; the
+  menu keeps one reference to it, focuses it when open and clears it on `closed`. The renderer is exposed only `window.api` via `contextBridge`, never
   `ipcRenderer`. Regressing context-isolation / node-integration / sandbox is a classic severe-vuln class.
-- A defense-in-depth **sender-frame trust check** (`isTrustedSender`, `ipc/registerHandlers.ts`) refuses
-  any invoke from a non-main-frame or non-`file://` origin, and is reused by the manual `ipcMain.on`
-  channels.
+- A defense-in-depth **sender-frame trust check** (`isTrustedSender`, `ipc/registerHandlers.ts`) has
+  these rules: no Electron event at all (a direct call from the CLI, Capacitor, the web shell or a
+  test) is trusted; an event with no `senderFrame`, or a frame whose `url` is not a string, is refused;
+  a frame that is not the window's main frame is refused; the main frame is trusted only when its URL
+  starts with `file://`; anything that throws while being inspected is refused. It does not check that
+  the file lies inside the app, so a packaged or portable layout can't lock itself out — the navigation
+  guard below is what keeps a window on the app's own pages. The check is reused by the manual
+  `ipcMain.on` channels, and its refusal log line carries the sender URL.
+- **Navigation guard** (`index/navigationGuard.ts`, registered in `index.ts` on `web-contents-created`
+  so it covers every window): no window opens another — `setWindowOpenHandler` always denies, and hands
+  the URL to the system (`shell.openExternal`) only when `isOpenableLinkUrl` (`format/urlSafe.ts`)
+  accepts it: `https:`/`http:` without userinfo, or `mailto:`. `will-navigate` and `will-redirect` let a
+  window stay on its current URL (reload) or move to an app page (`isAppFileUrl`, `appFileUrl.ts`: a
+  `file:` URL below `src/html`, compared with the platform's path rules — case-insensitive on Windows,
+  another drive or a UNC share rejected); any other target is cancelled and then opened externally if
+  openable, else logged as refused. Challenge `welcome_message` links (`sanitizeWelcomeMessage`) rely on
+  this: they never load in an app window.
+- **Permission handlers** (`index/permissions.ts`, installed in `onReady` before the first window): on
+  the default session and on `persist:gurushots`, only `notifications` is granted (the deadline
+  notifier), and only when the requesting `webContents.getURL()` starts with `file:`. Checks are judged
+  on that URL, never on `requestingOrigin` (always `file:///` for a file page), and a check with no
+  web contents is denied. Every denial is logged.
+- **CSP**: the Electron pages (`app.html`, `login.html`, `logs.html`) and the web shell page use
+  `connect-src 'self'`; the renderer makes no fetch/XHR to a remote host (all network calls run in the
+  main process), and remote images load through `img-src https:`. The Capacitor page carries no CSP.
 - The settings/token file is written mode `0o600` — but **only at creation. A pre-existing or
   backup-restored file keeps whatever mode it already had** (the source says as much); don't state 0600 as
   an always-guarantee.

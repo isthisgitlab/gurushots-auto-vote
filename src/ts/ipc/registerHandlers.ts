@@ -54,21 +54,33 @@ export type IpcHandlerMap = Record<string, IpcReplyFn>;
 
 /**
  * @param event - Null/undefined on a
- *   direct (non-Electron) invocation.
+ *   direct (non-Electron) invocation, which is trusted. An Electron event is
+ *   trusted only when its sending frame is the window's main frame and local.
  */
 const isTrustedSender = (event: IpcMainInvokeEvent | IpcMainEvent | null | undefined): boolean => {
+    // Direct invocation without an Electron event (CLI, Capacitor, web shell, tests).
+    if (!event) return true;
     try {
         // Read senderFrame inside the try: Electron's getter throws when the sending frame
         // has already been disposed (renderer navigated or closed while the message was in
         // flight). Outside the try that propagated as an uncaught exception in the main
         // process — a crash rather than the refusal this function is supposed to fall back to.
-        const frame = event?.senderFrame;
-        // Direct invocation without an Electron event (tests, internal reuse).
-        if (!frame) return true;
-        if (event?.sender?.mainFrame && frame !== event.sender.mainFrame) return false;
-        return typeof frame.url !== 'string' || frame.url.startsWith('file://');
+        const frame = event.senderFrame;
+        // A real event whose sender cannot be identified is not trusted.
+        if (!frame || typeof frame.url !== 'string') return false;
+        if (event.sender?.mainFrame && frame !== event.sender.mainFrame) return false;
+        return frame.url.startsWith('file://');
     } catch {
         return false;
+    }
+};
+
+// Where a refused message came from, for the log. Reading a disposed frame throws.
+const senderUrl = (event: IpcMainInvokeEvent): string => {
+    try {
+        return event.senderFrame?.url ?? event.sender?.getURL?.() ?? '<unknown>';
+    } catch {
+        return '<unknown>';
     }
 };
 
@@ -78,10 +90,7 @@ const registerHandlers = (ipcMain: IpcMain, handlers: Record<string, IpcHandler>
             if (!isTrustedSender(event)) {
                 logger
                     .withCategory('api')
-                    .warning(
-                        `Refused IPC '${channel}' from untrusted frame ${event?.senderFrame?.url ?? '<unknown>'}`,
-                        null,
-                    );
+                    .warning(`Refused IPC '${channel}' from untrusted frame ${senderUrl(event)}`, null);
                 return { success: false as const, error: 'Refused: untrusted sender' };
             }
             return invokeHandler(impl, event, args);

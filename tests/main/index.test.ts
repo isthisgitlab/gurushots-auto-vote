@@ -23,6 +23,8 @@ import type * as settingsWatcherModule from '../../src/ts/windows/settingsWatche
 import type * as backgroundActivityModule from '../../src/ts/windows/backgroundActivity';
 import type * as quitGuardModule from '../../src/ts/windows/quitGuard';
 import type * as applicationMenuModule from '../../src/ts/ui/applicationMenu';
+import type * as navigationGuardModule from '../../src/ts/index/navigationGuard';
+import type * as permissionsModule from '../../src/ts/index/permissions';
 import { invalid } from '../helpers/invalid';
 
 /** An event / IPC / process listener the fakes record by name. */
@@ -72,6 +74,7 @@ interface FakeElectron {
     dialog: { showMessageBox: jest.MockedFunction<Dialog['showMessageBox']> };
     powerMonitor: { handlers: Record<string, Listener>; on: jest.Mock<void, [string, Listener]> };
     ipcMain: { handlers: Record<string, Listener>; on: jest.Mock<void, [string, Listener]> };
+    shell: { openExternal: jest.Mock<Promise<void>, [string]> };
 }
 
 /** The logger mock: the real surface plus the shared category logger it exposes as `cat`. */
@@ -96,6 +99,8 @@ interface LoadedMocks {
     bg: jest.MaybeMockedDeep<typeof backgroundActivityModule>;
     quitGuard: jest.MaybeMockedDeep<typeof quitGuardModule>;
     menu: jest.MaybeMockedDeep<typeof applicationMenuModule>;
+    navigationGuard: jest.MaybeMockedDeep<typeof navigationGuardModule>;
+    permissions: jest.MaybeMockedDeep<typeof permissionsModule>;
     cat: jest.MaybeMockedDeep<CategoryLogger>;
 }
 
@@ -182,6 +187,7 @@ jest.mock('electron', (): FakeElectron => {
                 ipcHandlers[ch] = cb;
             }),
         },
+        shell: { openExternal: jest.fn<Promise<void>, [string]>(() => Promise.resolve()) },
     };
 });
 
@@ -231,6 +237,8 @@ jest.mock('../../src/ts/windows/quitGuard', () => ({
     resetQuitGuard: jest.fn(),
 }));
 jest.mock('../../src/ts/ui/applicationMenu', () => ({ createApplicationMenu: jest.fn() }));
+jest.mock('../../src/ts/index/navigationGuard', () => ({ register: jest.fn() }));
+jest.mock('../../src/ts/index/permissions', () => ({ installPermissionHandlers: jest.fn() }));
 jest.mock('../../src/ts/translations/index', () => ({ translationManager: { t: (k: string) => k } }));
 
 const originalPlatform = process.platform;
@@ -270,6 +278,8 @@ function load({ lock = true, whenReady }: { lock?: boolean; whenReady?: () => Pr
         bg: require('../../src/ts/windows/backgroundActivity') as typeof backgroundActivityModule,
         quitGuard: require('../../src/ts/windows/quitGuard') as typeof quitGuardModule,
         menu: require('../../src/ts/ui/applicationMenu') as typeof applicationMenuModule,
+        navigationGuard: require('../../src/ts/index/navigationGuard') as typeof navigationGuardModule,
+        permissions: require('../../src/ts/index/permissions') as typeof permissionsModule,
     });
     m.cat = m.logger.cat;
     require('../../src/ts/index');
@@ -329,6 +339,16 @@ describe('module bootstrap', () => {
         await flush();
     });
 
+    it('installs the navigation guard on the app before startup begins', async () => {
+        load();
+        expect(m.navigationGuard.register).toHaveBeenCalledTimes(1);
+        expect(m.navigationGuard.register).toHaveBeenCalledWith(m.app, m.electron.shell);
+        expect(m.navigationGuard.register.mock.invocationCallOrder[0]).toBeLessThan(
+            m.app.whenReady.mock.invocationCallOrder[0],
+        );
+        await flush();
+    });
+
     it('exposes live window / updater accessors to the update and misc IPC modules', async () => {
         load();
         await flush();
@@ -377,6 +397,7 @@ describe('startup (whenReady)', () => {
         expect(m.settings.seedIntentProfiles).toHaveBeenCalled();
         expect(m.logger.cleanup).toHaveBeenCalled();
         expect(m.menu.createApplicationMenu).toHaveBeenCalled();
+        expect(m.permissions.installPermissionHandlers).toHaveBeenCalledTimes(1);
         expect(m.AutoUpdater).toHaveBeenCalledWith();
         expect(loginWin()).toBeDefined();
         expect(mainWin()).toBeUndefined();

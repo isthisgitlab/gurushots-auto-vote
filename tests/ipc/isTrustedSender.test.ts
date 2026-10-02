@@ -7,7 +7,9 @@
  * which is why it is exported.
  *
  * The rules it encodes:
- *   - no Electron event at all (direct invocation from tests or internal reuse) is trusted
+ *   - no Electron event at all (direct invocation from the CLI, Capacitor, the web shell or
+ *     tests) is trusted
+ *   - an Electron event whose sending frame is missing, or has no string url, is refused
  *   - a frame that is not the window's main frame is refused, so an embedded iframe cannot
  *     drive privileged channels
  *   - the main frame is trusted only when it is local (file://)
@@ -33,7 +35,11 @@ describe('isTrustedSender', () => {
     test('trusts a call with no event (direct invocation)', () => {
         expect(isTrustedSender(undefined)).toBe(true);
         expect(isTrustedSender(null)).toBe(true);
-        expect(isTrustedSender(invalid({}))).toBe(true);
+    });
+
+    test('refuses an Electron event without a sending frame', () => {
+        expect(isTrustedSender(invalid({}))).toBe(false);
+        expect(isTrustedSender(invalid({ senderFrame: null }))).toBe(false);
     });
 
     test('trusts the main frame when it is local', () => {
@@ -54,10 +60,8 @@ describe('isTrustedSender', () => {
         expect(isTrustedSender(invalid(event))).toBe(false);
     });
 
-    test('trusts a frame whose url is not a string', () => {
-        // Electron can hand back a frame without a usable url; the main-frame identity
-        // check above has already done the meaningful work in that case.
-        expect(isTrustedSender(mainFrame(undefined))).toBe(true);
+    test('refuses a frame whose url is not a string', () => {
+        expect(isTrustedSender(mainFrame(undefined))).toBe(false);
     });
 
     test('refuses when inspecting the frame throws', () => {
@@ -121,9 +125,65 @@ describe('registerHandlers applies the check to every channel', () => {
 });
 
 describe('registerHandlers refusal logging', () => {
+    const channelFor = (warning: jest.Mock<void, [string, unknown]>) => {
+        const logger = jest.mocked(require('../../src/ts/logger') as typeof loggerModule);
+        const originalImpl = logger.withCategory.getMockImplementation();
+        logger.withCategory.mockImplementation(() => invalid({ warning }));
+        const channels = new Map<string, ChannelImpl>();
+        registerHandlers(invalid({ handle: (channel: string, fn: ChannelImpl) => channels.set(channel, fn) }), {
+            'do-thing': jest.fn(),
+        });
+        return { run: channels.get('do-thing')!, restore: () => logger.withCategory.mockImplementation(originalImpl) };
+    };
+
+    test('logs the sender url of a refused main frame', async () => {
+        const warning = jest.fn<void, [string, unknown]>();
+        const { run, restore } = channelFor(warning);
+        try {
+            await run(mainFrame('https://evil.example/page'));
+            expect(warning).toHaveBeenCalledWith(
+                "Refused IPC 'do-thing' from untrusted frame https://evil.example/page",
+                null,
+            );
+        } finally {
+            restore();
+        }
+    });
+
+    test('logs the webContents url when the event has no sending frame', async () => {
+        const warning = jest.fn<void, [string, unknown]>();
+        const { run, restore } = channelFor(warning);
+        try {
+            await run(invalid({ sender: { getURL: () => 'file:///other.html' } }));
+            expect(warning).toHaveBeenCalledWith(
+                "Refused IPC 'do-thing' from untrusted frame file:///other.html",
+                null,
+            );
+        } finally {
+            restore();
+        }
+    });
+
+    test('still refuses and logs <unknown> when reading the sender throws', async () => {
+        const warning = jest.fn<void, [string, unknown]>();
+        const { run, restore } = channelFor(warning);
+        try {
+            const event = {
+                get senderFrame() {
+                    throw new Error('frame disposed');
+                },
+            };
+            const result = await run(invalid(event));
+            expect(result).toEqual({ success: false, error: 'Refused: untrusted sender' });
+            expect(warning).toHaveBeenCalledWith("Refused IPC 'do-thing' from untrusted frame <unknown>", null);
+        } finally {
+            restore();
+        }
+    });
+
     test('refuses a non-main frame that has no url (logged as <unknown>)', async () => {
         const logger = jest.mocked(require('../../src/ts/logger') as typeof loggerModule);
-        const warning = jest.fn();
+        const warning = jest.fn<void, [string, unknown]>();
         // Swap (then restore) the setup-mock implementation rather than spyOn +
         // mockRestore, which would strip it for every later test.
         const originalImpl = logger.withCategory.getMockImplementation();

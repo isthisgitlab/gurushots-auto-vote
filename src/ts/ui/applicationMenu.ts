@@ -3,6 +3,7 @@ import { Menu, dialog, app, BrowserWindow } from 'electron';
 import * as logger from '../logger';
 import { translationManager } from '../translations/index';
 import { AutoUpdater } from '../services/AutoUpdater';
+import { appState } from '../index/state';
 import * as packageInfo from '../../../package.json';
 
 import type { MenuItemConstructorOptions } from 'electron';
@@ -163,11 +164,15 @@ function createApplicationMenu() {
     Menu.setApplicationMenu(menu);
 }
 
+// The open Logs window; cleared when it closes.
+let logsWindow: BrowserWindow | null = null;
+
 // Check for updates from menu
 async function checkForUpdatesFromMenu() {
     try {
-        // Get the main window to send events to
-        const mainWindow = BrowserWindow.getAllWindows().find((win) => win.getTitle() !== 'Logs' && !win.isDestroyed());
+        // The window update events go to: the main window, or the login window before login.
+        const target = appState.mainWindow ?? appState.loginWindow;
+        const mainWindow = target && !target.isDestroyed() ? target : undefined;
 
         const autoUpdater = new AutoUpdater(mainWindow);
         const updateInfo = await autoUpdater.checkForUpdates(true); // Force check
@@ -214,20 +219,19 @@ function updateMenuTranslations() {
 
 // Open logs window
 function openLogsWindow() {
-    // Check if logs window already exists
-    const existingWindow = BrowserWindow.getAllWindows().find((win) => win.getTitle() === 'Logs');
-    if (existingWindow) {
-        existingWindow.focus();
+    if (logsWindow) {
+        logsWindow.focus();
         return;
     }
 
-    const logsWindow = new BrowserWindow({
+    const win = new BrowserWindow({
         width: 1000,
         height: 700,
         title: 'Logs',
         webPreferences: {
             nodeIntegration: false,
             contextIsolation: true,
+            sandbox: true,
             // Same bundle as the main windows (scripts/build-react.ts): the
             // sandboxed preload cannot require() the relative channel manifest,
             // so the raw src/ts/preload.ts would leave this window without window.api.
@@ -235,13 +239,17 @@ function openLogsWindow() {
         },
         show: false,
     });
+    logsWindow = win;
+    win.on('closed', () => {
+        if (logsWindow === win) logsWindow = null;
+    });
 
-    logsWindow.loadFile(appPath('src', 'html', 'logs.html')).catch((error) => {
+    win.loadFile(appPath('src', 'html', 'logs.html')).catch((error) => {
         logger.withCategory('ui').error('Failed to load logs window content:', error);
     });
 
-    logsWindow.once('ready-to-show', () => {
-        logsWindow.show();
+    win.once('ready-to-show', () => {
+        win.show();
     });
 }
 

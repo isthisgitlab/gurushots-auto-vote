@@ -1,4 +1,4 @@
-import { app, ipcMain } from 'electron';
+import { app, ipcMain, shell } from 'electron';
 import * as settings from './settings';
 import * as logger from './logger';
 import { clearAuthToken } from './services/auth';
@@ -17,6 +17,7 @@ import { bypassQuitGuard } from './windows/quitGuard';
 import { appState } from './index/state';
 import { holdForOpenBoosts, createLoginWindow, createMainWindow } from './index/windows';
 import { onReady } from './index/startup';
+import { register as registerNavigationGuard } from './index/navigationGuard';
 
 import type { AutoUpdater } from './services/AutoUpdater';
 
@@ -32,6 +33,10 @@ app.commandLine.appendSwitch('disable-features', 'ServiceWorker');
 // settings store, API calls go through Node), so skip the real Keychain.
 // No-op on other platforms.
 app.commandLine.appendSwitch('use-mock-keychain');
+
+// Applies to every web contents created from here on, so it is registered at
+// module load, before any window exists.
+registerNavigationGuard(app, shell);
 
 // Enforce a single running instance. A second launch would share the same
 // userData dir and fight over Chromium's LevelDB locks (the source of the
