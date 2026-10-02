@@ -23,9 +23,9 @@ const payloadKey = (challenges: Challenge[]): string | null => {
 };
 
 /**
- * Cleanup stale settings and metadata for the challenges now on screen.
- * Stale settings are left alone while the voting pass runs, since it owns
- * metadata cleanup then.
+ * Prunes stale per-challenge data against the challenges now on screen:
+ * stale challenge settings only while autovote is stopped, stale metadata on
+ * every call.
  */
 const cleanupStale = async (challenges: Challenge[], autovoteRunning: boolean): Promise<void> => {
     if (challenges.length === 0) return;
@@ -60,8 +60,8 @@ const cleanupStale = async (challenges: Challenge[], autovoteRunning: boolean): 
  * is what tells the two apart; the null check guards a genuinely absent response.
  *
  * @param autovoteRunning - whether the autovote loop is
- *   currently running; stale-settings cleanup is skipped while it is (the
- *   voting pass owns metadata cleanup then). Threaded down as a prop from
+ *   currently running; stale challenge settings are not pruned while it is
+ *   (stale metadata still is). Threaded down as a prop from
  *   ChallengesProvider — no window.* side-channel.
  */
 export function useActiveChallenges(autovoteRunning: boolean = false): {

@@ -352,12 +352,17 @@ describe('useActiveChallenges unserialisable payload', () => {
         });
         expect(result.current.data).toBe(first);
     });
+});
 
-    test('a background refetch (skipCleanup) applies the data without any cleanup', async () => {
+describe('useActiveChallenges stale cleanup', () => {
+    test('a refetch with skipCleanup applies the data without any cleanup', async () => {
         mockApi.getSettings.mockResolvedValue(invalid({ token: 'tok' }));
         mockApi.getActiveChallenges.mockResolvedValue(invalid({ challenges: [{ id: 7 }] }));
         const { result } = renderHook(() => useActiveChallenges());
         await waitFor(() => expect(mockApi.cleanupStaleMetadata).toHaveBeenCalledTimes(1));
+        // With autovote stopped, a normal load prunes both stale settings and metadata.
+        expect(mockApi.cleanupStaleChallengeSetting).toHaveBeenCalledWith(['7']);
+        expect(mockApi.cleanupStaleMetadata).toHaveBeenCalledWith(['7']);
         mockApi.cleanupStaleChallengeSetting.mockClear();
         mockApi.cleanupStaleMetadata.mockClear();
 
