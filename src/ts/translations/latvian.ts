@@ -30,7 +30,7 @@ export const errors = {
     reload: 'Pārlādēt',
     fetchFailed: 'Neizdevās sazināties ar GuruShots — mēģinām vēlreiz automātiski.',
     actionInvalidArgs:
-        'Darbību neizdevās izpildīt: izaicinājuma vai foto identifikators nav derīgs. Pārlādē logu un mēģini vēlreiz.',
+        'Darbību neizdevās izpildīt: izaicinājuma vai foto identifikators nav derīgs. Pārlādē lietotni un mēģini vēlreiz.',
 };
 // First-run onboarding
 export const onboarding = {

@@ -9,6 +9,9 @@
 import * as logger from '../logger';
 import { getMiddleware } from '../apiFactory';
 
+// What the IPC handlers' 'invalid-args' refusal means for the CLI user.
+const INVALID_ID_TEXT = 'Invalid challenge or image id.';
+
 /**
  * True when a token is present. On miss, logs the standard "login first"
  * guidance; the caller decides what to return/exit.
@@ -77,4 +80,4 @@ const requireChallenge = ({ challengeId }: { challengeId: string | null }, usage
     return challengeId;
 };
 
-export { ensureAuthenticated, requireProfileArgs, requireChallenge };
+export { ensureAuthenticated, requireProfileArgs, requireChallenge, INVALID_ID_TEXT };

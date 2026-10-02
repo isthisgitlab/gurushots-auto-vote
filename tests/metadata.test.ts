@@ -423,12 +423,43 @@ describe('validation of stored metadata', () => {
 
         expect(Object.getPrototypeOf(result)).toBe(Object.prototype);
         expect(Object.keys(result).sort()).toEqual(['888', 'updateCheck']);
-        expect(({} as { exposureBump?: number }).exposureBump).toBeUndefined();
+        expect(Object.hasOwn(result, '__proto__')).toBe(false);
         expect(writes).toHaveLength(1);
         expect(Object.keys(writes[0]).sort()).toEqual(['888', 'updateCheck']);
         expect(warnings()).toEqual([
             expect.stringContaining('reserved key "__proto__"'),
             expect.stringContaining('reserved key "constructor"'),
+            'Cleaned up 2 invalid metadata entries total',
+        ]);
+    });
+
+    test('one reserved key logs its own warning and no summary line', () => {
+        fs.existsSync.mockReturnValue(true);
+        fs.readFileSync.mockReturnValue(
+            '{"updateCheck":{"lastCheck":null,"skipVersion":null},"constructor":{"exposureBump":6},"888":{"exposureBump":1}}',
+        );
+        captureWrites();
+
+        const result = metadata.loadMetadata();
+
+        expect(Object.keys(result).sort()).toEqual(['888', 'updateCheck']);
+        expect(warnings()).toEqual([expect.stringContaining('reserved key "constructor"')]);
+    });
+
+    test('a reserved key and an invalid entry are both counted in the summary', () => {
+        fs.existsSync.mockReturnValue(true);
+        fs.readFileSync.mockReturnValue(
+            '{"updateCheck":{"lastCheck":null,"skipVersion":null},"__proto__":{"exposureBump":5},"777":null,"888":{"exposureBump":1}}',
+        );
+        captureWrites();
+
+        const result = metadata.loadMetadata();
+
+        expect(Object.keys(result).sort()).toEqual(['888', 'updateCheck']);
+        expect(warnings()).toEqual([
+            // Integer-like keys enumerate first, so the invalid 777 precedes "__proto__".
+            expect.stringContaining('Removing invalid metadata entry for challenge 777'),
+            expect.stringContaining('reserved key "__proto__"'),
             'Cleaned up 2 invalid metadata entries total',
         ]);
     });

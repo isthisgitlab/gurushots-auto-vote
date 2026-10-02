@@ -172,6 +172,26 @@ describe('boost / turbo / fill fallbacks', () => {
     });
 });
 
+describe('invalid-args refusals', () => {
+    test('boost --image prints the invalid-id text, not the raw code', async () => {
+        h['apply-boost-to-entry'].mockResolvedValue(invalid({ success: false, error: 'invalid-args' }));
+        await actions.boostChallenge('111', { imageId: 'img' });
+        expect(msgs('error')).toEqual(['Invalid challenge or image id.']);
+    });
+
+    test('turbo prints the invalid-id text, not the raw code', async () => {
+        h['play-auto-turbo'].mockResolvedValue(invalid({ success: false, error: 'invalid-args' }));
+        await actions.turboChallenge('111');
+        expect(msgs('error')).toEqual(['Invalid challenge or image id.']);
+    });
+
+    test('fill prints the invalid-id text, not the raw code', async () => {
+        h['fill-challenge-now'].mockResolvedValue(invalid({ success: false, error: 'invalid-args' }));
+        await actions.fillChallenge('111');
+        expect(msgs('error')).toEqual(['Invalid challenge or image id.']);
+    });
+});
+
 describe('currency spends', () => {
     test('the cost line says so when the balance cannot be read', async () => {
         h['get-bankroll'].mockResolvedValue(invalid({ success: false }));

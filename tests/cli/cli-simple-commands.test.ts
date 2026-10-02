@@ -334,6 +334,13 @@ describe('join', () => {
         expect(msgs(level).some((m) => m.includes(text))).toBe(true);
     });
 
+    test('an invalid-args refusal prints the invalid-id text, not the retry fallback', async () => {
+        handlers['join-challenge'].mockResolvedValue(invalid({ success: false, error: 'invalid-args' }));
+        await joinChallengeCmd('7');
+        expect(msgs('error')).toEqual(['Invalid challenge or image id.']);
+        expect(msgs('debug')).toEqual([]);
+    });
+
     test('an unknown status is logged at debug for diagnosis', async () => {
         handlers['join-challenge'].mockResolvedValue(invalid({ status: 'weird' }));
         await joinChallengeCmd('7');

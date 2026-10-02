@@ -11,7 +11,7 @@
  */
 
 import * as logger from '../../logger';
-import { ensureAuthenticated } from '../guards';
+import { ensureAuthenticated, INVALID_ID_TEXT } from '../guards';
 import { getMiddleware } from '../../apiFactory';
 import { findActiveChallenge } from '../../services/findActiveChallenge';
 
@@ -81,7 +81,7 @@ const boostChallenge = async (challengeId: string, { imageId = null }: { imageId
             if (result?.success) {
                 logger.withCategory('boost').success(`Boost applied to image ${imageId} in "${challenge.title}"`);
             } else {
-                logger.withCategory('boost').error(result?.error || 'Failed to apply boost');
+                logger.withCategory('boost').error(actionError(result, 'Failed to apply boost'));
             }
             return;
         }
@@ -113,7 +113,7 @@ const turboChallenge = async (challengeId: string) => {
         if (result?.success) {
             logger.withCategory('turbo').success(`Turbo earned on "${challenge.title}"`);
         } else {
-            logger.withCategory('turbo').error(result?.error || 'Turbo not earned');
+            logger.withCategory('turbo').error(actionError(result, 'Turbo not earned'));
         }
     } catch (err) {
         logger.withCategory('turbo').error(`Failed to play turbo: ${errorMessage(err) || err}`);
@@ -138,7 +138,7 @@ const fillChallenge = async (challengeId: string, { all = false }: { all?: boole
                     `${result.message || `Submitted photos to "${challenge.title}"`} (submitted ${result.submitted ?? 0}, skipped ${result.skipped ?? 0})`,
                 );
         } else {
-            logger.withCategory('autoFill').error(result?.error || 'Failed to submit photos');
+            logger.withCategory('autoFill').error(actionError(result, 'Failed to submit photos'));
         }
     } catch (err) {
         logger.withCategory('autoFill').error(`Failed to submit photos: ${errorMessage(err) || err}`);
@@ -160,12 +160,17 @@ const OUTCOME_TEXT: Record<string, string> = {
     'stale-candidate':
         'The replacement photo changed since the preview. Nothing was spent — re-run without --yes to see the new suggestion.',
     busy: 'Another currency action is still running. Try again in a moment.',
-    'invalid-args': 'Invalid challenge or image id.',
+    'invalid-args': INVALID_ID_TEXT,
     'api-failed': 'GuruShots rejected the request. Nothing further was attempted — check the log for details.',
 };
 
 const describeOutcome = (result: { outcome?: string | null; error?: string | null } | null | undefined): string =>
     OUTCOME_TEXT[result?.outcome ?? ''] || result?.error || 'Action failed';
+
+// The line for a failed boost / turbo / fill reply: the handlers' 'invalid-args'
+// code becomes its wording, any other error is already a message.
+const actionError = (result: { error?: string | null } | null | undefined, fallback: string): string =>
+    result?.error === 'invalid-args' ? INVALID_ID_TEXT : result?.error || fallback;
 
 const CURRENCY_LABEL = { keys: 'key', swaps: 'swap', fills: 'fill' };
 

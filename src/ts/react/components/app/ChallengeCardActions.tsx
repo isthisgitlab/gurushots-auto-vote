@@ -2,6 +2,7 @@ import { useTranslation } from '@/contexts/TranslationContext';
 import { useTurbo } from '@/api/useTurbo';
 import { useFillChallenge } from '@/api/useFillChallenge';
 import { useAutoClear } from '@/hooks/useAutoClear';
+import { ipcErrorText } from '@/api/ipcErrorText';
 import { StrokeIcon, ICON_PATHS } from '@/components/ui/StrokeIcon';
 import { ActionButton } from '@/components/ui/ActionButton';
 import { VoteButton } from './VoteButton';
@@ -116,11 +117,13 @@ export function useChallengeCardActions({
     onCurrencySpent?: () => void;
 }) {
     const { t } = useTranslation();
-    const { playAutoTurbo, loading: playingTurbo, error: turboError, clearError: clearTurboError } = useTurbo();
-    const { fillNow, loading: filling, error: fillError, clearError: clearFillError } = useFillChallenge();
+    const { playAutoTurbo, loading: playingTurbo, error: turboFailure, clearError: clearTurboError } = useTurbo();
+    const { fillNow, loading: filling, error: fillFailure, clearError: clearFillError } = useFillChallenge();
 
-    useAutoClear(turboError, clearTurboError, TURBO_ERROR_DISPLAY_MS);
-    useAutoClear(fillError, clearFillError, FILL_ERROR_DISPLAY_MS);
+    useAutoClear(turboFailure, clearTurboError, TURBO_ERROR_DISPLAY_MS);
+    useAutoClear(fillFailure, clearFillError, FILL_ERROR_DISPLAY_MS);
+    const turboError = ipcErrorText(turboFailure, t);
+    const fillError = ipcErrorText(fillFailure, t);
 
     const handlePlayAutoTurbo = async () => {
         const result = await playAutoTurbo(challenge.id, challenge.title);

@@ -1,13 +1,13 @@
 import * as settings from '../../settings';
 import { errorResult } from '../errorResult';
-import { isIdArg, invalidArgs } from '../isIdArg';
+import { isIdArg } from '../isIdArg';
 import * as logger from '../../logger';
 import * as apiFactory from '../../apiFactory';
 import * as auth from '../../services/auth';
 import { isAutoJoinActive } from '../../services/joinChallenges';
 import { getAutoClaimStatus } from '../../services/autoClaim';
 import { rememberChallenges } from '../../windows/quitGuard';
-import { sanitizeForLog } from './shared';
+import { sanitizeForLog, refuseInvalidArgs } from './shared';
 
 import type { IpcReplyFn } from '../registerHandlers';
 import type { joinChallengeSingle } from '../../services/joinChallenges';
@@ -46,7 +46,7 @@ const handleGetActiveChallenges = (async (event: unknown, token: string): Promis
 const handleAuthenticate = (async (event: unknown, username: string, password: string, isMock: boolean) => {
     logger
         .withCategory(logger.CATEGORIES.AUTHENTICATION)
-        .info(`🔐 Authentication request received - Mock: ${isMock}, Username: ${username}`, null);
+        .info(`🔐 Authentication request received - Mock: ${isMock}, Username: ${sanitizeForLog(username)}`, null);
     try {
         // Route through the factory (no direct api/mock imports) and the
         // shared token normalizer. The explicit isMock arg from the login
@@ -135,7 +135,7 @@ const handleGetMemberChallenges = (async (event?: unknown, filter?: string) => {
  * @param spendCoins - Only `true` authorizes a paid join.
  */
 const handleJoinChallenge = (async (event: unknown, challengeId: string | number, spendCoins?: boolean) => {
-    if (!isIdArg(challengeId)) return invalidArgs;
+    if (!isIdArg(challengeId)) return refuseInvalidArgs('join', 'join-challenge');
     const safeId = sanitizeForLog(challengeId);
     try {
         logger

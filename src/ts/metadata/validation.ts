@@ -217,7 +217,9 @@ const validateChallengeEntries = (metadata: Record<string, unknown>, validatedMe
         if (!validation.isValid) {
             logger
                 .withCategory('challenges')
-                .warning(`Removing invalid metadata entry for challenge ${challengeId}: ${validation.reason}`);
+                .warning(
+                    `Removing invalid metadata entry for challenge ${oneLineId(challengeId)}: ${validation.reason}`,
+                );
             removedCount++;
             changed = true;
             continue;

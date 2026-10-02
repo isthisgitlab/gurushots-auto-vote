@@ -16,8 +16,10 @@ import { errorMessage } from '../errorMessage';
 // Translated text in the main process's current language.
 const t = (key: string) => translationManager.t(key);
 
-// Each conditional spread below is typed on its own: the checker does not carry
-// the template's element type into a spread's array literal.
+// The platform-conditional menu parts are functions with their own return type,
+// spread in by the template; windowMenu's inline conditional spread is cast to
+// its element type instead, because the checker does not carry the template's
+// element type into a spread's array literal.
 const macAppMenu = (): MenuItemConstructorOptions[] => [
     {
         label: app.getName(),

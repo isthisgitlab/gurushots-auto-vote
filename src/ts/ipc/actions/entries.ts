@@ -1,11 +1,11 @@
 import * as settings from '../../settings';
 import { errorResult } from '../errorResult';
-import { isIdArg, invalidArgs } from '../isIdArg';
+import { isIdArg } from '../isIdArg';
 import * as logger from '../../logger';
 import * as apiFactory from '../../apiFactory';
 import * as auth from '../../services/auth';
 import * as autoFill from '../../services/autoFill';
-import { sanitizeForLog, fetchLiveChallenge } from './shared';
+import { sanitizeForLog, refuseInvalidArgs, fetchLiveChallenge } from './shared';
 
 import type { IpcReplyFn } from '../registerHandlers';
 
@@ -28,7 +28,7 @@ const fillResponse = (result: { success: boolean; submitted: number; skipped: nu
  * @param mode - anything other than `'all'` means `'one'`.
  */
 const handleFillChallengeNow = (async (event: unknown, challengeId: string | number, mode: 'one' | 'all') => {
-    if (!isIdArg(challengeId)) return invalidArgs;
+    if (!isIdArg(challengeId)) return refuseInvalidArgs('autoFill', 'fill-challenge-now');
     const safeChallengeId = sanitizeForLog(challengeId);
     const safeMode = mode === 'all' ? 'all' : 'one';
     try {
@@ -63,7 +63,7 @@ const handleFillChallengeNow = (async (event: unknown, challengeId: string | num
 const logBoostRequest = (message: string) => logger.withCategory(logger.CATEGORIES.VOTING).info(message, null);
 
 const handleApplyBoostToEntry = (async (event: unknown, challengeId: string | number, imageId: string) => {
-    if (!isIdArg(challengeId) || !isIdArg(imageId)) return invalidArgs;
+    if (!isIdArg(challengeId) || !isIdArg(imageId)) return refuseInvalidArgs('voting', 'apply-boost-to-entry');
     // Sanitize before logging (matches the sibling turbo/fill handlers) —
     // these args can be arbitrary user input via the CLI `boost --image=`.
     const safeChallengeId = sanitizeForLog(challengeId);

@@ -1,7 +1,10 @@
 /**
- * IPC handlers for direct user-triggered actions: authenticate,
- * play-auto-turbo, apply-turbo-to-entry, apply-boost-to-entry, and
- * get-active-challenges.
+ * IPC handlers for direct user-triggered actions and account reads, one module
+ * per area under ./actions: authenticate, get-active-challenges,
+ * get-auto-claim-status, get-bankroll, get-auto-join-active,
+ * get-member-challenges and join-challenge (account.ts); play-auto-turbo and
+ * apply-turbo-to-entry (turbo.ts); fill-challenge-now and
+ * apply-boost-to-entry (entries.ts).
  *
  * The turbo and boost flows are kept structurally separate (different
  * sanitisation, different result shapes, different log categories) —

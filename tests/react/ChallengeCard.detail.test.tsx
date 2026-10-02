@@ -277,6 +277,14 @@ describe('earn turbo', () => {
         expect(onVoteComplete).not.toHaveBeenCalled();
     });
 
+    test('an invalid-args refusal shows the translated text, not the machine code', async () => {
+        window.api.playAutoTurbo = jest.fn().mockResolvedValue({ success: false, error: 'invalid-args' });
+        renderCard(turboChallenge({ state: 'IN_PROGRESS' }));
+        fireEvent.click(screen.getByText(/app\.earnTurbo/));
+        await waitFor(() => expect(screen.getByText('errors.actionInvalidArgs')).toBeTruthy());
+        expect(screen.queryByText('invalid-args')).toBeNull();
+    });
+
     test('offered once a TIMER cooldown has elapsed, not before', () => {
         const { unmount } = renderCard(turboChallenge({ state: 'TIMER', time_to_open: nowSec() - 5 }));
         expect(screen.getByText(/app\.earnTurbo/)).toBeTruthy();
@@ -333,6 +341,14 @@ describe('fill', () => {
         await waitFor(() => expect(screen.getByText('no photos')).toBeTruthy());
         expect(screen.getByText('+1').className).toContain('btn-error');
         expect(onVoteComplete).not.toHaveBeenCalled();
+    });
+
+    test('an invalid-args fill refusal shows the translated text, not the machine code', async () => {
+        window.api.fillChallengeNow = jest.fn().mockResolvedValue({ success: false, error: 'invalid-args' });
+        renderCard(makeChallenge());
+        fireEvent.click(screen.getByText('+1'));
+        await waitFor(() => expect(screen.getByText('errors.actionInvalidArgs')).toBeTruthy());
+        expect(screen.queryByText('invalid-args')).toBeNull();
     });
 
     test('+1 and +N are hidden while autovote runs', () => {

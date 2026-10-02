@@ -1,13 +1,13 @@
 import * as settings from '../../settings';
 import { errorResult } from '../errorResult';
-import { isIdArg, invalidArgs } from '../isIdArg';
+import { isIdArg } from '../isIdArg';
 import * as logger from '../../logger';
 import * as apiFactory from '../../apiFactory';
 import * as auth from '../../services/auth';
 import * as votingLogic from '../../services/VotingLogic';
 import { recordManualTurboWin } from '../../services/missions';
 import { claimTurboRun, releaseTurboRun } from '../../services/turboRunLock';
-import { sanitizeForLog, fetchLiveChallenge } from './shared';
+import { sanitizeForLog, refuseInvalidArgs, fetchLiveChallenge } from './shared';
 
 import type { IpcReplyFn } from '../registerHandlers';
 import type { Challenge, TurboMiniGameResult } from '../../types/gurushots';
@@ -100,7 +100,7 @@ const runManualTurbo = (async (challengeId: string | number, safeTitle: string, 
 // Independent of autovote — gives the user a way to earn a Turbo on
 // demand without enabling continuous voting.
 const handlePlayAutoTurbo = (async (event: unknown, challengeId: string | number, challengeTitle: string) => {
-    if (!isIdArg(challengeId)) return invalidArgs;
+    if (!isIdArg(challengeId)) return refuseInvalidArgs('turbo', 'play-auto-turbo');
     const safeId = sanitizeForLog(challengeId);
     const safeTitle = sanitizeForLog(challengeTitle) || `challenge ${safeId}`;
     try {
@@ -129,7 +129,7 @@ const handlePlayAutoTurbo = (async (event: unknown, challengeId: string | number
 }) satisfies IpcReplyFn;
 
 const handleApplyTurboToEntry = (async (event: unknown, challengeId: string | number, imageId: string) => {
-    if (!isIdArg(challengeId) || !isIdArg(imageId)) return invalidArgs;
+    if (!isIdArg(challengeId) || !isIdArg(imageId)) return refuseInvalidArgs('turbo', 'apply-turbo-to-entry');
     const safeChallengeId = sanitizeForLog(challengeId);
     const safeImageId = sanitizeForLog(imageId);
     try {

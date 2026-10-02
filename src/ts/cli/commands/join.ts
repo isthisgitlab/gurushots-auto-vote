@@ -6,7 +6,7 @@
  */
 
 import * as logger from '../../logger';
-import { ensureAuthenticated } from '../guards';
+import { ensureAuthenticated, INVALID_ID_TEXT } from '../guards';
 
 import type { NullEventHandlers } from '../../types/cli';
 import type * as actions_handlersModule from '../../ipc/actions.handlers';
@@ -50,6 +50,7 @@ const joinLine = (
     result: JoinOutcome | null | undefined,
     challengeId: string | number,
 ): { level: 'info' | 'error'; text: string } | null => {
+    if (result?.error === 'invalid-args') return { level: 'error', text: INVALID_ID_TEXT };
     switch (result?.status) {
         case 'joined':
             return { level: 'info', text: `✅ Joined challenge ${challengeId}.` };

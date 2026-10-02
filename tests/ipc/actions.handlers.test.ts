@@ -411,39 +411,70 @@ describe('id-taking action handlers — invalid args', () => {
         ['an object', { id: 1 }],
         ['NaN', NaN],
         ['an empty string', ''],
+        ['a blank string', '   '],
         ['a string over the id length cap', 'x'.repeat(65)],
     ];
+    const VALID_IDS: Array<[string, string | number]> = [
+        ['zero', 0],
+        ['a numeric id', 123],
+        ['a string at the id length cap', 'x'.repeat(64)],
+    ];
+    // [label, channel, log category, call with the id under test in its slot]
     const CHANNELS = [
         [
             'apply-turbo-to-entry',
+            'apply-turbo-to-entry',
+            'turbo',
             (h: Handlers, id: unknown) => h['apply-turbo-to-entry']({}, invalid<string>(id), 'i1'),
         ],
         [
             'apply-turbo-to-entry (image id)',
+            'apply-turbo-to-entry',
+            'turbo',
             (h: Handlers, id: unknown) => h['apply-turbo-to-entry']({}, '123', invalid<string>(id)),
         ],
-        ['play-auto-turbo', (h: Handlers, id: unknown) => h['play-auto-turbo']({}, invalid<string>(id), 'Title')],
-        ['fill-challenge-now', (h: Handlers, id: unknown) => h['fill-challenge-now']({}, invalid<string>(id), 'one')],
+        [
+            'play-auto-turbo',
+            'play-auto-turbo',
+            'turbo',
+            (h: Handlers, id: unknown) => h['play-auto-turbo']({}, invalid<string>(id), 'Title'),
+        ],
+        [
+            'fill-challenge-now',
+            'fill-challenge-now',
+            'autoFill',
+            (h: Handlers, id: unknown) => h['fill-challenge-now']({}, invalid<string>(id), 'one'),
+        ],
         [
             'apply-boost-to-entry',
+            'apply-boost-to-entry',
+            'voting',
             (h: Handlers, id: unknown) => h['apply-boost-to-entry']({}, invalid<string>(id), 'i1'),
         ],
         [
             'apply-boost-to-entry (image id)',
+            'apply-boost-to-entry',
+            'voting',
             (h: Handlers, id: unknown) => h['apply-boost-to-entry']({}, '123', invalid<string>(id)),
         ],
-        ['join-challenge', (h: Handlers, id: unknown) => h['join-challenge']({}, invalid<string>(id), false)],
+        [
+            'join-challenge',
+            'join-challenge',
+            'join',
+            (h: Handlers, id: unknown) => h['join-challenge']({}, invalid<string>(id), false),
+        ],
     ] as const;
 
-    describe.each(CHANNELS)('%s', (_channel, call) => {
+    describe.each(CHANNELS)('%s', (_label, channel, category, call) => {
         test.each(BAD_IDS)(
-            'refuses %s with the invalid-args code before touching auth or the API',
-            async (_label, id) => {
+            'refuses %s with the invalid-args code and one warning, before touching auth or the API',
+            async (_idLabel, id) => {
                 stubAuthGuardOk();
                 const strategy = stubStrategy({ joinChallenge: jest.fn() });
                 settings.loadSettings = jest.fn();
                 const result = await call(buildHandlers(), id);
                 expect(result).toEqual({ success: false, error: 'invalid-args' });
+                expect(logCategories('warning', `Refused ${channel}: invalid id argument`, null)).toEqual([category]);
                 expect(auth.requireAuthToken).not.toHaveBeenCalled();
                 expect(settings.loadSettings).not.toHaveBeenCalled();
                 expect(apiFactory.getApiStrategy).not.toHaveBeenCalled();
@@ -458,6 +489,54 @@ describe('id-taking action handlers — invalid args', () => {
                 expect(autoFill.fillChallengeNow).not.toHaveBeenCalled();
             },
         );
+    });
+
+    describe.each(VALID_IDS)('with %s as the challenge id', (_label, id) => {
+        const liveChallenge = (): { id: string | number; title: string; close_time: number; member: object } => ({
+            id,
+            title: 'C',
+            close_time: NOW() + 3600,
+            member: { turbo: { state: 'FREE' } },
+        });
+
+        test('play-auto-turbo plays the mini-game', async () => {
+            setToken('tok');
+            const strategy = stubStrategy({
+                getActiveChallenges: jest.fn().mockResolvedValue({ challenges: [liveChallenge()] }),
+            });
+            votingLogic.shouldPlayAutoTurbo = jest.fn().mockReturnValue(true);
+            strategy.runTurboMiniGame.mockResolvedValue({
+                played: 1,
+                correct: 1,
+                won: false,
+                flipped: 0,
+                doubleFailed: 0,
+            });
+            await buildHandlers()['play-auto-turbo']({}, id, 'Title');
+            expect(strategy.runTurboMiniGame).toHaveBeenCalledTimes(1);
+        });
+
+        test('fill-challenge-now fills the challenge', async () => {
+            stubAuthGuardOk();
+            stubStrategy({ getActiveChallenges: jest.fn().mockResolvedValue({ challenges: [liveChallenge()] }) });
+            autoFill.fillChallengeNow = jest.fn().mockResolvedValue({ success: true, submitted: 1, skipped: 0 });
+            await buildHandlers()['fill-challenge-now']({}, id, 'one');
+            expect(autoFill.fillChallengeNow).toHaveBeenCalledTimes(1);
+        });
+
+        test('apply-boost-to-entry applies the boost', async () => {
+            stubAuthGuardOk();
+            const strategy = stubStrategy({ applyBoostToEntry: jest.fn().mockResolvedValue(true) });
+            await buildHandlers()['apply-boost-to-entry']({}, id, 'i1');
+            expect(strategy.applyBoostToEntry).toHaveBeenCalledWith(id, 'i1', 'tok');
+        });
+
+        test('join-challenge joins the challenge', async () => {
+            stubAuthGuardOk();
+            const strategy = stubStrategy({ joinChallenge: jest.fn().mockResolvedValue({ status: 'joined' }) });
+            await buildHandlers()['join-challenge']({}, id, false);
+            expect(strategy.joinChallenge).toHaveBeenCalledWith(id, false, 'tok');
+        });
     });
 
     test('apply-turbo-to-entry passes valid numeric ids through to applyTurbo', async () => {

@@ -249,6 +249,14 @@ describe('compact ChallengeCard tile with compactActions', () => {
         expect(screen.getByText('submit failed')).toBeTruthy();
     });
 
+    test('shows the translated text for an invalid-args refusal, not the machine code', () => {
+        mockTurbo.error = 'invalid-args';
+        mockFill.error = 'invalid-args';
+        renderWithActions();
+        expect(screen.getAllByText('errors.actionInvalidArgs')).toHaveLength(2);
+        expect(screen.queryByText('invalid-args')).toBeNull();
+    });
+
     test('omits the row when no action is offered', () => {
         // Flash (no settings), ended (no turbo / submit), fully exposed and not
         // started (no vote / run), no bankroll (no currency spends).
