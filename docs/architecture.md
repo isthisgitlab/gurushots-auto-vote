@@ -411,7 +411,8 @@ repeated six times is one that gets forgotten at one of them.
   `{ ok: true, token, settings }` or `{ ok: false, response }`, and callers do
   `if (!guard.ok) return guard.response;`.
 - Handlers explicitly **whitelist** the fields returned to the renderer so internal result shapes don't
-  leak (`toSafeTurboResult` / `safeRaw` in `ipc/actions/turbo.ts`).
+  leak (`toSafeTurboResult` in `ipc/actions/turbo.ts`; apply-turbo returns only a sanitised message, and
+  its raw response reaches the log only as the redacted `safeRaw` summary).
 
 ## 7. Persistence & platform detection
 
@@ -487,9 +488,10 @@ repeated six times is one that gets forgotten at one of them.
 
 ## 10. Security (renderer / main) — state the limits, don't over-promise
 
-- Every `BrowserWindow` uses `contextIsolation: on`, `nodeIntegration: off`, `webSecurity: on`
-  and `sandbox: on` (all explicit in `index/windows.ts`, spread after any caller-supplied preferences so a
-  caller can't override them), and the renderer is exposed only `window.api` via `contextBridge`, never
+- The login and main windows set `contextIsolation: on`, `nodeIntegration: off`, `webSecurity: on`
+  and `sandbox: on` explicitly (`index/windows.ts`, after any caller-supplied preferences so a caller
+  can't override them). The Logs window (`ui/applicationMenu.ts`) sets `contextIsolation` and
+  `nodeIntegration` and relies on Electron's defaults for `sandbox` and `webSecurity`. The renderer is exposed only `window.api` via `contextBridge`, never
   `ipcRenderer`. Regressing context-isolation / node-integration / sandbox is a classic severe-vuln class.
 - A defense-in-depth **sender-frame trust check** (`isTrustedSender`, `ipc/registerHandlers.ts`) refuses
   any invoke from a non-main-frame or non-`file://` origin, and is reused by the manual `ipcMain.on`
@@ -538,7 +540,7 @@ caps (dependency-free, renderer-safe), and `scenarios/templates.ts` holds editab
   fails closed (never makes a condition true); entry ids are compared as strings, never by position (except
   the explicit `slot` selector); an in-flight rule resumes first; a phase or in-flight rule the edited
   scenario no longer has **halts** the challenge instead of guessing.
-- **Runner contract** (`services/scenarioRunner/{step,rule,actions}.ts`, first step of `processChallenge`, never throws): the
+- **Runner contract** (`services/scenarioRunner/{step,rule,actions,support}.ts`, first step of `processChallenge`, never throws): the
   challenge is re-read live and the action's entry re-resolved before every action; a gone target skips the
   action. Once one action of a rule lands the rule is **committed** and its progress persisted after every
   action, so a crash never repeats a spend that landed. A committed rule then passes over a **skipped** step

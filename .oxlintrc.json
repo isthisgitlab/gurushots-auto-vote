@@ -143,8 +143,9 @@
         },
         // Settings facade boundary. settings.ts is the only public entry point; the
         // modules behind it under settings/ share mutable state (load-once guards,
-        // active-challenge caches) that a direct import would bypass. settings/schema,
-        // storage, limits, uiDefaults and challengeRules stay importable.
+        // active-challenge caches) that a direct import would bypass. The settings/schema
+        // facade (not its schema/* group modules), storage, limits, uiDefaults and
+        // challengeRules stay importable.
         {
             "files": ["src/ts/**/*.ts", "src/ts/**/*.tsx", "scripts/**/*.ts", "scripts/**/*.mts"],
             "excludeFiles": ["src/ts/settings.ts", "src/ts/settings/**"],
@@ -158,8 +159,13 @@
                                 "message": "consoleSink is the logger's unredacted console path — only src/ts/logger/ may import it; log through the logger."
                             },
                             {
-                                "regex": "settings/(challengeFacts|challengeOverrides|defaults|migrations|persistence|profileStore|profiles|reset|ruleResolution|scenarioOverlay|scenarioSchema|scenarios|titlePins|titleRuleSanitize|titleRules|schema/[^/]+)(/[^/]+)?(\\.js)?$",
+                                "regex": "settings/(challengeFacts|challengeOverrides|defaults|migrations|persistence|profileStore|profiles|reset|ruleResolution|scenarioOverlay|scenarioSchema|scenarios|titlePins|titleRuleSanitize|titleRules)(/[^/]+)?(\\.js)?$",
                                 "message": "Settings internals are private to the facade — import settings.ts instead.",
+                                "allowTypeImports": true
+                            },
+                            {
+                                "regex": "settings/schema/[^/]+(\\.js)?$",
+                                "message": "The schema's group modules are private — import settings/schema (the schema facade) instead.",
                                 "allowTypeImports": true
                             }
                         ]
@@ -264,8 +270,13 @@
                                 "message": "consoleSink is the logger's unredacted console path — only src/ts/logger/ may import it; log through the logger."
                             },
                             {
-                                "regex": "settings/(challengeFacts|challengeOverrides|defaults|migrations|persistence|profileStore|profiles|reset|ruleResolution|scenarioOverlay|scenarioSchema|scenarios|titlePins|titleRuleSanitize|titleRules|schema/[^/]+)(/[^/]+)?(\\.js)?$",
+                                "regex": "settings/(challengeFacts|challengeOverrides|defaults|migrations|persistence|profileStore|profiles|reset|ruleResolution|scenarioOverlay|scenarioSchema|scenarios|titlePins|titleRuleSanitize|titleRules)(/[^/]+)?(\\.js)?$",
                                 "message": "Settings internals are private to the facade — import settings.ts instead.",
+                                "allowTypeImports": true
+                            },
+                            {
+                                "regex": "settings/schema/[^/]+(\\.js)?$",
+                                "message": "The schema's group modules are private — import settings/schema (the schema facade) instead.",
                                 "allowTypeImports": true
                             }
                         ]

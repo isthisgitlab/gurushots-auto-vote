@@ -126,7 +126,7 @@
         "@testing-library/dom": "^10.4.2",
         "@testing-library/preact": "^3.2.4",
         "@types/jest": "^30.0.0",
-        "@types/node": "^26.6.3",
+        "@types/node": "^26.6.4",
         "@types/yauzl": "^3.4.0",
         "concurrently": "^10.0.5",
         "cross-env": "^10.1.0",

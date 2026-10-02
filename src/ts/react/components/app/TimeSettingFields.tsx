@@ -157,8 +157,9 @@ const isDominated = (activeRows: { count: number; seconds: number }[], count: nu
  * trigger is max-based). Emits only rows with seconds > 0, ordered by count,
  * so "all off" emits [] — the runtime's 'no-schedule' state. Rebuilding from
  * the three fixed slots is lossy by design: any stored row not keyed by
- * counts 2/3/4 is dropped on the first edit (the load-time sanitizer in
- * sanitizeFillSchedule in settings/schema/autoFill.ts removes such rows anyway).
+ * counts 2/3/4 is dropped on the first edit (the load-time autoFillSchedule
+ * migration removes such rows anyway, through sanitizeFillSchedule in
+ * settings/schema/autoFill.ts).
  */
 export function ScheduleField({ settingKey, value, onChange, onReset, disabled }: SettingFieldProps) {
     const { t } = useTranslation();
