@@ -8,7 +8,9 @@
  * validateScenario (tests/scenarios/templates.test.ts).
  */
 
-const LOWERED_EXPOSURE_SETTINGS = {
+// A function, so each phase owns its settings object: an in-place edit of one
+// phase cannot reach another phase.
+const loweredExposureSettings = () => ({
     exposure: 10,
     exposureTarget: 12,
     // Off here, so a final-window trigger above 10% in the
@@ -16,7 +18,7 @@ const LOWERED_EXPOSURE_SETTINGS = {
     useFinalWindowExposure: false,
     autoFill: false,
     autoBoost: false,
-};
+});
 
 const SCENARIO_TEMPLATES = [
     {
@@ -29,7 +31,7 @@ const SCENARIO_TEMPLATES = [
             start: 'buildup',
             phases: {
                 buildup: {
-                    settings: LOWERED_EXPOSURE_SETTINGS,
+                    settings: loweredExposureSettings(),
                     rules: [
                         {
                             id: 'daily-entry',
@@ -92,7 +94,7 @@ const SCENARIO_TEMPLATES = [
                     ],
                 },
                 holding: {
-                    settings: LOWERED_EXPOSURE_SETTINGS,
+                    settings: loweredExposureSettings(),
                     rules: [
                         {
                             id: 'comeback',

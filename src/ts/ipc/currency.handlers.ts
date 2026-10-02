@@ -200,7 +200,7 @@ const buildHandlers = () =>
         'swap-back-entry-photo': async (
             event: unknown,
             challengeId: string | number,
-            currentImageId: string,
+            currentImageId: string | number,
             confirmed: boolean,
         ) => {
             logger
@@ -210,7 +210,8 @@ const buildHandlers = () =>
                     null,
                 );
             return runCurrencySpend('swap back', [challengeId, currentImageId], confirmed, (token, strategy) =>
-                currencyActions.swapBack(challengeId, currentImageId, token, {
+                // Validated by runCurrencySpend, which admits numbers; the service works on strings.
+                currencyActions.swapBack(challengeId, String(currentImageId), token, {
                     strategy,
                     logger,
                     ledger: ledgerFor(strategy),

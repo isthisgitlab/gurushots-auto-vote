@@ -23,6 +23,8 @@
  *     chain stops when it comes back to a phase already visited this pass.
  *     Currency spends honour the user's own currencyReserve* settings and the
  *     scenario's optional `limits`.
+ *   - Unreadable scenario state halts the challenge's plan (reported, never
+ *     silently restarted from the beginning).
  *   - Never throws into the pass; a failure is logged and recorded as the
  *     challenge's lastError for the status line.
  */

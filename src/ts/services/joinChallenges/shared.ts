@@ -12,7 +12,7 @@ import type * as tagsApi from '../../api/tags';
 import type * as joinStateStore from '../../joinStateStore';
 
 /**
- * The join flow's endpoints and state (see joinChallenges.ts).
+ * The join flow's endpoints and state (documented in the joinChallenges.ts header).
  */
 export interface JoinDeps {
     getMemberChallenges: typeof joinApi.getMemberChallenges;

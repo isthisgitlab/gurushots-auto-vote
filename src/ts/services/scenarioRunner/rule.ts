@@ -1,5 +1,8 @@
 /**
  * Running one scenario rule and recording its effects.
+ *
+ * Contract: see the runner contract in the scenarioRunner.ts header (live re-read
+ * before each action, persist after each, unreadable state halts).
  */
 
 import * as logger from '../../logger';

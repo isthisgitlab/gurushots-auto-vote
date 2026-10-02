@@ -227,6 +227,22 @@ describe('swapEntry', () => {
         expect(strategy.swapPhoto).not.toHaveBeenCalled();
     });
 
+    test('a replacement with the same id as the replaced entry is stale, nothing spent', async () => {
+        const strategy = stubStrategy({
+            challenge: makeChallenge({
+                member: {
+                    boost: { state: 'LOCKED', timeout: null },
+                    ranking: { exposure: { exposure_factor: 50 }, entries: [{ id: 7, member_id: 'mem1' }], swaps: [] },
+                },
+            }),
+        });
+        expect(await swapEntry(555, '7', '7', 'tok', { strategy, logger })).toEqual({
+            ok: false,
+            outcome: 'stale-candidate',
+        });
+        expect(strategy.swapPhoto).not.toHaveBeenCalled();
+    });
+
     test('a photo swapped out earlier can be swapped back in', async () => {
         const strategy = stubStrategy();
         expect(await swapEntry(555, 'old', 'swapped-before', 'tok', { strategy, logger })).toEqual({

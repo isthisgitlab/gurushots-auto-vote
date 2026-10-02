@@ -83,6 +83,31 @@ describe('NativeAutovoteBridge', () => {
         await expect(bridge.getStatus()).resolves.toEqual({ running: false, available: true, error: 'status boom' });
     });
 
+    test('a start/stop failure is logged, a getStatus failure is not (it polls)', async () => {
+        const error = jest.fn();
+        jest.mocked(
+            require('../../src/ts/logger') as typeof import('../../src/ts/logger'),
+        ).withCategory.mockReturnValue(invalid({ error }));
+        const startFailure = new Error('boom');
+        const stopFailure = new Error('stop boom');
+        const plugin = {
+            start: jest.fn().mockRejectedValue(startFailure),
+            stop: jest.fn().mockRejectedValue(stopFailure),
+            getStatus: jest.fn().mockRejectedValue(new Error('status boom')),
+        };
+        g.Capacitor = { Plugins: { AutoVoteBackground: plugin } };
+        const bridge = loadBridge();
+
+        await bridge.getStatus();
+        expect(error).not.toHaveBeenCalled();
+
+        await bridge.start();
+        await bridge.stop();
+        expect(error).toHaveBeenCalledTimes(2);
+        expect(error).toHaveBeenNthCalledWith(1, 'AutoVoteBackground.start failed', startFailure);
+        expect(error).toHaveBeenNthCalledWith(2, 'AutoVoteBackground.stop failed', stopFailure);
+    });
+
     test('reports unavailable (and logs) when reading the plugin registry throws', async () => {
         const warning = jest.fn();
         jest.mocked(
