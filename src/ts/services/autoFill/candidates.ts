@@ -115,10 +115,6 @@ const resolveTagsForTerms = async (
 const THEMED_SEARCH_BUDGET_MS = 8000;
 const THEMED_SEARCH_MIN_BUDGET_MS = 1500;
 
-// Enough of a description to see how it states its theme — GuruShots'
-// "The challenge is an open theme." is its third sentence on "10 Hours".
-const MAX_LOGGED_DESCRIPTION_CHARS = 400;
-
 /**
  * One line saying how the challenge's theme was read, with the text it was
  * read from. The app keeps no copy of challenge descriptions, so these lines
@@ -134,8 +130,7 @@ const describeTheme = (theme: ChallengeTheme, challenge: Challenge): string => {
     const description = String(challenge.welcome_message ?? '')
         .replace(/<[^>]*>/g, ' ')
         .replace(/\s+/g, ' ')
-        .trim()
-        .slice(0, MAX_LOGGED_DESCRIPTION_CHARS);
+        .trim();
     return `${verdict}. Description: "${description}"`;
 };
 

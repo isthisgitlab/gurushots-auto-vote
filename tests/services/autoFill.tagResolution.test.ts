@@ -210,6 +210,26 @@ describe('fetchCandidatesForChallenge — tag resolution', () => {
         );
     });
 
+    test('logs a long description in full, without truncating it', async () => {
+        const { logger, category } = makeLogger();
+        const sentence = 'Show photos of the different kinds of roads.';
+        const tail = 'The challenge is an open theme.';
+        const body = Array.from({ length: 12 }, () => sentence).join('   ');
+        const stripped = `${Array.from({ length: 12 }, () => sentence).join(' ')} ${tail}`;
+        expect(stripped.length).toBeGreaterThan(400);
+        await fetchCandidatesForChallenge(
+            invalid({
+                id: 'c-long',
+                title: 'Roads to Anywhere',
+                welcome_message: `<b>${body}</b> <i>${tail}</i>`,
+            }),
+            'tok',
+            {},
+            { getEligiblePhotos: makeGetEligiblePhotos(), logger },
+        );
+        expect(category.info).toHaveBeenCalledWith(expect.stringContaining(`Description: "${stripped}"`), null);
+    });
+
     test('a contest-cadence title reads as an open theme and says so', async () => {
         // "week" is a stopword, so "Guru of The Week" yields no search term at
         // all — a different case from a theme that was searched and missed, and
