@@ -64,4 +64,4 @@ function redactMessage(message: unknown): unknown {
     return message.replace(SENSITIVE_MSG_RE, (_match, key, sep) => `${key}${sep}${REDACTED}`);
 }
 
-export { sanitizeForLog, sanitizeLogString, redactMessage };
+export { sanitizeForLog, sanitizeLogString, redactMessage, SENSITIVE_KEY_RE, REDACTED };

@@ -7,6 +7,7 @@
 - [Settings Reference](#️-settings-reference)
 - [Recommended Setups](#-recommended-setups)
 - [Logging](#-logging)
+- [Where your data is stored / how to erase it](#️-where-your-data-is-stored--how-to-erase-it)
 - [Troubleshooting](#-troubleshooting)
 
 ## 🔧 Usage
@@ -398,6 +399,14 @@ Files are rotated daily (`<type>-YYYY-MM-DD.log`) and auto-pruned by age and siz
 From the CLI, tail any of them with `logs [--error|--api|--settings] [--lines=<n>]`. Credentials are redacted before anything is written to disk.
 
 The visual check logs under the `autoFill` category: `Visual check reordered picks for [Challenge …]` when it changed which photo gets submitted, and `Visual check unavailable for [Challenge …]` when the model couldn't run (the tag ranking was used instead). No line means it agreed with the ranking or abstained.
+
+## 🗑️ Where your data is stored / how to erase it
+
+Everything the app keeps lives in one app data folder: settings (including the login token), logs, caches, the cookie partition and local state files. The per-OS paths are listed under [Logging](#-logging) — the folder is the one that contains `logs/`. The CLI uses the same folder as the desktop app. Running from source uses a separate `-dev` folder next to it (`gurushots-auto-vote-dev`).
+
+To erase everything, quit the app and delete that whole folder. The Windows portable exe has no uninstaller, so deleting the folder is the only way to remove its data. On Android, clear the app's storage in the system settings or uninstall the app.
+
+Logging out removes only the login token; settings, logs and caches stay.
 
 ## 🔍 Troubleshooting
 

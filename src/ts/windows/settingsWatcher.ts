@@ -14,6 +14,7 @@ import { BrowserWindow } from 'electron';
 import * as fs from 'node:fs';
 import * as settings from '../settings';
 import * as logger from '../logger';
+import { SENSITIVE_KEY_RE, REDACTED } from '../logger/sanitize';
 
 import type { AppSettings } from '../types/settings';
 import { errorMessage } from '../errorMessage';
@@ -26,6 +27,24 @@ type SettingChange = { key: string; oldValue: string; newValue: string };
 // the previous watcher.
 let settingsReloadTimeout: NodeJS.Timeout | null = null;
 
+// Function to safely stringify values for comparison and logging
+const stringify = (value: unknown) => {
+    if (value === null || value === undefined) return 'null';
+    if (typeof value === 'object') return JSON.stringify(value);
+    return String(value);
+};
+
+// A change under a credential key (token, ...) or anywhere in apiHeaders is
+// logged masked on both sides: the log line's own redaction only scrubs the
+// first value after `key:`, which would leave the new credential in clear.
+const isSensitivePath = (path: string) =>
+    path.split('.').some((segment) => segment === 'apiHeaders' || SENSITIVE_KEY_RE.test(segment));
+
+const describeChange = (path: string, oldValue: unknown, newValue: unknown): SettingChange =>
+    isSensitivePath(path)
+        ? { key: path, oldValue: REDACTED, newValue: REDACTED }
+        : { key: path, oldValue: stringify(oldValue), newValue: stringify(newValue) };
+
 /**
  * Compare two settings objects and return array of changes
  * @param oldSettings - Previous settings object
@@ -35,23 +54,12 @@ let settingsReloadTimeout: NodeJS.Timeout | null = null;
 function compareSettings(oldSettings: unknown, newSettings: unknown): SettingChange[] {
     const changes: SettingChange[] = [];
 
-    // Function to safely stringify values for comparison and logging
-    const stringify = (value: unknown) => {
-        if (value === null || value === undefined) return 'null';
-        if (typeof value === 'object') return JSON.stringify(value);
-        return String(value);
-    };
-
     // Recursive function to compare nested objects
     const compareRecursive = (oldObj: unknown, newObj: unknown, path: string = '') => {
         // Handle null/undefined cases
         if (oldObj === null || oldObj === undefined || newObj === null || newObj === undefined) {
             if (oldObj !== newObj) {
-                changes.push({
-                    key: path,
-                    oldValue: stringify(oldObj),
-                    newValue: stringify(newObj),
-                });
+                changes.push(describeChange(path, oldObj, newObj));
             }
             return;
         }
@@ -75,11 +83,7 @@ function compareSettings(oldSettings: unknown, newSettings: unknown): SettingCha
         } else {
             // For primitive values or arrays, do direct comparison
             if (JSON.stringify(oldObj) !== JSON.stringify(newObj)) {
-                changes.push({
-                    key: path,
-                    oldValue: stringify(oldObj),
-                    newValue: stringify(newObj),
-                });
+                changes.push(describeChange(path, oldObj, newObj));
             }
         }
     };

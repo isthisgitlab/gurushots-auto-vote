@@ -13,7 +13,7 @@ let logsDir = '';
 try {
     logsDir = path.join(getUserDataPath(), 'logs');
     if (!fs.existsSync(logsDir)) {
-        fs.mkdirSync(logsDir, { recursive: true });
+        fs.mkdirSync(logsDir, { recursive: true, mode: 0o700 });
     }
 } catch (err) {
     // Browser / Capacitor context — fs is a require shim. Logger falls
@@ -21,6 +21,31 @@ try {
     writeConsole('debug', '[logger] fs not available; skipping file-based logging:', errorMessage(err));
     logsDir = '';
 }
+
+// Logs can carry account detail, so the directory and every file in it are
+// owner-only, like the JSON stores. mkdirSync/appendFileSync set the mode only
+// when they create something; this brings what already exists in line, once at
+// load. A refused chmod is reported on the console — never through the logger,
+// which would write back into this directory.
+const restrictToOwner = (target: string, mode: number) => {
+    try {
+        fs.chmodSync(target, mode);
+    } catch (err) {
+        writeConsole('error', `[logger] could not restrict ${target} to owner-only:`, errorMessage(err));
+    }
+};
+
+const restrictExistingLogs = () => {
+    if (!logsDir) return;
+    restrictToOwner(logsDir, 0o700);
+    try {
+        fs.readdirSync(logsDir).forEach((file) => restrictToOwner(path.join(logsDir, file), 0o600));
+    } catch (err) {
+        writeConsole('error', `[logger] could not list ${logsDir} to restrict its files:`, errorMessage(err));
+    }
+};
+
+restrictExistingLogs();
 
 const getCurrentDate = () => {
     return new Date().toISOString().split('T')[0];

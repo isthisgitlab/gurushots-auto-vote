@@ -19,7 +19,8 @@ const makeFs = (overrides = {}) => ({
     readdirSync: jest.fn(() => []),
     statSync: jest.fn(() => ({ size: 0, mtime: new Date() })),
     unlinkSync: jest.fn<void, [string]>(),
-    appendFileSync: jest.fn<void, [string, string]>(),
+    appendFileSync: jest.fn<void, [string, string, { mode: number }]>(),
+    chmodSync: jest.fn<void, [string, number]>(),
     ...overrides,
 });
 
@@ -96,7 +97,7 @@ describe('module load: logs directory', () => {
         const fs = makeFs({ existsSync: jest.fn(() => false) });
         const { logger } = loadLogger({ fs });
 
-        expect(fs.mkdirSync).toHaveBeenCalledWith(LOGS_DIR, { recursive: true });
+        expect(fs.mkdirSync).toHaveBeenCalledWith(LOGS_DIR, { recursive: true, mode: 0o700 });
         expect({
             error: logger.getErrorLogFile(),
             app: logger.getLogFile(),
@@ -113,6 +114,44 @@ describe('module load: logs directory', () => {
     test('does not recreate an existing logs dir', () => {
         const { fs } = loadLogger();
         expect(fs.mkdirSync).not.toHaveBeenCalled();
+    });
+
+    test('restricts the logs dir to 0o700 and every existing file in it to 0o600 once at load', () => {
+        const fs = makeFs({ readdirSync: jest.fn(() => ['app-2026-01-02.log', 'errors-2026-01-02.log']) });
+        loadLogger({ fs });
+
+        expect(fs.chmodSync.mock.calls).toEqual([
+            [LOGS_DIR, 0o700],
+            [`${LOGS_DIR}/app-2026-01-02.log`, 0o600],
+            [`${LOGS_DIR}/errors-2026-01-02.log`, 0o600],
+        ]);
+        expect(errorSpy).not.toHaveBeenCalled();
+    });
+
+    test('reports a refused chmod on the console only and keeps going', () => {
+        const fs = makeFs({
+            readdirSync: jest.fn(() => ['a.log', 'b.log']),
+            chmodSync: jest.fn((target: string) => {
+                if (target === LOGS_DIR || target.endsWith('a.log')) throw new Error('EPERM');
+            }),
+        });
+        const { logger } = loadLogger({ fs });
+
+        expect(errorSpy).toHaveBeenCalledWith(`[logger] could not restrict ${LOGS_DIR} to owner-only:`, 'EPERM');
+        expect(errorSpy).toHaveBeenCalledWith(`[logger] could not restrict ${LOGS_DIR}/a.log to owner-only:`, 'EPERM');
+        expect(fs.chmodSync).toHaveBeenCalledWith(`${LOGS_DIR}/b.log`, 0o600);
+        expect(logger.getRecentLogs()).toEqual([]);
+    });
+
+    test('reports an unreadable logs dir on the console only', () => {
+        const fs = makeFs({
+            readdirSync: jest.fn(() => {
+                throw new Error('EACCES');
+            }),
+        });
+        loadLogger({ fs });
+
+        expect(errorSpy).toHaveBeenCalledWith(`[logger] could not list ${LOGS_DIR} to restrict its files:`, 'EACCES');
     });
 
     test('falls back to console-only logging when fs is unavailable', () => {
@@ -174,9 +213,12 @@ describe('cleanupOldLogs', () => {
     test('swallows cleanup errors silently under test, reports them otherwise', () => {
         const boom = new Error('EACCES');
         const fs = makeFs({
-            readdirSync: jest.fn(() => {
-                throw boom;
-            }),
+            readdirSync: jest
+                .fn<string[], []>(() => {
+                    throw boom;
+                })
+                // the first listing is the load-time permission sweep
+                .mockReturnValueOnce([]),
         });
         const runtime = makeRuntime();
         const { logger } = loadLogger({ fs, runtime });
@@ -275,6 +317,7 @@ describe('writeLog routing and fan-out', () => {
             logger.getSettingsLogFile(),
             logger.getLogFile(),
         ]);
+        expect(fs.appendFileSync.mock.calls.map(([, , options]) => options)).toEqual(Array(4).fill({ mode: 0o600 }));
         expect(fs.appendFileSync.mock.calls[3][1]).toMatch(/\[INFO\] \[CLI\] \[general\] ℹ️ Plain\n={80}\n$/);
     });
 

@@ -83,7 +83,7 @@ const writeLog = (
             }
             line += '\n' + '='.repeat(80) + '\n';
             try {
-                fs.appendFileSync(target, line);
+                fs.appendFileSync(target, line, { mode: 0o600 });
             } catch {
                 // best-effort; never let a log write tear down the app.
             }

@@ -50,7 +50,7 @@ const handleGetActiveChallenges = (async (): Promise<ActiveChallengesResponse> =
 const handleAuthenticate = (async (event: unknown, username: string, password: string, isMock: boolean) => {
     logger
         .withCategory(logger.CATEGORIES.AUTHENTICATION)
-        .info(`🔐 Authentication request received - Mock: ${isMock}, Username: ${sanitizeForLog(username)}`, null);
+        .info(`🔐 Authentication request received - Mock: ${isMock}`, null);
     try {
         // Route through the factory (no direct api/mock imports) and the
         // shared token normalizer. The explicit isMock arg from the login

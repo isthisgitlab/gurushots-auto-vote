@@ -7,6 +7,7 @@
 - [Uzstādījumu apraksts](#️-uzstādījumu-apraksts)
 - [Ieteicamie uzstādījumi](#-ieteicamie-uzstādījumi)
 - [Žurnālfaili](#-žurnālfaili)
+- [Kur tiek glabāti jūsu dati / kā tos dzēst](#️-kur-tiek-glabāti-jūsu-dati--kā-tos-dzēst)
 - [Problēmu risināšana](#-problēmu-risināšana)
 
 ## 🔧 Lietošana
@@ -400,6 +401,14 @@ Katru dienu tiek sākts jauns fails (`<tips>-YYYY-MM-DD.log`), un vecie faili ti
 CLI jebkuru no tiem var apskatīt ar `logs [--error|--api|--settings] [--lines=<n>]`. Akreditācijas dati tiek aizklāti, pirms kaut kas tiek ierakstīts diskā.
 
 Vizuālā pārbaude raksta žurnālā kategorijā `autoFill`: `Visual check reordered picks for [Challenge …]`, ja tā mainīja iesniedzamo foto, un `Visual check unavailable for [Challenge …]`, ja modeli neizdevās palaist (tad tika izmantota tagu ranžēšana). Ja šādas rindas nav, pārbaude piekrita ranžēšanai vai atturējās.
+
+## 🗑️ Kur tiek glabāti jūsu dati / kā tos dzēst
+
+Viss, ko lietotne glabā, atrodas vienā lietotnes datu mapē: uzstādījumi (arī pieteikšanās tokens), žurnālfaili, kešatmiņas, sīkdatņu nodalījums un lokālie stāvokļa faili. Ceļi katrai operētājsistēmai ir norādīti sadaļā [Žurnālfaili](#-žurnālfaili) — tā ir mape, kurā atrodas `logs/`. CLI izmanto to pašu mapi, ko darbvirsmas lietotne. Palaižot no pirmkoda, tiek izmantota atsevišķa mape ar piedēkli `-dev` blakus (`gurushots-auto-vote-dev`).
+
+Lai izdzēstu visu, aizveriet lietotni un izdzēsiet visu šo mapi. Windows portatīvajam exe nav atinstalētāja, tāpēc mapes dzēšana ir vienīgais veids, kā noņemt tā datus. Android ierīcē sistēmas uzstādījumos notīriet lietotnes krātuvi vai atinstalējiet lietotni.
+
+Izrakstoties tiek noņemts tikai pieteikšanās tokens; uzstādījumi, žurnālfaili un kešatmiņas paliek.
 
 ## 🔍 Problēmu risināšana
 

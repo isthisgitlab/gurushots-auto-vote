@@ -1084,7 +1084,7 @@ describe('log categories', () => {
 
         await buildHandlers().authenticate({}, 'user', 'pw', true);
 
-        expect(logCategories('info', '🔐 Authentication request received - Mock: true, Username: user', null)).toEqual([
+        expect(logCategories('info', '🔐 Authentication request received - Mock: true', null)).toEqual([
             'authentication',
         ]);
     });

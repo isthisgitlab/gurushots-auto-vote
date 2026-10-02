@@ -300,6 +300,52 @@ describe('watchSettingsFile change detection', () => {
         expect(mockSend).toHaveBeenCalledTimes(1);
     });
 
+    describe('credential values stay out of the log', () => {
+        const loggedText = () => infoLines().join('\n');
+
+        test('a changed token is masked on both sides', async () => {
+            settings.loadSettings.mockReturnValue(invalid({ token: 'oldABC' }));
+            watchSettingsFile(deps());
+
+            settings.loadSettings.mockReturnValue(invalid({ token: 'newXYZ' }));
+            await emitChange();
+
+            expect(infoLines()).toContain('  • token: [REDACTED] → [REDACTED]');
+            expect(loggedText()).not.toMatch(/oldABC|newXYZ/);
+        });
+
+        test('a newly added apiHeaders object is masked', async () => {
+            settings.loadSettings.mockReturnValue(invalid({ theme: 'light' }));
+            watchSettingsFile(deps());
+
+            settings.loadSettings.mockReturnValue(invalid({ theme: 'light', apiHeaders: { 'x-token': 'newXYZ' } }));
+            await emitChange();
+
+            expect(infoLines()).toContain('  • apiHeaders: [REDACTED] → [REDACTED]');
+            expect(loggedText()).not.toContain('newXYZ');
+        });
+
+        test('a nested apiHeaders value and a nested credential key are masked', async () => {
+            settings.loadSettings.mockReturnValue(
+                invalid({ apiHeaders: { 'x-token': 'oldABC', ua: 'oldUA' }, auth: { password: 'oldPW' } }),
+            );
+            watchSettingsFile(deps());
+
+            settings.loadSettings.mockReturnValue(
+                invalid({ apiHeaders: { 'x-token': 'newXYZ', ua: 'newUA' }, auth: { password: 'newPW' } }),
+            );
+            await emitChange();
+
+            expect(infoLines()).toEqual([
+                '🔄 Settings changed (no reload required):',
+                '  • apiHeaders.x-token: [REDACTED] → [REDACTED]',
+                '  • apiHeaders.ua: [REDACTED] → [REDACTED]',
+                '  • auth.password: [REDACTED] → [REDACTED]',
+            ]);
+            expect(loggedText()).not.toMatch(/oldABC|newXYZ|oldUA|newUA|oldPW|newPW/);
+        });
+    });
+
     test('a write with no property differences neither reloads nor broadcasts', async () => {
         settings.loadSettings.mockReturnValue(invalid({ theme: 'light' }));
         watchSettingsFile(deps());
