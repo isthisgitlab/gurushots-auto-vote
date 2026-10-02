@@ -336,7 +336,7 @@ function ScenarioHeader({
 }
 
 /**
- * The whole draft as JSON; a valid edit replaces the draft.
+ * The draft as editable JSON text.
  */
 function JsonTab({ draft, onDraft }: { draft: ScenarioDraft; onDraft: (next: ScenarioDraft) => void }) {
     const { t } = useTranslation();
@@ -359,7 +359,7 @@ function JsonTab({ draft, onDraft }: { draft: ScenarioDraft; onDraft: (next: Sce
                     } catch {
                         parsed = undefined;
                     }
-                    // Only a document the forms can render replaces the draft.
+                    // Only a document the forms can render becomes the draft.
                     const editable = isEditableDraft(parsed);
                     if (editable) onDraft(parsed as ScenarioDraft);
                     setInvalid(!editable);

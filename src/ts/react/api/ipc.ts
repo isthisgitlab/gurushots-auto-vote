@@ -25,7 +25,7 @@ type BridgeCalls<M extends PropertyKey> = Record<M, (...args: unknown[]) => unkn
  * @param method - bridge method name
  */
 const forward = <M extends keyof WindowApi>(method: M): WindowApi[M] =>
-    ((...args: unknown[]) => (window.api as BridgeCalls<M>)[method](...args)) as unknown as WindowApi[M];
+    ((...args: unknown[]) => (window.api as BridgeCalls<M>)[method](...args)) as WindowApi[M];
 
 /**
  * A bridge method a host may leave out: absent (or no bridge at all) resolves
@@ -33,14 +33,17 @@ const forward = <M extends keyof WindowApi>(method: M): WindowApi[M] =>
  *
  * @param method - bridge method name
  */
-const forwardOptional = <M extends keyof WindowApi>(
-    method: M,
-): ((...args: Parameters<WindowApi[M]>) => ReturnType<WindowApi[M]> | undefined) =>
-    ((...args: unknown[]) => (window.api as Partial<BridgeCalls<M>> | undefined)?.[method]?.(...args)) as unknown as (
-        ...args: Parameters<WindowApi[M]>
-    ) => ReturnType<WindowApi[M]> | undefined;
+const forwardOptional =
+    <M extends keyof WindowApi>(
+        method: M,
+    ): ((...args: Parameters<WindowApi[M]>) => ReturnType<WindowApi[M]> | undefined) =>
+    (...args) =>
+        (window.api as Partial<BridgeCalls<M>> | undefined)?.[method]?.(...args) as
+            | ReturnType<WindowApi[M]>
+            | undefined;
 
-const ignore = () => {};
+/** The deliberate no-op for a log write's outcome: a failing log sink must stay silent. */
+const dropLogOutcome = (): void => undefined;
 
 /**
  * Fire-and-forget log line: tolerates a missing bridge or method and swallows
@@ -53,7 +56,7 @@ function logBestEffort(method: 'logError' | 'logWarning' | 'logDebug', message: 
     try {
         // The renderer sends the message only; the handler's `data` is optional at runtime.
         const api = window.api as Partial<BridgeCalls<typeof method>> | undefined;
-        return Promise.resolve(api?.[method]?.(message)).then(ignore, ignore);
+        return Promise.resolve(api?.[method]?.(message)).then(dropLogOutcome, dropLogOutcome);
     } catch {
         return Promise.resolve();
     }

@@ -158,6 +158,8 @@ function ValueInput({
 }) {
     return (
         <input
+            // A plain `type={type}` fails typecheck: preact's discriminated input props reject the
+            // widened union (Type '"number" | "text" | "time"' is not assignable to type 'Signalish<"color" | …>').
             {...(type === 'number'
                 ? { type: 'number' as const }
                 : type === 'time'

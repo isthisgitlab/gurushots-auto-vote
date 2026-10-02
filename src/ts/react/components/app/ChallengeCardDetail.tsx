@@ -60,6 +60,7 @@ function DetailHeader({
 
     // Only reachable from the URL row, which renders only when challenge.url is set.
     const handleOpenUrl = () => {
+        // aislop-ignore-next-line ai-slop/hardcoded-url -- stable public GuruShots challenge page link, not a deployment URL
         void ipc.callOrNull(() => ipc.openExternalUrl(`https://gurushots.com/challenge/${challenge.url}`));
     };
 

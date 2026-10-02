@@ -91,7 +91,7 @@ const lookupHints = <C,>(table: Map<string, (ctx: C) => SettingHint[]>, key: str
  * rather than degrade to a label.
  */
 function formatClockInTz(epochSec: number, timezone: string): string {
-    const ms = Number(epochSec) * 1000;
+    const ms = epochSec * 1000;
     if (!Number.isFinite(ms) || Math.abs(ms) > 8.64e15) return '—';
     try {
         return new Intl.DateTimeFormat(undefined, {
@@ -166,8 +166,6 @@ const allDayPauseHint = (t: Translate): SettingHint => ({
     text: t('app.votingPauseAllDayHint'),
 });
 
-// ---- Global defaults ------------------------------------------------------
-
 const GLOBAL_HINTS: Map<string, (ctx: GlobalHintContext) => SettingHint[]> = new Map([
     [
         'useVotingPause',
@@ -220,8 +218,6 @@ export function globalSettingHints({
     return (key) => lookupHints(GLOBAL_HINTS, key, ctx);
 }
 
-// ---- Per-challenge overrides ----------------------------------------------
-
 /**
  * With replace mode on, is any fill window still reachable for THIS
  * challenge? Unreachable means replace mode keeps blocking threshold voting
@@ -251,8 +247,6 @@ const shortWindowHints = (
     win.active && checkFrequencyMax > 0 && win.durationMin < checkFrequencyMax
         ? [{ tone: 'text-warning', text: t(templateKey).replace('{0}', String(checkFrequencyMax)) }]
         : [];
-
-// ---- Per-challenge: scheduled fill -----------------------------------------
 
 /**
  * On the master-toggle row (feature-level status): a before-end-only config
@@ -302,8 +296,6 @@ function fillReplacesHints({
     if (fillUnreachable) hints.push({ tone: 'text-warning', text: t('app.scheduledFillUnreachableHint') });
     return hints;
 }
-
-// ---- Per-challenge: voting pause -------------------------------------------
 
 /**
  * All pause status sits on the master-toggle row for the same reason

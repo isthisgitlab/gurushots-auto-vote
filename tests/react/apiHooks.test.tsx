@@ -353,6 +353,23 @@ describe('useActiveChallenges unserialisable payload', () => {
         expect(result.current.data).toBe(first);
     });
 
+    test('a background refetch (skipCleanup) applies the data without any cleanup', async () => {
+        mockApi.getSettings.mockResolvedValue(invalid({ token: 'tok' }));
+        mockApi.getActiveChallenges.mockResolvedValue(invalid({ challenges: [{ id: 7 }] }));
+        const { result } = renderHook(() => useActiveChallenges());
+        await waitFor(() => expect(mockApi.cleanupStaleMetadata).toHaveBeenCalledTimes(1));
+        mockApi.cleanupStaleChallengeSetting.mockClear();
+        mockApi.cleanupStaleMetadata.mockClear();
+
+        mockApi.getActiveChallenges.mockResolvedValue(invalid({ challenges: [{ id: 8 }] }));
+        await act(async () => {
+            await result.current.refetch(true);
+        });
+        expect(result.current.data).toEqual([{ id: 8 }]);
+        expect(mockApi.cleanupStaleChallengeSetting).not.toHaveBeenCalled();
+        expect(mockApi.cleanupStaleMetadata).not.toHaveBeenCalled();
+    });
+
     test('while autovote runs, stale-settings cleanup is skipped but metadata cleanup still runs', async () => {
         mockApi.getSettings.mockResolvedValue(invalid({ token: 'tok' }));
         mockApi.getActiveChallenges.mockResolvedValue(invalid({ challenges: [{ id: 7 }] }));

@@ -33,9 +33,7 @@ export function useChallengeSettings(
     const [isCompact, setIsCompact] = useState(initialCompact);
     const [hasCompactOverride, setHasCompactOverride] = useState(false);
 
-    // Tracks whether the card is still mounted: a challenge leaving the list
-    // unmounts its card mid-reload, and the flag keeps the batch of setState
-    // calls from landing on an unmounted component.
+    // Whether the card is still mounted; a reload settling after unmount applies nothing.
     const mountedRef = useRef(true);
     // Only the newest reload may apply: broadcasts can start overlapping
     // reloads, and an older one settling last must not overwrite newer values.
@@ -47,9 +45,7 @@ export function useChallengeSettings(
         };
     }, []);
 
-    // Walks the schema and sets the five state slots from current overrides.
-    // Used by both the mount effect and toggleCompact so the
-    // hasCustomSettings flag stays in sync after a per-challenge write.
+    // Reloads the state slots from the current overrides.
     const reload = useCallback(async () => {
         const id = challengeId.toString();
         const reloadId = ++reloadIdRef.current;
