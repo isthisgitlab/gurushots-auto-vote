@@ -1,3 +1,5 @@
+// Reset settings, global defaults, all settings and window positions from the CLI.
+
 import * as logger from '../../../logger';
 import * as settings from '../../../settings';
 import { getDefaultSettings } from '../../../settings';

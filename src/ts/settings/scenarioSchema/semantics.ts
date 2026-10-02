@@ -1,3 +1,9 @@
+/**
+ * Checks on a parsed scenario document that its shape cannot express: phase
+ * settings keys and values, condition depth, and reference resolution
+ * (see ../scenarioSchema.ts).
+ */
+
 import * as vocabulary from '../../scenarios/vocabulary';
 import { challengeValueSetIsValid } from '../defaults';
 import { schemaEntry, validateSetting, getValidationError } from '../schema';

@@ -1,3 +1,5 @@
+// List settings, global defaults and the schema from the CLI.
+
 import * as logger from '../../../logger';
 import * as settings from '../../../settings';
 import { getDefaultSettings } from '../../../settings';

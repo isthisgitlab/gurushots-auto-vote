@@ -29,28 +29,30 @@ const swapVoteCeiling = z.number().int().min(0).max(MAX_SWAP_VOTE_CEILING);
 // Seconds-after-start / seconds-before-end condition of a currency rule. 0 = that
 // condition is off. Capped like every other duration.
 const currencyRuleSec = z.number().int().min(0).max(MAX_SCHEDULE_SECONDS);
-const spendCountSetting = (unit: string) => ({
-    type: 'number',
-    default: 1,
-    perChallenge: true,
-    validation: autoSpendCount,
-    min: 1,
-    max: MAX_AUTO_SPENDS_PER_CHALLENGE,
-    unit,
-    validationOrder: 1,
-});
+const spendCountSetting = (unit: string) =>
+    ({
+        type: 'number',
+        default: 1,
+        perChallenge: true,
+        validation: autoSpendCount,
+        min: 1,
+        max: MAX_AUTO_SPENDS_PER_CHALLENGE,
+        unit,
+        validationOrder: 1,
+    }) satisfies Partial<SettingsSchemaEntry>;
 // Global reserve (not per challenge): automation never spends the balance
 // below this. Manual spends from the card are not limited by it.
-const currencyReserveSetting = (unit: string) => ({
-    type: 'number',
-    default: 0,
-    perChallenge: false,
-    validation: currencyReserve,
-    min: 0,
-    max: MAX_CURRENCY_RESERVE,
-    unit,
-    validationOrder: 1,
-});
+const currencyReserveSetting = (unit: string) =>
+    ({
+        type: 'number',
+        default: 0,
+        perChallenge: false,
+        validation: currencyReserve,
+        min: 0,
+        max: MAX_CURRENCY_RESERVE,
+        unit,
+        validationOrder: 1,
+    }) satisfies Partial<SettingsSchemaEntry>;
 
 export const currencyAutoSettings = {
     autoKeyUnlock: {

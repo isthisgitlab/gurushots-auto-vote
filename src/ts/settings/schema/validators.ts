@@ -5,6 +5,8 @@
 
 import { z } from 'zod';
 
+import type { SettingsSchemaEntry } from './entry';
+
 /**
  * A context validator's value: validateSetting only calls contextValidation
  * after the key's zod check passed, so a percentage key's value is a number.
@@ -52,15 +54,16 @@ export const MAX_SCHEDULE_SECONDS = 30 * 24 * 3600;
 
 // Entry shapes shared by several settings; each entry spreads one and adds its
 // group, label and description.
-export const entrySlotSetting = (defaultSlot: number) => ({
-    type: 'number',
-    default: defaultSlot,
-    perChallenge: true,
-    validation: entrySlotIndex,
-    min: 0,
-    max: MAX_ENTRY_SLOT,
-    validationOrder: 1,
-});
+export const entrySlotSetting = (defaultSlot: number) =>
+    ({
+        type: 'number',
+        default: defaultSlot,
+        perChallenge: true,
+        validation: entrySlotIndex,
+        min: 0,
+        max: MAX_ENTRY_SLOT,
+        validationOrder: 1,
+    }) satisfies Partial<SettingsSchemaEntry>;
 export const elapsedPercentSetting = {
     type: 'number',
     default: 0,
@@ -70,4 +73,4 @@ export const elapsedPercentSetting = {
     max: MAX_JOIN_PERCENT_ELAPSED,
     unit: 'app.unitPercent',
     validationOrder: 1,
-};
+} satisfies Partial<SettingsSchemaEntry>;

@@ -1,3 +1,5 @@
+// Get and set setting values from the CLI (global, per-challenge, global defaults).
+
 import * as logger from '../../../logger';
 import * as settings from '../../../settings';
 import { parseSettingValue } from '../../parseValue';

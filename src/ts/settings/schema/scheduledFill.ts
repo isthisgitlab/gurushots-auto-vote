@@ -20,7 +20,7 @@ import type { SettingsSchemaEntry } from './entry';
 // day, like 4 hours to the end and 10 hours to the end"). Each entry opens
 // its own fill window; the empty array is the off sentinel and the schema
 // default (scalar '' / 0 values in a stored blob are migrated to lists in
-// settings/migrations.ts — _scheduledFillListsMigratedV1). Entries are deduped by the validators and
+// settings/migrations/scheduledFill.ts — _scheduledFillListsMigratedV1). Entries are deduped by the validators and
 // canonical-sorted by the sanitizers; order carries no meaning. The window
 // floor keeps a window from being shorter than one last-minute check cycle;
 // the 12h ceiling keeps "hold at 100%" from silently becoming an all-day

@@ -1,3 +1,5 @@
+// The help-settings text.
+
 import * as logger from '../../../logger';
 import { THEMES } from '../../../settings/uiDefaults';
 

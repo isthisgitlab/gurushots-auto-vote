@@ -33,7 +33,7 @@ const fillSchedule = z
 
 /**
  * Clamp a persisted autoFillSchedule array to the current bounds. Used by the
- * load-time `_autoFillScheduleBoundsV1` sanitizer in settings/migrations.ts: the Settings
+ * load-time `_autoFillScheduleBoundsV1` sanitizer in settings/migrations/autoFillSchedule.ts: the Settings
  * modal resubmits EVERY persisted key on save, so a stored schedule that
  * violates the (tightened) validator would block saving unrelated settings
  * until repaired — this heals such data on load instead. Keeps only strict
@@ -110,7 +110,7 @@ export const autoFillSettings = {
         description: 'app.protectUncertainAutoFillsDesc',
     },
     // A stored single autoFillIntervalMinutes value is migrated into this list
-    // in settings/migrations.ts (`_autoFillScheduleMigratedV1`). Default: 2 @ 30m,
+    // in settings/migrations/autoFillSchedule.ts (`_autoFillScheduleMigratedV1`). Default: 2 @ 30m,
     // 3 @ 20m, 4 @ 10m before close.
     autoFillSchedule: {
         type: 'schedule',

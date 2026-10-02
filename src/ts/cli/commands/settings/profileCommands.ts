@@ -1,3 +1,5 @@
+// List, save, apply and delete challenge-settings profiles from the CLI.
+
 import * as logger from '../../../logger';
 import * as settings from '../../../settings';
 import { formatSettingForLog } from './shared';

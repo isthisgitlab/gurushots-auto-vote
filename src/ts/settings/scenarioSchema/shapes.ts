@@ -1,3 +1,8 @@
+/**
+ * The zod shapes of a scenario document. Every object is strict: these shapes
+ * are the trust boundary described in ../scenarioSchema.ts.
+ */
+
 import { z } from 'zod';
 import { parseDuration } from '../../scenarios/duration';
 import * as vocabulary from '../../scenarios/vocabulary';

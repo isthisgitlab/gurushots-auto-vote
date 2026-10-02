@@ -1,3 +1,5 @@
+// Helpers shared by the CLI settings commands: schema lookup, value formatting, key checks.
+
 import * as logger from '../../../logger';
 import * as settings from '../../../settings';
 import { formatDuration } from '../../../format/duration';

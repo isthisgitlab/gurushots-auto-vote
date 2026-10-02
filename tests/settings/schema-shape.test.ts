@@ -4,17 +4,27 @@
  * literal union so a setting read is typed per key.
  */
 
-import type { SettingKey } from '../../src/ts/settings/schema';
+import type { SettingKey, SettingValues } from '../../src/ts/settings/schema';
 import type * as schemaModule from '../../src/ts/settings/schema';
 
 const { SETTINGS_SCHEMA } = require('../../src/ts/settings/schema') as typeof schemaModule;
 
 type IsLiteralUnion<K> = string extends K ? false : true;
 const settingKeyIsLiteralUnion: IsLiteralUnion<SettingKey> = true;
+type IsExactly<A, B> = [A] extends [B] ? ([B] extends [A] ? true : false) : false;
+// SettingValues is read off each entry's validator, so a shared entry shape
+// that widened `validation` would turn these into unknown.
+const exposureValueIsNumber: IsExactly<SettingValues['exposure'], number> = true;
+const onlyBoostValueIsBoolean: IsExactly<SettingValues['onlyBoost'], boolean> = true;
 
 describe('settings schema shape', () => {
     test('SettingKey is a literal union, not string', () => {
         expect(settingKeyIsLiteralUnion).toBe(true);
+    });
+
+    test('SettingValues stays precise per key', () => {
+        expect(exposureValueIsNumber).toBe(true);
+        expect(onlyBoostValueIsBoolean).toBe(true);
     });
 
     test('SETTINGS_SCHEMA keys keep their order', () => {

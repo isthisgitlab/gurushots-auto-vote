@@ -288,7 +288,9 @@ function printHelp() {
     console.log('');
     console.log('Notes:');
     console.log('  - Values are automatically parsed (JSON, numbers, booleans)');
-    console.log('  - Use dot notation for nested properties');
+    console.log(
+        '  - Dot notation reads nested properties (get); set only takes challengeSettings.globalDefaults.<key>',
+    );
     console.log('  - CLI only supports global settings, not per-challenge overrides');
     console.log('  - GUI refresh (Ctrl+R / Cmd+R) needed for theme/language/timezone changes');
     console.log('  - Individual reset commands preserve current values until saved');
