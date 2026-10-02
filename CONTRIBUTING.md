@@ -86,7 +86,7 @@ The same core business logic in `src/ts/` runs under three shells: **Electron (G
 - **Entry points**: Electron `src/ts/index.ts` (bundled into `out/main/app.js` by `scripts/build-main.ts`, loaded through `out/main/index.js`) · CLI `src/ts/cli/cli.ts` · Electron preload `src/ts/preload.ts` · Capacitor bridge `src/ts/bridge/capacitor.ts`
 - **React renderer** (`src/ts/react/`) is shared between Electron and Capacitor
 - **`apiFactory.ts`** selects real vs mock API implementations at runtime based on `settings.mock`. All business logic goes through the factory — do not import from `src/ts/api/*` or `src/ts/mock/*` directly
-- **Settings facade** lives at `src/ts/settings.ts`. Schema + defaults + validation are in `src/ts/settings/schema.ts`; persistence transport (fs on Electron/CLI, `@capacitor/preferences` on Android) is in `src/ts/settings/storage.ts`
+- **Settings facade** lives at `src/ts/settings.ts`. Schema + defaults + validation are the facade `src/ts/settings/schema.ts` over the modules in `src/ts/settings/schema/`; persistence transport (fs on Electron/CLI, `@capacitor/preferences` on Android) is in `src/ts/settings/storage.ts`
 
 ## 📝 Code Guidelines
 

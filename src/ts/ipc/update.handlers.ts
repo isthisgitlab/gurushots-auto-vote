@@ -26,7 +26,7 @@ interface UpdateHandlerDeps {
 }
 
 // Lazily construct the shared instance on first use (windowed — unlike
-// index.ts's deliberate pre-window startup construction) and register it
+// index/startup.ts's deliberate pre-window startup construction) and register it
 // back through the accessor so index.ts keeps lifecycle ownership.
 const ensureUpdater = ({ getAutoUpdater, setAutoUpdater, getMainWindow }: UpdateHandlerDeps) => {
     let autoUpdater = getAutoUpdater();

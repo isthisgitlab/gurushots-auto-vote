@@ -8,7 +8,7 @@
  * error and no log line:
  *
  *   1. Chromium's hidden-page timer throttling / page freezing — handled by
- *      `backgroundThrottling: false` on the window (see index.ts).
+ *      `backgroundThrottling: false` on the window (see index/windows.ts).
  *   2. macOS App Nap — the OS suspends the whole app. No renderer flag helps;
  *      the process must hold a power assertion.
  *

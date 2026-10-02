@@ -125,7 +125,7 @@ const _runVotingRules = (
     // Clamp to the schema's valid range (1..59). Anything outside — a hand-edited
     // sub-minute value, an over-59 value, or a non-number — falls back to the
     // default (15). The lower bound MUST match soonestFinalWindowTopUpStart's guard
-    // in thresholdWindow.ts (>= 60s) so the vote-rule window and the scheduler's
+    // in thresholdWindow/leadWindows.ts (>= 60s) so the vote-rule window and the scheduler's
     // cadence cap can't disagree for the same corrupt input.
     const voteBeforeFinalWindowLeadMin =
         Number.isFinite(rawLeadMin) && rawLeadMin >= 1 && rawLeadMin <= 59 ? rawLeadMin : 15;

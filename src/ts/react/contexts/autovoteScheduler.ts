@@ -43,7 +43,7 @@ export const resolveScheduledFill: ResolveScheduledFill = async (challengeId) =>
 // WebView resolver for the pre-final-window top-up cadence cap: the per-challenge
 // keys over IPC, batched. Enabled only when BOTH the final-window feature and this
 // opt-in are on — matching nodeResolvers.ts and the rule engine's gate. durationSec
-// is the configurable final-window length; thresholdWindow.ts re-guards it.
+// is the configurable final-window length; thresholdWindow/leadWindows.ts re-guards it.
 export const resolveFinalWindowTopUp: ResolveFinalWindowTopUp = async (challengeId) => {
     const [voteBeforeFinalWindow, useFinalWindowExposure, leadMin, durationSec] = await Promise.all([
         ipc.getEffectiveSetting('voteBeforeFinalWindow', challengeId),
@@ -62,7 +62,7 @@ export const resolveFinalWindowTopUp: ResolveFinalWindowTopUp = async (challenge
 // IPC, batched. Enabled only when the opt-in and autoBoost are on AND onlyBoost is
 // off — matching nodeResolvers.ts and the rule engine's gate (onlyBoost blocks every
 // vote ahead of the pre-boost branch, so waking for it could only no-op). Both boost
-// windows go through as numbers; thresholdWindow.ts computes the apply instant from
+// windows go through as numbers; thresholdWindow/leadWindows.ts computes the apply instant from
 // live boost state and re-guards the `0 = off` sentinel.
 export const resolveBoostPrefill: ResolveBoostPrefill = async (challengeId) => {
     const [voteBeforeBoost, autoBoost, onlyBoost, leadMin, boostTime, keyUnlockedBoostTime] = await Promise.all([

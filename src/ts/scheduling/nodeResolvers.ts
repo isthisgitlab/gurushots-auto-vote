@@ -36,10 +36,10 @@ const resolveScheduledFill = ((challengeId: string) => ({
     beforeEndSecs: settings.getEffectiveSetting('scheduledFillBeforeEnd', challengeId),
 })) satisfies ResolveScheduledFill;
 
-// Per-challenge pre-final-window top-up config for the cadence cap (./thresholdWindow.ts).
+// Per-challenge pre-final-window top-up config for the cadence cap (./thresholdWindow/leadWindows.ts).
 // Enabled only when BOTH the final-window feature and this opt-in are on — matching the
 // rule engine's gate in _runVotingRules (services/decisions/ruleEngine.ts). leadSec is minutes → seconds and
-// durationSec is the configurable final-window length; thresholdWindow.ts re-guards a
+// durationSec is the configurable final-window length; thresholdWindow/leadWindows.ts re-guards a
 // non-positive/NaN value for both.
 const resolveFinalWindowTopUp = ((challengeId: string) => ({
     enabled:
@@ -49,13 +49,13 @@ const resolveFinalWindowTopUp = ((challengeId: string) => ({
     durationSec: Number(settings.getEffectiveSetting('finalWindowDuration', challengeId)),
 })) satisfies ResolveFinalWindowTopUp;
 
-// Per-challenge pre-boost fill config for the cadence cap (./thresholdWindow.ts).
+// Per-challenge pre-boost fill config for the cadence cap (./thresholdWindow/leadWindows.ts).
 // Enabled only when the opt-in and autoBoost are on AND onlyBoost is off — matching the
 // rule engine, so the scheduler never wakes for a fill the rule would decline. onlyBoost
 // is part of the gate because it blocks every vote ahead of the pre-boost branch in
 // _runVotingRules, which would otherwise make this cap wake a cycle that can only no-op.
 // Both boost windows are passed through as numbers because the apply instant depends on
-// the challenge's live boost state, which only thresholdWindow.ts sees; it re-guards the
+// the challenge's live boost state, which only thresholdWindow/leadWindows.ts sees; it re-guards the
 // `0 = off` sentinel and an out-of-range leadSec.
 const resolveBoostPrefill = ((challengeId: string) => ({
     enabled:
@@ -67,7 +67,7 @@ const resolveBoostPrefill = ((challengeId: string) => ({
     keyUnlockedBoostTimeSec: Number(settings.getEffectiveSetting('keyUnlockedBoostTime', challengeId)),
 })) satisfies ResolveBoostPrefill;
 
-// Per-challenge currency-automation timing for the cadence cap (./thresholdWindow.ts):
+// Per-challenge currency-automation timing for the cadence cap (./thresholdWindow/ruleWakes.ts):
 // each ENABLED rule's three timing conditions, null for a rule that is off. The
 // enable keys resolve through global defaults, profiles and challenge overrides.
 // Disabled rules resolve to null and never shorten the wait.
@@ -91,7 +91,7 @@ const resolveCurrencyAuto = ((challengeId: string) => ({
 })) satisfies ResolveCurrencyAuto;
 
 // Per-challenge scenario and runtime state for the scenario boundary
-// (./thresholdWindow.ts computes the instant with the engine's own nextWakeAt).
+// (./thresholdWindow/ruleWakes.ts computes the instant with the engine's own nextWakeAt).
 const resolveScenarioWake = ((challengeId: string) =>
     scenarioWakeInput(getScenarioStatus(challengeId))) satisfies ResolveScenarioWake;
 

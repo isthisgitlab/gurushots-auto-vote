@@ -82,7 +82,7 @@ Domain terms used throughout, in reader's terms:
     - `exposureTarget` / `finalWindowExposureTarget`: `0` or null means **"target == trigger"** — the rule
       stays **active**, it simply votes up to the trigger value.
       `getEffectiveExposureTarget()` (`services/decisions/thresholds.ts` — around L81); schema note in
-      `settings/schema.ts` (around L86).
+      the `exposureTarget` entry comment in `settings/schema/general.ts`.
     - `boostTime` / `emergencyFill` / `keyUnlockedBoostTime`: `0` means **feature off / never auto-apply**.
       See the explicit comment in `getEffectiveKeyUnlockedBoostTime()` (`services/decisions/thresholds.ts` — around
       L120: _"An explicit 0 means 'never auto-apply', matching the 0-is-off convention boostTime and
@@ -100,11 +100,10 @@ Domain terms used throughout, in reader's terms:
 
 ## 2. Scheduling
 
-- `createCadenceChain()` (`scheduling/cadenceChain.ts` — around L352) is a single recursive `setTimeout`
+- `createCadenceChain()` (`scheduling/cadenceChain/chain.ts`) is a single recursive `setTimeout`
   chain — **no cron** — shared by CLI, GUI, and Android headless. See `scheduling.md` for the three timer
   engines that drive it per platform.
-- The single cadence decision is `computeNextCycleDelayMs()` (`scheduling/thresholdWindow.ts` — around
-  L555): modes `last-minute` / `approaching` / `scheduled` / `normal`, with the invariant **never sleep
+- The single cadence decision is `computeNextCycleDelayMs()` (`scheduling/thresholdWindow/cadenceDecision.ts`): modes `last-minute` / `approaching` / `scheduled` / `normal`, with the invariant **never sleep
   past an upcoming boundary**.
 - Double-fire guard: a **stale-timer identity check** (`getTimer() !== timeoutId`) ensures only the
   current timer re-arms, so a re-armed/stopped chain can't double-fire. There is no mutex around a
@@ -114,7 +113,7 @@ Domain terms used throughout, in reader's terms:
   swallow it.
 - `now` is re-read per challenge (a pass can take minutes, so a single clock would miss windows that open
   mid-pass).
-- **Auto-join is a pre-step of the pass, not a separate schedule.** `runJoinPass` (`services/joinChallenges.ts`)
+- **Auto-join is a pre-step of the pass, not a separate schedule.** `runJoinPass` (`services/joinChallenges/joinPass.ts`)
   runs inside the shared `fetchChallengesAndVote` (`strategies/real/index.ts` real / `mock/strategy.ts` mock) before the
   voting pass, so all three platforms get it without forking `runVotingPass`. It is skipped for a
   single-challenge run and never allowed to abort voting (its errors are caught and logged). The `autoJoin`
@@ -256,8 +255,8 @@ The user-editable `ignoreTitleWords` setting (master → profile → per-challen
 rules cannot know are noise — "Epic", "Dramatic", "Captivating". Matched against the RAW word before
 stemming, like `STOPWORDS`, so a user writing "captivating" does not have to know it stems to "captivat".
 The default is **seeded, not hardcoded**, so every word is visible and removable; "negative" is
-deliberately absent because "Negative Space" is a real subject. It is resolved ONCE in `runFillAttempt`
-(and once in `pickJoinPhoto`) rather than threaded from the six sites that read the tag settings — a value
+deliberately absent because "Negative Space" is a real subject. It is resolved ONCE in `loadFillCandidates`
+(`services/autoFill/pipeline/scoring.ts`; and once in `pickJoinPhoto`) rather than threaded from the six sites that read the tag settings — a value
 repeated six times is one that gets forgotten at one of them.
 
 ### 3b. Tag resolution (auto-fill candidate narrowing)
@@ -282,8 +281,8 @@ repeated six times is one that gets forgotten at one of them.
 - Both deps are **optional** in `fetchCandidatesForChallenge`; omit either and behavior is exactly the
   pre-resolution fallback. Nothing here can fail a fill. **That optionality is a safety net, not the
   shipping state** — every real path supplies them: `strategies/real/index.ts` (the `api:` bundle `buildFillDeps`
-  in `services/votingOrchestrator/context.ts` copies into `fillDeps`, and `joinDeps`), `ipc/actions.handlers.ts` (manual Fill Now), and both mock
-  bundles. Note `runFillAttempt` rebuilds a fresh deps object for its
+  in `services/votingOrchestrator/context.ts` copies into `fillDeps`, and `joinDeps`), `ipc/actions/entries.ts` (manual Fill Now), and both mock
+  bundles. Note `loadFillCandidates` (`services/autoFill/pipeline/scoring.ts`) rebuilds a fresh deps object for its
   `fetchCandidatesForChallenge` call rather than spreading `deps`, so a dep added upstream must be named
   there too or it is silently dropped for auto-fill, emergency fill and manual fill alike.
 
@@ -314,9 +313,9 @@ repeated six times is one that gets forgotten at one of them.
 - `rankVisually()` (`services/visionVerifier.ts`) runs a bundled, 8-bit quantized **SigLIP** model
   (`zero-shot-image-classification`, `@huggingface/transformers`) over the **top 12 tag-ranked
   candidates** of every challenge. Like the lexicon it only orders photos — it is never part of the vote
-  decision. One call site feeds every submission path: `verifyFillPick()` in `services/autoFill/pipeline.ts` (auto, emergency,
+  decision. One call site feeds every submission path: `verifyFillPick()` in `services/autoFill/pipeline/verify.ts` (auto, emergency,
   manual, and fill-new fills via `runFillAttempt`, plus swaps via `rankCandidatesForChallenge`), and
-  `pickJoinPhoto()` for auto-join.
+  `pickJoinPhoto()` (`services/joinChallenges/photoPick.ts`) for auto-join.
 - **Prompts come from the challenge, never a theme list**: `a photo of <subject>` from
   `visualSubjectWords()` (the title subject — series prefix, negated words and `ignoreTitleWords` removed,
   **unstemmed**, and deliberately without `abstractTitleWords`, which reads "leaves" as a verb) plus
@@ -364,7 +363,7 @@ repeated six times is one that gets forgotten at one of them.
   never match real ones — so mock mode passes `cleanupStaleMetadata: null` plus an in-memory tracker, or it
   would purge/pollute the user's real `metadata.json`. The join flow follows the same rule: mock passes a
   `null` join-state store and no cross-process lock.
-- **Paid-join money safety** (`services/joinChallenges.ts`): the order is load-bearing — resolve an eligible
+- **Paid-join money safety** (`services/joinChallenges/performJoin.ts`, with the unlock claim in `unlockMarker.ts` and the in-flight lock in `shared.ts`): the order is load-bearing — resolve an eligible
   photo **before** any `coins_unlock` (no photo ⇒ skip, no spend); persist the unlock claim
   (`joinState.json`) **before** the charge so a crash can never let a later pass re-unlock (idempotent
   retry), and if the claim can't be written, don't spend; a per-process in-flight `Set` **plus** a
@@ -412,7 +411,7 @@ repeated six times is one that gets forgotten at one of them.
   `{ ok: true, token, settings }` or `{ ok: false, response }`, and callers do
   `if (!guard.ok) return guard.response;`.
 - Handlers explicitly **whitelist** the fields returned to the renderer so internal result shapes don't
-  leak (`safeResult` / `safeRaw` in `ipc/actions.handlers.ts`).
+  leak (`toSafeTurboResult` / `safeRaw` in `ipc/actions/turbo.ts`).
 
 ## 7. Persistence & platform detection
 
@@ -489,17 +488,16 @@ repeated six times is one that gets forgotten at one of them.
 ## 10. Security (renderer / main) — state the limits, don't over-promise
 
 - Every `BrowserWindow` uses `contextIsolation: on`, `nodeIntegration: off`, `webSecurity: on`
-  (`index.ts`), and the renderer is exposed only `window.api` via `contextBridge`, never `ipcRenderer`.
-  **Sandboxing here is Electron's default-on behavior** (unset `sandbox` + `nodeIntegration:false`), _not_
-  an explicit flag at those lines — a spot-checker won't find the word "sandbox" there. Regressing
-  context-isolation / node-integration is a classic severe-vuln class.
+  and `sandbox: on` (all explicit in `index/windows.ts`, spread after any caller-supplied preferences so a
+  caller can't override them), and the renderer is exposed only `window.api` via `contextBridge`, never
+  `ipcRenderer`. Regressing context-isolation / node-integration / sandbox is a classic severe-vuln class.
 - A defense-in-depth **sender-frame trust check** (`isTrustedSender`, `ipc/registerHandlers.ts`) refuses
   any invoke from a non-main-frame or non-`file://` origin, and is reused by the manual `ipcMain.on`
   channels.
 - The settings/token file is written mode `0o600` — but **only at creation. A pre-existing or
   backup-restored file keeps whatever mode it already had** (the source says as much); don't state 0600 as
   an always-guarantee.
-- **Log redaction (`logger.ts`) is two-layer but credential-key-keyed, not exhaustive.** `sanitizeForLog`
+- **Log redaction (`logger/sanitize.ts`, through the `logger.ts` facade) is two-layer but credential-key-keyed, not exhaustive.** `sanitizeForLog`
   recursively redacts an **allowlist** of sensitive object keys; `redactMessage` scrubs
   `token=…` / `password=…`-style fragments folded into message strings. Both run on every entry, and
   untrusted API strings additionally pass through `logger.sanitizeLogString()` before interpolation. The
@@ -535,12 +533,12 @@ caps (dependency-free, renderer-safe), and `scenarios/templates.ts` holds editab
   mode uses the in-memory ledger. Android persists it through the native keyed bridge
   (`gs_scenario_state`); the app WebView `refreshAsync`es it before status reads, resets and each in-app
   pass, and when the native service is available only the background service advances scenarios
-  (`backgroundServiceOwnsScenarios`).
+  (`backgroundServiceOwnsScenarios`, `services/scenarioRunner/step.ts`).
 - **Engine** (`scenarios/conditions.ts`, `selectors.ts`, `evaluate.ts`, `nextWake.ts`, pure): unknown data
   fails closed (never makes a condition true); entry ids are compared as strings, never by position (except
   the explicit `slot` selector); an in-flight rule resumes first; a phase or in-flight rule the edited
   scenario no longer has **halts** the challenge instead of guessing.
-- **Runner contract** (`services/scenarioRunner.ts`, first step of `processChallenge`, never throws): the
+- **Runner contract** (`services/scenarioRunner/{step,rule,actions}.ts`, first step of `processChallenge`, never throws): the
   challenge is re-read live and the action's entry re-resolved before every action; a gone target skips the
   action. Once one action of a rule lands the rule is **committed** and its progress persisted after every
   action, so a crash never repeats a spend that landed. A committed rule then passes over a **skipped** step

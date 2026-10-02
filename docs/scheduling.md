@@ -3,7 +3,7 @@
 This app runs the voting cycle on three different shells (CLI, Electron,
 Android). The **cadence decision** — how long to wait before the next
 cycle — is shared via `computeNextCycleDelayMs` in
-`src/ts/scheduling/thresholdWindow.ts`. The **timer engine** that acts on
+`src/ts/scheduling/thresholdWindow/cadenceDecision.ts`. The **timer engine** that acts on
 that decision is per-shell, because each shell has a different process
 model. Future contributors should keep the decision shared and resist
 re-introducing a separate boundary-switch timer per host.
@@ -198,7 +198,7 @@ the window still tops up; a window fully missed while the app was down is
 skipped with no catch-up, exactly like scheduled fill).
 
 The cadence side lives in `soonestFinalWindowTopUpStart`
-(`src/ts/scheduling/thresholdWindow.ts`), fed to `computeNextCycleDelayMs`
+(`src/ts/scheduling/thresholdWindow/leadWindows.ts`), fed to `computeNextCycleDelayMs`
 through a third injected resolver (`resolveFinalWindowTopUp`, sync on Node /
 async IPC on the WebView) returning `{enabled, leadSec, durationSec}` per challenge.
 Unlike scheduled fill, this resolver takes **no `timezone`** and is threaded
@@ -229,7 +229,7 @@ Deliberate semantics and caveats:
 Per-challenge pre-boost fill (`voteBeforeBoost`, default off) votes a challenge
 to **100%** for `voteBeforeBoostLeadMin` (1–59, default 15) minutes before an
 available Boost is auto-applied, so the Boost multiplies a full entry rather
-than a decayed one. The cadence side is `soonestBoostPrefillStart`, fed by a
+than a decayed one. The cadence side is `soonestBoostPrefillStart` (`scheduling/thresholdWindow/leadWindows.ts`), fed by a
 fourth injected resolver (`resolveBoostPrefill`, sync on Node / async IPC on the
 WebView) returning `{enabled, leadSec, boostTimeSec, keyUnlockedBoostTimeSec}`
 per challenge. The cap targets the soonest upcoming window **start**
@@ -244,7 +244,7 @@ Deliberate semantics and caveats:
   appear, move or vanish as the Boost's timer is refreshed server-side. That is
   fine — it is recomputed from scratch every cycle and the rule re-checks the
   same window before acting. The resolver carries only settings, keeping
-  `thresholdWindow.ts` free of settings I/O for the WebView bundle.
+  `thresholdWindow/` (the facade and every sub-module) free of settings I/O for the WebView bundle.
 - **Sentinel parity**: the `0 = off` sentinel on `boostTime` (timer boost) and
   `keyUnlockedBoostTime` (key-unlocked) is honoured in **both**
   `soonestBoostPrefillStart` and `VotingLogic.getBoostPrefillState`, so the
@@ -291,7 +291,7 @@ Deliberate semantics and caveats:
   with no error and no log line, and both must stay defeated:
     - Chromium throttles, then outright **freezes**, timers on a
       hidden/occluded page → `backgroundThrottling: false` on the main
-      window (`src/ts/index.ts`).
+      window (`src/ts/index/windows.ts`).
     - macOS **App Nap** suspends the whole process, which no renderer flag
       can reach → `src/ts/windows/backgroundActivity.ts` holds a
       `prevent-app-suspension` power-save blocker for exactly as long as
@@ -316,14 +316,14 @@ Deliberate semantics and caveats:
       syncs.
 
     When a timer _does_ fire far past its due time anyway, `cadenceChain`'s
-    `log.overslept` hook reports it as a warning on both hosts, using the
-    shared `formatOversleptMessage` so the two surfaces cannot drift. Without
+    `log.overslept` hook (`scheduling/cadenceChain/chain.ts`) reports it as a warning on both hosts, using the
+    shared `formatOversleptMessage` (`scheduling/cadenceChain/oversleep.ts`) so the two surfaces cannot drift. Without
     it the failure is invisible: the only symptom is a challenge that closed
     with an unfilled slot, and nothing in the log says why. A 51-minute gap on a
     3–4 minute cadence, for example, can swallow a challenge's last
     scheduled fill _and_ its emergency-fill window.
 
-    `oversleptBy` reports a stall that is over a minute late **and** either
+    `oversleptBy` (`scheduling/cadenceChain/oversleep.ts`) reports a stall that is over a minute late **and** either
     more than half the intended wait **or** more than five minutes outright.
     The second clause is not redundant: `checkFrequencyMin/Max` have no upper
     bound, so on a long cadence a deadline-costing stall can still be a small

@@ -7,7 +7,7 @@
  * computeNextCycleDelayMs can cap the sleep and land a cycle exactly at the
  * window start instead of overshooting it by up to a whole random delay.
  *
- * Mirrors thresholdWindow.ts's shape: pure math over an injected per-challenge
+ * Mirrors the thresholdWindow/ modules' shape: pure math over an injected per-challenge
  * config resolver that may be sync (Node: settings facade) or async (WebView:
  * IPC), resolved once per decision in a single pass.
  */
@@ -44,7 +44,7 @@ export type ScheduledStart = {
 
 // Non-flash challenges that are still open at `now`. Flash challenges never
 // enter last-minute/scheduled-fill mode, and closed ones can't. Shared with
-// thresholdWindow.ts so the two cadence paths agree on eligibility.
+// thresholdWindow/thresholds.ts so the two cadence paths agree on eligibility.
 /**
  * @param now - Unix timestamp (seconds)
  */
