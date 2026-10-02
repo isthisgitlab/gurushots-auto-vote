@@ -22,7 +22,6 @@ const submitVoteImages = async (
     onVoteLanded: () => void,
     maxVotes?: number,
 ): Promise<VotingPassResult | null> => {
-    // Check for cancellation before submitting votes
     if (cancellation.isCancelled()) {
         return cancelPass(pass.allChallenges, '🛑 Voting cancelled by user before vote submission');
     }
@@ -37,7 +36,6 @@ const submitVoteImages = async (
     // Submit votes to target exposure (dynamic based on voting rules)
     await pass.api.submitVotes(voteImages, pass.token, targetExposure, maxVotes);
 
-    // Check for cancellation before delay
     if (cancellation.isCancelled()) {
         // The vote already went through, so the trigger is spent —
         // record before bailing or the next pass re-votes it.
@@ -78,7 +76,6 @@ export const voteOnChallenge = async (
 ): Promise<VoteOutcome> => {
     const outcome: VoteOutcome = { cancelled: null, voteThrew: false, votePool: undefined };
     if (!decision.shouldVote) {
-        // Log why voting was skipped
         logger
             .withCategory('voting')
             .info(`${logger.challengeTag(challenge)} Skipping voting - ${decision.voteReason}`, null);
@@ -90,7 +87,6 @@ export const voteOnChallenge = async (
         .startOperation(`vote-${challenge.id}`, `Voting on ${logger.challengeTag(challenge)}`, 'DEBUG');
 
     try {
-        // Check for cancellation before voting
         if (cancellation.isCancelled()) {
             outcome.cancelled = cancelPass(
                 pass.allChallenges,
@@ -103,7 +99,6 @@ export const voteOnChallenge = async (
             .withCategory('voting')
             .info(`${logger.challengeTag(challenge)} Starting voting process - ${decision.voteReason}`, null);
 
-        // Get images to vote on
         const voteImages = await pass.api.getVoteImages(challenge, pass.token);
         // A capped mission pool is handed to the fill step whole, like any other.
         outcome.votePool = voteImages ?? null;
