@@ -70,8 +70,8 @@ const swapPhoto = async (
         c_id: String(challengeId),
         el: 'challenges',
         el_id: 'true',
-        img_id: String(oldImageId),
-        new_img_id: String(newImageId),
+        img_id: oldImageId,
+        new_img_id: newImageId,
     });
 };
 
@@ -91,7 +91,7 @@ const exposureAutofill = async (
     return post(ENDPOINTS.exposureAutofill, token, {
         'challenge_ids[0]': String(challengeId),
         el: 'my_challenges',
-        el_id: String(memberId),
+        el_id: memberId,
     });
 };
 

@@ -165,13 +165,11 @@ export interface VoteImagesResponse {
     images: VoteImage[];
 }
 
-// ---------------------------------------------------------------------------
-// Transport-layer payloads (src/ts/api/*, mirrored by src/ts/mock/*): the
-// action endpoints' bodies. A field is optional where a refusal or failure
-// body leaves it out.
-// ---------------------------------------------------------------------------
-
-/** A write endpoint's body; the code only checks `success`. */
+/**
+ * A write endpoint's body; the code only checks `success`. This and the action
+ * payloads below (src/ts/api/*, mirrored by src/ts/mock/*) leave a field
+ * optional where a refusal or failure body omits it.
+ */
 export interface SuccessResponse {
     success?: boolean;
 }

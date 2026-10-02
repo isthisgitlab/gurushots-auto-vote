@@ -1,10 +1,4 @@
-/**
- * API Header Randomizer
- *
- * Randomizes API headers to make the app look more natural when used by multiple people.
- * Headers are saved in settings so they stay consistent for each app installation.
- * Keeps app version and build number the same for consistency.
- */
+/** Per-installation randomized API headers, persisted in settings; app version and build number stay fixed. */
 
 import * as settings from '../settings';
 import * as logger from '../logger';

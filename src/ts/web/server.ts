@@ -119,6 +119,7 @@ const isLocalHost = (host: string | undefined) => {
 // with no Origin is not from a web page (curl, a test client).
 const isSameOrigin = (req: IncomingMessage) => {
     const origin = req.headers.origin;
+    // aislop-ignore-next-line ai-slop/hardcoded-url -- same-origin check built from the request's own Host header, not a deployment URL
     return origin === undefined || origin === `http://${req.headers.host}`;
 };
 

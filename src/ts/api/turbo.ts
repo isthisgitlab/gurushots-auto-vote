@@ -1,12 +1,4 @@
-/**
- * GuruShots Auto Voter - Turbo Module
- *
- * Handles the Turbo mini-game (earn) and apply-turbo flow on the
- * web API surface. The turbo endpoints live under /rest/ and use a
- * different header profile than the mobile vote/boost calls — they
- * require x-env: WEB and x-api-version: 13. The session token sent
- * via x-token works the same as the mobile flow.
- */
+/** Turbo mini-game (earn) and apply-turbo calls on the /rest/ web API: WEB header profile (x-env: WEB, x-api-version: 13). */
 
 import { makePostRequest } from './api-client';
 import { ENDPOINTS, createWebHeaders, makeRequireValue } from './constants';
@@ -61,7 +53,7 @@ const submitTurboSelection = async (
     requireValue(imageId, 'imageId');
     requireValue(token, 'token');
     const headers = createWebHeaders(token);
-    const data = `challenge_id=${encodeURIComponent(String(challengeId))}&image_id=${encodeURIComponent(String(imageId))}`;
+    const data = `challenge_id=${encodeURIComponent(String(challengeId))}&image_id=${encodeURIComponent(imageId)}`;
     const response = await makePostRequest<TurboSelectionResponse>(ENDPOINTS.submitTurboSelection, headers, data);
     if (!response) {
         return { ok: false, success: false, state: null, scores: null, errorCode: null, raw: null };
@@ -86,7 +78,7 @@ const applyTurbo = async (challengeId: string | number, imageId: string, token: 
     requireValue(imageId, 'imageId');
     requireValue(token, 'token');
     const headers = createWebHeaders(token);
-    const data = `challenge_id=${encodeURIComponent(String(challengeId))}&image_id=${encodeURIComponent(String(imageId))}`;
+    const data = `challenge_id=${encodeURIComponent(String(challengeId))}&image_id=${encodeURIComponent(imageId)}`;
     const response = await makePostRequest<SuccessResponse>(ENDPOINTS.setTurbo, headers, data);
     if (!response) {
         return { ok: false, raw: null };

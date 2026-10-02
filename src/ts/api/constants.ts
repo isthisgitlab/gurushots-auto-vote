@@ -5,6 +5,7 @@
  * submissions, and challenges modules.
  */
 
+// aislop-ignore-next-line ai-slop/hardcoded-url -- typed config module; CLAUDE.md forbids env-var configuration
 const API_BASE = 'https://api.gurushots.com';
 
 // rest_mobile/* endpoints share the iOS-spoof header profile assembled
