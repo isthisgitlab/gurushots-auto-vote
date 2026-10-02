@@ -27,6 +27,7 @@ import * as apiFactory from '../apiFactory';
 import * as auth from '../services/auth';
 import { registerHandlers } from './registerHandlers';
 import { errorResult } from './errorResult';
+import { isIdArg } from './isIdArg';
 import { getScenarioStatus, ledgerForMode } from '../services/scenarioStatus';
 import { findActiveChallenge } from '../services/findActiveChallenge';
 import { evaluateScenario, startState } from '../scenarios/evaluate';
@@ -50,8 +51,6 @@ type ScenarioStatus = ReturnType<typeof getScenarioStatus>;
 
 const log = () => logger.withCategory('scenario');
 
-const isIdArg = (value: unknown): value is string | number =>
-    (typeof value === 'string' && value.trim() !== '') || Number.isFinite(value);
 const isName = (value: unknown): value is string => typeof value === 'string' && value.trim() !== '';
 
 // `issues?: undefined` keeps this arm distinct from the validation failures that
@@ -142,6 +141,20 @@ const loadLiveScenario = async (
     };
 };
 
+type LiveScenario = Extract<Awaited<ReturnType<typeof loadLiveScenario>>, { ok: true }>;
+
+/**
+ * The input `evaluateScenario` and `simulateScenario` both take.
+ */
+const runInput = ({ status, challenge, state, now, bankroll }: LiveScenario) => ({
+    scenario: status.scenario,
+    state,
+    challenge,
+    now,
+    timezone: status.timezone,
+    bankroll,
+});
+
 const buildHandlers = () =>
     ({
         'get-scenarios': async () =>
@@ -220,15 +233,8 @@ const buildHandlers = () =>
             return safely('dry-run-scenario', async () => {
                 const loaded = await loadLiveScenario('scenario dry run', challengeId);
                 if (!loaded.ok) return loaded.response;
-                const { status, challenge, state, now, bankroll } = loaded;
-                const decision = evaluateScenario({
-                    scenario: status.scenario,
-                    state,
-                    challenge,
-                    now,
-                    timezone: status.timezone,
-                    bankroll,
-                });
+                const { status } = loaded;
+                const decision = evaluateScenario(runInput(loaded));
                 return {
                     success: true as const,
                     scenario: status.scenario.name,
@@ -254,15 +260,8 @@ const buildHandlers = () =>
             return safely('simulate-scenario', async () => {
                 const loaded = await loadLiveScenario('scenario simulation', challengeId, draft ?? null);
                 if (!loaded.ok) return loaded.response;
-                const { status, challenge, state, now, bankroll } = loaded;
-                const timeline = simulateScenario({
-                    scenario: status.scenario,
-                    state,
-                    challenge,
-                    now,
-                    timezone: status.timezone,
-                    bankroll,
-                });
+                const { status, state, now } = loaded;
+                const timeline = simulateScenario(runInput(loaded));
                 return {
                     success: true as const,
                     scenario: status.scenario.name,

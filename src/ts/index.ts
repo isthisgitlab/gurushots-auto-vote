@@ -22,6 +22,7 @@ import { holdQuitForOpenBoosts, bypassQuitGuard, resetQuitGuard } from './window
 import { createApplicationMenu } from './ui/applicationMenu';
 import { translationManager } from './translations/index';
 import type { FSWatcher } from 'node:fs';
+import type { WebPreferences } from 'electron';
 
 // Disable service workers at the application level. Kept deliberately:
 // with contextIsolation on, the preload.ts register() patch only covers
@@ -96,10 +97,14 @@ function holdForOpenBoosts(event: { preventDefault: () => void }, proceed: () =>
     });
 }
 
-function createLoginWindow() {
-    const bounds = settings.getWindowBounds('login');
+/**
+ * Creates a window with the shared web preferences and window-bounds
+ * persistence. `extraWebPreferences` carries what only one window needs.
+ */
+function createAppWindow(kind: 'login' | 'main', htmlFile: string, extraWebPreferences: WebPreferences = {}) {
+    const bounds = settings.getWindowBounds(kind);
 
-    loginWindow = new BrowserWindow({
+    const win = new BrowserWindow({
         width: bounds.width,
         height: bounds.height,
         x: bounds.x,
@@ -112,38 +117,40 @@ function createLoginWindow() {
             // require() the relative channel manifest, so it ships pre-bundled.
             preload: appPath('dist', 'preload-bundle.js'),
             webSecurity: true,
+            ...extraWebPreferences,
             // Use a custom session partition to isolate storage
             partition: 'persist:gurushots',
         },
     });
 
-    loginWindow.loadFile(appPath('src', 'html', 'login.html')).catch((error) => {
-        logger.withCategory('ui').error('Failed to load login window content:', error);
+    win.loadFile(appPath('src', 'html', htmlFile)).catch((error) => {
+        logger.withCategory('ui').error(`Failed to load ${kind} window content:`, error);
     });
 
-    // Open DevTools in development mode (optional)
-    // loginWindow.webContents.openDevTools();
-
-    // The listeners below read the module-level reference at event time; only
-    // this window's own 'closed' event nulls it, hence the non-null casts.
-
     // Ensure window is visible on screen
-    loginWindow.once('ready-to-show', () => {
-        if (!(loginWindow as BrowserWindow).isVisible()) {
-            (loginWindow as BrowserWindow).center();
+    win.once('ready-to-show', () => {
+        if (!win.isVisible()) {
+            win.center();
         }
     });
 
     // Save window bounds when window is moved or resized
-    loginWindow.on('resize', () => {
-        const newBounds = (loginWindow as BrowserWindow).getBounds();
-        settings.saveWindowBounds('login', newBounds);
+    win.on('resize', () => {
+        settings.saveWindowBounds(kind, win.getBounds());
     });
 
-    loginWindow.on('move', () => {
-        const newBounds = (loginWindow as BrowserWindow).getBounds();
-        settings.saveWindowBounds('login', newBounds);
+    win.on('move', () => {
+        settings.saveWindowBounds(kind, win.getBounds());
     });
+
+    return win;
+}
+
+function createLoginWindow() {
+    loginWindow = createAppWindow('login', 'login.html');
+
+    // Open DevTools in development mode (optional)
+    // loginWindow.webContents.openDevTools();
 
     loginWindow.on('closed', () => {
         loginWindow = null;
@@ -151,65 +158,23 @@ function createLoginWindow() {
 }
 
 function createMainWindow() {
-    const bounds = settings.getWindowBounds('main');
-
     // Track when main window is created to prevent reload during login
     mainWindowCreatedTime = Date.now();
 
-    mainWindow = new BrowserWindow({
-        width: bounds.width,
-        height: bounds.height,
-        x: bounds.x,
-        y: bounds.y,
-        icon: appPath('src', 'assets', 'logo.png'),
-        webPreferences: {
-            nodeIntegration: false,
-            contextIsolation: true,
-            // Bundled by scripts/build-react.ts — the sandboxed preload cannot
-            // require() the relative channel manifest, so it ships pre-bundled.
-            preload: appPath('dist', 'preload-bundle.js'),
-            webSecurity: true,
-            // The auto-vote cadence chain is a recursive setTimeout living in
-            // THIS renderer, and Chromium throttles then freezes timers on a
-            // hidden page — which silently stalls the voting loop. Rationale,
-            // measurements and the App Nap counterpart: see
-            // docs/scheduling.md "Staying schedulable" and
-            // windows/backgroundActivity.ts. Do not re-enable.
-            backgroundThrottling: false,
-            // Use a custom session partition to isolate storage
-            partition: 'persist:gurushots',
-        },
-    });
-
-    mainWindow.loadFile(appPath('src', 'html', 'app.html')).catch((error) => {
-        logger.withCategory('ui').error('Failed to load main window content:', error);
+    mainWindow = createAppWindow('main', 'app.html', {
+        // The auto-vote cadence chain is a recursive setTimeout living in
+        // THIS renderer, and Chromium throttles then freezes timers on a
+        // hidden page — which silently stalls the voting loop. Rationale,
+        // measurements and the App Nap counterpart: see
+        // docs/scheduling.md "Staying schedulable" and
+        // windows/backgroundActivity.ts. Do not re-enable.
+        backgroundThrottling: false,
     });
 
     // Set main window reference for AutoUpdater IPC events
     if (autoUpdater) {
         autoUpdater.setMainWindow(mainWindow);
     }
-
-    // The listeners below read the module-level reference at event time; only
-    // this window's own 'closed' event nulls it, hence the non-null casts.
-
-    // Ensure window is visible on screen
-    mainWindow.once('ready-to-show', () => {
-        if (!(mainWindow as BrowserWindow).isVisible()) {
-            (mainWindow as BrowserWindow).center();
-        }
-    });
-
-    // Save window bounds when window is moved or resized
-    mainWindow.on('resize', () => {
-        const newBounds = (mainWindow as BrowserWindow).getBounds();
-        settings.saveWindowBounds('main', newBounds);
-    });
-
-    mainWindow.on('move', () => {
-        const newBounds = (mainWindow as BrowserWindow).getBounds();
-        settings.saveWindowBounds('main', newBounds);
-    });
 
     // Closing the main window stops the cadence chain on every platform (on
     // macOS without quitting), so it forfeits a pending boost just like a quit.

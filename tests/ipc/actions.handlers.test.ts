@@ -406,6 +406,29 @@ describe('apply-turbo-to-entry', () => {
     });
 });
 
+describe('apply-turbo-to-entry — invalid args', () => {
+    test.each([
+        ['an object challenge id', { id: 1 }, 'i1'],
+        ['a NaN challenge id', NaN, 'i1'],
+        ['an empty challenge id', '', 'i1'],
+        ['an object image id', '123', { id: 1 }],
+        ['a NaN image id', '123', NaN],
+        ['an empty image id', '123', ''],
+    ])('refuses %s without calling applyTurbo', async (_label, challengeId, imageId) => {
+        stubAuthGuardOk();
+        const applyTurbo = jest.fn();
+        stubStrategy({ applyTurbo });
+        const handlers = buildHandlers();
+        const result = await handlers['apply-turbo-to-entry'](
+            {},
+            invalid<string>(challengeId),
+            invalid<string>(imageId),
+        );
+        expect(result).toEqual({ success: false, error: 'Invalid challenge or image id' });
+        expect(applyTurbo).not.toHaveBeenCalled();
+    });
+});
+
 describe('fill-challenge-now', () => {
     test('rejects when auth guard fails', async () => {
         stubAuthGuardFail();

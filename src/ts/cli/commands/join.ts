@@ -45,55 +45,61 @@ const showDiscover = async () => {
  */
 type JoinOutcome = { success?: boolean; status?: string; cost?: number; coins?: number; error?: string };
 
-// Map a join outcome status to a user-facing line.
-const reportJoin = (result: JoinOutcome | null | undefined, challengeId: string | number) => {
-    const status = result?.status;
-    switch (status) {
+// Map a join outcome status to a user-facing line; null for an unknown status.
+const joinLine = (
+    result: JoinOutcome | null | undefined,
+    challengeId: string | number,
+): { level: 'info' | 'error'; text: string } | null => {
+    switch (result?.status) {
         case 'joined':
-            logger.withCategory('ui').info(`✅ Joined challenge ${challengeId}.`);
-            return;
+            return { level: 'info', text: `✅ Joined challenge ${challengeId}.` };
         case 'skipped-unaffordable':
-            logger
-                .withCategory('ui')
-                .error(
-                    `Not enough coins to join ${challengeId} (needs ${result?.cost}, you have ${result?.coins ?? '?'}).`,
-                );
-            return;
+            return {
+                level: 'error',
+                text: `Not enough coins to join ${challengeId} (needs ${result?.cost}, you have ${result?.coins ?? '?'}).`,
+            };
         case 'balance-unknown':
-            logger.withCategory('ui').error(`Could not read your coin balance — not joining ${challengeId}.`);
-            return;
+            return { level: 'error', text: `Could not read your coin balance — not joining ${challengeId}.` };
         case 'charged-pending-submit':
-            logger
-                .withCategory('ui')
-                .error(
-                    `Coins were charged for ${challengeId} but the join did not complete. Re-run "join ${challengeId} --yes" to retry the submit — you will NOT be charged again.`,
-                );
-            return;
+            return {
+                level: 'error',
+                text: `Coins were charged for ${challengeId} but the join did not complete. Re-run "join ${challengeId} --yes" to retry the submit — you will NOT be charged again.`,
+            };
         case 'failed-no-charge':
-            logger.withCategory('ui').error(`Could not join ${challengeId}. No coins were charged.`);
-            return;
+            return { level: 'error', text: `Could not join ${challengeId}. No coins were charged.` };
         case 'skipped-no-photo':
-            logger.withCategory('ui').error(`No eligible photo to submit for ${challengeId}. No coins were charged.`);
-            return;
+            return {
+                level: 'error',
+                text: `No eligible photo to submit for ${challengeId}. No coins were charged.`,
+            };
         case 'unavailable':
-            logger.withCategory('ui').info(`Challenge ${challengeId} is not open to join (already joined or closed).`);
-            return;
+            return {
+                level: 'info',
+                text: `Challenge ${challengeId} is not open to join (already joined or closed).`,
+            };
         case 'busy':
-            logger.withCategory('ui').info(`A join is already in progress for ${challengeId}.`);
-            return;
+            return { level: 'info', text: `A join is already in progress for ${challengeId}.` };
         case 'not-authenticated':
-            logger.withCategory('ui').error(`Not logged in — run "login" first, then join ${challengeId}.`);
-            return;
+            return { level: 'error', text: `Not logged in — run "login" first, then join ${challengeId}.` };
         case 'fetch-failed':
-            logger
-                .withCategory('ui')
-                .error(`Could not reach GuruShots to join ${challengeId}. Check your connection and try again.`);
-            return;
+            return {
+                level: 'error',
+                text: `Could not reach GuruShots to join ${challengeId}. Check your connection and try again.`,
+            };
         default:
-            // Friendly fallback; the raw status is logged at debug for diagnosis.
-            logger.withCategory('ui').error(`Could not join ${challengeId} right now. Please try again.`);
-            logger.withCategory('ui').debug(`join status=${status}`);
+            return null;
     }
+};
+
+const reportJoin = (result: JoinOutcome | null | undefined, challengeId: string | number) => {
+    const line = joinLine(result, challengeId);
+    if (line) {
+        logger.withCategory('ui')[line.level](line.text);
+        return;
+    }
+    // Friendly fallback; the raw status is logged at debug for diagnosis.
+    logger.withCategory('ui').error(`Could not join ${challengeId} right now. Please try again.`);
+    logger.withCategory('ui').debug(`join status=${result?.status}`);
 };
 
 /**

@@ -11,6 +11,7 @@
 import * as settings from '../settings';
 import { registerHandlers } from './registerHandlers';
 import { errorResult } from './errorResult';
+import { isIdArg } from './isIdArg';
 import * as logger from '../logger';
 import * as apiFactory from '../apiFactory';
 import * as auth from '../services/auth';
@@ -216,6 +217,9 @@ const handlePlayAutoTurbo = (async (event: unknown, challengeId: string | number
 }) satisfies IpcReplyFn;
 
 const handleApplyTurboToEntry = (async (event: unknown, challengeId: string | number, imageId: string) => {
+    if (!isIdArg(challengeId) || !isIdArg(imageId)) {
+        return { success: false as const, error: 'Invalid challenge or image id' };
+    }
     const safeChallengeId = sanitizeForLog(challengeId);
     const safeImageId = sanitizeForLog(imageId);
     try {

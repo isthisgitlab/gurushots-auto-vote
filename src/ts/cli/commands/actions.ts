@@ -196,26 +196,53 @@ const reportSpend = (
 };
 
 /**
- * Spend a KEY to unlock the challenge's locked boost (unlock only).
+ * The shape both single-step spends (unlock-boost, fill-exposure) share: the
+ * dry run prints what would happen, its cost and the exact re-run line; --yes
+ * runs `spend` and reports its outcome.
  */
-const unlockBoostCmd = async (challengeId: string, { yes = false }: { yes?: boolean } = {}) => {
+const spendOnChallenge = async (
+    challengeId: string,
+    yes: boolean,
+    spend: {
+        command: string;
+        field: CurrencyField;
+        failure: string;
+        preview: (title: string) => string;
+        success: (title: string) => string;
+        run: () => Promise<Parameters<typeof reportSpend>[0]>;
+    },
+) => {
     const challenge = await resolveChallenge(challengeId);
     if (!challenge) return;
     try {
         if (!yes) {
-            logger.withCategory('currency').info(`Unlock the boost on "${challenge.title}" with a key.`);
-            await printCost('keys');
+            logger.withCategory('currency').info(spend.preview(challenge.title));
+            await printCost(spend.field);
             logger
                 .withCategory('currency')
-                .info(`To spend the key, re-run: unlock-boost --challenge=${challengeId} --yes`);
+                .info(
+                    `To spend the ${CURRENCY_LABEL[spend.field]}, re-run: ${spend.command} --challenge=${challengeId} --yes`,
+                );
             return;
         }
-        const result = await currencyHandlers()['key-unlock-boost'](null, challengeId, true);
-        reportSpend(result, `Boost unlocked on "${challenge.title}" (not applied yet).`);
+        reportSpend(await spend.run(), spend.success(challenge.title));
     } catch (err) {
-        logger.withCategory('currency').error(`Failed to unlock boost: ${errorMessage(err) || err}`);
+        logger.withCategory('currency').error(`Failed to ${spend.failure}: ${errorMessage(err) || err}`);
     }
 };
+
+/**
+ * Spend a KEY to unlock the challenge's locked boost (unlock only).
+ */
+const unlockBoostCmd = async (challengeId: string, { yes = false }: { yes?: boolean } = {}) =>
+    spendOnChallenge(challengeId, yes, {
+        command: 'unlock-boost',
+        field: 'keys',
+        failure: 'unlock boost',
+        preview: (title) => `Unlock the boost on "${title}" with a key.`,
+        success: (title) => `Boost unlocked on "${title}" (not applied yet).`,
+        run: () => currencyHandlers()['key-unlock-boost'](null, challengeId, true),
+    });
 
 const SWAP_USAGE = 'Usage: swap --challenge=<id> --image=<id> [--to=<id> --yes]';
 const SWAP_BACK_USAGE = 'Usage: swap-back --challenge=<id> --image=<id> [--yes]';
@@ -334,24 +361,15 @@ const swapBackCmd = async (
 /**
  * Spend a FILL to top the challenge's exposure up to 100%.
  */
-const fillExposureCmd = async (challengeId: string, { yes = false }: { yes?: boolean } = {}) => {
-    const challenge = await resolveChallenge(challengeId);
-    if (!challenge) return;
-    try {
-        if (!yes) {
-            logger.withCategory('currency').info(`Fill the exposure of "${challenge.title}" to 100%.`);
-            await printCost('fills');
-            logger
-                .withCategory('currency')
-                .info(`To spend the fill, re-run: fill-exposure --challenge=${challengeId} --yes`);
-            return;
-        }
-        const result = await currencyHandlers()['fill-exposure'](null, challengeId, true);
-        reportSpend(result, `Exposure filled on "${challenge.title}".`);
-    } catch (err) {
-        logger.withCategory('currency').error(`Failed to fill exposure: ${errorMessage(err) || err}`);
-    }
-};
+const fillExposureCmd = async (challengeId: string, { yes = false }: { yes?: boolean } = {}) =>
+    spendOnChallenge(challengeId, yes, {
+        command: 'fill-exposure',
+        field: 'fills',
+        failure: 'fill exposure',
+        preview: (title) => `Fill the exposure of "${title}" to 100%.`,
+        success: (title) => `Exposure filled on "${title}".`,
+        run: () => currencyHandlers()['fill-exposure'](null, challengeId, true),
+    });
 
 export {
     boostChallenge,

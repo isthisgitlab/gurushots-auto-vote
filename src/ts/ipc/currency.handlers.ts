@@ -14,6 +14,7 @@
 
 import * as settings from '../settings';
 import { registerHandlers } from './registerHandlers';
+import { isIdArg } from './isIdArg';
 import * as logger from '../logger';
 import * as apiFactory from '../apiFactory';
 import * as auth from '../services/auth';
@@ -61,9 +62,6 @@ const takeSwapPreview = (key: string): string | null => {
 // the one the mock voting pass also records automatic swaps into.
 const ledgerFor = (strategy: ApiStrategy | null | undefined) =>
     strategy?.getStrategyType?.() === 'MockAPI' ? mockSwapBackLedger : swapBackLedger;
-
-const isIdArg = (value: unknown): value is string | number =>
-    (typeof value === 'string' && value.trim() !== '') || Number.isFinite(value);
 
 const currencyFailure = ((outcome: string | undefined) => ({
     success: false as const,
