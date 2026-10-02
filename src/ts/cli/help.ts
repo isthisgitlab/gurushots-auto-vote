@@ -28,7 +28,7 @@ Commands:
              its boost/turbo back): swap-back --challenge=<id> --image=<current id> [--yes]
   fill-exposure - Spend a fill to top exposure up to 100%: fill-exposure --challenge=<id> [--yes]
              Currency actions spend nothing without --yes; they print the cost first.
-  start    - Start continuous voting with cron scheduling (runs until stopped with Ctrl+C)
+  start    - Start continuous voting on a schedule (runs until stopped with Ctrl+C)
   status   - Show current status and settings
   bankroll - Show your currency balances (keys / swaps / fills / coins). Alias: coins
   discover - List open (un-joined) challenges you can join

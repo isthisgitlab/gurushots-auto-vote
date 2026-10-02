@@ -138,7 +138,7 @@ export const autoFillSettings = {
     },
     // Emergency fill only acts on scheduler cycles that actually run, so it
     // depends on cadence: keep emergencyFill <= lastMinuteThreshold and the
-    // fast last-minute cron is already active throughout the window. If it is
+    // fast last-minute cadence is already active throughout the window. If it is
     // larger, the early part of the window relies on the slower normal cadence
     // (it still fires, just less tightly) — see emergencyFillDesc.
     emergencyFill: {

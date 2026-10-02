@@ -166,7 +166,6 @@ const RENDERER_EXTERNALS = [
     ...NODE_BUILTINS,
     'electron',
     'electron-updater',
-    'node-cron',
     'tar',
     ...(isLite ? ['@huggingface/transformers'] : []),
 ];
