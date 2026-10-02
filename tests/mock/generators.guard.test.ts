@@ -1,10 +1,12 @@
 /**
  * mock/challenges.ts + mock/voting.ts + mock/endpoints/join.ts — strict-equal
- * guards over the generated mock payloads and the open-join rows, with the clock and Math.random pinned to a seeded sequence so
- * every branch of the generators is exercised and any change in the output
- * values, or in the order of random calls, fails.
+ * guards over the generated mock payloads and the open-join rows, with the
+ * clock and Math.random pinned to a seeded sequence so every branch of the
+ * generators is exercised and any change in the output values, or in the
+ * order of random calls, fails.
  *
- * Expected generator output lives in tests/mock/__data__/*.json; the join rows are inline.
+ * Expected generator output lives in tests/mock/__data__/*.json; the join
+ * rows are inline.
  */
 
 import type * as challengesModule from '../../src/ts/mock/challenges';
