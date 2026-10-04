@@ -148,6 +148,36 @@ const NODE_DOWNLOAD_ATTEMPTS = 2;
 
 const sha256Hex = (data: Buffer) => crypto.createHash('sha256').update(data).digest('hex');
 
+// Read the cached tarball in one step. A missing file is the normal "not cached
+// yet" answer; any other errno (a permission problem, say) is a real failure and
+// must not be mistaken for a cold cache.
+function readCachedTarball(tarPath: string): Buffer | null {
+    try {
+        return fs.readFileSync(tarPath);
+    } catch (error) {
+        if ((error as NodeJS.ErrnoException).code !== 'ENOENT') throw error;
+        return null;
+    }
+}
+
+// Publish a download by renaming a per-process temp file from the same directory, so
+// the published name only ever appears with a complete tarball behind it: no
+// half-written cache file for a peer build to extract, and no existsSync/writeFileSync
+// pair on the shared path to race on (CWE-367). The temp name is dot-prefixed so the
+// CLI workflow's `node-v*.tar.*` cache glob cannot capture an orphan left behind by a
+// killed build. This closes the partial-write window, not every race: a peer build
+// whose own hash check fails still removes the published path, and extraction reads
+// it by name.
+function cacheTarball(tarPath: string, data: Buffer) {
+    const tempPath = path.join(path.dirname(tarPath), `.${path.basename(tarPath)}.${process.pid}.tmp`);
+    try {
+        fs.writeFileSync(tempPath, data);
+        fs.renameSync(tempPath, tarPath);
+    } finally {
+        fs.rmSync(tempPath, { force: true });
+    }
+}
+
 async function fetchOk(url: string) {
     const res = await fetch(url);
     if (!res.ok) {
@@ -186,13 +216,11 @@ async function getOfficialNodeBinary(plat: NodeJS.Platform, arch: NodeJS.Archite
 
     let actual = '';
     for (let attempt = 0; attempt < NODE_DOWNLOAD_ATTEMPTS && actual !== expected; attempt++) {
-        let data: Buffer;
-        if (fs.existsSync(tarPath)) {
-            data = fs.readFileSync(tarPath);
-        } else {
+        let data = readCachedTarball(tarPath);
+        if (!data) {
             console.log(`⬇️  Downloading ${tarName}...`);
             data = Buffer.from(await (await fetchOk(tarUrl)).arrayBuffer());
-            fs.writeFileSync(tarPath, data);
+            cacheTarball(tarPath, data);
         }
         actual = sha256Hex(data);
         if (actual !== expected) fs.rmSync(tarPath, { force: true });

@@ -22,6 +22,7 @@ jest.mock('../../scripts/fetch-vision-model', () => ({
 import fsModule = require('node:fs');
 const fs = jest.mocked(fsModule);
 const realReadFileSync = fs.readFileSync;
+const realRenameSync = fs.renameSync;
 import pathModule = require('node:path');
 import crypto = require('node:crypto');
 const path = jest.mocked(pathModule);
@@ -49,6 +50,17 @@ const POSTJECT = path.join(ROOT, 'node_modules', '.bin', 'postject');
 const NODE_VER = process.versions.node;
 
 const NODE_EXTRACT_DIR = path.join(ROOT, '.cache', 'node-extract');
+// The build trees scripts/build-cli.ts writes into (NODE_CACHE_DIR, NODE_EXTRACT_DIR,
+// the pnpm deploy dir, BUILD_DIR, DIST_DIR): the read spy treats a miss there as "no
+// file" instead of reaching for whatever is really on disk. Keep in step with the
+// script's path constants — a tree missing here lets the real on-disk file back in.
+const BUILD_TREES = [
+    DIST_DIR,
+    BUILD_DIR,
+    NODE_CACHE_DIR,
+    NODE_EXTRACT_DIR,
+    path.join(ROOT, '.cache', 'vision-cli-deploy'),
+];
 const NODE_DIST = `https://nodejs.org/dist/v${NODE_VER}`;
 const NODE_TARBALL = Buffer.from('node tarball');
 const NODE_TARBALL_SHA = crypto.createHash('sha256').update(NODE_TARBALL).digest('hex');
@@ -106,15 +118,32 @@ describe('build-cli', () => {
             existing.add(p);
             files.set(String(p), Buffer.from(data as Uint8Array | string));
         });
+        jest.spyOn(fs, 'renameSync').mockImplementation((from, to) => {
+            const contents = files.get(String(from));
+            if (!contents) throw new Error(`ENOENT: no such file or directory, rename '${String(from)}'`);
+            existing.delete(from);
+            existing.add(to);
+            files.set(String(to), contents);
+        });
         jest.spyOn(fs, 'copyFileSync').mockImplementation(() => {});
         jest.spyOn(fs, 'cpSync').mockImplementation(() => {});
         jest.spyOn(fs, 'rmSync').mockImplementation((p) => {
             existing.delete(p);
             files.delete(String(p));
         });
+        // The script only reads from the repo's own build trees, so those come from the
+        // in-memory set (a miss is a missing file) — a real 58 MB tarball sitting in
+        // .cache/node-binaries can then never leak into a run. Every other path falls
+        // through to the real fs, which the spy must keep serving: Jest itself reads
+        // modules through it while a failing expectation resolves a stack frame.
         jest.spyOn(fs, 'readFileSync').mockImplementation((file, ...args) => {
             if (String(file).endsWith('vision-runtime.tar.gz')) return Buffer.from('test archive');
-            return files.get(String(file)) ?? realReadFileSync(file, ...args);
+            const contents = files.get(String(file));
+            if (contents) return contents;
+            if (!BUILD_TREES.some((dir) => String(file).startsWith(dir))) return realReadFileSync(file, ...args);
+            throw Object.assign(new Error(`ENOENT: no such file or directory, open '${String(file)}'`), {
+                code: 'ENOENT',
+            });
         });
         jest.spyOn(fs, 'chmodSync').mockImplementation(() => {});
         exitSpy = jest.spyOn(process, 'exit').mockImplementation(invalid(() => undefined));
@@ -216,6 +245,8 @@ describe('build-cli', () => {
     describe('getOfficialNodeBinary', () => {
         const fetchedUrls = () => jest.mocked(global.fetch).mock.calls.map(([url]) => String(url));
         const extractCalls = () => execFileSync.mock.calls.filter(([command]) => command === 'tar');
+        const tempTarball = (plat: string, arch: string) =>
+            path.join(NODE_CACHE_DIR, `.${tarballName(plat, arch)}.${process.pid}.tmp`);
 
         test('downloads, verifies and extracts a darwin gzip tarball from the cache dir', async () => {
             await expect(buildCli.getOfficialNodeBinary('darwin', 'arm64')).resolves.toBe(
@@ -226,7 +257,8 @@ describe('build-cli', () => {
                 `${NODE_DIST}/${tarballName('darwin', 'arm64')}`,
             ]);
             expect(fs.mkdirSync).toHaveBeenCalledWith(NODE_CACHE_DIR, { recursive: true });
-            expect(fs.writeFileSync).toHaveBeenCalledWith(tarballPath('darwin', 'arm64'), NODE_TARBALL);
+            expect(fs.writeFileSync).toHaveBeenCalledWith(tempTarball('darwin', 'arm64'), NODE_TARBALL);
+            expect(fs.renameSync).toHaveBeenCalledWith(tempTarball('darwin', 'arm64'), tarballPath('darwin', 'arm64'));
             expect(fs.rmSync).toHaveBeenCalledWith(extractDir('darwin', 'arm64'), { recursive: true, force: true });
             expect(extractCalls()).toEqual([
                 ['tar', ['-xzf', tarballPath('darwin', 'arm64'), '-C', NODE_EXTRACT_DIR], { stdio: 'inherit' }],
@@ -247,8 +279,38 @@ describe('build-cli', () => {
             await expect(buildCli.getOfficialNodeBinary('linux', 'x64')).resolves.toBe(nodeBinary('linux', 'x64'));
             expect(fetchedUrls()).toEqual([`${NODE_DIST}/SHASUMS256.txt`]);
             expect(fs.writeFileSync).not.toHaveBeenCalled();
+            expect(fs.renameSync).not.toHaveBeenCalled();
             expect(fs.rmSync).toHaveBeenCalledWith(extractDir('linux', 'x64'), { recursive: true, force: true });
             expect(extractCalls()).toHaveLength(1);
+        });
+
+        // Each override is scoped to the path under test and replaced wholesale (not
+        // one-shot): the fs spies are process-wide, so an incidental call — Jest
+        // resolving a stack frame — must neither eat a one-shot nor be blinded.
+        // afterEach's restoreAllMocks puts the harness back.
+        test('propagates a cache read failure that is not a missing file', async () => {
+            const target = tarballPath('linux', 'x64');
+            fs.readFileSync.mockImplementation((file, ...args) => {
+                if (String(file) !== target) return realReadFileSync(file, ...args);
+                throw Object.assign(new Error('permission denied'), { code: 'EACCES' });
+            });
+            await expect(buildCli.getOfficialNodeBinary('linux', 'x64')).rejects.toThrow('permission denied');
+            expect(execFileSync).not.toHaveBeenCalled();
+        });
+
+        test('a publish that cannot rename discards the temp tarball and caches nothing', async () => {
+            const target = tarballPath('linux', 'x64');
+            fs.renameSync.mockImplementation((from, to) => {
+                if (String(to) !== target) return realRenameSync(from, to);
+                throw Object.assign(new Error('rename blocked'), { code: 'EPERM' });
+            });
+            await expect(buildCli.getOfficialNodeBinary('linux', 'x64')).rejects.toThrow('rename blocked');
+            // The complete temp copy is gone and the cache name was never created.
+            expect(fs.rmSync).toHaveBeenCalledWith(tempTarball('linux', 'x64'), { force: true });
+            expect(existing.has(tempTarball('linux', 'x64'))).toBe(false);
+            expect(existing.has(target)).toBe(false);
+            expect(files.has(target)).toBe(false);
+            expect(extractCalls()).toHaveLength(0);
         });
 
         test('a corrupt cached tarball is deleted and downloaded again', async () => {
