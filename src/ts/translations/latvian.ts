@@ -160,12 +160,12 @@ export const app = {
         'Automātiskā pievienošanās darbojas katrā balsošanas ciklā, kamēr ieslēgta automātiskā balsošana. To var pielāgot sadaļā Uzstādījumi › Automātiskā pievienošanās.',
     boostTime: 'Boost laiks',
     boostTimeDesc:
-        'Izmanto Boost, kad Boost laika atskaitē ir atlicis šis laiks. Neattiecas uz Boost, kas atbloķēts ar atslēgu, — tam nav laika atskaites, un tam ir atsevišķs uzstādījums „Boost laiks (atbloķēts ar atslēgu)”. Ja dators pāriet miega režīmā 30 minūšu laikā pirms šī laika, Boost tiek izmantots uzreiz.',
+        'Izmanto Boost, kad Boost laika atskaitē ir atlicis šis laiks. Neattiecas uz Boost, kas atbloķēts ar atslēgu, — tam nav laika atskaites, un tam ir atsevišķs uzstādījums „Boost laiks (atbloķēts ar atslēgu)”. Darbvirsmas lietotnē: ja dators pāriet miega režīmā, kamēr darbojas automātiskā balsošana, Boost, kuru būtu jāizmanto tuvāko 30 minūšu laikā, tiek izmantots uzreiz.',
     boostTimeHelp:
         'Šis ir laiks, kas atlicis līdz Boost loga beigām. Uzstādi 0, lai izslēgtu Boost izmantošanu pēc laika, — tad lietotne Boost ar laika atskaiti automātiski neizmantos vispār. Ņem vērā: šeit 0 nozīmē „izslēgts” atšķirībā no redzamības mērķa uzstādījumiem, kur 0 nozīmē „sekot slieksnim”. Attiecas tikai uz Boost ar savu laika atskaiti; Boost, kas atbloķēts ar atslēgu, izmanto uzstādījumu „Boost laiks (atbloķēts ar atslēgu)”.',
     keyUnlockedBoostTime: 'Boost laiks (atbloķēts ar atslēgu)',
     keyUnlockedBoostTimeDesc:
-        'Atsevišķs logs Boost, kas atbloķēts ar atslēgu, — tam nav savas laika atskaites. Tā kā tas nekad nebeidzas, lietotne to izmanto tikai tad, kad līdz izaicinājuma beigām atlicis šis laiks, lai tas nostrādātu pēc iespējas vēlāk. Uzstādījums „Boost laiks” uz tiem neattiecas. 0 = izslēgts.',
+        'Atsevišķs logs Boost, kas atbloķēts ar atslēgu, — tam nav savas laika atskaites. Tā kā tas nekad nebeidzas, lietotne to izmanto tikai tad, kad līdz izaicinājuma beigām atlicis šis laiks, lai tas nostrādātu pēc iespējas vēlāk. Uzstādījums „Boost laiks” uz tiem neattiecas. 0 = izslēgts. Darbvirsmas lietotnē: ja dators pāriet miega režīmā, kamēr darbojas automātiskā balsošana, Boost, kuru būtu jāizmanto tuvāko 30 minūšu laikā, tiek izmantots uzreiz.',
     keyUnlockedBoostTimeHelp:
         'Attiecas tikai uz Boost, kas atbloķēts ar atslēgu (bez savas laika atskaites). Uzstādi 0, lai lietotne to nekad neizmantotu automātiski. Šis laiks nav saistīts ar „Boost laiks” — viens otru tie neaizstāj. Tāpat kā citos laika uzstādījumos, 0 nozīmē „izslēgts”.',
     boostFreshEntryWait: 'Gaidīt pirms Boost jaunam foto',

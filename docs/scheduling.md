@@ -309,7 +309,9 @@ Deliberate semantics and caveats:
       decision (`runSuspendBoost`). It is best effort: the event only
       notifies the app, so the request races the network going down, and an
       unconfirmed result is logged as such. A new photo is never submitted
-      for it.
+      for it, and a fresh-entry hold (`boostFreshEntryWait`) is overridden —
+      the device cannot come back to finish the wait, and a hold never
+      outlasts the Boost's deadline.
 
     Two sharp edges in that `onSettingsChanged` wiring, both already handled
     in `index.ts` — keep them handled:

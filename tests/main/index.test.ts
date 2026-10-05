@@ -536,15 +536,9 @@ describe('quit guard wiring', () => {
         expect(m.electron.powerMonitor.handlers.shutdown).toBe(m.quitGuard.bypassQuitGuard);
     });
 
-    it('a device sleep applies imminent boosts, reading auto-vote state when the event fires', async () => {
-        const suspend = m.electron.powerMonitor.handlers.suspend;
-        m.settings.getSetting.mockImplementation((key) => key === 'autovoteRunning');
-        suspend();
-        expect(m.suspendBoost.applyImminentBoostsOnSuspend).toHaveBeenLastCalledWith({ autovoteRunning: true });
-
-        m.settings.getSetting.mockReturnValue(false);
-        suspend();
-        expect(m.suspendBoost.applyImminentBoostsOnSuspend).toHaveBeenLastCalledWith({ autovoteRunning: false });
+    it('a device sleep applies imminent boosts; auto-vote state is read by that module, not the listener', () => {
+        m.electron.powerMonitor.handlers.suspend();
+        expect(m.suspendBoost.applyImminentBoostsOnSuspend).toHaveBeenLastCalledWith();
     });
 
     it('a rejected sleep handler is caught and logged', async () => {

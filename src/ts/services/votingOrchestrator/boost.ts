@@ -301,9 +301,15 @@ const resolveSuspendBoostTarget = (ctx: ActionContext): BoostTarget | null => {
     if (pending) return pending;
     const target = existingBoostTarget(challenge);
     if (!target.imageId) {
-        // Only reachable with every entry turboed (the conflict row
-        // describeDeadlineActions keeps) or no entry at all; applyBoost would only fail.
-        logBoostTarget(challenge, 'no entry can take the boost (only entry already has Turbo) — boost skipped');
+        // Only reachable with no entry yet or every entry turboed (the conflict row
+        // describeDeadlineActions keeps); applyBoost would only fail.
+        const entries = challenge?.member?.ranking?.entries;
+        logBoostTarget(
+            challenge,
+            Array.isArray(entries) && entries.length > 0
+                ? 'no entry can take the boost (only entry already has Turbo) — boost skipped'
+                : 'no entry to boost yet — boost skipped',
+        );
         return null;
     }
     if (votingLogic.resolveBoostFillNewMode(challenge, challenge.id.toString()) !== 'no') {
@@ -318,9 +324,17 @@ const resolveSuspendBoostTarget = (ctx: ActionContext): BoostTarget | null => {
 /**
  * Apply a boost that auto-vote would apply soon, because the device is going to
  * sleep. The caller selected the challenge, so Boost Time is not re-checked; the
- * target rule and the fresh-entry / uncertain-photo skips are runBoost's own.
+ * target rule and the uncertain-photo skip are runBoost's own.
+ *
+ * The fresh-entry hold does not apply: a hold means "retry later", and at sleep
+ * the device cannot come back to finish it — but the hold never keeps a Boost
+ * past its deadline, so a sleep that outlasts the window must boost now. The hold
+ * is neither recorded nor retried here; a log line says it was overridden.
+ *
  * Scenario phase overlays are read as they are now: a later phase that would
- * retarget or disable the boost is not anticipated.
+ * retarget or disable the boost is not anticipated. The pass runs auto-swap before
+ * its deadline actions and this path does not, so a swap that would have replaced
+ * the Boost Entry can land after wake on the boosted photo. Accepted.
  */
 export const runSuspendBoost = async (ctx: ActionContext): Promise<SuspendBoostOutcome> => {
     const { challenge, now } = ctx;
@@ -331,12 +345,18 @@ export const runSuspendBoost = async (ctx: ActionContext): Promise<SuspendBoostO
         return 'skipped';
     }
     const target = resolveSuspendBoostTarget(ctx);
+    if (!target || skipForUncertainPhoto(ctx, target, isTimerBasedAvailable)) return 'skipped';
+    const imageId = target.imageId as string;
+    const { entryAges } = ctx;
     if (
-        !target ||
-        skipForUncertainPhoto(ctx, target, isTimerBasedAvailable) ||
-        holdBoostForFreshEntry(ctx, target.imageId)
-    )
-        return 'skipped';
+        entryAges &&
+        votingLogic.getBoostHoldUntil(challenge, entryAges.enteredAt(challenge.id, imageId), now) !== null
+    ) {
+        logBoostTarget(
+            challenge,
+            `photo ${imageId} entered too recently for the fresh-entry wait, but the device is going to sleep — boosting it now`,
+        );
+    }
     const landed = await applyAvailableBoost(
         ctx,
         target,
@@ -354,7 +374,9 @@ export const runSuspendBoost = async (ctx: ActionContext): Promise<SuspendBoostO
  * "per-challenge runners are sequential" invariant: these are separate challenge
  * objects with no shared mutation, and the ledger's read-modify-write is
  * synchronous. Skipping the 2–5 s inter-challenge delay is deliberate too, because
- * time is short.
+ * time is short. In mock mode the remembered list is the live mock session cache
+ * (by reference), so a concurrent mock pass can see these mutations; mock-only and
+ * harmless.
  *
  * @returns one settled outcome per challenge, in order
  */

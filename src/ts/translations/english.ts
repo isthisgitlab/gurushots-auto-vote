@@ -157,12 +157,12 @@ export const app = {
     autoJoinBadgeTitle: 'Auto-join runs each voting cycle while autovote is on. Configure it in Settings › Auto Join.',
     boostTime: 'Boost Time',
     boostTimeDesc:
-        'Apply Boost when this much time is left on the Boost’s own timer. Does not apply to a key-unlocked Boost, which has no timer — that one uses Key-Unlocked Boost Time. If the computer goes to sleep within 30 min of this time, the boost is applied right away.',
+        'Apply Boost when this much time is left on the Boost’s own timer. Does not apply to a key-unlocked Boost, which has no timer — that one uses Key-Unlocked Boost Time. Desktop app: if the computer goes to sleep while auto-vote is running, a boost due within 30 min is applied right away.',
     boostTimeHelp:
         'This is a timer measured as time-before-close. Set it to 0 to turn timed Boost off — the bot will not auto-apply a timer Boost at all. Note 0 means "off" here, unlike the Exposure Target settings where 0 means "follow the trigger". Only affects a Boost that has its own countdown; a key-unlocked Boost uses Key-Unlocked Boost Time instead.',
     keyUnlockedBoostTime: 'Key-Unlocked Boost Time',
     keyUnlockedBoostTimeDesc:
-        'Separate window for a key-unlocked Boost — one with no timer of its own. Because it never expires, it is applied only when this much time remains before the challenge closes, so it lands as late as possible. Boost Time does not apply to these. Set to 0 to never auto-apply it.',
+        'Separate window for a key-unlocked Boost — one with no timer of its own. Because it never expires, it is applied only when this much time remains before the challenge closes, so it lands as late as possible. Boost Time does not apply to these. Set to 0 to never auto-apply it. Desktop app: if the computer goes to sleep while auto-vote is running, a boost due within 30 min is applied right away.',
     keyUnlockedBoostTimeHelp:
         'Applies only to a key-unlocked Boost (one with no timer of its own). Set to 0 to never auto-apply it. This is a separate clock from Boost Time — the two never substitute for each other. As with the other time settings, 0 means "off".',
     boostFreshEntryWait: 'Wait Before Boosting a New Photo',

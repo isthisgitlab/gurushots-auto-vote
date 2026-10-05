@@ -16,14 +16,19 @@
  * row of describeDeadlineActions (autoBoost / Boost Time 0 = off / turbo-conflict
  * gating already applied). The boost itself is the voting pass's own decision
  * (services/votingOrchestrator/boost.ts runSuspendBoost), reached through
- * the API strategy so mock mode never touches the real entry-age file.
+ * the API strategy so mock mode never touches the real entry-age file. Its one
+ * departure from the pass: a fresh-entry hold is overridden, not honoured —
+ * the device cannot come back to finish the wait, and a hold never outlasts the
+ * Boost's deadline.
  *
  * Known race: a voting pass already running can boost the same challenge at the
  * same moment; the second POST is rejected, which "not confirmed" keeps from
- * reading as an error. The same goes for a stale list: the remembered list is
- * only refreshed by get-active-challenges (up to ~60 s old), so a boost the pass
- * applied just before sleep can be sent again — the server rejects it, nothing
- * is spent twice, and it logs as not confirmed.
+ * reading as an error. The remembered list is refreshed after each successful
+ * voting cycle (the refetch after the pass), so its age is the time since the last
+ * cycle finished: a boost window that opened after that is not selected on sleep.
+ * Re-sending a boost the pass applied is rare, because the refresh follows the
+ * pass; if it happens the server rejects it, nothing is spent twice, and it logs
+ * as not confirmed.
  */
 
 import * as logger from '../logger';
@@ -43,34 +48,51 @@ import {
 let running = false;
 
 /**
- * @param deps.autovoteRunning - nothing is boosted unless auto-vote is running
+ * Nothing is boosted unless auto-vote is running; that is read here, inside the
+ * try, so a failing settings read is logged rather than thrown at the listener.
+ *
  * @param deps.now - Unix seconds
  * @param deps.describeDeadlineActions - test seam
  */
 const applyImminentBoostsOnSuspend = async ({
-    autovoteRunning,
     now = Math.floor(Date.now() / 1000),
     describeDeadlineActions = votingLogic.describeDeadlineActions,
 }: {
-    autovoteRunning: boolean;
     now?: number;
     describeDeadlineActions?: Parameters<typeof imminentBoostChallenges>[1];
-}): Promise<void> => {
-    if (!autovoteRunning || running) return;
+} = {}): Promise<void> => {
+    if (running) return;
     running = true;
     // The batch can stay pending across the sleep while transport retries run, so
     // `running` is released in `finally`.
     try {
+        if (settings.getSetting('autovoteRunning') !== true) return;
         const { token, mock } = settings.loadSettings();
+        if (!token) return;
         // The remembered list must be the one the current API surface would act on.
-        if (!token || rememberedChallengesMock() !== (mock === true)) return;
+        const rememberedMock = rememberedChallengesMock();
+        if (rememberedMock !== (mock === true)) {
+            // null = nothing remembered yet, nothing to explain.
+            if (rememberedMock !== null) {
+                logger
+                    .withCategory('boost')
+                    .info(
+                        'Boost on sleep skipped — the remembered challenge list is from the other mode (mock/real)',
+                        null,
+                    );
+            }
+            return;
+        }
         const selected = imminentBoostChallenges(now, describeDeadlineActions, SUSPEND_BOOST_HORIZON_SEC);
         if (selected.length === 0) return;
 
         const boostLog = logger.withCategory('boost');
         for (const { challenge, dueAt } of selected) {
+            const tag = logger.challengeTag(challenge);
             boostLog.info(
-                `Device is going to sleep — trying to boost ${logger.challengeTag(challenge)} now, ${formatDuration(dueAt - now)} before its Boost Time`,
+                dueAt > now
+                    ? `Device is going to sleep — trying to boost ${tag} now, ${formatDuration(dueAt - now)} before it was due`
+                    : `Device is going to sleep — trying to boost ${tag} now (already due)`,
                 null,
             );
         }

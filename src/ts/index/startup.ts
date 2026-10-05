@@ -38,13 +38,11 @@ async function onReady() {
     powerMonitor.on('shutdown', bypassQuitGuard);
 
     // Sleep: a boost due soon goes out now, while the network is still up
-    // (best effort — see windows/suspendBoost.ts). Read at event time, not here.
+    // (best effort — see windows/suspendBoost.ts). Auto-vote state is read at event time.
     powerMonitor.on('suspend', () => {
-        applyImminentBoostsOnSuspend({ autovoteRunning: settings.getSetting('autovoteRunning') === true }).catch(
-            (error: unknown) => {
-                logger.withCategory('boost').error(`Boost on sleep could not run: ${failureText(error)}`, null);
-            },
-        );
+        applyImminentBoostsOnSuspend().catch((error: unknown) => {
+            logger.withCategory('boost').error(`Boost on sleep could not run: ${failureText(error)}`, null);
+        });
     });
 
     // Check if we should auto-login and run update check before creating main window

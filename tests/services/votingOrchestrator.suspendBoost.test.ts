@@ -156,17 +156,62 @@ describe('runSuspendBoosts — target rule', () => {
             '[Challenge 101: Orchestrated] no entry can take the boost (only entry already has Turbo) — boost skipped',
         );
     });
+
+    test('no entry at all: skipped as "no entry to boost yet", not as a Turbo conflict', async () => {
+        votingLogic.pickBoostEntry.mockReturnValue(null);
+        const api = makeApi();
+        const empty = buildChallenge({
+            id: 104,
+            title: 'Empty',
+            close_time: NOW + 3600,
+            member: { boost: { state: 'AVAILABLE', timeout: NOW + 600 }, ranking: { entries: [] } },
+        });
+        expect(await run([empty], api)).toEqual([{ status: 'fulfilled', value: 'skipped' }]);
+        expect(api.applyBoost).not.toHaveBeenCalled();
+        expect(messages('info')).toContain('[Challenge 104: Empty] no entry to boost yet — boost skipped');
+        expect(messages('info').join()).not.toContain('Turbo');
+    });
+
+    test('a payload without a ranking is "no entry to boost yet" too', async () => {
+        votingLogic.pickBoostEntry.mockReturnValue(null);
+        const api = makeApi();
+        const bare = invalid<Challenge>({
+            id: 105,
+            title: 'Bare',
+            close_time: NOW + 3600,
+            member: { boost: { state: 'AVAILABLE', timeout: NOW + 600 } },
+        });
+        expect(await run([bare], api)).toEqual([{ status: 'fulfilled', value: 'skipped' }]);
+        expect(messages('info')).toContain('[Challenge 105: Bare] no entry to boost yet — boost skipped');
+    });
 });
 
-describe('runSuspendBoosts — skips shared with runBoost', () => {
-    test('a photo too new to boost holds the boost: skipped', async () => {
+describe('runSuspendBoosts — skips and overrides', () => {
+    test('a photo inside the fresh-entry wait is boosted anyway: no hold is recorded, and the log says why', async () => {
         votingLogic.getBoostHoldUntil.mockReturnValue(NOW + 300);
         const api = makeApi();
         const ledger = createMemoryEntryAgeLedger();
         const challenge = timed();
-        expect(await run([challenge], api, ledger)).toEqual([{ status: 'fulfilled', value: 'skipped' }]);
-        expect(api.applyBoost).not.toHaveBeenCalled();
-        expect(messages('info').join()).toContain('Boost held');
+        expect(await run([challenge], api, ledger)).toEqual([{ status: 'fulfilled', value: 'applied' }]);
+        expect(api.applyBoost).toHaveBeenCalledWith(challenge, 'tok');
+        expect(challenge.boostHoldUntil).toBeUndefined();
+        expect(messages('info')).toContain(
+            '[Challenge 101: Orchestrated] photo e1 entered too recently for the fresh-entry wait, but the device is going to sleep — boosting it now',
+        );
+        expect(messages('info').join()).not.toContain('Boost held');
+    });
+
+    test('the sleep path never records first-seen times (no observe)', async () => {
+        const ledger = createMemoryEntryAgeLedger();
+        const observe = jest.spyOn(ledger, 'observe');
+        await run([timed()], makeApi(), ledger);
+        expect(observe).not.toHaveBeenCalled();
+    });
+
+    test('without an entry-age ledger there is no hold to override, and no override line', async () => {
+        votingLogic.getBoostHoldUntil.mockReturnValue(NOW + 300);
+        expect(await run([timed()], makeApi())).toEqual([{ status: 'fulfilled', value: 'applied' }]);
+        expect(messages('info').join()).not.toContain('fresh-entry wait');
     });
 
     describe('an uncertain auto-submitted photo', () => {

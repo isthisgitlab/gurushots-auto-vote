@@ -14,7 +14,7 @@ import type { SuspendBoostOutcome } from '../../src/ts/services/votingOrchestrat
 import { invalid } from '../helpers/invalid';
 
 type Describe = NonNullable<
-    Parameters<typeof suspendBoostModule.applyImminentBoostsOnSuspend>[0]['describeDeadlineActions']
+    NonNullable<Parameters<typeof suspendBoostModule.applyImminentBoostsOnSuspend>[0]>['describeDeadlineActions']
 >;
 
 jest.mock('../../src/ts/logger', () => {
@@ -25,7 +25,7 @@ jest.mock('../../src/ts/logger', () => {
         cat,
     };
 });
-jest.mock('../../src/ts/settings', () => ({ loadSettings: jest.fn() }));
+jest.mock('../../src/ts/settings', () => ({ loadSettings: jest.fn(), getSetting: jest.fn() }));
 jest.mock('../../src/ts/apiFactory', () => ({ getApiStrategy: jest.fn() }));
 jest.mock('../../src/ts/services/VotingLogic', () => ({ describeDeadlineActions: jest.fn() }));
 
@@ -59,9 +59,8 @@ const settle = (
 const dueIn: Record<number, number> = { 1: 600, 2: 1800, 3: 1860, 4: 60 };
 const describe_: Describe = (c) => ({ actions: [{ action: 'boost', dueAt: NOW + dueIn[c.id as number] }] });
 
-const run = (over: Partial<Parameters<typeof suspendBoostModule.applyImminentBoostsOnSuspend>[0]> = {}) =>
+const run = (over: NonNullable<Parameters<typeof suspendBoostModule.applyImminentBoostsOnSuspend>[0]> = {}) =>
     suspend.applyImminentBoostsOnSuspend({
-        autovoteRunning: true,
         now: NOW,
         describeDeadlineActions: describe_,
         ...over,
@@ -80,14 +79,16 @@ beforeEach(() => {
         settle(...challenges.map(() => 'applied' as const)),
     );
     apiFactory.getApiStrategy.mockReturnValue(invalid({ applyBoostsOnSuspend }));
+    settings.getSetting.mockImplementation((key) => key === 'autovoteRunning');
     settings.loadSettings.mockReturnValue(invalid({ token: TOKEN, mock: false }));
     guard.rememberChallenges([boostChallenge(1, 'One'), boostChallenge(2, 'Two'), boostChallenge(3, 'Three')], false);
 });
 
 describe('applyImminentBoostsOnSuspend — no-ops', () => {
     test('does nothing while auto-vote is stopped, however often it sleeps', async () => {
-        await run({ autovoteRunning: false });
-        await run({ autovoteRunning: false });
+        settings.getSetting.mockReturnValue(false);
+        await run();
+        await run();
         expect(applyBoostsOnSuspend).not.toHaveBeenCalled();
         expect(settings.loadSettings).not.toHaveBeenCalled();
     });
@@ -106,17 +107,25 @@ describe('applyImminentBoostsOnSuspend — no-ops', () => {
         settings.loadSettings.mockReturnValue(invalid({ token: '', mock: false }));
         await run();
         expect(applyBoostsOnSuspend).not.toHaveBeenCalled();
+        expect(cat.info).not.toHaveBeenCalled();
     });
 
-    test('does nothing when the list was fetched under a different mock setting, or never', async () => {
+    test('a list fetched under the other mock setting is not acted on, and says why (never the token)', async () => {
         settings.loadSettings.mockReturnValue(invalid({ token: TOKEN, mock: true }));
         await run();
         expect(applyBoostsOnSuspend).not.toHaveBeenCalled();
+        expect(cat.info).toHaveBeenCalledWith(
+            'Boost on sleep skipped — the remembered challenge list is from the other mode (mock/real)',
+            null,
+        );
+        expect(loggedText()).not.toContain(TOKEN);
+    });
 
+    test('with no remembered list nothing is sent and nothing is logged', async () => {
         guard.resetQuitGuard();
-        settings.loadSettings.mockReturnValue(invalid({ token: TOKEN, mock: false }));
         await run();
         expect(applyBoostsOnSuspend).not.toHaveBeenCalled();
+        expect(cat.info).not.toHaveBeenCalled();
     });
 
     test('a mock-mode list is acted on in mock mode', async () => {
@@ -143,7 +152,7 @@ describe('applyImminentBoostsOnSuspend — no-ops', () => {
             member: { boost: { state: 'AVAILABLE_KEY' } },
         });
         guard.rememberChallenges([soon], false);
-        await suspend.applyImminentBoostsOnSuspend({ autovoteRunning: true });
+        await suspend.applyImminentBoostsOnSuspend();
         expect(applyBoostsOnSuspend).toHaveBeenCalledWith([soon], TOKEN);
     });
 });
@@ -175,11 +184,25 @@ describe('applyImminentBoostsOnSuspend — outcomes', () => {
         await run();
         expect(applyBoostsOnSuspend).toHaveBeenCalledWith(expect.any(Array), TOKEN);
         expect(cat.info).toHaveBeenCalledWith(
-            'Device is going to sleep — trying to boost [Challenge 1: One] now, 10m before its Boost Time',
+            'Device is going to sleep — trying to boost [Challenge 1: One] now, 10m before it was due',
             null,
         );
         expect(cat.info).toHaveBeenCalledWith(
-            'Device is going to sleep — trying to boost [Challenge 2: Two] now, 30m before its Boost Time',
+            'Device is going to sleep — trying to boost [Challenge 2: Two] now, 30m before it was due',
+            null,
+        );
+    });
+
+    test('a boost already due says so instead of a clamped "0m"', async () => {
+        await run({
+            describeDeadlineActions: (c) => ({ actions: [{ action: 'boost', dueAt: NOW - (c.id === 1 ? 5 : 0) }] }),
+        });
+        expect(cat.info).toHaveBeenCalledWith(
+            'Device is going to sleep — trying to boost [Challenge 1: One] now (already due)',
+            null,
+        );
+        expect(cat.info).toHaveBeenCalledWith(
+            'Device is going to sleep — trying to boost [Challenge 2: Two] now (already due)',
             null,
         );
     });
@@ -249,6 +272,17 @@ describe('applyImminentBoostsOnSuspend — never throws', () => {
             }),
         ).resolves.toBeUndefined();
         expect(cat.error).toHaveBeenCalledWith('Boost on sleep could not run: bad challenge', null);
+    });
+
+    test('a throwing auto-vote state read is caught inside the module, logged, and releases the flag', async () => {
+        settings.getSetting.mockImplementationOnce(() => {
+            throw new Error('settings unreadable');
+        });
+        await expect(run()).resolves.toBeUndefined();
+        expect(cat.error).toHaveBeenCalledWith('Boost on sleep could not run: settings unreadable', null);
+        expect(applyBoostsOnSuspend).not.toHaveBeenCalled();
+        await run();
+        expect(applyBoostsOnSuspend).toHaveBeenCalledTimes(1);
     });
 
     test('a throwing loadSettings is caught, logged, and releases the flag', async () => {
