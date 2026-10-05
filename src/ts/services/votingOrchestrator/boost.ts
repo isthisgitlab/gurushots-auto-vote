@@ -13,6 +13,7 @@ import type { VotingPassApi } from '../../types/votingPass';
 import type { EntryAgeLedger } from '../../types/stores';
 
 type BoostTarget = { imageId: string | null; fresh: boolean };
+type SuspendBoostTarget = { imageId: string; fresh: boolean };
 type BoostAvailability = ReturnType<typeof readBoostAvailability>;
 
 /** What a boost sent on device sleep came to. */
@@ -209,17 +210,29 @@ const logBoostNotReady = (
 };
 
 /**
- * Hold a due boost while its target photo is newer than `boostFreshEntryWait`
- * (VotingLogic.getBoostHoldUntil). The release instant goes on the challenge so
- * the cadence decision lands the next cycle on it.
+ * When a due boost on `imageId` would still be held for `boostFreshEntryWait`
+ * (VotingLogic.getBoostHoldUntil).
+ *
+ * @param imageId - the entry the boost would land on
+ * @returns the release instant, or null when the boost is not held
+ */
+const freshEntryHoldUntil = ({ challenge, now, entryAges }: ActionContext, imageId: string | null): number | null => {
+    if (!imageId || !entryAges) return null;
+    return votingLogic.getBoostHoldUntil(challenge, entryAges.enteredAt(challenge.id, imageId), now);
+};
+
+/**
+ * Hold a due boost while its target photo is newer than `boostFreshEntryWait`.
+ * The release instant goes on the challenge so the cadence decision lands the
+ * next cycle on it.
  *
  * @param imageId - the entry the boost would land on
  * @returns true when the boost waits this pass
  */
-const holdBoostForFreshEntry = ({ challenge, now, entryAges }: ActionContext, imageId: string | null): boolean => {
-    if (!imageId || !entryAges) return false;
-    const holdUntil = votingLogic.getBoostHoldUntil(challenge, entryAges.enteredAt(challenge.id, imageId), now);
+const holdBoostForFreshEntry = (ctx: ActionContext, imageId: string | null): boolean => {
+    const holdUntil = freshEntryHoldUntil(ctx, imageId);
     if (holdUntil === null) return false;
+    const { challenge, now } = ctx;
     challenge.boostHoldUntil = holdUntil;
     logBoostTarget(
         challenge,
@@ -295,12 +308,12 @@ export const runBoost = async (ctx: ActionContext) => {
  *
  * @returns null when no entry can take the boost (already logged)
  */
-const resolveSuspendBoostTarget = (ctx: ActionContext): BoostTarget | null => {
+const resolveSuspendBoostTarget = (ctx: ActionContext): SuspendBoostTarget | null => {
     const { challenge } = ctx;
     const pending = pendingBoostTarget(ctx);
-    if (pending) return pending;
-    const target = existingBoostTarget(challenge);
-    if (!target.imageId) {
+    if (pending?.imageId) return { imageId: pending.imageId, fresh: true };
+    const { imageId, fresh } = existingBoostTarget(challenge);
+    if (!imageId) {
         // Only reachable with no entry yet or every entry turboed (the conflict row
         // describeDeadlineActions keeps); applyBoost would only fail.
         const entries = challenge?.member?.ranking?.entries;
@@ -318,7 +331,7 @@ const resolveSuspendBoostTarget = (ctx: ActionContext): BoostTarget | null => {
             'boost fill-new is on, but a new photo cannot be submitted before sleep; boosting existing entry',
         );
     }
-    return target;
+    return { imageId, fresh };
 };
 
 /**
@@ -346,15 +359,10 @@ export const runSuspendBoost = async (ctx: ActionContext): Promise<SuspendBoostO
     }
     const target = resolveSuspendBoostTarget(ctx);
     if (!target || skipForUncertainPhoto(ctx, target, isTimerBasedAvailable)) return 'skipped';
-    const imageId = target.imageId as string;
-    const { entryAges } = ctx;
-    if (
-        entryAges &&
-        votingLogic.getBoostHoldUntil(challenge, entryAges.enteredAt(challenge.id, imageId), now) !== null
-    ) {
+    if (freshEntryHoldUntil(ctx, target.imageId) !== null) {
         logBoostTarget(
             challenge,
-            `photo ${imageId} entered too recently for the fresh-entry wait, but the device is going to sleep — boosting it now`,
+            `photo ${oneLine(target.imageId)} has not finished "Wait Before Boosting a New Photo", but the device is going to sleep — boosting it now`,
         );
     }
     const landed = await applyAvailableBoost(

@@ -281,8 +281,6 @@ export const logMessages = {
     m6de905385e30: 'Balsošana veiksmīgi pabeigta',
     m6e1f23ece4fd: 'Kļūda, atiestatot uzstādījumu "{0}"',
     m6ef8752f2541: '🔐 Autentificēšanās neizdevās',
-    m6fae5b22f7cb:
-        '{0} Foto {1} izaicinājumā nonācis pārāk nesen, lai gaidītu, taču ierīce pāriet miega režīmā — izmanto Boost uzreiz',
     m70218b69341a: '🔐 Saņemts pieteikšanās pieprasījums — testa režīms: {0}, lietotājvārds: {1}',
     m707dcaed3e57: 'Iziešana apstiprināta, lai gan pienācis laiks izmantot Boost ({0})',
     m707e381a1d25: '[bezlogu režīms] {0}',
@@ -412,6 +410,8 @@ export const logMessages = {
     m9af941258be6: 'Aktīvo misiju dēļ priekšlaikus pievienojas līdz {0} izaicinājumiem',
     m9b901c6d995c: '⏰ Tuvojas scenārija solis izaicinājumā "{0}" (fāze {1}) — nākamais cikls pēc {2} s',
     m9bf8122676f3: 'Uzstādījumu {0} var norādīt tikai izaicinājumam vai profilam, nevis globāli',
+    m9c0719be2c97:
+        '{0} Foto {1} vēl nav nogaidījis „Gaidīt pirms Boost jaunam foto”, taču ierīce pāriet miega režīmā — izmanto Boost uzreiz',
     m9c0887b4c739: 'swap: izaicinājumam {0} nav pieejams cits foto',
     m9c096cf8314f: 'scheduledFillTime {0} pielāgots pašreizējiem ierobežojumiem: {1}',
     m9c120fa00e9e: '📸 Saņemti balsošanas foto: {0}',

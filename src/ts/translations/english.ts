@@ -167,7 +167,7 @@ export const app = {
         'Applies only to a key-unlocked Boost (one with no timer of its own). Set to 0 to never auto-apply it. This is a separate clock from Boost Time — the two never substitute for each other. As with the other time settings, 0 means "off".',
     boostFreshEntryWait: 'Wait Before Boosting a New Photo',
     boostFreshEntryWaitDesc:
-        'A Boost is held until the photo it will land on has been in the challenge this long, because boosting a photo the moment it is entered wastes most of the Boost. With "Boost a Freshly Submitted Photo" on, the photo is submitted first and boosted once this time has passed. Never holds a Boost past its own deadline. Set to 0 to boost straight away.',
+        'A Boost is held until the photo it will land on has been in the challenge this long, because boosting a photo the moment it is entered wastes most of the Boost. With "Boost a Freshly Submitted Photo" on, the photo is submitted first and boosted once this time has passed. Never holds a Boost past its own deadline. Set to 0 to boost straight away. Desktop app: the wait is cut short if the computer goes to sleep while a boost is due, so the boost is not lost.',
     voteBeforeBoost: 'Fill Exposure Before Boost',
     voteBeforeBoostDesc:
         'Vote this challenge up to 100% exposure for a short window before Boost is auto-applied, so the Boost lands on a fully exposed entry instead of a decayed one.',

@@ -170,7 +170,7 @@ export const app = {
         'Attiecas tikai uz Boost, kas atbloķēts ar atslēgu (bez savas laika atskaites). Uzstādi 0, lai lietotne to nekad neizmantotu automātiski. Šis laiks nav saistīts ar „Boost laiks” — viens otru tie neaizstāj. Tāpat kā citos laika uzstādījumos, 0 nozīmē „izslēgts”.',
     boostFreshEntryWait: 'Gaidīt pirms Boost jaunam foto',
     boostFreshEntryWaitDesc:
-        'Lietotne aiztur Boost, līdz foto, kuram tas paredzēts, ir izaicinājumā vismaz šo laiku, jo Boost uzreiz pēc foto iesniegšanas lielākoties aiziet zudumā. Ja ieslēgts „Boost jaunam iesniegtam foto”, lietotne vispirms iesniedz foto un izmanto Boost, kad šis laiks pagājis. Boost nekad netiek aizturēts ilgāk par tā termiņu. 0 = Boost uzreiz.',
+        'Lietotne aiztur Boost, līdz foto, kuram tas paredzēts, ir izaicinājumā vismaz šo laiku, jo Boost uzreiz pēc foto iesniegšanas lielākoties aiziet zudumā. Ja ieslēgts „Boost jaunam iesniegtam foto”, lietotne vispirms iesniedz foto un izmanto Boost, kad šis laiks pagājis. Boost nekad netiek aizturēts ilgāk par tā termiņu. 0 = Boost uzreiz. Darbvirsmas lietotnē: ja dators pāriet miega režīmā, kamēr Boost ir jāizmanto, gaidīšana tiek izlaista, lai Boost neaizietu zudumā.',
     voteBeforeBoost: 'Uzpildīt redzamību pirms Boost',
     voteBeforeBoostDesc:
         'Īsi pirms automātiskās Boost izmantošanas nobalso šajā izaicinājumā līdz 100 % redzamībai, lai Boost nostrādātu uz pilnībā redzama foto, nevis uz tāda, kura redzamība jau sarukusi.',

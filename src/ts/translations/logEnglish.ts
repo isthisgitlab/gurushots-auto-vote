@@ -276,8 +276,6 @@ export const logMessages = {
     m6de905385e30: 'Voting process completed successfully',
     m6e1f23ece4fd: "Error resetting setting '{0}'",
     m6ef8752f2541: '🔐 Authentication failed',
-    m6fae5b22f7cb:
-        '{0} photo {1} entered too recently for the fresh-entry wait, but the device is going to sleep — boosting it now',
     m70218b69341a: '🔐 Authentication request received - Mock: {0}, Username: {1}',
     m707dcaed3e57: 'Quit confirmed with {0} boost(s) due',
     m707e381a1d25: '[headless] {0}',
@@ -403,6 +401,8 @@ export const logMessages = {
     m9af941258be6: 'joining up to {0} challenge(s) early for the active missions',
     m9b901c6d995c: '⏰ Approaching a scenario step for "{0}" (phase {1}) — next cycle in {2}s',
     m9bf8122676f3: 'Setting {0} can only be set on a challenge or a profile, not globally',
+    m9c0719be2c97:
+        '{0} photo {1} has not finished "Wait Before Boosting a New Photo", but the device is going to sleep — boosting it now',
     m9c0887b4c739: 'swap: no different photo available for {0}',
     m9c096cf8314f: 'Sanitized scheduledFillTime {0} to current bounds: {1}',
     m9c120fa00e9e: '📸 Vote images received: {0}',

@@ -196,7 +196,7 @@ describe('runSuspendBoosts — skips and overrides', () => {
         expect(api.applyBoost).toHaveBeenCalledWith(challenge, 'tok');
         expect(challenge.boostHoldUntil).toBeUndefined();
         expect(messages('info')).toContain(
-            '[Challenge 101: Orchestrated] photo e1 entered too recently for the fresh-entry wait, but the device is going to sleep — boosting it now',
+            '[Challenge 101: Orchestrated] photo e1 has not finished "Wait Before Boosting a New Photo", but the device is going to sleep — boosting it now',
         );
         expect(messages('info').join()).not.toContain('Boost held');
     });
@@ -211,7 +211,77 @@ describe('runSuspendBoosts — skips and overrides', () => {
     test('without an entry-age ledger there is no hold to override, and no override line', async () => {
         votingLogic.getBoostHoldUntil.mockReturnValue(NOW + 300);
         expect(await run([timed()], makeApi())).toEqual([{ status: 'fulfilled', value: 'applied' }]);
-        expect(messages('info').join()).not.toContain('fresh-entry wait');
+        expect(messages('info').join()).not.toContain('Wait Before Boosting a New Photo');
+    });
+
+    describe('with the real fresh-entry hold rule', () => {
+        const WAIT_SEC = 600;
+        const overrideLine = (id: string) =>
+            `[Challenge 101: Orchestrated] photo ${id} has not finished "Wait Before Boosting a New Photo", but the device is going to sleep — boosting it now`;
+
+        // A ledger that first saw each photo at the given time, in the given order.
+        const ledgerWith = (...entered: Array<[string, number]>) => {
+            const ledger = createMemoryEntryAgeLedger();
+            const seen: string[] = [];
+            const observe = (at: number) =>
+                ledger.observe(
+                    buildChallenge({
+                        id: 101,
+                        close_time: NOW + 3600,
+                        member: { ranking: { entries: seen.map((id) => ({ id })) } },
+                    }),
+                    at,
+                );
+            observe(0);
+            for (const [id, at] of entered) {
+                seen.push(id);
+                observe(at);
+            }
+            return ledger;
+        };
+
+        beforeEach(() => {
+            const { getBoostHoldUntil } = jest.requireActual<typeof votingLogicModule>(
+                '../../src/ts/services/VotingLogic',
+            );
+            votingLogic.getBoostHoldUntil.mockImplementation(getBoostHoldUntil);
+            settings.getEffectiveSetting.mockImplementation((key) =>
+                key === 'boostFreshEntryWait' ? WAIT_SEC : key === 'autoBoost',
+            );
+        });
+
+        test("the ledger's entry time for the target photo decides", async () => {
+            const recent = await run([timed()], makeApi(), ledgerWith(['e2', NOW - 5000], ['e1', NOW - 100]));
+            expect(recent).toEqual([{ status: 'fulfilled', value: 'applied' }]);
+            expect(messages('info')).toContain(overrideLine('e1'));
+
+            log.info.mockClear();
+            const old = await run([timed()], makeApi(), ledgerWith(['e1', NOW - 5000], ['e2', NOW - 100]));
+            expect(old).toEqual([{ status: 'fulfilled', value: 'applied' }]);
+            expect(messages('info').join()).not.toContain('Wait Before Boosting a New Photo');
+        });
+
+        test('a photo past its wait is boosted with no override line', async () => {
+            expect(await run([timed()], makeApi(), ledgerWith(['e1', NOW - WAIT_SEC - 100]))).toEqual([
+                { status: 'fulfilled', value: 'applied' },
+            ]);
+            expect(messages('info').join()).not.toContain('Wait Before Boosting a New Photo');
+        });
+
+        test('a hold that would not fit before the deadline is no hold, so no override line', async () => {
+            // Released at NOW + 590, past the NOW + 540 cut-off (timeout NOW + 600 minus the 60 s margin).
+            expect(await run([timed()], makeApi(), ledgerWith(['e1', NOW - 10]))).toEqual([
+                { status: 'fulfilled', value: 'applied' },
+            ]);
+            expect(messages('info').join()).not.toContain('Wait Before Boosting a New Photo');
+        });
+
+        test('the photo id in the override line is sanitized', async () => {
+            const hostile = timed();
+            votingLogic.pickBoostEntry.mockReturnValue(invalid({ id: 'e1\nforged' }));
+            await run([hostile], makeApi(), ledgerWith(['e1\nforged', NOW - 100]));
+            expect(messages('info')).toContain(overrideLine('e1 forged'));
+        });
     });
 
     describe('an uncertain auto-submitted photo', () => {
