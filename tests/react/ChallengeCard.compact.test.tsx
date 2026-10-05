@@ -201,14 +201,14 @@ describe('compact ChallengeCard tile with compactActions', () => {
         expect(buttonTexts()).toEqual(expect.arrayContaining(['🖼 +1', '🖼 +3']));
     });
 
-    test('keeps Earn turbo while hiding Run and "+1" / "+N" during autovote', () => {
+    test('keeps Earn turbo and "+1" / "+N" while hiding Run during autovote', () => {
         const challenge = makeChallenge();
         challenge.member!.ranking!.entries = challenge.member!.ranking!.entries!.slice(0, 1);
         renderWithActions(challenge, { autovoteRunning: true });
         const texts = buttonTexts();
         expect(texts).not.toContain('app.run');
         expect(texts).toContain('🎯 app.earnTurbo');
-        expect(texts.some((text) => text.startsWith('🖼'))).toBe(false);
+        expect(texts).toEqual(expect.arrayContaining(['🖼 +1', '🖼 +3']));
         expect(texts).toContain('app.vote');
     });
 

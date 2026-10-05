@@ -351,10 +351,10 @@ describe('fill', () => {
         expect(screen.queryByText('invalid-args')).toBeNull();
     });
 
-    test('+1 and +N are hidden while autovote runs', () => {
+    test('+1 and +N stay shown while autovote runs', () => {
         renderCard(makeChallenge(), { autovoteRunning: true });
-        expect(screen.queryByText('+1')).toBeNull();
-        expect(screen.queryByText('+3')).toBeNull();
+        expect(screen.getByText('+1')).toBeTruthy();
+        expect(screen.getByText('+3')).toBeTruthy();
     });
 
     test('a single open slot offers only +1; no slots or unknown max offers none', () => {

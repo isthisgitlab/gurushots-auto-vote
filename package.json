@@ -138,7 +138,7 @@
         "jest": "^30.5.2",
         "jest-environment-node": "^30.5.2",
         "knip": "^6.39.0",
-        "lefthook": "^2.1.16",
+        "lefthook": "^2.1.17",
         "marked": "^18.0.14",
         "marked-gfm-heading-id": "^4.1.4",
         "onnxruntime-web": "1.31.0-dev.20260918-bc8e7ed75",
