@@ -20,10 +20,18 @@ import type * as votingOrchestratorModule from '../../src/ts/services/votingOrch
 import type * as realModule from '../../src/ts/strategies/real';
 import type * as mockModule from '../../src/ts/mock';
 import type * as scenarioStateStoreModule from '../../src/ts/scenarioStateStore';
+import type * as boostModule from '../../src/ts/services/votingOrchestrator/boost';
+import type * as entryAgeStoreModule from '../../src/ts/entryAgeStore';
+import type { Challenge } from '../../src/ts/types/gurushots';
 import type { VotingPassApi } from '../../src/ts/types/votingPass';
+import { invalid } from '../helpers/invalid';
 
 jest.mock('../../src/ts/services/votingOrchestrator', () => ({
     runVotingPass: jest.fn(async () => ({ success: true })),
+}));
+
+jest.mock('../../src/ts/services/votingOrchestrator/boost', () => ({
+    runSuspendBoosts: jest.fn(async () => []),
 }));
 
 jest.mock('../../src/ts/logger', () => {
@@ -128,5 +136,43 @@ describe('runVotingPass scenario wiring', () => {
         const { api, scenarios } = runVotingPass.mock.calls[0][2];
         expect(scenarios).toEqual({ ledger: mockScenarioStateLedger });
         for (const method of SCENARIO_ACTION_METHODS) expect(typeof api[method]).toBe('function');
+    });
+});
+
+describe('applyBoostsOnSuspend wiring', () => {
+    const { runSuspendBoosts } = jest.mocked(
+        require('../../src/ts/services/votingOrchestrator/boost') as typeof boostModule,
+    );
+    const challenges = [invalid<Challenge>({ id: 1 })];
+
+    beforeEach(() => {
+        jest.clearAllMocks();
+    });
+
+    test('real strategy binds the pass endpoints and the persisted entry-age ledger', async () => {
+        const { entryAgeLedger } = require('../../src/ts/entryAgeStore') as typeof entryAgeStoreModule;
+        const { applyBoostsOnSuspend } = require('../../src/ts/strategies/real') as typeof realModule;
+        await applyBoostsOnSuspend(challenges, 'tok');
+        const [passed, token, deps] = runSuspendBoosts.mock.calls[0];
+        expect(passed).toBe(challenges);
+        expect(token).toBe('tok');
+        expect(deps.entryAges).toBe(entryAgeLedger);
+        for (const method of [...REQUIRED_FILL_METHODS, 'applyBoost', 'applyBoostToEntry'] as const) {
+            expect(typeof deps.api[method]).toBe('function');
+        }
+    });
+
+    test('mock strategy binds the mock endpoints and the in-memory ledger — never the real file', async () => {
+        const { entryAgeLedger } = require('../../src/ts/entryAgeStore') as typeof entryAgeStoreModule;
+        const { mockApiClient } = require('../../src/ts/mock') as typeof mockModule;
+        await mockApiClient.applyBoostsOnSuspend(challenges, 'tok');
+        const [passed, token, deps] = runSuspendBoosts.mock.calls[0];
+        expect(passed).toBe(challenges);
+        expect(token).toBe('tok');
+        expect(deps.entryAges).toBeTruthy();
+        expect(deps.entryAges).not.toBe(entryAgeLedger);
+        for (const method of [...REQUIRED_FILL_METHODS, 'applyBoost', 'applyBoostToEntry'] as const) {
+            expect(typeof deps.api[method]).toBe('function');
+        }
     });
 });

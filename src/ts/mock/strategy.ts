@@ -12,6 +12,7 @@
 
 import * as logger from '../logger';
 import { runVotingPass } from '../services/votingOrchestrator';
+import { runSuspendBoosts } from '../services/votingOrchestrator/boost';
 import { createMemoryEntryTracker } from '../services/newEntryTracker';
 import { runJoinPass, joinChallengeSingle } from '../services/joinChallenges';
 import type { JoinDeps } from '../services/joinChallenges';
@@ -214,7 +215,18 @@ const createMockStrategy = (client: MockEndpoints) => {
         }
     };
 
-    return { joinChallenge, fetchChallengesAndVote };
+    /**
+     * The mock counterpart of the real strategy's applyBoostsOnSuspend: the same
+     * shared runSuspendBoosts over the pass's mock endpoints and the in-memory
+     * entry-age ledger (mock mode must never touch the real entryAges file).
+     */
+    const applyBoostsOnSuspend: typeof realModule.applyBoostsOnSuspend = async (challenges, token) =>
+        runSuspendBoosts(challenges, token, {
+            api: pickEndpoints(client, VOTING_PASS_ENDPOINTS),
+            entryAges: mockEntryAgeLedger,
+        });
+
+    return { joinChallenge, fetchChallengesAndVote, applyBoostsOnSuspend };
 };
 
 export { createMockStrategy };

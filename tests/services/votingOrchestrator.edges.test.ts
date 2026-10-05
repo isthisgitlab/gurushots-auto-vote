@@ -159,7 +159,7 @@ describe('runBoost — availability and readiness', () => {
         expect(messages('info').some((m) => m.includes('Emergency Fill window'))).toBe(false);
         expect(messages('startOperation')).toEqual(
             expect.arrayContaining([
-                expect.stringContaining('Applying boost to challenge Orchestrated (key-unlocked)'),
+                expect.stringContaining('Applying boost to challenge [Challenge 101: Orchestrated] (key-unlocked)'),
             ]),
         );
         expect(messages('endOperation')).toEqual(

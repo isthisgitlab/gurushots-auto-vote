@@ -18,6 +18,7 @@ jest.mock('../src/ts/services/BaseMiddleware', () => ({
 jest.mock('../src/ts/api/login', () => ({ authenticate: jest.fn() }));
 jest.mock('../src/ts/strategies/real', () => ({
     fetchChallengesAndVote: jest.fn(),
+    applyBoostsOnSuspend: jest.fn(),
     getActiveChallenges: jest.fn(),
     applyBoost: jest.fn(),
     joinChallenge: jest.fn(),
@@ -39,6 +40,7 @@ jest.mock('../src/ts/mock', () => ({
     mockApiClient: {
         authenticate: jest.fn(),
         fetchChallengesAndVote: jest.fn(),
+        applyBoostsOnSuspend: jest.fn(),
         runTurboMiniGame: jest.fn(),
         getActiveChallenges: jest.fn(),
         getVoteImages: jest.fn(),

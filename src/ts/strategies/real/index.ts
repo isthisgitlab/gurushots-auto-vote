@@ -27,6 +27,7 @@ import { backgroundServiceOwnsScenarios } from '../../services/scenarioRunner';
 import { sleep, getRandomDelay } from '../../timing';
 import * as logger from '../../logger';
 import { runVotingPass } from '../../services/votingOrchestrator';
+import { runSuspendBoosts } from '../../services/votingOrchestrator/boost';
 import { createMetadataEntryTracker } from '../../services/newEntryTracker';
 import { runJoinPass, joinChallengeSingle } from '../../services/joinChallenges';
 import { runClaimPass } from '../../services/autoClaim';
@@ -167,6 +168,35 @@ const runTurboMiniGame = async (challenge: Challenge, token: string): Promise<Tu
 };
 
 /**
+ * The endpoints runVotingPass reads off `deps.api`. Read per call (not at module
+ * load) so jest.mock'd api modules take effect.
+ */
+const votingPassApi = () => ({
+    getActiveChallenges,
+    getVoteImages,
+    submitVotes,
+    applyBoost,
+    applyBoostToEntry,
+    applyTurbo,
+    getEligiblePhotos,
+    getImageData,
+    submitToChallenge,
+    runTurboMiniGame,
+    // votingOrchestrator/context.ts copies these into fillDeps; without them the
+    // auto-fill path loses tag resolution in real mode only.
+    getCurrentMemberProfile,
+    searchTagAutocomplete,
+});
+
+/**
+ * Apply the boosts of the given challenges now, over the same endpoints and
+ * entry-age ledger a voting pass uses (device going to sleep —
+ * windows/suspendBoost.ts). Thin binder over the shared runSuspendBoosts.
+ */
+const applyBoostsOnSuspend = (challenges: readonly Challenge[], token: string) =>
+    runSuspendBoosts(challenges, token, { api: votingPassApi(), entryAges: entryAgeLedger });
+
+/**
  * Main function that fetches active challenges and processes them — thin
  * binder over the shared orchestration (services/votingOrchestrator.ts),
  * which real and mock strategies both run. The endpoint references are
@@ -213,22 +243,7 @@ const fetchChallengesAndVote = async (
         // re-read its state so this pass's phase-settings overlay is current.
         if (backgroundServiceOwnsScenarios()) await refreshScenarioStateAsync();
         return await runVotingPass(token, challengeIdFilter, {
-            api: {
-                getActiveChallenges,
-                getVoteImages,
-                submitVotes,
-                applyBoost,
-                applyBoostToEntry,
-                applyTurbo,
-                getEligiblePhotos,
-                getImageData,
-                submitToChallenge,
-                runTurboMiniGame,
-                // votingOrchestrator/context.ts copies these into fillDeps; without them the
-                // auto-fill path loses tag resolution in real mode only.
-                getCurrentMemberProfile,
-                searchTagAutocomplete,
-            },
+            api: votingPassApi(),
             cleanupStaleMetadata,
             // Real mode persists new-entry snapshots to metadata.json, where
             // cleanupStaleMetadata prunes them alongside their challenge.
@@ -259,4 +274,11 @@ const fetchChallengesAndVote = async (
     }
 };
 
-export { fetchChallengesAndVote, getActiveChallenges, applyBoost, runTurboMiniGame, joinChallenge };
+export {
+    fetchChallengesAndVote,
+    applyBoostsOnSuspend,
+    getActiveChallenges,
+    applyBoost,
+    runTurboMiniGame,
+    joinChallenge,
+};

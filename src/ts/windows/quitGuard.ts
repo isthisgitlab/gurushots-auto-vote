@@ -42,20 +42,42 @@ type DescribeDeadlineActions = (
 ) => { actions?: Array<{ action: string; dueAt: number | null }> } | null | undefined;
 
 const QUIT_WARN_HORIZON_SEC = 60 * 60;
+// Narrower than the quit prompt's: a sleep (even a 2-minute lid close) spends a
+// boost this much earlier than Boost Time, so only boosts due within 30 min go.
+const SUSPEND_BOOST_HORIZON_SEC = 30 * 60;
 // A bypass is for the quit already under way; if that quit never lands (a
 // cancelled OS shutdown, a failed update install) the guard comes back.
 const BYPASS_TTL_MS = 30_000;
 
-// Last successful challenge list from get-active-challenges.
+// Last successful challenge list from get-active-challenges, and the mock flag
+// it was fetched under (null until one has been).
 let lastChallenges: readonly Challenge[] = [];
+let lastChallengesMock: boolean | null = null;
 let bypassed = false;
 let bypassTimer: NodeJS.Timeout | null = null;
 // A second Cmd+Q while the dialog is up must not stack another dialog.
 let prompting = false;
 
-/** @param challenges - the get-active-challenges list (ignored unless an array) */
-const rememberChallenges = (challenges: readonly Challenge[] | null | undefined) => {
-    if (Array.isArray(challenges)) lastChallenges = challenges;
+/**
+ * @param challenges - the get-active-challenges list (ignored unless an array)
+ * @param mock - the `mock` setting the list was fetched under
+ */
+const rememberChallenges = (challenges: readonly Challenge[] | null | undefined, mock: boolean) => {
+    if (!Array.isArray(challenges)) return;
+    lastChallenges = challenges;
+    lastChallengesMock = mock;
+};
+
+/** The `mock` setting the remembered list was fetched under; null when there is none. */
+const rememberedChallengesMock = (): boolean | null => lastChallengesMock;
+
+/**
+ * Mark a boost as used on the remembered challenge, so neither the quit guard
+ * nor a later suspend counts it as pending until the next fetch replaces the list.
+ */
+const markBoostApplied = (id: Challenge['id']) => {
+    const boost = lastChallenges.find((c) => c.id === id)?.member?.boost;
+    if (boost) boost.state = 'USED';
 };
 
 const clearBypass = () => {
@@ -76,6 +98,7 @@ const bypassQuitGuard = () => {
 
 const resetQuitGuard = () => {
     lastChallenges = [];
+    lastChallengesMock = null;
     prompting = false;
     clearBypass();
 };
@@ -85,22 +108,31 @@ const resetQuitGuard = () => {
  * soonest first.
  *
  * @param now - Unix seconds
+ * @param horizonSec - only boosts due within this many seconds
  */
-const imminentBoosts = (now: number, describe: DescribeDeadlineActions): Array<{ title: string; dueIn: number }> => {
+const imminentBoostChallenges = (
+    now: number,
+    describe: DescribeDeadlineActions,
+    horizonSec: number,
+): Array<{ challenge: Challenge; dueAt: number }> => {
     const open = new Set(openBoostWindows(lastChallenges, now).map((w) => w.id));
     return lastChallenges
         .filter((c) => open.has(c.id))
-        .map((c) => ({
-            title: c.title,
-            dueAt: describe(c, now)?.actions?.find((a) => a.action === 'boost')?.dueAt,
+        .map((challenge) => ({
+            challenge,
+            dueAt: describe(challenge, now)?.actions?.find((a) => a.action === 'boost')?.dueAt,
         }))
-        .flatMap((b) =>
-            typeof b.dueAt === 'number' && b.dueAt - now <= QUIT_WARN_HORIZON_SEC
-                ? [{ title: b.title, dueIn: b.dueAt - now }]
-                : [],
+        .flatMap(({ challenge, dueAt }) =>
+            typeof dueAt === 'number' && dueAt - now <= horizonSec ? [{ challenge, dueAt }] : [],
         )
-        .sort((a, b) => a.dueIn - b.dueIn);
+        .sort((a, b) => a.dueAt - b.dueAt);
 };
+
+const imminentBoosts = (now: number, describe: DescribeDeadlineActions): Array<{ title: string; dueIn: number }> =>
+    imminentBoostChallenges(now, describe, QUIT_WARN_HORIZON_SEC).map(({ challenge, dueAt }) => ({
+        title: challenge.title,
+        dueIn: dueAt - now,
+    }));
 
 const describeBoost = (b: { title: string; dueIn: number }, t: (key: string) => string) =>
     `• ${b.title} — ${b.dueIn <= 0 ? t('quitGuard.dueNow') : t('quitGuard.dueIn').replace('{time}', formatDuration(b.dueIn))}`;
@@ -189,9 +221,13 @@ const holdQuitForOpenBoosts = (
 
 export {
     rememberChallenges,
+    rememberedChallengesMock,
+    markBoostApplied,
+    imminentBoostChallenges,
     bypassQuitGuard,
     resetQuitGuard,
     holdQuitForOpenBoosts,
     QUIT_WARN_HORIZON_SEC,
+    SUSPEND_BOOST_HORIZON_SEC,
     BYPASS_TTL_MS,
 };

@@ -301,6 +301,15 @@ Deliberate semantics and caveats:
       machine from idling to sleep while auto-vote runs (the display may
       still sleep) — a deliberate power cost, logged at INFO on both engage
       and release so it is never a silent behaviour.
+    - A user-initiated sleep cannot be cancelled on macOS, and a sleeping
+      machine cannot reach the API. On Electron's `powerMonitor` `'suspend'`,
+      `src/ts/windows/suspendBoost.ts` therefore applies, right away, every
+      boost auto-vote would apply within the next 30 minutes
+      (`SUSPEND_BOOST_HORIZON_SEC`), using the voting pass's own boost
+      decision (`runSuspendBoost`). It is best effort: the event only
+      notifies the app, so the request races the network going down, and an
+      unconfirmed result is logged as such. A new photo is never submitted
+      for it.
 
     Two sharp edges in that `onSettingsChanged` wiring, both already handled
     in `index.ts` — keep them handled:

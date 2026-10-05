@@ -16,6 +16,7 @@ import * as logger from './logger';
 import { authenticate } from './api/login';
 import {
     fetchChallengesAndVote,
+    applyBoostsOnSuspend,
     getActiveChallenges,
     applyBoost,
     runTurboMiniGame,
@@ -33,6 +34,7 @@ import { mockApiClient } from './mock';
 const realApi = {
     authenticate,
     fetchChallengesAndVote,
+    applyBoostsOnSuspend,
     runTurboMiniGame,
     getActiveChallenges,
     getVoteImages,
@@ -79,6 +81,7 @@ const withMockDebug =
 const mockApi: ApiStrategy = {
     authenticate: withMockDebug('authentication', mockApiClient.authenticate),
     fetchChallengesAndVote: withMockDebug('fetchChallengesAndVote', mockApiClient.fetchChallengesAndVote),
+    applyBoostsOnSuspend: withMockDebug('applyBoostsOnSuspend', mockApiClient.applyBoostsOnSuspend),
     runTurboMiniGame: withMockDebug('runTurboMiniGame', mockApiClient.runTurboMiniGame),
     getActiveChallenges: withMockDebug('getActiveChallenges', mockApiClient.getActiveChallenges),
     getVoteImages: withMockDebug('getVoteImages', mockApiClient.getVoteImages),

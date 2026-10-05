@@ -102,7 +102,14 @@ describe('get-active-challenges', () => {
         expect(strategy.getActiveChallenges).toHaveBeenCalledWith('tok');
         expect(result).toEqual({ challenges: [{ id: 1 }] });
         // Feeds the quit-while-boost-window-open confirmation.
-        expect(rememberChallenges).toHaveBeenCalledWith([{ id: 1 }]);
+        expect(rememberChallenges).toHaveBeenCalledWith([{ id: 1 }], false);
+    });
+
+    test('records the mock setting the list was fetched under', async () => {
+        settings.loadSettings = jest.fn().mockReturnValue({ token: 'tok', mock: true });
+        stubStrategy({ getActiveChallenges: jest.fn().mockResolvedValue({ challenges: [{ id: 1 }] }) });
+        await buildHandlers()['get-active-challenges']();
+        expect(rememberChallenges).toHaveBeenCalledWith([{ id: 1 }], true);
     });
 
     test('a failed fetch keeps the quit guard on its previous list', async () => {
@@ -118,7 +125,7 @@ describe('get-active-challenges', () => {
         stubStrategy({ getActiveChallenges: jest.fn().mockResolvedValue(undefined) });
         const handlers = buildHandlers();
         await expect(handlers['get-active-challenges']()).resolves.toBeUndefined();
-        expect(rememberChallenges).toHaveBeenCalledWith(undefined);
+        expect(rememberChallenges).toHaveBeenCalledWith(undefined, false);
     });
 
     test('never throws to the renderer — returns the fetchFailed list shape on error', async () => {

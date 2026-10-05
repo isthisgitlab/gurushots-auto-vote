@@ -22,6 +22,7 @@ import type * as lifecycleModule from '../../src/ts/windows/lifecycle';
 import type * as settingsWatcherModule from '../../src/ts/windows/settingsWatcher';
 import type * as backgroundActivityModule from '../../src/ts/windows/backgroundActivity';
 import type * as quitGuardModule from '../../src/ts/windows/quitGuard';
+import type * as suspendBoostModule from '../../src/ts/windows/suspendBoost';
 import type * as applicationMenuModule from '../../src/ts/ui/applicationMenu';
 import type * as navigationGuardModule from '../../src/ts/index/navigationGuard';
 import type * as permissionsModule from '../../src/ts/index/permissions';
@@ -98,6 +99,7 @@ interface LoadedMocks {
     watcher: jest.MaybeMockedDeep<typeof settingsWatcherModule>;
     bg: jest.MaybeMockedDeep<typeof backgroundActivityModule>;
     quitGuard: jest.MaybeMockedDeep<typeof quitGuardModule>;
+    suspendBoost: jest.MaybeMockedDeep<typeof suspendBoostModule>;
     menu: jest.MaybeMockedDeep<typeof applicationMenuModule>;
     navigationGuard: jest.MaybeMockedDeep<typeof navigationGuardModule>;
     permissions: jest.MaybeMockedDeep<typeof permissionsModule>;
@@ -236,6 +238,9 @@ jest.mock('../../src/ts/windows/quitGuard', () => ({
     bypassQuitGuard: jest.fn(),
     resetQuitGuard: jest.fn(),
 }));
+jest.mock('../../src/ts/windows/suspendBoost', () => ({
+    applyImminentBoostsOnSuspend: jest.fn(() => Promise.resolve()),
+}));
 jest.mock('../../src/ts/ui/applicationMenu', () => ({ createApplicationMenu: jest.fn() }));
 jest.mock('../../src/ts/index/navigationGuard', () => ({ register: jest.fn() }));
 jest.mock('../../src/ts/index/permissions', () => ({ installPermissionHandlers: jest.fn() }));
@@ -277,6 +282,7 @@ function load({ lock = true, whenReady }: { lock?: boolean; whenReady?: () => Pr
         watcher: require('../../src/ts/windows/settingsWatcher') as typeof settingsWatcherModule,
         bg: require('../../src/ts/windows/backgroundActivity') as typeof backgroundActivityModule,
         quitGuard: require('../../src/ts/windows/quitGuard') as typeof quitGuardModule,
+        suspendBoost: require('../../src/ts/windows/suspendBoost') as typeof suspendBoostModule,
         menu: require('../../src/ts/ui/applicationMenu') as typeof applicationMenuModule,
         navigationGuard: require('../../src/ts/index/navigationGuard') as typeof navigationGuardModule,
         permissions: require('../../src/ts/index/permissions') as typeof permissionsModule,
@@ -528,6 +534,24 @@ describe('quit guard wiring', () => {
 
     it('an OS shutdown bypasses the guard', () => {
         expect(m.electron.powerMonitor.handlers.shutdown).toBe(m.quitGuard.bypassQuitGuard);
+    });
+
+    it('a device sleep applies imminent boosts, reading auto-vote state when the event fires', async () => {
+        const suspend = m.electron.powerMonitor.handlers.suspend;
+        m.settings.getSetting.mockImplementation((key) => key === 'autovoteRunning');
+        suspend();
+        expect(m.suspendBoost.applyImminentBoostsOnSuspend).toHaveBeenLastCalledWith({ autovoteRunning: true });
+
+        m.settings.getSetting.mockReturnValue(false);
+        suspend();
+        expect(m.suspendBoost.applyImminentBoostsOnSuspend).toHaveBeenLastCalledWith({ autovoteRunning: false });
+    });
+
+    it('a rejected sleep handler is caught and logged', async () => {
+        m.suspendBoost.applyImminentBoostsOnSuspend.mockRejectedValueOnce(new Error('boom'));
+        m.electron.powerMonitor.handlers.suspend();
+        await flush();
+        expect(m.cat.error).toHaveBeenCalledWith('Boost on sleep could not run: boom', null);
     });
 
     it('before-quit asks first; a held quit neither clears the token nor force-exits', () => {

@@ -5,9 +5,18 @@ import * as autoFill from '../autoFill';
 import { formatDuration } from '../../format/duration';
 import { failureText, oneLine } from '../../format/logSafe';
 import { finiteOr } from '../../numbers';
+import { buildFillDeps } from './context';
 
 import type { Challenge, MemberBoost } from '../../types/gurushots';
 import type { ActionContext } from './context';
+import type { VotingPassApi } from '../../types/votingPass';
+import type { EntryAgeLedger } from '../../types/stores';
+
+type BoostTarget = { imageId: string | null; fresh: boolean };
+type BoostAvailability = ReturnType<typeof readBoostAvailability>;
+
+/** What a boost sent on device sleep came to. */
+export type SuspendBoostOutcome = 'applied' | 'unconfirmed' | 'skipped';
 
 /**
  * Which kind of boost the challenge currently offers. Optional-chained to match
@@ -64,6 +73,22 @@ const logBoostTarget = (challenge: Challenge, message: string) => {
 };
 
 /**
+ * The photo an earlier fill-new submitted that its boost is still waiting on.
+ */
+const pendingBoostTarget = ({ challenge, entryAges }: ActionContext): BoostTarget | null => {
+    const pending = entryAges?.pending(challenge.id.toString());
+    return pending ? { imageId: pending, fresh: true } : null;
+};
+
+/**
+ * The configured Boost Entry; its imageId is null when no entry can take a boost.
+ */
+const existingBoostTarget = (challenge: Challenge): BoostTarget => ({
+    imageId: votingLogic.pickBoostEntry(challenge, challenge.id.toString())?.id ?? null,
+    fresh: false,
+});
+
+/**
  * The entry a due boost lands on: the photo an earlier fill-new submitted and the
  * boost is still waiting on; else, with fill-new on, a fresh photo submitted now
  * (remembered as pending, so a held boost reuses it instead of submitting
@@ -72,12 +97,12 @@ const logBoostTarget = (challenge: Challenge, message: string) => {
  * @returns null when
  *   fill-new found no valid target and the boost is skipped (already logged)
  */
-const resolveBoostTarget = async (ctx: ActionContext): Promise<{ imageId: string | null; fresh: boolean } | null> => {
+const resolveBoostTarget = async (ctx: ActionContext): Promise<BoostTarget | null> => {
     const { challenge, token, now, fillDeps, entryAges } = ctx;
     const cid = challenge.id.toString();
-    const pending = entryAges?.pending(cid);
-    if (pending) return { imageId: pending, fresh: true };
-    const existing = () => ({ imageId: votingLogic.pickBoostEntry(challenge, cid)?.id ?? null, fresh: false });
+    const pending = pendingBoostTarget(ctx);
+    if (pending) return pending;
+    const existing = () => existingBoostTarget(challenge);
     // 'always' = boostFillNew; 'conflict' = boostFillNewOnConflict when
     // the only existing entry is turboed; 'no' = boost an existing entry.
     const fillMode = votingLogic.resolveBoostFillNewMode(challenge, cid);
@@ -115,13 +140,14 @@ const resolveBoostTarget = async (ctx: ActionContext): Promise<{ imageId: string
 /**
  * @param target - from resolveBoostTarget
  * @param timeUntilDisplayBase - seconds to the boost timeout (timer-based) or challenge end
+ * @returns whether the boost landed
  */
 const applyAvailableBoost = async (
     ctx: ActionContext,
-    target: { imageId: string | null; fresh: boolean },
+    target: BoostTarget,
     isTimerBasedAvailable: boolean,
     timeUntilDisplayBase: number,
-) => {
+): Promise<boolean> => {
     const { challenge, token, api } = ctx;
     // Surface the override so an applied boost on a challenge with
     // Auto-Apply Boost off is explained rather than looking like a bug.
@@ -136,8 +162,8 @@ const applyAvailableBoost = async (
     const timeDisplay = formatDuration(timeUntilDisplayBase);
 
     const applyingMsg = isTimerBasedAvailable
-        ? `Applying boost to challenge ${challenge.title}`
-        : `Applying boost to challenge ${challenge.title} (key-unlocked)`;
+        ? `Applying boost to challenge ${logger.challengeTag(challenge)}`
+        : `Applying boost to challenge ${logger.challengeTag(challenge)} (key-unlocked)`;
     logger.withCategory('boost').startOperation(`boost-${challenge.id}`, applyingMsg);
 
     try {
@@ -152,6 +178,7 @@ const applyAvailableBoost = async (
             logger
                 .withCategory('boost')
                 .endOperation(`boost-${challenge.id}`, `Boost applied successfully (${successSuffix})`);
+            return true;
         }
         // On null/falsy result the operation is already closed with the failure
         // reason (by applyBoost itself, or by boostFreshEntry) — no caller-side
@@ -159,6 +186,7 @@ const applyAvailableBoost = async (
     } catch (error) {
         endBoostOperation(challenge, failureText(error));
     }
+    return false;
 };
 
 /**
@@ -200,12 +228,40 @@ const holdBoostForFreshEntry = ({ challenge, now, entryAges }: ActionContext, im
     return true;
 };
 
+/**
+ * Skip a key-unlocked boost (outside the emergency window) that would land on an
+ * auto-submitted photo whose standing is still uncertain.
+ *
+ * @returns true when the boost is skipped (already logged)
+ */
+const skipForUncertainPhoto = (ctx: ActionContext, target: BoostTarget, isTimerBasedAvailable: boolean): boolean => {
+    const { challenge, now } = ctx;
+    if (
+        !target.imageId ||
+        isTimerBasedAvailable ||
+        votingLogic.isWithinEmergencyWindow(challenge, now) ||
+        !settings.getEffectiveSetting('protectUncertainAutoFills', challenge.id.toString()) ||
+        !ctx.entryAges?.isUncertain(challenge.id, target.imageId)
+    ) {
+        return false;
+    }
+    logBoostTarget(challenge, `auto-Boost skipped for uncertain auto-submitted photo ${oneLine(target.imageId)}`);
+    return true;
+};
+
+/**
+ * Seconds to the boost timeout (timer-based) or the challenge end (key-unlocked).
+ */
+const secondsToBoostDeadline = (challenge: Challenge, now: number, availability: BoostAvailability): number =>
+    availability.isTimerBasedAvailable ? finiteOr(availability.boost.timeout, 0) - now : challenge.close_time - now;
+
 export const runBoost = async (ctx: ActionContext) => {
     const { challenge, now } = ctx;
     // Every pass, so an entry's first-seen time is as close to its real entry
     // time as the cadence allows — including entries this pass just reflected.
     ctx.entryAges?.observe(challenge, now);
-    const { boost, isTimerBasedAvailable, isKeyUnlockedAvailable } = readBoostAvailability(challenge);
+    const availability = readBoostAvailability(challenge);
+    const { isTimerBasedAvailable, isKeyUnlockedAvailable } = availability;
     if (!isTimerBasedAvailable && !isKeyUnlockedAvailable) return;
 
     logger.withCategory('voting').info(`${logger.challengeTag(challenge)} Boost available`, null);
@@ -215,8 +271,7 @@ export const runBoost = async (ctx: ActionContext) => {
     // near the deadline even if autoBoost is off for this challenge.
     const shouldApplyBoost = votingLogic.shouldApplyBoost(challenge, now, { emergency: true });
     const effectiveBoostTime = votingLogic.getEffectiveBoostTime(challenge.id.toString());
-    // For timer-based availability use boost.timeout; for key-unlocked use challenge end time
-    const timeUntilDisplayBase = isTimerBasedAvailable ? finiteOr(boost.timeout, 0) - now : challenge.close_time - now;
+    const timeUntilDisplayBase = secondsToBoostDeadline(challenge, now, availability);
 
     if (!shouldApplyBoost) {
         logBoostNotReady(challenge, isTimerBasedAvailable, timeUntilDisplayBase, effectiveBoostTime);
@@ -224,15 +279,93 @@ export const runBoost = async (ctx: ActionContext) => {
     }
     const target = await resolveBoostTarget(ctx);
     if (
-        target?.imageId &&
-        !isTimerBasedAvailable &&
-        !votingLogic.isWithinEmergencyWindow(challenge, now) &&
-        settings.getEffectiveSetting('protectUncertainAutoFills', challenge.id.toString()) &&
-        ctx.entryAges?.isUncertain(challenge.id, target.imageId)
-    ) {
-        logBoostTarget(challenge, `auto-Boost skipped for uncertain auto-submitted photo ${oneLine(target.imageId)}`);
+        !target ||
+        skipForUncertainPhoto(ctx, target, isTimerBasedAvailable) ||
+        holdBoostForFreshEntry(ctx, target.imageId)
+    )
         return;
-    }
-    if (!target || holdBoostForFreshEntry(ctx, target.imageId)) return;
     await applyAvailableBoost(ctx, target, isTimerBasedAvailable, timeUntilDisplayBase);
+};
+
+/**
+ * The entry a boost sent on device sleep lands on. Same rule as
+ * resolveBoostTarget, except a new photo is never submitted — a submit cannot
+ * finish before the device sleeps — so a boost fill-new would have put on a
+ * fresh photo goes to the existing entry instead.
+ *
+ * @returns null when no entry can take the boost (already logged)
+ */
+const resolveSuspendBoostTarget = (ctx: ActionContext): BoostTarget | null => {
+    const { challenge } = ctx;
+    const pending = pendingBoostTarget(ctx);
+    if (pending) return pending;
+    const target = existingBoostTarget(challenge);
+    if (!target.imageId) {
+        // Only reachable with every entry turboed (the conflict row
+        // describeDeadlineActions keeps) or no entry at all; applyBoost would only fail.
+        logBoostTarget(challenge, 'no entry can take the boost (only entry already has Turbo) — boost skipped');
+        return null;
+    }
+    if (votingLogic.resolveBoostFillNewMode(challenge, challenge.id.toString()) !== 'no') {
+        logBoostTarget(
+            challenge,
+            'boost fill-new is on, but a new photo cannot be submitted before sleep; boosting existing entry',
+        );
+    }
+    return target;
+};
+
+/**
+ * Apply a boost that auto-vote would apply soon, because the device is going to
+ * sleep. The caller selected the challenge, so Boost Time is not re-checked; the
+ * target rule and the fresh-entry / uncertain-photo skips are runBoost's own.
+ * Scenario phase overlays are read as they are now: a later phase that would
+ * retarget or disable the boost is not anticipated.
+ */
+export const runSuspendBoost = async (ctx: ActionContext): Promise<SuspendBoostOutcome> => {
+    const { challenge, now } = ctx;
+    const availability = readBoostAvailability(challenge);
+    const { isTimerBasedAvailable, isKeyUnlockedAvailable } = availability;
+    if (!isTimerBasedAvailable && !isKeyUnlockedAvailable) {
+        logBoostTarget(challenge, 'boost no longer available — nothing to send before sleep');
+        return 'skipped';
+    }
+    const target = resolveSuspendBoostTarget(ctx);
+    if (
+        !target ||
+        skipForUncertainPhoto(ctx, target, isTimerBasedAvailable) ||
+        holdBoostForFreshEntry(ctx, target.imageId)
+    )
+        return 'skipped';
+    const landed = await applyAvailableBoost(
+        ctx,
+        target,
+        isTimerBasedAvailable,
+        secondsToBoostDeadline(challenge, now, availability),
+    );
+    return landed ? 'applied' : 'unconfirmed';
+};
+
+/**
+ * runSuspendBoost for every selected challenge, over the deps a voting pass
+ * would use.
+ *
+ * All challenges run at once — a deliberate exception to the voting pass's
+ * "per-challenge runners are sequential" invariant: these are separate challenge
+ * objects with no shared mutation, and the ledger's read-modify-write is
+ * synchronous. Skipping the 2–5 s inter-challenge delay is deliberate too, because
+ * time is short.
+ *
+ * @returns one settled outcome per challenge, in order
+ */
+export const runSuspendBoosts = (
+    challenges: readonly Challenge[],
+    token: string,
+    { api, entryAges }: { api: VotingPassApi; entryAges: EntryAgeLedger | null },
+): Promise<PromiseSettledResult<SuspendBoostOutcome>[]> => {
+    const now = Math.floor(Date.now() / 1000);
+    const fillDeps = buildFillDeps(api, entryAges);
+    return Promise.allSettled(
+        challenges.map((challenge) => runSuspendBoost({ challenge, token, now, api, fillDeps, entryAges })),
+    );
 };

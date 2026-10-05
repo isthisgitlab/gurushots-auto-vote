@@ -5,6 +5,8 @@ import * as logger from '../logger';
 import { AutoUpdater } from '../services/AutoUpdater';
 import { ensureExit } from '../windows/lifecycle';
 import { bypassQuitGuard } from '../windows/quitGuard';
+import { applyImminentBoostsOnSuspend } from '../windows/suspendBoost';
+import { failureText } from '../format/logSafe';
 import { createApplicationMenu } from '../ui/applicationMenu';
 import { appState } from './state';
 import { checkAutoLogin } from './windows';
@@ -34,6 +36,16 @@ async function onReady() {
 
     // Linux/macOS shutdown or reboot: never veto the OS with a dialog.
     powerMonitor.on('shutdown', bypassQuitGuard);
+
+    // Sleep: a boost due soon goes out now, while the network is still up
+    // (best effort — see windows/suspendBoost.ts). Read at event time, not here.
+    powerMonitor.on('suspend', () => {
+        applyImminentBoostsOnSuspend({ autovoteRunning: settings.getSetting('autovoteRunning') === true }).catch(
+            (error: unknown) => {
+                logger.withCategory('boost').error(`Boost on sleep could not run: ${failureText(error)}`, null);
+            },
+        );
+    });
 
     // Check if we should auto-login and run update check before creating main window
     const userSettings = settings.loadSettings();

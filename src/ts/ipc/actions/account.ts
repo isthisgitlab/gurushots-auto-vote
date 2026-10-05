@@ -28,13 +28,13 @@ const handleGetActiveChallenges = (async (): Promise<ActiveChallengesResponse> =
         // The token never travels from the renderer: it is read from the store.
         // No token is the pre-login state, answered with the failed-fetch shape
         // (the renderer polls this, so no warning per call).
-        const { token } = settings.loadSettings();
+        const { token, mock } = settings.loadSettings();
         if (!token) return { challenges: [], fetchFailed: true };
         const strategy = apiFactory.getApiStrategy();
         const result: ActiveChallengesResponse = await strategy.getActiveChallenges(token);
         // Feeds the quit confirmation. A failed fetch keeps the previous
         // list — an empty one would wave through a quit mid-boost-window.
-        if (!result?.fetchFailed) rememberChallenges(result?.challenges);
+        if (!result?.fetchFailed) rememberChallenges(result?.challenges, mock === true);
         return result;
     } catch (error) {
         // Never throw to the renderer (architecture invariant). Return the
