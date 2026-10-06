@@ -74,6 +74,10 @@ overrides:
     # (and so braces); 2.6.0 matches with picomatch instead. Any older release is moved up too. Verified: the app and site
     # CSS build byte-identical, and `tailwindcss --watch=always` still rebuilds on a change.
     '@parcel/watcher@<2.6.0': 2.6.0
+    # concurrently (the `pnpm dev` runner) pins shell-quote 1.9.0 exactly; GHSA-pqg4-j6r4-53mv
+    # (quote() command injection via a line terminator after a comment token) is fixed in 1.11.0.
+    # concurrently only quotes its own fixed command lines, never user input.
+    'shell-quote@<1.11.0': 1.12.0
 # braces <=3.0.3 (GHSA-vfj7-8cjw-p6xm: stack exhaustion on deeply nested brace patterns)
 # has NO patched release: 3.0.3 is the latest, and micromatch 4.0.8 and watchboy 0.4.3,
 # the dependents that remain, are the latest too. What remains is electronmon > watchboy >
