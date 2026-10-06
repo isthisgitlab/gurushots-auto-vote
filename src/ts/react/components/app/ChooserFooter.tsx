@@ -199,10 +199,11 @@ const focusIsLost = (): boolean => {
  * clear the selection (held with it while the saved list is unread: a late read would undo the
  * clear; its own description says so), cancel — and the error of a save that failed.
  *
- * When a Retry ends and the Retry button goes (the hold lifted, signed out, another account) while
- * focus was on it, focus would drop to the page. It moves to Save if Save is free, else to the
- * status line (which holds the reason), so it is always somewhere stable. Focus anywhere else — the
- * search box, Cancel — is never taken.
+ * When the Retry button goes (the hold lifted, signed out, another account, the listing reloading)
+ * while focus was on it, focus would drop to the page. It moves to Save if Save is free, else to
+ * the status line (which holds the reason), so it is always somewhere stable; once the hold lifts
+ * after a pressed Retry it moves on to Save. Focus anywhere else — the search box, Cancel — is
+ * never taken.
  */
 export function ChooserFooter({
     saveFailed,
@@ -238,12 +239,18 @@ export function ChooserFooter({
     const hintId = useId();
     const saveRef = useRef<HTMLButtonElement>(null);
     const statusRef = useRef<HTMLParagraphElement>(null);
-    const wasRetrying = useRef(false);
+    const retryShown = (saveWaits && RETRYABLE_HOLDS.includes(holdReason)) || retrying;
+    const wasShown = useRef(false);
     useEffect(() => {
-        const ended = wasRetrying.current && !retrying;
-        wasRetrying.current = retrying;
-        if (ended && focusIsLost()) (saveWaits ? statusRef : saveRef).current?.focus();
-    }, [retrying, saveWaits]);
+        const gone = wasShown.current && !retryShown;
+        wasShown.current = retryShown;
+        if (gone && focusIsLost()) (saveWaits ? statusRef : saveRef).current?.focus();
+    }, [retryShown, saveWaits]);
+    // The hold has lifted after a pressed Retry: from the page or from the status line (where focus
+    // was parked while Retry was away) it goes to Save; anywhere the user put it, it stays.
+    useEffect(() => {
+        if (confirmed && (focusIsLost() || document.activeElement === statusRef.current)) saveRef.current?.focus();
+    }, [confirmed]);
     const message = saveWaits ? SAVE_HOLD_HINT[holdReason] : confirmed ? 'app.photoChooserSaveConfirmed' : null;
     return (
         <>
@@ -256,7 +263,7 @@ export function ChooserFooter({
                 id={hintId}
                 statusRef={statusRef}
                 message={message}
-                showRetry={saveWaits && RETRYABLE_HOLDS.includes(holdReason)}
+                showRetry={retryShown}
                 retrying={retrying}
                 onRetry={onRetryHold}
             />

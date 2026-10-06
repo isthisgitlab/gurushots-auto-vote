@@ -10,7 +10,7 @@ import { act, fireEvent, render, screen, waitFor, within } from './helpers/test-
 import { PhotoChooserModal } from '@/components/app/PhotoChooserModal';
 import { Modal } from '@/components/ui/Modal';
 import { rememberCurrentMember } from '@/api/useChosenPhotosOwner';
-import { mockTranslator } from './helpers/setup';
+import { fireSettingsChanged, mockTranslator } from './helpers/setup';
 import { app } from '../../src/ts/translations/english';
 import { MAX_CHOSEN_PHOTOS } from '../../src/ts/settings/limits';
 import { invalid } from '../helpers/invalid';
@@ -57,6 +57,16 @@ const getLibrary = () => jest.mocked(window.api.getLibraryPhotos);
 
 // The count line is the first live region; the footer's hold/confirmation status is the last.
 const countLine = () => screen.getAllByRole('status')[0];
+
+// Passive effects run after the next frame (preact schedules them with requestAnimationFrame, then a
+// timeout): wait for exactly that, not for an arbitrary time, before judging what they did.
+const effectsFlushed = () =>
+    act(
+        () =>
+            new Promise<void>((resolve) => {
+                requestAnimationFrame(() => setTimeout(resolve, 0));
+            }),
+    );
 
 const tile = (n: number) => screen.getByRole('button', { name: new RegExp(`^Photo ${shortOf(n)}:`) });
 
@@ -768,7 +778,7 @@ describe('a saved list that came without its ids', () => {
     const notLoggedInHint =
         "You're signed out, so the account can't be checked. Log in again, then reopen the chooser.";
     const noContextHeldHint =
-        "Saving is held: without an active or open challenge the app can't check which account this list belongs to. Close this window and join a challenge first.";
+        "Saving is held: without an active or open challenge the app can't check which account this list belongs to. Close the chooser and join a challenge first.";
     const confirmedText = 'Account confirmed — your saved list is loaded.';
     const lockedText = 'Locked until your saved list is read';
     const checkingHint = 'Checking which account this list belongs to…';
@@ -1035,9 +1045,11 @@ describe('a saved list that came without its ids', () => {
             const cancel = screen.getByRole('button', { name: 'Cancel' });
             cancel.focus();
             await act(async () => answer.resolve({ success: true, memberId: OWNER }));
-            await waitFor(() => expect(pressed(1)).toBe('true'));
-            // Let the footer's effects run before judging where focus is.
-            await act(async () => new Promise((resolve) => setTimeout(resolve, 100)));
+            // The hold has lifted and the confirmation is on screen: the footer has committed what its
+            // focus effects react to. Only then is where focus is worth judging.
+            await screen.findByText(confirmedText);
+            await waitFor(() => expect(use().getAttribute('aria-disabled')).toBe('false'));
+            await effectsFlushed();
             expect(document.activeElement).toBe(cancel);
         });
 
@@ -1066,7 +1078,40 @@ describe('a saved list that came without its ids', () => {
             const search = screen.getByRole('searchbox');
             fireEvent.submit(search.closest('form')!);
             await waitFor(() => expect(getLibrary()).toHaveBeenCalledTimes(2));
-            await waitFor(() => expect(screen.queryByText(confirmedText)).toBeNull());
+            // The reload has settled (Save is free again, the list already read) before judging the text.
+            await waitFor(() => expect(use().getAttribute('aria-disabled')).toBe('false'));
+            await waitFor(() => expect(tile(1).getAttribute('aria-disabled')).toBe('false'));
+            expect(screen.queryByText(confirmedText)).toBeNull();
+        });
+
+        test('Retry that reloads the listing (the owner not yet known) keeps focus, then a good read announces and focuses Save', async () => {
+            // The listing names the member, but the owner record is not there yet: Retry reloads the listing.
+            jest.mocked(window.api.getSetting).mockResolvedValue('');
+            const reloadSaved = rereads([idOf(1)]);
+            setup({ value: [], savedCount: 1, reloadSaved });
+            await screen.findByText(unconfirmedHint);
+            expect(reloadSaved).not.toHaveBeenCalled();
+
+            const retry = retryButton();
+            retry.focus();
+            const reload = deferred<Listing>();
+            getLibrary().mockReturnValueOnce(invalid(reload.promise));
+            fireEvent.click(retry);
+            // While the listing loads Retry goes away; focus must not fall to the page.
+            await waitFor(() => expect(screen.queryByRole('button', { name: 'Retry' })).toBeNull());
+            await waitFor(() => expect(document.activeElement).not.toBe(document.body));
+            expect(document.activeElement?.getAttribute('role')).toBe('status');
+
+            // The owner is on record now; the reloaded listing names the same member, so the list is read.
+            jest.mocked(window.api.getSetting).mockResolvedValue(OWNER);
+            await act(async () => {
+                fireSettingsChanged({});
+                reload.resolve(listing([photo(1)]));
+            });
+            await screen.findByText(confirmedText);
+            await waitFor(() => expect(pressed(1)).toBe('true'));
+            expect(screen.getByText(confirmedText).getAttribute('role')).toBe('status');
+            await waitFor(() => expect(document.activeElement).toBe(use()));
         });
 
         test('a hold nobody pressed Retry for lifts without moving focus or announcing success', async () => {

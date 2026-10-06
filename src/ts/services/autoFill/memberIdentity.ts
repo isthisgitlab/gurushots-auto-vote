@@ -40,7 +40,7 @@ const MAX_MEMBER_ID_CACHE = 4;
 // (forgetFailedMemberId) may evict a failure early, and the gap is counted
 // between explicit retries (MIN_EXPLICIT_RETRY_GAP_MS), not from the failure:
 // the first press after a failed lookup always asks, presses repeated inside
-// the gap share the cached failure.
+// the gap share the cached failure (and only an eviction starts a gap).
 const NEGATIVE_IDENTITY_TTL_MS = 60_000;
 const MIN_EXPLICIT_RETRY_GAP_MS = 5_000;
 // When each token last had an explicit retry let through (bounded like the cache).
@@ -105,20 +105,22 @@ const peekMemberId = (token: string): string | null => memberIdCache.get(token)?
 
 /**
  * Evict a cached FAILED lookup for this token, so the next `resolveMemberId` asks again instead of
- * waiting out NEGATIVE_IDENTITY_TTL_MS. Only for a user's explicit retry. The first one always gets
- * through, however recent the failure; after that the gap is counted from the last explicit retry
- * let through: presses (or a script) inside MIN_EXPLICIT_RETRY_GAP_MS of it get the cached failure
- * back, so the profile endpoint sees at most one explicit request per gap. A resolved id stays (it
- * cannot change under a token), and so does a lookup still in flight (callers share it).
+ * waiting out NEGATIVE_IDENTITY_TTL_MS. Only for a user's explicit retry. The first eviction always
+ * gets through, however recent the failure; after that the gap is counted from the last eviction:
+ * presses (or a script) inside MIN_EXPLICIT_RETRY_GAP_MS of it get the cached failure back, so the
+ * profile endpoint sees at most one explicit request per gap. Only an actual eviction is recorded:
+ * a press while a lookup is in flight (callers share it), or with nothing cached, evicts nothing and
+ * uses up none of the allowance. A resolved id stays (it cannot change under a token).
  */
 const forgetFailedMemberId = (token: string): void => {
+    const entry = memberIdCache.get(token);
+    if (!entry || entry.id !== null || entry.expiresAt === null) return;
     const now = Date.now();
     const last = explicitRetryAt.get(token);
     if (last !== undefined && now - last < MIN_EXPLICIT_RETRY_GAP_MS) return;
     if (explicitRetryAt.size >= MAX_MEMBER_ID_CACHE) explicitRetryAt.clear();
     explicitRetryAt.set(token, now);
-    const entry = memberIdCache.get(token);
-    if (entry && entry.id === null && entry.expiresAt !== null) memberIdCache.delete(token);
+    memberIdCache.delete(token);
 };
 
 // Test-only: drop the memoised identity between cases.

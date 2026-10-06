@@ -123,20 +123,26 @@ describe('confirm-account: the explicit retry after a failed identity lookup', (
         expect(getCurrentMemberProfile).not.toHaveBeenCalled();
     });
 
-    test('a lookup that fails again says so; presses within the gap share the cached failure, one after it asks again', async () => {
+    test('a lookup that fails again says so; only an eviction starts the gap, presses inside it share the cached failure', async () => {
         const now = jest.spyOn(Date, 'now').mockReturnValue(1_000_000);
         getCurrentMemberProfile.mockResolvedValue(null);
-        await expect(confirm()).resolves.toEqual({ success: false, error: 'account-check-failed' });
-        // Two quick presses make no further request: the failure just cached answers them.
-        now.mockReturnValue(1_000_000 + 1_000);
-        await expect(confirm()).resolves.toEqual({ success: false, error: 'account-check-failed' });
+        // Nothing cached yet: the press just asks (no eviction, so no gap starts).
         await expect(confirm()).resolves.toEqual({ success: false, error: 'account-check-failed' });
         expect(getCurrentMemberProfile).toHaveBeenCalledTimes(1);
-        // Past the gap a press asks again, and a success then goes through.
+        // The next press evicts that failure and asks again; that eviction starts the gap.
+        now.mockReturnValue(1_000_000 + 1_000);
+        await expect(confirm()).resolves.toEqual({ success: false, error: 'account-check-failed' });
+        expect(getCurrentMemberProfile).toHaveBeenCalledTimes(2);
+        // Presses inside the gap make no further request.
+        await expect(confirm()).resolves.toEqual({ success: false, error: 'account-check-failed' });
+        now.mockReturnValue(1_000_000 + 5_999);
+        await confirm();
+        expect(getCurrentMemberProfile).toHaveBeenCalledTimes(2);
+        // Past it a press asks again, and a success then goes through.
         now.mockReturnValue(1_000_000 + 6_000);
         getCurrentMemberProfile.mockResolvedValueOnce({ id: OWNER });
         await expect(confirm()).resolves.toEqual({ success: true, memberId: OWNER });
-        expect(getCurrentMemberProfile).toHaveBeenCalledTimes(2);
+        expect(getCurrentMemberProfile).toHaveBeenCalledTimes(3);
     });
 
     test('the first explicit Retry right after a failed lookup asks at once; a second inside the gap does not', async () => {

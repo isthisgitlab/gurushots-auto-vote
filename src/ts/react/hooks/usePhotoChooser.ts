@@ -37,6 +37,7 @@ export function useLibraryListing(challengeId: string | number | null) {
     // the listing on screen (setMember) is not. What a Retry did belongs to the generation it was
     // pressed on.
     const [generation, setGeneration] = useState(0);
+    const generationRef = useRef(0);
     const requestRef = useRef(0);
     const lastSearchRef = useRef('');
 
@@ -44,7 +45,8 @@ export function useLibraryListing(challengeId: string | number | null) {
         async (search: string) => {
             const request = ++requestRef.current;
             lastSearchRef.current = search;
-            setGeneration((count) => count + 1);
+            generationRef.current += 1;
+            setGeneration(generationRef.current);
             setState({ status: 'loading' });
             const result = await ipc.callOrNull(() => ipc.getLibraryPhotos(challengeId, search || undefined));
             if (request !== requestRef.current) return;
@@ -82,7 +84,14 @@ export function useLibraryListing(challengeId: string | number | null) {
         );
     }, []);
 
-    return { state, known, generation, load, setMember, retry: () => void load(lastSearchRef.current) };
+    // Reads the listing again; answers the generation that read is, so a Retry can be recorded
+    // against the listing it created rather than the one it replaced.
+    const retry = () => {
+        void load(lastSearchRef.current);
+        return generationRef.current;
+    };
+
+    return { state, known, generation, load, setMember, retry };
 }
 
 /**
@@ -236,7 +245,8 @@ function useSavedListRetry({
     read: Pick<ReturnType<typeof useSavedListRead>, 'busy' | 'again'>;
     confirmAccount: () => Promise<AccountCheck>;
     onMember: (memberId: string) => void;
-    retryListing: () => void;
+    /** Reads the listing again and answers the generation that read is. */
+    retryListing: () => number;
 }) {
     const [checkBusy, setCheckBusy] = useState(false);
     // Both belong to the listing generation Retry was pressed on: a new search starts clean.
@@ -246,7 +256,8 @@ function useSavedListRetry({
     const retry = () => {
         if (busy) return;
         setFailure(null);
-        setPressedAt(generation);
+        // The press belongs to the generation it ends up on: a listing reload makes a new one.
+        let pressedOn = generation;
         if (ownersList) read.again();
         else if (memberId === null) {
             setCheckBusy(true);
@@ -256,7 +267,8 @@ function useSavedListRetry({
                 setBusy: setCheckBusy,
                 setCheckFailure: (kind) => setFailure({ generation, kind }),
             });
-        } else retryListing();
+        } else pressedOn = retryListing();
+        setPressedAt(pressedOn);
     };
     return {
         busy,
@@ -315,7 +327,7 @@ export function useSavedListReread({
     generation: number;
     reloadSaved?: () => Promise<string[] | null>;
     confirmAccount: () => Promise<AccountCheck>;
-    retryListing: () => void;
+    retryListing: () => number;
     onMember: (memberId: string) => void;
     onRead: (ids: string[]) => void;
 }) {
