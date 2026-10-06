@@ -51,7 +51,7 @@ const isSensitivePath = (path: string) =>
 // full, so it is masked key by key; a chosenPhotos list, at any depth, shows as a count.
 const describeValue = (path: string, value: unknown): string => {
     const lastSegment = path.slice(path.lastIndexOf('.') + 1);
-    return stringify((maskSettingValue({ [lastSegment]: value }) as Record<string, unknown>)[lastSegment]);
+    return stringify(maskSettingValue({ [lastSegment]: value })[lastSegment]);
 };
 
 const describeChange = (path: string, oldValue: unknown, newValue: unknown): SettingChange =>

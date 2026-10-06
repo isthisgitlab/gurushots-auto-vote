@@ -8,6 +8,7 @@
 jest.mock('../../src/ts/settings', () => ({
     getSetting: jest.fn(),
     setSetting: jest.fn(),
+    forgetOpenChallengeIds: jest.fn(),
 }));
 
 jest.mock('../../src/ts/services/auth', () => ({
@@ -58,6 +59,8 @@ describe('cliLogin', () => {
         expect(mw.apiStrategy.authenticate).toHaveBeenCalledWith('a@b.c', 'pw');
         expect(settings.setSetting).toHaveBeenCalledWith('token', 'new-tok');
         expect(cat.endOperation).toHaveBeenCalledWith('cli-login', 'Authentication successful');
+        // A different token than the stored one: the previous account's memory goes with it.
+        expect(settings.forgetOpenChallengeIds).toHaveBeenCalledTimes(1);
     });
 
     test('invalid credentials do not persist anything', async () => {
@@ -95,6 +98,14 @@ describe('guiLogin', () => {
         const mw = make({ authenticate: jest.fn(async () => response) });
         await expect(mw.guiLogin('a', 'b')).resolves.toEqual({ success: true, token: 'gui-tok', data: response });
         expect(settings.setSetting).toHaveBeenCalledWith('token', 'gui-tok');
+        expect(settings.forgetOpenChallengeIds).toHaveBeenCalledTimes(1);
+    });
+
+    test('logging in again with the stored token keeps what is remembered', async () => {
+        settings.getSetting.mockReturnValue('same-tok');
+        const mw = make({ authenticate: jest.fn(async () => ({ access_token: 'same-tok' })) });
+        await mw.guiLogin('a', 'b');
+        expect(settings.forgetOpenChallengeIds).not.toHaveBeenCalled();
     });
 
     test('invalid credentials', async () => {

@@ -12,7 +12,7 @@ import { formatDateTime } from '../../dateFormat';
 import { SCENARIO_TEMPLATES } from '../../scenarios/templates';
 import { VOCABULARY_REFERENCE } from '../../scenarios/vocabulary';
 import { finiteOr } from '../../numbers';
-import { escapeTerminalUnsafe } from '../../format/logSafe';
+import { escapeTerminalUnsafe, stripTerminalControl } from '../../format/logSafe';
 
 // Built lazily so requiring this module (e.g. for `help`) does not construct
 // the handler set or pull in its transitive dependencies.
@@ -76,8 +76,12 @@ const listScenarios = async () => {
     ui().info(names.length ? `Scenarios (${names.length}):` : 'No scenarios yet.');
     for (const name of names) {
         const scenario = result.scenarios[name];
-        ui().info(`  • ${name} — ${Object.keys(scenario.phases).length} phase(s), starts in "${scenario.start}"`);
-        if (scenario.description) ui().info(`      ${scenario.description}`);
+        // Stored (and imported) text: a control or bidi character in it must not reach the terminal.
+        const shown = stripTerminalControl(name);
+        ui().info(
+            `  • ${shown} — ${Object.keys(scenario.phases).length} phase(s), starts in "${stripTerminalControl(scenario.start)}"`,
+        );
+        if (scenario.description) ui().info(`      ${stripTerminalControl(scenario.description)}`);
     }
     ui().info(`Templates: ${SCENARIO_TEMPLATES.map((t) => t.id).join(', ')} (scenario-template <id> [file])`);
     return 0;

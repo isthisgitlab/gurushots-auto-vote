@@ -61,6 +61,8 @@ const setup = (
     over: Partial<{
         value: string[];
         challengeId: string | number | null;
+        savedCount: number;
+        reloadSaved: jest.MockedFunction<() => Promise<string[] | null>>;
         onSave: jest.MockedFunction<(ids: string[]) => boolean | Promise<boolean>>;
         onClose: jest.MockedFunction<() => void>;
     }> = {},
@@ -672,6 +674,7 @@ describe('Save while the account is unknown', () => {
     const use = () => screen.getByRole('button', { name: 'Use these photos' });
     const hint = 'Saving waits until your photos have loaded, so the app can check which account the list belongs to.';
 
+    const errorHint = 'Saving is held until your photos load. Press Retry above.';
     const noContextHint =
         "Saving is blocked: without an active or open challenge the app can't check which account this list belongs to. Clear the list to save, or join a challenge first.";
 
@@ -695,7 +698,9 @@ describe('Save while the account is unknown', () => {
         expect(onSave).not.toHaveBeenCalled();
         await act(async () => pending.resolve(invalid({ success: false, error: 'down' })));
         await screen.findByRole('button', { name: 'Retry' });
-        expectHeldBack();
+        // The hint names the way out of this state: Retry, not a wait that will not end by itself.
+        expectHeldBack(errorHint);
+        expect(screen.queryByText(hint)).toBeNull();
         // Once a listing shows who is signed in, Save is available again, and the hint is gone.
         getLibrary().mockResolvedValueOnce(listing([photo(1)]));
         fireEvent.click(screen.getByRole('button', { name: 'Retry' }));
@@ -745,6 +750,81 @@ describe('Save while the account is unknown', () => {
         setup({ value: [idOf(1)] });
         await act(async () => undefined);
         expect(use().getAttribute('aria-disabled')).toBe('false');
+    });
+});
+
+describe('a saved list that came without its ids', () => {
+    const OWNER = MEMBER;
+    const use = () => screen.getByRole('button', { name: 'Use these photos' });
+    const hint = 'Saving waits until your photos have loaded, so the app can check which account the list belongs to.';
+
+    beforeEach(() => {
+        jest.mocked(window.api.getSetting).mockResolvedValue(OWNER);
+    });
+
+    test('Save, an empty one too, is held until the list has been read again and seeds the selection', async () => {
+        const pending = deferred<Listing>();
+        getLibrary().mockReturnValueOnce(invalid(pending.promise));
+        const reloadSaved = jest.fn().mockResolvedValue([idOf(1), idOf(2)]);
+        const { onSave } = setup({ value: [], savedCount: 2, reloadSaved });
+        await act(async () => undefined);
+        // Nothing to save yet: the selection is empty only because the ids were withheld.
+        expect(use().getAttribute('aria-disabled')).toBe('true');
+        fireEvent.click(use());
+        expect(onSave).not.toHaveBeenCalled();
+        expect(reloadSaved).not.toHaveBeenCalled();
+
+        await act(async () => pending.resolve(listing([photo(1), photo(2), photo(3)])));
+        await waitFor(() => expect(tile(1).getAttribute('aria-pressed')).toBe('true'));
+        expect(tile(2).getAttribute('aria-pressed')).toBe('true');
+        expect(reloadSaved).toHaveBeenCalledTimes(1);
+        await waitFor(() => expect(use().getAttribute('aria-disabled')).toBe('false'));
+        expect(screen.queryByText(hint)).toBeNull();
+        fireEvent.click(use());
+        await waitFor(() => expect(onSave).toHaveBeenCalledWith([idOf(1), idOf(2)]));
+    });
+
+    test('an empty save goes through only once the user has really cleared the list', async () => {
+        const reloadSaved = jest.fn().mockResolvedValue([idOf(1)]);
+        const { onSave } = setup({ value: [], savedCount: 1, reloadSaved });
+        await waitFor(() => expect(tile(1).getAttribute('aria-pressed')).toBe('true'));
+        await waitFor(() => expect(use().getAttribute('aria-disabled')).toBe('false'));
+        fireEvent.click(screen.getByRole('button', { name: 'Clear' }));
+        fireEvent.click(use());
+        await waitFor(() => expect(onSave).toHaveBeenCalledWith([]));
+    });
+
+    test('a read that gives nothing keeps Save held, with the reason', async () => {
+        const reloadSaved = jest.fn().mockResolvedValue(null);
+        const { onSave } = setup({ value: [], savedCount: 1, reloadSaved });
+        await screen.findByRole('button', { name: /^Photo 00000001:/ });
+        await waitFor(() => expect(reloadSaved).toHaveBeenCalledTimes(1));
+        expect(use().getAttribute('aria-disabled')).toBe('true');
+        expect(screen.getByText(hint)).toBeTruthy();
+        fireEvent.click(use());
+        expect(onSave).not.toHaveBeenCalled();
+    });
+
+    test("another account: the ids stay withheld, the notice shows, nothing is re-read and Save is the user's choice", async () => {
+        jest.mocked(window.api.getSetting).mockResolvedValue('d'.repeat(32));
+        const reloadSaved = jest.fn();
+        const { onSave } = setup({ value: [], savedCount: 2, reloadSaved });
+        expect(await screen.findByText(/saved under another account, so the app ignores them/)).toBeTruthy();
+        expect(screen.getByText('2 photo(s) saved under another account')).toBeTruthy();
+        expect(reloadSaved).not.toHaveBeenCalled();
+        expect(tile(1).getAttribute('aria-pressed')).toBe('false');
+        await waitFor(() => expect(use().getAttribute('aria-disabled')).toBe('false'));
+        fireEvent.click(tile(2));
+        fireEvent.click(use());
+        await waitFor(() => expect(onSave).toHaveBeenCalledWith([idOf(2)]));
+    });
+
+    test('a list that arrived with its ids is not held back at all', async () => {
+        const reloadSaved = jest.fn();
+        setup({ value: [idOf(1)], savedCount: 1, reloadSaved });
+        await screen.findByRole('button', { name: /^Photo 00000001:/ });
+        expect(use().getAttribute('aria-disabled')).toBe('false');
+        expect(reloadSaved).not.toHaveBeenCalled();
     });
 });
 

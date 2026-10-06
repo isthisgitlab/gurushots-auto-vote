@@ -56,7 +56,9 @@ export function useTitleRules(isOpen: boolean) {
         setRules((current) =>
             current.flatMap((rule) => {
                 const stripped = withoutChosenPhotos(rule);
-                return stripped !== rule && !ruleHasBehaviour(stripped) ? [] : [stripped];
+                // Only a rule that actually held a list can have lost its behaviour to the clear: a
+                // half-written rule (its list still '' = inherit) is the user's draft, kept as it is.
+                return Array.isArray(rule.chosenPhotos) && !ruleHasBehaviour(stripped) ? [] : [stripped];
             }),
         ),
     );

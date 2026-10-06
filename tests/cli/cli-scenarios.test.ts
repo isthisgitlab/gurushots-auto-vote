@@ -82,6 +82,27 @@ describe('list-scenarios', () => {
         expect(text()).toContain('Templates: exhibitionDoubleDip');
     });
 
+    test('a stored name, description or start phase cannot drive the terminal or reorder what is shown', async () => {
+        const bidi = '\u202E';
+        const esc = String.fromCharCode(27);
+        h['get-scenarios'].mockResolvedValue(
+            invalid({
+                success: true,
+                scenarios: {
+                    [`Evil${bidi}name${esc}[31m`]: {
+                        start: `ma${bidi}in`,
+                        description: `desc${bidi}${esc}[2Jtext`,
+                        phases: { [`ma${bidi}in`]: {} },
+                    },
+                },
+            }),
+        );
+        await expect(cmd.listScenarios()).resolves.toBe(0);
+        expect(text()).toContain('Evilname — 1 phase(s), starts in "main"');
+        expect(text()).toContain('desctext');
+        expect(text()).not.toMatch(/(?!\n)[\p{Cc}\p{Cf}]/u);
+    });
+
     test('an empty list and a failure', async () => {
         h['get-scenarios'].mockResolvedValueOnce(invalid({ success: true, scenarios: {} }));
         await cmd.listScenarios();

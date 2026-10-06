@@ -17,7 +17,7 @@ import {
     ruleConditions,
 } from './challengeRules';
 import { normalizeProfileName, findProfileKey } from './profileStore';
-import { TITLE_RULE_INLINE_KEYS } from './ruleBehaviour';
+import { TITLE_RULE_INLINE_KEYS, ruleInlineEntries } from './ruleBehaviour';
 
 import type { ChallengeValues, TitleRule } from '../types/settings';
 import type { RuleLike } from './challengeRules';
@@ -42,12 +42,9 @@ const MAX_TITLES_PER_RULE = 50;
  */
 const sanitizeTitleRuleInline = (rule: RuleLike): ChallengeValues | null => {
     const out: ChallengeValues = {};
-    for (const key of TITLE_RULE_INLINE_KEYS) {
-        if (!rule || !Object.prototype.hasOwnProperty.call(rule, key)) continue;
-        const value = rule[key];
-        // An empty string / null is how the editor spells "inherit" for a
-        // cleared number or an unset select; treat it as absent, not as 0.
-        if (value === null || value === undefined || value === '') continue;
+    // ruleInlineEntries leaves out an empty string / null: that is how the editor spells "inherit"
+    // for a cleared number or an unset select, absent rather than 0.
+    for (const [key, value] of rule ? ruleInlineEntries(rule) : []) {
         if (!validateSetting(key, value)) return null;
         out[key] = value;
     }

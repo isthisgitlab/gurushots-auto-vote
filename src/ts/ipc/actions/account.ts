@@ -64,7 +64,7 @@ const handleAuthenticate = (async (event: unknown, username: string, password: s
         const { ok, token, error } = auth.extractAuthResult(response);
 
         if (ok) {
-            settings.setSetting('token', token);
+            auth.switchAccountToken(token);
             logger.withCategory('authentication').info('🔐 Authentication successful', { success: true });
             return { success: true as const };
         }
@@ -132,7 +132,7 @@ const handleGetMemberChallenges = (async (event?: unknown, filter?: string) => {
             settings.rememberOpenChallengeIds(items.flatMap((c) => (c?.id == null ? [] : [c.id])));
             rememberOpenChallenges(items);
         }
-        const annotate = chosenAnnotator(guard.token);
+        const annotate = await chosenAnnotator(guard.token);
         return {
             success: true as const,
             items: Array.isArray(items) ? items.map((item): OpenChallenge => ({ ...item, ...annotate(item) })) : [],
@@ -154,7 +154,7 @@ const handleGetOpenChosenAnnotations = (async (event: unknown, ids: Array<string
     }
     try {
         const { token } = settings.loadSettings();
-        return { success: true as const, annotations: annotateOpenIds(ids, token) };
+        return { success: true as const, annotations: await annotateOpenIds(ids, token) };
     } catch (error) {
         logger.withCategory('join').error('Error handling get-open-chosen-annotations request:', error);
         return { ...errorResult(error, 'Failed to read the chosen photos'), annotations: {} };

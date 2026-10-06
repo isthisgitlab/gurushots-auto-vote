@@ -620,6 +620,7 @@ export const app = {
         "Saving with nothing chosen removes this challenge's own list, so it uses the list from your settings or rules again.",
     photoChooserSaveWaits:
         'Saving waits until your photos have loaded, so the app can check which account the list belongs to.',
+    photoChooserSaveWaitsError: 'Saving is held until your photos load. Press Retry above.',
     photoChooserSaveNoContext:
         "Saving is blocked: without an active or open challenge the app can't check which account this list belongs to. Clear the list to save, or join a challenge first.",
     photoChooserSaveError: "The chosen photos weren't saved because the setting couldn't be written. Try again.",
@@ -627,6 +628,7 @@ export const app = {
     discoverChosenChip: 'Chosen',
     discoverChosenChipHint: 'This challenge has chosen photos. Click to change them.',
     discoverChosenChipLabel: 'Chosen photos for {title}: change them',
+    discoverChosenForeignChip: 'Other account: {count}',
     discoverChosenForeignLabel: '{count} photo(s) saved under another account for {title}: review them',
     discoverChosenForeignHint:
         "These photos were saved under another account and aren't used here. Click to review them.",

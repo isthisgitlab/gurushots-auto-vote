@@ -308,9 +308,10 @@ const runFillAttempt = async ({
             });
             return { status: 'submitted', picked };
         }
-        // The server answered with a failure: the remembered photos in this pick are held back for
-        // a short while (it does not say which one it refused). No answer (null raw) teaches nothing.
-        if (result?.raw?.success === false) refuseRememberedChosen(challenge, picked, Date.now());
+        // Any body that came back with a submit that was not ok is the server's answer: the remembered
+        // photos in this pick are held back for a short while (it does not say which one it refused).
+        // Only no body at all (null raw) or a throw is "no answer", and teaches nothing.
+        if (result?.raw) refuseRememberedChosen(challenge, picked, Date.now());
         const reason = describeSubmitFailure(result && result.raw);
         logger
             .withCategory('autoFill')

@@ -42,7 +42,7 @@ const settings = jest.mocked(settingsModule as typeof settingsModule & { __state
 import type * as authModule from '../../src/ts/services/auth';
 import type * as openChallengeCacheModule from '../../src/ts/services/openChallengeCache';
 import type * as chosenPhotosModule from '../../src/ts/services/autoFill/chosenPhotos';
-const { clearAuthToken } = require('../../src/ts/services/auth') as typeof authModule;
+const { clearAuthToken, switchAccountToken } = require('../../src/ts/services/auth') as typeof authModule;
 
 describe('clearAuthToken', () => {
     beforeEach(() => {
@@ -157,5 +157,55 @@ describe('clearTokenUnlessStayingLoggedIn', () => {
 
         await expect(clearTokenUnlessStayingLoggedIn()).resolves.toBe(false);
         expect(settings.setSetting).not.toHaveBeenCalled();
+    });
+});
+
+describe('switchAccountToken — a login on top of another session', () => {
+    beforeEach(() => {
+        settings.__state.cached = { token: 'old-token' };
+        settings.__state.persisted = { token: 'old-token' };
+        jest.clearAllMocks();
+    });
+
+    const remembered = () => {
+        const { rememberOpenChallenges, getOpenChallenge } =
+            require('../../src/ts/services/openChallengeCache') as typeof openChallengeCacheModule;
+        const { logChosenSkipOnce } =
+            require('../../src/ts/services/autoFill/chosenPhotos') as typeof chosenPhotosModule;
+        const warning = jest.fn();
+        const fillLogger = invalid<Parameters<typeof logChosenSkipOnce>[0]>({
+            withCategory: () => ({ warning }),
+            challengeTag: () => '[Challenge 9]',
+        });
+        const challenge = invalid<Challenge>({ id: 9 });
+        rememberOpenChallenges([challenge]);
+        logChosenSkipOnce(fillLogger, challenge, 'autoFill', 'none-usable');
+        return {
+            open: () => getOpenChallenge(9),
+            skipExplained: () => {
+                const before = warning.mock.calls.length;
+                logChosenSkipOnce(fillLogger, challenge, 'autoFill', 'none-usable');
+                return warning.mock.calls.length === before;
+            },
+        };
+    };
+
+    it("stores the new token and forgets the previous account's open challenges, open ids and skip state", () => {
+        const memory = remembered();
+        expect(memory.open()).toBeDefined();
+        switchAccountToken('new-token');
+        expect(settings.setSetting).toHaveBeenCalledWith('token', 'new-token');
+        expect(settings.forgetOpenChallengeIds).toHaveBeenCalledTimes(1);
+        expect(memory.open()).toBeUndefined();
+        // The skip was forgotten, so the next account is told its own: logging again is not a repeat.
+        expect(memory.skipExplained()).toBe(false);
+    });
+
+    it('keeps everything when the token is the one already stored', () => {
+        const memory = remembered();
+        switchAccountToken('old-token');
+        expect(settings.forgetOpenChallengeIds).not.toHaveBeenCalled();
+        expect(memory.open()).toBeDefined();
+        expect(memory.skipExplained()).toBe(true);
     });
 });

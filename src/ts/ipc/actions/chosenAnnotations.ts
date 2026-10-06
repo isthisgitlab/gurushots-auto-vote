@@ -5,7 +5,9 @@
  */
 
 import * as settings from '../../settings';
-import { peekMemberId } from '../../services/autoFill';
+import * as logger from '../../logger';
+import * as apiFactory from '../../apiFactory';
+import { peekMemberId, resolveMemberId } from '../../services/autoFill';
 import { resolveJoinSetting } from '../../services/joinChallenges';
 import { getOpenChallenge } from '../../services/openChallengeCache';
 
@@ -23,13 +25,17 @@ const idsOf = (value: unknown): string[] =>
  *
  * A list saved under another account is never described by its ids: the row gets
  * `chosenOwn: []` with the real `chosenOwnCount`, and nothing applies to the join
- * (`chosenEffectiveCount: 0`), as at join time. While the signed-in member is not
- * known yet (`peekMemberId` is null: no lookup has resolved it) it cannot be told
- * whether the list is theirs, so the ids are withheld all the same — but the list
- * still counts as applying, as resolveChosenPhotos applies it at join time.
+ * (`chosenEffectiveCount: 0`), as at join time. The signed-in member is resolved first
+ * (one cached lookup per token, so a fresh launch does not leave it unknown). If that
+ * lookup fails the member stays unknown, it cannot be told whether the list is theirs,
+ * and the ids are withheld all the same — but the list still counts as applying, as
+ * resolveChosenPhotos applies it at join time.
  */
-const chosenAnnotator = (token: string): ((challenge: Partial<Challenge>) => ChosenAnnotation) => {
+const chosenAnnotator = async (token: string): Promise<(challenge: Partial<Challenge>) => ChosenAnnotation> => {
     const savedBy = settings.getSetting('chosenPhotosMemberId');
+    if (token) {
+        await resolveMemberId(token, apiFactory.getApiStrategy().getCurrentMemberProfile, logger, 'join');
+    }
     const current = peekMemberId(token);
     const recorded = typeof savedBy === 'string' && savedBy !== '';
     const foreign = recorded && current !== null && current !== savedBy;
@@ -52,8 +58,11 @@ const chosenAnnotator = (token: string): ((challenge: Partial<Challenge>) => Cho
  * The annotations of the given ids. An id the latest list did not hold is resolved
  * as a bare id: its own list is read, a rule keyed on its title cannot match.
  */
-const annotateOpenIds = (ids: ReadonlyArray<string | number>, token: string): Record<string, ChosenAnnotation> => {
-    const annotate = chosenAnnotator(token);
+const annotateOpenIds = async (
+    ids: ReadonlyArray<string | number>,
+    token: string,
+): Promise<Record<string, ChosenAnnotation>> => {
+    const annotate = await chosenAnnotator(token);
     return Object.fromEntries(ids.map((id) => [String(id), annotate(getOpenChallenge(id) ?? { id })] as const));
 };
 

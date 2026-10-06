@@ -458,6 +458,19 @@ describe('chosen photos rank first', () => {
             expect(submittedIds(deps)).toEqual(Array(5).fill(['car']));
         });
 
+        test.each([
+            ['an error body with no success field', { error: 'photo not allowed' }],
+            ['an empty body', {}],
+        ])("%s is the server's answer too: the photo is held back", async (_name, raw) => {
+            const deps = await run(
+                (d) => d.submitToChallenge.mockResolvedValue(invalid({ ok: false, raw })),
+                2,
+                [0, 1],
+            );
+            // The second pass submits the top-up and does not look the refused photo up again.
+            expect(submittedIds(deps)).toEqual([['car'], ['theme-a']]);
+        });
+
         test('a server refusal holds the remembered photo back for ten minutes only', async () => {
             const refuse = (deps: ReturnType<typeof makeDeps>) =>
                 deps.submitToChallenge.mockResolvedValue(invalid({ ok: false, raw: { success: false } }));

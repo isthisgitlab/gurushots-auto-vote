@@ -7,7 +7,7 @@ import * as settings from '../settings';
 import * as logger from '../logger';
 import { failureText } from '../format/logSafe';
 import * as cancellation from '../voting/cancellation';
-import { extractAuthResult, clearAuthToken } from './auth';
+import { extractAuthResult, clearAuthToken, switchAccountToken } from './auth';
 import { voteAllChallengesManual } from './manualVote';
 
 import type { ApiStrategy } from '../apiFactory';
@@ -34,7 +34,7 @@ class BaseMiddleware {
         // success indicators.
         const { ok, token } = extractAuthResult(response);
         if (ok) {
-            settings.setSetting('token', token);
+            switchAccountToken(token);
             return { ok: true, token, response };
         }
         return { ok: false, token: null, response };

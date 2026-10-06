@@ -68,7 +68,7 @@ function ChosenChip({
     const { t } = useTranslation();
     const foreign = foreignCount !== null;
     const text = foreign
-        ? interp(t('app.chosenPhotosOtherAccountCount'), { count: foreignCount })
+        ? interp(t('app.discoverChosenForeignChip'), { count: foreignCount })
         : t('app.discoverChosenChip');
     return (
         <button
@@ -143,6 +143,15 @@ function RowPhotoChooser({
     onClose: () => void;
     onSaved: () => Promise<void>;
 }) {
+    // The row may have opened before the main process knew whose account this is, and then it came
+    // without its ids. Once the chooser's listing has said, ask again: the ids come through if the
+    // list is this account's, and not otherwise (null).
+    const reloadSaved = async (): Promise<string[] | null> => {
+        const id = String((challenge as Challenge).id);
+        const result = await ipc.callOrNull(() => ipc.getOpenChosenAnnotations([id]));
+        const annotation = result?.success ? result.annotations[id] : undefined;
+        return annotation && annotation.chosenOwn.length === annotation.chosenOwnCount ? annotation.chosenOwn : null;
+    };
     const save = async (ids: string[]): Promise<boolean> => {
         // Only reachable from the chooser, which renders only while a challenge is being chosen for.
         const id = String((challenge as Challenge).id);
@@ -164,6 +173,7 @@ function RowPhotoChooser({
             savedCount={challenge?.chosenOwnCount}
             challengeId={challenge?.id ?? null}
             clearMeansInherit
+            reloadSaved={reloadSaved}
             onSave={save}
         />
     );

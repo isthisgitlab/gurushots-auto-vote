@@ -32,7 +32,7 @@ export const formatSettingForLog = (key: string, value: unknown): string => {
     // A photo list is a handful of account-owned ids: print how many, never which.
     if (config?.type === 'photos' && Array.isArray(value)) return photoCount(value);
 
-    const masked = (maskSettingValue({ [key]: value }) as Record<string, unknown>)[key];
+    const masked = maskSettingValue({ [key]: value })[key];
     if (masked === REDACTED) return REDACTED;
     // Stored values are user-authored: a control or format character in one must not reach the terminal.
     const raw = stripTerminalControl(JSON.stringify(masked));

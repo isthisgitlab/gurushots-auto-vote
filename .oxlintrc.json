@@ -159,7 +159,7 @@
                                 "message": "consoleSink is the logger's unredacted console path — only src/ts/logger/ may import it; log through the logger."
                             },
                             {
-                                "regex": "settings/(challengeFacts|challengeOverrides|defaults|migrations|persistence|profileStore|profiles|reset|ruleResolution|scenarioOverlay|scenarioSchema|scenarios|titlePins|titleRuleSanitize|titleRules)(/[^/]+)?(\\.js)?$",
+                                "regex": "settings/(challengeFacts|challengeOverrides|chosenPhotosClear|defaults|migrations|openChallenges|persistence|profileStore|profiles|reset|ruleResolution|scenarioOverlay|scenarioSchema|scenarios|staleChallengeCleanup|titlePins|titleRuleSanitize|titleRules)(/[^/]+)?(\\.js)?$",
                                 "message": "Settings internals are private to the facade — import settings.ts instead.",
                                 "allowTypeImports": true
                             },
@@ -270,7 +270,7 @@
                                 "message": "consoleSink is the logger's unredacted console path — only src/ts/logger/ may import it; log through the logger."
                             },
                             {
-                                "regex": "settings/(challengeFacts|challengeOverrides|defaults|migrations|persistence|profileStore|profiles|reset|ruleResolution|scenarioOverlay|scenarioSchema|scenarios|titlePins|titleRuleSanitize|titleRules)(/[^/]+)?(\\.js)?$",
+                                "regex": "settings/(challengeFacts|challengeOverrides|chosenPhotosClear|defaults|migrations|openChallenges|persistence|profileStore|profiles|reset|ruleResolution|scenarioOverlay|scenarioSchema|scenarios|staleChallengeCleanup|titlePins|titleRuleSanitize|titleRules)(/[^/]+)?(\\.js)?$",
                                 "message": "Settings internals are private to the facade — import settings.ts instead.",
                                 "allowTypeImports": true
                             },

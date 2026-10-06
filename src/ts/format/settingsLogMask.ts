@@ -21,7 +21,9 @@ const photoCount = (list: readonly unknown[]): string => `${list.length} photo(s
  * `value` with credentials redacted, the account's private settings redacted and every
  * `chosenPhotos` list inside it reduced to a count. Plain values come back as they are.
  */
-const maskSettingValue = (value: unknown, depth: number = 0): unknown => {
+function maskSettingValue(value: Record<string, unknown>, depth?: number): Record<string, unknown>;
+function maskSettingValue(value: unknown, depth?: number): unknown;
+function maskSettingValue(value: unknown, depth: number = 0): unknown {
     if (value === null || typeof value !== 'object') return value;
     if (depth >= MAX_MASK_DEPTH) return '[Object]';
     if (Array.isArray(value)) return value.map((item) => maskSettingValue(item, depth + 1));
@@ -35,6 +37,6 @@ const maskSettingValue = (value: unknown, depth: number = 0): unknown => {
                   : maskSettingValue(item, depth + 1),
         ]),
     );
-};
+}
 
 export { PRIVATE_SETTING_KEYS, maskSettingValue, photoCount };

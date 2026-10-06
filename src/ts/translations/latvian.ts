@@ -626,6 +626,8 @@ export const app = {
         'Ja saglabāsi, neko neizvēloties, šim izaicinājumam paredzētais saraksts tiks izņemts, un izaicinājums atkal izmantos sarakstu no taviem uzstādījumiem vai noteikumiem.',
     photoChooserSaveWaits:
         'Saglabāšana gaida, līdz tavi foto ir ielādēti, lai lietotne varētu pārbaudīt, kuram kontam saraksts pieder.',
+    photoChooserSaveWaitsError:
+        'Saglabāšana tiek aizturēta, līdz tavi foto ir ielādēti. Spied „Mēģināt vēlreiz” augstāk.',
     photoChooserSaveNoContext:
         'Saglabāšana ir bloķēta: bez aktīva vai atvērta izaicinājuma lietotne nevar pārbaudīt, kuram kontam šis saraksts pieder. Notīri sarakstu, lai saglabātu, vai vispirms pievienojies izaicinājumam.',
     photoChooserSaveError: 'Izvēlētos foto neizdevās saglabāt, jo uzstādījumu nevarēja ierakstīt. Mēģini vēlreiz.',
@@ -633,8 +635,9 @@ export const app = {
     discoverChosenChip: 'Izvēlēti foto',
     discoverChosenChipHint: 'Šim izaicinājumam ir izvēlēti foto. Spied, lai tos mainītu.',
     discoverChosenChipLabel: 'Izvēlētie foto izaicinājumam „{title}”: mainīt',
+    discoverChosenForeignChip: 'Citā kontā: {count}',
     discoverChosenForeignLabel: 'Izaicinājumam „{title}” citā kontā saglabātie foto: {count} — pārskatīt',
-    discoverChosenForeignHint: 'Šie foto ir saglabāti citā kontā, un šeit netiek izmantoti. Spied, lai tos pārskatītu.',
+    discoverChosenForeignHint: 'Šie foto ir saglabāti citā kontā un šeit netiek izmantoti. Spied, lai tos pārskatītu.',
     discoverChoosePhotosLabel: 'Izvēlēties foto izaicinājumam „{title}”',
     discoverChosenInherited: 'Mantotie izvēlētie foto: {count} (no taviem uzstādījumiem vai noteikumiem)',
     discoverConfirmChosen: 'Tavs izvēlētais foto, ja tas der, citādi automātiski izvēlēts foto.',

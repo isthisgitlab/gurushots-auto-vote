@@ -4,6 +4,7 @@
  */
 
 import { ruleHasBehaviour, ruleInlineEntries, TITLE_RULE_INLINE_KEYS } from '../../src/ts/settings/ruleBehaviour';
+import { sanitizeTitleRuleInline } from '../../src/ts/settings/titleRuleSanitize';
 
 describe('ruleInlineEntries', () => {
     test('lists the allowlisted inline keys a rule sets, leaving out "inherit" values', () => {
@@ -30,9 +31,19 @@ describe('ruleInlineEntries', () => {
         ]);
     });
 
-    test('the allowlist is the one the sanitizer uses', () => {
-        expect(TITLE_RULE_INLINE_KEYS).toContain('chosenPhotos');
-        expect(TITLE_RULE_INLINE_KEYS).toContain('scenario');
+    test('the allowlist is the one the sanitizer uses: a valid setting outside it is refused, every key in it is read', () => {
+        // `exposure` is a valid per-challenge setting but not an allowlisted inline key.
+        expect(TITLE_RULE_INLINE_KEYS).not.toContain('exposure');
+        expect(sanitizeTitleRuleInline({ title: 'x', autoJoin: true, exposure: 50 })).toEqual({ autoJoin: true });
+        // Each allowlisted key reaches validation: a value no schema accepts voids the rule.
+        for (const key of TITLE_RULE_INLINE_KEYS) {
+            expect(sanitizeTitleRuleInline({ title: 'x', [key]: { not: 'valid' } })).toBeNull();
+        }
+        // The same "inherit" values the editor writes are skipped, as ruleInlineEntries skips them.
+        expect(
+            sanitizeTitleRuleInline({ title: 'x', autoJoin: '', scenario: null, chosenPhotosOnly: undefined }),
+        ).toEqual({});
+        expect(sanitizeTitleRuleInline(null)).toEqual({});
     });
 });
 
@@ -56,7 +67,7 @@ describe('ruleHasBehaviour', () => {
     test('an inline value counts only when valid; one invalid value voids the inline part', () => {
         const rule = { title: 'Hats', autoJoin: true, chosenPhotos: ['bad id'] };
         const valid = (key: string, value: unknown) =>
-            key !== 'chosenPhotos' || (value as string[]).every((id) => !id.includes(' '));
+            key !== 'chosenPhotos' || (Array.isArray(value) && value.every((id) => !String(id).includes(' ')));
         expect(ruleHasBehaviour(rule, valid)).toBe(false);
         expect(ruleHasBehaviour({ ...rule, chosenPhotos: ['ok'] }, valid)).toBe(true);
         // Tags and a profile do not depend on the inline values.

@@ -426,6 +426,120 @@ describe('chosen photos', () => {
         await waitFor(() => expect(screen.queryByText('app.discoverChosenChip')).toBeNull());
     });
 
+    describe("the user's own list, withheld on a fresh launch", () => {
+        const OWNER = 'c'.repeat(32);
+        let memberKnown: boolean;
+        let release: () => void;
+
+        // The listing becomes ready, and the chooser then asks again for its own list: wait for that ask.
+        const releaseAndWaitForReread = async () => {
+            jest.mocked(window.api.getOpenChosenAnnotations).mockClear();
+            release();
+            await waitFor(() => expect(window.api.getOpenChosenAnnotations).toHaveBeenCalledWith(['900001']));
+        };
+
+        const open = async () => {
+            own['900001'] = [PHOTO];
+            memberKnown = false;
+            const gate = new Promise<void>((resolve) => (release = resolve));
+            jest.mocked(window.api.getSetting).mockResolvedValue(OWNER);
+            // The main process withholds the ids until the listing has resolved the member.
+            jest.mocked(window.api.getOpenChosenAnnotations).mockImplementation(async () => ({
+                success: true,
+                annotations: Object.fromEntries(
+                    annotated().map(({ id, chosenOwn, chosenOwnCount, chosenEffectiveCount }) => [
+                        String(id),
+                        { chosenOwn: memberKnown ? chosenOwn : [], chosenOwnCount, chosenEffectiveCount },
+                    ]),
+                ),
+            }));
+            jest.mocked(window.api.getLibraryPhotos).mockImplementation(async () => {
+                await gate;
+                memberKnown = true;
+                return {
+                    success: true as const,
+                    photos: [{ id: PHOTO, labels: ['sea'], allowed: true, message: null, uploadDate: 1 }],
+                    memberId: OWNER,
+                    truncated: false,
+                    allowedKnown: true,
+                };
+            });
+            renderSection();
+            fireEvent.click(await screen.findByText('app.discoverChosenChip'));
+            return screen.findByRole('button', { name: 'app.photoChooserUse' });
+        };
+
+        test('Save is held, an empty one included, until the list has been read again; then it saves that list', async () => {
+            const use = await open();
+            expect(use.getAttribute('aria-disabled')).toBe('true');
+            fireEvent.click(use);
+            expect(window.api.removeChallengeOverride).not.toHaveBeenCalled();
+            expect(window.api.setChallengeOverride).not.toHaveBeenCalled();
+
+            release();
+            await waitFor(() =>
+                expect(
+                    screen.getByRole('button', { name: 'app.photoChooserTileLabel' }).getAttribute('aria-pressed'),
+                ).toBe('true'),
+            );
+            await waitFor(() => expect(use.getAttribute('aria-disabled')).toBe('false'));
+            fireEvent.click(use);
+            await waitFor(() =>
+                expect(window.api.setChallengeOverride).toHaveBeenCalledWith('chosenPhotos', '900001', [PHOTO]),
+            );
+            expect(window.api.removeChallengeOverride).not.toHaveBeenCalled();
+        });
+
+        test('the list is removed only when the user really clears it', async () => {
+            const use = await open();
+            release();
+            await waitFor(() => expect(use.getAttribute('aria-disabled')).toBe('false'));
+            fireEvent.click(screen.getByRole('button', { name: 'app.photosClear' }));
+            fireEvent.click(use);
+            await waitFor(() =>
+                expect(window.api.removeChallengeOverride).toHaveBeenCalledWith('chosenPhotos', '900001'),
+            );
+        });
+
+        test.each([
+            ['an answer that does not hold the row', {}],
+            [
+                'an answer that still withholds the ids',
+                { '900001': { chosenOwn: [], chosenOwnCount: 1, chosenEffectiveCount: 1 } },
+            ],
+        ])('%s keeps Save held', async (_name, annotations) => {
+            const use = await open();
+            jest.mocked(window.api.getOpenChosenAnnotations).mockResolvedValue({ success: true, annotations });
+            await releaseAndWaitForReread();
+            await screen.findByRole('button', { name: 'app.photoChooserTileLabel' });
+            expect(use.getAttribute('aria-disabled')).toBe('true');
+            fireEvent.click(use);
+            expect(window.api.removeChallengeOverride).not.toHaveBeenCalled();
+        });
+
+        test('a read that throws keeps Save held', async () => {
+            const use = await open();
+            jest.mocked(window.api.getOpenChosenAnnotations).mockRejectedValue(new Error('gone'));
+            await releaseAndWaitForReread();
+            await screen.findByRole('button', { name: 'app.photoChooserTileLabel' });
+            expect(use.getAttribute('aria-disabled')).toBe('true');
+        });
+
+        test('a read that fails keeps Save held', async () => {
+            const use = await open();
+            jest.mocked(window.api.getOpenChosenAnnotations).mockResolvedValue({
+                success: false,
+                error: 'down',
+                annotations: {},
+            });
+            await releaseAndWaitForReread();
+            await screen.findByRole('button', { name: 'app.photoChooserTileLabel' });
+            expect(use.getAttribute('aria-disabled')).toBe('true');
+            fireEvent.click(use);
+            expect(window.api.removeChallengeOverride).not.toHaveBeenCalled();
+        });
+    });
+
     test('the Choose photos button and the Chosen chip are named by their challenge', async () => {
         own['900001'] = [PHOTO];
         mockTranslator.t.mockImplementation((key) =>
@@ -532,12 +646,16 @@ describe('chosen photos', () => {
         mockTranslator.t.mockImplementation((key) =>
             key === 'app.discoverChosenForeignLabel'
                 ? '{count} photo(s) saved under another account for {title}: review them'
-                : key,
+                : key === 'app.discoverChosenForeignChip'
+                  ? 'Other account: {count}'
+                  : key,
         );
         renderSection();
         // The row counts another account's list instead of calling it chosen photos.
-        const chip = await screen.findByText('app.chosenPhotosOtherAccountCount');
+        const chip = await screen.findByText('Other account: 1');
         expect(screen.queryByText('app.discoverChosenChip')).toBeNull();
+        // A short chip text (the long sentence is its accessible name), so it stays one line in a narrow row.
+        expect(chip.textContent!.length).toBeLessThan(chip.getAttribute('aria-label')!.length / 2);
         // Its own translated name and tooltip, not a string built in code.
         expect(chip.getAttribute('aria-label')).toBe(
             '1 photo(s) saved under another account for Free One: review them',
@@ -547,7 +665,7 @@ describe('chosen photos', () => {
         fireEvent.click(chip);
         // The chooser opens empty, with the notice and a count — never the other account's id.
         expect(await screen.findByText('app.photoChooserOtherAccount')).toBeTruthy();
-        expect(screen.getAllByText('app.chosenPhotosOtherAccountCount').length).toBeGreaterThan(1);
+        expect(screen.getByText('app.chosenPhotosOtherAccountCount')).toBeTruthy();
         expect(document.body.textContent).not.toContain(PHOTO.slice(0, 8));
         fireEvent.click(screen.getByRole('button', { name: 'app.photoChooserOtherAccountClear' }));
         const confirm = (await screen.findAllByRole('button', { name: 'app.photoChooserOtherAccountClear' })).at(-1)!;

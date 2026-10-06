@@ -85,6 +85,17 @@ const extractAuthResult = (
 };
 
 /**
+ * What the process remembered about the account that left must not carry over to the next: its
+ * open challenges, the open-id list cleanup spares chosen lists for, and the chosen-photo walk
+ * memos and explained skips.
+ */
+const forgetAccountMemory = (): void => {
+    clearOpenChallenges();
+    settings.forgetOpenChallengeIds();
+    forgetChosenPhotosMemory();
+};
+
+/**
  * Core logout shared by every shell (Electron main, CLI, Capacitor bridge,
  * BaseMiddleware): clear the token and make sure the cleared value is
  * DURABLY persisted before resolving. The flush await is the load-bearing
@@ -101,14 +112,20 @@ const extractAuthResult = (
 const clearAuthToken = async (): Promise<boolean> => {
     const hadToken = !!settings.getSetting('token');
     settings.setSetting('token', '');
-    // What was remembered about the account that just left must not carry over to the next:
-    // its open challenges, the open-id list cleanup spares chosen lists for, and the chosen-photo
-    // walk memos and explained skips.
-    clearOpenChallenges();
-    settings.forgetOpenChallengeIds();
-    forgetChosenPhotosMemory();
+    forgetAccountMemory();
     await settings.flushPendingWrites();
     return hadToken;
+};
+
+/**
+ * Store the token a login just obtained. When it differs from the one stored, the account may have
+ * changed without a logout in between (a login on top of another session), so what was remembered
+ * about the previous one is dropped exactly as a logout would.
+ */
+const switchAccountToken = (token: string): void => {
+    const previous = settings.getSetting('token');
+    settings.setSetting('token', token);
+    if (previous !== token) forgetAccountMemory();
 };
 
 /**
@@ -129,4 +146,4 @@ const clearTokenUnlessStayingLoggedIn = async (): Promise<boolean> => {
     return clearAuthToken();
 };
 
-export { requireAuthToken, extractAuthResult, clearAuthToken, clearTokenUnlessStayingLoggedIn };
+export { requireAuthToken, extractAuthResult, clearAuthToken, switchAccountToken, clearTokenUnlessStayingLoggedIn };
