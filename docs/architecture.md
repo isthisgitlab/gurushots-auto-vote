@@ -97,6 +97,16 @@ Domain terms used throughout, in reader's terms:
 - **≤1 boost and ≤1 turbo per challenge, on different entries** — enforced by `pickEntryAvoidingConflict()`
   (`services/decisions/entryPick.ts` — around L24) plus a `reflectEntryFlag` marker. Entry-pick logic lives in
   the shared decision core (behind the `VotingLogic` facade) rather than in `api/boost.ts` so mock mode honours the same rule.
+- **Sleep boost** (`runSuspendBoost` / `runSuspendBoosts` in `services/votingOrchestrator/boost.ts`, driven by
+  `windows/suspendBoost.ts` on `powerMonitor` `'suspend'`): not a fork of the pass — it reuses `runBoost`'s target
+  resolution, uncertain-photo skip and turboed-only skip, and is reached through the strategy's
+  `applyBoostsOnSuspend` binder (real in `strategies/real/index.ts`, mock in `mock/strategy.ts`) exactly as
+  `runVotingPass` is reached through `deps`. It never submits a new photo and overrides a fresh-entry hold instead of
+  honouring it. It is the **one deliberate exception to the sequential-runner rule**: `runSuspendBoosts` runs the
+  selected challenges in parallel (`Promise.allSettled`), because they are separate challenge objects with no shared
+  mutation (there is no auto-fill here to reflect a new entry) and the device is about to lose the network, so
+  the 2–5 s inter-challenge delay is not affordable. The quit guard (`windows/quitGuard.ts`) and the sleep boost
+  pick their challenges with the same `imminentBoostChallenges`, differing only in horizon (60 min vs 30 min).
 
 ## 2. Scheduling
 
@@ -393,6 +403,16 @@ repeated six times is one that gets forgotten at one of them.
   (`maxDurationMin`), because substituting or honouring those would both be fail-_closed_ and could stop
   voting for good. Both catches **log**: the orchestrator has a per-challenge catch that reports the errors
   it sees, so a silent swallow here would be the least visible failure in the pass.
+- **Sleep-boost guards** (`windows/suspendBoost.ts`, `windows/quitGuard.ts`): the remembered challenge list carries
+  the `mock` flag it was fetched under, and the sleep path acts only when it matches the current mode (mock mode
+  also uses the in-memory entry-age ledger, never the real file), so a real list is never boosted from mock mode
+  or the reverse. A module-level re-entrancy flag stops two quick sleeps from sending twice and is released in
+  `finally`, since the batch can stay pending across the sleep. The path never throws: the whole body is
+  try/caught and logged, because it runs from an event listener. After a successful send `markBoostApplied`
+  flips the remembered boost to `USED`, so neither a later sleep nor the quit guard counts it as pending until the
+  next fetch replaces the list; an unconfirmed reply is logged as "not confirmed", never as a failure. The quit
+  guard remembers a list only from a fetch that did not fail (`ipc/actions/account.ts` skips `fetchFailed`;
+  `rememberChallenges` ignores a non-array), so a failed fetch keeps the previous list rather than blanking it.
 - **Log-injection guard**: API-sourced challenge ids/titles are CR/LF-collapsed via `format/logSafe.oneLine()`
   before interpolation (imported directly, not off the logger, because the logger is mocked in much of the
   test suite).

@@ -314,6 +314,11 @@ Deliberate semantics and caveats:
       outlasts the Boost's deadline. The per-challenge `boostOnSleep`
       setting (default on) turns this off for a challenge: its boost then
       stays at its set time, and the quit guard still counts it.
+      The same remembered list drives the quit/close warning
+      (`windows/quitGuard.ts`): with auto-vote running, quitting the app or
+      closing its main window asks first when a boost is due within
+      `QUIT_WARN_HORIZON_SEC` (60 min), and is bypassed for an OS shutdown,
+      signals, update install and logout.
 
     Two sharp edges in that `onSettingsChanged` wiring, both already handled
     in `index.ts` — keep them handled:

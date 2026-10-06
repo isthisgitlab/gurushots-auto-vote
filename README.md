@@ -36,7 +36,7 @@ The desktop app enforces this for GUI instances: launching it a second time focu
 - **Exposure control** — per-challenge exposure trigger and optional separate target ("vote up to X%").
 - **Last-minute push** — votes to 100% inside a configurable window before a challenge closes, and tightens the polling cadence automatically.
 - **Final-window exposure** — a separate, usually lower exposure ceiling for a configurable window before close (default the final hour).
-- **Boost** — auto-applies boost near the deadline, on a chosen entry slot.
+- **Boost** — auto-applies boost near the deadline, on a chosen entry slot. A boost that is due goes out right away when the computer goes to sleep (desktop app; turn it off with Boost Before Sleep), and quitting while one is due asks first.
 - **Turbo (earn + apply)** — auto-plays the mini-game to _earn_ turbo, then auto-_applies_ it to a chosen entry before the deadline.
 - **Auto-submit** — submits photos into empty entry slots near the deadline, staggered to avoid vote dilution, with tag filters, theme-aware photo selection double-checked by an on-device image model, and an emergency safety net.
 - **Auto-join** — discovers open (un-joined) challenges and joins them automatically (off by default); once on it joins all of them by default, narrowed by an include/exclude challenge-type list or a challenge rule. Paid challenges are gated by per-challenge and per-cycle coin caps and never charged without a completed join. Manual joining is available too, via a collapsible "Discover" list in the GUI and the `discover`/`join` CLI commands.
