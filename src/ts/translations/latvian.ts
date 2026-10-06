@@ -715,7 +715,7 @@ export const app = {
     titleRuleBroadWarning:
         'Šim noteikumam nav nosaukuma, tāpēc tas ieslēdz šo iespēju katram atbilstošajam izaicinājumam — tas var tērēt monētas vai foto veselai izaicinājumu grupai.',
     titleRuleOrderHint:
-        'Noteikumus pārbauda no augšas uz leju: katram uzstādījumam uzvar pirmais atbilstošais noteikums, kas to uzstāda, bet to, ko tas atstāj tukšu, ņem no nākamā atbilstošā noteikuma un pēc tam no globālā noklusējuma. Kārtojot noklusējuma secībā, noteikumi ar nosaukumu nonāk pirmie, tāpēc noteikums, kuram jābūt pārākam (piemēram, noteikums pēc beigu laika), ir jāpārvieto atpakaļ augšā.',
+        'Noteikumus pārbauda no augšas uz leju: katram uzstādījumam uzvar pirmais atbilstošais noteikums, kas to uzstāda, bet to, ko tas atstāj tukšu, ņem no nākamā atbilstošā noteikuma un pēc tam no globālā noklusējuma. Kārtojot noklusējuma secībā, noteikumi ar nosaukumu nonāk pirmie, tāpēc noteikums, kam jāņem virsroka pār tiem (piemēram, noteikums pēc beigu laika), atkal jāpārvieto uz augšu.',
     titleRuleSortDefault: 'Kārtot noklusējuma secībā',
     titleRuleMoveUp: 'Pārvietot noteikumu augstāk',
     titleRuleMoveDown: 'Pārvietot noteikumu zemāk',
