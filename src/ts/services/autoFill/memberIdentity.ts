@@ -37,10 +37,10 @@ const MAX_MEMBER_ID_CACHE = 4;
 // nothing in the UI to explain it. Expiring the negative keeps the retry cheap
 // (one call a minute at worst) without hammering a genuinely broken endpoint.
 // Ordinary callers retry no sooner than that; only a user's explicit retry
-// (forgetFailedMemberId) may evict a failure early, and the gap is counted
-// between explicit retries (MIN_EXPLICIT_RETRY_GAP_MS), not from the failure:
-// the first press after a failed lookup always asks, presses repeated inside
-// the gap share the cached failure (and only an eviction starts a gap).
+// (forgetFailedMemberId) may evict a failure early: the first eviction always
+// gets through, and later ones are spaced (MIN_EXPLICIT_RETRY_GAP_MS) from the
+// last eviction, not from the failure. Presses inside the gap share the cached
+// failure.
 const NEGATIVE_IDENTITY_TTL_MS = 60_000;
 const MIN_EXPLICIT_RETRY_GAP_MS = 5_000;
 // When each token last had an explicit retry let through (bounded like the cache).

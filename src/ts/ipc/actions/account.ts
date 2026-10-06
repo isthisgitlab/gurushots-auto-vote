@@ -169,9 +169,9 @@ const handleGetOpenChosenAnnotations = (async (event: unknown, ids: Array<string
 // resolves the member only: no library walk, so a retry costs one profile request and repeats
 // nothing the listing on screen already read. `memberId` is the signed-in account, or the check
 // failed (`account-check-failed`) and may be tried again shortly, or there is no session
-// (`not-logged-in`). The eviction is rate-limited in memberIdentity: the first explicit retry after
-// a failed lookup always asks, and later ones are spaced by MIN_EXPLICIT_RETRY_GAP_MS (presses
-// inside the gap are answered from the cache), so it never costs more than one request per gap.
+// (`not-logged-in`). The eviction is rate-limited in memberIdentity: the first eviction always gets
+// through; later ones are spaced from the last eviction (presses inside the gap are answered from
+// the cache), so it never costs more than one request per gap.
 const handleConfirmAccount = (async () => {
     try {
         const guard = auth.requireAuthToken('account check');

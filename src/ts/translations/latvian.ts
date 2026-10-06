@@ -638,13 +638,13 @@ export const app = {
     photoChooserSaveReadFailedAgain:
         'Saglabātā saraksta nolasīšana atkal neizdevās, tāpēc saglabāšana joprojām ir aizturēta, lai to pasargātu. Pēc brīža vēlreiz spied „Mēģināt vēlreiz”.',
     photoChooserSaveNotLoggedIn:
-        'Tu esi izrakstījies, tāpēc kontu nevar pārbaudīt. Piesakies vēlreiz, aizver šo logu un atver to vēlreiz.',
+        'Tu esi izrakstījies, tāpēc kontu nevar pārbaudīt. Piesakies vēlreiz, aizver logu „Izvēlēties foto” un atver to vēlreiz.',
     photoChooserSaveNoContextHeld:
-        'Saglabāšana ir aizturēta: bez aktīva vai atvērta izaicinājuma lietotne nevar pārbaudīt, kuram kontam šis saraksts pieder. Aizver šo logu un vispirms pievienojies izaicinājumam.',
+        'Saglabāšana ir aizturēta: bez aktīva vai atvērta izaicinājuma lietotne nevar pārbaudīt, kuram kontam šis saraksts pieder. Aizver logu „Izvēlēties foto” un vispirms pievienojies izaicinājumam.',
     photoChooserClearHeld:
         'Notīrīšana nav pieejama, kamēr tavs saglabātais saraksts nav nolasīts, lai vēlāka nolasīšana neatceltu notīrīšanu.',
     photoChooserSaveUnconfirmed:
-        'Neizdevās pārliecināties, kuram kontam šis saraksts pieder, tāpēc saglabāšana ir aizturēta, lai to pasargātu. Spied „Mēģināt vēlreiz” vai aizver šo logu un atver to vēlreiz.',
+        'Neizdevās pārliecināties, kuram kontam šis saraksts pieder, tāpēc saglabāšana ir aizturēta, lai to pasargātu. Spied „Mēģināt vēlreiz” vai aizver logu „Izvēlēties foto” un atver to vēlreiz.',
     photoChooserSaveNoContext:
         'Saglabāšana ir bloķēta: bez aktīva vai atvērta izaicinājuma lietotne nevar pārbaudīt, kuram kontam šis saraksts pieder. Notīri sarakstu, lai saglabātu, vai vispirms pievienojies izaicinājumam.',
     photoChooserSaveError: 'Izvēlētos foto neizdevās saglabāt, jo uzstādījumu nevarēja ierakstīt. Mēģini vēlreiz.',

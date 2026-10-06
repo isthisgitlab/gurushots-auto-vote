@@ -34,8 +34,8 @@ export function useLibraryListing(challengeId: string | number | null) {
     // search omits keeps its record and is not shown as a missing tile.
     const [known, setKnown] = useState<Map<string, LibraryPhoto>>(new Map());
     // Which load the listing is on: a new search or load is a new generation, a member patched into
-    // the listing on screen (setMember) is not. What a Retry did belongs to the generation it was
-    // pressed on.
+    // the listing on screen (setMember) is not. What a Retry did belongs to the generation it ends
+    // up on.
     const [generation, setGeneration] = useState(0);
     const generationRef = useRef(0);
     const requestRef = useRef(0);
@@ -249,7 +249,7 @@ function useSavedListRetry({
     retryListing: () => number;
 }) {
     const [checkBusy, setCheckBusy] = useState(false);
-    // Both belong to the listing generation Retry was pressed on: a new search starts clean.
+    // Both belong to the listing generation the Retry ends up on: a new search starts clean.
     const [failure, setFailure] = useState<{ generation: number; kind: 'failed' | 'not-logged-in' } | null>(null);
     const [pressedAt, setPressedAt] = useState<number | null>(null);
     const busy = checkBusy || read.busy;

@@ -1126,6 +1126,8 @@ describe('a saved list that came without its ids', () => {
             expect(screen.queryByRole('button', { name: 'Retry' })).toBeNull();
             await act(async () => read.resolve([idOf(1)]));
             await waitFor(() => expect(use().getAttribute('aria-disabled')).toBe('false'));
+            // Let the footer's focus effects run before judging where focus is.
+            await effectsFlushed();
             expect(document.activeElement).not.toBe(use());
             expect(screen.queryByText(confirmedText)).toBeNull();
         });
