@@ -628,8 +628,12 @@ export const app = {
         'Saglabāšana gaida, līdz tavi foto ir ielādēti, lai lietotne varētu pārbaudīt, kuram kontam saraksts pieder.',
     photoChooserSaveWaitsError:
         'Saglabāšana tiek aizturēta, līdz tavi foto ir ielādēti, lai lietotne varētu pārbaudīt, kuram kontam saraksts pieder. Spied „Mēģināt vēlreiz” augstāk.',
+    photoChooserSaveChecking: 'Pārbauda, kuram kontam šis saraksts pieder…',
+    photoChooserSaveCheckFailed:
+        'Konta pārbaude neizdevās, tāpēc saglabāšana ir aizturēta, lai pasargātu tavu sarakstu. Pēc brīža vēlreiz spied „Mēģināt vēlreiz”.',
+    photoChooserTileLocked: 'Gaida tavu saglabāto sarakstu',
     photoChooserSaveUnconfirmed:
-        'Neizdevās pārliecināties, kuram kontam šis saraksts pieder, tāpēc saglabāšana ir aizturēta, lai to pasargātu. Spied „Mēģināt vēlreiz” vai aizver izvēli un atver to vēlreiz.',
+        'Neizdevās pārliecināties, kuram kontam šis saraksts pieder, tāpēc saglabāšana ir aizturēta, lai to pasargātu. Spied „Mēģināt vēlreiz” vai aizver šo logu un atver to vēlreiz.',
     photoChooserSaveNoContext:
         'Saglabāšana ir bloķēta: bez aktīva vai atvērta izaicinājuma lietotne nevar pārbaudīt, kuram kontam šis saraksts pieder. Notīri sarakstu, lai saglabātu, vai vispirms pievienojies izaicinājumam.',
     photoChooserSaveError: 'Izvēlētos foto neizdevās saglabāt, jo uzstādījumu nevarēja ierakstīt. Mēģini vēlreiz.',

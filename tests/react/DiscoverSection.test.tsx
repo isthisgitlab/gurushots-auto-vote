@@ -491,16 +491,44 @@ describe('chosen photos', () => {
             expect(window.api.removeChallengeOverride).not.toHaveBeenCalled();
         });
 
-        test('the saved list is read again once per opening, however often the section re-renders', async () => {
+        test('a failed first read is not repeated by the section re-rendering: only Retry asks again', async () => {
             const use = await open();
-            release();
-            await waitFor(() => expect(use.getAttribute('aria-disabled')).toBe('false'));
-            // Settings changes re-render the section (and re-read the rows), but not the chooser's own read.
+            // The chooser's own read (one id) fails, so the ids stay withheld; the rows' read still
+            // answers, with different data each time, so every settings broadcast really re-renders.
+            const rowsRead = jest.mocked(window.api.getOpenChosenAnnotations).getMockImplementation()!;
+            let rowReads = 0;
+            jest.mocked(window.api.getOpenChosenAnnotations).mockImplementation(async (ids) => {
+                if (ids.length === 1) return { success: false, error: 'down', annotations: {} };
+                rowReads += 1;
+                const answer = await rowsRead(ids);
+                return answer.success
+                    ? {
+                          ...answer,
+                          annotations: Object.fromEntries(
+                              Object.entries(answer.annotations).map(([id, row]) => [
+                                  id,
+                                  { ...row, chosenEffectiveCount: row.chosenEffectiveCount + (rowReads % 2) },
+                              ]),
+                          ),
+                      }
+                    : answer;
+            });
+            await releaseAndWaitForReread();
+            await screen.findByText('app.photoChooserSaveUnconfirmed');
+            const ownReads = () =>
+                jest.mocked(window.api.getOpenChosenAnnotations).mock.calls.filter(([ids]) => ids.length === 1);
+            expect(ownReads()).toHaveLength(1);
+
+            // Settings broadcasts re-render the section; the chooser's read is not asked again.
+            const before = rowReads;
             act(() => fireSettingsChanged({ theme: 'dark' }));
+            await waitFor(() => expect(rowReads).toBe(before + 1));
             act(() => fireSettingsChanged({ theme: 'light' }));
-            await waitFor(() => expect(window.api.getOpenChosenAnnotations).toHaveBeenCalledTimes(4));
-            const own = jest.mocked(window.api.getOpenChosenAnnotations).mock.calls.filter(([ids]) => ids.length === 1);
-            expect(own).toEqual([[['900001']]]);
+            await waitFor(() => expect(rowReads).toBe(before + 2));
+            await act(async () => undefined);
+            expect(ownReads()).toHaveLength(1);
+            expect(screen.getByText('app.photoChooserSaveUnconfirmed')).toBeTruthy();
+            expect(use.getAttribute('aria-disabled')).toBe('true');
         });
 
         test('the list is removed only when the user really clears it', async () => {

@@ -27,10 +27,10 @@ const { clearOpenChallenges } = require('../../src/ts/services/openChallengeCach
 const OWNER = 'member-0';
 let getCurrentMemberProfile: jest.MockedFunction<() => Promise<{ id: string } | null>>;
 
-const annotate = () =>
+const annotate = (ids: number[] = [7]) =>
     invalid<(event: unknown, ids: unknown) => Promise<unknown>>(buildHandlers()['get-open-chosen-annotations'])(
         {},
-        [7],
+        ids,
     );
 const list = () => buildHandlers()['get-member-challenges']({});
 
@@ -56,7 +56,7 @@ afterEach(() => {
 });
 
 describe.each([
-    ['get-open-chosen-annotations', annotate],
+    ['get-open-chosen-annotations', () => annotate([7, 8, 9])],
     ['get-member-challenges', list],
 ])('%s', (_name, call) => {
     test('a cold cache looks the member up exactly once, however many rows or calls follow', async () => {
@@ -84,5 +84,75 @@ describe.each([
         now.mockReturnValue(1_000_000 + 61_000);
         await call();
         expect(getCurrentMemberProfile).toHaveBeenCalledTimes(2);
+    });
+});
+
+test('both handlers racing on a cold cache share one lookup', async () => {
+    await Promise.all([annotate([7, 8, 9]), list()]);
+    expect(getCurrentMemberProfile).toHaveBeenCalledTimes(1);
+});
+
+describe('confirm-account: the explicit retry after a failed identity lookup', () => {
+    const confirm = () => buildHandlers()['confirm-account']();
+    let walk: jest.MockedFunction<() => Promise<unknown>>;
+
+    beforeEach(() => {
+        walk = jest.fn();
+        apiFactory.getApiStrategy = jest.fn().mockReturnValue({
+            getCurrentMemberProfile,
+            getEligiblePhotosWalk: walk,
+            getMemberChallenges: jest.fn(),
+        });
+    });
+
+    test('a failed lookup is evicted, so the retry succeeds at once instead of waiting out the 60 s, with no library walk', async () => {
+        jest.spyOn(Date, 'now').mockReturnValue(1_000_000);
+        getCurrentMemberProfile.mockResolvedValueOnce(null);
+        await annotate();
+        // The cached failure answers any ordinary resolve for the next minute...
+        await annotate();
+        expect(getCurrentMemberProfile).toHaveBeenCalledTimes(1);
+
+        // ...but an explicit retry asks again, and this time it works.
+        await expect(confirm()).resolves.toEqual({ success: true, memberId: OWNER });
+        expect(getCurrentMemberProfile).toHaveBeenCalledTimes(2);
+        expect(walk).not.toHaveBeenCalled();
+        // The member is cached now: the rows get their ids with no further request.
+        getCurrentMemberProfile.mockClear();
+        expect(JSON.stringify(await annotate())).toContain('"chosenOwn":["a","b"]');
+        expect(getCurrentMemberProfile).not.toHaveBeenCalled();
+    });
+
+    test('a lookup that fails again says so, and can be tried again', async () => {
+        getCurrentMemberProfile.mockResolvedValue(null);
+        await expect(confirm()).resolves.toEqual({ success: false, error: 'account-check-failed' });
+        await expect(confirm()).resolves.toEqual({ success: false, error: 'account-check-failed' });
+        // Each press asked: the failure it caused was evicted again.
+        expect(getCurrentMemberProfile).toHaveBeenCalledTimes(2);
+    });
+
+    test('a resolved member is never looked up again, and a lookup in flight is shared, not evicted', async () => {
+        await annotate();
+        getCurrentMemberProfile.mockClear();
+        await expect(confirm()).resolves.toEqual({ success: true, memberId: OWNER });
+        expect(getCurrentMemberProfile).not.toHaveBeenCalled();
+
+        __resetMemberIdCache();
+        const inFlight = annotate();
+        await expect(confirm()).resolves.toEqual({ success: true, memberId: OWNER });
+        await inFlight;
+        expect(getCurrentMemberProfile).toHaveBeenCalledTimes(1);
+    });
+
+    test('with no token it answers the auth guard, and a throwing lookup is an error result', async () => {
+        auth.requireAuthToken = jest
+            .fn()
+            .mockReturnValue({ ok: false, response: { success: false, error: 'no token' } });
+        await expect(confirm()).resolves.toEqual({ success: false, error: 'no token' });
+        auth.requireAuthToken = jest.fn().mockReturnValue({ ok: true, token: 'tok', settings: {} });
+        apiFactory.getApiStrategy = jest.fn(() => {
+            throw new Error('settings broke');
+        });
+        await expect(confirm()).resolves.toEqual({ success: false, error: 'settings broke' });
     });
 });

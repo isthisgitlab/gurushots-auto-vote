@@ -622,6 +622,10 @@ export const app = {
         'Saving waits until your photos have loaded, so the app can check which account the list belongs to.',
     photoChooserSaveWaitsError:
         'Saving is held until your photos load, so the app can check which account the list belongs to. Press Retry above.',
+    photoChooserSaveChecking: 'Checking which account this list belongs to…',
+    photoChooserSaveCheckFailed:
+        'The account check failed, so saving is held to protect your list. Press Retry again shortly.',
+    photoChooserTileLocked: 'Waiting for your saved list',
     photoChooserSaveUnconfirmed:
         "Couldn't confirm which account this list belongs to, so saving is held to protect it. Press Retry, or close and reopen the chooser.",
     photoChooserSaveNoContext:

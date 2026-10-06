@@ -88,6 +88,7 @@ Object.assign(mockApi, {
     cleanupStaleChallengeSetting: jest.fn().mockResolvedValue(true),
     clearChosenPhotos: jest.fn().mockResolvedValue({ success: true, removed: 0 }),
     getOpenChosenAnnotations: jest.fn().mockResolvedValue({ success: true, annotations: {} }),
+    confirmAccount: jest.fn().mockResolvedValue({ success: false, error: 'account-check-failed' }),
     cleanupStaleMetadata: jest.fn().mockResolvedValue(true),
 
     // Logging

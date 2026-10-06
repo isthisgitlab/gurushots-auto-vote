@@ -43,7 +43,7 @@ import { fillChallengeNow } from './autoFill/manualFill';
 import { submitNewEntryForAction } from './autoFill/fillNew';
 import { rankCandidatesForChallenge } from './autoFill/pipeline';
 import { resolveSemanticScores, resolveIgnoreWords, fetchCandidatesForChallenge } from './autoFill/candidates';
-import { resolveMemberId, peekMemberId, __resetMemberIdCache } from './autoFill/memberIdentity';
+import { resolveMemberId, peekMemberId, forgetFailedMemberId, __resetMemberIdCache } from './autoFill/memberIdentity';
 import { resolveChosenPhotos, resolveMissingChosen, logChosenSkipOnce, clearChosenSkip } from './autoFill/chosenPhotos';
 import { describeSubmitFailure } from './autoFill/fillLogging';
 import { getSlotsRemaining, reflectNewEntry, reflectEntryFlag, refreshChallengeState } from './autoFill/challengeState';
@@ -67,6 +67,7 @@ export {
     rankCandidatesForChallenge,
     resolveMemberId,
     peekMemberId,
+    forgetFailedMemberId,
     __resetMemberIdCache,
     resolveSemanticScores,
     resolveIgnoreWords,

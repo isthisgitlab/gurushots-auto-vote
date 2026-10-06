@@ -340,7 +340,7 @@ describe('scenario-status', () => {
                     spent: { swaps: 1 },
                     inFlight: { ruleId: 'r1', actionIndex: 1 },
                     lastAction: { action: 'swap', ruleId: 'r1', at: 1_800_000_100 },
-                    lastError: { message: 'boost not available', at: 1_800_000_200 },
+                    lastError: { message: 'boost not avail\u202Eable', at: 1_800_000_200 },
                 },
             }),
         );
@@ -350,7 +350,9 @@ describe('scenario-status', () => {
         expect(text()).toContain('Spent: 1 swaps, 0 keys, 0 fills');
         expect(text()).toContain('resumes at action 2');
         expect(text()).toContain('Last action: swap (r1)');
+        // The stored message is stripped of bidi controls before it is printed.
         expect(text('warning')).toContain('Last problem: boost not available');
+        expect(text('warning')).not.toContain('\u202E');
     });
 
     test('a quiet plan prints only its phase', async () => {

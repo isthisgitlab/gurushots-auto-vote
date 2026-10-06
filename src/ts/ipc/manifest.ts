@@ -93,6 +93,7 @@ const invokeChannels = [
     'get-bankroll',
     'get-member-challenges',
     'get-open-chosen-annotations',
+    'confirm-account',
     'join-challenge',
     'get-library-photos',
     'get-auto-join-active',

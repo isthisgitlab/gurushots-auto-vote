@@ -95,7 +95,17 @@ const resolveMemberId = async (
  */
 const peekMemberId = (token: string): string | null => memberIdCache.get(token)?.id ?? null;
 
+/**
+ * Evict a cached FAILED lookup for this token, so the next `resolveMemberId` asks again at once
+ * instead of waiting out NEGATIVE_IDENTITY_TTL_MS. For a user's explicit retry only. A resolved id
+ * stays (it cannot change under a token), and so does a lookup still in flight (callers share it).
+ */
+const forgetFailedMemberId = (token: string): void => {
+    const entry = memberIdCache.get(token);
+    if (entry && entry.id === null && entry.expiresAt !== null) memberIdCache.delete(token);
+};
+
 // Test-only: drop the memoised identity between cases.
 const __resetMemberIdCache = () => memberIdCache.clear();
 
-export { resolveMemberId, peekMemberId, __resetMemberIdCache };
+export { resolveMemberId, peekMemberId, forgetFailedMemberId, __resetMemberIdCache };

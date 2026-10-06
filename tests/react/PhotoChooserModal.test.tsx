@@ -758,6 +758,9 @@ describe('a saved list that came without its ids', () => {
     const OWNER = MEMBER;
     const use = () => screen.getByRole('button', { name: 'Use these photos' });
     const hint = 'Saving waits until your photos have loaded, so the app can check which account the list belongs to.';
+    const checkingHint = 'Checking which account this list belongs to…';
+    const checkFailedHint =
+        'The account check failed, so saving is held to protect your list. Press Retry again shortly.';
     const unconfirmedHint =
         "Couldn't confirm which account this list belongs to, so saving is held to protect it. Press Retry, or close and reopen the chooser.";
     // A re-read mock: what it answers on its successive calls.
@@ -816,7 +819,9 @@ describe('a saved list that came without its ids', () => {
         expect(tile(3).getAttribute('aria-disabled')).toBe('true');
         fireEvent.click(tile(3));
         expect(pressed(3)).toBe('false');
-        expect(screen.getByText(hint)).toBeTruthy();
+        // The photos have loaded, so the hint names what is awaited instead of "waits until loaded".
+        expect(screen.getByText(checkingHint)).toBeTruthy();
+        expect(screen.queryByText(hint)).toBeNull();
 
         await act(async () => read.resolve([idOf(1)]));
         await waitFor(() => expect(pressed(1)).toBe('true'));
@@ -837,8 +842,20 @@ describe('a saved list that came without its ids', () => {
             expect(pressed(2)).toBe('false');
         };
 
-        test('a listing that cannot say who is signed in: the hint and Retry, and a good Retry seeds the list and releases Save', async () => {
+        const confirmWith = (...answers: Array<string | null>) => {
+            const confirm = jest.mocked(window.api.confirmAccount);
+            for (const memberId of answers) {
+                confirm.mockResolvedValueOnce(
+                    memberId === null ? { success: false, error: 'account-check-failed' } : { success: true, memberId },
+                );
+            }
+            return confirm;
+        };
+        const retryButton = () => screen.getByRole('button', { name: 'Retry' });
+
+        test('a listing that cannot say who is signed in: Retry checks the account only, never the library again, and seeds the list', async () => {
             getLibrary().mockResolvedValueOnce(listing([photo(1), photo(2)], { memberId: null }));
+            const confirm = confirmWith(OWNER);
             const reloadSaved = rereads([idOf(1)]);
             const { onSave } = setup({ value: [], savedCount: 1, reloadSaved });
             await expectUnconfirmed();
@@ -846,14 +863,86 @@ describe('a saved list that came without its ids', () => {
             fireEvent.click(use());
             expect(onSave).not.toHaveBeenCalled();
 
-            // Retry asks the listing again; this time it knows the member.
-            fireEvent.click(screen.getByRole('button', { name: 'Retry' }));
+            fireEvent.click(retryButton());
             await waitFor(() => expect(pressed(1)).toBe('true'));
             await waitFor(() => expect(use().getAttribute('aria-disabled')).toBe('false'));
             expect(screen.queryByText(unconfirmedHint)).toBeNull();
-            expect(getLibrary()).toHaveBeenCalledTimes(2);
+            expect(confirm).toHaveBeenCalledTimes(1);
+            // The listing on screen was reused: no second library walk.
+            expect(getLibrary()).toHaveBeenCalledTimes(1);
             fireEvent.click(use());
             await waitFor(() => expect(onSave).toHaveBeenCalledWith([idOf(1)]));
+        });
+
+        test('the check fails again: the hint says so and Retry stays; a later press can succeed', async () => {
+            getLibrary().mockResolvedValue(listing([photo(1), photo(2)], { memberId: null }));
+            confirmWith(null, OWNER);
+            const { onSave } = setup({ value: [], savedCount: 1, reloadSaved: rereads([idOf(1)]) });
+            await screen.findByText(unconfirmedHint);
+            fireEvent.click(retryButton());
+            await screen.findByText(checkFailedHint);
+            expect(screen.queryByText(unconfirmedHint)).toBeNull();
+            expect(use().getAttribute('aria-disabled')).toBe('true');
+            expect(getLibrary()).toHaveBeenCalledTimes(1);
+
+            fireEvent.click(retryButton());
+            await waitFor(() => expect(pressed(1)).toBe('true'));
+            fireEvent.click(use());
+            await waitFor(() => expect(onSave).toHaveBeenCalledWith([idOf(1)]));
+        });
+
+        test('a check that rejects counts as a failed check', async () => {
+            getLibrary().mockResolvedValue(listing([photo(1)], { memberId: null }));
+            jest.mocked(window.api.confirmAccount).mockRejectedValueOnce(new Error('ipc down'));
+            setup({ value: [], savedCount: 1, reloadSaved: rereads() });
+            await screen.findByText(unconfirmedHint);
+            fireEvent.click(retryButton());
+            await screen.findByText(checkFailedHint);
+        });
+
+        test("the check names another account: the notice shows, the ids stay withheld and Save is the user's choice", async () => {
+            getLibrary().mockResolvedValue(listing([photo(1), photo(2)], { memberId: null }));
+            confirmWith('d'.repeat(32));
+            const reloadSaved = rereads();
+            const { onSave } = setup({ value: [], savedCount: 2, reloadSaved });
+            await screen.findByText(unconfirmedHint);
+            fireEvent.click(retryButton());
+            expect(await screen.findByText(/saved under another account, so the app ignores them/)).toBeTruthy();
+            expect(reloadSaved).not.toHaveBeenCalled();
+            await waitFor(() => expect(use().getAttribute('aria-disabled')).toBe('false'));
+            fireEvent.click(tile(2));
+            fireEvent.click(use());
+            await waitFor(() => expect(onSave).toHaveBeenCalledWith([idOf(2)]));
+        });
+
+        test('Retry stays mounted, focused, aria-busy and inert while the check runs; the hint is a live region apart from it', async () => {
+            getLibrary().mockResolvedValue(listing([photo(1)], { memberId: null }));
+            const answer = deferred<{ success: true; memberId: string }>();
+            jest.mocked(window.api.confirmAccount).mockReturnValueOnce(invalid(answer.promise));
+            setup({ value: [], savedCount: 1, reloadSaved: rereads([idOf(1)]) });
+            await screen.findByText(unconfirmedHint);
+
+            // Save is described by the status paragraph, which holds the text only: Retry is outside it.
+            const status = document.getElementById(use().getAttribute('aria-describedby')!)!;
+            expect(status.getAttribute('role')).toBe('status');
+            expect(status.querySelector('button')).toBeNull();
+            expect(retryButton().closest('[role="status"]')).toBeNull();
+
+            const retry = retryButton();
+            retry.focus();
+            fireEvent.click(retry);
+            await screen.findByText(checkingHint);
+            expect(retryButton()).toBe(retry);
+            expect(document.activeElement).toBe(retry);
+            expect(retry.getAttribute('aria-busy')).toBe('true');
+            expect(retry.getAttribute('aria-disabled')).toBe('true');
+            // A second press while it runs asks nothing more.
+            fireEvent.click(retry);
+            expect(window.api.confirmAccount).toHaveBeenCalledTimes(1);
+
+            await act(async () => answer.resolve({ success: true, memberId: OWNER }));
+            await waitFor(() => expect(pressed(1)).toBe('true'));
+            expect(screen.queryByRole('button', { name: 'Retry' })).toBeNull();
         });
 
         test.each([
@@ -887,6 +976,58 @@ describe('a saved list that came without its ids', () => {
             fireEvent.click(screen.getByRole('button', { name: 'Retry' }));
             await waitFor(() => expect(pressed(1)).toBe('true'));
         });
+    });
+
+    test('locked tiles say they are waiting, not that they can be entered, and the tile name says it too', async () => {
+        const read = deferred<string[] | null>();
+        setup({
+            value: [],
+            savedCount: 1,
+            reloadSaved: jest.fn<Promise<string[] | null>, []>().mockReturnValue(read.promise),
+        });
+        await screen.findByRole('button', { name: /^Photo 00000001:/ });
+        expect(tile(1).textContent).toContain('Waiting for your saved list');
+        expect(tile(1).textContent).not.toContain('Can be entered');
+        expect(tile(1).getAttribute('aria-label')).toBe('Photo 00000001: tag1. Waiting for your saved list');
+        await act(async () => read.resolve([]));
+        await waitFor(() => expect(tile(1).textContent).toContain('Can be entered'));
+        expect(tile(1).textContent).not.toContain('Waiting for your saved list');
+    });
+
+    test('Clear is held with Save while the list is unread, so a late read cannot undo it', async () => {
+        const read = deferred<string[] | null>();
+        setup({
+            value: [],
+            savedCount: 1,
+            reloadSaved: jest.fn<Promise<string[] | null>, []>().mockReturnValue(read.promise),
+        });
+        await screen.findByRole('button', { name: /^Photo 00000001:/ });
+        const clear = screen.getByRole('button', { name: 'Clear' });
+        expect(clear.getAttribute('aria-disabled')).toBe('true');
+        expect(clear.getAttribute('aria-describedby')).toBe(use().getAttribute('aria-describedby'));
+        fireEvent.click(clear);
+        await act(async () => read.resolve([idOf(1)]));
+        // The press did nothing, and the list the user had is what is there once it is read.
+        await waitFor(() => expect(pressed(1)).toBe('true'));
+        expect(screen.getByRole('button', { name: 'Clear' }).getAttribute('aria-disabled')).toBe('false');
+    });
+
+    test('after a failed read, a new ready listing reads as pending at once: the unconfirmed hint does not flash', async () => {
+        const reloadSaved = rereads(null);
+        const second = deferred<string[] | null>();
+        reloadSaved.mockReturnValueOnce(second.promise);
+        setup({ value: [], savedCount: 1, reloadSaved });
+        await screen.findByText(unconfirmedHint);
+
+        // A new search: loading, then a ready listing again. The read for it is pending, not failed.
+        const next = deferred<Listing>();
+        getLibrary().mockReturnValueOnce(invalid(next.promise));
+        fireEvent.submit(screen.getByRole('searchbox').closest('form')!);
+        await act(async () => next.resolve(listing([photo(1)])));
+        expect(screen.queryByText(unconfirmedHint)).toBeNull();
+        expect(await screen.findByText(checkingHint)).toBeTruthy();
+        await act(async () => second.resolve([idOf(1)]));
+        await waitFor(() => expect(pressed(1)).toBe('true'));
     });
 
     test("another account: the ids stay withheld, the notice shows, nothing is re-read and Save is the user's choice", async () => {

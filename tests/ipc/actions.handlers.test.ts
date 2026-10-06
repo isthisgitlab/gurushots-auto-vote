@@ -810,13 +810,10 @@ describe('get-member-challenges', () => {
                 expect(autoFill.resolveMemberId).not.toHaveBeenCalled();
             });
 
-            // peekMemberId knows nobody until the lookup has run, as in a fresh process.
+            // peekMemberId knows nobody until the lookup has run, as in a fresh process; the lookup then answers.
             const unknownUntilResolved = (resolvesTo: string | null) => {
                 jest.mocked(autoFill.peekMemberId).mockReturnValue(null);
-                jest.mocked(autoFill.resolveMemberId).mockImplementation(async () => {
-                    jest.mocked(autoFill.peekMemberId).mockReturnValue(resolvesTo);
-                    return resolvesTo;
-                });
+                jest.mocked(autoFill.resolveMemberId).mockResolvedValue(resolvesTo);
             };
 
             test('the owner is the signed-in member: its own ids are sent', async () => {
@@ -895,10 +892,7 @@ describe('get-open-chosen-annotations — read from the settings, with one cache
 
         const unknownUntilResolved = (resolvesTo: string | null) => {
             jest.mocked(autoFill.peekMemberId).mockReturnValue(null);
-            jest.mocked(autoFill.resolveMemberId).mockImplementation(async () => {
-                jest.mocked(autoFill.peekMemberId).mockReturnValue(resolvesTo);
-                return resolvesTo;
-            });
+            jest.mocked(autoFill.resolveMemberId).mockResolvedValue(resolvesTo);
         };
 
         test('the member resolves to the owner: the ids are sent', async () => {

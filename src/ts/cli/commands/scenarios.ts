@@ -220,7 +220,8 @@ const scenarioStatusCmd = async (challengeId: string) => {
         ui().info(
             `  Last action: ${state.lastAction.action} (${state.lastAction.ruleId}) at ${at(state.lastAction.at)}`,
         );
-    if (state.lastError) ui().warning(`  Last problem: ${state.lastError.message} (${at(state.lastError.at)})`);
+    if (state.lastError)
+        ui().warning(`  Last problem: ${stripTerminalControl(state.lastError.message)} (${at(state.lastError.at)})`);
     return 0;
 };
 

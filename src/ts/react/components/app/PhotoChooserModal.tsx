@@ -1,4 +1,4 @@
-import { useCallback, useId, useState } from 'react';
+import { useCallback, useState } from 'react';
 import { useTranslation } from '@/contexts/TranslationContext';
 import { Modal, ModalActions } from '@/components/ui/Modal';
 import { InlineLoader } from '@/components/ui/LoadingSpinner';
@@ -8,6 +8,7 @@ import { interp } from '@/utils/interp';
 import { ipcErrorText } from '@/api/ipcErrorText';
 import { announceChosenPhotosCleared } from '@/api/chosenPhotosCleared';
 import { useChosenPhotosOwner } from '@/api/useChosenPhotosOwner';
+import { ChooserFooter, SearchForm, holdReasonOf } from './ChooserFooter';
 import { useChooserSave, useLibraryListing, useOtherAccountLists, useSavedListReread } from '@/hooks/usePhotoChooser';
 import * as ipc from '@/api/ipc';
 import { MAX_CHOSEN_PHOTOS } from '../../../settings/limits';
@@ -34,16 +35,20 @@ const TILE_BASE = 'rounded-box border p-1 text-left flex flex-col gap-1 w-full';
  * challenge's refusal, "list full", or "can be entered" when the listing knows.
  */
 const tileReason = ({
+    locked,
     blockedReason,
     full,
     allowedKnown,
     t,
 }: {
+    locked: boolean;
     blockedReason: string | null;
     full: boolean;
     allowedKnown: boolean;
     t: (key: string) => string;
 }): string | null => {
+    // Nothing can be added yet, so the tile must not say it can be.
+    if (locked) return t('app.photoChooserTileLocked');
     if (blockedReason !== null) return blockedReason;
     if (full) return t('app.photoChooserListFull');
     return allowedKnown ? t('app.photoChooserAllowed') : null;
@@ -83,7 +88,7 @@ function PhotoTile({
     // Tab still reaches it and a screen reader can read why it cannot be added.
     const unavailable = locked || (!selected && (blockedReason !== null || atCap));
     const full = !selected && atCap;
-    const reason = tileReason({ blockedReason, full, allowedKnown, t });
+    const reason = tileReason({ locked, blockedReason, full, allowedKnown, t });
     // Only the picture and its tags are dimmed: the reason line stays at full contrast, since it is
     // what says why the tile cannot be added.
     const dim = unavailable ? 'opacity-50' : '';
@@ -121,7 +126,7 @@ function PhotoTile({
             <span className={`truncate text-xs ${dim}`}>{showImage ? labels : shortId(photo.id)}</span>
             {reason && (
                 <span
-                    className={`text-xs ${blockedReason !== null ? 'text-error' : full ? 'text-base-content/70' : 'text-success'}`}
+                    className={`text-xs ${locked || full ? 'text-base-content/70' : blockedReason !== null ? 'text-error' : 'text-success'}`}
                 >
                     {reason}
                 </span>
@@ -343,85 +348,11 @@ function OtherAccountNotice({ onRemoved }: { onRemoved: () => void }) {
     );
 }
 
-// What Save being held says, by the listing's state: loading will resolve by itself, an error needs
-// Retry, and no context will not load at all, so it names the way out instead of a wait.
-const SAVE_HOLD_HINT: Record<ListState['status'] | 'unconfirmed', string> = {
-    unconfirmed: 'app.photoChooserSaveUnconfirmed',
-    loading: 'app.photoChooserSaveWaits',
-    ready: 'app.photoChooserSaveWaits',
-    error: 'app.photoChooserSaveWaitsError',
-    'no-context': 'app.photoChooserSaveNoContext',
+/** The signed-in member, asked for again on purpose (the main process drops its cached failure); null if it fails. */
+const confirmAccount = async (): Promise<string | null> => {
+    const result = await ipc.callOrNull(() => ipc.confirmAccount());
+    return result?.success ? result.memberId : null;
 };
-
-/**
- * The chooser's actions: save (held back, with its reason, while the account is unknown),
- * clear the selection, cancel — and the error of a save that failed.
- */
-function ChooserFooter({
-    saveFailed,
-    saveWaits,
-    holdReason,
-    onRetryHold,
-    saving,
-    onSave,
-    onClear,
-    onClose,
-}: {
-    saveFailed: boolean;
-    saveWaits: boolean;
-    /** Why Save is held: what the hint says to do about it differs. */
-    holdReason: keyof typeof SAVE_HOLD_HINT;
-    /** Asks again, when the hold is one only a retry can lift. */
-    onRetryHold: () => void;
-    saving: boolean;
-    onSave: () => void;
-    onClear: () => void;
-    onClose: () => void;
-}) {
-    const { t } = useTranslation();
-    const waitHintId = useId();
-    return (
-        <>
-            {saveFailed && (
-                <div role="alert" className="alert alert-error py-2 text-sm">
-                    <span>{t('app.photoChooserSaveError')}</span>
-                </div>
-            )}
-            {saveWaits && (
-                <p id={waitHintId} className="text-base-content/70 text-right text-xs">
-                    {t(SAVE_HOLD_HINT[holdReason])}
-                    {holdReason === 'unconfirmed' && (
-                        <button type="button" className="btn btn-outline btn-xs ml-2" onClick={onRetryHold}>
-                            {t('app.photoChooserRetry')}
-                        </button>
-                    )}
-                </p>
-            )}
-            <div className="flex justify-end gap-2">
-                {/* aria-disabled, not disabled: it stays focusable, so the hint above can be reached. */}
-                <button
-                    type="button"
-                    className={`btn btn-latvian btn-sm ${saveWaits ? 'btn-disabled' : ''}`}
-                    aria-disabled={saveWaits}
-                    aria-describedby={saveWaits ? waitHintId : undefined}
-                    onClick={() => {
-                        if (!saveWaits) onSave();
-                    }}
-                    disabled={saving}
-                >
-                    {saving && <span className="loading loading-spinner loading-xs" />}
-                    {t('app.photoChooserUse')}
-                </button>
-                <button type="button" className="btn btn-warning btn-sm" onClick={onClear}>
-                    {t('app.photosClear')}
-                </button>
-                <button type="button" className="btn btn-outline btn-sm" onClick={onClose}>
-                    {t('app.cancel')}
-                </button>
-            </div>
-        </>
-    );
-}
 
 /**
  * The modal's body. Mounted only while the modal is open, so every opening
@@ -447,18 +378,12 @@ function PhotoChooserBody({
     const { t } = useTranslation();
     const owner = useChosenPhotosOwner();
     const [selected, setSelected] = useState<string[]>(value);
-    const { state, known, load, retry } = useLibraryListing(challengeId);
-    const [searchText, setSearchText] = useState('');
+    const { state, known, load, retry, setMember } = useLibraryListing(challengeId);
     const [listsRemoved, setListsRemoved] = useState(false);
 
     const toggle = useCallback((id: string) => {
         setSelected((prev) => (prev.includes(id) ? prev.filter((other) => other !== id) : [...prev, id]));
     }, []);
-
-    const submitSearch = (event: { preventDefault: () => void }) => {
-        event.preventDefault();
-        void load(searchText.trim());
-    };
 
     const { save, saving, saveFailed } = useChooserSave(selected, onSave, onClose);
 
@@ -476,7 +401,9 @@ function PhotoChooserBody({
         owner,
         state,
         reloadSaved,
+        confirmAccount,
         retryListing: retry,
+        onMember: setMember,
         onRead: setSelected,
     });
     // Until the list is read the tiles are inert: a late read would otherwise overwrite what was picked.
@@ -498,19 +425,7 @@ function PhotoChooserBody({
                     <p className="text-xs">{interp(t('app.chosenPhotosOtherAccountCount'), { count: savedCount })}</p>
                 </>
             )}
-            <form className="flex flex-wrap items-center gap-2" onSubmit={submitSearch}>
-                <input
-                    type="search"
-                    className="input input-sm min-w-40 flex-1"
-                    aria-label={t('app.photoChooserSearchLabel')}
-                    placeholder={t('app.photoChooserSearchPlaceholder')}
-                    value={searchText}
-                    onChange={(event) => setSearchText(event.currentTarget.value)}
-                />
-                <button type="submit" className="btn btn-outline btn-sm">
-                    {t('app.photoChooserSearch')}
-                </button>
-            </form>
+            <SearchForm onSearch={(term) => void load(term)} />
             <p className="text-xs" role="status">
                 {interp(t('app.photoChooserCount'), { count: selected.length, max: MAX_CHOSEN_PHOTOS })}
                 {atCap && ` ${t('app.photoChooserLimitReached')}`}
@@ -527,7 +442,9 @@ function PhotoChooserBody({
             <ChooserFooter
                 saveFailed={saveFailed}
                 saveWaits={saveWaits}
-                holdReason={saved.status === 'unconfirmed' ? 'unconfirmed' : state.status}
+                holdReason={holdReasonOf(saved, state.status)}
+                retrying={saved.busy}
+                locked={locked}
                 onRetryHold={saved.retry}
                 saving={saving}
                 onSave={save}

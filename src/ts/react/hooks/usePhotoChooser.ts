@@ -68,7 +68,16 @@ export function useLibraryListing(challengeId: string | number | null) {
         };
     }, [load]);
 
-    return { state, known, load, retry: () => void load(lastSearchRef.current) };
+    // A member the listing could not name but a later check did: put it in the listing on screen,
+    // without reading the library again.
+    const setMember = useCallback((memberId: string) => {
+        rememberCurrentMember(memberId);
+        setState((prev) =>
+            prev.status === 'ready' ? { status: 'ready', listing: { ...prev.listing, memberId } } : prev,
+        );
+    }, []);
+
+    return { state, known, load, setMember, retry: () => void load(lastSearchRef.current) };
 }
 
 /**
@@ -116,7 +125,79 @@ export function useOtherAccountLists({
  * list, which the notice covers), `pending` (the listing or the read is still on its way) or
  * `unconfirmed` (the listing is ready but the list's account could not be confirmed, so Retry).
  */
-export type SavedListStatus = 'ok' | 'pending' | 'unconfirmed';
+type SavedListStatus = 'ok' | 'pending' | 'unconfirmed';
+
+/**
+ * The read itself: once the listing shows the saved list is this account's (`ownersList`),
+ * `reloadSaved` asks for it and `onRead` gets its ids. A read that gives nothing or rejects is
+ * `failed` for that listing; a new listing is not a failed one, so it reads as pending at once
+ * instead of flashing the unconfirmed state for a paint, and is read again. `again` retries.
+ * `onSettled` runs when a read ends, either way.
+ */
+function useSavedListRead({
+    ownersList,
+    state,
+    reloadSaved,
+    onRead,
+    onSettled,
+}: {
+    ownersList: boolean;
+    state: ListState;
+    reloadSaved?: () => Promise<string[] | null>;
+    onRead: (ids: string[]) => void;
+    onSettled: () => void;
+}) {
+    const [reloaded, setReloaded] = useState(false);
+    const [failedAt, setFailedAt] = useState<ListState | null>(null);
+    const [attempt, setAttempt] = useState(0);
+    const inFlight = useRef(false);
+    const latestState = useRef(state);
+    latestState.current = state;
+    useEffect(() => {
+        if (!ownersList || reloaded || !reloadSaved || inFlight.current) return;
+        inFlight.current = true;
+        const finish = (ids: string[] | null) => {
+            inFlight.current = false;
+            onSettled();
+            if (ids === null) {
+                setFailedAt(latestState.current);
+                return;
+            }
+            onRead(ids);
+            setReloaded(true);
+        };
+        reloadSaved().then(finish, () => finish(null));
+    }, [ownersList, reloaded, reloadSaved, onRead, onSettled, attempt, state]);
+    const again = () => {
+        setFailedAt(null);
+        setAttempt((count) => count + 1);
+    };
+    return { reloaded, failed: failedAt === state, again };
+}
+
+/**
+ * See SavedListStatus: asks the account check again (`confirmAccount`: the member only, never the
+ * library), putting a member it finds into the listing on screen (`onMember`) and flagging a
+ * failure (`setCheckFailed`); `setBusy(false)` once it has answered.
+ */
+function checkAccount({
+    confirmAccount,
+    onMember,
+    setBusy,
+    setCheckFailed,
+}: {
+    confirmAccount: () => Promise<string | null>;
+    onMember: (memberId: string) => void;
+    setBusy: (busy: boolean) => void;
+    setCheckFailed: (failed: boolean) => void;
+}) {
+    const done = (id: string | null) => {
+        setBusy(false);
+        if (id === null) setCheckFailed(true);
+        else onMember(id);
+    };
+    confirmAccount().then(done, () => done(null));
+}
 
 /**
  * A saved list can come without its ids (the main process withholds them until it knows whose
@@ -129,59 +210,55 @@ export type SavedListStatus = 'ok' | 'pending' | 'unconfirmed';
  * While the status is not `ok` Save is held back — an empty or partial selection would replace the
  * user's own list — and the tiles are inert, so a late read cannot overwrite what was picked. A
  * listing that is ready but cannot say who is signed in (the member lookup failed), or a read that
- * fails or rejects, ends in `unconfirmed`, and `retry` asks again: the listing in the first case,
- * the read in the other.
+ * fails or rejects, ends in `unconfirmed`, and `retry` asks again. For an unknown member that is
+ * `confirmAccount` (the member only, never the library again), whose answer goes into the listing
+ * on screen through `onMember`; if it fails again `checkFailed` says so. For a failed read it is
+ * the read. `busy` is true from the press until the answer, and `checking` while a read for a
+ * ready listing is on its way.
  */
 export function useSavedListReread({
     withheld,
     owner,
     state,
     reloadSaved,
+    confirmAccount,
     retryListing,
+    onMember,
     onRead,
 }: {
     withheld: boolean;
     owner: string;
     state: ListState;
     reloadSaved?: () => Promise<string[] | null>;
+    confirmAccount: () => Promise<string | null>;
     retryListing: () => void;
+    onMember: (memberId: string) => void;
     onRead: (ids: string[]) => void;
-}): { status: SavedListStatus; retry: () => void } {
-    const [reloaded, setReloaded] = useState(false);
-    const [phase, setPhase] = useState<'idle' | 'reading' | 'failed'>('idle');
-    const [attempt, setAttempt] = useState(0);
-    const inFlight = useRef(false);
+}) {
+    const [busy, setBusy] = useState(false);
+    const [checkFailed, setCheckFailed] = useState(false);
     const memberId = state.status === 'ready' ? state.listing.memberId : null;
     const ownersList = withheld && owner !== '' && memberId === owner;
-    useEffect(() => {
-        if (!ownersList || reloaded || !reloadSaved || inFlight.current) return;
-        inFlight.current = true;
-        setPhase('reading');
-        const finish = (ids: string[] | null) => {
-            inFlight.current = false;
-            if (ids === null) {
-                setPhase('failed');
-                return;
-            }
-            onRead(ids);
-            setReloaded(true);
-            setPhase('idle');
-        };
-        reloadSaved().then(finish, () => finish(null));
-    }, [ownersList, reloaded, reloadSaved, onRead, attempt]);
+    const onSettled = useCallback(() => setBusy(false), []);
+    const read = useSavedListRead({ ownersList, state, reloadSaved, onRead, onSettled });
 
     const otherAccount = memberId !== null && owner !== '' && memberId !== owner;
-    const unread = withheld && !reloaded && !otherAccount;
-    const waiting = state.status !== 'ready' || (ownersList && !!reloadSaved && phase !== 'failed');
+    const unread = withheld && !read.reloaded && !otherAccount;
+    const waiting = state.status !== 'ready' || (ownersList && !!reloadSaved && !read.failed);
     const status: SavedListStatus = !unread ? 'ok' : waiting ? 'pending' : 'unconfirmed';
-    // The listing could not say who is signed in: ask it again. Otherwise the read itself failed.
+
     const retry = () => {
-        if (ownersList) {
-            setPhase('idle');
-            setAttempt((count) => count + 1);
+        if (busy) return;
+        setCheckFailed(false);
+        if (ownersList && reloadSaved) {
+            setBusy(true);
+            read.again();
+        } else if (memberId === null) {
+            setBusy(true);
+            checkAccount({ confirmAccount, onMember, setBusy, setCheckFailed });
         } else retryListing();
     };
-    return { status, retry };
+    return { status, retry, busy, checkFailed, checking: status === 'pending' && state.status === 'ready' };
 }
 
 /**

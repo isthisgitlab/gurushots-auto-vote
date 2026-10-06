@@ -5,6 +5,7 @@ import * as logger from '../../logger';
 import * as apiFactory from '../../apiFactory';
 import * as auth from '../../services/auth';
 import { isAutoJoinActive } from '../../services/joinChallenges';
+import { forgetFailedMemberId, resolveMemberId } from '../../services/autoFill';
 import { chosenAnnotator, annotateOpenIds, MAX_ANNOTATED_IDS } from './chosenAnnotations';
 import { rememberOpenChallenges } from '../../services/openChallengeCache';
 import { getAutoClaimStatus } from '../../services/autoClaim';
@@ -163,6 +164,31 @@ const handleGetOpenChosenAnnotations = (async (event: unknown, ids: Array<string
     }
 }) satisfies IpcReplyFn;
 
+// The user's explicit "check the account again" (the chooser's Retry when it could not tell whose
+// account the saved list belongs to). It evicts the cached failed identity lookup for this token and
+// resolves the member only: no library walk, so a retry costs one profile request and repeats
+// nothing the listing on screen already read. `memberId` is the signed-in account, or the check
+// failed (`account-check-failed`) and may be tried again shortly.
+const handleConfirmAccount = (async () => {
+    try {
+        const guard = auth.requireAuthToken('account check');
+        if (!guard.ok) return guard.response;
+        forgetFailedMemberId(guard.token);
+        const memberId = await resolveMemberId(
+            guard.token,
+            apiFactory.getApiStrategy().getCurrentMemberProfile,
+            logger,
+            'join',
+        );
+        return memberId === null
+            ? { success: false as const, error: 'account-check-failed' as const }
+            : { success: true as const, memberId };
+    } catch (error) {
+        logger.withCategory('join').error('Error handling confirm-account request:', error);
+        return errorResult(error, 'Failed to check the account');
+    }
+}) satisfies IpcReplyFn;
+
 // Manual single join. Paid joins require spendCoins:true — otherwise the
 // service returns status 'needs-confirm' and nothing is charged. The
 // service re-fetches the live candidate and holds a shared in-flight lock,
@@ -206,5 +232,6 @@ export {
     handleGetAutoJoinActive,
     handleGetMemberChallenges,
     handleGetOpenChosenAnnotations,
+    handleConfirmAccount,
     handleJoinChallenge,
 };
