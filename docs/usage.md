@@ -113,6 +113,7 @@ When `autoBoost` is on, the app applies an available boost to the entry at `boos
 - **Timer-based boost** — applied once the boost has `boostTime` seconds or less left on its own timer.
 - **Key-unlocked boost** (no timer) — `boostTime` doesn't apply, because there is no timer to count down. It uses its own `keyUnlockedBoostTime` window (default 15 min) measured against the challenge's close time. Since a key-unlocked boost never expires, the default spends it as late as possible for maximum effect.
 - **Fresh-photo wait** — a boost spent on a photo the moment it enters the challenge gets few votes, so a due boost is held until the photo it will land on has been in the challenge `boostFreshEntryWait` (default 3 min), then applied on the next cycle, which the scheduler lands on that instant. The time is counted from when the app first saw the photo: its own submit, or the first poll after one you entered yourself. A boost is never held past its own deadline — if the wait would not end a minute before the boost's timer runs out (timer boost) or the challenge closes (key-unlocked), it is applied straight away. `0` turns the wait off.
+- **Boost before sleep** — in the desktop app, a boost due within 30 min goes out right away when the computer goes to sleep while auto-vote is running (cutting short the fresh-photo wait), because a sleeping computer cannot reach the API and the boost could be lost. Turn `boostOnSleep` off to keep every boost at its set time.
 
 ### Turbo (earn, then apply)
 
@@ -305,6 +306,7 @@ All of these support per-challenge overrides except where noted.
 | `keyUnlockedBoostTime` | `900` s (15m) | ≥ 0            | Separate window for a **key-unlocked** boost, which has no timer of its own — measured against the challenge close time. `boostTime` does not apply to these. `0` = never auto-apply. Entered as h+m in the GUI. |
 | `boostImageIndex`      | `1`           | `0`–`4`        | Entry slot to boost (1 = first, `0` = last; a challenge holds at most 4 entries). Steps back if that slot is already turboed.                                                                                    |
 | `boostFreshEntryWait`  | `180` s (3m)  | ≥ 0            | Hold a due boost until the photo it lands on has been in the challenge this long. Never holds past the boost's own deadline. `0` = boost straight away. Entered as h+m in the GUI.                               |
+| `boostOnSleep`         | `true`        | bool           | Desktop app: when the computer goes to sleep while auto-vote runs, send a boost due within 30 min right away (cutting short `boostFreshEntryWait`). `false` = keep it at its set time, even if that loses it.    |
 | `boostFillNew`         | `false`       | bool           | Submit a fresh photo and boost that new entry once `boostFreshEntryWait` has passed.                                                                                                                             |
 
 **Turbo**

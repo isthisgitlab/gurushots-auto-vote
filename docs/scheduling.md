@@ -311,7 +311,9 @@ Deliberate semantics and caveats:
       unconfirmed result is logged as such. A new photo is never submitted
       for it, and a fresh-entry hold (`boostFreshEntryWait`) is overridden —
       the device cannot come back to finish the wait, and a hold never
-      outlasts the Boost's deadline.
+      outlasts the Boost's deadline. The per-challenge `boostOnSleep`
+      setting (default on) turns this off for a challenge: its boost then
+      stays at its set time, and the quit guard still counts it.
 
     Two sharp edges in that `onSettingsChanged` wiring, both already handled
     in `index.ts` — keep them handled:

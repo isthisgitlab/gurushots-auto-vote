@@ -21,6 +21,10 @@
  * the device cannot come back to finish the wait, and a hold never outlasts the
  * Boost's deadline.
  *
+ * The per-challenge `boostOnSleep` setting (Boost Before Sleep) is filtered here,
+ * not in imminentBoostChallenges: a challenge with it off is left to its set time
+ * on sleep, but the quit guard still counts its boost as imminent.
+ *
  * Known race: a voting pass already running can boost the same challenge at the
  * same moment; the second POST is rejected, which "not confirmed" keeps from
  * reading as an error. The remembered list is refreshed after each successful
@@ -83,10 +87,21 @@ const applyImminentBoostsOnSuspend = async ({
             }
             return;
         }
-        const selected = imminentBoostChallenges(now, describeDeadlineActions, SUSPEND_BOOST_HORIZON_SEC);
+        const boostLog = logger.withCategory('boost');
+        const imminent = imminentBoostChallenges(now, describeDeadlineActions, SUSPEND_BOOST_HORIZON_SEC);
+        const selected: typeof imminent = [];
+        for (const entry of imminent) {
+            if (settings.getEffectiveSetting('boostOnSleep', entry.challenge.id.toString())) {
+                selected.push(entry);
+            } else {
+                boostLog.info(
+                    `Boost Before Sleep is off for ${logger.challengeTag(entry.challenge)} — boost left for its set time`,
+                    null,
+                );
+            }
+        }
         if (selected.length === 0) return;
 
-        const boostLog = logger.withCategory('boost');
         for (const { challenge, dueAt } of selected) {
             const tag = logger.challengeTag(challenge);
             boostLog.info(

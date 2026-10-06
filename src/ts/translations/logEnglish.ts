@@ -660,6 +660,7 @@ export const logMessages = {
     mf8c3523b4364: '❌ No token found for manual voting',
     mf8cf09af259e: 'Second instance launch blocked — focusing existing window.',
     mf933d286914f: 'Swap in "{0}": {1} → {2}',
+    mfa22631f6e63: 'Boost Before Sleep is off for {0} — boost left for its set time',
     mfa889dafc121:
         'autoFill: live re-check shows {0} already has {1} entries (target {2}) — an entry was added outside this run (e.g. a manual submission); standing down',
     mfaa99a6ba891:

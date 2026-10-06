@@ -157,17 +157,20 @@ export const app = {
     autoJoinBadgeTitle: 'Auto-join runs each voting cycle while autovote is on. Configure it in Settings › Auto Join.',
     boostTime: 'Boost Time',
     boostTimeDesc:
-        'Apply Boost when this much time is left on the Boost’s own timer. Does not apply to a key-unlocked Boost, which has no timer — that one uses Key-Unlocked Boost Time. Desktop app: if the computer goes to sleep while auto-vote is running, a boost due within 30 min is applied right away.',
+        'Apply Boost when this much time is left on the Boost’s own timer. Does not apply to a key-unlocked Boost, which has no timer — that one uses Key-Unlocked Boost Time. Desktop app: if the computer goes to sleep while auto-vote is running, a boost due within 30 min is applied right away, unless Boost Before Sleep is off.',
     boostTimeHelp:
         'This is a timer measured as time-before-close. Set it to 0 to turn timed Boost off — the bot will not auto-apply a timer Boost at all. Note 0 means "off" here, unlike the Exposure Target settings where 0 means "follow the trigger". Only affects a Boost that has its own countdown; a key-unlocked Boost uses Key-Unlocked Boost Time instead.',
     keyUnlockedBoostTime: 'Key-Unlocked Boost Time',
     keyUnlockedBoostTimeDesc:
-        'Separate window for a key-unlocked Boost — one with no timer of its own. Because it never expires, it is applied only when this much time remains before the challenge closes, so it lands as late as possible. Boost Time does not apply to these. Set to 0 to never auto-apply it. Desktop app: if the computer goes to sleep while auto-vote is running, a boost due within 30 min is applied right away.',
+        'Separate window for a key-unlocked Boost — one with no timer of its own. Because it never expires, it is applied only when this much time remains before the challenge closes, so it lands as late as possible. Boost Time does not apply to these. Set to 0 to never auto-apply it. Desktop app: if the computer goes to sleep while auto-vote is running, a boost due within 30 min is applied right away, unless Boost Before Sleep is off.',
     keyUnlockedBoostTimeHelp:
         'Applies only to a key-unlocked Boost (one with no timer of its own). Set to 0 to never auto-apply it. This is a separate clock from Boost Time — the two never substitute for each other. As with the other time settings, 0 means "off".',
     boostFreshEntryWait: 'Wait Before Boosting a New Photo',
     boostFreshEntryWaitDesc:
-        'A Boost is held until the photo it will land on has been in the challenge this long, because boosting a photo the moment it is entered wastes most of the Boost. With "Boost a Freshly Submitted Photo" on, the photo is submitted first and boosted once this time has passed. Never holds a Boost past its own deadline. Set to 0 to boost straight away. Desktop app: the wait is cut short if the computer goes to sleep while a boost is due, so the boost is not lost.',
+        'A Boost is held until the photo it will land on has been in the challenge this long, because boosting a photo the moment it is entered wastes most of the Boost. With "Boost a Freshly Submitted Photo" on, the photo is submitted first and boosted once this time has passed. Never holds a Boost past its own deadline. Set to 0 to boost straight away. Desktop app: the wait is cut short if the computer goes to sleep while a boost is due, so the boost is not lost, unless Boost Before Sleep is off.',
+    boostOnSleep: 'Boost Before Sleep',
+    boostOnSleepDesc:
+        'Desktop app: if the computer goes to sleep while auto-vote is running, a boost due within 30 min is applied right away, so it is not lost while the computer sleeps. This also cuts short Wait Before Boosting a New Photo. Turn off to keep the boost at its set time, even if that means losing it.',
     voteBeforeBoost: 'Fill Exposure Before Boost',
     voteBeforeBoostDesc:
         'Vote this challenge up to 100% exposure for a short window before Boost is auto-applied, so the Boost lands on a fully exposed entry instead of a decayed one.',

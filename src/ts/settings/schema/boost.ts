@@ -89,6 +89,19 @@ export const boostSettings = {
         label: 'app.boostFreshEntryWait',
         description: 'app.boostFreshEntryWaitDesc',
     },
+    // Desktop app only: when the computer goes to sleep while auto-vote runs, a boost due
+    // within 30 min is sent right away (windows/suspendBoost.ts). Off keeps the boost at its
+    // set time.
+    boostOnSleep: {
+        type: 'boolean',
+        default: true,
+        perChallenge: true,
+        validation: zBool,
+        validationOrder: 1,
+        group: 'boost',
+        label: 'app.boostOnSleep',
+        description: 'app.boostOnSleepDesc',
+    },
     boostImageIndex: {
         ...entrySlotSetting(1),
         group: 'boost',

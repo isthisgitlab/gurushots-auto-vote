@@ -160,17 +160,20 @@ export const app = {
         'Automātiskā pievienošanās darbojas katrā balsošanas ciklā, kamēr ieslēgta automātiskā balsošana. To var pielāgot sadaļā Uzstādījumi › Automātiskā pievienošanās.',
     boostTime: 'Boost laiks',
     boostTimeDesc:
-        'Izmanto Boost, kad Boost laika atskaitē ir atlicis šis laiks. Neattiecas uz Boost, kas atbloķēts ar atslēgu, — tam nav laika atskaites, un tam ir atsevišķs uzstādījums „Boost laiks (atbloķēts ar atslēgu)”. Darbvirsmas lietotnē: ja dators pāriet miega režīmā, kamēr darbojas automātiskā balsošana, Boost, kuru būtu jāizmanto tuvāko 30 minūšu laikā, tiek izmantots uzreiz.',
+        'Izmanto Boost, kad Boost laika atskaitē ir atlicis šis laiks. Neattiecas uz Boost, kas atbloķēts ar atslēgu, — tam nav laika atskaites, un tam ir atsevišķs uzstādījums „Boost laiks (atbloķēts ar atslēgu)”. Darbvirsmas lietotnē: ja dators pāriet miega režīmā, kamēr darbojas automātiskā balsošana, Boost, kuru būtu jāizmanto tuvāko 30 minūšu laikā, tiek izmantots uzreiz, ja vien „Boost pirms miega” nav izslēgts.',
     boostTimeHelp:
         'Šis ir laiks, kas atlicis līdz Boost loga beigām. Uzstādi 0, lai izslēgtu Boost izmantošanu pēc laika, — tad lietotne Boost ar laika atskaiti automātiski neizmantos vispār. Ņem vērā: šeit 0 nozīmē „izslēgts” atšķirībā no redzamības mērķa uzstādījumiem, kur 0 nozīmē „sekot slieksnim”. Attiecas tikai uz Boost ar savu laika atskaiti; Boost, kas atbloķēts ar atslēgu, izmanto uzstādījumu „Boost laiks (atbloķēts ar atslēgu)”.',
     keyUnlockedBoostTime: 'Boost laiks (atbloķēts ar atslēgu)',
     keyUnlockedBoostTimeDesc:
-        'Atsevišķs logs Boost, kas atbloķēts ar atslēgu, — tam nav savas laika atskaites. Tā kā tas nekad nebeidzas, lietotne to izmanto tikai tad, kad līdz izaicinājuma beigām atlicis šis laiks, lai tas nostrādātu pēc iespējas vēlāk. Uzstādījums „Boost laiks” uz tiem neattiecas. 0 = izslēgts. Darbvirsmas lietotnē: ja dators pāriet miega režīmā, kamēr darbojas automātiskā balsošana, Boost, kuru būtu jāizmanto tuvāko 30 minūšu laikā, tiek izmantots uzreiz.',
+        'Atsevišķs logs Boost, kas atbloķēts ar atslēgu, — tam nav savas laika atskaites. Tā kā tas nekad nebeidzas, lietotne to izmanto tikai tad, kad līdz izaicinājuma beigām atlicis šis laiks, lai tas nostrādātu pēc iespējas vēlāk. Uzstādījums „Boost laiks” uz tiem neattiecas. 0 = izslēgts. Darbvirsmas lietotnē: ja dators pāriet miega režīmā, kamēr darbojas automātiskā balsošana, Boost, kuru būtu jāizmanto tuvāko 30 minūšu laikā, tiek izmantots uzreiz, ja vien „Boost pirms miega” nav izslēgts.',
     keyUnlockedBoostTimeHelp:
         'Attiecas tikai uz Boost, kas atbloķēts ar atslēgu (bez savas laika atskaites). Uzstādi 0, lai lietotne to nekad neizmantotu automātiski. Šis laiks nav saistīts ar „Boost laiks” — viens otru tie neaizstāj. Tāpat kā citos laika uzstādījumos, 0 nozīmē „izslēgts”.',
     boostFreshEntryWait: 'Gaidīt pirms Boost jaunam foto',
     boostFreshEntryWaitDesc:
-        'Lietotne aiztur Boost, līdz foto, kuram tas paredzēts, ir izaicinājumā vismaz šo laiku, jo Boost uzreiz pēc foto iesniegšanas lielākoties aiziet zudumā. Ja ieslēgts „Boost jaunam iesniegtam foto”, lietotne vispirms iesniedz foto un izmanto Boost, kad šis laiks pagājis. Boost nekad netiek aizturēts ilgāk par tā termiņu. 0 = Boost uzreiz. Darbvirsmas lietotnē: ja dators pāriet miega režīmā, kamēr Boost ir jāizmanto, gaidīšana tiek izlaista, lai Boost neaizietu zudumā.',
+        'Lietotne aiztur Boost, līdz foto, kuram tas paredzēts, ir izaicinājumā vismaz šo laiku, jo Boost uzreiz pēc foto iesniegšanas lielākoties aiziet zudumā. Ja ieslēgts „Boost jaunam iesniegtam foto”, lietotne vispirms iesniedz foto un izmanto Boost, kad šis laiks pagājis. Boost nekad netiek aizturēts ilgāk par tā termiņu. 0 = Boost uzreiz. Darbvirsmas lietotnē: ja dators pāriet miega režīmā, kamēr Boost ir jāizmanto, gaidīšana tiek izlaista, lai Boost neaizietu zudumā, ja vien „Boost pirms miega” nav izslēgts.',
+    boostOnSleep: 'Boost pirms miega',
+    boostOnSleepDesc:
+        'Darbvirsmas lietotnē: ja dators pāriet miega režīmā, kamēr darbojas automātiskā balsošana, Boost, kuru būtu jāizmanto tuvāko 30 minūšu laikā, tiek izmantots uzreiz, lai tas neaizietu zudumā, kamēr dators guļ. Tas arī saīsina „Gaidīt pirms Boost jaunam foto”. Izslēdz, lai Boost paliktu savā laikā, pat ja tas var aiziet zudumā.',
     voteBeforeBoost: 'Uzpildīt redzamību pirms Boost',
     voteBeforeBoostDesc:
         'Īsi pirms automātiskās Boost izmantošanas nobalso šajā izaicinājumā līdz 100 % redzamībai, lai Boost nostrādātu uz pilnībā redzama foto, nevis uz tāda, kura redzamība jau sarukusi.',

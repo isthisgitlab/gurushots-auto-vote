@@ -42,6 +42,7 @@ describe('settings schema shape', () => {
             'voteBeforeBoostLeadMin',
             'keyUnlockedBoostTime',
             'boostFreshEntryWait',
+            'boostOnSleep',
             'boostImageIndex',
             'boostFillNew',
             'boostFillNewOnConflict',
@@ -122,5 +123,10 @@ describe('settings schema shape', () => {
             'autovoteRunning',
             'skipUpdateVersion',
         ]);
+    });
+
+    test('Boost Before Sleep is on by default and settable per challenge', () => {
+        expect(SETTINGS_SCHEMA.boostOnSleep.default).toBe(true);
+        expect(SETTINGS_SCHEMA.boostOnSleep.perChallenge).toBe(true);
     });
 });

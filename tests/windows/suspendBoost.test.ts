@@ -25,7 +25,11 @@ jest.mock('../../src/ts/logger', () => {
         cat,
     };
 });
-jest.mock('../../src/ts/settings', () => ({ loadSettings: jest.fn(), getSetting: jest.fn() }));
+jest.mock('../../src/ts/settings', () => ({
+    loadSettings: jest.fn(),
+    getSetting: jest.fn(),
+    getEffectiveSetting: jest.fn(),
+}));
 jest.mock('../../src/ts/apiFactory', () => ({ getApiStrategy: jest.fn() }));
 jest.mock('../../src/ts/services/VotingLogic', () => ({ describeDeadlineActions: jest.fn() }));
 
@@ -80,6 +84,7 @@ beforeEach(() => {
     );
     apiFactory.getApiStrategy.mockReturnValue(invalid({ applyBoostsOnSuspend }));
     settings.getSetting.mockImplementation((key) => key === 'autovoteRunning');
+    settings.getEffectiveSetting.mockReturnValue(true);
     settings.loadSettings.mockReturnValue(invalid({ token: TOKEN, mock: false }));
     guard.rememberChallenges([boostChallenge(1, 'One'), boostChallenge(2, 'Two'), boostChallenge(3, 'Three')], false);
 });
@@ -154,6 +159,40 @@ describe('applyImminentBoostsOnSuspend — no-ops', () => {
         guard.rememberChallenges([soon], false);
         await suspend.applyImminentBoostsOnSuspend();
         expect(applyBoostsOnSuspend).toHaveBeenCalledWith([soon], TOKEN);
+    });
+});
+
+describe('applyImminentBoostsOnSuspend — Boost Before Sleep setting', () => {
+    test('off for every challenge sends nothing and logs each one', async () => {
+        settings.getEffectiveSetting.mockReturnValue(false);
+        await run();
+        expect(applyBoostsOnSuspend).not.toHaveBeenCalled();
+        expect(cat.info.mock.calls.map(([message]) => message)).toEqual([
+            'Boost Before Sleep is off for [Challenge 1: One] — boost left for its set time',
+            'Boost Before Sleep is off for [Challenge 2: Two] — boost left for its set time',
+        ]);
+    });
+
+    test('off for one challenge withholds only that one and credits results to the rest', async () => {
+        settings.getEffectiveSetting.mockImplementation((key, id) => key !== 'boostOnSleep' || id !== '1');
+        await run();
+        expect(applyBoostsOnSuspend.mock.calls[0][0].map((c) => c.id)).toEqual([2]);
+        const messages = cat.info.mock.calls.map(([message]) => message);
+        expect(messages).toContain('Boost Before Sleep is off for [Challenge 1: One] — boost left for its set time');
+        expect(messages).not.toContain(
+            'Boost Before Sleep is off for [Challenge 2: Two] — boost left for its set time',
+        );
+        expect(messages.filter((m) => m.startsWith('Device is going to sleep'))).toEqual([
+            'Device is going to sleep — trying to boost [Challenge 2: Two] now, 30m before it was due',
+        ]);
+        // Challenge 2 landed and was marked applied; challenge 1 was never sent, so it is still open.
+        expect(guard.imminentBoostChallenges(NOW, describe_, 1800).map((b) => b.challenge.id)).toEqual([1]);
+    });
+
+    test('the setting is read with the challenge id', async () => {
+        await run();
+        expect(settings.getEffectiveSetting).toHaveBeenCalledWith('boostOnSleep', '1');
+        expect(settings.getEffectiveSetting).toHaveBeenCalledWith('boostOnSleep', '2');
     });
 });
 

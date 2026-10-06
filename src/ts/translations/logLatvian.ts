@@ -675,6 +675,7 @@ export const logMessages = {
     mf8c3523b4364: '❌ Manuālai balsošanai nav atrasts pieteikšanās tokens',
     mf8cf09af259e: 'Otrās instances palaišana bloķēta — fokusē esošo logu.',
     mf933d286914f: 'Apmaiņa izaicinājumā "{0}": {1} → {2}',
+    mfa22631f6e63: 'Boost pirms miega ir izslēgts izaicinājumam {0} — Boost paliek savā laikā',
     mfa889dafc121:
         'Automātiskā iesniegšana: atkārtotā pārbaude rāda, ka izaicinājumā {0} jau ir {1} foto (mērķis: {2}) — ārpus šī cikla pievienots foto (piemēram, iesniegts manuāli); darbību neturpina',
     mfaa99a6ba891:
