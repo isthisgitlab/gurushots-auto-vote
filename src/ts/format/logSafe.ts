@@ -24,6 +24,24 @@ import { errorMessage } from '../errorMessage';
  */
 const oneLine = (value: unknown): string => String(value).replace(/[\r\n\v\f\u0085\u2028\u2029]+/g, ' ');
 
+// An ANSI escape sequence (CSI "ESC [ … final", or OSC "ESC ] … BEL/ST"). Built
+// from the ESC code point rather than written as a literal, so the pattern
+// holds no control character.
+const ESC = String.fromCharCode(27);
+const ANSI_SEQUENCE = new RegExp(`${ESC}(?:\\[[0-?]*[ -/]*[@-~]|\\][^\\u0007${ESC}]*(?:\\u0007|${ESC}\\\\)?)`, 'g');
+
+/**
+ * Text from an untrusted source made safe to print to a terminal: ANSI
+ * sequences are removed whole, line breaks and tabs become a space, and any
+ * other control character (the C1 range included) is dropped, so the value can
+ * neither drive the terminal nor forge extra output lines.
+ */
+const stripTerminalControl = (value: unknown): string =>
+    String(value)
+        .replace(ANSI_SEQUENCE, '')
+        .replace(/[\t\r\n\v\f\u0085\u2028\u2029]+/g, ' ')
+        .replace(/\p{Cc}/gu, '');
+
 /** Sentence-case a log's first word, including after a logger icon. */
 const sentenceCaseLogMessage = (message: string): string => {
     const challenge = /^((?:[\p{Extended_Pictographic}\uFE0F\u200D]+\s+)*)(\[Challenge [^\]]+\]\s+)(.+)$/u.exec(
@@ -55,4 +73,4 @@ const sentenceCaseLogMessage = (message: string): string => {
  */
 const failureText = (error: unknown): string => errorMessage(error) || String(error ?? '') || 'unknown error';
 
-export { oneLine, failureText, sentenceCaseLogMessage };
+export { oneLine, failureText, stripTerminalControl, sentenceCaseLogMessage };

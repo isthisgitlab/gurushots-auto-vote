@@ -244,20 +244,8 @@ const selectEnrichmentSet = (scored: ScoredCandidate[], slotsToFill: number): Pi
     return contested.length <= 1 ? [] : contested.map((entry) => entry.photo);
 };
 
-/**
- * Sort scored candidates and take the top `slotsToFill` ids.
- *
- * Match tiers first, popularity tiers last. Because every match tier is
- * non-negative, a photo that matched on ANY of them cannot be overtaken by a
- * photo that matched on none — the popularity tiers below are only ever
- * reached by photos that tied, which for an unmatched photo means tied at
- * zero. That is the governing rule ("a theme match always beats popularity")
- * and it is enforced by this ordering, so do not reorder these.
- */
-const finalizePick = (scored: ScoredCandidate[], slotsToFill: number): Array<string> => {
-    if (!Array.isArray(scored) || scored.length === 0) return [];
-    if (!Number.isInteger(slotsToFill) || slotsToFill <= 0) return [];
-    const ranked = scored.slice().sort((a, b) => {
+const rankByTiers = (scored: ScoredCandidate[]): ScoredCandidate[] =>
+    scored.slice().sort((a, b) => {
         const theme = compareTheme(a, b);
         if (theme !== 0) return theme;
         // Known-stat photos outrank unknown-stat ones: an unenriched photo still
@@ -269,7 +257,60 @@ const finalizePick = (scored: ScoredCandidate[], slotsToFill: number): Array<str
         if (b.views !== a.views) return b.views - a.views;
         return b.uploadDate - a.uploadDate;
     });
-    return ranked.slice(0, slotsToFill).map((p) => p.id);
+
+/**
+ * Split a scored pool into the user's chosen block and the rest. A null
+ * `chosenIds` means no chosen photos: everything is "rest".
+ */
+const splitByChosen = (
+    scored: ScoredCandidate[],
+    chosenIds: ReadonlySet<string> | null,
+): { chosen: ScoredCandidate[]; rest: ScoredCandidate[] } => {
+    if (!chosenIds) return { chosen: [], rest: scored };
+    const chosen = scored.filter((entry) => chosenIds.has(String(entry.id)));
+    return { chosen, rest: scored.filter((entry) => !chosenIds.has(String(entry.id))) };
+};
+
+/**
+ * Sort scored candidates and take the top `slotsToFill` ids.
+ *
+ * Match tiers first, popularity tiers last. Because every match tier is
+ * non-negative, a photo that matched on ANY of them cannot be overtaken by a
+ * photo that matched on none — the popularity tiers below are only ever
+ * reached by photos that tied, which for an unmatched photo means tied at
+ * zero. That is the governing rule ("a theme match always beats popularity")
+ * and it is enforced by this ordering, so do not reorder these.
+ *
+ * With `chosenIds` the user's chosen block is ranked and taken first, then the
+ * rest tops up the remaining slots — each block by the same tiers, so a chosen
+ * photo is never ranked by anything but the scorer.
+ */
+const finalizePick = (
+    scored: ScoredCandidate[],
+    slotsToFill: number,
+    chosenIds: ReadonlySet<string> | null = null,
+): Array<string> => {
+    if (!Array.isArray(scored) || scored.length === 0) return [];
+    if (!Number.isInteger(slotsToFill) || slotsToFill <= 0) return [];
+    const { chosen, rest } = splitByChosen(scored, chosenIds);
+    return [...rankByTiers(chosen), ...rankByTiers(rest)].slice(0, slotsToFill).map((p) => p.id);
+};
+
+/**
+ * selectEnrichmentSet per block: the chosen block fills the first slots, the
+ * rest only the slots the chosen photos leave, and each block enriches just
+ * the candidates still competing for ITS last slot. A block that fills no slot
+ * (want - k = 0) enriches nothing.
+ */
+const selectBlockEnrichmentSet = (
+    scored: ScoredCandidate[],
+    slotsToFill: number,
+    chosenIds: ReadonlySet<string> | null,
+): PickerPhoto[] => {
+    if (!chosenIds) return selectEnrichmentSet(scored, slotsToFill);
+    const { chosen, rest } = splitByChosen(scored, chosenIds);
+    const chosenSlots = Math.min(chosen.length, slotsToFill);
+    return [...selectEnrichmentSet(chosen, chosenSlots), ...selectEnrichmentSet(rest, slotsToFill - chosenSlots)];
 };
 
 export {
@@ -283,5 +324,7 @@ export {
     uploadDateOf,
     hasThemeMatch,
     selectEnrichmentSet,
+    selectBlockEnrichmentSet,
+    splitByChosen,
     finalizePick,
 };

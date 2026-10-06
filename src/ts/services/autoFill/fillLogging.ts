@@ -4,7 +4,7 @@
  * rather than the theme decided a pick.
  */
 
-import { hasThemeMatch } from '../photoPicker';
+import { hasThemeMatch, splitByChosen } from '../photoPicker';
 import { oneLine } from '../../format/logSafe';
 
 import type { Challenge } from '../../types/gurushots';
@@ -18,6 +18,7 @@ const logSelectionDetails = ({
     scored,
     picked,
     contestedIds,
+    chosenIds,
     logger,
 }: {
     prefix: string;
@@ -25,13 +26,17 @@ const logSelectionDetails = ({
     scored: ScoredCandidate[];
     picked: string[];
     contestedIds: Set<string>;
+    chosenIds: ReadonlySet<string> | null;
     logger: FillLogger;
 }) => {
     const log = logger.withCategory('autoFill');
     for (const id of picked) {
         const entry = scored.find((candidate) => String(candidate.id) === String(id));
+        // The line says which photos the user chose, so "why did it submit THAT
+        // photo?" has an answer for a photo that was never ranked on merit alone.
+        const origin = chosenIds?.has(String(id)) ? ' (chosen by you)' : '';
         log.info(
-            `${prefix}: submitted photo ${oneLine(id)} selection details for ${logger.challengeTag(challenge)}`,
+            `${prefix}: submitted photo ${oneLine(id)}${origin} selection details for ${logger.challengeTag(challenge)}`,
             entry
                 ? {
                       candidateCount: scored.length,
@@ -235,4 +240,31 @@ const logPopularityPick = (
     );
 };
 
-export { describeSubmitFailure, makeFallbackLogger, logPopularityPick, logSelectionDetails };
+/**
+ * logPopularityPick for a pick that may hold the user's chosen photos: each
+ * block was enriched and tied on its own, so each is explained on its own.
+ */
+const logPopularityPicks = ({
+    label,
+    challenge,
+    scored,
+    chosenIds,
+    contestedIds,
+    picked,
+    logger,
+}: {
+    label: string;
+    challenge: Challenge;
+    scored: ScoredCandidate[];
+    chosenIds: ReadonlySet<string> | null;
+    contestedIds: Set<string>;
+    picked: string[];
+    logger: FillLogger;
+}) => {
+    const blocks = splitByChosen(scored, chosenIds);
+    for (const block of [blocks.chosen, blocks.rest]) {
+        logPopularityPick(label, challenge, block, contestedIds, picked, logger);
+    }
+};
+
+export { describeSubmitFailure, makeFallbackLogger, logPopularityPick, logPopularityPicks, logSelectionDetails };

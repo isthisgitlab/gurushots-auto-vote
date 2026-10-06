@@ -119,6 +119,7 @@ describe('import-scenario', () => {
                     { name: 'done', rules: 0, settings: [] },
                 ],
                 spending: [{ action: 'swap', phase: 'main', rule: 'Hold it' }],
+                flagged: [],
                 limits: { swaps: 3 },
                 ...overrides,
             },
@@ -134,6 +135,20 @@ describe('import-scenario', () => {
         expect(text()).toContain('Limits: 3 swaps');
         expect(text()).toContain('re-run: import-scenario plan.json --yes');
         expect(h['import-scenario']).not.toHaveBeenCalled();
+    });
+
+    test('the preview warns about chosen photos and Only by phase', async () => {
+        h['preview-scenario-import'].mockResolvedValue(
+            preview({
+                flagged: [
+                    { phase: 'main', key: 'chosenPhotos' },
+                    { phase: 'late', key: 'chosenPhotosOnly' },
+                ],
+            }),
+        );
+        await cmd.importScenarioCmd('plan.json');
+        expect(text('warning')).toContain('Phase main sets chosenPhotos');
+        expect(text('warning')).toContain('Phase late sets chosenPhotosOnly');
     });
 
     test('a scenario that spends nothing and replaces an existing one', async () => {
@@ -174,7 +189,7 @@ describe('import-scenario', () => {
 
 describe('export / rename / delete', () => {
     test('success paths', async () => {
-        h['export-scenario'].mockResolvedValue({ success: true, json: '{}\n' });
+        h['export-scenario'].mockResolvedValue({ success: true, json: '{}\n', omitted: [] });
         await expect(cmd.exportScenarioCmd('Plan', 'plan.json')).resolves.toBe(0);
         expect(fs.writeFileSync).toHaveBeenCalledWith('plan.json', '{}\n', 'utf8');
         h['rename-scenario'].mockResolvedValue({ success: true, name: 'New' });
@@ -182,6 +197,13 @@ describe('export / rename / delete', () => {
         h['delete-scenario'].mockResolvedValue({ success: true });
         await expect(cmd.deleteScenarioCmd('Plan')).resolves.toBe(0);
         expect(text('success')).toContain('Deleted "Plan"');
+    });
+
+    test('an export says which account-bound settings it left out', async () => {
+        h['export-scenario'].mockResolvedValue({ success: true, json: '{}\n', omitted: ['chosenPhotos'] });
+        await expect(cmd.exportScenarioCmd('Plan', 'plan.json')).resolves.toBe(0);
+        expect(text('warning')).toContain('Left out of the export (they belong to your account): chosenPhotos');
+        expect(fs.writeFileSync).toHaveBeenCalledWith('plan.json', '{}\n', 'utf8');
     });
 
     test('failures exit 1', async () => {

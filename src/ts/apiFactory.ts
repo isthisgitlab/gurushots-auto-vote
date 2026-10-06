@@ -25,7 +25,7 @@ import {
 import { getVoteImages, submitVotes } from './api/voting';
 import { applyBoostToEntry } from './api/boost';
 import { applyTurbo } from './api/turbo';
-import { getEligiblePhotos, getImageData, submitToChallenge } from './api/submissions';
+import { getEligiblePhotos, getEligiblePhotosWalk, getImageData, submitToChallenge } from './api/submissions';
 import { getMemberChallenges, getBankroll } from './api/join';
 import { getCurrentMemberProfile, searchTagAutocomplete } from './api/tags';
 import { keyUnlock, swapPhoto, exposureAutofill } from './api/currency';
@@ -43,6 +43,7 @@ const realApi = {
     applyBoostToEntry,
     applyTurbo,
     getEligiblePhotos,
+    getEligiblePhotosWalk,
     getImageData,
     submitToChallenge,
     getMemberChallenges,
@@ -90,6 +91,7 @@ const mockApi: ApiStrategy = {
     applyBoostToEntry: withMockDebug('applyBoostToEntry', mockApiClient.applyBoostToEntry),
     applyTurbo: withMockDebug('applyTurbo', mockApiClient.applyTurbo),
     getEligiblePhotos: withMockDebug('getEligiblePhotos', mockApiClient.getEligiblePhotos),
+    getEligiblePhotosWalk: withMockDebug('getEligiblePhotosWalk', mockApiClient.getEligiblePhotosWalk),
     getImageData: withMockDebug('getImageData', mockApiClient.getImageData),
     submitToChallenge: withMockDebug('submitToChallenge', mockApiClient.submitToChallenge),
     getMemberChallenges: withMockDebug('getMemberChallenges', mockApiClient.getMemberChallenges),

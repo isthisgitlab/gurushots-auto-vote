@@ -143,14 +143,18 @@ const submitJoin = async (
  * for paid, the consent/affordability) has already been made by the caller.
  *
  * @param needsCoins paid cost (0 = free)
- *   status ∈ joined | skipped-no-photo | charged-pending-submit |
- *            failed-no-charge | busy. `charged` is coins spent THIS call.
+ * @param options.manual the user asked for this join: Submit Only Chosen Photos
+ *   does not apply (the call site says so, never the renderer)
+ *   status ∈ joined | skipped-no-photo | skipped-no-chosen |
+ *            charged-pending-submit | failed-no-charge | busy.
+ *   `charged` is coins spent THIS call.
  */
 const performJoin = async (
     challenge: Challenge,
     token: string,
     deps: JoinDeps,
     needsCoins: number,
+    { manual = false }: { manual?: boolean } = {},
 ): Promise<JoinOutcome> => {
     const id = challenge?.id;
     const key = String(id);
@@ -159,13 +163,20 @@ const performJoin = async (
     }
     inFlight.add(key);
     try {
-        // 1. Photo first — no photo, no spend.
-        const imageId = await pickJoinPhoto(challenge, token, deps);
-        if (!imageId) {
-            return { status: 'skipped-no-photo', charged: 0 };
-        }
-
+        // The unlock claim is read BEFORE picking: a join whose coins are already
+        // spent must submit something, so Submit Only Chosen Photos is lifted for
+        // it — stranding paid coins behind a skipped pick would be worse than an
+        // automatic photo.
         let unlock = { charged: 0, alreadyUnlocked: isUnlocked(deps.joinStateStore, id) };
+
+        // 1. Photo first — no photo, no spend.
+        const pick = await pickJoinPhoto(challenge, token, deps, {
+            ignoreChosenOnly: manual || unlock.alreadyUnlocked,
+        });
+        const imageId = pick.id;
+        if (!imageId) {
+            return { status: pick.reason === 'no-chosen' ? 'skipped-no-chosen' : 'skipped-no-photo', charged: 0 };
+        }
 
         // 2. Paid unlock (skipped when a prior pass already unlocked → retry submit only).
         if (needsCoins > 0 && !unlock.alreadyUnlocked) {

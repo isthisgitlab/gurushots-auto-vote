@@ -40,6 +40,7 @@ import {
 import { getDefaultSettings } from './settings/defaults';
 import * as persistence from './settings/persistence';
 import * as challengeOverrides from './settings/challengeOverrides';
+import * as openChallenges from './settings/openChallenges';
 import { rememberChallengeTitles } from './settings/challengeFacts';
 import { TITLE_RULE_INLINE_KEYS, MAX_TITLE_LENGTH } from './settings/titleRuleSanitize';
 import * as titleRules from './settings/titleRules';
@@ -95,6 +96,7 @@ export const checkScenario = scenarios.checkScenario;
 export const previewScenarioImport = scenarios.previewScenarioImport;
 export const importScenario = scenarios.importScenario;
 export const exportScenario = scenarios.exportScenario;
+export const exportScenarioWithNotes = scenarios.exportScenarioWithNotes;
 export const MAX_SCENARIOS = scenarios.MAX_SCENARIOS;
 // First-seen challenge-title pins (internal cache — no IPC wiring).
 // MAX_TITLE_LENGTH is exported so challengeTitlePin.ts bounds incoming
@@ -103,6 +105,9 @@ export const getTitlePins = titlePins.getTitlePins;
 export const mergeTitlePins = titlePins.mergeTitlePins;
 // Cleanup functions
 export const cleanupStaleChallengeSetting = challengeOverrides.cleanupStaleChallengeSetting;
+// The open (joinable) challenge ids cleanupStaleChallengeSetting spares chosen-photo entries for
+export const rememberOpenChallengeIds = openChallenges.rememberOpenChallengeIds;
+export const getOpenChallengeIds = openChallenges.getOpenChallengeIds;
 export const cleanupObsoleteSettings = persistence.cleanupObsoleteSettings;
 // Reset functions
 export const resetSetting = reset.resetSetting;

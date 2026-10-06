@@ -7,7 +7,7 @@ import type * as api_clientModule from '../../src/ts/api/api-client';
 import type { CategoryLogger } from '../../src/ts/logger';
 import { invalid } from '../helpers/invalid';
 
-const { getEligiblePhotos, getImageData, submitToChallenge, MAX_LIBRARY_PAGES } =
+const { getEligiblePhotos, getEligiblePhotosWalk, getImageData, submitToChallenge, MAX_LIBRARY_PAGES } =
     require('../../src/ts/api/submissions') as typeof submissionsModule;
 
 jest.mock('../../src/ts/api/api-client', () => ({
@@ -221,6 +221,69 @@ describe('submissions', () => {
             await getEligiblePhotos('c1', token, { limit: 0, paginate: true });
             expect(makePostRequest).toHaveBeenCalledTimes(1);
             expect(makePostRequest.mock.calls[0][2]).toContain('limit=100');
+        });
+    });
+
+    describe('getEligiblePhotosWalk', () => {
+        const page = (...ids: string[]) => ({ items: ids.map((id) => ({ id })) });
+        const ids = (walk: { items: Array<{ id: string }> }) => walk.items.map((p) => p.id);
+
+        test('walks to a short page without paginate and is not truncated', async () => {
+            makePostRequest.mockResolvedValueOnce(page('p1', 'p2')).mockResolvedValueOnce(page('p3'));
+            const walk = await getEligiblePhotosWalk('c1', token, { limit: 2, search: 'hat' });
+            expect(ids(walk)).toEqual(['p1', 'p2', 'p3']);
+            expect(walk.truncated).toBe(false);
+            expect(makePostRequest.mock.calls[1][2]).toContain('search=hat');
+        });
+
+        test('an empty first page is a complete, empty library', async () => {
+            makePostRequest.mockResolvedValueOnce(page());
+            await expect(getEligiblePhotosWalk('c1', token, { limit: 2 })).resolves.toEqual({
+                items: [],
+                truncated: false,
+            });
+        });
+
+        test('every early stop is reported as truncated', async () => {
+            // The page cap.
+            makePostRequest.mockResolvedValue(page('a', 'b'));
+            expect((await getEligiblePhotosWalk('c1', token, { limit: 2 })).truncated).toBe(true);
+            // A failed page, the first included: not knowing is not "empty".
+            makePostRequest.mockReset();
+            makePostRequest.mockResolvedValueOnce(page('p1', 'p2')).mockRejectedValueOnce(new Error('down'));
+            expect(await getEligiblePhotosWalk('c1', token, { limit: 2 })).toEqual({
+                items: [{ id: 'p1' }, { id: 'p2' }],
+                truncated: true,
+            });
+            makePostRequest.mockReset();
+            makePostRequest.mockResolvedValueOnce(null);
+            expect(await getEligiblePhotosWalk('c1', token, { limit: 2 })).toEqual({ items: [], truncated: true });
+            // A later unreadable page.
+            makePostRequest.mockReset();
+            makePostRequest.mockResolvedValueOnce(page('p1', 'p2')).mockResolvedValueOnce({ nope: true });
+            expect((await getEligiblePhotosWalk('c1', token, { limit: 2 })).truncated).toBe(true);
+        });
+
+        test('the wall-clock budget truncates it', async () => {
+            const realNow = Date.now;
+            let clock = 1_000_000;
+            Date.now = () => clock;
+            try {
+                makePostRequest.mockImplementation(async () => {
+                    clock += 5_000;
+                    return page('a', 'b');
+                });
+                const walk = await getEligiblePhotosWalk('c1', token, { limit: 2, budgetMs: 12_000 });
+                expect(walk.truncated).toBe(true);
+                expect(makePostRequest).toHaveBeenCalledTimes(3);
+            } finally {
+                Date.now = realNow;
+            }
+        });
+
+        test('still refuses a missing challenge id or token', async () => {
+            await expect(getEligiblePhotosWalk('', token)).rejects.toThrow();
+            await expect(getEligiblePhotosWalk('c1', '')).rejects.toThrow();
         });
     });
 

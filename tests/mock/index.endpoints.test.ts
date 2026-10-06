@@ -90,6 +90,11 @@ describe('no-token contract for every endpoint not covered elsewhere', () => {
             { played: 0, correct: 0, flipped: 0, doubleFailed: 0, won: false },
         ],
         ['getEligiblePhotos', () => mockApiClient.getEligiblePhotos(1, invalid(null)), []],
+        [
+            'getEligiblePhotosWalk',
+            () => mockApiClient.getEligiblePhotosWalk(1, invalid(null)),
+            { items: [], truncated: true },
+        ],
         ['getImageData', () => mockApiClient.getImageData('photo_old_008', invalid(null)), null],
         ['submitToChallenge', () => mockApiClient.submitToChallenge(1, ['a'], invalid(null)), { ok: false, raw: null }],
         ['getMemberChallenges', () => mockApiClient.getMemberChallenges(invalid(null), 'open'), []],
@@ -148,6 +153,21 @@ describe('getEligiblePhotos', () => {
 
     test('a non-string search is ignored', async () => {
         expect(await settle(mockApiClient.getEligiblePhotos(1, 'tok', invalid({ search: 42 })))).toHaveLength(8);
+    });
+});
+
+describe('getEligiblePhotosWalk', () => {
+    test('reads the whole mock library in one complete walk', async () => {
+        const walk = await settle(mockApiClient.getEligiblePhotosWalk(1, 'tok'));
+        expect(walk.items).toHaveLength(8);
+        expect(walk.truncated).toBe(false);
+    });
+
+    test('a search is the same exact tag match as the paged read; a non-string search is ignored', async () => {
+        const exact = await settle(mockApiClient.getEligiblePhotosWalk(1, 'tok', { search: ' Flower ' }));
+        expect(exact.items.map((p) => p.id)).toEqual(['photo_pink_flower_001', 'photo_blocked_007']);
+        const ignored = await settle(mockApiClient.getEligiblePhotosWalk(1, 'tok', invalid({ search: 42 })));
+        expect(ignored.items).toHaveLength(8);
     });
 });
 

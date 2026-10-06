@@ -75,7 +75,8 @@ const joinChallengeSingle = async (
         if (refusal) return refusal;
     }
 
-    const outcome = await performJoin(challenge, token, deps, cost);
+    // An explicit click auto-picks even with Submit Only Chosen Photos on.
+    const outcome = await performJoin(challenge, token, deps, cost, { manual: true });
     return { status: outcome.status, challengeId, cost, imageId: outcome.imageId };
 };
 

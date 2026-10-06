@@ -268,6 +268,7 @@ describe('actions', () => {
             ['no-slots', 'no free entry slot'],
             ['challenge-gone', 'no longer active'],
             ['no-eligible', 'no eligible photo to enter'],
+            ['no-chosen', 'no chosen photo can be entered'],
             ['fetch-error', 'no photo was entered (fetch-error)'],
         ])('best: %s', async (reason, message) => {
             autoFill.submitNewEntryForAction.mockResolvedValue({ ok: false, imageId: null, reason });

@@ -44,6 +44,34 @@ const getEligiblePhotos: typeof submissionsModule.getEligiblePhotos = mockMethod
 );
 
 /**
+ * Simulate the library walk. The mock library is one short page, so a walk
+ * always reads all of it and is never truncated. Without a token the
+ * walk says it read nothing AND was cut short, so no caller can conclude a
+ * photo is missing from the library.
+ */
+const getEligiblePhotosWalk: typeof submissionsModule.getEligiblePhotosWalk = mockMethod(
+    {
+        name: 'getEligiblePhotosWalk',
+        tokenArg: 1,
+        debug: (challengeId) => {
+            logger.withCategory('challenges').debug(`Challenge ID: ${challengeId}`, null);
+        },
+        noTokenMessage: 'No token provided, returning empty',
+        onNoToken: () => ({ items: [], truncated: true }),
+    },
+    async (challengeId, token, options = {}) => {
+        const items = buildLibraryPhotos(Math.floor(Date.now() / 1000));
+        await simulateApiResponse({}, 400);
+        const search = typeof options.search === 'string' ? options.search.trim().toLowerCase() : '';
+        // The same exact-tag filter as the mock getEligiblePhotos search.
+        return {
+            items: search === '' ? items : items.filter((item) => item.labels.some((l) => l.toLowerCase() === search)),
+            truncated: false,
+        };
+    },
+);
+
+/**
  * Simulate the per-photo record. Mirrors /rest/get_image_data, which is
  * where the REAL popularity signals live: the library endpoint above
  * returns votes=0 and no achievements for every photo on the live API, so
@@ -112,4 +140,4 @@ const submitToChallenge: typeof submissionsModule.submitToChallenge = mockMethod
     },
 );
 
-export { getEligiblePhotos, getImageData, submitToChallenge };
+export { getEligiblePhotos, getEligiblePhotosWalk, getImageData, submitToChallenge };

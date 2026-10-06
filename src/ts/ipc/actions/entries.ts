@@ -48,6 +48,7 @@ const handleFillChallengeNow = (async (event: unknown, challengeId: string | num
             settings,
             logger,
             getEligiblePhotos: strategy.getEligiblePhotos,
+            getEligiblePhotosWalk: strategy.getEligiblePhotosWalk,
             getImageData: strategy.getImageData,
             submitToChallenge: strategy.submitToChallenge,
             searchTagAutocomplete: strategy.searchTagAutocomplete,

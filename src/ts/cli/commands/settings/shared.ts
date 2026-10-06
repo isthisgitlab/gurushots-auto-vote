@@ -25,6 +25,10 @@ export const formatSettingForLog = (key: string, value: unknown): string => {
     const masked = logger.sanitizeForLog({ [key]: value });
     if (masked[key] === '[REDACTED]') return '[REDACTED]';
 
+    const config = schemaEntry(key);
+    // A photo list is a handful of account-owned ids: print how many, never which.
+    if (config?.type === 'photos' && Array.isArray(value)) return `${value.length} photo(s)`;
+
     const raw = JSON.stringify(value);
 
     // Time-typed settings are stored in seconds but read as durations everywhere else —
@@ -33,7 +37,6 @@ export const formatSettingForLog = (key: string, value: unknown): string => {
     // `lastMinuteThreshold` 10 looks like 300 > 10 when it is really 5 minutes vs 10.
     // Annotate rather than convert, so the printed value still matches what set-setting
     // expects back.
-    const config = schemaEntry(key);
     if (config?.type === 'time' && typeof value === 'number' && Number.isFinite(value)) {
         return value === 0 ? `${raw} (off)` : `${raw} (${formatDuration(value)})`;
     }

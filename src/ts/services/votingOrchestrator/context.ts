@@ -31,6 +31,7 @@ export const buildFillDeps = (api: VotingPassApi, entryAges: EntryAgeLedger | nu
     settings,
     logger,
     getEligiblePhotos: api.getEligiblePhotos,
+    getEligiblePhotosWalk: api.getEligiblePhotosWalk,
     getImageData: api.getImageData,
     submitToChallenge: api.submitToChallenge,
     entryAges,

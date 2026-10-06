@@ -34,6 +34,8 @@ Commands:
   discover - List open (un-joined) challenges you can join
   join <id> [--yes] - Join an open challenge. Free joins immediately; paid joins
              print the coin cost and require --yes before spending coins.
+  list-photos [--challenge=<id>] [--search=<tag>] - List your photo ids, to choose them for auto-join / auto-submit.
+             With --challenge each photo shows whether that challenge accepts it.
   check-updates - Check GitHub for a newer release
   get-setting <key> [--challenge=<id>] - Get a setting value (effective value for a challenge with --challenge)
   set-setting <key> <value> [--challenge=<id>] - Set a setting value (per-challenge override with --challenge)
@@ -79,6 +81,8 @@ Examples:
   join 12345
   join 12345 --yes
   check-updates
+  list-photos --challenge=12345
+  set-setting chosenPhotos '["<id>"]' --challenge=12345
   set-setting exposure 80 --challenge=12345
   list-settings --challenge=12345
   logs --error --lines=50

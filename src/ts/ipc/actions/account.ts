@@ -124,6 +124,11 @@ const handleGetMemberChallenges = (async (event?: unknown, filter?: string) => {
             guard.token,
             filter === undefined ? 'open' : filter,
         );
+        // The open list is what keeps a chosen-photos entry alive for a challenge
+        // that is not joined yet (see cleanupStaleChallengeSetting).
+        if ((filter === undefined || filter === 'open') && Array.isArray(items)) {
+            settings.rememberOpenChallengeIds(items.flatMap((c) => (c?.id == null ? [] : [c.id])));
+        }
         return { success: true as const, items: Array.isArray(items) ? items : [] };
     } catch (error) {
         logger.withCategory('api').error('Error handling get-member-challenges request:', error);

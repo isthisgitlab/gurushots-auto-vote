@@ -18,6 +18,7 @@ import type { applyBoostToEntry as ApplyBoostToEntry } from '../api/boost';
 import type { applyTurbo as ApplyTurbo } from '../api/turbo';
 import type {
     getEligiblePhotos as GetEligiblePhotos,
+    getEligiblePhotosWalk as GetEligiblePhotosWalk,
     getImageData as GetImageData,
     submitToChallenge as SubmitToChallenge,
 } from '../api/submissions';
@@ -40,6 +41,8 @@ export interface VotingPassApi {
     applyBoostToEntry(...args: Parameters<typeof ApplyBoostToEntry>): ReturnType<typeof ApplyBoostToEntry>;
     applyTurbo(...args: Parameters<typeof ApplyTurbo>): ReturnType<typeof ApplyTurbo>;
     getEligiblePhotos(...args: Parameters<typeof GetEligiblePhotos>): ReturnType<typeof GetEligiblePhotos>;
+    /** Optional: without it a chosen photo missing from the themed fetch is not looked for. */
+    getEligiblePhotosWalk?(...args: Parameters<typeof GetEligiblePhotosWalk>): ReturnType<typeof GetEligiblePhotosWalk>;
     getImageData(...args: Parameters<typeof GetImageData>): ReturnType<typeof GetImageData>;
     submitToChallenge(...args: Parameters<typeof SubmitToChallenge>): ReturnType<typeof SubmitToChallenge>;
     runTurboMiniGame(...args: Parameters<typeof RunTurboMiniGame>): ReturnType<typeof RunTurboMiniGame>;

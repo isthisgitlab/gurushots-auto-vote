@@ -160,6 +160,9 @@ const describeTheme = (theme: ChallengeTheme, challenge: Challenge): string => {
  *   is what keeps every existing caller and test valid.
  *   usage: 'submit' (default) or 'swap' — which server-side eligibility view the
  *   library reads (a swap replaces an entry instead of adding one).
+ *   trace: optional out-parameter; `walkedUnfiltered` is set when the fetch had
+ *   to walk the whole unfiltered library, i.e. when every photo it can reach is
+ *   already in the result (the chosen-photos lookup then has nothing to add).
  */
 const fetchCandidatesForChallenge = async (
     challenge: Challenge,
@@ -172,9 +175,11 @@ const fetchCandidatesForChallenge = async (
         searchTagAutocomplete,
         getCurrentMemberProfile,
         usage = 'submit',
+        trace,
     }: Pick<RankDeps, 'getEligiblePhotos' | 'searchTagAutocomplete' | 'getCurrentMemberProfile' | 'logger'> & {
         logLabel?: string;
         usage?: string;
+        trace?: { walkedUnfiltered: boolean };
     },
 ): Promise<PickerPhoto[]> => {
     const challengeId = challenge.id;
@@ -371,6 +376,7 @@ const fetchCandidatesForChallenge = async (
     // full PAGINATE_BUDGET_MS default rather than the tighter themed budget: by
     // the time it runs the themed searches have already found nothing, and this
     // is the last chance to put ANY photo in the slot.
+    if (trace) trace.walkedUnfiltered = true;
     const byVotes = await getEligiblePhotos(challengeId, token, { paginate: true, logLabel, ...usageOpt });
     if (hasEligible(byVotes)) return byVotes;
     return getEligiblePhotos(challengeId, token, { order: 'default', logLabel, ...usageOpt });

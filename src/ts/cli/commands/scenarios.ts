@@ -106,6 +106,13 @@ const printPreview = ({
     }
     const limits = Object.entries(preview.limits);
     ui().info(limits.length ? `  Limits: ${limits.map(([k, v]) => `${v} ${k}`).join(', ')}` : '  No spending limits.');
+    for (const { phase, key } of preview.flagged) {
+        ui().warning(
+            key === 'chosenPhotos'
+                ? `  Phase ${phase} sets chosenPhotos — photo ids from another account will not match your photos.`
+                : `  Phase ${phase} sets chosenPhotosOnly — a challenge with no usable chosen photo is skipped.`,
+        );
+    }
     if (exists) ui().warning(`  A scenario named "${preview.name}" already exists — importing needs --overwrite.`);
 };
 
@@ -138,6 +145,9 @@ const importScenarioCmd = async (
 const exportScenarioCmd = async (name: string, file?: string) => {
     const result = await handlers()['export-scenario'](null, name);
     if (!result.success) return reportFailure(result, `Could not export "${name}"`);
+    if (result.omitted?.length) {
+        ui().warning(`Left out of the export (they belong to your account): ${result.omitted.join(', ')}`);
+    }
     // A successful export always carries its JSON text.
     return output(result.json as string, file);
 };

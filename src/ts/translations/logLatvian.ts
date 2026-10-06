@@ -13,6 +13,8 @@ export const logMessages = {
     m02b707d49004: 'Piespiedu iziešana pēc {0}...',
     m033109ec7c2a: 'Sāk atjauninājumu pārbaudi...',
     m03730e41012b: 'Kļūda, uzstādot globālo noklusējuma vērtību "{0}"',
+    m039ae621e4d5:
+        '{0}: izvēlētie foto meklēti arī ārpus tēmas meklēšanas izaicinājumam {1} — atrasti {2}, šeit nav atļauti {3}, tavā bibliotēkā nav {4}, nesasniegti {5}',
     m03bd77869ddb: '{0}: cikls {1} pabeigts',
     m048bece425dc: '  Statuss: noklusējums ✅',
     m04c18488457f: '  Katram izaicinājumam: {0}',
@@ -45,6 +47,8 @@ export const logMessages = {
     m12e29715bdfb: '{0}: cikls {1}{2}',
     m12f4eebac942: 'Noņem novecojušo boostConfig',
     m138786bc3559: '🔧 Izmanto testa versiju: {0}',
+    m139b4a755006:
+        '{0}: izaicinājums {1} izlaists — visi izvēlētie foto tajā jau ir iesniegti, un ir ieslēgts „Iesniegt tikai izvēlētos foto”. Izvēlies citus foto vai izslēdz šo uzstādījumu; ārkārtas iesniegšana to pirms termiņa neņem vērā, tāpēc izslēdz ārkārtas iesniegšanu šim izaicinājumam, lai vieta paliktu tukša',
     m13e60ae42e82: 'Piesprausts nosaukums: ignorē servera pārdēvēšanu izaicinājumam {0}: "{1}" — patur "{2}"',
     m13f2ed884ed0: 'Neizdevās apmainīt atpakaļ: {0}',
     m14159dd9d097: '{0}:',
@@ -88,6 +92,8 @@ export const logMessages = {
     m20a25539e44c: '  Statuss: mainīts ✏️',
     m20dd568d749e:
         'Neizdevās saglabāt profilu: nosaukums ir tukšs, pārāk garš vai rezervēts, sasniegts profilu skaita ierobežojums vai kāda vērtība neizturēja pārbaudi (skati uzstādījumu žurnālu)',
+    m216378b1dcc5:
+        '{0}: tavi izvēlētie foto saglabāti, kamēr bija pierakstīts cits konts, tāpēc tie tiek ignorēti — izvēlies tos no jauna šim kontam vai notīri sarakstu',
     m219dbd8057ac: 'Kļūda, apstrādājot get-settings pieprasījumu:',
     m21b1261f69f8:
         '{0} Boost iesniegšana jaunam foto ir ieslēgta, bet pirms miega jaunu foto iesniegt nevar; izmanto Boost esošajam foto',
@@ -214,6 +220,8 @@ export const logMessages = {
     m54a0e8c17ebb: 'Kļūda',
     m54fe10f65d4a: 'Neizdevās izmantot Boost',
     m5560911b6807: '🔄 Balsošanas pieprasījums: ID={0}, nosaukums="{1}"',
+    m56207bf1d723:
+        '{0}: izaicinājums {1} izlaists — neviens no taviem izvēlētajiem foto tur nav iesniedzams (izaicinājumam nav piedāvāts, jau izmantots citā izaicinājumā vai neatbilst taviem tagu uzstādījumiem), un ir ieslēgts „Iesniegt tikai izvēlētos foto”. Izvēlies citus foto vai izslēdz šo uzstādījumu; ārkārtas iesniegšana to pirms termiņa neņem vērā, tāpēc izslēdz ārkārtas iesniegšanu šim izaicinājumam, lai vieta paliktu tukša',
     m5626f1349a7d:
         'Interaktīvai pieteikšanai vajadzīgs terminālis. Palaid komandu `login` tieši terminālī — pāradresētu standarta ievadi neatbalsta, jo paroles ievades laikā nevar paslēpt rakstītās rakstzīmes.',
     m56b7b01fc0d4: 'Neizdevās novērtēt redzamības uzpildi pirms Boost izaicinājumam {0} — pieņem, ka tā ir izslēgta',
@@ -222,6 +230,7 @@ export const logMessages = {
     m585659559755: 'Neizdevās atbloķēt Boost: {0}',
     m58732014a96c: 'Nepietiek monētu, lai pievienotos izaicinājumam {0} (vajag {1}, tev ir {2}).',
     m587d463ab91d: 'Apstrādā izaicinājumu {0}/{1}: {2}',
+    m58ad27275eac: '{0}: neizdevās meklēt tavus izvēlētos foto: {1}',
     m58de71c88eb0: 'Uzstādījuma {0} globālā noklusējuma vērtība pārrēķināta no minūtēm ({1}) uz {2} s',
     m59d9de540e96: 'Izaicinājumam {0} nevar pievienoties (jau pievienojies vai tas ir slēgts).',
     m5a19de5a1959: 'Atsakās saglabāt entryIds ar rezervēto atslēgu "{0}"',

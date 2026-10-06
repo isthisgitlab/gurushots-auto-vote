@@ -33,4 +33,15 @@ const MAX_SCHEDULED_FILL_ENTRIES = 6;
 // apart.
 const MAX_VOTING_PAUSE_MINUTES = 720;
 
-export { MAX_SCHEDULED_FILL_ENTRIES, MAX_VOTING_PAUSE_MINUTES };
+// Longest a single tag may be, for the tag-list settings and for the photo search term the
+// library listing accepts (the same free-text field the server matches tags with).
+const MAX_TAG_LENGTH = 50;
+
+// Most photos a Chosen Photos list may hold. Deliberately small: the list is a
+// handful of hand-picked favourites, not a library mirror, and every id in it
+// costs a membership check on each fill and join of the challenges it applies
+// to. A photo can only be in one challenge, so a long shared list would mostly
+// name photos that cannot be used there anyway.
+const MAX_CHOSEN_PHOTOS = 20;
+
+export { MAX_SCHEDULED_FILL_ENTRIES, MAX_VOTING_PAUSE_MINUTES, MAX_TAG_LENGTH, MAX_CHOSEN_PHOTOS };

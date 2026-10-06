@@ -1026,6 +1026,21 @@ describe('get-member-challenges — filter, shape and errors', () => {
         });
     });
 
+    test('remembers the open list for the settings cleanup — open filter and readable lists only', async () => {
+        stubAuthGuardOk();
+        stubStrategy({ getMemberChallenges: jest.fn().mockResolvedValue([{ id: 1 }, { id: '2' }, {}, null]) });
+        await buildHandlers()['get-member-challenges']({});
+        expect(settings.rememberOpenChallengeIds).toHaveBeenLastCalledWith([1, '2']);
+        settings.rememberOpenChallengeIds.mockClear();
+        await buildHandlers()['get-member-challenges']({}, 'open');
+        expect(settings.rememberOpenChallengeIds).toHaveBeenCalledTimes(1);
+        settings.rememberOpenChallengeIds.mockClear();
+        await buildHandlers()['get-member-challenges']({}, 'all');
+        stubStrategy({ getMemberChallenges: jest.fn().mockResolvedValue(null) });
+        await buildHandlers()['get-member-challenges']({}, 'open');
+        expect(settings.rememberOpenChallengeIds).not.toHaveBeenCalled();
+    });
+
     test('passes an explicit filter through and coerces a non-array result to []', async () => {
         stubAuthGuardOk();
         const strategy = stubStrategy({ getMemberChallenges: jest.fn().mockResolvedValue(null) });

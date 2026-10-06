@@ -3,6 +3,7 @@
 import { z } from 'zod';
 import { isInteger } from '../../numbers';
 import { isPlainObject } from '../../plainObject';
+import { MAX_CHOSEN_PHOTOS, MAX_TAG_LENGTH } from '../limits';
 import { MAX_SCHEDULE_SECONDS, nonNegNumber, zBool } from './validators';
 import type { SettingsSchemaEntry } from './entry';
 
@@ -76,7 +77,6 @@ export const sanitizeFillSchedule = (value: unknown): Array<{ count: number; sec
 // to keep a corrupted settings file or out-of-band write from passing
 // pathological input to the picker. Each tag must be a non-empty,
 // non-whitespace string of at most MAX_TAG_LENGTH characters.
-const MAX_TAG_LENGTH = 50;
 const MAX_TAGS_PER_LIST = 50;
 const tagsList = z
     .array(
@@ -87,6 +87,16 @@ const tagsList = z
             .refine((v) => v.trim().length > 0),
     )
     .max(MAX_TAGS_PER_LIST);
+
+// Photo ids the user chose. Ids are opaque server tokens, so the safe-token
+// shape (letters, digits, `_`, `-`; the mock ids fit) is all that is accepted:
+// an id is only ever compared against the server's own eligible list, never
+// sent anywhere. Duplicates are rejected rather than collapsed so the stored
+// list is exactly what the chooser showed.
+const photoIdList = z
+    .array(z.string().regex(/^[A-Za-z0-9_-]{1,64}$/))
+    .max(MAX_CHOSEN_PHOTOS)
+    .refine((ids) => new Set(ids).size === ids.length);
 
 export const autoFillSettings = {
     autoFill: {
@@ -172,6 +182,34 @@ export const autoFillSettings = {
         group: 'autoFill',
         label: 'app.shouldIncludeTags',
         description: 'app.shouldIncludeTagsDesc',
+    },
+    // The photos auto-join and auto-fill try first. They only FILTER the server's
+    // own eligible list (a chosen id is never sent to the API) and are ranked by
+    // the same scorer as every other candidate, so they must still fit the tag
+    // settings. An empty list = no preference. Belongs to one member: see
+    // chosenPhotosMemberId.
+    chosenPhotos: {
+        type: 'photos',
+        default: [],
+        perChallenge: true,
+        validation: photoIdList,
+        validationOrder: 1,
+        group: 'autoFill',
+        label: 'app.chosenPhotos',
+        description: 'app.chosenPhotosDesc',
+    },
+    // With a non-empty chosenPhotos, never auto-pick: join and fill only submit
+    // a chosen photo, and a challenge with none usable is skipped. With an empty
+    // list it behaves as off.
+    chosenPhotosOnly: {
+        type: 'boolean',
+        default: false,
+        perChallenge: true,
+        validation: zBool,
+        validationOrder: 1,
+        group: 'autoFill',
+        label: 'app.chosenPhotosOnly',
+        description: 'app.chosenPhotosOnlyDesc',
     },
     // Words to drop from a challenge TITLE before it is used as a theme.
     //

@@ -6,7 +6,8 @@
 
 import type * as logSafeModule from '../../src/ts/format/logSafe';
 
-const { failureText, sentenceCaseLogMessage } = require('../../src/ts/format/logSafe') as typeof logSafeModule;
+const { failureText, sentenceCaseLogMessage, stripTerminalControl } =
+    require('../../src/ts/format/logSafe') as typeof logSafeModule;
 
 describe('sentenceCaseLogMessage', () => {
     test.each([
@@ -44,5 +45,25 @@ describe('failureText', () => {
         ['an empty string', '', 'unknown error'],
     ])('%s → %p', (_label, error, expected) => {
         expect(failureText(error)).toBe(expected);
+    });
+});
+
+describe('stripTerminalControl', () => {
+    const ESC = String.fromCharCode(27);
+    const BEL = String.fromCharCode(7);
+
+    test.each([
+        ['plain text', 'Pink Flower', 'Pink Flower'],
+        ['a colour sequence', `${ESC}[31;1mred${ESC}[0m`, 'red'],
+        ['a cursor move with intermediates', `a${ESC}[?25l${ESC}[2 qb`, 'ab'],
+        ['a title sequence ended by BEL', `x${ESC}]0;pwned${BEL}y`, 'xy'],
+        ['a title sequence ended by ST', `x${ESC}]0;pwned${ESC}\\y`, 'xy'],
+        ['a title sequence with no end', `x${ESC}]0;pwned`, 'x'],
+        ['a bare escape', `a${ESC}b`, 'ab'],
+        ['line breaks and tabs', 'one\r\ntwo\tthree\u2028four', 'one two three four'],
+        ['other control characters, C1 included', `a${BEL}b\u0085c\u009bd`, 'ab cd'],
+        ['a number', 42, '42'],
+    ])('%s', (_name, value, expected) => {
+        expect(stripTerminalControl(value)).toBe(expected);
     });
 });

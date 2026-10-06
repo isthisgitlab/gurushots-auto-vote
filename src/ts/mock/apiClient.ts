@@ -12,7 +12,7 @@ import { getActiveChallenges } from './endpoints/challenges';
 import { getVoteImages, submitVotes } from './endpoints/voting';
 import { applyBoost, applyBoostToEntry } from './endpoints/boost';
 import { applyTurbo, runTurboMiniGame } from './endpoints/turbo';
-import { getEligiblePhotos, getImageData, submitToChallenge } from './endpoints/submissions';
+import { getEligiblePhotos, getEligiblePhotosWalk, getImageData, submitToChallenge } from './endpoints/submissions';
 import { getMemberChallenges, getBankroll, coinsUnlock } from './endpoints/join';
 import {
     getMyCompletedChallenges,
@@ -37,6 +37,7 @@ const endpoints = {
     applyTurbo,
     runTurboMiniGame,
     getEligiblePhotos,
+    getEligiblePhotosWalk,
     getImageData,
     submitToChallenge,
     getMemberChallenges,

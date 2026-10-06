@@ -121,6 +121,28 @@ describe('Latvian log messages', () => {
         expect(localizeLogMessage(' Settings:')).toBe('\nUzstādījumi:');
     });
 
+    test('translates the chosen-photos lines, including the fill label they start with', () => {
+        const tag = '[Challenge 42: Sunset]';
+        const text = `skipped ${tag} — every chosen photo is already entered there, and Submit Only Chosen Photos is on. Choose other photos or turn that setting off; Emergency Submit ignores it near the deadline, so turn Emergency Submit off for this challenge to keep the slot empty`;
+        for (const [label, lv] of [
+            ['autoFill', 'Automātiskā iesniegšana'],
+            ['fillNew', 'Jauna foto iesniegšana'],
+            ['emergencyFill', 'Ārkārtas iesniegšana'],
+            ['manualFill', 'Manuālā iesniegšana'],
+            ['join', 'Pievienošanās'],
+        ]) {
+            const translated = localizeLogMessage(`⚠️ ${label}: ${text}`);
+            expect(translated.startsWith(`⚠️ ${lv}: izaicinājums [Izaicinājums 42: Sunset] izlaists`)).toBe(true);
+        }
+        expect(
+            localizeLogMessage(
+                'ℹ️ join: looked for your chosen photos outside the themed search for [Challenge 42: Sunset] — 1 found, 0 not allowed here, 2 not in your library, 0 not reached',
+            ),
+        ).toBe(
+            'ℹ️ Pievienošanās: izvēlētie foto meklēti arī ārpus tēmas meklēšanas izaicinājumam [Izaicinājums 42: Sunset] — atrasti 1, šeit nav atļauti 0, tavā bibliotēkā nav 2, nesasniegti 0',
+        );
+    });
+
     test('leaves unknown technical text intact and handles unmatched icons', () => {
         expect(localizeLogMessage('upstream-specific-error')).toBe('upstream-specific-error');
         expect(localizeLogMessage('ℹ️ upstream-specific-error')).toBe('ℹ️ upstream-specific-error');

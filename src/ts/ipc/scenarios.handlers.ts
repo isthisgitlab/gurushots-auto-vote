@@ -28,6 +28,7 @@ import * as auth from '../services/auth';
 import { registerHandlers } from './registerHandlers';
 import { errorResult } from './errorResult';
 import { isIdArg } from './isIdArg';
+import { stampChosenPhotosOwner } from './chosenPhotosOwner';
 import { getScenarioStatus, ledgerForMode } from '../services/scenarioStatus';
 import { findActiveChallenge } from '../services/findActiveChallenge';
 import { evaluateScenario, startState } from '../scenarios/evaluate';
@@ -171,9 +172,12 @@ const buildHandlers = () =>
             }),
 
         'save-scenario': async (event: unknown, doc: unknown, options?: { overwrite?: boolean } | null) =>
-            safely('save-scenario', () =>
-                fromResult(settings.saveScenario(doc, { overwrite: options?.overwrite !== false })),
-            ),
+            safely('save-scenario', () => {
+                const saved = fromResult(settings.saveScenario(doc, { overwrite: options?.overwrite !== false }));
+                // A phase's chosen photos belong to the account that just saved them.
+                if (saved.success) stampChosenPhotosOwner([doc]);
+                return saved;
+            }),
 
         'rename-scenario': async (event: unknown, oldName: string, newName: string) => {
             if (!isName(oldName) || typeof newName !== 'string') return invalidArgs;
@@ -200,10 +204,11 @@ const buildHandlers = () =>
         'export-scenario': async (event: unknown, name: string) => {
             if (!isName(name)) return invalidArgs;
             return safely('export-scenario', () => {
-                const json = settings.exportScenario(name);
-                return json === null
+                // `omitted`: account-bound settings (the chosen photos) left out of the file.
+                const exported = settings.exportScenarioWithNotes(name);
+                return exported === null
                     ? { success: false as const, error: 'not-found' }
-                    : { success: true as const, json };
+                    : { success: true as const, json: exported.json, omitted: exported.omitted };
             });
         },
 

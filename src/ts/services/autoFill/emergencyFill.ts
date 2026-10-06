@@ -11,6 +11,20 @@ import type { Challenge } from '../../types/gurushots';
 import type { FillSettings, SettingsFillDeps } from '../../types/autoFill';
 
 /**
+ * Whether Submit Only Chosen Photos is on for a challenge with a non-empty list.
+ * Only read where it can change the verdict (auto-fill on, no must-include
+ * filter): every other path is settled without it.
+ */
+const onlyChosenActive = (settings: FillSettings, challengeId: string | number): boolean => {
+    const list = settings.getEffectiveSetting('chosenPhotos', String(challengeId));
+    return (
+        Array.isArray(list) &&
+        list.length > 0 &&
+        settings.getEffectiveSetting('chosenPhotosOnly', String(challengeId)) === true
+    );
+};
+
+/**
  * Whether emergency fill stands down on LIVE STATE alone, independent of timing.
  * Owned here, beside the runner that enforces it, and exported so the read-only
  * renderer view (VotingLogic.describeDeadlineActions, which drives the deadline
@@ -25,7 +39,13 @@ import type { FillSettings, SettingsFillDeps } from '../../types/autoFill';
  *   - no free slot left to fill, and
  *   - "normal auto-fill already owns this challenge": auto-fill on with no
  *     must-include filter, the common configuration, in which the staggered
- *     path fills the slots and emergency fill has nothing to add.
+ *     path fills the slots and emergency fill has nothing to add. Submit Only
+ *     Chosen Photos with a non-empty list does NOT count as owning it: the
+ *     staggered path may then skip the challenge (no usable chosen photo) and
+ *     emergency fill ignores that setting, so — like a must-include filter —
+ *     it is "may fill" here and the runner's probe decides. Read from the
+ *     saved settings only; whether the list belongs to the signed-in account
+ *     is a network lookup only the runner can make.
  *
  * Deliberately NOT covered — the caller owns these:
  *   - the timing/enabled checks (`emergencyFill` seconds, close_time, whether
@@ -64,7 +84,8 @@ const evaluateEmergencyFill = (
     const mustIncludeTags = settings.getEffectiveTagSetting('mustIncludeTags', challenge);
     const autoFillEnabled = settings.getEffectiveSetting('autoFill', String(challengeId)) === true;
     const mustActive = Array.isArray(mustIncludeTags) && mustIncludeTags.length > 0;
-    return { standDown: autoFillEnabled && !mustActive, autoFillEnabled, mustIncludeTags };
+    const standDown = autoFillEnabled && !mustActive && !onlyChosenActive(settings, challengeId);
+    return { standDown, autoFillEnabled, mustIncludeTags };
 };
 
 /**
@@ -139,13 +160,17 @@ const maybeEmergencyFillChallenge = async (
         // staggered path can still fill it, so stand down). With auto-fill off,
         // always step in — nothing else will fill the slot. Dry-run probe: no
         // onFallback, and the user's real fillWithoutTagMatch setting applies.
+        // The probe models the staggered path, so it sees the chosen photos the
+        // way that path would: with Submit Only on and none usable it would
+        // skip, which is exactly when emergency fill must step in.
         probeStandDown: autoFillEnabled
-            ? ({ eligible, semanticScores }) =>
+            ? ({ eligible, semanticScores, chosen }) =>
                   pickPhotosForChallenge(challenge, eligible, 1, {
                       mustIncludeTags,
                       shouldIncludeTags,
                       fillWithoutTagMatch,
                       semanticScores,
+                      chosen,
                   }).length > 0
             : null,
         // Live re-check just before the batch submit: an entry added outside
@@ -169,6 +194,7 @@ const maybeEmergencyFillChallenge = async (
         },
     });
     if (attempt.status === 'no-pick') return 'no-eligible-photos';
+    // Emergency fill ignores Submit Only Chosen Photos, so it never answers 'no-chosen'.
     if (attempt.status === 'probe-stand-down' || attempt.status === 'gone' || attempt.status === 'refresh-stand-down') {
         return 'skipped';
     }

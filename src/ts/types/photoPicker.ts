@@ -78,11 +78,33 @@ export interface TagOptions {
     ignoreWords?: IgnoreWords;
 }
 
+/**
+ * The user's chosen photos for one pick (the Chosen Photos settings, resolved).
+ * The ids only FILTER the candidates the server already offered.
+ */
+export interface ChosenPick {
+    /** Photo ids to rank first; an empty list means no preference. */
+    ids: readonly string[];
+    /** Pick only these: with none usable the pick is empty rather than topped up. */
+    only: boolean;
+    /** Ids already entered in this challenge, removed from the pool as a set. */
+    excludeIds?: ReadonlySet<string> | null;
+}
+
 /** pickPhotosForChallenge / buildScoredCandidates options. */
 export interface PickOptions extends TagOptions {
     fillWithoutTagMatch?: boolean;
     semanticScores?: SemanticScoreMap | null;
     onFallback?: ((info: PickFallbackInfo) => void) | null;
+    /** Honoured by pickPhotosForChallenge and buildChosenCandidates; buildScoredCandidates ignores it. */
+    chosen?: ChosenPick | null;
+}
+
+/** The scored pool split into the user's chosen photos and the rest (buildChosenCandidates). */
+export interface ChosenCandidates {
+    scored: ScoredCandidate[];
+    /** Ids of the chosen block inside `scored`; null when no chosen photos were asked for. */
+    chosenIds: ReadonlySet<string> | null;
 }
 
 /** One candidate's tier record from buildScoredCandidates. */

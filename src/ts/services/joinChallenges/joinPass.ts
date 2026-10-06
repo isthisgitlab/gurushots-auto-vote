@@ -190,6 +190,17 @@ const joinCandidate = async (
 };
 
 /**
+ * A readable open list (empty included) is what cleanup of per-challenge
+ * settings compares against to keep a chosen-photos entry for a challenge that
+ * can still be joined. Optional-chained like every other settings call here: a
+ * partial facade must not fail the pass.
+ */
+const rememberOpenList = (candidates: Array<Challenge | null>): void => {
+    if (!Array.isArray(candidates)) return;
+    settings.rememberOpenChallengeIds?.(candidates.flatMap((c) => (c?.id == null ? [] : [c.id])));
+};
+
+/**
  * Automatic join pass — a pre-step in fetchChallengesAndVote. The `autoJoin`
  * enable is resolved per candidate by title (rule-inline → profile → master), so
  * a titled candidate joins even when the master default is off; the pass only
@@ -241,6 +252,7 @@ const runJoinPass = async (
         // aislop-ignore-next-line ai-slop/hidden-fallback -- logged via the join logger; the empty pass result is the documented contract
         return empty;
     }
+    rememberOpenList(candidates);
     if (!Array.isArray(candidates) || candidates.length === 0) {
         return { ran: true, joined: 0, results: [] };
     }

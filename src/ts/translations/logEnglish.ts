@@ -13,6 +13,8 @@ export const logMessages = {
     m02b707d49004: 'Force exiting after {0}...',
     m033109ec7c2a: 'Starting update check...',
     m03730e41012b: "Error setting global default '{0}'",
+    m039ae621e4d5:
+        '{0}: looked for your chosen photos outside the themed search for {1} — {2} found, {3} not allowed here, {4} not in your library, {5} not reached',
     m03bd77869ddb: '{0} cycle {1} completed',
     m048bece425dc: '  Status:  Default ✅',
     m04c18488457f: '  Per-Challenge: {0}',
@@ -45,6 +47,8 @@ export const logMessages = {
     m12e29715bdfb: '{0} cycle {1}{2}',
     m12f4eebac942: 'Removing legacy boostConfig',
     m138786bc3559: '🔧 Using mock {0}',
+    m139b4a755006:
+        '{0}: skipped {1} — every chosen photo is already entered there, and Submit Only Chosen Photos is on. Choose other photos or turn that setting off; Emergency Submit ignores it near the deadline, so turn Emergency Submit off for this challenge to keep the slot empty',
     m13e60ae42e82: 'Title pin: ignoring server rename for challenge {0}: "{1}" — keeping "{2}"',
     m13f2ed884ed0: 'Failed to swap back: {0}',
     m14159dd9d097: '{0}:',
@@ -86,6 +90,8 @@ export const logMessages = {
     m20a25539e44c: '  Status:  Modified ✏️',
     m20dd568d749e:
         'Failed to save profile — the name is empty/too long/reserved, the profile cap is reached, or a value failed validation (see the settings log)',
+    m216378b1dcc5:
+        '{0}: your Chosen Photos were saved while another account was signed in, so they are ignored — choose them again for this account or clear them',
     m219dbd8057ac: 'Error handling get-settings request:',
     m21b1261f69f8:
         '{0} boost fill-new is on, but a new photo cannot be submitted before sleep; boosting existing entry',
@@ -209,6 +215,8 @@ export const logMessages = {
     m54a0e8c17ebb: 'Error',
     m54fe10f65d4a: 'Boost application failed',
     m5560911b6807: '🔄 Vote on challenge request: ID={0}, Title="{1}"',
+    m56207bf1d723:
+        '{0}: skipped {1} — none of your chosen photos can be submitted there (not offered for this challenge, already used in another one, or filtered out by your tag settings), and Submit Only Chosen Photos is on. Choose other photos or turn that setting off; Emergency Submit ignores it near the deadline, so turn Emergency Submit off for this challenge to keep the slot empty',
     m5626f1349a7d:
         'Interactive login requires a terminal. Run the `login` command directly in a terminal session — piped or redirected stdin is not supported because the password prompt cannot mute echo.',
     m56b7b01fc0d4: 'Pre-boost fill evaluation failed for challenge {0} — treating it as off',
@@ -217,6 +225,7 @@ export const logMessages = {
     m585659559755: 'Failed to unlock boost: {0}',
     m58732014a96c: 'Not enough coins to join {0} (needs {1}, you have {2}).',
     m587d463ab91d: 'Processing challenge {0}/{1}: {2}',
+    m58ad27275eac: '{0}: could not look for your chosen photos: {1}',
     m58de71c88eb0: 'Migrated {0} global default from minute-encoded {1} to {2}s',
     m59d9de540e96: 'Challenge {0} is not open to join (already joined or closed).',
     m5a19de5a1959: 'Refusing to store entryIds under reserved key "{0}"',

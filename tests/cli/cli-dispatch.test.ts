@@ -17,6 +17,7 @@ import type * as votingModule from '../../src/ts/cli/commands/voting';
 import type * as actionsModule from '../../src/ts/cli/commands/actions';
 import type * as bankrollModule from '../../src/ts/cli/commands/bankroll';
 import type * as joinModule from '../../src/ts/cli/commands/join';
+import type * as photosModule from '../../src/ts/cli/commands/photos';
 import type * as updateModule from '../../src/ts/cli/commands/update';
 import type * as logsModule from '../../src/ts/cli/commands/logs';
 import type * as settingsCommandsModule from '../../src/ts/cli/commands/settings';
@@ -33,6 +34,7 @@ type Mods = {
     actions: jest.MockedObjectDeep<typeof actionsModule>;
     bankroll: jest.MockedObjectDeep<typeof bankrollModule>;
     join: jest.MockedObjectDeep<typeof joinModule>;
+    photos: jest.MockedObjectDeep<typeof photosModule>;
     update: jest.MockedObjectDeep<typeof updateModule>;
     logs: jest.MockedObjectDeep<typeof logsModule>;
     cmd: jest.MockedObjectDeep<typeof settingsCommandsModule>;
@@ -100,6 +102,10 @@ jest.mock('../../src/ts/cli/commands/actions', () => {
 
 jest.mock('../../src/ts/cli/commands/bankroll', () => ({ showBankroll: jest.fn() }));
 jest.mock('../../src/ts/cli/commands/join', () => ({ showDiscover: jest.fn(), joinChallengeCmd: jest.fn() }));
+jest.mock('../../src/ts/cli/commands/photos', () => ({
+    ...jest.requireActual<typeof import('../../src/ts/cli/commands/photos')>('../../src/ts/cli/commands/photos'),
+    listPhotosCmd: jest.fn(async () => 0),
+}));
 jest.mock('../../src/ts/cli/commands/update', () => ({ checkUpdates: jest.fn() }));
 jest.mock('../../src/ts/cli/commands/logs', () => ({ showLogs: jest.fn() }));
 jest.mock('../../src/ts/cli/commands/scenarios', () =>
@@ -174,6 +180,7 @@ const run = async (argv: string[], setup?: (mods: Mods) => void) => {
             actions: require('../../src/ts/cli/commands/actions') as typeof actionsModule,
             bankroll: require('../../src/ts/cli/commands/bankroll') as typeof bankrollModule,
             join: require('../../src/ts/cli/commands/join') as typeof joinModule,
+            photos: require('../../src/ts/cli/commands/photos') as typeof photosModule,
             update: require('../../src/ts/cli/commands/update') as typeof updateModule,
             logs: require('../../src/ts/cli/commands/logs') as typeof logsModule,
             cmd: require('../../src/ts/cli/commands/settings') as typeof settingsCommandsModule,
@@ -401,6 +408,35 @@ describe('challenge-scoped actions', () => {
         expect(m.join.joinChallengeCmd).toHaveBeenCalledWith('77', { yes: true });
         expect(m.exitCodes).toEqual([0]);
     });
+});
+
+describe('list-photos', () => {
+    test.each([
+        [['list-photos'], null, null],
+        [['list-photos', '--challenge=5'], '5', null],
+        [['list-photos', '--search=sunset'], null, 'sunset'],
+        [['list-photos', '--search', 'sun set', '--challenge', '5'], '5', 'sun set'],
+    ])('%j reads the library', async (argv, challengeId, search) => {
+        const m = await run(argv);
+        expect(m.photos.listPhotosCmd).toHaveBeenCalledWith(challengeId, search);
+        expect(m.exitCodes).toEqual([0]);
+    });
+
+    test("the exit code is the command's", async () => {
+        const m = await run(['list-photos'], (mods) => mods.photos.listPhotosCmd.mockResolvedValue(1));
+        expect(m.exitCodes).toEqual([1]);
+    });
+
+    test.each([[['list-photos', 'extra']], [['list-photos', '--search']], [['list-photos', '--search=a', 'stray']]])(
+        '%j is a usage error',
+        async (argv) => {
+            const m = await run(argv);
+            expect(m.photos.listPhotosCmd).not.toHaveBeenCalled();
+            expect(m.msgs('error')).toEqual(['Wrong arguments']);
+            expect(m.msgs('info')).toEqual(['Usage: list-photos [--challenge=<id>] [--search=<tag>]']);
+            expect(m.exitCodes).toEqual([1]);
+        },
+    );
 });
 
 describe('settings commands', () => {

@@ -58,7 +58,11 @@ describe('listing', () => {
 
 describe('a scenario row', () => {
     test('export shows the JSON, and hides again', async () => {
-        jest.mocked(window.api.exportScenario).mockResolvedValue({ success: true, json: '{"name":"Plan"}' });
+        jest.mocked(window.api.exportScenario).mockResolvedValue({
+            success: true,
+            json: '{"name":"Plan"}',
+            omitted: [],
+        });
         await renderSection();
         click('app.scenarioExport');
         const box = await screen.findByLabelText<HTMLTextAreaElement>('app.scenarioExportLabel');

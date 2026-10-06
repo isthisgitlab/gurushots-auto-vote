@@ -19,14 +19,19 @@ import {
     SEMANTIC_SUPPORT_CAP,
     hasThemeMatch,
     selectEnrichmentSet,
+    selectBlockEnrichmentSet,
+    splitByChosen,
     finalizePick,
 } from './photoPicker/tiers';
-import { pickPhotosForChallenge, buildScoredCandidates } from './photoPicker/candidates';
+import { pickPhotosForChallenge, buildScoredCandidates, buildChosenCandidates } from './photoPicker/candidates';
 
 export {
     pickPhotosForChallenge,
     buildScoredCandidates,
+    buildChosenCandidates,
     selectEnrichmentSet,
+    selectBlockEnrichmentSet,
+    splitByChosen,
     finalizePick,
     hasThemeMatch,
     buildSearchTerms,

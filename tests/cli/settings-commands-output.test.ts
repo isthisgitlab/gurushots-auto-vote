@@ -70,6 +70,14 @@ describe('formatSettingForLog', () => {
         expect(cmd.formatSettingForLog('token', 'secret')).toBe('[REDACTED]');
     });
 
+    test('a photo list prints its count, never the ids', () => {
+        settings.SETTINGS_SCHEMA = invalid({ chosenPhotos: { type: 'photos', perChallenge: true, default: [] } });
+        expect(cmd.formatSettingForLog('chosenPhotos', ['a', 'b', 'c'])).toBe('3 photo(s)');
+        expect(cmd.formatSettingForLog('chosenPhotos', [])).toBe('0 photo(s)');
+        // Anything that is not a list is printed as it is.
+        expect(cmd.formatSettingForLog('chosenPhotos', 'oops')).toBe('"oops"');
+    });
+
     test('a non-finite or non-number time value is printed raw', () => {
         expect(cmd.formatSettingForLog('emergencyFill', 'soon')).toBe('"soon"');
         expect(cmd.formatSettingForLog('emergencyFill', Infinity)).toBe('null');

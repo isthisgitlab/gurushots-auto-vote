@@ -29,6 +29,14 @@ type ScenarioImportPreview =
 
 const MAX_SCENARIOS = SCENARIO_CAPS.scenarios;
 
+// Phase settings the import preview points out: the photo ids belong to one
+// account (and may name private photos), and Only changes what a join and a fill
+// do when no chosen photo is usable.
+const FLAGGED_PHASE_SETTINGS = ['chosenPhotos', 'chosenPhotosOnly'] as const;
+// Phase settings an export leaves out: photo ids belong to one account and may
+// point at private photos, so a shared file must not carry them.
+const EXPORT_OMITTED_SETTINGS: readonly string[] = ['chosenPhotos'];
+
 const log = () => logger.withCategory('settings');
 
 /**
@@ -236,16 +244,24 @@ const deleteScenario = (name: unknown): boolean => {
     return true;
 };
 
+/** The phase settings worth pointing out in one phase's keys (FLAGGED_PHASE_SETTINGS). */
+const flaggedIn = (phase: string, keys: string[]) =>
+    FLAGGED_PHASE_SETTINGS.filter((key) => keys.includes(key)).map((key) => ({ phase, key }));
+
 /**
  * What a scenario will do, for the import confirmation: its phases, every
- * action that spends currency or a one-per-challenge power, and its limits.
+ * action that spends currency or a one-per-challenge power, the phase settings
+ * worth a second look (`flagged`), and its limits.
  */
 const describeScenario = (scenario: ScenarioDocument) => {
     const phases: Array<{ name: string; settings: string[]; rules: number }> = [];
     const spending: Array<{ phase: string; rule: string | undefined; action: string }> = [];
+    const flagged: Array<{ phase: string; key: (typeof FLAGGED_PHASE_SETTINGS)[number] }> = [];
     for (const [phaseName, phase] of Object.entries(scenario.phases)) {
         const rules = phase.rules ?? [];
-        phases.push({ name: phaseName, settings: Object.keys(phase.settings ?? {}), rules: rules.length });
+        const keys = Object.keys(phase.settings ?? {});
+        phases.push({ name: phaseName, settings: keys, rules: rules.length });
+        flagged.push(...flaggedIn(phaseName, keys));
         for (const rule of rules) {
             for (const action of rule.do) {
                 if (isOneOf(SPENDING_ACTIONS, action.type)) {
@@ -260,6 +276,7 @@ const describeScenario = (scenario: ScenarioDocument) => {
         start: scenario.start,
         phases,
         spending,
+        flagged,
         limits: scenario.limits ?? {},
     };
 };
@@ -297,12 +314,30 @@ const importScenario = (text: unknown, { overwrite = false }: { overwrite?: bool
 };
 
 /**
- * A stored scenario as pretty-printed JSON, or null when there is none.
+ * A stored scenario as pretty-printed JSON, and the settings it left out
+ * (EXPORT_OMITTED_SETTINGS), or null when there is none. The GUI and the CLI
+ * both export through this, so the omission cannot differ between them.
  */
-const exportScenario = (name: unknown): string | null => {
+const exportScenarioWithNotes = (name: unknown): { json: string; omitted: string[] } | null => {
+    // getScenario hands out a copy, safe to edit.
     const scenario = getScenario(name);
-    return scenario ? `${JSON.stringify(scenario, null, 2)}\n` : null;
+    if (!scenario) return null;
+    const omitted = new Set<string>();
+    for (const phase of Object.values(scenario.phases)) {
+        for (const key of EXPORT_OMITTED_SETTINGS) {
+            if (phase.settings && Object.prototype.hasOwnProperty.call(phase.settings, key)) {
+                delete phase.settings[key];
+                omitted.add(key);
+            }
+        }
+    }
+    return { json: `${JSON.stringify(scenario, null, 2)}\n`, omitted: [...omitted] };
 };
+
+/**
+ * A stored scenario as pretty-printed JSON (without its account-bound settings), or null when there is none.
+ */
+const exportScenario = (name: unknown): string | null => exportScenarioWithNotes(name)?.json ?? null;
 
 export {
     MAX_SCENARIOS,
@@ -318,4 +353,5 @@ export {
     previewScenarioImport,
     importScenario,
     exportScenario,
+    exportScenarioWithNotes,
 };

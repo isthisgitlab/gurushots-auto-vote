@@ -23,7 +23,7 @@ import type { SettingsFillDeps } from '../../types/autoFill';
  * @param challenge - challenge with member.ranking.entries
  * @param deps - getActiveChallenges enables the pre-submit live re-check; when
  *   absent the fill proceeds on pass-start data.
- *   reason ∈ 'submitted'|'no-slots'|'challenge-gone'|'no-eligible'|'fetch-error'|'submit-failed'|'invalid-challenge'
+ *   reason ∈ 'submitted'|'no-slots'|'challenge-gone'|'no-eligible'|'no-chosen'|'fetch-error'|'submit-failed'|'invalid-challenge'
  */
 const submitNewEntryForAction = async (
     challenge: Challenge,
@@ -76,6 +76,8 @@ const submitNewEntryForAction = async (
     if (attempt.status === 'no-pick') {
         return { ok: false, imageId: null, reason: 'no-eligible' };
     }
+    // Submit Only Chosen Photos: nothing chosen can be entered, so no photo was picked on purpose.
+    if (attempt.status === 'no-chosen') return { ok: false, imageId: null, reason: 'no-chosen' };
     if (attempt.status === 'gone') return { ok: false, imageId: null, reason: 'challenge-gone' };
     if (attempt.status === 'refresh-stand-down') return { ok: false, imageId: null, reason: 'no-slots' };
     if (attempt.status !== 'submitted') return { ok: false, imageId: null, reason: 'submit-failed' };

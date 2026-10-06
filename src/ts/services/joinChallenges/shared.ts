@@ -20,6 +20,8 @@ export interface JoinDeps {
     coinsUnlock: typeof joinApi.coinsUnlock;
     submitToChallenge: typeof submissionsApi.submitToChallenge;
     getEligiblePhotos: typeof submissionsApi.getEligiblePhotos;
+    /** Without it, a chosen photo missing from the themed fetch is not looked for. */
+    getEligiblePhotosWalk?: typeof submissionsApi.getEligiblePhotosWalk;
     searchTagAutocomplete?: typeof tagsApi.searchTagAutocomplete;
     getCurrentMemberProfile?: typeof tagsApi.getCurrentMemberProfile;
     /** The joined challenges, to count the turbos a turbo mission can still win (Join Early for Missions). */

@@ -22,6 +22,7 @@ jest.mock('../../src/ts/api/turbo', () => ({
 }));
 jest.mock('../../src/ts/api/submissions', () => ({
     getEligiblePhotos: jest.fn(),
+    getEligiblePhotosWalk: jest.fn(),
     getImageData: jest.fn(),
     submitToChallenge: jest.fn(),
 }));
@@ -282,6 +283,7 @@ describe('joinChallenge', () => {
                 coinsUnlock: join.coinsUnlock,
                 submitToChallenge: submissions.submitToChallenge,
                 getEligiblePhotos: submissions.getEligiblePhotos,
+                getEligiblePhotosWalk: submissions.getEligiblePhotosWalk,
                 getCurrentMemberProfile: tags.getCurrentMemberProfile,
                 searchTagAutocomplete: tags.searchTagAutocomplete,
                 joinStateStore,
@@ -449,6 +451,7 @@ describe('fetchChallengesAndVote', () => {
                 'getActiveChallenges',
                 'getCurrentMemberProfile',
                 'getEligiblePhotos',
+                'getEligiblePhotosWalk',
                 'getImageData',
                 'getVoteImages',
                 'runTurboMiniGame',

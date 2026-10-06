@@ -13,7 +13,7 @@ import { applyBoost } from './applyBoost';
 import { getVoteImages, submitVotes } from '../../api/voting';
 import { applyBoostToEntry } from '../../api/boost';
 import { getChallengeTurbo, submitTurboSelection, applyTurbo, TURBO_SELECTION_DELAY_MS } from '../../api/turbo';
-import { getEligiblePhotos, getImageData, submitToChallenge } from '../../api/submissions';
+import { getEligiblePhotos, getEligiblePhotosWalk, getImageData, submitToChallenge } from '../../api/submissions';
 import { getCurrentMemberProfile, searchTagAutocomplete } from '../../api/tags';
 import { getMemberChallenges, getBankroll, coinsUnlock } from '../../api/join';
 import { getMyCompletedChallenges, claimChallengeResources, getMyMissions, claimMissionPrize } from '../../api/rewards';
@@ -52,6 +52,8 @@ const joinDeps = {
     coinsUnlock,
     submitToChallenge,
     getEligiblePhotos,
+    // The chosen-photos lookup of the join's photo pick; optional there.
+    getEligiblePhotosWalk,
     // Tag resolution for the join flow's photo pick. pickJoinPhoto reads these
     // off deps and no-ops without them, so omitting the pair here silently
     // reverts joins to unfiltered-library behavior.
@@ -179,6 +181,7 @@ const votingPassApi = () => ({
     applyBoostToEntry,
     applyTurbo,
     getEligiblePhotos,
+    getEligiblePhotosWalk,
     getImageData,
     submitToChallenge,
     runTurboMiniGame,

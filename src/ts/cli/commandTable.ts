@@ -20,6 +20,7 @@ import {
 } from './commands/actions';
 import { showBankroll } from './commands/bankroll';
 import { showDiscover, joinChallengeCmd } from './commands/join';
+import { listPhotosCmd, parseSearchFlag } from './commands/photos';
 import { checkUpdates } from './commands/update';
 import {
     getSetting,
@@ -96,6 +97,17 @@ const runJoin: CommandHandler = async (argv) => {
     const id = argv.find((a) => !a.startsWith('--'));
     await joinChallengeCmd(id, { yes });
     return 0;
+};
+
+const runListPhotos: CommandHandler = async (argv) => {
+    const { challengeId, rest } = extractChallenge(argv);
+    const search = parseSearchFlag(rest);
+    // Anything that is neither a --search flag nor its value is a typo.
+    const unexpected = rest.filter((arg, i) => !arg.startsWith('--search') && rest[i - 1] !== '--search');
+    if (unexpected.length > 0 || (rest.some((arg) => arg === '--search') && search === null)) {
+        return usageError('Wrong arguments', 'Usage: list-photos [--challenge=<id>] [--search=<tag>]');
+    }
+    return listPhotosCmd(challengeId, search);
 };
 
 const runBoost = async (challengeId: string, rest: string[]) => {
@@ -190,6 +202,7 @@ const COMMANDS: Record<string, CommandHandler> = {
     coins: exitsZero(showBankroll),
     discover: exitsZero(showDiscover),
     join: runJoin,
+    'list-photos': runListPhotos,
     'get-setting': runGetSetting,
     'set-setting': runSetSetting,
     'list-settings': async (argv) => {

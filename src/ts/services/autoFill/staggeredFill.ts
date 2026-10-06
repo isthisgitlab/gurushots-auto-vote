@@ -101,7 +101,10 @@ const maybeAutoFillChallenge = async (
         },
     });
     if (attempt.status === 'no-pick') return 'no-eligible-photos';
-    if (attempt.status === 'gone' || attempt.status === 'refresh-stand-down') return 'skipped';
+    // 'no-chosen': Submit Only Chosen Photos left the challenge alone (already explained in the log).
+    if (attempt.status === 'gone' || attempt.status === 'refresh-stand-down' || attempt.status === 'no-chosen') {
+        return 'skipped';
+    }
     if (attempt.status !== 'submitted') return 'error';
 
     // Reflect the consumed slot locally so a due turbo/boost later this

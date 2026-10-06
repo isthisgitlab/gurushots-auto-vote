@@ -42,7 +42,7 @@ import { fillChallengeNow } from './autoFill/manualFill';
 import { submitNewEntryForAction } from './autoFill/fillNew';
 import { rankCandidatesForChallenge } from './autoFill/pipeline';
 import { resolveSemanticScores, resolveIgnoreWords, fetchCandidatesForChallenge } from './autoFill/candidates';
-import { resolveMemberId, __resetMemberIdCache } from './autoFill/memberIdentity';
+import { resolveMemberId, peekMemberId, __resetMemberIdCache } from './autoFill/memberIdentity';
 import { describeSubmitFailure } from './autoFill/fillLogging';
 import { getSlotsRemaining, reflectNewEntry, reflectEntryFlag, refreshChallengeState } from './autoFill/challengeState';
 import { resolveScheduleTarget, getNextScheduleThresholdSec } from './autoFill/schedule';
@@ -64,6 +64,7 @@ export {
     fetchCandidatesForChallenge,
     rankCandidatesForChallenge,
     resolveMemberId,
+    peekMemberId,
     __resetMemberIdCache,
     resolveSemanticScores,
     resolveIgnoreWords,

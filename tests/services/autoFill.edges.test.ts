@@ -24,6 +24,7 @@ jest.mock('../../src/ts/settings/storage', () => ({
 const {
     resolveIgnoreWords,
     resolveMemberId,
+    peekMemberId,
     __resetMemberIdCache,
     refreshChallengeState,
     rankCandidatesForChallenge,
@@ -129,6 +130,22 @@ describe('resolveMemberId', () => {
         await expect(resolveMemberId('tok-b', getProfile, logger, 'fillNew')).resolves.toBeNull();
         expect(categories).toContain('fillNew');
         expect(lines.debug).toEqual(['fillNew: identity lookup failed: 401']);
+    });
+
+    test('peekMemberId only reads what an earlier lookup already resolved', async () => {
+        expect(peekMemberId('tok-peek')).toBeNull();
+        const getProfile = jest.fn().mockResolvedValue({ id: 'member-7' });
+        const pending = resolveMemberId('tok-peek', getProfile);
+        // The lookup is in flight: peeking neither waits for it nor starts one.
+        expect(peekMemberId('tok-peek')).toBeNull();
+        await pending;
+        await Promise.resolve();
+        expect(peekMemberId('tok-peek')).toBe('member-7');
+        expect(getProfile).toHaveBeenCalledTimes(1);
+        // A lookup that found nobody leaves nothing to peek at.
+        await resolveMemberId('tok-nobody', jest.fn().mockResolvedValue({ id: '' }));
+        await Promise.resolve();
+        expect(peekMemberId('tok-nobody')).toBeNull();
     });
 
     test('a failure without a logger still resolves to null', async () => {

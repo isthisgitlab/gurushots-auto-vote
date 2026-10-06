@@ -20,6 +20,7 @@ import {
 
 import type {
     ChallengeText,
+    ChosenCandidates,
     PickerPhoto,
     PickFallbackInfo,
     PickOptions,
@@ -87,6 +88,9 @@ const notifyFallback = (opts: PickOptions, info: PickFallbackInfo) => {
  *   fallback where a user can see it. Exceptions it throws are swallowed;
  *   omitting it changes nothing. Not called when fillWithoutTagMatch is false
  *   (the picker returns [] instead of relaxing).
+ *   chosen: the user's chosen photos (see ChosenPick): they rank first, ordered
+ *   by the same tiers as everything else, and the rest tops up the remaining
+ *   slots — or, with `only`, nothing does. Omit it and nothing changes.
  * @returns ordered list of photo ids; length <= slotsToFill
  */
 const pickPhotosForChallenge = (
@@ -96,8 +100,8 @@ const pickPhotosForChallenge = (
     opts: PickOptions = {},
 ): Array<string> => {
     if (!Number.isInteger(slotsToFill) || slotsToFill <= 0) return [];
-    const scored = buildScoredCandidates(challenge, eligiblePhotos, opts);
-    return finalizePick(scored, slotsToFill);
+    const { scored, chosenIds } = buildChosenCandidates(challenge, eligiblePhotos, opts);
+    return finalizePick(scored, slotsToFill, chosenIds);
 };
 
 /**
@@ -227,4 +231,42 @@ const buildScoredCandidates = (
     });
 };
 
-export { pickPhotosForChallenge, buildScoredCandidates };
+/**
+ * buildScoredCandidates with the user's chosen photos split out as a block.
+ *
+ * The hard filters, the negated-subject filter and the fillWithoutTagMatch
+ * relaxation still apply to chosen photos like to every photo: they are about
+ * the challenge, not the photo's owner. Ids already entered are removed from
+ * the pool as a set. Without `only` the whole pool is scored once and the
+ * result is split afterwards, so a relaxation is judged on the whole pool the
+ * way it always was. With `only` just the chosen photos are scored, so the
+ * relaxation is judged on them alone — whether a chosen photo is used must
+ * never depend on unrelated photos in the library.
+ *
+ * @returns the scored pool; `chosenIds` names the chosen block inside it, or is
+ *   null when no chosen photos were asked for (then nothing differs from
+ *   buildScoredCandidates)
+ */
+const buildChosenCandidates = (
+    challenge: ChallengeText | null | undefined,
+    eligiblePhotos: PickerPhoto[],
+    opts: PickOptions,
+): ChosenCandidates => {
+    const { chosen } = opts;
+    if (!chosen || chosen.ids.length === 0) {
+        return { scored: buildScoredCandidates(challenge, eligiblePhotos, opts), chosenIds: null };
+    }
+    const wanted = new Set(chosen.ids.map(String));
+    const { excludeIds } = chosen;
+    const pool = (Array.isArray(eligiblePhotos) ? eligiblePhotos : []).filter(
+        (photo) => !(photo && excludeIds?.has(String(photo.id))),
+    );
+    const scored = buildScoredCandidates(
+        challenge,
+        chosen.only ? pool.filter((photo) => photo && wanted.has(String(photo.id))) : pool,
+        opts,
+    );
+    return { scored, chosenIds: new Set(scored.map((entry) => String(entry.id)).filter((id) => wanted.has(id))) };
+};
+
+export { pickPhotosForChallenge, buildScoredCandidates, buildChosenCandidates };

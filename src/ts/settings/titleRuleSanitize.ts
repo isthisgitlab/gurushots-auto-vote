@@ -39,6 +39,11 @@ const MAX_TITLES_PER_RULE = 50;
  * and an un-joined challenge has no cached id for a per-challenge override to
  * key off — so a rule is the only place they can be expressed. Richer setups
  * belong in a named profile, which this composes with (inline wins).
+ *
+ * `chosenPhotos` / `chosenPhotosOnly` are here for the same reason: the join
+ * must know which photo to enter with before the challenge has a cached id.
+ * `chosenPhotos` is the one array-valued key (an empty `[]` is an explicit
+ * "no chosen photos", distinct from the absent/'' "inherit").
  */
 const TITLE_RULE_INLINE_KEYS = [
     'autoJoin',
@@ -46,6 +51,8 @@ const TITLE_RULE_INLINE_KEYS = [
     'autoJoinWithinHoursOfEnd',
     'autoJoinAfterPercentElapsed',
     'scenario',
+    'chosenPhotos',
+    'chosenPhotosOnly',
 ];
 
 /**

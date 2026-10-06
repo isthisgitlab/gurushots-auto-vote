@@ -8,6 +8,9 @@ const logLabels: Record<string, string> = {
     Fill: 'Iesniegšana',
     autoFill: 'Automātiskā iesniegšana',
     AutoFill: 'Automātiskā iesniegšana',
+    emergencyFill: 'Ārkārtas iesniegšana',
+    manualFill: 'Manuālā iesniegšana',
+    fillNew: 'Jauna foto iesniegšana',
     join: 'Pievienošanās',
     Join: 'Pievienošanās',
 };

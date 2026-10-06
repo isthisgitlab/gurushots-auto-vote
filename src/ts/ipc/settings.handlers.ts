@@ -24,6 +24,7 @@ import { toRendererSettings, isRendererHiddenKey, withoutRendererHiddenKeys } fr
 import * as logger from '../logger';
 import * as apiFactory from '../apiFactory';
 import * as metadata from '../metadata';
+import { stampChosenPhotosOwner } from './chosenPhotosOwner';
 
 import type { IpcMain } from 'electron';
 import type { SettingsSchemaEntry } from '../settings/schema';
@@ -122,6 +123,17 @@ const CHANGE_BROADCAST_CHANNELS = new Set([
     'reset-global-default',
     'reset-all-global-defaults',
     'reset-all-settings',
+]);
+
+// The writes that can carry a Chosen Photos list, after which the saving
+// account is recorded (see chosenPhotosOwner.ts).
+const CHOSEN_LIST_CHANNELS = new Set([
+    'set-global-default',
+    'set-challenge-override',
+    'set-challenge-overrides',
+    'replace-challenge-overrides',
+    'set-title-rules',
+    'save-challenge-profile',
 ]);
 
 const handleGetSetting = async (key: unknown) => {
@@ -320,6 +332,7 @@ const buildThinHandlers = ({ broadcastSettingsChange }: { broadcastSettingsChang
         handlers[channel] = async (event, ...args: unknown[]) => {
             try {
                 const result = (lookup() as (...a: unknown[]) => unknown)(...args);
+                if (result && CHOSEN_LIST_CHANNELS.has(channel)) stampChosenPhotosOwner(args);
                 if (result && CHANGE_BROADCAST_CHANNELS.has(channel) && typeof broadcastSettingsChange === 'function') {
                     broadcastSettingsChange(toRendererSettings(settings.loadSettings()));
                 }

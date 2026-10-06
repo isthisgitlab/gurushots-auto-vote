@@ -35,6 +35,7 @@ const ACTIONS: { [K in ActionType]: ActionHandler<Extract<ScenarioAction, { type
             if (filled.reason === 'no-slots') return skipped('no free entry slot');
             if (filled.reason === 'challenge-gone') return skipped('the challenge is no longer active');
             if (filled.reason === 'no-eligible') return skipped('no eligible photo to enter');
+            if (filled.reason === 'no-chosen') return skipped('no chosen photo can be entered');
             if (!filled.ok) return failed(`no photo was entered (${filled.reason})`);
             enteredId = String(filled.imageId);
         } else {

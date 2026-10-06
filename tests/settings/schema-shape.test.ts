@@ -108,6 +108,8 @@ describe('settings schema shape', () => {
             'emergencyFill',
             'mustIncludeTags',
             'shouldIncludeTags',
+            'chosenPhotos',
+            'chosenPhotosOnly',
             'ignoreTitleWords',
             'autoClaimPrizes',
             'missionSaveTurbos',
@@ -122,6 +124,7 @@ describe('settings schema shape', () => {
             'notifyLeadTime',
             'autovoteRunning',
             'skipUpdateVersion',
+            'chosenPhotosMemberId',
         ]);
     });
 

@@ -13,6 +13,7 @@ import { loadSettings, saveSettings } from './persistence';
 import { valuesEqual, globalChallengeValues, challengeValueSetIsValid } from './defaults';
 import { ruleValuesForChallengeId, isTitleProfileSuppressed } from './ruleResolution';
 import { scenarioPhaseSettings } from './scenarioOverlay';
+import { getOpenChallengeIds } from './openChallenges';
 
 import type {
     AppSettings,
@@ -373,15 +374,35 @@ const _resolveEffectiveSetting = (
         : entry.default;
 };
 
+// The keys a not-yet-joined challenge needs its own override for: the join has
+// to know which photo to enter with before the challenge is in the active list.
+const JOIN_KEPT_KEYS = ['chosenPhotos', 'chosenPhotosOnly'];
+
 /**
- * Cleanup stale challenge settings for challenges that no longer exist
+ * Whether a non-active override entry must survive cleanup: it holds a chosen
+ * photos key and its challenge is still joinable (in the most recent open
+ * list), or no open list has been fetched yet so that cannot be told.
+ */
+const isKeptForJoin = (challengeId: string, values: ChallengeValues): boolean => {
+    if (!JOIN_KEPT_KEYS.some((key) => Object.prototype.hasOwnProperty.call(values, key))) return false;
+    const open = getOpenChallengeIds();
+    return open === null || open.has(challengeId);
+};
+
+/**
+ * Cleanup stale challenge settings for challenges that no longer exist.
+ * A challenge that is open but not joined yet is not stale when its entry
+ * holds a chosen photos setting (see isKeptForJoin).
  */
 const cleanupStaleChallengeSetting = (activeChallengeIds: Iterable<string>): boolean => {
     const settings = loadSettings();
     const activeIds = new Set(activeChallengeIds);
     const { perChallenge, titleProfileSuppressions: suppressions } = settings.challengeSettings;
-    const staleChallengeIds = Object.keys(perChallenge).filter((id) => !activeIds.has(id));
-    const staleSuppressionIds = Object.keys(suppressions).filter((id) => !activeIds.has(id));
+    const keptForJoin = new Set(
+        Object.keys(perChallenge).filter((id) => !activeIds.has(id) && isKeptForJoin(id, perChallenge[id])),
+    );
+    const staleChallengeIds = Object.keys(perChallenge).filter((id) => !activeIds.has(id) && !keptForJoin.has(id));
+    const staleSuppressionIds = Object.keys(suppressions).filter((id) => !activeIds.has(id) && !keptForJoin.has(id));
 
     if (staleChallengeIds.length === 0 && staleSuppressionIds.length === 0) {
         return true; // Nothing to cleanup
