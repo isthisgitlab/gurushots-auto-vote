@@ -634,7 +634,7 @@ export const app = {
     photoChooserSaveNotLoggedIn:
         "You're signed out, so the account can't be checked. Log in again, then reopen the chooser.",
     photoChooserSaveNoContextHeld:
-        'There is no challenge to read your library through, so saving is held. Join a challenge, or close this window.',
+        "Saving is held: without an active or open challenge the app can't check which account this list belongs to. Close this window and join a challenge first.",
     photoChooserClearHeld: "Clear is unavailable until your saved list has been read, so a late read can't undo it.",
     photoChooserSaveUnconfirmed:
         "Couldn't confirm which account this list belongs to, so saving is held to protect it. Press Retry, or close and reopen the chooser.",

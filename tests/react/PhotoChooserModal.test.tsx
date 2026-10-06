@@ -768,7 +768,7 @@ describe('a saved list that came without its ids', () => {
     const notLoggedInHint =
         "You're signed out, so the account can't be checked. Log in again, then reopen the chooser.";
     const noContextHeldHint =
-        'There is no challenge to read your library through, so saving is held. Join a challenge, or close this window.';
+        "Saving is held: without an active or open challenge the app can't check which account this list belongs to. Close this window and join a challenge first.";
     const confirmedText = 'Account confirmed — your saved list is loaded.';
     const lockedText = 'Locked until your saved list is read';
     const checkingHint = 'Checking which account this list belongs to…';
@@ -985,10 +985,88 @@ describe('a saved list that came without its ids', () => {
 
             await act(async () => read.resolve([idOf(1)]));
             await waitFor(() => expect(screen.queryByRole('button', { name: 'Retry' })).toBeNull());
-            expect(document.activeElement).toBe(use());
+            await waitFor(() => expect(document.activeElement).toBe(use()));
             // The success is in a live region that was mounted all along.
             const announced = screen.getByText(confirmedText);
             expect(announced.getAttribute('role')).toBe('status');
+        });
+
+        test('focus goes to the status line when Retry ends signed out (Save is still held), so it is never dropped', async () => {
+            getLibrary().mockResolvedValue(listing([photo(1)], { memberId: null }));
+            const answer = deferred<{ success: false; error: 'not-logged-in' }>();
+            jest.mocked(window.api.confirmAccount).mockReturnValueOnce(invalid(answer.promise));
+            setup({ value: [], savedCount: 1, reloadSaved: rereads() });
+            await screen.findByText(unconfirmedHint);
+            const retry = retryButton();
+            retry.focus();
+            fireEvent.click(retry);
+            await act(async () => answer.resolve({ success: false, error: 'not-logged-in' }));
+            await screen.findByText(notLoggedInHint);
+            expect(screen.queryByRole('button', { name: 'Retry' })).toBeNull();
+            const status = screen.getByText(notLoggedInHint);
+            await waitFor(() => expect(document.activeElement).toBe(status));
+            expect(status.getAttribute('role')).toBe('status');
+        });
+
+        test('focus goes to Save when Retry finds another account (Save is free then)', async () => {
+            getLibrary().mockResolvedValue(listing([photo(1)], { memberId: null }));
+            const answer = deferred<{ success: true; memberId: string }>();
+            jest.mocked(window.api.confirmAccount).mockReturnValueOnce(invalid(answer.promise));
+            setup({ value: [], savedCount: 1, reloadSaved: rereads() });
+            await screen.findByText(unconfirmedHint);
+            const retry = retryButton();
+            retry.focus();
+            fireEvent.click(retry);
+            await act(async () => answer.resolve({ success: true, memberId: 'd'.repeat(32) }));
+            await screen.findByText(/saved under another account, so the app ignores them/);
+            await waitFor(() => expect(screen.queryByRole('button', { name: 'Retry' })).toBeNull());
+            expect(use().getAttribute('aria-disabled')).toBe('false');
+            await waitFor(() => expect(document.activeElement).toBe(use()));
+        });
+
+        test('focus the user has put elsewhere is never taken when the hold lifts', async () => {
+            getLibrary().mockResolvedValue(listing([photo(1)], { memberId: null }));
+            const answer = deferred<{ success: true; memberId: string }>();
+            jest.mocked(window.api.confirmAccount).mockReturnValueOnce(invalid(answer.promise));
+            setup({ value: [], savedCount: 1, reloadSaved: rereads([idOf(1)]) });
+            await screen.findByText(unconfirmedHint);
+            fireEvent.click(retryButton());
+            // While the check runs the user moves to Cancel; the lifted hold must not pull focus away.
+            const cancel = screen.getByRole('button', { name: 'Cancel' });
+            cancel.focus();
+            await act(async () => answer.resolve({ success: true, memberId: OWNER }));
+            await waitFor(() => expect(pressed(1)).toBe('true'));
+            // Let the footer's effects run before judging where focus is.
+            await act(async () => new Promise((resolve) => setTimeout(resolve, 100)));
+            expect(document.activeElement).toBe(cancel);
+        });
+
+        test('an earlier failed Retry, then a search, then a successful automatic read: focus stays in the search box and nothing is announced', async () => {
+            const reloadSaved = rereads(null, null, [idOf(1)]);
+            setup({ value: [], savedCount: 1, reloadSaved });
+            await screen.findByText(readFailedHint);
+            fireEvent.click(retryButton());
+            await screen.findByText(readFailedAgainHint);
+
+            const search = screen.getByRole('searchbox');
+            search.focus();
+            fireEvent.submit(search.closest('form')!);
+            await waitFor(() => expect(pressed(1)).toBe('true'));
+            await waitFor(() => expect(use().getAttribute('aria-disabled')).toBe('false'));
+            expect(document.activeElement).toBe(search);
+            expect(screen.queryByText(confirmedText)).toBeNull();
+        });
+
+        test('a successful Retry is announced once: a later search does not announce it again', async () => {
+            const { onSave } = setup({ value: [], savedCount: 1, reloadSaved: rereads(null, [idOf(1)]) });
+            await screen.findByText(readFailedHint);
+            fireEvent.click(retryButton());
+            await screen.findByText(confirmedText);
+            expect(onSave).not.toHaveBeenCalled();
+            const search = screen.getByRole('searchbox');
+            fireEvent.submit(search.closest('form')!);
+            await waitFor(() => expect(getLibrary()).toHaveBeenCalledTimes(2));
+            await waitFor(() => expect(screen.queryByText(confirmedText)).toBeNull());
         });
 
         test('a hold nobody pressed Retry for lifts without moving focus or announcing success', async () => {

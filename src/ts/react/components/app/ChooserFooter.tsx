@@ -58,12 +58,15 @@ const RETRYABLE_HOLDS: ReadonlyArray<keyof typeof SAVE_HOLD_HINT> = [
  */
 function HoldStatus({
     id,
+    statusRef,
     message,
     showRetry,
     retrying,
     onRetry,
 }: {
     id: string;
+    /** Where focus goes when the Retry the user was on goes away and Save is still held. */
+    statusRef: RefObject<HTMLParagraphElement | null>;
     message: string | null;
     showRetry: boolean;
     retrying: boolean;
@@ -72,7 +75,7 @@ function HoldStatus({
     const { t } = useTranslation();
     return (
         <div className="flex items-center justify-end gap-2">
-            <p id={id} role="status" className="text-base-content/70 text-right text-xs">
+            <p id={id} ref={statusRef} tabIndex={-1} role="status" className="text-base-content/70 text-right text-xs">
                 {message && t(message)}
             </p>
             {(showRetry || retrying) && (
@@ -134,15 +137,14 @@ function HeldButton({
 
 /**
  * Save, Clear and Cancel. Save is held (`saveWaits`) with the status line as its description; Clear is
- * held while the saved list is unread (`locked`), with its own short description of why. `focusSave`
- * moves focus to Save, where the Retry the user was on was.
+ * held while the saved list is unread (`locked`), with its own short description of why.
  */
 function FooterActions({
     saveWaits,
     locked,
     hintId,
     saving,
-    focusSave,
+    saveRef,
     onSave,
     onClear,
     onClose,
@@ -151,17 +153,13 @@ function FooterActions({
     locked: boolean;
     hintId: string;
     saving: boolean;
-    focusSave: boolean;
+    saveRef: RefObject<HTMLButtonElement | null>;
     onSave: () => void;
     onClear: () => void;
     onClose: () => void;
 }) {
     const { t } = useTranslation();
     const clearHintId = useId();
-    const saveRef = useRef<HTMLButtonElement>(null);
-    useEffect(() => {
-        if (focusSave) saveRef.current?.focus();
-    }, [focusSave]);
     return (
         <div className="flex justify-end gap-2">
             <HeldButton
@@ -190,11 +188,21 @@ function FooterActions({
     );
 }
 
+/** Focus is nowhere: on the page itself, or on an element that has just been removed. */
+const focusIsLost = (): boolean => {
+    const active = document.activeElement;
+    return active === null || active === document.body || !active.isConnected;
+};
+
 /**
  * The chooser's actions: save (held back, with its reason, while the account is unknown),
  * clear the selection (held with it while the saved list is unread: a late read would undo the
- * clear; its own description says so), cancel — and the error of a save that failed. Once a Retry
- * has lifted the hold (`confirmed`), focus moves to Save, where the Retry the user was on was.
+ * clear; its own description says so), cancel — and the error of a save that failed.
+ *
+ * When a Retry ends and the Retry button goes (the hold lifted, signed out, another account) while
+ * focus was on it, focus would drop to the page. It moves to Save if Save is free, else to the
+ * status line (which holds the reason), so it is always somewhere stable. Focus anywhere else — the
+ * search box, Cancel — is never taken.
  */
 export function ChooserFooter({
     saveFailed,
@@ -228,6 +236,14 @@ export function ChooserFooter({
 }) {
     const { t } = useTranslation();
     const hintId = useId();
+    const saveRef = useRef<HTMLButtonElement>(null);
+    const statusRef = useRef<HTMLParagraphElement>(null);
+    const wasRetrying = useRef(false);
+    useEffect(() => {
+        const ended = wasRetrying.current && !retrying;
+        wasRetrying.current = retrying;
+        if (ended && focusIsLost()) (saveWaits ? statusRef : saveRef).current?.focus();
+    }, [retrying, saveWaits]);
     const message = saveWaits ? SAVE_HOLD_HINT[holdReason] : confirmed ? 'app.photoChooserSaveConfirmed' : null;
     return (
         <>
@@ -238,6 +254,7 @@ export function ChooserFooter({
             )}
             <HoldStatus
                 id={hintId}
+                statusRef={statusRef}
                 message={message}
                 showRetry={saveWaits && RETRYABLE_HOLDS.includes(holdReason)}
                 retrying={retrying}
@@ -251,7 +268,7 @@ export function ChooserFooter({
                 onSave={onSave}
                 onClear={onClear}
                 onClose={onClose}
-                focusSave={confirmed}
+                saveRef={saveRef}
             />
         </>
     );

@@ -25,7 +25,7 @@ const render = (reloadSaved: () => Promise<string[] | null>, state: ListState = 
     const retryListing = jest.fn();
     const confirmAccount = jest.fn<Promise<AccountCheck>, []>().mockResolvedValue({ memberId: OWNER });
     const hook = renderHook(
-        (props: { reloadSaved: () => Promise<string[] | null>; state: ListState }) =>
+        (props: { reloadSaved: () => Promise<string[] | null>; state: ListState; generation: number }) =>
             useSavedListReread({
                 withheld: true,
                 owner: OWNER,
@@ -35,7 +35,7 @@ const render = (reloadSaved: () => Promise<string[] | null>, state: ListState = 
                 confirmAccount,
                 ...props,
             }),
-        { initialProps: { reloadSaved, state } },
+        { initialProps: { reloadSaved, state, generation: 1 } },
     );
     return { ...hook, onRead, onMember, retryListing, confirmAccount };
 };
@@ -49,8 +49,8 @@ test('a failed read is not repeated by re-renders with the same function; Retry 
     const { result, rerender, onRead, retryListing } = render(reloadSaved, listing);
     await waitFor(() => expect(result.current.status).toBe('unconfirmed'));
     // The same listing and the same function: re-rendering never asks again.
-    rerender({ reloadSaved, state: listing });
-    rerender({ reloadSaved, state: listing });
+    rerender({ reloadSaved, state: listing, generation: 1 });
+    rerender({ reloadSaved, state: listing, generation: 1 });
     expect(reloadSaved).toHaveBeenCalledTimes(1);
 
     act(() => result.current.retry());
@@ -94,7 +94,7 @@ test.each([
     expect(onMember).not.toHaveBeenCalled();
     // The next press clears the failure while it runs.
     act(() => result.current.retry());
-    expect(result.current.failure).not.toBe('check-failed');
+    expect(result.current.failure).toBe('unconfirmed');
     await waitFor(() => expect(onMember).toHaveBeenCalledWith(OWNER));
 });
 
@@ -130,7 +130,7 @@ test('retrying covers the account check and the read after it; confirmed is true
     expect(result.current.retrying).toBe(true);
     await waitFor(() => expect(confirmAccount).toHaveBeenCalled());
     // The check answered: the listing now names the owner, and the chained read is pending.
-    rerender({ reloadSaved, state: ready(OWNER) });
+    rerender({ reloadSaved, state: ready(OWNER), generation: 1 });
     await waitFor(() => expect(reloadSaved).toHaveBeenCalledTimes(1));
     expect(result.current.busy).toBe(false);
     expect(result.current.retrying).toBe(true);
@@ -167,6 +167,7 @@ test('a listing that names a member while the owner is not loaded yet is retried
             withheld: true,
             owner: '',
             state: ready(OWNER),
+            generation: 1,
             reloadSaved: jest.fn(),
             confirmAccount,
             retryListing,
@@ -188,6 +189,7 @@ test('with no way to read the list, a ready listing of the owner is unconfirmed 
             withheld: true,
             owner: OWNER,
             state: ready(OWNER),
+            generation: 1,
             confirmAccount: jest.fn(),
             retryListing: jest.fn(),
             onMember: jest.fn(),
@@ -216,5 +218,71 @@ describe('useLibraryListing.setMember — a member the listing could not name, f
         const { result } = renderHook(() => useLibraryListing(7));
         act(() => result.current.setMember(OWNER));
         expect(result.current.state.status).toBe('loading');
+    });
+});
+
+describe('what a Retry did belongs to the listing generation it was pressed on', () => {
+    const next = { generation: 2 };
+
+    test('confirmed is tied to the press that produced it: a Retry that failed, then a search whose read succeeds, is not "confirmed"', async () => {
+        const reloadSaved = jest
+            .fn<Promise<string[] | null>, []>()
+            .mockResolvedValueOnce(null)
+            .mockResolvedValueOnce(null)
+            .mockResolvedValueOnce(['a']);
+        const { result, rerender } = render(reloadSaved);
+        await waitFor(() => expect(result.current.failure).toBe('read-failed'));
+        act(() => result.current.retry());
+        await waitFor(() => expect(result.current.failure).toBe('read-failed-again'));
+
+        // A new search: its automatic read succeeds, and nothing is announced.
+        rerender({ reloadSaved, state: ready(OWNER), ...next });
+        await waitFor(() => expect(result.current.status).toBe('ok'));
+        expect(result.current.confirmed).toBe(false);
+    });
+
+    test('a confirmed Retry stays confirmed on its own listing and not on the next', async () => {
+        const reloadSaved = jest
+            .fn<Promise<string[] | null>, []>()
+            .mockResolvedValueOnce(null)
+            .mockResolvedValueOnce(['a']);
+        const { result, rerender } = render(reloadSaved);
+        await waitFor(() => expect(result.current.failure).toBe('read-failed'));
+        act(() => result.current.retry());
+        await waitFor(() => expect(result.current.confirmed).toBe(true));
+        rerender({ reloadSaved, state: ready(OWNER), ...next });
+        expect(result.current.confirmed).toBe(false);
+    });
+
+    test('an old check failure never labels a later failure on a new listing: a failed read is a read failure', async () => {
+        const reloadSaved = jest.fn<Promise<string[] | null>, []>().mockResolvedValue(null);
+        const { result, rerender, confirmAccount } = render(reloadSaved, ready(null));
+        confirmAccount.mockResolvedValueOnce({ error: 'account-check-failed' });
+        act(() => result.current.retry());
+        await waitFor(() => expect(result.current.failure).toBe('check-failed'));
+
+        // A new listing that names the owner, whose read fails.
+        rerender({ reloadSaved, state: ready(OWNER), ...next });
+        await waitFor(() => expect(result.current.failure).toBe('read-failed'));
+    });
+
+    test('"failed again" does not carry over to a new listing', async () => {
+        const reloadSaved = jest.fn<Promise<string[] | null>, []>().mockResolvedValue(null);
+        const { result, rerender } = render(reloadSaved);
+        await waitFor(() => expect(result.current.failure).toBe('read-failed'));
+        act(() => result.current.retry());
+        await waitFor(() => expect(result.current.failure).toBe('read-failed-again'));
+
+        rerender({ reloadSaved, state: ready(OWNER), ...next });
+        await waitFor(() => expect(result.current.failure).toBe('read-failed'));
+    });
+
+    test('a check failure on one listing is not shown on the next while the member is still unknown', async () => {
+        const { result, rerender, confirmAccount } = render(jest.fn(), ready(null));
+        confirmAccount.mockResolvedValueOnce({ error: 'not-logged-in' });
+        act(() => result.current.retry());
+        await waitFor(() => expect(result.current.failure).toBe('not-logged-in'));
+        rerender({ reloadSaved: jest.fn(), state: ready(null), ...next });
+        expect(result.current.failure).toBe('unconfirmed');
     });
 });

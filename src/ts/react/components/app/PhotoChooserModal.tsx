@@ -379,7 +379,7 @@ function PhotoChooserBody({
     const { t } = useTranslation();
     const owner = useChosenPhotosOwner();
     const [selected, setSelected] = useState<string[]>(value);
-    const { state, known, load, retry, setMember } = useLibraryListing(challengeId);
+    const { state, known, generation, load, retry, setMember } = useLibraryListing(challengeId);
     const [listsRemoved, setListsRemoved] = useState(false);
 
     const toggle = useCallback((id: string) => {
@@ -401,6 +401,7 @@ function PhotoChooserBody({
         withheld: savedCount > value.length,
         owner,
         state,
+        generation,
         reloadSaved,
         confirmAccount,
         retryListing: retry,

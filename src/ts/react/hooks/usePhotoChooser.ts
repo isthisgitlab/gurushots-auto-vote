@@ -33,6 +33,10 @@ export function useLibraryListing(challengeId: string | number | null) {
     // Every photo any response has listed, by id: a selected photo that a narrower
     // search omits keeps its record and is not shown as a missing tile.
     const [known, setKnown] = useState<Map<string, LibraryPhoto>>(new Map());
+    // Which load the listing is on: a new search or load is a new generation, a member patched into
+    // the listing on screen (setMember) is not. What a Retry did belongs to the generation it was
+    // pressed on.
+    const [generation, setGeneration] = useState(0);
     const requestRef = useRef(0);
     const lastSearchRef = useRef('');
 
@@ -40,6 +44,7 @@ export function useLibraryListing(challengeId: string | number | null) {
         async (search: string) => {
             const request = ++requestRef.current;
             lastSearchRef.current = search;
+            setGeneration((count) => count + 1);
             setState({ status: 'loading' });
             const result = await ipc.callOrNull(() => ipc.getLibraryPhotos(challengeId, search || undefined));
             if (request !== requestRef.current) return;
@@ -77,7 +82,7 @@ export function useLibraryListing(challengeId: string | number | null) {
         );
     }, []);
 
-    return { state, known, load, setMember, retry: () => void load(lastSearchRef.current) };
+    return { state, known, generation, load, setMember, retry: () => void load(lastSearchRef.current) };
 }
 
 /**
@@ -138,23 +143,26 @@ type SavedListFailure = 'unconfirmed' | 'check-failed' | 'not-logged-in' | 'read
  * `reloadSaved` asks for it and `onRead` gets its ids. A read that gives nothing or rejects is
  * `failed` for that listing; a new listing is not a failed one, so it reads as pending at once
  * instead of flashing the unconfirmed state for a paint, and is read again. `again` retries
- * (`busy` until the read ends, either way; `retried` once it has).
+ * (`busy` until the read ends, either way); `retried` is true for the listing generation it was
+ * pressed on only, so a repeat is never claimed for a different listing.
  */
 function useSavedListRead({
     ownersList,
     state,
+    generation,
     reloadSaved,
     onRead,
 }: {
     ownersList: boolean;
     state: ListState;
+    generation: number;
     reloadSaved?: () => Promise<string[] | null>;
     onRead: (ids: string[]) => void;
 }) {
     const [reloaded, setReloaded] = useState(false);
     // A retry pressed for the read: it is under way (`busy`), and a failure after one is a repeat.
     const [busy, setBusy] = useState(false);
-    const [retried, setRetried] = useState(false);
+    const [retriedAt, setRetriedAt] = useState<number | null>(null);
     const [failedAt, setFailedAt] = useState<ListState | null>(null);
     const [attempt, setAttempt] = useState(0);
     const inFlight = useRef(false);
@@ -177,11 +185,11 @@ function useSavedListRead({
     }, [ownersList, reloaded, reloadSaved, onRead, attempt, state]);
     const again = () => {
         setBusy(true);
-        setRetried(true);
+        setRetriedAt(generation);
         setFailedAt(null);
         setAttempt((count) => count + 1);
     };
-    return { reloaded, failed: failedAt === state, busy, retried, again };
+    return { reloaded, failed: failedAt === state, busy, retried: retriedAt === generation, again };
 }
 
 /**
@@ -216,6 +224,7 @@ function checkAccount({
 function useSavedListRetry({
     ownersList,
     memberId,
+    generation,
     read,
     confirmAccount,
     onMember,
@@ -223,26 +232,38 @@ function useSavedListRetry({
 }: {
     ownersList: boolean;
     memberId: string | null;
+    generation: number;
     read: Pick<ReturnType<typeof useSavedListRead>, 'busy' | 'again'>;
     confirmAccount: () => Promise<AccountCheck>;
     onMember: (memberId: string) => void;
     retryListing: () => void;
 }) {
     const [checkBusy, setCheckBusy] = useState(false);
-    const [checkFailure, setCheckFailure] = useState<'failed' | 'not-logged-in' | null>(null);
-    const [pressed, setPressed] = useState(false);
+    // Both belong to the listing generation Retry was pressed on: a new search starts clean.
+    const [failure, setFailure] = useState<{ generation: number; kind: 'failed' | 'not-logged-in' } | null>(null);
+    const [pressedAt, setPressedAt] = useState<number | null>(null);
     const busy = checkBusy || read.busy;
     const retry = () => {
         if (busy) return;
-        setCheckFailure(null);
-        setPressed(true);
+        setFailure(null);
+        setPressedAt(generation);
         if (ownersList) read.again();
         else if (memberId === null) {
             setCheckBusy(true);
-            checkAccount({ confirmAccount, onMember, setBusy: setCheckBusy, setCheckFailure });
+            checkAccount({
+                confirmAccount,
+                onMember,
+                setBusy: setCheckBusy,
+                setCheckFailure: (kind) => setFailure({ generation, kind }),
+            });
         } else retryListing();
     };
-    return { busy, pressed, checkFailure, retry };
+    return {
+        busy,
+        pressed: pressedAt === generation,
+        checkFailure: failure?.generation === generation ? failure.kind : null,
+        retry,
+    };
 }
 
 /** Which failure keeps an unconfirmed list held: the account check's, or the read's (first, or a repeat). */
@@ -251,10 +272,10 @@ const failureOf = (
     ownersList: boolean,
     readRetried: boolean,
 ): SavedListFailure => {
+    // Once the listing names the owner the account is known: whatever fails is the read.
+    if (ownersList) return readRetried ? 'read-failed-again' : 'read-failed';
     if (checkFailure === 'not-logged-in') return 'not-logged-in';
-    if (checkFailure === 'failed') return 'check-failed';
-    if (!ownersList) return 'unconfirmed';
-    return readRetried ? 'read-failed-again' : 'read-failed';
+    return checkFailure === 'failed' ? 'check-failed' : 'unconfirmed';
 };
 
 /**
@@ -280,6 +301,7 @@ export function useSavedListReread({
     withheld,
     owner,
     state,
+    generation,
     reloadSaved,
     confirmAccount,
     retryListing,
@@ -289,6 +311,8 @@ export function useSavedListReread({
     withheld: boolean;
     owner: string;
     state: ListState;
+    /** Which load of the listing this is (see useLibraryListing): what a Retry did belongs to one. */
+    generation: number;
     reloadSaved?: () => Promise<string[] | null>;
     confirmAccount: () => Promise<AccountCheck>;
     retryListing: () => void;
@@ -298,10 +322,11 @@ export function useSavedListReread({
     const memberId = state.status === 'ready' ? state.listing.memberId : null;
     const ownersList = withheld && owner !== '' && memberId === owner;
     const canRead = !!reloadSaved;
-    const read = useSavedListRead({ ownersList, state, reloadSaved, onRead });
+    const read = useSavedListRead({ ownersList, state, generation, reloadSaved, onRead });
     const retrying = useSavedListRetry({
         ownersList: ownersList && canRead,
         memberId,
+        generation,
         read,
         confirmAccount,
         onMember,

@@ -106,15 +106,14 @@ describe('confirm-account: the explicit retry after a failed identity lookup', (
     });
 
     test('a failed lookup is evicted, so the retry succeeds at once instead of waiting out the 60 s, with no library walk', async () => {
-        const now = jest.spyOn(Date, 'now').mockReturnValue(1_000_000);
+        jest.spyOn(Date, 'now').mockReturnValue(1_000_000);
         getCurrentMemberProfile.mockResolvedValueOnce(null);
         await annotate();
         // The cached failure answers any ordinary resolve for the next minute...
         await annotate();
         expect(getCurrentMemberProfile).toHaveBeenCalledTimes(1);
 
-        // ...but an explicit retry (once the failure is a few seconds old) asks again, and this time it works.
-        now.mockReturnValue(1_000_000 + 6_000);
+        // ...but an explicit retry asks again, however recent the failure, and this time it works.
         await expect(confirm()).resolves.toEqual({ success: true, memberId: OWNER });
         expect(getCurrentMemberProfile).toHaveBeenCalledTimes(2);
         expect(walk).not.toHaveBeenCalled();
@@ -140,16 +139,25 @@ describe('confirm-account: the explicit retry after a failed identity lookup', (
         expect(getCurrentMemberProfile).toHaveBeenCalledTimes(2);
     });
 
-    test('a failure right at the gap is evicted, one just inside it is not', async () => {
-        const now = jest.spyOn(Date, 'now').mockReturnValue(2_000_000);
+    test('the first explicit Retry right after a failed lookup asks at once; a second inside the gap does not', async () => {
+        const now = jest.spyOn(Date, 'now').mockReturnValue(3_000_000);
         getCurrentMemberProfile.mockResolvedValue(null);
-        await confirm();
-        now.mockReturnValue(2_000_000 + 4_999);
-        await confirm();
+        await annotate();
         expect(getCurrentMemberProfile).toHaveBeenCalledTimes(1);
-        now.mockReturnValue(2_000_000 + 5_000);
+
+        // The lookup failed a moment ago, and the user presses Retry: it makes a request (which fails again).
+        now.mockReturnValue(3_000_000 + 100);
+        await expect(confirm()).resolves.toEqual({ success: false, error: 'account-check-failed' });
+        expect(getCurrentMemberProfile).toHaveBeenCalledTimes(2);
+
+        // A second press inside the gap, counted from that Retry, shares the cached failure.
+        now.mockReturnValue(3_000_000 + 100 + 4_999);
         await confirm();
         expect(getCurrentMemberProfile).toHaveBeenCalledTimes(2);
+        // Presses inside the gap do not push it back: one at the gap goes through.
+        now.mockReturnValue(3_000_000 + 100 + 5_000);
+        await confirm();
+        expect(getCurrentMemberProfile).toHaveBeenCalledTimes(3);
     });
 
     test('a resolved member is never looked up again, and a lookup in flight is shared, not evicted', async () => {

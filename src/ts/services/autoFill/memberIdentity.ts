@@ -7,14 +7,12 @@ import type { FillLogger, RankDeps } from '../../types/autoFill';
 import { errorMessage } from '../../errorMessage';
 
 /**
- * A memoised lookup: the shared promise, and when a null answer expires and when it
- * was cached (both null for a resolved id or a lookup still in flight).
+ * A memoised lookup: the shared promise, and when a null answer expires (null =
+ * never, for a resolved id or a lookup still in flight).
  */
 type MemberIdCacheEntry = {
     promise: Promise<string | null>;
     expiresAt: number | null;
-    /** When a failed lookup was cached: the explicit retry's minimum gap counts from here. */
-    failedAt: number | null;
     /** The id once the lookup resolved to one (what peekMemberId reads without waiting). */
     id: string | null;
 };
@@ -39,10 +37,14 @@ const MAX_MEMBER_ID_CACHE = 4;
 // nothing in the UI to explain it. Expiring the negative keeps the retry cheap
 // (one call a minute at worst) without hammering a genuinely broken endpoint.
 // Ordinary callers retry no sooner than that; only a user's explicit retry
-// (forgetFailedMemberId) may evict a failure early, and then no sooner than
-// MIN_EXPLICIT_RETRY_GAP_MS after it was cached.
+// (forgetFailedMemberId) may evict a failure early, and the gap is counted
+// between explicit retries (MIN_EXPLICIT_RETRY_GAP_MS), not from the failure:
+// the first press after a failed lookup always asks, presses repeated inside
+// the gap share the cached failure.
 const NEGATIVE_IDENTITY_TTL_MS = 60_000;
 const MIN_EXPLICIT_RETRY_GAP_MS = 5_000;
+// When each token last had an explicit retry let through (bounded like the cache).
+const explicitRetryAt: Map<string, number> = new Map();
 
 /**
  * The member id tag resolution needs, or null when it cannot be determined.
@@ -82,17 +84,14 @@ const resolveMemberId = async (
     })();
 
     if (memberIdCache.size >= MAX_MEMBER_ID_CACHE) memberIdCache.clear();
-    const entry: MemberIdCacheEntry = { promise, expiresAt: null, failedAt: null, id: null };
+    const entry: MemberIdCacheEntry = { promise, expiresAt: null, id: null };
     memberIdCache.set(token, entry);
     // Fire-and-forget by design: the caller awaits `promise` itself, this only
     // stamps the expiry afterwards. `void` because the inner function catches
     // everything and resolves to null, so there is no rejection to handle.
     void promise.then((id) => {
         entry.id = id;
-        if (id === null) {
-            entry.failedAt = Date.now();
-            entry.expiresAt = entry.failedAt + NEGATIVE_IDENTITY_TTL_MS;
-        }
+        if (id === null) entry.expiresAt = Date.now() + NEGATIVE_IDENTITY_TTL_MS;
     });
     return promise;
 };
@@ -106,18 +105,26 @@ const peekMemberId = (token: string): string | null => memberIdCache.get(token)?
 
 /**
  * Evict a cached FAILED lookup for this token, so the next `resolveMemberId` asks again instead of
- * waiting out NEGATIVE_IDENTITY_TTL_MS. Only for a user's explicit retry, and only once the failure
- * is at least MIN_EXPLICIT_RETRY_GAP_MS old: a press (or a script) hammering it gets the cached
- * failure back, so the profile endpoint sees at most one request per gap. A resolved id stays (it
+ * waiting out NEGATIVE_IDENTITY_TTL_MS. Only for a user's explicit retry. The first one always gets
+ * through, however recent the failure; after that the gap is counted from the last explicit retry
+ * let through: presses (or a script) inside MIN_EXPLICIT_RETRY_GAP_MS of it get the cached failure
+ * back, so the profile endpoint sees at most one explicit request per gap. A resolved id stays (it
  * cannot change under a token), and so does a lookup still in flight (callers share it).
  */
 const forgetFailedMemberId = (token: string): void => {
+    const now = Date.now();
+    const last = explicitRetryAt.get(token);
+    if (last !== undefined && now - last < MIN_EXPLICIT_RETRY_GAP_MS) return;
+    if (explicitRetryAt.size >= MAX_MEMBER_ID_CACHE) explicitRetryAt.clear();
+    explicitRetryAt.set(token, now);
     const entry = memberIdCache.get(token);
-    if (!entry || entry.id !== null || entry.failedAt === null) return;
-    if (Date.now() - entry.failedAt >= MIN_EXPLICIT_RETRY_GAP_MS) memberIdCache.delete(token);
+    if (entry && entry.id === null && entry.expiresAt !== null) memberIdCache.delete(token);
 };
 
 // Test-only: drop the memoised identity between cases.
-const __resetMemberIdCache = () => memberIdCache.clear();
+const __resetMemberIdCache = () => {
+    memberIdCache.clear();
+    explicitRetryAt.clear();
+};
 
 export { resolveMemberId, peekMemberId, forgetFailedMemberId, __resetMemberIdCache };
