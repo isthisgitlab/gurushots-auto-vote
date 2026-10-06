@@ -123,31 +123,38 @@ export function useOtherAccountLists({
 /**
  * Where the re-read of a saved list stands: `ok` (nothing to read, read, or another account's
  * list, which the notice covers), `pending` (the listing or the read is still on its way) or
- * `unconfirmed` (the listing is ready but the list's account could not be confirmed, so Retry).
+ * `unconfirmed` (the listing is ready but the list could not be read for this account, so Retry).
  */
 type SavedListStatus = 'ok' | 'pending' | 'unconfirmed';
+
+/** What asking the main process for the account came back with. */
+export type AccountCheck = { memberId: string } | { error: 'not-logged-in' | 'account-check-failed' };
+
+/** Why a held list stays `unconfirmed`, as the chooser tells it (each has its own hint). */
+type SavedListFailure = 'unconfirmed' | 'check-failed' | 'not-logged-in' | 'read-failed' | 'read-failed-again';
 
 /**
  * The read itself: once the listing shows the saved list is this account's (`ownersList`),
  * `reloadSaved` asks for it and `onRead` gets its ids. A read that gives nothing or rejects is
  * `failed` for that listing; a new listing is not a failed one, so it reads as pending at once
- * instead of flashing the unconfirmed state for a paint, and is read again. `again` retries.
- * `onSettled` runs when a read ends, either way.
+ * instead of flashing the unconfirmed state for a paint, and is read again. `again` retries
+ * (`busy` until the read ends, either way; `retried` once it has).
  */
 function useSavedListRead({
     ownersList,
     state,
     reloadSaved,
     onRead,
-    onSettled,
 }: {
     ownersList: boolean;
     state: ListState;
     reloadSaved?: () => Promise<string[] | null>;
     onRead: (ids: string[]) => void;
-    onSettled: () => void;
 }) {
     const [reloaded, setReloaded] = useState(false);
+    // A retry pressed for the read: it is under way (`busy`), and a failure after one is a repeat.
+    const [busy, setBusy] = useState(false);
+    const [retried, setRetried] = useState(false);
     const [failedAt, setFailedAt] = useState<ListState | null>(null);
     const [attempt, setAttempt] = useState(0);
     const inFlight = useRef(false);
@@ -158,7 +165,7 @@ function useSavedListRead({
         inFlight.current = true;
         const finish = (ids: string[] | null) => {
             inFlight.current = false;
-            onSettled();
+            setBusy(false);
             if (ids === null) {
                 setFailedAt(latestState.current);
                 return;
@@ -167,37 +174,88 @@ function useSavedListRead({
             setReloaded(true);
         };
         reloadSaved().then(finish, () => finish(null));
-    }, [ownersList, reloaded, reloadSaved, onRead, onSettled, attempt, state]);
+    }, [ownersList, reloaded, reloadSaved, onRead, attempt, state]);
     const again = () => {
+        setBusy(true);
+        setRetried(true);
         setFailedAt(null);
         setAttempt((count) => count + 1);
     };
-    return { reloaded, failed: failedAt === state, again };
+    return { reloaded, failed: failedAt === state, busy, retried, again };
 }
 
 /**
  * See SavedListStatus: asks the account check again (`confirmAccount`: the member only, never the
- * library), putting a member it finds into the listing on screen (`onMember`) and flagging a
- * failure (`setCheckFailed`); `setBusy(false)` once it has answered.
+ * library), putting a member it finds into the listing on screen (`onMember`) and recording why it
+ * found none (`setCheckFailure`); `setBusy(false)` once it has answered.
  */
 function checkAccount({
     confirmAccount,
     onMember,
     setBusy,
-    setCheckFailed,
+    setCheckFailure,
 }: {
-    confirmAccount: () => Promise<string | null>;
+    confirmAccount: () => Promise<AccountCheck>;
     onMember: (memberId: string) => void;
     setBusy: (busy: boolean) => void;
-    setCheckFailed: (failed: boolean) => void;
+    setCheckFailure: (failure: 'failed' | 'not-logged-in') => void;
 }) {
-    const done = (id: string | null) => {
+    const done = (check: AccountCheck) => {
         setBusy(false);
-        if (id === null) setCheckFailed(true);
-        else onMember(id);
+        if ('memberId' in check) onMember(check.memberId);
+        else setCheckFailure(check.error === 'not-logged-in' ? 'not-logged-in' : 'failed');
     };
-    confirmAccount().then(done, () => done(null));
+    confirmAccount().then(done, () => done({ error: 'account-check-failed' }));
 }
+
+/**
+ * The Retry: asks the read again when the owner's list is the one waiting, the account check when
+ * the listing could not name the member, else the listing. `busy` covers the check and a retried
+ * read; `pressed` once Retry has been pressed; `checkFailure` is why the check found no member.
+ */
+function useSavedListRetry({
+    ownersList,
+    memberId,
+    read,
+    confirmAccount,
+    onMember,
+    retryListing,
+}: {
+    ownersList: boolean;
+    memberId: string | null;
+    read: Pick<ReturnType<typeof useSavedListRead>, 'busy' | 'again'>;
+    confirmAccount: () => Promise<AccountCheck>;
+    onMember: (memberId: string) => void;
+    retryListing: () => void;
+}) {
+    const [checkBusy, setCheckBusy] = useState(false);
+    const [checkFailure, setCheckFailure] = useState<'failed' | 'not-logged-in' | null>(null);
+    const [pressed, setPressed] = useState(false);
+    const busy = checkBusy || read.busy;
+    const retry = () => {
+        if (busy) return;
+        setCheckFailure(null);
+        setPressed(true);
+        if (ownersList) read.again();
+        else if (memberId === null) {
+            setCheckBusy(true);
+            checkAccount({ confirmAccount, onMember, setBusy: setCheckBusy, setCheckFailure });
+        } else retryListing();
+    };
+    return { busy, pressed, checkFailure, retry };
+}
+
+/** Which failure keeps an unconfirmed list held: the account check's, or the read's (first, or a repeat). */
+const failureOf = (
+    checkFailure: 'failed' | 'not-logged-in' | null,
+    ownersList: boolean,
+    readRetried: boolean,
+): SavedListFailure => {
+    if (checkFailure === 'not-logged-in') return 'not-logged-in';
+    if (checkFailure === 'failed') return 'check-failed';
+    if (!ownersList) return 'unconfirmed';
+    return readRetried ? 'read-failed-again' : 'read-failed';
+};
 
 /**
  * A saved list can come without its ids (the main process withholds them until it knows whose
@@ -210,11 +268,13 @@ function checkAccount({
  * While the status is not `ok` Save is held back — an empty or partial selection would replace the
  * user's own list — and the tiles are inert, so a late read cannot overwrite what was picked. A
  * listing that is ready but cannot say who is signed in (the member lookup failed), or a read that
- * fails or rejects, ends in `unconfirmed`, and `retry` asks again. For an unknown member that is
- * `confirmAccount` (the member only, never the library again), whose answer goes into the listing
- * on screen through `onMember`; if it fails again `checkFailed` says so. For a failed read it is
- * the read. `busy` is true from the press until the answer, and `checking` while a read for a
- * ready listing is on its way.
+ * fails or rejects, ends in `unconfirmed` with a `failure` that says which, and `retry` asks again.
+ * For an unknown member that is `confirmAccount` (the member only, never the library again), whose
+ * answer goes into the listing on screen through `onMember`; a signed-out answer has no retry. For
+ * a failed read it is the read, and a second failure is `read-failed-again`. `busy` is true from the
+ * press until the answer; `retrying` also covers the read that follows a press; `checking` is any
+ * read for a ready listing on its way; `confirmed` is true once a pressed Retry has lifted the hold
+ * and the list is read.
  */
 export function useSavedListReread({
     withheld,
@@ -230,35 +290,39 @@ export function useSavedListReread({
     owner: string;
     state: ListState;
     reloadSaved?: () => Promise<string[] | null>;
-    confirmAccount: () => Promise<string | null>;
+    confirmAccount: () => Promise<AccountCheck>;
     retryListing: () => void;
     onMember: (memberId: string) => void;
     onRead: (ids: string[]) => void;
 }) {
-    const [busy, setBusy] = useState(false);
-    const [checkFailed, setCheckFailed] = useState(false);
     const memberId = state.status === 'ready' ? state.listing.memberId : null;
     const ownersList = withheld && owner !== '' && memberId === owner;
-    const onSettled = useCallback(() => setBusy(false), []);
-    const read = useSavedListRead({ ownersList, state, reloadSaved, onRead, onSettled });
+    const canRead = !!reloadSaved;
+    const read = useSavedListRead({ ownersList, state, reloadSaved, onRead });
+    const retrying = useSavedListRetry({
+        ownersList: ownersList && canRead,
+        memberId,
+        read,
+        confirmAccount,
+        onMember,
+        retryListing,
+    });
 
     const otherAccount = memberId !== null && owner !== '' && memberId !== owner;
     const unread = withheld && !read.reloaded && !otherAccount;
-    const waiting = state.status !== 'ready' || (ownersList && !!reloadSaved && !read.failed);
+    const waiting = state.status !== 'ready' || (ownersList && canRead && !read.failed);
     const status: SavedListStatus = !unread ? 'ok' : waiting ? 'pending' : 'unconfirmed';
-
-    const retry = () => {
-        if (busy) return;
-        setCheckFailed(false);
-        if (ownersList && reloadSaved) {
-            setBusy(true);
-            read.again();
-        } else if (memberId === null) {
-            setBusy(true);
-            checkAccount({ confirmAccount, onMember, setBusy, setCheckFailed });
-        } else retryListing();
+    const checking = status === 'pending' && state.status === 'ready';
+    const failure = status === 'unconfirmed' ? failureOf(retrying.checkFailure, ownersList, read.retried) : null;
+    return {
+        status,
+        failure,
+        retry: retrying.retry,
+        busy: retrying.busy,
+        checking,
+        retrying: retrying.busy || (retrying.pressed && checking),
+        confirmed: retrying.pressed && status === 'ok' && read.reloaded,
     };
-    return { status, retry, busy, checkFailed, checking: status === 'pending' && state.status === 'ready' };
 }
 
 /**

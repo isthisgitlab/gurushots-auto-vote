@@ -631,7 +631,18 @@ export const app = {
     photoChooserSaveChecking: 'Pārbauda, kuram kontam šis saraksts pieder…',
     photoChooserSaveCheckFailed:
         'Konta pārbaude neizdevās, tāpēc saglabāšana ir aizturēta, lai pasargātu tavu sarakstu. Pēc brīža vēlreiz spied „Mēģināt vēlreiz”.',
-    photoChooserTileLocked: 'Gaida tavu saglabāto sarakstu',
+    photoChooserTileLocked: 'Aizslēgts, līdz tavs saglabātais saraksts ir nolasīts',
+    photoChooserSaveConfirmed: 'Konts apstiprināts — tavs saglabātais saraksts ir ielādēts.',
+    photoChooserSaveReadFailed:
+        'Neizdevās nolasīt tavu saglabāto sarakstu šim izaicinājumam, tāpēc saglabāšana ir aizturēta, lai to pasargātu. Spied „Mēģināt vēlreiz”.',
+    photoChooserSaveReadFailedAgain:
+        'Saglabātā saraksta nolasīšana atkal neizdevās, tāpēc saglabāšana joprojām ir aizturēta, lai to pasargātu. Pēc brīža vēlreiz spied „Mēģināt vēlreiz”.',
+    photoChooserSaveNotLoggedIn:
+        'Tu esi izrakstījies, tāpēc kontu nevar pārbaudīt. Piesakies vēlreiz un atver izvēli no jauna.',
+    photoChooserSaveNoContextHeld:
+        'Nav izaicinājuma, caur kuru nolasīt tavu bibliotēku, tāpēc saglabāšana ir aizturēta. Pievienojies izaicinājumam vai aizver šo logu.',
+    photoChooserClearHeld:
+        'Notīrīšana nav pieejama, kamēr tavs saglabātais saraksts nav nolasīts, lai vēlāka nolasīšana to neatceltu.',
     photoChooserSaveUnconfirmed:
         'Neizdevās pārliecināties, kuram kontam šis saraksts pieder, tāpēc saglabāšana ir aizturēta, lai to pasargātu. Spied „Mēģināt vēlreiz” vai aizver šo logu un atver to vēlreiz.',
     photoChooserSaveNoContext:

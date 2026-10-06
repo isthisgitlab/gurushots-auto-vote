@@ -514,7 +514,7 @@ describe('chosen photos', () => {
                     : answer;
             });
             await releaseAndWaitForReread();
-            await screen.findByText('app.photoChooserSaveUnconfirmed');
+            await screen.findByText('app.photoChooserSaveReadFailed');
             const ownReads = () =>
                 jest.mocked(window.api.getOpenChosenAnnotations).mock.calls.filter(([ids]) => ids.length === 1);
             expect(ownReads()).toHaveLength(1);
@@ -527,7 +527,7 @@ describe('chosen photos', () => {
             await waitFor(() => expect(rowReads).toBe(before + 2));
             await act(async () => undefined);
             expect(ownReads()).toHaveLength(1);
-            expect(screen.getByText('app.photoChooserSaveUnconfirmed')).toBeTruthy();
+            expect(screen.getByText('app.photoChooserSaveReadFailed')).toBeTruthy();
             expect(use.getAttribute('aria-disabled')).toBe('true');
         });
 

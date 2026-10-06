@@ -106,14 +106,15 @@ describe('confirm-account: the explicit retry after a failed identity lookup', (
     });
 
     test('a failed lookup is evicted, so the retry succeeds at once instead of waiting out the 60 s, with no library walk', async () => {
-        jest.spyOn(Date, 'now').mockReturnValue(1_000_000);
+        const now = jest.spyOn(Date, 'now').mockReturnValue(1_000_000);
         getCurrentMemberProfile.mockResolvedValueOnce(null);
         await annotate();
         // The cached failure answers any ordinary resolve for the next minute...
         await annotate();
         expect(getCurrentMemberProfile).toHaveBeenCalledTimes(1);
 
-        // ...but an explicit retry asks again, and this time it works.
+        // ...but an explicit retry (once the failure is a few seconds old) asks again, and this time it works.
+        now.mockReturnValue(1_000_000 + 6_000);
         await expect(confirm()).resolves.toEqual({ success: true, memberId: OWNER });
         expect(getCurrentMemberProfile).toHaveBeenCalledTimes(2);
         expect(walk).not.toHaveBeenCalled();
@@ -123,11 +124,31 @@ describe('confirm-account: the explicit retry after a failed identity lookup', (
         expect(getCurrentMemberProfile).not.toHaveBeenCalled();
     });
 
-    test('a lookup that fails again says so, and can be tried again', async () => {
+    test('a lookup that fails again says so; presses within the gap share the cached failure, one after it asks again', async () => {
+        const now = jest.spyOn(Date, 'now').mockReturnValue(1_000_000);
         getCurrentMemberProfile.mockResolvedValue(null);
         await expect(confirm()).resolves.toEqual({ success: false, error: 'account-check-failed' });
+        // Two quick presses make no further request: the failure just cached answers them.
+        now.mockReturnValue(1_000_000 + 1_000);
         await expect(confirm()).resolves.toEqual({ success: false, error: 'account-check-failed' });
-        // Each press asked: the failure it caused was evicted again.
+        await expect(confirm()).resolves.toEqual({ success: false, error: 'account-check-failed' });
+        expect(getCurrentMemberProfile).toHaveBeenCalledTimes(1);
+        // Past the gap a press asks again, and a success then goes through.
+        now.mockReturnValue(1_000_000 + 6_000);
+        getCurrentMemberProfile.mockResolvedValueOnce({ id: OWNER });
+        await expect(confirm()).resolves.toEqual({ success: true, memberId: OWNER });
+        expect(getCurrentMemberProfile).toHaveBeenCalledTimes(2);
+    });
+
+    test('a failure right at the gap is evicted, one just inside it is not', async () => {
+        const now = jest.spyOn(Date, 'now').mockReturnValue(2_000_000);
+        getCurrentMemberProfile.mockResolvedValue(null);
+        await confirm();
+        now.mockReturnValue(2_000_000 + 4_999);
+        await confirm();
+        expect(getCurrentMemberProfile).toHaveBeenCalledTimes(1);
+        now.mockReturnValue(2_000_000 + 5_000);
+        await confirm();
         expect(getCurrentMemberProfile).toHaveBeenCalledTimes(2);
     });
 
@@ -144,11 +165,12 @@ describe('confirm-account: the explicit retry after a failed identity lookup', (
         expect(getCurrentMemberProfile).toHaveBeenCalledTimes(1);
     });
 
-    test('with no token it answers the auth guard, and a throwing lookup is an error result', async () => {
+    test('signed out is its own answer, not a failed check, and a throwing lookup is an error result', async () => {
         auth.requireAuthToken = jest
             .fn()
             .mockReturnValue({ ok: false, response: { success: false, error: 'no token' } });
-        await expect(confirm()).resolves.toEqual({ success: false, error: 'no token' });
+        await expect(confirm()).resolves.toEqual({ success: false, error: 'not-logged-in' });
+        expect(getCurrentMemberProfile).not.toHaveBeenCalled();
         auth.requireAuthToken = jest.fn().mockReturnValue({ ok: true, token: 'tok', settings: {} });
         apiFactory.getApiStrategy = jest.fn(() => {
             throw new Error('settings broke');

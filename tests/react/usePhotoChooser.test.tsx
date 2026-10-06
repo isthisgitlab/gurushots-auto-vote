@@ -8,7 +8,7 @@ import { act, renderHook, waitFor } from '@testing-library/preact';
 import { useLibraryListing, useSavedListReread } from '@/hooks/usePhotoChooser';
 import { mockApi } from './helpers/setup';
 
-import type { ListState } from '@/hooks/usePhotoChooser';
+import type { AccountCheck, ListState } from '@/hooks/usePhotoChooser';
 import type { WindowApi } from '../../src/ts/types/ipc';
 import { invalid } from '../helpers/invalid';
 
@@ -23,7 +23,7 @@ const render = (reloadSaved: () => Promise<string[] | null>, state: ListState = 
     const onRead = jest.fn();
     const onMember = jest.fn();
     const retryListing = jest.fn();
-    const confirmAccount = jest.fn<Promise<string | null>, []>().mockResolvedValue(OWNER);
+    const confirmAccount = jest.fn<Promise<AccountCheck>, []>().mockResolvedValue({ memberId: OWNER });
     const hook = renderHook(
         (props: { reloadSaved: () => Promise<string[] | null>; state: ListState }) =>
             useSavedListReread({
@@ -81,20 +81,74 @@ test('a listing that cannot say who is signed in is retried by checking the acco
 });
 
 test.each([
-    ['gives no member', () => Promise.resolve(null)],
+    ['says the check failed', () => Promise.resolve<AccountCheck>({ error: 'account-check-failed' })],
     ['rejects', () => Promise.reject(new Error('down'))],
-])('a check that %s ends in checkFailed, still unconfirmed, and can be pressed again', async (_name, answer) => {
+])('a check that %s ends in check-failed, still unconfirmed, and can be pressed again', async (_name, answer) => {
     const { result, confirmAccount, onMember } = render(jest.fn(), ready(null));
+    expect(result.current.failure).toBe('unconfirmed');
     confirmAccount.mockImplementationOnce(answer);
     act(() => result.current.retry());
-    await waitFor(() => expect(result.current.checkFailed).toBe(true));
+    await waitFor(() => expect(result.current.failure).toBe('check-failed'));
     expect(result.current.status).toBe('unconfirmed');
     expect(result.current.busy).toBe(false);
     expect(onMember).not.toHaveBeenCalled();
     // The next press clears the failure while it runs.
     act(() => result.current.retry());
-    expect(result.current.checkFailed).toBe(false);
+    expect(result.current.failure).not.toBe('check-failed');
     await waitFor(() => expect(onMember).toHaveBeenCalledWith(OWNER));
+});
+
+test('signed out is its own failure', async () => {
+    const { result, confirmAccount } = render(jest.fn(), ready(null));
+    confirmAccount.mockResolvedValueOnce({ error: 'not-logged-in' });
+    act(() => result.current.retry());
+    await waitFor(() => expect(result.current.failure).toBe('not-logged-in'));
+    expect(result.current.status).toBe('unconfirmed');
+});
+
+test('a read that fails is read-failed, a second failure after Retry is read-failed-again, a success clears it', async () => {
+    const reloadSaved = jest
+        .fn<Promise<string[] | null>, []>()
+        .mockResolvedValueOnce(null)
+        .mockResolvedValueOnce(null)
+        .mockResolvedValueOnce(['a']);
+    const { result } = render(reloadSaved);
+    await waitFor(() => expect(result.current.failure).toBe('read-failed'));
+    act(() => result.current.retry());
+    await waitFor(() => expect(result.current.failure).toBe('read-failed-again'));
+    act(() => result.current.retry());
+    await waitFor(() => expect(result.current.status).toBe('ok'));
+    expect(result.current.failure).toBeNull();
+});
+
+test('retrying covers the account check and the read after it; confirmed is true only once a pressed Retry has lifted the hold', async () => {
+    const read = Promise.withResolvers<string[] | null>();
+    const reloadSaved = jest.fn<Promise<string[] | null>, []>().mockReturnValue(read.promise);
+    const { result, rerender, confirmAccount } = render(reloadSaved, ready(null));
+    expect(result.current.retrying).toBe(false);
+    act(() => result.current.retry());
+    expect(result.current.retrying).toBe(true);
+    await waitFor(() => expect(confirmAccount).toHaveBeenCalled());
+    // The check answered: the listing now names the owner, and the chained read is pending.
+    rerender({ reloadSaved, state: ready(OWNER) });
+    await waitFor(() => expect(reloadSaved).toHaveBeenCalledTimes(1));
+    expect(result.current.busy).toBe(false);
+    expect(result.current.retrying).toBe(true);
+    expect(result.current.confirmed).toBe(false);
+    await act(async () => read.resolve(['a']));
+    expect(result.current.status).toBe('ok');
+    expect(result.current.retrying).toBe(false);
+    expect(result.current.confirmed).toBe(true);
+});
+
+test('a read nobody pressed Retry for is not "retrying" and is never "confirmed"', async () => {
+    const read = Promise.withResolvers<string[] | null>();
+    const { result } = render(jest.fn().mockReturnValue(read.promise));
+    expect(result.current.checking).toBe(true);
+    expect(result.current.retrying).toBe(false);
+    await act(async () => read.resolve(['a']));
+    expect(result.current.status).toBe('ok');
+    expect(result.current.confirmed).toBe(false);
 });
 
 test('a press while a retry is running does nothing', async () => {
@@ -107,7 +161,7 @@ test('a press while a retry is running does nothing', async () => {
 
 test('a listing that names a member while the owner is not loaded yet is retried through the listing', () => {
     const retryListing = jest.fn();
-    const confirmAccount = jest.fn<Promise<string | null>, []>();
+    const confirmAccount = jest.fn<Promise<AccountCheck>, []>();
     const { result } = renderHook(() =>
         useSavedListReread({
             withheld: true,

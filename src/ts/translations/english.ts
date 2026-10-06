@@ -625,7 +625,17 @@ export const app = {
     photoChooserSaveChecking: 'Checking which account this list belongs to…',
     photoChooserSaveCheckFailed:
         'The account check failed, so saving is held to protect your list. Press Retry again shortly.',
-    photoChooserTileLocked: 'Waiting for your saved list',
+    photoChooserTileLocked: 'Locked until your saved list is read',
+    photoChooserSaveConfirmed: 'Account confirmed — your saved list is loaded.',
+    photoChooserSaveReadFailed:
+        "Couldn't read your saved list for this challenge, so saving is held to protect it. Press Retry.",
+    photoChooserSaveReadFailedAgain:
+        'Reading your saved list failed again, so saving stays held to protect it. Press Retry again shortly.',
+    photoChooserSaveNotLoggedIn:
+        "You're signed out, so the account can't be checked. Log in again, then reopen the chooser.",
+    photoChooserSaveNoContextHeld:
+        'There is no challenge to read your library through, so saving is held. Join a challenge, or close this window.',
+    photoChooserClearHeld: "Clear is unavailable until your saved list has been read, so a late read can't undo it.",
     photoChooserSaveUnconfirmed:
         "Couldn't confirm which account this list belongs to, so saving is held to protect it. Press Retry, or close and reopen the chooser.",
     photoChooserSaveNoContext:

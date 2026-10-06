@@ -168,11 +168,14 @@ const handleGetOpenChosenAnnotations = (async (event: unknown, ids: Array<string
 // account the saved list belongs to). It evicts the cached failed identity lookup for this token and
 // resolves the member only: no library walk, so a retry costs one profile request and repeats
 // nothing the listing on screen already read. `memberId` is the signed-in account, or the check
-// failed (`account-check-failed`) and may be tried again shortly.
+// failed (`account-check-failed`) and may be tried again shortly, or there is no session
+// (`not-logged-in`). The eviction is rate-limited in memberIdentity (a failure younger than a few
+// seconds is answered from the cache), so a retry never costs more than one request per gap.
 const handleConfirmAccount = (async () => {
     try {
         const guard = auth.requireAuthToken('account check');
-        if (!guard.ok) return guard.response;
+        // Signed out is not a failed check: Retry cannot help, so the renderer says to log in again.
+        if (!guard.ok) return { success: false as const, error: 'not-logged-in' as const };
         forgetFailedMemberId(guard.token);
         const memberId = await resolveMemberId(
             guard.token,

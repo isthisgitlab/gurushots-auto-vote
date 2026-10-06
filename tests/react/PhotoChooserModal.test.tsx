@@ -55,6 +55,9 @@ const deferred = <T,>() => {
 
 const getLibrary = () => jest.mocked(window.api.getLibraryPhotos);
 
+// The count line is the first live region; the footer's hold/confirmation status is the last.
+const countLine = () => screen.getAllByRole('status')[0];
+
 const tile = (n: number) => screen.getByRole('button', { name: new RegExp(`^Photo ${shortOf(n)}:`) });
 
 const setup = (
@@ -189,7 +192,7 @@ describe('selection', () => {
         fireEvent.click(tile(3));
         expect(tile(2).getAttribute('aria-pressed')).toBe('true');
         fireEvent.click(tile(3));
-        expect(screen.getByRole('status').textContent).toBe(`1 of ${MAX_CHOSEN_PHOTOS} chosen`);
+        expect(countLine().textContent).toBe(`1 of ${MAX_CHOSEN_PHOTOS} chosen`);
         fireEvent.click(screen.getByRole('button', { name: 'Use these photos' }));
         await waitFor(() => expect(onClose).toHaveBeenCalledTimes(1));
         expect(onSave).toHaveBeenCalledWith([idOf(2)]);
@@ -257,14 +260,14 @@ describe('selection', () => {
         getLibrary().mockResolvedValue(listing(many));
         setup({ value: many.slice(0, MAX_CHOSEN_PHOTOS).map((p) => p.id) });
         await screen.findByRole('button', { name: /^Photo 00000001:/ });
-        expect(screen.getByRole('status').textContent).toContain('Limit reached — remove one to add another');
+        expect(countLine().textContent).toContain('Limit reached — remove one to add another');
         const extra = tile(MAX_CHOSEN_PHOTOS + 1);
         // aria-disabled, not disabled: Tab still reaches it. Clicking it does nothing.
         expect(extra.getAttribute('aria-disabled')).toBe('true');
         expect(extra.hasAttribute('disabled')).toBe(false);
         fireEvent.click(extra);
         expect(extra.getAttribute('aria-pressed')).toBe('false');
-        expect(screen.getByRole('status').textContent).toContain(`${MAX_CHOSEN_PHOTOS} of ${MAX_CHOSEN_PHOTOS}`);
+        expect(countLine().textContent).toContain(`${MAX_CHOSEN_PHOTOS} of ${MAX_CHOSEN_PHOTOS}`);
         // The reason is short text on the tile itself. The picture and its tags are dimmed; the reason
         // is not, so it stays at full contrast (opacity on the tile would have dimmed it too).
         expect(extra.textContent).toContain('List full');
@@ -279,7 +282,7 @@ describe('selection', () => {
         fireEvent.click(tile(1));
         expect(tile(MAX_CHOSEN_PHOTOS + 1).getAttribute('aria-disabled')).toBe('false');
         expect(tile(MAX_CHOSEN_PHOTOS + 1).textContent).not.toContain('List full');
-        expect(screen.getByRole('status').textContent).not.toContain('Limit reached');
+        expect(countLine().textContent).not.toContain('Limit reached');
     });
 
     test('Clear empties the selection and Cancel closes without saving', async () => {
@@ -523,7 +526,7 @@ describe('account scope', () => {
         expect(screen.queryByRole('button', { name: new RegExp(`${shortOf(9)}`) })).toBeNull();
         expect(document.body.textContent).not.toContain(shortOf(9));
         // The selection starts empty: those photos are not this account's to build on.
-        expect(screen.getByRole('status').textContent).toBe(`0 of ${MAX_CHOSEN_PHOTOS} chosen`);
+        expect(countLine().textContent).toBe(`0 of ${MAX_CHOSEN_PHOTOS} chosen`);
         expect(tile(1).getAttribute('aria-pressed')).toBe('false');
     });
 
@@ -535,7 +538,7 @@ describe('account scope', () => {
         expect(screen.queryByText(/saved under another account, so the app ignores them/)).not.toBeNull();
         fireEvent.click(tile(2));
         expect(screen.queryByText(/saved under another account, so the app ignores them/)).not.toBeNull();
-        expect(screen.getByRole('status').textContent).toBe(`1 of ${MAX_CHOSEN_PHOTOS} chosen`);
+        expect(countLine().textContent).toBe(`1 of ${MAX_CHOSEN_PHOTOS} chosen`);
     });
 
     test('the notice and the withheld photos stay while a search is loading or fails', async () => {
@@ -758,6 +761,16 @@ describe('a saved list that came without its ids', () => {
     const OWNER = MEMBER;
     const use = () => screen.getByRole('button', { name: 'Use these photos' });
     const hint = 'Saving waits until your photos have loaded, so the app can check which account the list belongs to.';
+    const readFailedHint =
+        "Couldn't read your saved list for this challenge, so saving is held to protect it. Press Retry.";
+    const readFailedAgainHint =
+        'Reading your saved list failed again, so saving stays held to protect it. Press Retry again shortly.';
+    const notLoggedInHint =
+        "You're signed out, so the account can't be checked. Log in again, then reopen the chooser.";
+    const noContextHeldHint =
+        'There is no challenge to read your library through, so saving is held. Join a challenge, or close this window.';
+    const confirmedText = 'Account confirmed — your saved list is loaded.';
+    const lockedText = 'Locked until your saved list is read';
     const checkingHint = 'Checking which account this list belongs to…';
     const checkFailedHint =
         'The account check failed, so saving is held to protect your list. Press Retry again shortly.';
@@ -832,8 +845,8 @@ describe('a saved list that came without its ids', () => {
     });
 
     describe('ready, but the list cannot be confirmed', () => {
-        const expectUnconfirmed = async () => {
-            await screen.findByText(unconfirmedHint);
+        const expectUnconfirmed = async (message = unconfirmedHint) => {
+            await screen.findByText(message);
             expect(screen.queryByText(hint)).toBeNull();
             expect(use().getAttribute('aria-disabled')).toBe('true');
             // The tiles are inert here too: nothing may be picked over a list that is unread.
@@ -940,18 +953,69 @@ describe('a saved list that came without its ids', () => {
             fireEvent.click(retry);
             expect(window.api.confirmAccount).toHaveBeenCalledTimes(1);
 
+            // Busy looks busy: a spinner and the disabled style, DaisyUI only.
+            expect(retry.className).toContain('btn-disabled');
+            expect(retry.querySelector('.loading.loading-spinner')).not.toBeNull();
+
             await act(async () => answer.resolve({ success: true, memberId: OWNER }));
             await waitFor(() => expect(pressed(1)).toBe('true'));
             expect(screen.queryByRole('button', { name: 'Retry' })).toBeNull();
         });
 
+        test('Retry stays mounted and focused through the read after the check, then focus moves to Save and success is announced', async () => {
+            getLibrary().mockResolvedValue(listing([photo(1)], { memberId: null }));
+            confirmWith(OWNER);
+            const read = deferred<string[] | null>();
+            const reloadSaved = jest.fn<Promise<string[] | null>, []>().mockReturnValue(read.promise);
+            setup({ value: [], savedCount: 1, reloadSaved });
+            await screen.findByText(unconfirmedHint);
+            expect(screen.queryByText(confirmedText)).toBeNull();
+
+            const retry = retryButton();
+            retry.focus();
+            fireEvent.click(retry);
+            // The account answers; the list read that follows is held deferred. Retry is still the same
+            // focused, busy button, and the hint says what is awaited.
+            await waitFor(() => expect(reloadSaved).toHaveBeenCalledTimes(1));
+            await screen.findByText(checkingHint);
+            expect(retryButton()).toBe(retry);
+            expect(document.activeElement).toBe(retry);
+            expect(retry.getAttribute('aria-busy')).toBe('true');
+            expect(retry.getAttribute('aria-disabled')).toBe('true');
+
+            await act(async () => read.resolve([idOf(1)]));
+            await waitFor(() => expect(screen.queryByRole('button', { name: 'Retry' })).toBeNull());
+            expect(document.activeElement).toBe(use());
+            // The success is in a live region that was mounted all along.
+            const announced = screen.getByText(confirmedText);
+            expect(announced.getAttribute('role')).toBe('status');
+        });
+
+        test('a hold nobody pressed Retry for lifts without moving focus or announcing success', async () => {
+            const read = deferred<string[] | null>();
+            setup({
+                value: [],
+                savedCount: 1,
+                reloadSaved: jest.fn<Promise<string[] | null>, []>().mockReturnValue(read.promise),
+            });
+            await screen.findByRole('button', { name: /^Photo 00000001:/ });
+            // No Retry is offered for the automatic read, busy or not.
+            expect(screen.queryByRole('button', { name: 'Retry' })).toBeNull();
+            await act(async () => read.resolve([idOf(1)]));
+            await waitFor(() => expect(use().getAttribute('aria-disabled')).toBe('false'));
+            expect(document.activeElement).not.toBe(use());
+            expect(screen.queryByText(confirmedText)).toBeNull();
+        });
+
         test.each([
             ['gives nothing', null],
             ['rejects', new Error('ipc down')],
-        ])('a read that %s: the same hint and Retry, and a good Retry releases Save', async (_name, failure) => {
+        ])('a read that %s: its own hint and Retry, and a good Retry releases Save', async (_name, failure) => {
             const reloadSaved = rereads(failure, [idOf(1), idOf(2)]);
             const { onSave } = setup({ value: [], savedCount: 2, reloadSaved });
-            await expectUnconfirmed();
+            // The account is known, so the words are about the read, not about the account.
+            await expectUnconfirmed(readFailedHint);
+            expect(screen.queryByText(unconfirmedHint)).toBeNull();
             expect(reloadSaved).toHaveBeenCalledTimes(1);
             fireEvent.click(use());
             expect(onSave).not.toHaveBeenCalled();
@@ -966,19 +1030,34 @@ describe('a saved list that came without its ids', () => {
             await waitFor(() => expect(onSave).toHaveBeenCalledWith([idOf(1), idOf(2)]));
         });
 
-        test('a Retry that fails again keeps the hint, and a second one still works', async () => {
+        test('a read that fails again says so with its own repeat text, and a second Retry still works', async () => {
             const reloadSaved = rereads(null, null, [idOf(1)]);
             setup({ value: [], savedCount: 1, reloadSaved });
-            await screen.findByText(unconfirmedHint);
+            await screen.findByText(readFailedHint);
             fireEvent.click(screen.getByRole('button', { name: 'Retry' }));
             await waitFor(() => expect(reloadSaved).toHaveBeenCalledTimes(2));
-            await screen.findByText(unconfirmedHint);
+            await screen.findByText(readFailedAgainHint);
+            expect(screen.queryByText(readFailedHint)).toBeNull();
             fireEvent.click(screen.getByRole('button', { name: 'Retry' }));
             await waitFor(() => expect(pressed(1)).toBe('true'));
+            expect(screen.queryByText(readFailedAgainHint)).toBeNull();
+        });
+
+        test('signed out is not a failed check: it says to log in again and offers no Retry', async () => {
+            getLibrary().mockResolvedValue(listing([photo(1)], { memberId: null }));
+            jest.mocked(window.api.confirmAccount).mockResolvedValueOnce({ success: false, error: 'not-logged-in' });
+            setup({ value: [], savedCount: 1, reloadSaved: rereads() });
+            await screen.findByText(unconfirmedHint);
+            fireEvent.click(retryButton());
+            await screen.findByText(notLoggedInHint);
+            expect(screen.queryByText(checkFailedHint)).toBeNull();
+            expect(screen.queryByText(/Press Retry again shortly/)).toBeNull();
+            expect(screen.queryByRole('button', { name: 'Retry' })).toBeNull();
+            expect(use().getAttribute('aria-disabled')).toBe('true');
         });
     });
 
-    test('locked tiles say they are waiting, not that they can be entered, and the tile name says it too', async () => {
+    test('locked tiles say they are locked, in every locked state, not that they can be entered, and the tile name says it too', async () => {
         const read = deferred<string[] | null>();
         setup({
             value: [],
@@ -986,44 +1065,74 @@ describe('a saved list that came without its ids', () => {
             reloadSaved: jest.fn<Promise<string[] | null>, []>().mockReturnValue(read.promise),
         });
         await screen.findByRole('button', { name: /^Photo 00000001:/ });
-        expect(tile(1).textContent).toContain('Waiting for your saved list');
+        expect(tile(1).textContent).toContain(lockedText);
         expect(tile(1).textContent).not.toContain('Can be entered');
-        expect(tile(1).getAttribute('aria-label')).toBe('Photo 00000001: tag1. Waiting for your saved list');
+        expect(tile(1).getAttribute('aria-label')).toBe(`Photo 00000001: tag1. ${lockedText}`);
         await act(async () => read.resolve([]));
         await waitFor(() => expect(tile(1).textContent).toContain('Can be entered'));
-        expect(tile(1).textContent).not.toContain('Waiting for your saved list');
+        expect(tile(1).textContent).not.toContain(lockedText);
     });
 
-    test('Clear is held with Save while the list is unread, so a late read cannot undo it', async () => {
+    test('Clear is held while the list is unread: a press changes nothing, and it says why', async () => {
         const read = deferred<string[] | null>();
         setup({
-            value: [],
-            savedCount: 1,
+            // A partial selection is visible while the saved list (two photos) is still unread.
+            value: [idOf(2)],
+            savedCount: 2,
             reloadSaved: jest.fn<Promise<string[] | null>, []>().mockReturnValue(read.promise),
         });
-        await screen.findByRole('button', { name: /^Photo 00000001:/ });
+        await screen.findByRole('button', { name: /^Photo 00000002:/ });
+        expect(pressed(2)).toBe('true');
+        expect(countLine().textContent).toBe(`1 of ${MAX_CHOSEN_PHOTOS} chosen`);
+
         const clear = screen.getByRole('button', { name: 'Clear' });
         expect(clear.getAttribute('aria-disabled')).toBe('true');
-        expect(clear.getAttribute('aria-describedby')).toBe(use().getAttribute('aria-describedby'));
+        // Its own description says why Clear is held (not the Save hint).
+        const why = document.getElementById(clear.getAttribute('aria-describedby')!)!;
+        expect(why.textContent).toBe(
+            "Clear is unavailable until your saved list has been read, so a late read can't undo it.",
+        );
+        expect(clear.getAttribute('aria-describedby')).not.toBe(use().getAttribute('aria-describedby'));
+
+        // The press is ignored while the read is still out: the selection is untouched.
         fireEvent.click(clear);
-        await act(async () => read.resolve([idOf(1)]));
-        // The press did nothing, and the list the user had is what is there once it is read.
+        expect(pressed(2)).toBe('true');
+        expect(countLine().textContent).toBe(`1 of ${MAX_CHOSEN_PHOTOS} chosen`);
+
+        await act(async () => read.resolve([idOf(1), idOf(2)]));
         await waitFor(() => expect(pressed(1)).toBe('true'));
-        expect(screen.getByRole('button', { name: 'Clear' }).getAttribute('aria-disabled')).toBe('false');
+        expect(pressed(2)).toBe('true');
+        const free = screen.getByRole('button', { name: 'Clear' });
+        expect(free.getAttribute('aria-disabled')).toBe('false');
+        expect(free.hasAttribute('aria-describedby')).toBe(false);
+        expect(screen.queryByText(/Clear is unavailable/)).toBeNull();
     });
 
-    test('after a failed read, a new ready listing reads as pending at once: the unconfirmed hint does not flash', async () => {
+    test('no challenge to read through while the list is unread: the hint names only the ways out that exist', async () => {
+        getLibrary().mockResolvedValue({ success: false, error: 'no-challenge-context' });
+        setup({ value: [], savedCount: 1, challengeId: null, reloadSaved: rereads() });
+        await screen.findByText(noContextHeldHint);
+        // Clear is held, so the hint must not send the user to it; there is nothing to retry either.
+        expect(noContextHeldHint).not.toMatch(/clear/i);
+        expect(screen.queryByText(/Clear the list to save/)).toBeNull();
+        expect(screen.getByRole('button', { name: 'Clear' }).getAttribute('aria-disabled')).toBe('true');
+        expect(screen.queryByRole('button', { name: 'Retry' })).toBeNull();
+        expect(use().getAttribute('aria-disabled')).toBe('true');
+    });
+
+    test('after a failed read, a new ready listing reads as pending at once: the failure hint does not flash', async () => {
         const reloadSaved = rereads(null);
         const second = deferred<string[] | null>();
         reloadSaved.mockReturnValueOnce(second.promise);
         setup({ value: [], savedCount: 1, reloadSaved });
-        await screen.findByText(unconfirmedHint);
+        await screen.findByText(readFailedHint);
 
         // A new search: loading, then a ready listing again. The read for it is pending, not failed.
         const next = deferred<Listing>();
         getLibrary().mockReturnValueOnce(invalid(next.promise));
         fireEvent.submit(screen.getByRole('searchbox').closest('form')!);
         await act(async () => next.resolve(listing([photo(1)])));
+        expect(screen.queryByText(readFailedHint)).toBeNull();
         expect(screen.queryByText(unconfirmedHint)).toBeNull();
         expect(await screen.findByText(checkingHint)).toBeTruthy();
         await act(async () => second.resolve([idOf(1)]));

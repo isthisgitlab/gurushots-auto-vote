@@ -13,7 +13,7 @@ import { useChooserSave, useLibraryListing, useOtherAccountLists, useSavedListRe
 import * as ipc from '@/api/ipc';
 import { MAX_CHOSEN_PHOTOS } from '../../../settings/limits';
 
-import type { LibraryPhoto, ListState } from '@/hooks/usePhotoChooser';
+import type { AccountCheck, LibraryPhoto, ListState } from '@/hooks/usePhotoChooser';
 
 // Edge length requested from the photo CDN for a tile (the grid shows them ~150px wide).
 const TILE_PX = 240;
@@ -348,10 +348,11 @@ function OtherAccountNotice({ onRemoved }: { onRemoved: () => void }) {
     );
 }
 
-/** The signed-in member, asked for again on purpose (the main process drops its cached failure); null if it fails. */
-const confirmAccount = async (): Promise<string | null> => {
+/** The signed-in member, asked for again on purpose (the main process drops its cached failure). */
+const confirmAccount = async (): Promise<AccountCheck> => {
     const result = await ipc.callOrNull(() => ipc.confirmAccount());
-    return result?.success ? result.memberId : null;
+    if (result?.success) return { memberId: result.memberId };
+    return { error: result?.error === 'not-logged-in' ? 'not-logged-in' : 'account-check-failed' };
 };
 
 /**
@@ -443,7 +444,8 @@ function PhotoChooserBody({
                 saveFailed={saveFailed}
                 saveWaits={saveWaits}
                 holdReason={holdReasonOf(saved, state.status)}
-                retrying={saved.busy}
+                retrying={saved.retrying}
+                confirmed={saved.confirmed}
                 locked={locked}
                 onRetryHold={saved.retry}
                 saving={saving}

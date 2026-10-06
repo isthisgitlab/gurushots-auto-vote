@@ -4,16 +4,34 @@
  * lift the hold.
  */
 
-import { useId, useState } from 'react';
+import { useEffect, useId, useRef, useState } from 'react';
 import { useTranslation } from '@/contexts/TranslationContext';
 
-import type { ReactNode } from 'react';
+import type { ReactNode, RefObject } from 'react';
 import type { ListState, useSavedListReread } from '@/hooks/usePhotoChooser';
 
 // What Save being held says, by the listing's state: loading will resolve by itself, an error needs
 // Retry, and no context will not load at all, so it names the way out instead of a wait.
-const SAVE_HOLD_HINT: Record<ListState['status'] | 'unconfirmed' | 'checking' | 'check-failed', string> = {
+const SAVE_HOLD_HINT: Record<
+    | ListState['status']
+    | 'unconfirmed'
+    | 'checking'
+    | 'check-failed'
+    | 'not-logged-in'
+    | 'read-failed'
+    | 'read-failed-again'
+    | 'no-context-held',
+    string
+> = {
     unconfirmed: 'app.photoChooserSaveUnconfirmed',
+    // The account is known but the saved list could not be read: its own words, and a repeat's.
+    'read-failed': 'app.photoChooserSaveReadFailed',
+    'read-failed-again': 'app.photoChooserSaveReadFailedAgain',
+    // Signed out: Retry cannot help.
+    'not-logged-in': 'app.photoChooserSaveNotLoggedIn',
+    // No challenge to read the library through while the saved list is unread: Clear is held too, so
+    // the hint names only the ways out that exist.
+    'no-context-held': 'app.photoChooserSaveNoContextHeld',
     // The listing is ready and the saved list is being read: the photos have loaded, so say what is awaited.
     checking: 'app.photoChooserSaveChecking',
     'check-failed': 'app.photoChooserSaveCheckFailed',
@@ -23,40 +41,51 @@ const SAVE_HOLD_HINT: Record<ListState['status'] | 'unconfirmed' | 'checking' | 
     'no-context': 'app.photoChooserSaveNoContext',
 };
 
+// The holds a Retry can lift.
+const RETRYABLE_HOLDS: ReadonlyArray<keyof typeof SAVE_HOLD_HINT> = [
+    'unconfirmed',
+    'check-failed',
+    'read-failed',
+    'read-failed-again',
+];
+
 /**
- * Why Save is held, as a live region (so the changing reason is announced; Save's description
- * points at it), and the Retry that can lift it. Retry sits outside the paragraph Save is described
- * by and stays mounted through the retry, so focus stays on it; it is aria-disabled and aria-busy
- * until the answer.
+ * A live region that stays mounted, so what it says is announced when it changes: why Save is held
+ * (Save's description points at it), or — once a Retry has lifted the hold — that the account is
+ * confirmed. The Retry that can lift a hold sits outside the paragraph and stays mounted through the
+ * retry (the account check and the read after it), so focus stays on it; it is aria-disabled,
+ * aria-busy and shows a spinner until the answer.
  */
-function SaveHoldHint({
+function HoldStatus({
     id,
-    holdReason,
+    message,
+    showRetry,
     retrying,
     onRetry,
 }: {
     id: string;
-    holdReason: keyof typeof SAVE_HOLD_HINT;
+    message: string | null;
+    showRetry: boolean;
     retrying: boolean;
     onRetry: () => void;
 }) {
     const { t } = useTranslation();
-    const retryable = retrying || holdReason === 'unconfirmed' || holdReason === 'check-failed';
     return (
         <div className="flex items-center justify-end gap-2">
             <p id={id} role="status" className="text-base-content/70 text-right text-xs">
-                {t(SAVE_HOLD_HINT[holdReason])}
+                {message && t(message)}
             </p>
-            {retryable && (
+            {(showRetry || retrying) && (
                 <button
                     type="button"
-                    className="btn btn-outline btn-xs"
+                    className={`btn btn-outline btn-xs ${retrying ? 'btn-disabled' : ''}`}
                     aria-disabled={retrying}
                     aria-busy={retrying}
                     onClick={() => {
                         if (!retrying) onRetry();
                     }}
                 >
+                    {retrying && <span className="loading loading-spinner loading-xs" />}
                     {t('app.photoChooserRetry')}
                 </button>
             )}
@@ -73,19 +102,23 @@ function HeldButton({
     hintId,
     className,
     disabled,
+    buttonRef,
     onPress,
     children,
 }: {
     held: boolean;
+    /** The element that says why it is held. */
     hintId: string;
     className: string;
     disabled?: boolean;
+    buttonRef?: RefObject<HTMLButtonElement | null>;
     onPress: () => void;
     children: ReactNode;
 }) {
     return (
         <button
             type="button"
+            ref={buttonRef}
             className={`btn btn-sm ${className} ${held ? 'btn-disabled' : ''}`}
             aria-disabled={held}
             aria-describedby={held ? hintId : undefined}
@@ -100,15 +133,75 @@ function HeldButton({
 }
 
 /**
+ * Save, Clear and Cancel. Save is held (`saveWaits`) with the status line as its description; Clear is
+ * held while the saved list is unread (`locked`), with its own short description of why. `focusSave`
+ * moves focus to Save, where the Retry the user was on was.
+ */
+function FooterActions({
+    saveWaits,
+    locked,
+    hintId,
+    saving,
+    focusSave,
+    onSave,
+    onClear,
+    onClose,
+}: {
+    saveWaits: boolean;
+    locked: boolean;
+    hintId: string;
+    saving: boolean;
+    focusSave: boolean;
+    onSave: () => void;
+    onClear: () => void;
+    onClose: () => void;
+}) {
+    const { t } = useTranslation();
+    const clearHintId = useId();
+    const saveRef = useRef<HTMLButtonElement>(null);
+    useEffect(() => {
+        if (focusSave) saveRef.current?.focus();
+    }, [focusSave]);
+    return (
+        <div className="flex justify-end gap-2">
+            <HeldButton
+                held={saveWaits}
+                hintId={hintId}
+                className="btn-latvian"
+                disabled={saving}
+                buttonRef={saveRef}
+                onPress={onSave}
+            >
+                {saving && <span className="loading loading-spinner loading-xs" />}
+                {t('app.photoChooserUse')}
+            </HeldButton>
+            <HeldButton held={locked} hintId={clearHintId} className="btn-warning" onPress={onClear}>
+                {t('app.photosClear')}
+            </HeldButton>
+            {locked && (
+                <span id={clearHintId} className="sr-only">
+                    {t('app.photoChooserClearHeld')}
+                </span>
+            )}
+            <button type="button" className="btn btn-outline btn-sm" onClick={onClose}>
+                {t('app.cancel')}
+            </button>
+        </div>
+    );
+}
+
+/**
  * The chooser's actions: save (held back, with its reason, while the account is unknown),
  * clear the selection (held with it while the saved list is unread: a late read would undo the
- * clear), cancel — and the error of a save that failed.
+ * clear; its own description says so), cancel — and the error of a save that failed. Once a Retry
+ * has lifted the hold (`confirmed`), focus moves to Save, where the Retry the user was on was.
  */
 export function ChooserFooter({
     saveFailed,
     saveWaits,
     holdReason,
     retrying,
+    confirmed,
     locked,
     onRetryHold,
     saving,
@@ -122,8 +215,10 @@ export function ChooserFooter({
     holdReason: keyof typeof SAVE_HOLD_HINT;
     /** The saved list is unread: Clear is held with Save. */
     locked: boolean;
-    /** A retry is under way. */
+    /** A retry is under way (the check and the read after it). */
     retrying: boolean;
+    /** A pressed Retry has lifted the hold and the list is read. */
+    confirmed: boolean;
     /** Asks again, when the hold is one only a retry can lift. */
     onRetryHold: () => void;
     saving: boolean;
@@ -133,6 +228,7 @@ export function ChooserFooter({
 }) {
     const { t } = useTranslation();
     const hintId = useId();
+    const message = saveWaits ? SAVE_HOLD_HINT[holdReason] : confirmed ? 'app.photoChooserSaveConfirmed' : null;
     return (
         <>
             {saveFailed && (
@@ -140,21 +236,23 @@ export function ChooserFooter({
                     <span>{t('app.photoChooserSaveError')}</span>
                 </div>
             )}
-            {saveWaits && (
-                <SaveHoldHint id={hintId} holdReason={holdReason} retrying={retrying} onRetry={onRetryHold} />
-            )}
-            <div className="flex justify-end gap-2">
-                <HeldButton held={saveWaits} hintId={hintId} className="btn-latvian" disabled={saving} onPress={onSave}>
-                    {saving && <span className="loading loading-spinner loading-xs" />}
-                    {t('app.photoChooserUse')}
-                </HeldButton>
-                <HeldButton held={locked} hintId={hintId} className="btn-warning" onPress={onClear}>
-                    {t('app.photosClear')}
-                </HeldButton>
-                <button type="button" className="btn btn-outline btn-sm" onClick={onClose}>
-                    {t('app.cancel')}
-                </button>
-            </div>
+            <HoldStatus
+                id={hintId}
+                message={message}
+                showRetry={saveWaits && RETRYABLE_HOLDS.includes(holdReason)}
+                retrying={retrying}
+                onRetry={onRetryHold}
+            />
+            <FooterActions
+                saveWaits={saveWaits}
+                locked={locked}
+                hintId={hintId}
+                saving={saving}
+                onSave={onSave}
+                onClear={onClear}
+                onClose={onClose}
+                focusSave={confirmed}
+            />
         </>
     );
 }
@@ -187,14 +285,16 @@ export function SearchForm({ onSearch }: { onSearch: (term: string) => void }) {
 }
 
 /**
- * What the hold on Save says: a retry or a read under way is "checking", an account that could not
- * be confirmed says so (or that the check failed again), and otherwise it is the listing's state.
+ * What the hold on Save says: a retry or a read under way is "checking"; with no challenge to read
+ * the library through while the saved list is unread, the way out that exists (Clear is held too);
+ * a list that could not be read for this account says which failure it was; otherwise it is the
+ * listing's state.
  */
 export const holdReasonOf = (
     saved: ReturnType<typeof useSavedListReread>,
     listState: ListState['status'],
 ): keyof typeof SAVE_HOLD_HINT => {
     if (saved.busy || saved.checking) return 'checking';
-    if (saved.status !== 'unconfirmed') return listState;
-    return saved.checkFailed ? 'check-failed' : 'unconfirmed';
+    if (listState === 'no-context' && saved.status !== 'ok') return 'no-context-held';
+    return saved.failure ?? listState;
 };
