@@ -166,6 +166,15 @@ const allDayPauseHint = (t: Translate): SettingHint => ({
     text: t('app.votingPauseAllDayHint'),
 });
 
+/**
+ * Submit Only Chosen Photos where it reaches every matching challenge (the
+ * global defaults, a profile, a rule) rather than the one being edited.
+ */
+export const chosenPhotosOnlyReachHint = (t: Translate): SettingHint => ({
+    tone: 'text-warning',
+    text: t('app.chosenPhotosOnlyReachHint'),
+});
+
 const GLOBAL_HINTS: Map<string, (ctx: GlobalHintContext) => SettingHint[]> = new Map([
     [
         'useVotingPause',
@@ -183,6 +192,11 @@ const GLOBAL_HINTS: Map<string, (ctx: GlobalHintContext) => SettingHint[]> = new
         },
     ],
     ['voteBeforeBoost', boostPrefillHints],
+    [
+        'chosenPhotosOnly',
+        ({ formValues, t }: GlobalHintContext) =>
+            formValues.chosenPhotosOnly === true ? [chosenPhotosOnlyReachHint(t)] : [],
+    ],
 ]);
 
 /**

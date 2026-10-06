@@ -6,8 +6,9 @@ import type { SerializableSchemaEntry } from '../../ipc/settings.handlers';
 
 import { formatSecondsAsHoursMinutes } from './timeFieldUnits';
 import { formatDuration } from '../../format/duration';
-import { entryPhotoUrl } from '../../format/photoUrl';
+import { buildPhotoUrl, entryPhotoUrl } from '../../format/photoUrl';
 import { finiteOr } from '../../numbers';
+import { interp } from './interp';
 
 // Re-exported from the shared core so the renderer, the CLI, and the voting pass
 // (services/votingOrchestrator/boost.ts) all format durations identically — see src/ts/format/duration.ts.
@@ -17,7 +18,13 @@ export { formatDuration };
 // component so the renderer keeps one door onto the shared core, matching
 // formatDuration above — see src/ts/format/photoUrl.ts for why the URL has to
 // be built client-side at all.
-export { entryPhotoUrl };
+export { buildPhotoUrl, entryPhotoUrl };
+
+/** A chosen-photos list as its size ("none" when empty). */
+const formatPhotoCount = (value: unknown, t: (key: string) => string): string => {
+    const count = Array.isArray(value) ? value.length : 0;
+    return count === 0 ? t('app.none') : interp(t('app.chosenPhotosCount'), { count });
+};
 
 /**
  * Format a setting value for the read-only "Global default" hint so it reads
@@ -25,7 +32,8 @@ export { entryPhotoUrl };
  * "count ≤ Xh Ym" (before the generic array join, which would print
  * [object Object] for them), hours+minutes for `time` settings (stored as
  * seconds), `value unit` for unit-bearing numbers, and a comma-joined list
- * (or the "none" label) for tag arrays. Everything else falls back to
+ * (or the "none" label) for tag arrays, a count for chosen-photo lists (their
+ * ids mean nothing to read). Everything else falls back to
  * `String(value)`.
  *
  * `t` is the translation function, passed in so this stays a pure util with no
@@ -63,6 +71,8 @@ export const formatSettingDefault = (
             t('app.none')
         );
     }
+    // Before the generic array branch: a photo list is opaque ids, so only its size is shown.
+    if (config?.type === 'photos') return formatPhotoCount(value, t);
     if (Array.isArray(value)) {
         return value.join(', ') || t('app.none');
     }

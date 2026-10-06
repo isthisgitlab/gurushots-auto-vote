@@ -7,6 +7,31 @@ import type { ComponentChildren } from 'preact';
 const FOCUSABLE_SELECTOR =
     'a[href], button:not([disabled]), textarea:not([disabled]), input:not([disabled]), select:not([disabled]), [tabindex]:not([tabindex="-1"])';
 
+// The open modals, outermost first. A modal can open from inside another (the
+// photo chooser from a settings modal); only the topmost one answers Escape and
+// Tab, and the page scroll lock outlives all but the last to close.
+const openModalIds: string[] = [];
+
+const isTopmost = (id: string): boolean => openModalIds[openModalIds.length - 1] === id;
+
+/**
+ * Keep this modal on the stack while it is open. Its own effect, keyed on the
+ * open state alone: handleKeyDown changes with every new onClose, and
+ * re-registering then would move a modal above one opened from inside it.
+ */
+function useModalStack(isOpen: boolean, id: string) {
+    useLayoutEffect(() => {
+        if (!isOpen) return undefined;
+        openModalIds.push(id);
+        // Prevent body scroll when modal is open
+        document.body.style.overflow = 'hidden';
+        return () => {
+            openModalIds.splice(openModalIds.indexOf(id), 1);
+            document.body.style.overflow = openModalIds.length > 0 ? 'hidden' : '';
+        };
+    }, [isOpen, id]);
+}
+
 // Close-button label, read from the page translator rather than the
 // useTranslation hook so this generic UI primitive stays usable outside a
 // TranslationProvider.
@@ -69,6 +94,7 @@ export function Modal({
 
     const handleKeyDown = useCallback(
         (e: KeyboardEvent) => {
+            if (!isTopmost(titleId)) return;
             if (e.key === 'Escape') {
                 if (onClose) onClose();
                 return;
@@ -96,7 +122,7 @@ export function Modal({
                 first.focus();
             }
         },
-        [onClose, getFocusable],
+        [onClose, getFocusable, titleId],
     );
 
     useLayoutEffect(() => {
@@ -105,19 +131,18 @@ export function Modal({
         // Remember the trigger so focus can return to it on close.
         previouslyFocusedRef.current = document.activeElement;
         document.addEventListener('keydown', handleKeyDown);
-        // Prevent body scroll when modal is open
-        document.body.style.overflow = 'hidden';
         // Move focus into the dialog (first focusable element, else the box).
         const focusable = getFocusable();
         (focusable[0] || modalBoxRef.current)?.focus();
 
         return () => {
             document.removeEventListener('keydown', handleKeyDown);
-            document.body.style.overflow = '';
             const prev = previouslyFocusedRef.current;
             if (prev && typeof prev.focus === 'function') prev.focus();
         };
     }, [isOpen, handleKeyDown, getFocusable]);
+
+    useModalStack(isOpen, titleId);
 
     if (!isOpen) {
         return null;

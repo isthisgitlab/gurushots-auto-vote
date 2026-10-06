@@ -72,6 +72,27 @@ describe('a scenario row', () => {
         expect(screen.queryByLabelText('app.scenarioExportLabel')).toBeNull();
     });
 
+    test('export names the settings it left out', async () => {
+        jest.mocked(window.api.exportScenario).mockResolvedValue({
+            success: true,
+            json: '{"name":"Plan"}',
+            omitted: ['chosenPhotos'],
+        });
+        await renderSection();
+        click('app.scenarioExport');
+        await screen.findByLabelText('app.scenarioExportLabel');
+        // Translations echo their key in tests; the omitted setting's label key is the placeholder value.
+        expect(screen.getByText('app.scenarioExportOmitted')).toBeTruthy();
+    });
+
+    test('export without omissions shows no note', async () => {
+        jest.mocked(window.api.exportScenario).mockResolvedValue({ success: true, json: '{}', omitted: [] });
+        await renderSection();
+        click('app.scenarioExport');
+        await screen.findByLabelText('app.scenarioExportLabel');
+        expect(screen.queryByText('app.scenarioExportOmitted')).toBeNull();
+    });
+
     test('a failed export shows the error', async () => {
         jest.mocked(window.api.exportScenario).mockResolvedValue({ success: false, error: 'not-found' });
         await renderSection();
@@ -183,6 +204,7 @@ describe('import', () => {
                 { name: 'done', rules: 0, settings: [] },
             ],
             spending: [{ action: 'swap', rule: 'Hold' }],
+            flagged: [],
             limits: { swaps: 2 },
             ...overrides,
         },
@@ -210,6 +232,23 @@ describe('import', () => {
             expect(window.api.importScenario).toHaveBeenCalledWith('{"name":"Shared"}', { overwrite: false }),
         );
         await waitFor(() => expect(screen.queryByLabelText('app.scenarioImportLabel')).toBeNull());
+    });
+
+    test('the preview calls out chosen-photo settings, and only when present', async () => {
+        jest.mocked(window.api.previewScenarioImport).mockResolvedValueOnce(
+            invalid(preview({ flagged: [{ phase: 'main', key: 'chosenPhotos' }] })),
+        );
+        await openImport();
+        click('app.scenarioPreview');
+        expect(await screen.findByText('app.scenarioFlagged')).toBeTruthy();
+    });
+
+    test('a preview with nothing flagged has no review line', async () => {
+        jest.mocked(window.api.previewScenarioImport).mockResolvedValueOnce(invalid(preview()));
+        await openImport();
+        click('app.scenarioPreview');
+        await screen.findByText('From a friend');
+        expect(screen.queryByText('app.scenarioFlagged')).toBeNull();
     });
 
     test('a scenario that exists needs the overwrite box; editing the text drops the preview', async () => {

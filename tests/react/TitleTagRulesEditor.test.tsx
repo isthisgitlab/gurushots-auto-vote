@@ -175,6 +175,72 @@ describe('TitleTagRulesEditor', () => {
             expect(onChange).toHaveBeenCalledWith([expect.objectContaining({ autoJoin: '' })]);
         });
 
+        describe('chosen photos', () => {
+            const ID = `00000001${'a'.repeat(24)}`;
+            beforeEach(() => {
+                window.api.getSetting = jest.fn().mockResolvedValue('');
+                window.api.getLibraryPhotos = jest.fn().mockResolvedValue({
+                    success: true,
+                    photos: [{ id: ID, labels: [], allowed: true, message: null, uploadDate: null }],
+                    memberId: null,
+                    truncated: false,
+                    allowedKnown: false,
+                });
+            });
+
+            test('a rule that sets nothing inherits, with no Clear', () => {
+                render(<TitleTagRulesEditor value={rowWith()} onChange={jest.fn()} />);
+                const group = screen.getByRole('group', { name: 'app.chosenPhotos' });
+                expect(group.textContent).toContain('app.titleRuleInherit');
+                expect(screen.queryByRole('button', { name: 'app.titleRuleInherit' })).toBeNull();
+            });
+
+            test("'' (a cleared draft) also reads as inherit", () => {
+                render(<TitleTagRulesEditor value={rowWith({ chosenPhotos: '' })} onChange={jest.fn()} />);
+                expect(screen.getByRole('group', { name: 'app.chosenPhotos' }).textContent).toContain(
+                    'app.titleRuleInherit',
+                );
+            });
+
+            test('choosing photos stores the list on the rule', async () => {
+                const onChange = jest.fn();
+                render(<TitleTagRulesEditor value={rowWith()} onChange={onChange} />);
+                fireEvent.click(screen.getByRole('button', { name: 'app.choosePhotos' }));
+                fireEvent.click(await screen.findByRole('button', { name: 'app.photoChooserTileLabel' }));
+                fireEvent.click(screen.getByRole('button', { name: 'app.photoChooserUse' }));
+                await waitFor(() =>
+                    expect(onChange).toHaveBeenCalledWith([expect.objectContaining({ chosenPhotos: [ID] })]),
+                );
+                // A rule has no challenge to read eligibility through.
+                expect(window.api.getLibraryPhotos).toHaveBeenCalledWith(null, undefined);
+            });
+
+            test('an explicit empty list means none, and Inherit writes the empty sentinel', () => {
+                const onChange = jest.fn();
+                render(<TitleTagRulesEditor value={rowWith({ chosenPhotos: [] })} onChange={onChange} />);
+                expect(screen.getByRole('group', { name: 'app.chosenPhotos' }).textContent).toContain('app.none');
+                fireEvent.click(screen.getByRole('button', { name: 'app.titleRuleInherit' }));
+                expect(onChange).toHaveBeenCalledWith([expect.objectContaining({ chosenPhotos: '' })]);
+            });
+
+            test('Submit Only is a three-way select like the other inline overrides', () => {
+                const onChange = jest.fn();
+                render(<TitleTagRulesEditor value={rowWith()} onChange={onChange} />);
+                expect(screen.getByLabelText<HTMLSelectElement>('app.chosenPhotosOnly').value).toBe('');
+                pick('app.chosenPhotosOnly', 'on');
+                expect(onChange).toHaveBeenCalledWith([expect.objectContaining({ chosenPhotosOnly: true })]);
+            });
+
+            test('Submit Only on a rule warns that it reaches every matching challenge', () => {
+                const { rerender } = render(
+                    <TitleTagRulesEditor value={rowWith({ chosenPhotosOnly: true })} onChange={jest.fn()} />,
+                );
+                expect(screen.getByText('app.chosenPhotosOnlyReachHint')).toBeTruthy();
+                rerender(<TitleTagRulesEditor value={rowWith({ chosenPhotosOnly: false })} onChange={jest.fn()} />);
+                expect(screen.queryByText('app.chosenPhotosOnlyReachHint')).toBeNull();
+            });
+        });
+
         test('the join window emits a number', () => {
             const onChange = jest.fn();
             render(<TitleTagRulesEditor value={rowWith()} onChange={onChange} />);

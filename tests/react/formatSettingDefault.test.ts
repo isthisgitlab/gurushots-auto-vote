@@ -9,6 +9,7 @@ const t = (key: string) => {
         'app.none': '(none)',
         'app.hours': 'hours',
         'app.minutes': 'minutes',
+        'app.chosenPhotosCount': 'Chosen photos: {count}',
     };
     return dict[key] ?? key;
 };
@@ -112,6 +113,17 @@ describe('formatSettingDefault', () => {
 
         test('no config still honors the array branch', () => {
             expect(formatSettingDefault([], null, t)).toBe('(none)');
+        });
+    });
+
+    describe('photos settings', () => {
+        test('shows a count, never the ids', () => {
+            expect(formatSettingDefault(['a1', 'b2', 'c3'], { type: 'photos' }, t)).toBe('Chosen photos: 3');
+        });
+
+        test('an empty list, and a value that is not a list, read as none', () => {
+            expect(formatSettingDefault([], { type: 'photos' }, t)).toBe('(none)');
+            expect(formatSettingDefault('junk', { type: 'photos' }, t)).toBe('(none)');
         });
     });
 });

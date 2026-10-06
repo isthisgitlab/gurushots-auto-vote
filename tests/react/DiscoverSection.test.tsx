@@ -248,3 +248,124 @@ describe('edge paths', () => {
         expect(await screen.findByText('app.discoverConfirmBalance')).toBeTruthy();
     });
 });
+
+describe('chosen photos', () => {
+    const PHOTO = `00000001${'a'.repeat(24)}`;
+    // Challenge id -> the list saved for that challenge alone.
+    let own: Record<string, string[]>;
+    let globalList: string[];
+
+    beforeEach(() => {
+        own = {};
+        globalList = [];
+        window.api = invalid({
+            onSettingsChanged: undefined,
+            getSetting: jest.fn().mockResolvedValue(''),
+            getMemberChallenges: jest.fn().mockResolvedValue({ success: true, items }),
+            joinChallenge: jest.fn().mockResolvedValue({ success: true, status: 'joined' }),
+            getChallengeOverride: jest.fn(async (_key: string, id: string) => own[id] ?? null),
+            getEffectiveSetting: jest.fn(async (_key: string, id: string) => own[id] ?? globalList),
+            setChallengeOverride: jest.fn(async (_key: string, id: string, value: string[]) => {
+                own[id] = value;
+                return true;
+            }),
+            removeChallengeOverride: jest.fn(async (_key: string, id: string) => {
+                delete own[id];
+                return true;
+            }),
+            getLibraryPhotos: jest.fn().mockResolvedValue({
+                success: true,
+                photos: [{ id: PHOTO, labels: ['sea'], allowed: true, message: null, uploadDate: 1 }],
+                memberId: 'c'.repeat(32),
+                truncated: false,
+                allowedKnown: true,
+            }),
+        });
+    });
+
+    const renderSection = () =>
+        render(<DiscoverSection isLoggedIn bankroll={invalid({ coins: 500 })} onJoined={jest.fn()} />);
+
+    test('a row with no list of its own has no Chosen chip, only the Choose photos action', async () => {
+        renderSection();
+        await screen.findByText('Free One');
+        expect(screen.queryByText('app.discoverChosenChip')).toBeNull();
+        expect(screen.getAllByText('app.choosePhotos')).toHaveLength(2);
+    });
+
+    test('Choose photos opens the chooser for that challenge and saves its own list', async () => {
+        renderSection();
+        await screen.findByText('Free One');
+        fireEvent.click(screen.getAllByText('app.choosePhotos')[0]);
+        await waitFor(() => expect(window.api.getLibraryPhotos).toHaveBeenCalledWith(900001, undefined));
+        fireEvent.click(await screen.findByRole('button', { name: 'app.photoChooserTileLabel' }));
+        fireEvent.click(screen.getByRole('button', { name: 'app.photoChooserUse' }));
+        await waitFor(() =>
+            expect(window.api.setChallengeOverride).toHaveBeenCalledWith('chosenPhotos', '900001', [PHOTO]),
+        );
+        // The row now carries the chip; the other row does not.
+        expect(await screen.findByText('app.discoverChosenChip')).toBeTruthy();
+        expect(screen.getAllByText('app.discoverChosenChip')).toHaveLength(1);
+        await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull());
+    });
+
+    test('the Chosen chip reopens the chooser on the saved list; saving none removes the list', async () => {
+        own['900001'] = [PHOTO];
+        renderSection();
+        fireEvent.click(await screen.findByText('app.discoverChosenChip'));
+        const tile = await screen.findByRole('button', { name: 'app.photoChooserTileLabel' });
+        expect(tile.getAttribute('aria-pressed')).toBe('true');
+        fireEvent.click(tile);
+        fireEvent.click(screen.getByRole('button', { name: 'app.photoChooserUse' }));
+        await waitFor(() => expect(window.api.removeChallengeOverride).toHaveBeenCalledWith('chosenPhotos', '900001'));
+        await waitFor(() => expect(screen.queryByText('app.discoverChosenChip')).toBeNull());
+    });
+
+    test('a refused save keeps the chooser open on its error and leaves the row alone', async () => {
+        jest.mocked(window.api.setChallengeOverride).mockResolvedValue(false);
+        renderSection();
+        await screen.findByText('Free One');
+        fireEvent.click(screen.getAllByText('app.choosePhotos')[0]);
+        fireEvent.click(await screen.findByRole('button', { name: 'app.photoChooserTileLabel' }));
+        fireEvent.click(screen.getByRole('button', { name: 'app.photoChooserUse' }));
+        expect((await screen.findByRole('alert')).textContent).toContain('app.photoChooserSaveError');
+        expect(screen.queryByText('app.discoverChosenChip')).toBeNull();
+    });
+
+    test('a save the bridge rejects counts as refused', async () => {
+        jest.mocked(window.api.setChallengeOverride).mockRejectedValue(new Error('down'));
+        renderSection();
+        await screen.findByText('Free One');
+        fireEvent.click(screen.getAllByText('app.choosePhotos')[0]);
+        fireEvent.click(await screen.findByRole('button', { name: 'app.photoChooserTileLabel' }));
+        fireEvent.click(screen.getByRole('button', { name: 'app.photoChooserUse' }));
+        expect((await screen.findByRole('alert')).textContent).toContain('app.photoChooserSaveError');
+    });
+
+    test('the paid-join confirm names the chosen photo only when a list applies to that row', async () => {
+        renderSection();
+        await screen.findByText('Paid One');
+        fireEvent.click(screen.getByText('app.discoverJoinPaid'));
+        await screen.findByText('app.discoverConfirmTitle');
+        expect(screen.queryByText('app.discoverConfirmChosen')).toBeNull();
+        fireEvent.click(screen.getByText('app.cancel'));
+        await waitFor(() => expect(screen.queryByText('app.discoverConfirmTitle')).toBeNull());
+    });
+
+    test('a list from the global settings applies to the row too', async () => {
+        globalList = [PHOTO];
+        renderSection();
+        await screen.findByText('Paid One');
+        // Only a list of the row's own gets the chip; the confirm text follows the effective list.
+        expect(screen.queryByText('app.discoverChosenChip')).toBeNull();
+        fireEvent.click(screen.getByText('app.discoverJoinPaid'));
+        expect(await screen.findByText('app.discoverConfirmChosen')).toBeTruthy();
+    });
+
+    test('a row whose own list is empty reads as having none', async () => {
+        own['900002'] = [];
+        renderSection();
+        await screen.findByText('Paid One');
+        expect(screen.queryByText('app.discoverChosenChip')).toBeNull();
+    });
+});

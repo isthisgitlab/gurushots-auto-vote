@@ -65,7 +65,7 @@ function PhaseSettings({
             {keys.map((key) => {
                 const config = schema?.[key];
                 return (
-                    <div key={key} className="flex items-center gap-2">
+                    <div key={key} className="flex flex-wrap items-center gap-2">
                         <span className="text-xs w-40 shrink-0">{config ? t(config.label) : key}</span>
                         {config && (
                             <SettingInput
@@ -84,6 +84,10 @@ function PhaseSettings({
                         >
                             {t('app.sbRemove')}
                         </button>
+                        {/* A scenario has no state until its challenge is joined, so a join never sees this list. */}
+                        {key === 'chosenPhotos' && (
+                            <p className="text-info w-full text-xs">{t('app.chosenPhotosScenarioHint')}</p>
+                        )}
                     </div>
                 );
             })}

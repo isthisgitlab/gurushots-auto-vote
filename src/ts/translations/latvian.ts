@@ -563,13 +563,55 @@ export const app = {
         'Vēlamais kritērijs gan automātiskajai iesniegšanai, gan manuālajām foto pogām. Dot priekšroku foto, kuru tagi sakrīt ar šiem; tie tiek vērtēti augstāk nekā pēc automātiski noteiktajiem izaicinājuma atslēgvārdiem, bet pārējie foto netiek izslēgti. Ja neviens nesakrīt, foto izvēlas kā parasti. Salīdzināšanai ir tie paši veselo vārdu noteikumi kā obligātajiem tagiem.',
     chosenPhotos: 'Izvēlētie foto',
     chosenPhotosDesc:
-        'Foto, ko automātiskā pievienošanās un automātiskā iesniegšana mēģina izmantot pirmos. Tiem joprojām jāatbilst taviem tagu uzstādījumiem, un lietotne tos kārto tāpat kā savus izvēlētos foto. Foto var būt tikai vienā izaicinājumā, tāpēc ar kopīgu sarakstu to paņem izaicinājums, kas tiek aizpildīts pirmais. Saraksts pieder kontam, kas to saglabāja, un citā kontā tiek ignorēts. Scenārija saraksts tiek izmantots tikai pēc pievienošanās.',
+        'Foto, ko automātiskā pievienošanās un automātiskā iesniegšana mēģina izmantot pirmos. Tiem joprojām jāatbilst taviem tagu uzstādījumiem, un lietotne tos kārto tāpat, kā kārto savas automātiskās izvēles. Foto var būt tikai vienā izaicinājumā, tāpēc ar kopīgu sarakstu to paņem izaicinājums, kas tiek aizpildīts pirmais. Saraksts pieder kontam, kas to saglabāja, un citā kontā tiek ignorēts. Scenārija saraksts tiek izmantots tikai pēc pievienošanās. Nomaiņa sarakstu neņem vērā.',
     chosenPhotosOnly: 'Iesniegt tikai izvēlētos foto',
     chosenPhotosOnlyDesc:
-        'Kad ir uzstādīti izvēlētie foto, automātiskā pievienošanās un iesniegšana paši foto neizvēlas: izaicinājums, kuram nav neviena derīga izvēlētā foto, tiek izlaists. Manuālā pievienošanās un manuālās pogas +1/+N tik un tā izvēlas automātiski, ārkārtas iesniegšana šo uzstādījumu neņem vērā (izslēdz to izaicinājumam, lai vieta paliktu tukša), un maksas pievienošanās, kas jau atbloķēta, tik un tā iesniedz automātiski izvēlētu foto, lai monētas neaizietu zudumā. Nomaiņa to arī neņem vērā. Ja saraksts ir tukšs, tam nav nozīmes.',
+        'Kad ir uzstādīti izvēlētie foto, automātiskā pievienošanās un iesniegšana paši foto neizvēlas: izaicinājums, kuram nav neviena derīga izvēlētā foto, tiek izlaists. Manuālā pievienošanās un manuālās pogas +1/+N tik un tā izvēlas automātiski, ārkārtas iesniegšana šo uzstādījumu neņem vērā (izslēdz to izaicinājumam, lai vieta paliktu tukša), un maksas pievienošanās, kas jau atbloķēta, tik un tā iesniedz automātiski izvēlētu foto, lai monētas neaizietu zudumā. Nomaiņa neņem vērā nevienu no abiem uzstādījumiem. Ja saraksts ir tukšs, tam nav nozīmes.',
     chosenPhotosMemberId: 'Izvēlēto foto konts',
     chosenPhotosMemberIdDesc:
         'Iekšējs — dalībnieks, kas pēdējais saglabāja izvēlēto foto sarakstu; ja piesakās cits dalībnieks, saraksts tiek ignorēts',
+    chosenPhotosCount: 'Izvēlēto foto: {count}',
+    choosePhotos: 'Izvēlēties foto',
+    photosClear: 'Notīrīt',
+    chosenPhotoThumbAlt: 'Izvēlētais foto {id}',
+    chosenPhotosScenarioHint:
+        'Scenārija izvēlētie foto tiek izmantoti tikai pēc pievienošanās izaicinājumam; pievienojoties tie netiek ņemti vērā.',
+    chosenPhotosOnlyReachHint:
+        'Tas attiecas uz katru izaicinājumu, ko aptver: automātiskā pievienošanās un iesniegšana izlaiž katru izaicinājumu, kuram nav derīga izvēlētā foto.',
+    photoChooserTitle: 'Izvēlēties foto',
+    photoChooserHelp:
+        'Lietotne izvēlētos foto kārto tāpat, kā kārto savas automātiskās izvēles, tāpēc tiem joprojām jāiztur tavi tagu filtri. Tie tiek izmantoti pirmie.',
+    photoChooserSearchLabel: 'Meklēt savus foto pēc taga',
+    photoChooserSearchPlaceholder: 'piem., saulriets',
+    photoChooserSearch: 'Meklēt',
+    photoChooserCount: 'Izvēlēti {count} no {max}',
+    photoChooserLoading: 'Ielādē tavus foto…',
+    photoChooserLoadError:
+        'Tavus foto neizdevās ielādēt, jo lietotne nesasniedza GuruShots vai sesija ir beigusies. Mēģini vēlreiz vai piesakies no jauna.',
+    photoChooserRetry: 'Mēģināt vēlreiz',
+    photoChooserNoContext:
+        'Tavus foto vēl nevar parādīt: bibliotēku nolasa caur izaicinājumu, bet tev šobrīd nav neviena aktīva vai pievienojama izaicinājuma. Pievienojies kādam vai uzgaidi, līdz tāds atveras, un mēģini vēlreiz.',
+    photoChooserEligibilityLater:
+        'Šeit netiek pārbaudīts, vai foto der kādam izaicinājumam; to pārbauda iesniegšanas brīdī.',
+    photoChooserTruncated: 'Rāda tikai pirmos {count} foto. Meklē pēc taga, lai atrastu citus.',
+    photoChooserEmpty: 'Foto nav atrasti. Pamēģini citu tagu vai augšupielādē foto savā GuruShots bibliotēkā.',
+    photoChooserMissing:
+        'Nav pieejams šim izaicinājumam (atrodas citā izaicinājumā, ir dzēsts vai ir tālāk par pirmajiem {count} foto)',
+    photoChooserNotEligible: 'Neder šim izaicinājumam',
+    photoChooserAllowed: 'Var iesniegt',
+    photoChooserTileLabel: 'Foto {id}: {labels}. {reason}',
+    photoChooserNoTags: 'Bez tagiem',
+    photoChooserOtherAccount:
+        'Šis saraksts tika saglabāts citā kontā, tāpēc lietotne to ignorē. Notīri to un izvēlies foto no jauna.',
+    photoChooserOtherAccountClear: 'Notīrīt sarakstu',
+    photoChooserSaveError: 'Izvēlētos foto neizdevās saglabāt, jo uzstādījumu nevarēja ierakstīt. Mēģini vēlreiz.',
+    photoChooserUse: 'Izmantot šos foto',
+    discoverChosenChip: 'Izvēlēti foto',
+    discoverChosenChipHint: 'Šim izaicinājumam ir izvēlēti foto. Spied, lai tos mainītu.',
+    discoverConfirmChosen: 'Tavs izvēlētais foto, ja tas der, citādi automātiski izvēlēts foto.',
+    scenarioFlagged:
+        'Pārskati pirms importa: {settings}. Izvēlētie foto pieder vienam kontam, un citā kontā tie tiek ignorēti; „Iesniegt tikai izvēlētos foto” liek izlaist izaicinājumu, kuram nav derīga izvēlētā foto.',
+    scenarioExportOmitted: 'Eksportā nav iekļauts, jo pieder tavam kontam: {settings}.',
     ignoreTitleWords: 'Ignorēt šos vārdus izaicinājumu nosaukumos',
     ignoreTitleWordsDesc:
         'Vārdi, ko izņemt no izaicinājuma nosaukuma, pirms pēc tā meklēt piemērotus foto. Izaicinājumu nosaukumos tēmai parasti pieliek kādu papildu vārdu — „Epic Lighthouses” ir par bākām, nevis par „epic”, — un šie liekie vārdi gan aizmiglo tēmu, gan tērē tās nedaudzās meklēšanas reizes, kas pieejamas vienam izaicinājumam. Saraksts jau ir aizpildīts ar biežākajiem vārdiem; to var brīvi labot. Izņem vārdu no saraksta, ja izaicinājums tiešām ir par to. Sēriju sākumus, piemēram, „Color Hunt:”, lietotne atmet automātiski, tie šeit nav jāraksta.',

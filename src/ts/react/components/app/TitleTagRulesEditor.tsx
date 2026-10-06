@@ -1,6 +1,9 @@
+import { useId } from 'react';
 import { useTranslation } from '@/contexts/TranslationContext';
 import { StrokeIcon, ICON_PATHS } from '@/components/ui/StrokeIcon';
 import { TagsField } from './SettingInput';
+import { ChosenPhotosControl, photoIdsOf } from './ChosenPhotosField';
+import { SettingHintList, chosenPhotosOnlyReachHint } from './SettingHints';
 import { useScenarios } from '@/api/useScenarios';
 import { interp } from '@/utils/interp';
 import {
@@ -128,6 +131,7 @@ const RUNTIME_FIELDS = [
 const TRISTATE_OVERRIDES = [
     { settingKey: 'autoJoin', labelKey: 'app.titleRuleAutoJoin' },
     { settingKey: 'autoFill', labelKey: 'app.titleRuleAutoFill' },
+    { settingKey: 'chosenPhotosOnly', labelKey: 'app.chosenPhotosOnly' },
 ];
 const JOIN_TIMING_FIELDS = [
     {
@@ -388,6 +392,26 @@ function RuleClassConditions({ rule, onPatch }: { rule: TitleRule; onPatch: Rule
     );
 }
 
+// The rule's chosen photos: an explicit list (an empty one means "none", beating a
+// lower layer's list) or inherit, which is how the rule stores ''.
+function RulePhotosField({ rule, onPatch }: { rule: TitleRule; onPatch: RulePatchHandler }) {
+    const { t } = useTranslation();
+    const labelId = useId();
+    return (
+        <div role="group" aria-labelledby={labelId} className="flex flex-col gap-1">
+            <span id={labelId} className="text-sm">
+                {t('app.chosenPhotos')}
+            </span>
+            <ChosenPhotosControl
+                value={Array.isArray(rule.chosenPhotos) ? photoIdsOf(rule.chosenPhotos) : null}
+                onChange={(ids) => onPatch({ chosenPhotos: ids })}
+                onClear={() => onPatch({ chosenPhotos: '' })}
+                clearLabel={t('app.titleRuleInherit')}
+            />
+        </div>
+    );
+}
+
 function RuleBehaviour({ rule, onPatch }: { rule: TitleRule; onPatch: RulePatchHandler }) {
     const { t } = useTranslation();
     return (
@@ -401,6 +425,8 @@ function RuleBehaviour({ rule, onPatch }: { rule: TitleRule; onPatch: RulePatchH
                     <RuleNumberField key={field.settingKey} {...field} rule={rule} onPatch={onPatch} />
                 ))}
             </div>
+            <RulePhotosField rule={rule} onPatch={onPatch} />
+            {rule.chosenPhotosOnly === true && <SettingHintList hints={[chosenPhotosOnlyReachHint(t)]} />}
         </div>
     );
 }
@@ -543,9 +569,11 @@ function RuleCard({
  *
  * BEHAVIOUR: a rule inherits an optional named profile, merges optional
  * Must/Should Include PHOTO tags at fill time, and may override auto-join,
- * auto-submit and the join timing INLINE. Inline wins over the profile. An
- * omitted key means "inherit"; the editor spells that as '' and the settings
- * sanitizer drops it.
+ * auto-submit, the join timing, Submit Only Chosen Photos and the Chosen
+ * Photos list INLINE. Inline wins over the profile. An omitted key means
+ * "inherit"; the editor spells that as '' and the settings sanitizer drops it.
+ * The chosen-photos list is the one array-valued inline key: '' inherits, an
+ * explicit [] means "no chosen photos".
  *
  * Controlled: `value` is the rules array and `onChange(nextRules)` is called
  * with a new array on every edit. Each rule is
@@ -553,7 +581,8 @@ function RuleCard({
  *    type?: string, pics?: number, minHours?: number, maxHours?: number,
  *    profile?: string, mustIncludeTags: string[], shouldIncludeTags: string[],
  *    autoJoin?: boolean, autoFill?: boolean, autoJoinWithinHoursOfEnd?: number,
- *    autoJoinAfterPercentElapsed?: number }`.
+ *    autoJoinAfterPercentElapsed?: number, chosenPhotos?: string[],
+ *    chosenPhotosOnly?: boolean }`.
  * `types` feeds the challenge-type suggestions; the field stays free text.
  */
 export function TitleTagRulesEditor({

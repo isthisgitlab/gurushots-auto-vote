@@ -2,6 +2,7 @@ import { useTranslation } from '@/contexts/TranslationContext';
 import { useListDraft, LIST_FINGERPRINT_SEP } from '@/hooks/useListDraft';
 import { SettingResetButton } from './SettingResetButton';
 import { TimeField, ScheduleField, TimeOfDayListField, TimeListField } from './TimeSettingFields';
+import { PhotosField } from './ChosenPhotosField';
 import { useScenarios } from '@/api/useScenarios';
 import { interp } from '@/utils/interp';
 
@@ -19,7 +20,7 @@ import type {
 // Setting types rendered as several controls (each with its own aria-label)
 // rather than one: their caption names a role="group" wrapper instead of
 // pointing a <label> at a single control.
-const GROUP_TYPES: Set<string | undefined> = new Set(['time', 'schedule', 'timeOfDayList', 'timeList']);
+const GROUP_TYPES: Set<string | undefined> = new Set(['time', 'schedule', 'timeOfDayList', 'timeList', 'photos']);
 
 /**
  * Caption for a setting control, shared by the global and per-challenge
@@ -289,6 +290,7 @@ function getDefaultForType(type: string | undefined): number | boolean | never[]
         case 'schedule':
         case 'timeOfDayList':
         case 'timeList':
+        case 'photos':
             return [];
         default:
             return '';
@@ -309,11 +311,12 @@ const FIELD_BY_TYPE: Map<string | undefined, ComponentType<SettingFieldProps>> =
     ['boolean', BooleanField],
     ['number', NumberField],
     ['scenario', ScenarioField],
+    ['photos', PhotosField],
 ]);
 
 // Row-list fields render inside a role="group" wrapper named by the
 // SettingLabel caption; TimeField carries that role on its own row.
-const GROUP_WRAPPED_TYPES: Set<string | undefined> = new Set(['schedule', 'timeOfDayList', 'timeList']);
+const GROUP_WRAPPED_TYPES: Set<string | undefined> = new Set(['schedule', 'timeOfDayList', 'timeList', 'photos']);
 
 /**
  * Schema-driven input renderer for settings. `id` goes on the control a

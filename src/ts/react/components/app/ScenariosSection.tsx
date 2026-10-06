@@ -49,6 +49,13 @@ function ImportPreview({ preview }: { preview: ImportPreviewResult['preview'] })
                       })
                     : t('app.scenarioSpendsNothing')}
             </div>
+            {preview.flagged.length > 0 && (
+                <div className="text-warning">
+                    {interp(t('app.scenarioFlagged'), {
+                        settings: preview.flagged.map((item) => `${t(`app.${item.key}`)} (${item.phase})`).join(', '),
+                    })}
+                </div>
+            )}
             <div>
                 {limits.length > 0
                     ? interp(t('app.scenarioLimits'), { limits: limits.map(([key, n]) => `${n} ${key}`).join(', ') })
@@ -141,6 +148,41 @@ function ImportPanel({ onDone, onCancel }: { onDone: () => void; onCancel: () =>
 }
 
 /**
+ * An exported scenario's JSON, and the settings the export left out (they belong to this account).
+ */
+type ExportedText = { json: string; omitted: string[] };
+
+/**
+ * The export panel of a scenario row: the JSON to copy and what was left out of it.
+ */
+function ExportedScenario({ name, exported, onHide }: { name: string; exported: ExportedText; onHide: () => void }) {
+    const { t } = useTranslation();
+    return (
+        <div className="space-y-1">
+            <p className="text-xs text-base-content/60">{t('app.scenarioExportHint')}</p>
+            {exported.omitted.length > 0 && (
+                <p className="text-xs text-warning">
+                    {interp(t('app.scenarioExportOmitted'), {
+                        settings: exported.omitted.map((key) => t(`app.${key}`)).join(', '),
+                    })}
+                </p>
+            )}
+            <textarea
+                className="textarea textarea-bordered w-full font-mono text-xs"
+                rows={6}
+                readOnly
+                aria-label={interp(t('app.scenarioExportLabel'), { name })}
+                value={exported.json}
+                onFocus={(e) => e.currentTarget.select()}
+            />
+            <button type="button" className="btn btn-xs btn-ghost" onClick={onHide}>
+                {t('app.scenarioExportClose')}
+            </button>
+        </div>
+    );
+}
+
+/**
  * One stored scenario: export, rename and a two-step delete.
  */
 function ScenarioRow({
@@ -157,7 +199,7 @@ function ScenarioRow({
     onEdit: () => void;
 }) {
     const { t } = useTranslation();
-    const [exported, setExported] = useState<string | null>(null);
+    const [exported, setExported] = useState<ExportedText | null>(null);
     const [renaming, setRenaming] = useState<string | null>(null);
     const [armed, setArmed] = useState(false);
 
@@ -169,7 +211,7 @@ function ScenarioRow({
 
     const runExport = async () => {
         const result = await ipc.callOrNull(() => ipc.exportScenario(name));
-        if (result?.success) setExported(result.json);
+        if (result?.success) setExported({ json: result.json, omitted: result.omitted });
         else onError({ what: 'app.scenarioExportFailed' });
     };
 
@@ -241,22 +283,7 @@ function ScenarioRow({
                     </button>
                 </div>
             )}
-            {exported !== null && (
-                <div className="space-y-1">
-                    <p className="text-xs text-base-content/60">{t('app.scenarioExportHint')}</p>
-                    <textarea
-                        className="textarea textarea-bordered w-full font-mono text-xs"
-                        rows={6}
-                        readOnly
-                        aria-label={interp(t('app.scenarioExportLabel'), { name })}
-                        value={exported}
-                        onFocus={(e) => e.currentTarget.select()}
-                    />
-                    <button type="button" className="btn btn-xs btn-ghost" onClick={() => setExported(null)}>
-                        {t('app.scenarioExportClose')}
-                    </button>
-                </div>
-            )}
+            {exported !== null && <ExportedScenario name={name} exported={exported} onHide={() => setExported(null)} />}
         </li>
     );
 }

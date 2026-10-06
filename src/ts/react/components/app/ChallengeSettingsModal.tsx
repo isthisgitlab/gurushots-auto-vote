@@ -2,6 +2,7 @@ import { useTranslation } from '@/contexts/TranslationContext';
 import { useSettingsSchema } from '@/api/useSettingsSchema';
 import { useIpcQuery } from '@/api/useIpcQuery';
 import { useAutovote } from '@/contexts/AutovoteContext';
+import { SettingsChallengeProvider } from '@/contexts/SettingsChallengeContext';
 import { useChallengeOverrides } from '@/hooks/useChallengeOverrides';
 import { tierSchemaEntries } from '@/utils/groupSettings';
 import { Modal } from '@/components/ui/Modal';
@@ -150,23 +151,26 @@ export function ChallengeSettingsModal({
                         onApply={form.applyProfile}
                     />
 
-                    {tierSchemaEntries(schema, groups, tiers, { perChallengeOnly: true }).map((band) => (
-                        <div key={band.id ?? '_'}>
-                            <SettingsTierHeading id={band.id} label={band.label} level="h4" />
-                            {band.groups.map((group) => (
-                                <ChallengeSettingsGroup
-                                    key={group.id}
-                                    id={group.id}
-                                    label={group.label}
-                                    entries={group.entries}
-                                    challenge={challenge}
-                                    defaults={defaults}
-                                    form={form}
-                                    hintsFor={hintsFor}
-                                />
-                            ))}
-                        </div>
-                    ))}
+                    {/* The chosen-photos chooser reads each photo's eligibility through this challenge. */}
+                    <SettingsChallengeProvider value={challengeId}>
+                        {tierSchemaEntries(schema, groups, tiers, { perChallengeOnly: true }).map((band) => (
+                            <div key={band.id ?? '_'}>
+                                <SettingsTierHeading id={band.id} label={band.label} level="h4" />
+                                {band.groups.map((group) => (
+                                    <ChallengeSettingsGroup
+                                        key={group.id}
+                                        id={group.id}
+                                        label={group.label}
+                                        entries={group.entries}
+                                        challenge={challenge}
+                                        defaults={defaults}
+                                        form={form}
+                                        hintsFor={hintsFor}
+                                    />
+                                ))}
+                            </div>
+                        ))}
+                    </SettingsChallengeProvider>
 
                     <ModalActionRow
                         bordered

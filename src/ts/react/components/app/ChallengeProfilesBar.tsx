@@ -2,6 +2,7 @@ import { useState, useEffect, useCallback, useRef } from 'react';
 import { useTranslation } from '@/contexts/TranslationContext';
 import { getIntentByName, intentValuesMatch } from '../../../settings/intentProfiles';
 import * as ipc from '@/api/ipc';
+import { SettingHintList, chosenPhotosOnlyReachHint } from './SettingHints';
 import { errorMessage } from '../../../errorMessage';
 
 /**
@@ -246,6 +247,9 @@ export function ChallengeProfilesBar({
                     {confirming === 'overwrite' ? t('app.confirmOverwrite') : t('app.saveAsProfile')}
                 </button>
             </div>
+
+            {/* A profile applies wherever it is used, not only to this challenge. */}
+            {overrides.chosenPhotosOnly === true && <SettingHintList hints={[chosenPhotosOnlyReachHint(t)]} />}
 
             {/* Single polite live region: confirm-arm prompts, errors and the
                 post-apply reminder are announced without stealing focus. */}

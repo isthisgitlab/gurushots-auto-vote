@@ -1,12 +1,14 @@
 import { useState, useCallback } from 'react';
 import { useTranslation } from '@/contexts/TranslationContext';
 import { useMemberChallenges } from '@/api/useMemberChallenges';
+import { useChosenPhotoLists } from '@/api/useChosenPhotoLists';
 import { Modal, ModalActions } from '@/components/ui/Modal';
 import { InlineLoader } from '@/components/ui/LoadingSpinner';
 import { StatusBadge } from '@/components/ui/StatusBadge';
 import { interp } from '@/utils/interp';
 import * as ipc from '@/api/ipc';
 import { ipcErrorText } from '@/api/ipcErrorText';
+import { PhotoChooserModal } from './PhotoChooserModal';
 
 import type { Bankroll, Challenge } from '../../../types/gurushots';
 import { errorMessage } from '../../../errorMessage';
@@ -46,11 +48,69 @@ const costOf = (c: Challenge) => {
 };
 
 /**
+ * Marks a row that has a list of its own; clicking it reopens the chooser.
+ */
+function ChosenChip({ onClick }: { onClick: () => void }) {
+    const { t } = useTranslation();
+    return (
+        <button
+            type="button"
+            className="badge badge-info badge-sm mt-0.5"
+            title={t('app.discoverChosenChipHint')}
+            onClick={onClick}
+        >
+            {t('app.discoverChosenChip')}
+        </button>
+    );
+}
+
+/**
+ * The chooser for one row's own Chosen Photos list. An empty selection removes
+ * the list so the row inherits again. The key gives each challenge a fresh open.
+ */
+function RowPhotoChooser({
+    challenge,
+    own,
+    onClose,
+    onSaved,
+}: {
+    challenge: Challenge | null;
+    own: string[];
+    onClose: () => void;
+    onSaved: () => Promise<void>;
+}) {
+    const save = async (ids: string[]): Promise<boolean> => {
+        // Only reachable from the chooser, which renders only while a challenge is being chosen for.
+        const id = String((challenge as Challenge).id);
+        const saved = await ipc.callOrNull(() =>
+            ids.length > 0
+                ? ipc.setChallengeOverride('chosenPhotos', id, ids)
+                : ipc.removeChallengeOverride('chosenPhotos', id),
+        );
+        if (saved !== true) return false;
+        await onSaved();
+        return true;
+    };
+    return (
+        <PhotoChooserModal
+            key={challenge?.id}
+            isOpen={!!challenge}
+            onClose={onClose}
+            value={own}
+            challengeId={challenge?.id ?? null}
+            onSave={save}
+        />
+    );
+}
+
+/**
  * Discover / un-joined challenges list with per-challenge Join buttons. Free
  * joins run immediately; paid joins open a confirm modal that shows the cost and
  * the current → resulting coin balance before spending. After any join that
  * changes state, refetches the list and calls onJoined so the header bankroll
- * (and active challenges) refresh.
+ * (and active challenges) refresh. Each row can also hold a list of chosen
+ * photos for that challenge alone: the join reads it before the challenge has
+ * any other settings (see resolveJoinSetting).
  */
 export function DiscoverSection({
     isLoggedIn,
@@ -63,7 +123,9 @@ export function DiscoverSection({
 }) {
     const { t } = useTranslation();
     const { items, loading, error, refetch } = useMemberChallenges();
+    const lists = useChosenPhotoLists(items.map((c) => String(c.id)));
     const [confirm, setConfirm] = useState<Challenge | null>(null); // challenge pending paid confirmation
+    const [choosing, setChoosing] = useState<Challenge | null>(null); // challenge whose photos are being chosen
     const [busyId, setBusyId] = useState<Challenge['id'] | null>(null);
     const [results, setResults] = useState<Record<string, JoinOutcome>>({}); // id -> outcome result
 
@@ -187,6 +249,9 @@ export function DiscoverSection({
                                                         : t('app.discoverCostFree')}
                                                 </span>
                                             </div>
+                                            {(lists.own[String(c.id)]?.length ?? 0) > 0 && (
+                                                <ChosenChip onClick={() => setChoosing(c)} />
+                                            )}
                                             {meta && (
                                                 <div className={`text-xs mt-0.5 ${TEXT_CLASS[meta.variant]}`}>
                                                     {meta.key
@@ -208,17 +273,22 @@ export function DiscoverSection({
                                                 </div>
                                             )}
                                         </div>
-                                        <button
-                                            className={`btn btn-sm ${cost > 0 ? 'btn-warning' : 'btn-primary'}`}
-                                            onClick={() => onJoinClick(c)}
-                                            disabled={isBusy}
-                                        >
-                                            {isBusy
-                                                ? t('app.discoverJoining')
-                                                : cost > 0
-                                                  ? t('app.discoverJoinPaid')
-                                                  : t('app.discoverJoin')}
-                                        </button>
+                                        <div className="flex items-center gap-2">
+                                            <button className="btn btn-outline btn-sm" onClick={() => setChoosing(c)}>
+                                                {t('app.choosePhotos')}
+                                            </button>
+                                            <button
+                                                className={`btn btn-sm ${cost > 0 ? 'btn-warning' : 'btn-primary'}`}
+                                                onClick={() => onJoinClick(c)}
+                                                disabled={isBusy}
+                                            >
+                                                {isBusy
+                                                    ? t('app.discoverJoining')
+                                                    : cost > 0
+                                                      ? t('app.discoverJoinPaid')
+                                                      : t('app.discoverJoin')}
+                                            </button>
+                                        </div>
                                     </li>
                                 );
                             })}
@@ -248,6 +318,9 @@ export function DiscoverSection({
                                         coins: cCost,
                                     })}
                                 </p>
+                                {(lists.effective[String(confirm.id)]?.length ?? 0) > 0 && (
+                                    <p className="text-base-content/70">{t('app.discoverConfirmChosen')}</p>
+                                )}
                                 <p className={insufficient ? 'text-error' : 'text-base-content/70'}>
                                     {!known
                                         ? t('app.discoverConfirmBalanceUnknown')
@@ -279,6 +352,13 @@ export function DiscoverSection({
                     );
                 })()}
             </Modal>
+
+            <RowPhotoChooser
+                challenge={choosing}
+                own={lists.own[String(choosing?.id)] ?? []}
+                onClose={() => setChoosing(null)}
+                onSaved={lists.refetch}
+            />
         </>
     );
 }

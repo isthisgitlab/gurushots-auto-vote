@@ -71,6 +71,7 @@ beforeEach(() => {
                 exposure: { type: 'number', perChallenge: true, default: 100, label: 'app.exposure' },
                 autoFill: { type: 'boolean', perChallenge: true, default: false, label: 'app.autoFill' },
                 scenario: { type: 'scenario', perChallenge: true, default: '', label: 'app.scenario' },
+                chosenPhotos: { type: 'photos', perChallenge: true, default: [], label: 'app.chosenPhotos' },
                 timezone: { type: 'string', perChallenge: false, default: 'UTC', label: 'app.timezone' },
             },
             defaults: {},
@@ -154,6 +155,28 @@ describe('phases', () => {
         fireEvent.click(screen.getAllByRole('button', { name: 'app.sbRemove' })[1]);
         const draft = await saveDraft();
         expect(draft.phases.main.settings).toEqual({ exposure: 12, autoFill: false });
+    });
+});
+
+describe('chosen photos in a phase', () => {
+    test('the row wraps and says a scenario list only applies after joining', async () => {
+        window.api.getSetting = jest.fn().mockResolvedValue('');
+        await renderBuilder({
+            initial: { ...doc(), phases: { main: { settings: { chosenPhotos: ['p1'] }, rules: [] } } },
+        });
+        const hint = await screen.findByText('app.chosenPhotosScenarioHint');
+        expect(hint.closest('div')!.className).toContain('flex-wrap');
+        expect(screen.getByRole('button', { name: 'app.choosePhotos' })).toBeTruthy();
+    });
+
+    test('other settings carry no such hint, and the key can be picked from the list', async () => {
+        await renderBuilder();
+        await waitFor(() => expect(screen.getAllByText('app.exposure').length).toBeGreaterThan(0));
+        expect(screen.queryByText('app.chosenPhotosScenarioHint')).toBeNull();
+        changeSelect(screen.getAllByLabelText<HTMLSelectElement>('app.sbAddSetting')[0], 'chosenPhotos');
+        expect(await screen.findByText('app.chosenPhotosScenarioHint')).toBeTruthy();
+        const draft = await saveDraft();
+        expect(draft.phases.main.settings).toEqual({ exposure: 10, unknownKey: 1, chosenPhotos: [] });
     });
 });
 

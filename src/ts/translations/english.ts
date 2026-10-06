@@ -557,13 +557,55 @@ export const app = {
         'Soft preference for both auto-submit and the manual photo buttons. Prefer photos whose labels match these tags; matches rank above the auto-detected challenge keyword score but do not exclude other photos. If nothing matches, photos are picked by the normal ranking. Matching follows the same whole-word rules as Must Include Tags.',
     chosenPhotos: 'Chosen Photos',
     chosenPhotosDesc:
-        "Photos that auto-join and auto-submit try first. They must still fit your tag settings, and they are ranked the way the app ranks its own picks. A photo can be in only one challenge, so with a shared list the challenge filled first takes it. The list belongs to the account that saved it and is ignored on another account. A scenario's list applies only after joining.",
+        "Photos that auto-join and auto-submit try first. They must still fit your tag settings, and they are ranked the way the app ranks its own picks. A photo can be in only one challenge, so with a shared list the challenge filled first takes it. The list belongs to the account that saved it and is ignored on another account. A scenario's list applies only after joining. Swap ignores the list.",
     chosenPhotosOnly: 'Submit Only Chosen Photos',
     chosenPhotosOnlyDesc:
-        'With Chosen Photos set, auto-join and auto-submit never pick a photo themselves: a challenge with no usable chosen photo is skipped. Manual Join and the manual +1/+N buttons still pick automatically, Emergency Submit ignores this setting (turn Emergency Submit off for the challenge to keep the slot empty), and a paid join that already unlocked still submits an automatic pick so the coins are not wasted. Swap ignores it too. With an empty list this does nothing.',
+        'With Chosen Photos set, auto-join and auto-submit never pick a photo themselves: a challenge with no usable chosen photo is skipped. Manual Join and the manual +1/+N buttons still pick automatically, Emergency Submit ignores this setting (turn Emergency Submit off for the challenge to keep the slot empty), and a paid join that already unlocked still submits an automatic pick so the coins are not wasted. Swap ignores both settings. With an empty list this does nothing.',
     chosenPhotosMemberId: 'Chosen Photos Account',
     chosenPhotosMemberIdDesc:
         'Internal — the member who last saved a Chosen Photos list; the list is ignored when a different member is logged in',
+    chosenPhotosCount: 'Chosen photos: {count}',
+    choosePhotos: 'Choose photos',
+    photosClear: 'Clear',
+    chosenPhotoThumbAlt: 'Chosen photo {id}',
+    chosenPhotosScenarioHint:
+        "A scenario's chosen photos apply only after the challenge is joined; joining never uses them.",
+    chosenPhotosOnlyReachHint:
+        'This applies to every challenge it covers: auto-join and auto-submit skip each challenge that has no usable chosen photo.',
+    photoChooserTitle: 'Choose photos',
+    photoChooserHelp:
+        'The app ranks chosen photos the way it ranks its own picks, so they must still pass your tag filters. They are used first.',
+    photoChooserSearchLabel: 'Search your photos by tag',
+    photoChooserSearchPlaceholder: 'e.g. sunset',
+    photoChooserSearch: 'Search',
+    photoChooserCount: '{count} of {max} chosen',
+    photoChooserLoading: 'Loading your photos…',
+    photoChooserLoadError:
+        "Your photos couldn't be loaded because the app couldn't reach GuruShots or your session has expired. Try again, or sign in again.",
+    photoChooserRetry: 'Retry',
+    photoChooserNoContext:
+        "Your photos can't be listed yet: the library is read through a challenge, and you have no active or joinable challenge right now. Join one or wait until one opens, then try again.",
+    photoChooserEligibilityLater:
+        'Eligibility is not checked here for any challenge; it is checked when the app submits.',
+    photoChooserTruncated: 'Showing the first {count} photos. Search by tag to find others.',
+    photoChooserEmpty: 'No photos found. Try another tag, or upload photos to your GuruShots library.',
+    photoChooserMissing:
+        'Not available for this challenge (in another challenge, deleted, or beyond the first {count} photos)',
+    photoChooserNotEligible: 'Not eligible for this challenge',
+    photoChooserAllowed: 'Can be entered',
+    photoChooserTileLabel: 'Photo {id}: {labels}. {reason}',
+    photoChooserNoTags: 'No tags',
+    photoChooserOtherAccount:
+        'This list was saved under another account, so the app ignores it. Clear it and choose photos again.',
+    photoChooserOtherAccountClear: 'Clear list',
+    photoChooserSaveError: "The chosen photos weren't saved because the setting couldn't be written. Try again.",
+    photoChooserUse: 'Use these photos',
+    discoverChosenChip: 'Chosen',
+    discoverChosenChipHint: 'This challenge has chosen photos. Click to change them.',
+    discoverConfirmChosen: "Your chosen photo if it's eligible, otherwise an automatic pick.",
+    scenarioFlagged:
+        'Review before importing: {settings}. Chosen photos belong to one account and are ignored on another; Submit Only Chosen Photos makes joins and fills skip a challenge with no usable chosen photo.',
+    scenarioExportOmitted: 'Left out of this export because it belongs to your account: {settings}.',
     ignoreTitleWords: 'Ignore These Words in Challenge Titles',
     ignoreTitleWordsDesc:
         'Words to strip from a challenge title before it is used to find matching photos. Challenge titles usually qualify their subject rather than just naming it — "Epic Lighthouses" is about lighthouses, not "epic" — and those extra words both blur the theme and use up the small number of searches per challenge. The list is pre-filled with common ones; edit it freely. Remove a word if a challenge really is about it. Series prefixes like "Color Hunt:" are handled automatically and do not need an entry.',
