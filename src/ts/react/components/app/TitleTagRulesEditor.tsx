@@ -118,13 +118,15 @@ function RuleCard({
  * MATCHING: a rule matches on any mix of titles (any one is enough; each title's
  * mode is is-exactly, starts-with or contains), the
  * challenge's OWN tag (Exhibition, Comm, …, not a photo tag), its type, its
- * photo count and its runtime range in hours. Every filled condition must hold.
+ * photo count, its runtime range in hours and its close time of day (the end time
+ * on the card, app timezone, any date). Every filled condition must hold.
  *
  * ORDER: the list order is the precedence — for each setting the first matching
  * rule that sets it wins (see `ruleValuesFor` in settings/ruleResolution.ts). The user reorders
  * with the arrows or resets to the default order (settings/challengeRules.ts
  * `sortRulesByDefaultOrder`: title rules, then photos + runtime, photos,
- * runtime).
+ * runtime, close time). Sorting puts title rules first, so a close-time rule that
+ * must override them has to be moved back up.
  *
  * BEHAVIOUR: a rule inherits an optional named profile, merges optional
  * Must/Should Include PHOTO tags at fill time, and may override auto-join,
@@ -138,6 +140,7 @@ function RuleCard({
  * with a new array on every edit. Each rule is
  * `{ title: string, titles?: string[], match?: 'exact'|'starts'|'contains', challengeTag?: string,
  *    type?: string, pics?: number, minHours?: number, maxHours?: number,
+ *    closesAt?: string,
  *    profile?: string, mustIncludeTags: string[], shouldIncludeTags: string[],
  *    autoJoin?: boolean, autoFill?: boolean, autoJoinWithinHoursOfEnd?: number,
  *    autoJoinAfterPercentElapsed?: number, chosenPhotos?: string[],

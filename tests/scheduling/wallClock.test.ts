@@ -1,5 +1,5 @@
 import type * as wallClockModule from '../../src/ts/scheduling/wallClock';
-const { parseTimeOfDay, tzOffsetSeconds, epochForWallTime, occurrencesOf } =
+const { parseTimeOfDay, timeOfDayIn, tzOffsetSeconds, epochForWallTime, occurrencesOf } =
     require('../../src/ts/scheduling/wallClock') as typeof wallClockModule;
 
 const utc = (y: number, m: number, d: number, hh = 0, mm = 0, ss = 0) => Date.UTC(y, m - 1, d, hh, mm, ss) / 1000;
@@ -28,6 +28,33 @@ describe('parseTimeOfDay', () => {
             expect(parseTimeOfDay(input)).toBeNull();
         },
     );
+});
+
+describe('timeOfDayIn', () => {
+    test('reads the wall clock of an IANA zone and floors the seconds', () => {
+        expect(timeOfDayIn(utc(2026, 6, 15, 17, 10, 59), 'UTC')).toBe('17:10');
+        expect(timeOfDayIn(utc(2026, 1, 15, 15, 10, 59), 'Europe/Riga')).toBe('17:10');
+        expect(timeOfDayIn(utc(2026, 1, 14, 22, 0), 'Europe/Riga')).toBe('00:00');
+    });
+
+    test('follows the zone across a DST change (Europe/Riga, 2026-10-25)', () => {
+        expect(timeOfDayIn(utc(2026, 10, 24, 14, 10), 'Europe/Riga')).toBe('17:10');
+        expect(timeOfDayIn(utc(2026, 10, 26, 14, 10), 'Europe/Riga')).toBe('16:10');
+    });
+
+    describe('device clock', () => {
+        afterEach(() => {
+            jest.restoreAllMocks();
+        });
+
+        // The device clock is read through Date#getHours/getMinutes; sentinels make
+        // the branch observable on any host (process.env.TZ does not reach Node under Jest).
+        test.each([['local'], ['Not/AZone']])('%s reads the device clock', (zone) => {
+            jest.spyOn(Date.prototype, 'getHours').mockReturnValue(5);
+            jest.spyOn(Date.prototype, 'getMinutes').mockReturnValue(37);
+            expect(timeOfDayIn(utc(2026, 6, 15, 17, 10), zone)).toBe('05:37');
+        });
+    });
 });
 
 describe('tzOffsetSeconds', () => {

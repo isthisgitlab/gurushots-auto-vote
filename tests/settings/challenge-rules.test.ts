@@ -35,6 +35,9 @@ const cat = invalid<{
 
 const HOUR = 3600;
 const START = 1_700_000_000;
+const ZONE = 'UTC';
+// 2026-06-15 17:10:59 UTC (20:10 in Europe/Riga, which is on summer time).
+const CLOSE_1710_UTC = Date.UTC(2026, 5, 15, 17, 10, 59) / 1000;
 // A challenge payload as the API sends it; `hours` sets its runtime.
 const challenge = ({ hours = 24, ...over }: Partial<Challenge> & { hours?: number } = {}) => ({
     title: 'Seaside',
@@ -47,7 +50,7 @@ const challenge = ({ hours = 24, ...over }: Partial<Challenge> & { hours?: numbe
 });
 
 describe('settings/challengeRules — pure matcher', () => {
-    const target = (over?: Parameters<typeof challenge>[0]) => rules.ruleMatchTarget(challenge(over));
+    const target = (over?: Parameters<typeof challenge>[0]) => rules.ruleMatchTarget(challenge(over), ZONE);
 
     test('normalizers bound photo counts and runtime hours, treating empties as absent', () => {
         expect(rules.normalizeRulePics(4)).toBe(4);
@@ -57,6 +60,23 @@ describe('settings/challengeRules — pure matcher', () => {
         expect(rules.normalizeRuleHours('0.5')).toBe(0.5);
         for (const bad of [0, -1, 2001, 'x', '', null, undefined, Infinity]) {
             expect(rules.normalizeRuleHours(bad)).toBeNull();
+        }
+    });
+
+    test('normalizeRuleClosesAt: absent is null, a strict HH:MM is kept, anything else is false', () => {
+        for (const absent of [undefined, null, '']) expect(rules.normalizeRuleClosesAt(absent)).toBeNull();
+        expect(rules.normalizeRuleClosesAt('17:10')).toBe('17:10');
+        for (const bad of ['25:00', '7:10', '17:10:00', ' 17:10', 1710, {}, true]) {
+            expect(rules.normalizeRuleClosesAt(bad)).toBe(false);
+        }
+    });
+
+    test('close time of day is read in the given zone and floored, or null when unreadable', () => {
+        const close = { close_time: CLOSE_1710_UTC };
+        expect(rules.challengeCloseTimeOfDay(close, 'UTC')).toBe('17:10');
+        expect(rules.challengeCloseTimeOfDay(close, 'Europe/Riga')).toBe('20:10');
+        for (const bad of [{}, { close_time: 0 }, { close_time: -5 }, { close_time: 'x' }, null, undefined]) {
+            expect(rules.challengeCloseTimeOfDay(bad, 'UTC')).toBeNull();
         }
     });
 
@@ -70,13 +90,14 @@ describe('settings/challengeRules — pure matcher', () => {
     });
 
     test('a bare title and a missing target normalize to empty keys', () => {
-        expect(rules.ruleMatchTarget('  Hats ')).toMatchObject({ titleKey: 'hats', tagKeys: [], pics: null });
-        expect(rules.ruleMatchTarget(null)).toEqual({
+        expect(rules.ruleMatchTarget('  Hats ', ZONE)).toMatchObject({ titleKey: 'hats', tagKeys: [], pics: null });
+        expect(rules.ruleMatchTarget(null, ZONE)).toEqual({
             titleKey: '',
             tagKeys: [],
             typeKey: '',
             pics: null,
             runtimeHours: null,
+            closeTimeOfDay: null,
         });
     });
 
@@ -99,11 +120,33 @@ describe('settings/challengeRules — pure matcher', () => {
         expect(rules.ruleMatches(atMostDay, target({ start_time: undefined }))).toBe(false);
     });
 
+    test('a closesAt condition matches the card time, and fails closed on an unreadable close_time', () => {
+        const rule = { closesAt: '17:10' };
+        expect(rules.ruleMatches(rule, target({ close_time: CLOSE_1710_UTC }))).toBe(true);
+        expect(rules.ruleMatches(rule, target({ close_time: CLOSE_1710_UTC + 60 }))).toBe(false);
+        expect(rules.ruleMatches(rule, target({ close_time: CLOSE_1710_UTC - 60 }))).toBe(false);
+        expect(rules.ruleMatches(rule, target({ close_time: undefined }))).toBe(false);
+        // The same instant reads differently in another zone.
+        expect(rules.ruleMatches(rule, rules.ruleMatchTarget({ close_time: CLOSE_1710_UTC }, 'Europe/Riga'))).toBe(
+            false,
+        );
+    });
+
+    test('an invalid stored closesAt matches nothing, alone or AND-ed with a matching condition', () => {
+        const hit = target({ close_time: CLOSE_1710_UTC, title: 'Seaside', type: 'default' });
+        expect(rules.ruleMatches({ closesAt: '25:00' }, hit)).toBe(false);
+        expect(rules.ruleMatches({ closesAt: '25:00', type: 'default' }, hit)).toBe(false);
+        expect(rules.ruleMatches({ closesAt: '25:00', title: 'Seaside' }, hit)).toBe(false);
+        expect(rules.ruleMatches({ closesAt: '17:10', title: 'Seaside', type: 'default' }, hit)).toBe(true);
+    });
+
     test('a title condition needs a title; a rule with no condition matches nothing', () => {
-        expect(rules.ruleMatches({ title: 'Seaside' }, rules.ruleMatchTarget({ tags: ['x'] }))).toBe(false);
+        expect(rules.ruleMatches({ title: 'Seaside' }, rules.ruleMatchTarget({ tags: ['x'] }, ZONE))).toBe(false);
         expect(rules.ruleMatches({ autoJoin: true }, target())).toBe(false);
         expect(rules.hasRuleCondition({ autoJoin: true })).toBe(false);
         expect(rules.hasRuleCondition({ maxHours: 24 })).toBe(true);
+        expect(rules.hasRuleCondition({ closesAt: '17:10' })).toBe(true);
+        expect(rules.hasRuleCondition({ closesAt: '25:00' })).toBe(false);
         expect(rules.hasRuleCondition({ title: 'x' })).toBe(true);
     });
 
@@ -119,9 +162,18 @@ describe('settings/challengeRules — pure matcher', () => {
     test('matchingRules keeps list order and tolerates a non-array list', () => {
         const a = { pics: 4 };
         const b = { title: 'Seaside' };
-        expect(rules.matchingRules([a, { pics: 2 }, b], challenge())).toEqual([a, b]);
-        expect(rules.matchingRules(null, challenge())).toEqual([]);
-        expect(rules.matchingRules([], challenge())).toEqual([]);
+        expect(rules.matchingRules([a, { pics: 2 }, b], challenge(), ZONE)).toEqual([a, b]);
+        expect(rules.matchingRules(null, challenge(), ZONE)).toEqual([]);
+        expect(rules.matchingRules([], challenge(), ZONE)).toEqual([]);
+    });
+
+    test('matchingRules reads the close time in the given zone', () => {
+        const skip = { closesAt: '17:10' };
+        const close = challenge({ close_time: CLOSE_1710_UTC });
+        expect(rules.matchingRules([skip], close, 'UTC')).toEqual([skip]);
+        expect(rules.matchingRules([skip], close, 'Europe/Riga')).toEqual([]);
+        // No rule carries a valid closesAt: other rules still match without the close time being read.
+        expect(rules.matchingRules([{ pics: 4 }, { closesAt: 'x' }], close, 'UTC')).toEqual([{ pics: 4 }]);
     });
 
     describe('sortRulesByDefaultOrder', () => {
@@ -167,6 +219,24 @@ describe('settings/challengeRules — pure matcher', () => {
                 titleMatchModes: ['starts', 'exact'],
             };
             expect(rules.sortRulesByDefaultOrder([mixed, exact])).toEqual([exact, mixed]);
+        });
+
+        test('a close-time rule ranks after runtime and before type, and below every title rule', () => {
+            const closes = { closesAt: '17:10' };
+            const runtime = { minHours: 168 };
+            const type = { type: 'flash' };
+            const titled = { title: 'Hats', match: 'contains' };
+            expect(rules.sortRulesByDefaultOrder([type, closes, runtime, titled])).toEqual([
+                titled,
+                runtime,
+                closes,
+                type,
+            ]);
+            // An invalid close time is no condition, so it takes no slot.
+            expect(rules.sortRulesByDefaultOrder([{ closesAt: '25:00', type: 'flash' }, closes])).toEqual([
+                closes,
+                { closesAt: '25:00', type: 'flash' },
+            ]);
         });
 
         test('returns a new array and an empty one for a non-array', () => {

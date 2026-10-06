@@ -12,6 +12,7 @@ import { readProfilesMap, profileNameForLog } from './profileStore';
 import { factsForChallengeId } from './challengeFacts';
 import { MAX_TITLE_RULES, sanitizeTitleRule, titleRuleKey, ruleLogLabel } from './titleRuleSanitize';
 import {
+    ruleTimeZone,
     profileFromMatches,
     ruleValuesFor,
     isTitleProfileSuppressed,
@@ -175,7 +176,10 @@ const getTitleProfile = (
             if (challenge[key] === undefined) challenge[key] = value;
         }
     }
-    const matched = profileFromMatches(settings, matchingRules(settings.challengeSettings?.titleRules, challenge));
+    const matched = profileFromMatches(
+        settings,
+        matchingRules(settings.challengeSettings?.titleRules, challenge, ruleTimeZone(settings)),
+    );
     if (!matched) return null;
     const profile = { name: matched.name, values: matched.values };
     return hasId ? { ...profile, suppressed: isTitleProfileSuppressed(settings, challengeId) } : profile;
@@ -201,7 +205,7 @@ const getEffectiveTagSetting = <K extends string>(
     // Pass the whole challenge, not just its title: a rule may be keyed on any
     // of the challenge's own facts, and a joined challenge carries them in the
     // payload. The first matching rule that lists tags for this key wins.
-    const rule = matchingRules(getTitleRules(), challenge).find(
+    const rule = matchingRules(getTitleRules(), challenge, ruleTimeZone(loadSettings())).find(
         (candidate) => Array.isArray(candidate?.[settingKey]) && candidate[settingKey].length > 0,
     );
     if (!rule) return base;

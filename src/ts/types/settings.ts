@@ -55,6 +55,8 @@ export interface TitleRule {
     pics?: number;
     minHours?: number;
     maxHours?: number;
+    /** Strict 'HH:MM': the end time the challenge card shows, in the app timezone, any date. */
+    closesAt?: string;
     profile?: string;
     mustIncludeTags?: string[];
     shouldIncludeTags?: string[];

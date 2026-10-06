@@ -17,6 +17,7 @@ import {
     sanitizeProfileValues,
 } from './profileStore';
 import { sanitizeTitleRuleInline } from './titleRuleSanitize';
+import { DEFAULT_TIMEZONE } from './uiDefaults';
 
 import type { AppSettings, ChallengeValues, RuleMatchChallenge, TitleRule } from '../types/settings';
 
@@ -49,6 +50,12 @@ const profileFromMatches = (settings: AppSettings, matches: TitleRule[]): RulePr
 };
 
 /**
+ * The zone close-time conditions are read in: the app's timezone setting, the
+ * same one the challenge cards show their end time in.
+ */
+const ruleTimeZone = (settings: AppSettings): string => settings.timezone || DEFAULT_TIMEZONE;
+
+/**
  * The settings the rules matching a challenge contribute, as one sparse map.
  * Walks the matches in list order and, per key, keeps the FIRST value found:
  * each rule's own inline values first, then — for the first rule naming a
@@ -64,7 +71,7 @@ const ruleValuesFor = (
     target: RuleMatchChallenge | string | null | undefined,
     suppressProfile: boolean = false,
 ): { values: ChallengeValues; profile: RuleProfile | null } => {
-    const matches = matchingRules(settings.challengeSettings?.titleRules, target);
+    const matches = matchingRules(settings.challengeSettings?.titleRules, target, ruleTimeZone(settings));
     const profile = suppressProfile ? null : profileFromMatches(settings, matches);
     const values: ChallengeValues = {};
     /** @param source */
@@ -120,13 +127,15 @@ const titleProfileComposesWithKnownOverrides = (
         // a contains/starts or class-keyed rule reaches challenges whose title
         // is not the rule's own, and skipping those would let a conflicting
         // profile+override combination save unvalidated.
-        if (matchingRules([rule], challengeTargetForId(settings, challengeId)).length === 0) return true;
+        if (matchingRules([rule], challengeTargetForId(settings, challengeId), ruleTimeZone(settings)).length === 0)
+            return true;
         const effective = { ...globalValues, ...profileValues, ...overrides };
         return challengeValueSetIsValid(effective, { ...profileValues, ...overrides }, challengeId);
     });
 };
 
 export {
+    ruleTimeZone,
     profileFromMatches,
     ruleValuesFor,
     ruleValuesForChallengeId,

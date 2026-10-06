@@ -15,6 +15,9 @@
  *     names and retries with 'UTC'. The guard lives HERE (not in callers)
  *     because the `timezone` setting has no main-process schema validation —
  *     a CLI `settings:set timezone <bad>` writes unvalidated.
+ *   - `timeOfDayIn` reads a challenge's close time as the card shows it. An
+ *     unknown zone (and 'local') falls back to the DEVICE clock, not UTC: the
+ *     rule condition must agree with `formatEndTime`, which does the same.
  *   - The numeric scheduled-fill keys (window minutes, before-end seconds)
  *     intentionally have no guards in this module: corrupt values coerce to
  *     NaN in the callers' arithmetic, every comparison goes false, and the
@@ -85,6 +88,29 @@ const parseTimeOfDay = (str: unknown): { hours: number; minutes: number } | null
         return null;
     }
     return { hours: Number(match[1]), minutes: Number(match[2]) };
+};
+
+const pad2 = (n: number): string => String(n).padStart(2, '0');
+
+/**
+ * Floored 'HH:MM' wall-clock reading of an instant in `timeZone`, the way a
+ * challenge card shows its end time. 'local' and unknown zone names read the
+ * device clock (card parity — see module notes), so this never throws.
+ *
+ * @param epochSec - Unix timestamp (seconds)
+ * @param timeZone - IANA zone name, or 'local' for the device clock
+ */
+const timeOfDayIn = (epochSec: number, timeZone: string): string => {
+    if (timeZone !== 'local') {
+        try {
+            const { hour, minute } = partsOf(epochSec, timeZone);
+            return `${hour}:${minute}`;
+        } catch {
+            // Unknown zone: fall through to the device clock, like formatEndTime.
+        }
+    }
+    const date = new Date(epochSec * 1000);
+    return `${pad2(date.getHours())}:${pad2(date.getMinutes())}`;
 };
 
 /**
@@ -193,4 +219,4 @@ const occurrencesOf = (timeHHMM: unknown, timeZone: string, nowSec: number): { p
     }
 };
 
-export { parseTimeOfDay, tzOffsetSeconds, epochForWallTime, occurrencesOf };
+export { parseTimeOfDay, timeOfDayIn, tzOffsetSeconds, epochForWallTime, occurrencesOf };

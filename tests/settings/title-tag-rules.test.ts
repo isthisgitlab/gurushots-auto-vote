@@ -15,6 +15,7 @@
 
 import type { AndroidHeadlessStore, RuleMatchChallenge } from '../../src/ts/types/settings';
 import settings = require('../../src/ts/settings');
+import { ruleLogLabel } from '../../src/ts/settings/titleRuleSanitize';
 
 jest.mock('../../src/ts/logger', () => ({
     info: jest.fn(),
@@ -554,6 +555,98 @@ describe('settings facade — title-keyed tag rules', () => {
         test('a bare title string still resolves (callers that have no challenge)', () => {
             save({ title: 'abc', match: 'contains', autoJoin: true });
             expect(overridesFor('The ABC Challenge')).toEqual({ autoJoin: true });
+        });
+    });
+
+    /**
+     * The close-time condition: the end time the challenge card shows, read in the
+     * app's timezone setting, any date.
+     */
+    describe('closesAt conditions', () => {
+        // 2026-06-15: Europe/Riga is on summer time (UTC+3).
+        const RIGA_1710 = { title: 'x', close_time: Date.UTC(2026, 5, 15, 14, 10, 30) / 1000 };
+        const UTC_1710 = { title: 'x', close_time: Date.UTC(2026, 5, 15, 17, 10, 30) / 1000 };
+        const save = (...rules: Record<string, unknown>[]) =>
+            settings.setTitleRules(rules.map((r) => ({ mustIncludeTags: [], shouldIncludeTags: [], ...r })));
+        const skip = { closesAt: '17:10', autoJoin: false };
+
+        test('stores a strict HH:MM, rejects an invalid one, and reads an empty one as unset', () => {
+            expect(save(skip)).toBe(true);
+            expect(settings.getTitleRules()).toEqual([
+                { ...skip, title: '', mustIncludeTags: [], shouldIncludeTags: [] },
+            ]);
+            for (const bad of ['25:00', '7:10', '17:10:00', 1710]) expect(save({ ...skip, closesAt: bad })).toBe(false);
+            expect(save({ title: 'abc', autoJoin: false, closesAt: '' })).toBe(true);
+            expect(settings.getTitleRules()[0]).not.toHaveProperty('closesAt');
+            // A rule whose only condition is an empty close time has no condition at all: dropped.
+            expect(save({ autoJoin: false, closesAt: '' })).toBe(true);
+            expect(settings.getTitleRules()).toEqual([]);
+        });
+
+        test('different close times are different rules; the same one de-duplicates', () => {
+            save(skip, { ...skip, closesAt: '17:20' });
+            expect(settings.getTitleRules().map((rule) => rule.closesAt)).toEqual(['17:10', '17:20']);
+            save(skip, { ...skip, autoJoin: true });
+            expect(settings.getTitleRules()).toHaveLength(1);
+            expect(settings.getTitleRules()[0].autoJoin).toBe(true);
+        });
+
+        test('the log label falls back to the close time, but only a strict one', () => {
+            expect(ruleLogLabel({ closesAt: '17:10' }, undefined)).toBe('closes 17:10');
+            expect(ruleLogLabel({ closesAt: '17:10', challengeTag: 'Comm' }, undefined)).toBe('Comm');
+            expect(ruleLogLabel({ closesAt: '17:10' }, 'Hats')).toBe('Hats');
+            expect(ruleLogLabel({ closesAt: 'evil\nlog line' }, undefined)).toBe('(untitled rule)');
+            expect(ruleLogLabel({ closesAt: '25:00' }, undefined)).toBe('(untitled rule)');
+        });
+
+        test('resolves in the app timezone, not the device clock', () => {
+            settings.setSetting('timezone', 'Europe/Riga');
+            save(skip);
+            expect(overridesFor(RIGA_1710)).toEqual({ autoJoin: false });
+            expect(overridesFor(UTC_1710)).toEqual({});
+            settings.setSetting('timezone', 'UTC');
+            expect(overridesFor(UTC_1710)).toEqual({ autoJoin: false });
+            expect(overridesFor(RIGA_1710)).toEqual({});
+        });
+
+        test('list order decides against a title rule that opts in', () => {
+            settings.setSetting('timezone', 'UTC');
+            const titled = { title: 'x', autoJoin: true };
+            save(skip, titled);
+            expect(overridesFor(UTC_1710)).toEqual({ autoJoin: false });
+            save(titled, skip);
+            expect(overridesFor(UTC_1710)).toEqual({ autoJoin: true });
+        });
+
+        test('an opt-in rule joins only its close time when auto-join is off globally', () => {
+            settings.setSetting('timezone', 'UTC');
+            settings.setGlobalDefault('autoJoin', false);
+            save({ closesAt: '17:10', autoJoin: true });
+            const at1720 = { title: 'x', close_time: Date.UTC(2026, 5, 15, 17, 20, 0) / 1000 };
+            expect(overridesFor(UTC_1710)).toEqual({ autoJoin: true });
+            expect(settings.hasRuleJoinOptIn(UTC_1710)).toBe(true);
+            expect(overridesFor(at1720)).toEqual({});
+            expect(settings.hasRuleJoinOptIn(at1720)).toBe(false);
+        });
+
+        test('getTitleProfile and tag rules read the close time in the app timezone too', () => {
+            settings.setSetting('timezone', 'Europe/Riga');
+            settings.saveChallengeProfile('Late', { exposure: 80 });
+            save({ closesAt: '17:10', profile: 'Late' });
+            expect(settings.getTitleProfile(RIGA_1710)).toMatchObject({ name: 'Late' });
+            expect(settings.getTitleProfile(UTC_1710)).toBeNull();
+            save({ closesAt: '17:10', mustIncludeTags: ['hat'] });
+            expect(settings.getEffectiveTagSetting('mustIncludeTags', RIGA_1710)).toEqual(['hat']);
+            expect(settings.getEffectiveTagSetting('mustIncludeTags', UTC_1710)).toEqual([]);
+        });
+
+        test('an empty timezone setting reads in the default zone, like the challenge cards', () => {
+            settings.setSetting('timezone', '');
+            settings.saveChallengeProfile('Late', { exposure: 80 });
+            save({ closesAt: '17:10', profile: 'Late' });
+            expect(settings.getTitleProfile(RIGA_1710)).toMatchObject({ name: 'Late' });
+            save({ closesAt: '17:10', mustIncludeTags: ['hat'] });
+            expect(settings.getEffectiveTagSetting('mustIncludeTags', RIGA_1710)).toEqual(['hat']);
         });
     });
 

@@ -13,6 +13,7 @@ import {
     normalizeTag,
     normalizeRulePics,
     normalizeRuleHours,
+    normalizeRuleClosesAt,
     titleRuleTitles,
     ruleConditions,
 } from './challengeRules';
@@ -80,6 +81,7 @@ const titleRuleKey = (rule: RuleLike): string => {
         conditions.pics ?? '',
         conditions.minHours ?? '',
         conditions.maxHours ?? '',
+        conditions.closesAt || '',
     ].join('\u0000');
 };
 
@@ -122,37 +124,46 @@ const _ruleNumberCondition = (raw: unknown, normalize: (value: unknown) => numbe
 
 /**
  * The non-title conditions of a rule, sanitized for storage: challenge tag,
- * challenge type, photo count and runtime range. Returns null when any
- * supplied value is invalid.
+ * challenge type, photo count, runtime range and close time. Returns null when
+ * any supplied value is invalid.
  */
 const _sanitizeRuleClassConditions = (
     rule: RuleLike,
-): Pick<TitleRule, 'challengeTag' | 'type' | 'pics' | 'minHours' | 'maxHours'> | null => {
+): Pick<TitleRule, 'challengeTag' | 'type' | 'pics' | 'minHours' | 'maxHours' | 'closesAt'> | null => {
     const challengeTag = typeof rule?.challengeTag === 'string' ? rule.challengeTag.trim() : '';
     const type = normalizeTag(rule?.type);
     const pics = _ruleNumberCondition(rule?.pics, normalizeRulePics);
     const minHours = _ruleNumberCondition(rule?.minHours, normalizeRuleHours);
     const maxHours = _ruleNumberCondition(rule?.maxHours, normalizeRuleHours);
-    if (pics === false || minHours === false || maxHours === false) return null;
+    const closesAt = normalizeRuleClosesAt(rule?.closesAt);
+    if (pics === false || minHours === false || maxHours === false || closesAt === false) return null;
     if (challengeTag.length > MAX_TITLE_LENGTH || type.length > MAX_TITLE_LENGTH) return null;
     // An inverted range can never match; refuse it rather than store a dead rule.
     if (minHours !== null && maxHours !== null && minHours > maxHours) return null;
-    const out: Pick<TitleRule, 'challengeTag' | 'type' | 'pics' | 'minHours' | 'maxHours'> = {};
+    const out: Pick<TitleRule, 'challengeTag' | 'type' | 'pics' | 'minHours' | 'maxHours' | 'closesAt'> = {};
     if (challengeTag) out.challengeTag = challengeTag;
     if (type) out.type = type;
     if (pics !== null) out.pics = pics;
     if (minHours !== null) out.minHours = minHours;
     if (maxHours !== null) out.maxHours = maxHours;
+    if (closesAt !== null) out.closesAt = closesAt;
     return out;
 };
 
 // What a rejected rule is called in the log: its first title, else its tag or
-// type, else a generic marker (a photo-count/runtime-only rule has no name).
-const ruleLogLabel = (rule: RuleLike, title: string | undefined): string =>
-    title ||
-    (typeof rule?.challengeTag === 'string' && rule.challengeTag.trim()) ||
-    (typeof rule?.type === 'string' && rule.type.trim()) ||
-    '(untitled rule)';
+// type, else its close time (only when it is a strict 'HH:MM', so renderer input
+// never reaches the log), else a generic marker (a photo-count/runtime-only
+// rule has no name).
+const ruleLogLabel = (rule: RuleLike, title: string | undefined): string => {
+    const closesAt = normalizeRuleClosesAt(rule?.closesAt);
+    return (
+        title ||
+        (typeof rule?.challengeTag === 'string' && rule.challengeTag.trim()) ||
+        (typeof rule?.type === 'string' && rule.type.trim()) ||
+        (closesAt && `closes ${closesAt}`) ||
+        '(untitled rule)'
+    );
+};
 
 /**
  * What a rule does when it matches — its tag lists, canonical profile name and

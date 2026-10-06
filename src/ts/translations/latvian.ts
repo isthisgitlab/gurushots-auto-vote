@@ -691,7 +691,7 @@ export const app = {
     titleRuleMatchContains: 'Satur',
     titleRuleConditionsLabel: 'Atbilst, ja',
     titleRuleConditionsHint:
-        'Jāatbilst katram aizpildītajam laukam; tukšus laukus neņem vērā. Izaicinājuma tags ir paša izaicinājuma tags (Exhibition, Comm, …), nevis foto tags. Ilgums ir izaicinājuma garums no sākuma līdz beigām: 24 h = 1 diena, 168 h = 7 dienas.',
+        'Jāatbilst katram aizpildītajam laukam; tukšus laukus neņem vērā. Izaicinājuma tags ir paša izaicinājuma tags (Exhibition, Comm, …), nevis foto tags. Ilgums ir izaicinājuma garums no sākuma līdz beigām: 24 h = 1 diena, 168 h = 7 dienas. Beigu laiks ir laiks, kāds redzams izaicinājuma kartītē (lietotnes laika joslā), neatkarīgi no datuma.',
     titleRuleChallengeTag: 'Izaicinājuma tags',
     titleRuleChallengeTagPlaceholder: 'piem., Exhibition',
     titleRuleType: 'Izaicinājuma veids',
@@ -700,6 +700,7 @@ export const app = {
     titleRuleAnyPics: 'Jebkāds skaits',
     titleRuleMinHours: 'Ilgst vismaz',
     titleRuleMaxHours: 'Ilgst ne vairāk kā',
+    titleRuleClosesAt: 'Beigu laiks',
     titleRuleAnyLength: 'jebkāds',
     titleRuleProfile: 'Automātiskais profils',
     titleRuleInherit: 'Noklusējums',
@@ -714,14 +715,14 @@ export const app = {
     titleRuleBroadWarning:
         'Šim noteikumam nav nosaukuma, tāpēc tas ieslēdz šo iespēju katram atbilstošajam izaicinājumam — tas var tērēt monētas vai foto veselai izaicinājumu grupai.',
     titleRuleOrderHint:
-        'Noteikumus pārbauda no augšas uz leju: katram uzstādījumam uzvar pirmais atbilstošais noteikums, kas to uzstāda, bet to, ko tas atstāj tukšu, ņem no nākamā atbilstošā noteikuma un pēc tam no globālā noklusējuma.',
+        'Noteikumus pārbauda no augšas uz leju: katram uzstādījumam uzvar pirmais atbilstošais noteikums, kas to uzstāda, bet to, ko tas atstāj tukšu, ņem no nākamā atbilstošā noteikuma un pēc tam no globālā noklusējuma. Kārtojot noklusējuma secībā, noteikumi ar nosaukumu nonāk pirmie, tāpēc noteikums, kuram jābūt pārākam (piemēram, noteikums pēc beigu laika), ir jāpārvieto atpakaļ augšā.',
     titleRuleSortDefault: 'Kārtot noklusējuma secībā',
     titleRuleMoveUp: 'Pārvietot noteikumu augstāk',
     titleRuleMoveDown: 'Pārvietot noteikumu zemāk',
     addTitleTagRule: 'Pievienot noteikumu',
     removeTitleTagRule: 'Noņemt noteikumu',
     noTitleTagRules:
-        'Vēl nav noteikumu. Pievieno kādu, lai atlasītu izaicinājumus pēc nosaukuma, taga, veida, foto skaita vai ilguma.',
+        'Vēl nav noteikumu. Pievieno kādu, lai atlasītu izaicinājumus pēc nosaukuma, taga, veida, foto skaita, ilguma vai beigu laika.',
     usingProfile: 'Izmanto profilu',
     none: '(nav)',
     addOnePhoto: 'Iesniegt vienu foto tukšā vietā',

@@ -685,7 +685,7 @@ export const app = {
     titleRuleMatchContains: 'Contains',
     titleRuleConditionsLabel: 'Match when',
     titleRuleConditionsHint:
-        "Every filled field must match; leave a field empty to ignore it. The challenge tag is the challenge's own tag (Exhibition, Comm, …), not a photo tag. Length is how long the challenge runs from start to end: 24 h = 1 day, 168 h = 7 days.",
+        "Every filled field must match; leave a field empty to ignore it. The challenge tag is the challenge's own tag (Exhibition, Comm, …), not a photo tag. Length is how long the challenge runs from start to end: 24 h = 1 day, 168 h = 7 days. Closes at is the end time shown on the challenge card, in the Timezone from Settings, on any date.",
     titleRuleChallengeTag: 'Challenge tag',
     titleRuleChallengeTagPlaceholder: 'e.g. Exhibition',
     titleRuleType: 'Challenge type',
@@ -694,6 +694,7 @@ export const app = {
     titleRuleAnyPics: 'Any',
     titleRuleMinHours: 'Runs at least',
     titleRuleMaxHours: 'Runs at most',
+    titleRuleClosesAt: 'Closes at',
     titleRuleAnyLength: 'any',
     titleRuleProfile: 'Automatic profile',
     titleRuleInherit: 'Inherit',
@@ -708,13 +709,14 @@ export const app = {
     titleRuleBroadWarning:
         'This rule has no title, so it turns this on for every challenge it matches — which can spend coins or photos across a whole group of challenges.',
     titleRuleOrderHint:
-        'Rules are checked top to bottom: for each setting, the first matching rule that sets it wins, and anything it leaves empty comes from the next matching rule, then the global default.',
+        'Rules are checked top to bottom: for each setting, the first matching rule that sets it wins, and anything it leaves empty comes from the next matching rule, then the global default. Sorting by default order puts rules with a title first, so a rule that must override them (for example one keyed on Closes at) has to be moved back up.',
     titleRuleSortDefault: 'Sort by default order',
     titleRuleMoveUp: 'Move rule up',
     titleRuleMoveDown: 'Move rule down',
     addTitleTagRule: 'Add rule',
     removeTitleTagRule: 'Remove rule',
-    noTitleTagRules: 'No rules yet. Add one to match challenges by title, tag, type, photo count or length.',
+    noTitleTagRules:
+        'No rules yet. Add one to match challenges by title, tag, type, photo count, length or close time.',
     usingProfile: 'Using profile',
     none: '(none)',
     addOnePhoto: 'Submit one photo to an empty slot',

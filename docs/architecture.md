@@ -155,9 +155,16 @@ Domain terms used throughout, in reader's terms:
 - **Challenge rules match on conditions; the LIST ORDER is the precedence.** A rule in
   `challengeSettings.titleRules` carries any mix of conditions — titles (one `match` mode for all of them:
   `exact`, the default, `starts`, or `contains`), `challengeTag`, `type`, `pics` (`max_photo_submits`) and a
-  runtime range `minHours`/`maxHours` over `close_time` - `start_time` — and every condition present must
-  hold (AND); a rule with none matches nothing, and a runtime condition fails closed when either time is
-  unreadable. The pure matcher and the default order live in the dependency-free
+  runtime range `minHours`/`maxHours` over `close_time` - `start_time`, and `closesAt` (strict `HH:MM`, any
+  date) — and every condition present must hold (AND); a rule with none matches nothing, and a runtime
+  condition fails closed when either time is unreadable. `closesAt` compares against the end time the
+  challenge card shows: `close_time` read in the app's `timezone` setting (`timeOfDayIn` in
+  `scheduling/wallClock.ts`; `'local'` and an unknown zone read the device clock, like `formatEndTime`),
+  minute floored. It fails closed both ways: an unreadable `close_time` matches nothing, and a stored
+  `closesAt` that is present but not strict `HH:MM` (hand-edited) makes the rule match nothing and is not
+  counted as a condition (the sanitizer rejects it on save) — so a skip rule keyed on it falls through to
+  global auto-join when a payload lacks `close_time`. The matcher formats the close time only when some rule
+  carries a valid `closesAt`. The pure matcher and the default order live in the dependency-free
   `settings/challengeRules.ts` so the renderer can use them too. Runtime exists because entry timing and
   tactics really track how long a challenge runs, and photo count is only an **imperfect proxy** for it: on
   the live account 4-photo defaults run 24h, 2-photo ones 48h and 3-photo ones 72h, yet 4-photo challenges
@@ -175,8 +182,9 @@ Domain terms used throughout, in reader's terms:
   (`resolveRuleSetting`).
 - **Default order: a title beats a class.** `sortRulesByDefaultOrder` ranks rules naming a title first
   (exact 3 > starts 2 > contains 1, +1 per class condition, then the longer pattern — the specificity ranking title rules were written against), then title-less rules
-  by condition count, then photo count > runtime > type > tag — so "4 photos + 7 days" > "4 photos" >
-  "7 days". The user can reorder freely in the editor or reset to this order; saving keeps the order given.
+  by condition count, then photo count > runtime > close time > type > tag — so "4 photos + 7 days" > "4 photos" >
+  "7 days". A close-time-only rule has no title, so sorting demotes it below every title rule, where a
+  title rule with `autoJoin: true` wins over its skip; the editor warns next to the Sort button. The user can reorder freely in the editor or reset to this order; saving keeps the order given.
   The one-time `_challengeRulesOrderedV1` migration applies this order to saved rules and appends the saved
   `categoryRules` below them; because the cascade lets a lower rule fill keys a higher one leaves unset, it
   logs a warning for every possibly-overlapping pair where that could newly switch `autoJoin`/`autoFill` on.

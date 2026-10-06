@@ -27,6 +27,23 @@ const RUNTIME_FIELDS = [
     max: MAX_RUNTIME_HOURS,
 }));
 
+// The end time the challenge card shows (app timezone, any date); blank = any time.
+function RuleClosesAtField({ rule, onPatch }: { rule: TitleRule; onPatch: RulePatchHandler }) {
+    const { t } = useTranslation();
+    return (
+        <div className="flex flex-col gap-1">
+            <span className="text-sm">{t('app.titleRuleClosesAt')}</span>
+            <input
+                type="time"
+                className="input input-sm w-full"
+                aria-label={t('app.titleRuleClosesAt')}
+                value={rule.closesAt ?? ''}
+                onChange={(e) => onPatch({ closesAt: e.currentTarget.value })}
+            />
+        </div>
+    );
+}
+
 export function RuleClassConditions({ rule, onPatch }: { rule: TitleRule; onPatch: RulePatchHandler }) {
     const { t } = useTranslation();
     return (
@@ -73,6 +90,7 @@ export function RuleClassConditions({ rule, onPatch }: { rule: TitleRule; onPatc
                     ))}
                 </select>
             </div>
+            <RuleClosesAtField rule={rule} onPatch={onPatch} />
             <div className="grid grid-cols-2 gap-2">
                 {RUNTIME_FIELDS.map((field) => (
                     <RuleNumberField key={field.settingKey} {...field} rule={rule} onPatch={onPatch} />

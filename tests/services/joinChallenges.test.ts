@@ -404,6 +404,25 @@ describe('runJoinPass', () => {
         expect(byId[2]).toBe('joined');
     });
 
+    test('the rules see the whole candidate including close_time, so a close-time rule can skip it', async () => {
+        const CLOSE = Date.UTC(2026, 5, 15, 17, 10) / 1000;
+        rulesGive((target) => (Number(target.close_time) === CLOSE ? { autoJoin: false } : {}));
+        const deps = makeDeps({
+            getMemberChallenges: jest.fn(async () => [
+                { id: 1, join_coins: 0, type: 'flash', title: 'Closes 17:10', close_time: CLOSE },
+                { id: 2, join_coins: 0, type: 'flash', title: 'Closes later', close_time: CLOSE + 600 },
+            ]),
+        });
+        const res = await runJoinPass('tok', Date.now(), deps);
+        const byId = Object.fromEntries(res.results.map((r) => [r.id, r.status])) as Record<string, string>;
+        expect(byId[1]).toBe('skipped:autojoin-off');
+        expect(byId[2]).toBe('joined');
+        expect(settings.resolveRuleSetting).toHaveBeenCalledWith(
+            'autoJoin',
+            expect.objectContaining({ title: 'Closes 17:10', close_time: CLOSE }),
+        );
+    });
+
     test('getTitleRules throwing with master off → pass short-circuits (fail-safe)', async () => {
         settings.getEffectiveSetting.mockImplementation((k) => (k === 'autoJoin' ? false : DEFAULT_SETTINGS[k]));
         settings.getTitleRules.mockImplementation(() => {

@@ -262,6 +262,23 @@ describe('TitleTagRulesEditor', () => {
         });
     });
 
+    describe('closes at', () => {
+        const rowWith = (over = {}) => [{ title: 'abc', mustIncludeTags: [], shouldIncludeTags: [], ...over }];
+
+        test('the time input patches closesAt, and an empty value sends an empty string', () => {
+            const onChange = jest.fn();
+            const { rerender } = render(<TitleTagRulesEditor value={rowWith()} onChange={onChange} />);
+            const input = () => screen.getByLabelText<HTMLInputElement>('app.titleRuleClosesAt');
+            expect(input().value).toBe('');
+            fireEvent.change(input(), { target: { value: '17:10' } });
+            expect(onChange).toHaveBeenLastCalledWith([expect.objectContaining({ closesAt: '17:10' })]);
+            rerender(<TitleTagRulesEditor value={rowWith({ closesAt: '17:10' })} onChange={onChange} />);
+            expect(input().value).toBe('17:10');
+            fireEvent.change(input(), { target: { value: '' } });
+            expect(onChange).toHaveBeenLastCalledWith([expect.objectContaining({ closesAt: '' })]);
+        });
+    });
+
     describe('match mode and challenge tag', () => {
         const rowWith = (over = {}) => [{ title: 'abc', mustIncludeTags: [], shouldIncludeTags: [], ...over }];
 
