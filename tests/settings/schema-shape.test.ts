@@ -125,6 +125,7 @@ describe('settings schema shape', () => {
             'autovoteRunning',
             'skipUpdateVersion',
             'chosenPhotosMemberId',
+            'chosenPhotosClearedAt',
         ]);
     });
 

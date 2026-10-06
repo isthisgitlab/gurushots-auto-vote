@@ -52,19 +52,79 @@ const costOf = (c: Challenge) => {
 const rowName = (c: Challenge, untitled: string): string => c.title || c.url || untitled;
 
 /**
- * Marks a row that has a list of its own; clicking it reopens the chooser.
+ * Marks a row that has a list of its own; clicking it reopens the chooser. A list
+ * saved under another account (`foreignCount`, which the join does not use) is
+ * counted instead of described as chosen photos.
  */
-function ChosenChip({ name, onClick }: { name: string; onClick: () => void }) {
+function ChosenChip({
+    name,
+    foreignCount,
+    onClick,
+}: {
+    name: string;
+    foreignCount: number | null;
+    onClick: () => void;
+}) {
     const { t } = useTranslation();
+    const text =
+        foreignCount === null
+            ? t('app.discoverChosenChip')
+            : interp(t('app.chosenPhotosOtherAccountCount'), { count: foreignCount });
     return (
         <button
             type="button"
             className="badge badge-info badge-sm mt-0.5"
-            title={t('app.discoverChosenChipHint')}
-            aria-label={interp(t('app.discoverChosenChipLabel'), { title: name })}
+            title={foreignCount === null ? t('app.discoverChosenChipHint') : text}
+            aria-label={
+                foreignCount === null ? interp(t('app.discoverChosenChipLabel'), { title: name }) : `${text}: ${name}`
+            }
             onClick={onClick}
         >
-            {t('app.discoverChosenChip')}
+            {text}
+        </button>
+    );
+}
+
+/**
+ * What a row says about chosen photos: the chip when it has a list of its own (a list
+ * saved under another account is counted instead), else a line for one that reaches it
+ * through a rule or the global default.
+ */
+function ChosenMarks({ c, name, onChoose }: { c: OpenChallenge; name: string; onChoose: () => void }) {
+    const { t } = useTranslation();
+    if (c.chosenOwnCount > 0) {
+        return (
+            <ChosenChip
+                name={name}
+                foreignCount={c.chosenEffectiveCount === 0 ? c.chosenOwnCount : null}
+                onClick={onChoose}
+            />
+        );
+    }
+    if (c.chosenEffectiveCount === 0) return null;
+    return (
+        <div className="text-xs text-base-content/60 mt-0.5">
+            {interp(t('app.discoverChosenInherited'), { count: c.chosenEffectiveCount })}
+        </div>
+    );
+}
+
+/**
+ * A row's Join button, named by its challenge (and, when paid, its cost) for assistive
+ * technology; while joining the visible text says so, so no static label contradicts it.
+ */
+function JoinButton({ name, cost, busy, onClick }: { name: string; cost: number; busy: boolean; onClick: () => void }) {
+    const { t } = useTranslation();
+    const paid = cost > 0;
+    const label = interp(t(paid ? 'app.discoverJoinPaidLabel' : 'app.discoverJoinLabel'), { title: name, coins: cost });
+    return (
+        <button
+            className={`btn btn-sm ${paid ? 'btn-warning' : 'btn-primary'}`}
+            aria-label={busy ? undefined : label}
+            onClick={onClick}
+            disabled={busy}
+        >
+            {busy ? t('app.discoverJoining') : paid ? t('app.discoverJoinPaid') : t('app.discoverJoin')}
         </button>
     );
 }
@@ -210,7 +270,12 @@ export function DiscoverSection({
                     {/* Surface a fetch failure even while collapsed — otherwise a
                         failed load looks identical to "no open challenges". */}
                     {error && (
-                        <span className="badge badge-error badge-sm" title={t('app.discoverUnavailableList')}>
+                        <span
+                            className="badge badge-error badge-sm"
+                            role="img"
+                            title={t('app.discoverUnavailableList')}
+                            aria-label={t('app.discoverUnavailableList')}
+                        >
                             !
                         </span>
                     )}
@@ -256,17 +321,7 @@ export function DiscoverSection({
                                                         : t('app.discoverCostFree')}
                                                 </span>
                                             </div>
-                                            {c.chosenOwnCount > 0 && (
-                                                <ChosenChip name={name} onClick={() => setChoosing(c)} />
-                                            )}
-                                            {/* No list of its own, but one reaches it through a rule or the global default. */}
-                                            {c.chosenOwnCount === 0 && c.chosenEffectiveCount > 0 && (
-                                                <div className="text-xs text-base-content/60 mt-0.5">
-                                                    {interp(t('app.discoverChosenInherited'), {
-                                                        count: c.chosenEffectiveCount,
-                                                    })}
-                                                </div>
-                                            )}
+                                            <ChosenMarks c={c} name={name} onChoose={() => setChoosing(c)} />
                                             {meta && (
                                                 <div className={`text-xs mt-0.5 ${TEXT_CLASS[meta.variant]}`}>
                                                     {meta.key
@@ -296,17 +351,12 @@ export function DiscoverSection({
                                             >
                                                 {t('app.choosePhotos')}
                                             </button>
-                                            <button
-                                                className={`btn btn-sm ${cost > 0 ? 'btn-warning' : 'btn-primary'}`}
+                                            <JoinButton
+                                                name={name}
+                                                cost={cost}
+                                                busy={isBusy}
                                                 onClick={() => onJoinClick(c)}
-                                                disabled={isBusy}
-                                            >
-                                                {isBusy
-                                                    ? t('app.discoverJoining')
-                                                    : cost > 0
-                                                      ? t('app.discoverJoinPaid')
-                                                      : t('app.discoverJoin')}
-                                            </button>
+                                            />
                                         </div>
                                     </li>
                                 );

@@ -49,9 +49,10 @@ const reportFailure = (result: { success?: boolean; error?: unknown; issues?: Sc
  */
 const output = (text: string, file: string | null | undefined) => {
     if (!file) {
-        // A document the user asked to see (or pipe): printed with its line breaks, on the console
-        // only; the log file's one-line entries would flatten it. print adds the final newline.
-        logger.printLine(text.replace(/\n$/, ''));
+        // A document the user asked to see (or pipe): printed verbatim, with its line breaks, on the
+        // console only; the log file's one-line entries would flatten it. It holds no credentials,
+        // and redaction would corrupt the JSON. The console adds the final newline.
+        logger.printDocument(text.replace(/\n$/, ''));
         return 0;
     }
     try {
@@ -148,7 +149,11 @@ const exportScenarioCmd = async (name: string, file?: string) => {
     const result = await handlers()['export-scenario'](null, name);
     if (!result.success) return reportFailure(result, `Could not export "${name}"`);
     if (result.omitted?.length) {
-        ui().warning(`Left out of the export (they belong to your account): ${result.omitted.join(', ')}`);
+        const note = `Left out of the export (they belong to your account): ${result.omitted.join(', ')}`;
+        // With no file the JSON goes to stdout, where it is often piped: the note goes to stderr so
+        // the document stays valid.
+        if (file) ui().warning(note);
+        else logger.printStderr(note);
     }
     // A successful export always carries its JSON text.
     return output(result.json as string, file);

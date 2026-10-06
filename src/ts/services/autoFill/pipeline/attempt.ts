@@ -9,7 +9,7 @@ import {
     clearChosenSkip,
     enteredIds,
     logChosenSkipOnce,
-    downgradeRememberedChosen,
+    refuseRememberedChosen,
     resolveChosenPhotos,
     resolveMissingChosen,
 } from '../chosenPhotos';
@@ -308,16 +308,15 @@ const runFillAttempt = async ({
             });
             return { status: 'submitted', picked };
         }
-        // A photo remembered from an earlier walk may have stopped being allowed. Only an
-        // answer that says so counts as the server refusing it; no answer teaches nothing.
-        downgradeRememberedChosen(challenge, picked, result?.raw?.success === false ? 'refused' : 'no-answer');
+        // The server answered with a failure: the remembered photos in this pick are held back for
+        // a short while (it does not say which one it refused). No answer (null raw) teaches nothing.
+        if (result?.raw?.success === false) refuseRememberedChosen(challenge, picked, Date.now());
         const reason = describeSubmitFailure(result && result.raw);
         logger
             .withCategory('autoFill')
             .warning(`${label}: submit rejected for ${logger.challengeTag(challenge)}: ${reason}`, null);
         return { status: 'submit-rejected', reason };
     } catch (error) {
-        downgradeRememberedChosen(challenge, picked, 'no-answer');
         logger
             .withCategory('autoFill')
             .warning(

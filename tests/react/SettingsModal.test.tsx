@@ -364,7 +364,9 @@ describe('SettingsModal — title-tag-rules save', () => {
     test("removing every list from a rule's chooser, then saving, does not write the lists back", async () => {
         const PHOTO = `00000001${'a'.repeat(24)}`;
         const rule = { title: 'Hats', mustIncludeTags: ['hat'], shouldIncludeTags: [], chosenPhotos: [PHOTO] };
-        jest.mocked(window.api.getTitleRules).mockResolvedValueOnce([rule]);
+        // A rule whose only content was its list goes with it, as it does where the lists are removed.
+        const lonely = { title: 'Lonely', mustIncludeTags: [], shouldIncludeTags: [], chosenPhotos: [PHOTO] };
+        jest.mocked(window.api.getTitleRules).mockResolvedValueOnce([rule, lonely]);
         // A list saved under another account: the chooser's notice offers to remove every list.
         jest.mocked(window.api.getSetting).mockResolvedValue('d'.repeat(32));
         jest.mocked(window.api.getLibraryPhotos).mockResolvedValue(
@@ -381,7 +383,7 @@ describe('SettingsModal — title-tag-rules save', () => {
 
         render(<SettingsModal isOpen={true} onClose={onClose} />);
         await screen.findByDisplayValue('Hats');
-        fireEvent.click(screen.getByRole('button', { name: 'app.choosePhotos' }));
+        fireEvent.click(screen.getAllByRole('button', { name: 'app.choosePhotos' })[0]);
         fireEvent.click(await screen.findByRole('button', { name: 'app.photoChooserOtherAccountClear' }));
         const confirm = (await screen.findAllByRole('button', { name: 'app.photoChooserOtherAccountClear' })).at(-1)!;
         fireEvent.click(confirm);
@@ -397,6 +399,7 @@ describe('SettingsModal — title-tag-rules save', () => {
         expect(window.api.setTitleRules).toHaveBeenCalledWith([
             { title: 'Hats', mustIncludeTags: ['hat'], shouldIncludeTags: [] },
         ]);
+        expect(screen.queryByDisplayValue('Lonely')).toBeNull();
     });
 
     test('a successful save persists the rules and closes the modal', async () => {

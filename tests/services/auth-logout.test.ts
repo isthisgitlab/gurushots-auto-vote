@@ -10,6 +10,7 @@
  */
 
 import { invalid } from '../helpers/invalid';
+import type { Challenge } from '../../src/ts/types/gurushots';
 
 // The simulated write-behind store the settings mock exposes as __state.
 type SettingsState = { cached: Record<string, unknown>; persisted: Record<string, unknown>; flushCalls: number };
@@ -38,6 +39,7 @@ jest.mock('../../src/ts/settings', () => {
 import settingsModule = require('../../src/ts/settings');
 const settings = jest.mocked(settingsModule as typeof settingsModule & { __state: SettingsState });
 import type * as authModule from '../../src/ts/services/auth';
+import type * as openChallengeCacheModule from '../../src/ts/services/openChallengeCache';
 const { clearAuthToken } = require('../../src/ts/services/auth') as typeof authModule;
 
 describe('clearAuthToken', () => {
@@ -46,6 +48,17 @@ describe('clearAuthToken', () => {
         settings.__state.persisted = { token: 'old-token' };
         settings.__state.flushCalls = 0;
         jest.clearAllMocks();
+    });
+
+    it('forgets the remembered open challenges, which belong to the account that left', async () => {
+        const { rememberOpenChallenges, getOpenChallenge } =
+            require('../../src/ts/services/openChallengeCache') as typeof openChallengeCacheModule;
+        const open = invalid<Challenge>({ id: 9, title: 'Rule Match' });
+        rememberOpenChallenges([open, null]);
+        expect(getOpenChallenge('9')).toBe(open);
+        expect(getOpenChallenge(9)).toBeDefined();
+        await clearAuthToken();
+        expect(getOpenChallenge(9)).toBeUndefined();
     });
 
     it('durably persists the cleared token before resolving (Capacitor kill-safety)', async () => {

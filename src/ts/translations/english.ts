@@ -525,6 +525,8 @@ export const app = {
     discoverCostPaid: '{coins} coins',
     discoverJoin: 'Join',
     discoverJoinPaid: 'Join (paid)',
+    discoverJoinLabel: 'Join {title}',
+    discoverJoinPaidLabel: 'Join {title} for {coins} coins',
     discoverJoining: 'Joining…',
     discoverRetrySubmit: 'Retry submit',
     discoverConfirmTitle: 'Join paid challenge?',
@@ -562,6 +564,9 @@ export const app = {
     chosenPhotosOnlyDesc:
         'With Chosen Photos set, auto-join and auto-submit never pick a photo themselves: a challenge with no usable chosen photo is skipped. Manual Join and the manual +1/+N buttons still pick automatically, Emergency Submit ignores this setting (turn Emergency Submit off for the challenge to keep the slot empty), and a paid join that already unlocked still submits an automatic pick so the coins are not wasted. Swap ignores both settings. With Submit Even Without a Tag Match on (the default), the tag check is relaxed for the chosen photos alone: if none of them fits your tags, they can still be entered. With an empty list this does nothing.',
     chosenPhotosMemberId: 'Chosen Photos Account',
+    chosenPhotosClearedAt: 'Chosen Photos Cleared At',
+    chosenPhotosClearedAtDesc:
+        'Internal — when every saved Chosen Photos list was last removed; open editors use it to drop their copy of the lists',
     chosenPhotosMemberIdDesc:
         'Internal — the member who last saved a Chosen Photos list; the list is ignored when a different member is logged in',
     chosenPhotosCount: 'Chosen photos: {count}',
@@ -581,8 +586,7 @@ export const app = {
     photoChooserCount: '{count} of {max} chosen',
     photoChooserLoading: 'Loading your photos…',
     photoChooserLoadError: "Your photos couldn't be loaded (details below). Try again.",
-    photoChooserLoadErrorNoDetail:
-        "Your photos couldn't be loaded — GuruShots didn't answer or your session expired. Try again, or sign in again.",
+    photoChooserLoadErrorNoDetail: "Your photos couldn't be loaded — the request was interrupted. Try again.",
     photoChooserRetry: 'Retry',
     photoChooserNoContext:
         "Your photos can't be listed yet: the library is read through a challenge, and you have no active or joinable challenge right now. Join one or wait until one opens, then try again.",
@@ -613,6 +617,8 @@ export const app = {
     chosenPhotosOtherAccountCount: '{count} photo(s) saved under another account',
     photoChooserInheritNote:
         "Saving with nothing chosen removes this challenge's own list, so it uses the list from your settings or rules again.",
+    photoChooserSaveWaits:
+        'Saving waits until your photos have loaded, so the app can check which account the list belongs to.',
     photoChooserSaveError: "The chosen photos weren't saved because the setting couldn't be written. Try again.",
     photoChooserUse: 'Use these photos',
     discoverChosenChip: 'Chosen',

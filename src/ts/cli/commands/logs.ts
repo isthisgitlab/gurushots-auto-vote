@@ -6,6 +6,7 @@
 
 import * as fs from 'node:fs';
 import * as logger from '../../logger';
+import { stripTerminalControl } from '../../format/logSafe';
 import { diagnostics } from '../../services/semantic/diagnostics';
 
 // category flag → logger path getter. Defaults to the app log.
@@ -51,7 +52,12 @@ const showLogs = ({ category = 'app', lines = 100 }: { category?: string; lines?
         logger.withCategory('ui').info(`=== ${category} log (last ${lines} lines): ${filePath} ===`);
         // The log lines as the file holds them, one per line: printed whole on the console only,
         // not written back into the log file they came from.
-        logger.printLine(tail);
+        logger.printLine(
+            tail
+                .split('\n')
+                .map((line) => stripTerminalControl(line))
+                .join('\n'),
+        );
     } catch (error) {
         logger.withCategory('ui').error(`Error reading ${category} log`, error);
     }

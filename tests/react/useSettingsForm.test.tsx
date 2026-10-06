@@ -330,7 +330,7 @@ describe('useSettingsForm — every chosen-photos list removed while the modal i
     test('the field reads empty, and neither commit nor revert writes the old list back', async () => {
         const props = baseProps({ schema: photosSchema, defaults: { exposure: 70, chosenPhotos: ['a', 'b'] } });
         const { result } = renderForm(props);
-        window.api.setGlobalDefault = jest.fn().mockResolvedValue(true);
+        jest.mocked(window.api.setGlobalDefault).mockClear().mockResolvedValue(true);
 
         act(() => announceChosenPhotosCleared());
         expect(result.current.formValues).toEqual({ exposure: 70, chosenPhotos: [] });

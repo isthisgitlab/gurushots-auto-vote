@@ -530,6 +530,8 @@ export const app = {
     discoverCostPaid: 'monētas: {coins}',
     discoverJoin: 'Pievienoties',
     discoverJoinPaid: 'Pievienoties (maksas)',
+    discoverJoinLabel: 'Pievienoties izaicinājumam „{title}”',
+    discoverJoinPaidLabel: 'Pievienoties izaicinājumam „{title}” par monētām: {coins}',
     discoverJoining: 'Pievienojas…',
     discoverRetrySubmit: 'Mēģināt iesniegt vēlreiz',
     discoverConfirmTitle: 'Pievienoties maksas izaicinājumam?',
@@ -568,6 +570,9 @@ export const app = {
     chosenPhotosOnlyDesc:
         'Kad ir uzstādīti izvēlētie foto, automātiskā pievienošanās un iesniegšana pašas foto neizvēlas: izaicinājums, kuram nav neviena derīga izvēlētā foto, tiek izlaists. Manuālā pievienošanās un manuālās pogas +1/+N tik un tā izvēlas automātiski, ārkārtas iesniegšana šo uzstādījumu neņem vērā (izslēdz to izaicinājumam, lai vieta paliktu tukša), un maksas pievienošanās, kas jau atbloķēta, tik un tā iesniedz automātiski izvēlētu foto, lai monētas neaizietu zudumā. Apmaiņa neņem vērā nevienu no abiem uzstādījumiem. Ja ir ieslēgts „Iesniegt arī bez tagu sakritības” (pēc noklusējuma tā ir), tagu pārbaude izvēlētajiem foto netiek stingri piemērota: ja neviens no tiem neatbilst taviem tagiem, tos tik un tā var iesniegt. Ja saraksts ir tukšs, tam nav nozīmes.',
     chosenPhotosMemberId: 'Izvēlēto foto konts',
+    chosenPhotosClearedAt: 'Izvēlēto foto notīrīšanas laiks',
+    chosenPhotosClearedAtDesc:
+        'Iekšējs — kad pēdējo reizi izņemti visi saglabātie izvēlēto foto saraksti; atvērtie redaktori pēc tā noņem savu sarakstu kopiju',
     chosenPhotosMemberIdDesc:
         'Iekšējs — dalībnieks, kas pēdējais saglabāja izvēlēto foto sarakstu; ja piesakās cits dalībnieks, saraksts tiek ignorēts',
     chosenPhotosCount: 'Izvēlēto foto: {count}',
@@ -587,8 +592,7 @@ export const app = {
     photoChooserCount: 'Izvēlēto foto: {count} no {max}',
     photoChooserLoading: 'Ielādē tavus foto…',
     photoChooserLoadError: 'Tavus foto neizdevās ielādēt (sīkāka informācija ir zemāk). Mēģini vēlreiz.',
-    photoChooserLoadErrorNoDetail:
-        'Tavus foto neizdevās ielādēt — GuruShots neatbildēja vai sesija ir beigusies. Mēģini vēlreiz vai piesakies no jauna.',
+    photoChooserLoadErrorNoDetail: 'Tavus foto neizdevās ielādēt — pieprasījums tika pārtraukts. Mēģini vēlreiz.',
     photoChooserRetry: 'Mēģināt vēlreiz',
     photoChooserNoContext:
         'Tavus foto vēl nevar parādīt: bibliotēku nolasa caur izaicinājumu, bet tev šobrīd nav neviena aktīva vai pievienojama izaicinājuma. Pievienojies kādam vai uzgaidi, līdz tāds atveras, un mēģini vēlreiz.',
@@ -619,6 +623,8 @@ export const app = {
     chosenPhotosOtherAccountCount: 'Citā kontā saglabātie foto: {count}',
     photoChooserInheritNote:
         'Ja saglabāsi, neko neizvēloties, šim izaicinājumam paredzētais saraksts tiks izņemts, un izaicinājums atkal izmantos sarakstu no taviem uzstādījumiem vai noteikumiem.',
+    photoChooserSaveWaits:
+        'Saglabāšana gaida, līdz tavi foto ir ielādēti, lai lietotne varētu pārbaudīt, kuram kontam saraksts pieder.',
     photoChooserSaveError: 'Izvēlētos foto neizdevās saglabāt, jo uzstādījumu nevarēja ierakstīt. Mēģini vēlreiz.',
     photoChooserUse: 'Izmantot šos foto',
     discoverChosenChip: 'Izvēlēti foto',

@@ -22,6 +22,7 @@ import type { IpcMain } from 'electron';
 import { invalid } from '../helpers/invalid';
 import { claimTurboRun, releaseTurboRun } from '../../src/ts/services/turboRunLock';
 import { registerMissionNeeds } from '../../src/ts/services/missions';
+import { clearOpenChallenges } from '../../src/ts/services/openChallengeCache';
 
 import settingsModule = require('../../src/ts/settings');
 const settings = jest.mocked(settingsModule);
@@ -74,6 +75,30 @@ const stubAuthGuardFail = () => {
     auth.requireAuthToken = jest
         .fn()
         .mockReturnValue({ ok: false, response: { success: false, error: 'No authentication token found' } });
+};
+
+// What the Chosen Photos settings resolve to, as the join resolves them: the challenge's own
+// list first, then a matching rule, then the global default; plus who saved it and who is signed in.
+const mockChosenSettings = ({
+    own = {},
+    inherited = [],
+    rule = null,
+    savedBy = '',
+    current = 'member-1',
+}: {
+    own?: Record<string, string[]>;
+    inherited?: string[];
+    rule?: { value: string[] } | null;
+    savedBy?: string;
+    current?: string | null;
+}) => {
+    jest.mocked(settings.getChallengeOverride).mockImplementation(
+        invalid((key: string, id: string) => (key === 'chosenPhotos' ? (own[id] ?? null) : null)),
+    );
+    jest.mocked(settings.resolveRuleSetting).mockReturnValue(invalid(rule));
+    jest.mocked(settings.getEffectiveSetting).mockReturnValue(invalid(inherited));
+    jest.mocked(settings.getSetting).mockReturnValue(invalid(savedBy));
+    jest.mocked(autoFill.peekMemberId).mockReturnValue(current);
 };
 
 // Note on module-scoped state: turboRunLock keeps its set at module scope.
@@ -711,22 +736,14 @@ describe('get-member-challenges', () => {
             const result = await buildHandlers()['get-member-challenges']({});
             return result.success ? result.items : [];
         };
-        // The join's own resolution: the per-id override first, then the rules, then the global default.
-        const resolve = (own: Record<string, unknown>, inherited: unknown) => {
-            settings.getChallengeOverride = invalid(
-                jest.fn((key: string, id: string) => (key === 'chosenPhotos' ? (own[id] ?? null) : null)),
-            );
-            settings.resolveRuleSetting = jest.fn().mockReturnValue(null);
-            settings.getEffectiveSetting = jest.fn().mockReturnValue(inherited);
-        };
 
         beforeEach(() => {
-            settings.getSetting = jest.fn().mockReturnValue('');
-            autoFill.peekMemberId = jest.fn().mockReturnValue('member-1');
+            clearOpenChallenges();
+            mockChosenSettings({});
         });
 
         test('its own list, and the count that applies when it is the one in force', async () => {
-            resolve({ '7': ['a', 'b'] }, []);
+            mockChosenSettings({ own: { '7': ['a', 'b'] } });
             const items = await open();
             expect(items[0]).toEqual({
                 id: 7,
@@ -740,35 +757,42 @@ describe('get-member-challenges', () => {
         });
 
         test('a list inherited from a rule or the global default counts, with nothing of its own', async () => {
-            resolve({}, ['g1', 'g2', 'g3']);
+            mockChosenSettings({ inherited: ['g1', 'g2', 'g3'] });
             expect((await open())[0]).toEqual(
                 expect.objectContaining({ chosenOwn: [], chosenOwnCount: 0, chosenEffectiveCount: 3 }),
             );
-            settings.resolveRuleSetting = jest.fn().mockReturnValue({ value: ['r1'] });
+            mockChosenSettings({ rule: { value: ['r1'] } });
             expect((await open())[0]).toEqual(expect.objectContaining({ chosenOwn: [], chosenEffectiveCount: 1 }));
         });
 
         test('an item with no id is passed through with nothing chosen', async () => {
-            resolve({}, ['g1']);
+            mockChosenSettings({ inherited: ['g1'] });
             expect((await open())[1]).toEqual({ chosenOwn: [], chosenOwnCount: 0, chosenEffectiveCount: 0 });
         });
 
         test('a list saved under another account is counted but its ids are never sent, and nothing applies', async () => {
-            resolve({ '7': ['secret-a', 'secret-b'] }, ['g1']);
-            settings.getSetting = jest.fn().mockReturnValue('member-0');
+            mockChosenSettings({ own: { '7': ['secret-a', 'secret-b'] }, inherited: ['g1'], savedBy: 'member-0' });
             const [row] = await open();
             expect(row).toEqual(expect.objectContaining({ chosenOwn: [], chosenOwnCount: 2, chosenEffectiveCount: 0 }));
             expect(JSON.stringify(await open())).not.toContain('secret');
-            // The same account, or one that cannot be told yet (no lookup has resolved it), applies the list.
-            settings.getSetting = jest.fn().mockReturnValue('member-1');
-            expect((await open())[0]).toEqual(expect.objectContaining({ chosenOwn: ['secret-a', 'secret-b'] }));
-            settings.getSetting = jest.fn().mockReturnValue('member-0');
-            autoFill.peekMemberId = jest.fn().mockReturnValue(null);
-            expect((await open())[0]).toEqual(expect.objectContaining({ chosenEffectiveCount: 2 }));
+        });
+
+        test('the same account, or no owner on record, gets its ids', async () => {
+            mockChosenSettings({ own: { '7': ['secret-a'] }, savedBy: 'member-1' });
+            expect((await open())[0]).toEqual(expect.objectContaining({ chosenOwn: ['secret-a'] }));
+            mockChosenSettings({ own: { '7': ['secret-a'] }, savedBy: '' });
+            expect((await open())[0]).toEqual(expect.objectContaining({ chosenOwn: ['secret-a'] }));
+        });
+
+        test('with an owner on record and the signed-in member not known yet, the ids are withheld but the list still applies', async () => {
+            mockChosenSettings({ own: { '7': ['secret-a', 'secret-b'] }, savedBy: 'member-0', current: null });
+            const [row] = await open();
+            expect(row).toEqual(expect.objectContaining({ chosenOwn: [], chosenOwnCount: 2, chosenEffectiveCount: 2 }));
+            expect(JSON.stringify(row)).not.toContain('secret');
         });
 
         test('the owner and the signed-in member are looked up once per request, not once per challenge', async () => {
-            resolve({ '7': ['a'], '8': ['b'] }, []);
+            mockChosenSettings({ own: { '7': ['a'], '8': ['b'] } });
             await open();
             expect(settings.getSetting).toHaveBeenCalledTimes(1);
             expect(autoFill.peekMemberId).toHaveBeenCalledTimes(1);
@@ -784,14 +808,9 @@ describe('get-open-chosen-annotations — settings only', () => {
         );
 
     beforeEach(() => {
-        settings.loadSettings = jest.fn().mockReturnValue({ token: 'tok' });
-        settings.getSetting = jest.fn().mockReturnValue('');
-        settings.getChallengeOverride = invalid(
-            jest.fn((key: string, id: string) => (key === 'chosenPhotos' && id === '7' ? ['a', 'b'] : null)),
-        );
-        settings.resolveRuleSetting = jest.fn().mockReturnValue(null);
-        settings.getEffectiveSetting = jest.fn().mockReturnValue(['g']);
-        autoFill.peekMemberId = jest.fn().mockReturnValue('member-1');
+        clearOpenChallenges();
+        jest.mocked(settings.loadSettings).mockReturnValue(invalid({ token: 'tok' }));
+        mockChosenSettings({ own: { '7': ['a', 'b'] }, inherited: ['g'] });
     });
 
     test('answers from the settings alone, without any request to GuruShots', async () => {
@@ -814,7 +833,7 @@ describe('get-open-chosen-annotations — settings only', () => {
         stubAuthGuardOk();
         stubStrategy({ getMemberChallenges: jest.fn().mockResolvedValue([{ id: 9, title: 'Rule Match' }]) });
         await buildHandlers()['get-member-challenges']({});
-        settings.resolveRuleSetting = jest.fn().mockReturnValue({ value: ['r1'] });
+        mockChosenSettings({ rule: { value: ['r1'] } });
         await ask([9]);
         expect(settings.resolveRuleSetting).toHaveBeenCalledWith(
             'chosenPhotos',
@@ -822,8 +841,17 @@ describe('get-open-chosen-annotations — settings only', () => {
         );
     });
 
+    test('logging out forgets the remembered open list: the same id resolves as a bare id again', async () => {
+        stubAuthGuardOk();
+        stubStrategy({ getMemberChallenges: jest.fn().mockResolvedValue([{ id: 9, title: 'Rule Match' }]) });
+        await buildHandlers()['get-member-challenges']({});
+        clearOpenChallenges();
+        await ask([9]);
+        expect(settings.resolveRuleSetting).toHaveBeenLastCalledWith('chosenPhotos', { id: 9 });
+    });
+
     test("under another account's list the ids are never sent", async () => {
-        settings.getSetting = jest.fn().mockReturnValue('member-0');
+        mockChosenSettings({ own: { '7': ['a', 'b'] }, savedBy: 'member-0' });
         const result = await ask([7]);
         expect(result).toEqual({
             success: true,
@@ -832,13 +860,28 @@ describe('get-open-chosen-annotations — settings only', () => {
         expect(JSON.stringify(result)).not.toContain('"a"');
     });
 
+    test('with an owner on record and the member not known yet, the ids are withheld but the list applies', async () => {
+        mockChosenSettings({ own: { '7': ['a', 'b'] }, savedBy: 'member-0', current: null });
+        await expect(ask([7])).resolves.toEqual({
+            success: true,
+            annotations: { '7': { chosenOwn: [], chosenOwnCount: 2, chosenEffectiveCount: 2 } },
+        });
+    });
+
     test.each([
         ['not an array', '7'],
         ['an item that is not an id', [7, {}]],
         ['a blank id', ['  ']],
-        ['too many ids', Array.from({ length: 201 }, (_, i) => i + 1)],
+        ['one id too many (201)', Array.from({ length: 201 }, (_, i) => i + 1)],
     ])('refuses %s', async (_name, ids) => {
         await expect(ask(ids)).resolves.toEqual({ success: false, error: 'invalid-args' });
+    });
+
+    test('exactly 200 ids is the most it answers', async () => {
+        const ids = Array.from({ length: 200 }, (_, i) => i + 1);
+        const result = (await ask(ids)) as { success: boolean; annotations: Record<string, unknown> };
+        expect(result.success).toBe(true);
+        expect(Object.keys(result.annotations)).toHaveLength(200);
     });
 
     test('an empty list is fine', async () => {
@@ -846,17 +889,13 @@ describe('get-open-chosen-annotations — settings only', () => {
     });
 
     test('a failing settings read is an error result, never a throw', async () => {
-        settings.loadSettings = invalid(
-            jest.fn(() => {
-                throw new Error('read failed');
-            }),
-        );
+        jest.mocked(settings.loadSettings).mockImplementation(() => {
+            throw new Error('read failed');
+        });
         await expect(ask([7])).resolves.toEqual({ success: false, error: 'read failed', annotations: {} });
-        settings.loadSettings = invalid(
-            jest.fn(() => {
-                throw new Error('');
-            }),
-        );
+        jest.mocked(settings.loadSettings).mockImplementation(() => {
+            throw new Error('');
+        });
         await expect(ask([7])).resolves.toEqual({
             success: false,
             error: 'Failed to read the chosen photos',

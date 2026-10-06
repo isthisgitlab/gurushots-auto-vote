@@ -17,6 +17,7 @@ import {
     ruleConditions,
 } from './challengeRules';
 import { normalizeProfileName, findProfileKey } from './profileStore';
+import { TITLE_RULE_INLINE_KEYS } from './ruleBehaviour';
 
 import type { ChallengeValues, TitleRule } from '../types/settings';
 import type { RuleLike } from './challengeRules';
@@ -31,29 +32,6 @@ const MAX_TITLE_LENGTH = 200;
 // One rule may list several titles that share the same behaviour, so the user
 // doesn't have to duplicate a whole rule per recurring challenge.
 const MAX_TITLES_PER_RULE = 50;
-
-/**
- * Settings a rule may override INLINE, without going through a named profile.
- * Deliberately a short allowlist rather than "every perChallenge key": these
- * are the ones that decide whether an UN-JOINED candidate is acted on at all,
- * and an un-joined challenge has no cached id for a per-challenge override to
- * key off — so a rule is the only place they can be expressed. Richer setups
- * belong in a named profile, which this composes with (inline wins).
- *
- * `chosenPhotos` / `chosenPhotosOnly` are here for the same reason: the join
- * must know which photo to enter with before the challenge has a cached id.
- * `chosenPhotos` is the one array-valued key (an empty `[]` is an explicit
- * "no chosen photos", distinct from the absent/'' "inherit").
- */
-const TITLE_RULE_INLINE_KEYS = [
-    'autoJoin',
-    'autoFill',
-    'autoJoinWithinHoursOfEnd',
-    'autoJoinAfterPercentElapsed',
-    'scenario',
-    'chosenPhotos',
-    'chosenPhotosOnly',
-];
 
 /**
  * Pull the inline overrides off one rule, validated against the schema. Returns

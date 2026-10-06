@@ -366,15 +366,22 @@ describe('cleanup-stale-metadata', () => {
 });
 
 describe('cleanup-stale-challenge-setting', () => {
-    test('passes a list of ids to the settings layer', async () => {
+    test('passes a list of ids to the settings layer and says it was saved', async () => {
         jest.mocked(settings.cleanupStaleChallengeSetting).mockReturnValue(true);
-        await expect(handlers['cleanup-stale-challenge-setting']({}, ['1', '2'])).resolves.toBe(true);
+        await expect(handlers['cleanup-stale-challenge-setting']({}, ['1', '2'])).resolves.toEqual({ success: true });
         expect(settings.cleanupStaleChallengeSetting).toHaveBeenCalledWith(['1', '2']);
+    });
+
+    test('ids are compared the way perChallenge is keyed: numeric ids become strings, untrimmed ones are trimmed', async () => {
+        jest.mocked(settings.cleanupStaleChallengeSetting).mockReturnValue(true);
+        await handlers['cleanup-stale-challenge-setting']({}, [7, ' 8 ', '9']);
+        expect(settings.cleanupStaleChallengeSetting).toHaveBeenCalledWith(['7', '8', '9']);
     });
 
     test.each([
         ['not an array', 'abc'],
         ['missing', undefined],
+        ['empty, which would prune every challenge', []],
         ['an item that is not an id', ['1', {}]],
         ['a blank id', ['1', '  ']],
         ['an over-long id', ['9'.repeat(65)]],
@@ -387,9 +394,20 @@ describe('cleanup-stale-challenge-setting', () => {
         expect(settings.cleanupStaleChallengeSetting).not.toHaveBeenCalled();
     });
 
-    test('returns false when cleanup throws', async () => {
+    test('a save that failed is an error result, never read as success', async () => {
+        jest.mocked(settings.cleanupStaleChallengeSetting).mockReturnValue(false);
+        await expect(handlers['cleanup-stale-challenge-setting']({}, ['1'])).resolves.toEqual({
+            success: false,
+            error: 'The settings file could not be saved',
+        });
+    });
+
+    test('an error is an error result with its message', async () => {
         settings.cleanupStaleChallengeSetting = invalid(jest.fn(boom));
-        await expect(handlers['cleanup-stale-challenge-setting']({}, ['1'])).resolves.toBe(false);
+        await expect(handlers['cleanup-stale-challenge-setting']({}, ['1'])).resolves.toEqual({
+            success: false,
+            error: 'boom',
+        });
     });
 });
 

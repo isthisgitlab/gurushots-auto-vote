@@ -8,6 +8,7 @@
  */
 import { render, screen, fireEvent, waitFor, act } from './helpers/test-utils';
 import { ChallengeProfilesBar } from '@/components/app/ChallengeProfilesBar';
+import { announceChosenPhotosCleared } from '@/api/chosenPhotosCleared';
 import { mockApi } from './helpers/setup';
 import { invalid } from '../helpers/invalid';
 
@@ -52,6 +53,36 @@ describe('ChallengeProfilesBar', () => {
             expect(document.body.textContent).toContain('2-pic tactic (2)');
         });
         expect(document.body.textContent).toContain('empty (0)');
+    });
+
+    test('profiles loaded before the lists were removed no longer carry them: Apply cannot bring a list back', async () => {
+        mockApi.getChallengeProfiles.mockResolvedValue({ Mine: { chosenPhotos: ['secret-id'], exposure: 80 } });
+        const onApply = jest.fn();
+        renderBar({ onApply });
+        await waitFor(() => expect(document.body.textContent).toContain('Mine (2)'));
+        // The stored profile has lost its list by the time it is read again — but Apply must not
+        // depend on that read having landed.
+        const reread = mockApi.getChallengeProfiles.mockReturnValueOnce(new Promise(() => undefined));
+        act(() => announceChosenPhotosCleared());
+        expect(reread).toHaveBeenCalledTimes(2);
+        await waitFor(() => expect(document.body.textContent).toContain('Mine (1)'));
+        await act(async () => {
+            changeSelect(selectEl(), 'Mine');
+        });
+        await act(async () => {
+            fireEvent.click(applyButton());
+        });
+        expect(onApply).toHaveBeenCalledWith({ exposure: 80 });
+    });
+
+    test('after the lists were removed the profiles are read again, showing what is stored now', async () => {
+        mockApi.getChallengeProfiles.mockResolvedValue({ Mine: { chosenPhotos: ['secret-id'], exposure: 80 } });
+        renderBar();
+        await waitFor(() => expect(document.body.textContent).toContain('Mine (2)'));
+        mockApi.getChallengeProfiles.mockResolvedValue({ Mine: { exposure: 80 }, Other: {} });
+        act(() => announceChosenPhotosCleared());
+        await waitFor(() => expect(document.body.textContent).toContain('Other (0)'));
+        expect(document.body.textContent).toContain('Mine (1)');
     });
 
     test('Apply hands the profile values to onApply and shows the applied hint', async () => {

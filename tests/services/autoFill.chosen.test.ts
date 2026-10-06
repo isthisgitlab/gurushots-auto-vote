@@ -416,15 +416,17 @@ describe('chosen photos rank first', () => {
         // The photo that was submitted is refused; the other one found by the same walk is kept.
         expect(await recalled(challenge, ['car', 'dog'])).toEqual(['dog']);
         expect(await recalled(other, ['car'])).toEqual(['car']);
+        // A submit that got no answer teaches nothing: the photo it used stays found.
         deps.submitToChallenge.mockRejectedValue(new Error('boom'));
         expect(await maybeAutoFillChallenge(challenge, 'tok', NOW, deps)).toBe('error');
-        expect(await recalled(challenge, ['car', 'dog'])).toEqual([]);
+        expect(await recalled(challenge, ['car', 'dog'])).toEqual(['dog']);
         expect(deps.getEligiblePhotosWalk).toHaveBeenCalledTimes(1);
     });
 
-    test('a submit that threw, or got no answer, forgets what the walk found; a server refusal keeps it refused', async () => {
-        const run = async (fail: (deps: ReturnType<typeof makeDeps>) => void) => {
+    describe('after a failed submit', () => {
+        const run = async (fail: (deps: ReturnType<typeof makeDeps>) => void, passes: number, clockAt?: number[]) => {
             __resetChosenPhotos();
+            const clock = jest.spyOn(Date, 'now').mockReturnValue(5_000_000);
             const deps = makeDeps({
                 library: [photo('theme-a')],
                 walkItems: [photo('theme-a'), photo('car', ['Car'])],
@@ -432,21 +434,71 @@ describe('chosen photos rank first', () => {
             });
             fail(deps);
             const challenge = makeChallenge();
-            expect(await maybeAutoFillChallenge(challenge, 'tok', NOW, deps)).toBe('error');
-            expect(await maybeAutoFillChallenge(challenge, 'tok', NOW, deps)).toBe('error');
+            for (let pass = 0; pass < passes; pass++) {
+                if (clockAt) clock.mockReturnValue(5_000_000 + clockAt[pass] * 60_000);
+                expect(await maybeAutoFillChallenge(challenge, 'tok', NOW, deps)).toBe('error');
+            }
+            return deps;
+        };
+
+        test.each([
+            [
+                'threw',
+                (deps: ReturnType<typeof makeDeps>) => deps.submitToChallenge.mockRejectedValue(new Error('timeout')),
+            ],
+            [
+                'got no body',
+                (deps: ReturnType<typeof makeDeps>) =>
+                    deps.submitToChallenge.mockResolvedValue(invalid({ ok: false, raw: null })),
+            ],
+        ])('a submit that %s teaches nothing: the photo stays found and no pass walks again', async (_name, fail) => {
+            const deps = await run(fail, 5);
+            expect(deps.getEligiblePhotosWalk).toHaveBeenCalledTimes(1);
+            // Every pass submitted the remembered photo.
+            expect(submittedIds(deps)).toEqual(Array(5).fill(['car']));
+        });
+
+        test('a server refusal holds the remembered photo back for ten minutes only', async () => {
+            const refuse = (deps: ReturnType<typeof makeDeps>) =>
+                deps.submitToChallenge.mockResolvedValue(invalid({ ok: false, raw: { success: false } }));
+            // Pass 1 walks and submits the car (refused), passes 2 and 3 submit the top-up and do
+            // not look the car up again; once ten minutes have passed it is looked up once more.
+            const deps = await run(refuse, 4, [0, 1, 9, 11]);
+            expect(submittedIds(deps)).toEqual([['car'], ['theme-a'], ['theme-a'], ['car']]);
+            expect(deps.getEligiblePhotosWalk).toHaveBeenCalledTimes(2);
+        });
+    });
+
+    test('a known id put back as unresolved keeps the back-off count; only a never-seen id starts it over', async () => {
+        const clock = jest.spyOn(Date, 'now').mockReturnValue(5_000_000);
+        const deps = makeDeps({
+            library: [photo('theme-a')],
+            // Reaches "bee" but not "ant": cut short, so "ant" waits.
+            walkItems: [photo('theme-a'), photo('bee', ['Bee'])],
+            walkTruncated: true,
+            settings: { chosen: ['ant', 'bee'], only: true },
+        });
+        const challenge = makeChallenge();
+        const min = 60_000;
+        const at = async (minutes: number) => {
+            clock.mockReturnValue(5_000_000 + minutes * min);
+            await maybeAutoFillChallenge(challenge, 'tok', NOW, deps);
             return deps.getEligiblePhotosWalk.mock.calls.length;
         };
-        // No answer: the photo is unresolved again, so the next pass looks it up once more (no backoff).
-        expect(await run((deps) => deps.submitToChallenge.mockRejectedValue(new Error('timeout')))).toBe(2);
-        expect(await run((deps) => deps.submitToChallenge.mockResolvedValue(invalid({ ok: false, raw: null })))).toBe(
-            2,
+        expect(await at(0)).toBe(1); // wait: 5 minutes
+        // The outcomes (and "bee") expire after the TTL; "bee" is unresolved again, and known.
+        expect(await at(31)).toBe(2); // wait: 10 minutes, not 5 — the count was kept
+        expect(await at(36)).toBe(2);
+        expect(await at(41)).toBe(3);
+        // A genuinely new id is looked up at once, and the count starts over (wait: 5 minutes).
+        deps.settings.getEffectiveSetting.mockImplementation(
+            (key: string) =>
+                ({ autoFill: true, chosenPhotos: ['ant', 'bee', 'cat'], chosenPhotosOnly: true })[key] ??
+                (key === 'autoFillSchedule' ? [{ count: 4, seconds: 600 }] : null),
         );
-        // The server said no: the photo stays refused and is not looked for again.
-        expect(
-            await run((deps) =>
-                deps.submitToChallenge.mockResolvedValue(invalid({ ok: false, raw: { success: false } })),
-            ),
-        ).toBe(1);
+        expect(await at(42)).toBe(4);
+        expect(await at(46)).toBe(4);
+        expect(await at(47)).toBe(5);
     });
 
     test('two rejections of the same photo cause only one walk', async () => {
@@ -1011,7 +1063,7 @@ describe('the list belongs to the account that saved it', () => {
         expect(await maybeAutoFillChallenge(makeChallenge(), 'tok', NOW, deps)).toBe('submitted');
         expect(await maybeAutoFillChallenge(makeChallenge(), 'tok', NOW, deps)).toBe('submitted');
         expect(submittedIds(deps)[0]).toEqual(['theme-a']);
-        expect(lines.warning.filter((m) => m.includes('saved while another account was signed in'))).toHaveLength(1);
+        expect(lines.warning.filter((m) => m.includes('saved while another account was logged in'))).toHaveLength(1);
     });
 
     test.each([

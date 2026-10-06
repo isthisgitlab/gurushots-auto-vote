@@ -14,13 +14,17 @@ import { parseSettingValue } from '../../parseValue';
  * Returns what to run once the write has landed: it records the signed-in account as
  * the list's owner, the same record the settings IPC keeps, so a list saved here is
  * not ignored as "another account's". An account that cannot be resolved (or a write
- * that carries no list) leaves the record unchanged: the returned function does nothing.
+ * that carries no list, or one the schema refuses) leaves the record unchanged: the returned
+ * function does nothing.
  *
  * @param value - the raw argv token about to be saved
  */
 export const beforeChosenPhotosWrite = async (key: string, value: string): Promise<() => void> => {
     const nothing = () => undefined;
-    if (!writeCarriesChosenList([key, parseSettingValue(value)])) return nothing;
+    const parsed = parseSettingValue(value);
+    if (!writeCarriesChosenList([key, parsed])) return nothing;
+    // A value the schema refuses is not going to be saved: no account lookup, no warning.
+    if (settings.getValidationError(key, parsed) !== null) return nothing;
     const { token } = settings.loadSettings();
     if (!token) return nothing;
     const memberId = await resolveMemberId(

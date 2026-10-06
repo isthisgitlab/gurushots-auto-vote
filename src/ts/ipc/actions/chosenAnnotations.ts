@@ -7,20 +7,12 @@
 import * as settings from '../../settings';
 import { peekMemberId } from '../../services/autoFill';
 import { resolveJoinSetting } from '../../services/joinChallenges';
+import { getOpenChallenge } from '../../services/openChallengeCache';
 
 import type { Challenge, ChosenAnnotation } from '../../types/gurushots';
 
 // Most ids one request may ask about: the open list is a handful of challenges.
 const MAX_ANNOTATED_IDS = 200;
-
-// The open challenges the latest list fetch returned, by id. The annotation of an id
-// needs its title and tags (a rule may be keyed on them), which only the list has.
-let openChallenges: Map<string, Challenge> = new Map();
-
-/** Remember the open list a fetch returned. */
-const rememberOpenChallenges = (items: ReadonlyArray<Challenge | null>): void => {
-    openChallenges = new Map(items.flatMap((item) => (item?.id == null ? [] : [[String(item.id), item] as const])));
-};
 
 const idsOf = (value: unknown): string[] =>
     Array.isArray(value) ? value.filter((id): id is string => typeof id === 'string') : [];
@@ -31,21 +23,25 @@ const idsOf = (value: unknown): string[] =>
  *
  * A list saved under another account is never described by its ids: the row gets
  * `chosenOwn: []` with the real `chosenOwnCount`, and nothing applies to the join
- * (`chosenEffectiveCount: 0`), as at join time. A member that is not known yet
- * (`peekMemberId` is null: no lookup has resolved it) means "cannot tell", which
- * applies the list, the same as resolveChosenPhotos does.
+ * (`chosenEffectiveCount: 0`), as at join time. While the signed-in member is not
+ * known yet (`peekMemberId` is null: no lookup has resolved it) it cannot be told
+ * whether the list is theirs, so the ids are withheld all the same — but the list
+ * still counts as applying, as resolveChosenPhotos applies it at join time.
  */
 const chosenAnnotator = (token: string): ((challenge: Partial<Challenge>) => ChosenAnnotation) => {
     const savedBy = settings.getSetting('chosenPhotosMemberId');
     const current = peekMemberId(token);
-    const foreign = typeof savedBy === 'string' && savedBy !== '' && current !== null && current !== savedBy;
+    const recorded = typeof savedBy === 'string' && savedBy !== '';
+    const foreign = recorded && current !== null && current !== savedBy;
+    // Ids are shown only once the list is known to be this account's.
+    const withhold = recorded && current !== savedBy;
     return (challenge) => {
         if (challenge?.id === undefined || challenge?.id === null) {
             return { chosenOwn: [], chosenOwnCount: 0, chosenEffectiveCount: 0 };
         }
         const own = idsOf(settings.getChallengeOverride('chosenPhotos', String(challenge.id)));
         return {
-            chosenOwn: foreign ? [] : own,
+            chosenOwn: withhold ? [] : own,
             chosenOwnCount: own.length,
             chosenEffectiveCount: foreign ? 0 : idsOf(resolveJoinSetting('chosenPhotos', challenge)).length,
         };
@@ -58,9 +54,7 @@ const chosenAnnotator = (token: string): ((challenge: Partial<Challenge>) => Cho
  */
 const annotateOpenIds = (ids: ReadonlyArray<string | number>, token: string): Record<string, ChosenAnnotation> => {
     const annotate = chosenAnnotator(token);
-    return Object.fromEntries(
-        ids.map((id) => [String(id), annotate(openChallenges.get(String(id)) ?? { id })] as const),
-    );
+    return Object.fromEntries(ids.map((id) => [String(id), annotate(getOpenChallenge(id) ?? { id })] as const));
 };
 
-export { chosenAnnotator, annotateOpenIds, rememberOpenChallenges, MAX_ANNOTATED_IDS };
+export { chosenAnnotator, annotateOpenIds, MAX_ANNOTATED_IDS };

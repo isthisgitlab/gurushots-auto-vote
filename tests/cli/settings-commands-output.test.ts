@@ -15,6 +15,7 @@ jest.mock('../../src/ts/logger', () => {
         __calls: calls,
         withCategory: jest.fn(() => cat),
         printLine: rec('stdout'),
+        printDocument: rec('stdout'),
         sanitizeForLog: jest.fn((obj: object) => (Object.hasOwn(obj, 'token') ? { token: '[REDACTED]' } : obj)),
     };
 });
@@ -77,6 +78,28 @@ describe('formatSettingForLog', () => {
         expect(cmd.formatSettingForLog('chosenPhotos', [])).toBe('0 photo(s)');
         // Anything that is not a list is printed as it is.
         expect(cmd.formatSettingForLog('chosenPhotos', 'oops')).toBe('"oops"');
+    });
+
+    test('the account is masked: the login name, the owner record, and photo lists nested in other values', () => {
+        expect(cmd.formatSettingForLog('lastUsername', 'me@example.com')).toBe('[REDACTED]');
+        expect(cmd.formatSettingForLog('chosenPhotosMemberId', 'member-1')).toBe('[REDACTED]');
+        const nested = {
+            perChallenge: { '7': { chosenPhotos: ['secret1', 'secret2'], exposure: 50 } },
+            titleRules: [{ title: 'Hats', chosenPhotos: ['secret3'] }],
+            profiles: { Mine: { chosenPhotos: [] } },
+        };
+        const printed = cmd.formatSettingForLog('challengeSettings', nested);
+        expect(printed).not.toContain('secret');
+        expect(JSON.parse(printed)).toEqual({
+            perChallenge: { '7': { chosenPhotos: '2 photo(s)', exposure: 50 } },
+            titleRules: [{ title: 'Hats', chosenPhotos: '1 photo(s)' }],
+            profiles: { Mine: { chosenPhotos: '0 photo(s)' } },
+        });
+        // Other values are untouched, and a list that is not a photo list stays as it is.
+        expect(cmd.formatSettingForLog('exposure', 5)).toBe('5');
+        expect(cmd.formatSettingForLog('other', { chosenPhotos: 'x', list: [1, { chosenPhotos: [] }] })).toBe(
+            '{"chosenPhotos":"x","list":[1,{"chosenPhotos":"0 photo(s)"}]}',
+        );
     });
 
     test('a non-finite or non-number time value is printed raw', () => {
@@ -231,7 +254,9 @@ describe('listSettings', () => {
         settings.getEffectiveSetting.mockImplementation((key) => (key === 'exposure' ? 80 : 0));
         settings.getChallengeOverride.mockImplementation((key) => (key === 'exposure' ? 80 : null));
         cmd.listSettings('7');
-        const info = msgs('info');
+        // The listing goes to the console only, never into the log.
+        expect(msgs('info')).toEqual([]);
+        const info = msgs('stdout');
         expect(info[0]).toBe('=== Settings for challenge 7 ===');
         expect(info).toContain('emergencyFill: 0 (off)  [Inherited ✅]');
         expect(info).toContain('exposure: 80  [Override ✏️]');
@@ -242,7 +267,7 @@ describe('listSettings', () => {
         settings.loadSettings.mockReturnValue(invalid({ theme: 'dark', extra: 1 }));
         settings.getDefaultSettings.mockReturnValue(invalid({ theme: 'light', language: 'en' }));
         cmd.listSettings();
-        const info = msgs('info');
+        const info = msgs('stdout');
         expect(info[0]).toBe('=== All Settings ===');
         const block = (key: string) => info.slice(info.indexOf(`${key}:`), info.indexOf(`${key}:`) + 4);
         expect(block('theme')).toEqual(['theme:', '  Current: "dark"', '  Default: "light"', '  Status:  Modified ✏️']);
@@ -260,7 +285,7 @@ describe('listSettings', () => {
         settings.loadSettings.mockReturnValue(invalid({ theme: 'light' }));
         settings.getDefaultSettings.mockReturnValue(invalid({ theme: 'light' }));
         cmd.listSettings(null);
-        expect(msgs('info')).toContain('  Status:  Default ✅');
+        expect(msgs('stdout')).toContain('  Status:  Default ✅');
     });
 
     test('a throwing facade is reported, not thrown', () => {
@@ -369,7 +394,8 @@ describe('schema and global-default dumps', () => {
     test('listGlobalDefaults prefers stored overrides over schema defaults', () => {
         settings.loadSettings.mockReturnValue(invalid({ challengeSettings: { globalDefaults: { exposure: 70 } } }));
         cmd.listGlobalDefaults();
-        const info = msgs('info');
+        expect(msgs('info')).toEqual([]);
+        const info = msgs('stdout');
         expect(info).toContain('exposure: 70');
         expect(info).toContain('emergencyFill: 300 (5m)');
     });
@@ -381,16 +407,15 @@ describe('schema and global-default dumps', () => {
         );
         cmd.listGlobalDefaults();
         cmd.dumpSchema();
-        const info = msgs('info');
-        expect(info).toContain('chosenPhotos: 2 photo(s)');
-        expect(info).toContain('  Default: 0 photo(s)');
-        expect(info.join('\n')).not.toContain('secret');
+        expect(msgs('stdout')).toContain('chosenPhotos: 2 photo(s)');
+        expect(msgs('info')).toContain('  Default: 0 photo(s)');
+        expect([...msgs('stdout'), ...msgs('info')].join('\n')).not.toContain('secret');
     });
 
     test('listGlobalDefaults falls back to schema defaults with no stored map', () => {
         settings.loadSettings.mockReturnValue(invalid({}));
         cmd.listGlobalDefaults();
-        expect(msgs('info')).toContain('exposure: 50');
+        expect(msgs('stdout')).toContain('exposure: 50');
     });
 });
 

@@ -152,6 +152,27 @@ describe('module load: logs directory', () => {
         expect(lastEntry(logger).message).toBe('ℹ️ First second');
     });
 
+    test('printDocument keeps the text as it is, with its layout, but strips control characters', () => {
+        const { logger, fs } = loadLogger();
+        const sink = jest.fn();
+        g.sendLogToGUI = sink;
+        const ESC = String.fromCharCode(27);
+        // Credential-looking text is NOT redacted (that would corrupt a JSON document).
+        logger.printDocument(`{\n\t"a": "token: x"\r\n}${ESC}[31m\u0007 \u202Eend`);
+        expect(logSpy).toHaveBeenCalledWith('{\n\t"a": "token: x"\n} end');
+        expect(fs.appendFileSync).not.toHaveBeenCalled();
+        expect(sink).not.toHaveBeenCalled();
+        expect(logger.getRecentLogs()).toEqual([]);
+    });
+
+    test('printStderr writes to the error stream only, redacted', () => {
+        const { logger, fs } = loadLogger();
+        logger.printStderr('note: password=hunter2');
+        expect(errorSpy).toHaveBeenCalledWith('note: password=[REDACTED]');
+        expect(logSpy).not.toHaveBeenCalled();
+        expect(fs.appendFileSync).not.toHaveBeenCalled();
+    });
+
     test('printLine redacts credentials folded into the text', () => {
         const { logger } = loadLogger();
         logger.printLine('auth token=abc123 password: hunter2');

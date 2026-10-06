@@ -47,7 +47,13 @@ jest.mock('../../src/ts/logger', () => {
     const rec = (level: string) => (msg: unknown) => calls.push({ level, msg });
     const cat = { info: rec('info'), error: rec('error'), debug: rec('debug'), warning: rec('warning') };
     // printLine is the console-only writer: what reaches it is never a one-line log entry.
-    return { __calls: calls, withCategory: jest.fn(() => cat), printLine: rec('stdout'), cleanup: jest.fn() };
+    return {
+        __calls: calls,
+        withCategory: jest.fn(() => cat),
+        printLine: rec('stdout'),
+        printDocument: rec('stdout'),
+        cleanup: jest.fn(),
+    };
 });
 
 jest.mock('../../src/ts/settings', () => ({
@@ -263,6 +269,7 @@ describe('help and unknown commands', () => {
         // clear-chosen-photos clears every list; a single challenge's list goes with reset-setting.
         expect(text).toContain('clear-chosen-photos');
         expect(text).toContain('reset-setting chosenPhotos --challenge=<id>');
+        expect(text).toContain("set-setting chosenPhotos '[]' --challenge=<id>");
         expect(m.exitCodes).toEqual([0]);
     });
 

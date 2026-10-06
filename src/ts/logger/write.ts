@@ -1,5 +1,5 @@
 import * as fs from 'node:fs';
-import { oneLine, sentenceCaseLogMessage } from '../format/logSafe';
+import { oneLine, sentenceCaseLogMessage, stripTerminalControl } from '../format/logSafe';
 import { getContext } from './context';
 import { writeConsole } from './consoleSink';
 import { logsDir, currentLogFiles } from './files';
@@ -116,6 +116,23 @@ const writeLog = (
 const printLine = (text: string): void => writeConsole('log', redactMessage(text));
 
 /**
+ * Write a note to the console's error stream only (stderr; redacted, like printLine). For a
+ * warning that belongs next to a document printed on stdout without ending up inside it,
+ * so that piping the document stays valid.
+ */
+const printStderr = (text: string): void => writeConsole('error', redactMessage(text));
+
+/**
+ * Write a document the user asked for (help, a scenario's JSON) to the console only,
+ * exactly as it is: line breaks and tabs kept, nothing redacted — redaction would
+ * corrupt JSON, and these documents hold no credentials — and every other control
+ * character stripped so the text cannot drive the terminal. Never in the log file,
+ * the ring buffer or the GUI feed. Use printLine for anything that might carry a
+ * credential.
+ */
+const printDocument = (text: string): void => writeConsole('log', stripTerminalControl(text, { keepLayout: true }));
+
+/**
  * Operation tracker. `startOperation` stores the level + category so
  * `endOperation` can emit the success line at the same severity as the
  * start (e.g. inner ops both start and end at DEBUG without cluttering
@@ -169,4 +186,4 @@ const endOperation = (
 // Ring buffer accessor — drives GUI backlog replay on mount.
 const getRecentLogs = () => recentLogs.slice();
 
-export { writeLog, printLine, startOperation, endOperation, getRecentLogs };
+export { writeLog, printLine, printStderr, printDocument, startOperation, endOperation, getRecentLogs };

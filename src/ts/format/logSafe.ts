@@ -30,25 +30,26 @@ const oneLine = (value: unknown): string => String(value).replace(/[\r\n\v\f\u00
 const ESC = String.fromCharCode(27);
 const ANSI_SEQUENCE = new RegExp(`${ESC}(?:\\[[0-?]*[ -/]*[@-~]|\\][^\\u0007${ESC}]*(?:\\u0007|${ESC}\\\\)?)`, 'g');
 
-// The left-to-right and right-to-left marks and the Arabic letter mark, the bidi
-// embedding, override and isolate controls, and the zero-width space, word joiner
-// and zero-width no-break space (the BOM).
-const BIDI_AND_ZERO_WIDTH = /[\u061C\u200B\u200E\u200F\u202A-\u202E\u2060\u2066-\u2069\uFEFF]/g;
-
 /**
- * Text from an untrusted source made safe to print to a terminal: ANSI
- * sequences are removed whole, line breaks and tabs become a space, and any
- * other control character (the C1 range included), the bidi controls and the
- * zero-width spaces are dropped, so the value can neither drive the terminal,
- * forge extra output lines, nor reorder or hide what is printed. The joiners
- * (ZWJ, ZWNJ) stay: emoji sequences and Persian text need them.
+ * Text from an untrusted source made safe to print to a terminal: ANSI sequences are
+ * removed whole, every other control character (the C1 range included) and every
+ * invisible format character (`\p{Cf}`: the bidi controls, zero-width spaces, word
+ * joiner, invisible operators, the soft hyphen, interlinear annotation marks, the
+ * tag characters) is dropped, so the value can neither drive the terminal nor
+ * reorder or hide what is printed. The two joiners, ZWJ (U+200D) and ZWNJ
+ * (U+200C), stay: emoji sequences and Persian text need them.
+ *
+ * Line breaks and tabs become a space, so the value cannot forge extra output lines —
+ * unless `keepLayout` is set, for a document whose own lines are wanted: then `\n` and
+ * `\t` stay, and the other line separators (CR, CRLF, VT, FF, NEL, LS, PS) become `\n`.
  */
-const stripTerminalControl = (value: unknown): string =>
-    String(value)
-        .replace(ANSI_SEQUENCE, '')
-        .replace(/[\t\r\n\v\f\u0085\u2028\u2029]+/g, ' ')
-        .replace(/\p{Cc}/gu, '')
-        .replace(BIDI_AND_ZERO_WIDTH, '');
+const stripTerminalControl = (value: unknown, { keepLayout = false }: { keepLayout?: boolean } = {}): string => {
+    const text = String(value).replace(ANSI_SEQUENCE, '');
+    const laidOut = keepLayout
+        ? text.replace(/\r\n?|[\v\f\u0085\u2028\u2029]/g, '\n')
+        : text.replace(/[\t\r\n\v\f\u0085\u2028\u2029]+/g, ' ');
+    return laidOut.replace(/(?![\n\t\u200C\u200D])[\p{Cc}\p{Cf}]/gu, '');
+};
 
 /** Sentence-case a log's first word, including after a logger icon. */
 const sentenceCaseLogMessage = (message: string): string => {

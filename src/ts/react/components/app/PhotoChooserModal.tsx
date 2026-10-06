@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useId, useLayoutEffect, useRef, useState } from 'react';
 import { useTranslation } from '@/contexts/TranslationContext';
 import { Modal, ModalActions } from '@/components/ui/Modal';
 import { InlineLoader } from '@/components/ui/LoadingSpinner';
@@ -94,6 +94,9 @@ function PhotoTile({
     const unavailable = !selected && (blockedReason !== null || atCap);
     const full = !selected && atCap;
     const reason = tileReason({ blockedReason, full, allowedKnown, t });
+    // Only the picture and its tags are dimmed: the reason line stays at full contrast, since it is
+    // what says why the tile cannot be added.
+    const dim = unavailable ? 'opacity-50' : '';
     const tone = selected ? 'border-primary bg-primary/10' : 'border-base-300';
     return (
         <button
@@ -105,7 +108,7 @@ function PhotoTile({
                 reason: reason ?? '',
             })}
             aria-disabled={unavailable}
-            className={`${TILE_BASE} ${tone} ${unavailable ? 'opacity-50' : ''}`}
+            className={`${TILE_BASE} ${tone}`}
             onClick={() => {
                 if (!unavailable) onToggle(photo.id);
             }}
@@ -116,14 +119,16 @@ function PhotoTile({
                     alt=""
                     loading="lazy"
                     referrerPolicy="no-referrer"
-                    className="aspect-square w-full rounded object-cover"
+                    className={`aspect-square w-full rounded object-cover ${dim}`}
                 />
             ) : (
-                <span className="bg-base-200 flex aspect-square w-full items-center justify-center rounded p-1 text-center text-xs break-words">
+                <span
+                    className={`bg-base-200 flex aspect-square w-full items-center justify-center rounded p-1 text-center text-xs break-words ${dim}`}
+                >
                     {labels}
                 </span>
             )}
-            <span className="truncate text-xs">{showImage ? labels : shortId(photo.id)}</span>
+            <span className={`truncate text-xs ${dim}`}>{showImage ? labels : shortId(photo.id)}</span>
             {reason && (
                 <span
                     className={`text-xs ${blockedReason !== null ? 'text-error' : full ? 'text-base-content/70' : 'text-success'}`}
@@ -418,9 +423,12 @@ function useOtherAccountLists({
     const currentMember = state.status === 'ready' ? state.listing.memberId : null;
     const otherNow = savedCount > 0 && owner !== '' && currentMember !== null && owner !== currentMember;
     const seen = useRef(false);
-    if (otherNow) seen.current = true;
     const otherAccount = !removed && (otherNow || seen.current);
     const startedFresh = useRef(false);
+    // Latched here, after the render that saw it, not during it.
+    useLayoutEffect(() => {
+        if (otherNow) seen.current = true;
+    }, [otherNow]);
     useLayoutEffect(() => {
         if (otherAccount && !startedFresh.current) {
             startedFresh.current = true;
@@ -428,6 +436,65 @@ function useOtherAccountLists({
         }
     }, [otherAccount, onFirstSeen]);
     return otherAccount;
+}
+
+/**
+ * The chooser's actions: save (held back, with its reason, while the account is unknown),
+ * clear the selection, cancel — and the error of a save that failed.
+ */
+function ChooserFooter({
+    saveFailed,
+    saveWaits,
+    saving,
+    onSave,
+    onClear,
+    onClose,
+}: {
+    saveFailed: boolean;
+    saveWaits: boolean;
+    saving: boolean;
+    onSave: () => void;
+    onClear: () => void;
+    onClose: () => void;
+}) {
+    const { t } = useTranslation();
+    const waitHintId = useId();
+    return (
+        <>
+            {saveFailed && (
+                <div role="alert" className="alert alert-error py-2 text-sm">
+                    <span>{t('app.photoChooserSaveError')}</span>
+                </div>
+            )}
+            {saveWaits && (
+                <p id={waitHintId} className="text-base-content/70 text-right text-xs">
+                    {t('app.photoChooserSaveWaits')}
+                </p>
+            )}
+            <div className="flex justify-end gap-2">
+                {/* aria-disabled, not disabled: it stays focusable, so the hint above can be reached. */}
+                <button
+                    type="button"
+                    className={`btn btn-latvian btn-sm ${saveWaits ? 'btn-disabled' : ''}`}
+                    aria-disabled={saveWaits}
+                    aria-describedby={saveWaits ? waitHintId : undefined}
+                    onClick={() => {
+                        if (!saveWaits) onSave();
+                    }}
+                    disabled={saving}
+                >
+                    {saving && <span className="loading loading-spinner loading-xs" />}
+                    {t('app.photoChooserUse')}
+                </button>
+                <button type="button" className="btn btn-warning btn-sm" onClick={onClear}>
+                    {t('app.photosClear')}
+                </button>
+                <button type="button" className="btn btn-outline btn-sm" onClick={onClose}>
+                    {t('app.cancel')}
+                </button>
+            </div>
+        </>
+    );
 }
 
 /**
@@ -490,8 +557,9 @@ function PhotoChooserBody({
     });
     const atCap = selected.length >= MAX_CHOSEN_PHOTOS;
     // With a list on record, saving restamps its owner as the signed-in account: only once the
-    // listing has said who that is can the notice above warn about it.
-    const owningUnknown = owner !== '' && (state.status === 'loading' || state.status === 'error');
+    // listing has said who that is can the notice above warn about it. Saving nothing writes no
+    // list, so it is never held back.
+    const saveWaits = selected.length > 0 && owner !== '' && state.status !== 'ready';
 
     return (
         <div className="space-y-3">
@@ -528,28 +596,14 @@ function PhotoChooserBody({
                 onToggle={toggle}
                 onRetry={retry}
             />
-            {saveFailed && (
-                <div role="alert" className="alert alert-error py-2 text-sm">
-                    <span>{t('app.photoChooserSaveError')}</span>
-                </div>
-            )}
-            <div className="flex justify-end gap-2">
-                <button
-                    type="button"
-                    className="btn btn-latvian btn-sm"
-                    onClick={() => void save()}
-                    disabled={saving || owningUnknown}
-                >
-                    {saving && <span className="loading loading-spinner loading-xs" />}
-                    {t('app.photoChooserUse')}
-                </button>
-                <button type="button" className="btn btn-warning btn-sm" onClick={() => setSelected([])}>
-                    {t('app.photosClear')}
-                </button>
-                <button type="button" className="btn btn-outline btn-sm" onClick={onClose}>
-                    {t('app.cancel')}
-                </button>
-            </div>
+            <ChooserFooter
+                saveFailed={saveFailed}
+                saveWaits={saveWaits}
+                saving={saving}
+                onSave={() => void save()}
+                onClear={() => setSelected([])}
+                onClose={onClose}
+            />
         </div>
     );
 }

@@ -186,6 +186,8 @@ export const logMessages = {
     m4833e4ffe6a9: 'Error resetting window positions',
     m48e2f0b7864c:
         '{0}: could not refresh live challenge state for {1}; proceeding with pass-start data — a manually submitted entry may not be seen and could be duplicated',
+    m4a0943c199c8:
+        '{0}: your Chosen Photos were saved while another account was logged in, so they are ignored — remove them (chooser → Remove those lists, or clear-chosen-photos), then choose photos for this account',
     m4a0bb479e56d: '⏰ Approaching scheduled fill for "{0}" ({1}) — next cycle in {2}s',
     m4a23eeb4693a: '{0} turbo fill-new: challenge left the active list — turbo skipped',
     m4ab430d590b1: 'Capacitor preferences write failed:',
@@ -476,8 +478,6 @@ export const logMessages = {
     mb47c17a2cd2b: 'Error applying turbo to entry:',
     mb484141d8ee1: 'Logged out successfully',
     mb49805a99d14: 'Reset {0} for challenge {1} (now inherits its profile/global baseline)',
-    mb4afab689594:
-        '{0}: your Chosen Photos were saved while another account was signed in, so they are ignored — remove them (chooser → Remove those lists, or clear-chosen-photos), then choose photos for this account',
     mb4cdb19fca68: 'Error computing next cycle delay; using normal cadence',
     mb4e5eb205e20: 'Failed to fill exposure: {0}',
     mb58f4ec761aa: '{0}: done for {1}',

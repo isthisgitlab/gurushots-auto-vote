@@ -3,7 +3,15 @@ import { isSourceCode, getAppName, getContext, setContext, clearContext, devMode
 import { currentLogFiles, cleanupOldLogs } from './logger/files';
 import { buildProgressMessage } from './logger/format';
 import { sanitizeForLog, sanitizeLogString, redactMessage } from './logger/sanitize';
-import { writeLog, printLine as printToConsole, startOperation, endOperation, getRecentLogs } from './logger/write';
+import {
+    writeLog,
+    printLine as printToConsole,
+    printStderr as printToStderr,
+    printDocument as printDocumentToConsole,
+    startOperation,
+    endOperation,
+    getRecentLogs,
+} from './logger/write';
 
 import type { LogLevel } from './logger/types';
 
@@ -182,6 +190,10 @@ export const challengeTag = (
 // land in the log files, the ring buffer or the GUI feed. Callers strip
 // untrusted text themselves, since nothing here sanitises it.
 export const printLine = printToConsole;
+// Likewise console only, on stderr (a warning beside a document on stdout).
+export const printStderr = printToStderr;
+// Likewise console only, but verbatim: for a document the user asked for (see printDocument).
+export const printDocument = printDocumentToConsole;
 // Utility methods
 export const getLogFile = () => currentLogFiles.app;
 export const getErrorLogFile = () => currentLogFiles.error;

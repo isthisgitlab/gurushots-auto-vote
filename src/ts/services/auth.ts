@@ -10,6 +10,7 @@
 
 import * as settings from '../settings';
 import * as logger from '../logger';
+import { clearOpenChallenges } from './openChallengeCache';
 
 import type { AppSettings } from '../types/settings';
 
@@ -99,6 +100,8 @@ const extractAuthResult = (
 const clearAuthToken = async (): Promise<boolean> => {
     const hadToken = !!settings.getSetting('token');
     settings.setSetting('token', '');
+    // The remembered open challenges belong to the account that just left.
+    clearOpenChallenges();
     await settings.flushPendingWrites();
     return hadToken;
 };

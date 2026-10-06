@@ -1,5 +1,7 @@
 import { useLayoutEffect } from 'react';
 import { useLatestRef } from '@/hooks/useLatestRef';
+import * as ipc from './ipc';
+import { isPlainObject } from '../../plainObject';
 
 import type { ScenarioDraft } from '../../types/scenarioBuilder';
 
@@ -16,15 +18,30 @@ export const announceChosenPhotosCleared = (): void => {
 
 /**
  * Run `onCleared` whenever the saved lists are removed while this component is
- * mounted. The latest callback is used, so it needs no stable identity.
+ * mounted: by the chooser's removal button (announced directly), or by a removal
+ * made elsewhere — the CLI, another window — which reaches this window through the
+ * settings-changed broadcast (`chosenPhotosClearedAt` moves past the moment this
+ * component mounted). The latest callback is used, so it needs no stable identity.
  */
 export function useOnChosenPhotosCleared(onCleared: () => void): void {
     const latest = useLatestRef(onCleared);
     useLayoutEffect(() => {
         const listen = () => latest.current();
         listeners.add(listen);
+        // Both clocks are this machine's, so "after I mounted" is comparable.
+        const mountedAt = Date.now();
+        let announcedAt = 0;
+        const unsubscribe = ipc.onSettingsChanged?.((settings: unknown) => {
+            const stamp = isPlainObject(settings) ? settings.chosenPhotosClearedAt : undefined;
+            const clearedAt = typeof stamp === 'string' ? Date.parse(stamp) : Number.NaN;
+            if (clearedAt > mountedAt && clearedAt > announcedAt) {
+                announcedAt = clearedAt;
+                listen();
+            }
+        });
         return () => {
             listeners.delete(listen);
+            unsubscribe?.();
         };
     }, [latest]);
 }

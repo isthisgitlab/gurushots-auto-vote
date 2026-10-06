@@ -17,6 +17,7 @@ jest.mock('../../src/ts/settings', () => ({
     getSetting: jest.fn(),
     setSetting: jest.fn(),
     clearChosenPhotos: jest.fn(),
+    getValidationError: jest.fn(() => null),
 }));
 jest.mock('../../src/ts/apiFactory', () => ({ getApiStrategy: jest.fn() }));
 jest.mock('../../src/ts/services/autoFill', () => ({ resolveMemberId: jest.fn(), peekMemberId: jest.fn() }));
@@ -45,6 +46,7 @@ beforeEach(() => {
     settings.loadSettings.mockReturnValue(invalid({ token: 'tok' }));
     apiFactory.getApiStrategy.mockReturnValue(invalid({ getCurrentMemberProfile }));
     autoFill.resolveMemberId.mockResolvedValue('member-B');
+    settings.getValidationError.mockReturnValue(null);
     stored('');
 });
 
@@ -89,9 +91,14 @@ describe('beforeChosenPhotosWrite', () => {
         expect(settings.setSetting).toHaveBeenCalledWith('chosenPhotosMemberId', 'member-B');
     });
 
-    test('a write that did not land is not stamped', async () => {
-        const stamp = await beforeChosenPhotosWrite('chosenPhotos', '["a"]');
-        void stamp;
+    test('a value the schema refuses does no lookup and prints no warning, even with another account on record', async () => {
+        stored('member-A');
+        settings.getValidationError.mockReturnValue('Invalid value');
+        const stamp = await beforeChosenPhotosWrite('chosenPhotos', '["a","a"]');
+        expect(settings.getValidationError).toHaveBeenCalledWith('chosenPhotos', ['a', 'a']);
+        expect(autoFill.resolveMemberId).not.toHaveBeenCalled();
+        expect(msgs('warning')).toEqual([]);
+        stamp();
         expect(settings.setSetting).not.toHaveBeenCalled();
     });
 

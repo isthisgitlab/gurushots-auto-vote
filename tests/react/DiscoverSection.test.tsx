@@ -5,9 +5,9 @@
  * their i18n key text.
  */
 
-import { render, screen, fireEvent, waitFor } from './helpers/test-utils';
+import { act, render, screen, fireEvent, waitFor } from './helpers/test-utils';
 import { DiscoverSection } from '@/components/app/DiscoverSection';
-import { mockTranslator } from './helpers/setup';
+import { fireSettingsChanged, mockApi, mockTranslator } from './helpers/setup';
 import { invalid } from '../helpers/invalid';
 import type { OpenChallenge } from '../../src/ts/types/gurushots';
 import type { WindowApi } from '../../src/ts/types/ipc';
@@ -139,6 +139,39 @@ describe('edge paths', () => {
         fireEvent.click(screen.getByText('app.discoverRefresh'));
         await screen.findByText('Free One');
         expect(window.api.getMemberChallenges).toHaveBeenCalledTimes(2);
+    });
+
+    test('the error badge of the collapsed section has a text name', async () => {
+        window.api.getMemberChallenges = jest.fn().mockResolvedValue({ success: false, error: 'down' });
+        renderSection();
+        expect(await screen.findByRole('img', { name: 'app.discoverUnavailableList' })).toBeTruthy();
+    });
+
+    test('each Join button is named by its challenge, free or paid, and the busy one by its own text', async () => {
+        mockTranslator.t.mockImplementation((key) =>
+            key === 'app.discoverJoinLabel'
+                ? 'Join {title}'
+                : key === 'app.discoverJoinPaidLabel'
+                  ? 'Join {title} for {coins} coins'
+                  : key,
+        );
+        try {
+            renderSection();
+            await screen.findByText('Free One');
+            expect(screen.getByRole('button', { name: 'Join Free One' })).toBeTruthy();
+            expect(screen.getByRole('button', { name: 'Join Paid One for 100 coins' })).toBeTruthy();
+            // While joining, the visible text says so, so no static label contradicts it.
+            let release!: (value: unknown) => void;
+            jest.mocked(window.api.joinChallenge).mockReturnValue(
+                invalid(new Promise((resolve) => (release = resolve))),
+            );
+            fireEvent.click(screen.getByRole('button', { name: 'Join Free One' }));
+            expect(await screen.findByText('app.discoverJoining')).toBeTruthy();
+            expect(screen.queryByRole('button', { name: 'Join Free One' })).toBeNull();
+            await act(async () => release({ success: true, status: 'joined' }));
+        } finally {
+            mockTranslator.t.mockImplementation((key) => key);
+        }
     });
 
     test('rows fall back from title to url to an untitled label', async () => {
@@ -291,7 +324,8 @@ describe('chosen photos', () => {
         own = {};
         globalList = [];
         window.api = invalid({
-            onSettingsChanged: undefined,
+            // The settings-only read subscribes to settings changes, as in the app.
+            onSettingsChanged: mockApi.onSettingsChanged,
             getSetting: jest.fn().mockResolvedValue(''),
             // The list is read once; the rows then follow the settings through the settings-only read.
             getMemberChallenges: jest.fn(async () => ({ success: true, items: items })),
@@ -467,10 +501,13 @@ describe('chosen photos', () => {
             return { success: true as const, removed: 1 };
         });
         renderSection();
-        fireEvent.click(await screen.findByText('app.discoverChosenChip'));
+        // The row counts another account's list instead of calling it chosen photos.
+        const chip = await screen.findByText('app.chosenPhotosOtherAccountCount');
+        expect(screen.queryByText('app.discoverChosenChip')).toBeNull();
+        fireEvent.click(chip);
         // The chooser opens empty, with the notice and a count — never the other account's id.
         expect(await screen.findByText('app.photoChooserOtherAccount')).toBeTruthy();
-        expect(screen.getByText('app.chosenPhotosOtherAccountCount')).toBeTruthy();
+        expect(screen.getAllByText('app.chosenPhotosOtherAccountCount').length).toBeGreaterThan(1);
         expect(document.body.textContent).not.toContain(PHOTO.slice(0, 8));
         fireEvent.click(screen.getByRole('button', { name: 'app.photoChooserOtherAccountClear' }));
         const confirm = (await screen.findAllByRole('button', { name: 'app.photoChooserOtherAccountClear' })).at(-1)!;
@@ -484,6 +521,44 @@ describe('chosen photos', () => {
         await screen.findByRole('button', { name: 'app.photoChooserUse' });
         expect(screen.queryByText('app.photoChooserOtherAccount')).toBeNull();
         expect(document.body.textContent).not.toContain(PHOTO.slice(0, 8));
+    });
+
+    test('a settings change updates the rows without asking GuruShots again', async () => {
+        renderSection();
+        await screen.findByText('Free One');
+        expect(screen.queryByText('app.discoverChosenChip')).toBeNull();
+        own['900001'] = [PHOTO];
+        act(() => fireSettingsChanged({}));
+        expect(await screen.findByText('app.discoverChosenChip')).toBeTruthy();
+        expect(window.api.getMemberChallenges).toHaveBeenCalledTimes(1);
+    });
+
+    test('when the settings read fails, the rows keep what the list carried', async () => {
+        const carried = { ...items[0], chosenOwn: [PHOTO], chosenOwnCount: 1, chosenEffectiveCount: 1 };
+        window.api.getMemberChallenges = jest.fn().mockResolvedValue({ success: true, items: [carried] });
+        jest.mocked(window.api.getOpenChosenAnnotations).mockResolvedValue({ success: false, error: 'invalid-args' });
+        renderSection();
+        expect(await screen.findByText('app.discoverChosenChip')).toBeTruthy();
+        await waitFor(() => expect(window.api.getOpenChosenAnnotations).toHaveBeenCalled());
+        expect(screen.getByText('app.discoverChosenChip')).toBeTruthy();
+    });
+
+    test('with no open challenges there is nothing to ask the settings about', async () => {
+        window.api.getMemberChallenges = jest.fn().mockResolvedValue({ success: true, items: [] });
+        renderSection();
+        await screen.findByText('app.discoverEmpty');
+        expect(window.api.getOpenChosenAnnotations).not.toHaveBeenCalled();
+    });
+
+    test('a different set of open challenges asks again for exactly those ids', async () => {
+        renderSection();
+        await screen.findByText('Free One');
+        await waitFor(() => expect(window.api.getOpenChosenAnnotations).toHaveBeenCalledWith(['900001', '900002']));
+        const third = { ...items[0], id: 900003, title: 'Third One', chosenOwn: [], chosenOwnCount: 0 };
+        window.api.getMemberChallenges = jest.fn().mockResolvedValue({ success: true, items: [items[0], third] });
+        fireEvent.click(screen.getByText('app.discoverRefresh'));
+        await screen.findByText('Third One');
+        await waitFor(() => expect(window.api.getOpenChosenAnnotations).toHaveBeenLastCalledWith(['900001', '900003']));
     });
 
     test('a row whose own list is empty reads as having none', async () => {

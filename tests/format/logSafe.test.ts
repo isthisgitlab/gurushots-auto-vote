@@ -65,6 +65,10 @@ describe('stripTerminalControl', () => {
         ['bidi embeddings, overrides and isolates', 'a\u202Ab\u202Ec\u2066d\u2069e', 'abcde'],
         ['directional marks', 'a\u200Eb\u200Fc\u061Cd', 'abcd'],
         ['zero-width space, word joiner and the BOM', 'a\u200Bb\u2060c\uFEFFd', 'abcd'],
+        ['tag characters', 'a\u{E0041}b', 'ab'],
+        ['invisible operators', 'a\u2062b', 'ab'],
+        ['the soft hyphen', 'a\u00ADb', 'ab'],
+        ['interlinear annotation marks', 'a\uFFF9b\uFFFBc', 'abc'],
         [
             'joiners that emoji sequences and Persian text need',
             '👨\u200D👩\u200D👧 می\u200Cخواهم',
@@ -73,5 +77,19 @@ describe('stripTerminalControl', () => {
         ['a number', 42, '42'],
     ])('%s', (_name, value, expected) => {
         expect(stripTerminalControl(value)).toBe(expected);
+    });
+
+    describe('with keepLayout, for a document whose own lines are wanted', () => {
+        const keep = (value: unknown) => stripTerminalControl(value, { keepLayout: true });
+
+        test('keeps newlines and tabs, and turns the other line separators into newlines', () => {
+            expect(keep('a\nb\tc')).toBe('a\nb\tc');
+            expect(keep('a\r\nb\rc\u2028d\u2029e\u0085f\vg\fh')).toBe('a\nb\nc\nd\ne\nf\ng\nh');
+        });
+
+        test('still strips every other control and format character, and escape sequences', () => {
+            expect(keep(`a${BEL}b${ESC}[31mc${ESC}[0m\u202Ed\u200Be\u00ADf\u{E0041}`)).toBe('abcdef');
+            expect(keep('👨\u200D👩 می\u200Cخ')).toBe('👨\u200D👩 می\u200Cخ');
+        });
     });
 });

@@ -2,6 +2,7 @@ import { useState, useEffect, useCallback } from 'react';
 import { useSessionLoad } from './useSessionLoad';
 import * as ipc from '@/api/ipc';
 import { useOnChosenPhotosCleared, withoutChosenPhotos } from '@/api/chosenPhotosCleared';
+import { ruleHasBehaviour } from '../../settings/ruleBehaviour';
 
 import type { ChallengeValues, TitleRule } from '../../types/settings';
 
@@ -50,7 +51,15 @@ export function useTitleRules(isOpen: boolean) {
     };
 
     // Saving the rules writes the whole list: lists removed meanwhile must not come back with it.
-    useOnChosenPhotosCleared(() => setRules((current) => current.map(withoutChosenPhotos)));
+    // A rule whose only content was its list goes too, as it does where the lists were removed.
+    useOnChosenPhotosCleared(() =>
+        setRules((current) =>
+            current.flatMap((rule) => {
+                const stripped = withoutChosenPhotos(rule);
+                return stripped !== rule && !ruleHasBehaviour(stripped) ? [] : [stripped];
+            }),
+        ),
+    );
 
     const persist = useCallback(async () => {
         if (loaded) {

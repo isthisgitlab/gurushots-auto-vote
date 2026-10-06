@@ -3,7 +3,7 @@
  * it edits, so the chooser can say which photos that challenge accepts, and the
  * edit lands in the modal's overrides (saved with the modal's own Save).
  */
-import { fireEvent, render, screen, waitFor } from './helpers/test-utils';
+import { act, fireEvent, render, screen, waitFor } from './helpers/test-utils';
 import { ChallengeSettingsModal } from '@/components/app/ChallengeSettingsModal';
 import { mockApi } from './helpers/setup';
 import type { useSettingsSchema } from '@/api/useSettingsSchema';
@@ -102,5 +102,38 @@ describe('removing every list from the chooser while the modal holds a draft', (
         await waitFor(() =>
             expect(mockApi.replaceChallengeOverrides).toHaveBeenCalledWith('123', { chosenPhotos: [PHOTO] }, false),
         );
+    });
+});
+
+describe('applying a profile that held a list after every list was removed', () => {
+    const OTHER = 'd'.repeat(32);
+
+    test('saving does not bring the list back', async () => {
+        mockApi.getChallengeOverrides.mockResolvedValue({});
+        mockApi.getSetting.mockResolvedValue(OTHER);
+        mockApi.getChallengeProfiles.mockResolvedValue({ Mine: { chosenPhotos: [PHOTO] } });
+        // Like the backend, the removal empties the stored profile too.
+        mockApi.clearChosenPhotos.mockClear().mockImplementation(async () => {
+            mockApi.getChallengeProfiles.mockResolvedValue({ Mine: {} });
+            return { success: true, removed: 1 };
+        });
+        mockApi.replaceChallengeOverrides.mockClear();
+        mockApi.getChallengeOverrides.mockResolvedValue({ chosenPhotos: [PHOTO] });
+        render(<ChallengeSettingsModal isOpen onClose={jest.fn()} challengeId="123" challengeTitle="Sea" />);
+        fireEvent.click(await screen.findByRole('button', { name: 'app.choosePhotos' }));
+        fireEvent.click(await screen.findByRole('button', { name: 'app.photoChooserOtherAccountClear' }));
+        fireEvent.click((await screen.findAllByRole('button', { name: 'app.photoChooserOtherAccountClear' })).at(-1)!);
+        await waitFor(() => expect(mockApi.clearChosenPhotos).toHaveBeenCalledTimes(1));
+        fireEvent.click((await screen.findAllByRole('button', { name: 'app.cancel' })).at(-1)!);
+        // The profile was loaded while the list still existed; Apply must not put it back.
+        const select = await screen.findByRole<HTMLSelectElement>('combobox');
+        await waitFor(() => expect(select.textContent).toContain('Mine'));
+        await act(async () => {
+            select.value = 'Mine';
+            select.dispatchEvent(new window.Event('change', { bubbles: true }));
+        });
+        fireEvent.click(await screen.findByRole('button', { name: 'app.applyProfile' }));
+        fireEvent.click(screen.getByRole('button', { name: 'app.save' }));
+        await waitFor(() => expect(mockApi.replaceChallengeOverrides).toHaveBeenCalledWith('123', {}, true));
     });
 });

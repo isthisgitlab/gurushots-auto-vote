@@ -7,7 +7,13 @@ jest.mock('../../src/ts/logger', () => {
     const calls: { level: string; msg: string }[] = [];
     const rec = (level: string) => (msg: unknown) => calls.push({ level, msg: String(msg) });
     const cat = { info: rec('info'), error: rec('error'), success: rec('success'), warning: rec('warning') };
-    return { __calls: calls, withCategory: jest.fn(() => cat), printLine: rec('stdout') };
+    return {
+        __calls: calls,
+        withCategory: jest.fn(() => cat),
+        printLine: rec('stdout'),
+        printDocument: rec('stdout'),
+        printStderr: rec('stderr'),
+    };
 });
 jest.mock('../../src/ts/ipc/scenarios.handlers', () => {
     const handlers = Object.fromEntries(
@@ -200,6 +206,18 @@ describe('export / rename / delete', () => {
         h['delete-scenario'].mockResolvedValue({ success: true });
         await expect(cmd.deleteScenarioCmd('Plan')).resolves.toBe(0);
         expect(text('success')).toContain('Deleted "Plan"');
+    });
+
+    test('exported JSON on stdout parses even with a credential-looking description, and the note stays out of it', async () => {
+        const doc = JSON.stringify({ name: 'Plan', description: 'token: x password=y' }, null, 2);
+        h['export-scenario'].mockResolvedValue({ success: true, json: `${doc}\n`, omitted: ['chosenPhotos'] });
+        await expect(cmd.exportScenarioCmd('Plan')).resolves.toBe(0);
+        // stdout holds the document and nothing else: it round-trips (redaction would corrupt it).
+        expect(JSON.parse(text('stdout'))).toEqual({ name: 'Plan', description: 'token: x password=y' });
+        // The note about the omitted list went to stderr, not into the piped document or the log.
+        expect(text('stderr')).toBe('Left out of the export (they belong to your account): chosenPhotos');
+        expect(text('stdout')).not.toContain('Left out');
+        expect(text('warning')).toBe('');
     });
 
     test('an export says which account-bound settings it left out', async () => {

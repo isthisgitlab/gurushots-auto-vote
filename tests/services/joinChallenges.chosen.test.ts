@@ -273,7 +273,7 @@ describe('the list belongs to one account', () => {
         // Ignored, so Only has nothing to enforce.
         expect(res.status).toBe('joined');
         expect(res.imageId).not.toBe('car');
-        expect(lines.warning.filter((m) => m.includes('saved while another account was signed in'))).toHaveLength(1);
+        expect(lines.warning.filter((m) => m.includes('saved while another account was logged in'))).toHaveLength(1);
     });
 });
 

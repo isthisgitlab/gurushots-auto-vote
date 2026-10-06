@@ -53,6 +53,20 @@ describe('CLI logs command', () => {
         expect(logger.__infoMock.mock.calls.map((c) => c[0]).join('\n')).not.toContain('line3');
     });
 
+    test('terminal control sequences in the file never reach the terminal, line by line', () => {
+        const ESC = String.fromCharCode(27);
+        const BEL = String.fromCharCode(7);
+        fs.existsSync.mockReturnValue(true);
+        fs.readFileSync.mockReturnValue(
+            `ok line\nbad ${ESC}[31mred${ESC}[0m line\ntitle ${ESC}]0;pwned${BEL}set\nrtl \u202Eevil\nlast`,
+        );
+        showLogs({ lines: 10 });
+        const [[printed]] = logger.__printMock.mock.calls;
+        expect(printed).toBe('ok line\nbad red line\ntitle set\nrtl evil\nlast');
+        // The line breaks between the log lines survive.
+        expect(printed.split('\n')).toHaveLength(5);
+    });
+
     test('reads the error log when category is error', () => {
         fs.existsSync.mockReturnValue(true);
         fs.readFileSync.mockReturnValue('err');

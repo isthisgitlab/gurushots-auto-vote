@@ -6,7 +6,7 @@
  * tiles are told apart by their accessible names.
  */
 
-import { act, fireEvent, render, screen, waitFor } from './helpers/test-utils';
+import { act, fireEvent, render, screen, waitFor, within } from './helpers/test-utils';
 import { PhotoChooserModal } from '@/components/app/PhotoChooserModal';
 import { Modal } from '@/components/ui/Modal';
 import { rememberCurrentMember } from '@/api/useChosenPhotosOwner';
@@ -263,11 +263,16 @@ describe('selection', () => {
         fireEvent.click(extra);
         expect(extra.getAttribute('aria-pressed')).toBe('false');
         expect(screen.getByRole('status').textContent).toContain(`${MAX_CHOSEN_PHOTOS} of ${MAX_CHOSEN_PHOTOS}`);
-        // The reason is short text on the tile itself, and the tile is dimmed.
+        // The reason is short text on the tile itself. The picture and its tags are dimmed; the reason
+        // is not, so it stays at full contrast (opacity on the tile would have dimmed it too).
         expect(extra.textContent).toContain('List full');
-        expect(extra.className).toContain('opacity-50');
+        expect(extra.className).not.toContain('opacity-50');
+        expect(extra.querySelectorAll('.opacity-50').length).toBeGreaterThan(0);
+        const reason = within(extra).getByText('List full');
+        expect(reason.className).not.toContain('opacity-50');
+        expect(reason.closest('.opacity-50')).toBeNull();
         expect(tile(1).textContent).not.toContain('List full');
-        expect(tile(1).className).not.toContain('opacity-50');
+        expect(tile(1).querySelector('.opacity-50')).toBeNull();
         expect(tile(1).getAttribute('aria-disabled')).toBe('false');
         fireEvent.click(tile(1));
         expect(tile(MAX_CHOSEN_PHOTOS + 1).getAttribute('aria-disabled')).toBe('false');
@@ -296,7 +301,9 @@ describe('eligibility', () => {
         // Reachable by Tab (aria-disabled, never disabled) but not addable.
         expect(blocked.getAttribute('aria-disabled')).toBe('true');
         expect(blocked.hasAttribute('disabled')).toBe(false);
-        expect(blocked.className).toContain('opacity-50');
+        // The picture is dimmed, the reason is not.
+        expect(blocked.querySelector('.opacity-50')).not.toBeNull();
+        expect(within(blocked).getByText('Already in another challenge').closest('.opacity-50')).toBeNull();
         fireEvent.click(blocked);
         expect(blocked.getAttribute('aria-pressed')).toBe('false');
         expect(screen.getByText('Already in another challenge')).toBeTruthy();
@@ -410,9 +417,7 @@ describe('failures', () => {
         setup();
         const alert = await screen.findByRole('alert');
         // Nothing came back to show as a detail: a generic why and next step, not "details below".
-        expect(alert.textContent).toContain(
-            "Your photos couldn't be loaded — GuruShots didn't answer or your session expired. Try again, or sign in again.",
-        );
+        expect(alert.textContent).toContain("Your photos couldn't be loaded — the request was interrupted. Try again.");
         expect(alert.textContent).not.toContain('details below');
         fireEvent.click(screen.getByRole('button', { name: 'Retry' }));
         await screen.findByRole('button', { name: /^Photo 00000001:/ });
@@ -664,24 +669,58 @@ describe('account scope', () => {
 
 describe('Save while the account is unknown', () => {
     const OTHER = 'd'.repeat(32);
-    const use = () => screen.getByRole<HTMLButtonElement>('button', { name: 'Use these photos' });
+    const use = () => screen.getByRole('button', { name: 'Use these photos' });
+    const hint = 'Saving waits until your photos have loaded, so the app can check which account the list belongs to.';
 
-    test('is disabled while the listing loads or has failed, once an owner is on record', async () => {
+    const expectHeldBack = () => {
+        // aria-disabled, not disabled: the button stays focusable, and the hint is linked to it.
+        expect(use().getAttribute('aria-disabled')).toBe('true');
+        expect(use().hasAttribute('disabled')).toBe(false);
+        const hintElement = screen.getByText(hint);
+        expect(use().getAttribute('aria-describedby')).toBe(hintElement.id);
+    };
+
+    test('is held back while the listing loads or has failed, once an owner is on record and a list is chosen', async () => {
         jest.mocked(window.api.getSetting).mockResolvedValue(OTHER);
         const pending = deferred<Listing>();
         getLibrary().mockReturnValueOnce(invalid(pending.promise));
-        setup({ value: [idOf(1)] });
+        const { onSave } = setup({ value: [idOf(1)] });
         await waitFor(() => expect(window.api.getSetting).toHaveBeenCalled());
         await act(async () => undefined);
-        expect(use().disabled).toBe(true);
+        expectHeldBack();
+        fireEvent.click(use());
+        expect(onSave).not.toHaveBeenCalled();
         await act(async () => pending.resolve(invalid({ success: false, error: 'down' })));
         await screen.findByRole('button', { name: 'Retry' });
-        expect(use().disabled).toBe(true);
-        // Once a listing shows who is signed in, Save is available again.
+        expectHeldBack();
+        // Once a listing shows who is signed in, Save is available again, and the hint is gone.
         getLibrary().mockResolvedValueOnce(listing([photo(1)]));
         fireEvent.click(screen.getByRole('button', { name: 'Retry' }));
         await screen.findByRole('button', { name: /^Photo 00000001:/ });
-        expect(use().disabled).toBe(false);
+        expect(use().getAttribute('aria-disabled')).toBe('false');
+        expect(use().hasAttribute('aria-describedby')).toBe(false);
+        expect(screen.queryByText(hint)).toBeNull();
+    });
+
+    test('is held back with no challenge to read the library through, since the account stays unknown', async () => {
+        jest.mocked(window.api.getSetting).mockResolvedValue(OTHER);
+        getLibrary().mockResolvedValue({ success: false, error: 'no-challenge-context' });
+        setup({ value: [idOf(1)], challengeId: null });
+        await screen.findByRole('alert');
+        expectHeldBack();
+    });
+
+    test('saving nothing is never held back: it writes no list', async () => {
+        jest.mocked(window.api.getSetting).mockResolvedValue(OTHER);
+        const pending = deferred<Listing>();
+        getLibrary().mockReturnValueOnce(invalid(pending.promise));
+        const { onSave } = setup({ value: [] });
+        await waitFor(() => expect(window.api.getSetting).toHaveBeenCalled());
+        await act(async () => undefined);
+        expect(use().getAttribute('aria-disabled')).toBe('false');
+        expect(screen.queryByText(hint)).toBeNull();
+        fireEvent.click(use());
+        await waitFor(() => expect(onSave).toHaveBeenCalledWith([]));
     });
 
     test('is not held back when no owner is on record', async () => {
@@ -689,7 +728,7 @@ describe('Save while the account is unknown', () => {
         getLibrary().mockReturnValueOnce(invalid(pending.promise));
         setup({ value: [idOf(1)] });
         await act(async () => undefined);
-        expect(use().disabled).toBe(false);
+        expect(use().getAttribute('aria-disabled')).toBe('false');
     });
 });
 

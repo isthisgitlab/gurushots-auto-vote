@@ -190,6 +190,8 @@ export const logMessages = {
     m4833e4ffe6a9: 'Kļūda, atiestatot logu pozīcijas',
     m48e2f0b7864c:
         '{0}: neizdevās atsvaidzināt izaicinājuma {1} pašreizējo stāvokli; izmanto cikla sākuma datus — manuāli iesniegtu foto var neredzēt un iesniegt atkārtoti',
+    m4a0943c199c8:
+        '{0}: tavi izvēlētie foto saglabāti, kamēr bija pieteicies cits konts, tāpēc tie tiek ignorēti — izņem tos (atlasītājā „Izņemt šos sarakstus” vai ar komandu clear-chosen-photos) un tad izvēlies foto šim kontam',
     m4a0bb479e56d: '⏰ Tuvojas plānotā balsošana izaicinājumā "{0}" ({1}) — nākamais cikls pēc {2} s',
     m4a23eeb4693a:
         '{0} Jauna foto iesniegšana Turbo izmantošanai: izaicinājums vairs nav aktīvo sarakstā — Turbo izlaists',
@@ -487,8 +489,6 @@ export const logMessages = {
     mb47c17a2cd2b: 'Kļūda, izmantojot Turbo foto:',
     mb484141d8ee1: 'Veiksmīgi izrakstījies',
     mb49805a99d14: 'Izaicinājuma {1} uzstādījums {0} atiestatīts (tagad manto profila vai globālo vērtību)',
-    mb4afab689594:
-        '{0}: tavi izvēlētie foto saglabāti, kamēr bija pieteicies cits konts, tāpēc tie tiek ignorēti — izņem tos (atlasītājā „Izņemt šos sarakstus” vai ar komandu clear-chosen-photos) un tad izvēlies foto šim kontam',
     mb4cdb19fca68: 'Neizdevās aprēķināt nākamā cikla sākumu; izmanto parasto intervālu',
     mb4e5eb205e20: 'Neizdevās uzpildīt redzamību: {0}',
     mb58f4ec761aa: '{0}: pabeigts izaicinājumam {1}',

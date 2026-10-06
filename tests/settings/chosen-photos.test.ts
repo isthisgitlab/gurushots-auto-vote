@@ -366,6 +366,16 @@ describe('Chosen Photos settings', () => {
             expect(blob().chosenPhotosMemberId).toBe('');
         });
 
+        test('stamps when the lists were removed, for editors opened before it', () => {
+            seedEverywhere();
+            expect(blob().chosenPhotosClearedAt).toBeUndefined();
+            const before = Date.now();
+            settings.clearChosenPhotos();
+            const stamp = blob().chosenPhotosClearedAt as string;
+            expect(Date.parse(stamp)).toBeGreaterThanOrEqual(before);
+            expect(new Date(stamp).toISOString()).toBe(stamp);
+        });
+
         test('a hand-edited blob with malformed scenarios, rules and profiles is walked without error', () => {
             seedEverywhere();
             const raw = blob();

@@ -226,16 +226,20 @@ const buildSettingsHandlers = ({ broadcastSettingsChange }: { broadcastSettingsC
 });
 
 // Prunes the settings of every challenge not in the given list, so the list is
-// checked: a non-array, or one holding anything but ids, would empty the lot.
-const handleCleanupStaleChallengeSetting = async (event: unknown, activeChallengeIds: string[]) => {
-    if (!Array.isArray(activeChallengeIds) || !activeChallengeIds.every(isIdArg)) {
+// checked: a non-array, an empty one, or one holding anything but ids would
+// empty the lot. Ids are compared as the trimmed strings perChallenge is keyed by.
+const handleCleanupStaleChallengeSetting = async (event: unknown, activeChallengeIds: Array<string | number>) => {
+    if (!Array.isArray(activeChallengeIds) || activeChallengeIds.length === 0 || !activeChallengeIds.every(isIdArg)) {
         return refuseInvalidArgs('settings', 'cleanup-stale-challenge-setting');
     }
     try {
-        return settings.cleanupStaleChallengeSetting(activeChallengeIds);
+        const saved = settings.cleanupStaleChallengeSetting(activeChallengeIds.map((id) => String(id).trim()));
+        return saved
+            ? { success: true as const }
+            : { success: false as const, error: 'The settings file could not be saved' };
     } catch (error) {
         logger.withCategory('settings').error('Error cleaning up stale challenge settings:', error);
-        return false;
+        return errorResult(error, 'Failed to clean up stale challenge settings');
     }
 };
 

@@ -54,12 +54,19 @@ describe('shipped dependency tree', () => {
     test('braces is not reachable from the production dependencies', () => {
         const { execFileSync } = jest.requireActual<typeof import('node:child_process')>('node:child_process');
         const path = jest.requireActual<typeof import('node:path')>('node:path');
-        const found: unknown = JSON.parse(
-            execFileSync('pnpm', ['why', 'braces', '--prod', '--json'], {
-                cwd: path.join(__dirname, '..'),
-                encoding: 'utf8',
-            }),
-        );
+        const stdout = execFileSync('pnpm', ['why', 'braces', '--prod', '--json'], {
+            cwd: path.join(__dirname, '..'),
+            encoding: 'utf8',
+            timeout: 30_000,
+            // pnpm is a .cmd shim on Windows, which execFile cannot start without a shell.
+            shell: process.platform === 'win32',
+        });
+        let found: unknown;
+        try {
+            found = JSON.parse(stdout);
+        } catch {
+            throw new Error(`pnpm why did not print JSON: ${stdout}`);
+        }
         expect(found).toEqual([]);
     });
 });

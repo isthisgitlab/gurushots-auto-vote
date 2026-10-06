@@ -16,7 +16,8 @@ import { loadSettings, saveSettings } from './persistence';
 import { globalChallengeValues } from './defaults';
 import { normalizeProfileName, profileNameForLog, findProfileKey } from './profileStore';
 import { validateScenario, parseScenarioJson } from './scenarioSchema';
-import { sanitizeTitleRuleInline } from './titleRuleSanitize';
+import { ruleHasBehaviour as ruleHasBehaviourWith } from './ruleBehaviour';
+import { validateSetting } from './schema';
 import { isPlainObject } from '../plainObject';
 
 import type { AppSettings, ChallengeValues, TitleRule } from '../types/settings';
@@ -117,13 +118,7 @@ const plainObject = (value: unknown): Record<string, unknown> => (isPlainObject(
 
 // A rule keeps its row only while it still contributes something: a profile,
 // tags, or a valid inline value.
-const ruleHasBehaviour = (rule: TitleRule): boolean => {
-    const hasTags = ['mustIncludeTags', 'shouldIncludeTags'].some(
-        (key) => Array.isArray(rule[key]) && rule[key].length > 0,
-    );
-    const inline = sanitizeTitleRuleInline(rule);
-    return Boolean(rule.profile) || hasTags || (inline !== null && Object.keys(inline).length > 0);
-};
+const ruleHasBehaviour = (rule: TitleRule): boolean => ruleHasBehaviourWith(rule, validateSetting);
 
 /**
  * Point every assignment of scenario `fromName` — per-challenge overrides,

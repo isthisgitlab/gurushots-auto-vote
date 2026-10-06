@@ -62,6 +62,8 @@ const clearChosenPhotos = (): number | null => {
             );
     }
     settings.chosenPhotosMemberId = '';
+    // Announced to every open editor through the settings-changed broadcast (see the schema entry).
+    settings.chosenPhotosClearedAt = new Date().toISOString();
 
     if (!saveSettings(settings)) return null;
     logger

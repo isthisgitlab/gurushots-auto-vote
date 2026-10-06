@@ -49,7 +49,7 @@ type Listing = Extract<Awaited<ReturnType<ActionHandlers['get-library-photos']>>
 const printPhotos = (listing: Listing): void => {
     for (const photo of listing.photos) {
         const state = listing.allowedKnown ? (photo.allowed ? '  allowed' : '  not allowed') : '';
-        const labels = photo.labels.map(stripTerminalControl).join(', ');
+        const labels = photo.labels.map((label) => stripTerminalControl(label)).join(', ');
         logger.printLine(`  • ${stripTerminalControl(photo.id)}${state}${labels ? `  [${labels}]` : ''}`);
         if (listing.allowedKnown && !photo.allowed && photo.message) {
             logger.printLine(`      ${stripTerminalControl(photo.message)}`);

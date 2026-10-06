@@ -75,7 +75,7 @@ const resolveChosenPhotos = async ({
                 logger
                     .withCategory(label === 'join' ? 'join' : 'autoFill')
                     .warning(
-                        `${label}: your Chosen Photos were saved while another account was signed in, so they are ignored — remove them (chooser → Remove those lists, or clear-chosen-photos), then choose photos for this account`,
+                        `${label}: your Chosen Photos were saved while another account was logged in, so they are ignored — remove them (chooser → Remove those lists, or clear-chosen-photos), then choose photos for this account`,
                         null,
                     );
             }
@@ -90,7 +90,12 @@ const enteredIds = (challenge: Challenge): Set<string> =>
     new Set(getEntries(challenge).map((entry) => String(entry?.id)));
 
 /** What a walk learned about one chosen id. */
-type WalkOutcome = { state: 'found'; photo: PickerPhoto } | { state: 'refused' } | { state: 'not-found' };
+type WalkOutcome =
+    | { state: 'found'; photo: PickerPhoto }
+    // `until` is set when the refusal was inferred from a failed submit (see
+    // refuseRememberedChosen); a refusal the walk itself saw has none and lasts the TTL.
+    | { state: 'refused'; until?: number }
+    | { state: 'not-found' };
 
 interface WalkMemo {
     /** When the outcomes were last cleared; they expire after WALK_MEMO_TTL_MS. */
@@ -101,10 +106,14 @@ interface WalkMemo {
     outcomes: Map<string, WalkOutcome>;
     /** How many walks in a row were cut short before reaching every unresolved id. */
     truncatedWalks: number;
-    /** The earliest the library may be walked again for the ids in `backoffIds`. */
+    /** The earliest the library may be walked again for the ids in `knownIds`. */
     nextWalkAt: number;
-    /** The unresolved ids the current wait covers; an id outside it is not made to wait. */
-    backoffIds: Set<string>;
+    /**
+     * Every id a walk has been looked for so far. It outlives the outcomes (TTL expiry, an entry
+     * change): a known id put back as unresolved waits out the current backoff and keeps the count,
+     * only an id never looked for before is looked up at once and starts the count over.
+     */
+    knownIds: Set<string>;
 }
 
 // How long a walk's outcomes are trusted. Long enough that the lookup is not
@@ -116,6 +125,10 @@ const WALK_MEMO_TTL_MS = 30 * 60_000;
 // The wait doubles with each consecutive cut-short walk, up to the cap.
 const TRUNCATED_WALK_RETRY_MS = 5 * 60_000;
 const MAX_TRUNCATED_WALK_RETRY_MS = 60 * 60_000;
+// A submit that fails with a server answer says nothing about WHICH photo it refused (the body
+// has no per-photo field), so every remembered chosen photo in the pick is held back for a short
+// while only; a refusal the walk itself saw (permission.allowed false) lasts the full TTL.
+const SUBMIT_REFUSAL_TTL_MS = 10 * 60_000;
 const MAX_WALK_MEMOS = 64;
 
 // Per challenge: the photo ids are the chosen list's own concern, so editing the
@@ -138,6 +151,11 @@ const readMemo = (challenge: Challenge, now: number): WalkMemo | null => {
         memo.outcomes.clear();
         memo.at = now;
     }
+    for (const [id, outcome] of memo.outcomes) {
+        if (outcome.state === 'refused' && outcome.until !== undefined && outcome.until <= now) {
+            memo.outcomes.delete(id);
+        }
+    }
     const entryCount = getEntries(challenge).length;
     if (memo.entryCount !== entryCount) {
         for (const [id, outcome] of memo.outcomes) {
@@ -155,24 +173,19 @@ const foundPhotos = (outcomes: ReadonlyMap<string, WalkOutcome> | undefined, ids
     });
 
 /**
- * A submit that used remembered photos failed. When the server answered and
- * refused (`refused`), those photos are not allowed here: mark as refused the
- * submitted ids the memo had found. When there was no answer (a throw, a
- * transport failure) nothing was learned about the photos, so they go back to
- * unresolved and the next pass looks them up again. Everything else the memo
- * knows stays either way.
+ * A submit that used remembered photos was answered by the server with a failure.
+ * Which photo it refused is not said, so the submitted ids the memo had found are
+ * held back for SUBMIT_REFUSAL_TTL_MS, then looked up again. A submit that got no
+ * answer at all (a throw, a transport failure) taught nothing, and the caller leaves
+ * the memo as it is.
  */
-const downgradeRememberedChosen = (
-    challenge: Challenge,
-    submitted: readonly string[],
-    answer: 'refused' | 'no-answer',
-): void => {
+const refuseRememberedChosen = (challenge: Challenge, submitted: readonly string[], now: number): void => {
     const memo = walkMemos.get(String(challenge.id));
     if (!memo) return;
     for (const id of submitted) {
-        if (memo.outcomes.get(id)?.state !== 'found') continue;
-        if (answer === 'refused') memo.outcomes.set(id, { state: 'refused' });
-        else memo.outcomes.delete(id);
+        if (memo.outcomes.get(id)?.state === 'found') {
+            memo.outcomes.set(id, { state: 'refused', until: now + SUBMIT_REFUSAL_TTL_MS });
+        }
     }
 };
 
@@ -229,13 +242,13 @@ const rememberWalk = ({
     /** The walk failed or ended before reaching every one of them. */
     cutShort: boolean;
 }): void => {
-    const gainedId = memo ? unresolved.some((id) => !memo.backoffIds.has(id)) : false;
+    const gainedId = memo ? unresolved.some((id) => !memo.knownIds.has(id)) : false;
     const previous = memo && !gainedId ? memo.truncatedWalks : 0;
     const truncatedWalks = cutShort ? previous + 1 : 0;
     const nextWalkAt = cutShort ? now + truncatedWalkDelay(truncatedWalks) : 0;
-    const backoffIds = cutShort ? new Set(unresolved.filter((id) => !outcomes.has(id))) : new Set<string>();
+    const knownIds = new Set([...(memo?.knownIds ?? []), ...unresolved]);
     if (memo) {
-        Object.assign(memo, { truncatedWalks, nextWalkAt, backoffIds });
+        Object.assign(memo, { truncatedWalks, nextWalkAt, knownIds });
         return;
     }
     if (walkMemos.size >= MAX_WALK_MEMOS) walkMemos.clear();
@@ -245,7 +258,7 @@ const rememberWalk = ({
         outcomes,
         truncatedWalks,
         nextWalkAt,
-        backoffIds,
+        knownIds,
     });
 };
 
@@ -292,8 +305,8 @@ const resolveMissingChosen = async ({
     const now = Date.now();
     const memo = readMemo(challenge, now);
     const unresolved = missing.filter((id) => !memo?.outcomes.has(id));
-    // The wait only holds for ids it was set for: a newly chosen id is looked up at once.
-    const waiting = memo !== null && now < memo.nextWalkAt && unresolved.every((id) => memo.backoffIds.has(id));
+    // The wait holds for every id already looked for: only a newly chosen id is looked up at once.
+    const waiting = memo !== null && now < memo.nextWalkAt && unresolved.every((id) => memo.knownIds.has(id));
     if (unresolved.length === 0 || !allowWalk || !deps.getEligiblePhotosWalk || waiting) {
         return foundPhotos(memo?.outcomes, missing);
     }
@@ -370,7 +383,7 @@ export {
     resolveChosenPhotos,
     enteredIds,
     resolveMissingChosen,
-    downgradeRememberedChosen,
+    refuseRememberedChosen,
     logChosenSkipOnce,
     clearChosenSkip,
     __resetChosenPhotos,

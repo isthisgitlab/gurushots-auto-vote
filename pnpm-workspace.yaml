@@ -9,7 +9,8 @@ allowBuilds:
     esbuild: true
     # @swc/jest's underlying compiler — postinstall installs the native bindings used by Jest.
     '@swc/core': true
-    # File watcher pulled in transitively by electronmon — install script builds/downloads native watcher.
+    # File watcher pulled in transitively by @tailwindcss/cli and by Jest (jest-haste-map) — install script
+    # builds/downloads the native watcher.
     '@parcel/watcher': true
     # electron-builder dependency — install script picks the right 7-Zip binary per arch.
     electron-winstaller: true
@@ -59,17 +60,20 @@ overrides:
     'argparse@<2': 2.0.1
     # electron-builder > app-builder-lib > @electron/get 3 > global-agent 3 > roarr 2 >
     # sprintf-js (no patched release). global-agent 4.x is already in the SHIPPED tree
-    # (onnxruntime-node pulls it in); this only moves @electron/get's optional ^3 onto
-    # it, and global-agent 4 drops roarr. @electron/get calls `bootstrap()` only when
-    # ELECTRON_GET_USE_PROXY is set, which matters to release builders alone: global-agent
-    # 4 reads NODE_TLS_REJECT_UNAUTHORIZED strictly, and any value other than
-    # true/t/yes/y/on/1 turns TLS verification OFF for those downloads. Do not set that
-    # variable while packaging with a proxy unless it is one of those values.
+    # (onnxruntime-node depends on it); this only moves @electron/get's optional ^3 onto
+    # it, and global-agent 4 drops roarr. Verified in node_modules: onnxruntime-node's
+    # postinstall (script/install.js) calls global-agent's bootstrap() on EVERY install, and
+    # @electron/get does when ELECTRON_GET_USE_PROXY is set. global-agent 4 reads
+    # NODE_TLS_REJECT_UNAUTHORIZED strictly: any value other than true/t/yes/y/on/1 turns TLS
+    # verification OFF for the connections it proxies. So do not set it to anything else when
+    # installing or packaging behind a global-agent proxy (GLOBAL_AGENT_HTTP(S)_PROXY).
+    # Developers who need no CUDA can set ONNXRUNTIME_NODE_INSTALL=skip, which skips the
+    # Linux x64 CUDA 12 download that script otherwise makes (the bootstrap still runs first).
     'global-agent@<4': 4.1.3
     # @tailwindcss/cli pins @parcel/watcher 2.5.1 exactly, which pulls in micromatch
-    # (and so braces); 2.6.0 matches with picomatch instead. Verified: the app and site
+    # (and so braces); 2.6.0 matches with picomatch instead. Any older release is moved up too. Verified: the app and site
     # CSS build byte-identical, and `tailwindcss --watch=always` still rebuilds on a change.
-    '@parcel/watcher@2.5.1': 2.6.0
+    '@parcel/watcher@<2.6.0': 2.6.0
 # braces <=3.0.3 (GHSA-vfj7-8cjw-p6xm: stack exhaustion on deeply nested brace patterns)
 # has NO patched release: 3.0.3 is the latest, and micromatch 4.0.8 and watchboy 0.4.3,
 # the dependents that remain, are the latest too. What remains is electronmon > watchboy >

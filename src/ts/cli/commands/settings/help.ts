@@ -5,7 +5,7 @@ import { THEMES } from '../../../settings/uiDefaults';
 
 export const helpSettings = () => {
     // A block of text the user asked to read: printed with its line breaks, on the console only.
-    logger.printLine(`
+    logger.printDocument(`
 === Settings Management Help ===
 
 Available Commands:
