@@ -847,6 +847,7 @@ describe('settings facade — edge cases', () => {
         });
 
         test('cleanupStaleChallengeSetting prunes stale overrides and suppressions', () => {
+            settings.rememberChallengeTitles([{ id: 'other', title: 'Other' }]);
             seed({
                 challengeSettings: {
                     globalDefaults: {},
@@ -861,6 +862,7 @@ describe('settings facade — edge cases', () => {
         });
 
         test('cleanupStaleChallengeSetting handles missing maps', () => {
+            settings.rememberChallengeTitles([{ id: 'other', title: 'Other' }]);
             seed({ challengeSettings: { globalDefaults: {}, titleProfileSuppressions: { gone: true } } });
             expect(settings.cleanupStaleChallengeSetting([])).toBe(true);
             expect(saved().challengeSettings.titleProfileSuppressions).toEqual({});

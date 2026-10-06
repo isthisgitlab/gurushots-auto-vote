@@ -13,7 +13,7 @@ import type * as clearModule from '../../src/ts/settings/chosenPhotosClear';
 import type * as cliClearModule from '../../src/ts/cli/commands/settings/chosenPhotos';
 import type * as scenarioStateStoreModule from '../../src/ts/scenarioStateStore';
 import type { AndroidHeadlessStore, AppSettings } from '../../src/ts/types/settings';
-const { __resetOpenChallengeIds, getOpenChallengeIds } =
+const { forgetOpenChallengeIds, getOpenChallengeIds } =
     require('../../src/ts/settings/openChallenges') as typeof openChallengesModule;
 const { scenarioStateLedger, initialState } =
     require('../../src/ts/scenarioStateStore') as typeof scenarioStateStoreModule;
@@ -59,7 +59,7 @@ describe('Chosen Photos settings', () => {
         };
         g.AndroidHeadlessStore = store;
         settings.rememberChallengeTitles([]);
-        __resetOpenChallengeIds();
+        forgetOpenChallengeIds();
     });
 
     afterEach(() => {
@@ -260,6 +260,37 @@ describe('Chosen Photos settings', () => {
             settings.setChallengeOverride('chosenPhotos', '104', ['c']);
         };
         const keys = () => Object.keys(blob().challengeSettings.perChallenge).sort();
+
+        // The main process's own active list: cleanup only prunes what that list also lacks.
+        beforeEach(() => {
+            settings.rememberChallengeTitles([{ id: '999', title: 'Elsewhere' }]);
+        });
+        afterAll(() => {
+            settings.rememberChallengeTitles([]);
+        });
+
+        test('with no active list of its own the main process prunes nothing, whatever it is told', () => {
+            seed();
+            settings.rememberChallengeTitles([]);
+            expect(settings.cleanupStaleChallengeSetting(['999'])).toBe(true);
+            expect(keys()).toEqual(['100', '101', '102', '103', '104']);
+        });
+
+        test('a challenge the main process knows is active survives a list that omits it', () => {
+            seed();
+            settings.rememberChallengeTitles([{ id: '102', title: 'Live' }]);
+            settings.rememberOpenChallengeIds([100]);
+            // The caller names only 104: 102 is protected by the main process, 103 is gone for both.
+            expect(settings.cleanupStaleChallengeSetting(['104'])).toBe(true);
+            expect(keys()).toEqual(['100', '102', '104']);
+        });
+
+        test('a challenge only the caller names is kept too: a newer list than the main process has', () => {
+            seed();
+            settings.rememberOpenChallengeIds([100]);
+            settings.cleanupStaleChallengeSetting(['102']);
+            expect(keys()).toEqual(['100', '102']);
+        });
 
         test('a chosen entry for an open challenge is kept; stale ones of other kinds are pruned', () => {
             seed();

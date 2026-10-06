@@ -26,9 +26,9 @@ const rememberOpenChallengeIds = (ids: Iterable<string | number>): void => {
 /** The remembered open list, or null when none has been fetched yet. */
 const getOpenChallengeIds = (): ReadonlySet<string> | null => openIds;
 
-// Test-only: forget the list between cases.
-const __resetOpenChallengeIds = (): void => {
+/** Forget the list: it belongs to the account that just logged out (and tests start clean). */
+const forgetOpenChallengeIds = (): void => {
     openIds = null;
 };
 
-export { rememberOpenChallengeIds, getOpenChallengeIds, __resetOpenChallengeIds };
+export { rememberOpenChallengeIds, getOpenChallengeIds, forgetOpenChallengeIds };

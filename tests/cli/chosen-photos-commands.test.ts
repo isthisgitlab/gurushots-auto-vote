@@ -142,6 +142,10 @@ describe('clearChosenPhotos', () => {
         settings.clearChosenPhotos.mockReturnValue(null);
         expect(clearChosenPhotos()).toBe(false);
         expect(msgs('error')[0]).toContain('could not be saved');
+        // what next
+        expect(msgs('error')[0]).toContain(
+            'Check that the settings file is writable and run clear-chosen-photos again.',
+        );
     });
 
     test('a throwing facade is reported, not thrown', () => {

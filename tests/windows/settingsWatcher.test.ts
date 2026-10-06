@@ -346,6 +346,63 @@ describe('watchSettingsFile change detection', () => {
         });
     });
 
+    describe('the account and its chosen photos stay out of the log', () => {
+        const loggedText = () => infoLines().join('\n');
+
+        test('a chooser save logs the photo counts, never the ids', async () => {
+            settings.loadSettings.mockReturnValue(
+                invalid({ chosenPhotos: ['p-old-1'], challengeSettings: { perChallenge: {} } }),
+            );
+            watchSettingsFile(deps());
+
+            settings.loadSettings.mockReturnValue(
+                invalid({
+                    chosenPhotos: ['p-old-1', 'p-new-2', 'p-new-3'],
+                    challengeSettings: { perChallenge: { 7: { chosenPhotos: ['p-ch-1'] } } },
+                }),
+            );
+            await emitChange();
+
+            expect(infoLines()).toContain('  • chosenPhotos: 1 photo(s) → 3 photo(s)');
+            expect(infoLines()).toContain('  • challengeSettings.perChallenge.7: null → {"chosenPhotos":"1 photo(s)"}');
+            expect(loggedText()).not.toMatch(/p-old|p-new|p-ch/);
+        });
+
+        test('a clear logs the counts going to zero', async () => {
+            settings.loadSettings.mockReturnValue(
+                invalid({ challengeSettings: { perChallenge: { 7: { chosenPhotos: ['p-ch-1', 'p-ch-2'] } } } }),
+            );
+            watchSettingsFile(deps());
+
+            settings.loadSettings.mockReturnValue(
+                invalid({ challengeSettings: { perChallenge: { 7: { chosenPhotos: [] } } } }),
+            );
+            await emitChange();
+
+            expect(infoLines()).toContain('  • challengeSettings.perChallenge.7.chosenPhotos: 2 photo(s) → 0 photo(s)');
+            expect(loggedText()).not.toContain('p-ch');
+        });
+
+        test('a username change and a new chooser owner are masked on both sides', async () => {
+            settings.loadSettings.mockReturnValue(
+                invalid({ lastUsername: 'old@example.com', chosenPhotosMemberId: 'member-old' }),
+            );
+            watchSettingsFile(deps());
+
+            settings.loadSettings.mockReturnValue(
+                invalid({ lastUsername: 'new@example.com', chosenPhotosMemberId: 'member-new' }),
+            );
+            await emitChange();
+
+            expect(infoLines()).toEqual([
+                '🔄 Settings changed (no reload required):',
+                '  • lastUsername: [REDACTED] → [REDACTED]',
+                '  • chosenPhotosMemberId: [REDACTED] → [REDACTED]',
+            ]);
+            expect(loggedText()).not.toMatch(/example\.com|member-/);
+        });
+    });
+
     test('a write with no property differences neither reloads nor broadcasts', async () => {
         settings.loadSettings.mockReturnValue(invalid({ theme: 'light' }));
         watchSettingsFile(deps());

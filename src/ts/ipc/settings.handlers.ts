@@ -228,6 +228,7 @@ const buildSettingsHandlers = ({ broadcastSettingsChange }: { broadcastSettingsC
 // Prunes the settings of every challenge not in the given list, so the list is
 // checked: a non-array, an empty one, or one holding anything but ids would
 // empty the lot. Ids are compared as the trimmed strings perChallenge is keyed by.
+// The settings layer then prunes only what the main process's own active list also lacks.
 const handleCleanupStaleChallengeSetting = async (event: unknown, activeChallengeIds: Array<string | number>) => {
     if (!Array.isArray(activeChallengeIds) || activeChallengeIds.length === 0 || !activeChallengeIds.every(isIdArg)) {
         return refuseInvalidArgs('settings', 'cleanup-stale-challenge-setting');

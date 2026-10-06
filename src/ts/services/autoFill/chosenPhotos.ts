@@ -372,8 +372,13 @@ const clearChosenSkip = (challenge: Challenge): void => {
     loggedSkips.delete(String(challenge.id));
 };
 
-// Test-only: drop the process-wide state between cases.
-const __resetChosenPhotos = (): void => {
+/**
+ * Drop everything remembered about an account's lists: the walk memos, the explained skips and
+ * the owner-mismatch warnings. A logout calls it, so the next account is neither skipped on the
+ * strength of a walk made for the last one nor denied a skip line the last one already got
+ * (tests also start clean with it).
+ */
+const forgetChosenPhotosMemory = (): void => {
     warnedMismatch.clear();
     walkMemos.clear();
     loggedSkips.clear();
@@ -386,6 +391,6 @@ export {
     refuseRememberedChosen,
     logChosenSkipOnce,
     clearChosenSkip,
-    __resetChosenPhotos,
+    forgetChosenPhotosMemory,
 };
 export type { ChosenSettings, ChosenKey, ChosenSkipReason };

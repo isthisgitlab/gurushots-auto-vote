@@ -269,7 +269,9 @@ describe('help and unknown commands', () => {
         // clear-chosen-photos clears every list; a single challenge's list goes with reset-setting.
         expect(text).toContain('clear-chosen-photos');
         expect(text).toContain('reset-setting chosenPhotos --challenge=<id>');
-        expect(text).toContain("set-setting chosenPhotos '[]' --challenge=<id>");
+        expect(text).toContain(
+            "To use no chosen photos for that challenge (overriding rules / global):\n             set-setting chosenPhotos '[]' --challenge=<id>",
+        );
         expect(m.exitCodes).toEqual([0]);
     });
 

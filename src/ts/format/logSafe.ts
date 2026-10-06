@@ -51,6 +51,20 @@ const stripTerminalControl = (value: unknown, { keepLayout = false }: { keepLayo
     return laidOut.replace(/(?![\n\t\u200C\u200D])[\p{Cc}\p{Cf}]/gu, '');
 };
 
+/**
+ * A JSON document made safe to print: every character `stripTerminalControl` would drop (control,
+ * C1, invisible format characters, the Unicode line and paragraph separators) becomes its
+ * `\uXXXX` escape — a surrogate pair above the BMP. Inside a JSON string that is the same value,
+ * so the document parses back unchanged and prints the same on a terminal as it is written to a
+ * file, where stripping would have altered the data. Layout whitespace and the two joiners stay.
+ */
+const escapeTerminalUnsafe = (json: string): string =>
+    json.replace(/(?![\n\r\t\u200C\u200D])[\p{Cc}\p{Cf}\u2028\u2029]/gu, (char) =>
+        Array.from({ length: char.length }, (_, i) => `\\u${char.charCodeAt(i).toString(16).padStart(4, '0')}`).join(
+            '',
+        ),
+    );
+
 /** Sentence-case a log's first word, including after a logger icon. */
 const sentenceCaseLogMessage = (message: string): string => {
     const challenge = /^((?:[\p{Extended_Pictographic}\uFE0F\u200D]+\s+)*)(\[Challenge [^\]]+\]\s+)(.+)$/u.exec(
@@ -82,4 +96,4 @@ const sentenceCaseLogMessage = (message: string): string => {
  */
 const failureText = (error: unknown): string => errorMessage(error) || String(error ?? '') || 'unknown error';
 
-export { oneLine, failureText, stripTerminalControl, sentenceCaseLogMessage };
+export { oneLine, failureText, stripTerminalControl, escapeTerminalUnsafe, sentenceCaseLogMessage };

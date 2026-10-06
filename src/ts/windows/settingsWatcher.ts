@@ -15,6 +15,7 @@ import * as fs from 'node:fs';
 import * as settings from '../settings';
 import * as logger from '../logger';
 import { SENSITIVE_KEY_RE, REDACTED } from '../logger/sanitize';
+import { PRIVATE_SETTING_KEYS, maskSettingValue } from '../format/settingsLogMask';
 
 import type { AppSettings } from '../types/settings';
 import { errorMessage } from '../errorMessage';
@@ -34,16 +35,29 @@ const stringify = (value: unknown) => {
     return String(value);
 };
 
-// A change under a credential key (token, ...) or anywhere in apiHeaders is
-// logged masked on both sides: the log line's own redaction only scrubs the
-// first value after `key:`, which would leave the new credential in clear.
+// A change under a credential key (token, ...), anywhere in apiHeaders, or in a setting that
+// names the account (lastUsername, chosenPhotosMemberId) is logged masked on both sides: the
+// log line's own redaction only scrubs the first value after `key:`, which would leave the
+// new credential in clear.
 const isSensitivePath = (path: string) =>
-    path.split('.').some((segment) => segment === 'apiHeaders' || SENSITIVE_KEY_RE.test(segment));
+    path
+        .split('.')
+        .some(
+            (segment) =>
+                segment === 'apiHeaders' || PRIVATE_SETTING_KEYS.has(segment) || SENSITIVE_KEY_RE.test(segment),
+        );
+
+// A value as the log shows it. A whole object that appeared or vanished is stringified in
+// full, so it is masked key by key; a chosenPhotos list, at any depth, shows as a count.
+const describeValue = (path: string, value: unknown): string => {
+    const lastSegment = path.slice(path.lastIndexOf('.') + 1);
+    return stringify((maskSettingValue({ [lastSegment]: value }) as Record<string, unknown>)[lastSegment]);
+};
 
 const describeChange = (path: string, oldValue: unknown, newValue: unknown): SettingChange =>
     isSensitivePath(path)
         ? { key: path, oldValue: REDACTED, newValue: REDACTED }
-        : { key: path, oldValue: stringify(oldValue), newValue: stringify(newValue) };
+        : { key: path, oldValue: describeValue(path, oldValue), newValue: describeValue(path, newValue) };
 
 /**
  * Compare two settings objects and return array of changes

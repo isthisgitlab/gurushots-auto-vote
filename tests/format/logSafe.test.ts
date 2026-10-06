@@ -6,7 +6,7 @@
 
 import type * as logSafeModule from '../../src/ts/format/logSafe';
 
-const { failureText, sentenceCaseLogMessage, stripTerminalControl } =
+const { failureText, sentenceCaseLogMessage, stripTerminalControl, escapeTerminalUnsafe } =
     require('../../src/ts/format/logSafe') as typeof logSafeModule;
 
 describe('sentenceCaseLogMessage', () => {
@@ -91,5 +91,20 @@ describe('stripTerminalControl', () => {
             expect(keep(`a${BEL}b${ESC}[31mc${ESC}[0m\u202Ed\u200Be\u00ADf\u{E0041}`)).toBe('abcdef');
             expect(keep('👨\u200D👩 می\u200Cخ')).toBe('👨\u200D👩 می\u200Cخ');
         });
+    });
+});
+
+describe('escapeTerminalUnsafe', () => {
+    test('escapes controls, C1, format characters and line separators; astral ones as a surrogate pair', () => {
+        const bel = String.fromCharCode(7);
+        const esc = String.fromCharCode(27);
+        expect(escapeTerminalUnsafe(`a${bel}b${esc}c\u0085d\u2028e\u2029f\u202Eg\u200Bh\u{E0041}`)).toBe(
+            'a\\u0007b\\u001bc\\u0085d\\u2028e\\u2029f\\u202eg\\u200bh\\udb40\\udc41',
+        );
+    });
+
+    test('keeps layout whitespace, the two joiners and ordinary text', () => {
+        const kept = '{\r\n\t"a": "👨\u200D👩 می\u200Cخ"}\n';
+        expect(escapeTerminalUnsafe(kept)).toBe(kept);
     });
 });

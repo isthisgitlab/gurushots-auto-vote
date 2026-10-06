@@ -3,6 +3,9 @@
 import * as logger from '../../../logger';
 import * as settings from '../../../settings';
 import { formatDuration } from '../../../format/duration';
+import { stripTerminalControl } from '../../../format/logSafe';
+import { PRIVATE_SETTING_KEYS, maskSettingValue, photoCount } from '../../../format/settingsLogMask';
+import { REDACTED } from '../../../logger/sanitize';
 
 import type { SettingsSchemaEntry } from '../../../settings/schema';
 
@@ -15,26 +18,6 @@ export type SchemaByKey = Record<string, SettingsSchemaEntry | undefined>;
 export const schemaEntry = (key: string): SettingsSchemaEntry | undefined =>
     (settings.SETTINGS_SCHEMA as SchemaByKey)[key];
 
-// Settings that name the account: never printed, even to the console.
-const PRIVATE_KEYS: ReadonlySet<string> = new Set(['lastUsername', 'chosenPhotosMemberId']);
-
-/**
- * `value` with every `chosenPhotos` list inside it (the per-challenge overrides, rules, profiles
- * and scenarios nest them) reduced to a count: the ids belong to one account.
- */
-const withPhotoListsCounted = (value: unknown, depth: number = 0): unknown => {
-    if (depth > 8 || value === null || typeof value !== 'object') return value;
-    if (Array.isArray(value)) return value.map((item) => withPhotoListsCounted(item, depth + 1));
-    return Object.fromEntries(
-        Object.entries(value).map(([key, item]) => [
-            key,
-            key === 'chosenPhotos' && Array.isArray(item)
-                ? `${item.length} photo(s)`
-                : withPhotoListsCounted(item, depth + 1),
-        ]),
-    );
-};
-
 /**
  * Format a settings value for log output, redacting sensitive keys via
  * the same regex the on-disk sanitizer uses. Keys like `token` would
@@ -42,14 +25,17 @@ const withPhotoListsCounted = (value: unknown, depth: number = 0): unknown => {
  * the sanitizer does not see), defeating the Tier 1 protection.
  */
 export const formatSettingForLog = (key: string, value: unknown): string => {
-    const masked = logger.sanitizeForLog({ [key]: value });
-    if (masked[key] === '[REDACTED]' || PRIVATE_KEYS.has(key)) return '[REDACTED]';
+    if (PRIVATE_SETTING_KEYS.has(key))
+        return value === undefined || value === null || value === '' ? '(not set)' : REDACTED;
 
     const config = schemaEntry(key);
     // A photo list is a handful of account-owned ids: print how many, never which.
-    if (config?.type === 'photos' && Array.isArray(value)) return `${value.length} photo(s)`;
+    if (config?.type === 'photos' && Array.isArray(value)) return photoCount(value);
 
-    const raw = JSON.stringify(withPhotoListsCounted(value));
+    const masked = (maskSettingValue({ [key]: value }) as Record<string, unknown>)[key];
+    if (masked === REDACTED) return REDACTED;
+    // Stored values are user-authored: a control or format character in one must not reach the terminal.
+    const raw = stripTerminalControl(JSON.stringify(masked));
 
     // Time-typed settings are stored in seconds but read as durations everywhere else —
     // the GUI enters them as hours+minutes, and their own descriptions talk in minutes.

@@ -11,6 +11,7 @@
 import * as settings from '../settings';
 import * as logger from '../logger';
 import { clearOpenChallenges } from './openChallengeCache';
+import { forgetChosenPhotosMemory } from './autoFill/chosenPhotos';
 
 import type { AppSettings } from '../types/settings';
 
@@ -100,8 +101,12 @@ const extractAuthResult = (
 const clearAuthToken = async (): Promise<boolean> => {
     const hadToken = !!settings.getSetting('token');
     settings.setSetting('token', '');
-    // The remembered open challenges belong to the account that just left.
+    // What was remembered about the account that just left must not carry over to the next:
+    // its open challenges, the open-id list cleanup spares chosen lists for, and the chosen-photo
+    // walk memos and explained skips.
     clearOpenChallenges();
+    settings.forgetOpenChallengeIds();
+    forgetChosenPhotosMemory();
     await settings.flushPendingWrites();
     return hadToken;
 };

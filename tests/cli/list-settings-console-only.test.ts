@@ -78,3 +78,20 @@ test('list-global-defaults prints to the console only, photo lists as counts', (
     expect(consoleLines.join('\n')).not.toContain('photo-secret');
     expect(consoleLines.at(-1)).toMatch(/^chosenPhotos: /);
 });
+
+test('an empty private setting reads "(not set)" rather than "[REDACTED]"', () => {
+    settings.loadSettings.mockReturnValue(invalid({ lastUsername: '', chosenPhotosMemberId: 'member-secret' }));
+    listSettings();
+    const lines = (key: string) =>
+        consoleLines.slice(consoleLines.indexOf(`${key}:`) + 1, consoleLines.indexOf(`${key}:`) + 4);
+    expect(lines('lastUsername')).toEqual(['  Current: (not set)', '  Default: (not set)', '  Status:  Default ✅']);
+    expect(lines('chosenPhotosMemberId')[0]).toBe('  Current: [REDACTED]');
+});
+
+test('control and format characters in a stored key or value never reach the terminal', () => {
+    settings.loadSettings.mockReturnValue(invalid({ 'ev\u001b[31mil\u2028key': 'a\u202Eb\u0085c' }));
+    listSettings();
+    const printed = consoleLines.join('\n');
+    expect(printed).toContain('evil');
+    expect(printed).not.toMatch(/(?!\n)[\p{Cc}\p{Cf}\u2028\u2029]/u);
+});

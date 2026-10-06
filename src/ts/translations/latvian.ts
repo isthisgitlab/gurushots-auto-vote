@@ -521,7 +521,7 @@ export const app = {
         'Cik monētu kopā automātiskā pievienošanās drīkst iztērēt vienā ciklā. 0 = neko netērēt (maksas pievienošanās izslēgta). Lai pievienotos maksas izaicinājumiem, gan šim, gan limitam par izaicinājumu jābūt lielākam par 0.',
     // Atklāšana (nepievienotie izaicinājumi)
     discoverTitle: 'Atrast izaicinājumus',
-    discoverCountLabel: 'atvērti izaicinājumi',
+    discoverCountLabel: 'Atvērtie izaicinājumi: {count}',
     discoverRefresh: 'Atsvaidzināt',
     discoverEmpty: 'Šobrīd nav atvērtu izaicinājumu, kuriem pievienoties.',
     discoverUnavailableList: 'Neizdevās ielādēt atvērtos izaicinājumus. Pārbaudi savienojumu un mēģini vēlreiz.',
@@ -531,9 +531,10 @@ export const app = {
     discoverJoin: 'Pievienoties',
     discoverJoinPaid: 'Pievienoties (maksas)',
     discoverJoinLabel: 'Pievienoties izaicinājumam „{title}”',
-    discoverJoinPaidLabel: 'Pievienoties izaicinājumam „{title}” par monētām: {coins}',
+    discoverJoinPaidLabel: 'Pievienoties (maksas) izaicinājumam „{title}”, monētas: {coins}',
     discoverJoining: 'Pievienojas…',
     discoverRetrySubmit: 'Mēģināt iesniegt vēlreiz',
+    discoverRetrySubmitLabel: 'Mēģināt vēlreiz iesniegt izaicinājumam „{title}”',
     discoverConfirmTitle: 'Pievienoties maksas izaicinājumam?',
     discoverConfirmBody: 'Pievienošanās izaicinājumam „{title}” maksā monētas: {coins}.',
     discoverConfirmBalance: 'Monētu atlikums: {current}; maksa: {cost}; paliks: {resulting}.',
@@ -568,7 +569,7 @@ export const app = {
         'Foto, ko automātiskā pievienošanās un automātiskā iesniegšana mēģina izmantot pirmos. Tiem joprojām jāatbilst taviem tagu uzstādījumiem (ja vien nav ieslēgts „Iesniegt arī bez tagu sakritības” un neviens foto tiem neatbilst), un lietotne tos kārto tāpat, kā kārto savas automātiskās izvēles. Foto var būt tikai vienā izaicinājumā, tāpēc ar kopīgu sarakstu to paņem izaicinājums, kas tiek aizpildīts pirmais. Saraksts pieder kontam, kas to saglabāja, un citā kontā tiek ignorēts; ja citā kontā saglabā sarakstu, pirmajā kontā saglabātie saraksti sāk attiekties arī uz to, ja vien tos iepriekš neizņem. Scenārija saraksts tiek izmantots tikai pēc pievienošanās. Apmaiņa sarakstu neņem vērā.',
     chosenPhotosOnly: 'Iesniegt tikai izvēlētos foto',
     chosenPhotosOnlyDesc:
-        'Kad ir uzstādīti izvēlētie foto, automātiskā pievienošanās un iesniegšana pašas foto neizvēlas: izaicinājums, kuram nav neviena derīga izvēlētā foto, tiek izlaists. Manuālā pievienošanās un manuālās pogas +1/+N tik un tā izvēlas automātiski, ārkārtas iesniegšana šo uzstādījumu neņem vērā (izslēdz to izaicinājumam, lai vieta paliktu tukša), un maksas pievienošanās, kas jau atbloķēta, tik un tā iesniedz automātiski izvēlētu foto, lai monētas neaizietu zudumā. Apmaiņa neņem vērā nevienu no abiem uzstādījumiem. Ja ir ieslēgts „Iesniegt arī bez tagu sakritības” (pēc noklusējuma tā ir), tagu pārbaude izvēlētajiem foto netiek stingri piemērota: ja neviens no tiem neatbilst taviem tagiem, tos tik un tā var iesniegt. Ja saraksts ir tukšs, tam nav nozīmes.',
+        'Kad ir uzstādīti izvēlētie foto, automātiskā pievienošanās un iesniegšana pašas foto neizvēlas: izaicinājums, kuram nav neviena derīga izvēlētā foto, tiek izlaists. Manuālā pievienošanās un manuālās pogas +1/+N tik un tā izvēlas automātiski, ārkārtas iesniegšana šo uzstādījumu neņem vērā (izslēdz to izaicinājumam, lai vieta paliktu tukša), un maksas pievienošanās, kas jau atbloķēta, tik un tā iesniedz automātiski izvēlētu foto, lai monētas neaizietu zudumā. Apmaiņa neņem vērā nevienu no abiem uzstādījumiem. Ja ir ieslēgts „Iesniegt arī bez tagu sakritības” (pēc noklusējuma tā ir), tagu pārbaude izvēlētajiem foto netiek stingri piemērota: ja neviens no tiem neatbilst taviem obligātajiem tagiem, tos tik un tā var iesniegt. Ja saraksts ir tukšs, tam nav nozīmes.',
     chosenPhotosMemberId: 'Izvēlēto foto konts',
     chosenPhotosClearedAt: 'Izvēlēto foto notīrīšanas laiks',
     chosenPhotosClearedAtDesc:
@@ -625,11 +626,15 @@ export const app = {
         'Ja saglabāsi, neko neizvēloties, šim izaicinājumam paredzētais saraksts tiks izņemts, un izaicinājums atkal izmantos sarakstu no taviem uzstādījumiem vai noteikumiem.',
     photoChooserSaveWaits:
         'Saglabāšana gaida, līdz tavi foto ir ielādēti, lai lietotne varētu pārbaudīt, kuram kontam saraksts pieder.',
+    photoChooserSaveNoContext:
+        'Saglabāšana ir bloķēta: bez aktīva vai atvērta izaicinājuma lietotne nevar pārbaudīt, kuram kontam šis saraksts pieder. Notīri sarakstu, lai saglabātu, vai vispirms pievienojies izaicinājumam.',
     photoChooserSaveError: 'Izvēlētos foto neizdevās saglabāt, jo uzstādījumu nevarēja ierakstīt. Mēģini vēlreiz.',
     photoChooserUse: 'Izmantot šos foto',
     discoverChosenChip: 'Izvēlēti foto',
     discoverChosenChipHint: 'Šim izaicinājumam ir izvēlēti foto. Spied, lai tos mainītu.',
     discoverChosenChipLabel: 'Izvēlētie foto izaicinājumam „{title}”: mainīt',
+    discoverChosenForeignLabel: 'Izaicinājumam „{title}” citā kontā saglabātie foto: {count} — pārskatīt',
+    discoverChosenForeignHint: 'Šie foto ir saglabāti citā kontā, un šeit netiek izmantoti. Spied, lai tos pārskatītu.',
     discoverChoosePhotosLabel: 'Izvēlēties foto izaicinājumam „{title}”',
     discoverChosenInherited: 'Mantotie izvēlētie foto: {count} (no taviem uzstādījumiem vai noteikumiem)',
     discoverConfirmChosen: 'Tavs izvēlētais foto, ja tas der, citādi automātiski izvēlēts foto.',

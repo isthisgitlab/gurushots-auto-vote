@@ -672,11 +672,14 @@ describe('Save while the account is unknown', () => {
     const use = () => screen.getByRole('button', { name: 'Use these photos' });
     const hint = 'Saving waits until your photos have loaded, so the app can check which account the list belongs to.';
 
-    const expectHeldBack = () => {
+    const noContextHint =
+        "Saving is blocked: without an active or open challenge the app can't check which account this list belongs to. Clear the list to save, or join a challenge first.";
+
+    const expectHeldBack = (text = hint) => {
         // aria-disabled, not disabled: the button stays focusable, and the hint is linked to it.
         expect(use().getAttribute('aria-disabled')).toBe('true');
         expect(use().hasAttribute('disabled')).toBe(false);
-        const hintElement = screen.getByText(hint);
+        const hintElement = screen.getByText(text);
         expect(use().getAttribute('aria-describedby')).toBe(hintElement.id);
     };
 
@@ -702,12 +705,25 @@ describe('Save while the account is unknown', () => {
         expect(screen.queryByText(hint)).toBeNull();
     });
 
-    test('is held back with no challenge to read the library through, since the account stays unknown', async () => {
+    test('is held back with no challenge to read the library through, and the hint does not promise a load', async () => {
         jest.mocked(window.api.getSetting).mockResolvedValue(OTHER);
         getLibrary().mockResolvedValue({ success: false, error: 'no-challenge-context' });
         setup({ value: [idOf(1)], challengeId: null });
         await screen.findByRole('alert');
-        expectHeldBack();
+        expectHeldBack(noContextHint);
+        // Nothing will load, so "saving waits until your photos have loaded" would be a false promise.
+        expect(screen.queryByText(hint)).toBeNull();
+    });
+
+    test('clearing the list lifts the no-challenge hold, so the way out the hint names works', async () => {
+        jest.mocked(window.api.getSetting).mockResolvedValue(OTHER);
+        getLibrary().mockResolvedValue({ success: false, error: 'no-challenge-context' });
+        const { onSave } = setup({ value: [idOf(1)], challengeId: null });
+        await screen.findByRole('alert');
+        fireEvent.click(screen.getByRole('button', { name: 'Clear' }));
+        expect(screen.queryByText(noContextHint)).toBeNull();
+        fireEvent.click(use());
+        await waitFor(() => expect(onSave).toHaveBeenCalledWith([]));
     });
 
     test('saving nothing is never held back: it writes no list', async () => {

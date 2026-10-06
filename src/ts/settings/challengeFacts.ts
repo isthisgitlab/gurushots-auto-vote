@@ -121,4 +121,17 @@ const challengeTargetForId = (
 const isActiveChallengeId = (challengeId: string | number | null | undefined): boolean =>
     activeChallengeTitles.has(_challengeIdKey(challengeId));
 
-export { rememberChallengeTitles, factsForChallengeId, challengeTargetForId, isActiveChallengeId };
+/**
+ * The ids of the latest active-challenge list the main process fetched itself, or null when it
+ * has none (nothing fetched yet, or only empty answers — which a failed request also looks like).
+ */
+const getActiveChallengeIds = (): ReadonlySet<string> | null =>
+    activeChallengeTitles.size > 0 ? new Set(activeChallengeTitles.keys()) : null;
+
+export {
+    rememberChallengeTitles,
+    factsForChallengeId,
+    challengeTargetForId,
+    isActiveChallengeId,
+    getActiveChallengeIds,
+};

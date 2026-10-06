@@ -41,7 +41,7 @@ const {
     rankCandidatesForChallenge,
     __resetMemberIdCache,
 } = require('../../src/ts/services/autoFill') as typeof autoFillModule;
-const { __resetChosenPhotos, resolveMissingChosen, logChosenSkipOnce } =
+const { forgetChosenPhotosMemory, resolveMissingChosen, logChosenSkipOnce } =
     require('../../src/ts/services/autoFill/chosenPhotos') as typeof chosenPhotosModule;
 const { buildChallenge } = require('../helpers/challengeFixtures') as typeof challengeFixturesModule;
 const { verifyFillPick } = require('../../src/ts/services/autoFill/pipeline/verify') as typeof verifyModule;
@@ -220,7 +220,7 @@ const recalled = async (challenge: ReturnType<typeof makeChallenge>, ids: string
     ).map((p) => p.id);
 
 beforeEach(() => {
-    __resetChosenPhotos();
+    forgetChosenPhotosMemory();
     __resetMemberIdCache();
     jest.restoreAllMocks();
 });
@@ -318,7 +318,7 @@ describe('chosen photos rank first', () => {
 
     test('an empty chosen set behaves exactly like no list, evidence and uncertainty included', async () => {
         const run = async (chosen: string[]) => {
-            __resetChosenPhotos();
+            forgetChosenPhotosMemory();
             const ledger = createMemoryEntryAgeLedger();
             const challenge = makeChallenge({ title: 'Dogs' });
             const deps = makeDeps({
@@ -373,7 +373,7 @@ describe('chosen photos rank first', () => {
             [['car'], false],
             [[], true],
         ] as const) {
-            __resetChosenPhotos();
+            forgetChosenPhotosMemory();
             const ledger = createMemoryEntryAgeLedger();
             const challenge = makeChallenge({ title: 'Dogs' });
             const deps = makeDeps({
@@ -425,7 +425,7 @@ describe('chosen photos rank first', () => {
 
     describe('after a failed submit', () => {
         const run = async (fail: (deps: ReturnType<typeof makeDeps>) => void, passes: number, clockAt?: number[]) => {
-            __resetChosenPhotos();
+            forgetChosenPhotosMemory();
             const clock = jest.spyOn(Date, 'now').mockReturnValue(5_000_000);
             const deps = makeDeps({
                 library: [photo('theme-a')],
@@ -1015,7 +1015,7 @@ describe('emergency fill', () => {
             expect(await maybeEmergencyFillChallenge(challenge, 'tok', NOW, standsDown)).toBe('skipped');
 
             // Not found, by contrast: emergency fill takes over.
-            __resetChosenPhotos();
+            forgetChosenPhotosMemory();
             await resolveMissingChosen({
                 challenge,
                 token: 'tok',
@@ -1091,9 +1091,51 @@ describe('the list belongs to the account that saved it', () => {
     });
 });
 
+describe('forgetChosenPhotosMemory (a logout)', () => {
+    test('the walk memo is dropped: the next account looks the photo up again', async () => {
+        const deps = makeDeps({ library: [photo('theme-a')], settings: { chosen: ['car'], only: true } });
+        const challenge = makeChallenge();
+        await maybeAutoFillChallenge(challenge, 'tok', NOW, deps);
+        await maybeAutoFillChallenge(challenge, 'tok', NOW, deps);
+        expect(deps.getEligiblePhotosWalk).toHaveBeenCalledTimes(1);
+
+        forgetChosenPhotosMemory();
+        await maybeAutoFillChallenge(challenge, 'tok', NOW, deps);
+        expect(deps.getEligiblePhotosWalk).toHaveBeenCalledTimes(2);
+    });
+
+    test('the explained skip and the owner-mismatch warning are given again to the next account', async () => {
+        const skipLog = makeLog();
+        const deps = makeDeps({
+            logger: skipLog.logger,
+            library: [photo('theme-a')],
+            settings: { chosen: ['car'], only: true },
+        });
+        await maybeAutoFillChallenge(makeChallenge(), 'tok', NOW, deps);
+        await maybeAutoFillChallenge(makeChallenge(), 'tok', NOW, deps);
+        expect(skipLog.lines.warning.filter((m) => m.includes('skipped'))).toHaveLength(1);
+        forgetChosenPhotosMemory();
+        await maybeAutoFillChallenge(makeChallenge(), 'tok', NOW, deps);
+        expect(skipLog.lines.warning.filter((m) => m.includes('skipped'))).toHaveLength(2);
+
+        const mismatchLog = makeLog();
+        const other = makeDeps({
+            logger: mismatchLog.logger,
+            member: 'member-2',
+            settings: { chosen: ['theme-b'], savedBy: 'member-1', only: true },
+        });
+        await maybeAutoFillChallenge(makeChallenge(), 'tok', NOW, other);
+        forgetChosenPhotosMemory();
+        await maybeAutoFillChallenge(makeChallenge(), 'tok', NOW, other);
+        expect(
+            mismatchLog.lines.warning.filter((m) => m.includes('saved while another account was logged in')),
+        ).toHaveLength(2);
+    });
+});
+
 describe('swap ranking ignores the chosen photos settings', () => {
     const rank = async (settings: SettingsSpec) => {
-        __resetChosenPhotos();
+        forgetChosenPhotosMemory();
         const deps = makeDeps({
             library: [
                 photo('theme-a', ['Pink'], { upload_date: 9300 }),

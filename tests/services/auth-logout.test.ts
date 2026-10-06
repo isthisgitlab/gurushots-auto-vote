@@ -28,6 +28,7 @@ jest.mock('../../src/ts/settings', () => {
             // Write-behind: only the in-memory cache updates synchronously.
             state.cached[key] = value;
         }),
+        forgetOpenChallengeIds: jest.fn(),
         flushPendingWrites: jest.fn(async () => {
             // The async flush is what actually persists.
             state.flushCalls++;
@@ -40,6 +41,7 @@ import settingsModule = require('../../src/ts/settings');
 const settings = jest.mocked(settingsModule as typeof settingsModule & { __state: SettingsState });
 import type * as authModule from '../../src/ts/services/auth';
 import type * as openChallengeCacheModule from '../../src/ts/services/openChallengeCache';
+import type * as chosenPhotosModule from '../../src/ts/services/autoFill/chosenPhotos';
 const { clearAuthToken } = require('../../src/ts/services/auth') as typeof authModule;
 
 describe('clearAuthToken', () => {
@@ -59,6 +61,29 @@ describe('clearAuthToken', () => {
         expect(getOpenChallenge(9)).toBeDefined();
         await clearAuthToken();
         expect(getOpenChallenge(9)).toBeUndefined();
+    });
+
+    it('forgets the open-id list cleanup spares chosen lists for', async () => {
+        await clearAuthToken();
+        expect(settings.forgetOpenChallengeIds).toHaveBeenCalledTimes(1);
+    });
+
+    it('forgets the explained chosen-photo skips, so the next account is told its own', async () => {
+        const { logChosenSkipOnce } =
+            require('../../src/ts/services/autoFill/chosenPhotos') as typeof chosenPhotosModule;
+        const warning = jest.fn();
+        const fillLogger = invalid<Parameters<typeof logChosenSkipOnce>[0]>({
+            withCategory: () => ({ warning }),
+            challengeTag: () => '[Challenge 9]',
+        });
+        const challenge = invalid<Challenge>({ id: 9 });
+        logChosenSkipOnce(fillLogger, challenge, 'autoFill', 'none-usable');
+        logChosenSkipOnce(fillLogger, challenge, 'autoFill', 'none-usable');
+        expect(warning).toHaveBeenCalledTimes(1);
+
+        await clearAuthToken();
+        logChosenSkipOnce(fillLogger, challenge, 'autoFill', 'none-usable');
+        expect(warning).toHaveBeenCalledTimes(2);
     });
 
     it('durably persists the cleared token before resolving (Capacitor kill-safety)', async () => {

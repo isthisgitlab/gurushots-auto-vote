@@ -57,7 +57,9 @@ export const clearChosenPhotos = (): boolean => {
         if (settings.clearChosenPhotos() === null) {
             logger
                 .withCategory('settings')
-                .error('Could not remove the chosen-photo lists — the settings file could not be saved');
+                .error(
+                    'Could not remove the chosen-photo lists — the settings file could not be saved. Check that the settings file is writable and run clear-chosen-photos again.',
+                );
             return false;
         }
         // The settings layer already logged how many lists went (one line for the GUI and the CLI

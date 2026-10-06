@@ -576,6 +576,13 @@ repeated six times is one that gets forgotten at one of them.
   an **allowlist** — prefer never logging a raw headers object rather than
   relying on it — and neither layer is **PII-aware** (e.g. a username logged into a message is not
   redacted).
+- **Console-only printers** (`logger/write.ts`, through the `logger.ts` facade) are for output a CLI
+  command is asked to show, never for the log files. `printLine` and `printStderr` redact like the
+  log; `printLine` keeps the line breaks. **`printDocument` does not redact**: it prints a document
+  the user asked to see or pipe verbatim, because redaction would corrupt it (the scenario JSON). It
+  only strips terminal control — ANSI sequences, control and invisible format characters — so use it
+  only for a document that holds no credentials, and escape the JSON first (`escapeTerminalUnsafe`,
+  `format/logSafe.ts`) when the same text is also written to a file.
 
 ## 11. User-defined scenarios
 

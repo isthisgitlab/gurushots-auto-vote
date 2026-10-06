@@ -54,6 +54,18 @@ test('renders collapsed by default with an open-count badge', async () => {
     expect(screen.getByText('2')).toBeTruthy();
 });
 
+test('the count badge is an image named with its count, not a bare number', async () => {
+    mockTranslator.t.mockImplementation((key) => (key === 'app.discoverCountLabel' ? '{count} open challenges' : key));
+    try {
+        render(<DiscoverSection isLoggedIn bankroll={invalid({ coins: 500 })} onJoined={jest.fn()} />);
+        await screen.findByText('Free One');
+        const badge = screen.getByRole('img', { name: '2 open challenges' });
+        expect(badge.textContent).toBe('2');
+    } finally {
+        mockTranslator.t.mockImplementation((key) => key);
+    }
+});
+
 test('the count badge is hidden when there are no open challenges', async () => {
     window.api.getMemberChallenges = jest.fn().mockResolvedValue({ success: true, items: [] });
     render(<DiscoverSection isLoggedIn bankroll={invalid({ coins: 500 })} onJoined={jest.fn()} />);
@@ -152,14 +164,15 @@ describe('edge paths', () => {
             key === 'app.discoverJoinLabel'
                 ? 'Join {title}'
                 : key === 'app.discoverJoinPaidLabel'
-                  ? 'Join {title} for {coins} coins'
+                  ? 'Join (paid) {title}, {coins} coins'
                   : key,
         );
         try {
             renderSection();
             await screen.findByText('Free One');
             expect(screen.getByRole('button', { name: 'Join Free One' })).toBeTruthy();
-            expect(screen.getByRole('button', { name: 'Join Paid One for 100 coins' })).toBeTruthy();
+            // The label starts with the visible text, so voice control can still say what it sees.
+            expect(screen.getByRole('button', { name: 'Join (paid) Paid One, 100 coins' })).toBeTruthy();
             // While joining, the visible text says so, so no static label contradicts it.
             let release!: (value: unknown) => void;
             jest.mocked(window.api.joinChallenge).mockReturnValue(
@@ -255,6 +268,22 @@ describe('edge paths', () => {
         await screen.findByText('app.discoverJoined');
         expect(window.api.joinChallenge).toHaveBeenLastCalledWith(900002, true);
         expect(onJoined).toHaveBeenCalledTimes(2);
+    });
+
+    test('the Retry submit button is named by its challenge', async () => {
+        window.api.joinChallenge = jest.fn().mockResolvedValue({ status: 'charged-pending-submit', cost: 100 });
+        mockTranslator.t.mockImplementation((key) =>
+            key === 'app.discoverRetrySubmitLabel' ? 'Retry submit for {title}' : key,
+        );
+        try {
+            renderSection();
+            await screen.findByText('Paid One');
+            fireEvent.click(screen.getByText('app.discoverJoinPaid'));
+            fireEvent.click(await screen.findByText('app.discoverConfirmSpend'));
+            expect(await screen.findByRole('button', { name: 'Retry submit for Paid One' })).toBeTruthy();
+        } finally {
+            mockTranslator.t.mockImplementation((key) => key);
+        }
     });
 
     test('Cancel and the close button dismiss the confirm modal without spending', async () => {
@@ -500,10 +529,21 @@ describe('chosen photos', () => {
             foreign = false;
             return { success: true as const, removed: 1 };
         });
+        mockTranslator.t.mockImplementation((key) =>
+            key === 'app.discoverChosenForeignLabel'
+                ? '{count} photo(s) saved under another account for {title}: review them'
+                : key,
+        );
         renderSection();
         // The row counts another account's list instead of calling it chosen photos.
         const chip = await screen.findByText('app.chosenPhotosOtherAccountCount');
         expect(screen.queryByText('app.discoverChosenChip')).toBeNull();
+        // Its own translated name and tooltip, not a string built in code.
+        expect(chip.getAttribute('aria-label')).toBe(
+            '1 photo(s) saved under another account for Free One: review them',
+        );
+        expect(chip.getAttribute('title')).toBe('app.discoverChosenForeignHint');
+        mockTranslator.t.mockImplementation((key) => key);
         fireEvent.click(chip);
         // The chooser opens empty, with the notice and a count — never the other account's id.
         expect(await screen.findByText('app.photoChooserOtherAccount')).toBeTruthy();

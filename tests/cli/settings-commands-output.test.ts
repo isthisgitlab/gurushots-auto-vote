@@ -83,6 +83,10 @@ describe('formatSettingForLog', () => {
     test('the account is masked: the login name, the owner record, and photo lists nested in other values', () => {
         expect(cmd.formatSettingForLog('lastUsername', 'me@example.com')).toBe('[REDACTED]');
         expect(cmd.formatSettingForLog('chosenPhotosMemberId', 'member-1')).toBe('[REDACTED]');
+        // An unset private value reads as unset, not as a hidden one.
+        expect(cmd.formatSettingForLog('lastUsername', '')).toBe('(not set)');
+        expect(cmd.formatSettingForLog('chosenPhotosMemberId', undefined)).toBe('(not set)');
+        expect(cmd.formatSettingForLog('chosenPhotosMemberId', null)).toBe('(not set)');
         const nested = {
             perChallenge: { '7': { chosenPhotos: ['secret1', 'secret2'], exposure: 50 } },
             titleRules: [{ title: 'Hats', chosenPhotos: ['secret3'] }],
@@ -100,6 +104,34 @@ describe('formatSettingForLog', () => {
         expect(cmd.formatSettingForLog('other', { chosenPhotos: 'x', list: [1, { chosenPhotos: [] }] })).toBe(
             '{"chosenPhotos":"x","list":[1,{"chosenPhotos":"0 photo(s)"}]}',
         );
+    });
+
+    test('a value masked inside another value is masked in the printed form, not only by its own key', () => {
+        // The old path serialized the unmasked value and only checked the top-level key.
+        const printed = cmd.formatSettingForLog('network', {
+            apiHeaders: { 'x-api-key': 'k1' },
+            auth: { token: 'k2' },
+            ua: 'u',
+        });
+        expect(printed).not.toMatch(/k1|k2/);
+        expect(JSON.parse(printed)).toEqual({ apiHeaders: '[REDACTED]', auth: { token: '[REDACTED]' }, ua: 'u' });
+        expect(cmd.formatSettingForLog('apiHeaders', { 'x-api-key': 'k1' })).toBe('[REDACTED]');
+        const account = cmd.formatSettingForLog('challengeSettings', { lastUsername: 'me@example.com', other: 1 });
+        expect(JSON.parse(account)).toEqual({ lastUsername: '[REDACTED]', other: 1 });
+    });
+
+    test('a value nested deeper than any settings structure is cut off rather than printed', () => {
+        let deep: Record<string, unknown> = { chosenPhotos: ['deep-secret'] };
+        for (let i = 0; i < 12; i += 1) deep = { next: deep };
+        const printed = cmd.formatSettingForLog('challengeSettings', deep);
+        expect(printed).toContain('[Object]');
+        expect(printed).not.toContain('deep-secret');
+    });
+
+    test('control and format characters in a stored value never reach the terminal', () => {
+        const printed = cmd.formatSettingForLog('theme', 'a\u001b[31mb\u202Ec\u0085d');
+        expect(printed).not.toMatch(/[\p{Cc}\p{Cf}]/u);
+        expect(printed).toContain('mb');
     });
 
     test('a non-finite or non-number time value is printed raw', () => {
@@ -423,7 +455,7 @@ describe('profiles', () => {
     test('no profiles prints the save hint', () => {
         settings.getChallengeProfiles.mockReturnValue({});
         cmd.listProfiles();
-        expect(msgs('info')).toEqual([
+        expect(msgs('stdout')).toEqual([
             'No saved challenge profiles',
             '💡 Save one with: save-profile "<name>" --challenge=<id>',
         ]);
@@ -432,11 +464,26 @@ describe('profiles', () => {
     test('profiles are listed by name with a summary of their values', () => {
         settings.getChallengeProfiles.mockReturnValue({ zeta: {}, alpha: { exposure: 80, emergencyFill: 0 } });
         cmd.listProfiles();
-        expect(msgs('info')).toEqual([
+        expect(msgs('stdout')).toEqual([
             '=== Challenge Profiles ===',
             'alpha (2): emergencyFill=0 (off), exposure=80',
             'zeta (0): (no overrides — applying it resets the challenge to global defaults)',
         ]);
+        // Console only: nothing of the profiles reaches the log files.
+        expect(msgs('info')).toEqual([]);
+    });
+
+    test('a profile listing masks the account and counts photo lists, and strips control characters from names', () => {
+        settings.SETTINGS_SCHEMA = invalid({ chosenPhotos: { type: 'photos', perChallenge: true, default: [] } });
+        settings.getChallengeProfiles.mockReturnValue({
+            'ev\u001b[31mil\u2028name': { chosenPhotos: ['secret1', 'secret2'], lastUsername: 'me@example.com' },
+        });
+        cmd.listProfiles();
+        const printed = msgs('stdout').join('\n');
+        expect(printed).toContain('evil');
+        expect(printed).not.toMatch(/secret|example\.com|(?!\n)[\p{Cc}\p{Cf}\u2028\u2029]/u);
+        expect(printed).toContain('chosenPhotos=2 photo(s)');
+        expect(printed).toContain('lastUsername=[REDACTED]');
     });
 
     test('a successful save reports the override count', () => {

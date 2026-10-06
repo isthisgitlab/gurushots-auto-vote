@@ -220,6 +220,26 @@ describe('export / rename / delete', () => {
         expect(text('warning')).toBe('');
     });
 
+    test('the document keeps its meaning on stdout and in --file: unsafe characters are escaped, not removed, identically', async () => {
+        const name = `a${String.fromCharCode(27)}b\u2028c\u202Ed\u0085e\u200Df`;
+        const doc = `${JSON.stringify({ name, description: 'tag: \u{E0041}' }, null, 2)}\n`;
+        // JSON.stringify leaves U+2028, U+202E, U+0085 and the tag character raw.
+        expect(doc).toMatch(/[\u2028\u202E\u0085]/);
+        h['export-scenario'].mockResolvedValue({ success: true, json: doc, omitted: [] });
+
+        await expect(cmd.exportScenarioCmd('Plan')).resolves.toBe(0);
+        await expect(cmd.exportScenarioCmd('Plan', 'plan.json')).resolves.toBe(0);
+
+        const written = String(fs.writeFileSync.mock.calls[0][1]);
+        expect(`${text('stdout')}\n`).toBe(written);
+        expect(written).not.toMatch(/(?![\n\u200D])[\p{Cc}\p{Cf}\u2028\u2029]/u);
+        expect(written).toContain('\\u2028');
+        expect(written).toContain('\\udb40\\udc41');
+        // The joiner stays, and the document parses back to the original values.
+        expect(written).toContain('\u200D');
+        expect(JSON.parse(written)).toEqual(JSON.parse(doc));
+    });
+
     test('an export says which account-bound settings it left out', async () => {
         h['export-scenario'].mockResolvedValue({ success: true, json: '{}\n', omitted: ['chosenPhotos'] });
         await expect(cmd.exportScenarioCmd('Plan', 'plan.json')).resolves.toBe(0);

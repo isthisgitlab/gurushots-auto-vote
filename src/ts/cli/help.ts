@@ -48,7 +48,8 @@ Commands:
   clear-chosen-photos - Remove every saved Chosen Photos list (settings, rules, profiles, scenarios), e.g. after
              switching accounts. Submit Only Chosen Photos is left as it is. It takes no arguments.
              To remove one challenge's own list (it then inherits from rules / global):
-             reset-setting chosenPhotos --challenge=<id>; for none at all:
+             reset-setting chosenPhotos --challenge=<id>
+             To use no chosen photos for that challenge (overriding rules / global):
              set-setting chosenPhotos '[]' --challenge=<id>
   list-profiles - Show saved challenge-settings profiles
   save-profile "<name>" --challenge=<id> - Save a challenge's overrides as a named profile

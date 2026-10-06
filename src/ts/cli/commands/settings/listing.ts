@@ -3,6 +3,7 @@
 import * as logger from '../../../logger';
 import * as settings from '../../../settings';
 import { getDefaultSettings } from '../../../settings';
+import { stripTerminalControl } from '../../../format/logSafe';
 import { formatSettingForLog } from './shared';
 
 import type { SettingsSchemaEntry } from '../../../settings/schema';
@@ -43,7 +44,7 @@ export const listSettings = (challengeId: string | null = null) => {
             const defaultValue = defaultSettings[key];
             const isModified = JSON.stringify(currentValue) !== JSON.stringify(defaultValue);
 
-            logger.printLine(`${key}:`);
+            logger.printLine(`${stripTerminalControl(key)}:`);
             logger.printLine(`  Current: ${formatSettingForLog(key, currentValue)}`);
             logger.printLine(`  Default: ${formatSettingForLog(key, defaultValue)}`);
             if (isModified) {

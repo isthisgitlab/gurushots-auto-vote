@@ -516,7 +516,7 @@ export const app = {
         'Total coins auto-join may spend in one cycle. 0 = spend nothing (paid joins off). Both this and the per-challenge cap must be above 0 to join paid challenges.',
     // Discover (un-joined challenges)
     discoverTitle: 'Discover Challenges',
-    discoverCountLabel: 'open challenges',
+    discoverCountLabel: '{count} open challenges',
     discoverRefresh: 'Refresh',
     discoverEmpty: 'No open challenges to join right now.',
     discoverUnavailableList: 'Could not load open challenges. Check your connection and try again.',
@@ -526,9 +526,10 @@ export const app = {
     discoverJoin: 'Join',
     discoverJoinPaid: 'Join (paid)',
     discoverJoinLabel: 'Join {title}',
-    discoverJoinPaidLabel: 'Join {title} for {coins} coins',
+    discoverJoinPaidLabel: 'Join (paid) {title}, {coins} coins',
     discoverJoining: 'Joining…',
     discoverRetrySubmit: 'Retry submit',
+    discoverRetrySubmitLabel: 'Retry submit for {title}',
     discoverConfirmTitle: 'Join paid challenge?',
     discoverConfirmBody: 'Joining "{title}" costs {coins} coins.',
     discoverConfirmBalance: 'You have {current} coins; this costs {cost}, leaving {resulting}.',
@@ -562,7 +563,7 @@ export const app = {
         "Photos that auto-join and auto-submit try first. They must still fit your tag settings (unless Submit Even Without a Tag Match is on and no photo fits them at all), and they are ranked the way the app ranks its own picks. A photo can be in only one challenge, so with a shared list the challenge filled first takes it. The list belongs to the account that saved it and is ignored on another account; saving a list there makes the lists saved under the first account apply to it too, unless you remove them first. A scenario's list applies only after joining. Swap ignores the list.",
     chosenPhotosOnly: 'Submit Only Chosen Photos',
     chosenPhotosOnlyDesc:
-        'With Chosen Photos set, auto-join and auto-submit never pick a photo themselves: a challenge with no usable chosen photo is skipped. Manual Join and the manual +1/+N buttons still pick automatically, Emergency Submit ignores this setting (turn Emergency Submit off for the challenge to keep the slot empty), and a paid join that already unlocked still submits an automatic pick so the coins are not wasted. Swap ignores both settings. With Submit Even Without a Tag Match on (the default), the tag check is relaxed for the chosen photos alone: if none of them fits your tags, they can still be entered. With an empty list this does nothing.',
+        'With Chosen Photos set, auto-join and auto-submit never pick a photo themselves: a challenge with no usable chosen photo is skipped. Manual Join and the manual +1/+N buttons still pick automatically, Emergency Submit ignores this setting (turn Emergency Submit off for the challenge to keep the slot empty), and a paid join that already unlocked still submits an automatic pick so the coins are not wasted. Swap ignores both settings. With Submit Even Without a Tag Match on (the default), the tag check is relaxed for the chosen photos alone: if none of them fits your must-include tags, they can still be entered. With an empty list this does nothing.',
     chosenPhotosMemberId: 'Chosen Photos Account',
     chosenPhotosClearedAt: 'Chosen Photos Cleared At',
     chosenPhotosClearedAtDesc:
@@ -619,11 +620,16 @@ export const app = {
         "Saving with nothing chosen removes this challenge's own list, so it uses the list from your settings or rules again.",
     photoChooserSaveWaits:
         'Saving waits until your photos have loaded, so the app can check which account the list belongs to.',
+    photoChooserSaveNoContext:
+        "Saving is blocked: without an active or open challenge the app can't check which account this list belongs to. Clear the list to save, or join a challenge first.",
     photoChooserSaveError: "The chosen photos weren't saved because the setting couldn't be written. Try again.",
     photoChooserUse: 'Use these photos',
     discoverChosenChip: 'Chosen',
     discoverChosenChipHint: 'This challenge has chosen photos. Click to change them.',
     discoverChosenChipLabel: 'Chosen photos for {title}: change them',
+    discoverChosenForeignLabel: '{count} photo(s) saved under another account for {title}: review them',
+    discoverChosenForeignHint:
+        "These photos were saved under another account and aren't used here. Click to review them.",
     discoverChoosePhotosLabel: 'Choose photos for {title}',
     discoverChosenInherited: 'Inherited chosen photos: {count} (from your settings or rules)',
     discoverConfirmChosen: "Your chosen photo if it's eligible, otherwise an automatic pick.",

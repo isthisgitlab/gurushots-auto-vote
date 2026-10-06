@@ -70,7 +70,8 @@ import type { JoinDeps } from '../../src/ts/services/joinChallenges';
 const { performJoin, runJoinPass, joinChallengeSingle, resolveJoinSetting, inFlight } =
     require('../../src/ts/services/joinChallenges') as typeof joinChallengesModule;
 const { __resetMemberIdCache } = require('../../src/ts/services/autoFill') as typeof autoFillModule;
-const { __resetChosenPhotos } = require('../../src/ts/services/autoFill/chosenPhotos') as typeof chosenPhotosModule;
+const { forgetChosenPhotosMemory } =
+    require('../../src/ts/services/autoFill/chosenPhotos') as typeof chosenPhotosModule;
 
 const photo = (id: string, labels: string[]): PickerPhoto => ({
     id,
@@ -121,7 +122,7 @@ const withSettings = (values: Record<string, unknown>) => {
 beforeEach(() => {
     jest.clearAllMocks();
     for (const level of Object.values(lines)) level.length = 0;
-    __resetChosenPhotos();
+    forgetChosenPhotosMemory();
     __resetMemberIdCache();
     inFlight.clear();
     settings.getChallengeOverride.mockReturnValue(null);

@@ -1,7 +1,10 @@
 // List, save, apply and delete challenge-settings profiles from the CLI.
+// The profile listing prints to the console only (never into the log files): it carries the
+// account's per-challenge settings, masked by formatSettingForLog.
 
 import * as logger from '../../../logger';
 import * as settings from '../../../settings';
+import { stripTerminalControl } from '../../../format/logSafe';
 import { formatSettingForLog } from './shared';
 
 export const listProfiles = () => {
@@ -9,11 +12,11 @@ export const listProfiles = () => {
         const profiles = settings.getChallengeProfiles();
         const names = Object.keys(profiles).sort((a, b) => a.localeCompare(b));
         if (names.length === 0) {
-            logger.withCategory('settings').info('No saved challenge profiles');
-            logger.withCategory('ui').info('💡 Save one with: save-profile "<name>" --challenge=<id>');
+            logger.printLine('No saved challenge profiles');
+            logger.printLine('💡 Save one with: save-profile "<name>" --challenge=<id>');
             return;
         }
-        logger.withCategory('settings').info('=== Challenge Profiles ===');
+        logger.printLine('=== Challenge Profiles ===');
         names.forEach((name) => {
             const values = profiles[name];
             const keys = Object.keys(values).sort();
@@ -21,7 +24,7 @@ export const listProfiles = () => {
                 keys.length === 0
                     ? '(no overrides — applying it resets the challenge to global defaults)'
                     : keys.map((key) => `${key}=${formatSettingForLog(key, values[key])}`).join(', ');
-            logger.withCategory('settings').info(`${name} (${keys.length}): ${summary}`);
+            logger.printLine(`${stripTerminalControl(name)} (${keys.length}): ${summary}`);
         });
     } catch (error) {
         logger.withCategory('settings').error('Error listing profiles', error);

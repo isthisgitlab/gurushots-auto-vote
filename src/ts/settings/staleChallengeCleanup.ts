@@ -5,6 +5,7 @@
 import * as logger from '../logger';
 import { loadSettings, saveSettings } from './persistence';
 import { getOpenChallengeIds } from './openChallenges';
+import { getActiveChallengeIds } from './challengeFacts';
 
 import type { ChallengeValues } from '../types/settings';
 
@@ -29,10 +30,19 @@ const isKeptForJoin = (challengeId: string, values: ChallengeValues): boolean =>
  * Cleanup stale challenge settings for challenges that no longer exist.
  * A challenge that is open but not joined yet is not stale when its entry
  * holds a chosen photos setting (see isKeptForJoin).
+ *
+ * `activeChallengeIds` comes from the caller — over IPC, the renderer — so it cannot be the only
+ * judge of what to delete. An entry is pruned only when the main process's own latest active list
+ * (getActiveChallengeIds) agrees it is gone, so a short, stale or forged list cannot wipe a live
+ * challenge's settings; with no such list yet, nothing is pruned. The limit that remains: the
+ * main process's list is the last one it fetched, so an entry for a challenge that ended since
+ * stays until the next fetch.
  */
 const cleanupStaleChallengeSetting = (activeChallengeIds: Iterable<string>): boolean => {
+    const known = getActiveChallengeIds();
+    if (known === null) return true; // The main process has no list of its own to judge by
     const settings = loadSettings();
-    const activeIds = new Set(activeChallengeIds);
+    const activeIds = new Set([...activeChallengeIds, ...known]);
     const { perChallenge, titleProfileSuppressions: suppressions } = settings.challengeSettings;
     const keptForJoin = new Set(
         Object.keys(perChallenge).filter((id) => !activeIds.has(id) && isKeptForJoin(id, perChallenge[id])),

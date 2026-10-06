@@ -12,6 +12,7 @@ import { formatDateTime } from '../../dateFormat';
 import { SCENARIO_TEMPLATES } from '../../scenarios/templates';
 import { VOCABULARY_REFERENCE } from '../../scenarios/vocabulary';
 import { finiteOr } from '../../numbers';
+import { escapeTerminalUnsafe } from '../../format/logSafe';
 
 // Built lazily so requiring this module (e.g. for `help`) does not construct
 // the handler set or pull in its transitive dependencies.
@@ -45,9 +46,12 @@ const reportFailure = (result: { success?: boolean; error?: unknown; issues?: Sc
 };
 
 /**
- * Write `text` to `file`, or print it when no file is given.
+ * Write the JSON document `json` to `file`, or print it when no file is given. Both get the same
+ * text: characters that could drive a terminal or hide what is shown are escaped, not removed, so
+ * the document stays valid and means the same either way.
  */
-const output = (text: string, file: string | null | undefined) => {
+const output = (json: string, file: string | null | undefined) => {
+    const text = escapeTerminalUnsafe(json);
     if (!file) {
         // A document the user asked to see (or pipe): printed verbatim, with its line breaks, on the
         // console only; the log file's one-line entries would flatten it. It holds no credentials,

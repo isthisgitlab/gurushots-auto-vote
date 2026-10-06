@@ -445,6 +445,7 @@ function useOtherAccountLists({
 function ChooserFooter({
     saveFailed,
     saveWaits,
+    noContext,
     saving,
     onSave,
     onClear,
@@ -452,6 +453,8 @@ function ChooserFooter({
 }: {
     saveFailed: boolean;
     saveWaits: boolean;
+    /** The listing will not load (no challenge to read the library through), so waiting is no remedy. */
+    noContext: boolean;
     saving: boolean;
     onSave: () => void;
     onClear: () => void;
@@ -468,7 +471,7 @@ function ChooserFooter({
             )}
             {saveWaits && (
                 <p id={waitHintId} className="text-base-content/70 text-right text-xs">
-                    {t('app.photoChooserSaveWaits')}
+                    {t(noContext ? 'app.photoChooserSaveNoContext' : 'app.photoChooserSaveWaits')}
                 </p>
             )}
             <div className="flex justify-end gap-2">
@@ -599,6 +602,7 @@ function PhotoChooserBody({
             <ChooserFooter
                 saveFailed={saveFailed}
                 saveWaits={saveWaits}
+                noContext={state.status === 'no-context'}
                 saving={saving}
                 onSave={() => void save()}
                 onClear={() => setSelected([])}

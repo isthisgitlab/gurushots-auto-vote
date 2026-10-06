@@ -66,18 +66,19 @@ function ChosenChip({
     onClick: () => void;
 }) {
     const { t } = useTranslation();
-    const text =
-        foreignCount === null
-            ? t('app.discoverChosenChip')
-            : interp(t('app.chosenPhotosOtherAccountCount'), { count: foreignCount });
+    const foreign = foreignCount !== null;
+    const text = foreign
+        ? interp(t('app.chosenPhotosOtherAccountCount'), { count: foreignCount })
+        : t('app.discoverChosenChip');
     return (
         <button
             type="button"
             className="badge badge-info badge-sm mt-0.5"
-            title={foreignCount === null ? t('app.discoverChosenChipHint') : text}
-            aria-label={
-                foreignCount === null ? interp(t('app.discoverChosenChipLabel'), { title: name }) : `${text}: ${name}`
-            }
+            title={t(foreign ? 'app.discoverChosenForeignHint' : 'app.discoverChosenChipHint')}
+            aria-label={interp(t(foreign ? 'app.discoverChosenForeignLabel' : 'app.discoverChosenChipLabel'), {
+                title: name,
+                count: foreignCount ?? 0,
+            })}
             onClick={onClick}
         >
             {text}
@@ -263,7 +264,11 @@ export function DiscoverSection({
                     {/* h2 (not span) keeps the section discoverable by heading nav. */}
                     <h2 className="m-0 text-sm font-semibold">{t('app.discoverTitle')}</h2>
                     {list.length > 0 && (
-                        <span className="badge badge-neutral badge-sm" aria-label={t('app.discoverCountLabel')}>
+                        <span
+                            className="badge badge-neutral badge-sm"
+                            role="img"
+                            aria-label={interp(t('app.discoverCountLabel'), { count: list.length })}
+                        >
                             {list.length}
                         </span>
                     )}
@@ -334,6 +339,9 @@ export function DiscoverSection({
                                                     {outcome.status === 'charged-pending-submit' && (
                                                         <button
                                                             className="btn btn-outline btn-sm ml-2"
+                                                            aria-label={interp(t('app.discoverRetrySubmitLabel'), {
+                                                                title: name,
+                                                            })}
                                                             onClick={() => void doJoin(c, true)}
                                                             disabled={isBusy}
                                                         >
