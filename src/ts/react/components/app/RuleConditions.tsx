@@ -1,5 +1,6 @@
 import { useTranslation } from '@/contexts/TranslationContext';
 import { RuleNumberField } from './RuleFields';
+import { normalizeRuleClosesAt } from '../../../settings/challengeRules';
 
 import type { TitleRule } from '../../../types/settings';
 import type { RulePatchHandler } from './RuleFields';
@@ -30,12 +31,16 @@ const RUNTIME_FIELDS = [
 // The end time the challenge card shows (app timezone, any date); blank = any time.
 function RuleClosesAtField({ rule, onPatch }: { rule: TitleRule; onPatch: RulePatchHandler }) {
     const { t } = useTranslation();
+    // A hand-edited stored value that is not a strict HH:MM renders blank in a time input,
+    // while the rule matches nothing and saving is rejected: flag it.
+    const invalidStored = Boolean(rule.closesAt) && normalizeRuleClosesAt(rule.closesAt) === false;
     return (
         <div className="flex flex-col gap-1">
             <span className="text-sm">{t('app.titleRuleClosesAt')}</span>
             <input
                 type="time"
-                className="input input-sm w-full"
+                className={`input input-sm w-full ${invalidStored ? 'input-error' : ''}`}
+                aria-invalid={invalidStored ? 'true' : undefined}
                 aria-label={t('app.titleRuleClosesAt')}
                 value={rule.closesAt ?? ''}
                 onChange={(e) => onPatch({ closesAt: e.currentTarget.value })}

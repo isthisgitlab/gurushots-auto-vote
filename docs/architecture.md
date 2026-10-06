@@ -183,8 +183,9 @@ Domain terms used throughout, in reader's terms:
 - **Default order: a title beats a class.** `sortRulesByDefaultOrder` ranks rules naming a title first
   (exact 3 > starts 2 > contains 1, +1 per class condition, then the longer pattern — the specificity ranking title rules were written against), then title-less rules
   by condition count, then photo count > runtime > close time > type > tag — so "4 photos + 7 days" > "4 photos" >
-  "7 days". A close-time-only rule has no title, so sorting demotes it below every title rule, where a
-  title rule with `autoJoin: true` wins over its skip; the editor warns next to the Sort button. The user can reorder freely in the editor or reset to this order; saving keeps the order given.
+  "7 days". A close-time-only rule has no title and one condition, so sorting demotes it below every title rule,
+  every title-less rule with more conditions, and any one-condition rule with a photo count or a runtime —
+  where a rule with `autoJoin: true` wins over its skip; the editor warns next to the Sort button. The user can reorder freely in the editor or reset to this order; saving keeps the order given.
   The one-time `_challengeRulesOrderedV1` migration applies this order to saved rules and appends the saved
   `categoryRules` below them; because the cascade lets a lower rule fill keys a higher one leaves unset, it
   logs a warning for every possibly-overlapping pair where that could newly switch `autoJoin`/`autoFill` on.

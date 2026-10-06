@@ -205,7 +205,8 @@ const getEffectiveTagSetting = <K extends string>(
     // Pass the whole challenge, not just its title: a rule may be keyed on any
     // of the challenge's own facts, and a joined challenge carries them in the
     // payload. The first matching rule that lists tags for this key wins.
-    const rule = matchingRules(getTitleRules(), challenge, ruleTimeZone(loadSettings())).find(
+    const settings = loadSettings();
+    const rule = matchingRules(settings.challengeSettings.titleRules, challenge, ruleTimeZone(settings)).find(
         (candidate) => Array.isArray(candidate?.[settingKey]) && candidate[settingKey].length > 0,
     );
     if (!rule) return base;

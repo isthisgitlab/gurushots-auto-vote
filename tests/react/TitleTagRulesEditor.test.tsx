@@ -277,6 +277,20 @@ describe('TitleTagRulesEditor', () => {
             fireEvent.change(input(), { target: { value: '' } });
             expect(onChange).toHaveBeenLastCalledWith([expect.objectContaining({ closesAt: '' })]);
         });
+
+        test('a stored value that is not a strict HH:MM is marked invalid; a valid or empty one is not', () => {
+            const { rerender } = render(
+                <TitleTagRulesEditor value={rowWith({ closesAt: '7:10' })} onChange={jest.fn()} />,
+            );
+            const input = () => screen.getByLabelText<HTMLInputElement>('app.titleRuleClosesAt');
+            expect(input().classList.contains('input-error')).toBe(true);
+            expect(input().getAttribute('aria-invalid')).toBe('true');
+            for (const closesAt of ['17:10', '', undefined]) {
+                rerender(<TitleTagRulesEditor value={rowWith({ closesAt })} onChange={jest.fn()} />);
+                expect(input().classList.contains('input-error')).toBe(false);
+                expect(input().hasAttribute('aria-invalid')).toBe(false);
+            }
+        });
     });
 
     describe('match mode and challenge tag', () => {

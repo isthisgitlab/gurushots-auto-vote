@@ -1,5 +1,6 @@
 import { invalid } from '../helpers/invalid';
 import type * as formattersModule from '../../src/ts/react/utils/formatters';
+import type * as wallClockModule from '../../src/ts/scheduling/wallClock';
 import type * as interpModule from '../../src/ts/react/utils/interp';
 const {
     formatSettingDefault,
@@ -10,6 +11,7 @@ const {
     getLevelStatus,
     getEntryStatus,
 } = require('../../src/ts/react/utils/formatters') as typeof formattersModule;
+const { timeOfDayIn } = require('../../src/ts/scheduling/wallClock') as typeof wallClockModule;
 const { interp } = require('../../src/ts/react/utils/interp') as typeof interpModule;
 
 const t = (key: string) =>
@@ -85,6 +87,17 @@ describe('formatEndTime', () => {
         // 1700000000 = 2023-11-14 22:13 UTC
         expect(out).toContain('14.11.2023');
         expect(out).toContain('22:13');
+    });
+
+    // The "closes at" rule condition must read the same HH:MM the card shows.
+    test.each([
+        ['an afternoon instant', Date.UTC(2026, 5, 15, 14, 10, 59) / 1000],
+        ['just after midnight (00:xx, not 24:xx)', Date.UTC(2026, 5, 14, 21, 5, 30) / 1000],
+        ['winter time, after midnight', Date.UTC(2026, 0, 14, 22, 7, 0) / 1000],
+    ])('timeOfDayIn agrees with the HH:MM on the card: %s', (_label, sec) => {
+        const card = /\b(\d{2}:\d{2})\b/.exec(formatEndTime(sec, 'Europe/Riga'));
+        expect(card?.[1]).toBeDefined();
+        expect(timeOfDayIn(sec, 'Europe/Riga')).toBe(card?.[1]);
     });
 
     test('an invalid timezone falls back to local instead of throwing', () => {

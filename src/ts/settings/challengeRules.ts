@@ -129,7 +129,7 @@ const normalizeRuleHours = (hours: unknown): number | null => {
  */
 const normalizeRuleClosesAt = (raw: unknown): string | null | false => {
     if (raw === null || raw === undefined || raw === '') return null;
-    return parseTimeOfDay(raw) ? (raw as string) : false;
+    return typeof raw === 'string' && parseTimeOfDay(raw) ? raw : false;
 };
 
 /**
@@ -158,7 +158,9 @@ const challengeCloseTimeOfDay = (challenge: RuleMatchChallenge | null | undefine
  * Normalize a challenge (or a bare title, for callers that only have one) into
  * the keys the conditions compare against. `timeZone` is the app's timezone
  * setting, which the close-time key is read in; pass `withCloseTime: false`
- * when no rule needs it to skip the formatting.
+ * when no rule needs it to skip the formatting. A target built with `false`
+ * must only be matched against rules carrying no valid `closesAt`
+ * (`matchingRules` guarantees this through `needsCloseTime`).
  */
 const ruleMatchTarget = (
     target: RuleMatchChallenge | string | null | undefined,
@@ -274,8 +276,10 @@ const TITLE_MODE_SCORE: Record<string, number> = { exact: 3, starts: 2, contains
  *   3. then the longer title pattern (title rules only);
  *   4. then by which class conditions it carries: photo count, then runtime,
  *      then close time, then type, then tag — so "4 photos + 7 days" >
- *      "4 photos" > "7 days". A close-time-only rule has no title, so sorting
- *      puts it below every title rule.
+ *      "4 photos" > "7 days". A close-time-only rule has no title and one
+ *      condition, so sorting puts it below every title rule, every title-less
+ *      rule with more conditions, and any one-condition rule with a photo
+ *      count or a runtime.
  * For title rules 1–3 reproduce the most-specific-wins ranking, so the
  * ordering migration keeps every existing winner.
  */

@@ -709,7 +709,7 @@ export const app = {
     titleRuleBroadWarning:
         'This rule has no title, so it turns this on for every challenge it matches — which can spend coins or photos across a whole group of challenges.',
     titleRuleOrderHint:
-        'Rules are checked top to bottom: for each setting, the first matching rule that sets it wins, and anything it leaves empty comes from the next matching rule, then the global default. Sorting by default order puts rules with a title first, so a rule that must override them (for example one keyed on Closes at) has to be moved back up.',
+        'Rules are checked top to bottom: for each setting, the first matching rule that sets it wins, and anything it leaves empty comes from the next matching rule, then the global default. Sorting by default order puts rules with a title, more conditions, a photo count or a length ahead of a close-time rule, so a close-time rule that must override them has to be moved back up.',
     titleRuleSortDefault: 'Sort by default order',
     titleRuleMoveUp: 'Move rule up',
     titleRuleMoveDown: 'Move rule down',

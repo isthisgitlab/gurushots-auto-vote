@@ -125,8 +125,9 @@ function RuleCard({
  * rule that sets it wins (see `ruleValuesFor` in settings/ruleResolution.ts). The user reorders
  * with the arrows or resets to the default order (settings/challengeRules.ts
  * `sortRulesByDefaultOrder`: title rules, then photos + runtime, photos,
- * runtime, close time). Sorting puts title rules first, so a close-time rule that
- * must override them has to be moved back up.
+ * runtime, close time). Sorting puts rules with a title, more conditions, a photo
+ * count or a length ahead of a close-time rule, so a close-time rule that must
+ * override them has to be moved back up.
  *
  * BEHAVIOUR: a rule inherits an optional named profile, merges optional
  * Must/Should Include PHOTO tags at fill time, and may override auto-join,
