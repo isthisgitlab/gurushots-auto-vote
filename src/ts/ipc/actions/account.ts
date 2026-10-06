@@ -143,8 +143,10 @@ const handleGetMemberChallenges = (async (event?: unknown, filter?: string) => {
     }
 }) satisfies IpcReplyFn;
 
-// The Chosen Photos annotations of open challenges, from the settings alone: what
-// the Discover rows re-read when a setting changes, without asking GuruShots again.
+// The Chosen Photos annotations of open challenges, read from the settings: what the Discover
+// rows re-read when a setting changes, without fetching the challenge list again. The only request
+// it can make is the signed-in member's identity lookup, cached per token (retried at most every
+// 60 s after a failure) and skipped when already resolved.
 /**
  * @param ids - the open challenges' ids
  */

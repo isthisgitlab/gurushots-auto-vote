@@ -146,12 +146,14 @@ function RowPhotoChooser({
     // The row may have opened before the main process knew whose account this is, and then it came
     // without its ids. Once the chooser's listing has said, ask again: the ids come through if the
     // list is this account's, and not otherwise (null).
-    const reloadSaved = async (): Promise<string[] | null> => {
-        const id = String((challenge as Challenge).id);
+    const challengeId = challenge?.id;
+    // Keyed on the challenge so a re-render does not look like a new function, and a new IPC call.
+    const reloadSaved = useCallback(async (): Promise<string[] | null> => {
+        const id = String(challengeId);
         const result = await ipc.callOrNull(() => ipc.getOpenChosenAnnotations([id]));
         const annotation = result?.success ? result.annotations[id] : undefined;
         return annotation && annotation.chosenOwn.length === annotation.chosenOwnCount ? annotation.chosenOwn : null;
-    };
+    }, [challengeId]);
     const save = async (ids: string[]): Promise<boolean> => {
         // Only reachable from the chooser, which renders only while a challenge is being chosen for.
         const id = String((challenge as Challenge).id);

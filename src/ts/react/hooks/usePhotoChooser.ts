@@ -112,43 +112,76 @@ export function useOtherAccountLists({
 }
 
 /**
+ * Where the re-read of a saved list stands: `ok` (nothing to read, read, or another account's
+ * list, which the notice covers), `pending` (the listing or the read is still on its way) or
+ * `unconfirmed` (the listing is ready but the list's account could not be confirmed, so Retry).
+ */
+export type SavedListStatus = 'ok' | 'pending' | 'unconfirmed';
+
+/**
  * A saved list can come without its ids (the main process withholds them until it knows whose
  * account this is), so the selection then starts empty, which is not what is saved. Once the
  * listing shows the list is this account's, `reloadSaved` reads it again (the member is known now,
  * so its ids come through) and `onRead` seeds the selection from it. Another account's list stays
  * withheld: the other-account notice covers it, and saving a new selection over it is then the
- * user's choice. Resolves to whether the list is still unread, which holds Save back — an empty
- * selection included, since saving it would remove the user's own list.
+ * user's choice.
+ *
+ * While the status is not `ok` Save is held back — an empty or partial selection would replace the
+ * user's own list — and the tiles are inert, so a late read cannot overwrite what was picked. A
+ * listing that is ready but cannot say who is signed in (the member lookup failed), or a read that
+ * fails or rejects, ends in `unconfirmed`, and `retry` asks again: the listing in the first case,
+ * the read in the other.
  */
 export function useSavedListReread({
     withheld,
     owner,
     state,
     reloadSaved,
+    retryListing,
     onRead,
 }: {
     withheld: boolean;
     owner: string;
     state: ListState;
     reloadSaved?: () => Promise<string[] | null>;
+    retryListing: () => void;
     onRead: (ids: string[]) => void;
-}): boolean {
+}): { status: SavedListStatus; retry: () => void } {
     const [reloaded, setReloaded] = useState(false);
-    const reloading = useRef(false);
+    const [phase, setPhase] = useState<'idle' | 'reading' | 'failed'>('idle');
+    const [attempt, setAttempt] = useState(0);
+    const inFlight = useRef(false);
     const memberId = state.status === 'ready' ? state.listing.memberId : null;
     const ownersList = withheld && owner !== '' && memberId === owner;
     useEffect(() => {
-        if (!ownersList || reloaded || reloading.current || !reloadSaved) return;
-        reloading.current = true;
-        void reloadSaved().then((ids) => {
-            reloading.current = false;
-            if (ids === null) return;
+        if (!ownersList || reloaded || !reloadSaved || inFlight.current) return;
+        inFlight.current = true;
+        setPhase('reading');
+        const finish = (ids: string[] | null) => {
+            inFlight.current = false;
+            if (ids === null) {
+                setPhase('failed');
+                return;
+            }
             onRead(ids);
             setReloaded(true);
-        });
-    }, [ownersList, reloaded, reloadSaved, onRead, state]);
+            setPhase('idle');
+        };
+        reloadSaved().then(finish, () => finish(null));
+    }, [ownersList, reloaded, reloadSaved, onRead, attempt]);
+
     const otherAccount = memberId !== null && owner !== '' && memberId !== owner;
-    return withheld && !reloaded && !otherAccount;
+    const unread = withheld && !reloaded && !otherAccount;
+    const waiting = state.status !== 'ready' || (ownersList && !!reloadSaved && phase !== 'failed');
+    const status: SavedListStatus = !unread ? 'ok' : waiting ? 'pending' : 'unconfirmed';
+    // The listing could not say who is signed in: ask it again. Otherwise the read itself failed.
+    const retry = () => {
+        if (ownersList) {
+            setPhase('idle');
+            setAttempt((count) => count + 1);
+        } else retryListing();
+    };
+    return { status, retry };
 }
 
 /**

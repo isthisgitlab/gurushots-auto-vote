@@ -9,6 +9,7 @@ import { act, render, screen, fireEvent, waitFor } from './helpers/test-utils';
 import { DiscoverSection } from '@/components/app/DiscoverSection';
 import { fireSettingsChanged, mockApi, mockTranslator } from './helpers/setup';
 import { invalid } from '../helpers/invalid';
+import { app } from '../../src/ts/translations/english';
 import type { OpenChallenge } from '../../src/ts/types/gurushots';
 import type { WindowApi } from '../../src/ts/types/ipc';
 
@@ -490,6 +491,18 @@ describe('chosen photos', () => {
             expect(window.api.removeChallengeOverride).not.toHaveBeenCalled();
         });
 
+        test('the saved list is read again once per opening, however often the section re-renders', async () => {
+            const use = await open();
+            release();
+            await waitFor(() => expect(use.getAttribute('aria-disabled')).toBe('false'));
+            // Settings changes re-render the section (and re-read the rows), but not the chooser's own read.
+            act(() => fireSettingsChanged({ theme: 'dark' }));
+            act(() => fireSettingsChanged({ theme: 'light' }));
+            await waitFor(() => expect(window.api.getOpenChosenAnnotations).toHaveBeenCalledTimes(4));
+            const own = jest.mocked(window.api.getOpenChosenAnnotations).mock.calls.filter(([ids]) => ids.length === 1);
+            expect(own).toEqual([[['900001']]]);
+        });
+
         test('the list is removed only when the user really clears it', async () => {
             const use = await open();
             release();
@@ -644,23 +657,19 @@ describe('chosen photos', () => {
             return { success: true as const, removed: 1 };
         });
         mockTranslator.t.mockImplementation((key) =>
-            key === 'app.discoverChosenForeignLabel'
-                ? '{count} photo(s) saved under another account for {title}: review them'
-                : key === 'app.discoverChosenForeignChip'
-                  ? 'Other account: {count}'
-                  : key,
+            key.startsWith('app.') ? ((app as Record<string, string>)[key.slice(4)] ?? key) : key,
         );
         renderSection();
         // The row counts another account's list instead of calling it chosen photos.
-        const chip = await screen.findByText('Other account: 1');
+        const chip = await screen.findByText('Other account: 1 photo(s)');
         expect(screen.queryByText('app.discoverChosenChip')).toBeNull();
         // A short chip text (the long sentence is its accessible name), so it stays one line in a narrow row.
         expect(chip.textContent!.length).toBeLessThan(chip.getAttribute('aria-label')!.length / 2);
         // Its own translated name and tooltip, not a string built in code.
-        expect(chip.getAttribute('aria-label')).toBe(
-            '1 photo(s) saved under another account for Free One: review them',
-        );
-        expect(chip.getAttribute('title')).toBe('app.discoverChosenForeignHint');
+        expect(chip.getAttribute('aria-label')).toBe('Other account: 1 photo(s) for Free One, review them');
+        // WCAG 2.5.3: the accessible name starts with the text that is shown.
+        expect(chip.getAttribute('aria-label')!.startsWith(chip.textContent!)).toBe(true);
+        expect(chip.getAttribute('title')).toBe(app.discoverChosenForeignHint);
         mockTranslator.t.mockImplementation((key) => key);
         fireEvent.click(chip);
         // The chooser opens empty, with the notice and a count — never the other account's id.

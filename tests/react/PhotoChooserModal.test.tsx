@@ -674,7 +674,8 @@ describe('Save while the account is unknown', () => {
     const use = () => screen.getByRole('button', { name: 'Use these photos' });
     const hint = 'Saving waits until your photos have loaded, so the app can check which account the list belongs to.';
 
-    const errorHint = 'Saving is held until your photos load. Press Retry above.';
+    const errorHint =
+        'Saving is held until your photos load, so the app can check which account the list belongs to. Press Retry above.';
     const noContextHint =
         "Saving is blocked: without an active or open challenge the app can't check which account this list belongs to. Clear the list to save, or join a challenge first.";
 
@@ -757,6 +758,18 @@ describe('a saved list that came without its ids', () => {
     const OWNER = MEMBER;
     const use = () => screen.getByRole('button', { name: 'Use these photos' });
     const hint = 'Saving waits until your photos have loaded, so the app can check which account the list belongs to.';
+    const unconfirmedHint =
+        "Couldn't confirm which account this list belongs to, so saving is held to protect it. Press Retry, or close and reopen the chooser.";
+    // A re-read mock: what it answers on its successive calls.
+    const rereads = (...answers: Array<string[] | null | Error>) => {
+        const reloadSaved = jest.fn<Promise<string[] | null>, []>();
+        for (const answer of answers) {
+            if (answer instanceof Error) reloadSaved.mockRejectedValueOnce(answer);
+            else reloadSaved.mockResolvedValueOnce(answer);
+        }
+        return reloadSaved;
+    };
+    const pressed = (n: number) => tile(n).getAttribute('aria-pressed');
 
     beforeEach(() => {
         jest.mocked(window.api.getSetting).mockResolvedValue(OWNER);
@@ -765,7 +778,7 @@ describe('a saved list that came without its ids', () => {
     test('Save, an empty one too, is held until the list has been read again and seeds the selection', async () => {
         const pending = deferred<Listing>();
         getLibrary().mockReturnValueOnce(invalid(pending.promise));
-        const reloadSaved = jest.fn().mockResolvedValue([idOf(1), idOf(2)]);
+        const reloadSaved = rereads([idOf(1), idOf(2)]);
         const { onSave } = setup({ value: [], savedCount: 2, reloadSaved });
         await act(async () => undefined);
         // Nothing to save yet: the selection is empty only because the ids were withheld.
@@ -775,8 +788,8 @@ describe('a saved list that came without its ids', () => {
         expect(reloadSaved).not.toHaveBeenCalled();
 
         await act(async () => pending.resolve(listing([photo(1), photo(2), photo(3)])));
-        await waitFor(() => expect(tile(1).getAttribute('aria-pressed')).toBe('true'));
-        expect(tile(2).getAttribute('aria-pressed')).toBe('true');
+        await waitFor(() => expect(pressed(1)).toBe('true'));
+        expect(pressed(2)).toBe('true');
         expect(reloadSaved).toHaveBeenCalledTimes(1);
         await waitFor(() => expect(use().getAttribute('aria-disabled')).toBe('false'));
         expect(screen.queryByText(hint)).toBeNull();
@@ -785,45 +798,117 @@ describe('a saved list that came without its ids', () => {
     });
 
     test('an empty save goes through only once the user has really cleared the list', async () => {
-        const reloadSaved = jest.fn().mockResolvedValue([idOf(1)]);
-        const { onSave } = setup({ value: [], savedCount: 1, reloadSaved });
-        await waitFor(() => expect(tile(1).getAttribute('aria-pressed')).toBe('true'));
+        const { onSave } = setup({ value: [], savedCount: 1, reloadSaved: rereads([idOf(1)]) });
+        await waitFor(() => expect(pressed(1)).toBe('true'));
         await waitFor(() => expect(use().getAttribute('aria-disabled')).toBe('false'));
         fireEvent.click(screen.getByRole('button', { name: 'Clear' }));
         fireEvent.click(use());
         await waitFor(() => expect(onSave).toHaveBeenCalledWith([]));
     });
 
-    test('a read that gives nothing keeps Save held, with the reason', async () => {
-        const reloadSaved = jest.fn().mockResolvedValue(null);
-        const { onSave } = setup({ value: [], savedCount: 1, reloadSaved });
+    test('the tiles are inert while the list is unread, so the late read cannot overwrite a pick', async () => {
+        const read = deferred<string[] | null>();
+        const reloadSaved = jest.fn<Promise<string[] | null>, []>().mockReturnValue(read.promise);
+        setup({ value: [], savedCount: 1, reloadSaved });
         await screen.findByRole('button', { name: /^Photo 00000001:/ });
         await waitFor(() => expect(reloadSaved).toHaveBeenCalledTimes(1));
-        expect(use().getAttribute('aria-disabled')).toBe('true');
+        // Read in flight: every tile says it cannot be changed, and a click does nothing.
+        expect(tile(3).getAttribute('aria-disabled')).toBe('true');
+        fireEvent.click(tile(3));
+        expect(pressed(3)).toBe('false');
         expect(screen.getByText(hint)).toBeTruthy();
-        fireEvent.click(use());
-        expect(onSave).not.toHaveBeenCalled();
+
+        await act(async () => read.resolve([idOf(1)]));
+        await waitFor(() => expect(pressed(1)).toBe('true'));
+        expect(pressed(3)).toBe('false');
+        expect(tile(3).getAttribute('aria-disabled')).toBe('false');
+        fireEvent.click(tile(3));
+        expect(pressed(3)).toBe('true');
+    });
+
+    describe('ready, but the list cannot be confirmed', () => {
+        const expectUnconfirmed = async () => {
+            await screen.findByText(unconfirmedHint);
+            expect(screen.queryByText(hint)).toBeNull();
+            expect(use().getAttribute('aria-disabled')).toBe('true');
+            // The tiles are inert here too: nothing may be picked over a list that is unread.
+            expect(tile(2).getAttribute('aria-disabled')).toBe('true');
+            fireEvent.click(tile(2));
+            expect(pressed(2)).toBe('false');
+        };
+
+        test('a listing that cannot say who is signed in: the hint and Retry, and a good Retry seeds the list and releases Save', async () => {
+            getLibrary().mockResolvedValueOnce(listing([photo(1), photo(2)], { memberId: null }));
+            const reloadSaved = rereads([idOf(1)]);
+            const { onSave } = setup({ value: [], savedCount: 1, reloadSaved });
+            await expectUnconfirmed();
+            expect(reloadSaved).not.toHaveBeenCalled();
+            fireEvent.click(use());
+            expect(onSave).not.toHaveBeenCalled();
+
+            // Retry asks the listing again; this time it knows the member.
+            fireEvent.click(screen.getByRole('button', { name: 'Retry' }));
+            await waitFor(() => expect(pressed(1)).toBe('true'));
+            await waitFor(() => expect(use().getAttribute('aria-disabled')).toBe('false'));
+            expect(screen.queryByText(unconfirmedHint)).toBeNull();
+            expect(getLibrary()).toHaveBeenCalledTimes(2);
+            fireEvent.click(use());
+            await waitFor(() => expect(onSave).toHaveBeenCalledWith([idOf(1)]));
+        });
+
+        test.each([
+            ['gives nothing', null],
+            ['rejects', new Error('ipc down')],
+        ])('a read that %s: the same hint and Retry, and a good Retry releases Save', async (_name, failure) => {
+            const reloadSaved = rereads(failure, [idOf(1), idOf(2)]);
+            const { onSave } = setup({ value: [], savedCount: 2, reloadSaved });
+            await expectUnconfirmed();
+            expect(reloadSaved).toHaveBeenCalledTimes(1);
+            fireEvent.click(use());
+            expect(onSave).not.toHaveBeenCalled();
+
+            fireEvent.click(screen.getByRole('button', { name: 'Retry' }));
+            await waitFor(() => expect(reloadSaved).toHaveBeenCalledTimes(2));
+            await waitFor(() => expect(pressed(2)).toBe('true'));
+            await waitFor(() => expect(use().getAttribute('aria-disabled')).toBe('false'));
+            // The listing was not asked again: only the read was.
+            expect(getLibrary()).toHaveBeenCalledTimes(1);
+            fireEvent.click(use());
+            await waitFor(() => expect(onSave).toHaveBeenCalledWith([idOf(1), idOf(2)]));
+        });
+
+        test('a Retry that fails again keeps the hint, and a second one still works', async () => {
+            const reloadSaved = rereads(null, null, [idOf(1)]);
+            setup({ value: [], savedCount: 1, reloadSaved });
+            await screen.findByText(unconfirmedHint);
+            fireEvent.click(screen.getByRole('button', { name: 'Retry' }));
+            await waitFor(() => expect(reloadSaved).toHaveBeenCalledTimes(2));
+            await screen.findByText(unconfirmedHint);
+            fireEvent.click(screen.getByRole('button', { name: 'Retry' }));
+            await waitFor(() => expect(pressed(1)).toBe('true'));
+        });
     });
 
     test("another account: the ids stay withheld, the notice shows, nothing is re-read and Save is the user's choice", async () => {
         jest.mocked(window.api.getSetting).mockResolvedValue('d'.repeat(32));
-        const reloadSaved = jest.fn();
+        const reloadSaved = rereads();
         const { onSave } = setup({ value: [], savedCount: 2, reloadSaved });
         expect(await screen.findByText(/saved under another account, so the app ignores them/)).toBeTruthy();
         expect(screen.getByText('2 photo(s) saved under another account')).toBeTruthy();
         expect(reloadSaved).not.toHaveBeenCalled();
-        expect(tile(1).getAttribute('aria-pressed')).toBe('false');
+        expect(pressed(1)).toBe('false');
         await waitFor(() => expect(use().getAttribute('aria-disabled')).toBe('false'));
         fireEvent.click(tile(2));
         fireEvent.click(use());
         await waitFor(() => expect(onSave).toHaveBeenCalledWith([idOf(2)]));
     });
 
-    test('a list that arrived with its ids is not held back at all', async () => {
-        const reloadSaved = jest.fn();
+    test('a list that arrived with its ids is not held back at all, and its tiles work', async () => {
+        const reloadSaved = rereads();
         setup({ value: [idOf(1)], savedCount: 1, reloadSaved });
         await screen.findByRole('button', { name: /^Photo 00000001:/ });
         expect(use().getAttribute('aria-disabled')).toBe('false');
+        expect(tile(2).getAttribute('aria-disabled')).toBe('false');
         expect(reloadSaved).not.toHaveBeenCalled();
     });
 });

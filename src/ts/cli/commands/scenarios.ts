@@ -103,28 +103,34 @@ const printPreview = ({
     preview: ReturnType<typeof settingsModule.describeScenario>;
     exists: boolean;
 }) => {
-    ui().info(`Scenario "${preview.name}" — starts in phase "${preview.start}"`);
-    if (preview.description) ui().info(`  ${preview.description}`);
+    // The scenario is a file the user imports: its names and text must not drive the terminal.
+    const name = stripTerminalControl(preview.name);
+    ui().info(`Scenario "${name}" — starts in phase "${stripTerminalControl(preview.start)}"`);
+    if (preview.description) ui().info(`  ${stripTerminalControl(preview.description)}`);
     for (const phase of preview.phases) {
         const overlay = phase.settings.length ? `, settings: ${phase.settings.join(', ')}` : '';
-        ui().info(`  • phase ${phase.name}: ${phase.rules} rule(s)${overlay}`);
+        ui().info(`  • phase ${stripTerminalControl(phase.name)}: ${phase.rules} rule(s)${overlay}`);
     }
     if (preview.spending.length) {
         ui().info('  Spends:');
-        for (const spend of preview.spending) ui().info(`    - ${spend.action} (${spend.phase} → ${spend.rule})`);
+        for (const spend of preview.spending) {
+            const where = `${stripTerminalControl(spend.phase)} → ${stripTerminalControl(spend.rule)}`;
+            ui().info(`    - ${spend.action} (${where})`);
+        }
     } else {
         ui().info('  Spends nothing.');
     }
     const limits = Object.entries(preview.limits);
     ui().info(limits.length ? `  Limits: ${limits.map(([k, v]) => `${v} ${k}`).join(', ')}` : '  No spending limits.');
     for (const { phase, key } of preview.flagged) {
+        const named = stripTerminalControl(phase);
         ui().warning(
             key === 'chosenPhotos'
-                ? `  Phase ${phase} sets chosenPhotos — photo ids from another account will not match your photos.`
-                : `  Phase ${phase} sets chosenPhotosOnly — a challenge with no usable chosen photo is skipped.`,
+                ? `  Phase ${named} sets chosenPhotos — photo ids from another account will not match your photos.`
+                : `  Phase ${named} sets chosenPhotosOnly — a challenge with no usable chosen photo is skipped.`,
         );
     }
-    if (exists) ui().warning(`  A scenario named "${preview.name}" already exists — importing needs --overwrite.`);
+    if (exists) ui().warning(`  A scenario named "${name}" already exists — importing needs --overwrite.`);
 };
 
 const importScenarioCmd = async (
@@ -235,7 +241,8 @@ const scenarioDryRunCmd = async (challengeId: string) => {
         ui().error(`  Halted: ${result.halted}`);
         return 1;
     }
-    for (const rule of result.explain) ui().info(`  [${rule.status}] ${rule.label}: ${rule.reason}`);
+    for (const rule of result.explain)
+        ui().info(`  [${rule.status}] ${stripTerminalControl(rule.label)}: ${rule.reason}`);
     ui().info(
         result.fire
             ? `  Would run now: ${result.fire.ruleId} → ${result.fire.actions.slice(result.fire.startIndex).join(', ')}`
@@ -260,7 +267,9 @@ const scenarioSimulateCmd = async (challengeId: string) => {
     if (result.events.length === 0) ui().info('  Nothing would run.');
     for (const event of result.events) {
         const move = event.toPhase ? ` → phase ${event.toPhase}` : '';
-        ui().info(`  ${at(event.at)}  [${event.phase}] ${event.label}: ${event.actions.join(', ')}${move}`);
+        ui().info(
+            `  ${at(event.at)}  [${stripTerminalControl(event.phase)}] ${stripTerminalControl(event.label)}: ${event.actions.join(', ')}${move}`,
+        );
     }
     ui().info(`  Stops at ${at(result.stoppedAt)}: ${STOP_REASONS[result.stoppedBecause]}.`);
     if (result.halted) ui().warning(`  ${result.halted}`);

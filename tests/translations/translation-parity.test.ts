@@ -80,3 +80,14 @@ describe('renderer translation keys exist', () => {
         expect(missing).toEqual([]);
     });
 });
+
+describe('a chip whose accessible name starts with the text it shows (WCAG 2.5.3 label in name)', () => {
+    const fill = (template: string) => template.replace('{count}', '3').replace('{title}', 'T');
+    test.each([
+        ['english', english.app],
+        ['latvian', latvian.app],
+    ])('%s: the own-list and other-account chips', (_language, app) => {
+        expect(fill(app.discoverChosenChipLabel).startsWith(fill(app.discoverChosenChip))).toBe(true);
+        expect(fill(app.discoverChosenForeignLabel).startsWith(fill(app.discoverChosenForeignChip))).toBe(true);
+    });
+});

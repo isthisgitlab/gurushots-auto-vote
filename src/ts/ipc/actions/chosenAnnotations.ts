@@ -1,7 +1,8 @@
 /**
  * What the Chosen Photos settings say about an open (not yet joined) challenge,
  * for the Discover rows: the challenge's own saved list and how many photos the
- * join would actually use. Settings only — nothing here asks GuruShots.
+ * join would actually use. Read from the settings; the only thing that can reach GuruShots is
+ * the signed-in member's identity lookup (below), which is cached per token.
  */
 
 import * as settings from '../../settings';
@@ -25,18 +26,20 @@ const idsOf = (value: unknown): string[] =>
  *
  * A list saved under another account is never described by its ids: the row gets
  * `chosenOwn: []` with the real `chosenOwnCount`, and nothing applies to the join
- * (`chosenEffectiveCount: 0`), as at join time. The signed-in member is resolved first
- * (one cached lookup per token, so a fresh launch does not leave it unknown). If that
- * lookup fails the member stays unknown, it cannot be told whether the list is theirs,
- * and the ids are withheld all the same — but the list still counts as applying, as
- * resolveChosenPhotos applies it at join time.
+ * (`chosenEffectiveCount: 0`), as at join time. The signed-in member is the one a
+ * cached lookup already resolved (`peekMemberId`); only when none has — a fresh launch —
+ * is it resolved first (`resolveMemberId`: one lookup per token, retried at most every
+ * 60 s after a failure), so the common case makes no request. If the lookup fails the
+ * member stays unknown, it cannot be told whether the list is theirs, and the ids are
+ * withheld all the same — but the list still counts as applying, as resolveChosenPhotos
+ * applies it at join time.
  */
 const chosenAnnotator = async (token: string): Promise<(challenge: Partial<Challenge>) => ChosenAnnotation> => {
     const savedBy = settings.getSetting('chosenPhotosMemberId');
-    if (token) {
-        await resolveMemberId(token, apiFactory.getApiStrategy().getCurrentMemberProfile, logger, 'join');
+    let current = peekMemberId(token);
+    if (current === null && token) {
+        current = await resolveMemberId(token, apiFactory.getApiStrategy().getCurrentMemberProfile, logger, 'join');
     }
-    const current = peekMemberId(token);
     const recorded = typeof savedBy === 'string' && savedBy !== '';
     const foreign = recorded && current !== null && current !== savedBy;
     // Ids are shown only once the list is known to be this account's.

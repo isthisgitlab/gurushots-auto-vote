@@ -8,7 +8,7 @@ const NO_ANNOTATIONS: Record<string, ChosenAnnotation> = {};
 
 /**
  * What the Chosen Photos settings say about the given open challenges, read from
- * the settings alone and re-read on every settings change — so a Discover row
+ * the settings (plus the cached identity lookup) and re-read on every settings change — so a Discover row
  * follows an edit without asking GuruShots for the list again. A failed read
  * leaves the data empty, and the rows keep what the list itself carried.
  *

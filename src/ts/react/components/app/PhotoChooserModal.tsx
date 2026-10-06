@@ -62,6 +62,7 @@ function PhotoTile({
     blockedReason,
     atCap,
     allowedKnown,
+    locked,
     onToggle,
 }: {
     photo: LibraryPhoto;
@@ -70,6 +71,7 @@ function PhotoTile({
     blockedReason: string | null;
     atCap: boolean;
     allowedKnown: boolean;
+    locked: boolean;
     onToggle: (id: string) => void;
 }) {
     const { t } = useTranslation();
@@ -79,7 +81,7 @@ function PhotoTile({
     // A photo that cannot be added (the challenge refuses it, or the list is full)
     // stays removable once selected. It is aria-disabled rather than disabled, so
     // Tab still reaches it and a screen reader can read why it cannot be added.
-    const unavailable = !selected && (blockedReason !== null || atCap);
+    const unavailable = locked || (!selected && (blockedReason !== null || atCap));
     const full = !selected && atCap;
     const reason = tileReason({ blockedReason, full, allowedKnown, t });
     // Only the picture and its tags are dimmed: the reason line stays at full contrast, since it is
@@ -185,6 +187,7 @@ function PhotoGrid({
     known,
     selected,
     hideUnlisted,
+    locked,
     onToggle,
     onRetry,
 }: {
@@ -193,6 +196,8 @@ function PhotoGrid({
     selected: string[];
     /** Selected ids the listing does not return are not shown (they belong to another account). */
     hideUnlisted: boolean;
+    /** The saved list is not read yet: the tiles are inert, so a late read cannot overwrite a pick. */
+    locked: boolean;
     onToggle: (id: string) => void;
     onRetry: () => void;
 }) {
@@ -232,6 +237,7 @@ function PhotoGrid({
             blockedReason={blockedReasonOf(photo)}
             atCap={atCap}
             allowedKnown={listing.allowedKnown}
+            locked={locked}
             onToggle={onToggle}
         />
     );
@@ -339,7 +345,8 @@ function OtherAccountNotice({ onRemoved }: { onRemoved: () => void }) {
 
 // What Save being held says, by the listing's state: loading will resolve by itself, an error needs
 // Retry, and no context will not load at all, so it names the way out instead of a wait.
-const SAVE_HOLD_HINT: Record<ListState['status'], string> = {
+const SAVE_HOLD_HINT: Record<ListState['status'] | 'unconfirmed', string> = {
+    unconfirmed: 'app.photoChooserSaveUnconfirmed',
     loading: 'app.photoChooserSaveWaits',
     ready: 'app.photoChooserSaveWaits',
     error: 'app.photoChooserSaveWaitsError',
@@ -353,7 +360,8 @@ const SAVE_HOLD_HINT: Record<ListState['status'], string> = {
 function ChooserFooter({
     saveFailed,
     saveWaits,
-    listState,
+    holdReason,
+    onRetryHold,
     saving,
     onSave,
     onClear,
@@ -361,8 +369,10 @@ function ChooserFooter({
 }: {
     saveFailed: boolean;
     saveWaits: boolean;
-    /** Why the listing is not ready: what the hint says to do about it differs. */
-    listState: ListState['status'];
+    /** Why Save is held: what the hint says to do about it differs. */
+    holdReason: keyof typeof SAVE_HOLD_HINT;
+    /** Asks again, when the hold is one only a retry can lift. */
+    onRetryHold: () => void;
     saving: boolean;
     onSave: () => void;
     onClear: () => void;
@@ -379,7 +389,12 @@ function ChooserFooter({
             )}
             {saveWaits && (
                 <p id={waitHintId} className="text-base-content/70 text-right text-xs">
-                    {t(SAVE_HOLD_HINT[listState])}
+                    {t(SAVE_HOLD_HINT[holdReason])}
+                    {holdReason === 'unconfirmed' && (
+                        <button type="button" className="btn btn-outline btn-xs ml-2" onClick={onRetryHold}>
+                            {t('app.photoChooserRetry')}
+                        </button>
+                    )}
                 </p>
             )}
             <div className="flex justify-end gap-2">
@@ -456,19 +471,22 @@ function PhotoChooserBody({
     });
     // A saved list that came without its ids is read again once the listing shows it is this
     // account's, and the selection starts from it; until then Save is held (see the hook).
-    const unreadSaved = useSavedListReread({
+    const saved = useSavedListReread({
         withheld: savedCount > value.length,
         owner,
         state,
         reloadSaved,
+        retryListing: retry,
         onRead: setSelected,
     });
+    // Until the list is read the tiles are inert: a late read would otherwise overwrite what was picked.
+    const locked = saved.status !== 'ok';
     const atCap = selected.length >= MAX_CHOSEN_PHOTOS;
     // With a list on record, saving restamps its owner as the signed-in account: only once the
     // listing has said who that is can the notice above warn about it. Saving nothing writes no
     // list, so it is never held back — except while the saved list is still unread (above), when
     // even an empty selection would remove it.
-    const saveWaits = (selected.length > 0 && owner !== '' && state.status !== 'ready') || unreadSaved;
+    const saveWaits = (selected.length > 0 && owner !== '' && state.status !== 'ready') || locked;
 
     return (
         <div className="space-y-3">
@@ -502,13 +520,15 @@ function PhotoChooserBody({
                 known={known}
                 selected={selected}
                 hideUnlisted={otherAccount}
+                locked={locked}
                 onToggle={toggle}
                 onRetry={retry}
             />
             <ChooserFooter
                 saveFailed={saveFailed}
                 saveWaits={saveWaits}
-                listState={state.status}
+                holdReason={saved.status === 'unconfirmed' ? 'unconfirmed' : state.status}
+                onRetryHold={saved.retry}
                 saving={saving}
                 onSave={save}
                 onClear={() => setSelected([])}

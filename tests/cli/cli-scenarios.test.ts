@@ -167,6 +167,29 @@ describe('import-scenario', () => {
         expect(h['import-scenario']).not.toHaveBeenCalled();
     });
 
+    test('the preview of an imported file cannot drive the terminal or reorder what is shown', async () => {
+        const bidi = '\u202E';
+        const esc = String.fromCharCode(27);
+        const hostile = preview({
+            name: `Pl${bidi}an${esc}[31m`,
+            start: `ma${bidi}in`,
+            description: `de${bidi}sc${esc}[2J`,
+            phases: [{ name: `ma${bidi}in`, rules: 1, settings: [] }],
+            spending: [{ action: 'swap', phase: `ma${bidi}in`, rule: `Ho${bidi}ld` }],
+            flagged: [{ phase: `ma${bidi}in`, key: 'chosenPhotos' }],
+        });
+        // `exists` too, so the overwrite warning that repeats the name is covered.
+        h['preview-scenario-import'].mockResolvedValue(invalid({ ...hostile, exists: true }));
+        await expect(cmd.importScenarioCmd('plan.json')).resolves.toBe(0);
+        const shown = text('info') + text('warning');
+        expect(shown).toContain('Scenario "Plan" — starts in phase "main"');
+        expect(shown).toContain('desc');
+        expect(shown).toContain('swap (main → Hold)');
+        expect(shown).toContain('Phase main sets chosenPhotos');
+        expect(shown).toContain('A scenario named "Plan" already exists');
+        expect(shown).not.toMatch(/(?!\n)[\p{Cc}\p{Cf}]/u);
+    });
+
     test('the preview warns about chosen photos and Only by phase', async () => {
         h['preview-scenario-import'].mockResolvedValue(
             preview({
@@ -366,6 +389,7 @@ describe('scenario-reset / dry-run / vocabulary', () => {
                 halted: null,
                 explain: [
                     { status: 'waiting', label: 'Morning entry', reason: 'condition 1 (dailyWindow) does not hold' },
+                    { status: 'waiting', label: 'Ev\u202Eil', reason: 'x' },
                 ],
                 fire: { ruleId: 'r2', startIndex: 1, actions: ['swap', 'boost', 'goto'] },
                 nextWakeAt: 1_800_000_000,
@@ -374,6 +398,9 @@ describe('scenario-reset / dry-run / vocabulary', () => {
         await expect(cmd.scenarioDryRunCmd('7')).resolves.toBe(0);
         expect(text()).toContain('phase main (not started yet)');
         expect(text()).toContain('[waiting] Morning entry');
+        // A rule label from the imported file is stripped of bidi controls.
+        expect(text()).toContain('[waiting] Evil: x');
+        expect(text()).not.toContain('\u202E');
         expect(text()).toContain('Would run now: r2 → boost, goto');
     });
 
@@ -423,8 +450,8 @@ describe('scenario-reset / dry-run / vocabulary', () => {
                     },
                     {
                         at: 1_800_000_600,
-                        phase: 'main',
-                        label: 'Hold it',
+                        phase: 'ma\u202Ein',
+                        label: 'Ho\u202Eld it',
                         actions: ['swap', 'goto'],
                         toPhase: 'holding',
                     },
@@ -436,7 +463,8 @@ describe('scenario-reset / dry-run / vocabulary', () => {
         );
         await expect(cmd.scenarioSimulateCmd('7')).resolves.toBe(0);
         expect(text()).toContain('[main] Morning entry: enterPhoto');
-        expect(text()).toContain('Hold it: swap, goto → phase holding');
+        expect(text()).toContain('[main] Hold it: swap, goto → phase holding');
+        expect(text()).not.toContain('\u202E');
         expect(text()).toContain('waits on live data');
     });
 

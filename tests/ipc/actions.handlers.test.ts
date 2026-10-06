@@ -194,7 +194,7 @@ describe('authenticate', () => {
 
     beforeEach(() => {
         auth.extractAuthResult = invalid(realExtractAuthResult);
-        auth.switchAccountToken = jest.fn();
+        auth.switchAccountToken.mockReset();
         settings.setSetting = jest.fn();
         mockSurface = { authenticate: jest.fn() };
         realSurface = { authenticate: jest.fn() };
@@ -744,6 +744,8 @@ describe('get-member-challenges', () => {
         beforeEach(() => {
             clearOpenChallenges();
             mockChosenSettings({});
+            // As the real lookup does when it cannot tell: no member, never undefined.
+            jest.mocked(autoFill.resolveMemberId).mockReset().mockResolvedValue(null);
         });
 
         test('its own list, and the count that applies when it is the one in force', async () => {
@@ -796,6 +798,18 @@ describe('get-member-challenges', () => {
         });
 
         describe('on a fresh launch the signed-in member is resolved before the ids are withheld', () => {
+            afterEach(() => {
+                jest.mocked(autoFill.resolveMemberId).mockReset();
+                jest.mocked(autoFill.peekMemberId).mockReset();
+            });
+
+            test('a member a lookup already resolved costs no lookup of its own', async () => {
+                mockChosenSettings({ own: { '7': ['a', 'b'] }, savedBy: 'member-0', current: 'member-0' });
+                const [row] = await open();
+                expect(row).toEqual(expect.objectContaining({ chosenOwn: ['a', 'b'] }));
+                expect(autoFill.resolveMemberId).not.toHaveBeenCalled();
+            });
+
             // peekMemberId knows nobody until the lookup has run, as in a fresh process.
             const unknownUntilResolved = (resolvesTo: string | null) => {
                 jest.mocked(autoFill.peekMemberId).mockReturnValue(null);
@@ -849,7 +863,7 @@ describe('get-member-challenges', () => {
     });
 });
 
-describe('get-open-chosen-annotations — settings only', () => {
+describe('get-open-chosen-annotations — read from the settings, with one cached identity lookup', () => {
     const ask = (ids: unknown) =>
         invalid<(event: unknown, ids: unknown) => Promise<unknown>>(buildHandlers()['get-open-chosen-annotations'])(
             {},
@@ -860,10 +874,25 @@ describe('get-open-chosen-annotations — settings only', () => {
         clearOpenChallenges();
         jest.mocked(settings.loadSettings).mockReturnValue(invalid({ token: 'tok' }));
         mockChosenSettings({ own: { '7': ['a', 'b'] }, inherited: ['g'] });
-        jest.mocked(autoFill.resolveMemberId).mockReset();
+        jest.mocked(autoFill.resolveMemberId).mockReset().mockResolvedValue(null);
     });
 
-    describe("the signed-in member is resolved first, so a fresh launch does not withhold the user's own list", () => {
+    describe("the signed-in member is resolved when no lookup has, so a fresh launch does not withhold the user's own list", () => {
+        afterEach(() => {
+            jest.mocked(autoFill.resolveMemberId).mockReset();
+            jest.mocked(autoFill.peekMemberId).mockReset();
+        });
+
+        test('a member a lookup already resolved costs no lookup of its own', async () => {
+            stubStrategy();
+            mockChosenSettings({ own: { '7': ['a', 'b'] }, savedBy: 'member-0', current: 'member-0' });
+            await expect(ask([7])).resolves.toEqual({
+                success: true,
+                annotations: { '7': { chosenOwn: ['a', 'b'], chosenOwnCount: 2, chosenEffectiveCount: 2 } },
+            });
+            expect(autoFill.resolveMemberId).not.toHaveBeenCalled();
+        });
+
         const unknownUntilResolved = (resolvesTo: string | null) => {
             jest.mocked(autoFill.peekMemberId).mockReturnValue(null);
             jest.mocked(autoFill.resolveMemberId).mockImplementation(async () => {
@@ -907,7 +936,7 @@ describe('get-open-chosen-annotations — settings only', () => {
         });
     });
 
-    test('answers from the settings alone, without any request to GuruShots', async () => {
+    test('answers from the settings, without fetching the challenge list or touching an entry', async () => {
         const strategy = stubStrategy();
         await expect(ask([7, '8'])).resolves.toEqual({
             success: true,
