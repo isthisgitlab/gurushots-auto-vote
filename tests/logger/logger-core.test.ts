@@ -143,6 +143,15 @@ describe('module load: logs directory', () => {
         expect(logger.getRecentLogs()).toEqual([]);
     });
 
+    test('printLine keeps line breaks, which writeLog flattens to one line', () => {
+        const { logger } = loadLogger();
+        logger.printLine('first\nsecond\n  third');
+        expect(logSpy).toHaveBeenCalledWith('first\nsecond\n  third');
+        // The protection of the log entry itself is unchanged.
+        logger.info('first\nsecond');
+        expect(lastEntry(logger).message).toBe('ℹ️ First second');
+    });
+
     test('printLine redacts credentials folded into the text', () => {
         const { logger } = loadLogger();
         logger.printLine('auth token=abc123 password: hunter2');

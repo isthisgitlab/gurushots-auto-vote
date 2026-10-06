@@ -50,16 +50,14 @@ export const beforeChosenPhotosWrite = async (key: string, value: string): Promi
  */
 export const clearChosenPhotos = (): boolean => {
     try {
-        const removed = settings.clearChosenPhotos();
-        if (removed === null) {
+        if (settings.clearChosenPhotos() === null) {
             logger
                 .withCategory('settings')
                 .error('Could not remove the chosen-photo lists — the settings file could not be saved');
             return false;
         }
-        logger
-            .withCategory('settings')
-            .success(`Removed ${removed} chosen-photo list(s) from settings, rules, profiles and scenarios`);
+        // The settings layer already logged how many lists went (one line for the GUI and the CLI
+        // alike); printing it again here would show it twice.
         return true;
     } catch (error) {
         logger.withCategory('settings').error('Error removing the chosen-photo lists', error);

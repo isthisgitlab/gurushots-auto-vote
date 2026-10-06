@@ -46,7 +46,8 @@ jest.mock('../../src/ts/logger', () => {
     const calls: { level: string; msg: unknown }[] = [];
     const rec = (level: string) => (msg: unknown) => calls.push({ level, msg });
     const cat = { info: rec('info'), error: rec('error'), debug: rec('debug'), warning: rec('warning') };
-    return { __calls: calls, withCategory: jest.fn(() => cat), cleanup: jest.fn() };
+    // printLine is the console-only writer: what reaches it is never a one-line log entry.
+    return { __calls: calls, withCategory: jest.fn(() => cat), printLine: rec('stdout'), cleanup: jest.fn() };
 });
 
 jest.mock('../../src/ts/settings', () => ({
@@ -252,7 +253,11 @@ describe('startup', () => {
 describe('help and unknown commands', () => {
     test.each([['help'], ['--help'], ['-h']])('%s prints help in REAL mode', async (flag) => {
         const m = await run([flag]);
-        const [text] = m.msgs('info');
+        // The help is printed whole, on the console only, with its line breaks (not as a log entry).
+        expect(m.msgs('info')).toEqual([]);
+        const [text] = m.msgs('stdout');
+        expect(text.split('\n').length).toBeGreaterThan(30);
+        expect(text).toContain('\nCommands:\n  login    - Authenticate with GuruShots and save token\n  logout ');
         expect(text).toContain('GuruShots Auto Voter - CLI (REAL MODE)');
         expect(text).toContain('Current mode: REAL (live API calls)');
         // clear-chosen-photos clears every list; a single challenge's list goes with reset-setting.
@@ -263,7 +268,7 @@ describe('help and unknown commands', () => {
 
     test('help in MOCK mode says so', async () => {
         const m = await run(['help'], (mods) => mods.settings.loadSettings.mockReturnValue(invalid({ mock: true })));
-        const [text] = m.msgs('info');
+        const [text] = m.msgs('stdout');
         expect(text).toContain('(MOCK MODE)');
         expect(text).toContain('Current mode: MOCK (simulated API calls)');
     });

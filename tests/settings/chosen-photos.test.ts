@@ -10,6 +10,7 @@ import { invalid } from '../helpers/invalid';
 import logger = require('../../src/ts/logger');
 import type * as openChallengesModule from '../../src/ts/settings/openChallenges';
 import type * as clearModule from '../../src/ts/settings/chosenPhotosClear';
+import type * as cliClearModule from '../../src/ts/cli/commands/settings/chosenPhotos';
 import type * as scenarioStateStoreModule from '../../src/ts/scenarioStateStore';
 import type { AndroidHeadlessStore, AppSettings } from '../../src/ts/types/settings';
 const { __resetOpenChallengeIds, getOpenChallengeIds } =
@@ -378,6 +379,22 @@ describe('Chosen Photos settings', () => {
             store.value = JSON.stringify(raw);
             expect(settings.clearChosenPhotos()).toBe(7);
             expect(settings.getScenario('Plan')!.phases.main.settings).not.toHaveProperty('chosenPhotos');
+        });
+
+        test('the CLI command and the settings layer together log the removal once', () => {
+            seedEverywhere();
+            const category = logger.withCategory('settings');
+            const lines = ['info', 'success', 'warning'] as const;
+            lines.forEach((level) => jest.mocked(category[level]).mockClear());
+            const { clearChosenPhotos: clearFromCli } =
+                require('../../src/ts/cli/commands/settings/chosenPhotos') as typeof cliClearModule;
+            expect(clearFromCli()).toBe(true);
+            const removedLines = lines
+                .flatMap((level) => jest.mocked(category[level]).mock.calls.map(([message]) => String(message)))
+                .filter((message) => message.startsWith('Removed '));
+            expect(removedLines).toEqual([
+                'Removed 7 chosen-photo list(s) from settings, rules, profiles and scenarios',
+            ]);
         });
 
         test('with nothing saved it removes nothing and still clears the owner record', () => {

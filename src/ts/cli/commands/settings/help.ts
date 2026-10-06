@@ -4,7 +4,8 @@ import * as logger from '../../../logger';
 import { THEMES } from '../../../settings/uiDefaults';
 
 export const helpSettings = () => {
-    logger.withCategory('ui').info(`
+    // A block of text the user asked to read: printed with its line breaks, on the console only.
+    logger.printLine(`
 === Settings Management Help ===
 
 Available Commands:

@@ -5,7 +5,9 @@ const showHelp = () => {
     const userSettings = settings.loadSettings();
     const isMockMode = userSettings.mock;
 
-    logger.withCategory('ui').info(`
+    // The help is a block of text the user asked to read: printed whole, with its line breaks,
+    // on the console only (the log file's one-line entries would flatten it).
+    logger.printLine(`
 GuruShots Auto Voter - CLI ${isMockMode ? '(MOCK MODE)' : '(REAL MODE)'}
 
 Usage: <command>

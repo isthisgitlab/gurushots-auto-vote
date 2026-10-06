@@ -10,8 +10,11 @@ jest.mock('../../src/ts/services/semantic/diagnostics', () => ({ diagnostics: { 
 jest.mock('../../src/ts/logger', () => {
     const infoMock = jest.fn();
     const errorMock = jest.fn();
+    const printMock = jest.fn();
     return {
         __infoMock: infoMock,
+        __printMock: printMock,
+        printLine: printMock,
         __errorMock: errorMock,
         withCategory: jest.fn(() => ({ info: infoMock, error: errorMock })),
         getLogFile: jest.fn(() => '/logs/app.log'),
@@ -25,7 +28,11 @@ import { invalid } from '../helpers/invalid';
 import fsModule = require('node:fs');
 const fs = jest.mocked(fsModule);
 import loggerModule = require('../../src/ts/logger');
-const logger = jest.mocked(invalid<typeof loggerModule & { __infoMock: jest.Mock<void, [string]> }>(loggerModule));
+const logger = jest.mocked(
+    invalid<typeof loggerModule & { __infoMock: jest.Mock<void, [string]>; __printMock: jest.Mock<void, [string]> }>(
+        loggerModule,
+    ),
+);
 import type * as diagnosticsModule from '../../src/ts/services/semantic/diagnostics';
 import type * as logsModule from '../../src/ts/cli/commands/logs';
 const { diagnostics } = jest.mocked(require('../../src/ts/services/semantic/diagnostics') as typeof diagnosticsModule);
@@ -41,10 +48,9 @@ describe('CLI logs command', () => {
         showLogs({ lines: 2 });
 
         expect(logger.getLogFile).toHaveBeenCalled();
-        const printed = logger.__infoMock.mock.calls.map((c) => c[0]).join('\n');
-        expect(printed).toContain('line3');
-        expect(printed).toContain('line4');
-        expect(printed).not.toContain('line1');
+        // The tail is printed whole, one line per log line, on the console only.
+        expect(logger.__printMock.mock.calls).toEqual([['line3\nline4']]);
+        expect(logger.__infoMock.mock.calls.map((c) => c[0]).join('\n')).not.toContain('line3');
     });
 
     test('reads the error log when category is error', () => {

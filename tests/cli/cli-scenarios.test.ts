@@ -7,7 +7,7 @@ jest.mock('../../src/ts/logger', () => {
     const calls: { level: string; msg: string }[] = [];
     const rec = (level: string) => (msg: unknown) => calls.push({ level, msg: String(msg) });
     const cat = { info: rec('info'), error: rec('error'), success: rec('success'), warning: rec('warning') };
-    return { __calls: calls, withCategory: jest.fn(() => cat) };
+    return { __calls: calls, withCategory: jest.fn(() => cat), printLine: rec('stdout') };
 });
 jest.mock('../../src/ts/ipc/scenarios.handlers', () => {
     const handlers = Object.fromEntries(
@@ -90,7 +90,10 @@ describe('list-scenarios', () => {
 describe('scenario-template', () => {
     test('prints or writes a template; an unknown id fails', async () => {
         await expect(cmd.scenarioTemplate('eveningBoost')).resolves.toBe(0);
-        expect(text()).toContain('"name": "Evening boost before the last day"');
+        // The document goes to the console with its line breaks, never into the log as one line.
+        expect(text('info')).toBe('');
+        expect(text('stdout')).toContain('{\n  "name": "Evening boost before the last day"');
+        expect(text('stdout').endsWith('}')).toBe(true);
         await expect(cmd.scenarioTemplate('eveningBoost', 'out.json')).resolves.toBe(0);
         expect(fs.writeFileSync).toHaveBeenCalledWith('out.json', expect.stringContaining('Evening boost'), 'utf8');
         await expect(cmd.scenarioTemplate('nope')).resolves.toBe(1);

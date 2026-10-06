@@ -124,12 +124,11 @@ describe('beforeChosenPhotosWrite', () => {
 });
 
 describe('clearChosenPhotos', () => {
-    test('reports how many lists went', () => {
+    test('succeeds without a line of its own: the settings layer already logged how many lists went', () => {
         settings.clearChosenPhotos.mockReturnValue(3);
         expect(clearChosenPhotos()).toBe(true);
-        expect(msgs('success')).toEqual([
-            'Removed 3 chosen-photo list(s) from settings, rules, profiles and scenarios',
-        ]);
+        expect(msgs('success')).toEqual([]);
+        expect(msgs('info')).toEqual([]);
     });
 
     test('a save that failed is an error', () => {

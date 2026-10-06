@@ -49,7 +49,9 @@ const reportFailure = (result: { success?: boolean; error?: unknown; issues?: Sc
  */
 const output = (text: string, file: string | null | undefined) => {
     if (!file) {
-        ui().info(text);
+        // A document the user asked to see (or pipe): printed with its line breaks, on the console
+        // only; the log file's one-line entries would flatten it. print adds the final newline.
+        logger.printLine(text.replace(/\n$/, ''));
         return 0;
     }
     try {

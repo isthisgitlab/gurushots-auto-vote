@@ -14,6 +14,7 @@ jest.mock('../../src/ts/logger', () => {
     return {
         __calls: calls,
         withCategory: jest.fn(() => cat),
+        printLine: rec('stdout'),
         sanitizeForLog: jest.fn((obj: object) => (Object.hasOwn(obj, 'token') ? { token: '[REDACTED]' } : obj)),
     };
 });
@@ -465,8 +466,11 @@ describe('profiles', () => {
 describe('help and window reset', () => {
     test('helpSettings prints the command and profile reference', () => {
         cmd.helpSettings();
-        const [text] = msgs('info');
-        expect(text).toContain('=== Settings Management Help ===');
+        // Printed whole, with its line breaks, on the console only.
+        expect(msgs('info')).toEqual([]);
+        const [text] = msgs('stdout');
+        expect(text).toContain('\n=== Settings Management Help ===\n\nAvailable Commands:\n  get-setting <key>');
+        expect(text.split('\n').length).toBeGreaterThan(20);
         expect(text).toContain('save-profile "2-pic tactic" --challenge=12345');
     });
 
