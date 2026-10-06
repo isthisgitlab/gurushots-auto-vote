@@ -4,8 +4,8 @@ import { isIdArg } from '../isIdArg';
 import * as logger from '../../logger';
 import * as apiFactory from '../../apiFactory';
 import * as auth from '../../services/auth';
-import { isAutoJoinActive, resolveJoinSetting } from '../../services/joinChallenges';
-import { peekMemberId } from '../../services/autoFill';
+import { isAutoJoinActive } from '../../services/joinChallenges';
+import { chosenAnnotator, annotateOpenIds, rememberOpenChallenges, MAX_ANNOTATED_IDS } from './chosenAnnotations';
 import { getAutoClaimStatus } from '../../services/autoClaim';
 import { rememberChallenges } from '../../windows/quitGuard';
 import { sanitizeForLog, refuseInvalidArgs } from './shared';
@@ -112,30 +112,6 @@ const handleGetAutoJoinActive = (async () => {
     }
 }) satisfies IpcReplyFn;
 
-const idsOf = (value: unknown): string[] =>
-    Array.isArray(value) ? value.filter((id): id is string => typeof id === 'string') : [];
-
-/**
- * An open challenge with what the Chosen Photos settings say for it: its own
- * saved list, and how many photos the join would use — resolved the way the
- * join resolves them, so a list reaching it through a rule or a global default
- * counts too. A list saved under another account counts for nothing, as it does
- * at join time.
- */
-const withChosenPhotos = (challenge: Challenge, token: string): OpenChallenge => {
-    if (challenge?.id === undefined || challenge?.id === null) {
-        return { ...challenge, chosenOwn: [], chosenEffectiveCount: 0 };
-    }
-    const savedBy = settings.getSetting('chosenPhotosMemberId');
-    const current = peekMemberId(token);
-    const foreign = typeof savedBy === 'string' && savedBy !== '' && current !== null && current !== savedBy;
-    return {
-        ...challenge,
-        chosenOwn: idsOf(settings.getChallengeOverride('chosenPhotos', String(challenge.id))),
-        chosenEffectiveCount: foreign ? 0 : idsOf(resolveJoinSetting('chosenPhotos', challenge)).length,
-    };
-};
-
 // List un-joined ("open") challenges for the Discover view / CLI.
 /**
  * @param filter - Server-side filter; defaults to 'open'.
@@ -153,14 +129,34 @@ const handleGetMemberChallenges = (async (event?: unknown, filter?: string) => {
         // that is not joined yet (see cleanupStaleChallengeSetting).
         if ((filter === undefined || filter === 'open') && Array.isArray(items)) {
             settings.rememberOpenChallengeIds(items.flatMap((c) => (c?.id == null ? [] : [c.id])));
+            rememberOpenChallenges(items);
         }
+        const annotate = chosenAnnotator(guard.token);
         return {
             success: true as const,
-            items: Array.isArray(items) ? items.map((item) => withChosenPhotos(item, guard.token)) : [],
+            items: Array.isArray(items) ? items.map((item): OpenChallenge => ({ ...item, ...annotate(item) })) : [],
         };
     } catch (error) {
         logger.withCategory('api').error('Error handling get-member-challenges request:', error);
         return { ...errorResult(error, 'Failed to list challenges'), items: [] };
+    }
+}) satisfies IpcReplyFn;
+
+// The Chosen Photos annotations of open challenges, from the settings alone: what
+// the Discover rows re-read when a setting changes, without asking GuruShots again.
+/**
+ * @param ids - the open challenges' ids
+ */
+const handleGetOpenChosenAnnotations = (async (event: unknown, ids: Array<string | number>) => {
+    if (!Array.isArray(ids) || ids.length > MAX_ANNOTATED_IDS || !ids.every(isIdArg)) {
+        return refuseInvalidArgs('join', 'get-open-chosen-annotations');
+    }
+    try {
+        const { token } = settings.loadSettings();
+        return { success: true as const, annotations: annotateOpenIds(ids, token) };
+    } catch (error) {
+        logger.withCategory('join').error('Error handling get-open-chosen-annotations request:', error);
+        return { ...errorResult(error, 'Failed to read the chosen photos'), annotations: {} };
     }
 }) satisfies IpcReplyFn;
 
@@ -206,5 +202,6 @@ export {
     handleGetBankroll,
     handleGetAutoJoinActive,
     handleGetMemberChallenges,
+    handleGetOpenChosenAnnotations,
     handleJoinChallenge,
 };

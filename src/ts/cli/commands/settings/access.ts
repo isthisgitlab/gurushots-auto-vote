@@ -98,7 +98,9 @@ export const setGlobalDefault = (key: string, value: string): boolean => {
         const success = settings.setGlobalDefault(key, parsedValue);
         if (success) {
             const actualValue = settings.getGlobalDefault(key);
-            logger.withCategory('settings').success(`Set global default ${key} = ${JSON.stringify(actualValue)}`);
+            logger
+                .withCategory('settings')
+                .success(`Set global default ${key} = ${formatSettingForLog(key, actualValue)}`);
             return true;
         }
         logger.withCategory('settings').error(`Failed to set global default '${key}' - validation failed`);
@@ -109,7 +111,7 @@ export const setGlobalDefault = (key: string, value: string): boolean => {
         const config = schema[key] as SettingsSchemaEntry;
         logger
             .withCategory('settings')
-            .info(`Setting info: ${config.type} type, default: ${JSON.stringify(config.default)}`);
+            .info(`Setting info: ${config.type} type, default: ${formatSettingForLog(key, config.default)}`);
         return false;
     } catch (error) {
         logger.withCategory('settings').error(`Error setting global default '${key}'`, error);

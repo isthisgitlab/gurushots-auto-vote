@@ -16,8 +16,8 @@ const isTopmost = (id: string): boolean => openModalIds[openModalIds.length - 1]
 
 /**
  * Keep this modal on the stack while it is open. Its own effect, keyed on the
- * open state alone: handleKeyDown changes with every new onClose, and
- * re-registering then would move a modal above one opened from inside it.
+ * open state alone, so the modal holds its place for as long as it stays open:
+ * registering again would move it above one opened from inside it.
  */
 function useModalStack(isOpen: boolean, id: string) {
     useLayoutEffect(() => {

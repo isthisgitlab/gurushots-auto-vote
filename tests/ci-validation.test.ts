@@ -46,6 +46,24 @@ describe('source language', () => {
     });
 });
 
+describe('shipped dependency tree', () => {
+    // braces (GHSA-vfj7-8cjw-p6xm) has no patched release and is excepted in
+    // pnpm-workspace.yaml's `auditConfig` because only dev tooling (electronmon's
+    // watcher) reaches it. That exception holds only while it stays out of the
+    // shipped tree: `pnpm why braces --prod` must find nothing.
+    test('braces is not reachable from the production dependencies', () => {
+        const { execFileSync } = jest.requireActual<typeof import('node:child_process')>('node:child_process');
+        const path = jest.requireActual<typeof import('node:path')>('node:path');
+        const found: unknown = JSON.parse(
+            execFileSync('pnpm', ['why', 'braces', '--prod', '--json'], {
+                cwd: path.join(__dirname, '..'),
+                encoding: 'utf8',
+            }),
+        );
+        expect(found).toEqual([]);
+    });
+});
+
 describe('test typing', () => {
     // `Mock` without type arguments is `Mock<any, any>`, an `any` the lint rules
     // cannot see until a value is used; a mock names the function it stands in

@@ -117,4 +117,8 @@ const challengeTargetForId = (
     title: _titleForChallengeId(settings, challengeId),
 });
 
-export { rememberChallengeTitles, factsForChallengeId, challengeTargetForId };
+/** Whether the id is in the latest active-challenge list (i.e. the challenge is joined). */
+const isActiveChallengeId = (challengeId: string | number | null | undefined): boolean =>
+    activeChallengeTitles.has(_challengeIdKey(challengeId));
+
+export { rememberChallengeTitles, factsForChallengeId, challengeTargetForId, isActiveChallengeId };

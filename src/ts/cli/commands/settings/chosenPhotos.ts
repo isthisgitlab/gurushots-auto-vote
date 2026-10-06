@@ -8,34 +8,37 @@ import { recordChosenPhotosOwner, writeCarriesChosenList } from '../../../ipc/ch
 import { parseSettingValue } from '../../parseValue';
 
 /**
- * After the CLI saved `key`: when it saved a Chosen Photos list, record the
- * signed-in account as the list's owner — the same record the settings IPC
- * keeps, so a list saved here is not ignored as "another account's" — and warn
- * when lists saved under a different account are now going to apply to this one.
- * An account that cannot be resolved leaves the record unchanged.
+ * Before the CLI saves `key`: when it is about to save a Chosen Photos list, look up
+ * the signed-in account and — when lists saved under a different account are on
+ * record, which saving now makes apply to this one too — say so, with the remedy.
+ * Returns what to run once the write has landed: it records the signed-in account as
+ * the list's owner, the same record the settings IPC keeps, so a list saved here is
+ * not ignored as "another account's". An account that cannot be resolved (or a write
+ * that carries no list) leaves the record unchanged: the returned function does nothing.
  *
- * @param value - the raw argv token that was saved
+ * @param value - the raw argv token about to be saved
  */
-export const noteChosenPhotosOwner = async (key: string, value: string): Promise<void> => {
-    if (!writeCarriesChosenList([key, parseSettingValue(value)])) return;
+export const beforeChosenPhotosWrite = async (key: string, value: string): Promise<() => void> => {
+    const nothing = () => undefined;
+    if (!writeCarriesChosenList([key, parseSettingValue(value)])) return nothing;
     const { token } = settings.loadSettings();
-    if (!token) return;
+    if (!token) return nothing;
     const memberId = await resolveMemberId(
         token,
         apiFactory.getApiStrategy().getCurrentMemberProfile,
         logger,
         'settings',
     );
-    if (memberId === null) return;
+    if (memberId === null) return nothing;
     const savedBy = settings.getSetting('chosenPhotosMemberId');
     if (typeof savedBy === 'string' && savedBy !== '' && savedBy !== memberId) {
         logger
             .withCategory('settings')
             .warning(
-                'Chosen-photo lists saved under another account stay in your settings and now apply to this account too. Remove them with: clear-chosen-photos',
+                'Chosen-photo lists saved under another account stay in your settings and will apply to this account too once this list is saved. To remove them, run clear-chosen-photos (it also removes the list you are setting now), then set this list again.',
             );
     }
-    recordChosenPhotosOwner(memberId);
+    return () => recordChosenPhotosOwner(memberId);
 };
 
 /**

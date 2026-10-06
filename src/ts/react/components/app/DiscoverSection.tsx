@@ -1,6 +1,8 @@
 import { useState, useCallback } from 'react';
 import { useTranslation } from '@/contexts/TranslationContext';
 import { useMemberChallenges } from '@/api/useMemberChallenges';
+import { useOpenChosenAnnotations } from '@/api/useOpenChosenAnnotations';
+import { useOnChosenPhotosCleared } from '@/api/chosenPhotosCleared';
 import { Modal, ModalActions } from '@/components/ui/Modal';
 import { InlineLoader } from '@/components/ui/LoadingSpinner';
 import { StatusBadge } from '@/components/ui/StatusBadge';
@@ -98,6 +100,7 @@ function RowPhotoChooser({
             isOpen={!!challenge}
             onClose={onClose}
             value={challenge?.chosenOwn ?? []}
+            savedCount={challenge?.chosenOwnCount}
             challengeId={challenge?.id ?? null}
             clearMeansInherit
             onSave={save}
@@ -125,6 +128,10 @@ export function DiscoverSection({
 }) {
     const { t } = useTranslation();
     const { items, loading, error, refetch } = useMemberChallenges();
+    // The rows follow the settings without another trip to GuruShots: what the list carried is
+    // only the starting point, the settings-only read replaces it as soon as it answers.
+    const chosen = useOpenChosenAnnotations(items.map((c) => String(c.id)));
+    useOnChosenPhotosCleared(() => void chosen.refetch());
     const [confirm, setConfirm] = useState<OpenChallenge | null>(null); // challenge pending paid confirmation
     const [choosing, setChoosing] = useState<OpenChallenge | null>(null); // challenge whose photos are being chosen
     const [busyId, setBusyId] = useState<Challenge['id'] | null>(null);
@@ -182,7 +189,7 @@ export function DiscoverSection({
     if (!isLoggedIn) return null;
 
     // useMemberChallenges guarantees an array.
-    const list = items;
+    const list = items.map((c): OpenChallenge => ({ ...c, ...chosen.annotations[String(c.id)] }));
 
     return (
         <>
@@ -249,11 +256,11 @@ export function DiscoverSection({
                                                         : t('app.discoverCostFree')}
                                                 </span>
                                             </div>
-                                            {c.chosenOwn.length > 0 && (
+                                            {c.chosenOwnCount > 0 && (
                                                 <ChosenChip name={name} onClick={() => setChoosing(c)} />
                                             )}
                                             {/* No list of its own, but one reaches it through a rule or the global default. */}
-                                            {c.chosenOwn.length === 0 && c.chosenEffectiveCount > 0 && (
+                                            {c.chosenOwnCount === 0 && c.chosenEffectiveCount > 0 && (
                                                 <div className="text-xs text-base-content/60 mt-0.5">
                                                     {interp(t('app.discoverChosenInherited'), {
                                                         count: c.chosenEffectiveCount,
@@ -365,7 +372,7 @@ export function DiscoverSection({
                 })()}
             </Modal>
 
-            <RowPhotoChooser challenge={choosing} onClose={() => setChoosing(null)} onSaved={refetch} />
+            <RowPhotoChooser challenge={choosing} onClose={() => setChoosing(null)} onSaved={chosen.refetch} />
         </>
     );
 }

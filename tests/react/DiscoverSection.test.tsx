@@ -13,8 +13,24 @@ import type { OpenChallenge } from '../../src/ts/types/gurushots';
 import type { WindowApi } from '../../src/ts/types/ipc';
 
 const items = invalid<OpenChallenge[]>([
-    { id: 900001, type: 'default', join_coins: 0, title: 'Free One', chosenOwn: [], chosenEffectiveCount: 0 },
-    { id: 900002, type: 'flash', join_coins: 100, title: 'Paid One', chosenOwn: [], chosenEffectiveCount: 0 },
+    {
+        id: 900001,
+        type: 'default',
+        join_coins: 0,
+        title: 'Free One',
+        chosenOwn: [],
+        chosenOwnCount: 0,
+        chosenEffectiveCount: 0,
+    },
+    {
+        id: 900002,
+        type: 'flash',
+        join_coins: 100,
+        title: 'Paid One',
+        chosenOwn: [],
+        chosenOwnCount: 0,
+        chosenEffectiveCount: 0,
+    },
 ]);
 
 beforeEach(() => {
@@ -129,8 +145,8 @@ describe('edge paths', () => {
         window.api.getMemberChallenges = jest.fn().mockResolvedValue({
             success: true,
             items: [
-                { id: 1, url: 'just-url', chosenOwn: [], chosenEffectiveCount: 0 },
-                { id: 2, join_coins: 'x', chosenOwn: [], chosenEffectiveCount: 0 },
+                { id: 1, url: 'just-url', chosenOwn: [], chosenOwnCount: 0, chosenEffectiveCount: 0 },
+                { id: 2, join_coins: 'x', chosenOwn: [], chosenOwnCount: 0, chosenEffectiveCount: 0 },
             ],
         });
         renderSection();
@@ -223,12 +239,12 @@ describe('edge paths', () => {
     });
 
     test('an unknown balance says so and still allows the spend; a url-only paid challenge is named by url', async () => {
-        window.api.getMemberChallenges = jest
-            .fn()
-            .mockResolvedValue({
-                success: true,
-                items: [{ id: 5, url: 'paid-url', join_coins: 10, chosenOwn: [], chosenEffectiveCount: 0 }],
-            });
+        window.api.getMemberChallenges = jest.fn().mockResolvedValue({
+            success: true,
+            items: [
+                { id: 5, url: 'paid-url', join_coins: 10, chosenOwn: [], chosenOwnCount: 0, chosenEffectiveCount: 0 },
+            ],
+        });
         mockTranslator.t.mockImplementation((key) =>
             key === 'app.discoverConfirmBody' ? 'join {title} for {coins}' : key,
         );
@@ -263,7 +279,12 @@ describe('chosen photos', () => {
     const annotated = () =>
         items.map((c) => {
             const mine = own[String(c.id)];
-            return { ...c, chosenOwn: mine ?? [], chosenEffectiveCount: (mine ?? globalList).length };
+            return {
+                ...c,
+                chosenOwn: mine ?? [],
+                chosenOwnCount: (mine ?? []).length,
+                chosenEffectiveCount: (mine ?? globalList).length,
+            };
         });
 
     beforeEach(() => {
@@ -272,7 +293,17 @@ describe('chosen photos', () => {
         window.api = invalid({
             onSettingsChanged: undefined,
             getSetting: jest.fn().mockResolvedValue(''),
-            getMemberChallenges: jest.fn(async () => ({ success: true, items: annotated() })),
+            // The list is read once; the rows then follow the settings through the settings-only read.
+            getMemberChallenges: jest.fn(async () => ({ success: true, items: items })),
+            getOpenChosenAnnotations: jest.fn(async () => ({
+                success: true,
+                annotations: Object.fromEntries(
+                    annotated().map(({ id, chosenOwn, chosenOwnCount, chosenEffectiveCount }) => [
+                        String(id),
+                        { chosenOwn, chosenOwnCount, chosenEffectiveCount },
+                    ]),
+                ),
+            })),
             joinChallenge: jest.fn().mockResolvedValue({ success: true, status: 'joined' }),
             setChallengeOverride: jest.fn(async (_key: string, id: string, value: string[]) => {
                 own[id] = value;
@@ -312,10 +343,11 @@ describe('chosen photos', () => {
         await waitFor(() =>
             expect(window.api.setChallengeOverride).toHaveBeenCalledWith('chosenPhotos', '900001', [PHOTO]),
         );
-        // The list is read again after the save: the row now carries the chip, the other row does not.
+        // The settings are read again after the save, not the list from GuruShots: the row now
+        // carries the chip, the other row does not.
         expect(await screen.findByText('app.discoverChosenChip')).toBeTruthy();
         expect(screen.getAllByText('app.discoverChosenChip')).toHaveLength(1);
-        expect(window.api.getMemberChallenges).toHaveBeenCalledTimes(2);
+        expect(window.api.getMemberChallenges).toHaveBeenCalledTimes(1);
         await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull());
     });
 
@@ -345,7 +377,7 @@ describe('chosen photos', () => {
             await screen.findByText('Free One');
             expect(screen.getByRole('button', { name: 'Choose photos for Free One' })).toBeTruthy();
             expect(screen.getByRole('button', { name: 'Choose photos for Paid One' })).toBeTruthy();
-            expect(screen.getByRole('button', { name: 'Chosen photos for Free One' })).toBeTruthy();
+            expect(await screen.findByRole('button', { name: 'Chosen photos for Free One' })).toBeTruthy();
             expect(screen.queryByRole('button', { name: 'Chosen photos for Paid One' })).toBeNull();
         } finally {
             mockTranslator.t.mockImplementation((key) => key);
@@ -388,8 +420,8 @@ describe('chosen photos', () => {
         renderSection();
         await screen.findByText('Paid One');
         // Only a list of the row's own gets the chip; the row says what it inherits instead.
+        await waitFor(() => expect(screen.getAllByText('app.discoverChosenInherited')).toHaveLength(2));
         expect(screen.queryByText('app.discoverChosenChip')).toBeNull();
-        expect(screen.getAllByText('app.discoverChosenInherited')).toHaveLength(2);
         fireEvent.click(screen.getByText('app.discoverJoinPaid'));
         expect(await screen.findByText('app.discoverConfirmChosen')).toBeTruthy();
     });
@@ -409,6 +441,49 @@ describe('chosen photos', () => {
         await screen.findByText('Free One');
         fireEvent.click(screen.getAllByText('app.choosePhotos')[0]);
         expect(await screen.findByText('app.photoChooserInheritNote')).toBeTruthy();
+    });
+
+    test("another account's list is only counted: remove, cancel, reopen, and its ids never appear", async () => {
+        // The main process withholds a foreign list's ids and counts them; the owner is on record.
+        let foreign = true;
+        own['900001'] = [PHOTO];
+        jest.mocked(window.api.getSetting).mockResolvedValue('d'.repeat(32));
+        jest.mocked(window.api.getOpenChosenAnnotations).mockImplementation(async () => ({
+            success: true,
+            annotations: Object.fromEntries(
+                annotated().map((row) => [
+                    String(row.id),
+                    {
+                        chosenOwn: foreign ? [] : row.chosenOwn,
+                        chosenOwnCount: row.chosenOwnCount,
+                        chosenEffectiveCount: foreign ? 0 : row.chosenEffectiveCount,
+                    },
+                ]),
+            ),
+        }));
+        window.api.clearChosenPhotos = jest.fn(async () => {
+            own = {};
+            foreign = false;
+            return { success: true as const, removed: 1 };
+        });
+        renderSection();
+        fireEvent.click(await screen.findByText('app.discoverChosenChip'));
+        // The chooser opens empty, with the notice and a count — never the other account's id.
+        expect(await screen.findByText('app.photoChooserOtherAccount')).toBeTruthy();
+        expect(screen.getByText('app.chosenPhotosOtherAccountCount')).toBeTruthy();
+        expect(document.body.textContent).not.toContain(PHOTO.slice(0, 8));
+        fireEvent.click(screen.getByRole('button', { name: 'app.photoChooserOtherAccountClear' }));
+        const confirm = (await screen.findAllByRole('button', { name: 'app.photoChooserOtherAccountClear' })).at(-1)!;
+        fireEvent.click(confirm);
+        await waitFor(() => expect(window.api.clearChosenPhotos).toHaveBeenCalledTimes(1));
+        fireEvent.click((await screen.findAllByRole('button', { name: 'app.cancel' })).at(-1)!);
+        await waitFor(() => expect(screen.queryByRole('button', { name: 'app.photoChooserUse' })).toBeNull());
+        // The row no longer carries the chip, and reopening shows a clean chooser.
+        await waitFor(() => expect(screen.queryByText('app.discoverChosenChip')).toBeNull());
+        fireEvent.click(screen.getAllByText('app.choosePhotos')[0]);
+        await screen.findByRole('button', { name: 'app.photoChooserUse' });
+        expect(screen.queryByText('app.photoChooserOtherAccount')).toBeNull();
+        expect(document.body.textContent).not.toContain(PHOTO.slice(0, 8));
     });
 
     test('a row whose own list is empty reads as having none', async () => {

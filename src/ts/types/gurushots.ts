@@ -196,8 +196,18 @@ export interface MemberChallengesResponse {
  * challenge alone; `chosenEffectiveCount` is how many photos the join would
  * actually use once every layer is resolved (0 under another account's list).
  */
-export interface OpenChallenge extends Challenge {
+export interface OpenChallenge extends Challenge, ChosenAnnotation {}
+
+/**
+ * What the Chosen Photos settings say about one open challenge. `chosenOwn` is the
+ * list saved for it alone — empty while that list was saved under another account,
+ * whose photo ids are never sent (`chosenOwnCount` still says how many there are).
+ * `chosenEffectiveCount` is how many photos the join would use once every layer is
+ * resolved (0 under another account's list).
+ */
+export interface ChosenAnnotation {
     chosenOwn: string[];
+    chosenOwnCount: number;
     chosenEffectiveCount: number;
 }
 

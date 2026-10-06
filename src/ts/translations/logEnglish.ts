@@ -90,8 +90,6 @@ export const logMessages = {
     m20a25539e44c: '  Status:  Modified ✏️',
     m20dd568d749e:
         'Failed to save profile — the name is empty/too long/reserved, the profile cap is reached, or a value failed validation (see the settings log)',
-    m216378b1dcc5:
-        '{0}: your Chosen Photos were saved while another account was signed in, so they are ignored — choose them again for this account or clear them',
     m219dbd8057ac: 'Error handling get-settings request:',
     m21b1261f69f8:
         '{0} boost fill-new is on, but a new photo cannot be submitted before sleep; boosting existing entry',
@@ -478,6 +476,8 @@ export const logMessages = {
     mb47c17a2cd2b: 'Error applying turbo to entry:',
     mb484141d8ee1: 'Logged out successfully',
     mb49805a99d14: 'Reset {0} for challenge {1} (now inherits its profile/global baseline)',
+    mb4afab689594:
+        '{0}: your Chosen Photos were saved while another account was signed in, so they are ignored — remove them (chooser → Remove those lists, or clear-chosen-photos), then choose photos for this account',
     mb4cdb19fca68: 'Error computing next cycle delay; using normal cadence',
     mb4e5eb205e20: 'Failed to fill exposure: {0}',
     mb58f4ec761aa: '{0}: done for {1}',

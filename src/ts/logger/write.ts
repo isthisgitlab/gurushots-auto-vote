@@ -110,9 +110,10 @@ const writeLog = (
 /**
  * Write a line to the console only: no log file, ring buffer or GUI feed. For
  * output a command was asked for (a long listing) that must not be persisted.
- * The text is printed as given, so callers strip untrusted content themselves.
+ * Credentials folded into the text are redacted like any log message; untrusted
+ * content is otherwise printed as given, so callers strip it themselves.
  */
-const printLine = (text: string): void => writeConsole('log', text);
+const printLine = (text: string): void => writeConsole('log', redactMessage(text));
 
 /**
  * Operation tracker. `startOperation` stores the level + category so

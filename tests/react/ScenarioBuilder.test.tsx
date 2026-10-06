@@ -7,6 +7,7 @@ import { act, render, screen, waitFor, fireEvent, within } from './helpers/test-
 import type { ComponentProps } from 'preact';
 import { ScenarioBuilder } from '@/components/app/scenarioBuilder/ScenarioBuilder';
 import type { ScenarioDraft, ScenarioDraftRule } from '../../src/ts/types/scenarioBuilder';
+import { announceChosenPhotosCleared } from '@/api/chosenPhotosCleared';
 import { invalid } from '../helpers/invalid';
 
 /** The saved document as these tests read it: each phase they inspect has rules, and every action a type. */
@@ -374,4 +375,23 @@ describe('save', () => {
         click('app.cancel');
         expect(onCancel).toHaveBeenCalled();
     });
+});
+
+test('every list removed while the builder is open is dropped from the draft, so saving cannot restore it', async () => {
+    await renderBuilder({
+        initial: {
+            ...doc(),
+            phases: {
+                main: { settings: { exposure: 10, chosenPhotos: ['p1'] }, rules: [] },
+                later: { rules: [] },
+            },
+        },
+    });
+    await screen.findByText('app.chosenPhotosScenarioHint');
+    act(() => announceChosenPhotosCleared());
+    await waitFor(() => expect(screen.queryByText('app.chosenPhotosScenarioHint')).toBeNull());
+    const draft = await saveDraft();
+    // The other settings stay; a phase without settings is left as it was.
+    expect(draft.phases.main.settings).toEqual({ exposure: 10 });
+    expect(draft.phases.later).toEqual({ rules: [] });
 });

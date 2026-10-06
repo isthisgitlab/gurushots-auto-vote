@@ -185,6 +185,23 @@ describe('Chosen Photos settings', () => {
             expect(perChallenge()['7']).toEqual({ chosenPhotos: ['a'], chosenPhotosOnly: true });
         });
 
+        test('a joined (active) challenge keeps the normal rule: equal to the inherited value means no override', () => {
+            settings.setGlobalDefault('chosenPhotos', ['a']);
+            settings.setGlobalDefault('chosenPhotosOnly', true);
+            settings.rememberChallengeTitles([{ id: 7, title: 'Pink' }]);
+            expect(settings.setChallengeOverride('chosenPhotos', '7', ['a'])).toBe(true);
+            expect(settings.setChallengeOverride('chosenPhotosOnly', '7', true)).toBe(true);
+            expect(perChallenge()['7']).toBeUndefined();
+            expect(settings.setChallengeOverrides('7', { chosenPhotos: ['a'] })).toBe(true);
+            expect(settings.replaceChallengeOverrides('7', { chosenPhotos: ['a'] }, false)).toBe(true);
+            expect(perChallenge()['7']).toBeUndefined();
+            // A value that differs is still stored, and an id that is not active keeps equal ones.
+            expect(settings.setChallengeOverride('chosenPhotos', '7', ['b'])).toBe(true);
+            expect(perChallenge()['7']).toEqual({ chosenPhotos: ['b'] });
+            expect(settings.setChallengeOverride('chosenPhotos', '8', ['a'])).toBe(true);
+            expect(perChallenge()['8']).toEqual({ chosenPhotos: ['a'] });
+        });
+
         test('also when a whole container is written, by the batch and the replace path', () => {
             settings.setGlobalDefault('chosenPhotos', ['a']);
             settings.setGlobalDefault('exposure', 50);
@@ -251,33 +268,30 @@ describe('Chosen Photos settings', () => {
             expect(keys()).toEqual(['100', '101', '104']);
         });
 
-        test('with no open list known and a join able to run, chosen entries are kept', () => {
+        test('with no open list known, chosen entries are kept even with auto-join off, and the join still reads them', () => {
             seed();
             expect(getOpenChallengeIds()).toBeNull();
-            settings.cleanupStaleChallengeSetting([], true);
-            expect(keys()).toEqual(['100', '101', '103', '104']);
-        });
-
-        test('with no open list known and no join able to run, chosen entries are pruned like any other', () => {
-            seed();
-            expect(getOpenChallengeIds()).toBeNull();
+            expect(settings.getEffectiveSetting('autoJoin', null)).toBe(false);
             settings.cleanupStaleChallengeSetting([]);
-            expect(keys()).toEqual([]);
+            // An entry that holds nothing a join reads is pruned all the same.
+            expect(keys()).toEqual(['100', '101', '103', '104']);
+            // A manual Join in Discover resolves the per-id list through exactly this read.
+            expect(settings.getChallengeOverride('chosenPhotos', '100')).toEqual(['a']);
         });
 
         test('once the list is known, a chosen entry that is neither open nor active goes', () => {
             seed();
             settings.rememberOpenChallengeIds([100]);
-            settings.cleanupStaleChallengeSetting([], true);
+            settings.cleanupStaleChallengeSetting([]);
             expect(keys()).toEqual(['100']);
-            expect(settings.cleanupStaleChallengeSetting([], true)).toBe(true);
+            expect(settings.cleanupStaleChallengeSetting([])).toBe(true);
         });
 
         test('an empty open list (a failed fetch reads the same) is never remembered, so entries are kept', () => {
             seed();
             settings.rememberOpenChallengeIds([]);
             expect(getOpenChallengeIds()).toBeNull();
-            settings.cleanupStaleChallengeSetting([], true);
+            settings.cleanupStaleChallengeSetting([]);
             expect(keys()).toEqual(['100', '101', '103', '104']);
         });
 
@@ -292,7 +306,7 @@ describe('Chosen Photos settings', () => {
             seed();
             settings.replaceChallengeOverrides('100', { chosenPhotos: ['a'] }, true);
             settings.rememberOpenChallengeIds([100]);
-            settings.cleanupStaleChallengeSetting([], true);
+            settings.cleanupStaleChallengeSetting([]);
             expect(blob().challengeSettings.titleProfileSuppressions).toEqual({ '100': true });
         });
     });

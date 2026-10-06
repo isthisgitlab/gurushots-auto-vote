@@ -79,8 +79,8 @@ const setup = (
 beforeEach(() => {
     mockTranslator.t.mockImplementation(english);
     rememberCurrentMember(null);
-    window.api.getSetting = jest.fn().mockResolvedValue('');
-    window.api.getLibraryPhotos = jest.fn().mockResolvedValue(listing([photo(1), photo(2), photo(3)]));
+    jest.mocked(window.api.getSetting).mockResolvedValue('');
+    jest.mocked(window.api.getLibraryPhotos).mockResolvedValue(listing([photo(1), photo(2), photo(3)]));
 });
 
 afterEach(() => {
@@ -89,10 +89,10 @@ afterEach(() => {
 
 describe('listing and tiles', () => {
     test('renders nothing while closed', () => {
-        const { container } = render(
-            <PhotoChooserModal isOpen={false} onClose={jest.fn()} value={[]} onSave={jest.fn()} />,
-        );
-        expect(container.querySelector('[role="dialog"]')).toBeNull();
+        render(<PhotoChooserModal isOpen={false} onClose={jest.fn()} value={[]} onSave={jest.fn()} />);
+        // The dialog is portalled to the body, so that is where it would show up.
+        expect(document.body.querySelector('[role="dialog"]')).toBeNull();
+        expect(getLibrary()).not.toHaveBeenCalled();
     });
 
     test('shows the loader, then a tile per photo with a lazy, referrer-less CDN thumbnail', async () => {
@@ -263,9 +263,15 @@ describe('selection', () => {
         fireEvent.click(extra);
         expect(extra.getAttribute('aria-pressed')).toBe('false');
         expect(screen.getByRole('status').textContent).toContain(`${MAX_CHOSEN_PHOTOS} of ${MAX_CHOSEN_PHOTOS}`);
+        // The reason is short text on the tile itself, and the tile is dimmed.
+        expect(extra.textContent).toContain('List full');
+        expect(extra.className).toContain('opacity-50');
+        expect(tile(1).textContent).not.toContain('List full');
+        expect(tile(1).className).not.toContain('opacity-50');
         expect(tile(1).getAttribute('aria-disabled')).toBe('false');
         fireEvent.click(tile(1));
         expect(tile(MAX_CHOSEN_PHOTOS + 1).getAttribute('aria-disabled')).toBe('false');
+        expect(tile(MAX_CHOSEN_PHOTOS + 1).textContent).not.toContain('List full');
         expect(screen.getByRole('status').textContent).not.toContain('Limit reached');
     });
 
@@ -403,10 +409,11 @@ describe('failures', () => {
             .mockResolvedValueOnce(listing([photo(1)]));
         setup();
         const alert = await screen.findByRole('alert');
-        expect(alert.textContent).toContain("Your photos couldn't be loaded (details below)");
-        // No cause is claimed: neither the network nor the session.
-        expect(alert.textContent).not.toMatch(/reach GuruShots|session/);
-        expect(alert.textContent).toContain('Try again');
+        // Nothing came back to show as a detail: a generic why and next step, not "details below".
+        expect(alert.textContent).toContain(
+            "Your photos couldn't be loaded — GuruShots didn't answer or your session expired. Try again, or sign in again.",
+        );
+        expect(alert.textContent).not.toContain('details below');
         fireEvent.click(screen.getByRole('button', { name: 'Retry' }));
         await screen.findByRole('button', { name: /^Photo 00000001:/ });
         expect(getLibrary()).toHaveBeenLastCalledWith(7, undefined);
@@ -415,7 +422,11 @@ describe('failures', () => {
     test('an error carries its own text as a detail; invalid-args is translated', async () => {
         getLibrary().mockResolvedValueOnce({ success: false, error: 'Failed to read your photo library' });
         const view = setup();
-        expect((await screen.findByRole('alert')).textContent).toContain('Failed to read your photo library');
+        const alert = await screen.findByRole('alert');
+        // With a detail to point at, "details below" is accurate and no cause is claimed.
+        expect(alert.textContent).toContain("Your photos couldn't be loaded (details below). Try again.");
+        expect(alert.textContent).not.toMatch(/GuruShots didn't answer|session/);
+        expect(alert.textContent).toContain('Failed to read your photo library');
         view.unmount();
 
         mockTranslator.t.mockImplementation((key) =>
@@ -493,11 +504,11 @@ describe('account scope', () => {
     const notice = () => screen.findByText(/saved under another account, so the app ignores them/);
 
     beforeEach(() => {
-        window.api.clearChosenPhotos = jest.fn().mockResolvedValue({ success: true, removed: 2 });
+        jest.mocked(window.api.clearChosenPhotos).mockResolvedValue({ success: true, removed: 2 });
     });
 
     test("warns that saving here makes the other account's lists apply too, and never shows their ids", async () => {
-        window.api.getSetting = jest.fn().mockResolvedValue(OTHER);
+        jest.mocked(window.api.getSetting).mockResolvedValue(OTHER);
         setup({ value: [idOf(1), idOf(9)] });
         expect((await notice()).textContent).toContain('Saving a list here makes them apply to this account too');
         // Counted, not shown: no tile, short id or thumbnail for the other account's photos.
@@ -510,7 +521,7 @@ describe('account scope', () => {
     });
 
     test('the notice judges the list the modal opened with, so it stays after clearing and choosing again', async () => {
-        window.api.getSetting = jest.fn().mockResolvedValue(OTHER);
+        jest.mocked(window.api.getSetting).mockResolvedValue(OTHER);
         setup({ value: [idOf(1)] });
         await notice();
         fireEvent.click(screen.getByRole('button', { name: 'Clear' }));
@@ -520,8 +531,44 @@ describe('account scope', () => {
         expect(screen.getByRole('status').textContent).toBe(`1 of ${MAX_CHOSEN_PHOTOS} chosen`);
     });
 
+    test('the notice and the withheld photos stay while a search is loading or fails', async () => {
+        jest.mocked(window.api.getSetting).mockResolvedValue(OTHER);
+        setup({ value: [idOf(1), idOf(2)] });
+        await notice();
+        const box = screen.getByLabelText('Search your photos by tag');
+        const pending = deferred<Listing>();
+        getLibrary().mockReturnValueOnce(invalid(pending.promise));
+        fireEvent.change(box, { target: { value: 'x' } });
+        fireEvent.submit(box.closest('form')!);
+        // Loading: the listing says nothing about the account, yet the notice is still there.
+        expect(screen.getByText('Loading your photos…')).toBeTruthy();
+        expect(screen.queryByText(/saved under another account, so the app ignores them/)).not.toBeNull();
+        expect(screen.getByText('2 photo(s) saved under another account')).toBeTruthy();
+        await act(async () => pending.resolve(invalid({ success: false, error: 'down' })));
+        // Failed: still there.
+        await screen.findByRole('button', { name: 'Retry' });
+        expect(screen.queryByText(/saved under another account, so the app ignores them/)).not.toBeNull();
+        expect(screen.queryByRole('button', { name: new RegExp(`${shortOf(1)}`) })).toBeNull();
+    });
+
+    test('a count passed in for a withheld list is shown with the notice, though no ids are', async () => {
+        jest.mocked(window.api.getSetting).mockResolvedValue(OTHER);
+        render(
+            <PhotoChooserModal
+                isOpen
+                onClose={jest.fn()}
+                value={[]}
+                savedCount={3}
+                challengeId={7}
+                onSave={jest.fn()}
+            />,
+        );
+        await notice();
+        expect(screen.getByText('3 photo(s) saved under another account')).toBeTruthy();
+    });
+
     test('saving still saves what was chosen here', async () => {
-        window.api.getSetting = jest.fn().mockResolvedValue(OTHER);
+        jest.mocked(window.api.getSetting).mockResolvedValue(OTHER);
         const { onSave } = setup({ value: [idOf(1)] });
         await notice();
         fireEvent.click(tile(2));
@@ -530,13 +577,13 @@ describe('account scope', () => {
     });
 
     test('removing the lists asks first, then removes them and drops the notice', async () => {
-        window.api.getSetting = jest.fn().mockResolvedValue(OTHER);
+        jest.mocked(window.api.getSetting).mockResolvedValue(OTHER);
         setup({ value: [idOf(1)] });
         await notice();
         fireEvent.click(screen.getByRole('button', { name: 'Remove those lists' }));
         expect(
             await screen.findByText(
-                'Remove the chosen-photo lists saved under the other account, in every setting, profile, rule and scenario?',
+                "Remove the chosen-photo lists saved under the other account, in every setting, profile, rule and scenario? This can't be undone. Submit Only Chosen Photos is kept.",
             ),
         ).toBeTruthy();
         expect(window.api.clearChosenPhotos).not.toHaveBeenCalled();
@@ -551,7 +598,7 @@ describe('account scope', () => {
     });
 
     test('cancelling the confirmation removes nothing', async () => {
-        window.api.getSetting = jest.fn().mockResolvedValue(OTHER);
+        jest.mocked(window.api.getSetting).mockResolvedValue(OTHER);
         setup({ value: [idOf(1)] });
         await notice();
         fireEvent.click(screen.getByRole('button', { name: 'Remove those lists' }));
@@ -565,7 +612,7 @@ describe('account scope', () => {
     });
 
     test('Escape closes the confirmation only, and removes nothing', async () => {
-        window.api.getSetting = jest.fn().mockResolvedValue(OTHER);
+        jest.mocked(window.api.getSetting).mockResolvedValue(OTHER);
         const { onClose } = setup({ value: [idOf(1)] });
         await notice();
         fireEvent.click(screen.getByRole('button', { name: 'Remove those lists' }));
@@ -582,7 +629,7 @@ describe('account scope', () => {
         ['a refused removal', jest.fn().mockResolvedValue({ success: false, error: 'disk' })],
         ['a removal the bridge rejects', jest.fn().mockRejectedValue(new Error('down'))],
     ])('%s keeps the notice and says the lists were not removed', async (_name, clear) => {
-        window.api.getSetting = jest.fn().mockResolvedValue(OTHER);
+        jest.mocked(window.api.getSetting).mockResolvedValue(OTHER);
         window.api.clearChosenPhotos = clear;
         setup({ value: [idOf(1)] });
         await notice();
@@ -594,7 +641,7 @@ describe('account scope', () => {
     });
 
     test('no warning when the list belongs to the signed-in account', async () => {
-        window.api.getSetting = jest.fn().mockResolvedValue(MEMBER);
+        jest.mocked(window.api.getSetting).mockResolvedValue(MEMBER);
         setup({ value: [idOf(1)] });
         await screen.findByRole('button', { name: /^Photo 00000001:/ });
         expect(screen.queryByText(/saved under another account/)).toBeNull();
@@ -608,10 +655,41 @@ describe('account scope', () => {
     });
 
     test('no warning for an empty list', async () => {
-        window.api.getSetting = jest.fn().mockResolvedValue(OTHER);
+        jest.mocked(window.api.getSetting).mockResolvedValue(OTHER);
         setup();
         await screen.findByRole('button', { name: /^Photo 00000001:/ });
         expect(screen.queryByText(/saved under another account/)).toBeNull();
+    });
+});
+
+describe('Save while the account is unknown', () => {
+    const OTHER = 'd'.repeat(32);
+    const use = () => screen.getByRole<HTMLButtonElement>('button', { name: 'Use these photos' });
+
+    test('is disabled while the listing loads or has failed, once an owner is on record', async () => {
+        jest.mocked(window.api.getSetting).mockResolvedValue(OTHER);
+        const pending = deferred<Listing>();
+        getLibrary().mockReturnValueOnce(invalid(pending.promise));
+        setup({ value: [idOf(1)] });
+        await waitFor(() => expect(window.api.getSetting).toHaveBeenCalled());
+        await act(async () => undefined);
+        expect(use().disabled).toBe(true);
+        await act(async () => pending.resolve(invalid({ success: false, error: 'down' })));
+        await screen.findByRole('button', { name: 'Retry' });
+        expect(use().disabled).toBe(true);
+        // Once a listing shows who is signed in, Save is available again.
+        getLibrary().mockResolvedValueOnce(listing([photo(1)]));
+        fireEvent.click(screen.getByRole('button', { name: 'Retry' }));
+        await screen.findByRole('button', { name: /^Photo 00000001:/ });
+        expect(use().disabled).toBe(false);
+    });
+
+    test('is not held back when no owner is on record', async () => {
+        const pending = deferred<Listing>();
+        getLibrary().mockReturnValueOnce(invalid(pending.promise));
+        setup({ value: [idOf(1)] });
+        await act(async () => undefined);
+        expect(use().disabled).toBe(false);
     });
 });
 

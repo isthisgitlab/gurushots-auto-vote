@@ -63,3 +63,44 @@ test('the chooser reads the library through the challenge being edited, and the 
         expect(mockApi.replaceChallengeOverrides).toHaveBeenCalledWith('123', { chosenPhotos: [PHOTO] }, false),
     );
 });
+
+describe('removing every list from the chooser while the modal holds a draft', () => {
+    const OTHER = 'd'.repeat(32);
+
+    const removeFromChooser = async () => {
+        fireEvent.click(await screen.findByRole('button', { name: 'app.choosePhotos' }));
+        // Another account's list: the chooser's notice offers to remove every list.
+        fireEvent.click(await screen.findByRole('button', { name: 'app.photoChooserOtherAccountClear' }));
+        const confirm = (await screen.findAllByRole('button', { name: 'app.photoChooserOtherAccountClear' })).at(-1)!;
+        fireEvent.click(confirm);
+        await waitFor(() => expect(mockApi.clearChosenPhotos).toHaveBeenCalledTimes(1));
+        // Leave the chooser without choosing anything: its Cancel is the last one in the page.
+        fireEvent.click((await screen.findAllByRole('button', { name: 'app.cancel' })).at(-1)!);
+    };
+
+    beforeEach(() => {
+        mockApi.getChallengeOverrides.mockResolvedValue({ chosenPhotos: [PHOTO] });
+        mockApi.getSetting.mockResolvedValue(OTHER);
+        mockApi.clearChosenPhotos.mockClear().mockResolvedValue({ success: true, removed: 1 });
+        mockApi.replaceChallengeOverrides.mockClear();
+    });
+
+    test('saving the modal afterwards does not write the removed list back', async () => {
+        render(<ChallengeSettingsModal isOpen onClose={jest.fn()} challengeId="123" challengeTitle="Sea" />);
+        await removeFromChooser();
+        await waitFor(() => expect(screen.queryByText('app.photoChooserOtherAccount')).toBeNull());
+        fireEvent.click(screen.getByRole('button', { name: 'app.save' }));
+        // What is written has no chosen list: the removal stands (and the settings layer, seeing no
+        // list in the write, never restamps the signed-in account as its owner).
+        await waitFor(() => expect(mockApi.replaceChallengeOverrides).toHaveBeenCalledWith('123', {}, false));
+    });
+
+    test('without the removal the same save would have carried the list', async () => {
+        render(<ChallengeSettingsModal isOpen onClose={jest.fn()} challengeId="123" challengeTitle="Sea" />);
+        await screen.findByRole('button', { name: 'app.choosePhotos' });
+        fireEvent.click(screen.getByRole('button', { name: 'app.save' }));
+        await waitFor(() =>
+            expect(mockApi.replaceChallengeOverrides).toHaveBeenCalledWith('123', { chosenPhotos: [PHOTO] }, false),
+        );
+    });
+});

@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback } from 'react';
 import { useSessionLoad } from './useSessionLoad';
 import * as ipc from '@/api/ipc';
+import { useOnChosenPhotosCleared, withoutChosenPhotos } from '@/api/chosenPhotosCleared';
 
 import type { Dispatch, SetStateAction } from 'react';
 import type { ChallengeValues } from '../../types/settings';
@@ -294,6 +295,13 @@ export function useChallengeOverrides({
     }, [isOpen, refetchSchema]);
 
     const { setTitleProfile, ...profile } = useTitleProfile({ isOpen, schema, defaults, overrides, setOverrides });
+    // Saving writes the whole override map: lists removed meanwhile must not come back with it.
+    useOnChosenPhotosCleared(() => {
+        setOverrides(withoutChosenPhotos);
+        setTitleProfile((current) =>
+            current && current.values ? { ...current, values: withoutChosenPhotos(current.values) } : current,
+        );
+    });
     const { loading, loadFailed } = useOverridesLoad({
         isOpen,
         challengeId,

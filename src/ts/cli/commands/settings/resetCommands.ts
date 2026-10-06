@@ -3,7 +3,7 @@
 import * as logger from '../../../logger';
 import * as settings from '../../../settings';
 import { getDefaultSettings } from '../../../settings';
-import { logUnknownSchemaKey, requirePerChallenge, schemaEntry } from './shared';
+import { formatSettingForLog, logUnknownSchemaKey, requirePerChallenge, schemaEntry } from './shared';
 
 export const resetSetting = (key: string, challengeId: string | null = null) => {
     try {
@@ -31,7 +31,7 @@ export const resetSetting = (key: string, challengeId: string | null = null) => 
         }
 
         settings.setSetting(key, defaultValue);
-        logger.withCategory('settings').success(`Reset ${key} to default: ${JSON.stringify(defaultValue)}`);
+        logger.withCategory('settings').success(`Reset ${key} to default: ${formatSettingForLog(key, defaultValue)}`);
         return true;
     } catch (error) {
         logger.withCategory('settings').error(`Error resetting setting '${key}'`, error);
@@ -51,7 +51,9 @@ export const resetGlobalDefault = (key: string) => {
             return false;
         }
         const defaultValue = entry.default;
-        logger.withCategory('settings').success(`Reset global default ${key} to: ${JSON.stringify(defaultValue)}`);
+        logger
+            .withCategory('settings')
+            .success(`Reset global default ${key} to: ${formatSettingForLog(key, defaultValue)}`);
         return true;
     } catch (error) {
         logger.withCategory('settings').error(`Error resetting global default '${key}'`, error);

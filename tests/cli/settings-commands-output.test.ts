@@ -164,6 +164,14 @@ describe('setSetting', () => {
         expect(msgs('success')).toEqual(['Set global default exposure = 80']);
     });
 
+    test('a global default photo list is confirmed as a count', () => {
+        settings.SETTINGS_SCHEMA = invalid({ chosenPhotos: { type: 'photos', perChallenge: true, default: [] } });
+        settings.setGlobalDefault.mockReturnValue(true);
+        settings.getGlobalDefault.mockReturnValue(invalid(['secret1', 'secret2']));
+        expect(cmd.setGlobalDefault('chosenPhotos', '["secret1","secret2"]')).toBe(true);
+        expect(msgs('success')).toEqual(['Set global default chosenPhotos = 2 photo(s)']);
+    });
+
     test('a global-only schema key redirects without the --challenge hint', () => {
         settings.setGlobalDefault.mockReturnValue(true);
         settings.getGlobalDefault.mockReturnValue(2);
@@ -362,7 +370,20 @@ describe('schema and global-default dumps', () => {
         cmd.listGlobalDefaults();
         const info = msgs('info');
         expect(info).toContain('exposure: 70');
-        expect(info).toContain('emergencyFill: 300');
+        expect(info).toContain('emergencyFill: 300 (5m)');
+    });
+
+    test('a photo list is counted in the dumps, never listed', () => {
+        settings.SETTINGS_SCHEMA = invalid({ chosenPhotos: { type: 'photos', perChallenge: true, default: [] } });
+        settings.loadSettings.mockReturnValue(
+            invalid({ challengeSettings: { globalDefaults: { chosenPhotos: ['secret1', 'secret2'] } } }),
+        );
+        cmd.listGlobalDefaults();
+        cmd.dumpSchema();
+        const info = msgs('info');
+        expect(info).toContain('chosenPhotos: 2 photo(s)');
+        expect(info).toContain('  Default: 0 photo(s)');
+        expect(info.join('\n')).not.toContain('secret');
     });
 
     test('listGlobalDefaults falls back to schema defaults with no stored map', () => {

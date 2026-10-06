@@ -696,7 +696,10 @@ describe('get-member-challenges', () => {
         const handlers = buildHandlers();
         const result = await handlers['get-member-challenges']({});
         expect(strategy.getMemberChallenges).toHaveBeenCalledWith('tok', 'open');
-        expect(result).toEqual({ success: true, items: [{ id: 1, chosenOwn: [], chosenEffectiveCount: 0 }] });
+        expect(result).toEqual({
+            success: true,
+            items: [{ id: 1, chosenOwn: [], chosenOwnCount: 0, chosenEffectiveCount: 0 }],
+        });
     });
 
     describe('each open challenge says what is chosen for it', () => {
@@ -725,33 +728,139 @@ describe('get-member-challenges', () => {
         test('its own list, and the count that applies when it is the one in force', async () => {
             resolve({ '7': ['a', 'b'] }, []);
             const items = await open();
-            expect(items[0]).toEqual({ id: 7, title: 'Pink', chosenOwn: ['a', 'b'], chosenEffectiveCount: 2 });
+            expect(items[0]).toEqual({
+                id: 7,
+                title: 'Pink',
+                chosenOwn: ['a', 'b'],
+                chosenOwnCount: 2,
+                chosenEffectiveCount: 2,
+            });
             // No list of its own and none inherited.
-            expect(items[2]).toEqual({ id: 8, chosenOwn: [], chosenEffectiveCount: 0 });
+            expect(items[2]).toEqual({ id: 8, chosenOwn: [], chosenOwnCount: 0, chosenEffectiveCount: 0 });
         });
 
         test('a list inherited from a rule or the global default counts, with nothing of its own', async () => {
             resolve({}, ['g1', 'g2', 'g3']);
-            expect((await open())[0]).toEqual(expect.objectContaining({ chosenOwn: [], chosenEffectiveCount: 3 }));
+            expect((await open())[0]).toEqual(
+                expect.objectContaining({ chosenOwn: [], chosenOwnCount: 0, chosenEffectiveCount: 3 }),
+            );
             settings.resolveRuleSetting = jest.fn().mockReturnValue({ value: ['r1'] });
             expect((await open())[0]).toEqual(expect.objectContaining({ chosenOwn: [], chosenEffectiveCount: 1 }));
         });
 
         test('an item with no id is passed through with nothing chosen', async () => {
             resolve({}, ['g1']);
-            expect((await open())[1]).toEqual({ chosenOwn: [], chosenEffectiveCount: 0 });
+            expect((await open())[1]).toEqual({ chosenOwn: [], chosenOwnCount: 0, chosenEffectiveCount: 0 });
         });
 
-        test('a list saved under another account counts for nothing, as it does at join time', async () => {
-            resolve({ '7': ['a'] }, ['g1']);
+        test('a list saved under another account is counted but its ids are never sent, and nothing applies', async () => {
+            resolve({ '7': ['secret-a', 'secret-b'] }, ['g1']);
             settings.getSetting = jest.fn().mockReturnValue('member-0');
-            expect((await open())[0]).toEqual(expect.objectContaining({ chosenOwn: ['a'], chosenEffectiveCount: 0 }));
-            // The same account, or one that cannot be told yet, keeps it.
+            const [row] = await open();
+            expect(row).toEqual(expect.objectContaining({ chosenOwn: [], chosenOwnCount: 2, chosenEffectiveCount: 0 }));
+            expect(JSON.stringify(await open())).not.toContain('secret');
+            // The same account, or one that cannot be told yet (no lookup has resolved it), applies the list.
             settings.getSetting = jest.fn().mockReturnValue('member-1');
-            expect((await open())[0]).toEqual(expect.objectContaining({ chosenEffectiveCount: 1 }));
+            expect((await open())[0]).toEqual(expect.objectContaining({ chosenOwn: ['secret-a', 'secret-b'] }));
             settings.getSetting = jest.fn().mockReturnValue('member-0');
             autoFill.peekMemberId = jest.fn().mockReturnValue(null);
-            expect((await open())[0]).toEqual(expect.objectContaining({ chosenEffectiveCount: 1 }));
+            expect((await open())[0]).toEqual(expect.objectContaining({ chosenEffectiveCount: 2 }));
+        });
+
+        test('the owner and the signed-in member are looked up once per request, not once per challenge', async () => {
+            resolve({ '7': ['a'], '8': ['b'] }, []);
+            await open();
+            expect(settings.getSetting).toHaveBeenCalledTimes(1);
+            expect(autoFill.peekMemberId).toHaveBeenCalledTimes(1);
+        });
+    });
+});
+
+describe('get-open-chosen-annotations — settings only', () => {
+    const ask = (ids: unknown) =>
+        invalid<(event: unknown, ids: unknown) => Promise<unknown>>(buildHandlers()['get-open-chosen-annotations'])(
+            {},
+            ids,
+        );
+
+    beforeEach(() => {
+        settings.loadSettings = jest.fn().mockReturnValue({ token: 'tok' });
+        settings.getSetting = jest.fn().mockReturnValue('');
+        settings.getChallengeOverride = invalid(
+            jest.fn((key: string, id: string) => (key === 'chosenPhotos' && id === '7' ? ['a', 'b'] : null)),
+        );
+        settings.resolveRuleSetting = jest.fn().mockReturnValue(null);
+        settings.getEffectiveSetting = jest.fn().mockReturnValue(['g']);
+        autoFill.peekMemberId = jest.fn().mockReturnValue('member-1');
+    });
+
+    test('answers from the settings alone, without any request to GuruShots', async () => {
+        const strategy = stubStrategy();
+        await expect(ask([7, '8'])).resolves.toEqual({
+            success: true,
+            annotations: {
+                '7': { chosenOwn: ['a', 'b'], chosenOwnCount: 2, chosenEffectiveCount: 2 },
+                '8': { chosenOwn: [], chosenOwnCount: 0, chosenEffectiveCount: 1 },
+            },
+        });
+        expect(auth.requireAuthToken).not.toHaveBeenCalled();
+        // None of the strategy's endpoints was reached.
+        expect(strategy.getActiveChallenges).not.toHaveBeenCalled();
+        expect(strategy.getEligiblePhotos).not.toHaveBeenCalled();
+        expect(strategy.submitToChallenge).not.toHaveBeenCalled();
+    });
+
+    test('a rule keyed on the title resolves through the open list the last fetch returned', async () => {
+        stubAuthGuardOk();
+        stubStrategy({ getMemberChallenges: jest.fn().mockResolvedValue([{ id: 9, title: 'Rule Match' }]) });
+        await buildHandlers()['get-member-challenges']({});
+        settings.resolveRuleSetting = jest.fn().mockReturnValue({ value: ['r1'] });
+        await ask([9]);
+        expect(settings.resolveRuleSetting).toHaveBeenCalledWith(
+            'chosenPhotos',
+            expect.objectContaining({ id: 9, title: 'Rule Match' }),
+        );
+    });
+
+    test("under another account's list the ids are never sent", async () => {
+        settings.getSetting = jest.fn().mockReturnValue('member-0');
+        const result = await ask([7]);
+        expect(result).toEqual({
+            success: true,
+            annotations: { '7': { chosenOwn: [], chosenOwnCount: 2, chosenEffectiveCount: 0 } },
+        });
+        expect(JSON.stringify(result)).not.toContain('"a"');
+    });
+
+    test.each([
+        ['not an array', '7'],
+        ['an item that is not an id', [7, {}]],
+        ['a blank id', ['  ']],
+        ['too many ids', Array.from({ length: 201 }, (_, i) => i + 1)],
+    ])('refuses %s', async (_name, ids) => {
+        await expect(ask(ids)).resolves.toEqual({ success: false, error: 'invalid-args' });
+    });
+
+    test('an empty list is fine', async () => {
+        await expect(ask([])).resolves.toEqual({ success: true, annotations: {} });
+    });
+
+    test('a failing settings read is an error result, never a throw', async () => {
+        settings.loadSettings = invalid(
+            jest.fn(() => {
+                throw new Error('read failed');
+            }),
+        );
+        await expect(ask([7])).resolves.toEqual({ success: false, error: 'read failed', annotations: {} });
+        settings.loadSettings = invalid(
+            jest.fn(() => {
+                throw new Error('');
+            }),
+        );
+        await expect(ask([7])).resolves.toEqual({
+            success: false,
+            error: 'Failed to read the chosen photos',
+            annotations: {},
         });
     });
 });

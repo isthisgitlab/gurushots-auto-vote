@@ -13,7 +13,9 @@ describe('Modal', () => {
                 <button type="button">inside</button>
             </Modal>,
         );
-        expect(container.querySelector('.modal-box')).toBeNull();
+        // The dialog is portalled to the body, so that is where it would show up.
+        expect(document.body.querySelector('.modal-box')).toBeNull();
+        expect(container.childElementCount).toBe(0);
     });
 
     test('renders title and children when open', () => {

@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback } from 'react';
 import { useSessionLoad } from './useSessionLoad';
 import * as ipc from '@/api/ipc';
+import { useOnChosenPhotosCleared, withoutChosenPhotos } from '@/api/chosenPhotosCleared';
 
 import type { ChallengeValues, TitleRule } from '../../types/settings';
 
@@ -47,6 +48,9 @@ export function useTitleRules(isOpen: boolean) {
         if (error) setError(false);
         setRules(next);
     };
+
+    // Saving the rules writes the whole list: lists removed meanwhile must not come back with it.
+    useOnChosenPhotosCleared(() => setRules((current) => current.map(withoutChosenPhotos)));
 
     const persist = useCallback(async () => {
         if (loaded) {

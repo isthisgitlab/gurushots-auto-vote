@@ -25,7 +25,8 @@ import * as logger from '../logger';
 import * as apiFactory from '../apiFactory';
 import * as metadata from '../metadata';
 import { stampChosenPhotosOwner } from './chosenPhotosOwner';
-import { isAutoJoinActive } from '../services/joinChallenges';
+import { isIdArg } from './isIdArg';
+import { refuseInvalidArgs } from './actions/shared';
 
 import type { IpcMain } from 'electron';
 import type { SettingsSchemaEntry } from '../settings/schema';
@@ -224,12 +225,14 @@ const buildSettingsHandlers = ({ broadcastSettingsChange }: { broadcastSettingsC
     },
 });
 
-// Whether an automatic join could run decides if a chosen-photos entry for a
-// challenge not seen in any open list yet is worth keeping; the settings layer
-// cannot ask (it does not import services), so the handler tells it.
+// Prunes the settings of every challenge not in the given list, so the list is
+// checked: a non-array, or one holding anything but ids, would empty the lot.
 const handleCleanupStaleChallengeSetting = async (event: unknown, activeChallengeIds: string[]) => {
+    if (!Array.isArray(activeChallengeIds) || !activeChallengeIds.every(isIdArg)) {
+        return refuseInvalidArgs('settings', 'cleanup-stale-challenge-setting');
+    }
     try {
-        return settings.cleanupStaleChallengeSetting(activeChallengeIds, isAutoJoinActive());
+        return settings.cleanupStaleChallengeSetting(activeChallengeIds);
     } catch (error) {
         logger.withCategory('settings').error('Error cleaning up stale challenge settings:', error);
         return false;

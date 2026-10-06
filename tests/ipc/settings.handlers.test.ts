@@ -15,7 +15,6 @@ jest.mock('electron', () => ({
 }));
 jest.mock('../../src/ts/settings');
 jest.mock('../../src/ts/metadata', () => ({ cleanupStaleMetadata: jest.fn() }));
-jest.mock('../../src/ts/services/joinChallenges', () => ({ isAutoJoinActive: jest.fn() }));
 jest.mock('../../src/ts/apiFactory', () => ({
     refreshApi: jest.fn(),
     getApiStrategy: jest.fn(),
@@ -29,8 +28,6 @@ import settingsModule = require('../../src/ts/settings');
 const settings = jest.mocked(settingsModule);
 import metadataModule = require('../../src/ts/metadata');
 const metadata = jest.mocked(metadataModule);
-import joinChallengesModule = require('../../src/ts/services/joinChallenges');
-const joinChallenges = jest.mocked(joinChallengesModule);
 import apiFactoryModule = require('../../src/ts/apiFactory');
 const apiFactory = jest.mocked(apiFactoryModule);
 import type * as settings_handlersModule from '../../src/ts/ipc/settings.handlers';
@@ -55,7 +52,7 @@ beforeEach(() => {
 
 describe('get-settings', () => {
     test('returns the loaded settings without the token, plus hasToken', async () => {
-        settings.loadSettings = jest.fn().mockReturnValue({ token: 'secret', theme: 'dark' });
+        jest.mocked(settings.loadSettings).mockReturnValue(invalid({ token: 'secret', theme: 'dark' }));
         const result = await handlers['get-settings']();
         expect(result).toEqual({ theme: 'dark', hasToken: true });
         expect(result).not.toHaveProperty('token');
@@ -369,11 +366,25 @@ describe('cleanup-stale-metadata', () => {
 });
 
 describe('cleanup-stale-challenge-setting', () => {
-    test.each([true, false])('tells the settings layer whether a join could run (%s)', async (armed) => {
-        joinChallenges.isAutoJoinActive.mockReturnValue(armed);
-        settings.cleanupStaleChallengeSetting = jest.fn().mockReturnValue(true);
-        await expect(handlers['cleanup-stale-challenge-setting']({}, ['1'])).resolves.toBe(true);
-        expect(settings.cleanupStaleChallengeSetting).toHaveBeenCalledWith(['1'], armed);
+    test('passes a list of ids to the settings layer', async () => {
+        jest.mocked(settings.cleanupStaleChallengeSetting).mockReturnValue(true);
+        await expect(handlers['cleanup-stale-challenge-setting']({}, ['1', '2'])).resolves.toBe(true);
+        expect(settings.cleanupStaleChallengeSetting).toHaveBeenCalledWith(['1', '2']);
+    });
+
+    test.each([
+        ['not an array', 'abc'],
+        ['missing', undefined],
+        ['an item that is not an id', ['1', {}]],
+        ['a blank id', ['1', '  ']],
+        ['an over-long id', ['9'.repeat(65)]],
+    ])('refuses %s without touching the settings', async (_name, ids) => {
+        jest.mocked(settings.cleanupStaleChallengeSetting).mockClear();
+        await expect(handlers['cleanup-stale-challenge-setting']({}, invalid(ids))).resolves.toEqual({
+            success: false,
+            error: 'invalid-args',
+        });
+        expect(settings.cleanupStaleChallengeSetting).not.toHaveBeenCalled();
     });
 
     test('returns false when cleanup throws', async () => {
@@ -385,8 +396,8 @@ describe('cleanup-stale-challenge-setting', () => {
 describe('clear-chosen-photos', () => {
     test('removes the lists, broadcasts the change and reports how many went', async () => {
         const broadcast = jest.fn();
-        settings.clearChosenPhotos = jest.fn().mockReturnValue(4);
-        settings.loadSettings = jest.fn().mockReturnValue({ token: 'secret', theme: 'dark' });
+        jest.mocked(settings.clearChosenPhotos).mockReturnValue(4);
+        jest.mocked(settings.loadSettings).mockReturnValue(invalid({ token: 'secret', theme: 'dark' }));
         await expect(buildHandlers({ broadcastSettingsChange: broadcast })['clear-chosen-photos']()).resolves.toEqual({
             success: true,
             removed: 4,
@@ -395,13 +406,13 @@ describe('clear-chosen-photos', () => {
     });
 
     test('works without a broadcast listener', async () => {
-        settings.clearChosenPhotos = jest.fn().mockReturnValue(0);
+        jest.mocked(settings.clearChosenPhotos).mockReturnValue(0);
         await expect(handlers['clear-chosen-photos']()).resolves.toEqual({ success: true, removed: 0 });
     });
 
     test('a save that failed is an error result, with no broadcast', async () => {
         const broadcast = jest.fn();
-        settings.clearChosenPhotos = jest.fn().mockReturnValue(null);
+        jest.mocked(settings.clearChosenPhotos).mockReturnValue(null);
         await expect(buildHandlers({ broadcastSettingsChange: broadcast })['clear-chosen-photos']()).resolves.toEqual({
             success: false,
             error: 'The settings file could not be saved',
@@ -432,7 +443,7 @@ describe('register (Electron)', () => {
         const winB = { isDestroyed: () => false, webContents: { send: jest.fn() } };
         getAllWindowsMock.mockReturnValue([winA, winB]);
         settings.saveSettings = jest.fn().mockReturnValue(true);
-        settings.loadSettings = jest.fn().mockReturnValue({ token: 'secret', theme: 'dark' });
+        jest.mocked(settings.loadSettings).mockReturnValue(invalid({ token: 'secret', theme: 'dark' }));
         const ipcMain = makeIpcMain();
         register(invalid(ipcMain));
 

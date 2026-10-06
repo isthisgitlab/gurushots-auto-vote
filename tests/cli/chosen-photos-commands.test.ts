@@ -31,10 +31,10 @@ const apiFactory = jest.mocked(apiFactoryModule);
 import autoFillModule = require('../../src/ts/services/autoFill');
 const autoFill = jest.mocked(autoFillModule);
 import type * as commandsModule from '../../src/ts/cli/commands/settings/chosenPhotos';
-const { noteChosenPhotosOwner, clearChosenPhotos } =
+const { beforeChosenPhotosWrite, clearChosenPhotos } =
     require('../../src/ts/cli/commands/settings/chosenPhotos') as typeof commandsModule;
 
-const getCurrentMemberProfile = jest.fn();
+const getCurrentMemberProfile = jest.fn<Promise<null>, [string]>(async () => null);
 const msgs = (level: string) => logger.__calls.filter((c) => c.level === level).map((c) => String(c.msg));
 const stored = (savedBy: string) =>
     settings.getSetting.mockImplementation((key: string) => (key === 'chosenPhotosMemberId' ? savedBy : undefined));
@@ -48,48 +48,68 @@ beforeEach(() => {
     stored('');
 });
 
-describe('noteChosenPhotosOwner', () => {
-    test("records the signed-in account, resolved through the fill path's member lookup", async () => {
-        await noteChosenPhotosOwner('chosenPhotos', '["a"]');
+describe('beforeChosenPhotosWrite', () => {
+    // The check runs before the write; what it returns runs after a write that landed.
+    const stampAfterWrite = async (key: string, value: string) => (await beforeChosenPhotosWrite(key, value))();
+
+    test("records the signed-in account after the write, resolved through the fill path's member lookup", async () => {
+        const stamp = await beforeChosenPhotosWrite('chosenPhotos', '["a"]');
         expect(autoFill.resolveMemberId).toHaveBeenCalledWith(
             'tok',
             getCurrentMemberProfile,
             expect.anything(),
             'settings',
         );
+        // Nothing is written until the caller says the write landed.
+        expect(settings.setSetting).not.toHaveBeenCalled();
+        stamp();
         expect(settings.setSetting).toHaveBeenCalledWith('chosenPhotosMemberId', 'member-B');
         expect(msgs('warning')).toEqual([]);
     });
 
     test('an owner that is already this account is left alone', async () => {
         stored('member-B');
-        await noteChosenPhotosOwner('chosenPhotos', '["a"]');
+        await stampAfterWrite('chosenPhotos', '["a"]');
         expect(settings.setSetting).not.toHaveBeenCalled();
         expect(msgs('warning')).toEqual([]);
     });
 
-    test('lists saved under another account: the new owner is recorded and the warning names the remedy', async () => {
+    test('lists saved under another account: the warning comes first and names the remedy and its cost', async () => {
         stored('member-A');
-        await noteChosenPhotosOwner('chosenPhotos', '["a"]');
-        expect(settings.setSetting).toHaveBeenCalledWith('chosenPhotosMemberId', 'member-B');
+        const stamp = await beforeChosenPhotosWrite('chosenPhotos', '["a"]');
+        // Printed before anything is written.
+        expect(settings.setSetting).not.toHaveBeenCalled();
         expect(msgs('warning')).toHaveLength(1);
-        expect(msgs('warning')[0]).toContain('clear-chosen-photos');
-        expect(msgs('warning')[0]).not.toContain('member-');
+        const [warning] = msgs('warning');
+        expect(warning).toContain('run clear-chosen-photos');
+        expect(warning).toContain('also removes the list you are setting now');
+        expect(warning).toContain('then set this list again');
+        expect(warning).not.toContain('member-');
+        stamp();
+        expect(settings.setSetting).toHaveBeenCalledWith('chosenPhotosMemberId', 'member-B');
+    });
+
+    test('a write that did not land is not stamped', async () => {
+        const stamp = await beforeChosenPhotosWrite('chosenPhotos', '["a"]');
+        void stamp;
+        expect(settings.setSetting).not.toHaveBeenCalled();
     });
 
     test.each([
         ['another setting', 'exposure', '50'],
         ['an empty list', 'chosenPhotos', '[]'],
         ['a value that is not a list', 'chosenPhotos', 'yes'],
-    ])('%s records nothing and looks nobody up', async (_name, key, value) => {
-        await noteChosenPhotosOwner(key, value);
+    ])('%s records nothing, warns of nothing and looks nobody up', async (_name, key, value) => {
+        stored('member-A');
+        await stampAfterWrite(key, value);
         expect(autoFill.resolveMemberId).not.toHaveBeenCalled();
         expect(settings.setSetting).not.toHaveBeenCalled();
+        expect(msgs('warning')).toEqual([]);
     });
 
     test('a signed-out CLI leaves the owner unchanged', async () => {
         settings.loadSettings.mockReturnValue(invalid({ token: '' }));
-        await noteChosenPhotosOwner('chosenPhotos', '["a"]');
+        await stampAfterWrite('chosenPhotos', '["a"]');
         expect(autoFill.resolveMemberId).not.toHaveBeenCalled();
         expect(settings.setSetting).not.toHaveBeenCalled();
     });
@@ -97,7 +117,7 @@ describe('noteChosenPhotosOwner', () => {
     test('an account that cannot be resolved leaves the owner unchanged, with no warning', async () => {
         stored('member-A');
         autoFill.resolveMemberId.mockResolvedValue(null);
-        await noteChosenPhotosOwner('chosenPhotos', '["a"]');
+        await stampAfterWrite('chosenPhotos', '["a"]');
         expect(settings.setSetting).not.toHaveBeenCalled();
         expect(msgs('warning')).toEqual([]);
     });

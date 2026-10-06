@@ -92,6 +92,7 @@ const invokeChannels = [
     'fill-challenge-now',
     'get-bankroll',
     'get-member-challenges',
+    'get-open-chosen-annotations',
     'join-challenge',
     'get-library-photos',
     'get-auto-join-active',

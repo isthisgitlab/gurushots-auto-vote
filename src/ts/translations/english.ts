@@ -581,6 +581,8 @@ export const app = {
     photoChooserCount: '{count} of {max} chosen',
     photoChooserLoading: 'Loading your photos…',
     photoChooserLoadError: "Your photos couldn't be loaded (details below). Try again.",
+    photoChooserLoadErrorNoDetail:
+        "Your photos couldn't be loaded — GuruShots didn't answer or your session expired. Try again, or sign in again.",
     photoChooserRetry: 'Retry',
     photoChooserNoContext:
         "Your photos can't be listed yet: the library is read through a challenge, and you have no active or joinable challenge right now. Join one or wait until one opens, then try again.",
@@ -595,6 +597,7 @@ export const app = {
     photoChooserMissingNoChallengeTruncated:
         'Not found in the photos listed (it may have been deleted, or be beyond the first {count} photos)',
     photoChooserMissingTileLabel: 'Chosen photo {id}: {reason}',
+    photoChooserListFull: 'List full',
     photoChooserLimitReached: 'Limit reached — remove one to add another.',
     photoChooserNotEligible: 'Not eligible for this challenge',
     photoChooserAllowed: 'Can be entered',
@@ -604,7 +607,7 @@ export const app = {
         'These lists were saved under another account, so the app ignores them. Saving a list here makes them apply to this account too, unless you remove them first.',
     photoChooserOtherAccountClear: 'Remove those lists',
     photoChooserOtherAccountConfirm:
-        'Remove the chosen-photo lists saved under the other account, in every setting, profile, rule and scenario?',
+        "Remove the chosen-photo lists saved under the other account, in every setting, profile, rule and scenario? This can't be undone. Submit Only Chosen Photos is kept.",
     photoChooserOtherAccountClearError:
         "The lists weren't removed because the settings couldn't be written. Try again.",
     chosenPhotosOtherAccountCount: '{count} photo(s) saved under another account',
@@ -616,7 +619,7 @@ export const app = {
     discoverChosenChipHint: 'This challenge has chosen photos. Click to change them.',
     discoverChosenChipLabel: 'Chosen photos for {title}: change them',
     discoverChoosePhotosLabel: 'Choose photos for {title}',
-    discoverChosenInherited: 'Inherited: {count} chosen photos from your settings or rules',
+    discoverChosenInherited: 'Inherited chosen photos: {count} (from your settings or rules)',
     discoverConfirmChosen: "Your chosen photo if it's eligible, otherwise an automatic pick.",
     scenarioFlagged:
         'Review before importing: {settings}. Chosen photos belong to one account and are ignored on another; Submit Only Chosen Photos makes joins and fills skip a challenge with no usable chosen photo.',

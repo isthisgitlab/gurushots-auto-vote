@@ -143,6 +143,12 @@ describe('module load: logs directory', () => {
         expect(logger.getRecentLogs()).toEqual([]);
     });
 
+    test('printLine redacts credentials folded into the text', () => {
+        const { logger } = loadLogger();
+        logger.printLine('auth token=abc123 password: hunter2');
+        expect(logSpy).toHaveBeenCalledWith('auth token=[REDACTED] password: [REDACTED]');
+    });
+
     test('reports an unreadable logs dir on the console only', () => {
         const fs = makeFs({
             readdirSync: jest.fn(() => {

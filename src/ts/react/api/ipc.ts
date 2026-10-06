@@ -124,6 +124,7 @@ export const simulateScenario = forward('simulateScenario');
 export const getActiveChallenges = forward('getActiveChallenges');
 export const getDeadlineActions = forward('getDeadlineActions');
 export const joinChallenge = forward('joinChallenge');
+export const getOpenChosenAnnotations = forward('getOpenChosenAnnotations');
 export const getLibraryPhotos = forward('getLibraryPhotos');
 export const runVotingCycle = forward('runVotingCycle');
 export const runVotingCycleForChallenge = forward('runVotingCycleForChallenge');

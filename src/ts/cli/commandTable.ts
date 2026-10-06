@@ -26,7 +26,7 @@ import {
     getSetting,
     setSetting,
     setGlobalDefault,
-    noteChosenPhotosOwner,
+    beforeChosenPhotosWrite,
     clearChosenPhotos,
     listSettings,
     resetSetting,
@@ -138,7 +138,9 @@ const runSetSetting: CommandHandler = async (argv) => {
     if (!rest[0] || rest[1] === undefined) {
         return usageError('Please specify both key and value', 'Usage: set-setting <key> <value> [--challenge=<id>]');
     }
-    if (setSetting(rest[0], rest[1], challengeId)) await noteChosenPhotosOwner(rest[0], rest[1]);
+    // The warning about another account's lists comes before the write, the owner stamp after it.
+    const stampOwner = await beforeChosenPhotosWrite(rest[0], rest[1]);
+    if (setSetting(rest[0], rest[1], challengeId)) stampOwner();
     return 0;
 };
 
@@ -156,8 +158,16 @@ const runSetGlobalDefault: CommandHandler = async ([key, value]) => {
             'Example: set-global-default exposure 80',
         );
     }
-    if (setGlobalDefault(key, value)) await noteChosenPhotosOwner(key, value);
+    const stampOwner = await beforeChosenPhotosWrite(key, value);
+    if (setGlobalDefault(key, value)) stampOwner();
     return 0;
+};
+
+// It takes no arguments on purpose: a --challenge would suggest it clears one challenge, but it
+// removes every saved list.
+const runClearChosenPhotos: CommandHandler = async (argv) => {
+    if (argv.length > 0) return usageError(`Unexpected arguments: ${argv.join(' ')}`, 'Usage: clear-chosen-photos');
+    return exitCodeOf(clearChosenPhotos());
 };
 
 const runListProfiles: CommandHandler = async (argv) => {
@@ -214,7 +224,7 @@ const COMMANDS: Record<string, CommandHandler> = {
         return 0;
     },
     'reset-setting': runResetSetting,
-    'clear-chosen-photos': async () => exitCodeOf(clearChosenPhotos()),
+    'clear-chosen-photos': runClearChosenPhotos,
     'set-global-default': runSetGlobalDefault,
     'reset-all-settings': exitsZero(resetAllSettings),
     'list-profiles': runListProfiles,

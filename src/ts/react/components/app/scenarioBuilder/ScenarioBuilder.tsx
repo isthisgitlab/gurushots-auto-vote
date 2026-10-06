@@ -4,6 +4,7 @@ import { useSettingsSchema } from '@/api/useSettingsSchema';
 import { useActiveChallenges } from '@/api/useActiveChallenges';
 import { interp } from '@/utils/interp';
 import * as ipc from '@/api/ipc';
+import { useOnChosenPhotosCleared, scenarioWithoutChosenPhotos } from '@/api/chosenPhotosCleared';
 import { SettingInput } from '../SettingInput';
 import { ScenarioError, issuesOf } from '../ScenarioError';
 import { ConditionList, ActionList } from './ItemEditors';
@@ -464,6 +465,8 @@ export function ScenarioBuilder({
 }) {
     const { t } = useTranslation();
     const [draft, setDraft] = useState(initial);
+    // Saving writes the whole scenario: lists removed meanwhile must not come back with it.
+    useOnChosenPhotosCleared(() => setDraft(scenarioWithoutChosenPhotos));
     // The name the scenario is stored under right now: a rename that went
     // through before a refused save must not be attempted again on retry.
     const [storedName, setStoredName] = useState(originalName);

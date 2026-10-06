@@ -422,6 +422,33 @@ describe('chosen photos rank first', () => {
         expect(deps.getEligiblePhotosWalk).toHaveBeenCalledTimes(1);
     });
 
+    test('a submit that threw, or got no answer, forgets what the walk found; a server refusal keeps it refused', async () => {
+        const run = async (fail: (deps: ReturnType<typeof makeDeps>) => void) => {
+            __resetChosenPhotos();
+            const deps = makeDeps({
+                library: [photo('theme-a')],
+                walkItems: [photo('theme-a'), photo('car', ['Car'])],
+                settings: { chosen: ['car'] },
+            });
+            fail(deps);
+            const challenge = makeChallenge();
+            expect(await maybeAutoFillChallenge(challenge, 'tok', NOW, deps)).toBe('error');
+            expect(await maybeAutoFillChallenge(challenge, 'tok', NOW, deps)).toBe('error');
+            return deps.getEligiblePhotosWalk.mock.calls.length;
+        };
+        // No answer: the photo is unresolved again, so the next pass looks it up once more (no backoff).
+        expect(await run((deps) => deps.submitToChallenge.mockRejectedValue(new Error('timeout')))).toBe(2);
+        expect(await run((deps) => deps.submitToChallenge.mockResolvedValue(invalid({ ok: false, raw: null })))).toBe(
+            2,
+        );
+        // The server said no: the photo stays refused and is not looked for again.
+        expect(
+            await run((deps) =>
+                deps.submitToChallenge.mockResolvedValue(invalid({ ok: false, raw: { success: false } })),
+            ),
+        ).toBe(1);
+    });
+
     test('two rejections of the same photo cause only one walk', async () => {
         const deps = makeDeps({
             library: [photo('theme-a')],
@@ -536,6 +563,58 @@ describe('looking for a chosen photo the themed fetch missed', () => {
             expect(deps.getEligiblePhotosWalk).toHaveBeenCalledTimes(walks);
             at += wait * min;
         }
+    });
+
+    test('a newly chosen photo is not made to wait out the pause set for older ones', async () => {
+        const clock = jest.spyOn(Date, 'now').mockReturnValue(5_000_000);
+        const deps = makeDeps({
+            library: [photo('theme-a')],
+            walkItems: [photo('theme-a')],
+            walkTruncated: true,
+            settings: { chosen: ['car'], only: true },
+        });
+        const challenge = makeChallenge();
+        await maybeAutoFillChallenge(challenge, 'tok', NOW, deps);
+        await maybeAutoFillChallenge(challenge, 'tok', NOW, deps);
+        expect(deps.getEligiblePhotosWalk).toHaveBeenCalledTimes(1);
+
+        // The user adds a photo the (still cut short) walk can reach: it is looked for at once.
+        const dog = photo('dog', ['Dog']);
+        deps.settings.getEffectiveSetting.mockImplementation(
+            (key: string) =>
+                ({ autoFill: true, chosenPhotos: ['car', 'dog'], chosenPhotosOnly: true, fillWithoutTagMatch: true })[
+                    key
+                ] ?? (key === 'autoFillSchedule' ? [{ count: 4, seconds: 600 }] : null),
+        );
+        deps.getEligiblePhotosWalk.mockResolvedValue({ items: [photo('theme-a'), dog], truncated: true });
+        clock.mockReturnValue(5_000_001);
+        expect(await maybeAutoFillChallenge(challenge, 'tok', NOW, deps)).toBe('submitted');
+        expect(deps.getEligiblePhotosWalk).toHaveBeenCalledTimes(2);
+        expect(submittedIds(deps)).toEqual([['dog']]);
+        // The ids already covered by the pause still wait: the unreached "car" is not walked for again.
+        reflectNewEntry(challenge, 'dog');
+        await maybeAutoFillChallenge(challenge, 'tok', NOW, deps);
+        expect(deps.getEligiblePhotosWalk).toHaveBeenCalledTimes(2);
+    });
+
+    test('a walk that throws waits like one that was cut short', async () => {
+        const clock = jest.spyOn(Date, 'now').mockReturnValue(5_000_000);
+        const deps = makeDeps({ library: [photo('theme-a')], settings: { chosen: ['car'], only: true } });
+        deps.getEligiblePhotosWalk.mockRejectedValue(new Error('library down'));
+        const challenge = makeChallenge();
+        await maybeAutoFillChallenge(challenge, 'tok', NOW, deps);
+        await maybeAutoFillChallenge(challenge, 'tok', NOW, deps);
+        expect(deps.getEligiblePhotosWalk).toHaveBeenCalledTimes(1);
+        clock.mockReturnValue(5_000_000 + 4 * 60_000);
+        await maybeAutoFillChallenge(challenge, 'tok', NOW, deps);
+        expect(deps.getEligiblePhotosWalk).toHaveBeenCalledTimes(1);
+        clock.mockReturnValue(5_000_000 + 5 * 60_000);
+        await maybeAutoFillChallenge(challenge, 'tok', NOW, deps);
+        expect(deps.getEligiblePhotosWalk).toHaveBeenCalledTimes(2);
+        // ...and the second failure doubles the pause (10 minutes).
+        clock.mockReturnValue(5_000_000 + 14 * 60_000);
+        await maybeAutoFillChallenge(challenge, 'tok', NOW, deps);
+        expect(deps.getEligiblePhotosWalk).toHaveBeenCalledTimes(2);
     });
 
     test('the pause starts over once a walk reaches every unresolved photo', async () => {

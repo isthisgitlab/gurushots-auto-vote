@@ -129,7 +129,7 @@ jest.mock('../../src/ts/cli/commands/settings', () => ({
     getSetting: jest.fn(),
     setSetting: jest.fn(),
     setGlobalDefault: jest.fn(),
-    noteChosenPhotosOwner: jest.fn(async () => undefined),
+    beforeChosenPhotosWrite: jest.fn(async () => () => undefined),
     clearChosenPhotos: jest.fn(() => true),
     listSettings: jest.fn(),
     resetSetting: jest.fn(),
@@ -255,6 +255,9 @@ describe('help and unknown commands', () => {
         const [text] = m.msgs('info');
         expect(text).toContain('GuruShots Auto Voter - CLI (REAL MODE)');
         expect(text).toContain('Current mode: REAL (live API calls)');
+        // clear-chosen-photos clears every list; a single challenge's list goes with reset-setting.
+        expect(text).toContain('clear-chosen-photos');
+        expect(text).toContain('reset-setting chosenPhotos --challenge=<id>');
         expect(m.exitCodes).toEqual([0]);
     });
 
@@ -466,14 +469,31 @@ describe('settings commands', () => {
     test.each([
         [true, 1],
         [false, 0],
-    ])('set-setting records the chosen-photos owner only after a saved write (%p)', async (saved, noted) => {
-        const m = await run(['set-setting', 'chosenPhotos', '["a"]', '--challenge=5'], (mods) =>
-            mods.cmd.setSetting.mockReturnValue(saved),
+    ])('set-setting stamps the chosen-photos owner only after a saved write (%p)', async (saved, stamped) => {
+        const stamp = jest.fn<void, []>();
+        const m = await run(['set-setting', 'chosenPhotos', '["a"]', '--challenge=5'], (mods) => {
+            mods.cmd.beforeChosenPhotosWrite.mockResolvedValue(stamp);
+            mods.cmd.setSetting.mockReturnValue(saved);
+        });
+        expect(m.cmd.beforeChosenPhotosWrite).toHaveBeenCalledWith('chosenPhotos', '["a"]');
+        // The check (and its warning) comes before the write; the stamp after it.
+        expect(m.cmd.beforeChosenPhotosWrite.mock.invocationCallOrder[0]).toBeLessThan(
+            m.cmd.setSetting.mock.invocationCallOrder[0],
         );
-        expect(m.cmd.noteChosenPhotosOwner).toHaveBeenCalledTimes(noted);
-        if (noted) expect(m.cmd.noteChosenPhotosOwner).toHaveBeenCalledWith('chosenPhotos', '["a"]');
+        expect(stamp).toHaveBeenCalledTimes(stamped);
         expect(m.exitCodes).toEqual([0]);
     });
+
+    test.each([[['--challenge=5']], [['5']], [['--yes']]])(
+        'clear-chosen-photos %p is refused, since it clears every list',
+        async (tail) => {
+            const m = await run(['clear-chosen-photos', ...tail]);
+            expect(m.cmd.clearChosenPhotos).not.toHaveBeenCalled();
+            expect(m.msgs('error')).toEqual([`Unexpected arguments: ${tail.join(' ')}`]);
+            expect(m.msgs('info')).toEqual(['Usage: clear-chosen-photos']);
+            expect(m.exitCodes[0]).toBe(1);
+        },
+    );
 
     test.each([
         [true, 0],
@@ -520,11 +540,16 @@ describe('settings commands', () => {
     test.each([
         [true, 1],
         [false, 0],
-    ])('set-global-default records the chosen-photos owner only after a saved write (%p)', async (saved, noted) => {
-        const m = await run(['set-global-default', 'chosenPhotos', '["a"]'], (mods) =>
-            mods.cmd.setGlobalDefault.mockReturnValue(saved),
+    ])('set-global-default stamps the chosen-photos owner only after a saved write (%p)', async (saved, stamped) => {
+        const stamp = jest.fn<void, []>();
+        const m = await run(['set-global-default', 'chosenPhotos', '["a"]'], (mods) => {
+            mods.cmd.beforeChosenPhotosWrite.mockResolvedValue(stamp);
+            mods.cmd.setGlobalDefault.mockReturnValue(saved);
+        });
+        expect(m.cmd.beforeChosenPhotosWrite.mock.invocationCallOrder[0]).toBeLessThan(
+            m.cmd.setGlobalDefault.mock.invocationCallOrder[0],
         );
-        expect(m.cmd.noteChosenPhotosOwner).toHaveBeenCalledTimes(noted);
+        expect(stamp).toHaveBeenCalledTimes(stamped);
     });
 
     test.each([[[]], [['exposure']]])('set-global-default %p missing args exits 1', async (tail) => {

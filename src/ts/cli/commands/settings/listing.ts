@@ -69,7 +69,7 @@ export const dumpSchema = () => {
     Object.entries(settings.SETTINGS_SCHEMA).forEach(([key, config]) => {
         logger.withCategory('ui').info(`\n${key}:`);
         logger.withCategory('ui').info(`  Type: ${config.type}`);
-        logger.withCategory('ui').info(`  Default: ${JSON.stringify(config.default)}`);
+        logger.withCategory('ui').info(`  Default: ${formatSettingForLog(key, config.default)}`);
         logger.withCategory('ui').info(`  Per-Challenge: ${config.perChallenge ? 'Yes' : 'No'}`);
         if (config.label) logger.withCategory('ui').info(`  Label: ${config.label}`);
         if (config.description) logger.withCategory('ui').info(`  Description: ${config.description}`);
@@ -86,6 +86,6 @@ export const listGlobalDefaults = () => {
     logger.withCategory('ui').info('===================================');
     Object.entries(settings.SETTINGS_SCHEMA).forEach(([key, config]) => {
         const currentValue = stored[key] !== undefined ? stored[key] : config.default;
-        logger.withCategory('ui').info(`${key}: ${JSON.stringify(currentValue)}`);
+        logger.withCategory('ui').info(`${key}: ${formatSettingForLog(key, currentValue)}`);
     });
 };

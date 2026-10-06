@@ -86,6 +86,8 @@ Object.assign(mockApi, {
     setChallengeOverride: jest.fn().mockResolvedValue(true),
     removeChallengeOverride: jest.fn().mockResolvedValue(true),
     cleanupStaleChallengeSetting: jest.fn().mockResolvedValue(true),
+    clearChosenPhotos: jest.fn().mockResolvedValue({ success: true, removed: 0 }),
+    getOpenChosenAnnotations: jest.fn().mockResolvedValue({ success: true, annotations: {} }),
     cleanupStaleMetadata: jest.fn().mockResolvedValue(true),
 
     // Logging

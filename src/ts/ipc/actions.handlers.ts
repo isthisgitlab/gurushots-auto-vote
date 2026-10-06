@@ -19,6 +19,7 @@ import {
     handleGetBankroll,
     handleGetAutoJoinActive,
     handleGetMemberChallenges,
+    handleGetOpenChosenAnnotations,
     handleJoinChallenge,
 } from './actions/account';
 import { handlePlayAutoTurbo, handleApplyTurboToEntry } from './actions/turbo';
@@ -40,6 +41,7 @@ const buildHandlers = () =>
         'get-bankroll': handleGetBankroll,
         'get-auto-join-active': handleGetAutoJoinActive,
         'get-member-challenges': handleGetMemberChallenges,
+        'get-open-chosen-annotations': handleGetOpenChosenAnnotations,
         'join-challenge': handleJoinChallenge,
         'get-library-photos': handleGetLibraryPhotos,
     }) satisfies IpcHandlerMap;

@@ -7,6 +7,7 @@
 import { renderHook, act, waitFor } from '@testing-library/preact';
 import { useChallengeOverrides } from '@/hooks/useChallengeOverrides';
 import { mockApi } from './helpers/setup';
+import { announceChosenPhotosCleared } from '@/api/chosenPhotosCleared';
 import { invalid } from '../helpers/invalid';
 import type { RendererSchema } from '../../src/ts/types/settingsEditor';
 
@@ -61,4 +62,28 @@ test('applyProfile() without a schema (its fetch failed) keeps no key instead of
 
     expect(result.current.overrides).toEqual({});
     expect(result.current.titleProfile).toEqual({ suppressed: true });
+});
+
+test('every list removed while the form is open leaves the overrides and the matched profile without it', async () => {
+    mockApi.getChallengeOverrides.mockReset().mockResolvedValue({ exposure: 50, chosenPhotos: ['a'] });
+    mockApi.getTitleProfile
+        .mockReset()
+        .mockResolvedValue({ name: 'Mine', values: { exposure: 60, chosenPhotos: ['b'] } });
+    const p = {
+        ...props(),
+        schema: invalid<RendererSchema>({
+            exposure: { type: 'number', default: 100, perChallenge: true },
+            chosenPhotos: { type: 'photos', default: [], perChallenge: true },
+        }),
+    };
+    const { result } = renderHook(() => useChallengeOverrides(p));
+    await waitFor(() => expect(result.current.loading).toBe(false));
+    expect(result.current.overrides).toEqual({ exposure: 50, chosenPhotos: ['a'] });
+
+    act(() => announceChosenPhotosCleared());
+    expect(result.current.overrides).toEqual({ exposure: 50 });
+    expect(result.current.profileValues).toEqual({ exposure: 60 });
+
+    await act(() => result.current.save());
+    expect(mockApi.replaceChallengeOverrides).toHaveBeenCalledWith('1', { exposure: 50 }, false);
 });

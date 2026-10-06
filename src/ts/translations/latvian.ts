@@ -566,7 +566,7 @@ export const app = {
         'Foto, ko automātiskā pievienošanās un automātiskā iesniegšana mēģina izmantot pirmos. Tiem joprojām jāatbilst taviem tagu uzstādījumiem (ja vien nav ieslēgts „Iesniegt arī bez tagu sakritības” un neviens foto tiem neatbilst), un lietotne tos kārto tāpat, kā kārto savas automātiskās izvēles. Foto var būt tikai vienā izaicinājumā, tāpēc ar kopīgu sarakstu to paņem izaicinājums, kas tiek aizpildīts pirmais. Saraksts pieder kontam, kas to saglabāja, un citā kontā tiek ignorēts; ja citā kontā saglabā sarakstu, pirmajā kontā saglabātie saraksti sāk attiekties arī uz to, ja vien tos iepriekš neizņem. Scenārija saraksts tiek izmantots tikai pēc pievienošanās. Apmaiņa sarakstu neņem vērā.',
     chosenPhotosOnly: 'Iesniegt tikai izvēlētos foto',
     chosenPhotosOnlyDesc:
-        'Kad ir uzstādīti izvēlētie foto, automātiskā pievienošanās un iesniegšana pašas foto neizvēlas: izaicinājums, kuram nav neviena derīga izvēlētā foto, tiek izlaists. Manuālā pievienošanās un manuālās pogas +1/+N tik un tā izvēlas automātiski, ārkārtas iesniegšana šo uzstādījumu neņem vērā (izslēdz to izaicinājumam, lai vieta paliktu tukša), un maksas pievienošanās, kas jau atbloķēta, tik un tā iesniedz automātiski izvēlētu foto, lai monētas neaizietu zudumā. Apmaiņa neņem vērā nevienu no abiem uzstādījumiem. Ja ir ieslēgts „Iesniegt arī bez tagu sakritības” (pēc noklusējuma tā ir), tagu pārbaude tiek atslābināta tikai izvēlētajiem foto: ja neviens no tiem neatbilst taviem tagiem, tos tik un tā var iesniegt. Ja saraksts ir tukšs, tam nav nozīmes.',
+        'Kad ir uzstādīti izvēlētie foto, automātiskā pievienošanās un iesniegšana pašas foto neizvēlas: izaicinājums, kuram nav neviena derīga izvēlētā foto, tiek izlaists. Manuālā pievienošanās un manuālās pogas +1/+N tik un tā izvēlas automātiski, ārkārtas iesniegšana šo uzstādījumu neņem vērā (izslēdz to izaicinājumam, lai vieta paliktu tukša), un maksas pievienošanās, kas jau atbloķēta, tik un tā iesniedz automātiski izvēlētu foto, lai monētas neaizietu zudumā. Apmaiņa neņem vērā nevienu no abiem uzstādījumiem. Ja ir ieslēgts „Iesniegt arī bez tagu sakritības” (pēc noklusējuma tā ir), tagu pārbaude izvēlētajiem foto netiek stingri piemērota: ja neviens no tiem neatbilst taviem tagiem, tos tik un tā var iesniegt. Ja saraksts ir tukšs, tam nav nozīmes.',
     chosenPhotosMemberId: 'Izvēlēto foto konts',
     chosenPhotosMemberIdDesc:
         'Iekšējs — dalībnieks, kas pēdējais saglabāja izvēlēto foto sarakstu; ja piesakās cits dalībnieks, saraksts tiek ignorēts',
@@ -587,6 +587,8 @@ export const app = {
     photoChooserCount: 'Izvēlēto foto: {count} no {max}',
     photoChooserLoading: 'Ielādē tavus foto…',
     photoChooserLoadError: 'Tavus foto neizdevās ielādēt (sīkāka informācija ir zemāk). Mēģini vēlreiz.',
+    photoChooserLoadErrorNoDetail:
+        'Tavus foto neizdevās ielādēt — GuruShots neatbildēja vai sesija ir beigusies. Mēģini vēlreiz vai piesakies no jauna.',
     photoChooserRetry: 'Mēģināt vēlreiz',
     photoChooserNoContext:
         'Tavus foto vēl nevar parādīt: bibliotēku nolasa caur izaicinājumu, bet tev šobrīd nav neviena aktīva vai pievienojama izaicinājuma. Pievienojies kādam vai uzgaidi, līdz tāds atveras, un mēģini vēlreiz.',
@@ -601,6 +603,7 @@ export const app = {
     photoChooserMissingNoChallengeTruncated:
         'Rādīto foto vidū nav atrasts (iespējams, tas ir dzēsts vai ir tālāk par pirmajiem {count} foto)',
     photoChooserMissingTileLabel: 'Izvēlētais foto {id}: {reason}',
+    photoChooserListFull: 'Saraksts ir pilns',
     photoChooserLimitReached: 'Sasniegts ierobežojums — noņem kādu, lai pievienotu citu.',
     photoChooserNotEligible: 'Neder šim izaicinājumam',
     photoChooserAllowed: 'Var iesniegt',
@@ -610,19 +613,19 @@ export const app = {
         'Šie saraksti tika saglabāti citā kontā, tāpēc lietotne tos ignorē. Ja šeit saglabāsi sarakstu, tie sāks attiekties arī uz šo kontu, ja vien tos iepriekš neizņemsi.',
     photoChooserOtherAccountClear: 'Izņemt šos sarakstus',
     photoChooserOtherAccountConfirm:
-        'Vai izņemt izvēlēto foto sarakstus, kas saglabāti citā kontā, visos uzstādījumos, profilos, noteikumos un scenārijos?',
+        'Vai izņemt izvēlēto foto sarakstus, kas saglabāti citā kontā, visos uzstādījumos, profilos, noteikumos un scenārijos? To nevar atsaukt. Uzstādījums „Iesniegt tikai izvēlētos foto” paliek.',
     photoChooserOtherAccountClearError:
         'Sarakstus neizdevās izņemt, jo uzstādījumus nevarēja ierakstīt. Mēģini vēlreiz.',
     chosenPhotosOtherAccountCount: 'Citā kontā saglabātie foto: {count}',
     photoChooserInheritNote:
-        'Ja saglabāsi, neko neizvēloties, šim izaicinājumam paredzētais saraksts tiks izņemts, un tas atkal izmantos sarakstu no taviem uzstādījumiem vai noteikumiem.',
+        'Ja saglabāsi, neko neizvēloties, šim izaicinājumam paredzētais saraksts tiks izņemts, un izaicinājums atkal izmantos sarakstu no taviem uzstādījumiem vai noteikumiem.',
     photoChooserSaveError: 'Izvēlētos foto neizdevās saglabāt, jo uzstādījumu nevarēja ierakstīt. Mēģini vēlreiz.',
     photoChooserUse: 'Izmantot šos foto',
     discoverChosenChip: 'Izvēlēti foto',
     discoverChosenChipHint: 'Šim izaicinājumam ir izvēlēti foto. Spied, lai tos mainītu.',
     discoverChosenChipLabel: 'Izvēlētie foto izaicinājumam „{title}”: mainīt',
     discoverChoosePhotosLabel: 'Izvēlēties foto izaicinājumam „{title}”',
-    discoverChosenInherited: 'Mantoti: {count} izvēlētie foto no taviem uzstādījumiem vai noteikumiem',
+    discoverChosenInherited: 'Mantotie izvēlētie foto: {count} (no taviem uzstādījumiem vai noteikumiem)',
     discoverConfirmChosen: 'Tavs izvēlētais foto, ja tas der, citādi automātiski izvēlēts foto.',
     scenarioFlagged:
         'Pārskati pirms importa: {settings}. Izvēlētie foto pieder vienam kontam, un citā kontā tie tiek ignorēti; „Iesniegt tikai izvēlētos foto” liek izlaist izaicinājumu, kuram nav derīga izvēlētā foto.',

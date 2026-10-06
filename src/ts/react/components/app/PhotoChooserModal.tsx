@@ -6,6 +6,7 @@ import { useImageLoads } from '@/hooks/useImageLoads';
 import { buildPhotoUrl } from '@/utils/formatters';
 import { interp } from '@/utils/interp';
 import { ipcErrorText } from '@/api/ipcErrorText';
+import { announceChosenPhotosCleared } from '@/api/chosenPhotosCleared';
 import { rememberCurrentMember, useChosenPhotosOwner } from '@/api/useChosenPhotosOwner';
 import * as ipc from '@/api/ipc';
 import { MAX_CHOSEN_PHOTOS } from '../../../settings/limits';
@@ -41,6 +42,26 @@ const labelsOf = (photo: LibraryPhoto, noTags: string): string => photo.labels.j
 const TILE_BASE = 'rounded-box border p-1 text-left flex flex-col gap-1 w-full';
 
 /**
+ * The short text under a tile saying whether the photo can be added: the
+ * challenge's refusal, "list full", or "can be entered" when the listing knows.
+ */
+const tileReason = ({
+    blockedReason,
+    full,
+    allowedKnown,
+    t,
+}: {
+    blockedReason: string | null;
+    full: boolean;
+    allowedKnown: boolean;
+    t: (key: string) => string;
+}): string | null => {
+    if (blockedReason !== null) return blockedReason;
+    if (full) return t('app.photoChooserListFull');
+    return allowedKnown ? t('app.photoChooserAllowed') : null;
+};
+
+/**
  * One photo as a toggle button: its thumbnail (or, with no URL or one that does
  * not load, its tags and short id as text), the tags, and — when the listing
  * knows — whether the challenge accepts it, with the reason as text.
@@ -71,7 +92,8 @@ function PhotoTile({
     // stays removable once selected. It is aria-disabled rather than disabled, so
     // Tab still reaches it and a screen reader can read why it cannot be added.
     const unavailable = !selected && (blockedReason !== null || atCap);
-    const reason = blockedReason ?? (allowedKnown ? t('app.photoChooserAllowed') : null);
+    const full = !selected && atCap;
+    const reason = tileReason({ blockedReason, full, allowedKnown, t });
     const tone = selected ? 'border-primary bg-primary/10' : 'border-base-300';
     return (
         <button
@@ -83,7 +105,7 @@ function PhotoTile({
                 reason: reason ?? '',
             })}
             aria-disabled={unavailable}
-            className={`${TILE_BASE} ${tone} ${blockedReason !== null ? 'opacity-50' : ''}`}
+            className={`${TILE_BASE} ${tone} ${unavailable ? 'opacity-50' : ''}`}
             onClick={() => {
                 if (!unavailable) onToggle(photo.id);
             }}
@@ -103,7 +125,11 @@ function PhotoTile({
             )}
             <span className="truncate text-xs">{showImage ? labels : shortId(photo.id)}</span>
             {reason && (
-                <span className={`text-xs ${blockedReason !== null ? 'text-error' : 'text-success'}`}>{reason}</span>
+                <span
+                    className={`text-xs ${blockedReason !== null ? 'text-error' : full ? 'text-base-content/70' : 'text-success'}`}
+                >
+                    {reason}
+                </span>
             )}
         </button>
     );
@@ -190,7 +216,7 @@ function PhotoGrid({
         return (
             <div role="alert" className="alert alert-error py-2 text-sm">
                 <div className="flex-1">
-                    <p>{t('app.photoChooserLoadError')}</p>
+                    <p>{t(state.error ? 'app.photoChooserLoadError' : 'app.photoChooserLoadErrorNoDetail')}</p>
                     {state.error && <p className="text-xs">{ipcErrorText(state.error, t)}</p>}
                 </div>
                 <button type="button" className="btn btn-sm" onClick={onRetry}>
@@ -267,8 +293,11 @@ function OtherAccountNotice({ onRemoved }: { onRemoved: () => void }) {
         const result = await ipc.callOrNull(() => ipc.clearChosenPhotos());
         setRemoving(false);
         setConfirming(false);
-        if (result?.success) onRemoved();
-        else setFailed(true);
+        if (result?.success) {
+            // Every open editor drops its copy of the lists, so saving it cannot put them back.
+            announceChosenPhotosCleared();
+            onRemoved();
+        } else setFailed(true);
     };
 
     return (
@@ -365,17 +394,56 @@ function useLibraryListing(challengeId: string | number | null) {
 }
 
 /**
+ * Whether the lists on record belong to another account than the signed-in one,
+ * judged on the list the modal opened with (`savedCount`), not the live selection,
+ * so choosing photos does not make the notice come and go. Once seen it stays until
+ * the lists are removed: a search puts the listing back to loading (or an error),
+ * which must not hide the notice and the photos it withholds. `onFirstSeen` runs
+ * once, as soon as it is seen — the other account's photos are not this account's
+ * to build on, so the selection then starts empty.
+ */
+function useOtherAccountLists({
+    savedCount,
+    owner,
+    state,
+    removed,
+    onFirstSeen,
+}: {
+    savedCount: number;
+    owner: string;
+    state: ListState;
+    removed: boolean;
+    onFirstSeen: () => void;
+}): boolean {
+    const currentMember = state.status === 'ready' ? state.listing.memberId : null;
+    const otherNow = savedCount > 0 && owner !== '' && currentMember !== null && owner !== currentMember;
+    const seen = useRef(false);
+    if (otherNow) seen.current = true;
+    const otherAccount = !removed && (otherNow || seen.current);
+    const startedFresh = useRef(false);
+    useLayoutEffect(() => {
+        if (otherAccount && !startedFresh.current) {
+            startedFresh.current = true;
+            onFirstSeen();
+        }
+    }, [otherAccount, onFirstSeen]);
+    return otherAccount;
+}
+
+/**
  * The modal's body. Mounted only while the modal is open, so every opening
  * starts from the saved value with a fresh listing.
  */
 function PhotoChooserBody({
     value,
+    savedCount,
     challengeId,
     clearMeansInherit,
     onSave,
     onClose,
 }: {
     value: string[];
+    savedCount: number;
     challengeId: string | number | null;
     clearMeansInherit: boolean;
     onSave: (ids: string[]) => boolean | Promise<boolean>;
@@ -413,21 +481,17 @@ function PhotoChooserBody({
         else setSaveFailed(true);
     };
 
-    // Judged on the list the modal opened with, not the live selection, so choosing
-    // photos does not make the notice come and go.
-    const currentMember = state.status === 'ready' ? state.listing.memberId : null;
-    const otherAccount =
-        !listsRemoved && value.length > 0 && owner !== '' && currentMember !== null && owner !== currentMember;
-    // The other account's photos are not this account's to build on: the selection starts empty
-    // (and never shows their ids) once the listing shows whose list it is.
-    const startedFresh = useRef(false);
-    useLayoutEffect(() => {
-        if (otherAccount && !startedFresh.current) {
-            startedFresh.current = true;
-            setSelected([]);
-        }
-    }, [otherAccount]);
+    const otherAccount = useOtherAccountLists({
+        savedCount,
+        owner,
+        state,
+        removed: listsRemoved,
+        onFirstSeen: () => setSelected([]),
+    });
     const atCap = selected.length >= MAX_CHOSEN_PHOTOS;
+    // With a list on record, saving restamps its owner as the signed-in account: only once the
+    // listing has said who that is can the notice above warn about it.
+    const owningUnknown = owner !== '' && (state.status === 'loading' || state.status === 'error');
 
     return (
         <div className="space-y-3">
@@ -436,7 +500,7 @@ function PhotoChooserBody({
             {otherAccount && (
                 <>
                     <OtherAccountNotice onRemoved={() => setListsRemoved(true)} />
-                    <p className="text-xs">{interp(t('app.chosenPhotosOtherAccountCount'), { count: value.length })}</p>
+                    <p className="text-xs">{interp(t('app.chosenPhotosOtherAccountCount'), { count: savedCount })}</p>
                 </>
             )}
             <form className="flex flex-wrap items-center gap-2" onSubmit={submitSearch}>
@@ -470,7 +534,12 @@ function PhotoChooserBody({
                 </div>
             )}
             <div className="flex justify-end gap-2">
-                <button type="button" className="btn btn-latvian btn-sm" onClick={() => void save()} disabled={saving}>
+                <button
+                    type="button"
+                    className="btn btn-latvian btn-sm"
+                    onClick={() => void save()}
+                    disabled={saving || owningUnknown}
+                >
                     {saving && <span className="loading loading-spinner loading-xs" />}
                     {t('app.photoChooserUse')}
                 </button>
@@ -500,6 +569,7 @@ export function PhotoChooserModal({
     isOpen,
     onClose,
     value,
+    savedCount = value.length,
     challengeId = null,
     clearMeansInherit = false,
     onSave,
@@ -507,6 +577,8 @@ export function PhotoChooserModal({
     isOpen: boolean;
     onClose: () => void;
     value: string[];
+    /** How many photos the saved list holds when `value` withholds them (another account's). */
+    savedCount?: number;
     challengeId?: string | number | null;
     clearMeansInherit?: boolean;
     onSave: (ids: string[]) => boolean | Promise<boolean>;
@@ -517,6 +589,7 @@ export function PhotoChooserModal({
         <Modal isOpen onClose={onClose} title={t('app.photoChooserTitle')} size="xl">
             <PhotoChooserBody
                 value={value}
+                savedCount={savedCount}
                 challengeId={challengeId}
                 clearMeansInherit={clearMeansInherit}
                 onSave={onSave}

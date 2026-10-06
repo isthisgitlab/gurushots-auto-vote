@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { getUiDefaultSettings } from '../../settings/uiDefaults';
 import * as ipc from '@/api/ipc';
+import { useOnChosenPhotosCleared, withEmptyChosenPhotos } from '@/api/chosenPhotosCleared';
 
 import type { RendererSettings } from '../../types/settings';
 import type {
@@ -130,6 +131,14 @@ export function useSettingsForm({
     const handleFormChange = useCallback<SettingChangeHandler>((key, value) => {
         setFormValues((prev) => ({ ...prev, [key]: value }));
     }, []);
+
+    // Lists removed while the modal is open: the removal is what is on disk now, so the field
+    // reads empty and neither Save nor Cancel writes the old list back.
+    useOnChosenPhotosCleared(() => {
+        setFormValues(withEmptyChosenPhotos);
+        setOriginalFormValues((original) => original && withEmptyChosenPhotos(original));
+        persistedFormRef.current = persistedFormRef.current && withEmptyChosenPhotos(persistedFormRef.current);
+    });
 
     const handleUiChange = useCallback<UiChangeHandler>((key, value) => {
         setUiValues((prev) => ({ ...prev, [key]: value }));

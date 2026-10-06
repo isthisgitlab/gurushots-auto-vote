@@ -26,7 +26,7 @@ const PER_ID_JOIN_KEYS: ReadonlySet<string> = new Set(['chosenPhotos', 'chosenPh
  * wins — a rule's inline override before the profile it names — then the
  * global default. See `ruleValuesFor` in settings/ruleResolution.ts.
  */
-const resolveJoinSetting = (key: string, challenge: Challenge): unknown => {
+const resolveJoinSetting = (key: string, challenge: Partial<Challenge>): unknown => {
     // The chosen-photos pair also honours an override saved for THIS id: an
     // un-joined challenge has no cached id for getEffectiveSetting, yet the
     // Discover view saves the user's choice per challenge id. Every other key

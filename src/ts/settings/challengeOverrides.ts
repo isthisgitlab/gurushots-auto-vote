@@ -14,6 +14,7 @@ import { valuesEqual, globalChallengeValues, challengeValueSetIsValid } from './
 import { ruleValuesForChallengeId, isTitleProfileSuppressed } from './ruleResolution';
 import { scenarioPhaseSettings } from './scenarioOverlay';
 import { JOIN_KEPT_KEYS } from './staleChallengeCleanup';
+import { isActiveChallengeId } from './challengeFacts';
 import { loggableSettingValue } from './logValue';
 
 import type {
@@ -23,6 +24,16 @@ import type {
     ChallengeValues,
     SettingValueOf,
 } from '../types/settings';
+
+/**
+ * Whether an override equal to the inherited value is still stored. The join keys
+ * are, for a challenge that is not joined yet: a rule cannot be resolved by id for
+ * it, so an entry that merely equals what the global default or a rule gives today
+ * would silently stop applying to it. A joined challenge resolves rules by id, so
+ * it keeps the normal "equal to inherited means no override".
+ */
+const keepsEqualValue = (settingKey: string, challengeId: string | number): boolean =>
+    JOIN_KEPT_KEYS.includes(settingKey) && !isActiveChallengeId(challengeId);
 
 /**
  * Trimmed string form of a caller-supplied challenge id ('' when absent).
@@ -149,10 +160,7 @@ const _applyChallengeOverride = (
     const container = _ensureChallengeContainer(settings, challengeId);
     // inheritedDefaults always holds every schema key (globalChallengeValues
     // starts from the full schema defaults), and settingKey is schema-checked above.
-    // The join keys are always stored as written: a rule cannot be resolved by id
-    // for a challenge that is not joined yet, so an entry that merely equals what
-    // the global default or a rule gives today would silently stop applying to it.
-    if (JOIN_KEPT_KEYS.includes(settingKey) || !valuesEqual(value, inheritedDefaults[settingKey])) {
+    if (keepsEqualValue(settingKey, challengeId) || !valuesEqual(value, inheritedDefaults[settingKey])) {
         container[settingKey] = value;
         return 'set';
     }
@@ -221,7 +229,7 @@ const replaceChallengeOverridesInSettings = (
 
     const container: ChallengeValues = {};
     for (const [key, value] of entries) {
-        if (JOIN_KEPT_KEYS.includes(key) || !valuesEqual(value, inherited[key])) container[key] = value;
+        if (keepsEqualValue(key, challengeId) || !valuesEqual(value, inherited[key])) container[key] = value;
     }
     const challengeSettings = settings.challengeSettings;
     if (Object.keys(container).length) challengeSettings.perChallenge[challengeId] = container;

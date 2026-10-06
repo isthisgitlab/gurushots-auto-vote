@@ -44,7 +44,8 @@ Commands:
   reset-setting <key> [--challenge=<id>] - Reset a setting to default (clear a challenge override with --challenge)
   reset-all-settings - Reset all settings to defaults
   clear-chosen-photos - Remove every saved Chosen Photos list (settings, rules, profiles, scenarios), e.g. after
-             switching accounts. Submit Only Chosen Photos is left as it is.
+             switching accounts. Submit Only Chosen Photos is left as it is. It takes no arguments;
+             to clear the list of one challenge: reset-setting chosenPhotos --challenge=<id>
   list-profiles - Show saved challenge-settings profiles
   save-profile "<name>" --challenge=<id> - Save a challenge's overrides as a named profile
   apply-profile "<name>" --challenge=<id> - Replace a challenge's overrides with a profile

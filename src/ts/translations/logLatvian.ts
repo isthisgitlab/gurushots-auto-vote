@@ -92,8 +92,6 @@ export const logMessages = {
     m20a25539e44c: '  Statuss: mainīts ✏️',
     m20dd568d749e:
         'Neizdevās saglabāt profilu: nosaukums ir tukšs, pārāk garš vai rezervēts, sasniegts profilu skaita ierobežojums vai kāda vērtība neizturēja pārbaudi (skati uzstādījumu žurnālu)',
-    m216378b1dcc5:
-        '{0}: tavi izvēlētie foto saglabāti, kamēr bija pieteicies cits konts, tāpēc tie tiek ignorēti — izvēlies tos no jauna šim kontam vai notīri sarakstu',
     m219dbd8057ac: 'Kļūda, apstrādājot get-settings pieprasījumu:',
     m21b1261f69f8:
         '{0} Boost iesniegšana jaunam foto ir ieslēgta, bet pirms miega jaunu foto iesniegt nevar; izmanto Boost esošajam foto',
@@ -489,6 +487,8 @@ export const logMessages = {
     mb47c17a2cd2b: 'Kļūda, izmantojot Turbo foto:',
     mb484141d8ee1: 'Veiksmīgi izrakstījies',
     mb49805a99d14: 'Izaicinājuma {1} uzstādījums {0} atiestatīts (tagad manto profila vai globālo vērtību)',
+    mb4afab689594:
+        '{0}: tavi izvēlētie foto saglabāti, kamēr bija pieteicies cits konts, tāpēc tie tiek ignorēti — izņem tos (atlasītājā „Izņemt šos sarakstus” vai ar komandu clear-chosen-photos) un tad izvēlies foto šim kontam',
     mb4cdb19fca68: 'Neizdevās aprēķināt nākamā cikla sākumu; izmanto parasto intervālu',
     mb4e5eb205e20: 'Neizdevās uzpildīt redzamību: {0}',
     mb58f4ec761aa: '{0}: pabeigts izaicinājumam {1}',

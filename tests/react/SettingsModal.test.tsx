@@ -361,6 +361,44 @@ describe('SettingsModal — title-tag-rules save', () => {
         expect(onClose).not.toHaveBeenCalled();
     });
 
+    test("removing every list from a rule's chooser, then saving, does not write the lists back", async () => {
+        const PHOTO = `00000001${'a'.repeat(24)}`;
+        const rule = { title: 'Hats', mustIncludeTags: ['hat'], shouldIncludeTags: [], chosenPhotos: [PHOTO] };
+        jest.mocked(window.api.getTitleRules).mockResolvedValueOnce([rule]);
+        // A list saved under another account: the chooser's notice offers to remove every list.
+        jest.mocked(window.api.getSetting).mockResolvedValue('d'.repeat(32));
+        jest.mocked(window.api.getLibraryPhotos).mockResolvedValue(
+            invalid({
+                success: true,
+                photos: [{ id: PHOTO, labels: [], allowed: true, message: null, uploadDate: 1 }],
+                memberId: 'c'.repeat(32),
+                truncated: false,
+                allowedKnown: true,
+            }),
+        );
+        jest.mocked(window.api.clearChosenPhotos).mockResolvedValue({ success: true, removed: 1 });
+        const onClose = jest.fn();
+
+        render(<SettingsModal isOpen={true} onClose={onClose} />);
+        await screen.findByDisplayValue('Hats');
+        fireEvent.click(screen.getByRole('button', { name: 'app.choosePhotos' }));
+        fireEvent.click(await screen.findByRole('button', { name: 'app.photoChooserOtherAccountClear' }));
+        const confirm = (await screen.findAllByRole('button', { name: 'app.photoChooserOtherAccountClear' })).at(-1)!;
+        fireEvent.click(confirm);
+        await waitFor(() => expect(window.api.clearChosenPhotos).toHaveBeenCalledTimes(1));
+        // Leave the chooser without choosing: its Cancel is the last one in the page.
+        fireEvent.click((await screen.findAllByRole('button', { name: 'app.cancel' })).at(-1)!);
+        await waitFor(() => expect(screen.queryByRole('button', { name: 'app.photoChooserUse' })).toBeNull());
+
+        clickSave();
+
+        await waitFor(() => expect(onClose).toHaveBeenCalled());
+        // The rule is saved without its list: the removal stands.
+        expect(window.api.setTitleRules).toHaveBeenCalledWith([
+            { title: 'Hats', mustIncludeTags: ['hat'], shouldIncludeTags: [] },
+        ]);
+    });
+
     test('a successful save persists the rules and closes the modal', async () => {
         const rule = { title: 'Hats', mustIncludeTags: ['hat'], shouldIncludeTags: [] };
         jest.mocked(window.api.getTitleRules).mockResolvedValueOnce([rule]);
