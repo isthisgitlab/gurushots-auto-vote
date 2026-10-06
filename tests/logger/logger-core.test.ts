@@ -330,6 +330,17 @@ describe('writeLog routing and fan-out', () => {
         expect(fs.appendFileSync.mock.calls[1][1]).toContain('] ℹ️ Str\ndetail\n');
     });
 
+    test('printLine writes the console only: no file, no ring buffer, no GUI feed', () => {
+        const { logger, fs } = loadLogger();
+        const sink = jest.fn();
+        g.sendLogToGUI = sink;
+        logger.printLine('  \u2022 p1');
+        expect(logSpy).toHaveBeenCalledWith('  \u2022 p1');
+        expect(fs.appendFileSync).not.toHaveBeenCalled();
+        expect(sink).not.toHaveBeenCalled();
+        expect(logger.getRecentLogs()).toEqual([]);
+    });
+
     test('a failing disk write never throws out of the logger', () => {
         const fs = makeFs({
             appendFileSync: jest.fn(() => {

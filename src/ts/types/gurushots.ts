@@ -190,6 +190,17 @@ export interface MemberChallengesResponse {
     items?: Challenge[];
 }
 
+/**
+ * An open challenge as the Discover list receives it: the API item plus what the
+ * Chosen Photos settings say for it. `chosenOwn` is the list saved for this
+ * challenge alone; `chosenEffectiveCount` is how many photos the join would
+ * actually use once every layer is resolved (0 under another account's list).
+ */
+export interface OpenChallenge extends Challenge {
+    chosenOwn: string[];
+    chosenEffectiveCount: number;
+}
+
 /** get_bankroll, raw. */
 export interface BankrollResponse {
     success?: boolean;

@@ -80,12 +80,29 @@ describe('the photos setting input', () => {
         expect(img.getAttribute('loading')).toBe('lazy');
     });
 
-    test('a list owned by another account never builds a thumbnail', async () => {
+    test('a list owned by another account is only counted: no thumbnail, no id, no short id', async () => {
         window.api.getSetting = jest.fn().mockResolvedValue('d'.repeat(32));
         rememberCurrentMember(MEMBER);
+        renderInput([idOf(1), idOf(2)]);
+        await waitFor(() => expect(window.api.getSetting).toHaveBeenCalled());
+        expect(await screen.findByText('app.chosenPhotosOtherAccountCount')).toBeTruthy();
+        expect(document.querySelector('img')).toBeNull();
+        expect(screen.queryAllByRole('listitem')).toHaveLength(0);
+        expect(document.body.textContent).not.toContain('00000001');
+    });
+
+    test('the count appears as soon as a listing shows whose account is signed in', async () => {
+        window.api.getSetting = jest.fn().mockResolvedValue('d'.repeat(32));
         renderInput([idOf(1)]);
         await waitFor(() => expect(window.api.getSetting).toHaveBeenCalled());
-        expect(document.querySelector('img')).toBeNull();
+        // Not known yet: the chips are what they were.
+        expect(screen.getByText('00000001')).toBeTruthy();
+        act(() => rememberCurrentMember(MEMBER));
+        expect(await screen.findByText('app.chosenPhotosOtherAccountCount')).toBeTruthy();
+        expect(screen.queryByText('00000001')).toBeNull();
+        // The same member reported again changes nothing.
+        act(() => rememberCurrentMember(MEMBER));
+        expect(screen.getByText('app.chosenPhotosOtherAccountCount')).toBeTruthy();
     });
 
     test('a failed read of the owner leaves chips as text', async () => {

@@ -44,7 +44,7 @@ export const setSetting = (key: string, value: string, challengeId: string | nul
             if (settings.setChallengeOverride(key, challengeId, parsedValue)) {
                 logger
                     .withCategory('settings')
-                    .success(`Set ${key} = ${JSON.stringify(parsedValue)} for challenge ${challengeId}`);
+                    .success(`Set ${key} = ${formatSettingForLog(key, parsedValue)} for challenge ${challengeId}`);
                 return true;
             }
             logger
@@ -74,7 +74,7 @@ export const setSetting = (key: string, value: string, challengeId: string | nul
             logger.withCategory('settings').error(`Failed to save setting '${key}' - validation failed`);
             return false;
         }
-        logger.withCategory('settings').success(`Set ${key} = ${JSON.stringify(parsedValue)}`);
+        logger.withCategory('settings').success(`Set ${key} = ${formatSettingForLog(key, parsedValue)}`);
         return true;
     } catch (error) {
         logger.withCategory('settings').error(`Error setting '${key}'`, error);
@@ -102,7 +102,9 @@ export const setGlobalDefault = (key: string, value: string): boolean => {
             return true;
         }
         logger.withCategory('settings').error(`Failed to set global default '${key}' - validation failed`);
-        logger.withCategory('settings').error(`Value ${JSON.stringify(parsedValue)} is invalid for this setting`);
+        logger
+            .withCategory('settings')
+            .error(`Value ${formatSettingForLog(key, parsedValue)} is invalid for this setting`);
 
         const config = schema[key] as SettingsSchemaEntry;
         logger

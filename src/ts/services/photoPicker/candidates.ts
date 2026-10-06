@@ -244,8 +244,8 @@ const buildScoredCandidates = (
  * never depend on unrelated photos in the library.
  *
  * @returns the scored pool; `chosenIds` names the chosen block inside it, or is
- *   null when no chosen photos were asked for (then nothing differs from
- *   buildScoredCandidates)
+ *   null when none was asked for or none is in the pool (then nothing differs
+ *   from buildScoredCandidates)
  */
 const buildChosenCandidates = (
     challenge: ChallengeText | null | undefined,
@@ -266,7 +266,9 @@ const buildChosenCandidates = (
         chosen.only ? pool.filter((photo) => photo && wanted.has(String(photo.id))) : pool,
         opts,
     );
-    return { scored, chosenIds: new Set(scored.map((entry) => String(entry.id)).filter((id) => wanted.has(id))) };
+    const chosenIds = new Set(scored.map((entry) => String(entry.id)).filter((id) => wanted.has(id)));
+    // No chosen photo made it into the pool: that reads exactly like no list.
+    return { scored, chosenIds: chosenIds.size > 0 ? chosenIds : null };
 };
 
 export { pickPhotosForChallenge, buildScoredCandidates, buildChosenCandidates };

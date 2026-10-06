@@ -31,6 +31,7 @@
  *   pipeline.ts        the shared fill pipeline and the submit-free ranking
  *   candidates.ts      on-theme candidate fetch, ignore words, semantic scores
  *   memberIdentity.ts  per-token member id cache for tag resolution
+ *   chosenPhotos.ts    the Chosen Photos settings, the lookup of a missed chosen photo, the skip log
  *   fillLogging.ts     submit-failure, fallback and popularity-pick explanations
  *   challengeState.ts  entry/slot reads, local reflects, live state refresh
  *   schedule.ts        schedule-row validation and threshold math
@@ -43,6 +44,7 @@ import { submitNewEntryForAction } from './autoFill/fillNew';
 import { rankCandidatesForChallenge } from './autoFill/pipeline';
 import { resolveSemanticScores, resolveIgnoreWords, fetchCandidatesForChallenge } from './autoFill/candidates';
 import { resolveMemberId, peekMemberId, __resetMemberIdCache } from './autoFill/memberIdentity';
+import { resolveChosenPhotos, resolveMissingChosen, logChosenSkipOnce, clearChosenSkip } from './autoFill/chosenPhotos';
 import { describeSubmitFailure } from './autoFill/fillLogging';
 import { getSlotsRemaining, reflectNewEntry, reflectEntryFlag, refreshChallengeState } from './autoFill/challengeState';
 import { resolveScheduleTarget, getNextScheduleThresholdSec } from './autoFill/schedule';
@@ -68,6 +70,11 @@ export {
     __resetMemberIdCache,
     resolveSemanticScores,
     resolveIgnoreWords,
+    // The join's photo pick reads the chosen photos the way a fill does.
+    resolveChosenPhotos,
+    resolveMissingChosen,
+    logChosenSkipOnce,
+    clearChosenSkip,
     describeSubmitFailure,
     refreshChallengeState,
 };

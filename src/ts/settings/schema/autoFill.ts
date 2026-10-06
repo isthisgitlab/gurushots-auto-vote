@@ -3,7 +3,7 @@
 import { z } from 'zod';
 import { isInteger } from '../../numbers';
 import { isPlainObject } from '../../plainObject';
-import { MAX_CHOSEN_PHOTOS, MAX_TAG_LENGTH } from '../limits';
+import { CHOSEN_PHOTO_ID_RE, MAX_CHOSEN_PHOTOS, MAX_TAG_LENGTH } from '../limits';
 import { MAX_SCHEDULE_SECONDS, nonNegNumber, zBool } from './validators';
 import type { SettingsSchemaEntry } from './entry';
 
@@ -94,7 +94,7 @@ const tagsList = z
 // sent anywhere. Duplicates are rejected rather than collapsed so the stored
 // list is exactly what the chooser showed.
 const photoIdList = z
-    .array(z.string().regex(/^[A-Za-z0-9_-]{1,64}$/))
+    .array(z.string().regex(CHOSEN_PHOTO_ID_RE))
     .max(MAX_CHOSEN_PHOTOS)
     .refine((ids) => new Set(ids).size === ids.length);
 

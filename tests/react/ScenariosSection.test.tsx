@@ -5,6 +5,7 @@
 
 import { act, render, screen, waitFor, fireEvent } from './helpers/test-utils';
 import { ScenariosSection } from '@/components/app/ScenariosSection';
+import { mockTranslator } from './helpers/setup';
 import { invalid } from '../helpers/invalid';
 
 const plan = { name: 'Plan', start: 'main', description: 'Mine', phases: { main: {}, done: {} } };
@@ -241,6 +242,28 @@ describe('import', () => {
         await openImport();
         click('app.scenarioPreview');
         expect(await screen.findByText('app.scenarioFlagged')).toBeTruthy();
+    });
+
+    test('each flagged setting names its phase as "(phase N)"', async () => {
+        mockTranslator.t.mockImplementation((key) =>
+            key === 'app.scenarioFlagged'
+                ? 'Review: {settings}'
+                : key === 'app.scenarioStatusPhase'
+                  ? 'phase {phase}'
+                  : key === 'app.chosenPhotos'
+                    ? 'Chosen Photos'
+                    : key,
+        );
+        try {
+            jest.mocked(window.api.previewScenarioImport).mockResolvedValueOnce(
+                invalid(preview({ flagged: [{ phase: 'main', key: 'chosenPhotos' }] })),
+            );
+            await openImport();
+            click('app.scenarioPreview');
+            expect(await screen.findByText('Review: Chosen Photos (phase main)')).toBeTruthy();
+        } finally {
+            mockTranslator.t.mockImplementation((key) => key);
+        }
     });
 
     test('a preview with nothing flagged has no review line', async () => {

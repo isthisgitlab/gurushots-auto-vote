@@ -341,6 +341,7 @@ const exportScenario = (name: unknown): string | null => exportScenarioWithNotes
 
 export {
     MAX_SCENARIOS,
+    ruleHasBehaviour,
     findStoredScenario,
     hasStoredScenarios,
     getScenarios,

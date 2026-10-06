@@ -52,7 +52,12 @@ function ImportPreview({ preview }: { preview: ImportPreviewResult['preview'] })
             {preview.flagged.length > 0 && (
                 <div className="text-warning">
                     {interp(t('app.scenarioFlagged'), {
-                        settings: preview.flagged.map((item) => `${t(`app.${item.key}`)} (${item.phase})`).join(', '),
+                        settings: preview.flagged
+                            .map(
+                                (item) =>
+                                    `${t(`app.${item.key}`)} (${interp(t('app.scenarioStatusPhase'), { phase: item.phase })})`,
+                            )
+                            .join(', '),
                     })}
                 </div>
             )}

@@ -15,6 +15,7 @@ jest.mock('electron', () => ({
 }));
 jest.mock('../../src/ts/settings');
 jest.mock('../../src/ts/metadata', () => ({ cleanupStaleMetadata: jest.fn() }));
+jest.mock('../../src/ts/services/joinChallenges', () => ({ isAutoJoinActive: jest.fn() }));
 jest.mock('../../src/ts/apiFactory', () => ({
     refreshApi: jest.fn(),
     getApiStrategy: jest.fn(),
@@ -28,6 +29,8 @@ import settingsModule = require('../../src/ts/settings');
 const settings = jest.mocked(settingsModule);
 import metadataModule = require('../../src/ts/metadata');
 const metadata = jest.mocked(metadataModule);
+import joinChallengesModule = require('../../src/ts/services/joinChallenges');
+const joinChallenges = jest.mocked(joinChallengesModule);
 import apiFactoryModule = require('../../src/ts/apiFactory');
 const apiFactory = jest.mocked(apiFactoryModule);
 import type * as settings_handlersModule from '../../src/ts/ipc/settings.handlers';
@@ -362,6 +365,53 @@ describe('cleanup-stale-metadata', () => {
     test('returns false when cleanup throws', async () => {
         metadata.cleanupStaleMetadata.mockImplementationOnce(boom);
         await expect(handlers['cleanup-stale-metadata']({}, invalid([1]))).resolves.toBe(false);
+    });
+});
+
+describe('cleanup-stale-challenge-setting', () => {
+    test.each([true, false])('tells the settings layer whether a join could run (%s)', async (armed) => {
+        joinChallenges.isAutoJoinActive.mockReturnValue(armed);
+        settings.cleanupStaleChallengeSetting = jest.fn().mockReturnValue(true);
+        await expect(handlers['cleanup-stale-challenge-setting']({}, ['1'])).resolves.toBe(true);
+        expect(settings.cleanupStaleChallengeSetting).toHaveBeenCalledWith(['1'], armed);
+    });
+
+    test('returns false when cleanup throws', async () => {
+        settings.cleanupStaleChallengeSetting = invalid(jest.fn(boom));
+        await expect(handlers['cleanup-stale-challenge-setting']({}, ['1'])).resolves.toBe(false);
+    });
+});
+
+describe('clear-chosen-photos', () => {
+    test('removes the lists, broadcasts the change and reports how many went', async () => {
+        const broadcast = jest.fn();
+        settings.clearChosenPhotos = jest.fn().mockReturnValue(4);
+        settings.loadSettings = jest.fn().mockReturnValue({ token: 'secret', theme: 'dark' });
+        await expect(buildHandlers({ broadcastSettingsChange: broadcast })['clear-chosen-photos']()).resolves.toEqual({
+            success: true,
+            removed: 4,
+        });
+        expect(broadcast).toHaveBeenCalledWith({ theme: 'dark', hasToken: true });
+    });
+
+    test('works without a broadcast listener', async () => {
+        settings.clearChosenPhotos = jest.fn().mockReturnValue(0);
+        await expect(handlers['clear-chosen-photos']()).resolves.toEqual({ success: true, removed: 0 });
+    });
+
+    test('a save that failed is an error result, with no broadcast', async () => {
+        const broadcast = jest.fn();
+        settings.clearChosenPhotos = jest.fn().mockReturnValue(null);
+        await expect(buildHandlers({ broadcastSettingsChange: broadcast })['clear-chosen-photos']()).resolves.toEqual({
+            success: false,
+            error: 'The settings file could not be saved',
+        });
+        expect(broadcast).not.toHaveBeenCalled();
+    });
+
+    test('never throws across IPC', async () => {
+        settings.clearChosenPhotos = invalid(jest.fn(boom));
+        await expect(handlers['clear-chosen-photos']()).resolves.toEqual({ success: false, error: 'boom' });
     });
 });
 

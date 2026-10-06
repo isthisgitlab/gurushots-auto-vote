@@ -51,7 +51,6 @@ const EXPECTED_THIN_HANDLERS: [string, string, string | boolean | null][] = [
     ['save-challenge-profile', 'saveChallengeProfile', false],
     ['delete-challenge-profile', 'deleteChallengeProfile', false],
     ['apply-challenge-profile', 'applyChallengeProfile', false],
-    ['cleanup-stale-challenge-setting', 'cleanupStaleChallengeSetting', false],
     ['cleanup-obsolete-settings', 'cleanupObsoleteSettings', false],
     ['reset-setting', 'resetSetting', false],
     ['reset-global-default', 'resetGlobalDefault', false],

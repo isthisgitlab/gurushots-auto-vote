@@ -25,6 +25,7 @@ import * as logger from '../logger';
 import * as apiFactory from '../apiFactory';
 import * as metadata from '../metadata';
 import { stampChosenPhotosOwner } from './chosenPhotosOwner';
+import { isAutoJoinActive } from '../services/joinChallenges';
 
 import type { IpcMain } from 'electron';
 import type { SettingsSchemaEntry } from '../settings/schema';
@@ -71,12 +72,6 @@ const thinRows = () =>
         ['save-challenge-profile', () => settings.saveChallengeProfile, false, 'saving challenge profile'],
         ['delete-challenge-profile', () => settings.deleteChallengeProfile, false, 'deleting challenge profile'],
         ['apply-challenge-profile', () => settings.applyChallengeProfile, false, 'applying challenge profile'],
-        [
-            'cleanup-stale-challenge-setting',
-            () => settings.cleanupStaleChallengeSetting,
-            false,
-            'cleaning up stale challenge settings',
-        ],
         ['cleanup-obsolete-settings', () => settings.cleanupObsoleteSettings, false, 'cleaning up obsolete settings'],
         ['reset-setting', () => settings.resetSetting, false, 'resetting setting'],
         ['reset-global-default', () => settings.resetGlobalDefault, false, 'resetting global default'],
@@ -176,6 +171,21 @@ const handleSetSetting = async (
     }
 };
 
+// A user-initiated removal of every saved Chosen Photos list (see settings/chosenPhotosClear.ts).
+const handleClearChosenPhotos = async (broadcastSettingsChange: BroadcastSettingsChange | undefined) => {
+    try {
+        const removed = settings.clearChosenPhotos();
+        if (removed === null) return { success: false as const, error: 'The settings file could not be saved' };
+        if (typeof broadcastSettingsChange === 'function') {
+            broadcastSettingsChange(toRendererSettings(settings.loadSettings()));
+        }
+        return { success: true as const, removed };
+    } catch (error) {
+        logger.withCategory('settings').error('Error handling clear-chosen-photos request:', error);
+        return errorResult(error, 'Failed to clear chosen photos');
+    }
+};
+
 const buildSettingsHandlers = ({ broadcastSettingsChange }: { broadcastSettingsChange?: BroadcastSettingsChange }) => ({
     'get-settings': async () => {
         try {
@@ -190,6 +200,10 @@ const buildSettingsHandlers = ({ broadcastSettingsChange }: { broadcastSettingsC
 
     'set-setting': (event: unknown, key: unknown, value: unknown) =>
         handleSetSetting(broadcastSettingsChange, key, value),
+
+    'cleanup-stale-challenge-setting': handleCleanupStaleChallengeSetting,
+
+    'clear-chosen-photos': async () => handleClearChosenPhotos(broadcastSettingsChange),
 
     'save-settings': async (event: unknown, newSettings: unknown) => {
         try {
@@ -209,6 +223,18 @@ const buildSettingsHandlers = ({ broadcastSettingsChange }: { broadcastSettingsC
         }
     },
 });
+
+// Whether an automatic join could run decides if a chosen-photos entry for a
+// challenge not seen in any open list yet is worth keeping; the settings layer
+// cannot ask (it does not import services), so the handler tells it.
+const handleCleanupStaleChallengeSetting = async (event: unknown, activeChallengeIds: string[]) => {
+    try {
+        return settings.cleanupStaleChallengeSetting(activeChallengeIds, isAutoJoinActive());
+    } catch (error) {
+        logger.withCategory('settings').error('Error cleaning up stale challenge settings:', error);
+        return false;
+    }
+};
 
 const buildEnvironmentHandlers = () => ({
     'get-environment-info': async () => {

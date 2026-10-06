@@ -1,7 +1,9 @@
 /**
  * CLI `list-photos`: the photo ids the Chosen Photos settings take, read from
  * your own library through the same handler the chooser uses. Everything the
- * server sent is stripped of terminal control characters before it is printed.
+ * server sent is stripped of terminal control characters before it is printed,
+ * and the per-photo listing goes to the terminal only — the log files get a
+ * count and whether the list was cut short, never the photos.
  */
 
 import * as logger from '../../logger';
@@ -38,6 +40,23 @@ const parseSearchFlag = (argv: string[]): string | null => {
     return null;
 };
 
+type Listing = Extract<Awaited<ReturnType<ActionHandlers['get-library-photos']>>, { success: true }>;
+
+/**
+ * Print each photo as `id  allowed|not allowed  [labels]` on the terminal only —
+ * the log files never get a photo.
+ */
+const printPhotos = (listing: Listing): void => {
+    for (const photo of listing.photos) {
+        const state = listing.allowedKnown ? (photo.allowed ? '  allowed' : '  not allowed') : '';
+        const labels = photo.labels.map(stripTerminalControl).join(', ');
+        logger.printLine(`  • ${stripTerminalControl(photo.id)}${state}${labels ? `  [${labels}]` : ''}`);
+        if (listing.allowedKnown && !photo.allowed && photo.message) {
+            logger.printLine(`      ${stripTerminalControl(photo.message)}`);
+        }
+    }
+};
+
 /**
  * Print the library as `id  allowed|not allowed  labels`.
  *
@@ -50,19 +69,22 @@ const listPhotosCmd = async (challengeId: string | null, search: string | null):
     const result = await handlers()['get-library-photos'](null, challengeId, search);
     if (!result?.success) {
         const code = String(result?.error);
-        ui().error(`Could not list your photos: ${REFUSALS[code] ?? stripTerminalControl(code)}`);
+        const reason = Object.hasOwn(REFUSALS, code) ? REFUSALS[code] : stripTerminalControl(code);
+        ui().error(`Could not list your photos: ${reason}`);
         return 1;
     }
-    ui().info(`=== Your photos${result.photos.length ? ` (${result.photos.length})` : ''} ===`);
-    for (const photo of result.photos) {
-        const state = result.allowedKnown ? (photo.allowed ? '  allowed' : '  not allowed') : '';
-        const labels = photo.labels.map(stripTerminalControl).join(', ');
-        ui().info(`  • ${stripTerminalControl(photo.id)}${state}${labels ? `  [${labels}]` : ''}`);
-        if (result.allowedKnown && !photo.allowed && photo.message) {
-            ui().info(`      ${stripTerminalControl(photo.message)}`);
-        }
+    if (result.photos.length === 0) {
+        ui().info(`No photos found${search ? ` for "${stripTerminalControl(search)}"` : ' in your library'}.`);
+        return 0;
     }
+    ui().info(`=== Your photos (${result.photos.length}${result.truncated ? ', list cut short' : ''}) ===`);
+    printPhotos(result);
     if (result.truncated) ui().warning('The list was cut short; narrow it with --search=<tag> to find the rest.');
+    if (!result.allowedKnown) {
+        ui().info(
+            'Eligibility is not shown without a challenge; pass --challenge=<id> to see which photos it accepts.',
+        );
+    }
     ui().info('Choose photos with: set-setting chosenPhotos \'["<id>"]\' --challenge=<id>');
     return 0;
 };

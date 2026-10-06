@@ -42,9 +42,32 @@ engineStrict: true
 # with it. Note this only gates what pnpm resolves; `pnpm bump` (npm-check-updates)
 # ignores it entirely and will still write the newest published version.
 minimumReleaseAge: 360
-# Dev-tree-only CVE override — xcode pins vulnerable uuid 7.x.
-# Exact-pinned for reproducibility; this resolves only through build tooling.
-# Re-check with a full `pnpm audit` after any lockfile change; drop an
-# override once the upstream chain moves past the vulnerable range.
+# Dev-tree-only CVE overrides, exact-pinned for reproducibility; each resolves
+# only through build or test tooling. Re-check with a full `pnpm audit` after
+# any lockfile change; drop an override once the upstream chain moves past the
+# vulnerable range.
 overrides:
+    # xcode pins vulnerable uuid 7.x.
     'uuid@<11.1.1': 11.1.1
+    # @tailwindcss/typography pins postcss-selector-parser 6.0.10 exactly, and 6.x
+    # has no fix; the site CSS (`prose`) builds byte-identical on 7.1.6.
+    'postcss-selector-parser@<7.1.6': 7.1.6
+    # jest > babel-plugin-istanbul > @istanbuljs/load-nyc-config > js-yaml@3 >
+    # argparse@1 > sprintf-js (no patched release). js-yaml 3's library code never
+    # loads argparse, only its bin/js-yaml.js does, and load-nyc-config calls just
+    # `require('js-yaml').load`; argparse 2 has no dependencies.
+    'argparse@<2': 2.0.1
+    # electron-builder > app-builder-lib > @electron/get 3 > global-agent 3 > roarr 2 >
+    # sprintf-js (no patched release). global-agent 4 drops roarr and keeps the
+    # `bootstrap()` entry point @electron/get calls when a proxy is configured.
+    'global-agent@<4': 4.1.3
+# braces <=3.0.3 (GHSA-vfj7-8cjw-p6xm: stack exhaustion on deeply nested brace
+# patterns) has no patched release, and every micromatch, watchboy and
+# @parcel/watcher 2.5.x that depends on it is on its latest version. It is reached
+# only by electronmon (dev restarts) and the Tailwind CLI's --watch mode, both of
+# which match fixed patterns from this repository's own config (package.json
+# `electronmon.patterns`, the CSS entry file); no input from the app or the
+# network ever becomes a pattern. Not reachable in anything we ship or run.
+auditConfig:
+    ignoreGhsas:
+        - GHSA-vfj7-8cjw-p6xm

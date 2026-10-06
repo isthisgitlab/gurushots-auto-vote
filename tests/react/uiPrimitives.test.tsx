@@ -110,10 +110,8 @@ describe('Modal edges', () => {
     });
 
     test('an unknown size uses the md width cap', () => {
-        const { container } = render(
-            <Modal isOpen onClose={() => {}} size={invalid('tiny')} showCloseButton={false} />,
-        );
-        expect(container.querySelector('.modal-box')!.className).toContain('max-w-lg');
+        render(<Modal isOpen onClose={() => {}} size={invalid('tiny')} showCloseButton={false} />);
+        expect(document.querySelector('.modal-box')!.className).toContain('max-w-lg');
     });
 
     test('Escape without an onClose handler is a no-op', () => {

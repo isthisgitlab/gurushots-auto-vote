@@ -13,6 +13,10 @@ jest.mock('../../src/ts/logger', () => {
 });
 jest.mock('../../src/ts/voting/cancellation', () => ({ isCancelled: jest.fn(() => false) }));
 jest.mock('../../src/ts/services/autoFill', () => ({
+    // The join's chosen-photos helpers are reached through this facade; they are the real ones.
+    ...jest.requireActual<typeof import('../../src/ts/services/autoFill/chosenPhotos')>(
+        '../../src/ts/services/autoFill/chosenPhotos',
+    ),
     fetchCandidatesForChallenge: jest.fn(async () => [{ id: 'imgA', permission: { allowed: true } }]),
     resolveSemanticScores: jest.fn(async () => null),
 }));

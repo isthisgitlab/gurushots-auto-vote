@@ -8,8 +8,8 @@ import { resolveSemanticScores } from '../candidates';
 import {
     clearChosenSkip,
     enteredIds,
-    forgetChosenWalks,
     logChosenSkipOnce,
+    refuseRememberedChosen,
     resolveChosenPhotos,
     resolveMissingChosen,
 } from '../chosenPhotos';
@@ -309,14 +309,14 @@ const runFillAttempt = async ({
             return { status: 'submitted', picked };
         }
         // A photo remembered from an earlier walk may have stopped being allowed.
-        forgetChosenWalks(challenge);
+        refuseRememberedChosen(challenge, picked);
         const reason = describeSubmitFailure(result && result.raw);
         logger
             .withCategory('autoFill')
             .warning(`${label}: submit rejected for ${logger.challengeTag(challenge)}: ${reason}`, null);
         return { status: 'submit-rejected', reason };
     } catch (error) {
-        forgetChosenWalks(challenge);
+        refuseRememberedChosen(challenge, picked);
         logger
             .withCategory('autoFill')
             .warning(

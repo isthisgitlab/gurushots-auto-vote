@@ -1,4 +1,4 @@
-import { useLayoutEffect, useCallback, useRef, useId } from 'react';
+import { useLayoutEffect, useCallback, useRef, useId, createPortal } from 'react';
 import { rendererTranslator } from '../../../translations/renderer';
 import { StrokeIcon, ICON_PATHS } from './StrokeIcon';
 import type { ComponentChildren } from 'preact';
@@ -54,7 +54,8 @@ export interface ModalProps {
 /**
  * DaisyUI modal with accessibility features: role=dialog / aria-modal, Escape
  * to close, a focus trap that keeps Tab / Shift+Tab cycling within the dialog,
- * and focus restoration to the triggering element when the modal closes.
+ * and focus restoration to the triggering element when the modal closes. It is
+ * portalled to the document body, so it stacks and sizes the same wherever it opens.
  */
 export function Modal({
     isOpen,
@@ -82,6 +83,10 @@ export function Modal({
     // the wrong dialog title).
     const titleId = useId();
     const modalBoxRef = useRef<HTMLDivElement | null>(null);
+    // Read at Escape time, so a parent passing a new onClose each render does not
+    // re-run the open effect (which would pull focus back to the first control).
+    const onCloseRef = useRef(onClose);
+    onCloseRef.current = onClose;
     // The element focused before the modal opened, restored on close.
     const previouslyFocusedRef = useRef<(Element & Partial<HTMLOrSVGElement>) | null>(null);
 
@@ -96,7 +101,7 @@ export function Modal({
         (e: KeyboardEvent) => {
             if (!isTopmost(titleId)) return;
             if (e.key === 'Escape') {
-                if (onClose) onClose();
+                onCloseRef.current?.();
                 return;
             }
             if (e.key !== 'Tab') return;
@@ -122,7 +127,7 @@ export function Modal({
                 first.focus();
             }
         },
-        [onClose, getFocusable, titleId],
+        [getFocusable, titleId],
     );
 
     useLayoutEffect(() => {
@@ -148,7 +153,10 @@ export function Modal({
         return null;
     }
 
-    return (
+    // Rendered into the body: DaisyUI's open .modal-box carries translate/scale, which
+    // makes it the containing block of any position:fixed descendant, so a modal
+    // opened from inside another would be sized and clipped by the outer box.
+    return createPortal(
         <div
             className="modal modal-open z-50"
             role="dialog"
@@ -183,7 +191,8 @@ export function Modal({
                 {/* Content */}
                 {children}
             </div>
-        </div>
+        </div>,
+        document.body,
     );
 }
 

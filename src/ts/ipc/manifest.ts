@@ -75,6 +75,7 @@ const invokeChannels = [
     'cleanup-obsolete-settings',
     'get-settings-schema',
     'get-validation-error',
+    'clear-chosen-photos',
     // Resets
     'reset-setting',
     'reset-global-default',

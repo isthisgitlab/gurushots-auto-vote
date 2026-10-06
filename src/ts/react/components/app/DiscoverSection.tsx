@@ -1,7 +1,6 @@
 import { useState, useCallback } from 'react';
 import { useTranslation } from '@/contexts/TranslationContext';
 import { useMemberChallenges } from '@/api/useMemberChallenges';
-import { useChosenPhotoLists } from '@/api/useChosenPhotoLists';
 import { Modal, ModalActions } from '@/components/ui/Modal';
 import { InlineLoader } from '@/components/ui/LoadingSpinner';
 import { StatusBadge } from '@/components/ui/StatusBadge';
@@ -10,7 +9,7 @@ import * as ipc from '@/api/ipc';
 import { ipcErrorText } from '@/api/ipcErrorText';
 import { PhotoChooserModal } from './PhotoChooserModal';
 
-import type { Bankroll, Challenge } from '../../../types/gurushots';
+import type { Bankroll, Challenge, OpenChallenge } from '../../../types/gurushots';
 import { errorMessage } from '../../../errorMessage';
 
 /**
@@ -47,16 +46,20 @@ const costOf = (c: Challenge) => {
     return Number.isFinite(n) && n > 0 ? n : 0;
 };
 
+/** What names a row for assistive technology: its title, else its address. */
+const rowName = (c: Challenge, untitled: string): string => c.title || c.url || untitled;
+
 /**
  * Marks a row that has a list of its own; clicking it reopens the chooser.
  */
-function ChosenChip({ onClick }: { onClick: () => void }) {
+function ChosenChip({ name, onClick }: { name: string; onClick: () => void }) {
     const { t } = useTranslation();
     return (
         <button
             type="button"
             className="badge badge-info badge-sm mt-0.5"
             title={t('app.discoverChosenChipHint')}
+            aria-label={interp(t('app.discoverChosenChipLabel'), { title: name })}
             onClick={onClick}
         >
             {t('app.discoverChosenChip')}
@@ -70,12 +73,10 @@ function ChosenChip({ onClick }: { onClick: () => void }) {
  */
 function RowPhotoChooser({
     challenge,
-    own,
     onClose,
     onSaved,
 }: {
-    challenge: Challenge | null;
-    own: string[];
+    challenge: OpenChallenge | null;
     onClose: () => void;
     onSaved: () => Promise<void>;
 }) {
@@ -96,8 +97,9 @@ function RowPhotoChooser({
             key={challenge?.id}
             isOpen={!!challenge}
             onClose={onClose}
-            value={own}
+            value={challenge?.chosenOwn ?? []}
             challengeId={challenge?.id ?? null}
+            clearMeansInherit
             onSave={save}
         />
     );
@@ -123,14 +125,13 @@ export function DiscoverSection({
 }) {
     const { t } = useTranslation();
     const { items, loading, error, refetch } = useMemberChallenges();
-    const lists = useChosenPhotoLists(items.map((c) => String(c.id)));
-    const [confirm, setConfirm] = useState<Challenge | null>(null); // challenge pending paid confirmation
-    const [choosing, setChoosing] = useState<Challenge | null>(null); // challenge whose photos are being chosen
+    const [confirm, setConfirm] = useState<OpenChallenge | null>(null); // challenge pending paid confirmation
+    const [choosing, setChoosing] = useState<OpenChallenge | null>(null); // challenge whose photos are being chosen
     const [busyId, setBusyId] = useState<Challenge['id'] | null>(null);
     const [results, setResults] = useState<Record<string, JoinOutcome>>({}); // id -> outcome result
 
     const doJoin = useCallback(
-        async (challenge: Challenge, spendCoins: boolean) => {
+        async (challenge: OpenChallenge, spendCoins: boolean) => {
             const id = challenge?.id;
             setBusyId(id);
             try {
@@ -160,7 +161,7 @@ export function DiscoverSection({
     );
 
     const onJoinClick = useCallback(
-        (challenge: Challenge) => {
+        (challenge: OpenChallenge) => {
             if (costOf(challenge) > 0) {
                 setConfirm(challenge);
             } else {
@@ -175,7 +176,7 @@ export function DiscoverSection({
         setConfirm(null);
         // Only reachable from the modal's Spend button, which renders only
         // while a challenge is pending confirmation.
-        await doJoin(challenge as Challenge, true);
+        await doJoin(challenge as OpenChallenge, true);
     }, [confirm, doJoin]);
 
     if (!isLoggedIn) return null;
@@ -232,15 +233,14 @@ export function DiscoverSection({
                                     ? OUTCOME[outcome.status as string] || { key: null, variant: 'error' }
                                     : null;
                                 const isBusy = busyId === c.id;
+                                const name = rowName(c, t('app.discoverUntitled'));
                                 return (
                                     <li
                                         key={c.id}
                                         className="flex flex-wrap items-center justify-between gap-2 rounded border border-base-200 px-2 py-1.5"
                                     >
                                         <div className="min-w-0">
-                                            <div className="truncate font-medium">
-                                                {c.title || c.url || t('app.discoverUntitled')}
-                                            </div>
+                                            <div className="truncate font-medium">{name}</div>
                                             <div className="flex items-center gap-2 text-xs text-base-content/60">
                                                 {c.type && <StatusBadge variant="ghost">{c.type}</StatusBadge>}
                                                 <span>
@@ -249,8 +249,16 @@ export function DiscoverSection({
                                                         : t('app.discoverCostFree')}
                                                 </span>
                                             </div>
-                                            {(lists.own[String(c.id)]?.length ?? 0) > 0 && (
-                                                <ChosenChip onClick={() => setChoosing(c)} />
+                                            {c.chosenOwn.length > 0 && (
+                                                <ChosenChip name={name} onClick={() => setChoosing(c)} />
+                                            )}
+                                            {/* No list of its own, but one reaches it through a rule or the global default. */}
+                                            {c.chosenOwn.length === 0 && c.chosenEffectiveCount > 0 && (
+                                                <div className="text-xs text-base-content/60 mt-0.5">
+                                                    {interp(t('app.discoverChosenInherited'), {
+                                                        count: c.chosenEffectiveCount,
+                                                    })}
+                                                </div>
                                             )}
                                             {meta && (
                                                 <div className={`text-xs mt-0.5 ${TEXT_CLASS[meta.variant]}`}>
@@ -274,7 +282,11 @@ export function DiscoverSection({
                                             )}
                                         </div>
                                         <div className="flex items-center gap-2">
-                                            <button className="btn btn-outline btn-sm" onClick={() => setChoosing(c)}>
+                                            <button
+                                                className="btn btn-outline btn-sm"
+                                                aria-label={interp(t('app.discoverChoosePhotosLabel'), { title: name })}
+                                                onClick={() => setChoosing(c)}
+                                            >
                                                 {t('app.choosePhotos')}
                                             </button>
                                             <button
@@ -318,7 +330,7 @@ export function DiscoverSection({
                                         coins: cCost,
                                     })}
                                 </p>
-                                {(lists.effective[String(confirm.id)]?.length ?? 0) > 0 && (
+                                {confirm.chosenEffectiveCount > 0 && (
                                     <p className="text-base-content/70">{t('app.discoverConfirmChosen')}</p>
                                 )}
                                 <p className={insufficient ? 'text-error' : 'text-base-content/70'}>
@@ -353,12 +365,7 @@ export function DiscoverSection({
                 })()}
             </Modal>
 
-            <RowPhotoChooser
-                challenge={choosing}
-                own={lists.own[String(choosing?.id)] ?? []}
-                onClose={() => setChoosing(null)}
-                onSaved={lists.refetch}
-            />
+            <RowPhotoChooser challenge={choosing} onClose={() => setChoosing(null)} onSaved={refetch} />
         </>
     );
 }

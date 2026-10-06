@@ -33,14 +33,15 @@ const ANSI_SEQUENCE = new RegExp(`${ESC}(?:\\[[0-?]*[ -/]*[@-~]|\\][^\\u0007${ES
 /**
  * Text from an untrusted source made safe to print to a terminal: ANSI
  * sequences are removed whole, line breaks and tabs become a space, and any
- * other control character (the C1 range included) is dropped, so the value can
- * neither drive the terminal nor forge extra output lines.
+ * other control or format character (the C1 range, bidi overrides and
+ * zero-width characters included) is dropped, so the value can neither drive the
+ * terminal, forge extra output lines, nor reorder or hide what is printed.
  */
 const stripTerminalControl = (value: unknown): string =>
     String(value)
         .replace(ANSI_SEQUENCE, '')
         .replace(/[\t\r\n\v\f\u0085\u2028\u2029]+/g, ' ')
-        .replace(/\p{Cc}/gu, '');
+        .replace(/[\p{Cc}\p{Cf}]/gu, '');
 
 /** Sentence-case a log's first word, including after a logger icon. */
 const sentenceCaseLogMessage = (message: string): string => {

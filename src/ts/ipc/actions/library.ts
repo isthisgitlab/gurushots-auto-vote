@@ -16,7 +16,7 @@ import * as logger from '../../logger';
 import * as apiFactory from '../../apiFactory';
 import * as auth from '../../services/auth';
 import { resolveMemberId } from '../../services/autoFill';
-import { MAX_TAG_LENGTH } from '../../settings/limits';
+import { CHOSEN_PHOTO_ID_RE, MAX_TAG_LENGTH } from '../../settings/limits';
 import { errorResult } from '../errorResult';
 import { isIdArg } from '../isIdArg';
 import { refuseInvalidArgs } from './shared';
@@ -114,8 +114,8 @@ const borrowChallengeId = async (strategy: apiFactory.ApiStrategy, token: string
     const active = await strategy.getActiveChallenges(token);
     const borrowed = active?.challenges?.find((challenge) => isIdArg(challenge?.id));
     if (borrowed) return borrowed.id;
-    const open = settings.getOpenChallengeIds();
-    return open && open.size > 0 ? ([...open][0] as string) : null;
+    const [firstOpen] = settings.getOpenChallengeIds() ?? [];
+    return firstOpen ?? null;
 };
 
 /**
@@ -123,33 +123,39 @@ const borrowChallengeId = async (strategy: apiFactory.ApiStrategy, token: string
  *   `allowed` flags are then meaningful); omitted for the plain library
  * @param search - a tag to narrow the listing to, as the server matches it
  */
-const handleGetLibraryPhotos = (async (event: unknown, challengeId?: string | number | null, search?: unknown) => {
+const handleGetLibraryPhotos = (async (
+    event: unknown,
+    challengeId?: string | number | null,
+    search?: string | null,
+) => {
     const hasChallenge = challengeId !== undefined && challengeId !== null;
     const hasSearch = search !== undefined && search !== null;
     if ((hasChallenge && !isIdArg(challengeId)) || (hasSearch && typeof search !== 'string')) {
         return refuseInvalidArgs('autoFill', 'get-library-photos');
     }
-    const term = hasSearch ? cleanSearch(search as string) : undefined;
+    const term = typeof search === 'string' ? cleanSearch(search) : undefined;
     try {
         const guard = auth.requireAuthToken('library photos');
         if (!guard.ok) return guard.response;
         const { token } = guard;
         const strategy = apiFactory.getApiStrategy();
 
-        const contextId = hasChallenge ? challengeId : await borrowChallengeId(strategy, token);
-        if (contextId === null) {
-            // Nothing to read the library through: no active challenge and no open one seen yet.
-            return { success: false as const, error: 'no-challenge-context' as const };
-        }
+        // The borrowing lookup is a request of its own, so it runs inside the
+        // throttled job like the walk it serves.
         const outcome = await throttled(async () => {
+            const contextId = challengeId ?? (await borrowChallengeId(strategy, token));
+            // Nothing to read the library through: no active challenge and no open one seen yet.
+            if (contextId === null) return null;
             const walk = await strategy.getEligiblePhotosWalk(contextId, token, { search: term, logLabel: 'library' });
             const memberId = await resolveMemberId(token, strategy.getCurrentMemberProfile, logger, 'library');
             return { walk, memberId };
         });
         if (outcome === SUPERSEDED) return { success: false as const, error: 'superseded' as const };
+        if (outcome === null) return { success: false as const, error: 'no-challenge-context' as const };
         return {
             success: true as const,
-            photos: outcome.walk.items.map(mapPhoto),
+            // An id that is not a safe token could never be stored in a list, so it is not offered.
+            photos: outcome.walk.items.filter((photo) => CHOSEN_PHOTO_ID_RE.test(String(photo.id))).map(mapPhoto),
             memberId: outcome.memberId,
             truncated: outcome.walk.truncated,
             allowedKnown: hasChallenge,

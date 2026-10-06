@@ -108,6 +108,13 @@ const writeLog = (
 };
 
 /**
+ * Write a line to the console only: no log file, ring buffer or GUI feed. For
+ * output a command was asked for (a long listing) that must not be persisted.
+ * The text is printed as given, so callers strip untrusted content themselves.
+ */
+const printLine = (text: string): void => writeConsole('log', text);
+
+/**
  * Operation tracker. `startOperation` stores the level + category so
  * `endOperation` can emit the success line at the same severity as the
  * start (e.g. inner ops both start and end at DEBUG without cluttering
@@ -161,4 +168,4 @@ const endOperation = (
 // Ring buffer accessor — drives GUI backlog replay on mount.
 const getRecentLogs = () => recentLogs.slice();
 
-export { writeLog, startOperation, endOperation, getRecentLogs };
+export { writeLog, printLine, startOperation, endOperation, getRecentLogs };

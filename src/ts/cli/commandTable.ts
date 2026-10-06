@@ -26,6 +26,8 @@ import {
     getSetting,
     setSetting,
     setGlobalDefault,
+    noteChosenPhotosOwner,
+    clearChosenPhotos,
     listSettings,
     resetSetting,
     resetAllSettings,
@@ -103,7 +105,9 @@ const runListPhotos: CommandHandler = async (argv) => {
     const { challengeId, rest } = extractChallenge(argv);
     const search = parseSearchFlag(rest);
     // Anything that is neither a --search flag nor its value is a typo.
-    const unexpected = rest.filter((arg, i) => !arg.startsWith('--search') && rest[i - 1] !== '--search');
+    const unexpected = rest.filter(
+        (arg, i) => arg !== '--search' && !arg.startsWith('--search=') && rest[i - 1] !== '--search',
+    );
     if (unexpected.length > 0 || (rest.some((arg) => arg === '--search') && search === null)) {
         return usageError('Wrong arguments', 'Usage: list-photos [--challenge=<id>] [--search=<tag>]');
     }
@@ -134,7 +138,7 @@ const runSetSetting: CommandHandler = async (argv) => {
     if (!rest[0] || rest[1] === undefined) {
         return usageError('Please specify both key and value', 'Usage: set-setting <key> <value> [--challenge=<id>]');
     }
-    setSetting(rest[0], rest[1], challengeId);
+    if (setSetting(rest[0], rest[1], challengeId)) await noteChosenPhotosOwner(rest[0], rest[1]);
     return 0;
 };
 
@@ -152,7 +156,7 @@ const runSetGlobalDefault: CommandHandler = async ([key, value]) => {
             'Example: set-global-default exposure 80',
         );
     }
-    setGlobalDefault(key, value);
+    if (setGlobalDefault(key, value)) await noteChosenPhotosOwner(key, value);
     return 0;
 };
 
@@ -210,6 +214,7 @@ const COMMANDS: Record<string, CommandHandler> = {
         return 0;
     },
     'reset-setting': runResetSetting,
+    'clear-chosen-photos': async () => exitCodeOf(clearChosenPhotos()),
     'set-global-default': runSetGlobalDefault,
     'reset-all-settings': exitsZero(resetAllSettings),
     'list-profiles': runListProfiles,

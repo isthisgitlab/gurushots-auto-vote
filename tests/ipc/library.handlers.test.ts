@@ -139,6 +139,17 @@ describe('the listing', () => {
         );
     });
 
+    test('photos whose id is not a safe token are not listed', async () => {
+        stubStrategy({
+            getEligiblePhotosWalk: newWalk({
+                items: [{ id: 'ok_id-1' }, { id: 'has space' }, { id: 'x'.repeat(65) }, { id: 'a/b' }, { id: 7 }],
+                truncated: false,
+            }),
+        });
+        const result = (await call(5)) as { photos: Array<{ id: string }> };
+        expect(result.photos.map((photo) => photo.id)).toEqual(['ok_id-1', '7']);
+    });
+
     test('caps the labels per photo', async () => {
         stubStrategy({
             getEligiblePhotosWalk: newWalk({
@@ -197,6 +208,21 @@ describe('without a challenge id (get_photos_private needs one)', () => {
 });
 
 describe('the throttle', () => {
+    test('borrowing a challenge is part of the throttled job: a replaced request never looks one up', async () => {
+        jest.useFakeTimers();
+        const strategy = stubStrategy();
+        await call();
+        expect(strategy.getActiveChallenges).toHaveBeenCalledTimes(1);
+        // Inside the gap two requests queue; only the newer one runs, and only it borrows.
+        const early = call();
+        const newer = call();
+        await expect(early).resolves.toEqual({ success: false, error: 'superseded' });
+        expect(strategy.getActiveChallenges).toHaveBeenCalledTimes(1);
+        await jest.advanceTimersByTimeAsync(MIN_WALK_INTERVAL_MS);
+        await expect(newer).resolves.toMatchObject({ success: true, allowedKnown: false });
+        expect(strategy.getActiveChallenges).toHaveBeenCalledTimes(2);
+    });
+
     const deferred = <T>() => {
         let resolve!: (value: T) => void;
         const promise = new Promise<T>((r) => (resolve = r));

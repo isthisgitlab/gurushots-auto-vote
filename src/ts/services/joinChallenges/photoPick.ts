@@ -4,14 +4,15 @@
 
 import * as logger from '../../logger';
 import * as settings from '../../settings';
-import { fetchCandidatesForChallenge, resolveSemanticScores } from '../autoFill';
-import { pickPhotosForChallenge } from '../photoPicker';
 import {
     clearChosenSkip,
+    fetchCandidatesForChallenge,
     logChosenSkipOnce,
     resolveChosenPhotos,
     resolveMissingChosen,
-} from '../autoFill/chosenPhotos';
+    resolveSemanticScores,
+} from '../autoFill';
+import { pickPhotosForChallenge } from '../photoPicker';
 import { rankVisually } from '../visionVerifier';
 import type { Challenge } from '../../types/gurushots';
 import type { PickerPhoto, TagOptions } from '../../types/photoPicker';

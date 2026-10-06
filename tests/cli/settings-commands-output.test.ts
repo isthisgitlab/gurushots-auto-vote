@@ -131,6 +131,22 @@ describe('setSetting', () => {
         expect(msgs('error')).toEqual(['Failed to set exposure for challenge 7 — validation failed']);
     });
 
+    test('a photo list is confirmed and rejected as a count, a token is never printed', () => {
+        settings.SETTINGS_SCHEMA = invalid({ chosenPhotos: { type: 'photos', perChallenge: true, default: [] } });
+        settings.setChallengeOverride.mockReturnValue(true);
+        cmd.setSetting('chosenPhotos', '["secret1","secret2"]', '7');
+        expect(msgs('success')).toEqual(['Set chosenPhotos = 2 photo(s) for challenge 7']);
+        logger.__calls.length = 0;
+        settings.setGlobalDefault.mockReturnValue(false);
+        cmd.setGlobalDefault('chosenPhotos', '["secret1","secret1"]');
+        expect(msgs('error').join('\n')).not.toContain('secret1');
+        expect(msgs('error')).toContain('Value 2 photo(s) is invalid for this setting');
+        logger.__calls.length = 0;
+        settings.setSetting.mockReturnValue(true);
+        cmd.setSetting('token', 'abc123');
+        expect(msgs('success')).toEqual(['Set token = [REDACTED]']);
+    });
+
     test('a successful per-challenge set is confirmed', () => {
         settings.setChallengeOverride.mockReturnValue(true);
         expect(cmd.setSetting('exposure', '80', '7')).toBe(true);

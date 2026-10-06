@@ -13,7 +13,8 @@ import { loadSettings, saveSettings } from './persistence';
 import { valuesEqual, globalChallengeValues, challengeValueSetIsValid } from './defaults';
 import { ruleValuesForChallengeId, isTitleProfileSuppressed } from './ruleResolution';
 import { scenarioPhaseSettings } from './scenarioOverlay';
-import { getOpenChallengeIds } from './openChallenges';
+import { JOIN_KEPT_KEYS } from './staleChallengeCleanup';
+import { loggableSettingValue } from './logValue';
 
 import type {
     AppSettings,
@@ -71,7 +72,9 @@ const setGlobalDefault = (settingKey: string, value: unknown): boolean => {
     // Get detailed validation error information
     const validationError = getValidationError(settingKey, value, contextSettings);
     if (validationError) {
-        logger.withCategory('settings').error(`Invalid value for setting ${settingKey}:`, value);
+        logger
+            .withCategory('settings')
+            .error(`Invalid value for setting ${settingKey}:`, loggableSettingValue(settingKey, value));
         logger.withCategory('settings').error(validationError, null);
         return false;
     }
@@ -113,7 +116,7 @@ const _ensureChallengeContainer = (settings: AppSettings, challengeId: string | 
  * Validates a per-challenge override and writes it onto the in-memory
  * settings object. Returns one of: 'invalid' (rejected),
  * 'set' (override stored), 'cleared' (override removed because it
- * matched the global default).
+ * matched the inherited value, except the chosen-photos keys).
  */
 const _applyChallengeOverride = (
     settings: AppSettings,
@@ -137,14 +140,19 @@ const _applyChallengeOverride = (
     const contextSettings = { ...inheritedDefaults, ...existingOverrides, [settingKey]: value };
 
     if (!challengeValueSetIsValid(contextSettings, { [settingKey]: value }, challengeId)) {
-        logger.withCategory('settings').error(`Invalid value for setting ${settingKey}:`, value);
+        logger
+            .withCategory('settings')
+            .error(`Invalid value for setting ${settingKey}:`, loggableSettingValue(settingKey, value));
         return 'invalid';
     }
 
     const container = _ensureChallengeContainer(settings, challengeId);
     // inheritedDefaults always holds every schema key (globalChallengeValues
     // starts from the full schema defaults), and settingKey is schema-checked above.
-    if (!valuesEqual(value, inheritedDefaults[settingKey])) {
+    // The join keys are always stored as written: a rule cannot be resolved by id
+    // for a challenge that is not joined yet, so an entry that merely equals what
+    // the global default or a rule gives today would silently stop applying to it.
+    if (JOIN_KEPT_KEYS.includes(settingKey) || !valuesEqual(value, inheritedDefaults[settingKey])) {
         container[settingKey] = value;
         return 'set';
     }
@@ -187,7 +195,8 @@ const _writeTitleProfileSuppression = (
 
 /**
  * Validate and write a challenge's whole override container (only values that
- * differ from the inherited global/rule baseline are kept) plus its profile
+ * differ from the inherited global/rule baseline are kept, except the join keys
+ * — see JOIN_KEPT_KEYS) plus its profile
  * suppression flag onto the in-memory settings. Returns false when rejected.
  * Expects `settings.challengeSettings` to exist.
  */
@@ -212,7 +221,7 @@ const replaceChallengeOverridesInSettings = (
 
     const container: ChallengeValues = {};
     for (const [key, value] of entries) {
-        if (!valuesEqual(value, inherited[key])) container[key] = value;
+        if (JOIN_KEPT_KEYS.includes(key) || !valuesEqual(value, inherited[key])) container[key] = value;
     }
     const challengeSettings = settings.challengeSettings;
     if (Object.keys(container).length) challengeSettings.perChallenge[challengeId] = container;
@@ -374,54 +383,6 @@ const _resolveEffectiveSetting = (
         : entry.default;
 };
 
-// The keys a not-yet-joined challenge needs its own override for: the join has
-// to know which photo to enter with before the challenge is in the active list.
-const JOIN_KEPT_KEYS = ['chosenPhotos', 'chosenPhotosOnly'];
-
-/**
- * Whether a non-active override entry must survive cleanup: it holds a chosen
- * photos key and its challenge is still joinable (in the most recent open
- * list), or no open list has been fetched yet so that cannot be told.
- */
-const isKeptForJoin = (challengeId: string, values: ChallengeValues): boolean => {
-    if (!JOIN_KEPT_KEYS.some((key) => Object.prototype.hasOwnProperty.call(values, key))) return false;
-    const open = getOpenChallengeIds();
-    return open === null || open.has(challengeId);
-};
-
-/**
- * Cleanup stale challenge settings for challenges that no longer exist.
- * A challenge that is open but not joined yet is not stale when its entry
- * holds a chosen photos setting (see isKeptForJoin).
- */
-const cleanupStaleChallengeSetting = (activeChallengeIds: Iterable<string>): boolean => {
-    const settings = loadSettings();
-    const activeIds = new Set(activeChallengeIds);
-    const { perChallenge, titleProfileSuppressions: suppressions } = settings.challengeSettings;
-    const keptForJoin = new Set(
-        Object.keys(perChallenge).filter((id) => !activeIds.has(id) && isKeptForJoin(id, perChallenge[id])),
-    );
-    const staleChallengeIds = Object.keys(perChallenge).filter((id) => !activeIds.has(id) && !keptForJoin.has(id));
-    const staleSuppressionIds = Object.keys(suppressions).filter((id) => !activeIds.has(id) && !keptForJoin.has(id));
-
-    if (staleChallengeIds.length === 0 && staleSuppressionIds.length === 0) {
-        return true; // Nothing to cleanup
-    }
-
-    logger
-        .withCategory('settings')
-        .debug(`Cleaning up settings for ${staleChallengeIds.length} stale challenges:`, staleChallengeIds);
-
-    staleChallengeIds.forEach((challengeId) => {
-        delete perChallenge[challengeId];
-    });
-    staleSuppressionIds.forEach((challengeId) => {
-        delete suppressions[challengeId];
-    });
-
-    return saveSettings(settings);
-};
-
 export {
     getGlobalDefault,
     setGlobalDefault,
@@ -433,6 +394,5 @@ export {
     replaceChallengeOverrides,
     replaceChallengeOverridesInSettings,
     getEffectiveSetting,
-    cleanupStaleChallengeSetting,
     trimmedChallengeId,
 };

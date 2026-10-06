@@ -56,7 +56,7 @@ jest.mock('../../src/ts/settings', () => ({
 import settingsModule = require('../../src/ts/settings');
 const settings = jest.mocked(settingsModule);
 import loggerModule = require('../../src/ts/logger');
-const lines = (loggerModule as unknown as { __lines: Record<string, string[]> }).__lines;
+const lines = invalid<{ __lines: Record<string, string[]> }>(loggerModule).__lines;
 import visionModule = require('../../src/ts/services/visionVerifier');
 const vision = jest.mocked(visionModule);
 import type * as joinChallengesModule from '../../src/ts/services/joinChallenges';
@@ -112,7 +112,7 @@ const makeDeps = (library: PickerPhoto[] = [...eleven, CAR], over: Record<string
 
 /** The settings a join reads, as the facade would resolve them for the candidate. */
 const withSettings = (values: Record<string, unknown>) => {
-    settings.getEffectiveSetting.mockImplementation((key) => values[key] as never);
+    settings.getEffectiveSetting.mockImplementation((key) => invalid(values[key]));
     settings.resolveRuleSetting.mockImplementation((key) =>
         Object.prototype.hasOwnProperty.call(values, key) ? { value: values[key] } : null,
     );
@@ -125,7 +125,7 @@ beforeEach(() => {
     __resetMemberIdCache();
     inFlight.clear();
     settings.getChallengeOverride.mockReturnValue(null);
-    settings.getSetting.mockReturnValue('' as never);
+    settings.getSetting.mockReturnValue(invalid(''));
     settings.getEffectiveTagSetting.mockReturnValue([]);
     settings.resolveRuleSetting.mockReturnValue(null);
     vision.rankVisually.mockImplementation(async (_c, ids, _e, want) => ids.slice(0, want));
@@ -177,7 +177,7 @@ describe('the chosen photo is the join photo', () => {
     test('an unreadable photo list is a no-photo skip', async () => {
         withSettings({ chosenPhotos: ['car'] });
         const deps = makeDeps(undefined, { getEligiblePhotos: jest.fn(async () => []) });
-        deps.getEligiblePhotosWalk = jest.fn(async () => ({ items: [], truncated: false })) as never;
+        deps.getEligiblePhotosWalk = invalid(jest.fn(async () => ({ items: [], truncated: false })));
         const res = await performJoin(challenge(), 'tok', deps, 0);
         expect(res).toEqual({ status: 'skipped-no-photo', charged: 0 });
     });
@@ -267,7 +267,7 @@ describe('Submit Only Chosen Photos on a join', () => {
 describe('the list belongs to one account', () => {
     test('another account ignores it on a join, with one line', async () => {
         withSettings({ chosenPhotos: ['car'], chosenPhotosOnly: true });
-        settings.getSetting.mockReturnValue('member-2' as never);
+        settings.getSetting.mockReturnValue(invalid('member-2'));
         const deps = makeDeps();
         const res = await performJoin(challenge(), 'tok', deps, 0);
         // Ignored, so Only has nothing to enforce.
@@ -279,8 +279,8 @@ describe('the list belongs to one account', () => {
 
 describe("resolveJoinSetting reads the candidate's own override for the chosen keys only", () => {
     test('a per-id override wins, including an explicit empty list and an off flag', () => {
-        settings.getChallengeOverride.mockImplementation(
-            ((key: string) => ({ chosenPhotos: [], chosenPhotosOnly: false })[key] ?? null) as never,
+        settings.getChallengeOverride.mockImplementation((key: string) =>
+            invalid({ chosenPhotos: [], chosenPhotosOnly: false }[key] ?? null),
         );
         withSettings({ chosenPhotos: ['from-rule'], chosenPhotosOnly: true });
         expect(resolveJoinSetting('chosenPhotos', challenge(7))).toEqual([]);
@@ -292,12 +292,12 @@ describe("resolveJoinSetting reads the candidate's own override for the chosen k
         withSettings({ chosenPhotos: ['from-rule'] });
         expect(resolveJoinSetting('chosenPhotos', challenge(7))).toEqual(['from-rule']);
         settings.resolveRuleSetting.mockReturnValue(null);
-        settings.getEffectiveSetting.mockReturnValue(['global'] as never);
+        settings.getEffectiveSetting.mockReturnValue(invalid(['global']));
         expect(resolveJoinSetting('chosenPhotos', challenge(7))).toEqual(['global']);
     });
 
     test('every other key resolves as before and never reads the override layer', () => {
-        settings.getChallengeOverride.mockReturnValue('override' as never);
+        settings.getChallengeOverride.mockReturnValue(invalid('override'));
         withSettings({ autoJoinMaxCoins: 42 });
         expect(resolveJoinSetting('autoJoinMaxCoins', challenge(7))).toBe(42);
         expect(settings.getChallengeOverride).not.toHaveBeenCalled();

@@ -93,7 +93,7 @@ export const logMessages = {
     m20dd568d749e:
         'Neizdevās saglabāt profilu: nosaukums ir tukšs, pārāk garš vai rezervēts, sasniegts profilu skaita ierobežojums vai kāda vērtība neizturēja pārbaudi (skati uzstādījumu žurnālu)',
     m216378b1dcc5:
-        '{0}: tavi izvēlētie foto saglabāti, kamēr bija pierakstīts cits konts, tāpēc tie tiek ignorēti — izvēlies tos no jauna šim kontam vai notīri sarakstu',
+        '{0}: tavi izvēlētie foto saglabāti, kamēr bija pieteicies cits konts, tāpēc tie tiek ignorēti — izvēlies tos no jauna šim kontam vai notīri sarakstu',
     m219dbd8057ac: 'Kļūda, apstrādājot get-settings pieprasījumu:',
     m21b1261f69f8:
         '{0} Boost iesniegšana jaunam foto ir ieslēgta, bet pirms miega jaunu foto iesniegt nevar; izmanto Boost esošajam foto',

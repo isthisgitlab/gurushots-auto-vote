@@ -4,14 +4,15 @@ import { isIdArg } from '../isIdArg';
 import * as logger from '../../logger';
 import * as apiFactory from '../../apiFactory';
 import * as auth from '../../services/auth';
-import { isAutoJoinActive } from '../../services/joinChallenges';
+import { isAutoJoinActive, resolveJoinSetting } from '../../services/joinChallenges';
+import { peekMemberId } from '../../services/autoFill';
 import { getAutoClaimStatus } from '../../services/autoClaim';
 import { rememberChallenges } from '../../windows/quitGuard';
 import { sanitizeForLog, refuseInvalidArgs } from './shared';
 
 import type { IpcReplyFn } from '../registerHandlers';
 import type { joinChallengeSingle } from '../../services/joinChallenges';
-import type { ActiveChallengesResponse, Bankroll, Challenge } from '../../types/gurushots';
+import type { ActiveChallengesResponse, Bankroll, Challenge, OpenChallenge } from '../../types/gurushots';
 
 const handleGetAutoClaimStatus = (async () => {
     try {
@@ -111,6 +112,30 @@ const handleGetAutoJoinActive = (async () => {
     }
 }) satisfies IpcReplyFn;
 
+const idsOf = (value: unknown): string[] =>
+    Array.isArray(value) ? value.filter((id): id is string => typeof id === 'string') : [];
+
+/**
+ * An open challenge with what the Chosen Photos settings say for it: its own
+ * saved list, and how many photos the join would use — resolved the way the
+ * join resolves them, so a list reaching it through a rule or a global default
+ * counts too. A list saved under another account counts for nothing, as it does
+ * at join time.
+ */
+const withChosenPhotos = (challenge: Challenge, token: string): OpenChallenge => {
+    if (challenge?.id === undefined || challenge?.id === null) {
+        return { ...challenge, chosenOwn: [], chosenEffectiveCount: 0 };
+    }
+    const savedBy = settings.getSetting('chosenPhotosMemberId');
+    const current = peekMemberId(token);
+    const foreign = typeof savedBy === 'string' && savedBy !== '' && current !== null && current !== savedBy;
+    return {
+        ...challenge,
+        chosenOwn: idsOf(settings.getChallengeOverride('chosenPhotos', String(challenge.id))),
+        chosenEffectiveCount: foreign ? 0 : idsOf(resolveJoinSetting('chosenPhotos', challenge)).length,
+    };
+};
+
 // List un-joined ("open") challenges for the Discover view / CLI.
 /**
  * @param filter - Server-side filter; defaults to 'open'.
@@ -129,7 +154,10 @@ const handleGetMemberChallenges = (async (event?: unknown, filter?: string) => {
         if ((filter === undefined || filter === 'open') && Array.isArray(items)) {
             settings.rememberOpenChallengeIds(items.flatMap((c) => (c?.id == null ? [] : [c.id])));
         }
-        return { success: true as const, items: Array.isArray(items) ? items : [] };
+        return {
+            success: true as const,
+            items: Array.isArray(items) ? items.map((item) => withChosenPhotos(item, guard.token)) : [],
+        };
     } catch (error) {
         logger.withCategory('api').error('Error handling get-member-challenges request:', error);
         return { ...errorResult(error, 'Failed to list challenges'), items: [] };

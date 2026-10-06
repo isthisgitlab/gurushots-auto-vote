@@ -16,6 +16,7 @@ import type { Challenge } from '../../types/gurushots';
 import type { FillLogger, RankDeps } from '../../types/autoFill';
 import type { PickerPhoto } from '../../types/photoPicker';
 import { errorMessage } from '../../errorMessage';
+import { oneLine } from '../../format/logSafe';
 
 /** The settings the Chosen Photos feature reads. */
 type ChosenKey = 'chosenPhotos' | 'chosenPhotosOnly' | 'chosenPhotosMemberId';
@@ -88,46 +89,59 @@ const resolveChosenPhotos = async ({
 const enteredIds = (challenge: Challenge): Set<string> =>
     new Set(getEntries(challenge).map((entry) => String(entry?.id)));
 
-// ---------------------------------------------------------------------------
-// The lookup of chosen photos the themed fetch did not return.
-// ---------------------------------------------------------------------------
-
 /** What a walk learned about one chosen id. */
 type WalkOutcome = { state: 'found'; photo: PickerPhoto } | { state: 'refused' } | { state: 'not-found' };
 
 interface WalkMemo {
-    /** When the entry was created; it expires after WALK_MEMO_TTL_MS. */
+    /** When the outcomes were last cleared; they expire after WALK_MEMO_TTL_MS. */
     at: number;
-    /** The challenge's entry count then; a different count drops the entry. */
+    /** The challenge's entry count when the outcomes were last reconciled. */
     entryCount: number;
-    /** When the library was last walked for this entry. */
-    walkedAt: number;
+    /** One outcome per chosen photo id. */
     outcomes: Map<string, WalkOutcome>;
+    /** How many walks in a row were cut short before reaching every unresolved id. */
+    truncatedWalks: number;
+    /** The earliest the library may be walked again for this challenge. */
+    nextWalkAt: number;
 }
 
-// How long a walk's outcome is trusted. Long enough that the lookup is not
+// How long a walk's outcomes are trusted. Long enough that the lookup is not
 // repeated every scheduler cycle, short enough that a photo the user frees or
 // uploads in the meantime is picked up within a fill or two.
 const WALK_MEMO_TTL_MS = 30 * 60_000;
 // When a walk was cut short, an id it did not reach is still unresolved; trying
 // again on every cycle would repeat a walk of up to PAGINATE_BUDGET_MS each time.
-const RETRY_TRUNCATED_WALK_MS = 5 * 60_000;
+// The wait doubles with each consecutive cut-short walk, up to the cap.
+const TRUNCATED_WALK_RETRY_MS = 5 * 60_000;
+const MAX_TRUNCATED_WALK_RETRY_MS = 60 * 60_000;
 const MAX_WALK_MEMOS = 64;
 
+// Per challenge: the photo ids are the chosen list's own concern, so editing the
+// list keeps what is already known about the ids it still holds.
 const walkMemos: Map<string, WalkMemo> = new Map();
 
-// The chosen list is part of the key so editing it never reuses a stale answer.
-const memoKey = (challenge: Challenge, ids: readonly string[]): string =>
-    `${challenge.id}|${[...ids].sort().join(',')}`;
+const truncatedWalkDelay = (truncatedWalks: number): number =>
+    Math.min(TRUNCATED_WALK_RETRY_MS * 2 ** (truncatedWalks - 1), MAX_TRUNCATED_WALK_RETRY_MS);
 
-/** The memo for this challenge and list while it is still valid, else null (dropping an expired one). */
-const readMemo = (challenge: Challenge, ids: readonly string[], now: number): WalkMemo | null => {
-    const key = memoKey(challenge, ids);
-    const memo = walkMemos.get(key);
+/**
+ * This challenge's memo with its outcomes brought up to date: all dropped once
+ * they are older than the TTL, and — when the entry count changed since — only
+ * the negative ones (a found photo is still checked for eligibility on every
+ * pass). Null when the challenge has none.
+ */
+const readMemo = (challenge: Challenge, now: number): WalkMemo | null => {
+    const memo = walkMemos.get(String(challenge.id));
     if (!memo) return null;
-    if (now - memo.at >= WALK_MEMO_TTL_MS || memo.entryCount !== getEntries(challenge).length) {
-        walkMemos.delete(key);
-        return null;
+    if (now - memo.at >= WALK_MEMO_TTL_MS) {
+        memo.outcomes.clear();
+        memo.at = now;
+    }
+    const entryCount = getEntries(challenge).length;
+    if (memo.entryCount !== entryCount) {
+        for (const [id, outcome] of memo.outcomes) {
+            if (outcome.state !== 'found') memo.outcomes.delete(id);
+        }
+        memo.entryCount = entryCount;
     }
     return memo;
 };
@@ -139,18 +153,15 @@ const foundPhotos = (outcomes: ReadonlyMap<string, WalkOutcome> | undefined, ids
     });
 
 /**
- * The chosen photos an earlier walk found for this challenge, without any
- * request — what the emergency path and its stand-down probe use, since neither
- * may walk the library.
+ * A submit that used remembered photos was rejected or threw: those photos are
+ * no longer trusted, so mark as refused the submitted ids the memo had found.
+ * Everything else the memo knows stays.
  */
-const recallChosenPhotos = (challenge: Challenge, ids: readonly string[]): PickerPhoto[] =>
-    foundPhotos(readMemo(challenge, ids, Date.now())?.outcomes, ids);
-
-/** Drop every remembered walk for a challenge (a submit using a remembered photo failed). */
-const forgetChosenWalks = (challenge: Challenge): void => {
-    const prefix = `${challenge.id}|`;
-    for (const key of [...walkMemos.keys()]) {
-        if (key.startsWith(prefix)) walkMemos.delete(key);
+const refuseRememberedChosen = (challenge: Challenge, submitted: readonly string[]): void => {
+    const memo = walkMemos.get(String(challenge.id));
+    if (!memo) return;
+    for (const id of submitted) {
+        if (memo.outcomes.get(id)?.state === 'found') memo.outcomes.set(id, { state: 'refused' });
     }
 };
 
@@ -184,6 +195,41 @@ const recordWalk = (
 };
 
 /**
+ * Store what a walk learned: the memo's outcomes, and when the library may be
+ * walked again (right away after a walk that reached every unresolved id, after
+ * a growing wait when it was cut short).
+ */
+const rememberWalk = ({
+    challenge,
+    memo,
+    outcomes,
+    now,
+    cutShort,
+}: {
+    challenge: Challenge;
+    memo: WalkMemo | null;
+    outcomes: Map<string, WalkOutcome>;
+    now: number;
+    cutShort: boolean;
+}): void => {
+    const truncatedWalks = cutShort ? (memo?.truncatedWalks ?? 0) + 1 : 0;
+    const nextWalkAt = cutShort ? now + truncatedWalkDelay(truncatedWalks) : 0;
+    if (memo) {
+        memo.truncatedWalks = truncatedWalks;
+        memo.nextWalkAt = nextWalkAt;
+        return;
+    }
+    if (walkMemos.size >= MAX_WALK_MEMOS) walkMemos.clear();
+    walkMemos.set(String(challenge.id), {
+        at: now,
+        entryCount: getEntries(challenge).length,
+        outcomes,
+        truncatedWalks,
+        nextWalkAt,
+    });
+};
+
+/**
  * The records of chosen photos the themed fetch did not return, to merge into
  * the candidates.
  *
@@ -192,9 +238,10 @@ const recordWalk = (
  * library) only runs when that leaves fewer usable chosen photos than the pick
  * can use — min(chosen not yet entered, slots wanted) — and never when the
  * caller already walked the unfiltered library (`allowWalk` false). Its outcome
- * is remembered per challenge and list (WALK_MEMO_TTL_MS, or until the entry
- * count changes): "not found" is only ever recorded from a complete walk, so a
- * photo beyond a truncated walk stays unresolved and is retried later.
+ * is remembered per challenge and photo (WALK_MEMO_TTL_MS; a changed entry count
+ * drops only the negative outcomes): "not found" is only ever recorded from a
+ * complete walk, so a photo beyond a truncated walk stays unresolved and the
+ * walk is retried with a growing wait (TRUNCATED_WALK_RETRY_MS, doubling).
  *
  * Only the matching chosen records are returned; never the rest of the walk.
  */
@@ -223,10 +270,9 @@ const resolveMissingChosen = async ({
     if (missing.length === 0 || usable >= Math.min(ids.length, wantCount)) return [];
 
     const now = Date.now();
-    const memo = readMemo(challenge, ids, now);
+    const memo = readMemo(challenge, now);
     const unresolved = missing.filter((id) => !memo?.outcomes.has(id));
-    const dueForWalk = !memo || now - memo.walkedAt >= RETRY_TRUNCATED_WALK_MS;
-    if (unresolved.length === 0 || !allowWalk || !deps.getEligiblePhotosWalk || !dueForWalk) {
+    if (unresolved.length === 0 || !allowWalk || !deps.getEligiblePhotosWalk || (memo && now < memo.nextWalkAt)) {
         return foundPhotos(memo?.outcomes, missing);
     }
 
@@ -236,10 +282,10 @@ const resolveMissingChosen = async ({
     } catch (error) {
         deps.logger
             .withCategory(label === 'join' ? 'join' : 'autoFill')
-            .debug(`${label}: could not look for your chosen photos: ${errorMessage(error) || error}`, null);
+            .debug(`${label}: could not look for your chosen photos: ${oneLine(errorMessage(error) || error)}`, null);
         return foundPhotos(memo?.outcomes, missing);
     }
-    const outcomes = new Map(memo?.outcomes);
+    const outcomes = memo?.outcomes ?? new Map<string, WalkOutcome>();
     const tally = recordWalk(unresolved, walk, outcomes);
     const notReached = unresolved.length - tally.found - tally.refused - tally.notFound;
     deps.logger
@@ -248,19 +294,9 @@ const resolveMissingChosen = async ({
             `${label}: looked for your chosen photos outside the themed search for ${deps.logger.challengeTag(challenge)} — ${tally.found} found, ${tally.refused} not allowed here, ${tally.notFound} not in your library, ${notReached} not reached`,
             null,
         );
-    if (walkMemos.size >= MAX_WALK_MEMOS) walkMemos.clear();
-    walkMemos.set(memoKey(challenge, ids), {
-        at: memo?.at ?? now,
-        entryCount: getEntries(challenge).length,
-        walkedAt: now,
-        outcomes,
-    });
+    rememberWalk({ challenge, memo, outcomes, now, cutShort: notReached > 0 });
     return foundPhotos(outcomes, missing);
 };
-
-// ---------------------------------------------------------------------------
-// The skip explanation, once per state change.
-// ---------------------------------------------------------------------------
 
 /** Why Submit Only Chosen Photos left a challenge alone. */
 type ChosenSkipReason = 'none-usable' | 'all-entered';
@@ -309,8 +345,7 @@ export {
     resolveChosenPhotos,
     enteredIds,
     resolveMissingChosen,
-    recallChosenPhotos,
-    forgetChosenWalks,
+    refuseRememberedChosen,
     logChosenSkipOnce,
     clearChosenSkip,
     __resetChosenPhotos,

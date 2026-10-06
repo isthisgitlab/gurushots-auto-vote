@@ -17,11 +17,10 @@
  */
 
 export type { JoinDeps } from './joinChallenges/shared';
-export { isAutoJoinActive } from './joinChallenges/settingsResolution';
+export { isAutoJoinActive, resolveJoinSetting } from './joinChallenges/settingsResolution';
 export { runJoinPass } from './joinChallenges/joinPass';
 export { joinChallengeSingle } from './joinChallenges/manualJoin';
 
 // exported for tests
 export { performJoin } from './joinChallenges/performJoin';
-export { resolveJoinSetting } from './joinChallenges/settingsResolution';
 export { inFlight } from './joinChallenges/shared';

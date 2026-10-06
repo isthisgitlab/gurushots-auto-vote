@@ -62,6 +62,8 @@ describe('stripTerminalControl', () => {
         ['a bare escape', `a${ESC}b`, 'ab'],
         ['line breaks and tabs', 'one\r\ntwo\tthree\u2028four', 'one two three four'],
         ['other control characters, C1 included', `a${BEL}b\u0085c\u009bd`, 'ab cd'],
+        ['bidi overrides', 'a\u202Eb\u2066c\u2069d', 'abcd'],
+        ['zero-width characters and the BOM', 'a\u200Bb\u200Dc\uFEFFd', 'abcd'],
         ['a number', 42, '42'],
     ])('%s', (_name, value, expected) => {
         expect(stripTerminalControl(value)).toBe(expected);

@@ -209,28 +209,64 @@ describe('selection', () => {
         expect(order.map((label) => label!.slice(6, 14))).toEqual([shortOf(3), shortOf(1), shortOf(2)]);
     });
 
+    const missingTile = () => screen.findByRole('button', { name: new RegExp(`^Chosen photo ${shortOf(9)}:`) });
+
     test('a chosen photo the listing lacks gets a not-available tile that can still be removed', async () => {
         getLibrary().mockResolvedValue(listing([photo(1), photo(2)]));
         setup({ value: [idOf(9)] });
-        const missing = await screen.findByRole('button', { name: new RegExp(`^Photo ${shortOf(9)}:`) });
-        expect(missing.textContent).toContain(
-            'Not available for this challenge (in another challenge, deleted, or beyond the first 2 photos)',
+        const missing = await missingTile();
+        // A complete listing: no "beyond the first N photos" clause.
+        expect(missing.textContent).toContain('Not available for this challenge (in another challenge, or deleted)');
+        expect(missing.getAttribute('aria-label')).toBe(
+            `Chosen photo ${shortOf(9)}: Not available for this challenge (in another challenge, or deleted)`,
         );
         expect(missing.getAttribute('aria-pressed')).toBe('true');
         fireEvent.click(missing);
-        expect(screen.queryByRole('button', { name: new RegExp(`^Photo ${shortOf(9)}:`) })).toBeNull();
+        expect(screen.queryByRole('button', { name: new RegExp(`^Chosen photo ${shortOf(9)}:`) })).toBeNull();
     });
 
-    test('stops at the cap: other photos are disabled, selected ones can still be removed', async () => {
+    test.each([
+        [
+            'a challenge and a cut-off listing',
+            { truncated: true },
+            7,
+            'Not available for this challenge (in another challenge, deleted, or beyond the first 2 photos)',
+        ],
+        [
+            'no challenge and a complete listing',
+            { allowedKnown: false },
+            null,
+            'Not found in your library (it may have been deleted)',
+        ],
+        [
+            'no challenge and a cut-off listing',
+            { allowedKnown: false, truncated: true },
+            null,
+            'Not found in the photos listed (it may have been deleted, or be beyond the first 2 photos)',
+        ],
+    ])('the not-available text for %s', async (_name, over, challengeId, text) => {
+        getLibrary().mockResolvedValue(listing([photo(1), photo(2)], over));
+        setup({ value: [idOf(9)], challengeId });
+        expect((await missingTile()).textContent).toContain(text);
+    });
+
+    test('stops at the cap: other photos cannot be added and a line says so, selected ones can still be removed', async () => {
         const many = Array.from({ length: MAX_CHOSEN_PHOTOS + 1 }, (_, n) => photo(n + 1));
         getLibrary().mockResolvedValue(listing(many));
         setup({ value: many.slice(0, MAX_CHOSEN_PHOTOS).map((p) => p.id) });
         await screen.findByRole('button', { name: /^Photo 00000001:/ });
-        const extra = tile(MAX_CHOSEN_PHOTOS + 1) as HTMLButtonElement;
-        expect(extra.disabled).toBe(true);
-        expect((tile(1) as HTMLButtonElement).disabled).toBe(false);
+        expect(screen.getByRole('status').textContent).toContain('Limit reached — remove one to add another');
+        const extra = tile(MAX_CHOSEN_PHOTOS + 1);
+        // aria-disabled, not disabled: Tab still reaches it. Clicking it does nothing.
+        expect(extra.getAttribute('aria-disabled')).toBe('true');
+        expect(extra.hasAttribute('disabled')).toBe(false);
+        fireEvent.click(extra);
+        expect(extra.getAttribute('aria-pressed')).toBe('false');
+        expect(screen.getByRole('status').textContent).toContain(`${MAX_CHOSEN_PHOTOS} of ${MAX_CHOSEN_PHOTOS}`);
+        expect(tile(1).getAttribute('aria-disabled')).toBe('false');
         fireEvent.click(tile(1));
-        expect((tile(MAX_CHOSEN_PHOTOS + 1) as HTMLButtonElement).disabled).toBe(false);
+        expect(tile(MAX_CHOSEN_PHOTOS + 1).getAttribute('aria-disabled')).toBe('false');
+        expect(screen.getByRole('status').textContent).not.toContain('Limit reached');
     });
 
     test('Clear empties the selection and Cancel closes without saving', async () => {
@@ -250,9 +286,13 @@ describe('eligibility', () => {
             listing([photo(1, { allowed: false, message: 'Already in another challenge' }), photo(2)]),
         );
         setup();
-        const blocked = (await screen.findByRole('button', { name: /^Photo 00000001:/ })) as HTMLButtonElement;
-        expect(blocked.disabled).toBe(true);
+        const blocked = await screen.findByRole('button', { name: /^Photo 00000001:/ });
+        // Reachable by Tab (aria-disabled, never disabled) but not addable.
+        expect(blocked.getAttribute('aria-disabled')).toBe('true');
+        expect(blocked.hasAttribute('disabled')).toBe(false);
         expect(blocked.className).toContain('opacity-50');
+        fireEvent.click(blocked);
+        expect(blocked.getAttribute('aria-pressed')).toBe('false');
         expect(screen.getByText('Already in another challenge')).toBeTruthy();
         expect(screen.getByText('Can be entered')).toBeTruthy();
     });
@@ -260,17 +300,17 @@ describe('eligibility', () => {
     test('a refused photo without a message gets a generic reason, and stays removable once chosen', async () => {
         getLibrary().mockResolvedValue(listing([photo(1, { allowed: false })]));
         setup({ value: [idOf(1)] });
-        const blocked = (await screen.findByRole('button', { name: /^Photo 00000001:/ })) as HTMLButtonElement;
+        const blocked = await screen.findByRole('button', { name: /^Photo 00000001:/ });
         expect(screen.getByText('Not eligible for this challenge')).toBeTruthy();
-        expect(blocked.disabled).toBe(false);
+        expect(blocked.getAttribute('aria-disabled')).toBe('false');
     });
 
     test('without a challenge the listing says eligibility is only checked at submit time', async () => {
         getLibrary().mockResolvedValue(listing([photo(1, { allowed: false })], { allowedKnown: false }));
         setup({ challengeId: null });
-        const only = (await screen.findByRole('button', { name: /^Photo 00000001:/ })) as HTMLButtonElement;
+        const only = await screen.findByRole('button', { name: /^Photo 00000001:/ });
         expect(screen.getByText(/Eligibility is not checked here/)).toBeTruthy();
-        expect(only.disabled).toBe(false);
+        expect(only.getAttribute('aria-disabled')).toBe('false');
         expect(screen.queryByText('Not eligible for this challenge')).toBeNull();
         expect(screen.queryByText('Can be entered')).toBeNull();
         expect(getLibrary()).toHaveBeenCalledWith(null, undefined);
@@ -327,12 +367,32 @@ describe('search', () => {
         expect(screen.queryByRole('button', { name: /^Photo / })).toBeNull();
     });
 
-    test('a superseded answer is dropped silently', async () => {
-        getLibrary().mockResolvedValue({ success: false, error: 'superseded' });
+    test('a superseded answer to the newest request offers Retry instead of loading forever', async () => {
+        getLibrary()
+            .mockResolvedValueOnce({ success: false, error: 'superseded' })
+            .mockResolvedValueOnce(listing([photo(1)]));
         setup();
-        await act(async () => undefined);
-        expect(screen.getByText('Loading your photos…')).toBeTruthy();
+        const alert = await screen.findByRole('alert');
+        expect(screen.queryByText('Loading your photos…')).toBeNull();
+        // The code is not shown as a detail.
+        expect(alert.textContent).not.toContain('superseded');
+        fireEvent.click(screen.getByRole('button', { name: 'Retry' }));
+        await screen.findByRole('button', { name: /^Photo 00000001:/ });
+    });
+
+    test('a superseded answer to an older request is still ignored', async () => {
+        const first = deferred<unknown>();
+        getLibrary()
+            .mockReturnValueOnce(invalid(first.promise))
+            .mockResolvedValueOnce(listing([photo(2)]));
+        setup();
+        const box = screen.getByLabelText('Search your photos by tag');
+        fireEvent.change(box, { target: { value: 'b' } });
+        fireEvent.submit(box.closest('form')!);
+        await screen.findByRole('button', { name: /^Photo 00000002:/ });
+        await act(async () => first.resolve({ success: false, error: 'superseded' }));
         expect(screen.queryByRole('alert')).toBeNull();
+        expect(tile(2)).toBeTruthy();
     });
 });
 
@@ -343,7 +403,9 @@ describe('failures', () => {
             .mockResolvedValueOnce(listing([photo(1)]));
         setup();
         const alert = await screen.findByRole('alert');
-        expect(alert.textContent).toContain("Your photos couldn't be loaded because");
+        expect(alert.textContent).toContain("Your photos couldn't be loaded (details below)");
+        // No cause is claimed: neither the network nor the session.
+        expect(alert.textContent).not.toMatch(/reach GuruShots|session/);
         expect(alert.textContent).toContain('Try again');
         fireEvent.click(screen.getByRole('button', { name: 'Retry' }));
         await screen.findByRole('button', { name: /^Photo 00000001:/ });
@@ -427,14 +489,108 @@ describe('failures', () => {
 });
 
 describe('account scope', () => {
-    test('warns when the list was saved under another account, and Clear empties it', async () => {
-        window.api.getSetting = jest.fn().mockResolvedValue('d'.repeat(32));
-        setup({ value: [idOf(1)] });
-        const alert = await screen.findByText(/saved under another account/);
-        expect(alert).toBeTruthy();
-        fireEvent.click(screen.getByRole('button', { name: 'Clear list' }));
-        expect(screen.queryByText(/saved under another account/)).toBeNull();
+    const OTHER = 'd'.repeat(32);
+    const notice = () => screen.findByText(/saved under another account, so the app ignores them/);
+
+    beforeEach(() => {
+        window.api.clearChosenPhotos = jest.fn().mockResolvedValue({ success: true, removed: 2 });
+    });
+
+    test("warns that saving here makes the other account's lists apply too, and never shows their ids", async () => {
+        window.api.getSetting = jest.fn().mockResolvedValue(OTHER);
+        setup({ value: [idOf(1), idOf(9)] });
+        expect((await notice()).textContent).toContain('Saving a list here makes them apply to this account too');
+        // Counted, not shown: no tile, short id or thumbnail for the other account's photos.
+        expect(screen.getByText('2 photo(s) saved under another account')).toBeTruthy();
+        expect(screen.queryByRole('button', { name: new RegExp(`${shortOf(9)}`) })).toBeNull();
+        expect(document.body.textContent).not.toContain(shortOf(9));
+        // The selection starts empty: those photos are not this account's to build on.
+        expect(screen.getByRole('status').textContent).toBe(`0 of ${MAX_CHOSEN_PHOTOS} chosen`);
         expect(tile(1).getAttribute('aria-pressed')).toBe('false');
+    });
+
+    test('the notice judges the list the modal opened with, so it stays after clearing and choosing again', async () => {
+        window.api.getSetting = jest.fn().mockResolvedValue(OTHER);
+        setup({ value: [idOf(1)] });
+        await notice();
+        fireEvent.click(screen.getByRole('button', { name: 'Clear' }));
+        expect(screen.queryByText(/saved under another account, so the app ignores them/)).not.toBeNull();
+        fireEvent.click(tile(2));
+        expect(screen.queryByText(/saved under another account, so the app ignores them/)).not.toBeNull();
+        expect(screen.getByRole('status').textContent).toBe(`1 of ${MAX_CHOSEN_PHOTOS} chosen`);
+    });
+
+    test('saving still saves what was chosen here', async () => {
+        window.api.getSetting = jest.fn().mockResolvedValue(OTHER);
+        const { onSave } = setup({ value: [idOf(1)] });
+        await notice();
+        fireEvent.click(tile(2));
+        fireEvent.click(screen.getByRole('button', { name: 'Use these photos' }));
+        await waitFor(() => expect(onSave).toHaveBeenCalledWith([idOf(2)]));
+    });
+
+    test('removing the lists asks first, then removes them and drops the notice', async () => {
+        window.api.getSetting = jest.fn().mockResolvedValue(OTHER);
+        setup({ value: [idOf(1)] });
+        await notice();
+        fireEvent.click(screen.getByRole('button', { name: 'Remove those lists' }));
+        expect(
+            await screen.findByText(
+                'Remove the chosen-photo lists saved under the other account, in every setting, profile, rule and scenario?',
+            ),
+        ).toBeTruthy();
+        expect(window.api.clearChosenPhotos).not.toHaveBeenCalled();
+        // The confirm button carries the same name as the notice's, so take the one in the confirm dialog.
+        const confirm = screen.getAllByRole('button', { name: 'Remove those lists' }).at(-1)!;
+        fireEvent.click(confirm);
+        await waitFor(() => expect(window.api.clearChosenPhotos).toHaveBeenCalledTimes(1));
+        await waitFor(() =>
+            expect(screen.queryByText(/saved under another account, so the app ignores them/)).toBeNull(),
+        );
+        expect(screen.queryByText('2 photo(s) saved under another account')).toBeNull();
+    });
+
+    test('cancelling the confirmation removes nothing', async () => {
+        window.api.getSetting = jest.fn().mockResolvedValue(OTHER);
+        setup({ value: [idOf(1)] });
+        await notice();
+        fireEvent.click(screen.getByRole('button', { name: 'Remove those lists' }));
+        await screen.findByText(/Remove the chosen-photo lists saved under the other account/);
+        fireEvent.click(screen.getAllByRole('button', { name: 'Cancel' }).at(-1)!);
+        await waitFor(() =>
+            expect(screen.queryByText(/Remove the chosen-photo lists saved under the other account/)).toBeNull(),
+        );
+        expect(window.api.clearChosenPhotos).not.toHaveBeenCalled();
+        expect(screen.queryByText(/saved under another account, so the app ignores them/)).not.toBeNull();
+    });
+
+    test('Escape closes the confirmation only, and removes nothing', async () => {
+        window.api.getSetting = jest.fn().mockResolvedValue(OTHER);
+        const { onClose } = setup({ value: [idOf(1)] });
+        await notice();
+        fireEvent.click(screen.getByRole('button', { name: 'Remove those lists' }));
+        await screen.findByText(/Remove the chosen-photo lists saved under the other account/);
+        fireEvent.keyDown(document, { key: 'Escape' });
+        await waitFor(() =>
+            expect(screen.queryByText(/Remove the chosen-photo lists saved under the other account/)).toBeNull(),
+        );
+        expect(onClose).not.toHaveBeenCalled();
+        expect(window.api.clearChosenPhotos).not.toHaveBeenCalled();
+    });
+
+    test.each([
+        ['a refused removal', jest.fn().mockResolvedValue({ success: false, error: 'disk' })],
+        ['a removal the bridge rejects', jest.fn().mockRejectedValue(new Error('down'))],
+    ])('%s keeps the notice and says the lists were not removed', async (_name, clear) => {
+        window.api.getSetting = jest.fn().mockResolvedValue(OTHER);
+        window.api.clearChosenPhotos = clear;
+        setup({ value: [idOf(1)] });
+        await notice();
+        fireEvent.click(screen.getByRole('button', { name: 'Remove those lists' }));
+        await screen.findByText(/Remove the chosen-photo lists saved under the other account/);
+        fireEvent.click(screen.getAllByRole('button', { name: 'Remove those lists' }).at(-1)!);
+        expect(await screen.findByText(/The lists weren't removed/)).toBeTruthy();
+        expect(screen.queryByText(/saved under another account, so the app ignores them/)).not.toBeNull();
     });
 
     test('no warning when the list belongs to the signed-in account', async () => {
@@ -442,6 +598,7 @@ describe('account scope', () => {
         setup({ value: [idOf(1)] });
         await screen.findByRole('button', { name: /^Photo 00000001:/ });
         expect(screen.queryByText(/saved under another account/)).toBeNull();
+        expect(tile(1).getAttribute('aria-pressed')).toBe('true');
     });
 
     test('no warning when no owner was recorded, or the member is unknown', async () => {
@@ -451,10 +608,24 @@ describe('account scope', () => {
     });
 
     test('no warning for an empty list', async () => {
-        window.api.getSetting = jest.fn().mockResolvedValue('d'.repeat(32));
+        window.api.getSetting = jest.fn().mockResolvedValue(OTHER);
         setup();
         await screen.findByRole('button', { name: /^Photo 00000001:/ });
         expect(screen.queryByText(/saved under another account/)).toBeNull();
+    });
+});
+
+describe('a row that inherits', () => {
+    test('says that saving nothing makes it use the list from the settings or rules again', async () => {
+        render(<PhotoChooserModal isOpen onClose={jest.fn()} value={[]} clearMeansInherit onSave={jest.fn()} />);
+        expect(screen.getByText(/Saving with nothing chosen removes this challenge's own list/)).toBeTruthy();
+        await screen.findByRole('button', { name: /^Photo 00000001:/ });
+    });
+
+    test('says nothing of the kind elsewhere', async () => {
+        setup();
+        await screen.findByRole('button', { name: /^Photo 00000001:/ });
+        expect(screen.queryByText(/removes this challenge's own list/)).toBeNull();
     });
 });
 

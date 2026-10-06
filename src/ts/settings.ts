@@ -40,7 +40,9 @@ import {
 import { getDefaultSettings } from './settings/defaults';
 import * as persistence from './settings/persistence';
 import * as challengeOverrides from './settings/challengeOverrides';
+import * as staleChallengeCleanup from './settings/staleChallengeCleanup';
 import * as openChallenges from './settings/openChallenges';
+import * as chosenPhotosClear from './settings/chosenPhotosClear';
 import { rememberChallengeTitles } from './settings/challengeFacts';
 import { TITLE_RULE_INLINE_KEYS, MAX_TITLE_LENGTH } from './settings/titleRuleSanitize';
 import * as titleRules from './settings/titleRules';
@@ -104,11 +106,13 @@ export const MAX_SCENARIOS = scenarios.MAX_SCENARIOS;
 export const getTitlePins = titlePins.getTitlePins;
 export const mergeTitlePins = titlePins.mergeTitlePins;
 // Cleanup functions
-export const cleanupStaleChallengeSetting = challengeOverrides.cleanupStaleChallengeSetting;
+export const cleanupStaleChallengeSetting = staleChallengeCleanup.cleanupStaleChallengeSetting;
 // The open (joinable) challenge ids cleanupStaleChallengeSetting spares chosen-photo entries for
 export const rememberOpenChallengeIds = openChallenges.rememberOpenChallengeIds;
 export const getOpenChallengeIds = openChallenges.getOpenChallengeIds;
 export const cleanupObsoleteSettings = persistence.cleanupObsoleteSettings;
+// Every saved Chosen Photos list removed in one go (the lists belong to one account)
+export const clearChosenPhotos = chosenPhotosClear.clearChosenPhotos;
 // Reset functions
 export const resetSetting = reset.resetSetting;
 export const resetGlobalDefault = reset.resetGlobalDefault;

@@ -78,17 +78,80 @@ describe('Modal', () => {
     });
 
     test('with no focusable children, Tab keeps focus pinned on the dialog box', () => {
-        const { container } = render(
+        render(
             <Modal isOpen onClose={() => {}} showCloseButton={false}>
                 <p>no focusable controls here</p>
             </Modal>,
         );
-        const box = container.querySelector('.modal-box');
+        const box = document.querySelector('.modal-box');
         // On open, focus falls to the box itself (tabIndex -1) since there is
         // nothing focusable inside.
         expect(document.activeElement).toBe(box);
         fireEvent.keyDown(document, { key: 'Tab' });
         expect(document.activeElement).toBe(box);
+    });
+
+    test('a new onClose identity on re-render does not pull focus back to the first control', () => {
+        const first = jest.fn();
+        const { rerender } = render(
+            <Modal isOpen onClose={first} title="T">
+                <button type="button">inside</button>
+            </Modal>,
+        );
+        const inside = screen.getByText('inside');
+        inside.focus();
+        expect(document.activeElement).toBe(inside);
+
+        const second = jest.fn();
+        rerender(
+            <Modal isOpen onClose={second} title="T">
+                <button type="button">inside</button>
+            </Modal>,
+        );
+        // Focus stays where the user put it, and Escape reaches the handler now in force.
+        expect(document.activeElement).toBe(inside);
+        fireEvent.keyDown(document, { key: 'Escape' });
+        expect(first).not.toHaveBeenCalled();
+        expect(second).toHaveBeenCalledTimes(1);
+    });
+
+    test('focus moves into the dialog once per opening', () => {
+        const { rerender } = render(
+            <Modal isOpen={false} onClose={() => {}} title="T">
+                <button type="button">inside</button>
+            </Modal>,
+        );
+        rerender(
+            <Modal isOpen onClose={() => {}} title="T">
+                <button type="button">inside</button>
+            </Modal>,
+        );
+        expect(document.activeElement).toBe(screen.getByLabelText('common.closeModal'));
+        screen.getByText('inside').focus();
+        rerender(
+            <Modal isOpen onClose={() => {}} title="T2">
+                <button type="button">inside</button>
+            </Modal>,
+        );
+        expect(document.activeElement).toBe(screen.getByText('inside'));
+    });
+
+    test('renders into the document body, so a modal opened inside another is not nested in its box', () => {
+        const { container } = render(
+            <Modal isOpen onClose={() => {}} title="Outer">
+                <Modal isOpen onClose={() => {}} title="Inner">
+                    <p>inner body</p>
+                </Modal>
+            </Modal>,
+        );
+        // Nothing lands in the render container...
+        expect(container.querySelector('.modal')).toBeNull();
+        // ...both dialogs are direct children of the body, and the inner is not inside the outer box.
+        const dialogs = Array.from(document.body.querySelectorAll(':scope > .modal'));
+        expect(dialogs).toHaveLength(2);
+        const outerBox = dialogs.find((d) => d.textContent?.includes('Outer') && !d.querySelector('.modal'));
+        expect(outerBox).toBeTruthy();
+        expect(outerBox!.contains(screen.getByText('inner body'))).toBe(false);
     });
 
     test('restores focus to the trigger element when closed', () => {

@@ -2,7 +2,7 @@ import { useState } from 'react';
 import { useTranslation } from '@/contexts/TranslationContext';
 import { useSettingsChallengeId } from '@/contexts/SettingsChallengeContext';
 import { useImageLoads } from '@/hooks/useImageLoads';
-import { useChosenThumbMember } from '@/api/useChosenPhotosOwner';
+import { useChosenListAccount } from '@/api/useChosenPhotosOwner';
 import { buildPhotoUrl } from '@/utils/formatters';
 import { interp } from '@/utils/interp';
 import { SettingResetButton } from './SettingResetButton';
@@ -47,7 +47,8 @@ function ChosenPhotoChip({ id, memberId }: { id: string; memberId: string | null
  * The chosen-photos control shared by every editor: the chosen photos as small
  * thumbnails, a button opening the chooser, and Clear. `value` null = nothing
  * set at this layer (a rule row inheriting); `onClear` decides what Clear
- * writes, `clearLabel` what it is called.
+ * writes, `clearLabel` what it is called. A list saved under another account is
+ * only counted, never shown.
  */
 export function ChosenPhotosControl({
     id,
@@ -67,7 +68,7 @@ export function ChosenPhotosControl({
     challengeId?: string | number | null;
 }) {
     const { t } = useTranslation();
-    const memberId = useChosenThumbMember();
+    const { thumbMember: memberId, otherAccount } = useChosenListAccount();
     const [open, setOpen] = useState(false);
     const ids = value ?? [];
     return (
@@ -76,6 +77,11 @@ export function ChosenPhotosControl({
                 <span className="text-base-content/60 text-sm">{t('app.titleRuleInherit')}</span>
             ) : ids.length === 0 ? (
                 <span className="text-base-content/60 text-sm">{t('app.none')}</span>
+            ) : otherAccount ? (
+                // Another account's photos are neither shown nor named, only counted.
+                <span className="text-base-content/60 text-sm">
+                    {interp(t('app.chosenPhotosOtherAccountCount'), { count: ids.length })}
+                </span>
             ) : (
                 <ul className="flex flex-wrap items-center gap-1" aria-label={t('app.chosenPhotos')}>
                     {ids.map((photoId) => (

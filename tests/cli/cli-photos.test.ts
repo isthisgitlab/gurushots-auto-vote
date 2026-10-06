@@ -7,7 +7,8 @@ jest.mock('../../src/ts/logger', () => {
     const calls: { level: string; msg: string }[] = [];
     const rec = (level: string) => (msg: string) => calls.push({ level, msg });
     const cat = { info: rec('info'), error: rec('error'), warning: rec('warning'), debug: rec('debug') };
-    return { __calls: calls, withCategory: jest.fn(() => cat) };
+    // The terminal-only writer: what it receives is never a log line.
+    return { __calls: calls, withCategory: jest.fn(() => cat), printLine: rec('stdout') };
 });
 jest.mock('../../src/ts/cli/guards', () => ({
     ensureAuthenticated: jest.fn(() => true),
@@ -60,11 +61,16 @@ describe('list-photos', () => {
         await expect(listPhotosCmd('5', 'pink')).resolves.toBe(0);
         expect(handlers['get-library-photos']).toHaveBeenCalledWith(null, '5', 'pink');
         const info = text('info');
-        expect(info[0]).toBe('=== Your photos (2) ===');
-        expect(info[1]).toBe('  \u2022 p1  allowed  [Pink, Flower]');
-        expect(info[2]).toBe('  \u2022 p2  not allowed  [Car]');
-        expect(info[3]).toBe('      Used in another challenge');
-        expect(info.join('')).not.toMatch(/\p{Cc}/u);
+        const stdout = text('stdout');
+        // The persisted log gets the count and the cut-short flag, never a photo.
+        expect(info[0]).toBe('=== Your photos (2, list cut short) ===');
+        expect(stdout).toEqual([
+            '  \u2022 p1  allowed  [Pink, Flower]',
+            '  \u2022 p2  not allowed  [Car]',
+            '      Used in another challenge',
+        ]);
+        expect(info.join('')).not.toMatch(/p1|p2|Pink|Car/);
+        expect((info.join('') + stdout.join('')).match(/\p{Cc}/u)).toBeNull();
         expect(info[info.length - 1]).toContain('set-setting chosenPhotos \'["<id>"]\' --challenge=<id>');
         expect(text('warning')).toEqual(['The list was cut short; narrow it with --search=<tag> to find the rest.']);
     });
@@ -78,8 +84,10 @@ describe('list-photos', () => {
             memberId: null,
         });
         await listPhotosCmd(null, null);
-        expect(text('info')[1]).toBe('  \u2022 p1  [Pink, Flower]');
+        expect(text('stdout')).toEqual(['  \u2022 p1  [Pink, Flower]']);
         expect(text('warning')).toEqual([]);
+        // Without a challenge the note says eligibility is not shown and how to get it.
+        expect(text('info').some((m) => m.includes('pass --challenge=<id>'))).toBe(true);
         calls.length = 0;
         handlers['get-library-photos'].mockResolvedValue({
             success: true,
@@ -89,7 +97,8 @@ describe('list-photos', () => {
             memberId: null,
         });
         await listPhotosCmd(null, null);
-        expect(text('info')[1]).toBe('  \u2022 p1  allowed');
+        expect(text('stdout')).toEqual(['  \u2022 p1  allowed']);
+        expect(text('info').some((m) => m.includes('pass --challenge=<id>'))).toBe(false);
         calls.length = 0;
         handlers['get-library-photos'].mockResolvedValue({
             success: true,
@@ -98,8 +107,12 @@ describe('list-photos', () => {
             allowedKnown: false,
             memberId: null,
         });
-        await listPhotosCmd(null, null);
-        expect(text('info')[0]).toBe('=== Your photos ===');
+        await expect(listPhotosCmd(null, null)).resolves.toBe(0);
+        expect(text('info')).toEqual(['No photos found in your library.']);
+        calls.length = 0;
+        await listPhotosCmd(null, 'pi\u001bnk');
+        expect(text('info')).toEqual(['No photos found for "pink".']);
+        expect(text('stdout')).toEqual([]);
     });
 
     test('a not-allowed photo without a message prints no second line', async () => {
@@ -111,7 +124,7 @@ describe('list-photos', () => {
             memberId: null,
         });
         await listPhotosCmd('5', null);
-        expect(text('info')).toHaveLength(3);
+        expect(text('stdout')).toEqual(['  \u2022 p3  not allowed']);
     });
 
     test.each([
@@ -119,6 +132,9 @@ describe('list-photos', () => {
         ['no-challenge-context', 'Join one first'],
         ['superseded', 'A newer request replaced this one'],
         ['library\u001b[0m down', 'library down'],
+        // A code that names an Object.prototype member is text, not a lookup hit.
+        ['constructor', 'Could not list your photos: constructor'],
+        ['__proto__', 'Could not list your photos: __proto__'],
     ])('a refusal "%s" is explained', async (error, expected) => {
         handlers['get-library-photos'].mockResolvedValue({ success: false, error });
         await expect(listPhotosCmd(null, null)).resolves.toBe(1);

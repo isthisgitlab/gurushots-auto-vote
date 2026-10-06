@@ -14,6 +14,7 @@
 import * as logger from '../logger';
 import { schemaEntry, validateSetting } from './schema';
 import { challengeValueSetIsValid } from './defaults';
+import { loggableSettingValue } from './logValue';
 
 import type { AppSettings, ChallengeValues } from '../types/settings';
 
@@ -86,7 +87,11 @@ const _validatedProfileValues = (
             continue;
         }
         if (!failClosed) continue;
-        _logProfileValidationFailure(logInvalid, `Invalid profile value for setting ${key}:`, value);
+        _logProfileValidationFailure(
+            logInvalid,
+            `Invalid profile value for setting ${key}:`,
+            loggableSettingValue(key, value),
+        );
         return null;
     }
     return sanitized;

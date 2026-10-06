@@ -44,4 +44,9 @@ const MAX_TAG_LENGTH = 50;
 // name photos that cannot be used there anyway.
 const MAX_CHOSEN_PHOTOS = 20;
 
-export { MAX_SCHEDULED_FILL_ENTRIES, MAX_VOTING_PAUSE_MINUTES, MAX_TAG_LENGTH, MAX_CHOSEN_PHOTOS };
+// The shape a photo id must have to be stored in a Chosen Photos list and to be
+// listed by the library read: ids are opaque server tokens, so only the safe
+// token characters (the mock ids fit) are accepted.
+const CHOSEN_PHOTO_ID_RE = /^[A-Za-z0-9_-]{1,64}$/;
+
+export { MAX_SCHEDULED_FILL_ENTRIES, MAX_VOTING_PAUSE_MINUTES, MAX_TAG_LENGTH, MAX_CHOSEN_PHOTOS, CHOSEN_PHOTO_ID_RE };

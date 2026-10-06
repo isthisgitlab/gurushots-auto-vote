@@ -104,6 +104,7 @@ export const saveChallengeProfile = forward('saveChallengeProfile');
 export const deleteChallengeProfile = forward('deleteChallengeProfile');
 export const getTitleRules = forward('getTitleRules');
 export const setTitleRules = forward('setTitleRules');
+export const clearChosenPhotos = forward('clearChosenPhotos');
 
 // User-defined scenarios
 export const getScenarios = forward('getScenarios');

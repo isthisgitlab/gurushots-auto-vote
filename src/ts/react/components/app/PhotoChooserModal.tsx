@@ -1,6 +1,6 @@
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { useTranslation } from '@/contexts/TranslationContext';
-import { Modal } from '@/components/ui/Modal';
+import { Modal, ModalActions } from '@/components/ui/Modal';
 import { InlineLoader } from '@/components/ui/LoadingSpinner';
 import { useImageLoads } from '@/hooks/useImageLoads';
 import { buildPhotoUrl } from '@/utils/formatters';
@@ -68,8 +68,9 @@ function PhotoTile({
     const showImage = useImageLoads(url);
     const labels = labelsOf(photo, t('app.photoChooserNoTags'));
     // A photo that cannot be added (the challenge refuses it, or the list is full)
-    // stays removable once selected.
-    const disabled = !selected && (blockedReason !== null || atCap);
+    // stays removable once selected. It is aria-disabled rather than disabled, so
+    // Tab still reaches it and a screen reader can read why it cannot be added.
+    const unavailable = !selected && (blockedReason !== null || atCap);
     const reason = blockedReason ?? (allowedKnown ? t('app.photoChooserAllowed') : null);
     const tone = selected ? 'border-primary bg-primary/10' : 'border-base-300';
     return (
@@ -81,9 +82,11 @@ function PhotoTile({
                 labels,
                 reason: reason ?? '',
             })}
-            disabled={disabled}
+            aria-disabled={unavailable}
             className={`${TILE_BASE} ${tone} ${blockedReason !== null ? 'opacity-50' : ''}`}
-            onClick={() => onToggle(photo.id)}
+            onClick={() => {
+                if (!unavailable) onToggle(photo.id);
+            }}
         >
             {showImage ? (
                 <img
@@ -107,17 +110,44 @@ function PhotoTile({
 }
 
 /**
+ * What a chosen photo the listing does not return most likely is. With a
+ * challenge the usual cause is another challenge holding it; without one every
+ * library photo is listed, so it was deleted. A cut-off listing adds that the
+ * photo may lie beyond what was read.
+ */
+const missingKey = (hasChallenge: boolean, truncated: boolean): string =>
+    hasChallenge
+        ? truncated
+            ? 'app.photoChooserMissingTruncated'
+            : 'app.photoChooserMissing'
+        : truncated
+          ? 'app.photoChooserMissingNoChallengeTruncated'
+          : 'app.photoChooserMissingNoChallenge';
+
+/**
  * A chosen photo the listing does not return: still selected (and removable),
  * with the likely reasons it is missing.
  */
-function MissingTile({ id, count, onToggle }: { id: string; count: number; onToggle: (id: string) => void }) {
+function MissingTile({
+    id,
+    count,
+    hasChallenge,
+    truncated,
+    onToggle,
+}: {
+    id: string;
+    count: number;
+    hasChallenge: boolean;
+    truncated: boolean;
+    onToggle: (id: string) => void;
+}) {
     const { t } = useTranslation();
-    const text = interp(t('app.photoChooserMissing'), { count });
+    const text = interp(t(missingKey(hasChallenge, truncated)), { count });
     return (
         <button
             type="button"
             aria-pressed
-            aria-label={interp(t('app.photoChooserTileLabel'), { id: shortId(id), labels: '', reason: text })}
+            aria-label={interp(t('app.photoChooserMissingTileLabel'), { id: shortId(id), reason: text })}
             className={`${TILE_BASE} border-warning bg-warning/10`}
             onClick={() => onToggle(id)}
         >
@@ -135,12 +165,15 @@ function PhotoGrid({
     state,
     known,
     selected,
+    hideUnlisted,
     onToggle,
     onRetry,
 }: {
     state: ListState;
     known: Map<string, LibraryPhoto>;
     selected: string[];
+    /** Selected ids the listing does not return are not shown (they belong to another account). */
+    hideUnlisted: boolean;
     onToggle: (id: string) => void;
     onRetry: () => void;
 }) {
@@ -199,10 +232,16 @@ function PhotoGrid({
             <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 md:grid-cols-4">
                 {selected.map((id) => {
                     const photo = known.get(id);
-                    return photo ? (
-                        tile(photo)
-                    ) : (
-                        <MissingTile key={id} id={id} count={listing.photos.length} onToggle={onToggle} />
+                    if (photo) return tile(photo);
+                    return hideUnlisted ? null : (
+                        <MissingTile
+                            key={id}
+                            id={id}
+                            count={listing.photos.length}
+                            hasChallenge={listing.allowedKnown}
+                            truncated={listing.truncated}
+                            onToggle={onToggle}
+                        />
                     );
                 })}
                 {listing.photos.filter((photo) => !chosen.has(photo.id)).map(tile)}
@@ -212,37 +251,88 @@ function PhotoGrid({
 }
 
 /**
- * The modal's body. Mounted only while open, so every open starts from the
- * saved value with a fresh listing.
+ * The notice shown while the list the chooser opened with was saved under
+ * another account: what that means, and the way to remove those lists — behind a
+ * confirmation, since it reaches every setting, profile, rule and scenario.
  */
-function PhotoChooserBody({
-    value,
-    challengeId,
-    onSave,
-    onClose,
-}: {
-    value: string[];
-    challengeId: string | number | null;
-    onSave: (ids: string[]) => boolean | Promise<boolean>;
-    onClose: () => void;
-}) {
+function OtherAccountNotice({ onRemoved }: { onRemoved: () => void }) {
     const { t } = useTranslation();
-    const owner = useChosenPhotosOwner();
-    const [selected, setSelected] = useState<string[]>(value);
+    const [confirming, setConfirming] = useState(false);
+    const [removing, setRemoving] = useState(false);
+    const [failed, setFailed] = useState(false);
+
+    const remove = async () => {
+        setRemoving(true);
+        setFailed(false);
+        const result = await ipc.callOrNull(() => ipc.clearChosenPhotos());
+        setRemoving(false);
+        setConfirming(false);
+        if (result?.success) onRemoved();
+        else setFailed(true);
+    };
+
+    return (
+        <>
+            <div role="alert" className="alert alert-warning py-2 text-sm">
+                <span className="flex-1">{t('app.photoChooserOtherAccount')}</span>
+                <button type="button" className="btn btn-sm" onClick={() => setConfirming(true)}>
+                    {t('app.photoChooserOtherAccountClear')}
+                </button>
+            </div>
+            {failed && (
+                <div role="alert" className="alert alert-error py-2 text-sm">
+                    <span>{t('app.photoChooserOtherAccountClearError')}</span>
+                </div>
+            )}
+            <Modal
+                isOpen={confirming}
+                onClose={removing ? undefined : () => setConfirming(false)}
+                title={t('app.photoChooserOtherAccountClear')}
+                showCloseButton={!removing}
+            >
+                <p className="text-sm">{t('app.photoChooserOtherAccountConfirm')}</p>
+                <ModalActions>
+                    <button
+                        type="button"
+                        className="btn btn-outline btn-sm"
+                        disabled={removing}
+                        onClick={() => setConfirming(false)}
+                    >
+                        {t('app.cancel')}
+                    </button>
+                    <button
+                        type="button"
+                        className="btn btn-warning btn-sm"
+                        disabled={removing}
+                        onClick={() => void remove()}
+                    >
+                        {removing && <span className="loading loading-spinner loading-xs" />}
+                        {t('app.photoChooserOtherAccountClear')}
+                    </button>
+                </ModalActions>
+            </Modal>
+        </>
+    );
+}
+
+/**
+ * The library listing for a challenge and what has been learned from it: the
+ * current state, every photo any response has listed so far (by id), and `load`
+ * to read again for a search term. A response for any but the newest request is a
+ * late answer and is dropped; leaving drops whatever is still in flight.
+ */
+function useLibraryListing(challengeId: string | number | null) {
     const [state, setState] = useState<ListState>({ status: 'loading' });
-    // Every photo any response of this open has listed: a selected photo that a
-    // narrower search no longer returns is still the photo it was.
+    // Every photo any response has listed, by id: a selected photo that a narrower
+    // search omits keeps its record and is not shown as a missing tile.
     const [known, setKnown] = useState<Map<string, LibraryPhoto>>(new Map());
-    const [searchText, setSearchText] = useState('');
-    const [submittedSearch, setSubmittedSearch] = useState('');
-    const [saving, setSaving] = useState(false);
-    const [saveFailed, setSaveFailed] = useState(false);
-    // The newest request's number: a response for any other one is a late answer.
     const requestRef = useRef(0);
+    const lastSearchRef = useRef('');
 
     const load = useCallback(
         async (search: string) => {
             const request = ++requestRef.current;
+            lastSearchRef.current = search;
             setState({ status: 'loading' });
             const result = await ipc.callOrNull(() => ipc.getLibraryPhotos(challengeId, search || undefined));
             if (request !== requestRef.current) return;
@@ -255,8 +345,10 @@ function PhotoChooserBody({
                 setState({ status: 'ready', listing: result });
             } else if (result?.error === 'no-challenge-context') {
                 setState({ status: 'no-context' });
-            } else if (result?.error !== 'superseded') {
-                setState({ status: 'error', error: result?.error ?? null });
+            } else {
+                // A 'superseded' answer to the newest request means nothing newer is coming: offer Retry.
+                const error = result?.error && result.error !== 'superseded' ? result.error : null;
+                setState({ status: 'error', error });
             }
         },
         [challengeId],
@@ -265,10 +357,38 @@ function PhotoChooserBody({
     useEffect(() => {
         void load('');
         return () => {
-            // Closing drops whatever is still in flight.
             requestRef.current += 1;
         };
     }, [load]);
+
+    return { state, known, load, retry: () => void load(lastSearchRef.current) };
+}
+
+/**
+ * The modal's body. Mounted only while the modal is open, so every opening
+ * starts from the saved value with a fresh listing.
+ */
+function PhotoChooserBody({
+    value,
+    challengeId,
+    clearMeansInherit,
+    onSave,
+    onClose,
+}: {
+    value: string[];
+    challengeId: string | number | null;
+    clearMeansInherit: boolean;
+    onSave: (ids: string[]) => boolean | Promise<boolean>;
+    onClose: () => void;
+}) {
+    const { t } = useTranslation();
+    const owner = useChosenPhotosOwner();
+    const [selected, setSelected] = useState<string[]>(value);
+    const { state, known, load, retry } = useLibraryListing(challengeId);
+    const [searchText, setSearchText] = useState('');
+    const [saving, setSaving] = useState(false);
+    const [saveFailed, setSaveFailed] = useState(false);
+    const [listsRemoved, setListsRemoved] = useState(false);
 
     const toggle = useCallback((id: string) => {
         setSelected((prev) => (prev.includes(id) ? prev.filter((other) => other !== id) : [...prev, id]));
@@ -276,9 +396,7 @@ function PhotoChooserBody({
 
     const submitSearch = (event: { preventDefault: () => void }) => {
         event.preventDefault();
-        const term = searchText.trim();
-        setSubmittedSearch(term);
-        void load(term);
+        void load(searchText.trim());
     };
 
     const save = async () => {
@@ -295,19 +413,31 @@ function PhotoChooserBody({
         else setSaveFailed(true);
     };
 
+    // Judged on the list the modal opened with, not the live selection, so choosing
+    // photos does not make the notice come and go.
     const currentMember = state.status === 'ready' ? state.listing.memberId : null;
-    const otherAccount = selected.length > 0 && owner !== '' && currentMember !== null && owner !== currentMember;
+    const otherAccount =
+        !listsRemoved && value.length > 0 && owner !== '' && currentMember !== null && owner !== currentMember;
+    // The other account's photos are not this account's to build on: the selection starts empty
+    // (and never shows their ids) once the listing shows whose list it is.
+    const startedFresh = useRef(false);
+    useLayoutEffect(() => {
+        if (otherAccount && !startedFresh.current) {
+            startedFresh.current = true;
+            setSelected([]);
+        }
+    }, [otherAccount]);
+    const atCap = selected.length >= MAX_CHOSEN_PHOTOS;
 
     return (
         <div className="space-y-3">
             <p className="text-base-content/70 text-xs">{t('app.photoChooserHelp')}</p>
+            {clearMeansInherit && <p className="text-base-content/70 text-xs">{t('app.photoChooserInheritNote')}</p>}
             {otherAccount && (
-                <div role="alert" className="alert alert-warning py-2 text-sm">
-                    <span className="flex-1">{t('app.photoChooserOtherAccount')}</span>
-                    <button type="button" className="btn btn-sm" onClick={() => setSelected([])}>
-                        {t('app.photoChooserOtherAccountClear')}
-                    </button>
-                </div>
+                <>
+                    <OtherAccountNotice onRemoved={() => setListsRemoved(true)} />
+                    <p className="text-xs">{interp(t('app.chosenPhotosOtherAccountCount'), { count: value.length })}</p>
+                </>
             )}
             <form className="flex flex-wrap items-center gap-2" onSubmit={submitSearch}>
                 <input
@@ -324,13 +454,15 @@ function PhotoChooserBody({
             </form>
             <p className="text-xs" role="status">
                 {interp(t('app.photoChooserCount'), { count: selected.length, max: MAX_CHOSEN_PHOTOS })}
+                {atCap && ` ${t('app.photoChooserLimitReached')}`}
             </p>
             <PhotoGrid
                 state={state}
                 known={known}
                 selected={selected}
+                hideUnlisted={otherAccount}
                 onToggle={toggle}
-                onRetry={() => void load(submittedSearch)}
+                onRetry={retry}
             />
             {saveFailed && (
                 <div role="alert" className="alert alert-error py-2 text-sm">
@@ -360,26 +492,36 @@ function PhotoChooserBody({
  * capped at MAX_CHOSEN_PHOTOS. `challengeId` makes the listing say whether each
  * photo can enter THAT challenge; without it eligibility is only known at submit
  * time. `onSave` gets the chosen ids and answers whether they were stored: on
- * false (or a throw) the modal stays open on an error.
+ * false (or a throw) the modal stays open on an error. `clearMeansInherit` says
+ * that saving nothing removes the list this layer holds, so the layer inherits
+ * the one from the settings or rules above it.
  */
 export function PhotoChooserModal({
     isOpen,
     onClose,
     value,
     challengeId = null,
+    clearMeansInherit = false,
     onSave,
 }: {
     isOpen: boolean;
     onClose: () => void;
     value: string[];
     challengeId?: string | number | null;
+    clearMeansInherit?: boolean;
     onSave: (ids: string[]) => boolean | Promise<boolean>;
 }) {
     const { t } = useTranslation();
     if (!isOpen) return null;
     return (
         <Modal isOpen onClose={onClose} title={t('app.photoChooserTitle')} size="xl">
-            <PhotoChooserBody value={value} challengeId={challengeId} onSave={onSave} onClose={onClose} />
+            <PhotoChooserBody
+                value={value}
+                challengeId={challengeId}
+                clearMeansInherit={clearMeansInherit}
+                onSave={onSave}
+                onClose={onClose}
+            />
         </Modal>
     );
 }

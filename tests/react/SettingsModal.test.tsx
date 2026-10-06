@@ -747,9 +747,9 @@ describe('SettingsModal — rule loading', () => {
     });
 
     test('the rule editor offers the known challenge types as suggestions', async () => {
-        const { container } = render(<SettingsModal isOpen={true} onClose={jest.fn()} />);
+        render(<SettingsModal isOpen={true} onClose={jest.fn()} />);
         await screen.findByText('app.noTitleTagRules');
-        const options = Array.from(container.querySelectorAll<HTMLOptionElement>('#gs-rule-types option')).map(
+        const options = Array.from(document.querySelectorAll<HTMLOptionElement>('#gs-rule-types option')).map(
             (o) => o.value,
         );
         expect(options).toEqual(['default', 'exhibition', 'flash', 'speed']);

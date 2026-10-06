@@ -3,7 +3,7 @@ import { isSourceCode, getAppName, getContext, setContext, clearContext, devMode
 import { currentLogFiles, cleanupOldLogs } from './logger/files';
 import { buildProgressMessage } from './logger/format';
 import { sanitizeForLog, sanitizeLogString, redactMessage } from './logger/sanitize';
-import { writeLog, startOperation, endOperation, getRecentLogs } from './logger/write';
+import { writeLog, printLine as printToConsole, startOperation, endOperation, getRecentLogs } from './logger/write';
 
 import type { LogLevel } from './logger/types';
 
@@ -178,6 +178,10 @@ export const challengeTag = (
     }
     return `[Challenge ${oneLine(challengeOrId ?? 'unknown')}: ${oneLine(title ?? 'unknown')}]`;
 };
+// Console only: output a command was asked for (a long listing) that must not
+// land in the log files, the ring buffer or the GUI feed. Callers strip
+// untrusted text themselves, since nothing here sanitises it.
+export const printLine = printToConsole;
 // Utility methods
 export const getLogFile = () => currentLogFiles.app;
 export const getErrorLogFile = () => currentLogFiles.error;

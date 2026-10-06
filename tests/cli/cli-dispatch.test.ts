@@ -129,6 +129,8 @@ jest.mock('../../src/ts/cli/commands/settings', () => ({
     getSetting: jest.fn(),
     setSetting: jest.fn(),
     setGlobalDefault: jest.fn(),
+    noteChosenPhotosOwner: jest.fn(async () => undefined),
+    clearChosenPhotos: jest.fn(() => true),
     listSettings: jest.fn(),
     resetSetting: jest.fn(),
     resetAllSettings: jest.fn(),
@@ -427,16 +429,19 @@ describe('list-photos', () => {
         expect(m.exitCodes).toEqual([1]);
     });
 
-    test.each([[['list-photos', 'extra']], [['list-photos', '--search']], [['list-photos', '--search=a', 'stray']]])(
-        '%j is a usage error',
-        async (argv) => {
-            const m = await run(argv);
-            expect(m.photos.listPhotosCmd).not.toHaveBeenCalled();
-            expect(m.msgs('error')).toEqual(['Wrong arguments']);
-            expect(m.msgs('info')).toEqual(['Usage: list-photos [--challenge=<id>] [--search=<tag>]']);
-            expect(m.exitCodes).toEqual([1]);
-        },
-    );
+    test.each([
+        [['list-photos', 'extra']],
+        [['list-photos', '--search']],
+        [['list-photos', '--search=a', 'stray']],
+        [['list-photos', '--searchx']],
+        [['list-photos', '--search-term=a']],
+    ])('%j is a usage error', async (argv) => {
+        const m = await run(argv);
+        expect(m.photos.listPhotosCmd).not.toHaveBeenCalled();
+        expect(m.msgs('error')).toEqual(['Wrong arguments']);
+        expect(m.msgs('info')).toEqual(['Usage: list-photos [--challenge=<id>] [--search=<tag>]']);
+        expect(m.exitCodes).toEqual([1]);
+    });
 });
 
 describe('settings commands', () => {
@@ -456,6 +461,27 @@ describe('settings commands', () => {
         const m = await run(['set-setting', '--challenge', '5', 'exposure', '80']);
         expect(m.cmd.setSetting).toHaveBeenCalledWith('exposure', '80', '5');
         expect(m.exitCodes).toEqual([0]);
+    });
+
+    test.each([
+        [true, 1],
+        [false, 0],
+    ])('set-setting records the chosen-photos owner only after a saved write (%p)', async (saved, noted) => {
+        const m = await run(['set-setting', 'chosenPhotos', '["a"]', '--challenge=5'], (mods) =>
+            mods.cmd.setSetting.mockReturnValue(saved),
+        );
+        expect(m.cmd.noteChosenPhotosOwner).toHaveBeenCalledTimes(noted);
+        if (noted) expect(m.cmd.noteChosenPhotosOwner).toHaveBeenCalledWith('chosenPhotos', '["a"]');
+        expect(m.exitCodes).toEqual([0]);
+    });
+
+    test.each([
+        [true, 0],
+        [false, 1],
+    ])('clear-chosen-photos exit code follows the result (%p → %p)', async (ok, code) => {
+        const m = await run(['clear-chosen-photos'], (mods) => mods.cmd.clearChosenPhotos.mockReturnValue(ok));
+        expect(m.cmd.clearChosenPhotos).toHaveBeenCalledTimes(1);
+        expect(m.exitCodes).toEqual([code]);
     });
 
     test.each([[[]], [['exposure']]])('set-setting %p missing key/value exits 1', async (tail) => {
@@ -489,6 +515,16 @@ describe('settings commands', () => {
         const m = await run(['set-global-default', 'exposure', '80']);
         expect(m.cmd.setGlobalDefault).toHaveBeenCalledWith('exposure', '80');
         expect(m.exitCodes).toEqual([0]);
+    });
+
+    test.each([
+        [true, 1],
+        [false, 0],
+    ])('set-global-default records the chosen-photos owner only after a saved write (%p)', async (saved, noted) => {
+        const m = await run(['set-global-default', 'chosenPhotos', '["a"]'], (mods) =>
+            mods.cmd.setGlobalDefault.mockReturnValue(saved),
+        );
+        expect(m.cmd.noteChosenPhotosOwner).toHaveBeenCalledTimes(noted);
     });
 
     test.each([[[]], [['exposure']]])('set-global-default %p missing args exits 1', async (tail) => {

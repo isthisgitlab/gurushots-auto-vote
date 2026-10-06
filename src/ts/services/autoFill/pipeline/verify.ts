@@ -53,8 +53,9 @@ const rankBlock = async (
 /**
  * The visual re-rank of a pick. With the user's chosen block it reorders only
  * WITHIN a block — a chosen photo is never swapped for a top-up photo, nor the
- * reverse — and a block that fills no slot, or is no larger than the slots it
- * fills, has nothing to choose between, so it is left alone and costs no model run.
+ * reverse — and a chosen block no larger than the slots it fills has nothing to
+ * choose between, so it is left alone and costs no model run. The rest block
+ * keeps the usual re-rank, as does an empty chosen set (the same as no list).
  */
 const verifyFillPick = async (
     challenge: Challenge,
@@ -65,7 +66,7 @@ const verifyFillPick = async (
     deps: RankDeps,
     chosenIds: ReadonlySet<string> | null = null,
 ): Promise<VerifiedPick> => {
-    if (!chosenIds) return rankBlock(challenge, scored, eligible, picked, ignoreWords, deps);
+    if (!chosenIds || chosenIds.size === 0) return rankBlock(challenge, scored, eligible, picked, ignoreWords, deps);
     const blocks = splitByChosen(scored, chosenIds);
     const results: VerifiedPick[] = [];
     for (const [block, isChosen] of [
@@ -74,7 +75,7 @@ const verifyFillPick = async (
     ] as const) {
         const blockPicked = picked.filter((id) => chosenIds.has(String(id)) === isChosen);
         results.push(
-            blockPicked.length === 0 || block.length <= blockPicked.length
+            blockPicked.length === 0 || (isChosen && block.length <= blockPicked.length)
                 ? { picked: blockPicked, visualEvidence: null }
                 : await rankBlock(challenge, block, eligible, blockPicked, ignoreWords, deps),
         );

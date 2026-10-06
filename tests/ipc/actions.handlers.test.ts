@@ -696,7 +696,63 @@ describe('get-member-challenges', () => {
         const handlers = buildHandlers();
         const result = await handlers['get-member-challenges']({});
         expect(strategy.getMemberChallenges).toHaveBeenCalledWith('tok', 'open');
-        expect(result).toEqual({ success: true, items: [{ id: 1 }] });
+        expect(result).toEqual({ success: true, items: [{ id: 1, chosenOwn: [], chosenEffectiveCount: 0 }] });
+    });
+
+    describe('each open challenge says what is chosen for it', () => {
+        const open = async () => {
+            stubAuthGuardOk();
+            stubStrategy({
+                getMemberChallenges: jest.fn().mockResolvedValue([{ id: 7, title: 'Pink' }, {}, { id: 8 }]),
+            });
+            const result = await buildHandlers()['get-member-challenges']({});
+            return result.success ? result.items : [];
+        };
+        // The join's own resolution: the per-id override first, then the rules, then the global default.
+        const resolve = (own: Record<string, unknown>, inherited: unknown) => {
+            settings.getChallengeOverride = invalid(
+                jest.fn((key: string, id: string) => (key === 'chosenPhotos' ? (own[id] ?? null) : null)),
+            );
+            settings.resolveRuleSetting = jest.fn().mockReturnValue(null);
+            settings.getEffectiveSetting = jest.fn().mockReturnValue(inherited);
+        };
+
+        beforeEach(() => {
+            settings.getSetting = jest.fn().mockReturnValue('');
+            autoFill.peekMemberId = jest.fn().mockReturnValue('member-1');
+        });
+
+        test('its own list, and the count that applies when it is the one in force', async () => {
+            resolve({ '7': ['a', 'b'] }, []);
+            const items = await open();
+            expect(items[0]).toEqual({ id: 7, title: 'Pink', chosenOwn: ['a', 'b'], chosenEffectiveCount: 2 });
+            // No list of its own and none inherited.
+            expect(items[2]).toEqual({ id: 8, chosenOwn: [], chosenEffectiveCount: 0 });
+        });
+
+        test('a list inherited from a rule or the global default counts, with nothing of its own', async () => {
+            resolve({}, ['g1', 'g2', 'g3']);
+            expect((await open())[0]).toEqual(expect.objectContaining({ chosenOwn: [], chosenEffectiveCount: 3 }));
+            settings.resolveRuleSetting = jest.fn().mockReturnValue({ value: ['r1'] });
+            expect((await open())[0]).toEqual(expect.objectContaining({ chosenOwn: [], chosenEffectiveCount: 1 }));
+        });
+
+        test('an item with no id is passed through with nothing chosen', async () => {
+            resolve({}, ['g1']);
+            expect((await open())[1]).toEqual({ chosenOwn: [], chosenEffectiveCount: 0 });
+        });
+
+        test('a list saved under another account counts for nothing, as it does at join time', async () => {
+            resolve({ '7': ['a'] }, ['g1']);
+            settings.getSetting = jest.fn().mockReturnValue('member-0');
+            expect((await open())[0]).toEqual(expect.objectContaining({ chosenOwn: ['a'], chosenEffectiveCount: 0 }));
+            // The same account, or one that cannot be told yet, keeps it.
+            settings.getSetting = jest.fn().mockReturnValue('member-1');
+            expect((await open())[0]).toEqual(expect.objectContaining({ chosenEffectiveCount: 1 }));
+            settings.getSetting = jest.fn().mockReturnValue('member-0');
+            autoFill.peekMemberId = jest.fn().mockReturnValue(null);
+            expect((await open())[0]).toEqual(expect.objectContaining({ chosenEffectiveCount: 1 }));
+        });
     });
 });
 

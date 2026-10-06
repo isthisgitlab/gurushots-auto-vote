@@ -30,7 +30,7 @@ beforeEach(() => {
     jest.clearAllMocks();
     saved = '';
     settings.loadSettings = jest.fn().mockReturnValue({ token: 'tok' });
-    settings.getSetting = jest.fn(() => saved) as never;
+    settings.getSetting = invalid(jest.fn(() => saved));
     autoFill.peekMemberId = jest.fn().mockReturnValue('member-1');
 });
 
@@ -99,7 +99,7 @@ describe('the settings IPC records the owner after a successful write only', () 
             'set-title-rules': 'setTitleRules',
             'save-challenge-profile': 'saveChallengeProfile',
         }[channel] as keyof typeof settings;
-        const handlers = buildHandlers() as unknown as Record<string, (...args: unknown[]) => Promise<unknown>>;
+        const handlers = invalid<Record<string, (...args: unknown[]) => Promise<unknown>>>(buildHandlers());
         const args = [{ chosenPhotos: ['a'] }];
         invalid<jest.Mock<boolean, unknown[]>>(settings[method]).mockReturnValueOnce(false).mockReturnValueOnce(true);
         await handlers[channel]({}, ...args);
@@ -109,7 +109,7 @@ describe('the settings IPC records the owner after a successful write only', () 
     });
 
     test('a channel that cannot carry a list never looks', async () => {
-        const handlers = buildHandlers() as unknown as Record<string, (...args: unknown[]) => Promise<unknown>>;
+        const handlers = invalid<Record<string, (...args: unknown[]) => Promise<unknown>>>(buildHandlers());
         settings.removeChallengeOverride = jest.fn().mockReturnValue(true);
         await handlers['remove-challenge-override']({}, 'chosenPhotos', '77');
         expect(settings.loadSettings).not.toHaveBeenCalled();

@@ -4,6 +4,7 @@
  * filters on the chosen set alone, and enrichment runs per block.
  */
 
+import { invalid } from '../helpers/invalid';
 import type * as photoPickerModule from '../../src/ts/services/photoPicker';
 import type { PickerPhoto, ScoredCandidate } from '../../src/ts/types/photoPicker';
 
@@ -46,6 +47,15 @@ describe('chosen photos in the picker', () => {
         expect(finalizePick(plain, 2)).toEqual(finalizePick(plain, 2, null));
     });
 
+    test('a list none of whose photos is usable has no chosen block, exactly like no list', () => {
+        const plain = buildScoredCandidates(challenge, library, {});
+        const { scored, chosenIds } = buildChosenCandidates(challenge, library, {
+            chosen: { ids: ['missing'], only: false },
+        });
+        expect(chosenIds).toBeNull();
+        expect(scored).toEqual(plain);
+    });
+
     test('chosen photos rank first — ordered by the ordinary scorer — and the rest tops up', () => {
         const chosen = { ids: ['off-a', 'theme-b'], only: false };
         // theme-b outscores off-a inside the chosen block; then the best of the rest.
@@ -70,7 +80,7 @@ describe('chosen photos in the picker', () => {
         expect(scored.map((entry) => entry.id).sort()).toEqual(['off-a', 'theme-b']);
         expect([...(chosenIds as ReadonlySet<string>)]).toEqual(['off-a']);
         // A non-array pool is just empty.
-        expect(buildChosenCandidates(challenge, undefined as unknown as PickerPhoto[], { chosen }).scored).toEqual([]);
+        expect(buildChosenCandidates(challenge, invalid<PickerPhoto[]>(undefined), { chosen }).scored).toEqual([]);
     });
 
     test('with Only the pool holds nothing but the chosen photos', () => {
