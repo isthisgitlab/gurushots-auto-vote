@@ -677,7 +677,7 @@ export const app = {
     titleTagRulesDesc:
         'Piešķir izaicinājumiem profilu, savu pievienošanās laiku un foto tagus pēc pazīmēm, kas atkārtojumos nemainās: nosaukuma, taga, veida, foto skaita vai ilguma. Noteikumi darbojas arī tad, ja izaicinājums atgriežas ar jaunu id; manuāliem viena izaicinājuma uzstādījumiem ir priekšroka. Tagus apvieno.',
     titleTagRulesSaveError:
-        'Neizdevās saglabāt noteikumus. Pārbaudi profilus, nosaukumu un tagu garumu, vai visas vērtības ir pieļaujamajā diapazonā („Ilgst vismaz” nedrīkst pārsniegt „Ilgst ne vairāk kā”) un vai nav pretrunu ar atvērta izaicinājuma manuālajiem uzstādījumiem. Pārējie uzstādījumi ir saglabāti.',
+        'Neizdevās saglabāt noteikumus. Pārbaudi profilus, nosaukumu un tagu garumu, vai visas vērtības ir pieļaujamajā diapazonā („Ilgst vismaz” nedrīkst pārsniegt „Ilgst ne vairāk kā”), vai beigu laiks ir derīgs (HH:MM) un vai nav pretrunu ar atvērta izaicinājuma manuālajiem uzstādījumiem. Pārējie uzstādījumi ir saglabāti.',
     titleTagRulesLoadError:
         'Neizdevās ielādēt izaicinājumu noteikumus, tāpēc tie ir paslēpti, lai tos nepārrakstītu. Pārējos uzstādījumus joprojām var saglabāt; lai mēģinātu vēlreiz, aizver uzstādījumus un atver tos no jauna.',
     titleTagRuleTitle: 'Izaicinājuma nosaukums',
@@ -701,6 +701,8 @@ export const app = {
     titleRuleMinHours: 'Ilgst vismaz',
     titleRuleMaxHours: 'Ilgst ne vairāk kā',
     titleRuleClosesAt: 'Beigu laiks',
+    titleRuleClosesAtInvalid:
+        'Šis saglabātais laiks nav derīgs (jāizmanto HH:MM), tāpēc noteikums neatbilst nevienam izaicinājumam. Izvēlies laiku vai ieraksti kādu un notīri to, lai noņemtu nosacījumu.',
     titleRuleAnyLength: 'jebkāds',
     titleRuleProfile: 'Automātiskais profils',
     titleRuleInherit: 'Noklusējums',
@@ -715,7 +717,7 @@ export const app = {
     titleRuleBroadWarning:
         'Šim noteikumam nav nosaukuma, tāpēc tas ieslēdz šo iespēju katram atbilstošajam izaicinājumam — tas var tērēt monētas vai foto veselai izaicinājumu grupai.',
     titleRuleOrderHint:
-        'Noteikumus pārbauda no augšas uz leju: katram uzstādījumam uzvar pirmais atbilstošais noteikums, kas to uzstāda, bet to, ko tas atstāj tukšu, ņem no nākamā atbilstošā noteikuma un pēc tam no globālā noklusējuma. Kārtojot noklusējuma secībā, pirms beigu laika noteikuma nonāk noteikumi, kuriem ir nosaukums, vairāk nosacījumu, foto skaits vai ilgums, tāpēc beigu laika noteikums, kam jāņem virsroka pār tiem, atkal jāpārvieto uz augšu.',
+        'Noteikumus pārbauda no augšas uz leju: katram uzstādījumam uzvar pirmais atbilstošais noteikums, kas to uzstāda, bet to, ko tas atstāj tukšu, ņem no nākamā atbilstošā noteikuma un pēc tam no globālā noklusējuma. Kārtojot noklusējuma secībā, pirms noteikuma, kuram ir tikai beigu laika nosacījums, nonāk noteikumi, kuriem ir nosaukums, vairāk nosacījumu, foto skaits vai ilgums, tāpēc šāds noteikums, kam jāņem virsroka pār tiem, atkal jāpārvieto uz augšu.',
     titleRuleSortDefault: 'Kārtot noklusējuma secībā',
     titleRuleMoveUp: 'Pārvietot noteikumu augstāk',
     titleRuleMoveDown: 'Pārvietot noteikumu zemāk',

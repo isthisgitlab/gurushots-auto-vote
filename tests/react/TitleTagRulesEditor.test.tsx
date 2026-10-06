@@ -285,10 +285,15 @@ describe('TitleTagRulesEditor', () => {
             const input = () => screen.getByLabelText<HTMLInputElement>('app.titleRuleClosesAt');
             expect(input().classList.contains('input-error')).toBe(true);
             expect(input().getAttribute('aria-invalid')).toBe('true');
+            const message = screen.getByText('app.titleRuleClosesAtInvalid');
+            expect(message.id).not.toBe('');
+            expect(input().getAttribute('aria-describedby')).toBe(message.id);
             for (const closesAt of ['17:10', '', undefined]) {
                 rerender(<TitleTagRulesEditor value={rowWith({ closesAt })} onChange={jest.fn()} />);
                 expect(input().classList.contains('input-error')).toBe(false);
                 expect(input().hasAttribute('aria-invalid')).toBe(false);
+                expect(input().hasAttribute('aria-describedby')).toBe(false);
+                expect(screen.queryByText('app.titleRuleClosesAtInvalid')).toBeNull();
             }
         });
     });

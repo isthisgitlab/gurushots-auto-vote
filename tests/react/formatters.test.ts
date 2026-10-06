@@ -100,6 +100,15 @@ describe('formatEndTime', () => {
         expect(timeOfDayIn(sec, 'Europe/Riga')).toBe(card?.[1]);
     });
 
+    // 'local' and an unknown zone both read the device clock on each side, so this holds on any host.
+    test.each([['local'], ['Not/AZone']])('timeOfDayIn agrees with the card on the device clock (%s)', (zone) => {
+        for (const sec of [Date.UTC(2026, 5, 15, 14, 10, 59) / 1000, Date.UTC(2026, 5, 14, 21, 5, 30) / 1000]) {
+            const card = /\b(\d{2}:\d{2})\b/.exec(formatEndTime(sec, zone));
+            expect(card?.[1]).toBeDefined();
+            expect(timeOfDayIn(sec, zone)).toBe(card?.[1]);
+        }
+    });
+
     test('an invalid timezone falls back to local instead of throwing', () => {
         expect(() => formatEndTime(end, 'Not/AZone')).not.toThrow();
         expect(formatEndTime(end, 'Not/AZone')).toBe(formatEndTime(end, 'local'));

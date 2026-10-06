@@ -1,3 +1,4 @@
+import { useId } from 'react';
 import { useTranslation } from '@/contexts/TranslationContext';
 import { RuleNumberField } from './RuleFields';
 import { normalizeRuleClosesAt } from '../../../settings/challengeRules';
@@ -32,8 +33,9 @@ const RUNTIME_FIELDS = [
 function RuleClosesAtField({ rule, onPatch }: { rule: TitleRule; onPatch: RulePatchHandler }) {
     const { t } = useTranslation();
     // A hand-edited stored value that is not a strict HH:MM renders blank in a time input,
-    // while the rule matches nothing and saving is rejected: flag it.
-    const invalidStored = Boolean(rule.closesAt) && normalizeRuleClosesAt(rule.closesAt) === false;
+    // while the rule matches nothing and saving is rejected: say so in text, not only colour.
+    const invalidStored = normalizeRuleClosesAt(rule.closesAt) === false;
+    const messageId = useId();
     return (
         <div className="flex flex-col gap-1">
             <span className="text-sm">{t('app.titleRuleClosesAt')}</span>
@@ -41,10 +43,16 @@ function RuleClosesAtField({ rule, onPatch }: { rule: TitleRule; onPatch: RulePa
                 type="time"
                 className={`input input-sm w-full ${invalidStored ? 'input-error' : ''}`}
                 aria-invalid={invalidStored ? 'true' : undefined}
+                aria-describedby={invalidStored ? messageId : undefined}
                 aria-label={t('app.titleRuleClosesAt')}
                 value={rule.closesAt ?? ''}
                 onChange={(e) => onPatch({ closesAt: e.currentTarget.value })}
             />
+            {invalidStored && (
+                <span id={messageId} className="text-error text-xs">
+                    {t('app.titleRuleClosesAtInvalid')}
+                </span>
+            )}
         </div>
     );
 }

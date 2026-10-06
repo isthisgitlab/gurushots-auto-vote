@@ -671,7 +671,7 @@ export const app = {
     titleTagRulesDesc:
         'Give challenges a profile, their own join timing and optional photo tags by what survives a rotation: title, tag, type, photo count or length. Rules reapply when a challenge returns with a new id; manual settings for one challenge still win. Tags combine with profile/global tags.',
     titleTagRulesSaveError:
-        'Could not save the rules. Check profile names, title/tag lengths, that every value is in range ("runs at least" must not exceed "runs at most"), and conflicts with manual settings for open challenges. Other settings were saved.',
+        'Could not save the rules. Check profile names, title/tag lengths, that every value is in range ("runs at least" must not exceed "runs at most"), that any close time is a valid HH:MM, and conflicts with manual settings for open challenges. Other settings were saved.',
     titleTagRulesLoadError:
         "Couldn't load your challenge rules, so they're hidden to keep them from being overwritten. Your other settings can still be saved; close and reopen Settings to try again.",
     titleTagRuleTitle: 'Challenge title',
@@ -695,6 +695,8 @@ export const app = {
     titleRuleMinHours: 'Runs at least',
     titleRuleMaxHours: 'Runs at most',
     titleRuleClosesAt: 'Closes at',
+    titleRuleClosesAtInvalid:
+        "This saved time isn't valid (use HH:MM), so the rule matches nothing. Pick a time, or type one and clear it to remove the condition.",
     titleRuleAnyLength: 'any',
     titleRuleProfile: 'Automatic profile',
     titleRuleInherit: 'Inherit',
@@ -709,7 +711,7 @@ export const app = {
     titleRuleBroadWarning:
         'This rule has no title, so it turns this on for every challenge it matches — which can spend coins or photos across a whole group of challenges.',
     titleRuleOrderHint:
-        'Rules are checked top to bottom: for each setting, the first matching rule that sets it wins, and anything it leaves empty comes from the next matching rule, then the global default. Sorting by default order puts rules with a title, more conditions, a photo count or a length ahead of a close-time rule, so a close-time rule that must override them has to be moved back up.',
+        'Rules are checked top to bottom: for each setting, the first matching rule that sets it wins, and anything it leaves empty comes from the next matching rule, then the global default. Sorting by default order puts rules with a title, more conditions, a photo count or a length ahead of a rule keyed only on Closes at, so such a rule that must override them has to be moved back up.',
     titleRuleSortDefault: 'Sort by default order',
     titleRuleMoveUp: 'Move rule up',
     titleRuleMoveDown: 'Move rule down',
