@@ -194,6 +194,14 @@ describe('applyImminentBoostsOnSuspend — Boost Before Sleep setting', () => {
         expect(settings.getEffectiveSetting).toHaveBeenCalledWith('boostOnSleep', '1');
         expect(settings.getEffectiveSetting).toHaveBeenCalledWith('boostOnSleep', '2');
     });
+
+    test('the quit guard still lists a boost due within 60 min with the setting off — the filter lives only here', async () => {
+        settings.getEffectiveSetting.mockReturnValue(false);
+        await run();
+        expect(applyBoostsOnSuspend).not.toHaveBeenCalled();
+        const listed = guard.imminentBoostChallenges(NOW, describe_, 3600).map((b) => b.challenge.id);
+        expect(listed).toEqual([1, 2, 3]);
+    });
 });
 
 describe('applyImminentBoostsOnSuspend — re-entrancy', () => {
