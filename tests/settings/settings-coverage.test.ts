@@ -368,9 +368,8 @@ describe('settings facade — edge cases', () => {
             );
             expect(settings.getEffectiveSetting('exposure', 'a')).toBe(70);
             expect(settings.getEffectiveSetting('exposure', 'b')).toBe(100);
-            expect(settings.getTitleProfile('Nope', 'a')).toEqual({
-                name: 'P',
-                values: { exposure: 70 },
+            expect(settings.getTitleProfile('Nope', 'a')).toMatchObject({
+                profile: { name: 'P', values: { exposure: 70 } },
                 suppressed: false,
             });
         });
@@ -485,9 +484,9 @@ describe('settings facade — edge cases', () => {
                 _challengeRulesOrderedV1: true,
                 challengeSettings: { globalDefaults: {}, titleRules: null, profiles: { P: {} } },
             });
-            expect(settings.getTitleProfile('Alpha')).toBeNull();
+            expect(settings.getTitleProfile('Alpha').profile).toBeNull();
             seed({ challengeSettings: { globalDefaults: {}, titleRules: [{ title: 'Alpha', profile: 'Missing' }] } });
-            expect(settings.getTitleProfile({ title: 'Alpha' })).toBeNull();
+            expect(settings.getTitleProfile({ title: 'Alpha' }).profile).toBeNull();
         });
 
         test('getTitleProfile accepts a challenge object and reports suppression for an id', () => {
@@ -499,13 +498,12 @@ describe('settings facade — edge cases', () => {
                     titleProfileSuppressions: { c1: true },
                 },
             });
-            expect(settings.getTitleProfile({ title: 'Alpha', tags: [] })).toEqual({
-                name: 'P',
-                values: { exposure: 70 },
+            expect(settings.getTitleProfile({ title: 'Alpha', tags: [] })).toMatchObject({
+                profile: { name: 'P', values: { exposure: 70 } },
+                suppressed: false,
             });
-            expect(settings.getTitleProfile({ title: 'Alpha' }, 'c1')).toEqual({
-                name: 'P',
-                values: { exposure: 70 },
+            expect(settings.getTitleProfile({ title: 'Alpha' }, 'c1')).toMatchObject({
+                profile: { name: 'P', values: { exposure: 70 } },
                 suppressed: true,
             });
         });

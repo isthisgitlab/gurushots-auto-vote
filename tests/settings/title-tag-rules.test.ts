@@ -633,8 +633,8 @@ describe('settings facade — title-keyed tag rules', () => {
             settings.setSetting('timezone', 'Europe/Riga');
             settings.saveChallengeProfile('Late', { exposure: 80 });
             save({ closesAt: '17:10', profile: 'Late' });
-            expect(settings.getTitleProfile(RIGA_1710)).toMatchObject({ name: 'Late' });
-            expect(settings.getTitleProfile(UTC_1710)).toBeNull();
+            expect(settings.getTitleProfile(RIGA_1710)).toMatchObject({ profile: { name: 'Late' } });
+            expect(settings.getTitleProfile(UTC_1710).profile).toBeNull();
             save({ closesAt: '17:10', mustIncludeTags: ['hat'] });
             expect(settings.getEffectiveTagSetting('mustIncludeTags', RIGA_1710)).toEqual(['hat']);
             expect(settings.getEffectiveTagSetting('mustIncludeTags', UTC_1710)).toEqual([]);
@@ -644,7 +644,7 @@ describe('settings facade — title-keyed tag rules', () => {
             settings.setSetting('timezone', '');
             settings.saveChallengeProfile('Late', { exposure: 80 });
             save({ closesAt: '17:10', profile: 'Late' });
-            expect(settings.getTitleProfile(RIGA_1710)).toMatchObject({ name: 'Late' });
+            expect(settings.getTitleProfile(RIGA_1710)).toMatchObject({ profile: { name: 'Late' } });
             save({ closesAt: '17:10', mustIncludeTags: ['hat'] });
             expect(settings.getEffectiveTagSetting('mustIncludeTags', RIGA_1710)).toEqual(['hat']);
         });
@@ -744,11 +744,11 @@ describe('settings facade — title-keyed tag rules', () => {
                 },
             ]);
 
-            expect(settings.getTitleProfile(' weekly PORTRAITS ')).toEqual({
+            expect(settings.getTitleProfile(' weekly PORTRAITS ').profile).toEqual({
                 name: 'Portrait Tactic',
                 values: { exposure: 80, autoFill: true },
             });
-            expect(settings.getTitleProfile('Other')).toBeNull();
+            expect(settings.getTitleProfile('Other').profile).toBeNull();
         });
 
         test('deleting an assigned profile removes only its part of each title rule', () => {
@@ -772,7 +772,7 @@ describe('settings facade — title-keyed tag rules', () => {
 
             expect(settings.saveChallengeProfile('TACTIC', { exposure: 70 })).toBe(true);
             expect(settings.getTitleRules()[0].profile).toBe('TACTIC');
-            expect(settings.getTitleProfile('Portraits')).toEqual({ name: 'TACTIC', values: { exposure: 70 } });
+            expect(settings.getTitleProfile('Portraits').profile).toEqual({ name: 'TACTIC', values: { exposure: 70 } });
         });
     });
 });

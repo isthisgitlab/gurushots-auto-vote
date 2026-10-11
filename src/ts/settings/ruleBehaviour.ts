@@ -27,6 +27,16 @@ export const TITLE_RULE_INLINE_KEYS = [
     'chosenPhotosOnly',
 ];
 
+/**
+ * The inline keys that only decide whether, and when, an un-joined challenge is joined. Once it is
+ * joined they change nothing, so a challenge they alone customize is not marked as customized.
+ */
+const JOIN_ONLY_INLINE_KEYS = ['autoJoin', 'autoJoinWithinHoursOfEnd', 'autoJoinAfterPercentElapsed'];
+
+/** Whether inline rule values include any that still matter after the join (auto-submit, scenario, chosen photos). */
+export const hasPostJoinInlineValue = (inline: Record<string, unknown>): boolean =>
+    Object.keys(inline).some((key) => TITLE_RULE_INLINE_KEYS.includes(key) && !JOIN_ONLY_INLINE_KEYS.includes(key));
+
 /** The inline overrides a rule sets: the allowlisted keys whose value is not the editor's "inherit" (null, undefined, ''). */
 export const ruleInlineEntries = (rule: Record<string, unknown>): Array<[string, unknown]> =>
     TITLE_RULE_INLINE_KEYS.filter((key) => Object.prototype.hasOwnProperty.call(rule, key)).flatMap((key) =>

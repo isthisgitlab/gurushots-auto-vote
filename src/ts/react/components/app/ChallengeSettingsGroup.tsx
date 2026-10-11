@@ -2,6 +2,7 @@ import { useTranslation } from '@/contexts/TranslationContext';
 import { SETTINGS_GRID_CLASS, SETTING_CELL_CLASS } from '@/utils/groupSettings';
 import { getGroupApplicability } from '@/utils/challengeApplicability';
 import { formatSettingDefault } from '@/utils/formatters';
+import { interp } from '@/utils/interp';
 import { getScheduleShift } from '../../../services/scheduleRemap';
 import { SettingHelp } from '@/components/ui/SettingHelp';
 import { SettingInput, SettingLabel } from './SettingInput';
@@ -25,11 +26,25 @@ export interface ChallengeGroupContext {
 }
 
 /**
- * Where a setting's shown value comes from: override, title-rule profile, or the global default.
+ * Where a setting's shown value comes from: override, a rule that sets it directly (named), the
+ * rule's profile, or the global default.
  */
-function ValueSourceBadge({ hasOverride, hasProfileValue }: { hasOverride: boolean; hasProfileValue: boolean }) {
+function ValueSourceBadge({
+    hasOverride,
+    ruleTitle,
+    hasProfileValue,
+}: {
+    hasOverride: boolean;
+    ruleTitle: string | undefined;
+    hasProfileValue: boolean;
+}) {
     const { t } = useTranslation();
     if (hasOverride) return <span className="badge badge-accent badge-sm">{t('app.overridden')}</span>;
+    if (ruleTitle !== undefined) {
+        return (
+            <span className="badge badge-secondary badge-sm">{interp(t('app.fromRule'), { title: ruleTitle })}</span>
+        );
+    }
     if (hasProfileValue) return <span className="badge badge-info badge-sm">{t('app.usingProfile')}</span>;
     return <span className="badge badge-ghost badge-sm">{t('app.usingGlobal')}</span>;
 }
@@ -81,7 +96,11 @@ function ChallengeSettingCell({
             <SettingLabel inputId={inputId} type={config.type}>
                 <span className="font-medium">{t(config.label)}</span>
                 <div className="flex gap-1">
-                    <ValueSourceBadge hasOverride={hasOverride} hasProfileValue={hasProfileValue} />
+                    <ValueSourceBadge
+                        hasOverride={hasOverride}
+                        ruleTitle={form.ruleSourceOf(key)}
+                        hasProfileValue={hasProfileValue}
+                    />
                 </div>
             </SettingLabel>
             <p className="text-xs text-base-content/60 mb-2">{t(config.description)}</p>

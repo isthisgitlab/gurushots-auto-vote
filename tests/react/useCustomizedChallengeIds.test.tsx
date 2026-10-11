@@ -7,6 +7,7 @@ import { act, render, screen, waitFor } from './helpers/test-utils';
 import { fireSettingsChanged } from './helpers/setup';
 import { useCustomizedChallengeIds } from '@/hooks/useCustomizedChallengeIds';
 import { invalid } from '../helpers/invalid';
+import { titleRuleInfo } from './helpers/titleRules';
 
 function Probe({ challenges }: { challenges: Parameters<typeof useCustomizedChallengeIds>[0] }) {
     const ids = useCustomizedChallengeIds(challenges);
@@ -55,9 +56,7 @@ test('an empty list issues no IPC and yields an empty set', async () => {
 
 test('marks an active automatic profile but not a suppressed one', async () => {
     jest.mocked(window.api.getTitleProfile).mockImplementation(async (_title, id) =>
-        id === '2'
-            ? { name: '4 pics', values: {}, suppressed: false }
-            : { name: '4 pics', values: {}, suppressed: true },
+        titleRuleInfo({ profile: { name: '4 pics', values: {} }, suppressed: id !== '2' }),
     );
     render(
         <Probe
@@ -73,11 +72,60 @@ test('marks an active automatic profile but not a suppressed one', async () => {
 });
 
 test('manual overrides and an automatic profile can both apply', async () => {
-    jest.mocked(window.api.getTitleProfile).mockResolvedValue({ name: '4 pics', values: {}, suppressed: false });
+    jest.mocked(window.api.getTitleProfile).mockResolvedValue(
+        titleRuleInfo({ profile: { name: '4 pics', values: {} } }),
+    );
     render(<Probe challenges={[{ id: 1, title: 'Manual' }]} />);
 
     await waitFor(() => expect(screen.getByTestId('ids').textContent).toBe('1:both'));
     expect(window.api.getTitleProfile).toHaveBeenCalledWith('Manual', '1');
+});
+
+test('a challenge whose only customization is a rule value that matters after the join gets the rule marker', async () => {
+    jest.mocked(window.api.getTitleProfile).mockImplementation(async (_title, id) => {
+        if (id === '4') return titleRuleInfo({ inlineValues: { scenario: 'Plan' } });
+        if (id === '5') return titleRuleInfo({ inlineValues: { chosenPhotos: [] } });
+        // Join-only keys change nothing once joined: not a customization.
+        if (id === '6') return titleRuleInfo({ inlineValues: { autoJoin: true, autoJoinWithinHoursOfEnd: 6 } });
+        if (id === '7') return titleRuleInfo({ inlineValues: { autoFill: true } });
+        return titleRuleInfo();
+    });
+    render(
+        <Probe
+            challenges={[
+                { id: 4, title: 'Scenario' },
+                { id: 5, title: 'Photos' },
+                { id: 6, title: 'Join only' },
+                { id: 7, title: 'Auto-submit' },
+                { id: 8, title: 'Nothing' },
+            ]}
+        />,
+    );
+    await waitFor(() => expect(screen.getByTestId('ids').textContent).toBe('4:rule,5:rule,7:rule'));
+});
+
+test('the rule marker never replaces a manual or profile marker, and a suppressed profile with inline values is a rule', async () => {
+    jest.mocked(window.api.getTitleProfile).mockImplementation(async (_title, id) =>
+        id === '1'
+            ? titleRuleInfo({ inlineValues: { scenario: 'Plan' } })
+            : id === '2'
+              ? titleRuleInfo({ profile: { name: 'P', values: {} }, inlineValues: { scenario: 'Plan' } })
+              : titleRuleInfo({
+                    profile: { name: 'P', values: {} },
+                    suppressed: true,
+                    inlineValues: { scenario: 'Plan' },
+                }),
+    );
+    render(
+        <Probe
+            challenges={[
+                { id: 1, title: 'Manual' },
+                { id: 2, title: 'Profiled' },
+                { id: 3, title: 'Suppressed' },
+            ]}
+        />,
+    );
+    await waitFor(() => expect(screen.getByTestId('ids').textContent).toBe('1:manual,2:profile,3:rule'));
 });
 
 const deferred = () => {

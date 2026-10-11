@@ -10,6 +10,7 @@
 import { act, fireEvent, render, screen, waitFor } from './helpers/test-utils';
 import { ChallengeSettingsModal } from '@/components/app/ChallengeSettingsModal';
 import { mockApi } from './helpers/setup';
+import { titleRuleInfo } from './helpers/titleRules';
 import type { useSettingsSchema } from '@/api/useSettingsSchema';
 import type { Challenge } from '../../src/ts/types/gurushots';
 import type { ChallengeValues } from '../../src/ts/types/settings';
@@ -298,7 +299,9 @@ describe('ChallengeSettingsModal group applicability', () => {
     });
 
     test('shows an automatic title profile as the inherited value below manual overrides', async () => {
-        mockApi.getTitleProfile.mockResolvedValue({ name: 'Quick Tactic', values: { boostTime: 17 } });
+        mockApi.getTitleProfile.mockResolvedValue(
+            titleRuleInfo({ profile: { name: 'Quick Tactic', values: { boostTime: 17 } } }),
+        );
         renderWithChallenge(invalid<Challenge>({ member: { boost: { state: 'AVAILABLE' } } }));
 
         await waitFor(() => {
@@ -320,7 +323,9 @@ describe('ChallengeSettingsModal group applicability', () => {
     });
 
     test('manual profile Apply replaces the automatic baseline and saves that mode atomically', async () => {
-        mockApi.getTitleProfile.mockResolvedValue({ name: 'Automatic', values: { boostTime: 17 } });
+        mockApi.getTitleProfile.mockResolvedValue(
+            titleRuleInfo({ profile: { name: 'Automatic', values: { boostTime: 17 } } }),
+        );
         mockApi.getChallengeProfiles.mockResolvedValue({ Reset: {} });
         const onClose = jest.fn();
         render(
@@ -351,7 +356,9 @@ describe('ChallengeSettingsModal group applicability', () => {
     });
 
     test('refreshes inherited values after deleting the assigned profile in the open modal', async () => {
-        mockApi.getTitleProfile.mockResolvedValue({ name: 'Automatic', values: { boostTime: 17 } });
+        mockApi.getTitleProfile.mockResolvedValue(
+            titleRuleInfo({ profile: { name: 'Automatic', values: { boostTime: 17 } } }),
+        );
         mockApi.getChallengeProfiles.mockResolvedValue({ Automatic: { boostTime: 17 } });
         renderWithChallenge(invalid<Challenge>({ member: { boost: { state: 'AVAILABLE' } } }));
         await waitFor(() => {

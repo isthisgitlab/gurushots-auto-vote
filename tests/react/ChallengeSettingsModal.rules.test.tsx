@@ -1,0 +1,220 @@
+/**
+ * The per-challenge settings modal and the values a challenge's rules set directly (a scenario,
+ * auto-join, a chosen photos list): they show as the inherited value with the rule that set them
+ * ("From rule: {title}"), not as the plain default ("None"), whether or not the rule's profile
+ * applies. Saving stores only what the user changed.
+ */
+import { act, fireEvent, render, screen, waitFor } from './helpers/test-utils';
+import { ChallengeSettingsModal } from '@/components/app/ChallengeSettingsModal';
+import { mockApi, mockTranslator } from './helpers/setup';
+import { titleRuleInfo } from './helpers/titleRules';
+import type { useSettingsSchema } from '@/api/useSettingsSchema';
+import { invalid } from '../helpers/invalid';
+
+const field = (type: string, dflt: unknown, label: string) => ({
+    type,
+    default: dflt,
+    perChallenge: true,
+    group: 'autoFill',
+    label,
+    description: 'app.desc',
+});
+
+const mockSchemaState: Partial<ReturnType<typeof useSettingsSchema>> = {
+    schema: invalid({
+        scenario: field('scenario', '', 'app.scenario'),
+        autoJoin: field('boolean', false, 'app.autoJoin'),
+        chosenPhotos: field('photos', [], 'app.chosenPhotos'),
+        boostTime: field('number', 30, 'app.boostTime'),
+    }),
+    defaults: { scenario: '', autoJoin: false, chosenPhotos: [], boostTime: 30 },
+    groups: [{ id: 'autoFill', label: 'app.groupAutoFill', tier: 'core' }],
+    tiers: [{ id: 'core', label: 'app.tierCore' }],
+    profileLimits: null,
+    refetch: jest.fn(),
+    loading: false,
+};
+
+jest.mock('@/api/useSettingsSchema', () => ({
+    useSettingsSchema: () => mockSchemaState,
+}));
+
+const PHOTO = `00000001${'a'.repeat(24)}`;
+
+beforeEach(() => {
+    window.api = invalid(mockApi);
+    mockTranslator.t.mockImplementation((key) => (key === 'app.fromRule' ? 'From rule: {title}' : key));
+    mockApi.getTitleProfile.mockReset().mockResolvedValue(titleRuleInfo());
+    mockApi.getChallengeOverrides.mockReset().mockResolvedValue({});
+    mockApi.getChallengeProfiles.mockReset().mockResolvedValue({});
+    mockApi.getScenarios
+        .mockReset()
+        .mockResolvedValue({ success: true, scenarios: invalid({ Plan: {} }), templates: [] });
+    mockApi.replaceChallengeOverrides.mockReset().mockResolvedValue(true);
+    mockApi.logError.mockReset().mockResolvedValue(invalid(undefined));
+});
+
+afterEach(() => {
+    mockTranslator.t.mockImplementation((key) => key);
+});
+
+const open = async () => {
+    const onClose = jest.fn();
+    render(<ChallengeSettingsModal isOpen onClose={onClose} challengeId="1" challengeTitle="Seaside" />);
+    await screen.findByRole('button', { name: 'app.save' });
+    // The scenario names arrive after the form: wait for the option so the select can show its value.
+    await screen.findByRole('option', { name: 'Plan' });
+    return { onClose };
+};
+
+/** The cell of a setting, found by its label. */
+const cell = (label: string) => screen.getByText(label).closest<HTMLElement>('.rounded-box')!;
+const scenarioSelect = () => document.getElementById('challenge-setting-scenario') as HTMLSelectElement;
+const withRule = () =>
+    titleRuleInfo({
+        inlineValues: { scenario: 'Plan', autoJoin: true, chosenPhotos: [PHOTO] },
+        ruleSources: { scenario: 'Seaside', autoJoin: 'Seaside', chosenPhotos: 'Seaside' },
+    });
+
+test('a scenario, auto-join and chosen photos a rule sets show as inherited, with the rule, not as "None"', async () => {
+    mockApi.getTitleProfile.mockResolvedValue(withRule());
+    await open();
+    expect(scenarioSelect().value).toBe('Plan');
+    expect(cell('app.scenario').textContent).toContain('From rule: Seaside');
+    expect(cell('app.autoJoin').textContent).toContain('From rule: Seaside');
+    expect(document.querySelector<HTMLInputElement>('#challenge-setting-autoJoin')!.checked).toBe(true);
+    expect(cell('app.chosenPhotos').textContent).toContain('From rule: Seaside');
+    // A key no rule sets is still the global default.
+    expect(cell('app.boostTime').textContent).toContain('app.usingGlobal');
+    expect(cell('app.boostTime').textContent).not.toContain('From rule');
+    // The lookup carries the challenge id, so rules keyed on tags or type resolve too.
+    expect(mockApi.getTitleProfile).toHaveBeenCalledWith('Seaside', '1');
+});
+
+test('with several matching rules each key names the rule that set it', async () => {
+    mockApi.getTitleProfile.mockResolvedValue(
+        titleRuleInfo({
+            inlineValues: { scenario: 'Plan', autoJoin: true },
+            ruleSources: { scenario: 'First rule', autoJoin: 'Comm' },
+        }),
+    );
+    await open();
+    expect(cell('app.scenario').textContent).toContain('From rule: First rule');
+    expect(cell('app.autoJoin').textContent).toContain('From rule: Comm');
+});
+
+test('a profile value is "Using profile", an inline value of the same rule is "From rule", and the summary names the profile', async () => {
+    mockApi.getTitleProfile.mockResolvedValue(
+        titleRuleInfo({
+            profile: { name: 'Quad', values: { boostTime: 17 } },
+            inlineValues: { scenario: 'Plan' },
+            ruleSources: { scenario: 'Seaside' },
+        }),
+    );
+    await open();
+    expect(cell('app.boostTime').textContent).toContain('app.usingProfile');
+    expect(cell('app.boostTime').textContent).not.toContain('From rule');
+    expect(cell('app.scenario').textContent).toContain('From rule: Seaside');
+    expect(document.body.textContent).toContain('app.usingProfile: Quad');
+});
+
+test('"Using profile" is not claimed when no rule names a profile, however many values rules set', async () => {
+    mockApi.getTitleProfile.mockResolvedValue(withRule());
+    await open();
+    expect(document.body.textContent).not.toContain('app.usingProfile');
+});
+
+test("with the profile suppressed the rule's own values stay and the profile's go", async () => {
+    mockApi.getTitleProfile.mockResolvedValue(
+        titleRuleInfo({
+            profile: { name: 'Quad', values: { boostTime: 17 } },
+            suppressed: true,
+            inlineValues: { scenario: 'Plan' },
+            ruleSources: { scenario: 'Seaside' },
+        }),
+    );
+    await open();
+    expect(scenarioSelect().value).toBe('Plan');
+    expect(cell('app.scenario').textContent).toContain('From rule: Seaside');
+    expect(cell('app.boostTime').textContent).toContain('app.usingGlobal');
+    expect(document.body.textContent).not.toContain('app.usingProfile');
+});
+
+test('a manual override wins over the rule value and says so', async () => {
+    mockApi.getTitleProfile.mockResolvedValue(withRule());
+    mockApi.getChallengeOverrides.mockResolvedValue({ scenario: '' });
+    await open();
+    expect(scenarioSelect().value).toBe('');
+    expect(cell('app.scenario').textContent).toContain('app.overridden');
+    expect(cell('app.scenario').textContent).not.toContain('From rule');
+});
+
+/** The saved-profiles dropdown (the scenario field is a select too), found by the profile it lists. */
+const profileSelect = (name: string) =>
+    screen
+        .getAllByRole<HTMLSelectElement>('combobox')
+        .find((select) => Array.from(select.options).some((option) => option.value === name))!;
+const choose = async (select: HTMLSelectElement, value: string) =>
+    act(async () => {
+        select.value = value;
+        select.dispatchEvent(new window.Event('change', { bubbles: true }));
+    });
+const quadRule = () =>
+    titleRuleInfo({
+        profile: { name: 'Quad', values: { boostTime: 17 } },
+        inlineValues: { scenario: 'Plan' },
+        ruleSources: { scenario: 'Seaside' },
+    });
+
+test('applying a manual profile keeps the values the rule sets directly, and saves only the suppression', async () => {
+    mockApi.getTitleProfile.mockResolvedValue(quadRule());
+    mockApi.getChallengeProfiles.mockResolvedValue({ Reset: {} });
+    const { onClose } = await open();
+    await waitFor(() => expect(document.body.textContent).toContain('Reset (0)'));
+
+    await choose(profileSelect('Reset'), 'Reset');
+    fireEvent.click(screen.getByRole('button', { name: 'app.applyProfile' }));
+
+    await waitFor(() => expect(cell('app.boostTime').textContent).toContain('app.usingGlobal'));
+    expect(scenarioSelect().value).toBe('Plan');
+    expect(cell('app.scenario').textContent).toContain('From rule: Seaside');
+    expect(document.body.textContent).not.toContain('app.usingProfile');
+    fireEvent.click(screen.getByRole('button', { name: 'app.save' }));
+    await waitFor(() => expect(onClose).toHaveBeenCalled());
+    expect(mockApi.replaceChallengeOverrides).toHaveBeenCalledWith('1', {}, true);
+});
+
+test("deleting the matched profile in the open modal keeps the rule's values", async () => {
+    mockApi.getTitleProfile.mockResolvedValue(quadRule());
+    mockApi.getChallengeProfiles.mockResolvedValue({ Quad: { boostTime: 17 } });
+    await open();
+    await waitFor(() => expect(document.body.textContent).toContain('Quad (1)'));
+    expect(cell('app.boostTime').textContent).toContain('app.usingProfile');
+
+    await choose(profileSelect('Quad'), 'Quad');
+    await act(async () => invalid<void>(fireEvent.click(screen.getByRole('button', { name: 'app.deleteProfile' }))));
+    await act(async () => invalid<void>(fireEvent.click(screen.getByRole('button', { name: 'app.confirmDelete' }))));
+
+    await waitFor(() => expect(cell('app.boostTime').textContent).toContain('app.usingGlobal'));
+    expect(scenarioSelect().value).toBe('Plan');
+    expect(cell('app.scenario').textContent).toContain('From rule: Seaside');
+    expect(document.body.textContent).not.toContain('app.usingProfile');
+});
+
+test('saving with nothing changed stores no override: the rule values are not copied into the challenge', async () => {
+    mockApi.getTitleProfile.mockResolvedValue(withRule());
+    const { onClose } = await open();
+    fireEvent.click(screen.getByRole('button', { name: 'app.save' }));
+    await waitFor(() => expect(onClose).toHaveBeenCalled());
+    expect(mockApi.replaceChallengeOverrides).toHaveBeenCalledWith('1', {}, false);
+});
+
+test('choosing None over a rule-assigned scenario is a real override, and Clear all gives the rule back', async () => {
+    mockApi.getTitleProfile.mockResolvedValue(withRule());
+    await open();
+    await choose(scenarioSelect(), '');
+    expect(cell('app.scenario').textContent).toContain('app.overridden');
+    fireEvent.click(screen.getByRole('button', { name: 'app.clearAll' }));
+    await waitFor(() => expect(scenarioSelect().value).toBe('Plan'));
+    expect(cell('app.scenario').textContent).toContain('From rule: Seaside');
+});

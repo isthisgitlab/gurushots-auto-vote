@@ -403,9 +403,8 @@ describe('settings facade — challenge profiles', () => {
             expect(settings.applyChallengeProfile('Reset', '100')).toBe(true);
             expect(settings.getChallengeOverrides('100')).toEqual({});
             expect(settings.getEffectiveSetting('autoFill', '100')).toBe(false);
-            expect(settings.getTitleProfile('Weekly Theme', '100')).toEqual({
-                name: 'Recurring Tactic',
-                values: { exposure: 80, autoFill: true },
+            expect(settings.getTitleProfile('Weekly Theme', '100')).toMatchObject({
+                profile: { name: 'Recurring Tactic', values: { exposure: 80, autoFill: true } },
                 suppressed: true,
             });
         });
@@ -466,7 +465,7 @@ describe('settings facade — challenge profiles', () => {
             settings.saveSettings(raw);
             logger.withCategory.mockClear();
 
-            expect(settings.getTitleProfile('Weekly Theme')).toBeNull();
+            expect(settings.getTitleProfile('Weekly Theme').profile).toBeNull();
             expect(settings.getEffectiveSetting('autoFill', '100')).toBe(false);
             expect(settings.getEffectiveSetting('exposure', '100')).toBe(100);
             expect(logger.withCategory).not.toHaveBeenCalled();
@@ -478,7 +477,7 @@ describe('settings facade — challenge profiles', () => {
             settings.setTitleRules([{ title: prefix, profile: 'Long', mustIncludeTags: [], shouldIncludeTags: [] }]);
             settings.rememberChallengeTitles([{ id: 100, title: `${prefix}-different-suffix` }]);
 
-            expect(settings.getTitleProfile(`${prefix}-different-suffix`)).toBeNull();
+            expect(settings.getTitleProfile(`${prefix}-different-suffix`).profile).toBeNull();
             expect(settings.getEffectiveSetting('autoFill', '100')).toBe(false);
         });
     });

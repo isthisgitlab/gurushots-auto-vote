@@ -726,6 +726,8 @@ export const app = {
     noTitleTagRules:
         'Vēl nav noteikumu. Pievieno kādu, lai atlasītu izaicinājumus pēc nosaukuma, taga, veida, foto skaita, ilguma vai beigu laika.',
     usingProfile: 'Izmanto profilu',
+    fromRule: 'No noteikuma: {title}',
+    ruleSettingsHint: 'Uzstādījumus nosaka izaicinājumu noteikums',
     none: '(nav)',
     addOnePhoto: 'Iesniegt vienu foto tukšā vietā',
     fillAllPhotos: 'Iesniegt foto visās tukšajās vietās tagad (bez intervāla)',

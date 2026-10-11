@@ -74,6 +74,23 @@ export interface RuleMatchChallenge {
     close_time?: unknown;
 }
 
+/**
+ * What a challenge's matching rules contribute, as the renderer reads it (`get-title-profile`):
+ * the one profile they apply, whether this challenge suppresses it, the sparse value map with and
+ * without the profile layer, and — per inline key — the title or label of the rule that set it.
+ */
+export interface TitleRuleInfo {
+    profile: { name: string; values: ChallengeValues } | null;
+    /** A manually applied profile stands in for the rule's profile. */
+    suppressed: boolean;
+    /** Every matching rule's inline values and the applied profile's, first match winning. */
+    ruleValues: ChallengeValues;
+    /** The inline values alone (what still applies with the profile suppressed). */
+    inlineValues: ChallengeValues;
+    /** Inline key -> the rule that set it. */
+    ruleSources: Record<string, string>;
+}
+
 /** The bounded match facts remembered for one active challenge. */
 export interface ChallengeFacts {
     tags: string[];

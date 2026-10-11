@@ -720,6 +720,8 @@ export const app = {
     noTitleTagRules:
         'No rules yet. Add one to match challenges by title, tag, type, photo count, length or close time.',
     usingProfile: 'Using profile',
+    fromRule: 'From rule: {title}',
+    ruleSettingsHint: 'Set by a challenge rule',
     none: '(none)',
     addOnePhoto: 'Submit one photo to an empty slot',
     fillAllPhotos: 'Submit photos to all empty slots now (no spacing)',

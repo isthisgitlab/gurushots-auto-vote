@@ -1,14 +1,17 @@
 import { useCallback, useMemo } from 'react';
 import { useIpcQuery } from '@/api/useIpcQuery';
 import * as ipc from '@/api/ipc';
+import { hasPostJoinInlineValue } from '../../settings/ruleBehaviour';
 
 // Stable empty result so consumers never see a changing identity while the
 // first fetch is in flight (or after a failed one).
-export type CustomizationKind = 'manual' | 'profile' | 'both';
+export type CustomizationKind = 'manual' | 'profile' | 'both' | 'rule';
 const NONE: Map<string, CustomizationKind> = new Map();
 
 /**
- * Ids of challenges with manual overrides or an unsuppressed automatic profile,
+ * Ids of challenges with manual overrides, an unsuppressed automatic profile, or
+ * — on their own — values a rule sets directly that still matter after the join
+ * (`'rule'`: auto-submit, scenario, chosen photos; the join-only keys don't count),
  * with their source so ChallengeNav can mark each kind distinctly.
  *
  * Reads both sources because a challenge can have manual overrides and an
@@ -44,10 +47,12 @@ export function useCustomizedChallengeIds(
         const kinds: Array<CustomizationKind | null> = await Promise.all(
             entries.map(async ([id, title]) => {
                 const overrides = await ipc.getChallengeOverrides(id);
-                const profile = await ipc.getTitleProfile(title, id);
+                const rules = await ipc.getTitleProfile(title, id);
                 const manual = overrides && Object.keys(overrides).length > 0;
-                const automatic = profile != null && !profile.suppressed;
-                return manual ? (automatic ? 'both' : 'manual') : automatic ? 'profile' : null;
+                const automatic = rules?.profile != null && !rules.suppressed;
+                if (manual) return automatic ? 'both' : 'manual';
+                if (automatic) return 'profile';
+                return rules && hasPostJoinInlineValue(rules.inlineValues) ? 'rule' : null;
             }),
         );
         const customized: Map<string, CustomizationKind> = new Map();

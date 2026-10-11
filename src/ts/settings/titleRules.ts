@@ -13,14 +13,13 @@ import { factsForChallengeId } from './challengeFacts';
 import { MAX_TITLE_RULES, sanitizeTitleRule, titleRuleKey, ruleLogLabel } from './titleRuleSanitize';
 import {
     ruleTimeZone,
-    profileFromMatches,
     ruleValuesFor,
     isTitleProfileSuppressed,
     titleProfileComposesWithKnownOverrides,
 } from './ruleResolution';
 import { getEffectiveSetting } from './challengeOverrides';
 
-import type { ChallengeValues, RuleMatchChallenge, SettingValueOf, TitleRule } from '../types/settings';
+import type { ChallengeValues, RuleMatchChallenge, SettingValueOf, TitleRule, TitleRuleInfo } from '../types/settings';
 import type { RuleLike } from './challengeRules';
 
 /**
@@ -156,17 +155,21 @@ const setTitleRules = (rules: unknown): boolean => {
 };
 
 /**
- * Public read model for the renderer: returns the sanitized profile inherited
- * by a challenge, or null when nothing matches.
+ * Public read model for the renderer: what the rules matching a challenge
+ * contribute (see TitleRuleInfo): the profile they apply, the challenge's
+ * suppression of it, and the value maps with and without the profile layer.
+ * Rules that match nothing give empty layers and no profile.
  *
  * Accepts a challenge object or a bare title. With only a title, a rule keyed
  * on tag / type / photo count / runtime can still resolve when `challengeId` is
  * given, because those facts come from the remembered active-challenge list.
+ * Everything is read against that fact-enriched challenge, the one the rules
+ * are matched on, never against the bare title.
  */
 const getTitleProfile = (
     target: RuleMatchChallenge | string,
     challengeId: string | number | null = null,
-): { name: string; values: ChallengeValues; suppressed?: boolean } | null => {
+): TitleRuleInfo => {
     const settings = loadSettings();
     const challenge: Record<string, unknown> = typeof target === 'string' ? { title: target } : { ...target };
     const hasId = challengeId !== null && challengeId !== undefined;
@@ -176,13 +179,15 @@ const getTitleProfile = (
             if (challenge[key] === undefined) challenge[key] = value;
         }
     }
-    const matched = profileFromMatches(
-        settings,
-        matchingRules(settings.challengeSettings?.titleRules, challenge, ruleTimeZone(settings)),
-    );
-    if (!matched) return null;
-    const profile = { name: matched.name, values: matched.values };
-    return hasId ? { ...profile, suppressed: isTitleProfileSuppressed(settings, challengeId) } : profile;
+    const { values: ruleValues, profile } = ruleValuesFor(settings, challenge);
+    const { values: inlineValues, sources: ruleSources } = ruleValuesFor(settings, challenge, true);
+    return {
+        profile: profile ? { name: profile.name, values: profile.values } : null,
+        suppressed: hasId && isTitleProfileSuppressed(settings, challengeId),
+        ruleValues,
+        inlineValues,
+        ruleSources,
+    };
 };
 
 /**

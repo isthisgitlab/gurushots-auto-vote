@@ -7,6 +7,7 @@
 import { act, fireEvent, render, screen, waitFor } from './helpers/test-utils';
 import { ChallengeSettingsModal } from '@/components/app/ChallengeSettingsModal';
 import { mockApi, mockTranslator } from './helpers/setup';
+import { titleRuleInfo } from './helpers/titleRules';
 import type { useSettingsSchema } from '@/api/useSettingsSchema';
 import type { Challenge } from '../../src/ts/types/gurushots';
 import type { RendererSettings } from '../../src/ts/types/settings';
@@ -264,7 +265,9 @@ describe('editing and saving', () => {
     });
 
     test('Clear All re-enables an automatic title profile', async () => {
-        mockApi.getTitleProfile.mockResolvedValue({ name: 'Auto', values: { boostTime: 17 }, suppressed: true });
+        mockApi.getTitleProfile.mockResolvedValue(
+            titleRuleInfo({ profile: { name: 'Auto', values: { boostTime: 17 } }, suppressed: true }),
+        );
         mockApi.getChallengeOverrides.mockResolvedValue({ boostTime: 5 });
         renderModal();
         await loaded();
@@ -286,7 +289,9 @@ describe('profiles bar interplay', () => {
     };
 
     test('saving the assigned title profile refreshes the inherited values', async () => {
-        mockApi.getTitleProfile.mockResolvedValue({ name: 'Auto', values: { boostTime: 17 } });
+        mockApi.getTitleProfile.mockResolvedValue(
+            titleRuleInfo({ profile: { name: 'Auto', values: { boostTime: 17 } } }),
+        );
         mockApi.getChallengeOverrides.mockResolvedValue({ boostTime: 8 });
         renderModal();
         await loaded();
@@ -313,7 +318,9 @@ describe('profiles bar interplay', () => {
     });
 
     test('deleting the assigned profile after a manual Apply keeps it suppressed', async () => {
-        mockApi.getTitleProfile.mockResolvedValue({ name: 'Auto', values: { boostTime: 17 } });
+        mockApi.getTitleProfile.mockResolvedValue(
+            titleRuleInfo({ profile: { name: 'Auto', values: { boostTime: 17 } } }),
+        );
         mockApi.getChallengeProfiles.mockResolvedValue({ Auto: { boostTime: 17 }, Manual: { boostTime: 3 } });
         renderModal();
         await loaded();

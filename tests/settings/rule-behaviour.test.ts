@@ -3,7 +3,12 @@
  * settings layer and the renderer's rule editor share.
  */
 
-import { ruleHasBehaviour, ruleInlineEntries, TITLE_RULE_INLINE_KEYS } from '../../src/ts/settings/ruleBehaviour';
+import {
+    hasPostJoinInlineValue,
+    ruleHasBehaviour,
+    ruleInlineEntries,
+    TITLE_RULE_INLINE_KEYS,
+} from '../../src/ts/settings/ruleBehaviour';
 import { sanitizeTitleRuleInline } from '../../src/ts/settings/titleRuleSanitize';
 
 describe('ruleInlineEntries', () => {
@@ -72,5 +77,26 @@ describe('ruleHasBehaviour', () => {
         expect(ruleHasBehaviour({ ...rule, chosenPhotos: ['ok'] }, valid)).toBe(true);
         // Tags and a profile do not depend on the inline values.
         expect(ruleHasBehaviour({ ...rule, profile: 'Mine' }, valid)).toBe(true);
+    });
+});
+
+describe('hasPostJoinInlineValue', () => {
+    test.each([
+        ['auto-submit', { autoFill: true }],
+        ['a scenario', { scenario: 'Plan' }],
+        ['a chosen photos list, even an empty one', { chosenPhotos: [] }],
+        ['the chosen-photos-only flag', { chosenPhotosOnly: true }],
+        ['a join-only key beside one that matters', { autoJoin: true, scenario: 'Plan' }],
+    ])('%s matters after the join', (_name, inline) => {
+        expect(hasPostJoinInlineValue(inline)).toBe(true);
+    });
+
+    test.each([
+        ['nothing', {}],
+        ['auto-join', { autoJoin: true }],
+        ['the join timing', { autoJoinWithinHoursOfEnd: 6, autoJoinAfterPercentElapsed: 50 }],
+        ['a key that is no rule inline key', { exposure: 70 }],
+    ])('%s does not', (_name, inline) => {
+        expect(hasPostJoinInlineValue(inline)).toBe(false);
     });
 });

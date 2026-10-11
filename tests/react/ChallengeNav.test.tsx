@@ -11,6 +11,7 @@
 
 import { render, screen, fireEvent, waitFor, act } from './helpers/test-utils';
 import { fireSettingsChanged } from './helpers/setup';
+import { titleRuleInfo } from './helpers/titleRules';
 import { ChallengeNav } from '@/components/app/ChallengeNav';
 import type { Challenge } from '../../src/ts/types/gurushots';
 import { invalid } from '../helpers/invalid';
@@ -86,9 +87,9 @@ describe('ChallengeNav', () => {
         );
         jest.mocked(window.api.getTitleProfile).mockImplementation(async (_title, id) =>
             id === '2' || id === '4'
-                ? { name: '4 pics', values: { exposureTarget: 90 }, suppressed: false }
+                ? titleRuleInfo({ profile: { name: '4 pics', values: { exposureTarget: 90 } } })
                 : id === '3'
-                  ? { name: '4 pics', values: {}, suppressed: true }
+                  ? titleRuleInfo({ profile: { name: '4 pics', values: {} }, suppressed: true })
                   : null,
         );
 
@@ -119,6 +120,27 @@ describe('ChallengeNav', () => {
         expect(mixed.querySelector('.truncate')!.getAttribute('title')).toContain(
             'app.customSettingsHint · app.titleRuleProfile',
         );
+    });
+
+    test('marks a challenge a rule customizes on its own with its own marker and text, not the profile one', async () => {
+        jest.mocked(window.api.getTitleProfile).mockImplementation(async (_title, id) =>
+            id === '8'
+                ? titleRuleInfo({ inlineValues: { scenario: 'Plan' }, ruleSources: { scenario: 'Seaside' } })
+                : // Join-only values change nothing once joined.
+                  titleRuleInfo({ inlineValues: { autoJoin: true } }),
+        );
+        render(<ChallengeNav challenges={[challenge(8, 'Ruled'), challenge(9, 'Join only')]} />);
+
+        const ruled = screen.getByRole('button', { name: /Ruled/ });
+        const joinOnly = screen.getByRole('button', { name: /Join only/ });
+        await waitFor(() => expect(ruled.className).toMatch(/btn-secondary/));
+        expect(ruled.textContent).toMatch(/📏/);
+        expect(ruled.className).not.toMatch(/btn-info|btn-accent/);
+        expect(ruled.querySelector('.truncate')!.getAttribute('title')).toContain('app.ruleSettingsHint');
+        expect(ruled.textContent).toContain('app.ruleSettingsHint');
+        expect(ruled.textContent).not.toContain('app.titleRuleProfile');
+        expect(joinOnly.className).not.toMatch(/btn-secondary/);
+        expect(joinOnly.textContent).not.toMatch(/📏/);
     });
 
     test('marks nothing when a per-challenge override read fails', async () => {
@@ -157,7 +179,9 @@ describe('ChallengeNav', () => {
         await waitFor(() => expect(window.api.getTitleProfile).toHaveBeenCalledWith('Later Profile', '6'));
         expect(chip.className).not.toMatch(/btn-accent/);
 
-        jest.mocked(window.api.getTitleProfile).mockResolvedValue({ name: '4 pics', values: {}, suppressed: false });
+        jest.mocked(window.api.getTitleProfile).mockResolvedValue(
+            titleRuleInfo({ profile: { name: '4 pics', values: {} } }),
+        );
         await act(async () => {
             fireSettingsChanged();
         });

@@ -43,10 +43,10 @@ function useAppSettings(isOpen: boolean) {
  */
 function OverridesSummary({
     overrideCount,
-    titleProfile,
+    titleRules,
 }: {
     overrideCount: number;
-    titleProfile: ReturnType<typeof useChallengeOverrides>['titleProfile'];
+    titleRules: ReturnType<typeof useChallengeOverrides>['titleRules'];
 }) {
     const { t } = useTranslation();
     return (
@@ -60,10 +60,10 @@ function OverridesSummary({
                     '{0}',
                     String(overrideCount),
                 )}
-                {titleProfile && !titleProfile.suppressed && (
+                {titleRules?.profile && !titleRules.suppressed && (
                     <>
                         {' · '}
-                        {t('app.usingProfile')}: {titleProfile.name}
+                        {t('app.usingProfile')}: {titleRules.profile.name}
                     </>
                 )}
             </p>
@@ -137,10 +137,7 @@ export function ChallengeSettingsModal({
                             <span>{t('app.settingsSaveError')}</span>
                         </div>
                     )}
-                    <OverridesSummary
-                        overrideCount={Object.keys(form.overrides).length}
-                        titleProfile={form.titleProfile}
-                    />
+                    <OverridesSummary overrideCount={Object.keys(form.overrides).length} titleRules={form.titleRules} />
 
                     {/* Named profiles: apply loads a saved tactic into the form
                         state below; the Save button persists it. */}

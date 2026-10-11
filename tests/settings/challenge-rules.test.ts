@@ -362,7 +362,7 @@ describe('settings facade — class conditions and the rule cascade', () => {
             expect(settings.resolveRuleSetting('exposure', day)).toEqual({ value: 70 });
             // Long's other keys do not leak in beside Quad's.
             expect(settings.resolveRuleSetting('boostTime', day)).toBeNull();
-            expect(settings.getTitleProfile(day)).toEqual({ name: 'Quad', values: { exposure: 70 } });
+            expect(settings.getTitleProfile(day).profile).toEqual({ name: 'Quad', values: { exposure: 70 } });
             // A week-long 4-photo challenge misses the first rule and gets Long.
             expect(settings.resolveRuleSetting('exposure', challenge({ hours: 168 }))).toEqual({ value: 40 });
         });
@@ -385,7 +385,7 @@ describe('settings facade — class conditions and the rule cascade', () => {
 
         test('a hand-edited reserved profile name on a rule resolves to no profile', () => {
             seed(base({ titleRules: [withTags({ title: 'Seaside', profile: '__proto__' })] }));
-            expect(settings.getTitleProfile(challenge())).toBeNull();
+            expect(settings.getTitleProfile(challenge()).profile).toBeNull();
             expect(settings.resolveRuleSetting('exposure', challenge())).toBeNull();
         });
 
@@ -401,6 +401,123 @@ describe('settings facade — class conditions and the rule cascade', () => {
             );
             expect(settings.getEffectiveTagSetting('mustIncludeTags', challenge())).toEqual(['quad']);
             expect(settings.getEffectiveTagSetting('shouldIncludeTags', challenge())).toEqual(['sea']);
+        });
+    });
+
+    describe('getTitleProfile — what the matching rules contribute', () => {
+        test('a rule-assigned scenario, auto-join and chosen photos are inline values with the rule that set them', () => {
+            seed(
+                base({
+                    titleRules: [
+                        withTags({ title: 'Seaside', scenario: 'Plan', autoJoin: true, chosenPhotos: ['p1', 'p2'] }),
+                    ],
+                }),
+            );
+            expect(settings.getTitleProfile('Seaside')).toEqual({
+                profile: null,
+                suppressed: false,
+                ruleValues: { scenario: 'Plan', autoJoin: true, chosenPhotos: ['p1', 'p2'] },
+                inlineValues: { scenario: 'Plan', autoJoin: true, chosenPhotos: ['p1', 'p2'] },
+                ruleSources: { scenario: 'Seaside', autoJoin: 'Seaside', chosenPhotos: 'Seaside' },
+            });
+        });
+
+        test('nothing matching gives empty layers and no profile', () => {
+            seed(base({ titleRules: [withTags({ title: 'Other', scenario: 'Plan' })] }));
+            expect(settings.getTitleProfile('Seaside')).toEqual({
+                profile: null,
+                suppressed: false,
+                ruleValues: {},
+                inlineValues: {},
+                ruleSources: {},
+            });
+        });
+
+        test('a rule matched only by tags or by type is read through the remembered facts, by id', () => {
+            seed(
+                base({
+                    titleRules: [
+                        withTags({ title: '', challengeTag: 'Exhibition', scenario: 'ByTag' }),
+                        withTags({ title: '', type: 'flash', autoFill: true }),
+                    ],
+                }),
+            );
+            settings.rememberChallengeTitles([
+                { id: 1, title: 'Whatever', tags: ['Exhibition'], type: 'default' },
+                { id: 2, title: 'Whatever', tags: [], type: 'flash' },
+            ]);
+            // The bare title matches neither rule: only the fact-enriched challenge does.
+            expect(settings.getTitleProfile('Whatever').inlineValues).toEqual({});
+            expect(settings.getTitleProfile('Whatever', 1)).toMatchObject({
+                inlineValues: { scenario: 'ByTag' },
+                ruleSources: { scenario: 'Exhibition' },
+            });
+            expect(settings.getTitleProfile('Whatever', 2)).toMatchObject({
+                inlineValues: { autoFill: true },
+                ruleSources: { autoFill: 'flash' },
+            });
+        });
+
+        test('with several matching rules the first wins per key, and each key names the rule that set it', () => {
+            seed(
+                base({
+                    titleRules: [
+                        withTags({ title: 'Seaside', scenario: 'First' }),
+                        withTags({ title: 'Sea', match: 'contains', scenario: 'Second', autoJoin: true }),
+                    ],
+                }),
+            );
+            const info = settings.getTitleProfile('Seaside');
+            expect(info.inlineValues).toEqual({ scenario: 'First', autoJoin: true });
+            expect(info.ruleSources).toEqual({ scenario: 'Seaside', autoJoin: 'Sea' });
+        });
+
+        test("the rule's profile and inline values are separate layers, inline winning in the combined one", () => {
+            seed(
+                base({
+                    profiles: { Quad: { exposure: 70, autoFill: false } },
+                    titleRules: [withTags({ title: 'Seaside', profile: 'Quad', autoFill: true, scenario: 'Plan' })],
+                }),
+            );
+            expect(settings.getTitleProfile('Seaside')).toEqual({
+                profile: { name: 'Quad', values: { exposure: 70, autoFill: false } },
+                suppressed: false,
+                ruleValues: { autoFill: true, scenario: 'Plan', exposure: 70 },
+                inlineValues: { autoFill: true, scenario: 'Plan' },
+                ruleSources: { autoFill: 'Seaside', scenario: 'Seaside' },
+            });
+        });
+
+        test('with the profile suppressed the inline values still apply and the profile still shows, flagged', () => {
+            seed(
+                base({
+                    profiles: { Quad: { exposure: 70 } },
+                    titleRules: [withTags({ title: 'Seaside', profile: 'Quad', scenario: 'Plan' })],
+                    titleProfileSuppressions: { '7': true },
+                }),
+            );
+            settings.rememberChallengeTitles([{ id: 7, title: 'Seaside' }]);
+            expect(settings.getTitleProfile('Seaside', 7)).toMatchObject({
+                profile: { name: 'Quad' },
+                suppressed: true,
+                inlineValues: { scenario: 'Plan' },
+                ruleSources: { scenario: 'Seaside' },
+            });
+        });
+
+        test('an untitled rule is named by its tag or type, and a hand-edited invalid inline value contributes nothing', () => {
+            seed(
+                base({
+                    titleRules: [
+                        withTags({ title: '', challengeTag: 'Comm', autoFill: true }),
+                        withTags({ title: 'Seaside', autoJoin: 'not a boolean' }),
+                    ],
+                }),
+            );
+            settings.rememberChallengeTitles([{ id: 3, title: 'Seaside', tags: ['Comm'] }]);
+            const info = settings.getTitleProfile('Seaside', 3);
+            expect(info.inlineValues).toEqual({ autoFill: true });
+            expect(info.ruleSources).toEqual({ autoFill: 'Comm' });
         });
     });
 
@@ -420,13 +537,12 @@ describe('settings facade — class conditions and the rule cascade', () => {
             expect(settings.getEffectiveSetting('exposure', '7')).toBe(70);
             expect(settings.getEffectiveSetting('autoFill', '7')).toBe(true);
             expect(settings.getEffectiveSetting('autoFill', '8')).toBe(false);
-            expect(settings.getTitleProfile('Seaside', 7)).toEqual({
-                name: 'Quad',
-                values: { exposure: 70 },
+            expect(settings.getTitleProfile('Seaside', 7)).toMatchObject({
+                profile: { name: 'Quad', values: { exposure: 70 } },
                 suppressed: false,
             });
             // An explicit payload field beats the remembered fact.
-            expect(settings.getTitleProfile({ title: 'Seaside', max_photo_submits: 2 }, 7)).toBeNull();
+            expect(settings.getTitleProfile({ title: 'Seaside', max_photo_submits: 2 }, 7).profile).toBeNull();
         });
 
         test('an unknown id resolves nothing and a non-numeric or over-long fact is dropped', () => {
