@@ -216,7 +216,7 @@ jobs:
                   echo "NEW_VERSION=$NEW_VERSION" >> "$GITHUB_OUTPUT"
 
             - name: Upload bumped package.json
-              uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
+              uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
               with:
                   name: bumped-package
                   path: package.json
@@ -322,7 +322,7 @@ jobs:
             # No `cache:` here — the composite already restored the pnpm cache earlier in this job.
             - name: Setup Node.js 26 for CLI builds
               if: matrix.platform != 'win'
-              uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7
+              uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7
               with:
                   node-version: '26'
 
@@ -357,7 +357,7 @@ jobs:
               run: pnpm size:cli
 
             - name: Upload build artifacts
-              uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
+              uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
               with:
                   name: ${{ needs.version-bump.outputs.is-beta == 'true' && 'develop-' || '' }}${{ matrix.platform }}${{ matrix.variant == 'lite' && '-lite' || '' }}-builds
                   path: |
@@ -392,7 +392,7 @@ jobs:
 
             # No `cache:` — the composite already restored the pnpm cache for this job.
             - name: Setup Node.js 26 for CLI build
-              uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7
+              uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7
               with:
                   node-version: '26'
 
@@ -427,7 +427,7 @@ jobs:
               run: pnpm size:cli
 
             - name: Upload Linux ARM CLI artifact
-              uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
+              uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
               with:
                   name: ${{ needs.version-bump.outputs.is-beta == 'true' && 'develop-linux-arm-builds' || 'linux-arm-builds' }}
                   path: build/cli/gurucli-v*-linux-arm*
@@ -503,7 +503,7 @@ jobs:
                   done
 
             - name: Upload Android artifact
-              uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
+              uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
               with:
                   name: ${{ needs.version-bump.outputs.is-beta == 'true' && 'develop-android-builds' || 'android-builds' }}
                   path: build/GuruShotsAutoVote-v*.apk
@@ -526,7 +526,7 @@ jobs:
 
         steps:
             - name: Download all build artifacts
-              uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+              uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
               with:
                   path: artifacts
 
@@ -598,7 +598,7 @@ jobs:
                   echo "RELEASE_NAME=v$VERSION" >> "$GITHUB_OUTPUT"
 
             - name: Download all build artifacts
-              uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+              uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
               with:
                   path: artifacts
 
