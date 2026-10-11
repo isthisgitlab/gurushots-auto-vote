@@ -60,10 +60,26 @@ const tileReason = ({
  * knows — whether the challenge accepts it, with the reason as text.
  * Server strings (tags, reason) are React text children only.
  */
+/** A tile's name, with "Number 3 in your list." added after it when it is a selected one. */
+const withPosition = (label: string, t: (key: string) => string, position: number | null): string => {
+    if (position === null) return label;
+    return `${label.replace(/[.!?]*$/, '.')} ${interp(t('app.photoChooserPosition'), { n: position })}`;
+};
+
+/** The visible number on a selected tile: the order the photos are saved in (named in the tile's label too). */
+function PositionBadge({ position }: { position: number | null }) {
+    return position === null ? null : (
+        <span aria-hidden="true" className="badge badge-primary badge-sm self-start">
+            {position}
+        </span>
+    );
+}
+
 function PhotoTile({
     photo,
     memberId,
     selected,
+    position,
     blockedReason,
     atCap,
     allowedKnown,
@@ -73,6 +89,8 @@ function PhotoTile({
     photo: LibraryPhoto;
     memberId: string | null;
     selected: boolean;
+    /** Where the photo stands in the list (1-based), for a selected tile; null otherwise. */
+    position: number | null;
     blockedReason: string | null;
     atCap: boolean;
     allowedKnown: boolean;
@@ -97,17 +115,18 @@ function PhotoTile({
         <button
             type="button"
             aria-pressed={selected}
-            aria-label={interp(t('app.photoChooserTileLabel'), {
-                id: shortId(photo.id),
-                labels,
-                reason: reason ?? '',
-            })}
+            aria-label={withPosition(
+                interp(t('app.photoChooserTileLabel'), { id: shortId(photo.id), labels, reason: reason ?? '' }).trim(),
+                t,
+                position,
+            )}
             aria-disabled={unavailable}
             className={`${TILE_BASE} ${tone}`}
             onClick={() => {
                 if (!unavailable) onToggle(photo.id);
             }}
         >
+            <PositionBadge position={position} />
             {showImage ? (
                 <img
                     src={url as string}
@@ -156,12 +175,14 @@ const missingKey = (hasChallenge: boolean, truncated: boolean): string =>
  */
 function MissingTile({
     id,
+    position,
     count,
     hasChallenge,
     truncated,
     onToggle,
 }: {
     id: string;
+    position: number;
     count: number;
     hasChallenge: boolean;
     truncated: boolean;
@@ -173,10 +194,15 @@ function MissingTile({
         <button
             type="button"
             aria-pressed
-            aria-label={interp(t('app.photoChooserMissingTileLabel'), { id: shortId(id), reason: text })}
+            aria-label={withPosition(
+                interp(t('app.photoChooserMissingTileLabel'), { id: shortId(id), reason: text }),
+                t,
+                position,
+            )}
             className={`${TILE_BASE} border-warning bg-warning/10`}
             onClick={() => onToggle(id)}
         >
+            <PositionBadge position={position} />
             <span className="text-xs font-medium">{shortId(id)}</span>
             <span className="text-xs">{text}</span>
         </button>
@@ -231,14 +257,16 @@ function PhotoGrid({
     const { listing } = state;
     const chosen = new Set(selected);
     const atCap = selected.length >= MAX_CHOSEN_PHOTOS;
+    let position = 0;
     const blockedReasonOf = (photo: LibraryPhoto): string | null =>
         listing.allowedKnown && !photo.allowed ? photo.message || t('app.photoChooserNotEligible') : null;
-    const tile = (photo: LibraryPhoto) => (
+    const tile = (photo: LibraryPhoto, position: number | null) => (
         <PhotoTile
             key={photo.id}
             photo={photo}
             memberId={listing.memberId}
             selected={chosen.has(photo.id)}
+            position={position}
             blockedReason={blockedReasonOf(photo)}
             atCap={atCap}
             allowedKnown={listing.allowedKnown}
@@ -260,13 +288,15 @@ function PhotoGrid({
                 <p className="text-base-content/60 text-sm">{t('app.photoChooserEmpty')}</p>
             )}
             <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 md:grid-cols-4">
+                {/* Numbered 1, 2, 3… as shown: a photo left out (another account's) leaves no gap. */}
                 {selected.map((id) => {
                     const photo = known.get(id);
-                    if (photo) return tile(photo);
+                    if (photo) return tile(photo, ++position);
                     return hideUnlisted ? null : (
                         <MissingTile
                             key={id}
                             id={id}
+                            position={++position}
                             count={listing.photos.length}
                             hasChallenge={listing.allowedKnown}
                             truncated={listing.truncated}
@@ -274,7 +304,7 @@ function PhotoGrid({
                         />
                     );
                 })}
-                {listing.photos.filter((photo) => !chosen.has(photo.id)).map(tile)}
+                {listing.photos.filter((photo) => !chosen.has(photo.id)).map((photo) => tile(photo, null))}
             </div>
         </>
     );

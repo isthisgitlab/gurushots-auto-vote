@@ -231,6 +231,14 @@ describe('TitleTagRulesEditor', () => {
                 expect(onChange).toHaveBeenCalledWith([expect.objectContaining({ chosenPhotosOnly: true })]);
             });
 
+            test('the pick-order flag is a three-way select too, with no reach warning', () => {
+                const onChange = jest.fn();
+                render(<TitleTagRulesEditor value={rowWith()} onChange={onChange} />);
+                expect(screen.getByLabelText<HTMLSelectElement>('app.chosenPhotosInOrder').value).toBe('');
+                pick('app.chosenPhotosInOrder', 'on');
+                expect(onChange).toHaveBeenCalledWith([expect.objectContaining({ chosenPhotosInOrder: true })]);
+            });
+
             test('Submit Only on a rule warns that it reaches every matching challenge', () => {
                 const { rerender } = render(
                     <TitleTagRulesEditor value={rowWith({ chosenPhotosOnly: true })} onChange={jest.fn()} />,

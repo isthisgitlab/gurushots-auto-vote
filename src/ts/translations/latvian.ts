@@ -567,6 +567,9 @@ export const app = {
     chosenPhotos: 'Izvēlētie foto',
     chosenPhotosDesc:
         'Foto, ko automātiskā pievienošanās un automātiskā iesniegšana mēģina izmantot pirmos. Tiem joprojām jāatbilst taviem tagu uzstādījumiem (ja vien nav ieslēgts „Iesniegt arī bez tagu sakritības” un neviens foto tiem neatbilst), un lietotne tos kārto tāpat, kā kārto savas automātiskās izvēles. Foto var būt tikai vienā izaicinājumā, tāpēc ar kopīgu sarakstu to paņem izaicinājums, kas tiek aizpildīts pirmais. Saraksts pieder kontam, kas to saglabāja, un citā kontā tiek ignorēts; ja citā kontā saglabā sarakstu, pirmajā kontā saglabātie saraksti sāk attiekties arī uz to, ja vien tos iepriekš neizņem. Scenārija saraksts tiek izmantots tikai pēc pievienošanās. Apmaiņa sarakstu neņem vērā.',
+    chosenPhotosInOrder: 'Izmantot izvēlētos foto tādā secībā, kādā tos izvēlējos',
+    chosenPhotosInOrderDesc:
+        'Kad ir uzstādīti izvēlētie foto, iesniedz tos tādā secībā, kādā tos izvēlējies (numuri izvēles logā), nevis kārto tā, kā lietotne kārto savas automātiskās izvēles. Foto, kas neiztur tavus obligātos tagus, jau ir iesniegts vai šim izaicinājumam nav pieejams, izlaiž un izmanto nākamo sarakstā; atlikušās vietas aizpilda pēc kārtojuma kā parasti. Pēc noklusējuma izslēgts.',
     chosenPhotosOnly: 'Iesniegt tikai izvēlētos foto',
     chosenPhotosOnlyDesc:
         'Kad ir uzstādīti izvēlētie foto, automātiskā pievienošanās un iesniegšana pašas foto neizvēlas: izaicinājums, kuram nav neviena derīga izvēlētā foto, tiek izlaists. Manuālā pievienošanās un manuālās pogas +1/+N tik un tā izvēlas automātiski, ārkārtas iesniegšana šo uzstādījumu neņem vērā (izslēdz to izaicinājumam, lai vieta paliktu tukša), un maksas pievienošanās, kas jau atbloķēta, tik un tā iesniedz automātiski izvēlētu foto, lai monētas neaizietu zudumā. Apmaiņa neņem vērā nevienu no abiem uzstādījumiem. Ja ir ieslēgts „Iesniegt arī bez tagu sakritības” (pēc noklusējuma tā ir), tagu pārbaude izvēlētajiem foto netiek stingri piemērota: ja neviens no tiem neatbilst taviem obligātajiem tagiem, tos tik un tā var iesniegt. Ja saraksts ir tukšs, tam nav nozīmes.',
@@ -579,14 +582,14 @@ export const app = {
     chosenPhotosCount: 'Izvēlēto foto: {count}',
     choosePhotos: 'Izvēlēties foto',
     photosClear: 'Notīrīt',
-    chosenPhotoThumbAlt: 'Izvēlētais foto {id}',
+    chosenPhotoThumbAlt: 'Izvēlētais foto {n}: {id}',
     chosenPhotosScenarioHint:
         'Scenārija izvēlētie foto tiek izmantoti tikai pēc pievienošanās izaicinājumam; pievienojoties tie netiek ņemti vērā.',
     chosenPhotosOnlyReachHint:
         'Tas attiecas uz katru izaicinājumu, ko aptver: automātiskā pievienošanās un iesniegšana izlaiž katru izaicinājumu, kuram nav derīga izvēlētā foto.',
     photoChooserTitle: 'Izvēlēties foto',
     photoChooserHelp:
-        'Lietotne izvēlētos foto kārto tāpat, kā kārto savas automātiskās izvēles, tāpēc tiem joprojām jāiztur tavi tagu filtri. Tie tiek izmantoti pirmie.',
+        'Lietotne šos foto izmanto pirmos, un tiem joprojām jāiztur tavi tagu filtri. Tos kārto tāpat, kā kārto savas automātiskās izvēles, vai arī iet pēc šeit redzamajiem numuriem, ja ir ieslēgts „Izmantot izvēlētos foto tādā secībā, kādā tos izvēlējos” (uzstādījumi „Automātiskā iesniegšana”, globāli vai katram izaicinājumam).',
     photoChooserSearchLabel: 'Meklēt savus foto pēc taga',
     photoChooserSearchPlaceholder: 'piem., saulriets',
     photoChooserSearch: 'Meklēt',
@@ -613,6 +616,7 @@ export const app = {
     photoChooserNotEligible: 'Neder šim izaicinājumam',
     photoChooserAllowed: 'Var iesniegt',
     photoChooserTileLabel: 'Foto {id}: {labels}. {reason}',
+    photoChooserPosition: 'Numurs {n} tavā sarakstā.',
     photoChooserNoTags: 'Bez tagiem',
     photoChooserOtherAccount:
         'Šie saraksti tika saglabāti citā kontā, tāpēc lietotne tos ignorē. Ja šeit saglabāsi sarakstu, tie sāks attiekties arī uz šo kontu, ja vien tos iepriekš neizņemsi.',

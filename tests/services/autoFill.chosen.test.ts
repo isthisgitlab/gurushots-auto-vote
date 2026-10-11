@@ -101,6 +101,7 @@ type SettingsSpec = {
     autoFill?: boolean;
     chosen?: unknown;
     only?: boolean;
+    inOrder?: boolean;
     savedBy?: unknown;
     must?: string[];
     fillWithoutTagMatch?: boolean;
@@ -111,6 +112,7 @@ const makeSettings = ({
     autoFill = true,
     chosen = [],
     only = false,
+    inOrder = false,
     savedBy = '',
     must = [],
     fillWithoutTagMatch = true,
@@ -135,6 +137,8 @@ const makeSettings = ({
                     return chosen;
                 case 'chosenPhotosOnly':
                     return only;
+                case 'chosenPhotosInOrder':
+                    return inOrder;
                 default:
                     return null;
             }
@@ -282,7 +286,7 @@ describe('chosen photos rank first', () => {
         const challenge = makeChallenge();
         const photos = ['c1', 'c2', 'r1', 'r2', 'r3'].map((id, n) => photo(id, ['Pink'], { upload_date: 9000 - n }));
         const { scored, chosenIds } = buildChosenCandidates(challenge, photos, {
-            chosen: { ids: ['c1', 'c2'], only: false },
+            chosen: { ids: ['c1', 'c2'], inOrder: false, only: false },
         });
         // Each block's model run sees only its own photos and confirms its first one.
         const seen: string[][] = [];
@@ -342,6 +346,37 @@ describe('chosen photos rank first', () => {
         // A list none of whose photos can be entered has an empty chosen block: the same outcome.
         expect(await run(['ghost'])).toEqual(none);
         expect(none).toEqual({ submitted: [['car']], modelRuns: 1, uncertain: false });
+    });
+
+    test('verifyFillPick leaves a chosen block in list order alone even when it has more photos than slots', async () => {
+        const challenge = makeChallenge();
+        const photos = ['c1', 'c2', 'c3', 'r1'].map((id, n) => photo(id, ['Pink'], { upload_date: 9000 - n }));
+        const { scored, chosenIds } = buildChosenCandidates(challenge, photos, {
+            chosen: { ids: ['c3', 'c1', 'c2'], inOrder: true, only: false },
+        });
+        const run = async (inOrder: boolean) => {
+            const seen: string[][] = [];
+            const rankVisually = jest.fn(async (_c: unknown, ids: string[], _e: unknown, want: number) => {
+                seen.push([...ids]);
+                return ids.slice(0, want);
+            });
+            const verified = await verifyFillPick(
+                challenge,
+                scored,
+                photos,
+                ['c3', 'r1'],
+                null,
+                invalid({ logger: makeLog().logger, rankVisually }),
+                chosenIds,
+                inOrder,
+            );
+            return { picked: verified.picked, seen };
+        };
+        const ordered = await run(true);
+        expect(ordered.picked).toEqual(['c3', 'r1']);
+        expect(ordered.seen.flat().some((id) => id.startsWith('c'))).toBe(false);
+        // The ranked mode asks the model about the three-photo chosen block for its one slot.
+        expect((await run(false)).seen.flat()).toEqual(expect.arrayContaining(['c1', 'c2', 'c3']));
     });
 
     test('verifyFillPick treats an empty chosen set as no list: the one block is re-ranked even when it fills its slots', async () => {
@@ -836,6 +871,32 @@ describe('looking for a chosen photo the themed fetch missed', () => {
         expect(enough.getEligiblePhotosWalk).not.toHaveBeenCalled();
     });
 
+    test('in list order a missing photo is looked up while fewer usable ones stand before it than slots are wanted', async () => {
+        const lookup = async (ids: string[], wantCount: number, inOrder: boolean) => {
+            forgetChosenPhotosMemory();
+            const getEligiblePhotosWalk = jest.fn(async () => ({ items: [car], truncated: false }));
+            const found = await resolveMissingChosen({
+                challenge: makeChallenge(),
+                token: 'tok',
+                ids,
+                eligible: [photo('x'), photo('y')],
+                wantCount,
+                allowWalk: true,
+                inOrder,
+                deps: { getEligiblePhotosWalk, logger: makeLog().logger },
+                label: 'autoFill',
+            });
+            return { walked: getEligiblePhotosWalk.mock.calls.length, found: found.map((p) => p.id) };
+        };
+        // The car is listed first: one usable photo behind it does not make the lookup unnecessary.
+        expect(await lookup(['car', 'x'], 1, true)).toEqual({ walked: 1, found: ['car'] });
+        expect(await lookup(['car', 'x'], 1, false)).toEqual({ walked: 0, found: [] });
+        // Enough usable photos stand before it, however many slots are wanted behind them.
+        expect(await lookup(['x', 'car'], 1, true)).toEqual({ walked: 0, found: [] });
+        expect(await lookup(['x', 'y', 'car'], 2, true)).toEqual({ walked: 0, found: [] });
+        expect(await lookup(['x', 'car', 'y'], 2, true)).toEqual({ walked: 1, found: ['car'] });
+    });
+
     test('resolveMissingChosen only returns the matching chosen records', async () => {
         const { logger } = makeLog();
         const challenge = makeChallenge();
@@ -852,6 +913,193 @@ describe('looking for a chosen photo the themed fetch missed', () => {
         });
         expect(found.map((p) => p.id)).toEqual(['car']);
         expect(await recalled(challenge, ['car', 'gone'])).toEqual(['car']);
+    });
+});
+
+describe('chosen photos in the order they were picked', () => {
+    // Three orders that all differ: the library lists them eligible-first as [pink, both, car, extra],
+    // the user picked [car, pink, both], and the scorer ranks both > pink > car.
+    const library = () => [
+        photo('pink', ['Pink']),
+        photo('both', ['Pink', 'Nature']),
+        photo('car', ['Car']),
+        photo('extra', ['Car']),
+    ];
+    const picked = ['car', 'pink', 'both'];
+
+    test('are entered in list order, however the scorer would rank them; the top-up still follows the scorer', async () => {
+        const deps = makeDeps({ library: library(), settings: { chosen: ['car', 'pink'], inOrder: true } });
+        // Three free slots: the two chosen photos, then the best of the rest by the scorer.
+        expect(await fillChallengeNow(makeChallenge(), 'tok', 'all', deps)).toEqual(
+            expect.objectContaining({ success: true }),
+        );
+        expect(submittedIds(deps)).toEqual([['car', 'pink', 'both']]);
+
+        const ranked = makeDeps({ library: library(), settings: { chosen: ['car', 'pink'] } });
+        expect(await fillChallengeNow(makeChallenge(), 'tok', 'all', ranked)).toEqual(
+            expect.objectContaining({ success: true }),
+        );
+        // Setting off: exactly as before — the scorer orders the chosen block.
+        expect(submittedIds(ranked)).toEqual([['pink', 'car', 'both']]);
+    });
+
+    test('the visual re-rank cannot reorder the chosen block', async () => {
+        const reverse = async (_c: unknown, ids: string[], _e: unknown, want: number) =>
+            ids.slice().reverse().slice(0, want);
+        const deps = makeDeps({ library: library(), settings: { chosen: picked, inOrder: true } });
+        deps.rankVisually.mockImplementation(reverse);
+        // One slot per staggered cycle, three chosen photos: the model would be asked to choose among them.
+        expect(await maybeAutoFillChallenge(makeChallenge({ maxSubmits: 3 }), 'tok', NOW, deps)).toBe('submitted');
+        expect(submittedIds(deps)).toEqual([['car']]);
+        expect(deps.rankVisually.mock.calls.flatMap(([, ids]) => ids)).not.toEqual(expect.arrayContaining(['pink']));
+    });
+
+    test('without the setting the same visual re-rank does reorder the chosen block', async () => {
+        const reverse = async (_c: unknown, ids: string[], _e: unknown, want: number) =>
+            ids.slice().reverse().slice(0, want);
+        const deps = makeDeps({ library: library(), settings: { chosen: picked } });
+        deps.rankVisually.mockImplementation(reverse);
+        expect(await maybeAutoFillChallenge(makeChallenge({ maxSubmits: 3 }), 'tok', NOW, deps)).toBe('submitted');
+        expect(deps.rankVisually.mock.calls.flatMap(([, ids]) => ids)).toEqual(expect.arrayContaining(['pink']));
+    });
+
+    test('a photo that is entered, missing from the library, not allowed, or refused is skipped for the next one in the list', async () => {
+        const blocked = photo('blocked', ['Pink'], { permission: { allowed: false, message: 'used' } });
+        const deps = makeDeps({
+            library: [blocked, ...library(), photo('entered', ['Pink'])],
+            walkItems: [blocked, ...library()],
+            settings: { chosen: ['entered', 'gone', 'blocked', 'car', 'pink'], inOrder: true },
+        });
+        const challenge = makeChallenge({ entries: [{ id: 'entered' }], maxSubmits: 3 });
+        expect(await fillChallengeNow(challenge, 'tok', 'all', deps)).toEqual(
+            expect.objectContaining({ success: true }),
+        );
+        expect(submittedIds(deps)).toEqual([['car', 'pink']]);
+
+        // A refused photo: the server answers a submit with a failure, so the remembered photos in
+        // that batch are held back, and the next attempt goes down the list past them.
+        deps.submitToChallenge.mockResolvedValueOnce(invalid({ ok: false, raw: { success: false } }));
+        const again = makeChallenge({ entries: [], maxSubmits: 3 });
+        forgetChosenPhotosMemory();
+        const refusing = makeDeps({ library: library(), settings: { chosen: ['car', 'pink', 'both'], inOrder: true } });
+        refusing.submitToChallenge.mockResolvedValueOnce(invalid({ ok: false, raw: { success: false } }));
+        await fillChallengeNow(again, 'tok', 'all', refusing);
+        expect(submittedIds(refusing)[0].slice(0, 3)).toEqual(['car', 'pink', 'both']);
+    });
+
+    test('a chosen photo the themed fetch missed is found by the lookup and keeps its place in the list', async () => {
+        // 'car' is not on theme, so the themed search does not return it; the lookup finds it.
+        const deps = makeDeps({
+            library: library(),
+            settings: { chosen: ['car', 'both'], inOrder: true },
+        });
+        deps.getEligiblePhotos.mockImplementation(async () => [
+            photo('pink', ['Pink']),
+            photo('both', ['Pink', 'Nature']),
+        ]);
+        expect(await fillChallengeNow(makeChallenge({ maxSubmits: 3 }), 'tok', 'all', deps)).toEqual(
+            expect.objectContaining({ success: true }),
+        );
+        expect(deps.getEligiblePhotosWalk).toHaveBeenCalledTimes(1);
+        expect(submittedIds(deps)[0].slice(0, 2)).toEqual(['car', 'both']);
+    });
+
+    test('the chosen photos are not enriched (they are not ranked) and the log says list order', async () => {
+        // Five photos tie on theme, three are chosen and only two slots are left: off, the chosen block's
+        // tie is decided on past performance (explained in the log, and the images are looked up); in
+        // order, neither happens.
+        const run = async (inOrder: boolean) => {
+            forgetChosenPhotosMemory();
+            const { logger, lines } = makeLog();
+            const getImageData = jest.fn(async () => null);
+            const deps = makeDeps({
+                logger,
+                library: [photo('a'), photo('b'), photo('c'), photo('d'), photo('e')],
+                settings: { chosen: ['c', 'a', 'b'], inOrder },
+                extra: { getImageData },
+            });
+            await fillChallengeNow(makeChallenge({ maxSubmits: 3 }), 'tok', 'all', deps);
+            return {
+                submitted: submittedIds(deps),
+                explained: lines.warning.concat(lines.info).some((m) => m.includes('chosen on past performance')),
+                listOrder: lines.info.filter((m) => m.includes('(chosen by you, in list order)')).length,
+                plain: lines.info.filter((m) => m.includes('(chosen by you)')).length,
+            };
+        };
+        expect(await run(true)).toEqual({ submitted: [['c', 'a']], explained: false, listOrder: 2, plain: 0 });
+        const off = await run(false);
+        expect(off.explained).toBe(true);
+        expect(off.listOrder).toBe(0);
+        expect(off.plain).toBe(2);
+    });
+
+    test('the top-up after the list is still explained on past performance when its tie decides a slot', async () => {
+        const { logger, lines } = makeLog();
+        const deps = makeDeps({
+            logger,
+            library: [photo('a'), photo('b'), photo('c'), photo('d')],
+            settings: { chosen: ['c'], inOrder: true },
+        });
+        await fillChallengeNow(makeChallenge({ maxSubmits: 3 }), 'tok', 'all', deps);
+        expect(submittedIds(deps)[0][0]).toBe('c');
+        const explanation = lines.warning.concat(lines.info).filter((m) => m.includes('chosen on past performance'));
+        expect(explanation).toHaveLength(1);
+        expect(explanation[0]).not.toContain('(c,');
+    });
+
+    test('with the setting off the log keeps saying "chosen by you"', async () => {
+        const { logger, lines } = makeLog();
+        const deps = makeDeps({ logger, library: library(), settings: { chosen: ['car'] } });
+        await maybeAutoFillChallenge(makeChallenge(), 'tok', NOW, deps);
+        expect(lines.info.some((m) => m.includes('(chosen by you) selection details'))).toBe(true);
+    });
+
+    test('Submit Only with the order on enters only chosen photos, the first of the list each cycle', async () => {
+        const deps = makeDeps({ library: library(), settings: { chosen: ['car', 'pink'], inOrder: true, only: true } });
+        // The staggered pass enters one photo per cycle: the first of the list, not the scorer's.
+        expect(await maybeAutoFillChallenge(makeChallenge(), 'tok', NOW, deps)).toBe('submitted');
+        expect(submittedIds(deps)).toEqual([['car']]);
+    });
+
+    test('emergency fill: the stand-down probe and the batch follow the list, and the truncation keeps the first photos in it', async () => {
+        const photos = [
+            photo('theme-a', ['Pink'], { upload_date: 9200 }),
+            photo('theme-b', ['Pink'], { upload_date: 9100 }),
+            photo('theme-c', ['Pink'], { upload_date: 9300 }),
+            photo('theme-d', ['Pink'], { upload_date: 9000 }),
+        ];
+        const deps = makeDeps({
+            library: photos,
+            settings: { autoFill: false, chosen: ['theme-d', 'theme-b', 'theme-c'], inOrder: true },
+            extra: {
+                getActiveChallenges: jest.fn().mockResolvedValue({
+                    challenges: [
+                        {
+                            id: 'c1',
+                            member: {
+                                boost: { state: 'LOCKED', timeout: 0 },
+                                ranking: { entries: [{ id: 'm1' }, { id: 'm2' }], exposure: { exposure_factor: 100 } },
+                            },
+                        },
+                    ],
+                }),
+            },
+        });
+        expect(await maybeEmergencyFillChallenge(makeChallenge({ entries: [], closeIn: 200 }), 'tok', NOW, deps)).toBe(
+            'submitted',
+        );
+        // Cut to the two free slots after the live re-check: the first two of the LIST, not of the scorer (c, b).
+        expect(submittedIds(deps)).toEqual([['theme-d', 'theme-b']]);
+    });
+
+    test('the stand-down probe goes by the same order', async () => {
+        // Auto-fill on with Submit Only and a list: the probe asks what the staggered path would submit.
+        const deps = makeDeps({
+            settings: { autoFill: true, chosen: ['theme-b'], inOrder: true, only: true },
+        });
+        expect(await maybeEmergencyFillChallenge(makeChallenge({ entries: [], closeIn: 200 }), 'tok', NOW, deps)).toBe(
+            'skipped',
+        );
     });
 });
 

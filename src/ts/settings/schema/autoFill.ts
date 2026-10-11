@@ -211,6 +211,20 @@ export const autoFillSettings = {
         label: 'app.chosenPhotosOnly',
         description: 'app.chosenPhotosOnlyDesc',
     },
+    // With a non-empty chosenPhotos, enter the chosen photos in the order they
+    // were picked instead of ranking them with the scorer. The hard tag
+    // filters, entered photos and refusals still apply: a chosen photo that
+    // fails one is skipped and the next one in the list is used. Off = ranked.
+    chosenPhotosInOrder: {
+        type: 'boolean',
+        default: false,
+        perChallenge: true,
+        validation: zBool,
+        validationOrder: 1,
+        group: 'autoFill',
+        label: 'app.chosenPhotosInOrder',
+        description: 'app.chosenPhotosInOrderDesc',
+    },
     // Words to drop from a challenge TITLE before it is used as a theme.
     //
     // Challenge titles qualify their subject rather than just naming it — "Epic

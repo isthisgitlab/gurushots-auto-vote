@@ -85,7 +85,8 @@ const resolveJoinChosen = (challenge: Challenge, token: string, deps: JoinDeps) 
  *
  * The user's chosen photos come first: when any can be entered the shortlist is
  * the chosen block alone, so the visual re-rank can only choose between chosen
- * photos. With none usable the join picks as it always did — or, with Submit
+ * photos — or, when the user asked for their order, the first usable photo in the
+ * list is taken and nothing re-ranks it. With none usable the join picks as it always did — or, with Submit
  * Only Chosen Photos on, picks nothing (`ignoreChosenOnly` lifts that: a paid
  * join whose coins are already spent must still submit something).
  */
@@ -121,6 +122,7 @@ const pickJoinPhoto = async (
         eligible: loaded.eligible,
         wantCount: 1,
         allowWalk: !loaded.walkedUnfiltered,
+        inOrder: chosenSettings.inOrder,
         deps: { getEligiblePhotosWalk: deps.getEligiblePhotosWalk, logger },
         label: 'join',
     });
@@ -135,7 +137,10 @@ const pickJoinPhoto = async (
         fillWithoutTagMatch,
         semanticScores,
         ignoreWords,
-        chosen: chosenSettings.ids.length > 0 ? { ids: chosenSettings.ids, only: enforceOnly } : null,
+        chosen:
+            chosenSettings.ids.length > 0
+                ? { ids: chosenSettings.ids, only: enforceOnly, inOrder: chosenSettings.inOrder }
+                : null,
     });
     if (!ranked || ranked.length === 0) {
         if (!enforceOnly) return { id: null, reason: 'no-photo' };
@@ -149,8 +154,11 @@ const pickJoinPhoto = async (
     const chosenIds = new Set(chosenSettings.ids);
     const chosenRanked = ranked.filter((id) => chosenIds.has(String(id)));
     const shortlist = chosenRanked.length > 0 ? chosenRanked : ranked;
-    // A single chosen photo has nothing to be re-ranked against.
-    if (chosenRanked.length === 1) return { id: chosenRanked[0], reason: 'picked' };
+    // A single chosen photo has nothing to be re-ranked against, and one the user put in order is
+    // not re-ranked: the first usable photo in the list is the pick.
+    if (chosenRanked.length === 1 || (chosenSettings.inOrder && chosenRanked.length > 0)) {
+        return { id: chosenRanked[0], reason: 'picked' };
+    }
     const [picked] = await (deps.rankVisually || rankVisually)(challenge, shortlist, eligible, 1, {
         logger,
         ignoreWords,

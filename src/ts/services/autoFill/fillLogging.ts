@@ -19,6 +19,7 @@ const logSelectionDetails = ({
     picked,
     contestedIds,
     chosenIds,
+    inOrder,
     logger,
 }: {
     prefix: string;
@@ -27,6 +28,8 @@ const logSelectionDetails = ({
     picked: string[];
     contestedIds: Set<string>;
     chosenIds: ReadonlySet<string> | null;
+    /** The chosen photos went by the user's order, not by rank. */
+    inOrder: boolean;
     logger: FillLogger;
 }) => {
     const log = logger.withCategory('autoFill');
@@ -34,7 +37,11 @@ const logSelectionDetails = ({
         const entry = scored.find((candidate) => String(candidate.id) === String(id));
         // The line says which photos the user chose, so "why did it submit THAT
         // photo?" has an answer for a photo that was never ranked on merit alone.
-        const origin = chosenIds?.has(String(id)) ? ' (chosen by you)' : '';
+        const origin = chosenIds?.has(String(id))
+            ? inOrder
+                ? ' (chosen by you, in list order)'
+                : ' (chosen by you)'
+            : '';
         log.info(
             `${prefix}: submitted photo ${oneLine(id)}${origin} selection details for ${logger.challengeTag(challenge)}`,
             entry
@@ -242,13 +249,15 @@ const logPopularityPick = (
 
 /**
  * logPopularityPick for a pick that may hold the user's chosen photos: each
- * block was enriched and tied on its own, so each is explained on its own.
+ * block was enriched and tied on its own, so each is explained on its own — except a
+ * chosen block that went by the user's order (`inOrder`), which was never ranked.
  */
 const logPopularityPicks = ({
     label,
     challenge,
     scored,
     chosenIds,
+    inOrder,
     contestedIds,
     picked,
     logger,
@@ -257,12 +266,14 @@ const logPopularityPicks = ({
     challenge: Challenge;
     scored: ScoredCandidate[];
     chosenIds: ReadonlySet<string> | null;
+    inOrder: boolean;
     contestedIds: Set<string>;
     picked: string[];
     logger: FillLogger;
 }) => {
     const blocks = splitByChosen(scored, chosenIds);
-    for (const block of [blocks.chosen, blocks.rest]) {
+    // Photos that went by the user's order were not ranked on past performance: nothing to explain.
+    for (const block of inOrder ? [blocks.rest] : [blocks.chosen, blocks.rest]) {
         logPopularityPick(label, challenge, block, contestedIds, picked, logger);
     }
 };

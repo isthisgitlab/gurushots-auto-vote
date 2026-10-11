@@ -56,6 +56,8 @@ const rankBlock = async (
  * reverse — and a chosen block no larger than the slots it fills has nothing to
  * choose between, so it is left alone and costs no model run. The rest block
  * keeps the usual re-rank, as does an empty chosen set (the same as no list).
+ * A chosen block that goes by the user's order (`inOrder`) is never re-ranked: the
+ * photos are entered in the order picked, and the model must not reorder them.
  */
 const verifyFillPick = async (
     challenge: Challenge,
@@ -65,6 +67,7 @@ const verifyFillPick = async (
     ignoreWords: IgnoreWords,
     deps: RankDeps,
     chosenIds: ReadonlySet<string> | null = null,
+    inOrder: boolean = false,
 ): Promise<VerifiedPick> => {
     if (!chosenIds || chosenIds.size === 0) return rankBlock(challenge, scored, eligible, picked, ignoreWords, deps);
     const blocks = splitByChosen(scored, chosenIds);
@@ -75,7 +78,7 @@ const verifyFillPick = async (
     ] as const) {
         const blockPicked = picked.filter((id) => chosenIds.has(String(id)) === isChosen);
         results.push(
-            blockPicked.length === 0 || (isChosen && block.length <= blockPicked.length)
+            blockPicked.length === 0 || (isChosen && (inOrder || block.length <= blockPicked.length))
                 ? { picked: blockPicked, visualEvidence: null }
                 : await rankBlock(challenge, block, eligible, blockPicked, ignoreWords, deps),
         );

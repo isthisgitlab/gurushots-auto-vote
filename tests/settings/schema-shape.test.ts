@@ -110,6 +110,7 @@ describe('settings schema shape', () => {
             'shouldIncludeTags',
             'chosenPhotos',
             'chosenPhotosOnly',
+            'chosenPhotosInOrder',
             'ignoreTitleWords',
             'autoClaimPrizes',
             'missionSaveTurbos',

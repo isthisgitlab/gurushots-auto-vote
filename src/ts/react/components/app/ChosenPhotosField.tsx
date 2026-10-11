@@ -21,17 +21,21 @@ const photoIdsOf = (value: unknown): string[] =>
  * One chosen photo: its thumbnail when the owner's member id is trusted and the
  * image loads, else its id's start as text.
  */
-function ChosenPhotoChip({ id, memberId }: { id: string; memberId: string | null }) {
+function ChosenPhotoChip({ id, position, memberId }: { id: string; position: number; memberId: string | null }) {
     const { t } = useTranslation();
     const url = memberId ? buildPhotoUrl(memberId, id, { size: THUMB_PX }) : null;
     const showImage = useImageLoads(url);
     const short = id.slice(0, 8);
     return (
-        <li className="inline-flex">
+        <li className="inline-flex items-center gap-0.5">
+            {/* The saved order. The image says it in its alt text; a text chip reads it as it is. */}
+            <span aria-hidden={showImage} className="badge badge-neutral badge-xs">
+                {position}
+            </span>
             {showImage ? (
                 <img
                     src={url as string}
-                    alt={interp(t('app.chosenPhotoThumbAlt'), { id: short })}
+                    alt={interp(t('app.chosenPhotoThumbAlt'), { n: position, id: short })}
                     loading="lazy"
                     referrerPolicy="no-referrer"
                     className="h-8 w-8 rounded object-cover"
@@ -84,8 +88,8 @@ export function ChosenPhotosControl({
                 </span>
             ) : (
                 <ul className="flex flex-wrap items-center gap-1" aria-label={t('app.chosenPhotos')}>
-                    {ids.map((photoId) => (
-                        <ChosenPhotoChip key={photoId} id={photoId} memberId={memberId} />
+                    {ids.map((photoId, index) => (
+                        <ChosenPhotoChip key={photoId} id={photoId} position={index + 1} memberId={memberId} />
                     ))}
                 </ul>
             )}

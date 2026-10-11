@@ -156,7 +156,7 @@ describe('Chosen Photos settings', () => {
             // A rule with an invalid list is refused as a whole.
             expect(settings.setTitleRules([{ title: 'Big show', chosenPhotos: ['a', 'a'] }])).toBe(false);
             expect(settings.TITLE_RULE_INLINE_KEYS).toEqual(
-                expect.arrayContaining(['chosenPhotos', 'chosenPhotosOnly']),
+                expect.arrayContaining(['chosenPhotos', 'chosenPhotosOnly', 'chosenPhotosInOrder']),
             );
         });
 
@@ -179,19 +179,27 @@ describe('Chosen Photos settings', () => {
         test('are stored even when they equal the inherited value; other keys are still dropped', () => {
             settings.setGlobalDefault('chosenPhotos', ['a']);
             settings.setGlobalDefault('chosenPhotosOnly', true);
+            settings.setGlobalDefault('chosenPhotosInOrder', true);
             settings.setGlobalDefault('exposure', 50);
             expect(settings.setChallengeOverride('chosenPhotos', '7', ['a'])).toBe(true);
             expect(settings.setChallengeOverride('chosenPhotosOnly', '7', true)).toBe(true);
+            expect(settings.setChallengeOverride('chosenPhotosInOrder', '7', true)).toBe(true);
             expect(settings.setChallengeOverride('exposure', '7', 50)).toBe(true);
-            expect(perChallenge()['7']).toEqual({ chosenPhotos: ['a'], chosenPhotosOnly: true });
+            expect(perChallenge()['7']).toEqual({
+                chosenPhotos: ['a'],
+                chosenPhotosOnly: true,
+                chosenPhotosInOrder: true,
+            });
         });
 
         test('a joined (active) challenge keeps the normal rule: equal to the inherited value means no override', () => {
             settings.setGlobalDefault('chosenPhotos', ['a']);
             settings.setGlobalDefault('chosenPhotosOnly', true);
+            settings.setGlobalDefault('chosenPhotosInOrder', true);
             settings.rememberChallengeTitles([{ id: 7, title: 'Pink' }]);
             expect(settings.setChallengeOverride('chosenPhotos', '7', ['a'])).toBe(true);
             expect(settings.setChallengeOverride('chosenPhotosOnly', '7', true)).toBe(true);
+            expect(settings.setChallengeOverride('chosenPhotosInOrder', '7', true)).toBe(true);
             expect(perChallenge()['7']).toBeUndefined();
             expect(settings.setChallengeOverrides('7', { chosenPhotos: ['a'] })).toBe(true);
             expect(settings.replaceChallengeOverrides('7', { chosenPhotos: ['a'] }, false)).toBe(true);
@@ -298,6 +306,15 @@ describe('Chosen Photos settings', () => {
             expect(settings.cleanupStaleChallengeSetting(['104'])).toBe(true);
             // 100/101 are open, 104 is active; 102 holds no chosen key, 103 is gone.
             expect(keys()).toEqual(['100', '101', '104']);
+        });
+
+        test('an entry holding only the pick-order flag is kept for an open challenge, like the other chosen keys', () => {
+            settings.setChallengeOverride('chosenPhotosInOrder', '105', true);
+            settings.setChallengeOverride('chosenPhotosInOrder', '106', true);
+            settings.rememberOpenChallengeIds([105]);
+            expect(settings.cleanupStaleChallengeSetting([])).toBe(true);
+            expect(keys()).toEqual(['105']);
+            expect(settings.getChallengeOverride('chosenPhotosInOrder', '105')).toBe(true);
         });
 
         test('with no open list known, chosen entries are kept even with auto-join off, and the join still reads them', () => {

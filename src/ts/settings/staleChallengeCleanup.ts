@@ -11,7 +11,7 @@ import type { ChallengeValues } from '../types/settings';
 
 // The keys a not-yet-joined challenge needs its own override for: the join has
 // to know which photo to enter with before the challenge is in the active list.
-const JOIN_KEPT_KEYS = ['chosenPhotos', 'chosenPhotosOnly'];
+const JOIN_KEPT_KEYS = ['chosenPhotos', 'chosenPhotosOnly', 'chosenPhotosInOrder'];
 
 /**
  * Whether a non-active override entry must survive cleanup: it holds a chosen

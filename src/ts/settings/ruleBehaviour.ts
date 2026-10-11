@@ -12,8 +12,9 @@
  * key off — so a rule is the only place they can be expressed. Richer setups
  * belong in a named profile, which this composes with (inline wins).
  *
- * `chosenPhotos` / `chosenPhotosOnly` are here for the same reason: the join
- * must know which photo to enter with before the challenge has a cached id.
+ * `chosenPhotos` / `chosenPhotosOnly` / `chosenPhotosInOrder` are here for the
+ * same reason: the join must know which photo to enter with, and in what order,
+ * before the challenge has a cached id.
  * `chosenPhotos` is the one array-valued key (an empty `[]` is an explicit
  * "no chosen photos", distinct from the absent/'' "inherit").
  */
@@ -25,6 +26,7 @@ export const TITLE_RULE_INLINE_KEYS = [
     'scenario',
     'chosenPhotos',
     'chosenPhotosOnly',
+    'chosenPhotosInOrder',
 ];
 
 /**

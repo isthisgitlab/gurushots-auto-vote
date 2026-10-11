@@ -94,8 +94,10 @@ const loadFillCandidates = async ({
  *
  * With `chosen` the pool is split into the user's chosen block and the rest
  * (see buildChosenCandidates), and enrichment runs per block; `chosenIds`
- * names the chosen block for finalizePick, verifyFillPick and the logging.
- * Without it nothing differs from the ranking a swap uses.
+ * names the chosen block for finalizePick, verifyFillPick and the logging, and
+ * `orderedIds` is that block in the list's order. When the pick goes by that order
+ * (`chosen.inOrder`) the chosen block is not ranked, so it is not enriched either.
+ * Without `chosen` nothing differs from the ranking a swap uses.
  */
 const scoreFillCandidates = async ({
     label,
@@ -128,9 +130,10 @@ const scoreFillCandidates = async ({
     contested: PickerPhoto[];
     contestedIds: Set<string>;
     chosenIds: ReadonlySet<string> | null;
+    orderedIds: readonly string[];
 }> => {
     const { logger } = deps;
-    const { scored, chosenIds } = buildChosenCandidates(challenge, eligible, {
+    const { scored, chosenIds, orderedIds } = buildChosenCandidates(challenge, eligible, {
         mustIncludeTags,
         shouldIncludeTags,
         fillWithoutTagMatch,
@@ -144,7 +147,7 @@ const scoreFillCandidates = async ({
     // competing for the last slot after the theme tiers — i.e. exactly the set
     // whose order the popularity tiers decide. It is empty whenever the theme
     // settled things, so a clean match costs no extra requests.
-    const contested = selectBlockEnrichmentSet(scored, wantCount, chosenIds);
+    const contested = selectBlockEnrichmentSet(scored, wantCount, chosenIds, chosen?.inOrder === true);
     const contestedIds = new Set(contested.map((photo) => String(photo.id)));
     if (contested.length > 0) {
         const enriched = await enrichCandidates(contested, token, deps);
@@ -162,7 +165,7 @@ const scoreFillCandidates = async ({
             }
         }
     }
-    return { scored, contested, contestedIds, chosenIds };
+    return { scored, contested, contestedIds, chosenIds, orderedIds };
 };
 
 export { loadFillCandidates, scoreFillCandidates };

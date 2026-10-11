@@ -88,9 +88,10 @@ const notifyFallback = (opts: PickOptions, info: PickFallbackInfo) => {
  *   fallback where a user can see it. Exceptions it throws are swallowed;
  *   omitting it changes nothing. Not called when fillWithoutTagMatch is false
  *   (the picker returns [] instead of relaxing).
- *   chosen: the user's chosen photos (see ChosenPick): they rank first, ordered
- *   by the same tiers as everything else, and the rest tops up the remaining
- *   slots — or, with `only`, nothing does. Omit it and nothing changes.
+ *   chosen: the user's chosen photos (see ChosenPick): they come first, ordered
+ *   by the same tiers as everything else — or, with `inOrder`, in the order they
+ *   were picked — and the rest tops up the remaining slots — or, with `only`,
+ *   nothing does. Omit it and nothing changes.
  * @returns ordered list of photo ids; length <= slotsToFill
  */
 const pickPhotosForChallenge = (
@@ -100,8 +101,8 @@ const pickPhotosForChallenge = (
     opts: PickOptions = {},
 ): Array<string> => {
     if (!Number.isInteger(slotsToFill) || slotsToFill <= 0) return [];
-    const { scored, chosenIds } = buildChosenCandidates(challenge, eligiblePhotos, opts);
-    return finalizePick(scored, slotsToFill, chosenIds);
+    const { scored, chosenIds, orderedIds } = buildChosenCandidates(challenge, eligiblePhotos, opts);
+    return finalizePick(scored, slotsToFill, chosenIds, opts.chosen?.inOrder ? orderedIds : null);
 };
 
 /**
@@ -245,7 +246,7 @@ const buildScoredCandidates = (
  *
  * @returns the scored pool; `chosenIds` names the chosen block inside it, or is
  *   null when none was asked for or none is in the pool (then nothing differs
- *   from buildScoredCandidates)
+ *   from buildScoredCandidates); `orderedIds` is that block in the list's order
  */
 const buildChosenCandidates = (
     challenge: ChallengeText | null | undefined,
@@ -254,7 +255,7 @@ const buildChosenCandidates = (
 ): ChosenCandidates => {
     const { chosen } = opts;
     if (!chosen || chosen.ids.length === 0) {
-        return { scored: buildScoredCandidates(challenge, eligiblePhotos, opts), chosenIds: null };
+        return { scored: buildScoredCandidates(challenge, eligiblePhotos, opts), chosenIds: null, orderedIds: [] };
     }
     const wanted = new Set(chosen.ids.map(String));
     const { excludeIds } = chosen;
@@ -266,9 +267,11 @@ const buildChosenCandidates = (
         chosen.only ? pool.filter((photo) => photo && wanted.has(String(photo.id))) : pool,
         opts,
     );
-    const chosenIds = new Set(scored.map((entry) => String(entry.id)).filter((id) => wanted.has(id)));
+    const inPool = new Set(scored.map((entry) => String(entry.id)));
+    // List order, each id once: the set keeps the order it was filled in.
+    const orderedIds = Array.from(wanted).filter((id) => inPool.has(id));
     // No chosen photo made it into the pool: that reads exactly like no list.
-    return { scored, chosenIds: chosenIds.size > 0 ? chosenIds : null };
+    return { scored, chosenIds: orderedIds.length > 0 ? new Set(orderedIds) : null, orderedIds };
 };
 
 export { pickPhotosForChallenge, buildScoredCandidates, buildChosenCandidates };

@@ -561,6 +561,9 @@ export const app = {
     chosenPhotos: 'Chosen Photos',
     chosenPhotosDesc:
         "Photos that auto-join and auto-submit try first. They must still fit your tag settings (unless Submit Even Without a Tag Match is on and no photo fits them at all), and they are ranked the way the app ranks its own picks. A photo can be in only one challenge, so with a shared list the challenge filled first takes it. The list belongs to the account that saved it and is ignored on another account; saving a list there makes the lists saved under the first account apply to it too, unless you remove them first. A scenario's list applies only after joining. Swap ignores the list.",
+    chosenPhotosInOrder: 'Use Chosen Photos in the order I picked them',
+    chosenPhotosInOrderDesc:
+        "With Chosen Photos set, enter them in the order you picked them (the numbers in the chooser) instead of ranking them the way the app ranks its own picks. A photo that fails your must-include tags, is already entered or isn't offered for the challenge is skipped, and the next one in the list is used; any slots left over are filled by ranking as usual. Off by default.",
     chosenPhotosOnly: 'Submit Only Chosen Photos',
     chosenPhotosOnlyDesc:
         'With Chosen Photos set, auto-join and auto-submit never pick a photo themselves: a challenge with no usable chosen photo is skipped. Manual Join and the manual +1/+N buttons still pick automatically, Emergency Submit ignores this setting (turn Emergency Submit off for the challenge to keep the slot empty), and a paid join that already unlocked still submits an automatic pick so the coins are not wasted. Swap ignores both settings. With Submit Even Without a Tag Match on (the default), the tag check is relaxed for the chosen photos alone: if none of them fits your must-include tags, they can still be entered. With an empty list this does nothing.',
@@ -573,14 +576,14 @@ export const app = {
     chosenPhotosCount: 'Chosen photos: {count}',
     choosePhotos: 'Choose photos',
     photosClear: 'Clear',
-    chosenPhotoThumbAlt: 'Chosen photo {id}',
+    chosenPhotoThumbAlt: 'Chosen photo {n}: {id}',
     chosenPhotosScenarioHint:
         "A scenario's chosen photos apply only after the challenge is joined; joining never uses them.",
     chosenPhotosOnlyReachHint:
         'This applies to every challenge it covers: auto-join and auto-submit skip each challenge that has no usable chosen photo.',
     photoChooserTitle: 'Choose photos',
     photoChooserHelp:
-        'The app ranks chosen photos the way it ranks its own picks, so they must still pass your tag filters. They are used first.',
+        'The app uses these first, and they must still pass your tag filters. It ranks them the way it ranks its own picks, or goes by the numbers shown here when “Use Chosen Photos in the order I picked them” is on (Auto-Submit settings, globally or per challenge).',
     photoChooserSearchLabel: 'Search your photos by tag',
     photoChooserSearchPlaceholder: 'e.g. sunset',
     photoChooserSearch: 'Search',
@@ -607,6 +610,7 @@ export const app = {
     photoChooserNotEligible: 'Not eligible for this challenge',
     photoChooserAllowed: 'Can be entered',
     photoChooserTileLabel: 'Photo {id}: {labels}. {reason}',
+    photoChooserPosition: 'Number {n} in your list.',
     photoChooserNoTags: 'No tags',
     photoChooserOtherAccount:
         'These lists were saved under another account, so the app ignores them. Saving a list here makes them apply to this account too, unless you remove them first.',

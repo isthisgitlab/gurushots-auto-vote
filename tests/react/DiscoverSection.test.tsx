@@ -402,7 +402,7 @@ describe('chosen photos', () => {
         await screen.findByText('Free One');
         fireEvent.click(screen.getAllByText('app.choosePhotos')[0]);
         await waitFor(() => expect(window.api.getLibraryPhotos).toHaveBeenCalledWith(900001, undefined));
-        fireEvent.click(await screen.findByRole('button', { name: 'app.photoChooserTileLabel' }));
+        fireEvent.click(await screen.findByRole('button', { name: /^app\.photoChooserTileLabel/ }));
         fireEvent.click(screen.getByRole('button', { name: 'app.photoChooserUse' }));
         await waitFor(() =>
             expect(window.api.setChallengeOverride).toHaveBeenCalledWith('chosenPhotos', '900001', [PHOTO]),
@@ -419,7 +419,7 @@ describe('chosen photos', () => {
         own['900001'] = [PHOTO];
         renderSection();
         fireEvent.click(await screen.findByText('app.discoverChosenChip'));
-        const tile = await screen.findByRole('button', { name: 'app.photoChooserTileLabel' });
+        const tile = await screen.findByRole('button', { name: /^app\.photoChooserTileLabel/ });
         expect(tile.getAttribute('aria-pressed')).toBe('true');
         fireEvent.click(tile);
         fireEvent.click(screen.getByRole('button', { name: 'app.photoChooserUse' }));
@@ -480,7 +480,7 @@ describe('chosen photos', () => {
             release();
             await waitFor(() =>
                 expect(
-                    screen.getByRole('button', { name: 'app.photoChooserTileLabel' }).getAttribute('aria-pressed'),
+                    screen.getByRole('button', { name: /^app\.photoChooserTileLabel/ }).getAttribute('aria-pressed'),
                 ).toBe('true'),
             );
             await waitFor(() => expect(use.getAttribute('aria-disabled')).toBe('false'));
@@ -552,7 +552,7 @@ describe('chosen photos', () => {
             const use = await open();
             jest.mocked(window.api.getOpenChosenAnnotations).mockResolvedValue({ success: true, annotations });
             await releaseAndWaitForReread();
-            await screen.findByRole('button', { name: 'app.photoChooserTileLabel' });
+            await screen.findByRole('button', { name: /^app\.photoChooserTileLabel/ });
             expect(use.getAttribute('aria-disabled')).toBe('true');
             fireEvent.click(use);
             expect(window.api.removeChallengeOverride).not.toHaveBeenCalled();
@@ -562,7 +562,7 @@ describe('chosen photos', () => {
             const use = await open();
             jest.mocked(window.api.getOpenChosenAnnotations).mockRejectedValue(new Error('gone'));
             await releaseAndWaitForReread();
-            await screen.findByRole('button', { name: 'app.photoChooserTileLabel' });
+            await screen.findByRole('button', { name: /^app\.photoChooserTileLabel/ });
             expect(use.getAttribute('aria-disabled')).toBe('true');
         });
 
@@ -574,7 +574,7 @@ describe('chosen photos', () => {
                 annotations: {},
             });
             await releaseAndWaitForReread();
-            await screen.findByRole('button', { name: 'app.photoChooserTileLabel' });
+            await screen.findByRole('button', { name: /^app\.photoChooserTileLabel/ });
             expect(use.getAttribute('aria-disabled')).toBe('true');
             fireEvent.click(use);
             expect(window.api.removeChallengeOverride).not.toHaveBeenCalled();
@@ -607,7 +607,7 @@ describe('chosen photos', () => {
         renderSection();
         await screen.findByText('Free One');
         fireEvent.click(screen.getAllByText('app.choosePhotos')[0]);
-        fireEvent.click(await screen.findByRole('button', { name: 'app.photoChooserTileLabel' }));
+        fireEvent.click(await screen.findByRole('button', { name: /^app\.photoChooserTileLabel/ }));
         fireEvent.click(screen.getByRole('button', { name: 'app.photoChooserUse' }));
         expect((await screen.findByRole('alert')).textContent).toContain('app.photoChooserSaveError');
         expect(screen.queryByText('app.discoverChosenChip')).toBeNull();
@@ -618,7 +618,7 @@ describe('chosen photos', () => {
         renderSection();
         await screen.findByText('Free One');
         fireEvent.click(screen.getAllByText('app.choosePhotos')[0]);
-        fireEvent.click(await screen.findByRole('button', { name: 'app.photoChooserTileLabel' }));
+        fireEvent.click(await screen.findByRole('button', { name: /^app\.photoChooserTileLabel/ }));
         fireEvent.click(screen.getByRole('button', { name: 'app.photoChooserUse' }));
         expect((await screen.findByRole('alert')).textContent).toContain('app.photoChooserSaveError');
     });

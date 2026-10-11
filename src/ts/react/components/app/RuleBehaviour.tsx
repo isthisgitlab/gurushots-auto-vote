@@ -43,6 +43,7 @@ const TRISTATE_OVERRIDES = [
     { settingKey: 'autoJoin', labelKey: 'app.titleRuleAutoJoin' },
     { settingKey: 'autoFill', labelKey: 'app.titleRuleAutoFill' },
     { settingKey: 'chosenPhotosOnly', labelKey: 'app.chosenPhotosOnly' },
+    { settingKey: 'chosenPhotosInOrder', labelKey: 'app.chosenPhotosInOrder' },
 ];
 const JOIN_TIMING_FIELDS = [
     {

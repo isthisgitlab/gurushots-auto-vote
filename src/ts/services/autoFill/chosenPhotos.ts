@@ -19,7 +19,7 @@ import { errorMessage } from '../../errorMessage';
 import { oneLine } from '../../format/logSafe';
 
 /** The settings the Chosen Photos feature reads. */
-type ChosenKey = 'chosenPhotos' | 'chosenPhotosOnly' | 'chosenPhotosMemberId';
+type ChosenKey = 'chosenPhotos' | 'chosenPhotosOnly' | 'chosenPhotosInOrder' | 'chosenPhotosMemberId';
 
 /** What the Chosen Photos settings resolve to for one challenge. */
 interface ChosenSettings {
@@ -27,9 +27,11 @@ interface ChosenSettings {
     ids: string[];
     /** Submit Only Chosen Photos, as set — the caller decides whether its path honours it. */
     only: boolean;
+    /** Use the photos in the order they were picked, not ranked. */
+    inOrder: boolean;
 }
 
-const NO_CHOSEN: ChosenSettings = { ids: [], only: false };
+const NO_CHOSEN: ChosenSettings = { ids: [], only: false, inOrder: false };
 
 // Logged once per (saved account, current account): a per-challenge line would
 // repeat on every cycle for every challenge the list applies to.
@@ -82,7 +84,7 @@ const resolveChosenPhotos = async ({
             return NO_CHOSEN;
         }
     }
-    return { ids, only: read('chosenPhotosOnly') === true };
+    return { ids, only: read('chosenPhotosOnly') === true, inOrder: read('chosenPhotosInOrder') === true };
 };
 
 /** The ids of a challenge's own entries, the photos a chosen list can no longer use. */
@@ -270,7 +272,10 @@ const rememberWalk = ({
  * fetch did not return it at all; the lookup (one unfiltered walk of the
  * library) only runs when that leaves fewer usable chosen photos than the pick
  * can use — min(chosen not yet entered, slots wanted) — and never when the
- * caller already walked the unfiltered library (`allowWalk` false). Its outcome
+ * caller already walked the unfiltered library (`allowWalk` false). When the
+ * pick goes by the user's order (`inOrder`) the lookup is needed whenever a
+ * missing photo stands before the `wantCount`-th usable one in the list, however
+ * many usable ones stand behind it: the order says which photo goes first. Its outcome
  * is remembered per challenge and photo (WALK_MEMO_TTL_MS; a changed entry count
  * drops only the negative outcomes): "not found" is only ever recorded from a
  * complete walk, so a photo beyond a truncated walk stays unresolved and the
@@ -285,6 +290,7 @@ const resolveMissingChosen = async ({
     eligible,
     wantCount,
     allowWalk,
+    inOrder = false,
     deps,
     label,
 }: {
@@ -294,13 +300,18 @@ const resolveMissingChosen = async ({
     eligible: PickerPhoto[];
     wantCount: number;
     allowWalk: boolean;
+    inOrder?: boolean;
     deps: Pick<RankDeps, 'getEligiblePhotosWalk'> & { logger: FillLogger };
     label: string;
 }): Promise<PickerPhoto[]> => {
     const present = new Map(eligible.map((photo) => [String(photo.id), photo]));
     const missing = ids.filter((id) => !present.has(id));
-    const usable = ids.filter((id) => present.get(id)?.permission?.allowed === true).length;
-    if (missing.length === 0 || usable >= Math.min(ids.length, wantCount)) return [];
+    if (missing.length === 0) return [];
+    // Ranked, any usable chosen photo fills a slot as well as another: look up only when too few are
+    // usable. In list order a missing photo matters while fewer than `wantCount` usable ones stand before it.
+    const isUsable = (id: string) => present.get(id)?.permission?.allowed === true;
+    const usable = inOrder ? ids.slice(0, ids.indexOf(missing[0])).filter(isUsable) : ids.filter(isUsable);
+    if (usable.length >= (inOrder ? wantCount : Math.min(ids.length, wantCount))) return [];
 
     const now = Date.now();
     const memo = readMemo(challenge, now);

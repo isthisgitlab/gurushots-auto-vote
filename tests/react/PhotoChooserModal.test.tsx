@@ -208,6 +208,64 @@ describe('selection', () => {
         expect(onSave).toHaveBeenCalledWith([idOf(2)]);
     });
 
+    describe('the numbers: the order the photos are saved in', () => {
+        const badge = (n: number) => within(tile(n)).queryByText(/^\d+$/)?.textContent ?? null;
+
+        test('selected tiles are numbered 1, 2, 3 in the order picked, in a visible badge and in the name; the rest are not', async () => {
+            setup();
+            await screen.findByRole('button', { name: /^Photo 00000001:/ });
+            fireEvent.click(tile(3));
+            fireEvent.click(tile(1));
+            fireEvent.click(tile(2));
+            expect([badge(3), badge(1), badge(2)]).toEqual(['1', '2', '3']);
+            expect(tile(3).getAttribute('aria-label')).toBe(
+                'Photo 00000003: tag3. Can be entered. Number 1 in your list.',
+            );
+            expect(tile(2).getAttribute('aria-label')).toMatch(/Number 3 in your list\.$/);
+            // Tiles are listed in that order, the unselected after them.
+            const order = screen
+                .getAllByRole('button', { name: /^Photo / })
+                .map((button) => button.getAttribute('aria-label')!.slice(6, 14));
+            expect(order).toEqual([shortOf(3), shortOf(1), shortOf(2)]);
+        });
+
+        test('an unselected tile has no number and its name is unchanged', async () => {
+            setup();
+            await screen.findByRole('button', { name: /^Photo 00000001:/ });
+            expect(badge(1)).toBeNull();
+            expect(tile(1).getAttribute('aria-label')).toBe('Photo 00000001: tag1. Can be entered');
+        });
+
+        test('deselecting moves the later ones up, and selecting again puts the photo last', async () => {
+            setup({ value: [idOf(1), idOf(2), idOf(3)] });
+            await screen.findByRole('button', { name: /^Photo 00000001:/ });
+            expect([badge(1), badge(2), badge(3)]).toEqual(['1', '2', '3']);
+            fireEvent.click(tile(1));
+            expect([badge(2), badge(3)]).toEqual(['1', '2']);
+            expect(badge(1)).toBeNull();
+            fireEvent.click(tile(1));
+            expect([badge(2), badge(3), badge(1)]).toEqual(['1', '2', '3']);
+        });
+
+        test('a saved photo the listing lacks keeps its place in the numbering, with no gap before the next', async () => {
+            setup({ value: [idOf(1), idOf(9), idOf(2)] });
+            const missing = await screen.findByRole('button', { name: new RegExp(`^Chosen photo ${shortOf(9)}:`) });
+            expect(within(missing).getByText('2')).toBeTruthy();
+            expect(missing.getAttribute('aria-label')).toMatch(/Number 2 in your list\.$/);
+            expect([badge(1), badge(2)]).toEqual(['1', '3']);
+        });
+
+        test('the numbers go to the saved list as its order', async () => {
+            const { onSave } = setup();
+            await screen.findByRole('button', { name: /^Photo 00000001:/ });
+            fireEvent.click(tile(2));
+            fireEvent.click(tile(3));
+            fireEvent.click(tile(1));
+            fireEvent.click(screen.getByRole('button', { name: 'Use these photos' }));
+            await waitFor(() => expect(onSave).toHaveBeenCalledWith([idOf(2), idOf(3), idOf(1)]));
+        });
+    });
+
     test('starts from the saved value', async () => {
         setup({ value: [idOf(1)] });
         await screen.findByRole('button', { name: /^Photo 00000001:/ });
@@ -233,7 +291,7 @@ describe('selection', () => {
         // A complete listing: no "beyond the first N photos" clause.
         expect(missing.textContent).toContain('Not available for this challenge (in another challenge, or deleted)');
         expect(missing.getAttribute('aria-label')).toBe(
-            `Chosen photo ${shortOf(9)}: Not available for this challenge (in another challenge, or deleted)`,
+            `Chosen photo ${shortOf(9)}: Not available for this challenge (in another challenge, or deleted). Number 1 in your list.`,
         );
         expect(missing.getAttribute('aria-pressed')).toBe('true');
         fireEvent.click(missing);
@@ -1302,9 +1360,13 @@ describe('a row that inherits', () => {
     });
 });
 
-test('explains how chosen photos are ranked and used', async () => {
+test('explains how chosen photos are used: ranked, or in the picked order when that setting is on, and where it lives', async () => {
     setup();
-    expect(screen.getByText(/ranks chosen photos the way it ranks its own picks/)).toBeTruthy();
+    const help = screen.getByText(/The app uses these first/).textContent!;
+    expect(help).toContain('must still pass your tag filters');
+    expect(help).toContain('ranks them the way it ranks its own picks');
+    expect(help).toContain('Use Chosen Photos in the order I picked them');
+    expect(help).toContain('Auto-Submit settings, globally or per challenge');
     await screen.findByRole('button', { name: /^Photo 00000001:/ });
 });
 

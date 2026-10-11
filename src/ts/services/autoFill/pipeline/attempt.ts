@@ -49,7 +49,9 @@ const planChosen = async ({
     const enforceOnly = settings.only && ONLY_LABELS.has(label);
     const entered = enteredIds(challenge);
     const chosen: ChosenPick | null =
-        settings.ids.length > 0 ? { ids: settings.ids, only: enforceOnly, excludeIds: entered } : null;
+        settings.ids.length > 0
+            ? { ids: settings.ids, only: enforceOnly, inOrder: settings.inOrder, excludeIds: entered }
+            : null;
     return { settings, enforceOnly, unentered: settings.ids.filter((id) => !entered.has(id)), chosen };
 };
 
@@ -65,9 +67,11 @@ const addMissedChosen = async ({
     deps,
     wantCount,
     unentered,
+    inOrder,
     loaded,
 }: Pick<FillAttemptParams, 'label' | 'challenge' | 'token' | 'deps' | 'wantCount'> & {
     unentered: string[];
+    inOrder: boolean;
     loaded: Extract<Awaited<ReturnType<typeof loadFillCandidates>>, { status: 'loaded' }>;
 }) => {
     const { eligible, semanticScores, ignoreWords } = loaded;
@@ -78,6 +82,7 @@ const addMissedChosen = async ({
         eligible,
         wantCount,
         allowWalk: label !== 'emergencyFill' && !loaded.walkedUnfiltered,
+        inOrder,
         deps,
         label,
     });
@@ -103,6 +108,7 @@ const explainSubmission = ({
     contested,
     contestedIds,
     chosenIds,
+    inOrder,
     visualEvidence,
     ignoreWords,
 }: Pick<FillAttemptParams, 'label' | 'challenge' | 'deps'> & {
@@ -111,14 +117,15 @@ const explainSubmission = ({
     contested: PickerPhoto[];
     contestedIds: Set<string>;
     chosenIds: ReadonlySet<string> | null;
+    inOrder: boolean;
     visualEvidence: Set<string> | null;
     ignoreWords: IgnoreWords;
 }) => {
     const { logger } = deps;
     if (contested.length > 0) {
-        logPopularityPicks({ label, challenge, scored, chosenIds, contestedIds, picked, logger });
+        logPopularityPicks({ label, challenge, scored, chosenIds, inOrder, contestedIds, picked, logger });
     }
-    logSelectionDetails({ prefix: label, challenge, scored, picked, contestedIds, chosenIds, logger });
+    logSelectionDetails({ prefix: label, challenge, scored, picked, contestedIds, chosenIds, inOrder, logger });
     recordUncertainSubmission({ challenge, label, scored, picked, visualEvidence, ignoreWords, chosenIds, deps });
 };
 
@@ -211,6 +218,7 @@ const runFillAttempt = async ({
         deps,
         wantCount,
         unentered,
+        inOrder: chosenSettings.inOrder,
         loaded,
     });
 
@@ -229,7 +237,7 @@ const runFillAttempt = async ({
     // on every scheduler cycle inside the emergency window, usually to stand
     // down. Enriching before it would spend a burst of get_image_data requests
     // per cycle to submit nothing. Do not "fix" this asymmetry.
-    const { scored, contested, contestedIds, chosenIds } = await scoreFillCandidates({
+    const { scored, contested, contestedIds, chosenIds, orderedIds } = await scoreFillCandidates({
         label,
         challenge,
         token,
@@ -253,7 +261,8 @@ const runFillAttempt = async ({
     }
     clearChosenSkip(challenge);
 
-    let picked = finalizePick(scored, wantCount, chosenIds);
+    const inOrder = chosenSettings.inOrder;
+    let picked = finalizePick(scored, wantCount, chosenIds, inOrder ? orderedIds : null);
     if (picked.length === 0) {
         if (onEmptyPick) {
             return { status: 'no-pick', detail: onEmptyPick(eligible) };
@@ -283,7 +292,7 @@ const runFillAttempt = async ({
         }
     }
 
-    const verified = await verifyFillPick(challenge, scored, eligible, picked, ignoreWords, deps, chosenIds);
+    const verified = await verifyFillPick(challenge, scored, eligible, picked, ignoreWords, deps, chosenIds, inOrder);
     picked = verified.picked;
 
     try {
@@ -303,6 +312,7 @@ const runFillAttempt = async ({
                 contested,
                 contestedIds,
                 chosenIds,
+                inOrder,
                 visualEvidence: verified.visualEvidence,
                 ignoreWords,
             });

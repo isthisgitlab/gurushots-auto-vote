@@ -21,11 +21,13 @@ describe('ruleInlineEntries', () => {
                 scenario: null,
                 chosenPhotos: [],
                 chosenPhotosOnly: undefined,
+                chosenPhotosInOrder: false,
                 notInline: 1,
             }),
         ).toEqual([
             ['autoJoin', true],
             ['chosenPhotos', []],
+            ['chosenPhotosInOrder', false],
         ]);
     });
 
@@ -65,6 +67,7 @@ describe('ruleHasBehaviour', () => {
         ['must tags', { title: 'Hats', mustIncludeTags: ['hat'] }],
         ['should tags', { title: 'Hats', shouldIncludeTags: ['hat'] }],
         ['an inline value', { title: 'Hats', chosenPhotosOnly: true }],
+        ['the pick-order flag', { title: 'Hats', chosenPhotosInOrder: true }],
     ])('%s is behaviour', (_name, rule) => {
         expect(ruleHasBehaviour(rule)).toBe(true);
     });
@@ -86,6 +89,7 @@ describe('hasPostJoinInlineValue', () => {
         ['a scenario', { scenario: 'Plan' }],
         ['a chosen photos list, even an empty one', { chosenPhotos: [] }],
         ['the chosen-photos-only flag', { chosenPhotosOnly: true }],
+        ['the chosen-photos pick-order flag', { chosenPhotosInOrder: true }],
         ['a join-only key beside one that matters', { autoJoin: true, scenario: 'Plan' }],
     ])('%s matters after the join', (_name, inline) => {
         expect(hasPostJoinInlineValue(inline)).toBe(true);

@@ -66,6 +66,26 @@ describe('the photos setting input', () => {
         expect(document.querySelector('img')).toBeNull();
     });
 
+    test('chips are numbered in the saved order, in the badge and (for an image) in its alt text', async () => {
+        window.api.getSetting = jest.fn().mockResolvedValue(MEMBER);
+        renderInput([idOf(3), idOf(1), idOf(2)]);
+        await waitFor(() => expect(window.api.getSetting).toHaveBeenCalledWith('chosenPhotosMemberId'));
+        // Text chips read as their number and id start.
+        const chips = screen.getAllByRole('listitem').map((item) => item.textContent);
+        expect(chips).toEqual(['100000003', '200000001', '300000002']);
+        rememberCurrentMember(MEMBER);
+        await waitFor(() => expect(document.querySelectorAll('img')).toHaveLength(3));
+        // With images the alt text carries the number (the visible badge is then hidden from readers).
+        expect(Array.from(document.querySelectorAll('img')).map((img) => img.getAttribute('alt'))).toEqual([
+            'app.chosenPhotoThumbAlt',
+            'app.chosenPhotoThumbAlt',
+            'app.chosenPhotoThumbAlt',
+        ]);
+        const badges = Array.from(document.querySelectorAll('li .badge'));
+        expect(badges.map((badge) => badge.textContent)).toEqual(['1', '2', '3']);
+        expect(badges.every((badge) => badge.getAttribute('aria-hidden') === 'true')).toBe(true);
+    });
+
     test('a list owned by the account the listing reported shows thumbnails', async () => {
         window.api.getSetting = jest.fn().mockResolvedValue(MEMBER);
         rememberCurrentMember(MEMBER);

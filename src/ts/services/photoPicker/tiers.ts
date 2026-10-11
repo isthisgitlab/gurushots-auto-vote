@@ -258,6 +258,13 @@ const rankByTiers = (scored: ScoredCandidate[]): ScoredCandidate[] =>
         return b.uploadDate - a.uploadDate;
     });
 
+/** A scored block in the order of `orderedIds` (an id the list does not name goes last, in scored order). */
+const inListOrder = (block: ScoredCandidate[], orderedIds: readonly string[]): ScoredCandidate[] => {
+    const position = new Map(orderedIds.map((id, index) => [id, index]));
+    const at = (entry: ScoredCandidate) => position.get(String(entry.id)) ?? orderedIds.length;
+    return block.slice().sort((a, b) => at(a) - at(b));
+};
+
 /**
  * Split a scored pool into the user's chosen block and the rest. A null
  * `chosenIds` means no chosen photos: everything is "rest".
@@ -281,36 +288,43 @@ const splitByChosen = (
  * zero. That is the governing rule ("a theme match always beats popularity")
  * and it is enforced by this ordering, so do not reorder these.
  *
- * With `chosenIds` the user's chosen block is ranked and taken first, then the
- * rest tops up the remaining slots — each block by the same tiers, so a chosen
- * photo is never ranked by anything but the scorer.
+ * With `chosenIds` the user's chosen block is taken first, then the rest tops up
+ * the remaining slots. Each block is ranked by the same tiers, so a chosen photo
+ * is ranked by nothing but the scorer — unless the pick goes by the user's order
+ * (`orderedIds`, the chosen ids in list order): then the chosen block follows
+ * the list position, whatever the scorer would say, and only the top-up is ranked.
  */
 const finalizePick = (
     scored: ScoredCandidate[],
     slotsToFill: number,
     chosenIds: ReadonlySet<string> | null = null,
+    orderedIds: readonly string[] | null = null,
 ): Array<string> => {
     if (!Array.isArray(scored) || scored.length === 0) return [];
     if (!Number.isInteger(slotsToFill) || slotsToFill <= 0) return [];
     const { chosen, rest } = splitByChosen(scored, chosenIds);
-    return [...rankByTiers(chosen), ...rankByTiers(rest)].slice(0, slotsToFill).map((p) => p.id);
+    const chosenBlock = orderedIds ? inListOrder(chosen, orderedIds) : rankByTiers(chosen);
+    return [...chosenBlock, ...rankByTiers(rest)].slice(0, slotsToFill).map((p) => p.id);
 };
 
 /**
  * selectEnrichmentSet per block: the chosen block fills the first slots, the
  * rest only the slots the chosen photos leave, and each block enriches just
  * the candidates still competing for ITS last slot. A block that fills no slot
- * (want - k = 0) enriches nothing.
+ * (want - k = 0) enriches nothing. A chosen block that goes by the user's order
+ * (`inOrder`) is not ranked, so there is nothing to decide and nothing to enrich.
  */
 const selectBlockEnrichmentSet = (
     scored: ScoredCandidate[],
     slotsToFill: number,
     chosenIds: ReadonlySet<string> | null,
+    inOrder: boolean = false,
 ): PickerPhoto[] => {
     if (!chosenIds) return selectEnrichmentSet(scored, slotsToFill);
     const { chosen, rest } = splitByChosen(scored, chosenIds);
     const chosenSlots = Math.min(chosen.length, slotsToFill);
-    return [...selectEnrichmentSet(chosen, chosenSlots), ...selectEnrichmentSet(rest, slotsToFill - chosenSlots)];
+    const chosenSet = inOrder ? [] : selectEnrichmentSet(chosen, chosenSlots);
+    return [...chosenSet, ...selectEnrichmentSet(rest, slotsToFill - chosenSlots)];
 };
 
 export {

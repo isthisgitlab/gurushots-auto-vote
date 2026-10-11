@@ -184,6 +184,52 @@ describe('the chosen photo is the join photo', () => {
     });
 });
 
+describe('the chosen photos in the order they were picked, on a join', () => {
+    test('the first usable photo of the list is the pick, without asking the model', async () => {
+        withSettings({
+            chosenPhotos: ['auto-7', 'auto-3', 'auto-5'],
+            chosenPhotosInOrder: true,
+            fillWithoutTagMatch: true,
+        });
+        const deps = makeDeps();
+        const res = await performJoin(challenge(), 'tok', deps, 0);
+        expect(res).toEqual({ status: 'joined', charged: 0, imageId: 'auto-7' });
+        expect(vision.rankVisually).not.toHaveBeenCalled();
+        // Off, the model chooses among the same shortlist.
+        withSettings({ chosenPhotos: ['auto-7', 'auto-3', 'auto-5'], fillWithoutTagMatch: true });
+        await performJoin(challenge(2), 'tok', makeDeps(), 0);
+        expect(vision.rankVisually).toHaveBeenCalledTimes(1);
+    });
+
+    test('an unusable photo of the list is skipped for the next one, and a missed one keeps its place', async () => {
+        const blocked = { ...photo('blocked', ['Pink']), permission: { allowed: false, message: 'used' } };
+        withSettings({ chosenPhotos: ['gone', 'blocked', 'car', 'auto-2'], chosenPhotosInOrder: true });
+        const deps = makeDeps([...eleven, CAR, blocked]);
+        const res = await performJoin(challenge(), 'tok', deps, 0);
+        // The themed fetch holds auto-2 but not the car: the lookup still runs, and the car goes first.
+        expect(res).toEqual({ status: 'joined', charged: 0, imageId: 'car' });
+        expect(deps.getEligiblePhotosWalk).toHaveBeenCalledTimes(1);
+        expect(vision.rankVisually).not.toHaveBeenCalled();
+    });
+
+    test('with enough usable photos before it, a missing one is not looked up', async () => {
+        withSettings({ chosenPhotos: ['auto-4', 'car'], chosenPhotosInOrder: true });
+        const deps = makeDeps();
+        const res = await performJoin(challenge(), 'tok', deps, 0);
+        expect(res.imageId).toBe('auto-4');
+        expect(deps.getEligiblePhotosWalk).not.toHaveBeenCalled();
+    });
+
+    test('a per-id override of the setting wins on a join', () => {
+        settings.getChallengeOverride.mockImplementation((key: string) =>
+            invalid({ chosenPhotosInOrder: false }[key] ?? null),
+        );
+        withSettings({ chosenPhotosInOrder: true });
+        expect(resolveJoinSetting('chosenPhotosInOrder', challenge(7))).toBe(false);
+        expect(settings.getChallengeOverride).toHaveBeenCalledWith('chosenPhotosInOrder', '7');
+    });
+});
+
 describe('Submit Only Chosen Photos on a join', () => {
     test('nothing usable: skipped before any coin is spent, and explained once', async () => {
         withSettings({ chosenPhotos: ['gone'], chosenPhotosOnly: true });
