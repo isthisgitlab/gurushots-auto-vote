@@ -208,6 +208,163 @@ describe('release job', () => {
     });
 });
 
+describe('release job: the version bump is idempotent', () => {
+    const script = stepNamed(build.jobs['create-release'], 'Commit and push version bump').run ?? '';
+    const BUMP_FILES = ['package.json', 'README.md', 'README.lv.md', 'docs/usage.md', 'docs/usage.lv.md'];
+
+    const git = (cwd: string, ...args: string[]) =>
+        execFileSync('git', args, {
+            cwd,
+            encoding: 'utf8',
+            stdio: 'pipe',
+            env: { ...process.env, GIT_CONFIG_GLOBAL: '/dev/null' },
+        })
+            .toString()
+            .trim();
+
+    type Scenario = {
+        origin: string;
+        builtSha: string;
+        clone: () => string;
+        run: (dir: string, version: string) => string;
+    };
+
+    // A bare origin on `develop` holding the built commit, and clones of it that run the step the way the job does:
+    // checked out at the built commit, with the bumped files in the tree.
+    const withOrigin = (check: (scenario: Scenario) => void) => {
+        const base = fs.mkdtempSync(path.join(os.tmpdir(), 'bump-step-'));
+        try {
+            const origin = path.join(base, 'origin.git');
+            const seed = path.join(base, 'seed');
+            fs.mkdirSync(seed);
+            git(base, 'init', '--bare', '--initial-branch=develop', origin);
+            git(seed, 'init', '--initial-branch=develop');
+            git(seed, 'config', 'user.email', 'seed@example.com');
+            git(seed, 'config', 'user.name', 'Seed');
+            fs.mkdirSync(path.join(seed, 'docs'));
+            for (const file of BUMP_FILES) {
+                fs.writeFileSync(
+                    path.join(seed, file),
+                    file === 'package.json' ? '{"version":"1.0.0"}\n' : 'docs 1.0.0\n',
+                );
+            }
+            git(seed, 'add', '.');
+            git(seed, 'commit', '-m', 'Earlier work');
+            fs.writeFileSync(path.join(seed, 'notes.txt'), 'the built commit\n');
+            git(seed, 'add', '.');
+            git(seed, 'commit', '-m', 'The built commit');
+            git(seed, 'remote', 'add', 'origin', `file://${origin}`);
+            git(seed, 'push', 'origin', 'develop');
+            const builtSha = git(seed, 'rev-parse', 'HEAD');
+
+            let clones = 0;
+            // Checked out at the built commit alone, as the job's checkout is.
+            const clone = () => {
+                const dir = path.join(base, `job-${clones++}`);
+                fs.mkdirSync(dir);
+                git(dir, 'init', '--quiet', '--initial-branch=develop');
+                git(dir, 'remote', 'add', 'origin', `file://${origin}`);
+                git(dir, 'fetch', '--quiet', '--depth=1', 'origin', builtSha);
+                git(dir, 'checkout', '--quiet', 'FETCH_HEAD');
+                return dir;
+            };
+            const run = (dir: string, version: string) => {
+                for (const file of BUMP_FILES) {
+                    const current = fs.readFileSync(path.join(dir, file), 'utf8');
+                    fs.writeFileSync(path.join(dir, file), current.replace(/\d+\.\d+\.\d+/, version));
+                }
+                const output = path.join(base, `output-${clones}-${version}`);
+                fs.writeFileSync(output, '');
+                execFileSync('bash', ['-c', script], {
+                    cwd: dir,
+                    stdio: 'pipe',
+                    env: {
+                        PATH: process.env.PATH,
+                        HOME: base,
+                        GIT_CONFIG_GLOBAL: '/dev/null',
+                        GITHUB_OUTPUT: output,
+                        REF_NAME: 'develop',
+                        BUILT_SHA: builtSha,
+                        NEW_VERSION: version,
+                        BUMP_TYPE: 'patch',
+                    },
+                });
+                return fs.readFileSync(output, 'utf8').trim();
+            };
+            check({ origin, builtSha, clone, run });
+        } finally {
+            fs.rmSync(base, { recursive: true, force: true });
+        }
+    };
+
+    test('the first run commits the bump on top of the built commit and pushes it', () => {
+        withOrigin(({ origin, builtSha, clone, run }) => {
+            const output = run(clone(), '1.0.1');
+
+            const tip = git(origin, 'rev-parse', 'develop');
+            expect(output).toBe(`sha=${tip}`);
+            expect(git(origin, 'rev-parse', 'develop^')).toBe(builtSha);
+            expect(git(origin, 'log', '-1', '--format=%s', 'develop')).toBe(
+                'Bump version to 1.0.1 (patch) and update documentation [skip ci]',
+            );
+        });
+    });
+
+    test('a re-run after the bump was pushed reuses it instead of committing again', () => {
+        withOrigin(({ origin, builtSha, clone, run }) => {
+            run(clone(), '1.0.1');
+            const pushed = git(origin, 'rev-parse', 'develop');
+
+            const second = clone();
+            const output = run(second, '1.0.1');
+
+            expect(output).toBe(`sha=${pushed}`);
+            expect(git(origin, 'rev-parse', 'develop')).toBe(pushed);
+            expect(git(origin, 'rev-list', '--count', `${builtSha}..develop`)).toBe('1');
+            // Nothing was committed in the re-run's own checkout either.
+            expect(git(second, 'rev-parse', 'HEAD')).toBe(builtSha);
+        });
+    });
+
+    test('a branch tip that bumps to another version is not reused: the push is refused and the job stops', () => {
+        withOrigin(({ origin, clone, run }) => {
+            run(clone(), '1.0.1');
+            const pushed = git(origin, 'rev-parse', 'develop');
+
+            expect(() => run(clone(), '1.0.2')).toThrow();
+            expect(git(origin, 'rev-parse', 'develop')).toBe(pushed);
+        });
+    });
+
+    test('a branch that moved on with another commit is not reused: the push is refused and the job stops', () => {
+        withOrigin(({ origin, builtSha, clone, run }) => {
+            const other = path.join(path.dirname(origin), 'other');
+            git(path.dirname(origin), 'clone', '--quiet', `file://${origin}`, other);
+            git(other, 'config', 'user.email', 'other@example.com');
+            git(other, 'config', 'user.name', 'Other');
+            fs.writeFileSync(path.join(other, 'later.txt'), 'a push that landed since\n');
+            git(other, 'add', '.');
+            git(other, 'commit', '-m', 'A later commit');
+            git(other, 'push', 'origin', 'develop');
+            const moved = git(origin, 'rev-parse', 'develop');
+            expect(git(origin, 'rev-parse', 'develop^')).toBe(builtSha);
+
+            expect(() => run(clone(), '1.0.1')).toThrow();
+            expect(git(origin, 'rev-parse', 'develop')).toBe(moved);
+        });
+    });
+
+    test('a branch tip on the built commit itself (nothing pushed yet) is committed on, not reused', () => {
+        withOrigin(({ origin, builtSha, clone, run }) => {
+            expect(git(origin, 'rev-parse', 'develop')).toBe(builtSha);
+
+            run(clone(), '1.0.1');
+
+            expect(git(origin, 'rev-parse', 'develop')).not.toBe(builtSha);
+        });
+    });
+});
+
 describe('version bump type', () => {
     const script = stepNamed(build.jobs['version-bump'], 'Determine version bump type').run ?? '';
 

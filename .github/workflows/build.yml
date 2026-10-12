@@ -696,15 +696,30 @@ jobs:
             # the release creates points at a commit that exists on the branch.
             # The push is a plain fast-forward: if the branch moved past the
             # built commit meanwhile it is rejected and the job stops here,
-            # leaving nothing published.
+            # leaving nothing published. A re-run of this job after the bump
+            # was pushed finds it at the branch tip (a commit on top of the
+            # built one, carrying the new version) and reuses it instead of
+            # committing the same bump a second time, which would be rejected.
             - name: Commit and push version bump
               id: bump_commit
               env:
                   REF_NAME: ${{ github.ref_name }}
+                  BUILT_SHA: ${{ github.sha }}
                   NEW_VERSION: ${{ needs.version-bump.outputs.new-version }}
                   BUMP_TYPE: ${{ needs.version-bump.outputs.bump-type }}
               run: |
                   set -euo pipefail
+                  git fetch --depth=2 origin "refs/heads/$REF_NAME"
+                  TIP_SHA=$(git rev-parse FETCH_HEAD)
+                  TIP_PARENT=$(git rev-parse --verify --quiet "$TIP_SHA^" || true)
+                  if [[ "$TIP_PARENT" == "$BUILT_SHA" ]]; then
+                    TIP_VERSION=$(git show "$TIP_SHA:package.json" | node -p "JSON.parse(require('fs').readFileSync(0, 'utf8')).version")
+                    if [[ "$TIP_VERSION" == "$NEW_VERSION" ]]; then
+                      echo "The version bump to $NEW_VERSION is already on $REF_NAME ($TIP_SHA); reusing it."
+                      echo "sha=$TIP_SHA" >> "$GITHUB_OUTPUT"
+                      exit 0
+                    fi
+                  fi
                   git config --local user.email "action@github.com"
                   git config --local user.name "GitHub Action"
                   git add package.json README.md README.lv.md docs/usage.md docs/usage.lv.md
