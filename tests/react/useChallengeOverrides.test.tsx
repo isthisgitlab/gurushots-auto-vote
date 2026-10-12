@@ -242,6 +242,24 @@ describe("what the challenge's rules contribute", () => {
             expect(result.current.titleRules?.suppressed).toBe(false);
         });
 
+        test('a rule that names a profile not stored yet picks it up when it is saved from the dialog', async () => {
+            // The rule names "X", which does not exist: no profile matched.
+            const { result } = await open(titleRuleInfo({ inlineValues: { scenario: 'Plan' } }));
+            expect(result.current.titleRules?.profile).toBeNull();
+            const opened = callsAfterOpen();
+            mockApi.getTitleProfile.mockResolvedValue(
+                titleRuleInfo({
+                    profile: { name: 'X', values: { exposure: 55 } },
+                    inlineValues: { scenario: 'Plan' },
+                }),
+            );
+            act(() => result.current.onProfilesChanged({ name: 'X', values: { exposure: 55 } }));
+            await waitFor(() => expect(result.current.titleRules?.profile?.name).toBe('X'));
+            expect(callsAfterOpen()).toBe(opened + 1);
+            expect(result.current.inheritedOf('exposure')).toBe(55);
+            expect(result.current.profileValues).toEqual({ exposure: 55 });
+        });
+
         test('a reread that fails changes nothing', async () => {
             const { result } = await open(seaside());
             mockApi.getTitleProfile.mockRejectedValue(new Error('ipc'));

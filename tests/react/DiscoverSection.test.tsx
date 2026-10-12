@@ -210,6 +210,76 @@ describe('a price that rose', () => {
     });
 });
 
+test.each([
+    ['no cost', { success: false, status: 'needs-confirm' }],
+    ['a null cost', { success: false, status: 'needs-confirm', cost: null }],
+    ['a cost that is no number', { success: false, status: 'needs-confirm', cost: '150' }],
+])('a needs-confirm answer with %s keeps the listed price', async (_name, answer) => {
+    window.api.getMemberChallenges = jest
+        .fn()
+        .mockResolvedValueOnce({ success: true, items })
+        .mockReturnValue(new Promise(() => undefined));
+    window.api.joinChallenge = jest.fn().mockResolvedValueOnce(answer).mockResolvedValue({ success: true });
+    mockTranslator.t.mockImplementation((key) => (key === 'app.discoverConfirmSpend' ? 'Spend {coins}' : key));
+    try {
+        render(<DiscoverSection isLoggedIn bankroll={invalid({ coins: 500 })} onJoined={jest.fn()} />);
+        await screen.findByText('Paid One');
+        fireEvent.click(screen.getByText('app.discoverJoinPaid'));
+        fireEvent.click(await screen.findByText('Spend 100'));
+        await waitFor(() => expect(window.api.joinChallenge).toHaveBeenCalledTimes(1));
+        // A cost of 0 (what Number(null) would read) must not make the row look free.
+        expect(screen.getAllByText('app.discoverJoinPaid')).toHaveLength(1);
+        fireEvent.click(screen.getByText('app.discoverJoinPaid'));
+        expect(await screen.findByText('Spend 100')).toBeTruthy();
+    } finally {
+        mockTranslator.t.mockImplementation((key) => key);
+    }
+});
+
+describe('two joins at once', () => {
+    const twoFree = invalid<OpenChallenge[]>([
+        { ...items[0], id: 1, title: 'Alpha' },
+        { ...items[0], id: 2, title: 'Beta' },
+    ]);
+
+    test('each row is busy for its own join only, and finishing one leaves the other busy', async () => {
+        window.api.getMemberChallenges = jest.fn().mockResolvedValue({ success: true, items: twoFree });
+        const release: Record<number, () => void> = {};
+        window.api.joinChallenge = invalid(
+            jest.fn(
+                (id: string | number) =>
+                    new Promise((resolve) => {
+                        release[Number(id)] = () => resolve({ success: false, status: 'busy' });
+                    }),
+            ),
+        );
+        mockTranslator.t.mockImplementation((key) =>
+            key === 'app.discoverJoinLabel' ? 'Join {title}' : key === 'app.discoverJoining' ? 'Joining…' : key,
+        );
+        try {
+            render(<DiscoverSection isLoggedIn bankroll={invalid({ coins: 500 })} onJoined={jest.fn()} />);
+            await screen.findByText('Alpha');
+            fireEvent.click(screen.getByRole('button', { name: 'Join Alpha' }));
+            fireEvent.click(screen.getByRole('button', { name: 'Join Beta' }));
+            await waitFor(() => expect(screen.getAllByText('Joining…')).toHaveLength(2));
+
+            // Beta finishes first: Beta is free again, Alpha is still joining and still cannot be pressed.
+            await act(async () => release[2]());
+            await waitFor(() => expect(screen.getAllByText('Joining…')).toHaveLength(1));
+            expect(screen.getByRole<HTMLButtonElement>('button', { name: 'Join Beta' }).disabled).toBe(false);
+            const alpha = screen.getByText('Joining…').closest('li')!;
+            expect(within(alpha).getByText('Alpha')).toBeTruthy();
+            expect(within(alpha).getByText<HTMLButtonElement>('Joining…').disabled).toBe(true);
+
+            await act(async () => release[1]());
+            await waitFor(() => expect(screen.queryByText('Joining…')).toBeNull());
+            expect(screen.getByRole<HTMLButtonElement>('button', { name: 'Join Alpha' }).disabled).toBe(false);
+        } finally {
+            mockTranslator.t.mockImplementation((key) => key);
+        }
+    });
+});
+
 test('a free join sends no cost to confirm', async () => {
     render(<DiscoverSection isLoggedIn bankroll={invalid({ coins: 500 })} onJoined={jest.fn()} />);
     await screen.findByText('Free One');

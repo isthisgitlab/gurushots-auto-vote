@@ -385,14 +385,14 @@ export function DiscoverSection({
     useOnChosenPhotosCleared(() => void chosen.refetch());
     const [confirm, setConfirm] = useState<OpenChallenge | null>(null); // challenge pending paid confirmation
     const [choosing, setChoosing] = useState<OpenChallenge | null>(null); // challenge whose photos are being chosen
-    const [busyId, setBusyId] = useState<Challenge['id'] | null>(null);
+    const [busyIds, setBusyIds] = useState<ReadonlySet<Challenge['id']>>(new Set()); // joins in flight, by id
     const [results, setResults] = useState<Record<string, JoinOutcome>>({}); // id -> outcome result
     const { noteAnswer, withAnswerCost } = useRepricedRows(items);
 
     const doJoin = useCallback(
         async (challenge: OpenChallenge, spendCoins: boolean) => {
             const id = challenge?.id;
-            setBusyId(id);
+            setBusyIds((prev) => new Set(prev).add(id));
             try {
                 // A paid join names the cost the user was shown: a price that rose since then is not consented to.
                 const res: JoinOutcome = spendCoins
@@ -421,7 +421,7 @@ export function DiscoverSection({
                 }));
                 return { success: false };
             } finally {
-                setBusyId(null);
+                setBusyIds((prev) => new Set([...prev].filter((other) => other !== id)));
             }
         },
         [refetch, onJoined, noteAnswer],
@@ -496,7 +496,7 @@ export function DiscoverSection({
                                     key={c.id}
                                     c={c}
                                     outcome={results[c.id]}
-                                    busy={busyId === c.id}
+                                    busy={busyIds.has(c.id)}
                                     nowSec={nowSec}
                                     onChoose={() => setChoosing(c)}
                                     onJoin={() => onJoinClick(c)}

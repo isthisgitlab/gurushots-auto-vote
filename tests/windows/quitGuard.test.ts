@@ -288,6 +288,39 @@ describe('holdQuitForOpenBoosts — the dialog', () => {
         expect(logger.cat.error).toHaveBeenCalledWith('Quit confirmation failed — quitting anyway:', err);
         expect(proceed).toHaveBeenCalledTimes(1);
     });
+
+    test('a dialog that throws at once quits anyway, runs proceed once, and leaves no stuck prompt behind', async () => {
+        guard.rememberChallenges([timed], false);
+        const err = new Error('no dialog');
+        const throwing = setup({
+            showMessageBox: invalid(
+                jest.fn(() => {
+                    throw err;
+                }),
+            ),
+        });
+        expect(throwing.hold()).toBe(true);
+        await flush();
+        expect(throwing.event.preventDefault).toHaveBeenCalled();
+        expect(logger.cat.error).toHaveBeenCalledWith('Quit confirmation failed — quitting anyway:', err);
+        expect(throwing.proceed).toHaveBeenCalledTimes(1);
+        // The re-issued quit passes straight through, and the guard is not stuck: once it re-arms, it asks again.
+        expect(setup().hold()).toBe(false);
+        guard.resetQuitGuard();
+        guard.rememberChallenges([timed], false);
+        const next = setup({ showMessageBox: invalid(jest.fn(() => new Promise(() => {}))) });
+        expect(next.hold()).toBe(true);
+        expect(next.dialog.showMessageBox).toHaveBeenCalledTimes(1);
+    });
+
+    test('a failed dialog runs proceed once, not once per path', async () => {
+        guard.rememberChallenges([timed], false);
+        const rejecting = setup({ showMessageBox: invalid(jest.fn(() => Promise.reject(new Error('x')))) });
+        rejecting.hold();
+        await flush();
+        await flush();
+        expect(rejecting.proceed).toHaveBeenCalledTimes(1);
+    });
 });
 
 describe('bypass and reset', () => {

@@ -236,7 +236,8 @@ function useProfileReread({
     const onScreen = useLatestRef(isOpen ? `${challengeId}\0${challengeTitle}` : null);
     const suppressedNow = useLatestRef(rules.suppressed);
     return ({ name }: { name: string; values?: ChallengeValues; deleted?: boolean }) => {
-        if (!challengeId || name.toLowerCase() !== rules.profile?.name.toLowerCase()) return;
+        // A rule may name a profile that is not stored yet, and saving it here makes it apply: read again then too.
+        if (!challengeId || (rules.profile && name.toLowerCase() !== rules.profile.name.toLowerCase())) return;
         const asked = onScreen.current;
         void rereadTitleRules(
             challengeTitle,

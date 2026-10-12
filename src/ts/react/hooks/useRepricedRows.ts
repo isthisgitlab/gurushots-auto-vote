@@ -1,6 +1,7 @@
 import { useCallback, useState } from 'react';
 import { useLatestRef } from './useLatestRef';
 
+import type { JoinOutcome } from '@/components/app/DiscoverSection';
 import type { OpenChallenge } from '../../types/gurushots';
 
 type Price = { cost: number; list: OpenChallenge[] };
@@ -16,9 +17,10 @@ export function useRepricedRows(items: OpenChallenge[]) {
     const listRead = useLatestRef(items);
 
     const noteAnswer = useCallback(
-        (id: OpenChallenge['id'], answer: { status?: string; cost?: number } | null | undefined) => {
-            if (answer?.status !== 'needs-confirm' || !Number.isFinite(Number(answer.cost))) return;
-            setRepriced((prev) => ({ ...prev, [id]: { cost: Number(answer.cost), list: listRead.current } }));
+        (id: OpenChallenge['id'], answer: Pick<JoinOutcome, 'status' | 'cost'>) => {
+            const { status, cost } = answer;
+            if (status !== 'needs-confirm' || typeof cost !== 'number' || !Number.isFinite(cost)) return;
+            setRepriced((prev) => ({ ...prev, [id]: { cost, list: listRead.current } }));
         },
         [listRead],
     );

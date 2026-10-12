@@ -199,29 +199,32 @@ const holdQuitForOpenBoosts = (
     prompting = true;
 
     const options = quitDialogOptions(boosts, t, locale);
-    const shown =
-        parent && !parent.isDestroyed() ? dialog.showMessageBox(parent, options) : dialog.showMessageBox(options);
-
     const confirm = () => {
         bypassQuitGuard();
         proceed();
     };
+    // A broken dialog must never make the app unquittable.
+    const dialogFailed = (error: unknown) => {
+        prompting = false;
+        logger.withCategory('ui').error('Quit confirmation failed — quitting anyway:', error);
+        confirm();
+    };
+    let shown;
+    try {
+        shown =
+            parent && !parent.isDestroyed() ? dialog.showMessageBox(parent, options) : dialog.showMessageBox(options);
+    } catch (error) {
+        dialogFailed(error);
+        return true;
+    }
     // Two-argument then: only a failed dialog lands in the error branch, so
     // `proceed` can never run twice.
-    void Promise.resolve(shown).then(
-        ({ response }) => {
-            prompting = false;
-            if (response !== 1) return;
-            logger.withCategory('ui').info(`Quit confirmed with ${boosts.length} boost(s) due`, null);
-            confirm();
-        },
-        (error) => {
-            // A broken dialog must never make the app unquittable.
-            prompting = false;
-            logger.withCategory('ui').error('Quit confirmation failed — quitting anyway:', error);
-            confirm();
-        },
-    );
+    void Promise.resolve(shown).then(({ response }) => {
+        prompting = false;
+        if (response !== 1) return;
+        logger.withCategory('ui').info(`Quit confirmed with ${boosts.length} boost(s) due`, null);
+        confirm();
+    }, dialogFailed);
     return true;
 };
 
