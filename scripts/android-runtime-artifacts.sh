@@ -3,7 +3,7 @@
 # classpath (`:app:dependencies --configuration releaseRuntimeClasspath`):
 #
 #   android/release-runtime-artifacts.txt  the libraries the release APK ships (group:artifact, sorted, one per line)
-#   android/release-runtime-notices.txt    the ones of them whose jar or aar carries a META-INF/NOTICE* file (empty if none)
+#   android/release-runtime-notices.txt    the ones of them whose jar or aar (or a jar inside it) carries a META-INF/NOTICE* file
 #
 # CI runs it in the Android job and fails when either file differs from the committed one;
 # scripts/android-verification-metadata.sh runs it too, so a dependency change regenerates all of it in one go.
@@ -31,8 +31,10 @@ cleanup() {
 }
 trap cleanup EXIT
 
-# Prints "SCANNED n" (the modules it opened) and "NOTICE group:artifact" for every module of the release runtime
-# classpath whose jar, or the classes.jar inside its aar, has a META-INF/NOTICE* entry.
+# Prints "SCANNED group:artifact" for every module of the release runtime classpath it opened, "NOTICE group:artifact"
+# for the ones whose jar, or a jar inside its aar (classes.jar, libs/*.jar), has a META-INF/NOTICE* entry, and
+# "UNSCANNED group:artifact" for a module that resolves to a file the scan did not open (a BOM or platform has no file,
+# so it is not one).
 cat > "$work/notices.init.gradle" <<'GRADLE'
 import java.util.zip.ZipEntry
 import java.util.zip.ZipFile
@@ -49,7 +51,7 @@ allprojects {
                 new ZipFile(file).withCloseable { zip ->
                     zip.entries().each { ZipEntry entry ->
                         if (isNotice(entry.name)) found = true
-                        if (entry.name == 'classes.jar') {
+                        if (entry.name == 'classes.jar' || entry.name ==~ /libs\/[^\/]+\.jar/) {
                             new ZipInputStream(zip.getInputStream(entry)).withCloseable { nested ->
                                 ZipEntry inner
                                 while ((inner = nested.nextEntry) != null) {
@@ -77,8 +79,18 @@ allprojects {
                     }
                 }
             }
-            println "SCANNED ${scanned.size()}"
+            // Lenient resolution skips what a view cannot take, so what resolves to a file at all is asked of a view
+            // that takes whatever the configuration gives; a module it lists that was not opened is a gap in the scan.
+            def resolved = new TreeSet<String>()
+            configurations.getByName('releaseRuntimeClasspath').incoming.artifactView { config ->
+                config.lenient = true
+            }.artifacts.artifacts.each { artifact ->
+                def id = artifact.id.componentIdentifier
+                if (id instanceof ModuleComponentIdentifier) resolved.add("${id.group}:${id.module}".toString())
+            }
+            scanned.each { println "SCANNED ${it}" }
             withNotice.each { println "NOTICE ${it}" }
+            resolved.findAll { !scanned.contains(it) }.each { println "UNSCANNED ${it}" }
         }
     }
 }
@@ -91,10 +103,19 @@ GRADLE
     ./gradlew --no-daemon --console=plain -q -I "$work/notices.init.gradle" :app:printRuntimeNotices > "$work/notices"
 )
 
-# A scan that opened nothing would report "no NOTICE" for everything.
-scanned=$(sed -nE 's/^SCANNED ([0-9]+)$/\1/p' "$work/notices")
-if [ "${scanned:-0}" -lt 1 ]; then
+# A scan that opened nothing would report "no NOTICE" for everything, and one that skipped a module that resolves to a
+# file would hide its NOTICE: either is a failure, not an empty answer.
+sed -nE 's/^SCANNED ([A-Za-z0-9_.-]+:[A-Za-z0-9_.-]+)$/\1/p' "$work/notices" > "$work/scanned"
+if [ ! -s "$work/scanned" ]; then
     echo "The NOTICE scan opened no artifact of the release runtime classpath; nothing was written." >&2
+    exit 1
+fi
+echo "==> scanned for a NOTICE file ($(wc -l < "$work/scanned" | tr -d ' ') artifacts):"
+sed 's/^/    /' "$work/scanned"
+unscanned=$(sed -nE 's/^UNSCANNED ([A-Za-z0-9_.-]+:[A-Za-z0-9_.-]+)$/\1/p' "$work/notices")
+if [ -n "$unscanned" ]; then
+    echo "These release runtime artifacts resolve to a file the NOTICE scan did not open; nothing was written:" >&2
+    echo "$unscanned" | sed 's/^/    /' >&2
     exit 1
 fi
 
@@ -105,8 +126,7 @@ if [ ! -s "$new_artifacts" ]; then
     echo "No release runtime artifacts were found in the Gradle output; nothing was written." >&2
     exit 1
 fi
-# grep exits 1 for no match, which is the normal answer here.
-{ sed -nE 's/^NOTICE ([A-Za-z0-9_.-]+:[A-Za-z0-9_.-]+)$/\1/p' "$work/notices" || true; } | LC_ALL=C sort -u > "$new_notices"
+sed -nE 's/^NOTICE ([A-Za-z0-9_.-]+:[A-Za-z0-9_.-]+)$/\1/p' "$work/notices" | LC_ALL=C sort -u > "$new_notices"
 
 mv "$new_artifacts" "$artifacts"
 mv "$new_notices" "$notices"

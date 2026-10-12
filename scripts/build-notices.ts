@@ -27,6 +27,8 @@ import { isPlainObject } from '../src/ts/plainObject';
 import { GLOVE_URL } from './fetch-embeddings/config';
 import { REPOS } from './fetch-vision-model';
 import { readLicenseText, visionModelNotice } from './lib/licenses';
+import { loadAndroidComponents, loadLicenses } from './lib/noticeData';
+import type { AndroidComponent, LicenseEntry } from './lib/noticeData';
 import { runIfMain } from './lib/run-if-main';
 
 const ROOT = path.join(__dirname, '..');
@@ -46,29 +48,6 @@ interface PackageRef {
     version: string;
 }
 
-/** One packages.json entry: the SPDX expression shown, the vendored text ids that apply, copyright lines. */
-interface LicenseEntry {
-    license: string;
-    texts: string[];
-    copyright: string[];
-    /** Where the source of this version lives; `{version}` is replaced. */
-    source?: string;
-}
-
-/** One android.json entry: a native library group the Android app ships. */
-interface AndroidComponent {
-    name: string;
-    /** `group:artifact`, or a pattern ending in `*` for every coordinate that starts with the rest (`androidx.*`, `group:prefix-*`). */
-    coordinates: string[];
-    license: string;
-    copyright: string;
-    url: string;
-    /** The android/variables.gradle variable holding the version. */
-    versionVariable?: string;
-    /** Pulled in by another library rather than declared by the app. */
-    transitive?: boolean;
-}
-
 interface Lockfile {
     importer: Record<string, unknown>;
     snapshots: Record<string, unknown>;
@@ -81,28 +60,10 @@ interface NoticeInputs {
     android: AndroidComponent[];
     androidVersions: Record<string, string>;
     onnxruntimeVersion: string;
+    /** The ids (`NOTICE-<group>-<artifact>`) of the vendored NOTICE files of shipped Android artifacts. */
+    noticeIds: string[];
     readText: (id: string) => string;
 }
-
-const isStringArray = (value: unknown): value is string[] =>
-    Array.isArray(value) && value.every((item) => typeof item === 'string');
-
-const isLicenseEntry = (value: unknown): value is LicenseEntry =>
-    isPlainObject(value) &&
-    typeof value.license === 'string' &&
-    isStringArray(value.texts) &&
-    isStringArray(value.copyright) &&
-    (value.source === undefined || typeof value.source === 'string');
-
-const isAndroidComponent = (value: unknown): value is AndroidComponent =>
-    isPlainObject(value) &&
-    typeof value.name === 'string' &&
-    isStringArray(value.coordinates) &&
-    typeof value.license === 'string' &&
-    typeof value.copyright === 'string' &&
-    typeof value.url === 'string' &&
-    (value.versionVariable === undefined || typeof value.versionVariable === 'string') &&
-    (value.transitive === undefined || typeof value.transitive === 'boolean');
 
 /** The lockfile's last YAML document: pnpm 12 writes the environment's own lock first. */
 const parseLockfile = (text: string): Lockfile => {
@@ -285,7 +246,17 @@ const renderRuntimesSection = ({ readText, onnxruntimeVersion }: NoticeInputs) =
     '',
 ];
 
-/** Section 6 lines; records each component's license text. */
+const NOTICE_ID_PREFIX = 'NOTICE-';
+
+/** Whether a vendored NOTICE file (`NOTICE-<group>-<artifact>`) belongs to the artifacts an android.json pattern names. */
+const noticeBelongsTo = (pattern: string, noticeId: string) => {
+    const name = noticeId.slice(NOTICE_ID_PREFIX.length);
+    return pattern.endsWith('*')
+        ? name.startsWith(pattern.slice(0, -1).replace(':', '-'))
+        : name === pattern.replace(':', '-');
+};
+
+/** Section 6 lines; records each component's license text. Every vendored NOTICE file is rendered with its component. */
 const renderAndroidSection = (inputs: NoticeInputs, usedTexts: Set<string>) => {
     const lines: string[] = [
         ...heading('6. Android native libraries'),
@@ -293,6 +264,7 @@ const renderAndroidSection = (inputs: NoticeInputs, usedTexts: Set<string>) => {
         'packages listed in section 3).',
         '',
     ];
+    const rendered = new Set<string>();
     for (const component of inputs.android) {
         const version = component.versionVariable ? inputs.androidVersions[component.versionVariable] : undefined;
         usedTexts.add(component.license);
@@ -300,9 +272,27 @@ const renderAndroidSection = (inputs: NoticeInputs, usedTexts: Set<string>) => {
             `${component.name}${version ? ` ${version}` : ''}`,
             `  License: ${component.license}`,
             `  ${component.copyright}`,
+            ...(component.attribution ? [`  ${component.attribution}`] : []),
             `  ${component.url}`,
             '',
         );
+        for (const id of inputs.noticeIds) {
+            if (!component.coordinates.some((pattern) => noticeBelongsTo(pattern, id))) continue;
+            rendered.add(id);
+            lines.push(
+                `  NOTICE of ${id.slice(NOTICE_ID_PREFIX.length)}:`,
+                '',
+                ...inputs
+                    .readText(id)
+                    .split('\n')
+                    .map((line) => (line ? `    ${line}` : '')),
+                '',
+            );
+        }
+    }
+    const orphans = inputs.noticeIds.filter((id) => !rendered.has(id));
+    if (orphans.length > 0) {
+        throw new Error(`No scripts/licenses/android.json component for the vendored ${orphans.join(', ')}`);
     }
     return lines;
 };
@@ -338,27 +328,6 @@ const parseGradleVariables = (text: string) => {
     return variables;
 };
 
-const readJson = (file: string): unknown => JSON.parse(fs.readFileSync(file, 'utf8'));
-
-/** Reads and validates scripts/licenses/packages.json. */
-const loadLicenses = (file: string): Record<string, LicenseEntry> => {
-    const data = readJson(file);
-    if (!isPlainObject(data)) throw new Error(`${file} must hold a JSON object`);
-    const licenses: Record<string, LicenseEntry> = {};
-    for (const [name, entry] of Object.entries(data)) {
-        if (!isLicenseEntry(entry)) throw new Error(`${file}: invalid entry for ${name}`);
-        licenses[name] = entry;
-    }
-    return licenses;
-};
-
-/** Reads and validates scripts/licenses/android.json. */
-const loadAndroidComponents = (file: string): AndroidComponent[] => {
-    const data = readJson(file);
-    if (!Array.isArray(data) || !data.every(isAndroidComponent)) throw new Error(`${file}: invalid component list`);
-    return data;
-};
-
 interface MainOptions {
     lockPath?: string;
     licensesDir?: string;
@@ -383,6 +352,11 @@ const main = ({
         );
     }
     const textsDir = path.join(licensesDir, 'texts');
+    const noticeIds = fs
+        .readdirSync(textsDir)
+        .filter((file) => file.startsWith(NOTICE_ID_PREFIX) && file.endsWith('.txt'))
+        .map((file) => file.slice(0, -'.txt'.length))
+        .sort();
     const notices = renderNotices({
         projectLicense: fs.readFileSync(licensePath, 'utf8').trimEnd(),
         packages,
@@ -390,6 +364,7 @@ const main = ({
         android: loadAndroidComponents(path.join(licensesDir, 'android.json')),
         androidVersions: parseGradleVariables(fs.readFileSync(androidVariablesPath, 'utf8')),
         onnxruntimeVersion: onnxruntime.version,
+        noticeIds,
         readText: (id) => readLicenseText(id, textsDir),
     });
     fs.writeFileSync(outPath, notices);
