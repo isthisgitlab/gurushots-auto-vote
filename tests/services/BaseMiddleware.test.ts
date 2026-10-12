@@ -7,7 +7,7 @@
 
 jest.mock('../../src/ts/settings', () => ({
     getSetting: jest.fn(),
-    setSetting: jest.fn(),
+    setSetting: jest.fn(() => true),
     forgetOpenChallengeIds: jest.fn(),
 }));
 

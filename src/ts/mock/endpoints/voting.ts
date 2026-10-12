@@ -1,6 +1,7 @@
 /**
  * Mock counterpart to api/voting.ts: session-stable vote images and a vote
- * submit that records the pre-vote exposure in metadata like the real one.
+ * submit. Nothing in mock mode reads vote metadata, so the submit writes none
+ * (and never touches the real metadata.json).
  */
 
 import * as voting from '../voting';
@@ -8,7 +9,6 @@ import * as settings from '../../settings';
 import * as logger from '../../logger';
 import { simulateApiResponse, simulateApiError, mockMethod } from '../simulate';
 import { getSessionCache } from '../sessionCache';
-import { mockMetadata } from '../metadata';
 
 import type { Challenge } from '../../types/gurushots';
 import type * as votingModule from '../../api/voting';
@@ -81,21 +81,6 @@ const submitVotes: typeof votingModule.submitVotes = mockMethod(
     async (voteImages) => {
         if (voteImages.images && voteImages.images.length > 0) {
             logger.withCategory('voting').info('Submitting mock votes successfully', null);
-
-            // Recorded in memory: mock mode never writes the real metadata.json.
-            if (voteImages.challenge?.id) {
-                // Use the ORIGINAL exposure factor from before voting (the "from what" value)
-                const originalExposure = Math.round(voteImages.voting?.exposure?.exposure_factor || 50);
-                const challengeId = String(voteImages.challenge.id);
-                mockMetadata.updateChallengeVoteMetadata(challengeId, originalExposure);
-                logger
-                    .withCategory('voting')
-                    .success(
-                        `Mock metadata updated for challenge ${challengeId}: original exposure ${originalExposure}%`,
-                        null,
-                        null,
-                    );
-            }
 
             return simulateApiResponse(voting.mockVoteSubmissionSuccess, 2000);
         } else {

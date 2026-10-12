@@ -317,7 +317,6 @@ export const logMessages = {
     m7d0ae87bd933: 'izlaižamās versijas migrācija neizdevās:',
     m7d3e94594cb5: 'Neizdevās ielādēt izaicinājumus manuālai balsošanai',
     m7d5c8341f22f: 'Režīms mainīts uz: {0}',
-    m7da68a26ab2c: 'Atjaunināti izaicinājuma {0} testa metadati: sākotnējā redzamība {1} %',
     m7dca69aae98c: 'Foto ID: {0}',
     m7e1bb08d7ad3: 'Neizdevās nolasīt Capacitor uzstādījumus:',
     m7eb0dee9fde9: '{0}: neizdevās noskaidrot identitāti: {1}',

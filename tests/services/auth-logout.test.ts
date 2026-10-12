@@ -28,6 +28,7 @@ jest.mock('../../src/ts/settings', () => {
         setSetting: jest.fn((key: string, value: unknown) => {
             // Write-behind: only the in-memory cache updates synchronously.
             state.cached[key] = value;
+            return true;
         }),
         forgetOpenChallengeIds: jest.fn(),
         flushPendingWrites: jest.fn(async () => {
@@ -194,6 +195,10 @@ describe('switchAccountToken — a login on top of another session', () => {
         settings.__state.cached = { token: 'old-token' };
         settings.__state.persisted = { token: 'old-token' };
         jest.clearAllMocks();
+        settings.setSetting.mockImplementation((key: string, value: unknown) => {
+            settings.__state.cached[key] = value;
+            return true;
+        });
     });
 
     const remembered = () => {
@@ -241,6 +246,19 @@ describe('switchAccountToken — a login on top of another session', () => {
         switchAccountToken('new-token');
         await fetchUpcoming('tok-a', fetchList);
         expect(fetchList).toHaveBeenCalledTimes(2);
+    });
+
+    it('answers true when the token was saved', () => {
+        expect(switchAccountToken('new-token')).toBe(true);
+    });
+
+    it('answers false, stores nothing and forgets nothing when the settings refuse the write', () => {
+        const memory = remembered();
+        settings.setSetting.mockReturnValueOnce(false);
+        expect(switchAccountToken('new-token')).toBe(false);
+        expect(settings.forgetOpenChallengeIds).not.toHaveBeenCalled();
+        expect(memory.open()).toBeDefined();
+        expect(settings.__state.cached.token).toBe('old-token');
     });
 
     it('keeps everything when the token is the one already stored', () => {

@@ -14,6 +14,7 @@ const dialog = () => screen.getByRole('dialog');
 
 afterEach(() => {
     delete (globalThis as RendererGlobals).Capacitor;
+    delete (globalThis as { webShell?: true }).webShell;
 });
 
 describe('third-party licenses', () => {
@@ -160,20 +161,44 @@ describe('Delete all local data', () => {
         expect(within(dialog()).getByRole('status').textContent).toBe('about.deleteDone');
         // Nothing left to confirm: only a way to close.
         expect(within(dialog()).queryByRole('button', { name: 'about.deleteConfirm' })).toBeNull();
-        fireEvent.click(within(dialog()).getByRole('button', { name: 'common.closeModal' }));
+        // The visible button says Close (not the aria-only "close modal" label).
+        fireEvent.click(within(dialog()).getByRole('button', { name: 'app.close' }));
         expect(screen.queryByRole('dialog')).toBeNull();
     });
 
-    test('a refusal because a voting pass is running says to stop auto-vote and try again', async () => {
-        jest.mocked(window.api.wipeLocalData).mockResolvedValue({ success: false, error: 'busy' });
+    test('in the web shell the delete text says the server stops and must be started again', async () => {
+        (globalThis as { webShell?: true }).webShell = true;
+        jest.mocked(window.api.wipeLocalData).mockResolvedValue({ success: true });
+        render(<AboutDataSection />);
+        openDelete();
+        expect(within(dialog()).getByText('about.deleteAfterWeb')).toBeTruthy();
+        expect(within(dialog()).queryByText('about.deleteAfter')).toBeNull();
+        confirm();
+        await waitFor(() => expect(within(dialog()).getByRole('status').textContent).toBe('about.deleteDoneWeb'));
+    });
+
+    test.each([
+        ['busy-pass', 'about.deleteBusyPass'],
+        ['busy-cli', 'about.deleteBusyCli'],
+        ['busy-app', 'about.deleteBusyApp'],
+    ])('a refusal with %s says what is in the way and the step that clears it', async (code, key) => {
+        jest.mocked(window.api.wipeLocalData).mockResolvedValue({ success: false, error: code });
         render(<AboutDataSection />);
         openDelete();
         confirm();
         const alert = await within(dialog()).findByRole('alert');
-        expect(alert.textContent).toBe('about.deleteBusy');
-        // Still offered: stop the vote, then try again.
+        expect(alert.textContent).toBe(key);
+        // Still offered: clear what is in the way, then try again.
         expect(within(dialog()).getByRole('button', { name: 'about.deleteConfirm' })).toBeTruthy();
         expect(window.api.logError).not.toHaveBeenCalled();
+    });
+
+    test('a code that is not a refusal this build knows (even an object key) is the generic failure', async () => {
+        jest.mocked(window.api.wipeLocalData).mockResolvedValue({ success: false, error: 'constructor' });
+        render(<AboutDataSection />);
+        openDelete();
+        confirm();
+        expect((await within(dialog()).findByRole('alert')).textContent).toBe('about.deleteFailed');
     });
 
     test.each([
@@ -213,7 +238,7 @@ describe('Delete all local data', () => {
     });
 
     test('closing after an error clears it for the next time', async () => {
-        jest.mocked(window.api.wipeLocalData).mockResolvedValue({ success: false, error: 'busy' });
+        jest.mocked(window.api.wipeLocalData).mockResolvedValue({ success: false, error: 'busy-pass' });
         render(<AboutDataSection />);
         openDelete();
         confirm();

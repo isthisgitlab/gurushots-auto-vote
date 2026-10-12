@@ -281,6 +281,24 @@ describe('Capacitor bridge', () => {
             expect(res).toEqual({ success: false, error: 'No mechanism', fallbackUrl: 'https://example.com/releases' });
         });
 
+        test('a download the native updater refused carries its code in update-error', async () => {
+            updateChecker.checkForUpdates.mockResolvedValue(available);
+            await api.checkForUpdates();
+            installer.downloadAndInstall.mockResolvedValue({ success: false, error: 'Refused', code: 'digest' });
+            const onError = jest.fn();
+            api.onUpdateError(onError);
+
+            const res = await api.downloadUpdate();
+
+            expect(onError).toHaveBeenCalledWith({ message: 'Refused', code: 'digest' });
+            expect(res).toEqual({
+                success: false,
+                error: 'Refused',
+                code: 'digest',
+                fallbackUrl: 'https://example.com/releases',
+            });
+        });
+
         test('install-update, get-releases-url and can-auto-update return their fixed answers', async () => {
             await expect(api.installUpdate()).resolves.toMatchObject({ success: true, info: expect.any(String) });
             await expect(api.getReleasesUrl()).resolves.toEqual({

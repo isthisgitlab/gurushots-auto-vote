@@ -312,7 +312,6 @@ export const logMessages = {
     m7d0ae87bd933: 'skip-version migration failed:',
     m7d3e94594cb5: 'Failed to fetch challenges for manual voting',
     m7d5c8341f22f: 'Mode changed to: {0}',
-    m7da68a26ab2c: 'Mock metadata updated for challenge {0}: original exposure {1}%',
     m7dca69aae98c: 'Image ID: {0}',
     m7e1bb08d7ad3: 'Capacitor preferences read failed:',
     m7eb0dee9fde9: '{0}: identity lookup failed: {1}',

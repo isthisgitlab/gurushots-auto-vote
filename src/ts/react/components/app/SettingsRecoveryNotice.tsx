@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
 import { useTranslation } from '@/contexts/TranslationContext';
+import { usePlatformCapabilities } from '@/api/usePlatformCapabilities';
 import { useIpcQuery } from '@/api/useIpcQuery';
 import * as ipc from '@/api/ipc';
 import { interp } from '@/utils/interp';
@@ -7,7 +8,10 @@ import { interp } from '@/utils/interp';
 import type { IpcQueryTools } from '@/api/useIpcQuery';
 
 type RecoveryCode = 'settings-corrupt' | 'settings-unreadable' | 'settings-migration-failed' | 'settings-save-dropped';
-type Recovery = { code: RecoveryCode; path: string };
+// `cause` (a save the window gave up only): why the change was dropped — `conflict` (the background service wrote at
+// the same time), `too-large` (past the size the store takes) or `storage` (the store refused it). Any other value,
+// or none, is worded neutrally.
+type Recovery = { code: RecoveryCode; path: string; cause?: string };
 
 // The translation keys of each code's what happened / why / what next text.
 const RECOVERY_KEYS: Record<RecoveryCode, { what: string; why: string; next: string }> = {
@@ -28,9 +32,30 @@ const RECOVERY_KEYS: Record<RecoveryCode, { what: string; why: string; next: str
     },
     'settings-save-dropped': {
         what: 'notice.recoveryDroppedWhat',
-        why: 'notice.recoveryDroppedWhy',
+        why: 'notice.recoveryDroppedWhyUnknown',
         next: 'notice.recoveryDroppedNext',
     },
+};
+
+const DROPPED_WHY = new Map([
+    ['conflict', 'notice.recoveryDroppedWhyConflict'],
+    ['too-large', 'notice.recoveryDroppedWhyTooLarge'],
+    ['storage', 'notice.recoveryDroppedWhyStorage'],
+]);
+
+// The text keys of a notice: its code's, refined by what the platform and the cause make true. A damaged settings
+// copy on Android sits in app-private storage the user cannot open; a dropped save is worded by why it was dropped.
+const keysFor = (recovery: Recovery, settingsFile: boolean) => {
+    const keys = { ...RECOVERY_KEYS[recovery.code] };
+    if (recovery.code === 'settings-corrupt' && !settingsFile) {
+        keys.why = 'notice.recoveryCorruptWhyAndroid';
+        keys.next = 'notice.recoveryCorruptNextAndroid';
+    }
+    if (recovery.code === 'settings-save-dropped') {
+        keys.why = DROPPED_WHY.get(recovery.cause ?? '') ?? 'notice.recoveryDroppedWhyUnknown';
+        if (recovery.cause === 'too-large') keys.next = 'notice.recoveryDroppedNextTooLarge';
+    }
+    return keys;
 };
 
 const fetchRecovery = () => ipc.getSettingsRecovery();
@@ -53,6 +78,7 @@ const applyRecovery = (
  */
 export function SettingsRecoveryNotice() {
     const { t } = useTranslation();
+    const { settingsFile } = usePlatformCapabilities();
     const { data: recovery } = useIpcQuery(fetchRecovery, {
         initialData: null as Recovery | null,
         apply: applyRecovery,
@@ -64,7 +90,7 @@ export function SettingsRecoveryNotice() {
         if (!recovery) setDismissed(false);
     }, [recovery]);
     if (!recovery || dismissed) return null;
-    const keys = RECOVERY_KEYS[recovery.code];
+    const keys = keysFor(recovery, settingsFile);
     return (
         <div role="alert" className="alert alert-warning mb-4 text-sm items-start">
             <div className="flex-1 space-y-1">

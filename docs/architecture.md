@@ -555,7 +555,8 @@ repeated six times is one that gets forgotten at one of them.
 
 - `ipc/manifest.ts` is the **dependency-free single source of truth** for the whole `window.api` surface —
   four lists: `invokeChannels`, `aliases`, `sendMethods`, `eventMethods`, plus the Logs window's subsets
-  `logsWindowInvokeChannels` / `logsWindowEventMethods`. Both shells generate from it:
+  `logsWindowInvokeChannels` / `logsWindowEventMethods` and the settings it may read, `logsWindowSettingKeys`
+  (`language` only). Both shells generate from it:
   Electron `preload.ts` builds `contextBridge.exposeInMainWorld('api', …)`; Capacitor
   `bridge/capacitor.ts` builds the identical surface in-process.
 - **Drift is CI-enforced** by `tests/ipc/manifest.test.ts` at the name level. Signatures travel through the
@@ -591,15 +592,38 @@ repeated six times is one that gets forgotten at one of them.
   most 2 MiB and refuses a plain write. A save is accepted only while the blob still holds what the writer last read;
   otherwise the writer reads again and makes **only its own change** again on what is there (`rebaseSettingsText`,
   a three-way merge of the text it was made from, the changed text and the stored one: nested objects merge key by
-  key, and where both sides changed one value the writer's wins), up to 5 attempts. A blob that cannot be read is
+  key, and where both sides changed one value the writer's wins), up to 5 attempts. The writer's text is the blob
+  persistence writes — the stored values over the defaults — so the earlier and the stored text are put over the
+  defaults the same way before they are compared: a setting absent from the stored text but filled by its default in
+  the writer's text is not a change the writer made. A blob that cannot be read is
   never overwritten, and a save that is not made is logged and leaves the window cache showing what is stored.
   A window save given up (5 conflicting attempts, a refused save, or a plugin error) is not silent: the window's
-  `get-settings-recovery` answers `{ code: 'settings-save-dropped', path }` (`getSettingsSaveDropped`, below the
-  recovery of the stored settings in precedence), the same `settings-changed` signal a write sends is emitted so
+  `get-settings-recovery` answers `{ code: 'settings-save-dropped', path, cause }` (`getSettingsSaveDropped`, below
+  the recovery of the stored settings in precedence), the same `settings-changed` signal a write sends is emitted so
   `SettingsRecoveryNotice` re-reads, and it tells the user in what / why / next terms that the change was not saved
-  and the setting shows its stored value again. It clears when a write issued after the dropped one lands.
+  and the setting shows its stored value again. `cause` is why the save was given up and words the _why_:
+  `conflict` (the background service kept changing the settings), `too-large` (the blob is past the size the native
+  store takes; the next step is to remove per-challenge overrides and scenarios) or `storage` (the store refused or
+  failed the write); a cause the notice has no wording for reads neutrally. It clears when a write issued after the
+  dropped one lands. On Android the damaged copy of a corrupt blob is kept under the `<key>_corrupt` preference key,
+  which the user cannot open, so that notice says the app kept the copy and the settings were reset rather than
+  naming a path (`usePlatformCapabilities().settingsFile` is false there).
   `setSetting` hands `saveSettings` only the changed key, so the service's own load-and-save has no stale whole blob
   to write back. Desktop and the CLI write the file atomically and are unchanged.
+- **Session markers and "Delete all local data".** Two processes can hold the user-data directory at once, so each
+  running one leaves a marker file there (`settings/cliSessionLock.ts`): a CLI session (`start`, continuous voting)
+  holds `cli-session.lock`, the desktop app holds `desktop-app.lock` for its lifetime. A marker names its process id
+  and its holder rewrites it every 30 s (`HEARTBEAT_MS`); it counts only while that process exists **and** the marker
+  was refreshed within three beats (`STALE_AFTER_MS`), so one left by a crash or a reboot goes stale even when its
+  process id has since been given to another process. The desktop app reads the CLI marker at startup so it does not
+  clear a login the CLI session is using. The wipe (`wipeLocalData`) refuses to run while anything live is in the way
+  and touches nothing, answering the code of what it found, in this order: `busy-pass` (a voting pass runs in this
+  process), `busy-cli` (a live CLI session holds its marker) or `busy-app` (the desktop app holds its marker — what the
+  CLI's `reset-data` and the web shell see). A saved "auto-vote running" flag is only a wish to resume at the next
+  start and does not block. The delete modal words each code with its own next step (stop auto-vote / stop the CLI
+  session in its terminal / quit the desktop app); any other failure reads as the generic "not everything was
+  deleted". After a successful wipe Electron and Android relaunch; the web shell's server stops, so its text says to
+  start `pnpm web` again (`usePlatformCapabilities().relaunchesAfterWipe`, read from the flag the web bridge sets).
 - Write-behind is **ordered** (writes chain onto a promise) and `flushPendingWrites()` awaits durability
   before session invalidation. On Capacitor, `initializeAsync()` must be awaited before the first sync
   read — **each store hydrates independently**, so a new store must be wired into the Capacitor bootstrap
@@ -689,6 +713,9 @@ repeated six times is one that gets forgotten at one of them.
   settings write, no other log channel. The main process enforces the same set per sender, whatever the
   preload exposes: the menu registers the window's `webContents` with `restrictToLogsChannels`, and
   `registerHandlers` refuses any other invoke from it (`isChannelAllowedForSender`), next to `isTrustedSender`.
+  Its settings read is language-only: `get-setting` from that window answers only the `logsWindowSettingKeys`
+  (`isSettingKeyAllowedForSender` refuses any other key), and the `settings-changed` events the main process sends
+  it are cut down to the same keys, so the window learns the language and nothing else about the settings.
 - **Navigation guard** (`index/navigationGuard.ts`, registered in `index.ts` on `web-contents-created`
   so it covers every window): no window opens another — `setWindowOpenHandler` always denies, and hands
   the URL to the system (`shell.openExternal`) only when `isOpenableLinkUrl` (`format/urlSafe.ts`)

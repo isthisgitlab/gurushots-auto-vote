@@ -1,9 +1,9 @@
-import { deriveChallengeCardView, needsSecondTick } from '@/utils/challengeCardView';
+import { deriveChallengeCardView, needsSecondTick, nextBoundaryFlip } from '@/utils/challengeCardView';
 import { useDeadlineActions } from '@/api/useDeadlineActions';
 import { useSwapBacks } from '@/api/useSwapBacks';
 import { useScenarioStatus } from '@/api/useScenarioStatus';
 import { useChallengeSettings } from '@/hooks/useChallengeSettings';
-import { useTick } from '@/hooks/useTick';
+import { useTick, useRerenderAt } from '@/hooks/useTick';
 import { ChallengeCardCompact } from './ChallengeCardCompact';
 import { ChallengeCardDetail } from './ChallengeCardDetail';
 import type { TimeRemaining } from './Countdown';
@@ -71,9 +71,11 @@ export function ChallengeCard({
     // The card re-renders once a second only while something on it counts down — a turbo cooldown (so
     // canPlayAutoTurbo flips the moment it elapses, without waiting for an external poll) or a timed boost
     // window's time left. Every other render reads the clock afresh; the live countdown text is the
-    // Countdown leaf's own signal binding, so it never re-renders the card.
+    // Countdown leaf's own signal binding, so it never re-renders the card. The start- and close-gated
+    // buttons flip on one re-render scheduled for the boundary itself.
     const now = Math.floor(Date.now() / 1000);
     useTick(1000, needsSecondTick(challenge, now));
+    useRerenderAt(nextBoundaryFlip(challenge, now));
 
     const view = deriveChallengeCardView(challenge, { now, bankroll, autovoteRunning, autoFillEnabled });
     const actions = useChallengeCardActions({

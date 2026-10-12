@@ -188,6 +188,22 @@ describe('Login page', () => {
         await waitFor(() => expect(screen.getByText('errors.invalidCredentials')).toBeTruthy());
     });
 
+    test('a login that could not be saved says so, with what to do, and does not transition', async () => {
+        jest.mocked(window.api.authenticate).mockResolvedValue({ success: false, error: 'token-not-saved' });
+        await renderReady();
+        submit('alice', 'pw');
+        const text = await screen.findByText('errors.tokenNotSaved');
+        expect(text.closest('[role="alert"]')).not.toBeNull();
+        expect(window.api.login).not.toHaveBeenCalled();
+    });
+
+    test('a web shell page without a valid access token says to open the printed URL', async () => {
+        jest.mocked(window.api.authenticate).mockRejectedValue(new Error('web-shell-token'));
+        await renderReady();
+        submit('alice', 'pw');
+        expect((await screen.findByText('errors.webShellToken')).closest('[role="alert"]')).not.toBeNull();
+    });
+
     test('mountLogin renders into #root and is a no-op without it', async () => {
         mountLogin();
         expect(document.body.textContent).toBe('');

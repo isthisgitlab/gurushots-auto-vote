@@ -553,9 +553,9 @@ describe('the app window being told that a save was given up', () => {
         expect(seen).toEqual([true, false]);
     });
 
-    test('a save the plugin rejected is reported as well', async () => {
+    test('a save the plugin rejected is reported as well, as a storage failure', async () => {
         const { compareAndWrite } = nativeWindow('{"a":1}');
-        const { storage, initializeAsync, flushPendingWrites, isSaveDropped } = loadStorage();
+        const { storage, initializeAsync, flushPendingWrites, isSaveDropped, getSaveDroppedCause } = loadStorage();
         await initializeAsync();
         compareAndWrite.mockRejectedValueOnce(new Error('refused'));
 
@@ -563,6 +563,65 @@ describe('the app window being told that a save was given up', () => {
         await flushPendingWrites();
 
         expect(isSaveDropped()).toBe(true);
+        expect(getSaveDroppedCause()).toBe('storage');
+    });
+
+    test.each([
+        ['a save that kept conflicting', 'conflict'],
+        ['a blob past the size the native store takes', 'too-large'],
+        ['a store that refused the value', 'storage'],
+        ['a rejection that carries another code', 'storage'],
+        ['a rejection that is no object', 'storage'],
+    ] as const)('%s is reported with the cause %s', async (what, cause) => {
+        const { native, compareAndWrite } = nativeWindow('{"a":1}');
+        const { storage, initializeAsync, flushPendingWrites, getSaveDroppedCause } = loadStorage();
+        await initializeAsync();
+        if (cause === 'conflict') alwaysConflicting(native, compareAndWrite);
+        else if (cause === 'too-large') {
+            compareAndWrite.mockRejectedValueOnce(Object.assign(new Error('too large'), { code: 'too-large' }));
+        } else if (what.startsWith('a rejection that carries')) {
+            compareAndWrite.mockRejectedValueOnce(Object.assign(new Error('odd'), { code: 'UNAVAILABLE' }));
+        } else if (what.startsWith('a rejection that is no')) {
+            compareAndWrite.mockRejectedValueOnce('odd');
+        } else compareAndWrite.mockRejectedValueOnce(new Error('refused'));
+
+        storage.writeRaw('{"a":1,"w":1}');
+        await flushPendingWrites();
+
+        expect(getSaveDroppedCause()).toBe(cause);
+    });
+
+    test('a rejection that is a plain Capacitor error object carrying the code is read too', async () => {
+        const { compareAndWrite } = nativeWindow('{"a":1}');
+        const { storage, initializeAsync, flushPendingWrites, getSaveDroppedCause } = loadStorage();
+        await initializeAsync();
+        compareAndWrite.mockRejectedValueOnce({ message: 'too large', code: 'too-large' });
+
+        storage.writeRaw('{"a":1,"w":1}');
+        await flushPendingWrites();
+
+        expect(getSaveDroppedCause()).toBe('too-large');
+    });
+
+    test('a cause that changes while a save is reported tells the listener again; the same cause does not', async () => {
+        const { native, compareAndWrite } = nativeWindow('{"a":1}');
+        const { storage, initializeAsync, flushPendingWrites, getSaveDroppedCause, onSaveDroppedChange } =
+            loadStorage();
+        await initializeAsync();
+        const listener = jest.fn();
+        onSaveDroppedChange(listener);
+        alwaysConflicting(native, compareAndWrite);
+
+        storage.writeRaw('{"a":1,"w":1}');
+        await flushPendingWrites();
+        expect(getSaveDroppedCause()).toBe('conflict');
+        expect(listener).toHaveBeenCalledTimes(1);
+
+        compareAndWrite.mockRejectedValueOnce(Object.assign(new Error('too large'), { code: 'too-large' }));
+        storage.writeRaw('{"a":1,"w":2}');
+        await flushPendingWrites();
+        expect(getSaveDroppedCause()).toBe('too-large');
+        expect(listener).toHaveBeenCalledTimes(2);
     });
 
     test('a failed save is reported although a later one lands: that one carries only its own change', async () => {
@@ -608,15 +667,36 @@ describe('the app window being told that a save was given up', () => {
 
     test('discarding the pending writes forgets it', async () => {
         const { native, compareAndWrite } = nativeWindow('{"a":1}');
-        const { storage, initializeAsync, flushPendingWrites, discardPendingWrites, isSaveDropped } = loadStorage();
+        const {
+            storage,
+            initializeAsync,
+            flushPendingWrites,
+            discardPendingWrites,
+            isSaveDropped,
+            getSaveDroppedCause,
+        } = loadStorage();
         await initializeAsync();
         alwaysConflicting(native, compareAndWrite);
         storage.writeRaw('{"a":1,"w":1}');
         await flushPendingWrites();
         expect(isSaveDropped()).toBe(true);
+        expect(getSaveDroppedCause()).toBe('conflict');
 
         await discardPendingWrites();
 
+        expect(isSaveDropped()).toBe(false);
+        expect(getSaveDroppedCause()).toBe('storage');
+    });
+
+    test('a save still queued when the pending writes are discarded puts nothing down and reports nothing', async () => {
+        const { compareAndWrite } = nativeWindow('{"a":1}');
+        const { storage, initializeAsync, discardPendingWrites, isSaveDropped } = loadStorage();
+        await initializeAsync();
+
+        storage.writeRaw('{"a":1,"w":1}');
+        await discardPendingWrites();
+
+        expect(compareAndWrite).not.toHaveBeenCalled();
         expect(isSaveDropped()).toBe(false);
     });
 
@@ -635,7 +715,11 @@ describe('the app window being told that a save was given up', () => {
         expect(facade!.setSetting('theme', 'dark')).toBe(true);
         await facade!.flushPendingWrites();
 
-        expect(facade!.getSettingsSaveDropped()).toEqual({ code: 'settings-save-dropped', path: KEY });
+        expect(facade!.getSettingsSaveDropped()).toEqual({
+            code: 'settings-save-dropped',
+            path: KEY,
+            cause: 'conflict',
+        });
         expect(listener).toHaveBeenCalledTimes(1);
         // The setting shows its stored value again.
         expect(facade!.getSetting('theme')).toBe('light');

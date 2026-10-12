@@ -168,6 +168,25 @@ describe('AndroidUpdateInstaller', () => {
             success: false,
             version: '1.0.0',
             error: 'The download does not match the published checksum; the release page was opened instead',
+            code: 'digest',
+        });
+    });
+
+    test.each([
+        ['an empty code', Object.assign(new Error('x'), { code: '' })],
+        ['a code that is not text', Object.assign(new Error('x'), { code: 7 })],
+        ['no error object', null],
+    ])('a rejection with %s carries no code', async (_name, rejection) => {
+        const dl = jest.fn().mockRejectedValue(rejection);
+        g.Capacitor = { Plugins: { ApkInstaller: { downloadAndInstall: dl }, Browser: { open: jest.fn() } } };
+
+        const res = await downloadAndInstall({ downloadUrl: 'https://x/app.apk', version: '1.0.0' });
+
+        expect(res).toEqual({
+            success: false,
+            version: '1.0.0',
+            error: expect.stringContaining('the release page was opened instead'),
+            code: undefined,
         });
     });
 

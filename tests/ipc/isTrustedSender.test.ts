@@ -176,6 +176,55 @@ describe('registerHandlers holds the Logs window to the Logs channel set', () =>
         expect(isChannelAllowedForSender(undefined, 'logout')).toBe(true);
     });
 
+    test('get-setting from the Logs window answers only the language', async () => {
+        const channels = new Map<string, ChannelImpl>();
+        const getSetting = jest.fn(async (_event: unknown, key: string) => `value of ${key}`);
+        registerHandlers(invalid({ handle: (channel: string, fn: ChannelImpl) => channels.set(channel, fn) }), {
+            'get-setting': getSetting,
+        });
+        const sender = invalid<IpcMainInvokeEvent['sender']>({});
+        restrictToLogsChannels(invalid(sender));
+
+        expect(await channels.get('get-setting')!(eventFrom(sender), 'language')).toBe('value of language');
+        for (const key of ['theme', 'token', 'autovoteRunning', undefined]) {
+            expect(await channels.get('get-setting')!(eventFrom(sender), key)).toEqual({
+                success: false,
+                error: 'Refused: setting not available to this window',
+            });
+        }
+        expect(getSetting).toHaveBeenCalledTimes(1);
+        // Every other window and a direct call read any key.
+        expect(await channels.get('get-setting')!(eventFrom({}), 'token')).toBe('value of token');
+        expect(await channels.get('get-setting')!(invalid(null), 'theme')).toBe('value of theme');
+    });
+
+    test('settings-changed sent to the Logs window carries only the language', () => {
+        const send = jest.fn<void, [string, ...unknown[]]>();
+        const sender = invalid<IpcMainInvokeEvent['sender']>({ send });
+        restrictToLogsChannels(invalid(sender));
+
+        sender.send('settings-changed', { language: 'lv', token: 'secret', mock: true, theme: 'dark' });
+        sender.send('settings-changed', 'not an object');
+        sender.send('log-message', { seq: 1, message: 'a log line', token: 'kept: not a settings event' });
+
+        expect(send).toHaveBeenNthCalledWith(1, 'settings-changed', { language: 'lv' });
+        expect(send).toHaveBeenNthCalledWith(2, 'settings-changed', {});
+        expect(send).toHaveBeenNthCalledWith(3, 'log-message', {
+            seq: 1,
+            message: 'a log line',
+            token: 'kept: not a settings event',
+        });
+    });
+
+    test('a window sending settings-changed is not touched until it is restricted', () => {
+        const send = jest.fn<void, [string, ...unknown[]]>();
+        const sender = invalid<IpcMainInvokeEvent['sender']>({ send });
+
+        sender.send('settings-changed', { language: 'lv', token: 'secret' });
+
+        expect(send).toHaveBeenCalledWith('settings-changed', { language: 'lv', token: 'secret' });
+    });
+
     test('a refusal is logged with the channel', async () => {
         const { channels } = setup();
         const logger = jest.mocked(require('../../src/ts/logger') as typeof loggerModule);

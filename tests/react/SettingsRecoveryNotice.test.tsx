@@ -7,12 +7,16 @@ import { act, fireEvent, render, screen, waitFor } from './helpers/test-utils';
 import { SettingsRecoveryNotice } from '@/components/app/SettingsRecoveryNotice';
 import { mockTranslator, defaultTranslate, fireSettingsChanged } from './helpers/setup';
 import { invalid } from '../helpers/invalid';
+import type { RendererGlobals } from '../../src/ts/types/capacitor';
 
 const answer = (recovery: unknown) =>
     jest.mocked(window.api.getSettingsRecovery).mockResolvedValue(invalid({ success: true, recovery }));
 
 describe('SettingsRecoveryNotice', () => {
-    afterEach(() => mockTranslator.t.mockImplementation(defaultTranslate));
+    afterEach(() => {
+        mockTranslator.t.mockImplementation(defaultTranslate);
+        delete (globalThis as RendererGlobals).Capacitor;
+    });
 
     test('shows nothing when the settings are in use', async () => {
         answer(null);
@@ -25,7 +29,6 @@ describe('SettingsRecoveryNotice', () => {
         ['settings-corrupt', 'Corrupt'],
         ['settings-unreadable', 'Unreadable'],
         ['settings-migration-failed', 'Migration'],
-        ['settings-save-dropped', 'Dropped'],
     ])('%s says what happened, why with the path, and what next', async (code, key) => {
         mockTranslator.t.mockImplementation((text) => (text === `notice.recovery${key}Why` ? 'Why at {path}' : text));
         answer({ code, path: '/data/settings.json.corrupt-1' });
@@ -35,6 +38,37 @@ describe('SettingsRecoveryNotice', () => {
         expect(alert.textContent).toContain(`notice.recovery${key}What`);
         expect(alert.textContent).toContain('Why at /data/settings.json.corrupt-1');
         expect(alert.textContent).toContain(`notice.recovery${key}Next`);
+    });
+
+    test.each([
+        ['conflict', 'recoveryDroppedWhyConflict', 'recoveryDroppedNext'],
+        ['too-large', 'recoveryDroppedWhyTooLarge', 'recoveryDroppedNextTooLarge'],
+        ['storage', 'recoveryDroppedWhyStorage', 'recoveryDroppedNext'],
+        ['something-else', 'recoveryDroppedWhyUnknown', 'recoveryDroppedNext'],
+        [undefined, 'recoveryDroppedWhyUnknown', 'recoveryDroppedNext'],
+        ['constructor', 'recoveryDroppedWhyUnknown', 'recoveryDroppedNext'],
+    ])('a dropped save with cause %s words its why (%s) and next (%s) by that cause', async (cause, why, next) => {
+        answer({ code: 'settings-save-dropped', path: 'gurushots-settings', cause });
+        render(<SettingsRecoveryNotice />);
+
+        const alert = await screen.findByRole('alert');
+        expect(alert.textContent).toContain('notice.recoveryDroppedWhat');
+        expect(alert.textContent).toContain(`notice.${why}`);
+        expect(alert.textContent).toContain(`notice.${next}`);
+        // One why only: the causes are not stacked.
+        expect(alert.textContent?.match(/recoveryDroppedWhy/g)).toHaveLength(1);
+    });
+
+    test('a damaged settings copy on Android says the app kept it and the settings were reset', async () => {
+        (globalThis as RendererGlobals).Capacitor = { isNativePlatform: () => true };
+        answer({ code: 'settings-corrupt', path: 'gurushots-settings_corrupt' });
+        render(<SettingsRecoveryNotice />);
+
+        const alert = await screen.findByRole('alert');
+        expect(alert.textContent).toContain('notice.recoveryCorruptWhat');
+        expect(alert.textContent).toContain('notice.recoveryCorruptWhyAndroid');
+        expect(alert.textContent).toContain('notice.recoveryCorruptNextAndroid');
+        expect(alert.textContent).not.toContain('gurushots-settings_corrupt');
     });
 
     test('Dismiss hides it', async () => {

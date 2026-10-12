@@ -57,22 +57,44 @@ describe('reset-data', () => {
         expect(cat.info).not.toHaveBeenCalled();
     });
 
-    test('while auto-vote runs it says why nothing was deleted, and exits 1', async () => {
-        localData.wipeLocalData.mockResolvedValue({ success: false, error: 'busy' });
+    test.each([
+        ['busy-pass', 'a voting pass is running. Stop it, then run reset-data again.'],
+        ['busy-cli', 'a CLI session is running. Stop it (Ctrl+C in its terminal), then run reset-data again.'],
+        ['busy-app', 'the desktop app is running. Quit it, then run reset-data again.'],
+    ] as const)('when %s, it says nothing was deleted and what to do next, and exits 1', async (code, nextStep) => {
+        localData.wipeLocalData.mockResolvedValue({ success: false, error: code });
 
         await expect(resetDataCmd(['--yes'])).resolves.toBe(1);
 
-        expect(logger.printStderr).toHaveBeenCalledWith(expect.stringContaining('Auto-vote is running'));
+        expect(logger.printStderr).toHaveBeenCalledTimes(1);
+        expect(logger.printStderr).toHaveBeenCalledWith(`Nothing was deleted: ${nextStep}`);
+        expect(logger.printLine).not.toHaveBeenCalled();
     });
 
-    test('a partial failure is reported with its reason, and exits 1', async () => {
-        localData.wipeLocalData.mockResolvedValue({ success: false, error: 'Could not delete: /u/logs (EBUSY)' });
+    test('a partial failure is reported with its reason and with what was removed, and exits 1', async () => {
+        localData.wipeLocalData.mockResolvedValue({
+            success: false,
+            error: '/u/logs (EBUSY)',
+            removed: ['/u/settings.json', '/u/metadata.json'],
+        });
 
         await expect(resetDataCmd(['--yes'])).resolves.toBe(1);
 
-        expect(logger.printStderr).toHaveBeenCalledWith(
-            'Nothing was deleted completely: Could not delete: /u/logs (EBUSY)',
-        );
+        expect(logger.printStderr).toHaveBeenCalledWith('Some data could not be deleted: /u/logs (EBUSY)');
+        expect(logger.printLine).toHaveBeenCalledWith('Already deleted:');
+        expect(logger.printLine).toHaveBeenCalledWith('  /u/settings.json');
+        expect(logger.printLine).toHaveBeenCalledWith('  /u/metadata.json');
+    });
+
+    test('a failure that removed nothing lists nothing', async () => {
+        localData.wipeLocalData.mockResolvedValue({ success: false, error: 'unknown error', removed: [] });
+        await expect(resetDataCmd(['--yes'])).resolves.toBe(1);
+        expect(logger.printStderr).toHaveBeenCalledWith('Some data could not be deleted: unknown error');
+        expect(logger.printLine).not.toHaveBeenCalled();
+
+        localData.wipeLocalData.mockResolvedValue({ success: false, error: 'unknown error' });
+        await expect(resetDataCmd(['--yes'])).resolves.toBe(1);
+        expect(logger.printLine).not.toHaveBeenCalled();
     });
 
     test('is registered in the command table', async () => {

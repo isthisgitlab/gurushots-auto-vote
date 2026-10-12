@@ -75,6 +75,24 @@ describe('a settings write in the Android background service', () => {
         expect(cat.error).toHaveBeenCalledWith('Headless store refused the settings write', null);
     });
 
+    test.each([
+        ['too-large', ' (too-large)'],
+        ['conflict', ' (conflict)'],
+        ['refused', ' (refused)'],
+        ['', ''],
+    ] as const)('a refusal the bridge explains (%j) says why in the log', (refusal, suffix) => {
+        g.__GS_HEADLESS__ = true;
+        g.AndroidHeadlessStore = {
+            read: () => null,
+            write: jest.fn(() => false as unknown as void),
+            lastWriteRefusal: () => refusal,
+        };
+        const { storage } = loadStorage();
+
+        expect(storage.writeRaw('{"a":1}')).toBe(false);
+        expect(cat.error).toHaveBeenCalledWith(`Headless store refused the settings write${suffix}`, null);
+    });
+
     test('a bridge that throws is a failed write, said in the log', () => {
         withBridge(() => {
             throw new Error('commit failed');

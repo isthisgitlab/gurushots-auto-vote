@@ -19,3 +19,22 @@ export function useTick(intervalMs: number, enabled: boolean = true): number {
 
     return now;
 }
+
+// The longest delay setTimeout honours (a larger one fires at once).
+const MAX_TIMEOUT_MS = 2_147_483_647;
+
+/**
+ * Re-renders the caller once the wall clock reaches `at` (Unix seconds), for a gate that reads the clock at render
+ * time and flips at a known moment. A moment further away than one timer can wait is waited for in steps. `null`
+ * (or a moment already past) schedules nothing: the caller passes the next moment it computes at each render.
+ */
+export function useRerenderAt(at: number | null): void {
+    const [woken, setWoken] = useState(0);
+
+    useEffect(() => {
+        const wait = at === null ? 0 : at * 1000 - Date.now();
+        if (wait <= 0) return undefined;
+        const id = setTimeout(() => setWoken((count) => count + 1), Math.min(wait, MAX_TIMEOUT_MS));
+        return () => clearTimeout(id);
+    }, [at, woken]);
+}

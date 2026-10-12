@@ -148,7 +148,7 @@ describe('UpdateChecker', () => {
             expect(getReleaseAsset('https://elsewhere/app.apk')).toBeNull();
         });
 
-        it('remembers a missing digest and release page as null, and forgets the asset when a check picks none', async () => {
+        it('remembers a missing digest and release page as null, and keeps an asset when a later check picks none', async () => {
             axios.get.mockResolvedValue({
                 data: {
                     tag_name: 'v2.0.0',
@@ -160,7 +160,33 @@ describe('UpdateChecker', () => {
 
             axios.get.mockResolvedValue({ data: { tag_name: 'v3.0.0', html_url: 'html-url', assets: [] } });
             await checkForUpdates({ currentVersion: '1.0.0', assetSuffix: '.apk' });
-            expect(getReleaseAsset('apk-url')).toBeNull();
+            expect(getReleaseAsset('apk-url')).toEqual({ downloadUrl: 'apk-url', digest: null, releaseUrl: null });
+        });
+
+        it('keeps the digest of the URL an open dialog holds when a later check picks another asset', async () => {
+            axios.get.mockResolvedValue({
+                data: {
+                    tag_name: 'v2.0.0',
+                    html_url: 'html-2',
+                    assets: [{ name: 'app.apk', browser_download_url: 'apk-2', digest: 'sha256:two' }],
+                },
+            });
+            await checkForUpdates({ currentVersion: '1.0.0', assetSuffix: '.apk' });
+            axios.get.mockResolvedValue({
+                data: {
+                    tag_name: 'v3.0.0',
+                    html_url: 'html-3',
+                    assets: [{ name: 'app.apk', browser_download_url: 'apk-3', digest: 'sha256:three' }],
+                },
+            });
+            await checkForUpdates({ currentVersion: '1.0.0', assetSuffix: '.apk' });
+
+            expect(getReleaseAsset('apk-2')).toEqual({
+                downloadUrl: 'apk-2',
+                digest: 'sha256:two',
+                releaseUrl: 'html-2',
+            });
+            expect(getReleaseAsset('apk-3')?.digest).toBe('sha256:three');
         });
 
         it('falls back to the html page, empty notes and null date when fields are missing', async () => {

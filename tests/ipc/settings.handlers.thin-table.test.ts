@@ -136,6 +136,39 @@ describe('settings.handlers thin-handler rows', () => {
     });
 });
 
+describe('settings.handlers hidden setting keys', () => {
+    beforeEach(() => {
+        jest.clearAllMocks();
+    });
+
+    const KEY_CHANNELS: [string, string][] = [
+        ['reset-setting', 'resetSetting'],
+        ['is-setting-modified', 'isSettingModified'],
+    ];
+
+    test.each(
+        KEY_CHANNELS.flatMap(([channel, method]) =>
+            ['token', 'hasToken', 'apiHeaders'].map((key) => [channel, method, key] as const),
+        ),
+    )('"%s" refuses the hidden key %s without touching settings.%s', async (channel, method, key) => {
+        invalid<MockTable>(settings)[method] = jest.fn().mockReturnValue(true);
+        const broadcastSettingsChange = jest.fn();
+
+        const result = await invalid<HandlerTable>(buildHandlers({ broadcastSettingsChange }))[channel]({}, key);
+
+        expect(result).toBe(false);
+        expect(invalid<MockTable>(settings)[method]).not.toHaveBeenCalled();
+        expect(broadcastSettingsChange).not.toHaveBeenCalled();
+    });
+
+    test.each(KEY_CHANNELS)('"%s" still serves an ordinary key', async (channel, method) => {
+        invalid<MockTable>(settings)[method] = jest.fn().mockReturnValue(true);
+
+        await expect(invalid<HandlerTable>(buildHandlers())[channel]({}, 'language')).resolves.toBe(true);
+        expect(invalid<MockTable>(settings)[method]).toHaveBeenCalledWith('language');
+    });
+});
+
 // The channels that name a challenge, with where its id sits among the arguments: a value that is not a plain id
 // (a non-blank string of bounded length, or a number) never reaches the settings, and the row's fallback comes back.
 const CHALLENGE_ID_CHANNELS: [string, string, number][] = [

@@ -28,9 +28,20 @@ const ACTIONS = {
 export type DownloadProgress = { percent: number; transferred: number; total: number; bytesPerSecond: number };
 /**
  * Which step failed, for the dialog's translated message: `update` (reaching the
- * update server or downloading) offers the browser download, `install` does not.
+ * update server or downloading) offers the browser download, `install` does not, and
+ * `unverified` (the Android updater refused the download because it could not be checked
+ * against the release; the release page is already open) does not either.
  */
-type UpdateError = { kind: 'update' | 'install' };
+type UpdateError = { kind: 'update' | 'install' | 'unverified' };
+
+// The codes the Android updater rejects a download with when it cannot vouch for it.
+const UNVERIFIED_DOWNLOAD_CODES: ReadonlySet<string> = new Set([
+    'host',
+    'content-type',
+    'size',
+    'digest',
+    'digest-missing',
+]);
 
 interface UpdateStateFields {
     updateInfo: UpdateSummary | null;
@@ -127,10 +138,11 @@ const UpdateContext = createContext<UpdateContextValue | null>(null);
  * Put the dialog into its error state. The user reads a translated message for
  * the failed step; the technical reason goes to the log.
  */
-const failWith = (dispatch: Dispatch<UpdateAction>, kind: UpdateError['kind'], reason: unknown) => {
+const failWith = (dispatch: Dispatch<UpdateAction>, kind: 'update' | 'install', reason: unknown, code?: unknown) => {
+    const unverified = kind === 'update' && typeof code === 'string' && UNVERIFIED_DOWNLOAD_CODES.has(code);
     const step = kind === 'install' ? 'Update install' : 'Update';
-    void ipc.logRendererError(`${step} failed: ${errorMessage(reason) || reason}`);
-    dispatch({ type: ACTIONS.SET_ERROR, payload: { kind } });
+    void ipc.logRendererError(`${step} failed: ${errorMessage(reason) || reason}${unverified ? ` (${code})` : ''}`);
+    dispatch({ type: ACTIONS.SET_ERROR, payload: { kind: unverified ? 'unverified' : kind } });
 };
 
 /**
@@ -153,8 +165,8 @@ export function UpdateProvider({ children }: { children?: ComponentChildren }) {
             dispatch({ type: ACTIONS.SET_READY });
         });
 
-        const unsubscribeError = ipc.onUpdateError((error: { message?: string }) => {
-            failWith(dispatch, 'update', error?.message);
+        const unsubscribeError = ipc.onUpdateError((error: { message?: string; code?: string }) => {
+            failWith(dispatch, 'update', error?.message, error?.code);
         });
 
         return () => {
@@ -184,7 +196,8 @@ export function UpdateProvider({ children }: { children?: ComponentChildren }) {
             dispatch({ type: ACTIONS.SET_DOWNLOADING });
             const result = await ipc.downloadUpdate();
 
-            if (!result.success) failWith(dispatch, 'update', result.error);
+            // The Android updater's refusal answers with its code beside the error.
+            if (!result.success) failWith(dispatch, 'update', result.error, (result as { code?: unknown }).code);
         } catch (err) {
             failWith(dispatch, 'update', err);
         }

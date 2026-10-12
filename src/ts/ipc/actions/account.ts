@@ -66,7 +66,13 @@ const handleAuthenticate = (async (event: unknown, username: string, password: s
         const { ok, token, error } = auth.extractAuthResult(response);
 
         if (ok) {
-            auth.switchAccountToken(token);
+            // A login that could not be saved would sign the user out at the next start: say so now.
+            if (auth.switchAccountToken(token) === false) {
+                logger
+                    .withCategory('authentication')
+                    .error('Authentication succeeded but the token was not saved', null);
+                return { success: false as const, error: 'token-not-saved' };
+            }
             logger.withCategory('authentication').info('🔐 Authentication successful', { success: true });
             return { success: true as const };
         }

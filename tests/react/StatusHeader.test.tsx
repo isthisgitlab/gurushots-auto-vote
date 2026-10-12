@@ -404,17 +404,50 @@ describe('StatusHeader', () => {
             });
         });
 
-        test('Escape blurs the focused trigger and entry; other keys do not', () => {
+        test('Escape closes the menu and returns focus to the trigger; other keys do not', () => {
             wrap(<StatusHeader challenges={missedChallenges} nextRunAt={null} running={true} />);
             const entry = screen.getByText('Soon one').closest('button')!;
-            for (const el of [trigger(), entry]) {
-                el.focus();
-                expect(document.activeElement).toBe(el);
-                fireEvent.keyDown(el, { key: 'ArrowDown' });
-                expect(document.activeElement).toBe(el);
-                fireEvent.keyDown(el, { key: 'Escape' });
-                expect(document.activeElement).not.toBe(el);
-            }
+            const wrapper = trigger().closest('.dropdown')!;
+
+            act(() => entry.focus());
+            expect(trigger().getAttribute('aria-expanded')).toBe('true');
+            fireEvent.keyDown(entry, { key: 'ArrowDown' });
+            expect(document.activeElement).toBe(entry);
+
+            fireEvent.keyDown(entry, { key: 'Escape' });
+            expect(document.activeElement).toBe(trigger());
+            expect(trigger().getAttribute('aria-expanded')).toBe('false');
+            expect(wrapper.classList.contains('dropdown-close')).toBe(true);
+
+            // Pressing the trigger opens it again; so does moving focus back in.
+            fireEvent.click(trigger());
+            expect(trigger().getAttribute('aria-expanded')).toBe('true');
+            expect(wrapper.classList.contains('dropdown-close')).toBe(false);
+        });
+
+        test('Escape on the trigger itself closes the menu and keeps focus there, and a later focus still opens it', () => {
+            wrap(<StatusHeader challenges={missedChallenges} nextRunAt={null} running={true} />);
+            const entry = screen.getByText('Soon one').closest('button')!;
+            act(() => trigger().focus());
+            fireEvent.keyDown(trigger(), { key: 'Escape' });
+            expect(document.activeElement).toBe(trigger());
+            expect(trigger().getAttribute('aria-expanded')).toBe('false');
+
+            // A real focus move into the menu is not swallowed by the Escape.
+            act(() => entry.focus());
+            expect(trigger().getAttribute('aria-expanded')).toBe('true');
+        });
+
+        test('focus leaving the menu closes it and clears an earlier Escape', () => {
+            wrap(<StatusHeader challenges={missedChallenges} nextRunAt={null} running={true} />);
+            const wrapper = trigger().closest('.dropdown')!;
+            act(() => trigger().focus());
+            fireEvent.keyDown(trigger(), { key: 'Escape' });
+            act(() => trigger().blur());
+            expect(trigger().getAttribute('aria-expanded')).toBe('false');
+            expect(wrapper.classList.contains('dropdown-close')).toBe(false);
+            act(() => trigger().focus());
+            expect(trigger().getAttribute('aria-expanded')).toBe('true');
         });
     });
 });

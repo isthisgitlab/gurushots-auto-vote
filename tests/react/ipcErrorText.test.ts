@@ -20,6 +20,8 @@ describe('ipcErrorText', () => {
         ['Could not read your balance right now', 'errors.fetchChallengesFailed'],
         ['The account changed while listing challenges', 'errors.accountChanged'],
         ['account-check-failed', 'errors.accountCheckFailed'],
+        ['token-not-saved', 'errors.tokenNotSaved'],
+        ['web-shell-token', 'errors.webShellToken'],
     ])('words the known failure %j as %s', (error, key) => {
         expect(ipcErrorText(error, t)).toBe(`[${key}]`);
     });

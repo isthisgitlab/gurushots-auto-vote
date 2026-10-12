@@ -6,8 +6,9 @@
  *   - invoke methods POST to /api/invoke/<channel>; a handler that throws
  *     rejects the call, as ipcRenderer.invoke does;
  *   - every request carries the per-run token from the launch URL's fragment,
- *     kept in memory only: a header on POSTs, a query parameter on the event
- *     stream (EventSource sets no headers);
+ *     kept for the tab in sessionStorage (so a reload keeps working) and taken
+ *     out of the address bar: a header on POSTs, a query parameter on the
+ *     event stream (EventSource sets no headers);
  *   - event methods subscribe to one shared EventSource on /api/events;
  *   - login / logout are local mount swaps (pages/Web.tsx listens through
  *     onShellEvent); logout clears the token on the server first.
@@ -22,6 +23,7 @@
 
 import { invokeChannels, aliases, sendMethods, eventMethods, kebabToCamel } from '../ipc/manifest';
 import { isSafeExternalUrl } from '../format/urlSafe';
+import { markWebShell } from './webShellFlag';
 
 import type { WindowApi } from '../types/ipc';
 
@@ -34,11 +36,33 @@ const BROWSER_CHANNELS: ReadonlySet<string> = new Set(['open-external-url', 'rel
 
 const TOKEN_HEADER = 'x-web-shell-token';
 
-// The per-run token the server printed in the launch URL (`#t=<token>`). Read once, then taken out of
-// the address bar so it is not left in the page's URL, history entry or a bookmark.
+const TOKEN_STORAGE_KEY = 'web-shell-token';
+
+// The token is kept in the tab's own sessionStorage: it survives a reload of the tab, is not shared with other tabs and
+// is gone when the tab closes. A browser that refuses the access (blocked site data) leaves it in memory only.
+const keptToken = (): string => {
+    try {
+        return globalThis.sessionStorage?.getItem(TOKEN_STORAGE_KEY) ?? '';
+    } catch {
+        return '';
+    }
+};
+const keepToken = (token: string) => {
+    try {
+        globalThis.sessionStorage?.setItem(TOKEN_STORAGE_KEY, token);
+    } catch {
+        // memory only
+    }
+};
+
+// The per-run token the server printed in the launch URL (`#t=<token>`). Taken from the fragment when the page was
+// opened with one (and kept for the tab), otherwise from what the tab kept, then taken out of the address bar so it
+// is not left in the page's URL, history entry or a bookmark.
 let shellToken = '';
 const takeShellToken = () => {
-    shellToken = new URLSearchParams(globalThis.location.hash.slice(1)).get('t') ?? '';
+    const given = new URLSearchParams(globalThis.location.hash.slice(1)).get('t');
+    if (given) keepToken(given);
+    shellToken = given || keptToken();
     globalThis.history.replaceState(null, '', globalThis.location.pathname + globalThis.location.search);
 };
 
@@ -91,6 +115,7 @@ const subscribeServer = (channel: string, fn: Listener) => {
 
 const installWebBridge = (): WindowApi => {
     takeShellToken();
+    markWebShell();
     const api: Record<string, (...args: never[]) => unknown> = {};
 
     for (const channel of invokeChannels.filter((name) => !BROWSER_CHANNELS.has(name))) {
@@ -122,12 +147,6 @@ const installWebBridge = (): WindowApi => {
         return Promise.resolve({ success: true });
     };
     api.reloadWindow = () => {
-        // The token lives in memory only, so it rides the reload in the fragment (taken out again at startup).
-        globalThis.history.replaceState(
-            null,
-            '',
-            `${globalThis.location.pathname}${globalThis.location.search}#t=${encodeURIComponent(shellToken)}`,
-        );
         globalThis.location.reload();
         return Promise.resolve({ success: true });
     };

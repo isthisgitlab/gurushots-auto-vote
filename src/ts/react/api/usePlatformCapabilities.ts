@@ -1,5 +1,7 @@
 import { useMemo } from 'react';
 
+import { isWebShell } from '../../bridge/webShellFlag';
+
 import type { RendererGlobals } from '../../types/capacitor';
 
 /**
@@ -20,6 +22,10 @@ export type PlatformCapabilities = {
     batteryGuidance: boolean;
     /** the app has a native background service whose state is kept on the device */
     backgroundService: boolean;
+    /** the settings are a file the user can open (desktop, web shell), not app-private storage */
+    settingsFile: boolean;
+    /** the app starts again by itself after "Delete all local data" (the web shell's server stops instead) */
+    relaunchesAfterWipe: boolean;
 };
 
 /**
@@ -28,6 +34,12 @@ export type PlatformCapabilities = {
 export function usePlatformCapabilities(): PlatformCapabilities {
     return useMemo(() => {
         const native = isNativePlatform();
-        return { inAppLogs: native, batteryGuidance: native, backgroundService: native };
+        return {
+            inAppLogs: native,
+            batteryGuidance: native,
+            backgroundService: native,
+            settingsFile: !native,
+            relaunchesAfterWipe: !isWebShell(),
+        };
     }, []);
 }

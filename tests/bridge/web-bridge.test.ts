@@ -37,6 +37,16 @@ const saved = {
     history: g.history,
     open: g.open,
 };
+const savedSessionStorage = Object.getOwnPropertyDescriptor(globalThis, 'sessionStorage');
+
+/** The tab's sessionStorage, as a map the tests can read and prefill. */
+const tabStore = new Map<string, string>();
+const fakeSessionStorage = invalid({
+    getItem: (key: string) => tabStore.get(key) ?? null,
+    setItem: (key: string, value: string) => void tabStore.set(key, value),
+});
+const stubSessionStorage = (value: unknown) =>
+    Object.defineProperty(globalThis, 'sessionStorage', { value, configurable: true, writable: true });
 
 const mockFetch = jest.fn<Promise<FetchReply>, [string, RequestInit]>();
 const mockOpen = jest.fn();
@@ -59,6 +69,8 @@ let bridge: typeof bridgeModule;
 let api: WindowApi;
 
 beforeEach(() => {
+    tabStore.clear();
+    stubSessionStorage(fakeSessionStorage);
     FakeEventSource.instances = [];
     mockFetch.mockReset().mockResolvedValue(reply(200, { result: { success: true } }));
     mockOpen.mockReset();
@@ -75,7 +87,10 @@ beforeEach(() => {
 });
 
 afterEach(() => {
+    delete (g as { webShell?: true }).webShell;
     Object.assign(g, saved);
+    if (savedSessionStorage) Object.defineProperty(globalThis, 'sessionStorage', savedSessionStorage);
+    else Reflect.deleteProperty(globalThis, 'sessionStorage');
     delete g.api;
 });
 
@@ -92,6 +107,10 @@ describe('web bridge — invoke', () => {
             headers: { 'Content-Type': 'application/json', 'x-web-shell-token': TOKEN },
             body: JSON.stringify({ args: ['theme'], undefinedAt: [] }),
         });
+    });
+
+    test('marks the page as the web shell', () => {
+        expect((g as { webShell?: true }).webShell).toBe(true);
     });
 
     test('undefined arguments travel as null plus their positions', async () => {
@@ -149,16 +168,56 @@ describe('web bridge — access token', () => {
         expect(FakeEventSource.instances[0].url).toBe('/api/events?t=a%20b');
     });
 
-    test('a page opened without the fragment sends an empty token', async () => {
+    test('a page opened without the fragment or a kept token sends an empty token', async () => {
+        tabStore.clear();
         const bare = reinstall('');
         await bare.guiVote();
         expect(sentHeaders()['x-web-shell-token']).toBe('');
     });
 
-    test('a reload carries the token in the fragment, which the next load takes out again', async () => {
+    test('the token from the fragment is kept for the tab', () => {
+        expect(tabStore.get('web-shell-token')).toBe(TOKEN);
+    });
+
+    test('a reload without the fragment (F5) uses the token the tab kept, and keeps the address bar clean', async () => {
+        const reloaded = reinstall('');
+        await reloaded.guiVote();
+        expect(sentHeaders()['x-web-shell-token']).toBe(TOKEN);
+        expect(mockReplaceState).toHaveBeenCalledWith(null, '', '/?lang=lv');
+    });
+
+    test('a new fragment replaces the token the tab kept', async () => {
+        const fresh = reinstall('#t=newrun');
+        await fresh.guiVote();
+        expect(sentHeaders()['x-web-shell-token']).toBe('newrun');
+        expect(tabStore.get('web-shell-token')).toBe('newrun');
+    });
+
+    test('a browser that refuses sessionStorage still works from the fragment, in memory only', async () => {
+        const refuse = () => {
+            throw new Error('denied');
+        };
+        stubSessionStorage(invalid({ getItem: refuse, setItem: refuse }));
+        const guarded = reinstall(`#t=${TOKEN}`);
+        await guarded.guiVote();
+        expect(sentHeaders()['x-web-shell-token']).toBe(TOKEN);
+        const bare = reinstall('');
+        await bare.guiVote();
+        expect(mockFetch.mock.calls.at(-1)![1].headers).toEqual(expect.objectContaining({ 'x-web-shell-token': '' }));
+    });
+
+    test('a runtime with no sessionStorage works the same', async () => {
+        stubSessionStorage(undefined);
+        const bare = reinstall(`#t=${TOKEN}`);
+        await bare.guiVote();
+        expect(sentHeaders()['x-web-shell-token']).toBe(TOKEN);
+    });
+
+    test('a reload only reloads the page: the tab keeps the token, so the address bar is not touched', async () => {
+        mockReplaceState.mockClear();
         await api.reloadWindow();
-        expect(mockReplaceState).toHaveBeenLastCalledWith(null, '', `/?lang=lv#t=${TOKEN}`);
-        expect(mockReplaceState.mock.invocationCallOrder.at(-1)!).toBeLessThan(mockReload.mock.invocationCallOrder[0]);
+        expect(mockReplaceState).not.toHaveBeenCalled();
+        expect(mockReload).toHaveBeenCalledTimes(1);
     });
 });
 

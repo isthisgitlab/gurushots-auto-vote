@@ -116,6 +116,32 @@ describe('log.handlers — renderer log writes and file lookups', () => {
         expect(written.startsWith('first second third')).toBe(true);
     });
 
+    test('data over 16 KB serialized is replaced by a marker, data at the cap is kept', async () => {
+        const atCap = { text: 'x'.repeat(16 * 1024 - '{"text":""}'.length) };
+        expect(JSON.stringify(atCap)).toHaveLength(16 * 1024);
+        await handlers['log-error'](invalid({}), 'msg', atCap);
+        await handlers['log-error'](invalid({}), 'msg', { text: 'x'.repeat(16 * 1024) });
+
+        const { calls } = jest.mocked(logger.categories.ui.error).mock;
+        expect(calls[0][1]).toBe(atCap);
+        expect(calls[1][1]).toBe(
+            `[data omitted: ${16 * 1024 + '{"text":""}'.length} characters, over the 16384 limit]`,
+        );
+    });
+
+    test('data that cannot be serialized is replaced by a marker, and absent data is passed on', async () => {
+        const circular: Record<string, unknown> = {};
+        circular.self = circular;
+        await handlers['log-warning'](invalid({}), 'msg', circular);
+        await handlers['log-warning'](invalid({}), 'msg', 10n);
+        await handlers['log-warning'](invalid({}), 'msg', undefined);
+
+        const { calls } = jest.mocked(logger.categories.ui.warning).mock;
+        expect(calls[0][1]).toBe('[data omitted: it could not be serialized]');
+        expect(calls[1][1]).toBe('[data omitted: it could not be serialized]');
+        expect(calls[2][1]).toBeUndefined();
+    });
+
     test('a non-string renderer message is written as text', async () => {
         await handlers['log-warning'](invalid({}), invalid(undefined), null);
 

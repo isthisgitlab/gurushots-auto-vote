@@ -178,6 +178,10 @@ const logsWindowInvokeChannels = [
     'stop-log-stream',
 ] as const satisfies readonly (typeof invokeChannels)[number][];
 
+// The settings the Logs window may read or be told about: its get-setting answers only these keys, and the
+// settings-changed event it receives carries only these (registerHandlers.ts).
+const logsWindowSettingKeys = ['language'] as const;
+
 const logsWindowEventMethods = {
     onLogMessage: eventMethods.onLogMessage,
     onSettingsChanged: eventMethods.onSettingsChanged,
@@ -198,6 +202,7 @@ export {
     eventMethods,
     logsWindowInvokeChannels,
     logsWindowEventMethods,
+    logsWindowSettingKeys,
     kebabToCamel,
     allInvokeChannels,
 };

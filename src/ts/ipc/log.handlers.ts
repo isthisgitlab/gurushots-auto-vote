@@ -22,8 +22,24 @@ import type { GuiLogEntry, GuiLogSink } from '../logger';
 // Longest message a renderer log call may write; a compromised window cannot push more into the log files.
 const MAX_LOG_MESSAGE_LENGTH = 8 * 1024;
 
+// Longest serialized `data` a renderer log call may attach; a longer one is replaced by a marker.
+const MAX_LOG_DATA_LENGTH = 16 * 1024;
+
 // A renderer-supplied message as one bounded line.
 const clip = (message: unknown): string => logger.sanitizeLogString(message, MAX_LOG_MESSAGE_LENGTH);
+
+// Renderer-supplied `data` as it is, or a marker when its serialized form is over the cap (or cannot be serialized).
+const clipData = (data: unknown): unknown => {
+    let length: number;
+    try {
+        length = JSON.stringify(data)?.length ?? 0;
+    } catch {
+        return '[data omitted: it could not be serialized]';
+    }
+    return length > MAX_LOG_DATA_LENGTH
+        ? `[data omitted: ${length} characters, over the ${MAX_LOG_DATA_LENGTH} limit]`
+        : data;
+};
 
 const logStreamWindows: Set<WebContents> = new Set();
 
@@ -41,28 +57,28 @@ const buildHandlers = () =>
     ({
         'log-debug': async (event: unknown, message: string, data: unknown) => {
             logger.setContext('GUI');
-            logger.withCategory('ui').debug(clip(message), data);
+            logger.withCategory('ui').debug(clip(message), clipData(data));
             logger.clearContext();
             return { success: true as const };
         },
 
         'log-error': async (event: unknown, message: string, data: unknown) => {
             logger.setContext('GUI');
-            logger.withCategory('ui').error(clip(message), data);
+            logger.withCategory('ui').error(clip(message), clipData(data));
             logger.clearContext();
             return { success: true as const };
         },
 
         'log-warning': async (event: unknown, message: string, data: unknown) => {
             logger.setContext('GUI');
-            logger.withCategory('ui').warning(clip(message), data);
+            logger.withCategory('ui').warning(clip(message), clipData(data));
             logger.clearContext();
             return { success: true as const };
         },
 
         'log-api': async (event: unknown, message: string, data: unknown) => {
             logger.setContext('GUI');
-            logger.withCategory('api').api(clip(message), data);
+            logger.withCategory('api').api(clip(message), clipData(data));
             logger.clearContext();
             return { success: true as const };
         },

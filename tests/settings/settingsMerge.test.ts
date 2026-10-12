@@ -5,6 +5,7 @@
 
 import { rebaseSettingsText } from '../../src/ts/settings/settingsMerge';
 import { isPlainObject } from '../../src/ts/plainObject';
+import { getDefaultSettings } from '../../src/ts/settings/defaults';
 
 const text = (value: unknown) => JSON.stringify(value, null, 2);
 const rebase = (base: unknown, ours: unknown, theirs: unknown) =>
@@ -91,5 +92,45 @@ describe('rebaseSettingsText', () => {
         ['an unreadable earlier text', '{broken', '{"a":2}', '{"a":1}'],
     ])('%s is not overwritten: it throws', (_name, base, ours, theirs) => {
         expect(() => rebaseSettingsText(base, ours, theirs)).toThrow();
+    });
+
+    describe('defaults are not changes', () => {
+        // What persistence writes: the stored values over the defaults.
+        const blob = (stored: Record<string, unknown>) => text({ ...getDefaultSettings(), ...stored });
+        const rebaseBlob = (base: string | null, ours: string, theirs: string | null): Record<string, unknown> => {
+            const merged: unknown = JSON.parse(rebaseSettingsText(base, ours, theirs));
+            if (!isPlainObject(merged)) throw new Error('not an object');
+            return merged;
+        };
+
+        test('a key absent from the earlier text and set by the other writer survives', () => {
+            const base = '{"token":"t1"}';
+            const ours = blob({ token: 't2' });
+            const theirs = '{"token":"t1","noticeAcknowledgedVersion":"9.9.9"}';
+            const merged = rebaseBlob(base, ours, theirs);
+            expect(merged.noticeAcknowledgedVersion).toBe('9.9.9');
+            expect(merged.token).toBe('t2');
+        });
+
+        test('with no earlier text, only what this side changed from the defaults is applied', () => {
+            const ours = blob({ language: 'lv' });
+            const theirs = '{"token":"theirs-token","noticeAcknowledgedVersion":"9.9.9"}';
+            const merged = rebaseBlob(null, ours, theirs);
+            expect(merged.token).toBe('theirs-token');
+            expect(merged.noticeAcknowledgedVersion).toBe('9.9.9');
+            expect(merged.language).toBe('lv');
+        });
+
+        test('a nested container the other writer filled in is kept whatever the earlier text lacked', () => {
+            const ours = blob({ language: 'lv' });
+            const theirs = JSON.stringify({ challengeSettings: { globalDefaults: { exposure: 12 } } });
+            const merged = rebaseBlob('{}', ours, theirs);
+            const challengeSettings = merged.challengeSettings;
+            if (!isPlainObject(challengeSettings) || !isPlainObject(challengeSettings.globalDefaults)) {
+                throw new Error('challengeSettings missing');
+            }
+            expect(challengeSettings.globalDefaults.exposure).toBe(12);
+            expect(merged.language).toBe('lv');
+        });
     });
 });

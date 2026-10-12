@@ -1,6 +1,6 @@
 import { app, BrowserWindow, powerMonitor } from 'electron';
 import * as settings from '../settings';
-import { isCliSessionActive } from '../settings/cliSessionLock';
+import { holdDesktopAppLock, isCliSessionActive } from '../settings/cliSessionLock';
 import { initializeHeaders } from '../api/randomizer';
 import * as logger from '../logger';
 import { AutoUpdater } from '../services/AutoUpdater';
@@ -35,6 +35,20 @@ const clearLeftoverToken = () => {
         }
     } catch (error) {
         logger.withCategory('authentication').error('Failed to clear a leftover token at startup:', error);
+    }
+};
+
+/**
+ * Marks this process as the running desktop app for as long as it runs, so a CLI `reset-data` waits for it instead of
+ * pulling the files out from under it. A marker that cannot be written only costs that check.
+ */
+const holdAppMarker = () => {
+    try {
+        app.on('will-quit', holdDesktopAppLock());
+    } catch (error) {
+        logger
+            .withCategory('ui')
+            .warning('Could not mark the app as running (a CLI reset-data will not wait for it):', error);
     }
 };
 
@@ -152,6 +166,7 @@ const registerLifecycleHandlers = () => {
  * Everything that runs once Electron has finished initialization.
  */
 async function onReady() {
+    holdAppMarker();
     prepareApp();
     registerPowerHandlers();
     await openFirstWindow();

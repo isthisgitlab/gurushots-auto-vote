@@ -51,6 +51,8 @@ import type { GuiLogSink } from '../logger';
 const LOOPBACK_HOST = '127.0.0.1';
 const TOKEN_HEADER = 'x-web-shell-token';
 const TOKEN_QUERY_PARAM = 't';
+// The stable code a request without the right token is refused with, for the page to explain (see bridge/web.ts).
+const WEB_SHELL_TOKEN_REFUSED = 'web-shell-token';
 const LOCAL_HOSTNAMES = new Set(['localhost', '127.0.0.1', '[::1]']);
 // Generous for a scenario import or a full settings save, small enough that a
 // runaway client cannot balloon the process.
@@ -287,6 +289,7 @@ const createWebServer = ({ distDir, token = newShellToken(), onLocalDataWiped }:
     const root = path.resolve(distDir);
     const clients = new Set<ServerResponse>();
     let wiped = false;
+    let stopped = false;
     const emit: Emit = (channel, payload) => {
         const frame = `event: ${channel}\ndata: ${JSON.stringify(payload ?? null)}\n\n`;
         for (const client of clients) client.write(frame);
@@ -297,9 +300,11 @@ const createWebServer = ({ distDir, token = newShellToken(), onLocalDataWiped }:
         },
     });
 
-    // Runs when a reply has been sent: after a wipe, ends the event streams and stops listening.
+    // Runs when a reply has been sent: after a wipe, ends the event streams and stops listening, once however many
+    // replies finish after it.
     const stopIfWiped = () => {
-        if (!wiped) return;
+        if (!wiped || stopped) return;
+        stopped = true;
         for (const client of clients) client.end();
         server.close();
         onLocalDataWiped?.();
@@ -309,7 +314,7 @@ const createWebServer = ({ distDir, token = newShellToken(), onLocalDataWiped }:
         const { pathname, searchParams } = new URL(String(req.url), 'http://localhost');
         if (!isLocalHost(req.headers.host)) fail(res, 403, 'Refused: non-local Host header');
         else if (pathname.startsWith('/api/') && !isShellToken(requestToken(req, pathname, searchParams), token)) {
-            fail(res, 403, 'Refused: missing or invalid web shell token — open the URL the server printed');
+            fail(res, 403, WEB_SHELL_TOKEN_REFUSED);
         } else if (req.method === 'GET' && pathname === '/api/events') openEventStream(res, clients);
         else if (pathname.startsWith('/api/')) {
             res.once('finish', stopIfWiped);

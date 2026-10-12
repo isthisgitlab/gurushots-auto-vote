@@ -84,8 +84,8 @@ Commands:
   logs [--error|--api|--settings|--lexicon] [--lines=<n>] - Show logs or the local lexicon report
   licenses - Print the third-party license notices
   reset-data --yes - Delete everything stored on this device: settings and the saved login, every store, logs and
-             the extracted vision runtime. It cannot be undone, so it does nothing without --yes, and nothing
-             while auto-vote is running (in the app or in a CLI session).
+             the extracted vision runtime. It cannot be undone, so it does nothing without --yes. Quit the
+             desktop app and stop any CLI session first: it refuses to delete while either is running.
   reset-windows  - Reset window positions to default
   help     - Show this help message
 

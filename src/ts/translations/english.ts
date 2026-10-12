@@ -47,6 +47,10 @@ export const errors = {
     fetchChallengesFailed: 'The challenges could not be loaded. GuruShots did not answer. Try again in a moment.',
     accountChanged: 'The account changed while the list was loading, so the result was dropped. Open the list again.',
     accountCheckFailed: 'The account could not be checked. GuruShots did not answer. Try again in a moment.',
+    tokenNotSaved:
+        "You are logged in, but the login could not be saved. The settings can't be written; the settings notice above says why. Fix or move the settings file, then log in again.",
+    webShellToken:
+        "This page can't talk to the web server. It was opened without this run's access token, or the server was restarted since. Open the URL that pnpm web printed.",
     boundaryBody:
         'Part of the app stopped working. The details were saved to the logs. Reload the app to continue; if it keeps happening, the logs show what failed.',
     votingFailed:
@@ -1220,6 +1224,8 @@ export const app = {
         "The update didn't finish: the update server couldn't be reached or the download was interrupted. Try again later, or download it in your browser.",
     updateInstallFailed:
         "The update couldn't be installed: the downloaded update could not be applied. Restart the app and try again.",
+    updateUnverified:
+        'The download could not be verified, so it was not installed. The release page is open in your browser.',
     skipVersion: 'Skip Version',
     remindLater: 'Remind Later',
     download: 'Download',
@@ -1408,6 +1414,10 @@ export const notice = {
     recoveryCorruptWhy: 'The file could not be read as valid settings. The damaged copy was kept at {path}.',
     recoveryCorruptNext:
         'You can save new settings as usual. To get the old values back, repair that copy or read them from it.',
+    recoveryCorruptWhyAndroid:
+        'The stored settings could not be read as valid settings. The app kept the damaged copy in its own storage, where you cannot open it.',
+    recoveryCorruptNextAndroid:
+        'Your settings were reset to the defaults. Set them again; you can save new settings as usual.',
     recoveryUnreadableWhat: 'Your settings file could not be read, so saving settings is turned off.',
     recoveryUnreadableWhy:
         'The app could not open {path}. It may be locked by another program, or its permissions may block access.',
@@ -1419,8 +1429,13 @@ export const notice = {
     recoveryMigrationNext:
         'Restart the app. If this keeps happening, move that file aside to start with default settings; the file is not overwritten.',
     recoveryDroppedWhat: 'A change to your settings could not be saved.',
-    recoveryDroppedWhy: 'The background service changed the settings at the same time.',
+    recoveryDroppedWhyConflict: 'The background service changed the settings at the same time.',
+    recoveryDroppedWhyTooLarge: 'The settings are too large to save.',
+    recoveryDroppedWhyStorage: "The device's settings storage did not accept the change.",
+    recoveryDroppedWhyUnknown: 'The settings could not be written just now.',
     recoveryDroppedNext: 'Your setting shows its saved value again. Change it again if needed.',
+    recoveryDroppedNextTooLarge:
+        'Your setting shows its saved value again. Remove per-challenge overrides and scenarios you no longer need, then change it again.',
 };
 // about
 export const about = {
@@ -1445,10 +1460,17 @@ export const about = {
     deleteLogs: 'the logs',
     deleteBackground: 'the state of the background service',
     deleteAfter: 'The app restarts afterwards and asks you to log in again. Your GuruShots account is not touched.',
+    deleteAfterWeb:
+        'The web server stops afterwards. Start pnpm web again, open the URL it prints and log in again. Your GuruShots account is not touched.',
     deleteConfirm: 'Delete everything',
-    deleteBusy:
+    deleteBusyPass:
         'A voting pass is running, so nothing was deleted. Stop auto-vote, wait for the pass to end, then try again.',
+    deleteBusyCli:
+        'A command-line session is running, so nothing was deleted. Stop it in the terminal where it runs (Ctrl+C), then try again.',
+    deleteBusyApp: 'The desktop app is open, so nothing was deleted. Quit the desktop app, then try again.',
     deleteFailed:
         "Not everything could be deleted. A file or store could not be removed; the details are in the logs. Close other programs that use the app's files, then try again.",
     deleteDone: 'All local data was deleted. The app restarts now; if it does not, close it and open it again.',
+    deleteDoneWeb:
+        'All local data was deleted. The web server has stopped. Start pnpm web again and open the URL it prints.',
 };

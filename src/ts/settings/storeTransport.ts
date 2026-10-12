@@ -137,6 +137,19 @@ const applyAgain = (
 // is given up as not saved.
 const MAX_ATTEMPTS = 5;
 
+/**
+ * A save that the other writer (the Android app window and its background service) beat on every attempt. Its `code`
+ * is the cause a given-up save is reported with (see settings/storage.ts).
+ */
+export class SaveConflictError extends Error {
+    readonly code = 'conflict';
+
+    constructor(message: string) {
+        super(message);
+        this.name = 'SaveConflictError';
+    }
+}
+
 /** What the native compare-and-write answered: saved, or not because the key had changed (and what it holds). */
 export type CasAnswer = { saved: boolean; current: string | null };
 
@@ -172,7 +185,7 @@ export const saveThroughCas = async (
         if (saved) return data;
         base = current;
     }
-    throw new Error('the key kept changing');
+    throw new SaveConflictError('the key kept changing');
 };
 
 /**
@@ -196,7 +209,7 @@ export const headlessSettingsWrite = (base: string | null, ours: string): string
         if (now === theirs) return null;
         theirs = now;
     }
-    throw new Error('the settings kept changing');
+    throw new SaveConflictError('the settings kept changing');
 };
 
 /**

@@ -24,10 +24,16 @@ import { errorMessage } from '../errorMessage';
 
 import type { CapacitorGlobals } from '../types/capacitor';
 
-/** A failure always says why, so the update dialog has a message to show. */
+/** A failure always says why, so the update dialog has a message to show. `code` is the native refusal's, when it gave one. */
 type InstallResult =
     | { success: true; version?: string | null; viaFallback?: boolean }
-    | { success: false; version?: string | null; error: string };
+    | { success: false; version?: string | null; error: string; code?: string };
+
+/** The typed code a native plugin call rejected with (`host`, `content-type`, `size`, `digest`, `digest-missing`), if any. */
+const rejectionCode = (err: unknown): string | undefined => {
+    const code = (err as { code?: unknown } | null | undefined)?.code;
+    return typeof code === 'string' && code ? code : undefined;
+};
 
 // The native plugin, when this build registered it. Accessed lazily (only
 // after downloadAndInstall's isCapacitor() gate) so non-Capacitor paths never
@@ -103,6 +109,7 @@ const downloadAndInstall = async ({
                       success: false,
                       version,
                       error: `${errorMessage(err) || 'The APK could not be installed'}; the release page was opened instead`,
+                      code: rejectionCode(err),
                   }
                 : opened;
         } finally {

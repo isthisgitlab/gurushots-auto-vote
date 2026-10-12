@@ -25,12 +25,18 @@ import type * as updateCheckerModule from '../../src/ts/services/UpdateChecker';
 import type { CategoryLogger, GuiLogSink } from '../../src/ts/logger';
 
 let mockWipeSucceeds = true;
+// While set, 'slow-setting' waits for it: a request that is still in flight when a wipe finishes.
+let mockSlowGate: Promise<void> | null = null;
 let mockSettingsDeps: Parameters<typeof settingsHandlersModule.buildHandlers>[0] | null = null;
 jest.mock('../../src/ts/ipc/settings.handlers', () => ({
     buildHandlers: (deps: Parameters<typeof settingsHandlersModule.buildHandlers>[0]) => {
         mockSettingsDeps = deps;
         return {
             'get-setting': async (_event: unknown, key: string, scope = 'global') => ({ key, scope }),
+            'slow-setting': async () => {
+                await mockSlowGate;
+                return 'slow';
+            },
             'wipe-local-data': async () => {
                 if (!mockWipeSucceeds) return { success: false, error: 'busy' };
                 mockSettingsDeps?.afterWipe?.();
@@ -157,6 +163,7 @@ afterAll(() => {
 beforeEach(async () => {
     jest.clearAllMocks();
     mockWipeSucceeds = true;
+    mockSlowGate = null;
     ({ server, emit } = createWebServer({ distDir, token: TOKEN, onLocalDataWiped: onWiped }));
     port = await listen(server);
 });
@@ -283,7 +290,7 @@ describe('access token', () => {
             expect(reply.status).toBe(403);
             expect(parsed(reply)).toEqual({
                 success: false,
-                error: 'Refused: missing or invalid web shell token — open the URL the server printed',
+                error: 'web-shell-token',
             });
             expect(auth.clearAuthToken).not.toHaveBeenCalled();
         },
@@ -382,6 +389,22 @@ describe('local-data wipe', () => {
         await streamEnded;
         await new Promise<void>((resolve) => (server.listening ? server.once('close', () => resolve()) : resolve()));
         expect(server.listening).toBe(false);
+        expect(onWiped).toHaveBeenCalledTimes(1);
+    });
+
+    test('two replies finishing after a wipe stop the server once', async () => {
+        let release: () => void = () => undefined;
+        mockSlowGate = new Promise<void>((resolve) => (release = resolve));
+        const slow = invoke('slow-setting', { args: [] });
+        // The slow request has reached its handler before the wipe is asked for.
+        await new Promise<void>((resolve) => setTimeout(resolve, 50));
+
+        await invoke('wipe-local-data', { args: [] });
+        release();
+        await slow;
+        mockSlowGate = null;
+        await new Promise<void>((resolve) => setTimeout(resolve, 50));
+
         expect(onWiped).toHaveBeenCalledTimes(1);
     });
 

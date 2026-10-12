@@ -51,6 +51,7 @@ const {
     eventMethods,
     logsWindowInvokeChannels,
     logsWindowEventMethods,
+    logsWindowSettingKeys,
     kebabToCamel,
     allInvokeChannels,
 } = require('../../src/ts/ipc/manifest') as typeof manifestModule;
@@ -128,5 +129,6 @@ describe('ipc channel manifest', () => {
             onLogMessage: eventMethods.onLogMessage,
             onSettingsChanged: eventMethods.onSettingsChanged,
         });
+        expect([...logsWindowSettingKeys]).toEqual(['language']);
     });
 });

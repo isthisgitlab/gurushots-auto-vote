@@ -23,8 +23,7 @@ import {
     removePreferenceKeys,
     resumeWrites,
 } from './storage';
-import { getSetting } from './persistence';
-import { isCliSessionActive } from './cliSessionLock';
+import { isCliSessionActive, isDesktopAppActive } from './cliSessionLock';
 
 import type { CapacitorGlobals } from '../types/capacitor';
 
@@ -49,26 +48,32 @@ const LOCAL_DATA_DIRECTORIES = ['logs', 'vision'] as const;
 // The vision runtime of the CLI binary lives under this app name whatever the build (services/visionCliAssets.ts).
 const VISION_APP_NAME = 'gurushots-auto-vote';
 
-// Files that are not stores but sit beside them: the CLI session marker, and the lock files of the join and scenario
-// state (with the ".stale-<token>" copy a lock takeover can leave).
-const LOCK_FILE_RE = /^(?:(?:statelock|joinlock)-.+\.lock(?:\.stale-.+)?|cli-session\.lock)$/;
+// Files that are not stores but sit beside them: the CLI session and desktop-app markers, and the lock files of the
+// join and scenario state (with the ".stale-<token>" copy a lock takeover can leave).
+const LOCK_FILE_RE = /^(?:(?:statelock|joinlock)-.+\.lock(?:\.stale-.+)?|cli-session\.lock|desktop-app\.lock)$/;
 
 /**
  * The electron session the app's windows use, for the wipe to clear its cookies, local storage and cache.
  */
 const appSession = () => (require('electron') as typeof import('electron')).session.fromPartition(APP_PARTITION);
 
-type WipeResult = { success: true; removed: string[] } | { success: false; error: string };
+/** Why a wipe was refused: a voting pass in this process, a live CLI session, or the running desktop app. */
+type WipeBusyCode = 'busy-pass' | 'busy-cli' | 'busy-app';
+
+/** `error` is a WipeBusyCode when nothing was touched; otherwise what could not be deleted, with what was `removed`. */
+type WipeResult = { success: true; removed: string[] } | { success: false; error: string; removed?: string[] };
 
 type WipeDeps = {
-    /** Whether the app is working: a wipe then would pull the files out from under it. */
-    isBusy: () => boolean;
+    /** What the app is doing that a wipe would pull the files out from under (live activity only), or null. */
+    busyReason: () => WipeBusyCode | null;
     /** Stops a voting pass that is under way. */
     stopScheduler: () => void;
     /** Android: stops the background service and clears its native stores (resolves ok: whether it all went). */
     wipeNative: () => Promise<{ ok: boolean } | null>;
     /** Electron: clears the windows' cookies, local storage and cache. */
     clearSession: () => Promise<void>;
+    /** Capacitor: reloads the window, which hydrates every cache from what is stored. */
+    reloadWindow: () => void;
 };
 
 /**
@@ -81,8 +86,15 @@ const nativeWipe = async (): Promise<{ ok: boolean } | null> => {
     return isPlainObject(answer) ? { ok: answer.ok === true } : { ok: false };
 };
 
+// A saved "auto-vote running" flag is only a wish to resume at the next start: it is no activity, and does not block.
+const liveBusyReason = (): WipeBusyCode | null => {
+    if (isVotingPassRunning()) return 'busy-pass';
+    if (isCliSessionActive()) return 'busy-cli';
+    return isDesktopAppActive() ? 'busy-app' : null;
+};
+
 const defaultDeps = (): WipeDeps => ({
-    isBusy: () => getSetting('autovoteRunning') === true || isVotingPassRunning() || isCliSessionActive(),
+    busyReason: liveBusyReason,
     stopScheduler: () => cancellation.setCancelled(true),
     wipeNative: nativeWipe,
     clearSession: async () => {
@@ -91,6 +103,7 @@ const defaultDeps = (): WipeDeps => ({
         await session.clearStorageData();
         await session.clearCache();
     },
+    reloadWindow: () => (globalThis as { location?: { reload?: () => void } }).location?.reload?.(),
 });
 
 const vision = (dir: string) => path.join(dir, 'vision');
@@ -127,13 +140,15 @@ const localDataPaths = (userData: string): string[] => {
  * Deletes everything the app keeps on this device (see the header): settings and token, every store, logs, the
  * extracted vision runtime, the Android service's native stores, the windows' browser storage. Pending writes are
  * given up first and stores refuse writes from then on, so nothing re-creates a file. The caller relaunches (or exits)
- * afterwards; the app is not usable until it does. A failure partway leaves what is left and says what.
+ * afterwards; the app is not usable until it does. A failure partway leaves what is left and says what; on Capacitor
+ * the window then reloads, because the caches were emptied and what is stored is only partly gone.
  *
- * @returns the paths and keys removed; `error: 'busy'` when the app is working and nothing was touched
+ * @returns the paths and keys removed; a WipeBusyCode as `error` when the app is working and nothing was touched
  */
 const wipeLocalData = async (overrides: Partial<WipeDeps> = {}): Promise<WipeResult> => {
     const deps = { ...defaultDeps(), ...overrides };
-    if (deps.isBusy()) return { success: false, error: 'busy' };
+    const busy = deps.busyReason();
+    if (busy !== null) return { success: false, error: busy };
 
     const log = logger.withCategory('settings');
     log.warning('Deleting all local data');
@@ -169,10 +184,12 @@ const wipeLocalData = async (overrides: Partial<WipeDeps> = {}): Promise<WipeRes
 
     if (failures.length > 0) {
         resumeWrites();
-        return { success: false, error: `Could not delete: ${failures.join('; ')}` };
+        // Never keep running on caches the wipe emptied.
+        if (runtime.isCapacitor()) deps.reloadWindow();
+        return { success: false, error: failures.join('; '), removed };
     }
     return { success: true, removed };
 };
 
 export { LOCAL_DATA_STORES, LOCAL_DATA_DIRECTORIES, appSession, wipeLocalData };
-export type { LocalDataStore, WipeResult, WipeDeps };
+export type { LocalDataStore, WipeBusyCode, WipeResult, WipeDeps };

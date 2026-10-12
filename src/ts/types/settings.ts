@@ -166,6 +166,11 @@ export interface AndroidHeadlessStore {
      * or the native store refused the value. No answer counts as written.
      */
     write(data: string): boolean | void;
+    /**
+     * Why the latest `write` was refused: `too-large` (past the size the native store takes), `conflict` (the blob
+     * changed since the last `read`), `refused` (the store or the commit failed); '' when it was not refused.
+     */
+    lastWriteRefusal?(): 'too-large' | 'conflict' | 'refused' | '';
     readKey?(key: string): string | null;
     /** `true` when the native side persisted the value. Anything else (`false`, or no answer) is not a write a strict
      *  store takes for one. */

@@ -5,7 +5,7 @@
 
 import * as settings from '../settings';
 import type { IpcHandler } from './registerHandlers';
-import { toRendererSettings } from './rendererSettings';
+import { isRendererHiddenKey, toRendererSettings } from './rendererSettings';
 import * as logger from '../logger';
 import { stampChosenPhotosOwner } from './chosenPhotosOwner';
 import { isIdArg } from './isIdArg';
@@ -29,6 +29,11 @@ const CHALLENGE_ID_ARGS: Record<string, { index: number; optional?: boolean }> =
     'replace-challenge-overrides': { index: 0 },
     'apply-challenge-profile': { index: 1 },
 };
+
+// The channels that take one setting key: a key the renderer may not touch (the token, the derived hasToken, the API
+// headers) is refused as set-setting refuses it, so the answer of a reset or a modified-check never confirms or
+// changes one.
+const SETTING_KEY_CHANNELS = new Set(['reset-setting', 'is-setting-modified']);
 
 // Channels that just delegate to a settings facade method. Each row:
 // [channel, lazy method lookup, fallback-on-error, verb-for-log]. The lookup
@@ -128,6 +133,10 @@ const buildThinHandlers = ({ broadcastSettingsChange }: { broadcastSettingsChang
                     // aislop-ignore-next-line ai-slop/hidden-fallback -- refused and logged by refuseInvalidArgs; the row's fallback is the channel contract
                     return fallback;
                 }
+            }
+            if (SETTING_KEY_CHANNELS.has(channel) && typeof args[0] === 'string' && isRendererHiddenKey(args[0])) {
+                // aislop-ignore-next-line ai-slop/hidden-fallback -- a hidden key is refused; the row's fallback is the channel contract
+                return fallback;
             }
             try {
                 const result = (lookup() as (...a: unknown[]) => unknown)(...args);

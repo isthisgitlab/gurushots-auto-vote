@@ -71,14 +71,34 @@ let saveDropped = false;
 let droppedAfter = 0;
 let saveDroppedListener: (() => void) | null = null;
 
-const setSaveDropped = (dropped: boolean) => {
-    if (saveDropped === dropped) return;
+/**
+ * Why a settings save of the app window was given up: the background service kept changing the settings (`conflict`),
+ * the blob is past the size the native store takes (`too-large`), or the store refused or failed it (`storage`).
+ */
+type SaveDroppedCause = 'conflict' | 'too-large' | 'storage';
+
+let droppedCause: SaveDroppedCause = 'storage';
+
+// The cause of a save that threw: the code the native plugin rejected with (`too-large`), or the one a save that lost
+// to the other writer on every attempt carries (`conflict`); anything else is the store's failure.
+const causeOf = (err: unknown): SaveDroppedCause => {
+    const code = typeof err === 'object' && err !== null && 'code' in err ? err.code : undefined;
+    return code === 'too-large' || code === 'conflict' ? code : 'storage';
+};
+
+// A change of the reported cause while a save is already reported is a change too: the window words it by the cause.
+const setSaveDropped = (dropped: boolean, cause: SaveDroppedCause = 'storage') => {
+    if (saveDropped === dropped && (!dropped || droppedCause === cause)) return;
     saveDropped = dropped;
+    droppedCause = cause;
     saveDroppedListener?.();
 };
 
 /** Whether a settings save of the app window was given up, and its change is not in the stored settings. */
 const isSaveDropped = (): boolean => saveDropped;
+
+/** Why the save reported by {@link isSaveDropped} was given up (`storage` while none is). */
+const getSaveDroppedCause = (): SaveDroppedCause => droppedCause;
 
 /**
  * Tells `listener` whenever {@link isSaveDropped} changes, so a window can re-read the settings (the one subscriber is
@@ -149,7 +169,11 @@ const storage = {
             try {
                 const saved = headlessSettingsWrite(headlessSettingsBase, data);
                 if (saved === null) {
-                    logger.withCategory('settings').error('Headless store refused the settings write', null);
+                    // The native side says why: the blob is past its size limit, it changed under the write, or the commit failed.
+                    const why = headlessStore()?.lastWriteRefusal?.();
+                    logger
+                        .withCategory('settings')
+                        .error(`Headless store refused the settings write${why ? ` (${why})` : ''}`, null);
                     return false;
                 }
                 headlessSettingsBase = saved;
@@ -189,7 +213,7 @@ const storage = {
                     if (serial === settingsWriteSerial) cachedSettingsJson = persistedSettingsJson;
                     // The window is told, so the user can make the change again.
                     droppedAfter = settingsWriteSerial;
-                    setSaveDropped(true);
+                    setSaveDropped(true, causeOf(err));
                 });
             return true;
         }
@@ -286,11 +310,13 @@ const discardPendingWrites = async (): Promise<void> => {
     cachedSettingsJson = null;
     persistedSettingsJson = null;
     saveDropped = false;
+    droppedCause = 'storage';
     discardStores();
     await writeChain;
     await settleStores();
 };
 
+export type { SaveDroppedCause };
 export {
     SETTINGS_KEY,
     CORRUPT_SUFFIX,
@@ -299,6 +325,7 @@ export {
     removePreferenceKeys,
     storage,
     isSaveDropped,
+    getSaveDroppedCause,
     onSaveDroppedChange,
     initializeAsync,
     flushPendingWrites,

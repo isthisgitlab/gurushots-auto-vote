@@ -7,7 +7,7 @@ import { signal } from '@preact/signals';
 import { act, render, screen } from './helpers/test-utils';
 import { ChallengeCard } from '@/components/app/ChallengeCard';
 import { Countdown } from '@/components/app/Countdown';
-import { needsSecondTick } from '@/utils/challengeCardView';
+import { needsSecondTick, nextBoundaryFlip } from '@/utils/challengeCardView';
 import { buildChallenge } from '../helpers/challengeFixtures';
 import { invalid } from '../helpers/invalid';
 import type { Challenge } from '../../src/ts/types/gurushots';
@@ -37,6 +37,8 @@ jest.mock('@/api/useFillChallenge', () => ({
     useFillChallenge: () => ({ fillNow: jest.fn(), loading: false, error: null, clearError: jest.fn() }),
 }));
 jest.mock('@/components/app/EntryBadge', () => ({ EntryBadge: () => null }));
+jest.mock('@/components/app/VoteButton', () => ({ VoteButton: () => <button data-testid="vote-button">vote</button> }));
+jest.mock('@/components/app/RunButton', () => ({ RunButton: () => null }));
 
 const BASE_MS = 1_700_000_000_000;
 const nowSec = () => Math.floor(Date.now() / 1000);
@@ -112,6 +114,25 @@ describe('needsSecondTick', () => {
     });
 });
 
+describe('nextBoundaryFlip', () => {
+    const now = nowSec();
+    const flip = (start_time: number, close_time: number) =>
+        nextBoundaryFlip(invalid<Challenge>({ id: 1, start_time, close_time }), now);
+
+    test('is the second after the start while the challenge has not started, then the close time', () => {
+        expect(flip(now + 30, now + 3600)).toBe(now + 31);
+        expect(flip(now - 30, now + 3600)).toBe(now + 3600);
+        // A start in this very second still has a second to go before the vote button shows.
+        expect(flip(now, now + 3600)).toBe(now + 1);
+    });
+
+    test('is null once both have passed, or when neither is a number', () => {
+        expect(flip(now - 30, now)).toBeNull();
+        expect(flip(now - 30, now - 5)).toBeNull();
+        expect(flip(Number.NaN, Number.NaN)).toBeNull();
+    });
+});
+
 describe('ChallengeCard rendering', () => {
     test('a card with nothing counting down does not re-render as time passes', () => {
         renderCard(challengeWith({ turbo: { state: 'FREE' }, boost: { state: 'USED' } }), '2h 0m');
@@ -160,6 +181,36 @@ describe('ChallengeCard rendering', () => {
             jest.advanceTimersByTime(10_000);
         });
         expect(mockRenders.count).toBe(afterClosed);
+    });
+
+    test('the vote button appears the second a challenge starts, with nothing else ticking', () => {
+        const challenge = challengeWith({ turbo: { state: 'FREE' }, boost: { state: 'USED' } });
+        challenge.start_time = nowSec() + 90;
+        renderCard(challenge, '2h 0m');
+        expect(screen.queryByTestId('vote-button')).toBeNull();
+        act(() => {
+            jest.advanceTimersByTime(90_000);
+        });
+        expect(screen.queryByTestId('vote-button')).toBeNull();
+        act(() => {
+            jest.advanceTimersByTime(1_000);
+        });
+        expect(screen.getByTestId('vote-button')).toBeTruthy();
+    });
+
+    test('the fill button goes away the second a challenge closes', () => {
+        const challenge = challengeWith({ turbo: { state: 'FREE' }, boost: { state: 'USED' } });
+        challenge.close_time = nowSec() + 120;
+        renderCard(challenge, '2m');
+        expect(screen.getByText('+1')).toBeTruthy();
+        act(() => {
+            jest.advanceTimersByTime(119_000);
+        });
+        expect(screen.getByText('+1')).toBeTruthy();
+        act(() => {
+            jest.advanceTimersByTime(1_000);
+        });
+        expect(screen.queryByText('+1')).toBeNull();
     });
 
     test('the countdown text updates through its signal without re-rendering the card', () => {

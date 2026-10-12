@@ -50,6 +50,21 @@ export function needsSecondTick(challenge: Challenge, now: number): boolean {
 }
 
 /**
+ * The next second at which a start- or close-gated control on the card flips, or null when none is ahead: the first
+ * second after `start_time` (the vote and run buttons need the challenge started) and `close_time` itself (filling needs
+ * it still open). The card re-renders at that second, so those buttons flip on time with no per-second tick.
+ *
+ * @param challenge - An active challenge.
+ * @param now - Unix seconds
+ */
+export function nextBoundaryFlip(challenge: Challenge, now: number): number | null {
+    const ahead = [challenge.start_time + 1, challenge.close_time].filter(
+        (flip) => Number.isFinite(flip) && flip > now,
+    );
+    return ahead.length > 0 ? Math.min(...ahead) : null;
+}
+
+/**
  * Everything the challenge card (detailed and compact) derives from the raw
  * challenge at one `now` tick: stats, alert flags/classes and the action gates.
  * Pure, so the two layouts can never disagree about what a state means.
@@ -70,7 +85,7 @@ export function deriveChallengeCardView(
     const exposureFactor = member.ranking.exposure.exposure_factor;
 
     // canPlayAutoTurbo flips to true the moment a TIMER cooldown elapses (the
-    // card ticks `now` every second) without waiting for an external poll.
+    // card ticks `now` every second while one runs) without waiting for an external poll.
     const turboState = member.turbo?.state;
     const turboCooldownPassed =
         turboState === 'TIMER' && typeof member.turbo?.time_to_open === 'number' && member.turbo.time_to_open <= now;
@@ -124,8 +139,9 @@ export function deriveChallengeCardView(
         // manual path (evaluateManualVotingToHundred) bypasses thresholds and
         // the vote is naturally bounded (the API caps exposure at 100%), unlike
         // the full-strategy Run button which stays hidden to avoid racing
-        // turbo/boost/fill actions. Both gates read the per-second `now` tick
-        // (not a raw Date.now()) so they flip the moment a challenge starts.
+        // turbo/boost/fill actions. Both gates read the card's `now` (not a raw
+        // Date.now()), and the card re-renders at the start boundary
+        // (nextBoundaryFlip), so they flip the moment a challenge starts.
         showVoteButton: challenge.start_time < now && exposureFactor < 100,
         // Run button: fires one full auto-strategy cycle for this card. Hidden
         // while the scheduled autovote loop is active to avoid racing

@@ -14,6 +14,13 @@ function formatBytes(bytes: number, decimals: number = 1) {
     return parseFloat((bytes / Math.pow(k, i)).toFixed(decimals)) + ' ' + sizes[i];
 }
 
+// The translated message of each failed step.
+const ERROR_KEYS = {
+    update: 'app.updateFailed',
+    install: 'app.updateInstallFailed',
+    unverified: 'app.updateUnverified',
+} as const;
+
 /**
  * Update dialog component with multiple states. Built on ui/Modal (focus trap,
  * Escape, backdrop); it can only be dismissed that way while an update is
@@ -108,13 +115,7 @@ export function UpdateDialog() {
             {state === UPDATE_STATES.ERROR && (
                 <div className="alert alert-error">
                     <StrokeIcon className="w-5 h-5" d={ICON_PATHS.xCircle} />
-                    <span>
-                        {t(
-                            (error as NonNullable<typeof error>).kind === 'install'
-                                ? 'app.updateInstallFailed'
-                                : 'app.updateFailed',
-                        )}
-                    </span>
+                    <span>{t(ERROR_KEYS[(error as NonNullable<typeof error>).kind])}</span>
                 </div>
             )}
 

@@ -299,6 +299,41 @@ describe('UpdateProvider + UpdateDialog', () => {
         expect(screen.queryByText('app.updateError')).toBeNull();
     });
 
+    it.each(['host', 'content-type', 'size', 'digest', 'digest-missing'])(
+        'a download the Android updater refused (%s) says it was not verified and offers no browser download',
+        async (code) => {
+            mockApi.downloadUpdate.mockResolvedValue(
+                invalid({ success: false, error: 'The download does not match; the release page was opened', code }),
+            );
+            renderDialog();
+            await emit('onUpdateAvailable', INFO);
+            await clickAndSettle(screen.getByText('app.download'));
+            expect(screen.getByText('app.updateUnverified')).toBeTruthy();
+            expect(screen.queryByText('app.downloadInBrowser')).toBeNull();
+            expect(screen.getByText('app.close')).toBeTruthy();
+            expect(mockApi.logError).toHaveBeenCalledWith(expect.stringContaining(`(${code})`));
+        },
+    );
+
+    it('takes the refusal code from an update-error event as well', async () => {
+        renderDialog();
+        await emit('onUpdateAvailable', INFO);
+        await emit('onUpdateError', { message: 'x', code: 'digest' });
+        expect(screen.getByText('app.updateUnverified')).toBeTruthy();
+        expect(screen.queryByText('app.downloadInBrowser')).toBeNull();
+    });
+
+    it.each([
+        ['an unknown code', { message: 'x', code: 'timeout' }],
+        ['a code that is not text', { message: 'x', code: 7 }],
+    ])('%s is an ordinary update failure with the browser download', async (_name, payload) => {
+        renderDialog();
+        await emit('onUpdateAvailable', INFO);
+        await emit('onUpdateError', payload);
+        expect(screen.getByText('app.updateFailed')).toBeTruthy();
+        expect(screen.getByText('app.downloadInBrowser')).toBeTruthy();
+    });
+
     it('closes the error dialog from the backdrop', async () => {
         renderDialog();
         await emit('onUpdateAvailable', INFO);

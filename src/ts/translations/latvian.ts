@@ -46,6 +46,10 @@ export const errors = {
     boostFailed: 'Boost netika piemērots. GuruShots to noraidīja vai neatbildēja. Mēģini vēlreiz pēc brīža.',
     fetchChallengesFailed: 'Izaicinājumus neizdevās ielādēt. GuruShots neatbildēja. Mēģini vēlreiz pēc brīža.',
     accountChanged: 'Saraksta ielādes laikā mainījās konts, tāpēc rezultāts tika atmests. Atver sarakstu vēlreiz.',
+    tokenNotSaved:
+        'Tu esi pieteicies, bet pieteikšanos neizdevās saglabāt. Uzstādījumus nevar ierakstīt; iemeslu skaties uzstādījumu paziņojumā augstāk. Salabo vai pārvieto uzstādījumu failu un piesakies vēlreiz.',
+    webShellToken:
+        'Šī lapa nevar sazināties ar tīmekļa serveri. Tā ir atvērta bez šīs palaišanas piekļuves tokena, vai serveris kopš tā laika ir restartēts. Atver adresi, ko izvadīja pnpm web.',
     accountCheckFailed: 'Kontu neizdevās pārbaudīt. GuruShots neatbildēja. Mēģini vēlreiz pēc brīža.',
     boundaryBody:
         'Daļa lietotnes pārstāja darboties. Informācija ir saglabāta žurnālos. Pārlādē lietotni, lai turpinātu; ja tas atkārtojas, žurnālos redzams, kas neizdevās.',
@@ -1242,6 +1246,8 @@ export const app = {
         'Atjauninājumu neizdevās pabeigt: nevarēja sazināties ar atjauninājumu serveri, vai lejupielāde tika pārtraukta. Mēģini vēlreiz vēlāk vai lejupielādē to pārlūkā.',
     updateInstallFailed:
         'Atjauninājumu neizdevās instalēt: lejupielādēto atjauninājumu nevarēja uzstādīt. Restartē lietotni un mēģini vēlreiz.',
+    updateUnverified:
+        'Lejupielādi neizdevās pārbaudīt, tāpēc tā netika instalēta. Laidiena lapa ir atvērta tavā pārlūkā.',
     skipVersion: 'Izlaist versiju',
     remindLater: 'Atgādināt vēlāk',
     download: 'Lejupielādēt',
@@ -1433,6 +1439,10 @@ export const notice = {
     recoveryCorruptWhy: 'Failu neizdevās nolasīt kā derīgus uzstādījumus. Bojātā kopija ir saglabāta šeit: {path}.',
     recoveryCorruptNext:
         'Jaunus uzstādījumus vari saglabāt kā parasti. Lai atgūtu vecās vērtības, salabo šo kopiju vai nolasi tās no tās.',
+    recoveryCorruptWhyAndroid:
+        'Saglabātos uzstādījumus neizdevās nolasīt kā derīgus. Lietotne bojāto kopiju paturēja savā krātuvē, kur tu to nevari atvērt.',
+    recoveryCorruptNextAndroid:
+        'Uzstādījumi ir atiestatīti uz noklusētajiem. Iestati tos vēlreiz; jaunus uzstādījumus vari saglabāt kā parasti.',
     recoveryUnreadableWhat: 'Tavu uzstādījumu failu neizdevās nolasīt, tāpēc uzstādījumu saglabāšana ir izslēgta.',
     recoveryUnreadableWhy:
         'Lietotne nevarēja atvērt failu {path}. Iespējams, to bloķē cita programma vai piekļuvi liedz atļaujas.',
@@ -1444,8 +1454,13 @@ export const notice = {
     recoveryMigrationNext:
         'Restartē lietotni. Ja tas atkārtojas, pārvieto šo failu citur, lai sāktu ar noklusētajiem uzstādījumiem; fails netiek pārrakstīts.',
     recoveryDroppedWhat: 'Vienu no tavām izmaiņām uzstādījumos neizdevās saglabāt.',
-    recoveryDroppedWhy: 'Fona pakalpojums tajā pašā laikā mainīja uzstādījumus.',
+    recoveryDroppedWhyConflict: 'Fona pakalpojums tajā pašā laikā mainīja uzstādījumus.',
+    recoveryDroppedWhyTooLarge: 'Uzstādījumi ir pārāk lieli, lai tos varētu saglabāt.',
+    recoveryDroppedWhyStorage: 'Ierīces uzstādījumu krātuve izmaiņu nepieņēma.',
+    recoveryDroppedWhyUnknown: 'Uzstādījumus šobrīd neizdevās ierakstīt.',
     recoveryDroppedNext: 'Uzstādījums atkal rāda saglabāto vērtību. Ja vajag, nomaini to vēlreiz.',
+    recoveryDroppedNextTooLarge:
+        'Uzstādījums atkal rāda saglabāto vērtību. Noņem izaicinājumu atsevišķos uzstādījumus un scenārijus, kas vairs nav vajadzīgi, un nomaini to vēlreiz.',
 };
 // about
 export const about = {
@@ -1471,11 +1486,19 @@ export const about = {
     deleteBackground: 'fona pakalpojuma stāvoklis',
     deleteAfter:
         'Pēc tam lietotne tiek palaista no jauna un lūdz pieteikties vēlreiz. Tavs GuruShots konts netiek skarts.',
+    deleteAfterWeb:
+        'Pēc tam tīmekļa serveris apstājas. Palaid pnpm web vēlreiz, atver adresi, ko tas izvada, un piesakies no jauna. Tavs GuruShots konts netiek skarts.',
     deleteConfirm: 'Dzēst visu',
-    deleteBusy:
+    deleteBusyPass:
         'Notiek balsošanas cikls, tāpēc nekas netika dzēsts. Aptur automātisko balsošanu, pagaidi, kamēr cikls beidzas, un mēģini vēlreiz.',
+    deleteBusyCli:
+        'Darbojas komandrindas sesija, tāpēc nekas netika dzēsts. Aptur to terminālī, kurā tā darbojas (Ctrl+C), un mēģini vēlreiz.',
+    deleteBusyApp:
+        'Darbvirsmas lietotne ir atvērta, tāpēc nekas netika dzēsts. Aizver darbvirsmas lietotni un mēģini vēlreiz.',
     deleteFailed:
         'Ne viss tika izdzēsts. Kādu failu vai krātuvi neizdevās noņemt; sīkāka informācija ir žurnālos. Aizver citas programmas, kas izmanto lietotnes failus, un mēģini vēlreiz.',
     deleteDone:
         'Visi vietējie dati ir dzēsti. Lietotne tūlīt tiks palaista no jauna. Ja tas nenotiek, aizver to un atver vēlreiz.',
+    deleteDoneWeb:
+        'Visi vietējie dati ir dzēsti. Tīmekļa serveris ir apstājies. Palaid pnpm web vēlreiz un atver adresi, ko tas izvada.',
 };

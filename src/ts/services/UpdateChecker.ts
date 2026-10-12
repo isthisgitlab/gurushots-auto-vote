@@ -39,9 +39,10 @@ const DEFAULT_TIMEOUT_MS = 15_000;
 /** What the in-app installer needs to verify a downloaded asset and to send the user somewhere safe when it cannot. */
 type ReleaseAssetInfo = { downloadUrl: string; digest: string | null; releaseUrl: string | null };
 
-// The asset the latest check picked. The installer looks it up by download URL, so a URL that did not come from a
-// check never carries a digest.
-let latestAsset: ReleaseAssetInfo | null = null;
+// The assets the checks picked, by download URL. The installer looks one up by the URL the open dialog holds, so a
+// later check (which may pick another asset or none) never takes away the digest of that URL, and a URL that did not
+// come from a check never carries one.
+const pickedAssets = new Map<string, ReleaseAssetInfo>();
 
 const releasesLatestUrl = () => `https://api.github.com/repos/${REPO_OWNER}/${REPO_NAME}/releases/latest`;
 const releasesListUrl = (perPage: number) =>
@@ -161,13 +162,13 @@ const checkForUpdates = async ({
 
         const asset = assetSuffix ? pickAsset(release, assetSuffix) : null;
         const downloadUrl = asset?.browser_download_url || release.html_url || null;
-        latestAsset = asset?.browser_download_url
-            ? {
-                  downloadUrl: asset.browser_download_url,
-                  digest: asset.digest || null,
-                  releaseUrl: release.html_url || null,
-              }
-            : null;
+        if (asset?.browser_download_url) {
+            pickedAssets.set(asset.browser_download_url, {
+                downloadUrl: asset.browser_download_url,
+                digest: asset.digest || null,
+                releaseUrl: release.html_url || null,
+            });
+        }
 
         return {
             updateAvailable,
@@ -185,9 +186,8 @@ const checkForUpdates = async ({
     }
 };
 
-/** The digest and release page of the asset the latest check picked, when `downloadUrl` is that asset's URL. */
-const getReleaseAsset = (downloadUrl: string): ReleaseAssetInfo | null =>
-    latestAsset?.downloadUrl === downloadUrl ? latestAsset : null;
+/** The digest and release page of the asset a check picked, when `downloadUrl` is that asset's URL. */
+const getReleaseAsset = (downloadUrl: string): ReleaseAssetInfo | null => pickedAssets.get(downloadUrl) ?? null;
 
 const getReleasesUrl = () => `https://github.com/${REPO_OWNER}/${REPO_NAME}/releases/latest`;
 

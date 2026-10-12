@@ -293,7 +293,10 @@ describe('wipeLocalData', () => {
             expect(result).toEqual({
                 success: false,
                 error: expect.stringContaining(`${path.join(userData, 'metadata.json')} (EBUSY: resource busy)`),
+                removed: expect.arrayContaining([path.join(userData, 'settings.json'), path.join(userData, 'logs')]),
             });
+            // What failed is not listed as removed.
+            expect(result.success === false && result.removed).not.toContain(path.join(userData, 'metadata.json'));
             expect(fs.existsSync(path.join(userData, 'settings.json'))).toBe(false);
             expect(fs.existsSync(path.join(userData, 'logs'))).toBe(false);
             // The app is still running: its stores work again.
@@ -307,7 +310,11 @@ describe('wipeLocalData', () => {
                 throw null;
             });
             const first = await ctx.localData.wipeLocalData({ clearSession: async () => {} });
-            expect(first).toEqual({ success: false, error: expect.stringContaining('(unknown error)') });
+            expect(first).toEqual({
+                success: false,
+                error: expect.stringContaining('(unknown error)'),
+                removed: expect.any(Array),
+            });
 
             load();
             const second = await ctx.localData.wipeLocalData({
@@ -315,7 +322,7 @@ describe('wipeLocalData', () => {
                     throw new Error('session gone');
                 },
             });
-            expect(second).toEqual({ success: false, error: 'Could not delete: session gone' });
+            expect(second).toEqual({ success: false, error: 'session gone', removed: expect.any(Array) });
 
             load();
             const third = await ctx.localData.wipeLocalData({
@@ -323,37 +330,22 @@ describe('wipeLocalData', () => {
                     throw null;
                 },
             });
-            expect(third).toEqual({ success: false, error: 'Could not delete: unknown error' });
+            expect(third).toEqual({ success: false, error: 'unknown error', removed: [] });
         });
     });
 
     describe('refusing', () => {
-        test('while auto-vote is running, touching nothing', async () => {
-            load();
-            fillUserData();
-            fs.writeFileSync(path.join(userData, 'settings.json'), JSON.stringify({ autovoteRunning: true }));
+        // The parent process (the test runner's shell or the runner itself) is a live process that is not this one.
+        const markerOfAnotherProcess = (fileName: string) =>
+            fs.writeFileSync(path.join(userData, fileName), JSON.stringify({ pid: process.ppid }));
 
-            const result = await ctx.localData.wipeLocalData({ clearSession: async () => {} });
-
-            expect(result).toEqual({ success: false, error: 'busy' });
+        const expectNothingTouched = () => {
             expect(fs.existsSync(path.join(userData, 'metadata.json'))).toBe(true);
             expect(ctx.cancellation.isCancelled()).toBe(false);
             expect(ctx.storage.storage.writeRaw('{"autovoteRunning":true}')).toBe(true);
-        });
+        };
 
-        test('while a CLI session holds its marker, touching nothing', async () => {
-            load();
-            fillUserData();
-            // The parent process (the test runner's shell or the runner itself) is a live process that is not this one.
-            fs.writeFileSync(path.join(userData, 'cli-session.lock'), JSON.stringify({ pid: process.ppid }));
-
-            const result = await ctx.localData.wipeLocalData({ clearSession: async () => {} });
-
-            expect(result).toEqual({ success: false, error: 'busy' });
-            expect(fs.existsSync(path.join(userData, 'metadata.json'))).toBe(true);
-        });
-
-        test('while a voting pass is under way, touching nothing', async () => {
+        test('while a voting pass is under way (busy-pass), touching nothing', async () => {
             load();
             fillUserData();
             const endPass = ctx.passActivity.beginVotingPass();
@@ -361,9 +353,55 @@ describe('wipeLocalData', () => {
             const result = await ctx.localData.wipeLocalData({ clearSession: async () => {} });
             endPass();
 
-            expect(result).toEqual({ success: false, error: 'busy' });
-            expect(fs.existsSync(path.join(userData, 'metadata.json'))).toBe(true);
-            expect(ctx.cancellation.isCancelled()).toBe(false);
+            expect(result).toEqual({ success: false, error: 'busy-pass' });
+            expectNothingTouched();
+        });
+
+        test('while a CLI session holds its marker (busy-cli), touching nothing', async () => {
+            load();
+            fillUserData();
+            markerOfAnotherProcess('cli-session.lock');
+
+            const result = await ctx.localData.wipeLocalData({ clearSession: async () => {} });
+
+            expect(result).toEqual({ success: false, error: 'busy-cli' });
+            expectNothingTouched();
+        });
+
+        test('while the desktop app holds its marker (busy-app), touching nothing', async () => {
+            load();
+            fillUserData();
+            markerOfAnotherProcess('desktop-app.lock');
+
+            const result = await ctx.localData.wipeLocalData({ clearSession: async () => {} });
+
+            expect(result).toEqual({ success: false, error: 'busy-app' });
+            expectNothingTouched();
+        });
+
+        test('names the pass first, then the CLI session, then the app', async () => {
+            load();
+            markerOfAnotherProcess('cli-session.lock');
+            markerOfAnotherProcess('desktop-app.lock');
+            const endPass = ctx.passActivity.beginVotingPass();
+
+            const both = await ctx.localData.wipeLocalData({ clearSession: async () => {} });
+            endPass();
+            const onlyMarkers = await ctx.localData.wipeLocalData({ clearSession: async () => {} });
+
+            expect(both).toEqual({ success: false, error: 'busy-pass' });
+            expect(onlyMarkers).toEqual({ success: false, error: 'busy-cli' });
+        });
+
+        test('a saved "auto-vote running" flag alone is no activity and does not block', async () => {
+            load();
+            fillUserData();
+            fs.writeFileSync(path.join(userData, 'settings.json'), JSON.stringify({ autovoteRunning: true }));
+
+            const result = await ctx.localData.wipeLocalData({ clearSession: async () => {} });
+
+            expect(result.success).toBe(true);
+            expect(fs.existsSync(path.join(userData, 'metadata.json'))).toBe(false);
         });
 
         test('a stale marker (its process is gone) does not block', async () => {
@@ -373,6 +411,24 @@ describe('wipeLocalData', () => {
             await expect(ctx.localData.wipeLocalData({ clearSession: async () => {} })).resolves.toEqual({
                 success: true,
                 removed: [path.join(userData, 'cli-session.lock')],
+            });
+        });
+
+        test('a marker nobody has refreshed lately does not block, even when its process id is alive', async () => {
+            load();
+            markerOfAnotherProcess('cli-session.lock');
+            markerOfAnotherProcess('desktop-app.lock');
+            const longAgo = new Date(Date.now() - ctx.lock.STALE_AFTER_MS - 5_000);
+            for (const name of ['cli-session.lock', 'desktop-app.lock']) {
+                fs.utimesSync(path.join(userData, name), longAgo, longAgo);
+            }
+
+            await expect(ctx.localData.wipeLocalData({ clearSession: async () => {} })).resolves.toEqual({
+                success: true,
+                removed: expect.arrayContaining([
+                    path.join(userData, 'cli-session.lock'),
+                    path.join(userData, 'desktop-app.lock'),
+                ]),
             });
         });
     });
@@ -497,8 +553,70 @@ describe('wipeLocalData', () => {
 
             const result = await ctx.localData.wipeLocalData();
 
-            expect(result).toEqual({ success: false, error: 'Could not delete: the background service data' });
+            expect(result).toEqual({
+                success: false,
+                error: 'the background service data',
+                removed: expect.any(Array),
+            });
             expect(ctx.storage.storage.writeRaw('{}')).toBe(true);
+        });
+
+        test('a failed wipe reloads the window, so the app never keeps running on emptied caches', async () => {
+            load();
+            wipeNative.mockResolvedValue({ ok: false });
+            const reloadWindow = jest.fn();
+
+            await ctx.localData.wipeLocalData({ reloadWindow });
+
+            expect(reloadWindow).toHaveBeenCalledTimes(1);
+        });
+
+        test('a Preferences key that cannot be removed fails the wipe and reloads the window too', async () => {
+            load();
+            mockPreferences.remove.mockRejectedValueOnce(new Error('preferences gone'));
+            const reloadWindow = jest.fn();
+
+            const result = await ctx.localData.wipeLocalData({ reloadWindow });
+
+            expect(result).toEqual({ success: false, error: 'preferences gone', removed: [] });
+            expect(reloadWindow).toHaveBeenCalledTimes(1);
+        });
+
+        test('a wipe that went through, or one that was refused, does not reload', async () => {
+            load();
+            const reloadWindow = jest.fn();
+
+            await ctx.localData.wipeLocalData({ reloadWindow });
+            await ctx.localData.wipeLocalData({ reloadWindow, busyReason: () => 'busy-app' });
+
+            expect(reloadWindow).not.toHaveBeenCalled();
+        });
+
+        test("by default the reload is the WebView's own", async () => {
+            load();
+            wipeNative.mockResolvedValue({ ok: false });
+            const reload = jest.fn();
+            const original = Object.getOwnPropertyDescriptor(globalThis, 'location');
+            const setLocation = (value: unknown) =>
+                Object.defineProperty(globalThis, 'location', { value, configurable: true, writable: true });
+            try {
+                setLocation({ reload });
+                await ctx.localData.wipeLocalData();
+                expect(reload).toHaveBeenCalledTimes(1);
+
+                // A window without a reload (or without a location) is not an error.
+                setLocation({});
+                await expect(ctx.localData.wipeLocalData()).resolves.toEqual(
+                    expect.objectContaining({ success: false }),
+                );
+                setLocation(undefined);
+                await expect(ctx.localData.wipeLocalData()).resolves.toEqual(
+                    expect.objectContaining({ success: false }),
+                );
+            } finally {
+                if (original) Object.defineProperty(globalThis, 'location', original);
+                else Reflect.deleteProperty(globalThis, 'location');
+            }
         });
 
         test('a build without the plugin carries on', async () => {
@@ -514,7 +632,8 @@ describe('wipeLocalData', () => {
 
             await expect(ctx.localData.wipeLocalData()).resolves.toEqual({
                 success: false,
-                error: 'Could not delete: the background service data',
+                error: 'the background service data',
+                removed: expect.any(Array),
             });
         });
 

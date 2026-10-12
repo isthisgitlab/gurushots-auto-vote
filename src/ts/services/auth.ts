@@ -123,11 +123,15 @@ const clearAuthToken = async (): Promise<boolean> => {
  * Store the token a login just obtained. When it differs from the one stored, the account may have
  * changed without a logout in between (a login on top of another session), so what was remembered
  * about the previous one is dropped exactly as a logout would.
+ *
+ * @returns false when the token was not saved (the settings refused the write): the session then does not outlive
+ *   this run, and the stored account is unchanged
  */
-const switchAccountToken = (token: string): void => {
+const switchAccountToken = (token: string): boolean => {
     const previous = settings.getSetting('token');
-    settings.setSetting('token', token);
+    if (!settings.setSetting('token', token)) return false;
     if (previous !== token) forgetAccountMemory();
+    return true;
 };
 
 /**

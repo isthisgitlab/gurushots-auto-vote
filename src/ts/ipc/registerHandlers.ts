@@ -10,12 +10,14 @@
  * that renders remote content doesn't inherit the full IPC surface.
  * The Logs window is held to a smaller set per sender: its webContents is
  * registered with restrictToLogsChannels() and may then invoke only the
- * manifest's logsWindowInvokeChannels. Unit tests and the Capacitor bridge call
+ * manifest's logsWindowInvokeChannels, read only the manifest's logsWindowSettingKeys through get-setting, and be told
+ * of a settings change only for those keys. Unit tests and the Capacitor bridge call
  * buildHandlers() directly and are unaffected.
  */
 
 import * as logger from '../logger';
-import { logsWindowInvokeChannels } from './manifest';
+import { logsWindowInvokeChannels, logsWindowSettingKeys } from './manifest';
+import { isPlainObject } from '../plainObject';
 
 import type { IpcMain, IpcMainEvent, IpcMainInvokeEvent, WebContents } from 'electron';
 
@@ -90,12 +92,25 @@ const senderUrl = (event: IpcMainInvokeEvent): string => {
 // The webContents of windows limited to the Logs channel set. Weak, so a closed window drops out.
 const logsWindowSenders = new WeakSet<WebContents>();
 
+// A settings-changed payload cut down to the keys the Logs window may know.
+const logsWindowSettings = (payload: unknown): Record<string, unknown> =>
+    isPlainObject(payload)
+        ? Object.fromEntries(
+              Object.entries(payload).filter(([key]) => (logsWindowSettingKeys as readonly string[]).includes(key)),
+          )
+        : {};
+
 /**
- * Limits every call from this window to the Logs channel set, whatever its preload exposes.
+ * Limits every call from this window to the Logs channel set, whatever its preload exposes, and cuts what is sent to
+ * it down to what it may know: its settings-changed events carry only the logsWindowSettingKeys.
  * @param webContents - the Logs window's, registered before its page loads
  */
 const restrictToLogsChannels = (webContents: WebContents): void => {
     logsWindowSenders.add(webContents);
+    const send = webContents.send;
+    if (typeof send !== 'function') return;
+    webContents.send = (channel: string, ...args: unknown[]) =>
+        send.call(webContents, channel, ...(channel === 'settings-changed' ? args.map(logsWindowSettings) : args));
 };
 
 /**
@@ -110,6 +125,21 @@ const isChannelAllowedForSender = (
     !logsWindowSenders.has(event.sender) ||
     (logsWindowInvokeChannels as readonly string[]).includes(channel);
 
+/**
+ * @param event - Null/undefined on a direct invocation, which is not limited.
+ * @param channel - the channel being invoked
+ * @param args - the arguments of the call
+ */
+const isSettingKeyAllowedForSender = (
+    event: IpcMainInvokeEvent | null | undefined,
+    channel: string,
+    args: unknown[],
+): boolean =>
+    channel !== 'get-setting' ||
+    !event?.sender ||
+    !logsWindowSenders.has(event.sender) ||
+    (logsWindowSettingKeys as readonly unknown[]).includes(args[0]);
+
 const registerHandlers = (ipcMain: IpcMain, handlers: Record<string, IpcHandler>) => {
     for (const [channel, impl] of Object.entries(handlers)) {
         ipcMain.handle(channel, (event, ...args: unknown[]) => {
@@ -122,6 +152,12 @@ const registerHandlers = (ipcMain: IpcMain, handlers: Record<string, IpcHandler>
             if (!isChannelAllowedForSender(event, channel)) {
                 logger.withCategory('api').warning(`Refused IPC '${channel}' from the Logs window`, null);
                 return { success: false as const, error: 'Refused: channel not available to this window' };
+            }
+            if (!isSettingKeyAllowedForSender(event, channel, args)) {
+                logger
+                    .withCategory('api')
+                    .warning(`Refused IPC '${channel}' for a setting the Logs window may not read`, null);
+                return { success: false as const, error: 'Refused: setting not available to this window' };
             }
             return invokeHandler(impl, event, args);
         });

@@ -4,6 +4,7 @@
  * session holds its marker. The CLI and the Android service do not do this at all.
  */
 
+const mockReleaseAppLock = jest.fn();
 jest.mock('electron', () => ({
     app: { on: jest.fn() },
     BrowserWindow: { getAllWindows: jest.fn(() => []) },
@@ -15,7 +16,10 @@ jest.mock('../../src/ts/settings', () => ({
     setSetting: jest.fn(),
     seedIntentProfiles: jest.fn(),
 }));
-jest.mock('../../src/ts/settings/cliSessionLock', () => ({ isCliSessionActive: jest.fn(() => false) }));
+jest.mock('../../src/ts/settings/cliSessionLock', () => ({
+    isCliSessionActive: jest.fn(() => false),
+    holdDesktopAppLock: jest.fn(() => mockReleaseAppLock),
+}));
 jest.mock('../../src/ts/api/randomizer', () => ({ initializeHeaders: jest.fn() }));
 jest.mock('../../src/ts/logger', () => {
     const cat = { info: jest.fn(), error: jest.fn(), warning: jest.fn(), debug: jest.fn() };
@@ -32,6 +36,7 @@ jest.mock('../../src/ts/index/windows', () => ({ checkAutoLogin: jest.fn() }));
 jest.mock('../../src/ts/index/permissions', () => ({ installPermissionHandlers: jest.fn() }));
 jest.mock('../../src/ts/index/state', () => ({ appState: {} }));
 
+import { app } from 'electron';
 import loggerModule = require('../../src/ts/logger');
 import settingsModule = require('../../src/ts/settings');
 import lockModule = require('../../src/ts/settings/cliSessionLock');
@@ -42,7 +47,11 @@ import { invalid } from '../helpers/invalid';
 const settings = jest.mocked(settingsModule);
 const lock = jest.mocked(lockModule);
 const cat = invalid<{
-    __cat: { info: jest.Mock<void, [string, ...unknown[]]>; error: jest.Mock<void, [string, ...unknown[]]> };
+    __cat: {
+        info: jest.Mock<void, [string, ...unknown[]]>;
+        error: jest.Mock<void, [string, ...unknown[]]>;
+        warning: jest.Mock<void, [string, ...unknown[]]>;
+    };
 }>(loggerModule).__cat;
 const { onReady } = require('../../src/ts/index/startup') as typeof startupModule;
 
@@ -124,5 +133,42 @@ describe('desktop startup clears a leftover login', () => {
             expect.stringContaining('Failed to clear a leftover token'),
             expect.any(Error),
         );
+    });
+});
+
+describe('desktop startup marks the app as running', () => {
+    beforeEach(() => {
+        jest.useFakeTimers();
+        jest.clearAllMocks();
+        settings.loadSettings.mockReturnValue(invalid({ token: '', stayLoggedIn: false }));
+    });
+
+    afterEach(() => {
+        jest.clearAllTimers();
+        jest.useRealTimers();
+    });
+
+    test('it holds the marker before anything else and gives it up when the app quits', async () => {
+        await onReady();
+
+        expect(lock.holdDesktopAppLock).toHaveBeenCalledTimes(1);
+        expect(lock.holdDesktopAppLock.mock.invocationCallOrder[0]).toBeLessThan(
+            settings.seedIntentProfiles.mock.invocationCallOrder[0],
+        );
+        expect(jest.mocked(app.on)).toHaveBeenCalledWith('will-quit', mockReleaseAppLock);
+    });
+
+    test('a marker that cannot be written is logged and never stops startup', async () => {
+        lock.holdDesktopAppLock.mockImplementationOnce(() => {
+            throw new Error('read-only');
+        });
+
+        await expect(onReady()).resolves.toBeUndefined();
+
+        expect(cat.warning).toHaveBeenCalledWith(
+            expect.stringContaining('Could not mark the app as running'),
+            expect.any(Error),
+        );
+        expect(jest.mocked(app.on)).not.toHaveBeenCalledWith('will-quit', expect.anything());
     });
 });

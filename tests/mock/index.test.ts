@@ -198,7 +198,7 @@ describe('mock/index', () => {
 
                 expect(result).toEqual(auth.mockLoginSuccess);
                 expect(logger.__mockDebugFn).toHaveBeenCalledWith(
-                    'Mock authentication with: test@example.com, password: [hidden]',
+                    'Mock authentication: email given, password given',
                     null,
                 );
                 expect(logger.__mockSuccessFn).toHaveBeenCalledWith('Mock authentication successful', null, null);
@@ -239,9 +239,20 @@ describe('mock/index', () => {
                 await mockIndex.mockApiClient.authenticate('test@example.com', 'mypassword');
 
                 expect(logger.__mockDebugFn).toHaveBeenCalledWith(
-                    'Mock authentication with: test@example.com, password: [hidden]',
+                    'Mock authentication: email given, password given',
                     null,
                 );
+            });
+
+            test('should log no email when not provided, and never the address itself', async () => {
+                await expect(mockIndex.mockApiClient.authenticate('', 'pw')).rejects.toEqual(auth.mockLoginFailure);
+                await mockIndex.mockApiClient.authenticate('someone@example.com', 'pw');
+
+                expect(logger.__mockDebugFn).toHaveBeenCalledWith(
+                    'Mock authentication: no email, password given',
+                    null,
+                );
+                expect(JSON.stringify(logger.__mockDebugFn.mock.calls)).not.toContain('someone@example.com');
             });
 
             test('should log no password when not provided', async () => {
@@ -250,7 +261,7 @@ describe('mock/index', () => {
                 );
 
                 expect(logger.__mockDebugFn).toHaveBeenCalledWith(
-                    'Mock authentication with: test@example.com, password: no password',
+                    'Mock authentication: email given, no password',
                     null,
                 );
             });

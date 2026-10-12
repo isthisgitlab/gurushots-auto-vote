@@ -114,7 +114,7 @@ const buildAllHandlers = () => {
                 // settles to a "see system notification" state.
                 emit('update-downloaded', lastUpdateInfo);
             } else {
-                emit('update-error', { message: result.error });
+                emit('update-error', { message: result.error, code: result.code });
             }
             return { ...result, fallbackUrl: updateChecker.getReleasesUrl() };
         },

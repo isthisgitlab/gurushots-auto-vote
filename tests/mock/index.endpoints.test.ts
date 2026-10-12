@@ -46,7 +46,7 @@ const { runJoinPass, joinChallengeSingle, forgetUnconfirmedPayment } = jest.mock
 const { loadMissionNeeds, registerMissionNeeds } = jest.mocked(
     require('../../src/ts/services/missions') as typeof missionsModule,
 );
-const { mockApiClient, mockMetadata, clearSessionCache } = require('../../src/ts/mock/index') as typeof indexModule;
+const { mockApiClient, clearSessionCache } = require('../../src/ts/mock/index') as typeof indexModule;
 
 /** Resolve a promise that is gated on simulated latency. */
 const settle = async <T>(promise: Promise<T>): Promise<T> => {
@@ -336,44 +336,23 @@ describe('searchTagAutocomplete', () => {
     });
 });
 
-describe('submitVotes — metadata bookkeeping', () => {
+describe('submitVotes — no vote metadata', () => {
     const images = [{ id: 'i1' }];
 
-    test('records the ORIGINAL exposure for the challenge after a successful mock vote, in memory only', async () => {
-        await settle(
-            mockApiClient.submitVotes(
-                { images, challenge: invalid({ id: 31 }), voting: { exposure: { exposure_factor: 42.4 } } },
-                'tok',
-                80,
-            ),
-        );
-        expect(mockMetadata.getChallengeMetadata('31')).toEqual({
-            lastVoteTime: expect.any(String),
-            exposureBump: 42,
-        });
-        expect(metadata.updateChallengeVoteMetadata).not.toHaveBeenCalled();
-        expect(cat.debug).toHaveBeenCalledWith('Exposure threshold: 80', null);
-        expect(cat.success).toHaveBeenCalledWith(
-            'Mock metadata updated for challenge 31: original exposure 42%',
-            null,
-            null,
-        );
-    });
-
-    test('defaults the original exposure to 50% when the payload has none', async () => {
-        await settle(mockApiClient.submitVotes(invalid({ images, challenge: { id: 32 } }), 'tok'));
-        expect(mockMetadata.getChallengeMetadata(32)).toMatchObject({ exposureBump: 50 });
-    });
-
-    test('a challenge that was not voted on has no entry', () => {
-        expect(mockMetadata.getChallengeMetadata('no-such-challenge')).toBeNull();
-    });
-
-    test.each([[undefined], [{}]])('no challenge id (%p) → no metadata write', async (challenge) => {
-        await settle(mockApiClient.submitVotes(invalid({ images, challenge }), 'tok'));
-        expect(cat.success).not.toHaveBeenCalled();
-        expect(metadata.updateChallengeVoteMetadata).not.toHaveBeenCalled();
-    });
+    test.each([
+        ['a challenge with its pre-vote exposure', { id: 31 }, { exposure: { exposure_factor: 42.4 } }],
+        ['a challenge without one', { id: 32 }, undefined],
+        ['no challenge', undefined, undefined],
+    ])(
+        'a successful mock vote for %s writes no metadata, the real metadata.json included',
+        async (_name, challenge, voting) => {
+            await settle(mockApiClient.submitVotes(invalid({ images, challenge, voting }), 'tok', 80));
+            expect(metadata.updateChallengeVoteMetadata).not.toHaveBeenCalled();
+            expect(cat.debug).toHaveBeenCalledWith('Exposure threshold: 80', null);
+            expect(cat.info).toHaveBeenCalledWith('Submitting mock votes successfully', null);
+            expect(cat.success).not.toHaveBeenCalled();
+        },
+    );
 
     test('a payload without an images list is logged as 0 and rejected', async () => {
         await expect(settle(mockApiClient.submitVotes(invalid({}), 'tok'))).rejects.toEqual(
