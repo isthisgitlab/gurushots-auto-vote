@@ -232,7 +232,7 @@ export const app = {
         'Iesniegt papildu foto, kad tuvojas izaicinājuma termiņš, pēc zemāk norādītā grafika. Katrā pārbaudes ciklā iesniedz vienu foto.',
     autoFillSchedule: 'Automātiskās iesniegšanas grafiks',
     autoFillScheduleDesc:
-        'Uzstādi laiku 0h 0m, lai izslēgtu attiecīgo foto. Katra rinda nozīmē: kad līdz beigām atlicis šis laiks, jābūt iesniegtiem vismaz tik foto — „Foto 2 ≤ 48h” iesniedz tavu 2. foto, kad atlikušas 48 stundas. Ja esi atpalicis no grafika (lietotne palaista vēlu vai laiks ir garāks par visu izaicinājumu), lietotne grafiku panāk, jau no sākuma iesniedzot vienu foto katrā ciklā. Ja izaicinājums atļauj mazāk foto, nekā aptver grafiks, viss grafiks nobīdās uz beigām, lai pēdējā foto laiks attiektos uz izaicinājuma pēdējo foto: piemēram, izaicinājumā ar 2 foto 2. foto izmanto Foto 4 laiku, bet izaicinājumā ar 3 foto 2. foto izmanto Foto 3 laiku un 3. foto — Foto 4 laiku.',
+        'Uzstādi laiku 0h 0min, lai izslēgtu attiecīgo foto. Katra rinda nozīmē: kad līdz beigām atlicis šis laiks, jābūt iesniegtiem vismaz tik foto — „Foto 2 ≤ 48h” iesniedz tavu 2. foto, kad atlikušas 48 stundas. Ja esi atpalicis no grafika (lietotne palaista vēlu vai laiks ir garāks par visu izaicinājumu), lietotne grafiku panāk, jau no sākuma iesniedzot vienu foto katrā ciklā. Ja izaicinājums atļauj mazāk foto, nekā aptver grafiks, viss grafiks nobīdās uz beigām, lai pēdējā foto laiks attiektos uz izaicinājuma pēdējo foto: piemēram, izaicinājumā ar 2 foto 2. foto izmanto Foto 4 laiku, bet izaicinājumā ar 3 foto 2. foto izmanto Foto 3 laiku un 3. foto — Foto 4 laiku.',
     autoFillScheduleShiftHint:
         'Šis izaicinājums atļauj {0} foto — mazāk, nekā aptver grafiks, tāpēc laiki nobīdās uz beigām: pēdējais foto izmanto Foto {1} laiku.',
     autoFillScheduleImage: 'Foto',
@@ -1013,12 +1013,12 @@ export const app = {
     scheduledFillTimeOff: 'laiki nav uzstādīti — izslēgts',
     scheduledFillBeforeEnd: 'Balsošana pirms beigām',
     scheduledFillBeforeEndDesc:
-        'Atvērt vienreizējus balsošanas logus tik ilgi pirms izaicinājuma beigām: piem., 10h 0m un 4h 0m, lai noslēguma dienā balsotu divreiz. Ievada stundās un minūtēs; noņem visas rindas, lai šos intervālus izslēgtu. Tos skaita no katra izaicinājuma beigām, tāpēc pārbaudi tos vēlreiz, ja izmanto saglabātu profilu izaicinājumam ar citu garumu.',
+        'Atvērt vienreizējus balsošanas logus tik ilgi pirms izaicinājuma beigām: piem., 10h 0min un 4h 0min, lai noslēguma dienā balsotu divreiz. Ievada stundās un minūtēs; noņem visas rindas, lai šos intervālus izslēgtu. Tos skaita no katra izaicinājuma beigām, tāpēc pārbaudi tos vēlreiz, ja izmanto saglabātu profilu izaicinājumam ar citu garumu.',
     scheduledFillBeforeEndOff: 'intervāli nav uzstādīti — izslēgts',
     scheduledFillAddTime: 'Pievienot laiku',
     scheduledFillAddBeforeEnd: 'Pievienot intervālu',
     scheduledFillRemoveEntry: 'Noņemt rindu',
-    scheduledFillEntryDraft: 'uzstādi laiku — rindas ar 0h 0m netiek saglabātas',
+    scheduledFillEntryDraft: 'uzstādi laiku — rindas ar 0h 0min netiek saglabātas',
     scheduledFillDuplicateEntry: 'atkārtojas — šo rindu neņem vērā',
     scheduledFillMaxEntries: 'Sasniegts rindu maksimums: {0}.',
     scheduledFillSourceBeforeEnd: '{0} pirms beigām',

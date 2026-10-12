@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback } from 'react';
 import { useSessionLoad } from './useSessionLoad';
+import { useLatestRef } from './useLatestRef';
 import * as ipc from '@/api/ipc';
 import { useOnChosenPhotosCleared, withoutChosenPhotos } from '@/api/chosenPhotosCleared';
 
@@ -198,16 +199,19 @@ const ruleSourceFor = (rules: TitleRuleInfo, ruleLayer: ChallengeValues, key: st
 
 /**
  * Read the rules' contribution again from the settings (a failed read changes nothing). The
- * suppression this dialog holds, saved or not, stays as it is.
+ * suppression this dialog holds, saved or not, stays as it is. A reply that comes after the dialog
+ * has closed, or moved to another challenge (`isCurrent` says no), is dropped: it describes a
+ * challenge that is no longer on screen.
  */
 const rereadTitleRules = async (
     challengeTitle: string,
     challengeId: string | number,
     setTitleRules: SetTitleRules,
+    isCurrent: () => boolean,
+    isSuppressed: () => boolean,
 ): Promise<void> => {
     const fresh = await ipc.callOrNull(() => ipc.getTitleProfile(challengeTitle, challengeId.toString()));
-    // Reached only with a matched profile on screen, so the state is loaded.
-    if (fresh) setTitleRules((state) => ({ ...fresh, suppressed: (state as TitleRuleInfo).suppressed }));
+    if (fresh && isCurrent()) setTitleRules({ ...fresh, suppressed: isSuppressed() });
 };
 
 /**
@@ -242,7 +246,10 @@ function useTitleRules({
         if (isOpen) setProfileReplacesWarning(false);
     }, [isOpen]);
 
+    // Which challenge is on screen, now: a reply to a read of another one is stale.
+    const onScreen = useLatestRef(isOpen ? `${challengeId}\0${challengeTitle}` : null);
     const rules = titleRules ?? NO_RULES;
+    const suppressedNow = useLatestRef(rules.suppressed);
     // A suppressed profile drops out, the rules' own inline values do not: a rule that sets a
     // scenario or an auto-join directly keeps setting it.
     const ruleLayer: ChallengeValues = rules.suppressed ? rules.inlineValues : rules.ruleValues;
@@ -269,7 +276,14 @@ function useTitleRules({
     // first-match order decides what runs, so it is read again rather than merged client-side.
     const onProfilesChanged = ({ name }: { name: string; values?: ChallengeValues; deleted?: boolean }) => {
         if (name.toLowerCase() !== titleRules?.profile?.name.toLowerCase() || !challengeId) return;
-        void rereadTitleRules(challengeTitle, challengeId, setTitleRules);
+        const asked = onScreen.current;
+        void rereadTitleRules(
+            challengeTitle,
+            challengeId,
+            setTitleRules,
+            () => onScreen.current === asked,
+            () => suppressedNow.current,
+        );
     };
 
     // The matched profile's own values, while it applies (the "Using profile" badge).

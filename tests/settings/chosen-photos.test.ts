@@ -472,7 +472,13 @@ describe('Chosen Photos settings', () => {
 
                 test('a start time that is no number counts as the fetch time', () => {
                     at(0);
-                    settings.rememberUpcomingChallenges([{ id: 200, start_time: 'soon' }, { id: null }, null]);
+                    settings.rememberUpcomingChallenges(
+                        invalid<Parameters<typeof settings.rememberUpcomingChallenges>[0]>([
+                            { id: 200, start_time: 'soon' },
+                            { id: null },
+                            null,
+                        ]),
+                    );
                     feedDropsIt(599);
                     expect([...(getUpcomingChallengeIds() ?? [])]).toEqual(['200']);
                     feedDropsIt(601);

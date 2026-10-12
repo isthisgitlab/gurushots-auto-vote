@@ -36,10 +36,10 @@ Commands:
   discover - List open (un-joined) challenges you can join, and the upcoming ones starting
              within discoverUpcomingHours (24 by default; 0 = open only). An upcoming challenge
              can't be joined until it starts, but you can choose its photos now.
-  join <id> [--yes [--max-coins=<n>]] - Join an open challenge. Free joins immediately; paid joins
+  join <id> [--yes [--max-coins=<coins>]] - Join an open challenge. Free joins immediately; paid joins
              print the coin cost and require --yes before spending coins. --yes alone pays the
-             cost at that moment; with --max-coins=<n> it refuses (and spends nothing) if the cost
-             is above n. An upcoming challenge answers that it has not started.
+             cost at that moment; with --max-coins=<coins> it refuses (and spends nothing) if the cost
+             is above that. An upcoming challenge answers that it has not started.
   list-photos [--challenge=<id>] [--search=<tag>] - List your photo ids, to choose them for auto-join / auto-submit.
              With --challenge each photo shows whether that challenge accepts it.
   check-updates - Check GitHub for a newer release

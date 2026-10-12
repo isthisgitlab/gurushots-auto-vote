@@ -257,7 +257,10 @@ const handleJoinChallenge = (async (
     try {
         logger
             .withCategory('join')
-            .info(`▶️ Join request: Challenge=${safeId}, spendCoins=${spendCoins === true}`, null);
+            .info(
+                `▶️ Join request: Challenge=${safeId}, spendCoins=${spendCoins === true}, expectedCost=${expectedCost ?? 'none'}`,
+                null,
+            );
         const guard = auth.requireAuthToken('join');
         if (!guard.ok) return guard.response;
         const strategy = apiFactory.getApiStrategy();

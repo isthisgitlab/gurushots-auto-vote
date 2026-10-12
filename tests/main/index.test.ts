@@ -244,7 +244,9 @@ jest.mock('../../src/ts/windows/suspendBoost', () => ({
 jest.mock('../../src/ts/ui/applicationMenu', () => ({ createApplicationMenu: jest.fn() }));
 jest.mock('../../src/ts/index/navigationGuard', () => ({ register: jest.fn() }));
 jest.mock('../../src/ts/index/permissions', () => ({ installPermissionHandlers: jest.fn() }));
-jest.mock('../../src/ts/translations/index', () => ({ translationManager: { t: (k: string) => k } }));
+jest.mock('../../src/ts/translations/index', () => ({
+    translationManager: { t: (k: string) => k, getCurrentLanguage: () => 'lv' },
+}));
 
 const originalPlatform = process.platform;
 const setPlatform = (p: NodeJS.Platform) =>
@@ -560,6 +562,8 @@ describe('quit guard wiring', () => {
         expect(heldEvent).toBe(event);
         expect(deps).toMatchObject({ autovoteRunning: true, dialog: m.electron.dialog, parent: mainWin() });
         expect(deps.t('quitGuard.title')).toBe('quitGuard.title');
+        // The dialog's times are written in the UI language.
+        expect(deps.locale).toBe('lv');
         expect(m.lifecycle.clearTokenOnQuit).not.toHaveBeenCalled();
         expect(m.lifecycle.ensureExit).not.toHaveBeenCalled();
 

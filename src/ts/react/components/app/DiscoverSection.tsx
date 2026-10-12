@@ -4,6 +4,7 @@ import { useMemberChallenges } from '@/api/useMemberChallenges';
 import { useOpenChosenAnnotations } from '@/api/useOpenChosenAnnotations';
 import { useOnChosenPhotosCleared } from '@/api/chosenPhotosCleared';
 import { useDiscoverRows } from '@/hooks/useDiscoverRows';
+import { useLatestRef } from '@/hooks/useLatestRef';
 import { Modal, ModalActions } from '@/components/ui/Modal';
 import { InlineLoader } from '@/components/ui/LoadingSpinner';
 import { StatusBadge } from '@/components/ui/StatusBadge';
@@ -259,7 +260,11 @@ function RowOutcome({
         variant: 'error',
     };
     return (
-        <div className={`text-xs mt-0.5 ${TEXT_CLASS[meta.variant]}`}>
+        // Announced when it appears: a problem interrupts (alert), a result or a note waits its turn (status).
+        <div
+            role={meta.variant === 'error' || meta.variant === 'warning' ? 'alert' : 'status'}
+            className={`text-xs mt-0.5 ${TEXT_CLASS[meta.variant]}`}
+        >
             {meta.key
                 ? interp(t(meta.key), { coins: outcome.cost ?? cost, have: outcome.coins })
                 : ipcErrorText(outcome.error, t) || t('app.discoverGenericError')}
@@ -361,6 +366,10 @@ export function DiscoverSection({
     const [choosing, setChoosing] = useState<OpenChallenge | null>(null); // challenge whose photos are being chosen
     const [busyId, setBusyId] = useState<Challenge['id'] | null>(null);
     const [results, setResults] = useState<Record<string, JoinOutcome>>({}); // id -> outcome result
+    // id -> the cost a join just answered with when it was dearer than shown: until the list is read
+    // again, that is the row's cost, so the next confirmation shows (and names) it, not the old one.
+    const [repriced, setRepriced] = useState<Record<string, { cost: number; list: OpenChallenge[] }>>({});
+    const listRead = useLatestRef(items);
 
     const doJoin = useCallback(
         async (challenge: OpenChallenge, spendCoins: boolean) => {
@@ -372,6 +381,9 @@ export function DiscoverSection({
                     ? await ipc.joinChallenge(id, true, costOf(challenge))
                     : await ipc.joinChallenge(id, false);
                 setResults((prev) => ({ ...prev, [id]: res }));
+                if (res?.status === 'needs-confirm' && Number.isFinite(Number(res.cost))) {
+                    setRepriced((prev) => ({ ...prev, [id]: { cost: Number(res.cost), list: listRead.current } }));
+                }
                 // Refetch on any outcome that changes what's joinable (joined,
                 // coins charged, or the challenge is gone) so a stale row/button
                 // doesn't linger. Refresh balances only when coins moved.
@@ -396,7 +408,7 @@ export function DiscoverSection({
                 setBusyId(null);
             }
         },
-        [refetch, onJoined],
+        [refetch, onJoined, listRead],
     );
 
     const onJoinClick = useCallback(
@@ -421,13 +433,19 @@ export function DiscoverSection({
     if (!isLoggedIn) return null;
 
     // useMemberChallenges guarantees an array.
-    const list = rows.map((c): OpenChallenge => ({ ...c, ...chosen.annotations[String(c.id)] }));
-    const upcomingCount = list.filter((c) => c.status === 'upcoming').length;
-    // Open and upcoming are counted apart; without upcoming rows the count is the open one, as ever.
+    const list = rows.map((c): OpenChallenge => {
+        const price = repriced[String(c.id)];
+        const read = price?.list === items ? { join_coins: price.cost } : {};
+        return { ...c, ...read, ...chosen.annotations[String(c.id)] };
+    });
+    // Open and upcoming are counted apart, and a challenge that has just started (not open yet, no
+    // longer upcoming) is neither: both numbers stay true. Without upcoming rows it is the open count, as ever.
+    const upcomingCount = list.filter((c) => secondsToStart(c, nowSec) !== null).length;
+    const openCount = list.filter((c) => c.status !== 'upcoming').length;
     const countLabel =
         upcomingCount > 0
-            ? interp(t('app.discoverCountSplit'), { open: list.length - upcomingCount, upcoming: upcomingCount })
-            : interp(t('app.discoverCountLabel'), { count: list.length });
+            ? interp(t('app.discoverCountSplit'), { open: openCount, upcoming: upcomingCount })
+            : interp(t('app.discoverCountLabel'), { count: openCount });
 
     return (
         <>
@@ -440,9 +458,9 @@ export function DiscoverSection({
                 <summary className="collapse-title min-h-0 flex items-center gap-2 py-2 ps-3 pe-10 text-sm font-semibold">
                     {/* h2 (not span) keeps the section discoverable by heading nav. */}
                     <h2 className="m-0 text-sm font-semibold">{t('app.discoverTitle')}</h2>
-                    {list.length > 0 && (
+                    {openCount + upcomingCount > 0 && (
                         <span className="badge badge-neutral badge-sm" role="img" aria-label={countLabel}>
-                            {upcomingCount > 0 ? countLabel : list.length}
+                            {upcomingCount > 0 ? countLabel : openCount}
                         </span>
                     )}
                     {/* Surface a fetch failure even while collapsed — otherwise a

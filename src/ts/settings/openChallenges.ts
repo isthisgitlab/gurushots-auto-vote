@@ -13,6 +13,8 @@
 import { UPCOMING_GRACE_SEC } from './limits';
 import { getActiveChallengeIds } from './challengeFacts';
 
+import type { Challenge } from '../types/gurushots';
+
 let openIds: Set<string> | null = null;
 
 /**
@@ -62,7 +64,7 @@ const getOpenChallengeIds = (): ReadonlySet<string> | null => openIds;
  * @param nowMs - the clock, injectable for tests
  */
 const rememberUpcomingChallenges = (
-    items: ReadonlyArray<{ id?: string | number | null; start_time?: unknown } | null>,
+    items: ReadonlyArray<Pick<Challenge, 'id' | 'start_time'> | null>,
     nowMs: number = Date.now(),
 ): void => {
     const nowSec = nowMs / 1000;

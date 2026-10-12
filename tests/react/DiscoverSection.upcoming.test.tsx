@@ -126,6 +126,37 @@ describe('the count badge', () => {
     });
 });
 
+describe('the count badge and a challenge that has just started', () => {
+    test('a "starting now" row is neither open nor upcoming', async () => {
+        renderSection([open(1, 'Open One'), upcoming(2, 'Later', 3600), upcoming(3, 'Soon', 30)]);
+        await settle();
+        expect(screen.getByRole('img', { name: '1 open · 2 upcoming' })).toBeTruthy();
+        // Its start passes while the list stays as it is: it leaves the upcoming count, and joins no other.
+        await advance(31 * 1000);
+        getMemberChallenges.mockResolvedValue(invalid(answer([open(1, 'Open One'), upcoming(2, 'Later', 3570)])));
+        await advance(2 * 1000);
+        expect(screen.getByText('Soon')).toBeTruthy();
+        expect(screen.getByRole('img', { name: '1 open · 1 upcoming' })).toBeTruthy();
+    });
+
+    test('with only starting-now rows left there is no badge, and no upcoming count of zero', async () => {
+        renderSection([upcoming(3, 'Soon', 30)]);
+        await settle();
+        getMemberChallenges.mockResolvedValue(invalid(answer([])));
+        await advance(32 * 1000);
+        expect(screen.getByText('Soon')).toBeTruthy();
+        expect(screen.queryByRole('img', { name: /open/i })).toBeNull();
+    });
+
+    test('without upcoming rows it is the open count, a starting-now row not among them', async () => {
+        renderSection([open(1, 'A'), open(2, 'B'), upcoming(3, 'Soon', 30)]);
+        await settle();
+        getMemberChallenges.mockResolvedValue(invalid(answer([open(1, 'A'), open(2, 'B')])));
+        await advance(32 * 1000);
+        expect(screen.getByRole('img', { name: 'Open challenges: 2' }).textContent).toBe('2');
+    });
+});
+
 describe('when the soonest challenge starts', () => {
     test('the list is read again then, once', async () => {
         renderSection([upcoming(2, 'Soon', 120), upcoming(3, 'Later', 7200)]);
@@ -166,8 +197,8 @@ describe('a challenge that has just started but is not in the open list yet', ()
         expect(screen.getByText('Soon')).toBeTruthy();
         expect(screen.getByRole('button', { name: /Chosen/ })).toBeTruthy();
         expect(screen.queryByText(app.discoverEmpty)).toBeNull();
-        // Counted with the upcoming ones: it is not open yet.
-        expect(screen.getByRole('img', { name: '0 open · 1 upcoming' })).toBeTruthy();
+        // It is not open yet and no longer upcoming: counted as neither, so both numbers stay true.
+        expect(screen.queryByRole('img', { name: /open/i })).toBeNull();
 
         await advance(60 * 1000);
         expect(getMemberChallenges).toHaveBeenCalledTimes(3);

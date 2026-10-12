@@ -5,7 +5,7 @@
  * their i18n key text.
  */
 
-import { act, render, screen, fireEvent, waitFor } from './helpers/test-utils';
+import { act, render, screen, fireEvent, waitFor, within } from './helpers/test-utils';
 import { DiscoverSection } from '@/components/app/DiscoverSection';
 import { fireSettingsChanged, mockApi, mockTranslator } from './helpers/setup';
 import { invalid } from '../helpers/invalid';
@@ -114,6 +114,100 @@ test('a price that rose after it was shown spends nothing: the row says so, and 
     } finally {
         mockTranslator.t.mockImplementation((key) => key);
     }
+});
+
+describe('what a join answered is announced', () => {
+    const answerWith = async (res: Record<string, unknown>) => {
+        window.api.joinChallenge = jest.fn().mockResolvedValue(res);
+        render(<DiscoverSection isLoggedIn bankroll={invalid({ coins: 500 })} onJoined={jest.fn()} />);
+        await screen.findByText('Free One');
+        fireEvent.click(screen.getByText('app.discoverJoin'));
+    };
+
+    test.each([
+        ['a join that worked', { success: true, status: 'joined' }, 'app.discoverJoined', 'status'],
+        ['a challenge that is gone', { success: false, status: 'unavailable' }, 'app.discoverUnavailable', 'status'],
+        ['a join already running', { success: false, status: 'busy' }, 'app.discoverBusy', 'status'],
+        [
+            'a balance too low',
+            { success: false, status: 'skipped-unaffordable', cost: 9, coins: 1 },
+            'app.discoverUnaffordable',
+            'alert',
+        ],
+        ['a refused join', { success: false, status: 'failed-no-charge' }, 'app.discoverFailedNoCharge', 'alert'],
+        [
+            'an unmapped failure',
+            { success: false, error: 'No authentication token found' },
+            'No authentication token found',
+            'alert',
+        ],
+    ])('%s is announced as a %s', async (_name, res, text, role) => {
+        await answerWith(res);
+        const line = await screen.findByText(text);
+        expect(line.getAttribute('role')).toBe(role);
+        expect(within(screen.getByRole(role as 'status' | 'alert')).getByText(text)).toBeTruthy();
+    });
+});
+
+describe('a price that rose', () => {
+    test('the next confirmation, before the list is read again, shows and names the new cost', async () => {
+        // The first read stays the only one that answers: the refetch after the price change never comes back.
+        const pending = new Promise(() => undefined);
+        window.api.getMemberChallenges = jest
+            .fn()
+            .mockResolvedValueOnce({ success: true, items })
+            .mockReturnValue(pending);
+        window.api.joinChallenge = jest
+            .fn()
+            .mockResolvedValueOnce({ success: false, status: 'needs-confirm', cost: 150 })
+            .mockResolvedValue({ success: true, status: 'joined' });
+        mockTranslator.t.mockImplementation((key) =>
+            key === 'app.discoverConfirmBody'
+                ? 'Costs {coins}'
+                : key === 'app.discoverConfirmSpend'
+                  ? 'Spend {coins}'
+                  : key,
+        );
+        try {
+            render(<DiscoverSection isLoggedIn bankroll={invalid({ coins: 500 })} onJoined={jest.fn()} />);
+            await screen.findByText('Paid One');
+            fireEvent.click(screen.getByText('app.discoverJoinPaid'));
+            fireEvent.click(await screen.findByText('Spend 100'));
+            await waitFor(() => expect(window.api.joinChallenge).toHaveBeenCalledWith(900002, true, 100));
+
+            // Press Join again while the list has not been read again: it is 150 now, not 100.
+            fireEvent.click(screen.getByText('app.discoverJoinPaid'));
+            expect(await screen.findByText('Costs 150')).toBeTruthy();
+            fireEvent.click(screen.getByText('Spend 150'));
+            await waitFor(() => expect(window.api.joinChallenge).toHaveBeenLastCalledWith(900002, true, 150));
+        } finally {
+            mockTranslator.t.mockImplementation((key) => key);
+        }
+    });
+
+    test('once the list is read again, the row goes by what the list says', async () => {
+        window.api.getMemberChallenges = jest
+            .fn()
+            .mockResolvedValueOnce({ success: true, items })
+            .mockResolvedValue({
+                success: true,
+                items: invalid<OpenChallenge[]>([items[0], { ...items[1], join_coins: 120 }]),
+            });
+        window.api.joinChallenge = jest.fn().mockResolvedValue({ success: false, status: 'needs-confirm', cost: 150 });
+        mockTranslator.t.mockImplementation((key) => (key === 'app.discoverConfirmSpend' ? 'Spend {coins}' : key));
+        try {
+            render(<DiscoverSection isLoggedIn bankroll={invalid({ coins: 500 })} onJoined={jest.fn()} />);
+            await screen.findByText('Paid One');
+            fireEvent.click(screen.getByText('app.discoverJoinPaid'));
+            fireEvent.click(await screen.findByText('Spend 100'));
+            await waitFor(() => expect(window.api.getMemberChallenges).toHaveBeenCalledTimes(2));
+            fireEvent.click(await screen.findByText('app.discoverJoinPaid'));
+            // The list was read again and says 120: that is what is shown and named.
+            expect(await screen.findByText('Spend 120')).toBeTruthy();
+        } finally {
+            mockTranslator.t.mockImplementation((key) => key);
+        }
+    });
 });
 
 test('a free join sends no cost to confirm', async () => {

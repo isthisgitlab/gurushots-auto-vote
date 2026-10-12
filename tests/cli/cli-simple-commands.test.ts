@@ -393,7 +393,7 @@ describe('join', () => {
 
     test('exits with usage when no id is given', async () => {
         await expect(joinChallengeCmd(undefined)).rejects.toThrow('exit:1');
-        expect(msgs('info')).toEqual(['Usage: join <id> [--yes]']);
+        expect(msgs('info')).toEqual(['Usage: join <id> [--yes [--max-coins=<coins>]]']);
     });
 
     test.each([
@@ -476,7 +476,7 @@ describe('join', () => {
             .mockResolvedValueOnce(invalid({ success: false, status: 'needs-confirm', cost: 40 }));
         await joinChallengeCmd('7', { yes: true, maxCoins: 25 });
         expect(msgs('error')).toEqual([
-            'Challenge 7 now costs 40 coins, more than you agreed to. Nothing was spent — to pay the new cost, re-run: join 7 --yes --max-coins=40',
+            'Challenge 7 costs 40 coins, more than --max-coins allows. Nothing was spent — to pay this cost, re-run: join 7 --yes --max-coins=40',
         ]);
         expect(msgs('info')).not.toContain('✅ Joined challenge 7.');
     });

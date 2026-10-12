@@ -435,14 +435,40 @@ describe('challenge-scoped actions', () => {
         expect(zero.join.joinChallengeCmd).toHaveBeenCalledWith('77', { yes: true, maxCoins: 0 });
     });
 
-    test.each([['--max-coins='], ['--max-coins=abc'], ['--max-coins=-5'], ['--max-coins=1.5']])(
-        'join %p is a usage error and joins nothing',
-        async (flag) => {
-            const m = await run(['join', '77', '--yes', flag]);
-            expect(m.join.joinChallengeCmd).not.toHaveBeenCalled();
-            expect(m.exitCodes).toEqual([1]);
-        },
-    );
+    // `join` spends coins: anything that is not exactly `<id> [--yes] [--max-coins=<digits>]` joins nothing.
+    test.each([
+        [['77', '--yes', '--max-coins=']],
+        [['77', '--yes', '--max-coins=abc']],
+        [['77', '--yes', '--max-coins=-5']],
+        [['77', '--yes', '--max-coins=1.5']],
+        [['77', '--yes', `--max-coins=${'9'.repeat(400)}`]],
+        [['77', '--yes', `--max-coins=${'9'.repeat(17)}`]],
+        [['77', '--yes', '--max-coins', '25']],
+        [['77', '--yes', '--max-coins']],
+        [['--max-coins', '25', '77', '--yes']],
+        [['77', '--yes', '--max-coin=25']],
+        [['77', '--yes', '--maxcoins=25']],
+        [['77', '--yes', '--max-coins=25', '--max-coins=30']],
+        [['77', '--yes', '--yes']],
+        [['77', '--force']],
+        [['77', '88', '--yes']],
+        [['77', '-y']],
+    ])('join %p is a usage error and joins nothing', async (args) => {
+        const m = await run(['join', ...args]);
+        expect(m.join.joinChallengeCmd).not.toHaveBeenCalled();
+        expect(m.exitCodes).toEqual([1]);
+    });
+
+    test('join takes the id and the flags in any order, and the largest cap that is an exact integer', async () => {
+        const safe = String(Number.MAX_SAFE_INTEGER);
+        const m = await run(['join', '--max-coins=25', '--yes', '77']);
+        expect(m.join.joinChallengeCmd).toHaveBeenCalledWith('77', { yes: true, maxCoins: 25 });
+        const big = await run(['join', '77', `--max-coins=${safe}`]);
+        expect(big.join.joinChallengeCmd).toHaveBeenCalledWith('77', { yes: false, maxCoins: Number(safe) });
+        // No id still reaches the command, which prints its usage.
+        const none = await run(['join', '--yes']);
+        expect(none.join.joinChallengeCmd).toHaveBeenCalledWith(undefined, { yes: true });
+    });
 });
 
 describe('list-photos', () => {

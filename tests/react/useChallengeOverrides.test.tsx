@@ -251,6 +251,80 @@ describe("what the challenge's rules contribute", () => {
             expect(result.current.inheritedOf('exposure')).toBe(60);
         });
 
+        describe('a reply that arrives for a challenge no longer on screen is dropped', () => {
+            const SCHEMA = invalid<RendererSchema>({
+                exposure: { type: 'number', default: 100, perChallenge: true },
+                scenario: { type: 'scenario', default: '', perChallenge: true },
+                autoJoin: { type: 'boolean', default: false, perChallenge: true },
+            });
+            const base = () => ({ ...props(), schema: SCHEMA });
+            const flush = () => act(async () => void (await new Promise((resolve) => setTimeout(resolve, 0))));
+            const late = () => {
+                let release: (info: ReturnType<typeof titleRuleInfo>) => void = () => undefined;
+                const reply = new Promise<ReturnType<typeof titleRuleInfo>>((resolve) => (release = resolve));
+                return { reply, release };
+            };
+
+            test('after the dialog moved to another challenge', async () => {
+                mockApi.getChallengeOverrides.mockReset().mockResolvedValue({});
+                const { reply, release } = late();
+                mockApi.getTitleProfile
+                    .mockReset()
+                    .mockResolvedValueOnce(seaside()) // A, on open
+                    .mockReturnValueOnce(invalid(reply)) // A, read again after a profile edit
+                    .mockResolvedValue(titleRuleInfo({ inlineValues: { scenario: 'B plan' } })); // B, on open
+                const hook = renderHook((p) => useChallengeOverrides(p), {
+                    initialProps: { ...base(), challengeId: 'A', challengeTitle: 'Seaside' },
+                });
+                await waitFor(() => expect(hook.result.current.loading).toBe(false));
+                act(() => hook.result.current.onProfilesChanged({ name: 'Quad', values: { exposure: 1 } }));
+
+                hook.rerender({ ...base(), challengeId: 'B', challengeTitle: 'Other' });
+                await waitFor(() => expect(hook.result.current.inheritedOf('scenario')).toBe('B plan'));
+
+                // A's answer comes late: it must not replace B's rules.
+                release(titleRuleInfo({ inlineValues: { scenario: 'A plan' } }));
+                await flush();
+                expect(hook.result.current.inheritedOf('scenario')).toBe('B plan');
+                expect(hook.result.current.titleRules?.profile).toBeNull();
+            });
+
+            test('after the dialog was closed', async () => {
+                mockApi.getChallengeOverrides.mockReset().mockResolvedValue({});
+                const { reply, release } = late();
+                mockApi.getTitleProfile
+                    .mockReset()
+                    .mockResolvedValueOnce(seaside())
+                    .mockReturnValueOnce(invalid(reply));
+                const hook = renderHook((p) => useChallengeOverrides(p), {
+                    initialProps: { ...base(), challengeId: 'A', challengeTitle: 'Seaside' },
+                });
+                await waitFor(() => expect(hook.result.current.loading).toBe(false));
+                act(() => hook.result.current.onProfilesChanged({ name: 'Quad', values: { exposure: 1 } }));
+                hook.rerender({ ...base(), challengeId: 'A', challengeTitle: 'Seaside', isOpen: false });
+                release(titleRuleInfo({ inlineValues: { scenario: 'late' } }));
+                await flush();
+                expect(hook.result.current.inheritedOf('scenario')).toBe('Plan');
+            });
+
+            test('still on the same challenge, the reply is used', async () => {
+                mockApi.getChallengeOverrides.mockReset().mockResolvedValue({});
+                const { reply, release } = late();
+                mockApi.getTitleProfile
+                    .mockReset()
+                    .mockResolvedValueOnce(seaside())
+                    .mockReturnValueOnce(invalid(reply));
+                const hook = renderHook((p) => useChallengeOverrides(p), {
+                    initialProps: { ...base(), challengeId: 'A', challengeTitle: 'Seaside' },
+                });
+                await waitFor(() => expect(hook.result.current.loading).toBe(false));
+                act(() => hook.result.current.onProfilesChanged({ name: 'Quad', values: { exposure: 1 } }));
+                release(titleRuleInfo({ inlineValues: { scenario: 'fresh' } }));
+                await flush();
+                expect(hook.result.current.inheritedOf('scenario')).toBe('fresh');
+            });
+        });
+
         test('nothing is read without a challenge to ask about', async () => {
             mockApi.getChallengeOverrides.mockReset().mockResolvedValue({});
             const p = { ...props(), challengeId: null };

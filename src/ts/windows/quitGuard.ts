@@ -71,10 +71,7 @@ const rememberChallenges = (challenges: readonly Challenge[] | null | undefined,
 /** The `mock` setting the remembered list was fetched under; null when there is none. */
 const rememberedChallengesMock = (): boolean | null => lastChallengesMock;
 
-/**
- * Mark a boost as used on the remembered challenge, so neither the quit guard
- * nor a later suspend counts it as pending until the next fetch replaces the list.
- */
+/** Mark the remembered challenge's boost as used, so it no longer counts as pending; a fresh `rememberChallenges` list replaces the mark. */
 const markBoostApplied = (id: Challenge['id']) => {
     const boost = lastChallenges.find((c) => c.id === id)?.member?.boost;
     if (boost) boost.state = 'USED';
@@ -134,8 +131,8 @@ const imminentBoosts = (now: number, describe: DescribeDeadlineActions): Array<{
         dueIn: dueAt - now,
     }));
 
-const describeBoost = (b: { title: string; dueIn: number }, t: (key: string) => string) =>
-    `• ${b.title} — ${b.dueIn <= 0 ? t('quitGuard.dueNow') : t('quitGuard.dueIn').replace('{time}', formatDuration(b.dueIn))}`;
+const describeBoost = (b: { title: string; dueIn: number }, t: (key: string) => string, locale: string) =>
+    `• ${b.title} — ${b.dueIn <= 0 ? t('quitGuard.dueNow') : t('quitGuard.dueIn').replace('{time}', formatDuration(b.dueIn, { locale }))}`;
 
 /**
  * Hold a quit/close that would forfeit an imminent boost, and ask.
@@ -145,6 +142,7 @@ const describeBoost = (b: { title: string; dueIn: number }, t: (key: string) => 
  * @param deps.dialog - Electron dialog
  * @param deps.parent - window to attach the dialog to, if still alive
  * @param deps.t - translator
+ * @param deps.locale - the UI language the time is written in ("lv" writes minutes "min"); default English
  * @param deps.proceed - re-issues the quit/close once confirmed
  * @param deps.now - Unix seconds
  * @param deps.describeDeadlineActions - test seam
@@ -157,6 +155,7 @@ const holdQuitForOpenBoosts = (
         dialog,
         parent,
         t,
+        locale = 'en',
         proceed,
         now = Math.floor(Date.now() / 1000),
         describeDeadlineActions = votingLogic.describeDeadlineActions,
@@ -165,6 +164,7 @@ const holdQuitForOpenBoosts = (
         dialog: Pick<Dialog, 'showMessageBox'>;
         parent: BrowserWindow | null;
         t: (key: string) => string;
+        locale?: string;
         proceed: () => void;
         now?: number;
         describeDeadlineActions?: DescribeDeadlineActions;
@@ -191,7 +191,7 @@ const holdQuitForOpenBoosts = (
         defaultId: 0,
         cancelId: 0,
         message: t('quitGuard.title'),
-        detail: `${t('quitGuard.detail')}\n\n${boosts.map((b) => describeBoost(b, t)).join('\n')}`,
+        detail: `${t('quitGuard.detail')}\n\n${boosts.map((b) => describeBoost(b, t, locale)).join('\n')}`,
     };
     const shown =
         parent && !parent.isDestroyed() ? dialog.showMessageBox(parent, options) : dialog.showMessageBox(options);

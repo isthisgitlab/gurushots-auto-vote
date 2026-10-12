@@ -1083,6 +1083,19 @@ describe('join-challenge', () => {
         expect(strategy.joinChallenge).not.toHaveBeenCalled();
     });
 
+    test('the log names the cap that is enforced, a number or "none"', async () => {
+        stubAuthGuardOk();
+        stubStrategy({ joinChallenge: jest.fn().mockResolvedValue({ status: 'joined' }) });
+        await buildHandlers()['join-challenge']({}, 5, true, 100);
+        await buildHandlers()['join-challenge']({}, 5, true, 0);
+        await buildHandlers()['join-challenge']({}, 5, false);
+        const line = (cap: string) =>
+            `▶️ Join request: Challenge=5, spendCoins=${cap === 'none' ? 'false' : 'true'}, expectedCost=${cap}`;
+        expect(logCategories('info', line('100'), null)).toEqual(['join']);
+        expect(logCategories('info', line('0'), null)).toEqual(['join']);
+        expect(logCategories('info', line('none'), null)).toEqual(['join']);
+    });
+
     test('a price that rose answers needs-confirm with the live cost', async () => {
         stubAuthGuardOk();
         stubStrategy({ joinChallenge: jest.fn().mockResolvedValue({ status: 'needs-confirm', cost: 150 }) });

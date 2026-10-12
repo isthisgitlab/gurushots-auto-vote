@@ -94,15 +94,27 @@ const runRun: CommandHandler = async (argv) => {
     return 0;
 };
 
+const JOIN_USAGE = 'Usage: join <id> [--yes [--max-coins=<coins>]]';
+
+// `join` spends coins, so its arguments are strict: a cap that is misspelled, written with a space
+// or repeated would otherwise be dropped, and the join would go ahead uncapped (or on the wrong id).
 const runJoin: CommandHandler = async (argv) => {
-    const yes = argv.includes('--yes');
-    const id = argv.find((a) => !a.startsWith('--'));
-    const maxFlag = argv.find((a) => a.startsWith('--max-coins='));
-    const maxText = maxFlag?.slice('--max-coins='.length);
-    if (maxText !== undefined && !/^\d+$/.test(maxText)) {
-        return usageError('Wrong arguments', 'Usage: join <id> [--yes [--max-coins=<coins>]]');
-    }
-    await joinChallengeCmd(id, { yes, ...(maxText === undefined ? {} : { maxCoins: Number(maxText) }) });
+    const flags = argv.filter((a) => a.startsWith('--'));
+    const positional = argv.filter((a) => !a.startsWith('--'));
+    const caps = flags.filter((a) => a.startsWith('--max-coins='));
+    const maxText = caps[0]?.slice('--max-coins='.length);
+    const maxCoins = maxText !== undefined && /^\d+$/.test(maxText) ? Number(maxText) : undefined;
+    const wrong =
+        flags.some((a) => a !== '--yes' && !a.startsWith('--max-coins=')) ||
+        flags.filter((a) => a === '--yes').length > 1 ||
+        caps.length > 1 ||
+        (maxText !== undefined && !Number.isSafeInteger(maxCoins)) ||
+        positional.length > 1;
+    if (wrong) return usageError('Wrong arguments', JOIN_USAGE);
+    await joinChallengeCmd(positional[0], {
+        yes: flags.includes('--yes'),
+        ...(maxCoins === undefined ? {} : { maxCoins }),
+    });
     return 0;
 };
 

@@ -109,7 +109,7 @@ const joinLine = (
         case 'needs-confirm':
             return {
                 level: 'error',
-                text: `Challenge ${challengeId} now costs ${Number(result?.cost)} coins, more than you agreed to. Nothing was spent — to pay the new cost, re-run: join ${challengeId} --yes --max-coins=${Number(result?.cost)}`,
+                text: `Challenge ${challengeId} costs ${Number(result?.cost)} coins, more than --max-coins allows. Nothing was spent — to pay this cost, re-run: join ${challengeId} --yes --max-coins=${Number(result?.cost)}`,
             };
         case 'busy':
             return { level: 'info', text: `A join is already in progress for ${challengeId}.` };
@@ -152,7 +152,7 @@ const joinChallengeCmd = async (
     if (!ensureAuthenticated()) return;
     if (!challengeId) {
         logger.withCategory('ui').error('Please specify a challenge id');
-        logger.withCategory('ui').info('Usage: join <id> [--yes]');
+        logger.withCategory('ui').info('Usage: join <id> [--yes [--max-coins=<coins>]]');
         process.exit(1);
     }
 

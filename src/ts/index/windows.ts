@@ -18,6 +18,7 @@ function holdForOpenBoosts(event: { preventDefault: () => void }, proceed: () =>
         dialog,
         parent: appState.mainWindow,
         t: (key) => translationManager.t(key),
+        locale: translationManager.getCurrentLanguage(),
         proceed,
     });
 }

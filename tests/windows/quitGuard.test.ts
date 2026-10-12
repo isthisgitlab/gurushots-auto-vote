@@ -213,6 +213,33 @@ describe('holdQuitForOpenBoosts — the dialog', () => {
         );
     });
 
+    test.each([
+        ['lv', 'Boost pēc 9min'],
+        ['en', 'Boost pēc 9m'],
+        [undefined, 'Boost pēc 9m'],
+    ])('writes the time in the UI language (%p): Latvian minutes are "min", not metres', (locale, text) => {
+        guard.rememberChallenges([timed], false);
+        const dialog: { showMessageBox: ShowMessageBox } = {
+            showMessageBox: invalid(jest.fn(() => new Promise(() => {}))),
+        };
+        guard.holdQuitForOpenBoosts(
+            { preventDefault: jest.fn() },
+            {
+                autovoteRunning: true,
+                dialog,
+                parent: null,
+                t: (key) => (key === 'quitGuard.dueIn' ? 'Boost pēc {time}' : key),
+                ...(locale === undefined ? {} : { locale }),
+                proceed: jest.fn(),
+                now: NOW,
+                describeDeadlineActions: describe_,
+            },
+        );
+        expect(jest.mocked(dialog.showMessageBox as Dialog['showMessageBox']).mock.calls[0][0].detail).toContain(
+            `• Anything Music — ${text}`,
+        );
+    });
+
     test('"Keep running" leaves the app up and asks again next time', async () => {
         guard.rememberChallenges([timed], false);
         const first = setup({ response: 0 });
