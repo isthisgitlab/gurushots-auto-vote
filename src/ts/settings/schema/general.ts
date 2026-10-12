@@ -5,6 +5,7 @@
  */
 
 import { z } from 'zod';
+import { MAX_UPCOMING_HOURS } from '../limits';
 import { percentage, percentageOrZero, validatedNumber, zBool } from './validators';
 import type { SettingsSchemaEntry } from './entry';
 
@@ -96,6 +97,21 @@ export const generalSettings = {
         group: 'general',
         label: 'app.voteOnNewEntry',
         description: 'app.voteOnNewEntryDesc',
+    },
+    // Global only: how far ahead Discover lists challenges that have not started yet, so photos can be
+    // chosen early. 0 = off (Discover lists the open challenges alone, as before).
+    discoverUpcomingHours: {
+        type: 'number',
+        default: 24,
+        perChallenge: false,
+        validation: z.number().int().min(0).max(MAX_UPCOMING_HOURS),
+        min: 0,
+        max: MAX_UPCOMING_HOURS,
+        unit: 'app.unitHours',
+        validationOrder: 1,
+        group: 'general',
+        label: 'app.discoverUpcomingHours',
+        description: 'app.discoverUpcomingHoursDesc',
     },
     compactCards: {
         type: 'boolean',

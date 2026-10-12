@@ -5,7 +5,8 @@
  * browser session. Uses the same WEB header profile as submissions/turbo
  * (x-env: WEB, x-api-version: 13).
  *
- *   getMemberChallenges - list un-joined ("open") challenges the member can join
+ *   getMemberChallenges - list un-joined challenges: "open" ones the member can join,
+ *                         "upcoming" ones that have not started yet
  *   coinsUnlock         - spend COINS to unlock a paid challenge for joining
  *   getBankroll         - read the account currency balances
  *
@@ -32,19 +33,25 @@ import type {
 
 const requireValue = makeRequireValue('join');
 
+/** The server-side filters of get_member_challenges. */
+type MemberChallengesFilter = 'open' | 'upcoming';
+
 /**
  * Lists challenges the member has NOT joined yet.
  *
- * @param filter server-side filter (the web app uses 'open')
- * @returns the challenge items, or [] on failure
+ * @param filter 'open' (joinable now, what the web app uses) or 'upcoming' (not started yet)
+ * @returns the challenge items, or null on failure — an empty list is a real answer
  */
-const getMemberChallenges = async (token: string, filter: string = 'open'): Promise<Challenge[]> => {
+const getMemberChallenges = async (
+    token: string,
+    filter: MemberChallengesFilter = 'open',
+): Promise<Challenge[] | null> => {
     requireValue(token, 'token');
     const headers = createWebHeaders(token);
     const data = `filter=${encodeURIComponent(filter)}`;
     const response = await makePostRequest<MemberChallengesResponse>(ENDPOINTS.getMemberChallenges, headers, data);
     if (!response || !Array.isArray(response.items)) {
-        return [];
+        return null;
     }
     return response.items;
 };
@@ -115,3 +122,4 @@ const getBankroll = async (token: string): Promise<Bankroll | null> => {
 };
 
 export { getMemberChallenges, coinsUnlock, getBankroll };
+export type { MemberChallengesFilter };

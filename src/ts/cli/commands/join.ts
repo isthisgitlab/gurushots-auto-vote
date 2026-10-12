@@ -1,5 +1,6 @@
 /**
- * CLI join commands: `discover` lists un-joined ("open") challenges, and
+ * CLI join commands: `discover` lists un-joined challenges (the open ones, and the upcoming ones
+ * starting within `discoverUpcomingHours`), and
  * `join <id> [--yes]` joins one. Paid joins (join_coins > 0) print the coin
  * cost and require an explicit `--yes` — `join <id>` alone never spends coins.
  * Reuses the shared IPC handlers so the join safety model lives in one place.
@@ -7,6 +8,8 @@
 
 import * as logger from '../../logger';
 import { ensureAuthenticated, INVALID_ID_TEXT } from '../guards';
+import { stripTerminalControl } from '../../format/logSafe';
+import { formatDuration } from '../../format/duration';
 
 import type { NullEventHandlers } from '../../types/cli';
 import type * as actions_handlersModule from '../../ipc/actions.handlers';
@@ -17,10 +20,29 @@ const handlers = (): ActionHandlers =>
         require('../../ipc/actions.handlers') as typeof import('../../ipc/actions.handlers')
     ).buildHandlers());
 
+type DiscoverItem = {
+    id?: string | number;
+    title?: string;
+    url?: string;
+    type?: string;
+    status?: string;
+    join_coins?: number;
+    start_time?: number;
+};
+
+/** One row of the listing. Everything that came from the server is stripped of terminal control. */
+const discoverLine = (c: DiscoverItem, nowSec: number): string => {
+    const cost = Number(c?.join_coins) > 0 ? `${c.join_coins} coins` : 'free';
+    const name = stripTerminalControl(c?.title || c?.url || 'untitled');
+    const type = stripTerminalControl(c?.type || '?');
+    const timing = c?.status === 'upcoming' ? ` — starts in ${formatDuration(Number(c.start_time) - nowSec)}` : '';
+    return `  • [${stripTerminalControl(String(c?.id))}] ${name} (${type}) — ${cost}${timing}`;
+};
+
 const showDiscover = async () => {
     if (!ensureAuthenticated()) return;
-    const result = await handlers()['get-member-challenges'](null, 'open');
-    logger.withCategory('ui').info('=== Open (un-joined) Challenges ===');
+    const result = await handlers()['get-member-challenges'](null);
+    logger.withCategory('ui').info('=== Open and upcoming challenges ===');
     if (!result?.success) {
         logger.withCategory('ui').info(`  (unavailable — ${result?.error || 'could not list challenges'})`);
         return;
@@ -30,13 +52,19 @@ const showDiscover = async () => {
         logger.withCategory('ui').info('  None');
         return;
     }
-    items.forEach((c) => {
-        const cost = Number(c?.join_coins) > 0 ? `${c.join_coins} coins` : 'free';
-        const name = c?.title || c?.url || 'untitled';
-        logger.withCategory('ui').info(`  • [${c?.id}] ${name} (${c?.type || '?'}) — ${cost}`);
-    });
+    const nowSec = Date.now() / 1000;
+    items.forEach((c) => logger.withCategory('ui').info(discoverLine(c, nowSec)));
     logger.withCategory('ui').info('Join with: join <id>          (free challenges)');
     logger.withCategory('ui').info('           join <id> --yes    (paid challenges — spends coins)');
+    const upcoming = items.filter((c) => c?.status === 'upcoming');
+    if (upcoming.length > 0) {
+        // An upcoming challenge cannot be joined yet, but its photos can be chosen now.
+        logger
+            .withCategory('ui')
+            .info('Upcoming challenges cannot be joined until they start. To choose their photos now:');
+        logger.withCategory('ui').info('  list-photos --challenge=<id>');
+        logger.withCategory('ui').info(`  set-setting chosenPhotos '["<photo id>"]' --challenge=<id>`);
+    }
 };
 
 /**
@@ -77,6 +105,11 @@ const joinLine = (
             return {
                 level: 'info',
                 text: `Challenge ${challengeId} is not open to join (already joined or closed).`,
+            };
+        case 'not-started':
+            return {
+                level: 'info',
+                text: `Challenge ${challengeId} has not started yet, so it can't be joined. Choose its photos now — list-photos --challenge=${challengeId}, then set-setting chosenPhotos '["<photo id>"]' --challenge=${challengeId} — and join once it starts.`,
             };
         case 'busy':
             return { level: 'info', text: `A join is already in progress for ${challengeId}.` };

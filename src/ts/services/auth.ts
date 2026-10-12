@@ -11,6 +11,7 @@
 import * as settings from '../settings';
 import * as logger from '../logger';
 import { clearOpenChallenges } from './openChallengeCache';
+import { clearUpcomingCache } from './discoverChallenges';
 import { forgetChosenPhotosMemory } from './autoFill/chosenPhotos';
 
 import type { AppSettings } from '../types/settings';
@@ -86,11 +87,12 @@ const extractAuthResult = (
 
 /**
  * What the process remembered about the account that left must not carry over to the next: its
- * open challenges, the open-id list cleanup spares chosen lists for, and the chosen-photo walk
- * memos and explained skips.
+ * listed challenges and the cached upcoming list, the open- and upcoming-id lists cleanup spares
+ * chosen lists for, and the chosen-photo walk memos and explained skips.
  */
 const forgetAccountMemory = (): void => {
     clearOpenChallenges();
+    clearUpcomingCache();
     settings.forgetOpenChallengeIds();
     forgetChosenPhotosMemory();
 };

@@ -10,7 +10,8 @@
  */
 
 import { invalid } from '../helpers/invalid';
-import type { Challenge } from '../../src/ts/types/gurushots';
+import type { Challenge, DiscoverChallenge } from '../../src/ts/types/gurushots';
+import type * as discoverChallengesModule from '../../src/ts/services/discoverChallenges';
 
 // The simulated write-behind store the settings mock exposes as __state.
 type SettingsState = { cached: Record<string, unknown>; persisted: Record<string, unknown>; flushCalls: number };
@@ -55,7 +56,7 @@ describe('clearAuthToken', () => {
     it('forgets the remembered open challenges, which belong to the account that left', async () => {
         const { rememberOpenChallenges, getOpenChallenge } =
             require('../../src/ts/services/openChallengeCache') as typeof openChallengeCacheModule;
-        const open = invalid<Challenge>({ id: 9, title: 'Rule Match' });
+        const open = invalid<DiscoverChallenge>({ id: 9, title: 'Rule Match' });
         rememberOpenChallenges([open, null]);
         expect(getOpenChallenge('9')).toBe(open);
         expect(getOpenChallenge(9)).toBeDefined();
@@ -63,9 +64,22 @@ describe('clearAuthToken', () => {
         expect(getOpenChallenge(9)).toBeUndefined();
     });
 
-    it('forgets the open-id list cleanup spares chosen lists for', async () => {
+    it('forgets the open- and upcoming-id lists cleanup spares chosen lists for', async () => {
         await clearAuthToken();
+        // One call forgets both: they live side by side in settings/openChallenges.
         expect(settings.forgetOpenChallengeIds).toHaveBeenCalledTimes(1);
+    });
+
+    it("forgets the cached upcoming list, so the next account is never shown the previous one's", async () => {
+        const { fetchUpcoming } =
+            require('../../src/ts/services/discoverChallenges') as typeof discoverChallengesModule;
+        const fetchList = jest.fn(async () => [invalid<Challenge>({ id: 1 })]);
+        await fetchUpcoming('old-token', fetchList);
+        await fetchUpcoming('old-token', fetchList);
+        expect(fetchList).toHaveBeenCalledTimes(1);
+        await clearAuthToken();
+        await fetchUpcoming('old-token', fetchList);
+        expect(fetchList).toHaveBeenCalledTimes(2);
     });
 
     it('forgets the explained chosen-photo skips, so the next account is told its own', async () => {
@@ -178,7 +192,7 @@ describe('switchAccountToken — a login on top of another session', () => {
             challengeTag: () => '[Challenge 9]',
         });
         const challenge = invalid<Challenge>({ id: 9 });
-        rememberOpenChallenges([challenge]);
+        rememberOpenChallenges([invalid<DiscoverChallenge>(challenge)]);
         logChosenSkipOnce(fillLogger, challenge, 'autoFill', 'none-usable');
         return {
             open: () => getOpenChallenge(9),
@@ -199,6 +213,19 @@ describe('switchAccountToken — a login on top of another session', () => {
         expect(memory.open()).toBeUndefined();
         // The skip was forgotten, so the next account is told its own: logging again is not a repeat.
         expect(memory.skipExplained()).toBe(false);
+    });
+
+    it("forgets the previous account's cached upcoming list on a switch, and keeps it on the same token", async () => {
+        const { fetchUpcoming } =
+            require('../../src/ts/services/discoverChallenges') as typeof discoverChallengesModule;
+        const fetchList = jest.fn(async () => [invalid<Challenge>({ id: 1 })]);
+        await fetchUpcoming('tok-a', fetchList);
+        switchAccountToken('old-token');
+        await fetchUpcoming('tok-a', fetchList);
+        expect(fetchList).toHaveBeenCalledTimes(1);
+        switchAccountToken('new-token');
+        await fetchUpcoming('tok-a', fetchList);
+        expect(fetchList).toHaveBeenCalledTimes(2);
     });
 
     it('keeps everything when the token is the one already stored', () => {

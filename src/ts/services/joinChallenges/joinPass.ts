@@ -196,7 +196,6 @@ const joinCandidate = async (
  * partial facade must not fail the pass.
  */
 const rememberOpenList = (candidates: Array<Challenge | null>): void => {
-    if (!Array.isArray(candidates)) return;
     settings.rememberOpenChallengeIds?.(candidates.flatMap((c) => (c?.id == null ? [] : [c.id])));
 };
 
@@ -250,6 +249,10 @@ const runJoinPass = async (
     } catch (error) {
         cat().warning(`could not list open challenges: ${errorMessage(error) || error}`, null);
         // aislop-ignore-next-line ai-slop/hidden-fallback -- logged via the join logger; the empty pass result is the documented contract
+        return empty;
+    }
+    if (candidates === null) {
+        cat().warning('could not list open challenges: the request failed', null);
         return empty;
     }
     rememberOpenList(candidates);

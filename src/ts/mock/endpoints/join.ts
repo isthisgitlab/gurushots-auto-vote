@@ -1,6 +1,6 @@
 /**
- * Mock counterpart to api/join.ts: open (un-joined) challenges, the
- * bankroll, and the coin unlock.
+ * Mock counterpart to api/join.ts: open and upcoming (un-joined) challenges,
+ * the bankroll, and the coin unlock.
  */
 
 import * as logger from '../../logger';
@@ -46,9 +46,18 @@ const OPEN_CHALLENGE_ROWS: OpenChallengeRow[] = [
     [900005, 'flash', 100, 'Mock Submit-Fails Challenge', 'mock-submitfail', 4 * DAY, 4 * DAY, 200, 125],
 ];
 
+// Not started yet: `startedAgo` is negative, so start_time lies ahead. The ids stay clear of the
+// open fixtures (the join path must never mistake one for the other). 900103 starts after the
+// default 24 h look-ahead, so the window is exercisable too.
+const UPCOMING_CHALLENGE_ROWS: OpenChallengeRow[] = [
+    [900101, 'default', 0, 'Mock Upcoming Free Challenge', 'mock-upcoming-free', -2 * HOUR, 3 * DAY, 0, 0],
+    [900102, 'default', 150, 'Mock Upcoming Paid Challenge', 'mock-upcoming-paid', -20 * HOUR, 4 * DAY, 0, 0],
+    [900103, 'flash', 100, 'Mock Upcoming Later Challenge', 'mock-upcoming-later', -3 * DAY, 5 * DAY, 0, 0],
+];
+
 /**
- * Simulate /rest/get_member_challenges (un-joined "open" challenges).
- * Fixtures cover a free join, paid flash, paid normal, and a designated
+ * Simulate /rest/get_member_challenges: the un-joined "open" challenges, or the "upcoming" ones
+ * (not started yet, `status: 'upcoming'`, a future start_time). Open fixtures cover a free join, paid flash, paid normal, and a designated
  * paid id (900004) whose coinsUnlock fails — so the "coins charged but
  * submit failed" / "unlock failed" paths are exercisable without a real
  * account. Id 900005 unlocks but its submit fails (see submitToChallenge).
@@ -62,8 +71,12 @@ const getMemberChallenges: typeof joinModule.getMemberChallenges = mockMethod(
         },
         onNoToken: () => [],
     },
-    async () => {
+    async (_token, filter) => {
         await simulateApiResponse({}, 400);
+        const nowSec = Math.floor(Date.now() / 1000);
+        if (filter === 'upcoming') {
+            return UPCOMING_CHALLENGE_ROWS.map((row) => ({ ...openChallenge(nowSec, row), status: 'upcoming' }));
+        }
         // close_time / start_time are epoch SECONDS, matching joined
         // challenges. VERIFIED against the live get_member_challenges
         // response (2026-09-19): both are present on every open challenge,
@@ -71,7 +84,6 @@ const getMemberChallenges: typeof joinModule.getMemberChallenges = mockMethod(
         // across the join window so `autoJoinWithinHoursOfEnd` is
         // exercisable in mock mode: 900001 ends in 3h (inside any window),
         // the rest end in 2-5 days (outside a 24h one).
-        const nowSec = Math.floor(Date.now() / 1000);
         return OPEN_CHALLENGE_ROWS.map((row) => openChallenge(nowSec, row));
     },
 );

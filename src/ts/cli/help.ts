@@ -33,9 +33,12 @@ Commands:
   start    - Start continuous voting on a schedule (runs until stopped with Ctrl+C)
   status   - Show current status and settings
   bankroll - Show your currency balances (keys / swaps / fills / coins). Alias: coins
-  discover - List open (un-joined) challenges you can join
+  discover - List open (un-joined) challenges you can join, and the upcoming ones starting
+             within discoverUpcomingHours (24 by default; 0 = open only). An upcoming challenge
+             can't be joined until it starts, but you can choose its photos now.
   join <id> [--yes] - Join an open challenge. Free joins immediately; paid joins
-             print the coin cost and require --yes before spending coins.
+             print the coin cost and require --yes before spending coins. An upcoming
+             challenge answers that it has not started.
   list-photos [--challenge=<id>] [--search=<tag>] - List your photo ids, to choose them for auto-join / auto-submit.
              With --challenge each photo shows whether that challenge accepts it.
   check-updates - Check GitHub for a newer release

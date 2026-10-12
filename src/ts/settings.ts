@@ -110,6 +110,9 @@ export const cleanupStaleChallengeSetting = staleChallengeCleanup.cleanupStaleCh
 // The open (joinable) challenge ids cleanupStaleChallengeSetting spares chosen-photo entries for
 export const rememberOpenChallengeIds = openChallenges.rememberOpenChallengeIds;
 export const getOpenChallengeIds = openChallenges.getOpenChallengeIds;
+// The upcoming (not started) ids Discover listed: written by the Discover handler alone
+export const rememberUpcomingChallengeIds = openChallenges.rememberUpcomingChallengeIds;
+export const getUpcomingChallengeIds = openChallenges.getUpcomingChallengeIds;
 export const forgetOpenChallengeIds = openChallenges.forgetOpenChallengeIds;
 export const cleanupObsoleteSettings = persistence.cleanupObsoleteSettings;
 // Every saved Chosen Photos list removed in one go (the lists belong to one account)

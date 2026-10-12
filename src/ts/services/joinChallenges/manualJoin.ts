@@ -33,6 +33,30 @@ const checkAffordable = async (
 };
 
 /**
+ * What an id the live open list does not hold is: `not-started` when a live look at the upcoming
+ * challenges names it (nothing is unlocked or submitted), `unavailable` when that look does not
+ * (joined already, or closed), and `fetch-failed` when the look itself fails. A live call, not a
+ * remembered list, so it holds in a fresh process and never calls a challenge that has since
+ * started or been joined "not started".
+ */
+const notOpenResult = async (
+    challengeId: string | number,
+    token: string,
+    deps: JoinDeps,
+): Promise<JoinSingleResult> => {
+    let upcoming;
+    try {
+        upcoming = await deps.getMemberChallenges(token, 'upcoming');
+    } catch (error) {
+        cat().warning(`could not list upcoming challenges: ${errorMessage(error) || error}`, null);
+        return { status: 'unavailable', challengeId, cost: 0 };
+    }
+    if (upcoming === null) return { status: 'unavailable', challengeId, cost: 0 };
+    const isUpcoming = upcoming.some((c) => String(c?.id) === String(challengeId));
+    return { status: isUpcoming ? 'not-started' : 'unavailable', challengeId, cost: 0 };
+};
+
+/**
  * Join ONE challenge by id, on user request. The `autoJoinWithinHoursOfEnd`
  * window deliberately does NOT apply here — it defers the AUTOMATIC pass, and an
  * explicit click is the user overriding that timing on purpose.
@@ -57,11 +81,9 @@ const joinChallengeSingle = async (
         cat().warning(`could not list open challenges: ${errorMessage(error) || error}`, null);
         return { status: 'fetch-failed', challengeId, cost: 0 };
     }
-    const challenge = (candidates || []).find((c) => String(c?.id) === String(challengeId));
-    if (!challenge) {
-        // Not in the open list any more — already joined, or closed.
-        return { status: 'unavailable', challengeId, cost: 0 };
-    }
+    if (candidates === null) return { status: 'fetch-failed', challengeId, cost: 0 };
+    const challenge = candidates.find((c) => String(c?.id) === String(challengeId));
+    if (!challenge) return notOpenResult(challengeId, token, deps);
 
     const rawCost = Number(challenge.join_coins);
     const cost = Number.isFinite(rawCost) && rawCost > 0 ? rawCost : 0;

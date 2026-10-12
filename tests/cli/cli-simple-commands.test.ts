@@ -274,7 +274,7 @@ describe('discover', () => {
     ])('reports %p', async (result, line) => {
         handlers['get-member-challenges'].mockResolvedValue(invalid(result));
         await showDiscover();
-        expect(handlers['get-member-challenges']).toHaveBeenCalledWith(null, 'open');
+        expect(handlers['get-member-challenges']).toHaveBeenCalledWith(null);
         expect(msgs('info')).toContain(line);
     });
 
@@ -297,6 +297,68 @@ describe('discover', () => {
         expect(info).toContain('  • [3] untitled (?) — free');
         expect(info).toContain('  • [undefined] untitled (?) — free');
         expect(info.some((l) => l.includes('join <id> --yes'))).toBe(true);
+        expect(info).toContain('=== Open and upcoming challenges ===');
+        // No upcoming row, no upcoming advice.
+        expect(info.some((l) => l.includes('list-photos'))).toBe(false);
+    });
+
+    describe('upcoming challenges', () => {
+        const NOW_SEC = 1_800_000_000;
+        beforeEach(() => {
+            jest.spyOn(Date, 'now').mockReturnValue(NOW_SEC * 1000);
+        });
+        afterEach(() => jest.mocked(Date.now).mockRestore());
+
+        test('are marked "starts in …", and followed by the steps to choose their photos', async () => {
+            handlers['get-member-challenges'].mockResolvedValue(
+                invalid({
+                    success: true,
+                    items: [
+                        { id: 1, title: 'Open One', type: 'default', join_coins: 0 },
+                        {
+                            id: 2,
+                            title: 'Soon',
+                            type: 'flash',
+                            join_coins: 100,
+                            status: 'upcoming',
+                            start_time: NOW_SEC + 2 * 3600 + 15 * 60,
+                        },
+                    ],
+                }),
+            );
+            await showDiscover();
+            const info = msgs('info');
+            expect(info).toContain('  • [1] Open One (default) — free');
+            expect(info).toContain('  • [2] Soon (flash) — 100 coins — starts in 2h 15m');
+            expect(info).toContain('  list-photos --challenge=<id>');
+            expect(info).toContain(`  set-setting chosenPhotos '["<photo id>"]' --challenge=<id>`);
+            expect(info.some((l) => l.includes('cannot be joined until they start'))).toBe(true);
+        });
+
+        test("print the server's text without terminal control sequences", async () => {
+            const esc = String.fromCharCode(27);
+            handlers['get-member-challenges'].mockResolvedValue(
+                invalid({
+                    success: true,
+                    items: [
+                        {
+                            id: `7${esc}[2J`,
+                            title: `Evil${esc}]0;owned${String.fromCharCode(7)} title`,
+                            type: `fl${esc}[31mash`,
+                            status: 'upcoming',
+                            start_time: NOW_SEC + 600,
+                        },
+                        { id: 8, url: `dogs${esc}[1A`, status: 'upcoming', start_time: NOW_SEC + 600 },
+                    ],
+                }),
+            );
+            await showDiscover();
+            const printed = all();
+            expect(printed).not.toContain(esc);
+            expect(printed).not.toContain(String.fromCharCode(7));
+            expect(printed).toContain('Evil');
+            expect(printed).toContain('dogs');
+        });
     });
 });
 
@@ -321,6 +383,8 @@ describe('join', () => {
         [{ status: 'failed-no-charge' }, 'error', 'Could not join 7. No coins were charged.'],
         [{ status: 'skipped-no-photo' }, 'error', 'No eligible photo'],
         [{ status: 'unavailable' }, 'info', 'not open to join'],
+        [{ status: 'not-started' }, 'info', "has not started yet, so it can't be joined"],
+        [{ status: 'not-started' }, 'info', 'set-setting chosenPhotos \'["<photo id>"]\' --challenge=7'],
         [{ status: 'busy' }, 'info', 'already in progress'],
         [{ status: 'not-authenticated' }, 'error', 'Not logged in'],
         [{ status: 'fetch-failed' }, 'error', 'Could not reach GuruShots'],

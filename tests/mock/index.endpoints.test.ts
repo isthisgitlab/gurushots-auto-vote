@@ -218,7 +218,7 @@ describe('submitToChallenge', () => {
 
 describe('join endpoints', () => {
     test('getMemberChallenges returns the five fixtures with epoch-second timing', async () => {
-        const list = await settle(mockApiClient.getMemberChallenges('tok', 'open'));
+        const list = (await settle(mockApiClient.getMemberChallenges('tok', 'open'))) ?? [];
         expect(list.map((c) => c.id)).toEqual([900001, 900002, 900003, 900004, 900005]);
         const nowSec = Math.floor(Date.now() / 1000);
         list.forEach((c) => {
@@ -226,6 +226,25 @@ describe('join endpoints', () => {
             expect(c.start_time).toBeLessThan(nowSec);
         });
         expect(cat.debug).toHaveBeenCalledWith('Filter: open', null);
+    });
+
+    test('getMemberChallenges branches on the filter: upcoming has its own fixtures, not started yet', async () => {
+        const list = (await settle(mockApiClient.getMemberChallenges('tok', 'upcoming'))) ?? [];
+        expect(list.map((c) => c.id)).toEqual([900101, 900102, 900103]);
+        const nowSec = Math.floor(Date.now() / 1000);
+        list.forEach((c) => {
+            expect(c.status).toBe('upcoming');
+            expect(c.start_time).toBeGreaterThan(nowSec);
+            expect(c.close_time).toBeGreaterThan(c.start_time);
+        });
+        // A free one and a paid one inside the default 24 h window, one beyond it.
+        expect(list.map((c) => c.join_coins)).toEqual([0, 150, 100]);
+        expect(list[1].start_time - nowSec).toBeLessThanOrEqual(24 * 3600);
+        expect(list[2].start_time - nowSec).toBeGreaterThan(24 * 3600);
+        expect(cat.debug).toHaveBeenCalledWith('Filter: upcoming', null);
+        // No id is shared with the open fixtures.
+        const open = (await settle(mockApiClient.getMemberChallenges('tok', 'open'))) ?? [];
+        expect(open.some((c) => list.some((u) => u.id === c.id))).toBe(false);
     });
 
     test('getBankroll returns the flat balance shape', async () => {

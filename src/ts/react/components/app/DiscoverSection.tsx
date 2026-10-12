@@ -3,10 +3,12 @@ import { useTranslation } from '@/contexts/TranslationContext';
 import { useMemberChallenges } from '@/api/useMemberChallenges';
 import { useOpenChosenAnnotations } from '@/api/useOpenChosenAnnotations';
 import { useOnChosenPhotosCleared } from '@/api/chosenPhotosCleared';
+import { useDiscoverRows } from '@/hooks/useDiscoverRows';
 import { Modal, ModalActions } from '@/components/ui/Modal';
 import { InlineLoader } from '@/components/ui/LoadingSpinner';
 import { StatusBadge } from '@/components/ui/StatusBadge';
 import { interp } from '@/utils/interp';
+import { formatDuration } from '@/utils/formatters';
 import * as ipc from '@/api/ipc';
 import { ipcErrorText } from '@/api/ipcErrorText';
 import { PhotoChooserModal } from './PhotoChooserModal';
@@ -31,6 +33,7 @@ const OUTCOME: Record<string, { key: string; variant: keyof typeof TEXT_CLASS }>
     'failed-no-charge': { key: 'app.discoverFailedNoCharge', variant: 'error' },
     'skipped-no-photo': { key: 'app.discoverNoPhoto', variant: 'warning' },
     unavailable: { key: 'app.discoverUnavailable', variant: 'neutral' },
+    'not-started': { key: 'app.discoverNotStarted', variant: 'neutral' },
     busy: { key: 'app.discoverBusy', variant: 'neutral' },
 };
 
@@ -113,17 +116,39 @@ function ChosenMarks({ c, name, onChoose }: { c: OpenChallenge; name: string; on
 /**
  * A row's Join button, named by its challenge (and, when paid, its cost) for assistive
  * technology; while joining the visible text says so, so no static label contradicts it.
+ * A challenge that has not started cannot be joined: the button is disabled and its name says why.
  */
-function JoinButton({ name, cost, busy, onClick }: { name: string; cost: number; busy: boolean; onClick: () => void }) {
+function JoinButton({
+    name,
+    cost,
+    busy,
+    notStarted,
+    onClick,
+}: {
+    name: string;
+    cost: number;
+    busy: boolean;
+    notStarted: boolean;
+    onClick: () => void;
+}) {
     const { t } = useTranslation();
     const paid = cost > 0;
-    const label = interp(t(paid ? 'app.discoverJoinPaidLabel' : 'app.discoverJoinLabel'), { title: name, coins: cost });
+    const label = interp(
+        t(
+            notStarted
+                ? 'app.discoverJoinNotStartedLabel'
+                : paid
+                  ? 'app.discoverJoinPaidLabel'
+                  : 'app.discoverJoinLabel',
+        ),
+        { title: name, coins: cost },
+    );
     return (
         <button
             className={`btn btn-sm ${paid ? 'btn-warning' : 'btn-primary'}`}
             aria-label={busy ? undefined : label}
             onClick={onClick}
-            disabled={busy}
+            disabled={busy || notStarted}
         >
             {busy ? t('app.discoverJoining') : paid ? t('app.discoverJoinPaid') : t('app.discoverJoin')}
         </button>
@@ -181,6 +206,124 @@ function RowPhotoChooser({
     );
 }
 
+/** The seconds until a challenge starts, or null once it has (or when the row is an open one). */
+const secondsToStart = (c: OpenChallenge, nowSec: number): number | null => {
+    const left = Number(c.start_time) - nowSec;
+    return c.status === 'upcoming' && left > 0 ? left : null;
+};
+
+/**
+ * What a row says about when its challenge starts: how long is left, or that it is starting now (it
+ * was upcoming and its start has passed, but the open list does not show it yet).
+ */
+function StartLine({ c, nowSec }: { c: OpenChallenge; nowSec: number }) {
+    const { t } = useTranslation();
+    if (c.status !== 'upcoming') return null;
+    const left = secondsToStart(c, nowSec);
+    return (
+        <div className="text-xs text-info mt-0.5">
+            {left === null
+                ? t('app.discoverStartingNow')
+                : interp(t('app.discoverStartsIn'), { time: formatDuration(left) })}
+        </div>
+    );
+}
+
+/**
+ * What a join left behind for its row, as a translated, coloured line. Any result without a mapped
+ * status (auth-expiry, an unexpected handler error) still shows a message rather than failing
+ * silently on a money-adjacent action.
+ */
+function RowOutcome({
+    outcome,
+    cost,
+    name,
+    busy,
+    onRetry,
+}: {
+    outcome: JoinOutcome;
+    cost: number;
+    name: string;
+    busy: boolean;
+    onRetry: () => void;
+}) {
+    const { t } = useTranslation();
+    const meta: { key: string | null; variant: keyof typeof TEXT_CLASS } = OUTCOME[outcome.status as string] || {
+        key: null,
+        variant: 'error',
+    };
+    return (
+        <div className={`text-xs mt-0.5 ${TEXT_CLASS[meta.variant]}`}>
+            {meta.key
+                ? interp(t(meta.key), { coins: outcome.cost ?? cost, have: outcome.coins })
+                : ipcErrorText(outcome.error, t) || t('app.discoverGenericError')}
+            {outcome.status === 'charged-pending-submit' && (
+                <button
+                    className="btn btn-outline btn-sm ml-2"
+                    aria-label={interp(t('app.discoverRetrySubmitLabel'), { title: name })}
+                    onClick={onRetry}
+                    disabled={busy}
+                >
+                    {t('app.discoverRetrySubmit')}
+                </button>
+            )}
+        </div>
+    );
+}
+
+/** One challenge in the list: what it is, what it costs, when it starts, its chosen photos and its actions. */
+function DiscoverRow({
+    c,
+    outcome,
+    busy,
+    nowSec,
+    onChoose,
+    onJoin,
+    onRetry,
+}: {
+    c: OpenChallenge;
+    outcome: JoinOutcome | undefined;
+    busy: boolean;
+    nowSec: number;
+    onChoose: () => void;
+    onJoin: () => void;
+    onRetry: () => void;
+}) {
+    const { t } = useTranslation();
+    const cost = costOf(c);
+    const name = rowName(c, t('app.discoverUntitled'));
+    const notStarted = secondsToStart(c, nowSec) !== null;
+    return (
+        <li className="flex flex-wrap items-center justify-between gap-2 rounded border border-base-200 px-2 py-1.5">
+            <div className="min-w-0">
+                <div className="truncate font-medium">{name}</div>
+                <div className="flex items-center gap-2 text-xs text-base-content/60">
+                    {c.type && <StatusBadge variant="ghost">{c.type}</StatusBadge>}
+                    <span>
+                        {cost > 0 ? interp(t('app.discoverCostPaid'), { coins: cost }) : t('app.discoverCostFree')}
+                    </span>
+                </div>
+                <StartLine c={c} nowSec={nowSec} />
+                <ChosenMarks c={c} name={name} onChoose={onChoose} />
+                {notStarted && c.chosenEffectiveCount > 0 && (
+                    <div className="text-xs text-base-content/60 mt-0.5">{t('app.discoverUpcomingChosenHint')}</div>
+                )}
+                {outcome && <RowOutcome outcome={outcome} cost={cost} name={name} busy={busy} onRetry={onRetry} />}
+            </div>
+            <div className="flex items-center gap-2">
+                <button
+                    className="btn btn-outline btn-sm"
+                    aria-label={interp(t('app.discoverChoosePhotosLabel'), { title: name })}
+                    onClick={onChoose}
+                >
+                    {t('app.choosePhotos')}
+                </button>
+                <JoinButton name={name} cost={cost} busy={busy} notStarted={notStarted} onClick={onJoin} />
+            </div>
+        </li>
+    );
+}
+
 /**
  * Discover / un-joined challenges list with per-challenge Join buttons. Free
  * joins run immediately; paid joins open a confirm modal that shows the cost and
@@ -201,9 +344,11 @@ export function DiscoverSection({
 }) {
     const { t } = useTranslation();
     const { items, loading, error, refetch } = useMemberChallenges();
+    // The rows: the open challenges, those that just started (until the open list shows them), the upcoming ones.
+    const { rows, nowSec } = useDiscoverRows(items, error !== null, refetch);
     // The rows follow the settings without another trip to GuruShots: what the list carried is
     // only the starting point, the settings-only read replaces it as soon as it answers.
-    const chosen = useOpenChosenAnnotations(items.map((c) => String(c.id)));
+    const chosen = useOpenChosenAnnotations(rows.map((c) => String(c.id)));
     useOnChosenPhotosCleared(() => void chosen.refetch());
     const [confirm, setConfirm] = useState<OpenChallenge | null>(null); // challenge pending paid confirmation
     const [choosing, setChoosing] = useState<OpenChallenge | null>(null); // challenge whose photos are being chosen
@@ -262,7 +407,13 @@ export function DiscoverSection({
     if (!isLoggedIn) return null;
 
     // useMemberChallenges guarantees an array.
-    const list = items.map((c): OpenChallenge => ({ ...c, ...chosen.annotations[String(c.id)] }));
+    const list = rows.map((c): OpenChallenge => ({ ...c, ...chosen.annotations[String(c.id)] }));
+    const upcomingCount = list.filter((c) => c.status === 'upcoming').length;
+    // Open and upcoming are counted apart; without upcoming rows the count is the open one, as ever.
+    const countLabel =
+        upcomingCount > 0
+            ? interp(t('app.discoverCountSplit'), { open: list.length - upcomingCount, upcoming: upcomingCount })
+            : interp(t('app.discoverCountLabel'), { count: list.length });
 
     return (
         <>
@@ -276,12 +427,8 @@ export function DiscoverSection({
                     {/* h2 (not span) keeps the section discoverable by heading nav. */}
                     <h2 className="m-0 text-sm font-semibold">{t('app.discoverTitle')}</h2>
                     {list.length > 0 && (
-                        <span
-                            className="badge badge-neutral badge-sm"
-                            role="img"
-                            aria-label={interp(t('app.discoverCountLabel'), { count: list.length })}
-                        >
-                            {list.length}
+                        <span className="badge badge-neutral badge-sm" role="img" aria-label={countLabel}>
+                            {upcomingCount > 0 ? countLabel : list.length}
                         </span>
                     )}
                     {/* Surface a fetch failure even while collapsed — otherwise a
@@ -312,75 +459,18 @@ export function DiscoverSection({
                         <p className="text-sm text-base-content/60">{t('app.discoverEmpty')}</p>
                     ) : (
                         <ul className="flex flex-col gap-2">
-                            {list.map((c) => {
-                                const cost = costOf(c);
-                                const outcome = results[c.id];
-                                // Any result without a mapped status (auth-expiry, an
-                                // unexpected handler error) still shows a message rather
-                                // than failing silently on a money-adjacent action.
-                                const meta: { key: string | null; variant: keyof typeof TEXT_CLASS } | null = outcome
-                                    ? OUTCOME[outcome.status as string] || { key: null, variant: 'error' }
-                                    : null;
-                                const isBusy = busyId === c.id;
-                                const name = rowName(c, t('app.discoverUntitled'));
-                                return (
-                                    <li
-                                        key={c.id}
-                                        className="flex flex-wrap items-center justify-between gap-2 rounded border border-base-200 px-2 py-1.5"
-                                    >
-                                        <div className="min-w-0">
-                                            <div className="truncate font-medium">{name}</div>
-                                            <div className="flex items-center gap-2 text-xs text-base-content/60">
-                                                {c.type && <StatusBadge variant="ghost">{c.type}</StatusBadge>}
-                                                <span>
-                                                    {cost > 0
-                                                        ? interp(t('app.discoverCostPaid'), { coins: cost })
-                                                        : t('app.discoverCostFree')}
-                                                </span>
-                                            </div>
-                                            <ChosenMarks c={c} name={name} onChoose={() => setChoosing(c)} />
-                                            {meta && (
-                                                <div className={`text-xs mt-0.5 ${TEXT_CLASS[meta.variant]}`}>
-                                                    {meta.key
-                                                        ? interp(t(meta.key), {
-                                                              coins: outcome.cost ?? cost,
-                                                              have: outcome.coins,
-                                                          })
-                                                        : ipcErrorText(outcome.error, t) ||
-                                                          t('app.discoverGenericError')}
-                                                    {outcome.status === 'charged-pending-submit' && (
-                                                        <button
-                                                            className="btn btn-outline btn-sm ml-2"
-                                                            aria-label={interp(t('app.discoverRetrySubmitLabel'), {
-                                                                title: name,
-                                                            })}
-                                                            onClick={() => void doJoin(c, true)}
-                                                            disabled={isBusy}
-                                                        >
-                                                            {t('app.discoverRetrySubmit')}
-                                                        </button>
-                                                    )}
-                                                </div>
-                                            )}
-                                        </div>
-                                        <div className="flex items-center gap-2">
-                                            <button
-                                                className="btn btn-outline btn-sm"
-                                                aria-label={interp(t('app.discoverChoosePhotosLabel'), { title: name })}
-                                                onClick={() => setChoosing(c)}
-                                            >
-                                                {t('app.choosePhotos')}
-                                            </button>
-                                            <JoinButton
-                                                name={name}
-                                                cost={cost}
-                                                busy={isBusy}
-                                                onClick={() => onJoinClick(c)}
-                                            />
-                                        </div>
-                                    </li>
-                                );
-                            })}
+                            {list.map((c) => (
+                                <DiscoverRow
+                                    key={c.id}
+                                    c={c}
+                                    outcome={results[c.id]}
+                                    busy={busyId === c.id}
+                                    nowSec={nowSec}
+                                    onChoose={() => setChoosing(c)}
+                                    onJoin={() => onJoinClick(c)}
+                                    onRetry={() => void doJoin(c, true)}
+                                />
+                            ))}
                         </ul>
                     )}
                 </div>

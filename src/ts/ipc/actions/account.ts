@@ -8,6 +8,7 @@ import { isAutoJoinActive } from '../../services/joinChallenges';
 import { forgetFailedMemberId, resolveMemberId } from '../../services/autoFill';
 import { chosenAnnotator, annotateOpenIds, MAX_ANNOTATED_IDS } from './chosenAnnotations';
 import { rememberOpenChallenges } from '../../services/openChallengeCache';
+import { fetchUpcoming, mergeDiscoverLists } from '../../services/discoverChallenges';
 import { getAutoClaimStatus } from '../../services/autoClaim';
 import { rememberChallenges } from '../../windows/quitGuard';
 import { sanitizeForLog, refuseInvalidArgs } from './shared';
@@ -114,29 +115,57 @@ const handleGetAutoJoinActive = (async () => {
     }
 }) satisfies IpcReplyFn;
 
-// List un-joined ("open") challenges for the Discover view / CLI.
+const idsOf = (items: ReadonlyArray<Challenge | null>): Array<string | number> =>
+    items.flatMap((c) => (c?.id == null ? [] : [c.id]));
+
 /**
- * @param filter - Server-side filter; defaults to 'open'.
+ * The upcoming list, or null when it could not be had: a failure never costs the open list its
+ * place. The log line carries the filter and the kind of failure only — no token, no member.
  */
-const handleGetMemberChallenges = (async (event?: unknown, filter?: string) => {
+const fetchUpcomingOrNull = async (token: string, strategy: apiFactory.ApiStrategy): Promise<Challenge[] | null> => {
+    try {
+        const upcoming = await fetchUpcoming(token, strategy.getMemberChallenges);
+        if (upcoming === null)
+            logger.withCategory('api').warning('Could not list challenges (filter=upcoming: failed)');
+        return upcoming;
+    } catch (error) {
+        const kind = error instanceof Error ? error.name : typeof error;
+        logger.withCategory('api').warning(`Could not list challenges (filter=upcoming: ${kind})`);
+        // aislop-ignore-next-line ai-slop/hidden-fallback -- logged just above; null is the documented "could not be had" outcome
+        return null;
+    }
+};
+
+// List the challenges Discover shows (and the CLI's `discover`): the open (un-joined) ones and, when
+// discoverUpcomingHours is above 0, the upcoming ones starting within that many hours. The handler
+// decides what to fetch; the renderer sends nothing.
+const handleGetMemberChallenges = (async () => {
     try {
         const guard = auth.requireAuthToken('member challenges');
         if (!guard.ok) return guard.response;
         const strategy = apiFactory.getApiStrategy();
-        const items: Challenge[] | null = await strategy.getMemberChallenges(
-            guard.token,
-            filter === undefined ? 'open' : filter,
-        );
-        // The open list is what keeps a chosen-photos entry alive for a challenge
-        // that is not joined yet (see cleanupStaleChallengeSetting).
-        if ((filter === undefined || filter === 'open') && Array.isArray(items)) {
-            settings.rememberOpenChallengeIds(items.flatMap((c) => (c?.id == null ? [] : [c.id])));
-            rememberOpenChallenges(items);
-        }
+        const [open, upcoming] = await Promise.all([
+            strategy.getMemberChallenges(guard.token, 'open'),
+            // Fetched whatever the window: every upcoming id is what keeps its chosen photos from cleanup.
+            fetchUpcomingOrNull(guard.token, strategy),
+        ]);
+        if (open === null) return { success: false as const, error: 'Could not list challenges', items: [] };
+        // These lists keep a chosen-photos entry alive for a challenge that is not joined yet (see
+        // cleanupStaleChallengeSetting); the upcoming one is written only from a successful fetch.
+        settings.rememberOpenChallengeIds(idsOf(open));
+        if (upcoming !== null) settings.rememberUpcomingChallengeIds(idsOf(upcoming));
+        const hours = Number(settings.getEffectiveSetting('discoverUpcomingHours', null));
+        const merged = mergeDiscoverLists({
+            open,
+            upcoming: upcoming ?? [],
+            hours: Number.isFinite(hours) ? hours : 0,
+            nowSec: Date.now() / 1000,
+        });
+        rememberOpenChallenges(merged);
         const annotate = await chosenAnnotator(guard.token);
         return {
             success: true as const,
-            items: Array.isArray(items) ? items.map((item): OpenChallenge => ({ ...item, ...annotate(item) })) : [],
+            items: merged.map((item): OpenChallenge => ({ ...item, ...annotate(item) })),
         };
     } catch (error) {
         logger.withCategory('api').error('Error handling get-member-challenges request:', error);

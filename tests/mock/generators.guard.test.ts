@@ -77,6 +77,46 @@ describe('generated mock payload guards', () => {
         expect(actual).toStrictEqual(expected);
     });
 
+    test('getMemberChallenges() upcoming rows are pinned', async () => {
+        jest.useFakeTimers({ now: PINNED_NOW_MS });
+        const pending = getMemberChallenges('token', 'upcoming');
+        await jest.advanceTimersByTimeAsync(400);
+        const rows = (await pending) ?? [];
+        expect(
+            rows.map(({ id, status, join_coins, start_time, close_time }) => ({
+                id,
+                status,
+                join_coins,
+                start_time,
+                close_time,
+            })),
+        ).toMatchInlineSnapshot(`
+            [
+              {
+                "close_time": 1768737600,
+                "id": 900101,
+                "join_coins": 0,
+                "start_time": 1768485600,
+                "status": "upcoming",
+              },
+              {
+                "close_time": 1768824000,
+                "id": 900102,
+                "join_coins": 150,
+                "start_time": 1768550400,
+                "status": "upcoming",
+              },
+              {
+                "close_time": 1768910400,
+                "id": 900103,
+                "join_coins": 100,
+                "start_time": 1768737600,
+                "status": "upcoming",
+              },
+            ]
+        `);
+    });
+
     test('getMemberChallenges() open rows are unchanged', async () => {
         jest.useFakeTimers({ now: PINNED_NOW_MS });
         const pending = getMemberChallenges('token', 'open');

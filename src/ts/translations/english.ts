@@ -517,6 +517,12 @@ export const app = {
     // Discover (un-joined challenges)
     discoverTitle: 'Discover Challenges',
     discoverCountLabel: '{count} open challenges',
+    discoverCountSplit: '{open} open · {upcoming} upcoming',
+    discoverStartsIn: 'Starts in {time} — opens for joining then',
+    discoverStartingNow: 'Starting now — refresh',
+    discoverUpcomingChosenHint:
+        'Chosen photos are used automatically only if auto-join is on for this challenge; otherwise join by hand once it starts.',
+    discoverJoinNotStartedLabel: 'Join {title} — not open until it starts',
     discoverRefresh: 'Refresh',
     discoverEmpty: 'No open challenges to join right now.',
     discoverUnavailableList: 'Could not load open challenges. Check your connection and try again.',
@@ -546,6 +552,7 @@ export const app = {
     discoverFailedNoCharge: 'Could not join. No coins were charged.',
     discoverNoPhoto: 'No eligible photo to submit. No coins were charged.',
     discoverUnavailable: 'This challenge is no longer open to join.',
+    discoverNotStarted: 'This challenge has not started yet. You can join once it starts.',
     discoverBusy: 'A join is already in progress.',
     validationOutOfRange: 'Enter a value between {min} and {max}.',
     validationAtLeast: 'Enter a value of {min} or more.',
@@ -906,6 +913,9 @@ export const app = {
     voteOnNewEntry: 'Vote on New Entry',
     voteOnNewEntryDesc:
         'When a new photo appears in this challenge — added by you on the website, or by Auto-Submit, Emergency Submit, or a fresh Boost/Turbo photo — vote once even if exposure already reads at or above your threshold. It votes up to whichever ceiling the challenge would normally use: Exposure Target (or Exposure, when Target is 0), or Final Window Exposure Target during the final window when Use Final Window Exposure is on. Does not override Only Boost Mode, Vote Only in Last Minute, or Scheduled Voting Only: if any of those is blocking, no vote happens.',
+    discoverUpcomingHours: 'Show upcoming challenges starting within',
+    discoverUpcomingHoursDesc:
+        'How far ahead Discover Challenges lists challenges that have not started yet, so you can choose photos for them early. They cannot be joined until they start, and chosen photos are used automatically only if auto-join is on for that challenge. 0 = off: Discover lists the open challenges alone.',
     override: 'Override',
     overrideForChallenge: 'Override for Challenge',
     photo: 'photo',

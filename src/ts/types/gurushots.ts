@@ -191,12 +191,21 @@ export interface MemberChallengesResponse {
 }
 
 /**
- * An open challenge as the Discover list receives it: the API item plus what the
+ * A Discover row's challenge: an open one (no `status`) or one that has not started yet
+ * (`status: 'upcoming'`, a future `start_time`). The literal is the only marker; the open
+ * rows' own server status is dropped so it cannot be mistaken for it.
+ */
+export interface DiscoverChallenge extends Omit<Challenge, 'status'> {
+    status?: 'upcoming';
+}
+
+/**
+ * A challenge as the Discover list receives it: the API item plus what the
  * Chosen Photos settings say for it. `chosenOwn` is the list saved for this
  * challenge alone; `chosenEffectiveCount` is how many photos the join would
  * actually use once every layer is resolved (0 under another account's list).
  */
-export interface OpenChallenge extends Challenge, ChosenAnnotation {}
+export interface OpenChallenge extends DiscoverChallenge, ChosenAnnotation {}
 
 /**
  * What the Chosen Photos settings say about one open challenge. `chosenOwn` is the

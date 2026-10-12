@@ -18,10 +18,12 @@ import authModule = require('../../src/ts/services/auth');
 const auth = jest.mocked(authModule);
 import type * as autoFillModule from '../../src/ts/services/autoFill';
 import type * as actionsHandlersModule from '../../src/ts/ipc/actions.handlers';
+import type * as discoverChallengesModule from '../../src/ts/services/discoverChallenges';
 import type * as openChallengeCacheModule from '../../src/ts/services/openChallengeCache';
 import type { Challenge } from '../../src/ts/types/gurushots';
 const { __resetMemberIdCache } = require('../../src/ts/services/autoFill') as typeof autoFillModule;
 const { buildHandlers } = require('../../src/ts/ipc/actions.handlers') as typeof actionsHandlersModule;
+const { clearUpcomingCache } = require('../../src/ts/services/discoverChallenges') as typeof discoverChallengesModule;
 const { clearOpenChallenges } = require('../../src/ts/services/openChallengeCache') as typeof openChallengeCacheModule;
 
 const OWNER = 'member-0';
@@ -32,11 +34,12 @@ const annotate = (ids: number[] = [7]) =>
         {},
         ids,
     );
-const list = () => buildHandlers()['get-member-challenges']({});
+const list = () => invalid<(event: object) => Promise<unknown>>(buildHandlers()['get-member-challenges'])({});
 
 beforeEach(() => {
     __resetMemberIdCache();
     clearOpenChallenges();
+    clearUpcomingCache();
     getCurrentMemberProfile = jest.fn();
     getCurrentMemberProfile.mockResolvedValue({ id: OWNER });
     apiFactory.getApiStrategy = jest.fn().mockReturnValue({

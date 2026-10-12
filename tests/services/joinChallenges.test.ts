@@ -1534,6 +1534,25 @@ describe('joinChallenges — edge paths', () => {
             }
         });
 
+        test('a failed listing (null) is not "no open challenges": not run, and said so', async () => {
+            const deps = makeDeps({ getMemberChallenges: jest.fn(async () => null) });
+            expect(await runJoinPass('tok', Date.now(), deps)).toEqual({ ran: false, joined: 0, results: [] });
+            expect(warnings()).toContain('could not list open challenges: the request failed');
+            expect(deps.getBankroll).not.toHaveBeenCalled();
+        });
+
+        test('the pass only ever asks for open challenges, upcoming ones are never joined', async () => {
+            const deps = makeDeps({
+                getMemberChallenges: jest.fn(async (_token: string, filter: string) =>
+                    filter === 'open' ? [] : [{ id: 9, join_coins: 0, type: 'flash', status: 'upcoming' }],
+                ),
+            });
+            expect(await runJoinPass('tok', Date.now(), deps)).toEqual({ ran: true, joined: 0, results: [] });
+            expect(deps.getMemberChallenges).toHaveBeenCalledTimes(1);
+            expect(deps.getMemberChallenges).toHaveBeenCalledWith('tok', 'open');
+            expect(deps.submitToChallenge).not.toHaveBeenCalled();
+        });
+
         test('no open challenges → ran, nothing joined, no balance read', async () => {
             const deps = makeDeps({ getMemberChallenges: jest.fn(async () => []) });
             expect(await runJoinPass('tok', Date.now(), deps)).toEqual({ ran: true, joined: 0, results: [] });
@@ -1641,9 +1660,73 @@ describe('joinChallenges — edge paths', () => {
             }
         });
 
-        test('a null listing → unavailable', async () => {
+        test('a failed listing (null) → fetch-failed, and the upcoming list is not asked about', async () => {
             const deps = makeDeps({ getMemberChallenges: jest.fn(async () => null) });
-            expect((await joinChallengeSingle(2, 'tok', deps, { spendCoins: true })).status).toBe('unavailable');
+            expect((await joinChallengeSingle(2, 'tok', deps, { spendCoins: true })).status).toBe('fetch-failed');
+            expect(deps.getMemberChallenges).toHaveBeenCalledTimes(1);
+        });
+
+        describe('an id the live open list does not hold', () => {
+            // Open and upcoming answer apart, as the server does.
+            const lists = (upcoming: unknown) =>
+                jest.fn(async (_token: string, filter: string) => (filter === 'upcoming' ? upcoming : []));
+            const spent = (deps: ReturnType<typeof makeDeps>) =>
+                [deps.coinsUnlock, deps.submitToChallenge].some((fn) => jest.mocked(fn).mock.calls.length > 0);
+
+            test.each([[true], [false]])(
+                'named by a live upcoming call → not-started, nothing spent (spendCoins %p)',
+                async (spendCoins) => {
+                    const deps = makeDeps({ getMemberChallenges: lists([{ id: 7, join_coins: 100 }]) });
+                    expect(await joinChallengeSingle(7, 'tok', deps, { spendCoins })).toEqual({
+                        status: 'not-started',
+                        challengeId: 7,
+                        cost: 0,
+                    });
+                    expect(deps.getMemberChallenges).toHaveBeenNthCalledWith(1, 'tok', 'open');
+                    expect(deps.getMemberChallenges).toHaveBeenNthCalledWith(2, 'tok', 'upcoming');
+                    expect(deps.getBankroll).not.toHaveBeenCalled();
+                    expect(spent(deps)).toBe(false);
+                },
+            );
+
+            test('a challenge that has since started or been joined is in neither list → unavailable', async () => {
+                const deps = makeDeps({ getMemberChallenges: lists([{ id: 8 }]) });
+                expect((await joinChallengeSingle(7, 'tok', deps, { spendCoins: true })).status).toBe('unavailable');
+            });
+
+            test('the id is compared as text', async () => {
+                const deps = makeDeps({ getMemberChallenges: lists([{ id: '7' }]) });
+                expect((await joinChallengeSingle(7, 'tok', deps)).status).toBe('not-started');
+            });
+
+            test('a failed or throwing upcoming call → unavailable, nothing spent', async () => {
+                // null: the request failed; the rest: the call threw (an Error, a bare string, nothing at all).
+                for (const upcoming of [null, new Error('503'), 'raw', undefined]) {
+                    const getMemberChallenges = jest.fn(async (_token: string, filter: string) => {
+                        if (filter === 'open') return [];
+                        if (upcoming !== null) throw upcoming;
+                        return upcoming;
+                    });
+                    const deps = makeDeps({ getMemberChallenges });
+                    expect((await joinChallengeSingle(7, 'tok', deps, { spendCoins: true })).status).toBe(
+                        'unavailable',
+                    );
+                    expect(spent(deps)).toBe(false);
+                }
+                expect(warnings()).toEqual(
+                    expect.arrayContaining([
+                        'could not list upcoming challenges: 503',
+                        'could not list upcoming challenges: raw',
+                        'could not list upcoming challenges: undefined',
+                    ]),
+                );
+            });
+
+            test('an open challenge never asks for the upcoming list', async () => {
+                const deps = makeDeps({ getMemberChallenges: paid() });
+                expect((await joinChallengeSingle(2, 'tok', deps)).status).toBe('needs-confirm');
+                expect(deps.getMemberChallenges).toHaveBeenCalledTimes(1);
+            });
         });
 
         test.each([[null], [{}], [{ coins: 'lots' }]])('bankroll %p → balance-unknown, no spend', async (bankroll) => {

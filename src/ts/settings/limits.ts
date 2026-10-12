@@ -49,4 +49,17 @@ const MAX_CHOSEN_PHOTOS = 20;
 // token characters (the mock ids fit) are accepted.
 const CHOSEN_PHOTO_ID_RE = /^[A-Za-z0-9_-]{1,64}$/;
 
-export { MAX_SCHEDULED_FILL_ENTRIES, MAX_VOTING_PAUSE_MINUTES, MAX_TAG_LENGTH, MAX_CHOSEN_PHOTOS, CHOSEN_PHOTO_ID_RE };
+// Furthest ahead, in hours (a week), that Discover may list challenges that have not started yet.
+// The real list reaches weeks out, and every row costs a settings-only annotation read, so the
+// window stays short. schema/general.ts uses it as discoverUpcomingHours' upper bound and the
+// settings field offers it as its maximum.
+const MAX_UPCOMING_HOURS = 168;
+
+export {
+    MAX_SCHEDULED_FILL_ENTRIES,
+    MAX_VOTING_PAUSE_MINUTES,
+    MAX_TAG_LENGTH,
+    MAX_CHOSEN_PHOTOS,
+    CHOSEN_PHOTO_ID_RE,
+    MAX_UPCOMING_HOURS,
+};

@@ -522,6 +522,12 @@ export const app = {
     // Atklāšana (nepievienotie izaicinājumi)
     discoverTitle: 'Atrast izaicinājumus',
     discoverCountLabel: 'Atvērtie izaicinājumi: {count}',
+    discoverCountSplit: 'Atvērti: {open} · gaidāmi: {upcoming}',
+    discoverStartsIn: 'Sākas pēc {time} — tad varēs pievienoties',
+    discoverStartingNow: 'Tūlīt sāksies — atsvaidzini',
+    discoverUpcomingChosenHint:
+        'Izvēlētos foto automātiski izmanto tikai tad, ja šim izaicinājumam ir ieslēgta automātiskā pievienošanās; citādi pievienojies pats, kad tas sāksies.',
+    discoverJoinNotStartedLabel: 'Pievienoties izaicinājumam „{title}” — iespējams tikai pēc tā sākuma',
     discoverRefresh: 'Atsvaidzināt',
     discoverEmpty: 'Šobrīd nav atvērtu izaicinājumu, kuriem pievienoties.',
     discoverUnavailableList: 'Neizdevās ielādēt atvērtos izaicinājumus. Pārbaudi savienojumu un mēģini vēlreiz.',
@@ -552,6 +558,7 @@ export const app = {
     discoverFailedNoCharge: 'Neizdevās pievienoties. Monētas netika norakstītas.',
     discoverNoPhoto: 'Nav piemērota foto, ko iesniegt. Monētas netika norakstītas.',
     discoverUnavailable: 'Šim izaicinājumam vairs nevar pievienoties.',
+    discoverNotStarted: 'Šis izaicinājums vēl nav sācies. Pievienoties varēs, kad tas sāksies.',
     discoverBusy: 'Pievienošanās jau notiek.',
     validationOutOfRange: 'Ievadi vērtību no {min} līdz {max}.',
     validationAtLeast: 'Ievadi vērtību, kas nav mazāka par {min}.',
@@ -921,6 +928,9 @@ export const app = {
     voteOnNewEntry: 'Balsot par jaunu foto',
     voteOnNewEntryDesc:
         'Kad šajā izaicinājumā parādās jauns foto — pievienots pašā GuruShots vai ar automātisko iesniegšanu, ārkārtas iesniegšanu vai kā jauns Boost/Turbo foto —, nobalsot vienu reizi arī tad, ja redzamība jau sasniegusi slieksni vai to pārsniegusi. Lietotne balso līdz tai robežai, ko izaicinājums izmantotu parasti: redzamības mērķim (vai redzamībai, ja mērķis ir 0) vai beigu loga laikā — beigu loga redzamības mērķim, ja ieslēgts „Izmantot beigu loga redzamību”. Tas neapiet uzstādījumus „Tikai Boost režīms”, „Balsot tikai pēdējās minūtes laikā” un „Tikai plānotā balsošana”: ja kāds no tiem to aizliedz, balsošana nenotiek.',
+    discoverUpcomingHours: 'Rādīt gaidāmos izaicinājumus, kas sākas tuvāko',
+    discoverUpcomingHoursDesc:
+        'Cik tālu uz priekšu „Atrast izaicinājumus” rāda izaicinājumus, kas vēl nav sākušies, lai foto tiem varētu izvēlēties jau iepriekš. Tiem nevar pievienoties, kamēr tie nav sākušies, un izvēlētos foto lietotne izmanto automātiski tikai tad, ja šim izaicinājumam ir ieslēgta automātiskā pievienošanās. 0 = izslēgts: rāda tikai atvērtos izaicinājumus.',
     override: 'Pielāgots',
     overrideForChallenge: 'Pielāgot uzstādījumus izaicinājumam',
     photo: 'foto',

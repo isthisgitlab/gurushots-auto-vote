@@ -14,8 +14,8 @@ import { getOpenChallenge } from '../../services/openChallengeCache';
 
 import type { Challenge, ChosenAnnotation } from '../../types/gurushots';
 
-// Most ids one request may ask about: the open list is a handful of challenges.
-const MAX_ANNOTATED_IDS = 200;
+// Most ids one request may ask about: the open list plus the upcoming rows Discover shows (at most 100).
+const MAX_ANNOTATED_IDS = 300;
 
 const idsOf = (value: unknown): string[] =>
     Array.isArray(value) ? value.filter((id): id is string => typeof id === 'string') : [];
@@ -58,8 +58,9 @@ const chosenAnnotator = async (token: string): Promise<(challenge: Partial<Chall
 };
 
 /**
- * The annotations of the given ids. An id the latest list did not hold is resolved
- * as a bare id: its own list is read, a rule keyed on its title cannot match.
+ * The annotations of the given ids, upcoming rows included (the cache holds the merged list). An
+ * id the latest list did not hold is resolved as a bare id: its own list is read, a rule keyed on
+ * its title cannot match.
  */
 const annotateOpenIds = async (
     ids: ReadonlyArray<string | number>,

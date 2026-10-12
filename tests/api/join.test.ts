@@ -5,6 +5,7 @@
  */
 
 import type * as joinModule from '../../src/ts/api/join';
+import { invalid } from '../helpers/invalid';
 import type * as api_clientModule from '../../src/ts/api/api-client';
 
 const { getMemberChallenges, coinsUnlock, getBankroll } = require('../../src/ts/api/join') as typeof joinModule;
@@ -32,15 +33,26 @@ describe('getMemberChallenges', () => {
 
     test('encodes the filter value (no form-field injection)', async () => {
         makePostRequest.mockResolvedValueOnce({ items: [] });
-        await getMemberChallenges(token, 'a&b=c');
+        await getMemberChallenges(token, invalid<joinModule.MemberChallengesFilter>('a&b=c'));
         expect(makePostRequest.mock.calls[0][2]).toBe('filter=a%26b%3Dc');
     });
 
-    test('returns [] on null / malformed payload', async () => {
+    test('asks for the upcoming ones with filter=upcoming', async () => {
+        makePostRequest.mockResolvedValueOnce({ items: [{ id: 9, status: 'upcoming' }] });
+        expect(await getMemberChallenges(token, 'upcoming')).toEqual([{ id: 9, status: 'upcoming' }]);
+        expect(makePostRequest.mock.calls[0][2]).toBe('filter=upcoming');
+    });
+
+    test('an empty list is an answer, not a failure', async () => {
+        makePostRequest.mockResolvedValueOnce({ items: [] });
+        expect(await getMemberChallenges(token)).toEqual([]);
+    });
+
+    test('returns null on a failed request or a malformed payload', async () => {
         makePostRequest.mockResolvedValueOnce(null);
-        expect(await getMemberChallenges(token)).toEqual([]);
+        expect(await getMemberChallenges(token)).toBeNull();
         makePostRequest.mockResolvedValueOnce({ nope: true });
-        expect(await getMemberChallenges(token)).toEqual([]);
+        expect(await getMemberChallenges(token)).toBeNull();
     });
 });
 

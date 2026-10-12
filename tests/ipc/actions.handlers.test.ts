@@ -25,6 +25,8 @@ import { registerMissionNeeds } from '../../src/ts/services/missions';
 import { clearOpenChallenges } from '../../src/ts/services/openChallengeCache';
 import { isPlainObject } from '../../src/ts/plainObject';
 
+import loggerModule = require('../../src/ts/logger');
+const logger = jest.mocked(loggerModule);
 import settingsModule = require('../../src/ts/settings');
 const settings = jest.mocked(settingsModule);
 import apiFactoryModule = require('../../src/ts/apiFactory');
@@ -38,6 +40,7 @@ const autoFill = jest.mocked(autoFillModule);
 import type * as quitGuardModule from '../../src/ts/windows/quitGuard';
 import type * as logCategoriesModule from '../helpers/logCategories';
 import type * as actions_handlersModule from '../../src/ts/ipc/actions.handlers';
+import type * as discoverChallengesModule from '../../src/ts/services/discoverChallenges';
 import type * as autoClaimModule from '../../src/ts/services/autoClaim';
 const { rememberChallenges } = jest.mocked(require('../../src/ts/windows/quitGuard') as typeof quitGuardModule);
 const { logCategories } = require('../helpers/logCategories') as typeof logCategoriesModule;
@@ -109,13 +112,20 @@ const mockChosenSettings = ({
 // tests — no jest.resetModules() needed (and it would defeat module-top
 // jest.mock() bindings anyway by giving the handler fresh mock instances).
 const { buildHandlers } = require('../../src/ts/ipc/actions.handlers') as typeof actions_handlersModule;
+const { clearUpcomingCache } = require('../../src/ts/services/discoverChallenges') as typeof discoverChallengesModule;
 
 type Handlers = ReturnType<typeof buildHandlers>;
 // A zero-parameter handler invoked the way ipcMain does, with the event first.
 type WithEvent<F> = F extends (...args: infer A) => infer R ? (event: object, ...args: A) => R : never;
 
+// The Discover handler takes no argument from the renderer, and is invoked with the event first.
+const listChallenges = () =>
+    invalid<WithEvent<Handlers['get-member-challenges']>>(buildHandlers()['get-member-challenges'])({});
+
 beforeEach(() => {
     jest.clearAllMocks();
+    // The upcoming list is cached for a minute per account; every test starts without it.
+    clearUpcomingCache();
 });
 
 describe('get-active-challenges', () => {
@@ -719,12 +729,12 @@ describe('get-bankroll', () => {
 });
 
 describe('get-member-challenges', () => {
-    test('defaults the filter to "open" and returns items', async () => {
+    test('asks for the open list and the upcoming one itself, and returns the open items', async () => {
         stubAuthGuardOk();
         const strategy = stubStrategy({ getMemberChallenges: jest.fn().mockResolvedValue([{ id: 1 }]) });
-        const handlers = buildHandlers();
-        const result = await handlers['get-member-challenges']({});
+        const result = await listChallenges();
         expect(strategy.getMemberChallenges).toHaveBeenCalledWith('tok', 'open');
+        expect(strategy.getMemberChallenges).toHaveBeenCalledWith('tok', 'upcoming');
         expect(result).toEqual({
             success: true,
             items: [{ id: 1, chosenOwn: [], chosenOwnCount: 0, chosenEffectiveCount: 0 }],
@@ -737,7 +747,7 @@ describe('get-member-challenges', () => {
             stubStrategy({
                 getMemberChallenges: jest.fn().mockResolvedValue([{ id: 7, title: 'Pink' }, {}, { id: 8 }]),
             });
-            const result = await buildHandlers()['get-member-challenges']({});
+            const result = await listChallenges();
             return result.success ? result.items : [];
         };
 
@@ -949,7 +959,7 @@ describe('get-open-chosen-annotations — read from the settings, with one cache
     test('a rule keyed on the title resolves through the open list the last fetch returned', async () => {
         stubAuthGuardOk();
         stubStrategy({ getMemberChallenges: jest.fn().mockResolvedValue([{ id: 9, title: 'Rule Match' }]) });
-        await buildHandlers()['get-member-challenges']({});
+        await listChallenges();
         mockChosenSettings({ rule: { value: ['r1'] } });
         await ask([9]);
         expect(settings.resolveRuleSetting).toHaveBeenCalledWith(
@@ -961,7 +971,7 @@ describe('get-open-chosen-annotations — read from the settings, with one cache
     test('logging out forgets the remembered open list: the same id resolves as a bare id again', async () => {
         stubAuthGuardOk();
         stubStrategy({ getMemberChallenges: jest.fn().mockResolvedValue([{ id: 9, title: 'Rule Match' }]) });
-        await buildHandlers()['get-member-challenges']({});
+        await listChallenges();
         clearOpenChallenges();
         await ask([9]);
         expect(settings.resolveRuleSetting).toHaveBeenLastCalledWith('chosenPhotos', { id: 9 });
@@ -989,18 +999,19 @@ describe('get-open-chosen-annotations — read from the settings, with one cache
         ['not an array', '7'],
         ['an item that is not an id', [7, {}]],
         ['a blank id', ['  ']],
-        ['one id too many (201)', Array.from({ length: 201 }, (_, i) => i + 1)],
+        ['one id too many (301)', Array.from({ length: 301 }, (_, i) => i + 1)],
     ])('refuses %s', async (_name, ids) => {
         await expect(ask(ids)).resolves.toEqual({ success: false, error: 'invalid-args' });
     });
 
-    test('exactly 200 ids is the most it answers', async () => {
-        const ids = Array.from({ length: 200 }, (_, i) => i + 1);
+    // Up to 300: the open list and the 100 upcoming rows Discover shows.
+    test.each([[200], [250], [300]])('%p ids are answered, and 300 is the most', async (count) => {
+        const ids = Array.from({ length: count }, (_, i) => i + 1);
         const result = await ask(ids);
         if (!isPlainObject(result) || result.success !== true || !isPlainObject(result.annotations)) {
             throw new Error('expected a successful answer');
         }
-        expect(Object.keys(result.annotations)).toHaveLength(200);
+        expect(Object.keys(result.annotations)).toHaveLength(count);
     });
 
     test('an empty list is fine', async () => {
@@ -1033,6 +1044,15 @@ describe('join-challenge', () => {
         const result = await handlers['join-challenge']({}, 5, true);
         expect(strategy.joinChallenge).toHaveBeenCalledWith(5, true, 'tok');
         expect(result).toMatchObject({ success: true, status: 'joined', cost: 100 });
+    });
+
+    test('an upcoming challenge is not joined: not-started is a failure that carries its status', async () => {
+        stubAuthGuardOk();
+        stubStrategy({
+            joinChallenge: jest.fn().mockResolvedValue({ status: 'not-started', cost: 0, challengeId: 5 }),
+        });
+        const result = await buildHandlers()['join-challenge']({}, 5, true);
+        expect(result).toMatchObject({ success: false, status: 'not-started', challengeId: 5 });
     });
 
     test('a paid challenge without spendCoins does not report success (needs-confirm)', async () => {
@@ -1343,33 +1363,30 @@ describe('get-bankroll — errors', () => {
 describe('get-member-challenges — filter, shape and errors', () => {
     test('returns the auth guard response when not authenticated', async () => {
         stubAuthGuardFail();
-        await expect(buildHandlers()['get-member-challenges']({})).resolves.toEqual({
+        await expect(listChallenges()).resolves.toEqual({
             success: false,
             error: 'No authentication token found',
         });
     });
 
-    test('remembers the open list for the settings cleanup — open filter and readable lists only', async () => {
+    test('remembers the open list for the settings cleanup — readable ids only, and only when the fetch succeeded', async () => {
         stubAuthGuardOk();
         stubStrategy({ getMemberChallenges: jest.fn().mockResolvedValue([{ id: 1 }, { id: '2' }, {}, null]) });
-        await buildHandlers()['get-member-challenges']({});
+        await listChallenges();
         expect(settings.rememberOpenChallengeIds).toHaveBeenLastCalledWith([1, '2']);
         settings.rememberOpenChallengeIds.mockClear();
-        await buildHandlers()['get-member-challenges']({}, 'open');
-        expect(settings.rememberOpenChallengeIds).toHaveBeenCalledTimes(1);
-        settings.rememberOpenChallengeIds.mockClear();
-        await buildHandlers()['get-member-challenges']({}, 'all');
+        settings.rememberUpcomingChallengeIds.mockClear();
         stubStrategy({ getMemberChallenges: jest.fn().mockResolvedValue(null) });
-        await buildHandlers()['get-member-challenges']({}, 'open');
+        await listChallenges();
         expect(settings.rememberOpenChallengeIds).not.toHaveBeenCalled();
+        expect(settings.rememberUpcomingChallengeIds).not.toHaveBeenCalled();
     });
 
-    test('passes an explicit filter through and coerces a non-array result to []', async () => {
+    test('a failed open list is a failure, not an empty list, and nothing is remembered', async () => {
         stubAuthGuardOk();
         const strategy = stubStrategy({ getMemberChallenges: jest.fn().mockResolvedValue(null) });
-        const result = await buildHandlers()['get-member-challenges']({}, 'all');
-        expect(strategy.getMemberChallenges).toHaveBeenCalledWith('tok', 'all');
-        expect(result).toEqual({ success: true, items: [] });
+        expect(await listChallenges()).toEqual({ success: false, error: 'Could not list challenges', items: [] });
+        expect(strategy.getMemberChallenges).not.toHaveBeenCalledWith('tok', 'all');
     });
 
     test.each([
@@ -1379,11 +1396,218 @@ describe('get-member-challenges — filter, shape and errors', () => {
     ])('returns %s with an empty list when listing throws', async (_label, err, expected) => {
         stubAuthGuardOk();
         stubStrategy({ getMemberChallenges: jest.fn().mockRejectedValue(err) });
-        await expect(buildHandlers()['get-member-challenges']({})).resolves.toEqual({
+        await expect(listChallenges()).resolves.toEqual({
             success: false,
             items: [],
             error: expected,
         });
+    });
+});
+
+describe('get-member-challenges — upcoming challenges', () => {
+    const T0 = 1_800_000_000;
+    const HOUR = 3600;
+    const up = (id: number, startsIn: number, over: object = {}) => ({
+        id,
+        title: `Up ${id}`,
+        status: 'upcoming',
+        start_time: T0 + startsIn,
+        ...over,
+    });
+    // The server answers each filter apart; a function as `upcoming` is called, and may throw.
+    const lists = (open: unknown, upcoming: unknown) =>
+        jest.fn(async (_token: string, filter: string) => {
+            if (filter === 'upcoming' && typeof upcoming === 'function') (upcoming as () => void)();
+            return filter === 'upcoming' ? upcoming : open;
+        });
+    const throwing = (value: unknown) => () => {
+        throw value;
+    };
+    const withWindow = (hours: unknown) =>
+        jest
+            .mocked(settings.getEffectiveSetting)
+            .mockImplementation(invalid((key: string) => (key === 'discoverUpcomingHours' ? hours : [])));
+    const shown = async () => {
+        const result = await listChallenges();
+        return result.success ? result.items.map((c) => [c.id, c.status]) : [];
+    };
+
+    beforeEach(() => {
+        jest.spyOn(Date, 'now').mockReturnValue(T0 * 1000);
+        clearOpenChallenges();
+        mockChosenSettings({});
+        stubAuthGuardOk();
+        withWindow(24);
+    });
+    afterEach(() => jest.mocked(Date.now).mockRestore());
+
+    test('merges them behind the open ones: the open copy wins, started and non-finite items drop, soonest first', async () => {
+        stubStrategy({
+            getMemberChallenges: lists(
+                [{ id: 1, status: 'started' }, { id: 5 }],
+                [
+                    up(30, 3 * HOUR),
+                    up(5, 2 * HOUR), // also open: the open copy
+                    up(20, 1 * HOUR),
+                    up(21, 1 * HOUR), // same start: by id
+                    up(40, -60), // already started (server lag)
+                    up(41, 0), // starts this very second: not after now
+                    up(42, Number.NaN),
+                    up(43, 25 * HOUR), // outside the window
+                    { id: 44, status: 'upcoming' }, // no start_time
+                    null,
+                ],
+            ),
+        });
+        expect(await shown()).toEqual([
+            [1, undefined], // an open row carries no status, whatever the server said
+            [5, undefined],
+            [20, 'upcoming'],
+            [21, 'upcoming'],
+            [30, 'upcoming'],
+        ]);
+    });
+
+    test('the window: 24 h by default, the far end inclusive, a custom value, and 0 = off', async () => {
+        stubStrategy({ getMemberChallenges: lists([], [up(1, 24 * HOUR), up(2, 24 * HOUR + 1), up(3, 100 * HOUR)]) });
+        expect(await shown()).toEqual([[1, 'upcoming']]);
+        clearUpcomingCache();
+        withWindow(100);
+        expect(await shown()).toEqual([
+            [1, 'upcoming'],
+            [2, 'upcoming'],
+            [3, 'upcoming'],
+        ]);
+        clearUpcomingCache();
+        withWindow(0);
+        expect(await shown()).toEqual([]);
+        // A setting that is no number shows none rather than everything.
+        withWindow('soon');
+        expect(await shown()).toEqual([]);
+    });
+
+    test('shows at most the 100 soonest upcoming rows', async () => {
+        const many = Array.from({ length: 150 }, (_, i) => up(1000 + i, 60 + i));
+        stubStrategy({ getMemberChallenges: lists([{ id: 1 }], many) });
+        const result = await listChallenges();
+        expect(result.success && result.items).toHaveLength(101);
+        expect(result.success && result.items.at(-1)?.id).toBe(1099);
+    });
+
+    test('records EVERY upcoming id for the cleanup, whatever the window shows, even with the window at 0', async () => {
+        stubStrategy({ getMemberChallenges: lists([{ id: 1 }], [up(2, HOUR), up(3, 100 * HOUR), up(4, -5)]) });
+        withWindow(0);
+        expect(await shown()).toEqual([[1, undefined]]);
+        expect(settings.rememberUpcomingChallengeIds).toHaveBeenLastCalledWith([2, 3, 4]);
+        expect(settings.rememberOpenChallengeIds).toHaveBeenLastCalledWith([1]);
+    });
+
+    test('a failed upcoming fetch keeps the open list and the previous upcoming ids, and logs the filter and the kind only', async () => {
+        stubStrategy({ getMemberChallenges: lists([{ id: 1 }], null) });
+        expect(await shown()).toEqual([[1, undefined]]);
+        expect(settings.rememberUpcomingChallengeIds).not.toHaveBeenCalled();
+        expect(settings.rememberOpenChallengeIds).toHaveBeenCalledWith([1]);
+        expect(logCategories('warning', 'Could not list challenges (filter=upcoming: failed)')).toEqual(['api']);
+
+        // Thrown, with the account's token and a member id in the message: neither reaches the log.
+        const secret = new TypeError('401 for tok member-77');
+        stubStrategy({ getMemberChallenges: lists([{ id: 1 }], throwing(secret)) });
+        expect(await shown()).toEqual([[1, undefined]]);
+        expect(settings.rememberUpcomingChallengeIds).not.toHaveBeenCalled();
+        expect(logCategories('warning', 'Could not list challenges (filter=upcoming: TypeError)')).toEqual(['api']);
+        expect(logCategories('warning', 'Could not list challenges (filter=upcoming: failed)')).toEqual(['api']);
+        const logged = JSON.stringify(
+            jest
+                .mocked(logger.withCategory)
+                .mock.results.flatMap(
+                    (r) =>
+                        jest.mocked((r.value as { warning: jest.MockedFunction<(m: string) => void> }).warning).mock
+                            .calls,
+                ),
+        );
+        expect(logged).not.toContain('tok');
+        expect(logged).not.toContain('member-77');
+        // A thrown value that is no Error is named by its type.
+        stubStrategy({ getMemberChallenges: lists([{ id: 1 }], throwing('boom')) });
+        clearUpcomingCache();
+        await shown();
+        expect(logCategories('warning', 'Could not list challenges (filter=upcoming: string)')).toEqual(['api']);
+    });
+
+    test('an empty upcoming answer is a real one: the recorded ids become empty', async () => {
+        stubStrategy({ getMemberChallenges: lists([{ id: 1 }], []) });
+        await shown();
+        expect(settings.rememberUpcomingChallengeIds).toHaveBeenLastCalledWith([]);
+    });
+
+    test('the upcoming list is fetched once for a burst of calls, again after a minute or a logout, and a failure is not kept', async () => {
+        const strategy = stubStrategy({ getMemberChallenges: lists([{ id: 1 }], [up(2, HOUR)]) });
+        const upcomingCalls = () =>
+            strategy.getMemberChallenges.mock.calls.filter(([, filter]) => filter === 'upcoming').length;
+        await Promise.all([shown(), shown(), shown()]);
+        await shown();
+        expect(upcomingCalls()).toBe(1);
+        // The open list is never cached.
+        expect(strategy.getMemberChallenges.mock.calls.filter(([, filter]) => filter === 'open')).toHaveLength(4);
+        jest.mocked(Date.now).mockReturnValue((T0 + 59) * 1000);
+        await shown();
+        expect(upcomingCalls()).toBe(1);
+        jest.mocked(Date.now).mockReturnValue((T0 + 61) * 1000);
+        await shown();
+        expect(upcomingCalls()).toBe(2);
+        clearUpcomingCache();
+        await shown();
+        expect(upcomingCalls()).toBe(3);
+
+        // A failed fetch is asked again on the next call.
+        const flaky = stubStrategy({ getMemberChallenges: lists([{ id: 1 }], null) });
+        clearUpcomingCache();
+        await shown();
+        await shown();
+        expect(flaky.getMemberChallenges.mock.calls.filter(([, filter]) => filter === 'upcoming')).toHaveLength(2);
+    });
+
+    test('accounts do not share the cache', async () => {
+        const strategy = stubStrategy({ getMemberChallenges: lists([], [up(2, HOUR)]) });
+        await shown();
+        auth.requireAuthToken = jest.fn().mockReturnValue({ ok: true, token: 'other', settings: {} });
+        await shown();
+        expect(strategy.getMemberChallenges.mock.calls.filter(([, filter]) => filter === 'upcoming')).toEqual([
+            ['tok', 'upcoming'],
+            ['other', 'upcoming'],
+        ]);
+    });
+
+    test('annotations resolve through the merged list: a rule keyed on an upcoming title gives its list', async () => {
+        stubStrategy({
+            getMemberChallenges: lists([{ id: 1, title: 'Open' }], [up(2, HOUR, { title: 'Rule Match' })]),
+        });
+        await listChallenges();
+        mockChosenSettings({ rule: { value: ['r1'] } });
+        setToken('tok');
+        await expect(
+            invalid<(event: object, ids: unknown) => Promise<unknown>>(buildHandlers()['get-open-chosen-annotations'])(
+                {},
+                [2],
+            ),
+        ).resolves.toEqual({
+            success: true,
+            annotations: { '2': { chosenOwn: [], chosenOwnCount: 0, chosenEffectiveCount: 1 } },
+        });
+        expect(settings.resolveRuleSetting).toHaveBeenCalledWith(
+            'chosenPhotos',
+            expect.objectContaining({ id: 2, title: 'Rule Match' }),
+        );
+    });
+
+    test('keeps the upcoming rows annotated like open ones, with their own saved list', async () => {
+        stubStrategy({ getMemberChallenges: lists([], [up(2, HOUR)]) });
+        mockChosenSettings({ own: { '2': ['early'] } });
+        withWindow(24);
+        const result = await listChallenges();
+        expect(result.success && result.items[0]).toEqual(
+            expect.objectContaining({ id: 2, status: 'upcoming', chosenOwn: ['early'], chosenOwnCount: 1 }),
+        );
     });
 });
 

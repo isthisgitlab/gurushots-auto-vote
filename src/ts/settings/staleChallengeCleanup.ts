@@ -4,7 +4,7 @@
 
 import * as logger from '../logger';
 import { loadSettings, saveSettings } from './persistence';
-import { getOpenChallengeIds } from './openChallenges';
+import { getOpenChallengeIds, getUpcomingChallengeIds } from './openChallenges';
 import { getActiveChallengeIds } from './challengeFacts';
 
 import type { ChallengeValues } from '../types/settings';
@@ -16,14 +16,17 @@ const JOIN_KEPT_KEYS = ['chosenPhotos', 'chosenPhotosOnly', 'chosenPhotosInOrder
 /**
  * Whether a non-active override entry must survive cleanup: it holds a chosen
  * photos key and its challenge is still joinable (in the most recent open
- * list). While no open list is known (after a restart, or a failed fetch) it is
- * kept: a manual Join in Discover reads the per-id list whether or not
- * auto-join is on, so it is not stale until a list shows the challenge is gone.
+ * list) or will be (in the most recent upcoming list, which Discover fetches). While either list
+ * is unknown (after a restart, or a failed fetch) every entry is kept: a manual Join in
+ * Discover reads the per-id list whether or not auto-join is on, and a join pass that has seen
+ * the open list alone cannot tell an upcoming challenge's entry from a stale one, so it is not
+ * stale until the lists show the challenge is gone.
  */
 const isKeptForJoin = (challengeId: string, values: ChallengeValues): boolean => {
     if (!JOIN_KEPT_KEYS.some((key) => Object.prototype.hasOwnProperty.call(values, key))) return false;
     const open = getOpenChallengeIds();
-    return open === null || open.has(challengeId);
+    const upcoming = getUpcomingChallengeIds();
+    return open === null || upcoming === null || open.has(challengeId) || upcoming.has(challengeId);
 };
 
 /**
