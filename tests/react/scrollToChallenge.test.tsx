@@ -23,6 +23,21 @@ describe('scrollToChallenge', () => {
         expect(fakeCard.focus).toHaveBeenCalledWith({ preventScroll: true });
     });
 
+    test('scrolls instantly for a user who prefers reduced motion', () => {
+        const original = globalThis.matchMedia;
+        globalThis.matchMedia = ((query: string) => ({
+            matches: query.includes('reduce'),
+        })) as unknown as typeof globalThis.matchMedia;
+        const fakeCard = { scrollIntoView: jest.fn(), focus: jest.fn() };
+        jest.spyOn(document, 'getElementById').mockReturnValue(invalid(fakeCard));
+        try {
+            scrollToChallenge(7);
+            expect(fakeCard.scrollIntoView).toHaveBeenCalledWith({ behavior: 'auto', block: 'start' });
+        } finally {
+            globalThis.matchMedia = original;
+        }
+    });
+
     test('no-ops without throwing when the card is not mounted', () => {
         const getById = jest.spyOn(document, 'getElementById').mockReturnValue(null);
 

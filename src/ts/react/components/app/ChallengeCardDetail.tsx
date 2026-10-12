@@ -1,15 +1,19 @@
 import { useMemo } from 'react';
 import { useTranslation } from '@/contexts/TranslationContext';
-import { formatEndTime, getLevelStatus } from '@/utils/formatters';
+import { formatEndTime, getLevelStatus, isBoostAvailable, statusText } from '@/utils/formatters';
 import { getNextLevelInfo } from '@/utils/challengeCardView';
 import { sanitizeWelcomeMessage } from '@/utils/sanitizeWelcomeMessage';
+import { Countdown } from './Countdown';
+import type { TimeRemaining } from './Countdown';
 import { DeadlineTimeline } from './DeadlineTimeline';
 import { ScenarioStatusPanel } from './ScenarioStatusPanel';
 import { EntryBadge } from './EntryBadge';
 import { ChallengeBadgeRow } from './ChallengeBadgeRow';
 import { CardDensityToggle } from './CardDensityToggle';
 import { FillButtons } from './ChallengeCardActions';
+import { InlineError } from '@/components/ui/InlineError';
 import * as ipc from '@/api/ipc';
+import { challengePageUrl } from '@/utils/challengePageUrl';
 
 import type { ComponentChildren } from 'preact';
 import type { Bankroll, Challenge, RankingTotal } from '../../../types/gurushots';
@@ -58,10 +62,10 @@ function DetailHeader({
         [challenge.welcome_message],
     );
 
-    // Only reachable from the URL row, which renders only when challenge.url is set.
+    // Only reachable from the URL row, which renders only when challenge.url is set. The slug comes off the network
+    // and goes into a URL path: anything but word characters and hyphens opens the generic challenges page instead.
     const handleOpenUrl = () => {
-        // aislop-ignore-next-line ai-slop/hardcoded-url -- stable public GuruShots challenge page link, not a deployment URL
-        void ipc.callOrNull(() => ipc.openExternalUrl(`https://gurushots.com/challenge/${challenge.url}`));
+        void ipc.callOrNull(() => ipc.openExternalUrl(challengePageUrl(challenge.url)));
     };
 
     return (
@@ -82,7 +86,7 @@ function DetailHeader({
                             onClick={handleOpenUrl}
                             className="font-mono hover:text-latvian hover:underline text-left"
                         >
-                            gurushots.com/challenge/{challenge.url}
+                            {challengePageUrl(challenge.url).replace('https://', '')}
                         </button>
                     </div>
                 )}
@@ -144,23 +148,25 @@ function UserProgressPanel({ challenge, userProgress }: { challenge: Challenge; 
 function StatusCells({
     challenge,
     view,
-    timeText,
+    timeRemaining,
     timezone,
     actions,
 }: {
     challenge: Challenge;
     view: ChallengeCardView;
-    timeText: string;
+    timeRemaining: TimeRemaining;
     timezone: string;
     actions: ChallengeCardActionSet;
 }) {
     const { t } = useTranslation();
-    const { turboError, fillError } = actions;
+    const { turboError, fillError, clearTurboError, clearFillError } = actions;
 
     return (
         <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-6 gap-2 text-xs">
             <StatCell label={t('app.time')}>
-                <div className={timeText === 'Ended' ? 'text-error' : 'text-success'}>{timeText}</div>
+                <div>
+                    <Countdown source={timeRemaining} />
+                </div>
             </StatCell>
             <StatCell label={t('app.ends')}>
                 <div className="text-xs">{formatEndTime(challenge.close_time, timezone)}</div>
@@ -170,13 +176,17 @@ function StatusCells({
                 {actions.fillExposureButton}
             </StatCell>
             <StatCell label={t('app.boost')}>
-                <div className={view.boostStatus.colorClass}>{view.boostStatus.text}</div>
+                <div className={view.boostStatus.colorClass}>{statusText(view.boostStatus, t)}</div>
                 {actions.keyUnlockButton}
             </StatCell>
             <StatCell label={t('app.turbo')}>
-                <div className={view.turboStatus.colorClass}>{view.turboStatus.text}</div>
+                <div className={view.turboStatus.colorClass}>{statusText(view.turboStatus, t)}</div>
                 {actions.earnTurboButton}
-                {turboError && <div className="text-error text-xs mt-1">{turboError}</div>}
+                {turboError && (
+                    <InlineError className="mt-1" onDismiss={clearTurboError}>
+                        {turboError}
+                    </InlineError>
+                )}
             </StatCell>
             <StatCell label={t('app.yourEntries')}>
                 <div>
@@ -187,7 +197,11 @@ function StatusCells({
                         <FillButtons {...actions.fillButtonProps} />
                     </div>
                 )}
-                {fillError && <div className="text-error text-xs mt-1">{fillError}</div>}
+                {fillError && (
+                    <InlineError className="mt-1" onDismiss={clearFillError}>
+                        {fillError}
+                    </InlineError>
+                )}
             </StatCell>
         </div>
     );
@@ -222,7 +236,7 @@ function EntryDetails({
                         key={entry.id}
                         entry={entry}
                         challengeId={challenge.id}
-                        boostAvailable={view.boostStatus.text.includes('Available')}
+                        boostAvailable={isBoostAvailable(view.boostStatus)}
                         turboAvailable={view.member.turbo?.state === 'WON'}
                         onBoostApplied={onVoteComplete}
                         onTurboApplied={onVoteComplete}
@@ -246,7 +260,7 @@ export function ChallengeCardDetail({
     challenge,
     view,
     badgeRowProps,
-    timeText,
+    timeRemaining,
     timezone,
     actions,
     hasCompactOverride,
@@ -262,7 +276,7 @@ export function ChallengeCardDetail({
     challenge: Challenge;
     view: ChallengeCardView;
     badgeRowProps: ChallengeBadgeRowProps;
-    timeText: string;
+    timeRemaining: TimeRemaining;
     timezone: string;
     actions: ChallengeCardActionSet;
     hasCompactOverride: boolean;
@@ -308,7 +322,13 @@ export function ChallengeCardDetail({
                 <UserProgressPanel challenge={challenge} userProgress={userProgress} />
             )}
 
-            <StatusCells challenge={challenge} view={view} timeText={timeText} timezone={timezone} actions={actions} />
+            <StatusCells
+                challenge={challenge}
+                view={view}
+                timeRemaining={timeRemaining}
+                timezone={timezone}
+                actions={actions}
+            />
 
             {/* Challenge Tags */}
             {challenge.tags && challenge.tags.length > 0 && (

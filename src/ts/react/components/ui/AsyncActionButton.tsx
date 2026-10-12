@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import * as ipc from '@/api/ipc';
+import { LoadingSpinner } from '@/components/ui/LoadingSpinner';
 import type { ComponentChildren } from 'preact';
 import { errorMessage } from '../../../errorMessage';
 
@@ -67,10 +68,16 @@ export function AsyncActionButton({
     };
 
     return (
-        <button className={className} onClick={() => void handleClick()} disabled={loading || disabled} title={title}>
+        <button
+            className={className}
+            onClick={() => void handleClick()}
+            disabled={loading || disabled}
+            aria-busy={loading}
+            title={title}
+        >
             {loading ? (
                 <>
-                    <span className="loading loading-spinner loading-xs" />
+                    <LoadingSpinner size="xs" decorative />
                     {loadingLabel}
                 </>
             ) : (

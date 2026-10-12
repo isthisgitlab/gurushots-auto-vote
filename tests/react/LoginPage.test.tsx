@@ -8,6 +8,7 @@
 import { fireEvent, render, screen, waitFor } from '@testing-library/preact';
 import { invalid } from '../helpers/invalid';
 import { pickOption } from './helpers/test-utils';
+import { CURRENT_NOTICE_VERSION } from '../../src/ts/noticeVersion';
 
 import type { RendererGlobals } from '../../src/ts/types/capacitor';
 import type { WindowApi } from '../../src/ts/types/ipc';
@@ -144,13 +145,47 @@ describe('Login page', () => {
         expect(window.api.setSetting).toHaveBeenCalledWith('lastUsername', 'alice');
     });
 
-    test('failed auth shows the error and does not transition', async () => {
+    test('failed auth shows a translated, announced error and does not transition', async () => {
         jest.mocked(window.api.authenticate).mockResolvedValue({ success: false, error: 'Bad credentials' });
         await renderReady();
         submit('alice', 'wrong');
-        await waitFor(() => expect(screen.getByText('Bad credentials')).toBeTruthy());
+        // An unlisted message is never shown raw: the generic login-failed text stands in for it.
+        await waitFor(() => expect(screen.getByText('errors.loginFailed')).toBeTruthy());
+        expect(screen.getByText('errors.loginFailed').closest('[role="alert"]')).not.toBeNull();
+        expect(screen.queryByText('Bad credentials')).toBeNull();
         expect(window.api.setSetting).not.toHaveBeenCalledWith('token', expect.anything());
         expect(window.api.login).not.toHaveBeenCalled();
+    });
+
+    test('the unofficial-app notice shows on the login page and acknowledging it persists the version', async () => {
+        await renderReady();
+        expect(screen.getByRole('dialog', { name: 'notice.title' })).toBeTruthy();
+        fireEvent.click(screen.getByRole('button', { name: 'notice.acknowledge' }));
+        await waitFor(() => expect(screen.queryByRole('dialog', { name: 'notice.title' })).toBeNull());
+        expect(window.api.setSetting).toHaveBeenCalledWith('noticeAcknowledgedVersion', CURRENT_NOTICE_VERSION);
+    });
+
+    test('an acknowledged notice is not shown again', async () => {
+        jest.mocked(window.api.getSettings).mockResolvedValue(
+            invalid({ noticeAcknowledgedVersion: CURRENT_NOTICE_VERSION }),
+        );
+        await renderReady();
+        expect(screen.queryByRole('dialog')).toBeNull();
+    });
+
+    test('a damaged settings file is explained on the login page too', async () => {
+        jest.mocked(window.api.getSettingsRecovery).mockResolvedValue(
+            invalid({ success: true, recovery: { code: 'settings-unreadable', path: '/data/settings.json' } }),
+        );
+        await renderReady();
+        expect((await screen.findByRole('alert')).textContent).toContain('notice.recoveryUnreadableWhat');
+    });
+
+    test('rejected credentials get their own translated text', async () => {
+        jest.mocked(window.api.authenticate).mockResolvedValue({ success: false, error: 'Invalid credentials' });
+        await renderReady();
+        submit('alice', 'wrong');
+        await waitFor(() => expect(screen.getByText('errors.invalidCredentials')).toBeTruthy());
     });
 
     test('mountLogin renders into #root and is a no-op without it', async () => {

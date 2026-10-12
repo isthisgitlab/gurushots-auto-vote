@@ -24,7 +24,7 @@ describe('AutoVoteControls', () => {
 
         const button = screen.getByText('app.startAutoVote').closest('button')!;
         expect(button.className).toContain('btn-latvian');
-        expect(screen.getByText('Stopped').className).toContain('badge-neutral');
+        expect(screen.getByText('common.stopped').className).toContain('badge-neutral');
         expect(screen.getByText('-')).toBeTruthy();
         expect(screen.getByText('0')).toBeTruthy();
 
@@ -50,7 +50,7 @@ describe('AutoVoteControls', () => {
 
         expect(screen.getByText('app.stopAutoVote').closest('button')!.className).toContain('btn-error');
         expect(screen.queryByText('app.startAutoVote')).toBeNull();
-        expect(screen.getByText('Running').className).toContain('badge-success');
+        expect(screen.getByText('common.running').className).toContain('badge-success');
         expect(screen.getByText('12:34:56')).toBeTruthy();
         expect(screen.getByText('7')).toBeTruthy();
     });
@@ -115,6 +115,53 @@ describe('AutoVoteControls', () => {
         );
 
         expect(screen.queryByText('app.autoJoinBadge')).toBeNull();
+    });
+
+    describe('the Error status', () => {
+        const withError = (props: { status?: string; error?: string | null; pendingStartAt?: number | null } = {}) =>
+            render(
+                <AutoVoteControls
+                    running
+                    status={props.status ?? 'Error'}
+                    statusClass="badge-error"
+                    error={props.error}
+                    lastRun={null}
+                    cycles={0}
+                    onToggle={jest.fn()}
+                    autoJoinActive={false}
+                    pendingStartAt={props.pendingStartAt ?? null}
+                    onStartNow={jest.fn()}
+                    onCancelResume={jest.fn()}
+                />,
+            );
+
+        it('is worded in the UI language, with the reason as an announced, translated line', () => {
+            withError({ error: 'not-logged-in' });
+            expect(screen.getByText('app.statusError').className).toContain('badge-error');
+            expect(screen.queryByText('Error')).toBeNull();
+            expect(screen.getByRole('alert').textContent).toBe('errors.notLoggedIn');
+        });
+
+        it('an unknown reason reads as the generic voting failure, never the raw text', () => {
+            withError({ error: 'ECONNRESET' });
+            expect(screen.getByRole('alert').textContent).toBe('errors.votingFailed');
+        });
+
+        it('shows no reason line without an error, or while a held resume is pending, or in another status', () => {
+            const first = withError({ error: null });
+            expect(screen.queryByRole('alert')).toBeNull();
+            first.unmount();
+            const second = withError({ error: 'voting-failed', pendingStartAt: BASE_MS + 1000 });
+            expect(screen.queryByRole('alert')).toBeNull();
+            second.unmount();
+            withError({ status: 'Running', error: 'voting-failed' });
+            expect(screen.queryByRole('alert')).toBeNull();
+        });
+
+        it('a status this build has no label for reads as the error label', () => {
+            withError({ status: 'idle' });
+            expect(screen.getByText('app.statusError')).toBeTruthy();
+        });
     });
 
     describe('while an auto-resume is held at launch', () => {

@@ -1,5 +1,6 @@
 import { useEffect, useId, useRef } from 'react';
 import { useTranslation } from '@/contexts/TranslationContext';
+import { ipcErrorText } from '@/api/ipcErrorText';
 import { StrokeIcon, ICON_PATHS } from '@/components/ui/StrokeIcon';
 import { formatDuration } from '@/utils/formatters';
 import { interp } from '@/utils/interp';
@@ -62,6 +63,13 @@ function ResumeHold({
     );
 }
 
+// The reducer's machine status → the translation key of its label.
+const STATUS_LABEL_KEYS: Record<string, string> = {
+    Stopped: 'common.stopped',
+    Running: 'common.running',
+    Error: 'app.statusError',
+};
+
 /**
  * Autovote controls - toggle button, status, last run, cycle count. While an
  * auto-resume is held at launch (`pendingStartAt`) the toggle gives way to a
@@ -71,6 +79,7 @@ export function AutoVoteControls({
     running,
     status,
     statusClass,
+    error = null,
     lastRun,
     cycles,
     onToggle,
@@ -82,6 +91,8 @@ export function AutoVoteControls({
     running: boolean;
     status: string;
     statusClass: string;
+    /** why the last cycle failed (the reducer's error); shown while the status is Error */
+    error?: string | null;
     lastRun: string | null;
     cycles: number;
     onToggle: () => void | Promise<void>;
@@ -133,7 +144,7 @@ export function AutoVoteControls({
                         <div className="flex items-center gap-2">
                             <span className="text-sm font-medium">{t('app.status')}</span>
                             <span className={`badge badge-sm ${pending ? 'badge-warning' : statusClass}`}>
-                                {pending ? t('app.statusWaiting') : status}
+                                {pending ? t('app.statusWaiting') : t(STATUS_LABEL_KEYS[status] ?? 'app.statusError')}
                             </span>
                             {/* Auto-join is a property of the running autovote, so it
                                 sits next to the running status. Shown only while
@@ -168,6 +179,12 @@ export function AutoVoteControls({
                         </div>
                     </div>
                 </div>
+
+                {!pending && status === 'Error' && error && (
+                    <p role="alert" className="text-error text-sm mt-2">
+                        {ipcErrorText(error, t, 'errors.votingFailed')}
+                    </p>
+                )}
 
                 {pending && (
                     <ResumeHold

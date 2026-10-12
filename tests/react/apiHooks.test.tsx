@@ -33,7 +33,7 @@ beforeEach(() => {
 });
 
 describe('useAsyncIpcAction', () => {
-    test('without labels, falls back to the generic failure and error messages', async () => {
+    test('without labels, falls back to the generic failure and error codes, and logs the raw detail', async () => {
         const invoker = jest
             .fn()
             .mockResolvedValueOnce({ success: false })
@@ -44,14 +44,16 @@ describe('useAsyncIpcAction', () => {
         await act(async () => {
             await result.current.run(1);
         });
-        expect(result.current.error).toBe('Action failed');
+        expect(result.current.error).toBe('action-failed');
+        expect(mockApi.logWarning).toHaveBeenCalledWith('IPC action failed: action-failed');
 
         let ret;
         await act(async () => {
             ret = await result.current.run(2);
         });
-        expect(ret).toEqual({ success: false, error: 'Action error' });
-        expect(result.current.error).toBe('Action error');
+        expect(ret).toEqual({ success: false, error: 'action-error' });
+        expect(result.current.error).toBe('action-error');
+        expect(mockApi.logError).toHaveBeenCalledWith('IPC action threw: action-error');
 
         await act(async () => {
             ret = await result.current.run(3);
@@ -75,37 +77,37 @@ describe('useAsyncIpcAction', () => {
 });
 
 describe('useAuth transitions', () => {
-    test('login and logout rejections without a message use their fallbacks', async () => {
+    test('login and logout rejections are stored as codes', async () => {
         mockApi.login.mockRejectedValueOnce({});
         const { result } = renderHook(() => useAuth());
         await act(async () => {
             await result.current.login();
         });
-        expect(result.current.error).toBe('Login transition failed');
+        expect(result.current.error).toBe('login-transition-failed');
 
         mockApi.logout.mockRejectedValueOnce({});
         await act(async () => {
             await result.current.logout();
         });
-        expect(result.current.error).toBe('Logout failed');
+        expect(result.current.error).toBe('logout-failed');
 
         mockApi.login.mockRejectedValueOnce(null);
         await act(async () => {
             await result.current.login();
         });
-        expect(result.current.error).toBe('Login transition failed');
+        expect(result.current.error).toBe('login-transition-failed');
 
         mockApi.logout.mockRejectedValueOnce(null);
         await act(async () => {
             await result.current.logout();
         });
-        expect(result.current.error).toBe('Logout failed');
+        expect(result.current.error).toBe('logout-failed');
 
         mockApi.logout.mockRejectedValueOnce(new Error('ipc gone'));
         await act(async () => {
             await result.current.logout();
         });
-        expect(result.current.error).toBe('ipc gone');
+        expect(result.current.error).toBe('logout-failed');
 
         act(() => result.current.clearError());
         expect(result.current.error).toBeNull();
@@ -126,14 +128,14 @@ describe('useAuth transitions', () => {
 });
 
 describe('useBoost / useTurbo / useFillChallenge', () => {
-    test('useBoost forwards (challengeId, imageId) and surfaces its failure label', async () => {
+    test('useBoost forwards (challengeId, imageId) and surfaces the generic failure code', async () => {
         mockApi.applyBoost.mockResolvedValueOnce(invalid({ success: false }));
         const { result } = renderHook(() => useBoost());
         await act(async () => {
             await result.current.applyBoost('c1', 'img1');
         });
         expect(mockApi.applyBoost).toHaveBeenCalledWith('c1', 'img1');
-        expect(result.current.error).toBe('Boost failed');
+        expect(result.current.error).toBe('action-failed');
         act(() => result.current.clearError());
         expect(result.current.error).toBeNull();
     });
@@ -147,31 +149,34 @@ describe('useBoost / useTurbo / useFillChallenge', () => {
             await result.current.playAutoTurbo('c1', 'Title');
         });
         expect(mockApi.playAutoTurbo).toHaveBeenCalledWith('c1', 'Title');
-        expect(result.current.error).toBe('Auto-turbo run failed');
+        expect(result.current.error).toBe('action-failed');
 
         await act(async () => {
             await result.current.applyTurbo('c1', 'img');
         });
         expect(mockApi.applyTurbo).toHaveBeenCalledWith('c1', 'img');
         // apply side wins when both hold an error
-        expect(result.current.error).toBe('Turbo apply error');
+        expect(result.current.error).toBe('action-error');
 
         act(() => result.current.clearError());
         expect(result.current.error).toBeNull();
         expect(result.current.loading).toBe(false);
     });
 
-    test.each([[{}], [null]])('useFillChallenge forwards the mode and reports its error label (%p)', async (thrown) => {
-        mockApi.fillChallengeNow.mockRejectedValueOnce(thrown);
-        const { result } = renderHook(() => useFillChallenge());
-        await act(async () => {
-            await result.current.fillNow('c9', invalid('fill'));
-        });
-        expect(mockApi.fillChallengeNow).toHaveBeenCalledWith('c9', 'fill');
-        expect(result.current.error).toBe('Photo submit error');
-        act(() => result.current.clearError());
-        expect(result.current.error).toBeNull();
-    });
+    test.each([[{}], [null]])(
+        'useFillChallenge forwards the mode and reports the generic error code (%p)',
+        async (thrown) => {
+            mockApi.fillChallengeNow.mockRejectedValueOnce(thrown);
+            const { result } = renderHook(() => useFillChallenge());
+            await act(async () => {
+                await result.current.fillNow('c9', invalid('fill'));
+            });
+            expect(mockApi.fillChallengeNow).toHaveBeenCalledWith('c9', 'fill');
+            expect(result.current.error).toBe('action-error');
+            act(() => result.current.clearError());
+            expect(result.current.error).toBeNull();
+        },
+    );
 });
 
 describe('useDeadlineActions', () => {
@@ -233,10 +238,21 @@ describe('useDeadlineActions', () => {
         expect(second.result.current.loading).toBe(true);
     });
 
+    test('no challenge settles empty without calling the handler', async () => {
+        mockApi.getDeadlineActions.mockClear();
+        const { result, rerender } = renderHook(({ c }) => useDeadlineActions(c), {
+            initialProps: { c: null as Challenge | null | undefined },
+        });
+        await waitFor(() => expect(result.current.loading).toBe(false));
+        expect(result.current).toEqual({ actions: [], boostBlocked: false, loading: false, error: false });
+        rerender({ c: undefined });
+        expect(mockApi.getDeadlineActions).not.toHaveBeenCalled();
+    });
+
     test('a late success after unmount is ignored', async () => {
         const late = deferred();
         mockApi.getDeadlineActions.mockReturnValueOnce(invalid(late.promise));
-        const { result, unmount } = renderHook(() => useDeadlineActions(null));
+        const { result, unmount } = renderHook(() => useDeadlineActions(challenge));
         unmount();
         await act(async () => {
             late.resolve({ success: true, actions: [{ action: 'boost' }] });

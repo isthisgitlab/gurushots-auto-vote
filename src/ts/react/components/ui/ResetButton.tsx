@@ -11,12 +11,12 @@ export function ResetIcon({ className = 'w-4 h-4' }: { className?: string }) {
 
 /**
  * Small outlined icon button that resets a setting to its default. Uses
- * `btn btn-outline btn-sm` with the ResetIcon; `title` is optional
- * (omitted → no attribute).
+ * `btn btn-outline btn-sm` with the ResetIcon. The icon carries no text, so `label` is
+ * the button's accessible name and its tooltip.
  */
-export function ResetButton({ title, onClick }: { title?: string; onClick: () => void }) {
+export function ResetButton({ label, onClick }: { label: string; onClick: () => void }) {
     return (
-        <button className="btn btn-outline btn-sm" title={title} onClick={onClick}>
+        <button type="button" className="btn btn-outline btn-sm" title={label} aria-label={label} onClick={onClick}>
             <ResetIcon />
         </button>
     );

@@ -3,6 +3,7 @@ import type { Bankroll } from '../../../types/gurushots';
 import { useTranslation } from '@/contexts/TranslationContext';
 import { Modal, ModalActions } from '@/components/ui/Modal';
 import { interp } from '@/utils/interp';
+import { BusyContent } from '@/components/ui/LoadingSpinner';
 
 // Outcome code (voting/currencyActions CURRENCY_OUTCOME) → translated message.
 // Anything unmapped (auth failure, unexpected string) reads as a generic
@@ -84,12 +85,13 @@ export function CurrencyConfirmModal({
                 <button className="btn btn-outline btn-sm" onClick={onClose} disabled={spending}>
                     {t('app.cancel')}
                 </button>
-                <button className="btn btn-warning btn-sm" onClick={() => void onConfirm()} disabled={spending}>
-                    {spending ? (
-                        <span className="loading loading-spinner loading-xs" />
-                    ) : (
-                        interp(t('app.currencySpend'), { unit })
-                    )}
+                <button
+                    className="btn btn-warning btn-sm"
+                    onClick={() => void onConfirm()}
+                    disabled={spending}
+                    aria-busy={spending}
+                >
+                    <BusyContent busy={spending} label={interp(t('app.currencySpend'), { unit })} />
                 </button>
             </ModalActions>
         </Modal>

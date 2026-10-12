@@ -38,14 +38,16 @@ function ImportPreview({ preview }: { preview: ImportPreviewResult['preview'] })
                 {preview.phases.map((phase) => (
                     <li key={phase.name}>
                         {interp(t('app.scenarioPhaseSummary'), { phase: phase.name, rules: phase.rules })}
-                        {phase.settings.length > 0 && ` (${phase.settings.join(', ')})`}
+                        {phase.settings.length > 0 && ` (${phase.settings.map((key) => t(`app.${key}`)).join(', ')})`}
                     </li>
                 ))}
             </ul>
             <div>
                 {preview.spending.length > 0
                     ? interp(t('app.scenarioSpends'), {
-                          actions: preview.spending.map((spend) => `${spend.action} (${spend.rule})`).join(', '),
+                          actions: preview.spending
+                              .map((spend) => `${t(`app.sbAct_${spend.action}`)} (${spend.rule})`)
+                              .join(', '),
                       })
                     : t('app.scenarioSpendsNothing')}
             </div>
@@ -63,7 +65,9 @@ function ImportPreview({ preview }: { preview: ImportPreviewResult['preview'] })
             )}
             <div>
                 {limits.length > 0
-                    ? interp(t('app.scenarioLimits'), { limits: limits.map(([key, n]) => `${n} ${key}`).join(', ') })
+                    ? interp(t('app.scenarioLimits'), {
+                          limits: limits.map(([key, n]) => `${n} ${t(`app.sbCurrency_${key}`)}`).join(', '),
+                      })
                     : t('app.scenarioNoLimits')}
             </div>
         </div>
@@ -180,7 +184,7 @@ function ExportedScenario({ name, exported, onHide }: { name: string; exported: 
                 value={exported.json}
                 onFocus={(e) => e.currentTarget.select()}
             />
-            <button type="button" className="btn btn-xs btn-ghost" onClick={onHide}>
+            <button type="button" className="btn btn-sm btn-ghost" onClick={onHide}>
                 {t('app.scenarioExportClose')}
             </button>
         </div>
@@ -207,6 +211,8 @@ function ScenarioRow({
     const [exported, setExported] = useState<ExportedText | null>(null);
     const [renaming, setRenaming] = useState<string | null>(null);
     const [armed, setArmed] = useState(false);
+    // Each row repeats the same four buttons: the scenario's name makes each one's accessible name unique.
+    const rowLabel = (actionKey: string) => interp(t('app.actionOnItem'), { action: t(actionKey), item: name });
 
     useEffect(() => {
         if (!armed) return undefined;
@@ -253,18 +259,29 @@ function ScenarioRow({
                 <span className="text-xs text-base-content/60">
                     {interp(t('app.scenarioPhaseCount'), { count: Object.keys(scenario.phases).length })}
                 </span>
-                <button type="button" className="btn btn-xs" onClick={onEdit}>
+                <button type="button" className="btn btn-sm" aria-label={rowLabel('app.sbEdit')} onClick={onEdit}>
                     {t('app.sbEdit')}
                 </button>
-                <button type="button" className="btn btn-xs" onClick={() => void runExport()}>
+                <button
+                    type="button"
+                    className="btn btn-sm"
+                    aria-label={rowLabel('app.scenarioExport')}
+                    onClick={() => void runExport()}
+                >
                     {t('app.scenarioExport')}
                 </button>
-                <button type="button" className="btn btn-xs" onClick={() => setRenaming(name)}>
+                <button
+                    type="button"
+                    className="btn btn-sm"
+                    aria-label={rowLabel('app.scenarioRename')}
+                    onClick={() => setRenaming(name)}
+                >
                     {t('app.scenarioRename')}
                 </button>
                 <button
                     type="button"
-                    className={`btn btn-xs ${armed ? 'btn-error' : ''}`}
+                    className={`btn btn-sm ${armed ? 'btn-error' : ''}`}
+                    aria-label={rowLabel(armed ? 'app.scenarioDeleteConfirm' : 'app.scenarioDelete')}
                     onClick={() => void runDelete()}
                 >
                     {armed ? t('app.scenarioDeleteConfirm') : t('app.scenarioDelete')}

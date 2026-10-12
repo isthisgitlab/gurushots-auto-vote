@@ -73,11 +73,17 @@ export function useDeadlineActions(
     const challengeRef = useLatestRef(challenge);
 
     useLayoutEffect(() => {
+        const current = challengeRef.current;
+        // Nothing to preview without a challenge: settled and empty, not an error, and no call to make.
+        if (!current) {
+            setState({ actions: [], boostBlocked: false, loading: false, error: false });
+            return undefined;
+        }
         let cancelled = false;
         setState((s) => ({ ...s, loading: true }));
         void (async () => {
             try {
-                const res = await window.api.getDeadlineActions(challengeRef.current);
+                const res = await window.api.getDeadlineActions(current);
                 if (cancelled) return;
                 if (res && res.success) {
                     setState({

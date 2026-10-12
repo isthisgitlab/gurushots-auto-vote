@@ -1,8 +1,10 @@
 import { useState, useCallback } from 'react';
 import { errorMessage } from '../../errorMessage';
+import { logRendererError, logRendererWarning } from './ipc';
 
 /**
- * Fallback messages for a failed action.
+ * Fallback codes for a failed action, used when the handler or the throw carries no text of its own. They are
+ * codes, not wording: what the user reads is ipcErrorText's translation of the stored error.
  */
 export type IpcActionLabels = { failureMessage?: string; errorMessage?: string };
 
@@ -23,18 +25,19 @@ export interface AsyncIpcAction<A extends unknown[], R> {
  * Wraps the boilerplate that every IPC action hook would otherwise
  * repeat: setLoading(true), clear prior error, await the call, surface
  * `result.error` when `result.success` is falsy, catch thrown errors,
- * and clear loading in finally.
+ * and clear loading in finally. The raw failure detail goes to the log; the stored `error` is shown through
+ * ipcErrorText, which words it for the user.
  *
  * @param ipcInvoker - bound window.api method
  * @param labels
- *   - failureMessage: fallback when the IPC returned `{success:false}` without an error string
- *   - errorMessage: fallback when the call threw without a message
+ *   - failureMessage: code stored when the IPC returned `{success:false}` without an error string
+ *   - errorMessage: code stored when the call threw without a message
  */
 export function useAsyncIpcAction<A extends unknown[], R extends { success: boolean; error?: string }>(
     ipcInvoker: (...args: A) => Promise<R>,
     labels: IpcActionLabels = {},
 ): AsyncIpcAction<A, R> {
-    const { failureMessage = 'Action failed', errorMessage: errorFallback = 'Action error' } = labels;
+    const { failureMessage = 'action-failed', errorMessage: errorFallback = 'action-error' } = labels;
 
     const [loading, setLoading] = useState(false);
     const [error, setError] = useState<string | null>(null);
@@ -46,11 +49,14 @@ export function useAsyncIpcAction<A extends unknown[], R extends { success: bool
             try {
                 const result = await ipcInvoker(...args);
                 if (!result?.success) {
-                    setError(result?.error || failureMessage);
+                    const failure = result?.error || failureMessage;
+                    void logRendererWarning(`IPC action failed: ${failure}`);
+                    setError(failure);
                 }
                 return result;
             } catch (err) {
                 const message = errorMessage(err) || errorFallback;
+                void logRendererError(`IPC action threw: ${message}`);
                 setError(message);
                 return { success: false, error: message };
             } finally {

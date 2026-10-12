@@ -75,12 +75,13 @@ export class ErrorBoundary extends Component<ErrorBoundaryProps, ErrorBoundarySt
         const { error } = this.state;
         if (!error) return this.props.children;
 
-        const message = error.message || String(error);
+        // The error's own text is for the log (componentDidCatch), not for the user: it is English, technical and
+        // can carry paths or response data. The user gets what happened and what to do next.
         return (
-            <div className="alert alert-error shadow-lg my-4">
+            <div role="alert" className="alert alert-error shadow-lg my-4">
                 <div className="flex-1">
                     <h3 className="font-bold">{tr('errors.boundaryTitle')}</h3>
-                    <p className="text-sm break-words">{message}</p>
+                    <p className="text-sm">{tr('errors.boundaryBody')}</p>
                 </div>
                 <div className="flex gap-2 shrink-0">
                     <button type="button" className="btn btn-outline btn-sm" onClick={this.handleDismiss}>

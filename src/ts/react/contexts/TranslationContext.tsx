@@ -25,11 +25,17 @@ const TranslationContext = createContext<TranslationContextValue | null>(null);
 
 const fetchLanguage = () => ipc.getSetting('language');
 
-// Hand the saved language to the page translator before publishing it, so
-// hook-less consumers (ErrorBoundary, Modal) render in the same language.
+// Hand a language to the page translator and mark the document with it (screen readers pick their voice and
+// hyphenation from `lang`), so hook-less consumers (ErrorBoundary, Modal) render in the same language.
+const adoptLanguage = (language: string) => {
+    rendererTranslator.setCurrentLanguage(language);
+    document.documentElement.lang = language;
+};
+
+// Adopt the saved language before publishing it.
 const applyLanguage = (saved: unknown, { setData }: Pick<IpcQueryTools<string, Error>, 'setData'>) => {
     const language = resolveLanguage(saved);
-    rendererTranslator.setCurrentLanguage(language);
+    adoptLanguage(language);
     setData(language);
 };
 
@@ -91,7 +97,7 @@ export function TranslationProvider({ children }: { children?: ComponentChildren
                 logLanguageSaveFailure('the settings store rejected the write');
                 return false;
             }
-            rendererTranslator.setCurrentLanguage(lang);
+            adoptLanguage(lang);
             setData(lang);
             Promise.resolve(ipc.refreshMenu()).catch(() => {});
             return true;

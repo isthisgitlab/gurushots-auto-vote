@@ -64,25 +64,27 @@ describe('LoginForm', () => {
 describe('LanguageSwitcher', () => {
     test('shows English, switches to Latvian and refreshes the menu', async () => {
         render(<LanguageSwitcher />);
-        expect(screen.getByText('English')).toBeTruthy();
-        expect(screen.getByText('common.languageEnglish').className).toBe('active');
-        expect(screen.getByText('common.languageLatvian').className).toBe('');
+        // The trigger names the current language in itself, marked with its own lang; the items do the same.
+        const triggerName = () => document.querySelector('button[aria-expanded] span[lang]')!;
+        expect(triggerName().textContent).toBe('common.languageEnglish');
+        expect(triggerName().getAttribute('lang')).toBe('en');
+        expect(screen.getByRole('button', { name: 'common.languageEnglish', pressed: true }).className).toBe('active');
+        // The trigger is a disclosure button, not a menu.
+        expect(document.querySelector('button[aria-expanded]')!.getAttribute('aria-expanded')).toBe('false');
+        expect(screen.getByRole('button', { name: 'common.languageLatvian' }).className).toBe('');
+        expect(screen.getByRole('button', { name: 'common.languageLatvian' }).getAttribute('lang')).toBe('lv');
         // Real buttons, with the current language exposed as pressed.
-        expect(screen.getByRole('button', { name: 'common.languageEnglish' }).getAttribute('aria-pressed')).toBe(
-            'true',
-        );
-        expect(screen.getByRole('button', { name: 'common.languageLatvian' }).getAttribute('aria-pressed')).toBe(
-            'false',
-        );
+        expect(screen.getByRole('button', { name: 'common.languageLatvian', pressed: false })).toBeTruthy();
 
-        fireEvent.click(screen.getByText('common.languageLatvian'));
-        await waitFor(() => expect(screen.getByText('Latviešu')).toBeTruthy());
+        fireEvent.click(screen.getByRole('button', { name: 'common.languageLatvian' }));
+        await waitFor(() => expect(triggerName().getAttribute('lang')).toBe('lv'));
         expect(window.api.setSetting).toHaveBeenCalledWith('language', 'lv');
         expect(window.api.refreshMenu).toHaveBeenCalledTimes(1);
-        expect(screen.getByText('common.languageLatvian').className).toBe('active');
+        expect(screen.getAllByRole('button', { name: 'common.languageLatvian' }).at(-1)!.className).toBe('active');
+        expect(document.documentElement.lang).toBe('lv');
 
-        fireEvent.click(screen.getByText('common.languageEnglish'));
-        await waitFor(() => expect(screen.getByText('English')).toBeTruthy());
+        fireEvent.click(screen.getByRole('button', { name: 'common.languageEnglish', pressed: false }));
+        await waitFor(() => expect(triggerName().getAttribute('lang')).toBe('en'));
         expect(window.api.setSetting).toHaveBeenLastCalledWith('language', 'en');
     });
 });

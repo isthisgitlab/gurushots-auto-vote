@@ -17,6 +17,7 @@ import { SettingHintList, globalSettingHints } from './SettingHints';
 import { ApplicationSettingsSection } from './ApplicationSettingsSection';
 import { TitleTagRulesEditor } from './TitleTagRulesEditor';
 import { ScenariosSection } from './ScenariosSection';
+import { AboutDataSection } from './AboutDataSection';
 import * as ipc from '@/api/ipc';
 
 import type { SettingsBand, SettingsSection } from '@/utils/groupSettings';
@@ -268,6 +269,7 @@ export function SettingsModal({ isOpen, onClose }: { isOpen: boolean; onClose: (
                     <ChallengeDefaultsSection bands={bands.filter((band) => band.id !== APP_TIER)} {...schemaForm} />
                     <TitleRulesSection titleRules={titleRules} />
                     <ScenariosSection isOpen={isOpen} />
+                    <AboutDataSection />
                     <ModalActionRow bordered {...actionRowProps} />
                 </div>
             )}

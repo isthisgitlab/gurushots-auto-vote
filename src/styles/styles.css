@@ -3,6 +3,7 @@
 @source "../../src/html/**/*.html";
 @source "../../src/ts/**/*.ts";
 @source "../../src/ts/**/*.tsx";
+@source "../../scripts/build-react.ts";
 @plugin "daisyui" {
     themes: all;
     base: true;
@@ -11,24 +12,17 @@
     logs: false;
 }
 
+/* The Latvian theme: the brand red, the GuruShots ranking-level colours (each white-on-colour pair is at least
+ * 4.5:1, the WCAG AA contrast for text), and the few utilities that apply them. Everything else is Tailwind and
+ * DaisyUI classes. */
 :root {
     --color-latvian: #960018;
+    --color-level-allstar: #1c1c1c;
+    --color-level-elite: #234f64;
+    --color-level-premier: #853445;
+    --color-level-skilled: #0a655c;
+    --color-level-popular: #2a7aa0;
     scrollbar-color: color-mix(in oklch, currentColor 0%, var(--color-latvian)) transparent;
-}
-
-/* Capacitor / mobile safe-area handling. The Android WebView paints
- * underneath the status bar and gesture nav by default; without these
- * insets the title overlaps the time/battery indicators at the top
- * and the bottom edge gets cut off on phones with a gesture bar.
- * env(safe-area-inset-*) returns 0 on desktop so this is harmless
- * for Electron. */
-html,
-body {
-    padding-top: env(safe-area-inset-top);
-    padding-bottom: env(safe-area-inset-bottom);
-    padding-left: env(safe-area-inset-left);
-    padding-right: env(safe-area-inset-right);
-    box-sizing: border-box;
 }
 
 /* Latvian color utility classes */
@@ -67,29 +61,4 @@ body {
 
 .border-latvian {
     border-color: var(--color-latvian);
-}
-
-.badge-allstar {
-    --badge-color: #1c1c1c;
-    --badge-fg: white;
-}
-
-.badge-elite {
-    --badge-color: #234f64;
-    --badge-fg: white;
-}
-
-.badge-premier {
-    --badge-color: #853445;
-    --badge-fg: white;
-}
-
-.badge-skilled {
-    --badge-color: #0a655c;
-    --badge-fg: white;
-}
-
-.badge-popular {
-    --badge-color: #2c7fa6;
-    --badge-fg: white;
 }

@@ -165,9 +165,15 @@ describe('what a join answered is announced', () => {
         ],
         ['a refused join', { success: false, status: 'failed-no-charge' }, 'app.discoverFailedNoCharge', 'alert'],
         [
-            'an unmapped failure',
+            'an unmapped failure (a known handler message, translated)',
             { success: false, error: 'No authentication token found' },
-            'No authentication token found',
+            'errors.notLoggedIn',
+            'alert',
+        ],
+        [
+            'an unmapped failure with unlisted text (generic, never the raw text)',
+            { success: false, error: 'socket hang up' },
+            'errors.actionFailed',
             'alert',
         ],
     ])('%s is announced as a %s', async (_name, res, text, role) => {
@@ -591,8 +597,9 @@ test('a statusless failure (auth expiry / handler error) still shows a message',
     render(<DiscoverSection isLoggedIn bankroll={invalid({ coins: 500 })} onJoined={jest.fn()} />);
     await screen.findByText('Free One');
     fireEvent.click(screen.getByText('app.discoverJoin'));
-    // No mapped status → falls back to the result's error text, never silent.
-    await screen.findByText('No authentication token found');
+    // No mapped status → falls back to the result's error, translated; never silent, never raw English.
+    await screen.findByText('errors.notLoggedIn');
+    expect(screen.queryByText('No authentication token found')).toBeNull();
 });
 
 test('confirm modal blocks the spend when the balance is short', async () => {

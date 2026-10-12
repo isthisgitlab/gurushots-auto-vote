@@ -73,6 +73,13 @@ describe('ConditionList', () => {
         ]);
     });
 
+    test('an item without a readable type is named by its position alone', () => {
+        render(<Probe Editor={ConditionList} initial={[null, { type: 7 }]} />);
+        expect(
+            screen.getAllByRole('button', { name: /^app\.sbRemove: / }).map((b) => b.getAttribute('aria-label')),
+        ).toEqual(['app.sbRemove: 1', 'app.sbRemove: 2']);
+    });
+
     test('moves and removes items', () => {
         render(
             <Probe
@@ -84,12 +91,17 @@ describe('ConditionList', () => {
             />,
         );
         const up = screen.getAllByRole<HTMLButtonElement>('button', { name: /app\.sbMoveUp/ });
+        // Each item's buttons are named by the item and its place, so a list of them is not identical rows.
+        expect(up.map((button) => button.getAttribute('aria-label'))).toEqual([
+            'app.sbMoveUp: app.sbCond_entries 1',
+            'app.sbMoveUp: app.sbCond_freeSlots 2',
+        ]);
         expect(up[0].disabled).toBe(true);
         fireEvent.click(up[1]);
         expect(value<{ type: string }[]>().map((c: { type: string }) => c.type)).toEqual(['freeSlots', 'entries']);
         fireEvent.click(screen.getAllByRole('button', { name: /app\.sbMoveDown/ })[0]);
         expect(value<{ type: string }[]>().map((c: { type: string }) => c.type)).toEqual(['entries', 'freeSlots']);
-        fireEvent.click(screen.getAllByRole('button', { name: 'app.sbRemove' })[0]);
+        fireEvent.click(screen.getByRole('button', { name: 'app.sbRemove: app.sbCond_entries 1' }));
         expect(value()).toEqual([{ type: 'freeSlots', op: '>', value: 0 }]);
     });
 

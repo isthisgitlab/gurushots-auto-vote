@@ -490,7 +490,8 @@ describe('SettingsModal tier bands', () => {
         // Bands are h5 here (under the h4 "Challenge Defaults" section);
         // group headings drop to h6.
         const bands = await screen.findAllByRole('heading', { level: 5 });
-        expect(bands.map((h) => h.textContent)).toEqual(['app.tierCore', 'app.tierOverrides']);
+        // (The last h5 is the About section's danger zone.)
+        expect(bands.map((h) => h.textContent)).toEqual(['app.tierCore', 'app.tierOverrides', 'about.dangerTitle']);
 
         const groups = screen.getAllByRole('heading', { level: 6 });
         expect(groups.map((h) => h.textContent)).toEqual(['app.groupGeneral', 'app.groupLastMinute']);
@@ -579,12 +580,9 @@ const clickButtonByText = (text: string, index = 0) => {
     fireEvent.click(buttons[index]);
 };
 
-// The application-settings ResetButtons carry no title attribute, in DOM order:
+// The application-settings ResetButtons are named "<reset action>: <setting>", in DOM order:
 // theme, language, timezone, check frequency, reliability.
-const appResetButtons = () =>
-    Array.from(document.querySelectorAll('button:not([title])')).filter(
-        (b) => b.className === 'btn btn-outline btn-sm' && b.querySelector('svg'),
-    );
+const appResetButtons = () => Array.from(document.querySelectorAll('button[aria-label^="app.resetToDefault: "]'));
 
 // Set a select's value and dispatch a native change event (fireEvent.change
 // does not reach preact's select onChange under happy-dom).
@@ -598,7 +596,7 @@ describe('SettingsModal — loading state', () => {
         mockSchemaState.loading = true;
         mockSchemaState.schema = null;
         render(<SettingsModal isOpen={true} onClose={jest.fn()} />);
-        expect(screen.getByLabelText('Loading')).toBeTruthy();
+        expect(screen.getByRole('status').textContent).toBe('common.loading');
         expect(screen.queryByText('app.applicationSettings')).toBeNull();
     });
 
@@ -633,7 +631,13 @@ describe('SettingsModal — application settings controls', () => {
     test('every application reset button resets its own UI keys', () => {
         render(<SettingsModal isOpen={true} onClose={jest.fn()} />);
         const resets = appResetButtons();
-        expect(resets).toHaveLength(5);
+        expect(resets.map((b) => b.getAttribute('aria-label'))).toEqual([
+            'app.resetToDefault: app.theme',
+            'app.resetToDefault: app.language',
+            'app.resetToDefault: app.timezone',
+            'app.resetToDefault: app.checkFrequency',
+            'app.resetToDefault: app.reliability',
+        ]);
         resets.forEach((b) => fireEvent.click(b));
         expect(mockFormState.handleResetUi.mock.calls.map(([key]) => key)).toEqual([
             'theme',

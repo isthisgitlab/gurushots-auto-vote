@@ -1,4 +1,5 @@
 import { useTranslation } from '@/contexts/TranslationContext';
+import { interp } from '@/utils/interp';
 import {
     CONDITION_FIELDS,
     ACTION_FIELDS,
@@ -433,36 +434,50 @@ export function ItemEditor({
 }
 
 /**
- * Remove / move buttons for one list item.
+ * Remove / move buttons for one list item. `itemName` (what the item is, and its place in the list) goes into each
+ * button's accessible name, since a list repeats the same three buttons per item.
  */
 function ListControls({
     index,
     count,
+    itemName,
     onMove,
     onRemove,
 }: {
     index: number;
     count: number;
+    itemName: string;
     onMove: (delta: number) => void;
     onRemove: () => void;
 }) {
     const { t } = useTranslation();
+    const nameOf = (actionKey: string) => interp(t('app.actionOnItem'), { action: t(actionKey), item: itemName });
     return (
         <div className="flex gap-1 shrink-0">
-            <button type="button" className="btn btn-xs btn-ghost" disabled={index === 0} onClick={() => onMove(-1)}>
+            <button
+                type="button"
+                className="btn btn-sm btn-ghost"
+                disabled={index === 0}
+                aria-label={nameOf('app.sbMoveUp')}
+                onClick={() => onMove(-1)}
+            >
                 <span aria-hidden="true">↑</span>
-                <span className="sr-only">{t('app.sbMoveUp')}</span>
             </button>
             <button
                 type="button"
-                className="btn btn-xs btn-ghost"
+                className="btn btn-sm btn-ghost"
                 disabled={index === count - 1}
+                aria-label={nameOf('app.sbMoveDown')}
                 onClick={() => onMove(1)}
             >
                 <span aria-hidden="true">↓</span>
-                <span className="sr-only">{t('app.sbMoveDown')}</span>
             </button>
-            <button type="button" className="btn btn-xs btn-ghost text-error" onClick={onRemove}>
+            <button
+                type="button"
+                className="btn btn-sm btn-ghost text-error"
+                aria-label={nameOf('app.sbRemove')}
+                onClick={onRemove}
+            >
                 {t('app.sbRemove')}
             </button>
         </div>
@@ -488,6 +503,11 @@ function ItemList({
     const { t } = useTranslation();
     const spec = KINDS[kind];
     const list: unknown[] = Array.isArray(value) ? value : [];
+    // "<type> <position>", e.g. "Boost an entry 2": names the item in its buttons.
+    const itemName = (item: unknown, index: number) => {
+        const type = (item as Record<string, unknown> | null | undefined)?.[spec.key];
+        return `${typeof type === 'string' ? t(`${spec.label}${type}`) : ''} ${index + 1}`.trim();
+    };
     return (
         <div className="space-y-2">
             {list.map((item, index) => (
@@ -502,6 +522,7 @@ function ItemList({
                         <ListControls
                             index={index}
                             count={list.length}
+                            itemName={itemName(item, index)}
                             onMove={(delta) => onChange(moveItem(list, index, delta))}
                             onRemove={() => onChange(list.filter((_, i) => i !== index))}
                         />

@@ -52,7 +52,11 @@ describe('ErrorBoundary', () => {
         );
 
         expect(screen.getByText('errors.boundaryTitle')).toBeTruthy();
-        expect(screen.getByText(/boom from child/)).toBeTruthy();
+        // The user reads what happened and what to do, never the error's own text (that goes to the log).
+        expect(screen.getByRole('alert')).toBeTruthy();
+        expect(screen.getByText('errors.boundaryBody')).toBeTruthy();
+        expect(screen.getByText('errors.reload')).toBeTruthy();
+        expect(screen.queryByText(/boom from child/)).toBeNull();
         expect(screen.queryByText('child ok')).toBeNull();
     });
 

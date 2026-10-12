@@ -407,6 +407,16 @@
                         "object": "globalThis",
                         "property": "api",
                         "message": "Call the shell bridge through src/ts/react/api/ (e.g. `import * as ipc from \"@/api/ipc\"`)."
+                    },
+                    {
+                        "object": "window",
+                        "property": "Capacitor",
+                        "message": "Ask the platform through src/ts/react/api/usePlatformCapabilities (no per-platform branching in components)."
+                    },
+                    {
+                        "object": "globalThis",
+                        "property": "Capacitor",
+                        "message": "Ask the platform through src/ts/react/api/usePlatformCapabilities (no per-platform branching in components)."
                     }
                 ]
             }

@@ -151,6 +151,11 @@ describe('AutovoteContext', () => {
     describe('start / stop', () => {
         it('starts: persists the flag, runs the first cycle, refreshes challenges and arms the chain', async () => {
             const onChallengesRefresh = jest.fn();
+            const words: Record<string, string> = {
+                'app.autovoteNotificationPreparing': 'Preparing the first cycle',
+                'app.autovoteNotificationLastCycle': 'Last cycle: {time}',
+            };
+            mockTranslator.t.mockImplementation((key: string) => words[key] ?? key);
             renderProvider({ onChallengesRefresh });
 
             await act(async () => {
@@ -159,11 +164,10 @@ describe('AutovoteContext', () => {
 
             expect(window.api.setCancelVoting).toHaveBeenCalledWith(false);
             expect(window.api.setSetting).toHaveBeenCalledWith('autovoteRunning', true);
-            expect(foregroundService.start).toHaveBeenCalledWith({
-                body: 'Auto-vote running — preparing first cycle',
-            });
+            // The Android notification text is translated (not English literals) and the time follows the UI language.
+            expect(foregroundService.start).toHaveBeenCalledWith({ body: 'Preparing the first cycle' });
             expect(foregroundService.update).toHaveBeenCalledWith({
-                body: expect.stringMatching(/^Last cycle: /),
+                body: expect.stringMatching(/^Last cycle: \d{2}:\d{2}:\d{2}$/),
             });
             expect(onChallengesRefresh).toHaveBeenCalledTimes(1);
             expect(ctx.running).toBe(true);
@@ -394,35 +398,37 @@ describe('AutovoteContext', () => {
             return { error: ctx.error, status: ctx.status, cycles: ctx.cycles };
         };
 
-        it('reports "Not logged in" when there is no token', async () => {
+        it('reports the not-logged-in code when there is no token', async () => {
             jest.mocked(window.api.getSettings).mockResolvedValue(invalid({}));
             renderProvider();
-            expect(await startAndRead()).toEqual({ error: 'Not logged in', status: 'Error', cycles: 0 });
+            expect(await startAndRead()).toEqual({ error: 'not-logged-in', status: 'Error', cycles: 0 });
             expect(window.api.runVotingCycle).not.toHaveBeenCalled();
         });
 
-        it('surfaces the cycle error message', async () => {
+        it('surfaces the cycle error message and logs it', async () => {
             jest.mocked(window.api.runVotingCycle).mockResolvedValue({ success: false, error: 'API request failed' });
             renderProvider();
             expect(await startAndRead()).toMatchObject({ error: 'API request failed', status: 'Error' });
+            expect(window.api.logWarning).toHaveBeenCalledWith('Voting cycle failed: API request failed');
         });
 
-        it('falls back to "Voting failed" for an unsuccessful result without a message', async () => {
+        it('falls back to the voting-failed code for an unsuccessful result without a message', async () => {
             jest.mocked(window.api.runVotingCycle).mockResolvedValue(invalid(undefined));
             renderProvider();
-            expect(await startAndRead()).toMatchObject({ error: 'Voting failed' });
+            expect(await startAndRead()).toMatchObject({ error: 'voting-failed' });
         });
 
-        it('reports a thrown error message', async () => {
+        it('reports a thrown error as a code and logs its message', async () => {
             jest.mocked(window.api.runVotingCycle).mockRejectedValue(new Error('network down'));
             renderProvider();
-            expect(await startAndRead()).toMatchObject({ error: 'network down' });
+            expect(await startAndRead()).toMatchObject({ error: 'voting-error' });
+            expect(window.api.logWarning).toHaveBeenCalledWith('Voting cycle threw: network down');
         });
 
-        it.each([[{}], [null]])('falls back to "Voting error" for a thrown %p without a message', async (thrown) => {
+        it.each([[{}], [null]])('reports a thrown %p without a message as the same code', async (thrown) => {
             jest.mocked(window.api.runVotingCycle).mockRejectedValue(thrown);
             renderProvider();
-            expect(await startAndRead()).toMatchObject({ error: 'Voting error' });
+            expect(await startAndRead()).toMatchObject({ error: 'voting-error' });
         });
 
         it('a success without a challenge list makes the chain fetch fresh', async () => {

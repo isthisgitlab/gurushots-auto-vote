@@ -172,8 +172,12 @@ function fireSettingsChanged(payload?: object) {
 // Mock the page translator (translations/renderer.ts) that TranslationProvider,
 // ErrorBoundary and Modal translate through. `t` returns the key so tests can
 // assert on keys ('app.save'); override it per test with mockImplementation.
+// Keys whose text is a pattern the component fills in (no t() interpolation: callers use interp), so the filled
+// text — an accessible name made of an action and what it acts on — stays testable.
+const PATTERN_TEXT: Record<string, string> = { 'app.actionOnItem': '{action}: {item}', 'app.sbRuleN': 'Rule {n}' };
+const defaultTranslate = (key: string) => PATTERN_TEXT[key] ?? key;
 const mockTranslator = {
-    t: jest.fn((key: string) => key),
+    t: jest.fn(defaultTranslate),
     getCurrentLanguage: jest.fn().mockReturnValue('en'),
     setCurrentLanguage: jest.fn(),
 };
@@ -199,4 +203,4 @@ beforeEach(() => {
 });
 
 // Export mocks for use in tests
-export { mockApi, mockTranslator, fireSettingsChanged };
+export { mockApi, mockTranslator, defaultTranslate, fireSettingsChanged };

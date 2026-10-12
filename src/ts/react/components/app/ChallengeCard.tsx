@@ -1,5 +1,4 @@
-import { useTranslation } from '@/contexts/TranslationContext';
-import { deriveChallengeCardView } from '@/utils/challengeCardView';
+import { deriveChallengeCardView, needsSecondTick } from '@/utils/challengeCardView';
 import { useDeadlineActions } from '@/api/useDeadlineActions';
 import { useSwapBacks } from '@/api/useSwapBacks';
 import { useScenarioStatus } from '@/api/useScenarioStatus';
@@ -7,9 +6,9 @@ import { useChallengeSettings } from '@/hooks/useChallengeSettings';
 import { useTick } from '@/hooks/useTick';
 import { ChallengeCardCompact } from './ChallengeCardCompact';
 import { ChallengeCardDetail } from './ChallengeCardDetail';
+import type { TimeRemaining } from './Countdown';
 import { useChallengeCardActions, buildCompactActionRow } from './ChallengeCardActions';
 
-import type { Signal } from '@preact/signals';
 import type { Bankroll, Challenge } from '../../../types/gurushots';
 
 /**
@@ -49,7 +48,7 @@ export function ChallengeCard({
     passVersion?: number;
     defaultCompact?: boolean;
     compactActions?: boolean;
-    timeRemaining?: Signal<string> | string;
+    timeRemaining?: TimeRemaining;
     timezone: string;
     autovoteRunning: boolean;
     onVoteComplete: () => void;
@@ -57,7 +56,6 @@ export function ChallengeCard({
     bankroll?: Bankroll | null;
     onCurrencySpent: () => void;
 }) {
-    const { t } = useTranslation();
     const { hasCustomSettings, autoFillEnabled, isCompact, hasCompactOverride, toggleCompact } = useChallengeSettings(
         challenge.id,
         defaultCompact,
@@ -70,17 +68,12 @@ export function ChallengeCard({
     const swapBacks = useSwapBacks(challenge);
     const scenarioStatus = useScenarioStatus(challenge, settingsVersion, passVersion);
 
-    // Tick once a second — only meaningful when this challenge is in TIMER
-    // state and we want canPlayAutoTurbo to flip to true the moment the
-    // cooldown elapses without waiting for an external poll.
-    const now = useTick(1000);
-
-    // timeRemaining is a Signal<string> from useTimers — reading .value here
-    // subscribes this card so the countdown text stays live. The badges smoke
-    // test passes a plain string, so fall back to the raw value (or a loading
-    // placeholder) when it isn't a signal.
-    const timeText =
-        timeRemaining && typeof timeRemaining === 'object' ? timeRemaining.value : timeRemaining || t('common.loading');
+    // The card re-renders once a second only while something on it counts down — a turbo cooldown (so
+    // canPlayAutoTurbo flips the moment it elapses, without waiting for an external poll) or a timed boost
+    // window's time left. Every other render reads the clock afresh; the live countdown text is the
+    // Countdown leaf's own signal binding, so it never re-renders the card.
+    const now = Math.floor(Date.now() / 1000);
+    useTick(1000, needsSecondTick(challenge, now));
 
     const view = deriveChallengeCardView(challenge, { now, bankroll, autovoteRunning, autoFillEnabled });
     const actions = useChallengeCardActions({
@@ -115,7 +108,7 @@ export function ChallengeCard({
                 <ChallengeCardCompact
                     challenge={challenge}
                     badgeRowProps={badgeRowProps}
-                    timeText={timeText}
+                    timeRemaining={timeRemaining}
                     exposureFactor={view.exposureFactor}
                     exposureClass={view.exposureClass}
                     boostStatus={view.boostStatus}
@@ -139,7 +132,7 @@ export function ChallengeCard({
                 challenge={challenge}
                 view={view}
                 badgeRowProps={badgeRowProps}
-                timeText={timeText}
+                timeRemaining={timeRemaining}
                 timezone={timezone}
                 actions={actions}
                 hasCompactOverride={hasCompactOverride}

@@ -5,9 +5,11 @@ import type { ChallengeCardView } from './ChallengeCard';
 import type { ChallengeBadgeRowProps } from './ChallengeBadgeRow';
 import type { DeadlineAction } from './DeadlineTimeline';
 import { useTranslation } from '@/contexts/TranslationContext';
-import { getEntryStatus } from '@/utils/formatters';
+import { getEntryStatus, statusText } from '@/utils/formatters';
 import { ChallengeBadgeRow } from './ChallengeBadgeRow';
 import { CardDensityToggle } from './CardDensityToggle';
+import { Countdown } from './Countdown';
+import type { TimeRemaining } from './Countdown';
 import { DeadlineTimeline } from './DeadlineTimeline';
 import { ScenarioStatusLine } from './ScenarioStatusLine';
 import type * as useScenarioStatusModule from '@/api/useScenarioStatus';
@@ -55,7 +57,7 @@ function Stat({
 export function ChallengeCardCompact({
     challenge,
     badgeRowProps,
-    timeText,
+    timeRemaining,
     exposureFactor,
     exposureClass,
     boostStatus,
@@ -70,7 +72,7 @@ export function ChallengeCardCompact({
 }: {
     challenge: Challenge;
     badgeRowProps: ChallengeBadgeRowProps;
-    timeText: string;
+    timeRemaining: TimeRemaining;
     exposureFactor: ChallengeCardView['exposureFactor'];
     exposureClass: ChallengeCardView['exposureClass'];
     boostStatus: ChallengeCardView['boostStatus'];
@@ -101,12 +103,8 @@ export function ChallengeCardCompact({
             </div>
 
             <div className="grid grid-cols-2 gap-x-3 gap-y-1 text-xs text-base-content/80">
-                <Stat
-                    icon="⏱"
-                    label={t('app.time')}
-                    className={timeText === 'Ended' ? 'text-error font-medium' : 'text-success font-medium'}
-                >
-                    {timeText}
+                <Stat icon="⏱" label={t('app.time')}>
+                    <Countdown source={timeRemaining} className="font-medium" />
                 </Stat>
                 <Stat icon="📊" label={t('app.exposure')} className={exposureClass}>
                     {exposureFactor}%
@@ -118,17 +116,21 @@ export function ChallengeCardCompact({
                     {entries.length}/{challenge.max_photo_submits}
                 </Stat>
                 <Stat icon="🚀" label={t('app.boost')} className={boostStatus.colorClass}>
-                    {boostStatus.text}
+                    {statusText(boostStatus, t)}
                 </Stat>
                 <Stat icon="⚡" label={t('app.turbo')} className={turboStatus.colorClass}>
-                    {turboStatus.text}
+                    {statusText(turboStatus, t)}
                 </Stat>
             </div>
 
             {/* Per-entry state as glyphs: which photo is boosted / turboed /
                 guru-picked, and its rank. No thumbnail, no buttons. */}
             {entries.length > 0 && (
-                <div className="flex flex-wrap gap-x-2 gap-y-0.5 text-xs" aria-label={t('app.entryDetails')}>
+                <div
+                    className="flex flex-wrap gap-x-2 gap-y-0.5 text-xs"
+                    role="group"
+                    aria-label={t('app.entryDetails')}
+                >
                     {entries.map((entry) => {
                         const { icon, textClass } = getEntryStatus(entry);
                         return (

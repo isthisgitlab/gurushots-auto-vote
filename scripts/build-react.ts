@@ -5,6 +5,45 @@ import type { BuildContext, BuildOptions } from 'esbuild';
 import path from 'node:path';
 import fs from 'node:fs';
 import { removeVisionWebAssets, stageVisionWebAssets } from './fetch-vision-model';
+import { runIfMain } from './lib/run-if-main';
+
+// Every remote image the renderer draws comes from the photo CDN (format/photoUrl.ts);
+// no API-supplied avatar or cover URL is ever put in an <img>.
+const PHOTO_HOST = 'https://photos.gurushots.com';
+const GITHUB_API_HOST = 'https://api.github.com';
+const NOTICES_ASSET_NAME = 'THIRD_PARTY_NOTICES.txt';
+
+type CspDirectives = Record<string, string[]>;
+
+const serializeCsp = (directives: CspDirectives) =>
+    Object.entries(directives)
+        .map(([name, sources]) => [name, ...sources].join(' '))
+        .join('; ');
+
+// The policy every document starts from. script-src 'self' (no 'unsafe-inline', no
+// 'unsafe-eval') is the load-bearing line; style-src keeps 'unsafe-inline' for DaisyUI and
+// inline element styles.
+const baseCsp = (overrides: CspDirectives = {}): string =>
+    serializeCsp({
+        'default-src': ["'self'"],
+        'script-src': ["'self'"],
+        'style-src': ["'self'", "'unsafe-inline'"],
+        'img-src': ["'self'", 'data:', PHOTO_HOST],
+        'font-src': ["'self'", 'data:'],
+        'connect-src': ["'self'"],
+        'object-src': ["'none'"],
+        'base-uri': ["'self'"],
+        'form-action': ["'none'"],
+        ...overrides,
+    });
+
+// The two Android documents run the local vision model: onnxruntime-web compiles WebAssembly
+// ('wasm-unsafe-eval' allows that without 'unsafe-eval'), the classifier fetches candidate
+// photos from the photo CDN, and the update check reads the GitHub releases API.
+const androidCsp = baseCsp({
+    'script-src': ["'self'", "'wasm-unsafe-eval'"],
+    'connect-src': ["'self'", GITHUB_API_HOST, PHOTO_HOST],
+});
 
 const reactDir = path.join(__dirname, '..', 'src', 'ts', 'react');
 const tsDir = path.join(__dirname, '..', 'src', 'ts');
@@ -43,11 +82,12 @@ const capacitorIndexHtml = `<!doctype html>
         <meta charset="UTF-8" />
         <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover, maximum-scale=1.0, user-scalable=no" />
         <meta name="theme-color" content="#960018" />
+        <meta http-equiv="Content-Security-Policy" content="${androidCsp}" />
         <title>GuruShots Auto Vote</title>
         <link href="styles.css" rel="stylesheet" />
         <script defer src="capacitor-bundle.js"></script>
     </head>
-    <body class="min-h-screen bg-base-200">
+    <body class="min-h-screen bg-base-200 pt-[env(safe-area-inset-top)] pr-[env(safe-area-inset-right)] pb-[env(safe-area-inset-bottom)] pl-[env(safe-area-inset-left)]">
         <div id="root"></div>
     </body>
 </html>
@@ -61,30 +101,30 @@ const webHtml = `<!doctype html>
     <head>
         <meta charset="UTF-8" />
         <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-        <meta
-            http-equiv="Content-Security-Policy"
-            content="default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: https:; font-src 'self' data:; connect-src 'self'; object-src 'none'; base-uri 'self'"
-        />
+        <meta http-equiv="Content-Security-Policy" content="${baseCsp()}" />
         <title>GuruShots Auto Vote</title>
         <link href="styles.css" rel="stylesheet" />
         <script defer src="web-bundle.js"></script>
     </head>
-    <body class="min-h-screen bg-base-200">
+    <body class="min-h-screen bg-base-200 pt-[env(safe-area-inset-top)] pr-[env(safe-area-inset-right)] pb-[env(safe-area-inset-bottom)] pl-[env(safe-area-inset-left)]">
         <div id="root"></div>
     </body>
 </html>
 `;
 
 // Headless background document. Loaded by AutoVoteService in a bare
-// WebView (no Capacitor). It sets the headless flag before the bundle
-// executes so runtime.isHeadlessService() is true at module load, then
+// WebView (no Capacitor). headless-flag.js sets the headless flag before the
+// bundle executes so runtime.isHeadlessService() is true at module load, then
 // the bundle installs window.GS.runOneCycle() for the service to call.
+const HEADLESS_FLAG_FILE = 'headless-flag.js';
+const HEADLESS_FLAG_SOURCE = 'window.__GS_HEADLESS__ = true;\n';
 const headlessHtml = `<!doctype html>
 <html lang="en">
     <head>
         <meta charset="UTF-8" />
+        <meta http-equiv="Content-Security-Policy" content="${androidCsp}" />
         <title>GuruShots Auto Vote — background</title>
-        <script>window.__GS_HEADLESS__ = true;</script>
+        <script src="${HEADLESS_FLAG_FILE}"></script>
         <script defer src="headless-bundle.js"></script>
     </head>
     <body></body>
@@ -269,6 +309,7 @@ const prepareDist = async () => {
     fs.writeFileSync(path.join(distDir, 'index.html'), capacitorIndexHtml);
     // Background service document (loaded by AutoVoteService's WebView).
     fs.writeFileSync(path.join(distDir, 'headless.html'), headlessHtml);
+    fs.writeFileSync(path.join(distDir, HEADLESS_FLAG_FILE), HEADLESS_FLAG_SOURCE);
     // Web shell document (served by src/ts/web/server.ts).
     fs.writeFileSync(path.join(distDir, 'web.html'), webHtml);
 
@@ -281,6 +322,13 @@ const prepareDist = async () => {
     const lexiconSrc = path.join(__dirname, '..', 'src', 'assets', 'semantic-vectors.json');
     if (fs.existsSync(lexiconSrc)) {
         fs.copyFileSync(lexiconSrc, path.join(distDir, 'semantic-vectors.json'));
+    }
+
+    // The same for the third-party notices the licenses dialog fetch()es next to the document
+    // (thirdPartyNotices.ts).
+    const noticesSrc = path.join(__dirname, '..', 'src', 'assets', NOTICES_ASSET_NAME);
+    if (fs.existsSync(noticesSrc)) {
+        fs.copyFileSync(noticesSrc, path.join(distDir, NOTICES_ASSET_NAME));
     }
 };
 
@@ -373,4 +421,17 @@ async function buildReact() {
     }
 }
 
-buildReact();
+runIfMain(require.main, module, buildReact);
+
+export {
+    PHOTO_HOST,
+    NOTICES_ASSET_NAME,
+    HEADLESS_FLAG_FILE,
+    HEADLESS_FLAG_SOURCE,
+    baseCsp,
+    androidCsp,
+    capacitorIndexHtml,
+    headlessHtml,
+    webHtml,
+    buildReact,
+};

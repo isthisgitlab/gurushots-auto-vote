@@ -158,7 +158,7 @@ describe('ChallengeSettingsModal schema loading', () => {
         mockSchemaState.loading = true;
         mockSchemaState.schema = null;
         render(<ChallengeSettingsModal isOpen={true} onClose={jest.fn()} challengeId="1" challengeTitle="C" />);
-        expect(screen.getByLabelText('Loading')).toBeTruthy();
+        expect(screen.getByRole('status').textContent).toBe('common.loading');
     });
 
     test('keeps the form on screen during a background schema refetch', async () => {

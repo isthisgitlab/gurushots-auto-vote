@@ -17,12 +17,14 @@ import { createDeadlineNotifier, resolveRendererDelivery } from '../notification
 import { createRendererScenarioNotifier } from '../notifications/scenarioNotifier';
 import { useLatestRef } from '../hooks/useLatestRef';
 import { rendererTranslator } from '../../translations/renderer';
+import { interp } from '../utils/interp';
 import * as ipc from '../api/ipc';
+import { isNativePlatform } from '../api/usePlatformCapabilities';
+import { dateLocale } from '../utils/formatters';
 
 import type { ComponentChildren } from 'preact';
 import type { Dispatch } from 'react';
 import type { Challenge } from '../../types/gurushots';
-import type { RendererGlobals } from '../../types/capacitor';
 import type { TimerHandle } from '../../scheduling/cadenceChain';
 import type { AutovoteAction, AutovoteState } from './autovoteReducer';
 import { errorMessage } from '../../errorMessage';
@@ -106,7 +108,7 @@ const HOLD_CHUNK_MS = 5000;
 async function startBackgroundHost() {
     const native = await nativeAutovote.start();
     if (!native.available) {
-        await foregroundService.start({ body: 'Auto-vote running — preparing first cycle' });
+        await foregroundService.start({ body: rendererTranslator.t('app.autovoteNotificationPreparing') });
     }
 }
 
@@ -130,9 +132,11 @@ async function stopBackgroundHost() {
  */
 function recordCycleSuccess(dispatch: Dispatch<AutovoteAction>) {
     dispatch({ type: ACTIONS.INCREMENT_CYCLE });
-    const lastRunStr = new Date().toLocaleTimeString('lv-LV');
+    const lastRunStr = new Date().toLocaleTimeString(dateLocale());
     dispatch({ type: ACTIONS.UPDATE_LAST_RUN, payload: lastRunStr });
-    void foregroundService.update({ body: `Last cycle: ${lastRunStr}` });
+    void foregroundService.update({
+        body: interp(rendererTranslator.t('app.autovoteNotificationLastCycle'), { time: lastRunStr }),
+    });
 }
 
 /**
@@ -161,7 +165,7 @@ async function runRendererVotingCycle({
     try {
         const settings = await ipc.getSettings();
         if (!settings.hasToken) {
-            dispatch({ type: ACTIONS.SET_ERROR, payload: 'Not logged in' });
+            dispatch({ type: ACTIONS.SET_ERROR, payload: 'not-logged-in' });
             return false;
         }
 
@@ -172,7 +176,8 @@ async function runRendererVotingCycle({
         }
 
         if (!result?.success) {
-            dispatch({ type: ACTIONS.SET_ERROR, payload: result?.error || 'Voting failed' });
+            void ipc.logRendererWarning(`Voting cycle failed: ${result?.error || 'no reason given'}`);
+            dispatch({ type: ACTIONS.SET_ERROR, payload: result?.error || 'voting-failed' });
             return false;
         }
 
@@ -186,10 +191,8 @@ async function runRendererVotingCycle({
         // list is present so callers fetch fresh.
         return result.challenges ?? true;
     } catch (err) {
-        dispatch({
-            type: ACTIONS.SET_ERROR,
-            payload: errorMessage(err) || 'Voting error',
-        });
+        void ipc.logRendererWarning(`Voting cycle threw: ${errorMessage(err) || err}`);
+        dispatch({ type: ACTIONS.SET_ERROR, payload: 'voting-error' });
         return false;
     }
 }
@@ -202,8 +205,7 @@ async function runRendererVotingCycle({
  * would only be discarded). See deadlineNotifier.ts header.
  */
 function createRendererDeadlineNotifier(): CycleNotifier | null {
-    const isNativePlatform = (globalThis as RendererGlobals).Capacitor?.isNativePlatform?.() === true;
-    const deliver = resolveRendererDelivery(isNativePlatform);
+    const deliver = resolveRendererDelivery(isNativePlatform());
     if (!deliver) return null;
     const shared = {
         getSetting: (key: string) => ipc.getGlobalDefault(key),
@@ -429,7 +431,7 @@ export function AutovoteProvider({
     // would never dedupe): it holds the fired-key Set + re-entrancy guard across
     // cycles. `undefined` = not yet initialized; the stored value is the notifier
     // on Electron or `null` on native Android.
-    const notifierRef = useRef(undefined as CycleNotifier | null | undefined);
+    const notifierRef = useRef<CycleNotifier | null | undefined>(undefined);
     if (notifierRef.current === undefined) {
         notifierRef.current = createRendererDeadlineNotifier();
     }

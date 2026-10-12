@@ -80,7 +80,11 @@ function PhaseSettings({
                         )}
                         <button
                             type="button"
-                            className="btn btn-xs btn-ghost text-error"
+                            className="btn btn-sm btn-ghost text-error"
+                            aria-label={interp(t('app.actionOnItem'), {
+                                action: t('app.sbRemove'),
+                                item: config ? t(config.label) : key,
+                            })}
                             onClick={() => onChange(setIn(current, [key], undefined))}
                         >
                             {t('app.sbRemove')}
@@ -190,6 +194,9 @@ function PhaseEditor({
     const [editingName, setEditingName] = useState(name);
     const rules = phase.rules ?? [];
     const setRules = (next: ScenarioDraftRule[]) => onDraft(setIn(draft, ['phases', name, 'rules'], next));
+    // Every rule repeats the same three buttons: the rule's position makes each one's accessible name unique.
+    const ruleActionLabel = (actionKey: string, index: number) =>
+        interp(t('app.actionOnItem'), { action: t(actionKey), item: interp(t('app.sbRuleN'), { n: index + 1 }) });
     return (
         <section className="rounded-lg border border-base-300 p-3 space-y-3">
             <div className="flex gap-2 items-end">
@@ -211,6 +218,7 @@ function PhaseEditor({
                     type="button"
                     className="btn btn-sm btn-ghost text-error"
                     disabled={phases.length <= 1}
+                    aria-label={interp(t('app.actionOnItem'), { action: t('app.sbRemovePhase'), item: name })}
                     onClick={() => onDraft(removePhase(draft, name))}
                 >
                     {t('app.sbRemovePhase')}
@@ -231,23 +239,26 @@ function PhaseEditor({
                         <div className="flex gap-1">
                             <button
                                 type="button"
-                                className="btn btn-xs btn-ghost"
+                                className="btn btn-sm btn-ghost"
                                 disabled={index === 0}
+                                aria-label={ruleActionLabel('app.sbMoveUp', index)}
                                 onClick={() => setRules(moveItem(rules, index, -1))}
                             >
                                 {t('app.sbMoveUp')}
                             </button>
                             <button
                                 type="button"
-                                className="btn btn-xs btn-ghost"
+                                className="btn btn-sm btn-ghost"
                                 disabled={index === rules.length - 1}
+                                aria-label={ruleActionLabel('app.sbMoveDown', index)}
                                 onClick={() => setRules(moveItem(rules, index, 1))}
                             >
                                 {t('app.sbMoveDown')}
                             </button>
                             <button
                                 type="button"
-                                className="btn btn-xs btn-ghost text-error"
+                                className="btn btn-sm btn-ghost text-error"
+                                aria-label={ruleActionLabel('app.sbRemove', index)}
                                 onClick={() => setRules(rules.filter((_, i) => i !== index))}
                             >
                                 {t('app.sbRemove')}

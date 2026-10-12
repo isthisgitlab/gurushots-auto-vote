@@ -31,6 +31,26 @@ export const errors = {
     fetchFailed: "Couldn't reach GuruShots — retrying automatically.",
     actionInvalidArgs:
         'The action could not run: the challenge or photo id is not valid. Reload the app and try again.',
+    actionFailed:
+        'The action did not finish. GuruShots did not accept it or did not answer. Try again in a moment; if it keeps failing, the logs have the details.',
+    loginFailed:
+        'Login did not work. GuruShots did not accept it or could not be reached. Check your username, password and connection, then try again.',
+    invalidCredentials: 'Login failed. GuruShots did not accept the username or password. Check them and try again.',
+    notLoggedIn: 'You are not logged in. The session has ended or was never started. Log in again to continue.',
+    turboNotEarned: 'Turbo was not earned. The battles ended without a win. Try again later.',
+    turboNoBattles:
+        'There are no battles to play right now. GuruShots has none ready for you. Try again in a few minutes.',
+    turboRunInProgress: 'A turbo run is already in progress for this challenge. Wait for it to finish, then try again.',
+    challengeNoLongerActive:
+        'This challenge is no longer open, so the action was not made. Refresh the list to see the current challenges.',
+    boostFailed: 'The boost was not applied. GuruShots refused it or did not answer. Try again in a moment.',
+    fetchChallengesFailed: 'The challenges could not be loaded. GuruShots did not answer. Try again in a moment.',
+    accountChanged: 'The account changed while the list was loading, so the result was dropped. Open the list again.',
+    accountCheckFailed: 'The account could not be checked. GuruShots did not answer. Try again in a moment.',
+    boundaryBody:
+        'Part of the app stopped working. The details were saved to the logs. Reload the app to continue; if it keeps happening, the logs show what failed.',
+    votingFailed:
+        'The last voting cycle failed. GuruShots did not answer or refused a request. Auto-vote tries again on its next cycle; the logs have the details.',
 };
 // First-run onboarding
 export const onboarding = {
@@ -1248,6 +1268,60 @@ export const app = {
         'Pushes everything the whole way: votes to full exposure throughout, submits photos to every slot, and spends Boost and Turbo.',
     naExhibitionNoTurbo: "Exhibition challenges don't support Turbo.",
     naBoostSinglePhoto: "Single-photo challenges never unlock Boost — these settings won't take effect.",
+    ended: 'Ended',
+    stateUnknown: 'Unknown',
+    stateAvailableMinutes: 'Available ({minutes} min left)',
+    stateLocked: 'Locked',
+    stateFree: 'Free',
+    stateTimer: 'Timer',
+    stateInProgress: 'In progress',
+    stateWon: 'Won',
+    statusError: 'Error',
+    autovoteNotificationPreparing: 'Auto-vote is running — preparing the first cycle',
+    autovoteNotificationLastCycle: 'Last cycle: {time}',
+    actionOnItem: '{action}: {item}',
+    sbRuleN: 'Rule {n}',
+    scenarioIssueNoJson: 'No scenario was given. Paste the scenario file.',
+    scenarioIssueTooLarge: 'The file is larger than {kb} KB.',
+    scenarioIssueNotJson: 'This is not valid JSON.',
+    scenarioIssuePhaseScenario: 'A phase cannot change which scenario is assigned.',
+    scenarioIssueNotPerChallenge: 'This setting cannot be set for a single challenge.',
+    scenarioIssueSetTogether: 'Set {fields} together.',
+    scenarioIssueConflictDefaults: 'These values conflict with the global defaults they work together with.',
+    scenarioIssueNoPhase: 'There is no phase named "{name}".',
+    scenarioIssueDuplicateRuleId: 'The rule id "{id}" is used twice.',
+    scenarioIssueConditionDepth: 'Conditions are nested more than {depth} levels deep.',
+    scenarioIssueMemoryNeverSet: 'The memory slot "{slot}" is never filled by any action.',
+    scenarioIssueControlChars: 'Remove line breaks and other control characters.',
+    scenarioIssueIdentifier: 'Use letters, digits, "-" or "_", starting with a letter (at most 32).',
+    scenarioIssueReserved: 'This name is reserved.',
+    scenarioIssueNameRequired: 'A name is required.',
+    scenarioIssueNameTooLong: 'The name is longer than {max} characters.',
+    scenarioIssueNameChars: "Use letters, digits, spaces and . _ - ' ( ).",
+    scenarioIssueTimeOfDay: 'Use a 24-hour time, HH:MM.',
+    scenarioIssueStateName: 'Use an upper-case state name such as AVAILABLE.',
+    scenarioIssueSetMinMax: 'Set a minimum, a maximum or both.',
+    scenarioIssueMinMax: 'The minimum is larger than the maximum.',
+    scenarioIssueWindowOnly: 'A window only applies to {fields}.',
+    scenarioIssueCompareBool: '{field} is compared with true or false.',
+    scenarioIssueOpEquals: '{field} only supports = and !=.',
+    scenarioIssueCompareNumber: '{field} is compared with a number.',
+    scenarioIssueSameTime: 'The start and the end are the same time.',
+    scenarioIssueWriteMessage: 'Write the message.',
+    scenarioIssueIdChars: 'Use letters, digits, "-" or "_" (at most 40).',
+    scenarioIssueNeedsAction: 'A rule needs at least one action.',
+    scenarioIssuePhaseNeeded: 'A scenario needs at least one phase.',
+    scenarioIssueTooManyPhases: 'A scenario has at most {max} phases.',
+    scenarioIssueMissing: 'This value is required.',
+    scenarioIssueWrongType: 'This value is of the wrong kind.',
+    scenarioIssueUnknownKey: 'This key is not part of the scenario format.',
+    scenarioIssueRange: 'This value is outside the allowed range or length.',
+    scenarioIssueInvalidOption: 'This is not one of the allowed values.',
+    scenarioIssueInvalidFormat: 'This value is not in the expected format.',
+    scenarioIssueGeneric: 'This part of the scenario is not valid.',
+    noticeAcknowledgedVersion: 'Acknowledged Notice Version',
+    noticeAcknowledgedVersionDesc:
+        'Internal — the version of the "unofficial app" notice you acknowledged; the notice is shown again when its text changes materially',
 };
 // Logs page specific
 export const logs = {
@@ -1317,4 +1391,58 @@ export const themes = {
     caramellatte: 'Caramel Latte',
     abyss: 'Abyss',
     silk: 'Silk',
+};
+// notice
+export const notice = {
+    title: 'Before you use this app',
+    unofficial:
+        'GuruShots Auto Vote is an unofficial tool. It is not affiliated with, endorsed by or sponsored by GuruShots.',
+    trademark: 'GuruShots is a trademark of its owner. It is used here only to say which service this app works with.',
+    terms: 'Voting automatically may break the GuruShots terms of use and can lead to your account being suspended. You use this app at your own risk.',
+    updates: 'To check for updates, the app contacts GitHub.',
+    acknowledge: 'I understand',
+    recoveryCorruptWhat: 'Your settings file was damaged, so the app started with default settings.',
+    recoveryCorruptWhy: 'The file could not be read as valid settings. The damaged copy was kept at {path}.',
+    recoveryCorruptNext:
+        'You can save new settings as usual. To get the old values back, repair that copy or read them from it.',
+    recoveryUnreadableWhat: 'Your settings file could not be read, so saving settings is turned off.',
+    recoveryUnreadableWhy:
+        'The app could not open {path}. It may be locked by another program, or its permissions may block access.',
+    recoveryUnreadableNext:
+        'Close other programs that use it, or fix its permissions, then restart the app. Nothing was overwritten.',
+    recoveryMigrationWhat:
+        'Your settings file comes from another version and could not be updated, so saving settings is turned off.',
+    recoveryMigrationWhy: 'The file at {path} could not be converted to the format this version uses.',
+    recoveryMigrationNext:
+        'Restart the app. If this keeps happening, move that file aside to start with default settings; the file is not overwritten.',
+};
+// about
+export const about = {
+    title: 'About and data',
+    licensesDesc: 'The open-source software and data this app includes, with their licenses.',
+    licensesButton: 'Third-party licenses',
+    licensesTitle: 'Third-party licenses',
+    licensesTextLabel: 'Third-party license texts',
+    licensesLoadError:
+        'The license texts could not be loaded. The file with them is missing from this installation or could not be read. Try again; if it keeps failing, reinstall the app.',
+    licensesRetry: 'Try again',
+    dangerTitle: 'Danger zone',
+    deleteDesc: 'Delete everything this app stores on this device. This cannot be undone.',
+    deleteButton: 'Delete all local data…',
+    deleteTitle: 'Delete all local data?',
+    deleteIntro: 'This permanently removes from this device:',
+    deleteLogin: 'your saved login',
+    deleteSettings: 'your settings',
+    deleteProfiles: 'your saved profiles',
+    deleteScenarios: 'your scenarios and their progress',
+    deleteStats: 'your statistics',
+    deleteLogs: 'the logs',
+    deleteBackground: 'the state of the background service',
+    deleteAfter: 'The app restarts afterwards and asks you to log in again. Your GuruShots account is not touched.',
+    deleteConfirm: 'Delete everything',
+    deleteBusy:
+        'A voting pass is running, so nothing was deleted. Stop auto-vote, wait for the pass to end, then try again.',
+    deleteFailed:
+        "Not everything could be deleted. A file or store could not be removed; the details are in the logs. Close other programs that use the app's files, then try again.",
+    deleteDone: 'All local data was deleted. The app restarts now; if it does not, close it and open it again.',
 };

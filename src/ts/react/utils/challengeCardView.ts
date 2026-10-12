@@ -32,6 +32,24 @@ export function getNextLevelInfo(
 }
 
 /**
+ * Whether anything on the card counts down to a second-by-second change at `now`: a turbo cooldown that has yet to
+ * elapse, or a timed boost window with time left (its remaining time is on the card's badge). When neither is
+ * true the card needs no per-second re-render.
+ *
+ * @param challenge - An active challenge.
+ * @param now - Unix seconds
+ */
+export function needsSecondTick(challenge: Challenge, now: number): boolean {
+    const member = (challenge as RankedChallenge).member;
+    const turbo = member?.turbo;
+    const boost = member?.boost;
+    const turboCooldown =
+        turbo?.state === 'TIMER' && typeof turbo.time_to_open === 'number' && turbo.time_to_open > now;
+    const timedBoost = boost?.state === 'AVAILABLE' && finiteOr(boost.timeout, 0) > now;
+    return turboCooldown || timedBoost;
+}
+
+/**
  * Everything the challenge card (detailed and compact) derives from the raw
  * challenge at one `now` tick: stats, alert flags/classes and the action gates.
  * Pure, so the two layouts can never disagree about what a state means.

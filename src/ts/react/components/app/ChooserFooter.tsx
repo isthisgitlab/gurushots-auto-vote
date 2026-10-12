@@ -6,6 +6,7 @@
 
 import { useEffect, useId, useRef, useState } from 'react';
 import { useTranslation } from '@/contexts/TranslationContext';
+import { LoadingSpinner } from '@/components/ui/LoadingSpinner';
 
 import type { ReactNode, RefObject } from 'react';
 import type { ListState, useSavedListReread } from '@/hooks/usePhotoChooser';
@@ -88,7 +89,7 @@ function HoldStatus({
                         if (!retrying) onRetry();
                     }}
                 >
-                    {retrying && <span className="loading loading-spinner loading-xs" />}
+                    {retrying && <LoadingSpinner size="xs" decorative />}
                     {t('app.photoChooserRetry')}
                 </button>
             )}
@@ -170,7 +171,7 @@ function FooterActions({
                 buttonRef={saveRef}
                 onPress={onSave}
             >
-                {saving && <span className="loading loading-spinner loading-xs" />}
+                {saving && <LoadingSpinner size="xs" decorative />}
                 {t('app.photoChooserUse')}
             </HeldButton>
             <HeldButton held={locked} hintId={clearHintId} className="btn-warning" onPress={onClear}>

@@ -20,11 +20,14 @@ import { ChallengeSettingsModal } from '@/components/app/ChallengeSettingsModal'
 import { LogsModal } from '@/components/app/LogsModal';
 import { UpdateDialog } from '@/components/app/UpdateDialog';
 import { WelcomeModal } from '@/components/app/WelcomeModal';
+import { UnofficialNoticeModal } from '@/components/app/UnofficialNoticeModal';
+import { SettingsRecoveryNotice } from '@/components/app/SettingsRecoveryNotice';
 import { PageLoader } from '@/components/ui/LoadingSpinner';
 import { ErrorBoundary } from '@/components/ui/ErrorBoundary';
 import { ScrollToTopButton } from '@/components/ui/ScrollToTopButton';
 import { useDisclosure } from '@/hooks/useDisclosure';
 import { useDocumentTheme } from '@/hooks/useDocumentTheme';
+import { useNoticeGate } from '@/hooks/useNoticeGate';
 import { DEFAULT_TIMEZONE } from '../../settings/uiDefaults';
 import * as ipc from '@/api/ipc';
 import { errorMessage } from '../../errorMessage';
@@ -118,12 +121,16 @@ function AppModals({
     logsModal,
     welcomeOpen,
     onWelcomeClose,
+    noticeOpen,
+    onNoticeAcknowledge,
 }: {
     settingsModal: ReturnType<typeof useDisclosure>;
     challengeSettings: ReturnType<typeof useChallengeSettingsTarget>;
     logsModal: ReturnType<typeof useDisclosure>;
     welcomeOpen: boolean;
     onWelcomeClose: () => Promise<void>;
+    noticeOpen: boolean;
+    onNoticeAcknowledge: () => Promise<void>;
 }) {
     return (
         <>
@@ -154,9 +161,14 @@ function AppModals({
             {/* Update Dialog */}
             <UpdateDialog />
 
-            {/* First-run onboarding */}
+            {/* The unofficial-app notice, shown at the next open after an install or a change to its text */}
             <ErrorBoundary>
-                <WelcomeModal isOpen={welcomeOpen} onClose={onWelcomeClose} />
+                <UnofficialNoticeModal isOpen={noticeOpen} onAcknowledge={() => void onNoticeAcknowledge()} />
+            </ErrorBoundary>
+
+            {/* First-run onboarding — after the notice, never on top of it */}
+            <ErrorBoundary>
+                <WelcomeModal isOpen={welcomeOpen && !noticeOpen} onClose={onWelcomeClose} />
             </ErrorBoundary>
         </>
     );
@@ -177,6 +189,7 @@ function AppContent() {
     // In-app log viewer; the Navbar button is Capacitor-gated.
     const logsModal = useDisclosure();
     const challengeSettings = useChallengeSettingsTarget(challenges);
+    const notice = useNoticeGate(settings, settingsLoading, updateSetting);
     const { welcomeOpen, handleWelcomeClose } = useWelcomeGate(settings, settingsLoading, updateSetting);
 
     useDocumentTheme(settings?.theme);
@@ -242,6 +255,8 @@ function AppContent() {
         <div className="min-h-screen bg-base-200">
             <div className="container mx-auto px-4 py-4 max-w-4xl">
                 <ErrorBoundary>
+                    <SettingsRecoveryNotice />
+
                     {/* Navbar */}
                     <Navbar
                         isMock={isMock}
@@ -255,6 +270,7 @@ function AppContent() {
                         running={autovote.running}
                         status={autovote.status}
                         statusClass={autovote.statusClass}
+                        error={autovote.error}
                         lastRun={autovote.lastRun}
                         cycles={autovote.cycles}
                         onToggle={handleAutovoteToggle}
@@ -294,8 +310,10 @@ function AppContent() {
                         settingsModal={settingsModal}
                         challengeSettings={challengeSettings}
                         logsModal={logsModal}
-                        welcomeOpen={welcomeOpen}
+                        welcomeOpen={welcomeOpen && !notice.pending}
                         onWelcomeClose={handleWelcomeClose}
+                        noticeOpen={notice.open}
+                        onNoticeAcknowledge={notice.acknowledge}
                     />
                 </ErrorBoundary>
             </div>

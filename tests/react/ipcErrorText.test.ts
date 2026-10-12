@@ -1,0 +1,44 @@
+import { ipcErrorText } from '@/api/ipcErrorText';
+
+const t = (key: string) => `[${key}]`;
+
+describe('ipcErrorText', () => {
+    test.each([
+        ['invalid-args', 'errors.actionInvalidArgs'],
+        ['No authentication token found', 'errors.notLoggedIn'],
+        ['No authentication token found. Please login first.', 'errors.notLoggedIn'],
+        ['not-logged-in', 'errors.notLoggedIn'],
+        ['Invalid credentials', 'errors.invalidCredentials'],
+        ['Login failed. Please check your credentials.', 'errors.invalidCredentials'],
+        ['Turbo not earned — try again later', 'errors.turboNotEarned'],
+        ['No battles to play right now', 'errors.turboNoBattles'],
+        ['A turbo run is already in progress for this challenge', 'errors.turboRunInProgress'],
+        ['Challenge no longer active', 'errors.challengeNoLongerActive'],
+        ['Failed to apply boost', 'errors.boostFailed'],
+        ['Failed to fetch challenges', 'errors.fetchChallengesFailed'],
+        ['Could not list challenges', 'errors.fetchChallengesFailed'],
+        ['Could not read your balance right now', 'errors.fetchChallengesFailed'],
+        ['The account changed while listing challenges', 'errors.accountChanged'],
+        ['account-check-failed', 'errors.accountCheckFailed'],
+    ])('words the known failure %j as %s', (error, key) => {
+        expect(ipcErrorText(error, t)).toBe(`[${key}]`);
+    });
+
+    test('anything else — raw exception text, an unlisted handler message, a fallback code — is the generic failure', () => {
+        for (const error of ['ECONNRESET at socket.js:12', 'action-failed', 'action-error', 'Boost failed']) {
+            expect(ipcErrorText(error, t)).toBe('[errors.actionFailed]');
+        }
+    });
+
+    test('a surface with a better generic text names it', () => {
+        expect(ipcErrorText('Bad credentials', t, 'errors.loginFailed')).toBe('[errors.loginFailed]');
+        // A known failure still gets its own text there.
+        expect(ipcErrorText('Invalid credentials', t, 'errors.loginFailed')).toBe('[errors.invalidCredentials]');
+    });
+
+    test('a missing error stays missing', () => {
+        expect(ipcErrorText(null, t)).toBeNull();
+        expect(ipcErrorText(undefined, t)).toBeUndefined();
+        expect(ipcErrorText('', t)).toBe('');
+    });
+});

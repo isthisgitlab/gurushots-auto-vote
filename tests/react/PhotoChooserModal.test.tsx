@@ -534,14 +534,15 @@ describe('failures', () => {
         expect(getLibrary()).toHaveBeenLastCalledWith(7, undefined);
     });
 
-    test('an error carries its own text as a detail; invalid-args is translated', async () => {
+    test('an error is shown as a translated detail, never as raw handler text; invalid-args has its own', async () => {
         getLibrary().mockResolvedValueOnce({ success: false, error: 'Failed to read your photo library' });
         const view = setup();
         const alert = await screen.findByRole('alert');
         // With a detail to point at, "details below" is accurate and no cause is claimed.
         expect(alert.textContent).toContain("Your photos couldn't be loaded (details below). Try again.");
         expect(alert.textContent).not.toMatch(/GuruShots didn't answer|session/);
-        expect(alert.textContent).toContain('Failed to read your photo library');
+        expect(alert.textContent).not.toContain('Failed to read your photo library');
+        expect(alert.textContent).toContain(english('errors.actionFailed'));
         view.unmount();
 
         mockTranslator.t.mockImplementation((key) =>

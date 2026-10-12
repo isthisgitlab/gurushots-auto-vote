@@ -180,7 +180,7 @@ describe('ChallengesProvider + ChallengesSection', () => {
         it('shows a spinner while the first load is pending', () => {
             setHook({ data: [], loading: true });
             renderSection();
-            expect(screen.getByLabelText('Loading')).toBeTruthy();
+            expect(screen.getByLabelText('common.loading')).toBeTruthy();
             expect(screen.queryByText('app.noActiveChallenges')).toBeNull();
         });
 

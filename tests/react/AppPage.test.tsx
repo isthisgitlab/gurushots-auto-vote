@@ -10,6 +10,7 @@
 import { act, fireEvent, render, screen, waitFor } from '@testing-library/preact';
 import { DEFAULT_TIMEZONE } from '../../src/ts/settings/uiDefaults';
 import { invalid } from '../helpers/invalid';
+import { CURRENT_NOTICE_VERSION } from '../../src/ts/noticeVersion';
 
 import type { ComponentChildren } from 'preact';
 import type { Challenge } from '../../src/ts/types/gurushots';
@@ -56,6 +57,7 @@ const mockAutovote = {
     running: false,
     status: 'idle',
     statusClass: 'x',
+    error: null as string | null,
     lastRun: null,
     cycles: 0,
     nextRunAt: null as number | null,
@@ -116,7 +118,9 @@ describe('App page', () => {
         mockAutovote.pendingStartAt = null;
         mockAutovote.cycles = 0;
         originals = Object.fromEntries(API_METHODS.map((m) => [m, window.api[m]]));
-        window.api.getSettings = jest.fn().mockResolvedValue({ onboardingCompleted: true });
+        window.api.getSettings = jest
+            .fn()
+            .mockResolvedValue({ onboardingCompleted: true, noticeAcknowledgedVersion: CURRENT_NOTICE_VERSION });
         window.api.setSetting = jest.fn().mockResolvedValue(undefined);
         (window.api as { logout: WindowApi['logout'] }).logout = jest.fn().mockResolvedValue(undefined);
         window.api.logError = jest.fn().mockResolvedValue(undefined);
@@ -151,6 +155,7 @@ describe('App page', () => {
                 mock: true,
                 timezone: 'Europe/Riga',
                 onboardingCompleted: true,
+                noticeAcknowledgedVersion: CURRENT_NOTICE_VERSION,
             }),
         );
         await renderReady();
@@ -174,7 +179,9 @@ describe('App page', () => {
     });
 
     test('empty settings fall back to defaults and leave the theme untouched', async () => {
-        jest.mocked(window.api.getSettings).mockResolvedValue(invalid({ onboardingCompleted: true }));
+        jest.mocked(window.api.getSettings).mockResolvedValue(
+            invalid({ onboardingCompleted: true, noticeAcknowledgedVersion: CURRENT_NOTICE_VERSION }),
+        );
         await renderReady();
         expect(document.documentElement.getAttribute('data-theme')).toBeNull();
         expect(screen.queryByText('app.mockMode')).toBeNull();
@@ -182,7 +189,9 @@ describe('App page', () => {
     });
 
     test('first run opens the welcome once; closing persists onboardingCompleted', async () => {
-        jest.mocked(window.api.getSettings).mockResolvedValue(invalid({}));
+        jest.mocked(window.api.getSettings).mockResolvedValue(
+            invalid({ noticeAcknowledgedVersion: CURRENT_NOTICE_VERSION }),
+        );
         await renderReady();
         await waitFor(() => expect(mockProps.WelcomeModal.isOpen).toBe(true));
 
@@ -198,7 +207,9 @@ describe('App page', () => {
         [new Error('disk full'), 'Failed to persist onboardingCompleted: disk full'],
         [undefined, 'Failed to persist onboardingCompleted: undefined'],
     ])('a failed welcome persist is logged and does not reopen (%p)', async (err, logged) => {
-        jest.mocked(window.api.getSettings).mockResolvedValue(invalid({}));
+        jest.mocked(window.api.getSettings).mockResolvedValue(
+            invalid({ noticeAcknowledgedVersion: CURRENT_NOTICE_VERSION }),
+        );
         await renderReady();
         await waitFor(() => expect(mockProps.WelcomeModal.isOpen).toBe(true));
         jest.mocked(window.api.setSetting).mockRejectedValue(err);
@@ -211,6 +222,82 @@ describe('App page', () => {
         // so the modal stays closed.
         await waitFor(() => expect(jest.mocked(window.api.getSettings).mock.calls.length).toBeGreaterThan(1));
         expect(mockProps.WelcomeModal.isOpen).toBe(false);
+    });
+
+    describe('the unofficial-app notice', () => {
+        const upgradedWithAutoLogin = (noticeAcknowledgedVersion?: number) =>
+            jest.mocked(window.api.getSettings).mockResolvedValue(
+                invalid({
+                    hasToken: true,
+                    stayLoggedIn: true,
+                    onboardingCompleted: true,
+                    noticeAcknowledgedVersion,
+                }),
+            );
+
+        test('an upgrade with auto-login still shows it, once, and acknowledging persists the version', async () => {
+            upgradedWithAutoLogin(CURRENT_NOTICE_VERSION - 1);
+            const first = await renderReady();
+            expect(screen.getByRole('dialog', { name: 'notice.title' })).toBeTruthy();
+            expect(screen.getByText('notice.unofficial')).toBeTruthy();
+            expect(screen.getByText('notice.updates')).toBeTruthy();
+            // No close button, and Escape does not dismiss it: only the explicit button does.
+            expect(screen.queryByLabelText('common.closeModal')).toBeNull();
+            fireEvent.keyDown(document, { key: 'Escape' });
+            expect(screen.getByRole('dialog', { name: 'notice.title' })).toBeTruthy();
+
+            fireEvent.click(screen.getByRole('button', { name: 'notice.acknowledge' }));
+            await waitFor(() => expect(screen.queryByRole('dialog', { name: 'notice.title' })).toBeNull());
+            expect(window.api.setSetting).toHaveBeenCalledWith('noticeAcknowledgedVersion', CURRENT_NOTICE_VERSION);
+
+            // The next open reads the stored version and does not show it again.
+            first.unmount();
+            upgradedWithAutoLogin(CURRENT_NOTICE_VERSION);
+            await renderReady();
+            expect(screen.queryByRole('dialog', { name: 'notice.title' })).toBeNull();
+        });
+
+        test('a brand-new profile (no stored version) is shown it before the welcome', async () => {
+            jest.mocked(window.api.getSettings).mockResolvedValue(invalid({}));
+            await renderReady();
+            expect(screen.getByRole('dialog', { name: 'notice.title' })).toBeTruthy();
+            expect(mockProps.WelcomeModal.isOpen).toBe(false);
+
+            fireEvent.click(screen.getByRole('button', { name: 'notice.acknowledge' }));
+            await waitFor(() => expect(mockProps.WelcomeModal.isOpen).toBe(true));
+        });
+
+        test('unreadable settings count as not acknowledged', async () => {
+            jest.mocked(window.api.getSettings).mockRejectedValue(new Error('unreadable'));
+            await renderReady();
+            expect(screen.getByRole('dialog', { name: 'notice.title' })).toBeTruthy();
+        });
+
+        test('a failed save with no error message is logged as it came', async () => {
+            upgradedWithAutoLogin(0);
+            await renderReady();
+            jest.mocked(window.api.setSetting).mockRejectedValue(undefined);
+            fireEvent.click(screen.getByRole('button', { name: 'notice.acknowledge' }));
+            await waitFor(() =>
+                expect(window.api.logError).toHaveBeenCalledWith(
+                    'Failed to persist noticeAcknowledgedVersion: undefined',
+                ),
+            );
+        });
+
+        test('a failed save of the acknowledgement is logged and does not bring the notice back', async () => {
+            upgradedWithAutoLogin(0);
+            await renderReady();
+            jest.mocked(window.api.setSetting).mockRejectedValue(new Error('disk full'));
+            fireEvent.click(screen.getByRole('button', { name: 'notice.acknowledge' }));
+            await waitFor(() =>
+                expect(window.api.logError).toHaveBeenCalledWith(
+                    'Failed to persist noticeAcknowledgedVersion: disk full',
+                ),
+            );
+            await waitFor(() => expect(jest.mocked(window.api.getSettings).mock.calls.length).toBeGreaterThan(1));
+            expect(screen.queryByRole('dialog', { name: 'notice.title' })).toBeNull();
+        });
     });
 
     test('logout when idle just logs out', async () => {

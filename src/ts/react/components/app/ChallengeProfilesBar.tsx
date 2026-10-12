@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { useTranslation } from '@/contexts/TranslationContext';
+import { LoadingSpinner } from '@/components/ui/LoadingSpinner';
 import { getIntentByName, intentValuesMatch } from '../../../settings/intentProfiles';
 import * as ipc from '@/api/ipc';
 import { useOnChosenPhotosCleared, withoutChosenPhotos } from '@/api/chosenPhotosCleared';
@@ -252,8 +253,13 @@ export function ChallengeProfilesBar({
                         if (confirming === 'overwrite') disarm();
                     }}
                 />
-                <button className="btn btn-sm btn-latvian" onClick={() => void handleSave()} disabled={busy}>
-                    {busy && <span className="loading loading-spinner loading-xs" />}
+                <button
+                    className="btn btn-sm btn-latvian"
+                    onClick={() => void handleSave()}
+                    disabled={busy}
+                    aria-busy={busy}
+                >
+                    {busy && <LoadingSpinner size="xs" decorative />}
                     {confirming === 'overwrite' ? t('app.confirmOverwrite') : t('app.saveAsProfile')}
                 </button>
             </div>

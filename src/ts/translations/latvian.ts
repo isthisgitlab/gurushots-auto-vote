@@ -31,6 +31,26 @@ export const errors = {
     fetchFailed: 'Neizdevās sazināties ar GuruShots — mēģinām vēlreiz automātiski.',
     actionInvalidArgs:
         'Darbību neizdevās izpildīt: izaicinājuma vai foto identifikators nav derīgs. Pārlādē lietotni un mēģini vēlreiz.',
+    actionFailed:
+        'Darbība netika pabeigta. GuruShots to nepieņēma vai neatbildēja. Mēģini vēlreiz pēc brīža; ja tas atkārtojas, sīkāka informācija ir žurnālos.',
+    loginFailed:
+        'Pieteikšanās neizdevās. GuruShots to nepieņēma vai nebija sasniedzams. Pārbaudi lietotājvārdu, paroli un savienojumu un mēģini vēlreiz.',
+    invalidCredentials:
+        'Pieteikšanās neizdevās. GuruShots nepieņēma lietotājvārdu vai paroli. Pārbaudi tos un mēģini vēlreiz.',
+    notLoggedIn: 'Tu neesi pieteicies. Sesija ir beigusies vai nav sākta. Piesakies vēlreiz, lai turpinātu.',
+    turboNotEarned: 'Turbo netika nopelnīts. Cīņas beidzās bez uzvaras. Mēģini vēlreiz vēlāk.',
+    turboNoBattles: 'Šobrīd nav cīņu, ko spēlēt. GuruShots nav sagatavojis nevienu. Mēģini vēlreiz pēc dažām minūtēm.',
+    turboRunInProgress: 'Šajā izaicinājumā Turbo spēle jau notiek. Pagaidi, kamēr tā beidzas, un mēģini vēlreiz.',
+    challengeNoLongerActive:
+        'Šis izaicinājums vairs nav atvērts, tāpēc darbība netika veikta. Atsvaidzini sarakstu, lai redzētu pašreizējos izaicinājumus.',
+    boostFailed: 'Boost netika piemērots. GuruShots to noraidīja vai neatbildēja. Mēģini vēlreiz pēc brīža.',
+    fetchChallengesFailed: 'Izaicinājumus neizdevās ielādēt. GuruShots neatbildēja. Mēģini vēlreiz pēc brīža.',
+    accountChanged: 'Saraksta ielādes laikā mainījās konts, tāpēc rezultāts tika atmests. Atver sarakstu vēlreiz.',
+    accountCheckFailed: 'Kontu neizdevās pārbaudīt. GuruShots neatbildēja. Mēģini vēlreiz pēc brīža.',
+    boundaryBody:
+        'Daļa lietotnes pārstāja darboties. Informācija ir saglabāta žurnālos. Pārlādē lietotni, lai turpinātu; ja tas atkārtojas, žurnālos redzams, kas neizdevās.',
+    votingFailed:
+        'Pēdējais balsošanas cikls neizdevās. GuruShots neatbildēja vai noraidīja pieprasījumu. Automātiskā balsošana mēģinās vēlreiz nākamajā ciklā; sīkāka informācija ir žurnālos.',
 };
 // First-run onboarding
 export const onboarding = {
@@ -1270,6 +1290,61 @@ export const app = {
     intentMaxExposure: 'Maksimāla redzamība',
     intentMaxExposureDesc:
         'Visu laiku ar pilnu jaudu: balso līdz pilnai redzamībai, iesniedz foto visās foto vietās un izmanto Boost un Turbo.',
+    ended: 'Beidzies',
+    stateUnknown: 'Nezināms',
+    stateAvailableMinutes: 'Pieejams (atlikušas {minutes} min)',
+    stateLocked: 'Slēgts',
+    stateFree: 'Bezmaksas',
+    stateTimer: 'Gaidīšana',
+    stateInProgress: 'Notiek',
+    stateWon: 'Laimēts',
+    statusError: 'Kļūda',
+    autovoteNotificationPreparing: 'Automātiskā balsošana darbojas — sagatavo pirmo ciklu',
+    autovoteNotificationLastCycle: 'Pēdējais cikls: {time}',
+    actionOnItem: '{action}: {item}',
+    sbRuleN: '{n}. likums',
+    scenarioIssueNoJson: 'Scenārijs nav ievadīts. Ielīmē scenārija failu.',
+    scenarioIssueTooLarge: 'Fails ir lielāks par {kb} KB.',
+    scenarioIssueNotJson: 'Šis nav derīgs JSON.',
+    scenarioIssuePhaseScenario: 'Fāze nevar mainīt, kurš scenārijs ir piešķirts.',
+    scenarioIssueNotPerChallenge: 'Šo uzstādījumu nevar iestatīt vienam izaicinājumam.',
+    scenarioIssueSetTogether: 'Uzstādi {fields} kopā.',
+    scenarioIssueConflictDefaults:
+        'Šīs vērtības ir pretrunā ar globālajiem noklusējumiem, ar kuriem tās darbojas kopā.',
+    scenarioIssueNoPhase: 'Nav fāzes ar nosaukumu „{name}”.',
+    scenarioIssueDuplicateRuleId: 'Likuma identifikators „{id}” ir izmantots divreiz.',
+    scenarioIssueConditionDepth: 'Nosacījumi ir ieklāti dziļāk par {depth} līmeņiem.',
+    scenarioIssueMemoryNeverSet: 'Atmiņas vieta „{slot}” netiek aizpildīta ne ar vienu darbību.',
+    scenarioIssueControlChars: 'Noņem rindu pārtraukumus un citas vadības rakstzīmes.',
+    scenarioIssueIdentifier: 'Lieto burtus, ciparus, „-” vai „_”, sākot ar burtu (ne vairāk kā 32 rakstzīmes).',
+    scenarioIssueReserved: 'Šis nosaukums ir rezervēts.',
+    scenarioIssueNameRequired: 'Nosaukums ir obligāts.',
+    scenarioIssueNameTooLong: 'Nosaukums ir garāks par {max} rakstzīmēm.',
+    scenarioIssueNameChars: "Lieto burtus, ciparus, atstarpes un . _ - ' ( ).",
+    scenarioIssueTimeOfDay: 'Lieto 24 stundu laiku formātā HH:MM.',
+    scenarioIssueStateName: 'Lieto stāvokļa nosaukumu ar lielajiem burtiem, piemēram, AVAILABLE.',
+    scenarioIssueSetMinMax: 'Norādi minimumu, maksimumu vai abus.',
+    scenarioIssueMinMax: 'Minimums ir lielāks par maksimumu.',
+    scenarioIssueWindowOnly: 'Logs attiecas tikai uz {fields}.',
+    scenarioIssueCompareBool: 'Lauku {field} salīdzina ar true vai false.',
+    scenarioIssueOpEquals: 'Lauks {field} atbalsta tikai = un !=.',
+    scenarioIssueCompareNumber: 'Lauku {field} salīdzina ar skaitli.',
+    scenarioIssueSameTime: 'Sākuma un beigu laiks ir vienāds.',
+    scenarioIssueWriteMessage: 'Uzraksti ziņojumu.',
+    scenarioIssueIdChars: 'Lieto burtus, ciparus, „-” vai „_” (ne vairāk kā 40 rakstzīmes).',
+    scenarioIssueNeedsAction: 'Likumam ir vajadzīga vismaz viena darbība.',
+    scenarioIssuePhaseNeeded: 'Scenārijam ir vajadzīga vismaz viena fāze.',
+    scenarioIssueTooManyPhases: 'Scenārijā var būt ne vairāk kā {max} fāzes.',
+    scenarioIssueMissing: 'Šī vērtība ir obligāta.',
+    scenarioIssueWrongType: 'Šīs vērtības veids nav pareizs.',
+    scenarioIssueUnknownKey: 'Šī atslēga nav daļa no scenārija formāta.',
+    scenarioIssueRange: 'Šī vērtība ir ārpus atļautā diapazona vai garuma.',
+    scenarioIssueInvalidOption: 'Šī nav neviena no atļautajām vērtībām.',
+    scenarioIssueInvalidFormat: 'Šīs vērtības formāts nav pareizs.',
+    scenarioIssueGeneric: 'Šī scenārija daļa nav derīga.',
+    noticeAcknowledgedVersion: 'Apstiprinātā paziņojuma versija',
+    noticeAcknowledgedVersionDesc:
+        'Iekšējs — tā paziņojuma versija, ko apstiprināji (lietotne nav saistīta ar GuruShots); paziņojums tiek rādīts vēlreiz, ja tā teksts būtiski mainās',
 };
 // Logs page specific
 export const logs = {
@@ -1339,4 +1414,62 @@ export const themes = {
     caramellatte: 'Karameļu latte',
     abyss: 'Bezdibenis',
     silk: 'Zīds',
+};
+// notice
+export const notice = {
+    title: 'Pirms lieto lietotni',
+    unofficial:
+        'Šī nav oficiāla GuruShots lietotne. GuruShots Auto Vote ir citu izstrādāts rīks, kas nav saistīts ar GuruShots, un GuruShots to nav apstiprinājis vai atbalstījis.',
+    trademark:
+        'GuruShots ir tā īpašnieka preču zīme. Tā šeit lietota tikai tāpēc, lai norādītu, ar kuru pakalpojumu šī lietotne strādā.',
+    terms: 'Automātiska balsošana var pārkāpt GuruShots lietošanas noteikumus un var novest pie tava konta apturēšanas. Lietotni lieto uz savu atbildību.',
+    updates: 'Lai pārbaudītu atjauninājumus, lietotne sazinās ar GitHub.',
+    acknowledge: 'Sapratu',
+    recoveryCorruptWhat:
+        'Tavs uzstādījumu fails bija bojāts, tāpēc lietotne sāka darbu ar noklusētajiem uzstādījumiem.',
+    recoveryCorruptWhy: 'Failu neizdevās nolasīt kā derīgus uzstādījumus. Bojātā kopija ir saglabāta šeit: {path}.',
+    recoveryCorruptNext:
+        'Jaunus uzstādījumus vari saglabāt kā parasti. Lai atgūtu vecās vērtības, salabo šo kopiju vai nolasi tās no tās.',
+    recoveryUnreadableWhat: 'Tavu uzstādījumu failu neizdevās nolasīt, tāpēc uzstādījumu saglabāšana ir izslēgta.',
+    recoveryUnreadableWhy:
+        'Lietotne nevarēja atvērt failu {path}. Iespējams, to bloķē cita programma vai piekļuvi liedz atļaujas.',
+    recoveryUnreadableNext:
+        'Aizver citas programmas, kas to izmanto, vai salabo atļaujas un pēc tam restartē lietotni. Nekas netika pārrakstīts.',
+    recoveryMigrationWhat:
+        'Tavs uzstādījumu fails ir no citas versijas, un to neizdevās atjaunināt, tāpēc uzstādījumu saglabāšana ir izslēgta.',
+    recoveryMigrationWhy: 'Failu {path} neizdevās pārveidot formātā, ko izmanto šī versija.',
+    recoveryMigrationNext:
+        'Restartē lietotni. Ja tas atkārtojas, pārvieto šo failu citur, lai sāktu ar noklusētajiem uzstādījumiem; fails netiek pārrakstīts.',
+};
+// about
+export const about = {
+    title: 'Par lietotni un datiem',
+    licensesDesc: 'Atvērtā koda programmatūra un dati, kas iekļauti šajā lietotnē, ar to licencēm.',
+    licensesButton: 'Trešo pušu licences',
+    licensesTitle: 'Trešo pušu licences',
+    licensesTextLabel: 'Trešo pušu licenču teksti',
+    licensesLoadError:
+        'Licenču tekstus neizdevās ielādēt. Fails ar tiem trūkst šajā instalācijā vai nav nolasāms. Mēģini vēlreiz; ja tas atkārtojas, pārinstalē lietotni.',
+    licensesRetry: 'Mēģināt vēlreiz',
+    dangerTitle: 'Bīstamā zona',
+    deleteDesc: 'Dzēst visu, ko lietotne glabā šajā ierīcē. To nevar atsaukt.',
+    deleteButton: 'Dzēst visus vietējos datus…',
+    deleteTitle: 'Dzēst visus vietējos datus?',
+    deleteIntro: 'Tiks neatgriezeniski dzēsts šajā ierīcē:',
+    deleteLogin: 'saglabātā pieteikšanās',
+    deleteSettings: 'uzstādījumi',
+    deleteProfiles: 'saglabātie profili',
+    deleteScenarios: 'scenāriji un to norise',
+    deleteStats: 'statistika',
+    deleteLogs: 'žurnāli',
+    deleteBackground: 'fona pakalpojuma stāvoklis',
+    deleteAfter:
+        'Pēc tam lietotne tiek palaista no jauna un lūdz pieteikties vēlreiz. Tavs GuruShots konts netiek skarts.',
+    deleteConfirm: 'Dzēst visu',
+    deleteBusy:
+        'Notiek balsošanas cikls, tāpēc nekas netika dzēsts. Aptur automātisko balsošanu, pagaidi, kamēr cikls beidzas, un mēģini vēlreiz.',
+    deleteFailed:
+        'Ne viss tika izdzēsts. Kādu failu vai krātuvi neizdevās noņemt; sīkāka informācija ir žurnālos. Aizver citas programmas, kas izmanto lietotnes failus, un mēģini vēlreiz.',
+    deleteDone:
+        'Visi vietējie dati ir dzēsti. Lietotne tūlīt tiks palaista no jauna. Ja tas nenotiek, aizver to un atver vēlreiz.',
 };

@@ -32,7 +32,7 @@ export function PulseDot({
             aria-hidden="true"
             data-testid={`pulse-dot-${variant}`}
         >
-            {pulse && <span className={`status ${size} ${colour} animate-ping`} />}
+            {pulse && <span className={`status ${size} ${colour} motion-safe:animate-ping`} />}
             <span className={`status ${size} ${colour}`} />
         </span>
     );

@@ -1,10 +1,12 @@
 import { useTranslation } from '@/contexts/TranslationContext';
 import { useTurbo } from '@/api/useTurbo';
 import { useFillChallenge } from '@/api/useFillChallenge';
-import { useAutoClear } from '@/hooks/useAutoClear';
 import { ipcErrorText } from '@/api/ipcErrorText';
 import { StrokeIcon, ICON_PATHS } from '@/components/ui/StrokeIcon';
 import { ActionButton } from '@/components/ui/ActionButton';
+import { InlineError } from '@/components/ui/InlineError';
+import { BusyContent } from '@/components/ui/LoadingSpinner';
+
 import { VoteButton } from './VoteButton';
 import { RunButton } from './RunButton';
 import { CurrencyCellButton } from './CurrencyActionButton';
@@ -17,9 +19,6 @@ import type { ChallengeCardView } from './ChallengeCard';
  * between its layouts.
  */
 export type ChallengeCardActionSet = ReturnType<typeof useChallengeCardActions>;
-
-const TURBO_ERROR_DISPLAY_MS = 5000;
-const FILL_ERROR_DISPLAY_MS = 5000;
 
 /**
  * "Earn turbo" mini-game button (detailed turbo cell, compact action row).
@@ -43,8 +42,11 @@ function EarnTurboButton({
             className="mt-1"
             onClick={() => void onPlay()}
             disabled={playingTurbo}
+            aria-busy={playingTurbo}
         >
-            {playingTurbo ? <span className="loading loading-spinner loading-xs" /> : <>🎯 {label}</>}
+            <BusyContent busy={playingTurbo} label={label}>
+                🎯 {label}
+            </BusyContent>
         </ActionButton>
     );
 }
@@ -67,15 +69,29 @@ export function FillButtons({
     onFill: (mode: 'one' | 'all') => Promise<void>;
     icon?: string;
 }) {
-    const spinner = <span className="loading loading-spinner loading-xs" />;
     return (
         <>
-            <ActionButton variant="info" error={fillError} onClick={() => void onFill('one')} disabled={filling}>
-                {filling ? spinner : `${icon}+1`}
+            <ActionButton
+                variant="info"
+                error={fillError}
+                onClick={() => void onFill('one')}
+                disabled={filling}
+                aria-busy={filling}
+            >
+                <BusyContent busy={filling} label="+1">
+                    {`${icon}+1`}
+                </BusyContent>
             </ActionButton>
             {slotsRemaining > 1 && (
-                <button className="btn btn-sm btn-warning" onClick={() => void onFill('all')} disabled={filling}>
-                    {filling ? spinner : `${icon}+${slotsRemaining}`}
+                <button
+                    className="btn btn-sm btn-warning"
+                    onClick={() => void onFill('all')}
+                    disabled={filling}
+                    aria-busy={filling}
+                >
+                    <BusyContent busy={filling} label={`+${slotsRemaining}`}>
+                        {`${icon}+${slotsRemaining}`}
+                    </BusyContent>
                 </button>
             )}
         </>
@@ -120,8 +136,6 @@ export function useChallengeCardActions({
     const { playAutoTurbo, loading: playingTurbo, error: turboFailure, clearError: clearTurboError } = useTurbo();
     const { fillNow, loading: filling, error: fillFailure, clearError: clearFillError } = useFillChallenge();
 
-    useAutoClear(turboFailure, clearTurboError, TURBO_ERROR_DISPLAY_MS);
-    useAutoClear(fillFailure, clearFillError, FILL_ERROR_DISPLAY_MS);
     const turboError = ipcErrorText(turboFailure, t);
     const fillError = ipcErrorText(fillFailure, t);
 
@@ -138,6 +152,8 @@ export function useChallengeCardActions({
     return {
         turboError,
         fillError,
+        clearTurboError,
+        clearFillError,
         voteButton: view.showVoteButton && (
             <VoteButton challengeId={challenge.id} challengeTitle={challenge.title} onVoteComplete={onVoteComplete} />
         ),
@@ -204,8 +220,10 @@ export function buildCompactActionRow({
                     {keyUnlockButton}
                     {settingsButton}
                 </div>
-                {actions.turboError && <div className="text-error text-xs">{actions.turboError}</div>}
-                {actions.fillError && <div className="text-error text-xs">{actions.fillError}</div>}
+                {actions.turboError && (
+                    <InlineError onDismiss={actions.clearTurboError}>{actions.turboError}</InlineError>
+                )}
+                {actions.fillError && <InlineError onDismiss={actions.clearFillError}>{actions.fillError}</InlineError>}
             </div>
         )
     );

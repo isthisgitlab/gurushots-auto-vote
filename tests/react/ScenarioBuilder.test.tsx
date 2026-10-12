@@ -128,7 +128,7 @@ describe('phases', () => {
         fireEvent.change(names[0], { target: { value: 'end' } });
         fireEvent.focusOut(names[0]);
         expect(names[0].value).toBe('main');
-        fireEvent.click(screen.getAllByRole('button', { name: 'app.sbRemovePhase' })[2]);
+        fireEvent.click(screen.getAllByRole('button', { name: /^app\.sbRemovePhase: / })[2]);
         const draft = await saveDraft();
         expect(Object.keys(draft.phases)).toEqual(['main', 'end']);
         expect(draft.phases.main.rules[0].do[0]).toEqual({ type: 'goto', phase: 'end' });
@@ -136,7 +136,7 @@ describe('phases', () => {
 
     test('the only phase cannot be removed', async () => {
         await renderBuilder({ initial: { ...doc(), phases: { main: {} } } });
-        expect(screen.getByRole<HTMLButtonElement>('button', { name: 'app.sbRemovePhase' }).disabled).toBe(true);
+        expect(screen.getByRole<HTMLButtonElement>('button', { name: 'app.sbRemovePhase: main' }).disabled).toBe(true);
         expect(screen.getByText('app.sbNoSettings')).toBeTruthy();
     });
 
@@ -153,7 +153,7 @@ describe('phases', () => {
         fireEvent.change(document.querySelector('#sb-setting-exposure')!, { target: { value: '12' } });
         // unknownKey (not in the schema) shows its key and only a remove button.
         expect(screen.getByText('unknownKey')).toBeTruthy();
-        fireEvent.click(screen.getAllByRole('button', { name: 'app.sbRemove' })[1]);
+        fireEvent.click(screen.getByRole('button', { name: 'app.sbRemove: unknownKey' }));
         const draft = await saveDraft();
         expect(draft.phases.main.settings).toEqual({ exposure: 12, autoFill: false });
     });
@@ -187,7 +187,10 @@ describe('rules', () => {
         // A rule's own controls come first in its card, before its condition and action lists.
         const ruleCards = () => [...document.querySelectorAll<HTMLElement>('section .bg-base-100')];
         const ruleButton = (index: number, name: string) =>
-            within(ruleCards()[index]).getAllByRole<HTMLButtonElement>('button', { name })[0];
+            // Named by the action and the rule's place: "Move up: Rule 2".
+            within(ruleCards()[index]).getAllByRole<HTMLButtonElement>('button', {
+                name: new RegExp(`^${name.replace('.', '\\.')}: Rule ${index + 1}\$`),
+            })[0];
         const labels = screen.getAllByLabelText('app.sbRuleLabel');
         fireEvent.change(labels[0], { target: { value: '' } });
         fireEvent.change(labels[1], { target: { value: 'Second' } });
@@ -332,7 +335,11 @@ describe('save', () => {
         await renderBuilder();
         fireEvent.change(screen.getByLabelText('app.sbName'), { target: { value: 'New' } });
         click('app.sbSave');
-        expect((await screen.findByRole('alert')).textContent).toContain('No phase');
+        // The validator's English message is worded in the UI language; its path stays.
+        const alert = await screen.findByRole('alert');
+        expect(alert.textContent).toContain('start');
+        expect(alert.textContent).not.toContain('No phase');
+        expect(alert.textContent).toContain('app.scenarioIssueGeneric');
         expect(window.api.renameScenario).not.toHaveBeenCalled();
         expect(window.api.saveScenario).not.toHaveBeenCalled();
     });
@@ -345,7 +352,12 @@ describe('save', () => {
         await renderBuilder();
         fireEvent.change(screen.getByLabelText('app.sbName'), { target: { value: 'New' } });
         click('app.sbSave');
-        expect((await screen.findByRole('alert')).textContent).toContain('disk full');
+        const alert = await screen.findByRole('alert');
+        expect(alert.textContent).toContain('app.scenarioIssueGeneric');
+        expect(alert.textContent).not.toContain('disk full');
+        await waitFor(() =>
+            expect(window.api.logDebug).toHaveBeenCalledWith('Scenario issue without wording at "": disk full'),
+        );
         click('app.sbSave');
         await waitFor(() => expect(onSaved).toHaveBeenCalled());
         expect(window.api.renameScenario).toHaveBeenCalledTimes(1);
@@ -364,7 +376,7 @@ describe('save', () => {
         await renderBuilder();
         fireEvent.change(screen.getByLabelText('app.sbName'), { target: { value: 'Other' } });
         click('app.sbSave');
-        expect((await screen.findByRole('alert')).textContent).toContain('taken');
+        expect((await screen.findByRole('alert')).textContent).toContain('app.scenarioIssueGeneric');
         expect(window.api.saveScenario).not.toHaveBeenCalled();
         expect(saved).toBeNull();
     });

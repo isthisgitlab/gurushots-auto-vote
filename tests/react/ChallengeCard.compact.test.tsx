@@ -89,7 +89,7 @@ const makeChallenge = () =>
 
 const renderCard = (
     challenge = makeChallenge(),
-    timeRemaining = '2h 30m',
+    timeRemaining: Parameters<typeof ChallengeCard>[0]['timeRemaining'] = '2h 30m',
     props: Partial<Parameters<typeof ChallengeCard>[0]> = {},
 ) =>
     render(
@@ -130,8 +130,9 @@ describe('compact ChallengeCard tile', () => {
     });
 
     test('an ended countdown is shown in red, a running one in green', () => {
-        const { unmount } = renderCard(makeChallenge(), 'Ended');
-        expect(screen.getByText('Ended').className).toContain('text-error');
+        // null is the countdown of a challenge that has ended; the card words it in the UI's language.
+        const { unmount } = renderCard(makeChallenge(), null);
+        expect(screen.getByText('app.ended').className).toContain('text-error');
         unmount();
         renderCard();
         expect(screen.getByText('2h 30m').className).toContain('text-success');
@@ -241,12 +242,21 @@ describe('compact ChallengeCard tile with compactActions', () => {
         expect(screen.getByText(/app\.currencyFillExposure$/)).toBeTruthy();
     });
 
-    test('shows turbo and submit errors under the row', () => {
+    test('shows turbo and submit errors under the row, announced, translated and dismissable', () => {
         mockTurbo.error = 'turbo failed';
         mockFill.error = 'submit failed';
         renderWithActions();
-        expect(screen.getByText('turbo failed')).toBeTruthy();
-        expect(screen.getByText('submit failed')).toBeTruthy();
+        // Neither raw text reaches the user: unlisted failures read as the generic translated one.
+        expect(screen.queryByText('turbo failed')).toBeNull();
+        expect(screen.queryByText('submit failed')).toBeNull();
+        expect(screen.getAllByText('errors.actionFailed')).toHaveLength(2);
+        expect(screen.getAllByRole('alert')).toHaveLength(2);
+
+        const [dismissTurbo, dismissFill] = screen.getAllByRole('button', { name: 'errors.dismiss' });
+        fireEvent.click(dismissTurbo);
+        fireEvent.click(dismissFill);
+        expect(mockTurbo.clearError).toHaveBeenCalledTimes(1);
+        expect(mockFill.clearError).toHaveBeenCalledTimes(1);
     });
 
     test('shows the translated text for an invalid-args refusal, not the machine code', () => {

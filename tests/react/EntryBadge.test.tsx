@@ -5,8 +5,8 @@
  *     already turbo'd hides BOTH per-entry buttons (isEntryActioned).
  *   - boostAvailable / turboAvailable independently gate their buttons
  *     even when the entry isn't actioned.
- *   - The 5-second error auto-clear (useEffect + setTimeout) calls
- *     clearError so a stuck red button doesn't trap the user.
+ *   - A failed action's message is announced (role="alert") and stays until
+ *     it is dismissed or the next action starts.
  *   - The in-flight loading state disables the button and renders the
  *     spinner instead of the icon.
  *
@@ -15,7 +15,7 @@
  * them in the factory closure.
  */
 
-import { act, render, screen } from './helpers/test-utils';
+import { act, fireEvent, render, screen } from './helpers/test-utils';
 import { EntryBadge } from '@/components/app/EntryBadge';
 
 const mockBoostState = {
@@ -177,7 +177,7 @@ describe('EntryBadge — loading state', () => {
     });
 });
 
-describe('EntryBadge — error auto-clear (5s timer)', () => {
+describe('EntryBadge — a failed action stays until dismissed', () => {
     beforeEach(() => {
         jest.useFakeTimers();
     });
@@ -186,64 +186,42 @@ describe('EntryBadge — error auto-clear (5s timer)', () => {
         jest.useRealTimers();
     });
 
-    test('boost error triggers clearBoostError after 5 seconds', () => {
+    const renderBadge = () =>
+        render(
+            <EntryBadge
+                {...noCallbacks}
+                entry={baseEntry()}
+                challengeId={777}
+                boostAvailable={true}
+                turboAvailable={true}
+            />,
+        );
+
+    test('the error is announced and is not cleared by a timer', () => {
         mockBoostState.error = 'Boost failed';
-        render(
-            <EntryBadge
-                {...noCallbacks}
-                entry={baseEntry()}
-                challengeId={777}
-                boostAvailable={true}
-                turboAvailable={false}
-            />,
-        );
-        expect(mockBoostState.clearError).not.toHaveBeenCalled();
+        renderBadge();
+        expect(screen.getByRole('alert')).toBeTruthy();
 
         act(() => {
-            jest.advanceTimersByTime(4999);
-        });
-        expect(mockBoostState.clearError).not.toHaveBeenCalled();
-
-        act(() => {
-            jest.advanceTimersByTime(1);
-        });
-        expect(mockBoostState.clearError).toHaveBeenCalledTimes(1);
-    });
-
-    test('turbo error triggers clearTurboError after 5 seconds', () => {
-        mockTurboState.error = 'Turbo failed';
-        render(
-            <EntryBadge
-                {...noCallbacks}
-                entry={baseEntry()}
-                challengeId={777}
-                boostAvailable={false}
-                turboAvailable={true}
-            />,
-        );
-        act(() => {
-            jest.advanceTimersByTime(5000);
-        });
-        expect(mockTurboState.clearError).toHaveBeenCalledTimes(1);
-    });
-
-    test('no timer scheduled when there is no error', () => {
-        // No error → useEffect early-returns; nothing should happen even
-        // after a long advance.
-        render(
-            <EntryBadge
-                {...noCallbacks}
-                entry={baseEntry()}
-                challengeId={777}
-                boostAvailable={true}
-                turboAvailable={true}
-            />,
-        );
-        act(() => {
-            jest.advanceTimersByTime(10_000);
+            jest.advanceTimersByTime(60_000);
         });
         expect(mockBoostState.clearError).not.toHaveBeenCalled();
         expect(mockTurboState.clearError).not.toHaveBeenCalled();
+        expect(screen.getByRole('alert')).toBeTruthy();
+    });
+
+    test('Dismiss clears both the boost and the turbo error', () => {
+        mockTurboState.error = 'Turbo failed';
+        renderBadge();
+        fireEvent.click(screen.getByRole('button', { name: 'errors.dismiss' }));
+        expect(mockBoostState.clearError).toHaveBeenCalledTimes(1);
+        expect(mockTurboState.clearError).toHaveBeenCalledTimes(1);
+    });
+
+    test('no alert and no dismiss button without an error', () => {
+        renderBadge();
+        expect(screen.queryByRole('alert')).toBeNull();
+        expect(screen.queryByRole('button', { name: 'errors.dismiss' })).toBeNull();
     });
 });
 
@@ -259,10 +237,18 @@ describe('EntryBadge — error text', () => {
             />,
         );
 
-    test('shows a handler failure message as-is', () => {
-        mockBoostState.error = 'Boost failed';
+    test('shows a known handler failure translated, never the English handler text', () => {
+        mockBoostState.error = 'Failed to apply boost';
         renderBadge();
-        expect(screen.getByText('Boost failed')).toBeTruthy();
+        expect(screen.queryByText('Failed to apply boost')).toBeNull();
+        expect(screen.getByText('errors.boostFailed')).toBeTruthy();
+    });
+
+    test('an unlisted failure reads as the generic translated failure', () => {
+        mockBoostState.error = 'ECONNRESET at socket.js:12';
+        renderBadge();
+        expect(screen.queryByText(/ECONNRESET/)).toBeNull();
+        expect(screen.getByText('errors.actionFailed')).toBeTruthy();
     });
 
     test('shows translated text for the invalid-args machine code', () => {
@@ -285,7 +271,7 @@ describe('EntryBadge — error styling on button', () => {
                 turboAvailable={false}
             />,
         );
-        const button = screen.getByRole('button');
+        const button = screen.getByRole('button', { name: /🚀/ });
         expect(button.className).toMatch(/btn-error/);
         expect(button.className).not.toMatch(/btn-success/);
     });

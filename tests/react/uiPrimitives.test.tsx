@@ -4,7 +4,8 @@
  * focus-trap edges of Modal, and ErrorBoundary's odd-error handling.
  */
 import { fireEvent, render, screen, waitFor } from './helpers/test-utils';
-import { LoadingSpinner, PageLoader, InlineLoader } from '@/components/ui/LoadingSpinner';
+import { LoadingSpinner, PageLoader, InlineLoader, BusyContent } from '@/components/ui/LoadingSpinner';
+import { LEVEL_BADGE_CLASS } from '@/utils/levelBadge';
 import { PulseDot } from '@/components/ui/PulseDot';
 import { StatusBadge, ConnectionBadge } from '@/components/ui/StatusBadge';
 import { Modal, ModalActions } from '@/components/ui/Modal';
@@ -31,7 +32,22 @@ describe('LoadingSpinner', () => {
         const { container } = render(<LoadingSpinner size={invalid('huge')} className="ml-2" />);
         const span = container.querySelector('span')!;
         expect(span.className).toBe('loading loading-spinner loading-md ml-2');
-        expect(span.getAttribute('aria-label')).toBe('Loading');
+        expect(span.getAttribute('role')).toBe('status');
+        expect(span.getAttribute('aria-label')).toBe('common.loading');
+    });
+
+    test('a decorative spinner is hidden from assistive tech and has no role', () => {
+        const { container } = render(<LoadingSpinner size="xs" decorative />);
+        const span = container.querySelector('span')!;
+        expect(span.getAttribute('aria-hidden')).toBe('true');
+        expect(span.hasAttribute('role')).toBe(false);
+        expect(span.hasAttribute('aria-label')).toBe(false);
+    });
+
+    test('PageLoader with text hides its spinner so the caption is announced once', () => {
+        const { container } = render(<PageLoader text="Loading app" />);
+        expect(container.querySelector('.loading')!.getAttribute('aria-hidden')).toBe('true');
+        expect(screen.getByRole('status').textContent).toBe('Loading app');
     });
 
     test('PageLoader renders a large spinner with optional text', () => {
@@ -49,13 +65,32 @@ describe('LoadingSpinner', () => {
     });
 });
 
+describe('BusyContent', () => {
+    test('idle shows the children, or the label when there are none', () => {
+        const { container, rerender } = render(<BusyContent busy={false} label="Boost" />);
+        expect(container.textContent).toBe('Boost');
+        rerender(
+            <BusyContent busy={false} label="Boost">
+                🚀 Boost
+            </BusyContent>,
+        );
+        expect(container.textContent).toBe('🚀 Boost');
+    });
+
+    test('busy keeps the label for assistive tech behind a decorative spinner', () => {
+        const { container } = render(<BusyContent busy label="Boost" />);
+        expect(container.querySelector('.loading')!.getAttribute('aria-hidden')).toBe('true');
+        expect(container.querySelector('.sr-only')!.textContent).toBe('Boost');
+    });
+});
+
 describe('PulseDot', () => {
     test('defaults to a pinging info dot of medium size', () => {
         const { container } = render(<PulseDot />);
         expect(container.querySelector('[data-testid="pulse-dot-info"]')).not.toBeNull();
         const dots = container.querySelectorAll('.status');
         expect(dots).toHaveLength(2);
-        expect(dots[0].className).toBe('status status-md status-info animate-ping');
+        expect(dots[0].className).toBe('status status-md status-info motion-safe:animate-ping');
     });
 
     test('an unknown variant falls back to the info colour; pulse=false drops the halo', () => {
@@ -78,7 +113,7 @@ describe('StatusBadge', () => {
                 e
             </StatusBadge>,
         );
-        expect(container.querySelector('span')!.className).toBe('badge badge-elite badge-sm');
+        expect(container.querySelector('span')!.className).toBe(`badge ${LEVEL_BADGE_CLASS.elite} badge-sm`);
     });
 });
 
@@ -221,13 +256,14 @@ describe('ErrorBoundary edges', () => {
         throw value;
     }
 
-    test('a thrown non-Error string is shown and logged via String(error)', () => {
+    test('a thrown non-Error string is logged via String(error), not shown', () => {
         render(
             <ErrorBoundary>
                 <Thrower value="raw failure" />
             </ErrorBoundary>,
         );
-        expect(screen.getByText('raw failure')).toBeTruthy();
+        expect(screen.queryByText('raw failure')).toBeNull();
+        expect(screen.getByText('errors.boundaryBody')).toBeTruthy();
         expect((mockApi.logError as LogErrorMock).mock.calls[0][0]).toMatch(
             /^React error boundary caught: raw failure\nComponent stack:/,
         );
@@ -252,7 +288,7 @@ describe('ErrorBoundary edges', () => {
                 <Thrower value={new Error('offline')} />
             </ErrorBoundary>,
         );
-        expect(screen.getByText('offline')).toBeTruthy();
+        expect(screen.getByText('errors.boundaryTitle')).toBeTruthy();
         expect(mockApi.logError).not.toHaveBeenCalled();
     });
 
@@ -268,7 +304,7 @@ describe('ErrorBoundary edges', () => {
                 () => 'handled',
             ),
         ).resolves.toBe('handled');
-        expect(screen.getByText('crash')).toBeTruthy();
+        expect(screen.getByText('errors.boundaryBody')).toBeTruthy();
     });
 
     test('componentDidCatch without info still logs an empty component stack', () => {

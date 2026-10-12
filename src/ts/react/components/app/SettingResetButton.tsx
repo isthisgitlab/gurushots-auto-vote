@@ -17,5 +17,5 @@ export function SettingResetButton({
 }) {
     const { t } = useTranslation();
     if (!onReset) return null;
-    return <ResetButton title={t('app.resetToDefaultNotSaved')} onClick={() => onReset(settingKey)} />;
+    return <ResetButton label={t('app.resetToDefaultNotSaved')} onClick={() => onReset(settingKey)} />;
 }

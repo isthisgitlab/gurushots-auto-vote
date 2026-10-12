@@ -6,13 +6,15 @@
         <!-- See app.html for the rationale; script-src 'self' is the load-bearing line. -->
         <meta
             http-equiv="Content-Security-Policy"
-            content="default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: https:; font-src 'self' data:; connect-src 'self'; object-src 'none'; base-uri 'self'"
+            content="default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: https://photos.gurushots.com; font-src 'self' data:; connect-src 'self'; object-src 'none'; base-uri 'self'; form-action 'none'"
         />
         <title>Logs - GuruShots Auto Vote</title>
         <link href="../../dist/styles.css" rel="stylesheet" />
         <script defer src="../../dist/logs-bundle.js"></script>
     </head>
-    <body class="min-h-screen bg-base-200">
+    <body
+        class="min-h-screen bg-base-200 pt-[env(safe-area-inset-top)] pr-[env(safe-area-inset-right)] pb-[env(safe-area-inset-bottom)] pl-[env(safe-area-inset-left)]"
+    >
         <div id="root"></div>
     </body>
 </html>

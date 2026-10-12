@@ -1,4 +1,5 @@
 import { useTranslation } from '@/contexts/TranslationContext';
+import { LoadingSpinner } from './LoadingSpinner';
 import { ResetIcon } from './ResetButton';
 import { StrokeIcon, ICON_PATHS } from './StrokeIcon';
 
@@ -35,8 +36,13 @@ export function ModalActionRow({
 
     return (
         <div className={bordered ? 'flex justify-end gap-2 pt-4 border-t border-base-300' : 'flex justify-end gap-2'}>
-            <button className="btn btn-latvian btn-sm" onClick={() => void onSave()} disabled={saving}>
-                {saving && <span className="loading loading-spinner loading-xs" />}
+            <button
+                className="btn btn-latvian btn-sm"
+                onClick={() => void onSave()}
+                disabled={saving}
+                aria-busy={saving}
+            >
+                {saving && <LoadingSpinner size="xs" decorative />}
                 <StrokeIcon d={ICON_PATHS.save} className={ROW_ICON_CLASS} />
                 {t('app.save')}
             </button>

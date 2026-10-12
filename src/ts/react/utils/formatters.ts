@@ -10,6 +10,7 @@ import { rendererTranslator } from '../../translations/renderer';
 import { buildPhotoUrl, entryPhotoUrl } from '../../format/photoUrl';
 import { finiteOr } from '../../numbers';
 import { interp } from './interp';
+import { LEVEL_BADGE_CLASS } from './levelBadge';
 
 // The shared core's formatter, so the renderer, the CLI, and the voting pass
 // (services/votingOrchestrator/boost.ts) all format durations identically — see src/ts/format/duration.ts —
@@ -94,18 +95,25 @@ export const formatSettingDefault = (
 /**
  * Format time remaining from Unix timestamp
  * @param endTime - Unix timestamp of end time
- * @returns Formatted time remaining (e.g., "2d 3h 5m", "30m 45s", "Ended")
+ * @returns Formatted time remaining (e.g., "2d 3h 5m", "30m 45s"), or null once the challenge has ended — the
+ *   view words that in the UI's language
  */
-export const formatTimeRemaining = (endTime: number): string => {
+export const formatTimeRemaining = (endTime: number): string | null => {
     const now = Math.floor(Date.now() / 1000);
     const remaining = endTime - now;
 
     if (remaining <= 0) {
-        return 'Ended';
+        return null;
     }
 
     return formatDuration(remaining, { includeSeconds: true });
 };
+
+/**
+ * The BCP 47 locale dates are written in: the UI's language, with the regional form that keeps the
+ * day-month-year, 24-hour layout.
+ */
+export const dateLocale = (): string => (rendererTranslator.getCurrentLanguage() === 'lv' ? 'lv-LV' : 'en-GB');
 
 /**
  * Format end time to localized string
@@ -125,49 +133,103 @@ export const formatEndTime = (endTime: number, timezone: string = 'local'): stri
         hour12: false,
     };
 
+    const locale = dateLocale();
     if (timezone === 'local') {
-        return date.toLocaleString('lv-LV', formatOptions);
+        return date.toLocaleString(locale, formatOptions);
     } else {
         try {
-            return date.toLocaleString('lv-LV', {
+            return date.toLocaleString(locale, {
                 ...formatOptions,
                 timeZone: timezone,
             });
         } catch {
             // Fallback to local on invalid timezone
-            return date.toLocaleString('lv-LV', formatOptions);
+            return date.toLocaleString(locale, formatOptions);
         }
     }
 };
 
 /**
- * Get boost status with display text and color class
+ * A challenge-level boost or turbo state as the view words it: a stable `code` (the view picks the translated text
+ * from it — see statusText), the colour for that state, and the API's own state string when it is one this app has no
+ * wording for.
+ */
+export type ResourceStatus<C extends string> = {
+    code: C;
+    colorClass: string;
+    /** the API's state, set only when code is 'other' */
+    raw?: string;
+    /** whole minutes left, set only when code is 'availableMinutes' */
+    minutes?: number;
+};
+
+export type BoostStatusCode =
+    | 'unknown'
+    | 'available'
+    | 'availableMinutes'
+    | 'used'
+    | 'unavailable'
+    | 'locked'
+    | 'other';
+export type TurboStatusCode = 'unavailable' | 'free' | 'timer' | 'inProgress' | 'won' | 'used' | 'locked' | 'other';
+
+/**
+ * Get boost status: a state code and its colour class
  * @param boost - Boost object from API
  */
-export const getBoostStatus = (boost: MemberBoost | null | undefined): { text: string; colorClass: string } => {
+export const getBoostStatus = (boost: MemberBoost | null | undefined): ResourceStatus<BoostStatusCode> => {
     if (!boost || !boost.state) {
-        return { text: 'Unknown', colorClass: 'text-secondary' };
+        return { code: 'unknown', colorClass: 'text-secondary' };
     }
 
     if (boost.state === 'AVAILABLE' || boost.state === 'AVAILABLE_KEY') {
         const now = Math.floor(Date.now() / 1000);
         const remaining = finiteOr(boost.timeout, 0) - now;
         if (remaining > 0) {
-            const minutes = Math.floor(remaining / 60);
-            return { text: `Available (${minutes}m left)`, colorClass: 'text-info' };
+            return { code: 'availableMinutes', colorClass: 'text-info', minutes: Math.floor(remaining / 60) };
         } else {
-            return { text: 'Available', colorClass: 'text-info' };
+            return { code: 'available', colorClass: 'text-info' };
         }
     } else if (boost.state === 'USED') {
-        return { text: 'Used', colorClass: 'text-success' };
+        return { code: 'used', colorClass: 'text-success' };
     } else if (boost.state === 'UNAVAILABLE') {
-        return { text: 'Unavailable', colorClass: 'text-error' };
+        return { code: 'unavailable', colorClass: 'text-error' };
     } else if (boost.state === 'LOCKED') {
-        return { text: 'Locked', colorClass: 'text-error' };
+        return { code: 'locked', colorClass: 'text-error' };
     } else {
         // state is non-empty here (guarded above), so it is shown verbatim.
-        return { text: boost.state, colorClass: 'text-secondary' };
+        return { code: 'other', colorClass: 'text-secondary', raw: boost.state };
     }
+};
+
+/**
+ * Whether a boost status says a boost can be placed (with or without time left on its window).
+ */
+export const isBoostAvailable = (status: ResourceStatus<BoostStatusCode>): boolean =>
+    status.code === 'available' || status.code === 'availableMinutes';
+
+const STATUS_TEXT_KEYS: Record<string, string> = {
+    unknown: 'app.stateUnknown',
+    available: 'app.available',
+    availableMinutes: 'app.stateAvailableMinutes',
+    used: 'app.used',
+    unavailable: 'app.unavailable',
+    locked: 'app.stateLocked',
+    free: 'app.stateFree',
+    timer: 'app.stateTimer',
+    inProgress: 'app.stateInProgress',
+    won: 'app.stateWon',
+};
+
+/**
+ * The status in the UI's language. An 'other' state is the API's own string, shown as it came.
+ *
+ * @param t - Translation lookup
+ */
+export const statusText = (status: ResourceStatus<string>, t: (key: string) => string): string => {
+    if (status.code === 'other') return status.raw ?? '';
+    const text = t(STATUS_TEXT_KEYS[status.code]);
+    return status.code === 'availableMinutes' ? interp(text, { minutes: status.minutes ?? 0 }) : text;
 };
 
 /**
@@ -203,32 +265,32 @@ export const getEntryStatus = (
 export { isBoostWindowOpen } from '../../voting/boostWindow';
 
 /**
- * Get turbo status with display text and color class
+ * Get turbo status: a state code and its colour class
  * @param turbo - Turbo object from API
  */
-export const getTurboStatus = (turbo: MemberTurbo | null | undefined): { text: string; colorClass: string } => {
+export const getTurboStatus = (turbo: MemberTurbo | null | undefined): ResourceStatus<TurboStatusCode> => {
     if (!turbo || !turbo.state) {
-        return { text: 'Unavailable', colorClass: 'text-error' };
+        return { code: 'unavailable', colorClass: 'text-error' };
     }
 
     switch (turbo.state) {
         case 'FREE':
-            return { text: 'Free', colorClass: 'text-info' };
+            return { code: 'free', colorClass: 'text-info' };
         case 'TIMER':
-            return { text: 'Timer', colorClass: 'text-error' };
+            return { code: 'timer', colorClass: 'text-error' };
         case 'IN_PROGRESS':
-            return { text: 'In Progress', colorClass: 'text-warning' };
+            return { code: 'inProgress', colorClass: 'text-warning' };
         case 'WON':
-            return { text: 'Won', colorClass: 'text-accent' };
+            return { code: 'won', colorClass: 'text-accent' };
         case 'USED':
-            return { text: 'Used', colorClass: 'text-success' };
+            return { code: 'used', colorClass: 'text-success' };
         case 'UNAVAILABLE':
-            return { text: 'Unavailable', colorClass: 'text-error' };
+            return { code: 'unavailable', colorClass: 'text-error' };
         case 'LOCKED':
-            return { text: 'Locked', colorClass: 'text-latvian' };
+            return { code: 'locked', colorClass: 'text-latvian' };
         default:
             // state is non-empty here (guarded above), so it is shown verbatim.
-            return { text: turbo.state, colorClass: 'text-secondary' };
+            return { code: 'other', colorClass: 'text-secondary', raw: turbo.state };
     }
 };
 
@@ -244,15 +306,15 @@ export const getLevelStatus = (level: number, levelName: string): { text: string
 
     switch (levelName.toUpperCase()) {
         case 'POPULAR':
-            return { text: `${levelName} ${level}`, colorClass: 'badge-popular' };
+            return { text: `${levelName} ${level}`, colorClass: LEVEL_BADGE_CLASS.popular };
         case 'SKILLED':
-            return { text: `${levelName} ${level}`, colorClass: 'badge-skilled' };
+            return { text: `${levelName} ${level}`, colorClass: LEVEL_BADGE_CLASS.skilled };
         case 'PREMIER':
-            return { text: `${levelName} ${level}`, colorClass: 'badge-premier' };
+            return { text: `${levelName} ${level}`, colorClass: LEVEL_BADGE_CLASS.premier };
         case 'ELITE':
-            return { text: `${levelName} ${level}`, colorClass: 'badge-elite' };
+            return { text: `${levelName} ${level}`, colorClass: LEVEL_BADGE_CLASS.elite };
         case 'ALL STAR':
-            return { text: `${levelName} ${level}`, colorClass: 'badge-allstar' };
+            return { text: `${levelName} ${level}`, colorClass: LEVEL_BADGE_CLASS.allstar };
         default:
             return { text: `${levelName} ${level}`, colorClass: 'badge-warning' };
     }

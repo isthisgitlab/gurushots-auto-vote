@@ -336,6 +336,23 @@ describe('StatusHeader', () => {
             expect(trigger().hasAttribute('aria-haspopup')).toBe(false);
         });
 
+        // It is a disclosure button: a real <button>, expanded while focus is inside, controlling the list.
+        test('the trigger is a real button whose aria-expanded follows focus and controls the list', () => {
+            wrap(<StatusHeader challenges={missedChallenges} nextRunAt={null} running={true} />);
+            const button = trigger();
+            expect(button.tagName).toBe('BUTTON');
+            expect(button.getAttribute('aria-expanded')).toBe('false');
+            expect(document.getElementById(button.getAttribute('aria-controls')!)!.tagName).toBe('UL');
+
+            fireEvent.focusIn(button);
+            expect(button.getAttribute('aria-expanded')).toBe('true');
+            // Focus moving to an entry inside the list keeps it open; leaving the dropdown closes it.
+            fireEvent.focusOut(button, { relatedTarget: screen.getByText('Soon one') });
+            expect(button.getAttribute('aria-expanded')).toBe('true');
+            fireEvent.focusOut(button, { relatedTarget: document.body });
+            expect(button.getAttribute('aria-expanded')).toBe('false');
+        });
+
         describe.each([
             ['English', englishApp],
             ['Latvian', latvianApp],

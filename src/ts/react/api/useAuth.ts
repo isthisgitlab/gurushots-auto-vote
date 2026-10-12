@@ -1,6 +1,7 @@
 import { useState, useCallback } from 'react';
 import { useAsyncIpcAction } from './useAsyncIpcAction';
 import { errorMessage } from '../../errorMessage';
+import { logRendererError } from './ipc';
 
 /**
  * What `authenticate` resolves: the handler's result, or the envelope's
@@ -28,15 +29,7 @@ export function useAuth(): {
     error: string | null;
     clearError: () => void;
 } {
-    const {
-        run,
-        loading,
-        error: authError,
-        clearError: clearAuthError,
-    } = useAsyncIpcAction(invokeAuthenticate, {
-        failureMessage: 'Authentication failed',
-        errorMessage: 'Authentication error',
-    });
+    const { run, loading, error: authError, clearError: clearAuthError } = useAsyncIpcAction(invokeAuthenticate);
     const [flowError, setFlowError] = useState<string | null>(null);
 
     const authenticate = useCallback(
@@ -59,7 +52,8 @@ export function useAuth(): {
             await window.api.login();
         } catch (err) {
             clearAuthError();
-            setFlowError(errorMessage(err) || 'Login transition failed');
+            void logRendererError(`Login transition failed: ${errorMessage(err)}`);
+            setFlowError('login-transition-failed');
         }
     }, [clearAuthError]);
 
@@ -71,7 +65,8 @@ export function useAuth(): {
             await window.api.logout();
         } catch (err) {
             clearAuthError();
-            setFlowError(errorMessage(err) || 'Logout failed');
+            void logRendererError(`Logout failed: ${errorMessage(err)}`);
+            setFlowError('logout-failed');
         }
     }, [clearAuthError]);
 

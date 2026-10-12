@@ -10,6 +10,7 @@ import { signal } from '@preact/signals';
 import { render, screen, fireEvent, waitFor, act } from './helpers/test-utils';
 import { ChallengeCard } from '@/components/app/ChallengeCard';
 import { scrollToChallenge } from '@/utils/scrollToChallenge';
+import { LEVEL_BADGE_CLASS } from '@/utils/levelBadge';
 import { buildChallenge } from '../helpers/challengeFixtures';
 import type { EntryBadge as RealEntryBadge } from '@/components/app/EntryBadge';
 import type { Challenge, MemberTurbo, RankingTotal } from '../../src/ts/types/gurushots';
@@ -189,6 +190,20 @@ describe('header', () => {
         expect(onSettingsClick).toHaveBeenCalledWith(101, 'Sunset');
     });
 
+    test.each([
+        ['a path walk', '../../account'],
+        ['a query', 'x?next=//evil.example'],
+        ['a fragment', 'x#y'],
+        ['another host', '@evil.example'],
+        ['a slash', 'a/b'],
+    ])('a challenge slug with %s opens the generic challenges page, not an attacker-shaped URL', async (_name, url) => {
+        renderCard(makeChallenge({ url }));
+        fireEvent.click(screen.getByText('gurushots.com/challenges'));
+        await waitFor(() =>
+            expect(window.api.openExternalUrl).toHaveBeenCalledWith('https://gurushots.com/challenges'),
+        );
+    });
+
     test('the statistics show the counts, and 0 votes when the challenge carries none', () => {
         const { unmount } = renderCard(makeChallenge());
         expect(screen.getByText((2000).toLocaleString())).toBeTruthy();
@@ -248,9 +263,14 @@ describe('time text', () => {
         expect(screen.getByText('5m').className).toBe('text-success');
     });
 
-    test('marks Ended in red', () => {
-        renderCard(makeChallenge(), { timeRemaining: 'Ended' });
-        expect(screen.getByText('Ended').className).toBe('text-error');
+    test('marks an ended challenge (null) in red, worded in the UI language', () => {
+        renderCard(makeChallenge(), { timeRemaining: null });
+        expect(screen.getByText('app.ended').className).toBe('text-error');
+    });
+
+    test('a plain countdown string is shown in green', () => {
+        renderCard(makeChallenge(), { timeRemaining: '1h 2m' });
+        expect(screen.getByText('1h 2m').className).toBe('text-success');
     });
 
     test('falls back to the loading label', () => {
@@ -280,7 +300,7 @@ describe('progress', () => {
         );
         expect(screen.getByText('Keep going')).toBeTruthy();
         expect(screen.getByText(/SKILLED \(380/)).toBeTruthy();
-        expect(screen.getByText('POPULAR 1').className).toContain('badge-popular');
+        expect(screen.getByText('POPULAR 1').className).toContain(LEVEL_BADGE_CLASS.popular);
     });
 
     test('levels past the named table fall back to LEVEL n', () => {
@@ -338,17 +358,24 @@ describe('earn turbo', () => {
         window.api.playAutoTurbo = jest.fn(() => d.promise);
         const { onVoteComplete } = renderCard(turboChallenge({ state: 'FREE' }));
         fireEvent.click(screen.getByText(/app\.earnTurbo/));
-        await waitFor(() => expect(screen.queryByText(/app\.earnTurbo/)).toBeNull());
+        // While in flight the button shows a spinner but keeps its name for assistive tech, and says it is busy.
+        const busy = await screen.findByRole('button', { name: 'app.earnTurbo' });
+        await waitFor(() => expect(busy.getAttribute('aria-busy')).toBe('true'));
+        expect(busy.querySelector('.loading-spinner')).not.toBeNull();
+        expect(busy.querySelector('.sr-only')!.textContent).toBe('app.earnTurbo');
         expect(window.api.playAutoTurbo).toHaveBeenCalledWith(101, 'Sunset');
         await act(async () => d.resolve(invalid({ success: true })));
         await waitFor(() => expect(onVoteComplete).toHaveBeenCalled());
     });
 
-    test('a failed play shows the error and does not refresh', async () => {
-        window.api.playAutoTurbo = jest.fn().mockResolvedValue({ success: false, error: 'turbo broke' });
+    test('a failed play shows a translated, announced error and does not refresh', async () => {
+        window.api.playAutoTurbo = jest
+            .fn()
+            .mockResolvedValue({ success: false, error: 'Turbo not earned — try again later' });
         const { onVoteComplete } = renderCard(turboChallenge({ state: 'IN_PROGRESS' }));
         fireEvent.click(screen.getByText(/app\.earnTurbo/));
-        await waitFor(() => expect(screen.getByText('turbo broke')).toBeTruthy());
+        await waitFor(() => expect(screen.getByText('errors.turboNotEarned')).toBeTruthy());
+        expect(screen.getByText('errors.turboNotEarned').closest('[role="alert"]')).not.toBeNull();
         expect(screen.getByText(/app\.earnTurbo/).closest('button')!.className).toContain('btn-error');
         expect(onVoteComplete).not.toHaveBeenCalled();
     });
@@ -414,7 +441,8 @@ describe('fill', () => {
         window.api.fillChallengeNow = jest.fn().mockResolvedValue({ success: false, error: 'no photos' });
         const { onVoteComplete } = renderCard(makeChallenge());
         fireEvent.click(screen.getByText('+1'));
-        await waitFor(() => expect(screen.getByText('no photos')).toBeTruthy());
+        await waitFor(() => expect(screen.getByText('errors.actionFailed')).toBeTruthy());
+        expect(screen.getByRole('alert')).toBeTruthy();
         expect(screen.getByText('+1').className).toContain('btn-error');
         expect(onVoteComplete).not.toHaveBeenCalled();
     });

@@ -189,7 +189,7 @@ export function ChallengesSection({
                             label={t('app.run')}
                         />
                         <button className="btn btn-outline btn-sm" onClick={handleRefresh} disabled={loading}>
-                            {loading ? <span className="loading loading-spinner loading-xs" /> : <ResetIcon />}
+                            {loading ? <LoadingSpinner size="xs" decorative /> : <ResetIcon />}
                             {t('app.refresh')}
                         </button>
                     </>

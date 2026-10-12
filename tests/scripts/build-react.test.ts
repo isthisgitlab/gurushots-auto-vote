@@ -1,9 +1,9 @@
 /**
  * Unit tests for scripts/build-react.ts.
  *
- * The script runs buildReact() at require time (it is only ever invoked as
- * `node --import tsx scripts/build-react.ts [--watch]`), so each case stubs argv/env/exit,
- * requires it in an isolated module registry and flushes the async build.
+ * The script is invoked as `node --import tsx scripts/build-react.ts [--watch]` (gated by runIfMain), so
+ * each case stubs argv/env/exit, requires it in an isolated module registry, calls buildReact() and
+ * flushes the async build.
  * esbuild and fs are fully mocked — no real bundle is built or watched and
  * nothing under dist/ is touched.
  */
@@ -41,6 +41,7 @@ const fs = mockFs;
 const ROOT = realPath.join(__dirname, '..', '..');
 const DIST = realPath.join(ROOT, 'dist');
 const LEXICON = realPath.join(ROOT, 'src', 'assets', 'semantic-vectors.json');
+const NOTICES = realPath.join(ROOT, 'src', 'assets', 'THIRD_PARTY_NOTICES.txt');
 const ENTRY_NAMES = ['login', 'app', 'logs', 'capacitor', 'web', 'headless', 'preload'];
 
 const flush = async () => {
@@ -78,12 +79,23 @@ describe('scripts/build-react.ts', () => {
         if (nodeEnv === undefined) delete process.env.NODE_ENV;
         else process.env.NODE_ENV = nodeEnv;
         jest.isolateModules(() => {
-            require('../../scripts/build-react');
+            (require('../../scripts/build-react') as typeof import('../../scripts/build-react')).buildReact();
         });
         await flush();
     };
 
     const logged = () => logSpy.mock.calls.map((c) => c.join(' ')).join('\n');
+
+    test('requiring the script does not start a build', async () => {
+        process.argv = ['node', 'scripts/build-react.ts'];
+        jest.isolateModules(() => {
+            require('../../scripts/build-react');
+        });
+        await flush();
+
+        expect(esbuild.build).not.toHaveBeenCalled();
+        expect(fs.writeFileSync).not.toHaveBeenCalled();
+    });
 
     describe('build mode', () => {
         test('writes the HTML shells, copies the lexicon and builds every entry', async () => {
@@ -96,13 +108,18 @@ describe('scripts/build-react.ts', () => {
             );
             expect(fs.writeFileSync).toHaveBeenCalledWith(
                 realPath.join(DIST, 'headless.html'),
-                expect.stringContaining('window.__GS_HEADLESS__ = true'),
+                expect.stringContaining('src="headless-flag.js"'),
+            );
+            expect(fs.writeFileSync).toHaveBeenCalledWith(
+                realPath.join(DIST, 'headless-flag.js'),
+                'window.__GS_HEADLESS__ = true;\n',
             );
             expect(fs.writeFileSync).toHaveBeenCalledWith(
                 realPath.join(DIST, 'web.html'),
                 expect.stringContaining('web-bundle.js'),
             );
             expect(fs.copyFileSync).toHaveBeenCalledWith(LEXICON, realPath.join(DIST, 'semantic-vectors.json'));
+            expect(fs.copyFileSync).toHaveBeenCalledWith(NOTICES, realPath.join(DIST, 'THIRD_PARTY_NOTICES.txt'));
 
             expect(esbuild.build).toHaveBeenCalledTimes(ENTRY_NAMES.length);
             const outfiles = esbuild.build.mock.calls.map(([opts]) => realPath.basename(opts.outfile!));
@@ -159,12 +176,15 @@ describe('scripts/build-react.ts', () => {
         });
 
         test('creates dist/, skips missing entries and the lexicon, defaults NODE_ENV to development', async () => {
-            fs.existsSync.mockImplementation((p) => p !== DIST && p !== LEXICON && !p.endsWith('Logs.tsx'));
+            fs.existsSync.mockImplementation(
+                (p) => p !== DIST && p !== LEXICON && p !== NOTICES && !p.endsWith('Logs.tsx'),
+            );
 
             await run([], undefined);
 
             expect(fs.mkdirSync).toHaveBeenCalledWith(DIST, { recursive: true });
             expect(fs.copyFileSync).not.toHaveBeenCalledWith(LEXICON, realPath.join(DIST, 'semantic-vectors.json'));
+            expect(fs.copyFileSync).not.toHaveBeenCalledWith(NOTICES, realPath.join(DIST, 'THIRD_PARTY_NOTICES.txt'));
             expect(esbuild.build).toHaveBeenCalledTimes(ENTRY_NAMES.length - 1);
             const opts = esbuild.build.mock.calls[0][0];
             expect(opts.minify).toBe(false);

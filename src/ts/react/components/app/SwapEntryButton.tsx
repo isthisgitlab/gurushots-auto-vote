@@ -2,10 +2,12 @@ import { useState } from 'react';
 import { useTranslation } from '@/contexts/TranslationContext';
 import { useSwapPhoto, useSwapBack } from '@/api/useCurrencyActions';
 import { interp } from '@/utils/interp';
-import { useAutoClear } from '@/hooks/useAutoClear';
 import { entryPhotoUrl } from '@/utils/formatters';
 import { spentOrStale } from '@/utils/spentOrStale';
 import { ActionButton } from '@/components/ui/ActionButton';
+import { InlineError } from '@/components/ui/InlineError';
+import { BusyContent } from '@/components/ui/LoadingSpinner';
+
 import { CurrencyConfirmModal, currencyOutcomeText } from './CurrencyConfirmModal';
 
 import type { Bankroll, Challenge, RankingEntry } from '../../../types/gurushots';
@@ -14,7 +16,6 @@ import type { SwapBackOffer } from '@/api/useSwapBacks';
 import type { ActionButtonVariant } from '@/components/ui/ActionButton';
 import type { CurrencyConfirmModalProps } from './CurrencyConfirmModal';
 
-const ERROR_DISPLAY_MS = 5000;
 const PREVIEW_PX = 240;
 
 /**
@@ -50,24 +51,28 @@ function SwapTrigger({
     busy,
     error,
     onClick,
+    onDismiss,
 }: {
     variant: ActionButtonVariant;
     label: string;
     busy: boolean;
     error: string | null;
     onClick: () => void | Promise<void>;
+    onDismiss: () => void;
 }) {
     const { t } = useTranslation();
     return (
         <>
-            <ActionButton variant={variant} error={error} onClick={() => void onClick()} disabled={busy}>
-                {busy ? <span className="loading loading-spinner loading-xs" /> : label}
+            <ActionButton
+                variant={variant}
+                error={error}
+                onClick={() => void onClick()}
+                disabled={busy}
+                aria-busy={busy}
+            >
+                <BusyContent busy={busy} label={label} />
             </ActionButton>
-            {error && (
-                <span className="text-error" role="alert">
-                    {currencyOutcomeText(t, error)}
-                </span>
-            )}
+            {error && <InlineError onDismiss={onDismiss}>{currencyOutcomeText(t, error)}</InlineError>}
         </>
     );
 }
@@ -127,8 +132,10 @@ export function SwapEntryButton({
     const [candidate, setCandidate] = useState<SwapCandidate | null>(null);
     const error = preview.error || commit.error;
 
-    useAutoClear(preview.error, preview.clearError, ERROR_DISPLAY_MS);
-    useAutoClear(commit.error, commit.clearError, ERROR_DISPLAY_MS);
+    const dismissError = () => {
+        preview.clearError();
+        commit.clearError();
+    };
 
     const handlePreview = async () => {
         commit.clearError();
@@ -151,6 +158,7 @@ export function SwapEntryButton({
                 busy={preview.loading || commit.loading}
                 error={error}
                 onClick={handlePreview}
+                onDismiss={dismissError}
             />
             <SwapConfirmModal
                 isOpen={candidate !== null}
@@ -195,8 +203,6 @@ export function SwapBackButton({
     const { run, loading, error, clearError } = useSwapBack();
     const [confirmOpen, setConfirmOpen] = useState(false);
 
-    useAutoClear(error, clearError, ERROR_DISPLAY_MS);
-
     const handleConfirm = async () => {
         const result = await run(challengeId, entry.id);
         setConfirmOpen(false);
@@ -214,6 +220,7 @@ export function SwapBackButton({
                 busy={loading}
                 error={error}
                 onClick={() => setConfirmOpen(true)}
+                onDismiss={clearError}
             />
             <SwapConfirmModal
                 isOpen={confirmOpen}

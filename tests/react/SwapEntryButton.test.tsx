@@ -4,7 +4,7 @@
  * previewed photo. A swap that can't happen is reported inline with no modal.
  */
 
-import { render, screen, fireEvent, waitFor } from './helpers/test-utils';
+import { act, render, screen, fireEvent, waitFor } from './helpers/test-utils';
 import { SwapEntryButton, SwapBackButton } from '@/components/app/SwapEntryButton';
 import type { SwapBackOffer } from '@/api/useSwapBacks';
 import { mockTranslator } from './helpers/setup';
@@ -71,6 +71,30 @@ test('no alternative: inline message, no modal', async () => {
     fireEvent.click(swapButton());
     expect(await screen.findByText('app.currencyOutcomeNoAlternative')).toBeTruthy();
     expect(screen.queryByText('app.currencySwapTitle')).toBeNull();
+});
+
+test('a failed swap stays until dismissed — no timer clears it — and a new attempt starts clean', async () => {
+    jest.useFakeTimers();
+    try {
+        window.api.previewSwapPhoto = jest
+            .fn()
+            .mockResolvedValueOnce({ success: false, outcome: 'no-alternative', error: 'no-alternative' })
+            .mockResolvedValueOnce({ success: true, outcome: 'ok', candidate: CANDIDATE });
+        renderButton();
+        fireEvent.click(swapButton());
+        await act(async () => {
+            await Promise.resolve();
+        });
+        expect(screen.getByRole('alert').textContent).toContain('app.currencyOutcomeNoAlternative');
+
+        act(() => jest.advanceTimersByTime(60_000));
+        expect(screen.getByRole('alert')).toBeTruthy();
+
+        fireEvent.click(screen.getByRole('button', { name: 'errors.dismiss' }));
+        expect(screen.queryByRole('alert')).toBeNull();
+    } finally {
+        jest.useRealTimers();
+    }
 });
 
 test('stale candidate on commit: modal closes and the reason is shown', async () => {
@@ -174,6 +198,16 @@ describe('SwapBackButton', () => {
         await waitFor(() => expect(onSpent).toHaveBeenCalledTimes(1));
         expect(screen.getByRole('alert')).toBeTruthy();
         expect(screen.getByText(/app\.currencySwapBack$/).closest('button')!.className).toContain('btn-error');
+    });
+
+    test('Dismiss clears a swap-back failure', async () => {
+        window.api.swapBackEntryPhoto = jest.fn().mockResolvedValue({ success: false, outcome: 'failed' });
+        renderSwapBack();
+        fireEvent.click(screen.getByText(/app\.currencySwapBack$/));
+        fireEvent.click(screen.getByText('app.currencySpend'));
+        await screen.findByRole('alert');
+        fireEvent.click(screen.getByRole('button', { name: 'errors.dismiss' }));
+        expect(screen.queryByRole('alert')).toBeNull();
     });
 
     test('a plain failure shows the reason without refreshing', async () => {

@@ -2,6 +2,8 @@ import { invalid } from '../helpers/invalid';
 import type * as formattersModule from '../../src/ts/react/utils/formatters';
 import type * as wallClockModule from '../../src/ts/scheduling/wallClock';
 import type * as interpModule from '../../src/ts/react/utils/interp';
+import type * as rendererModule from '../../src/ts/translations/renderer';
+import type * as levelBadgeModule from '../../src/ts/react/utils/levelBadge';
 const {
     formatSettingDefault,
     formatTimeRemaining,
@@ -10,9 +12,14 @@ const {
     getTurboStatus,
     getLevelStatus,
     getEntryStatus,
+    isBoostAvailable,
+    statusText,
+    dateLocale,
 } = require('../../src/ts/react/utils/formatters') as typeof formattersModule;
 const { timeOfDayIn } = require('../../src/ts/scheduling/wallClock') as typeof wallClockModule;
 const { interp } = require('../../src/ts/react/utils/interp') as typeof interpModule;
+const { rendererTranslator } = require('../../src/ts/translations/renderer') as typeof rendererModule;
+const { LEVEL_BADGE_CLASS } = require('../../src/ts/react/utils/levelBadge') as typeof levelBadgeModule;
 
 const t = (key: string) =>
     (({ 'app.none': '(none)', 'app.hours': 'h', 'app.minutes': 'm' }) as Record<string, string>)[key] ?? key;
@@ -26,6 +33,7 @@ beforeEach(() => {
 
 afterEach(() => {
     jest.useRealTimers();
+    jest.mocked(rendererTranslator.getCurrentLanguage).mockReturnValue('en');
 });
 
 describe('formatSettingDefault edge shapes', () => {
@@ -57,9 +65,9 @@ describe('formatSettingDefault edge shapes', () => {
 });
 
 describe('formatTimeRemaining', () => {
-    test('returns Ended at or past the close time', () => {
-        expect(formatTimeRemaining(NOW_SEC)).toBe('Ended');
-        expect(formatTimeRemaining(NOW_SEC - 10)).toBe('Ended');
+    test('returns null (ended) at or past the close time', () => {
+        expect(formatTimeRemaining(NOW_SEC)).toBeNull();
+        expect(formatTimeRemaining(NOW_SEC - 10)).toBeNull();
     });
 
     test('formats a future close time with seconds', () => {
@@ -70,8 +78,12 @@ describe('formatTimeRemaining', () => {
 describe('formatEndTime', () => {
     const end = NOW_SEC;
 
-    test('local timezone (default) uses the runtime zone', () => {
-        const expected = new Date(end * 1000).toLocaleString('lv-LV', {
+    test.each([
+        ['en', 'en-GB'],
+        ['lv', 'lv-LV'],
+    ])('local timezone (default) uses the runtime zone, written for the UI language (%s)', (language, locale) => {
+        jest.mocked(rendererTranslator.getCurrentLanguage).mockReturnValue(language);
+        const expected = new Date(end * 1000).toLocaleString(locale, {
             day: '2-digit',
             month: '2-digit',
             year: 'numeric',
@@ -79,14 +91,19 @@ describe('formatEndTime', () => {
             minute: '2-digit',
             hour12: false,
         });
+        expect(dateLocale()).toBe(locale);
         expect(formatEndTime(end)).toBe(expected);
     });
 
-    test('a named timezone is honoured', () => {
-        const out = formatEndTime(end, 'UTC');
+    test("a named timezone is honoured, in the UI language's date layout", () => {
         // 1700000000 = 2023-11-14 22:13 UTC
-        expect(out).toContain('14.11.2023');
-        expect(out).toContain('22:13');
+        const english = formatEndTime(end, 'UTC');
+        expect(english).toContain('14/11/2023');
+        expect(english).toContain('22:13');
+        jest.mocked(rendererTranslator.getCurrentLanguage).mockReturnValue('lv');
+        const latvian = formatEndTime(end, 'UTC');
+        expect(latvian).toContain('14.11.2023');
+        expect(latvian).toContain('22:13');
     });
 
     // The "closes at" rule condition must read the same HH:MM the card shows.
@@ -117,42 +134,76 @@ describe('formatEndTime', () => {
 
 describe('getBoostStatus', () => {
     test.each([
-        [null, 'Unknown', 'text-secondary'],
-        [{}, 'Unknown', 'text-secondary'],
-        [{ state: 'USED' }, 'Used', 'text-success'],
-        [{ state: 'UNAVAILABLE' }, 'Unavailable', 'text-error'],
-        [{ state: 'LOCKED' }, 'Locked', 'text-error'],
-        [{ state: 'WEIRD' }, 'WEIRD', 'text-secondary'],
-    ])('%j → %s', (boost, text, colorClass) => {
-        expect(getBoostStatus(boost)).toEqual({ text, colorClass });
+        [null, { code: 'unknown', colorClass: 'text-secondary' }],
+        [{}, { code: 'unknown', colorClass: 'text-secondary' }],
+        [{ state: 'USED' }, { code: 'used', colorClass: 'text-success' }],
+        [{ state: 'UNAVAILABLE' }, { code: 'unavailable', colorClass: 'text-error' }],
+        [{ state: 'LOCKED' }, { code: 'locked', colorClass: 'text-error' }],
+        [{ state: 'WEIRD' }, { code: 'other', colorClass: 'text-secondary', raw: 'WEIRD' }],
+    ])('%j → %j', (boost, status) => {
+        expect(getBoostStatus(boost)).toEqual(status);
     });
 
-    test('available with time left shows minutes remaining', () => {
+    test('available with time left carries the whole minutes remaining', () => {
         expect(getBoostStatus({ state: 'AVAILABLE_KEY', timeout: NOW_SEC + 125 })).toEqual({
-            text: 'Available (2m left)',
+            code: 'availableMinutes',
             colorClass: 'text-info',
+            minutes: 2,
         });
     });
 
-    test('available with an expired timeout shows plain Available', () => {
-        expect(getBoostStatus({ state: 'AVAILABLE', timeout: NOW_SEC - 1 }).text).toBe('Available');
+    test('available with an expired timeout is plain available', () => {
+        expect(getBoostStatus({ state: 'AVAILABLE', timeout: NOW_SEC - 1 }).code).toBe('available');
+    });
+
+    test('isBoostAvailable is true for both available codes only', () => {
+        expect(isBoostAvailable(getBoostStatus({ state: 'AVAILABLE', timeout: NOW_SEC + 600 }))).toBe(true);
+        expect(isBoostAvailable(getBoostStatus({ state: 'AVAILABLE', timeout: NOW_SEC - 1 }))).toBe(true);
+        expect(isBoostAvailable(getBoostStatus({ state: 'USED' }))).toBe(false);
+        expect(isBoostAvailable(getBoostStatus(null))).toBe(false);
+    });
+});
+
+describe('statusText', () => {
+    const keyT = (key: string) => key;
+
+    test('words each code through its translation key; minutes fill the placeholder', () => {
+        const words = (status: Parameters<typeof statusText>[0]) => statusText(status, keyT);
+        expect(words({ code: 'unknown', colorClass: '' })).toBe('app.stateUnknown');
+        expect(words({ code: 'available', colorClass: '' })).toBe('app.available');
+        expect(words({ code: 'used', colorClass: '' })).toBe('app.used');
+        expect(words({ code: 'unavailable', colorClass: '' })).toBe('app.unavailable');
+        expect(words({ code: 'locked', colorClass: '' })).toBe('app.stateLocked');
+        expect(words({ code: 'free', colorClass: '' })).toBe('app.stateFree');
+        expect(words({ code: 'timer', colorClass: '' })).toBe('app.stateTimer');
+        expect(words({ code: 'inProgress', colorClass: '' })).toBe('app.stateInProgress');
+        expect(words({ code: 'won', colorClass: '' })).toBe('app.stateWon');
+        expect(statusText({ code: 'availableMinutes', colorClass: '', minutes: 7 }, () => 'Left: {minutes} min')).toBe(
+            'Left: 7 min',
+        );
+        expect(statusText({ code: 'availableMinutes', colorClass: '' }, () => '{minutes} min')).toBe('0 min');
+    });
+
+    test("an 'other' state is the API's own text, untranslated", () => {
+        expect(statusText({ code: 'other', colorClass: '', raw: 'NEW_STATE' }, keyT)).toBe('NEW_STATE');
+        expect(statusText({ code: 'other', colorClass: '' }, keyT)).toBe('');
     });
 });
 
 describe('getTurboStatus', () => {
     test.each([
-        [undefined, 'Unavailable', 'text-error'],
-        [{ state: '' }, 'Unavailable', 'text-error'],
-        [{ state: 'FREE' }, 'Free', 'text-info'],
-        [{ state: 'TIMER' }, 'Timer', 'text-error'],
-        [{ state: 'IN_PROGRESS' }, 'In Progress', 'text-warning'],
-        [{ state: 'WON' }, 'Won', 'text-accent'],
-        [{ state: 'USED' }, 'Used', 'text-success'],
-        [{ state: 'UNAVAILABLE' }, 'Unavailable', 'text-error'],
-        [{ state: 'LOCKED' }, 'Locked', 'text-latvian'],
-        [{ state: 'NEW_STATE' }, 'NEW_STATE', 'text-secondary'],
-    ])('%j → %s', (turbo, text, colorClass) => {
-        expect(getTurboStatus(turbo)).toEqual({ text, colorClass });
+        [undefined, { code: 'unavailable', colorClass: 'text-error' }],
+        [{ state: '' }, { code: 'unavailable', colorClass: 'text-error' }],
+        [{ state: 'FREE' }, { code: 'free', colorClass: 'text-info' }],
+        [{ state: 'TIMER' }, { code: 'timer', colorClass: 'text-error' }],
+        [{ state: 'IN_PROGRESS' }, { code: 'inProgress', colorClass: 'text-warning' }],
+        [{ state: 'WON' }, { code: 'won', colorClass: 'text-accent' }],
+        [{ state: 'USED' }, { code: 'used', colorClass: 'text-success' }],
+        [{ state: 'UNAVAILABLE' }, { code: 'unavailable', colorClass: 'text-error' }],
+        [{ state: 'LOCKED' }, { code: 'locked', colorClass: 'text-latvian' }],
+        [{ state: 'NEW_STATE' }, { code: 'other', colorClass: 'text-secondary', raw: 'NEW_STATE' }],
+    ])('%j → %j', (turbo, status) => {
+        expect(getTurboStatus(turbo)).toEqual(status);
     });
 });
 
@@ -163,11 +214,11 @@ describe('getLevelStatus', () => {
     });
 
     test.each([
-        ['Popular', 'badge-popular'],
-        ['SKILLED', 'badge-skilled'],
-        ['premier', 'badge-premier'],
-        ['ELITE', 'badge-elite'],
-        ['All Star', 'badge-allstar'],
+        ['Popular', LEVEL_BADGE_CLASS.popular],
+        ['SKILLED', LEVEL_BADGE_CLASS.skilled],
+        ['premier', LEVEL_BADGE_CLASS.premier],
+        ['ELITE', LEVEL_BADGE_CLASS.elite],
+        ['All Star', LEVEL_BADGE_CLASS.allstar],
         ['Newbie', 'badge-warning'],
     ])('%s → %s (case-insensitive)', (name, colorClass) => {
         expect(getLevelStatus(2, name)).toEqual({ text: `${name} 2`, colorClass });

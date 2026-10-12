@@ -39,6 +39,12 @@ interface UiNumberField {
 }
 
 /**
+ * The accessible name of a UI setting's reset button: the action and the setting it resets.
+ */
+const resetLabel = (t: (key: string) => string, labelKey: string): string =>
+    `${t('app.resetToDefault')}: ${t(labelKey)}`;
+
+/**
  * One application (UI) setting: caption with the "UI setting" badge, description, then its controls.
  */
 function UiSettingCell({
@@ -126,12 +132,16 @@ function UiNumberGroupCell({
     fields: UiNumberField[];
     suffix?: ComponentChildren;
 }) {
+    const { t } = useTranslation();
     return (
         <UiSettingCell inputId={inputId} group labelKey={labelKey} descKey={descKey}>
             <div className="flex items-center gap-2 flex-wrap" role="group" aria-labelledby={`${inputId}-label`}>
                 <UiNumberInputs fields={fields} uiValues={uiValues} handleUiChange={handleUiChange} />
                 {suffix}
-                <ResetButton onClick={() => fields.forEach(({ key }) => handleResetUi(key))} />
+                <ResetButton
+                    label={resetLabel(t, labelKey)}
+                    onClick={() => fields.forEach(({ key }) => handleResetUi(key))}
+                />
             </div>
         </UiSettingCell>
     );
@@ -213,11 +223,12 @@ function ResettableUiCell({
     onReset: () => void;
     children?: ComponentChildren;
 }) {
+    const { t } = useTranslation();
     return (
         <UiSettingCell inputId={inputId} labelKey={labelKey} descKey={descKey}>
             <div className="flex items-center gap-2">
                 {children}
-                <ResetButton onClick={onReset} />
+                <ResetButton label={resetLabel(t, labelKey)} onClick={onReset} />
             </div>
         </UiSettingCell>
     );
@@ -301,7 +312,7 @@ function TimezoneSetting({
                 >
                     ×
                 </button>
-                <ResetButton onClick={() => handleResetUi('timezone')} />
+                <ResetButton label={resetLabel(t, 'app.timezone')} onClick={() => handleResetUi('timezone')} />
             </div>
             {timezoneInput.visible && <CustomTimezoneInput timezoneInput={timezoneInput} />}
         </UiSettingCell>

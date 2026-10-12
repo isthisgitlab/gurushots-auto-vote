@@ -4,9 +4,11 @@ import { useTranslation } from '@/contexts/TranslationContext';
 import { useBoost } from '@/api/useBoost';
 import { ipcErrorText } from '@/api/ipcErrorText';
 import { useTurbo } from '@/api/useTurbo';
-import { useAutoClear } from '@/hooks/useAutoClear';
 import { getEntryStatus } from '@/utils/formatters';
 import { ActionButton } from '@/components/ui/ActionButton';
+import { InlineError } from '@/components/ui/InlineError';
+import { BusyContent } from '@/components/ui/LoadingSpinner';
+
 import { EntryPhoto } from './EntryPhoto';
 import { SwapEntryButton, SwapBackButton } from './SwapEntryButton';
 
@@ -64,10 +66,12 @@ export function EntryBadge({
     const showBoostButton = boostAvailable && !isEntryActioned;
     const showTurboButton = turboAvailable && !isEntryActioned;
 
-    // Auto-clear errors after a few seconds so a stuck red button doesn't
-    // block the user from retrying without page state reset.
-    useAutoClear(boostError, clearBoostError, 5000);
-    useAutoClear(turboError, clearTurboError, 5000);
+    // A failed action's message stays until it is dismissed or the next action starts (each run clears the
+    // previous error), so it can be read; the red button is still a retry.
+    const dismissError = () => {
+        clearBoostError();
+        clearTurboError();
+    };
 
     const handleBoost = async () => {
         const result = await applyBoost(challengeId, entry.id);
@@ -96,8 +100,11 @@ export function EntryBadge({
                     className="ml-1"
                     onClick={() => void handleBoost()}
                     disabled={boosting}
+                    aria-busy={boosting}
                 >
-                    {boosting ? <span className="loading loading-spinner loading-xs" /> : `🚀 ${t('app.boost')}`}
+                    <BusyContent busy={boosting} label={t('app.boost')}>
+                        {`🚀 ${t('app.boost')}`}
+                    </BusyContent>
                 </ActionButton>
             )}
             {showTurboButton && (
@@ -107,8 +114,11 @@ export function EntryBadge({
                     className="ml-1"
                     onClick={() => void handleTurbo()}
                     disabled={turboing}
+                    aria-busy={turboing}
                 >
-                    {turboing ? <span className="loading loading-spinner loading-xs" /> : `⚡ ${t('app.turbo')}`}
+                    <BusyContent busy={turboing} label={t('app.turbo')}>
+                        {`⚡ ${t('app.turbo')}`}
+                    </BusyContent>
                 </ActionButton>
             )}
             {swapAvailable && (
@@ -134,7 +144,9 @@ export function EntryBadge({
                 </span>
             )}
             {(boostError || turboError) && (
-                <span className="text-error ml-1">{ipcErrorText(boostError || turboError, t)}</span>
+                <InlineError className="ml-1" onDismiss={dismissError}>
+                    {ipcErrorText(boostError || turboError, t)}
+                </InlineError>
             )}
         </div>
     );

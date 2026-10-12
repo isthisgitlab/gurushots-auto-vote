@@ -1,7 +1,7 @@
 import { useCallback, useState } from 'react';
 import { useTranslation } from '@/contexts/TranslationContext';
 import { Modal, ModalActions } from '@/components/ui/Modal';
-import { InlineLoader } from '@/components/ui/LoadingSpinner';
+import { InlineLoader, LoadingSpinner } from '@/components/ui/LoadingSpinner';
 import { useImageLoads } from '@/hooks/useImageLoads';
 import { buildPhotoUrl } from '@/utils/formatters';
 import { interp } from '@/utils/interp';
@@ -369,7 +369,7 @@ function OtherAccountNotice({ onRemoved }: { onRemoved: () => void }) {
                         disabled={removing}
                         onClick={() => void remove()}
                     >
-                        {removing && <span className="loading loading-spinner loading-xs" />}
+                        {removing && <LoadingSpinner size="xs" decorative />}
                         {t('app.photoChooserOtherAccountClear')}
                     </button>
                 </ModalActions>

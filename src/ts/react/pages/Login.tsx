@@ -11,6 +11,10 @@ import { ModeInfoText } from '@/components/login/ModeInfoText';
 import { PageLoader } from '@/components/ui/LoadingSpinner';
 import { StrokeIcon, ICON_PATHS } from '@/components/ui/StrokeIcon';
 import { useDocumentTheme } from '@/hooks/useDocumentTheme';
+import { useNoticeGate } from '@/hooks/useNoticeGate';
+import { UnofficialNoticeModal } from '@/components/app/UnofficialNoticeModal';
+import { SettingsRecoveryNotice } from '@/components/app/SettingsRecoveryNotice';
+import { ipcErrorText } from '@/api/ipcErrorText';
 
 /**
  * Login page content component
@@ -19,6 +23,7 @@ function LoginPageContent() {
     const { ready, t } = useTranslation();
     const { settings, loading: settingsLoading, updateSetting } = useSettings();
     const { envInfo, loading: envLoading } = useEnvironmentInfo();
+    const notice = useNoticeGate(settings, settingsLoading, updateSetting);
     const { authenticate, login, loading: authLoading, error: authError } = useAuth();
 
     // Local state
@@ -108,14 +113,16 @@ function LoginPageContent() {
                     {/* Language Switcher */}
                     <LanguageSwitcher />
 
+                    <SettingsRecoveryNotice />
+
                     {/* Title */}
                     <h2 className="card-title text-2xl font-bold text-center mb-6">{t('login.heading')}</h2>
 
                     {/* Auth Error */}
                     {authError && (
-                        <div className="alert alert-error mb-4">
+                        <div className="alert alert-error mb-4" role="alert">
                             <StrokeIcon className="stroke-current shrink-0 h-6 w-6" d={ICON_PATHS.xCircle} />
-                            <span>{authError}</span>
+                            <span>{ipcErrorText(authError, t, 'errors.loginFailed')}</span>
                         </div>
                     )}
 
@@ -136,6 +143,9 @@ function LoginPageContent() {
                     <ModeInfoText isMock={mockMode} />
                 </div>
             </div>
+
+            {/* Shown here when there is no auto-login; with one, the app page shows it instead */}
+            <UnofficialNoticeModal isOpen={notice.open} onAcknowledge={() => void notice.acknowledge()} />
         </div>
     );
 }
