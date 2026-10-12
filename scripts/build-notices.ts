@@ -381,6 +381,7 @@ export {
     NODE_LICENSE_VERSION,
     ONNXRUNTIME_TEXTS_VERSION,
     collectPackages,
+    coordinateMatches,
     loadAndroidComponents,
     loadLicenses,
     loadNoticeFiles,

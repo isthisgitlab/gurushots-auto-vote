@@ -33,6 +33,7 @@ const {
     NODE_LICENSE_VERSION,
     ONNXRUNTIME_TEXTS_VERSION,
     collectPackages,
+    coordinateMatches,
     loadAndroidComponents,
     loadNoticeFiles,
     loadLicenses,
@@ -49,37 +50,35 @@ const COMMITTED = path.join(ROOT, 'src', 'assets', 'THIRD_PARTY_NOTICES.txt');
 const LICENSES_DIR = path.join(ROOT, 'scripts', 'licenses');
 const read = (...segments: string[]) => fs.readFileSync(path.join(ROOT, ...segments), 'utf8');
 
-/** Whether an android.json coordinate (`group:artifact`, or a pattern ending in `*`) names this artifact, as the generator reads it. */
-const matches = (pattern: string, coordinate: string) =>
-    pattern.endsWith('*') ? coordinate.startsWith(pattern.slice(0, -1)) : pattern === coordinate;
-
 /**
  * The problems with the release each vendored NOTICE was taken from: no android.json component covers the coordinate;
- * the covering component's version variable is undefined in android/variables.gradle or differs from the vendored
- * version; or, for a component with no version variable, the vendored version is not among the versions the release
- * runtime resolves (`resolved`, from the verification metadata). A component with no version variable whose coordinate
- * the verification metadata does not list has nothing to compare against, so it is skipped.
+ * a covering component's version variable is undefined in android/variables.gradle or differs from the vendored
+ * version; or, for a covering component with no version variable, the vendored version is not the one the release
+ * ships (`shipped`, from android/release-runtime-versions.txt). Every component that covers the coordinate is checked,
+ * as the generator renders the NOTICE under each of them. A coordinate the release does not ship has nothing to compare
+ * against here; the test for the shipped artifacts reports it.
  */
 const mismatchedNoticeVersions = (
     vendored: Record<string, { version: string }>,
     components: readonly { coordinates: string[]; versionVariable?: string }[],
     variables: Record<string, string>,
-    resolved: Record<string, string[]>,
+    shipped: Record<string, string>,
 ) => {
     const problems: string[] = [];
     for (const [coordinate, { version }] of Object.entries(vendored)) {
-        const component = components.find((candidate) =>
-            candidate.coordinates.some((pattern) => matches(pattern, coordinate)),
+        const covering = components.filter((candidate) =>
+            candidate.coordinates.some((pattern) => coordinateMatches(pattern, coordinate)),
         );
-        if (!component) {
-            problems.push(`no component covers ${coordinate}`);
-        } else if (component.versionVariable) {
-            const built = variables[component.versionVariable];
-            if (version !== built) problems.push(`${coordinate} is vendored at ${version} but the build uses ${built}`);
-        } else if (resolved[coordinate] && !resolved[coordinate].includes(version)) {
-            problems.push(
-                `${coordinate} is vendored at ${version} but the runtime resolves ${resolved[coordinate].join(', ')}`,
-            );
+        if (covering.length === 0) problems.push(`no component covers ${coordinate}`);
+        for (const component of covering) {
+            if (component.versionVariable) {
+                const built = variables[component.versionVariable];
+                if (version !== built) {
+                    problems.push(`${coordinate} is vendored at ${version} but the build uses ${built}`);
+                }
+            } else if (shipped[coordinate] && shipped[coordinate] !== version) {
+                problems.push(`${coordinate} is vendored at ${version} but the release ships ${shipped[coordinate]}`);
+            }
         }
     }
     return problems;
@@ -239,7 +238,7 @@ describe('the committed notices', () => {
 describe('the Android component list', () => {
     const components = loadAndroidComponents(path.join(LICENSES_DIR, 'android.json'));
     const covers = (coordinate: string) =>
-        components.some((component) => component.coordinates.some((pattern) => matches(pattern, coordinate)));
+        components.some((component) => component.coordinates.some((pattern) => coordinateMatches(pattern, coordinate)));
 
     const appGradle = read('android', 'app', 'build.gradle');
     const declared = [...appGradle.matchAll(/^\s*implementation\s+"([^":]+):([^":]+):/gm)].map(
@@ -256,7 +255,9 @@ describe('the Android component list', () => {
         const unmatched = components.filter(
             (component) =>
                 !component.transitive &&
-                !component.coordinates.some((pattern) => declared.some((coordinate) => matches(pattern, coordinate))),
+                !component.coordinates.some((pattern) =>
+                    declared.some((coordinate) => coordinateMatches(pattern, coordinate)),
+                ),
         );
         expect(unmatched.map((component) => component.name)).toEqual([]);
     });
@@ -323,7 +324,7 @@ describe('the Android component list', () => {
         const stale = components.filter(
             (component) =>
                 !component.coordinates.some((pattern) =>
-                    runtimeArtifacts.some((coordinate) => matches(pattern, coordinate)),
+                    runtimeArtifacts.some((coordinate) => coordinateMatches(pattern, coordinate)),
                 ),
         );
         expect(stale.map((component) => component.name)).toEqual([]);
@@ -400,15 +401,28 @@ describe('the Android component list', () => {
         );
     });
 
-    const resolvedVersions: Record<string, string[]> = {};
-    for (const [, group, artifact, version] of read('android', 'gradle', 'verification-metadata.xml').matchAll(
-        /<component group="([^"]+)" name="([^"]+)" version="([^"]+)"/g,
-    )) {
-        (resolvedVersions[`${group}:${artifact}`] ??= []).push(version);
+    // android/release-runtime-versions.txt (scripts/android-runtime-artifacts.sh) is the release runtime classpath at the
+    // versions the release resolves, group:artifact:version; the verification metadata lists the versions of every
+    // configuration, so it cannot say what the APK ships.
+    const shippedVersions: Record<string, string> = {};
+    const versionLines = read('android', 'release-runtime-versions.txt').split('\n').filter(Boolean);
+    for (const line of versionLines) {
+        const [group, artifact, version] = line.split(':');
+        shippedVersions[`${group}:${artifact}`] = version;
     }
 
+    test('has a release runtime version list with one version for each shipped artifact', () => {
+        expect(versionLines.every((line) => /^[\w.-]+:[\w.-]+:[\w.+-]+$/.test(line))).toBe(true);
+        expect(Object.keys(shippedVersions).sort()).toEqual(runtimeArtifacts);
+        expect(versionLines).toHaveLength(runtimeArtifacts.length);
+    });
+
+    test('vendors only NOTICE files of artifacts the release APK still ships', () => {
+        expect(Object.keys(vendoredNotices).filter((coordinate) => !runtimeArtifacts.includes(coordinate))).toEqual([]);
+    });
+
     test('takes each vendored NOTICE from the release the build uses', () => {
-        const problems = mismatchedNoticeVersions(vendoredNotices, components, variables, resolvedVersions);
+        const problems = mismatchedNoticeVersions(vendoredNotices, components, variables, shippedVersions);
         if (problems.length > 0) {
             throw new Error(
                 `scripts/licenses/notices.json disagrees with the build: ${problems.join('; ')}. Re-fetch the NOTICE ` +
@@ -418,7 +432,7 @@ describe('the Android component list', () => {
         expect(Object.keys(vendoredNotices).length).toBeGreaterThan(0);
     });
 
-    test('compares a vendored NOTICE with the version variable, the resolved runtime, and reports what no component covers', () => {
+    test('compares a vendored NOTICE with the version variable and the shipped version of every covering component, and reports what no component covers', () => {
         const vendored = {
             'org.apache.cordova:framework': { version: '1.0' },
             'androidx.core:core': { version: '2.0' },
@@ -428,30 +442,33 @@ describe('the Android component list', () => {
         const components = [
             { coordinates: ['org.apache.cordova:framework'], versionVariable: 'cordovaVersion' },
             { coordinates: ['androidx.*'] },
+            { coordinates: ['androidx.core:*'], versionVariable: 'coreVersion' },
             { coordinates: ['x:y'] },
         ];
         expect(
             mismatchedNoticeVersions(
                 vendored,
                 components,
-                { cordovaVersion: '1.0' },
-                { 'androidx.core:core': ['2.0'] },
+                { cordovaVersion: '1.0', coreVersion: '2.0' },
+                { 'androidx.core:core': '2.0' },
             ),
         ).toEqual(['no component covers z:w']);
         expect(
             mismatchedNoticeVersions(
                 vendored,
                 components,
-                { cordovaVersion: '1.1' },
-                { 'androidx.core:core': ['2.1', '2.2'] },
+                { cordovaVersion: '1.1', coreVersion: '2.1' },
+                { 'androidx.core:core': '2.2' },
             ),
         ).toEqual([
             'org.apache.cordova:framework is vendored at 1.0 but the build uses 1.1',
-            'androidx.core:core is vendored at 2.0 but the runtime resolves 2.1, 2.2',
+            'androidx.core:core is vendored at 2.0 but the release ships 2.2',
+            'androidx.core:core is vendored at 2.0 but the build uses 2.1',
             'no component covers z:w',
         ]);
         expect(mismatchedNoticeVersions(vendored, components, {}, {})).toEqual([
             'org.apache.cordova:framework is vendored at 1.0 but the build uses undefined',
+            'androidx.core:core is vendored at 2.0 but the build uses undefined',
             'no component covers z:w',
         ]);
     });
@@ -459,13 +476,14 @@ describe('the Android component list', () => {
     test('accepts a module without a file only when every selected variant is a platform or a redirect', () => {
         const script = read('scripts', 'android-runtime-artifacts.sh');
         expect(script).toContain('!component.variants.isEmpty() && component.variants.every {');
+        expect(script).toContain('failures.add("${coordinate} resolves to no file');
     });
 
     test('keeps the runtime lists current: the Android CI job regenerates and diffs them, and so does the metadata script', () => {
         const workflow = read('.github', 'workflows', 'test.yml');
         expect(workflow).toContain('scripts/android-runtime-artifacts.sh');
         expect(workflow).toMatch(
-            /git diff --exit-code -- android\/release-runtime-artifacts\.txt android\/release-runtime-notices\.txt/,
+            /git diff --exit-code -- android\/release-runtime-artifacts\.txt android\/release-runtime-versions\.txt android\/release-runtime-notices\.txt/,
         );
         expect(read('scripts', 'android-verification-metadata.sh')).toContain('scripts/android-runtime-artifacts.sh');
     });

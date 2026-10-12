@@ -141,13 +141,13 @@ jobs:
             - name: Sync Capacitor
               run: pnpm exec cap sync android
 
-            # The lists the third-party notices test holds the Android notices to (what the release APK ships, and which
-            # of it carries a NOTICE file) must match the dependency graph as it is now.
+            # The lists the third-party notices test holds the Android notices to (what the release APK ships, at which
+            # versions, and which of it carries a NOTICE file) must match the dependency graph as it is now.
             - name: Check the release runtime lists are current
               run: |
                   scripts/android-runtime-artifacts.sh
-                  if ! git diff --exit-code -- android/release-runtime-artifacts.txt android/release-runtime-notices.txt; then
-                      echo "::error::The release runtime lists are out of date. Run scripts/android-runtime-artifacts.sh (or scripts/android-verification-metadata.sh after a dependency change) and commit android/release-runtime-artifacts.txt and android/release-runtime-notices.txt."
+                  if ! git diff --exit-code -- android/release-runtime-artifacts.txt android/release-runtime-versions.txt android/release-runtime-notices.txt; then
+                      echo "::error::The release runtime lists are out of date. Run scripts/android-runtime-artifacts.sh (or scripts/android-verification-metadata.sh after a dependency change) and commit android/release-runtime-artifacts.txt, android/release-runtime-versions.txt and android/release-runtime-notices.txt."
                       exit 1
                   fi
 

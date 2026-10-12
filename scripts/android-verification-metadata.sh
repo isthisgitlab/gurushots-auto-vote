@@ -1,9 +1,9 @@
 #!/usr/bin/env bash
 # Regenerates android/gradle/verification-metadata.xml, the SHA-256 of every artifact Gradle resolves for the Android
 # build (plugins, libraries, the Gradle-side tooling), which CI checks on every run, and
-# the two lists of what the release APK ships (android/release-runtime-artifacts.txt and
-# android/release-runtime-notices.txt, written by scripts/android-runtime-artifacts.sh), which the third-party notices
-# test holds the notices' Android component list to.
+# the three lists of what the release APK ships (android/release-runtime-artifacts.txt, android/release-runtime-versions.txt
+# and android/release-runtime-notices.txt, written by scripts/android-runtime-artifacts.sh), which the third-party
+# notices test holds the notices' Android component list to.
 #
 # Run it after any change to the Android dependency graph: android/build.gradle, android/app/build.gradle,
 # android/variables.gradle, a Capacitor plugin, or the Gradle wrapper. Dependabot's npm PRs that bump @capacitor/* change

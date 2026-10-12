@@ -1,11 +1,12 @@
 #!/usr/bin/env bash
-# Regenerates the two lists the third-party notices test holds the Android notices to, from the release APK's runtime
+# Regenerates the three lists the third-party notices test holds the Android notices to, from the release APK's runtime
 # classpath (`:app:dependencies --configuration releaseRuntimeClasspath`):
 #
 #   android/release-runtime-artifacts.txt  the libraries the release APK ships (group:artifact, sorted, one per line)
+#   android/release-runtime-versions.txt   the same libraries at the version the release resolves (group:artifact:version)
 #   android/release-runtime-notices.txt    the ones of them whose jar or aar (or a jar inside it) carries a META-INF/NOTICE* file
 #
-# CI runs it in the Android job and fails when either file differs from the committed one;
+# CI runs it in the Android job and fails when any file differs from the committed one;
 # scripts/android-verification-metadata.sh runs it too, so a dependency change regenerates all of it in one go.
 #
 #   scripts/android-runtime-artifacts.sh
@@ -18,20 +19,23 @@ set -euo pipefail
 
 repo=$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)
 artifacts="$repo/android/release-runtime-artifacts.txt"
+versions="$repo/android/release-runtime-versions.txt"
 notices="$repo/android/release-runtime-notices.txt"
 
-# Everything is written beside its target and moved into place only once both lists exist, so a failed run leaves the
+# Everything is written beside its target and moved into place only once all the lists exist, so a failed run leaves the
 # committed files as they were; whatever is left over is removed on the way out.
 work=$(mktemp -d)
 new_artifacts=$(mktemp "$artifacts.XXXXXX")
+new_versions=$(mktemp "$versions.XXXXXX")
 new_notices=$(mktemp "$notices.XXXXXX")
 cleanup() {
     rm -rf "$work"
-    rm -f "$new_artifacts" "$new_notices"
+    rm -f "$new_artifacts" "$new_versions" "$new_notices"
 }
 trap cleanup EXIT
 
-# Prints "SCANNED group:artifact" for every module of the release runtime classpath it opened, "NOTICE group:artifact"
+# Prints "VERSION group:artifact:version" for every module of the resolved graph, "SCANNED group:artifact" for every
+# module of the release runtime classpath it opened, "NOTICE group:artifact"
 # for the ones whose jar, or a jar inside its aar (classes.jar, libs/*.jar), has a META-INF/NOTICE* entry, and
 # "UNSCANNED group:artifact" for a module that resolves to a file the scan did not open, "NOFILE group:artifact" for a
 # module of the resolved graph that has no file because it is a BOM, a platform or a redirect to another module, and
@@ -116,6 +120,12 @@ allprojects {
                     }
                 }
             }
+            def versions = new TreeSet<String>()
+            configurations.getByName('releaseRuntimeClasspath').incoming.resolutionResult.allComponents.each { component ->
+                def id = component.id
+                if (id instanceof ModuleComponentIdentifier) versions.add("${id.group}:${id.module}:${id.version}".toString())
+            }
+            versions.each { println "VERSION ${it}" }
             scanned.each { println "SCANNED ${it}" }
             withNotice.each { println "NOTICE ${it}" }
             resolved.findAll { !scanned.contains(it) }.each { println "UNSCANNED ${it}" }
@@ -174,6 +184,18 @@ if [ -n "$unaccounted" ]; then
 fi
 sed -nE 's/^NOTICE ([A-Za-z0-9_.-]+:[A-Za-z0-9_.-]+)$/\1/p' "$work/notices" | LC_ALL=C sort -u > "$new_notices"
 
+# The version each artifact ships at: exactly one per artifact of the list, or the resolved graph is not the one listed.
+sed -nE 's/^VERSION ([A-Za-z0-9_.-]+:[A-Za-z0-9_.-]+:[A-Za-z0-9_.+-]+)$/\1/p' "$work/notices" |
+    awk -F: 'NR == FNR { listed[$0] = 1; next } ($1 ":" $2) in listed { print }' "$new_artifacts" - |
+    LC_ALL=C sort -u > "$new_versions"
+unversioned=$(cut -d: -f1,2 "$new_versions" | LC_ALL=C sort | LC_ALL=C comm -3 - "$new_artifacts")
+if [ -n "$unversioned" ]; then
+    echo "The versions the release runtime classpath resolves do not map one-to-one onto its artifacts; nothing was written:" >&2
+    echo "$unversioned" | sed 's/^/    /' >&2
+    exit 1
+fi
+
 mv "$new_artifacts" "$artifacts"
+mv "$new_versions" "$versions"
 mv "$new_notices" "$notices"
 echo "==> $(wc -l < "$artifacts" | tr -d ' ') runtime artifacts, $(wc -l < "$notices" | tr -d ' ') with a NOTICE"
