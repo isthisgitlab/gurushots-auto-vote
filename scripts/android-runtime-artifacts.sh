@@ -25,7 +25,7 @@ set -euo pipefail
 # list (group:artifact lines); otherwise names the modules that have none or several on stderr and fails.
 check_versions() {
     local unversioned
-    unversioned=$(comm -3 <(cut -d: -f1,2 "$2" | LC_ALL=C sort) <(LC_ALL=C sort "$1") | tr -d '\t')
+    unversioned=$(LC_ALL=C comm -3 <(cut -d: -f1,2 "$2" | LC_ALL=C sort) <(LC_ALL=C sort "$1") | tr -d '\t')
     if [ -n "$unversioned" ]; then
         echo "The versions the release runtime classpath resolves do not map one-to-one onto its artifacts:" >&2
         echo "$unversioned" | sed 's/^/    /' >&2

@@ -584,6 +584,11 @@ describe('the Android component list', () => {
             expect(result.stderr).toContain('    g:c\n');
         });
 
+        test('compares the sorted lists bytewise, under the same collation they were sorted with', () => {
+            const text = read('scripts', 'android-runtime-artifacts.sh');
+            expect(text).toContain('unversioned=$(LC_ALL=C comm -3 ');
+        });
+
         test('the generating flow calls the same check and writes nothing when it fails', () => {
             const text = read('scripts', 'android-runtime-artifacts.sh');
             expect(text).toContain('if ! check_versions "$new_artifacts" "$new_versions"; then');
