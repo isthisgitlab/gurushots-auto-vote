@@ -9,7 +9,7 @@
  *       scenario, phase, phaseEnteredAt,        // unix seconds
  *       memory: { slot: photoId },
  *       fired: { ruleId: { at, day?, phaseEnteredAt?, unclearHalt? } },   // unclearHalt: the spend it stopped after
- *       inFlight: { ruleId, actionIndex, unclear? } | null,               // unclear: the spend that got no answer
+ *       inFlight: { ruleId, actionIndex, unclear?, unclearAt? } | null,   // unclear: the spend that got no answer, and when
  *       spent: { swaps, keys, fills },
  *       history: { photoId: [[unixSec, votes], …] },   // vote samples (scenarios/speed.ts)
  *       outbox: [{ id, at, message }],                // notices for the host notifiers
@@ -36,6 +36,11 @@ import type { RawJsonStore, ScenarioState, SpendAction } from './types/stores';
 import * as logger from './logger';
 import { createJsonStore } from './settings/storage';
 import { isPlainObject } from './plainObject';
+import { errorMessage } from './errorMessage';
+import { acquireWithin } from './lockWait';
+import { acquireUnlockLock } from './joinStateStore';
+
+const NO_LOCK: StateLock = { ok: true, release: () => {} };
 
 const scenarioStateStore = createJsonStore({
     fileName: 'scenarioState.json',
@@ -68,13 +73,15 @@ const isRecord = (r: unknown): r is ScenarioState =>
     isPlainObject(r.fired) &&
     Object.values(r.fired).every(isFiredRecord) &&
     isPlainObject(r.spent) &&
+    Object.values(r.spent).every((count) => Number.isFinite(count) && Number(count) >= 0) &&
     (r.history === undefined || isPlainObject(r.history)) &&
     (r.outbox === undefined || Array.isArray(r.outbox)) &&
     (r.inFlight === null ||
         (isPlainObject(r.inFlight) &&
             typeof r.inFlight.ruleId === 'string' &&
             Number.isInteger(r.inFlight.actionIndex) &&
-            (r.inFlight.unclear === undefined || isSpendAction(r.inFlight.unclear))));
+            (r.inFlight.unclear === undefined || isSpendAction(r.inFlight.unclear)) &&
+            (r.inFlight.unclearAt === undefined || Number.isFinite(r.inFlight.unclearAt))));
 
 /**
  * A fresh record for a challenge entering `scenario` at its start phase.
@@ -95,12 +102,27 @@ const initialState = (scenario: string, phase: string, nowSec: number): Scenario
 
 type ParsedStateFile = { ok: boolean; map: Record<string, unknown> };
 
+/** A cross-process lock, as joinStateStore's acquireUnlockLock gives one. */
+type StateLock = { ok: boolean; release: () => void };
+
+/** How a reset ended: done, not done because another process holds a lock, or not done because the file is unreadable. */
+type ResetResult = 'removed' | 'busy' | 'unreadable';
+
+// The state file is one file for every challenge, so a change of it is read-modify-write of the whole: two processes
+// running different challenges would drop each other's change (a fired rule, a spend counter, an unclear marker,
+// and with it the protection against repeating a landed spend). It is changed only under this lock, held briefly.
+const FILE_LOCK_ID = 'scenariostate';
+const FILE_LOCK_WAIT_MS = 500;
+
 /**
- * Ledger over a raw-JSON store ({readRaw, writeRaw}).
+ * The state file over a raw-JSON store: its parsed text (re-parsed only when the stored text changed: the engine and
+ * the settings overlay read state many times per pass), its whole-file write (older records pruned) and the lock its
+ * changes are made under.
+ *
+ * @param acquireLock - the cross-process lock of the file's changes; none where one process owns the file (mock
+ *   mode, Android) and in tests
  */
-const createStateLedger = (store: RawJsonStore) => {
-    // The engine and the settings overlay read state many times per pass;
-    // re-parse only when the stored text changed.
+const createStateFile = (store: RawJsonStore, acquireLock?: (id: string) => StateLock) => {
     let lastRaw: string | null | undefined;
     let lastParsed: ParsedStateFile | undefined;
 
@@ -132,37 +154,117 @@ const createStateLedger = (store: RawJsonStore) => {
         store.writeRaw(JSON.stringify(pruned));
     };
 
+    /**
+     * Runs `change` under the file's lock, waited for a moment. False when the lock could not be had (nothing ran).
+     */
+    const underFileLock = (change: () => void): boolean => {
+        const lock = acquireLock ? acquireWithin(() => acquireLock(FILE_LOCK_ID), FILE_LOCK_WAIT_MS) : NO_LOCK;
+        if (!lock) {
+            logger
+                .withCategory('scenario')
+                .warning('scenario state is locked by another process — nothing written', null);
+            return false;
+        }
+        try {
+            change();
+            return true;
+        } finally {
+            lock.release();
+        }
+    };
+
+    /**
+     * Rewrites the file as `change` makes it from the file as it is now (read again under the lock). An unreadable
+     * file is never replaced by one challenge's change: that would wipe every challenge's progress.
+     */
+    const mutate = (change: (map: Record<string, unknown>) => Record<string, unknown>): ResetResult | 'done' => {
+        let result: ResetResult | 'done' = 'unreadable';
+        const ran = underFileLock(() => {
+            const { ok, map } = read();
+            if (!ok) return;
+            write(change(map));
+            result = 'done';
+        });
+        return ran ? result : 'busy';
+    };
+
+    return { read, write, underFileLock, mutate };
+};
+
+/**
+ * Ledger over a raw-JSON store ({readRaw, writeRaw}).
+ *
+ * @param acquireLock - see createStateFile
+ */
+const createStateLedger = (store: RawJsonStore, acquireLock?: (id: string) => StateLock) => {
+    const { read, write, underFileLock, mutate } = createStateFile(store, acquireLock);
+    // States that could not be written, by challenge: kept so that the next pass goes on from them (a spend that
+    // landed is not spent again) and tries to write them first. While one is kept the runner spends nothing.
+    const unsaved = new Map<string, ScenarioState>();
+
+    // Writes one challenge's state into the file as it is now; false when it could not be (see `set`).
+    const persist = (key: string, state: ScenarioState): boolean => {
+        let result: ResetResult | 'done' = 'unreadable';
+        try {
+            result = mutate((map) => ({ ...map, [key]: { ...state, updatedAt: Date.now() } }));
+        } catch (error) {
+            logger.withCategory('scenario').error(`scenario state could not be written: ${errorMessage(error)}`, null);
+        }
+        if (result === 'done') unsaved.delete(key);
+        return result === 'done';
+    };
+
     return {
         /**
          * The state for one challenge: `{state: null}` when it has none yet,
          * `{state}` when readable, `{corrupt: true}` when the file or this
-         * record cannot be trusted.
+         * record cannot be trusted. A state that could not be written is returned as it is, after trying again.
          */
         get: (challengeId: string | number): { corrupt: boolean; state: ScenarioState | null } => {
+            const key = String(challengeId);
+            const pending = unsaved.get(key);
+            if (pending && !persist(key, pending)) return { corrupt: false, state: structuredClone(pending) };
             const { ok, map } = read();
             if (!ok) return { corrupt: true, state: null };
-            const record = map[String(challengeId)];
+            const record = map[key];
             if (record === undefined) return { corrupt: false, state: null };
             if (!isRecord(record)) return { corrupt: true, state: null };
             return { corrupt: false, state: structuredClone(record) };
         },
 
         /**
-         * Store the state for one challenge. An unreadable file is replaced.
+         * Store the state for one challenge, under the file's lock. False when it could not be written (the lock
+         * is held, the file is unreadable or the write failed): the state is kept for the next try, and the caller
+         * must not go on to spend anything.
          */
-        set: (challengeId: string | number, state: ScenarioState) => {
-            const { map } = read();
-            write({ ...map, [String(challengeId)]: { ...state, updatedAt: Date.now() } });
+        set: (challengeId: string | number, state: ScenarioState): boolean => {
+            const key = String(challengeId);
+            const saved = persist(key, state);
+            if (!saved) unsaved.set(key, state);
+            return saved;
+        },
+
+        /** Whether a state of this challenge is waiting to be written. */
+        hasUnsaved: (challengeId: string | number): boolean => unsaved.has(String(challengeId)),
+
+        /**
+         * Forget one challenge's state (a reset). An unreadable file is left as it is: clearing it takes a reset
+         * of every challenge (removeAll).
+         */
+        remove: (challengeId: string | number): ResetResult => {
+            const key = String(challengeId);
+            const result = mutate(({ [key]: _gone, ...rest }) => rest);
+            if (result === 'done') unsaved.delete(key);
+            return result === 'done' ? 'removed' : result;
         },
 
         /**
-         * Forget one challenge's state (a reset). An unreadable file is replaced.
+         * Forget every challenge's state, an unreadable file included.
          */
-        remove: (challengeId: string | number) => {
-            const { map } = read();
-            const next = { ...map };
-            delete next[String(challengeId)];
-            write(next);
+        removeAll: (): ResetResult => {
+            if (!underFileLock(() => write({}))) return 'busy';
+            unsaved.clear();
+            return 'removed';
         },
     };
 };
@@ -178,7 +280,14 @@ const createMemoryStateLedger = () => {
     });
 };
 
-const scenarioStateLedger = createStateLedger(scenarioStateStore);
+const scenarioStateLedger = createStateLedger(scenarioStateStore, (id) => acquireUnlockLock(id, 'scenario'));
+
+/**
+ * The cross-process lock of one challenge's scenario steps: one process runs a challenge's rule steps (or resets it)
+ * at a time. Not granted twice, and never waited for.
+ */
+const scenarioStepLock = (challengeId: string | number): StateLock =>
+    acquireUnlockLock(`scenario-${String(challengeId)}`, 'scenario');
 
 // Process-wide in-memory ledger for mock mode, shared by the mock voting pass
 // and the scenario IPC handlers so a mock run is inspectable like a real one.
@@ -187,4 +296,12 @@ const mockScenarioStateLedger = createMemoryStateLedger();
 export const initializeScenarioStateAsync = scenarioStateStore.initializeAsync;
 export const refreshScenarioStateAsync = scenarioStateStore.refreshAsync;
 export const flushScenarioStateWrites = scenarioStateStore.flushPendingWrites;
-export { scenarioStateLedger, mockScenarioStateLedger, createStateLedger, createMemoryStateLedger, initialState };
+export {
+    scenarioStateLedger,
+    mockScenarioStateLedger,
+    createStateLedger,
+    createMemoryStateLedger,
+    initialState,
+    scenarioStepLock,
+};
+export type { ResetResult, StateLock };

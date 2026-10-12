@@ -24,6 +24,7 @@ import fsModule = require('node:fs');
 const fs = jest.mocked(fsModule);
 import type * as storageModule from '../../src/ts/settings/storage';
 import * as logger from '../../src/ts/logger';
+import { invalid } from '../helpers/invalid';
 
 const g = globalThis as typeof globalThis & {
     Capacitor?: { isNativePlatform: () => boolean; getPlatform: () => string };
@@ -82,10 +83,10 @@ describe('createJsonStore', () => {
 
             test('the data goes to a temp file next to it (owner-only, exclusive), is flushed to disk, and is renamed over it', () => {
                 atomic.writeRaw('{"a":3}');
-                const [temp, flag, mode] = fs.openSync.mock.calls[0] as unknown as [string, string, number];
+                const [temp, flag, mode] = invalid<[string, string, number]>(fs.openSync.mock.calls[0]);
                 expect(temp).toMatch(TEMP);
                 expect([flag, mode]).toEqual(['wx', 0o600]);
-                expect(fs.writeSync).toHaveBeenCalledWith(3, '{"a":3}');
+                expect(fs.writeFileSync).toHaveBeenCalledWith(3, '{"a":3}');
                 expect(fs.fsyncSync).toHaveBeenCalledWith(3);
                 expect(fs.closeSync).toHaveBeenCalledWith(3);
                 expect(fs.renameSync).toHaveBeenCalledWith(temp, expect.stringMatching(/joinState\.json$/));
@@ -94,7 +95,12 @@ describe('createJsonStore', () => {
                     fs.renameSync.mock.invocationCallOrder[0],
                 );
                 // Nothing is ever written into the file itself, so a reader never sees it empty or cut off.
-                expect(fs.writeFileSync).not.toHaveBeenCalled();
+                expect(fs.writeFileSync).toHaveBeenCalledTimes(1);
+                expect(fs.writeFileSync).not.toHaveBeenCalledWith(
+                    expect.stringMatching(/joinState\.json$/),
+                    expect.anything(),
+                    expect.anything(),
+                );
                 expect(fs.chmodSync).not.toHaveBeenCalled();
             });
 
@@ -145,7 +151,7 @@ describe('createJsonStore', () => {
                     throw new Error('disk full');
                 });
                 expect(() => atomic.writeRaw('{}')).toThrow('disk full');
-                fs.writeSync.mockImplementationOnce(() => {
+                fs.writeFileSync.mockImplementationOnce(() => {
                     throw new Error('ENOSPC');
                 });
                 expect(() => atomic.writeRaw('{}')).toThrow('ENOSPC');
@@ -164,7 +170,7 @@ describe('createJsonStore', () => {
             });
 
             test('a temp file that is not there to remove does not hide the failure', () => {
-                fs.writeSync.mockImplementationOnce(() => {
+                fs.writeFileSync.mockImplementationOnce(() => {
                     throw new Error('disk full');
                 });
                 fs.unlinkSync.mockImplementationOnce(() => {
@@ -182,8 +188,8 @@ describe('createJsonStore', () => {
             describe('the temp files of a write that was cut short are cleared, once, by the first read or write', () => {
                 const AGE = 61_000;
                 const listing = (...names: string[]) => {
-                    fs.readdirSync.mockReturnValue(names as unknown as ReturnType<typeof fs.readdirSync>);
-                    fs.statSync.mockReturnValue({ mtimeMs: Date.now() - AGE } as ReturnType<typeof fs.statSync>);
+                    fs.readdirSync.mockReturnValue(invalid(names));
+                    fs.statSync.mockReturnValue(invalid({ mtimeMs: Date.now() - AGE }));
                 };
 
                 test('only names of its own pattern, and only old ones', () => {
@@ -194,6 +200,8 @@ describe('createJsonStore', () => {
                         'joinState.json.abc.0a1b2c3d.tmp',
                         'metadata.json.4242.0a1b2c3d.tmp',
                         'joinState.jsonx.4242.0a1b2c3d.tmp',
+                        'joinStateXjson.4242.0a1b2c3d.tmp',
+                        'x.joinState.json.4242.0a1b2c3d.tmp',
                     );
                     atomic.readRaw();
                     expect(fs.unlinkSync).toHaveBeenCalledTimes(1);
@@ -204,7 +212,7 @@ describe('createJsonStore', () => {
 
                 test('a temp file of a write that may still be under way is left alone', () => {
                     listing('joinState.json.4242.0a1b2c3d.tmp');
-                    fs.statSync.mockReturnValue({ mtimeMs: Date.now() - 5_000 } as ReturnType<typeof fs.statSync>);
+                    fs.statSync.mockReturnValue(invalid({ mtimeMs: Date.now() - 5_000 }));
                     atomic.writeRaw('{}');
                     expect(fs.unlinkSync).not.toHaveBeenCalled();
                 });
@@ -229,6 +237,16 @@ describe('createJsonStore', () => {
                         throw new Error('EBUSY');
                     });
                     expect(() => other.readRaw()).not.toThrow();
+                });
+
+                test('one that vanished before it could be looked at does not stop the others', () => {
+                    listing('joinState.json.1.0a1b2c3d.tmp', 'joinState.json.2.0a1b2c3d.tmp');
+                    fs.statSync.mockImplementationOnce(() => {
+                        throw Object.assign(new Error('gone'), { code: 'ENOENT' });
+                    });
+                    atomic.readRaw();
+                    expect(fs.unlinkSync).toHaveBeenCalledTimes(1);
+                    expect(fs.unlinkSync).toHaveBeenCalledWith(expect.stringMatching(/joinState\.json\.2\./));
                 });
 
                 test('a store that is not atomic never looks', () => {

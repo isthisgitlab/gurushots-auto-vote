@@ -93,6 +93,72 @@ beforeEach(() => {
     window.api.openExternalUrl = jest.fn().mockResolvedValue(undefined);
 });
 
+describe('a scenario whose progress can be reset from the card', () => {
+    const scenario = { name: 'Plan', start: 'main', phases: { main: { rules: [{ id: 'r', if: [], do: [] }] } } };
+    const statusOf = (state: object | null, corrupt = false) =>
+        invalid({
+            success: true,
+            assigned: 'Plan',
+            scenario,
+            corrupt,
+            timezone: 'UTC',
+            state: corrupt
+                ? null
+                : {
+                      phase: 'main',
+                      phaseEnteredAt: nowSec(),
+                      fired: {},
+                      memory: {},
+                      lastError: null,
+                      inFlight: null,
+                      ...state,
+                  },
+        });
+    const stopped = () => ({ fired: { r: { at: nowSec(), phaseEnteredAt: nowSec(), unclearHalt: 'swap' } } });
+
+    test('a stopped rule offers the reset: the dialog says what it costs, and confirming resets and reads the status again', async () => {
+        window.api.getScenarioStatus = jest.fn().mockResolvedValue(statusOf(stopped()));
+        window.api.resetScenarioState = jest.fn().mockResolvedValue({ success: true });
+        renderCard(makeChallenge());
+        fireEvent.click(await screen.findByText('app.scenarioReset'));
+        expect(screen.getByText('app.scenarioResetBody')).toBeTruthy();
+        fireEvent.click(screen.getByText('app.scenarioResetConfirm'));
+        await waitFor(() => expect(window.api.resetScenarioState).toHaveBeenCalledWith(101));
+        await waitFor(() => expect(window.api.getScenarioStatus).toHaveBeenCalledTimes(2));
+        await waitFor(() => expect(screen.queryByText('app.scenarioResetTitle')).toBeNull());
+        expect(window.api.resetAllScenarioState).not.toHaveBeenCalled();
+    });
+
+    test('unreadable progress offers the reset of every challenge, and the dialog says that', async () => {
+        window.api.getScenarioStatus = jest.fn().mockResolvedValue(statusOf(null, true));
+        window.api.resetAllScenarioState = jest.fn().mockResolvedValue({ success: true });
+        renderCard(makeChallenge());
+        fireEvent.click(await screen.findByText('app.scenarioResetAll'));
+        expect(screen.getByText('app.scenarioResetAllBody')).toBeTruthy();
+        fireEvent.click(screen.getByText('app.scenarioResetConfirm'));
+        await waitFor(() => expect(window.api.resetAllScenarioState).toHaveBeenCalledTimes(1));
+        expect(window.api.resetScenarioState).not.toHaveBeenCalled();
+    });
+
+    test('cancelling resets nothing', async () => {
+        window.api.getScenarioStatus = jest.fn().mockResolvedValue(statusOf(stopped()));
+        window.api.resetScenarioState = jest.fn();
+        renderCard(makeChallenge());
+        fireEvent.click(await screen.findByText('app.scenarioReset'));
+        fireEvent.click(screen.getByText('app.cancel'));
+        await waitFor(() => expect(screen.queryByText('app.scenarioResetTitle')).toBeNull());
+        expect(window.api.resetScenarioState).not.toHaveBeenCalled();
+    });
+
+    test('a plan with nothing stopped offers no reset', async () => {
+        window.api.getScenarioStatus = jest.fn().mockResolvedValue(statusOf({}));
+        renderCard(makeChallenge());
+        await waitFor(() => expect(window.api.getScenarioStatus).toHaveBeenCalled());
+        await screen.findByText(/app\.scenarioStatusPhase/);
+        expect(screen.queryByText('app.scenarioReset')).toBeNull();
+    });
+});
+
 describe('header', () => {
     test('the jump target accepts focus and shows a blue outline', () => {
         const { container } = renderCard(makeChallenge());

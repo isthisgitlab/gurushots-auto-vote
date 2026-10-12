@@ -482,7 +482,7 @@ describe('join', () => {
         );
         await joinChallengeCmd('7');
         expect(msgs('error')).toEqual([
-            `Challenge 7 has a payment record from an older version of the app, from before accounts were told apart, so it is not known whether the coins were taken, or by which GuruShots account used on this device. The join did not finish. ${RERUN} The record cannot be forgotten here, because it may belong to another account: it clears by itself, at the next check after 30 days, or when the account that paid joins the challenge. If this is not the account that paid, you can join the challenge on the GuruShots website meanwhile.`,
+            `Challenge 7 has a payment record from an older version of the app, from before accounts were told apart, so it is not known whether the coins were taken, or by which GuruShots account used on this device. The join did not finish. ${RERUN} The record cannot be forgotten here, because it may belong to another account: it stops applying to other accounts once the account that paid joins the challenge, and otherwise clears by itself, at the next check after 30 days. If this is not the account that paid, you can join the challenge on the GuruShots website meanwhile.`,
         ]);
         expect(msgs('error')[0]).not.toContain('forget-payment');
         expect(handlers['get-bankroll']).not.toHaveBeenCalled();
@@ -496,6 +496,15 @@ describe('join', () => {
         expect(msgs('error')).toEqual([
             'Could not confirm which account is logged in, so this attempt to join 7 spent no coins. Try again shortly, or run "login" again.',
         ]);
+    });
+
+    test('a challenge this account has already joined says so and spent nothing, and is not a success of this call', async () => {
+        handlers['join-challenge'].mockResolvedValue(
+            invalid({ status: 'failed-no-charge', reason: 'already-joined', cost: 100 }),
+        );
+        expect(await joinChallengeCmd('7')).toBe(1);
+        expect(msgs('info')).toEqual(['This account has already joined 7; nothing was spent.']);
+        expect(msgs('error')).toEqual([]);
     });
 
     test('an invalid-args refusal prints the invalid-id text, not the retry fallback', async () => {
@@ -614,7 +623,7 @@ describe('forget-payment', () => {
         [
             'legacy-record',
             'error',
-            'is from an older version of the app and may belong to another GuruShots account used on this device, so it cannot be forgotten here. It clears by itself, at the next check after 30 days, or when the account that paid joins the challenge.',
+            'is from an older version of the app and may belong to another GuruShots account used on this device, so it cannot be forgotten here. It stops applying to other accounts once the account that paid joins the challenge, and otherwise clears by itself, at the next check after 30 days.',
         ],
         ['nothing-to-forget', 'error', 'Nothing to forget for 7'],
         [

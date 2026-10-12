@@ -117,6 +117,7 @@ export const importScenario = forward('importScenario');
 export const exportScenario = forward('exportScenario');
 export const getScenarioStatus = forward('getScenarioStatus');
 export const resetScenarioState = forward('resetScenarioState');
+export const resetAllScenarioState = forward('resetAllScenarioState');
 export const dryRunScenario = forward('dryRunScenario');
 export const simulateScenario = forward('simulateScenario');
 

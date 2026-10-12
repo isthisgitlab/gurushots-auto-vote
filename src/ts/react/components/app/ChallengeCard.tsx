@@ -1,3 +1,4 @@
+import { useState } from 'react';
 import { useTranslation } from '@/contexts/TranslationContext';
 import { deriveChallengeCardView } from '@/utils/challengeCardView';
 import { useDeadlineActions } from '@/api/useDeadlineActions';
@@ -68,7 +69,9 @@ export function ChallengeCard({
     // renders without them, never an error surface.
     const { actions: deadlineActions, boostBlocked } = useDeadlineActions(challenge, settingsVersion);
     const swapBacks = useSwapBacks(challenge);
-    const scenarioStatus = useScenarioStatus(challenge, settingsVersion, passVersion);
+    // A reset of the scenario progress reads the status again, as a finished pass does.
+    const [scenarioResets, setScenarioResets] = useState(0);
+    const scenarioStatus = useScenarioStatus(challenge, settingsVersion, passVersion + scenarioResets);
 
     // Tick once a second — only meaningful when this challenge is in TIMER
     // state and we want canPlayAutoTurbo to flip to true the moment the
@@ -151,6 +154,7 @@ export function ChallengeCard({
                 bankroll={bankroll}
                 onVoteComplete={onVoteComplete}
                 onCurrencySpent={onCurrencySpent}
+                onScenarioReset={() => setScenarioResets((count) => count + 1)}
             />
         </div>
     );

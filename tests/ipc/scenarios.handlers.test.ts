@@ -16,14 +16,21 @@ jest.mock('../../src/ts/settings', () => ({
 }));
 jest.mock('../../src/ts/ipc/chosenPhotosOwner', () => ({ stampChosenPhotosOwner: jest.fn() }));
 jest.mock('../../src/ts/services/scenarioStatus', () => {
-    const ledger = { remove: jest.fn() };
-    return { getScenarioStatus: jest.fn(), ledgerForMode: jest.fn(() => ledger), __ledger: ledger };
+    const ledger = { remove: jest.fn(() => 'removed'), removeAll: jest.fn(() => 'removed') };
+    const release = jest.fn();
+    return {
+        getScenarioStatus: jest.fn(),
+        ledgerForMode: jest.fn(() => ledger),
+        stepLockForMode: jest.fn((_id: string | number) => ({ ok: true, release })),
+        __ledger: ledger,
+        __release: release,
+    };
 });
 jest.mock('../../src/ts/scenarioStateStore', () => ({ refreshScenarioStateAsync: jest.fn(async () => {}) }));
 jest.mock('../../src/ts/services/auth', () => ({ requireAuthToken: jest.fn(() => ({ ok: true, token: 'tok' })) }));
 jest.mock('../../src/ts/apiFactory', () => ({ getApiStrategy: jest.fn() }));
 jest.mock('../../src/ts/logger', () => ({
-    withCategory: jest.fn(() => ({ error: jest.fn(), info: jest.fn() })),
+    withCategory: jest.fn(() => ({ error: jest.fn(), info: jest.fn(), warning: jest.fn() })),
     sanitizeLogString: (value: string) => value,
 }));
 
@@ -207,17 +214,40 @@ describe('status and reset', () => {
         }
     });
 
-    test('reset forgets the challenge progress', async () => {
+    // The ledger and the lock the module mock hands out, with what each did.
+    const mocked = scenarioStatus as typeof scenarioStatus & {
+        __ledger: { remove: jest.Mock<string, [string]>; removeAll: jest.Mock<string, []> };
+        __release: jest.Mock<void, []>;
+    };
+
+    test('reset forgets the challenge progress, under the challenge’s step lock, which is let go', async () => {
         await expect(handlers['reset-scenario-state'](null, 7)).resolves.toEqual({ success: true });
-        expect(
-            (
-                scenarioStatus as typeof scenarioStatus & {
-                    __ledger: {
-                        remove: jest.MockedFunction<ReturnType<typeof scenarioStatusModule.ledgerForMode>['remove']>;
-                    };
-                }
-            ).__ledger.remove,
-        ).toHaveBeenCalledWith('7');
+        expect(scenarioStatus.stepLockForMode).toHaveBeenCalledWith(7);
+        expect(mocked.__ledger.remove).toHaveBeenCalledWith('7');
+        expect(mocked.__release).toHaveBeenCalledTimes(1);
+    });
+
+    test('a challenge whose rule steps another process is running is busy: nothing is reset, and it is not reported as done', async () => {
+        scenarioStatus.stepLockForMode.mockReturnValueOnce({ ok: false, release: mocked.__release });
+        await expect(handlers['reset-scenario-state'](null, 7)).resolves.toEqual({ success: false, error: 'busy' });
+        expect(mocked.__ledger.remove).not.toHaveBeenCalled();
+        expect(mocked.__release).not.toHaveBeenCalled();
+    });
+
+    test.each([
+        ['busy', 'busy'],
+        ['unreadable', 'state-unreadable'],
+    ])('a ledger that answers %s is reported as %s, never as done, and the lock is let go', async (answer, error) => {
+        mocked.__ledger.remove.mockReturnValueOnce(answer);
+        await expect(handlers['reset-scenario-state'](null, 7)).resolves.toEqual({ success: false, error });
+        expect(mocked.__release).toHaveBeenCalledTimes(1);
+    });
+
+    test('a reset of every challenge, the only way past an unreadable file', async () => {
+        await expect(handlers['reset-all-scenario-state']()).resolves.toEqual({ success: true });
+        expect(refreshScenarioStateAsync).toHaveBeenCalled();
+        mocked.__ledger.removeAll.mockReturnValueOnce('busy');
+        await expect(handlers['reset-all-scenario-state']()).resolves.toEqual({ success: false, error: 'busy' });
     });
 
     test('a throw becomes an error result', async () => {

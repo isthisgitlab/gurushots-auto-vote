@@ -41,9 +41,6 @@ jest.mock('../../src/ts/runtime', () => ({
     isHeadlessService: jest.fn(() => false),
 }));
 jest.mock('../../src/ts/services/NativeAutovoteBridge', () => ({ isAvailable: jest.fn(() => false) }));
-jest.mock('../../src/ts/joinStateStore', () => ({
-    acquireUnlockLock: jest.fn((_id: string | number) => ({ ok: true, release: jest.fn() })),
-}));
 
 import loggerModule = require('../../src/ts/logger');
 const logger = jest.mocked(loggerModule);
@@ -53,8 +50,6 @@ import currencyActionsModule = require('../../src/ts/services/currencyActions');
 const currencyActions = jest.mocked(currencyActionsModule);
 import autoFillModule = require('../../src/ts/services/autoFill');
 const autoFill = jest.mocked(autoFillModule);
-import joinStateStoreModule = require('../../src/ts/joinStateStore');
-const joinStateStore = jest.mocked(joinStateStoreModule);
 import runtimeModule = require('../../src/ts/runtime');
 const runtime = jest.mocked(runtimeModule);
 import nativeAutovoteModule = require('../../src/ts/services/NativeAutovoteBridge');
@@ -128,7 +123,10 @@ type TestPass = {
         strategy: jest.Mocked<Pick<CurrencyPassDeps['strategy'], 'getBankroll'>>;
         swapLedger?: jest.Mocked<Pick<SwapBackLedger, 'onSwapped'>>;
     };
-    scenarios: { ledger: ReturnType<typeof createMemoryStateLedger> };
+    scenarios: {
+        ledger: ReturnType<typeof createMemoryStateLedger>;
+        lock?: (challengeId: string) => { ok: boolean; release: () => void };
+    };
 };
 
 let ledger: ReturnType<typeof createMemoryStateLedger>;
@@ -232,22 +230,30 @@ describe('when nothing runs', () => {
 describe('one process at a time per challenge', () => {
     const lockWith = (ok: boolean) => {
         const release = jest.fn();
-        joinStateStore.acquireUnlockLock.mockReturnValueOnce({ ok, release });
-        return release;
+        const lock = jest.fn((_challengeId: string) => ({ ok, release }));
+        pass.scenarios = { ledger, lock };
+        return { release, lock };
     };
 
-    test('the step runs under a lock of its own for the challenge, released when it ends', async () => {
-        const release = lockWith(true);
+    test('the step runs under the lock of its challenge that the pass is given, released when it ends', async () => {
+        const { release, lock } = lockWith(true);
         currencyActions.fillExposure.mockResolvedValue(invalid({ ok: true }));
         setup(single([{ type: 'fillExposure' }]));
         await run();
-        expect(joinStateStore.acquireUnlockLock).toHaveBeenCalledWith('scenario-7');
+        expect(lock).toHaveBeenCalledWith('7');
         expect(currencyActions.fillExposure).toHaveBeenCalledTimes(1);
         expect(release).toHaveBeenCalledTimes(1);
     });
 
+    test('a pass with no lock to give (mock mode) runs the step all the same', async () => {
+        currencyActions.fillExposure.mockResolvedValue(invalid({ ok: true }));
+        setup(single([{ type: 'fillExposure' }]));
+        await run();
+        expect(currencyActions.fillExposure).toHaveBeenCalledTimes(1);
+    });
+
     test('while another process holds it, nothing runs and nothing is written this pass', async () => {
-        const release = lockWith(false);
+        const { release } = lockWith(false);
         setup(single([{ type: 'fillExposure' }]));
         await run();
         expect(currencyActions.fillExposure).not.toHaveBeenCalled();
@@ -261,32 +267,30 @@ describe('one process at a time per challenge', () => {
 
     test('two passes at once spend once: the second finds the lock held and skips the challenge', async () => {
         const held = new Set<string>();
-        joinStateStore.acquireUnlockLock.mockImplementation((id) => {
-            const key = String(id);
-            if (held.has(key)) return { ok: false, release: () => {} };
-            held.add(key);
-            return { ok: true, release: () => held.delete(key) };
-        });
-        try {
-            let finish!: () => void;
-            currencyActions.fillExposure.mockImplementationOnce(
-                () => new Promise((resolve) => (finish = () => resolve(invalid({ ok: true })))),
-            );
-            setup(single([{ type: 'fillExposure' }]));
-            const first = run();
-            await Promise.resolve();
-            await run();
-            finish();
-            await first;
-            expect(currencyActions.fillExposure).toHaveBeenCalledTimes(1);
-            expect(held.size).toBe(0);
-        } finally {
-            joinStateStore.acquireUnlockLock.mockImplementation(() => ({ ok: true, release: jest.fn() }));
-        }
+        pass.scenarios = {
+            ledger,
+            lock: (id) => {
+                if (held.has(id)) return { ok: false, release: () => {} };
+                held.add(id);
+                return { ok: true, release: () => held.delete(id) };
+            },
+        };
+        let finish!: () => void;
+        currencyActions.fillExposure.mockImplementationOnce(
+            () => new Promise((resolve) => (finish = () => resolve(invalid({ ok: true })))),
+        );
+        setup(single([{ type: 'fillExposure' }]));
+        const first = run();
+        await Promise.resolve();
+        await run();
+        finish();
+        await first;
+        expect(currencyActions.fillExposure).toHaveBeenCalledTimes(1);
+        expect(held.size).toBe(0);
     });
 
     test('the lock is released when the step fails', async () => {
-        const release = lockWith(true);
+        const { release } = lockWith(true);
         setup(single([{ type: 'fillExposure' }]));
         jest.spyOn(ledger, 'get').mockImplementationOnce(() => {
             throw new Error('boom');
@@ -294,6 +298,69 @@ describe('one process at a time per challenge', () => {
         await run();
         expect(release).toHaveBeenCalledTimes(1);
         expect(log.error).toHaveBeenCalledWith(expect.stringContaining('boom'), null);
+    });
+});
+
+describe('a state that cannot be written down is never run on', () => {
+    // The calls of ledger.set a pass makes: the start of the plan, the vote sample, then one per step.
+    const failAfter = (writes: number) => {
+        const real = ledger.set.bind(ledger);
+        let calls = 0;
+        jest.spyOn(ledger, 'set').mockImplementation((id, next) => (++calls <= writes ? real(id, next) : false));
+    };
+
+    test('a plan that cannot be started is not run', async () => {
+        failAfter(0);
+        setup(single([{ type: 'fillExposure' }]));
+        await run();
+        expect(currencyActions.fillExposure).not.toHaveBeenCalled();
+    });
+
+    test('a vote sample that cannot be written stops the step before any rule', async () => {
+        failAfter(1);
+        setup(single([{ type: 'fillExposure' }]));
+        await run();
+        expect(currencyActions.fillExposure).not.toHaveBeenCalled();
+    });
+
+    test('a step that landed and could not be written down is the last of its rule: the next one could spend too', async () => {
+        failAfter(2);
+        currencyActions.fillExposure.mockResolvedValue(invalid({ ok: true }));
+        currencyActions.unlockBoostWithKey.mockResolvedValue(invalid({ ok: true }));
+        setup(single([{ type: 'fillExposure' }, { type: 'unlockBoost' }]));
+        await run();
+        expect(currencyActions.fillExposure).toHaveBeenCalledTimes(1);
+        expect(currencyActions.unlockBoostWithKey).not.toHaveBeenCalled();
+    });
+
+    test('a rule that finished and could not be written down is not followed by another in the same pass', async () => {
+        failAfter(3);
+        currencyActions.fillExposure.mockResolvedValue(invalid({ ok: true }));
+        currencyActions.unlockBoostWithKey.mockResolvedValue(invalid({ ok: true }));
+        setup(
+            plan({ main: { rules: [rule('r1', [{ type: 'fillExposure' }]), rule('r2', [{ type: 'unlockBoost' }])] } }),
+        );
+        await run();
+        expect(currencyActions.fillExposure).toHaveBeenCalledTimes(1);
+        expect(currencyActions.unlockBoostWithKey).not.toHaveBeenCalled();
+    });
+
+    test('a skipped step of a committed rule that could not be written down ends the rule there', async () => {
+        failAfter(3);
+        currencyActions.fillExposure.mockResolvedValue(invalid({ ok: true }));
+        currencyActions.unlockBoostWithKey.mockResolvedValueOnce({ ok: false, outcome: 'no-balance' });
+        currencyActions.swapEntry.mockResolvedValue({ ok: true, outcome: 'ok' });
+        setup(single([{ type: 'fillExposure' }, { type: 'unlockBoost' }, { type: 'fillExposure' }]));
+        await run();
+        expect(currencyActions.fillExposure).toHaveBeenCalledTimes(1);
+    });
+
+    test('a state still waiting to be written from an earlier pass is not run on, with the reason logged', async () => {
+        jest.spyOn(ledger, 'hasUnsaved').mockReturnValue(true);
+        setup(single([{ type: 'fillExposure' }]));
+        await run();
+        expect(currencyActions.fillExposure).not.toHaveBeenCalled();
+        expect(log.warning).toHaveBeenCalledWith(expect.stringContaining('could not be written yet'), null);
     });
 });
 
@@ -703,7 +770,12 @@ describe('rule execution', () => {
         currencyActions.unlockBoostWithKey.mockResolvedValueOnce({ ok: false, outcome: 'unclear' });
         setup(single([{ type: 'fillExposure' }, { type: 'unlockBoost' }]));
         await run();
-        expect(state().inFlight).toEqual({ ruleId: 'r1', actionIndex: 1, unclear: 'unlockBoost' });
+        expect(state().inFlight).toEqual({
+            ruleId: 'r1',
+            actionIndex: 1,
+            unclear: 'unlockBoost',
+            unclearAt: expect.any(Number),
+        });
         expect(state().lastError!.message).toContain('the boost unlock may have gone through');
         expect(state().lastError!.message).not.toContain('refused');
     });
@@ -726,7 +798,12 @@ describe('rule execution', () => {
         currencyActions.fillExposure.mockResolvedValueOnce({ ok: false, outcome: 'unclear' });
         setup(single([{ type: 'fillExposure' }]));
         await run();
-        expect(state().inFlight).toEqual({ ruleId: 'r1', actionIndex: 0, unclear: 'fillExposure' });
+        expect(state().inFlight).toEqual({
+            ruleId: 'r1',
+            actionIndex: 0,
+            unclear: 'fillExposure',
+            unclearAt: expect.any(Number),
+        });
         expect(state().lastError).toEqual({
             at: expect.any(Number),
             message:
@@ -748,7 +825,12 @@ describe('rule execution', () => {
             const c = challenge();
             c.member.boost!.state = 'LOCKED';
             await run(c);
-            expect(state().inFlight).toEqual({ ruleId: 'r1', actionIndex: 0, unclear: 'unlockBoost' });
+            expect(state().inFlight).toEqual({
+                ruleId: 'r1',
+                actionIndex: 0,
+                unclear: 'unlockBoost',
+                unclearAt: expect.any(Number),
+            });
             expect(pass.api.applyBoostToEntry).not.toHaveBeenCalled();
 
             c.member.boost!.state = 'AVAILABLE_KEY';
@@ -845,7 +927,12 @@ describe('rule execution', () => {
                 );
                 const c = challenge();
                 await run(c); // the fill goes through, the swap gets no answer
-                expect(state().inFlight).toEqual({ ruleId: 'r1', actionIndex: 1, unclear: 'swap' });
+                expect(state().inFlight).toEqual({
+                    ruleId: 'r1',
+                    actionIndex: 1,
+                    unclear: 'swap',
+                    unclearAt: expect.any(Number),
+                });
                 await run(c); // the retry cannot show the swap landed (a selector chose it): the rule stops
                 expect(state().inFlight).toBeNull();
                 expect(state().fired.r1).toEqual(expect.objectContaining({ unclearHalt: 'swap' }));
@@ -880,12 +967,22 @@ describe('rule execution', () => {
             const c = challenge();
             c.member.boost!.state = 'LOCKED';
             await run(c);
-            expect(state().inFlight).toEqual({ ruleId: 'r1', actionIndex: 0, unclear: 'unlockBoost' });
+            expect(state().inFlight).toEqual({
+                ruleId: 'r1',
+                actionIndex: 0,
+                unclear: 'unlockBoost',
+                unclearAt: expect.any(Number),
+            });
             // The rule is edited away: the scenario halts, and what it says of the halt replaces lastError.
             setup(plan({ main: { rules: [rule('renamed', [{ type: 'fillExposure' }])] } }));
             await run(c);
             expect(state().lastError!.message).toContain('no longer matches');
-            expect(state().inFlight).toEqual({ ruleId: 'r1', actionIndex: 0, unclear: 'unlockBoost' });
+            expect(state().inFlight).toEqual({
+                ruleId: 'r1',
+                actionIndex: 0,
+                unclear: 'unlockBoost',
+                unclearAt: expect.any(Number),
+            });
             // Reverted: the retry still only looks, and the key is not spent again.
             setup(original);
             c.member.boost!.state = 'AVAILABLE_KEY';
@@ -904,13 +1001,20 @@ describe('rule execution', () => {
             const c = challenge();
             c.member.boost!.state = 'LOCKED';
             await run(c);
-            expect(state().inFlight).toEqual({ ruleId: 'r1', actionIndex: 0, unclear: 'unlockBoost' });
+            const markedAt = state().inFlight!.unclearAt!;
+            expect(markedAt).toEqual(expect.any(Number));
             // The first step is edited into a fill, which fails: it is not the spend that got no answer, so the
             // marker is not its to drop.
             setup(single([{ type: 'fillExposure' }, { type: 'boost', entry: { by: 'fewestVotes' } }]));
             await run(c);
             expect(currencyActions.fillExposure).toHaveBeenCalledTimes(1);
-            expect(state().inFlight).toEqual({ ruleId: 'r1', actionIndex: 0, unclear: 'unlockBoost' });
+            // ...nor the time it was marked at.
+            expect(state().inFlight).toEqual({
+                ruleId: 'r1',
+                actionIndex: 0,
+                unclear: 'unlockBoost',
+                unclearAt: markedAt,
+            });
             // Reverted: the retry still only looks, and the key is not spent a second time.
             setup(original);
             c.member.boost!.state = 'AVAILABLE_KEY';

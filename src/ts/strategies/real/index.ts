@@ -22,7 +22,7 @@ import { cleanupStaleMetadata } from '../../metadata';
 import { swapBackLedger } from '../../swapBackStore';
 import { autoSpendLedger } from '../../currencyAutoStore';
 import { entryAgeLedger } from '../../entryAgeStore';
-import { scenarioStateLedger, refreshScenarioStateAsync } from '../../scenarioStateStore';
+import { scenarioStateLedger, scenarioStepLock, refreshScenarioStateAsync } from '../../scenarioStateStore';
 import { backgroundServiceOwnsScenarios } from '../../services/scenarioRunner';
 import { sleep, getRandomDelay } from '../../timing';
 import * as logger from '../../logger';
@@ -279,7 +279,11 @@ const fetchChallengesAndVote = async (
             // app WebView the native background service owns them (it runs a pass
             // alongside the in-app loop, with its own copy of the state), so only
             // one loop ever advances a challenge's plan.
-            scenarios: { ledger: scenarioStateLedger, enabled: () => !backgroundServiceOwnsScenarios() },
+            scenarios: {
+                ledger: scenarioStateLedger,
+                enabled: () => !backgroundServiceOwnsScenarios(),
+                lock: scenarioStepLock,
+            },
             missions,
             refreshMissionNeeds: runtime.isHeadlessService()
                 ? () => loadMissionNeeds(token, Date.now(), { getMyMissions })

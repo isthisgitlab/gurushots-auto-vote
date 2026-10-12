@@ -16,6 +16,7 @@
  *   get-scenario-status      where a challenge is in its scenario (the GUI
  *                            scheduler's boundary and the card status read it)
  *   reset-scenario-state     forget a challenge's progress — its plan restarts
+ *   reset-all-scenario-state forget every challenge's progress (the only way past an unreadable state file)
  *   dry-run-scenario         what would fire right now and why; spends nothing
  *   simulate-scenario        a what-if timeline until the challenge closes, of
  *                            the assigned scenario or an unsaved draft
@@ -29,7 +30,7 @@ import { registerHandlers } from './registerHandlers';
 import { errorResult } from './errorResult';
 import { isIdArg } from './isIdArg';
 import { stampChosenPhotosOwner } from './chosenPhotosOwner';
-import { getScenarioStatus, ledgerForMode } from '../services/scenarioStatus';
+import { getScenarioStatus, ledgerForMode, stepLockForMode } from '../services/scenarioStatus';
 import { findActiveChallenge } from '../services/findActiveChallenge';
 import { evaluateScenario, startState } from '../scenarios/evaluate';
 import { simulateScenario } from '../scenarios/simulate';
@@ -156,6 +157,36 @@ const runInput = ({ status, challenge, state, now, bankroll }: LiveScenario) => 
     bankroll,
 });
 
+/**
+ * Forgets one challenge's progress, under the challenge's step lock so that it never runs in the middle of its rule
+ * steps in another process. An unreadable file is cleared only by a reset of every challenge.
+ */
+const resetScenario = async (challengeId: string | number) => {
+    await refreshScenarioStateAsync();
+    const lock = stepLockForMode(challengeId);
+    if (!lock.ok) return { success: false as const, error: 'busy' };
+    try {
+        const result = ledgerForMode().remove(String(challengeId));
+        if (result !== 'removed') {
+            return { success: false as const, error: result === 'busy' ? 'busy' : 'state-unreadable' };
+        }
+        log().info(`Scenario progress reset for challenge ${logger.sanitizeLogString(String(challengeId))}`, null);
+        return { success: true as const };
+    } finally {
+        lock.release();
+    }
+};
+
+/**
+ * Forgets every challenge's progress: the only way past a state file that cannot be read.
+ */
+const resetEveryScenario = async () => {
+    await refreshScenarioStateAsync();
+    if (ledgerForMode().removeAll() === 'busy') return { success: false as const, error: 'busy' };
+    log().warning('Scenario progress reset for every challenge', null);
+    return { success: true as const };
+};
+
 const buildHandlers = () =>
     ({
         'get-scenarios': async () =>
@@ -222,16 +253,10 @@ const buildHandlers = () =>
 
         'reset-scenario-state': async (event: unknown, challengeId: string | number) => {
             if (!isIdArg(challengeId)) return invalidArgs;
-            return safely('reset-scenario-state', async () => {
-                await refreshScenarioStateAsync();
-                ledgerForMode().remove(String(challengeId));
-                log().info(
-                    `Scenario progress reset for challenge ${logger.sanitizeLogString(String(challengeId))}`,
-                    null,
-                );
-                return { success: true as const };
-            });
+            return safely('reset-scenario-state', () => resetScenario(challengeId));
         },
+
+        'reset-all-scenario-state': async () => safely('reset-all-scenario-state', resetEveryScenario),
 
         'dry-run-scenario': async (event: unknown, challengeId: string | number) => {
             if (!isIdArg(challengeId)) return invalidArgs;

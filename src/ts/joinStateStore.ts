@@ -184,7 +184,7 @@ const keepFresh = (lockPath: string, token: string): NodeJS.Timeout => {
  * @returns ok=false means another process
  *   holds it right now (caller should treat as busy). release() is always safe.
  */
-const acquireUnlockLock = (id: string | number): UnlockLock => {
+const acquireUnlockLock = (id: string | number, category: 'join' | 'scenario' = 'join'): UnlockLock => {
     // Only the real-fs platforms (Electron/CLI) can run two processes against one
     // account; Capacitor/headless are single-process for a given surface.
     if (runtime.isCapacitor() || runtime.isHeadlessService()) return NO_LOCK;
@@ -217,9 +217,9 @@ const acquireUnlockLock = (id: string | number): UnlockLock => {
         // Lock infrastructure failed (permissions, etc.) — fail OPEN rather than
         // block joins forever; the in-process Set + persisted claim still apply.
         logger
-            .withCategory('join')
+            .withCategory(category)
             .warning(
-                `cross-process join lock unavailable for ${sanitizeLogString(id)}: ${errorMessage(caught) || sanitizeLogString(caught)}`,
+                `cross-process lock unavailable for ${sanitizeLogString(id)}: ${errorMessage(caught) || sanitizeLogString(caught)}`,
                 null,
             );
         return NO_LOCK;

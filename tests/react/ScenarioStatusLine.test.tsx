@@ -3,7 +3,7 @@
  * problem; warnings for a missing scenario or unreadable progress.
  */
 
-import { cleanup, render, screen } from './helpers/test-utils';
+import { cleanup, fireEvent, render, screen } from './helpers/test-utils';
 import { ScenarioStatusLine } from '@/components/app/ScenarioStatusLine';
 import type { ScenarioSummary } from '@/api/useScenarioStatus';
 import { mockTranslator } from './helpers/setup';
@@ -102,6 +102,60 @@ test('a spend that got no answer is shown even when an unrelated problem has rep
 test('a spend that got no answer is clamped in the compact line', () => {
     render(<ScenarioStatusLine status={{ ...unclear({ stopped: true }), lastError: null }} compact />);
     expect(screen.getByRole('status').className).toContain('line-clamp-2');
+});
+
+describe('the reset button', () => {
+    const stoppedStatus = (over: Partial<NonNullable<ScenarioSummary['spendUnclear']>> = {}) => ({
+        ...unclear({ stopped: true, ...over }),
+        lastError: null,
+    });
+
+    test('is offered on the card for a stopped rule, and presses through', () => {
+        const onReset = jest.fn();
+        render(<ScenarioStatusLine status={stoppedStatus()} onReset={onReset} />);
+        fireEvent.click(screen.getByText('app.scenarioReset'));
+        expect(onReset).toHaveBeenCalledTimes(1);
+    });
+
+    test('is offered, for every challenge, when the progress cannot be read', () => {
+        const onReset = jest.fn();
+        render(<ScenarioStatusLine status={{ name: 'Plan', corrupt: true }} onReset={onReset} />);
+        fireEvent.click(screen.getByText('app.scenarioResetAll'));
+        expect(onReset).toHaveBeenCalledTimes(1);
+    });
+
+    test.each([
+        ['a rule only being checked on', unclear()],
+        ['a plan with nothing stopped', { name: 'Plan', phase: 'main', started: true, lastError: null }],
+        ['a scenario that no longer exists', { name: 'Gone', missing: true as const }],
+    ])('is not offered for %s', (_name, status) => {
+        render(<ScenarioStatusLine status={status} onReset={jest.fn()} />);
+        expect(screen.queryByText('app.scenarioReset')).toBeNull();
+        expect(screen.queryByText('app.scenarioResetAll')).toBeNull();
+    });
+
+    test('is not offered where there is no dialog to open it (no handler: the compact tile has none)', () => {
+        render(<ScenarioStatusLine status={stoppedStatus()} />);
+        expect(screen.queryByText('app.scenarioReset')).toBeNull();
+        cleanup();
+        render(<ScenarioStatusLine status={{ name: 'Plan', corrupt: true }} />);
+        expect(screen.queryByText('app.scenarioResetAll')).toBeNull();
+    });
+
+    test('the compact tile gets a short notice, whole, where the card has the long one', () => {
+        render(<ScenarioStatusLine status={stoppedStatus()} compact />);
+        expect(screen.getByRole('status').textContent).toBe('app.scenarioStatusSpendStoppedShort');
+        cleanup();
+        render(<ScenarioStatusLine status={stoppedStatus()} />);
+        expect(screen.getByRole('status').textContent).toBe('app.scenarioStatusSpendStopped');
+        cleanup();
+        render(<ScenarioStatusLine status={{ name: 'Plan', corrupt: true }} compact />);
+        expect(screen.getByRole('status').textContent).toContain('app.scenarioStatusCorruptShort');
+        cleanup();
+        render(<ScenarioStatusLine status={{ name: 'Plan', corrupt: true }} />);
+        expect(screen.getByRole('status').textContent).toContain('app.scenarioStatusCorrupt');
+        expect(screen.getByRole('status').textContent).not.toContain('Short');
+    });
 });
 
 test('a plan not started, with nothing pending or already due (compact)', () => {

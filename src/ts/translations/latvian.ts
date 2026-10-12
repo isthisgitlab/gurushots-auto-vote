@@ -337,7 +337,9 @@ export const app = {
     scenarioStatusMissing:
         'Scenārijs „{name}” vairs nepastāv — nekas netiek izpildīts. Izvēlies citu izaicinājuma uzstādījumos.',
     scenarioStatusCorrupt:
-        'Scenārija „{name}” progresu nevar nolasīt, tāpēc tas ir apturēts. Atiestati to (scenario-reset), lai sāktu plānu no jauna.',
+        'Scenārijs „{name}”: tā saglabāto progresu nevar nolasīt, tāpēc plāns ir apturēts. Atiestatot visu izaicinājumu progresu, plāni sāksies no jauna.',
+    scenarioStatusCorruptShort:
+        'Scenārijs „{name}” ir apturēts: tā saglabāto progresu nevar nolasīt. Atver izaicinājumu, lai to atiestatītu.',
     scenarioStatusPhase: 'fāze {phase}',
     scenarioStatusNotStarted: 'nākamajā palaišanā sāksies fāzē {phase}',
     scenarioStatusNext: 'nākamā pārbaude pēc {time}',
@@ -345,7 +347,23 @@ export const app = {
     scenarioStatusSpendUnclear:
         'GuruShots neatbildēja uz „{action}”, tāpēc tas, iespējams, tika izpildīts. Tas netiks tērēts atkārtoti: nākamajā ciklā tikai pārbaudīs, vai tas stājās spēkā.',
     scenarioStatusSpendStopped:
-        'GuruShots neatbildēja uz „{action}”, tāpēc tas, iespējams, tika izpildīts, un tā noteikums tika apturēts, lai to netērētu atkārtoti. Pārbaudi izaicinājumu. {again} Lai scenāriju sāktu no jauna, CLI palaid scenario-reset --challenge={id} (lietotnē atiestatīšanas nav): tas var vēlreiz iztērēt darbību, uz kuru nebija atbildes, un atsāk scenārija tēriņu skaitīšanu.',
+        'GuruShots neatbildēja uz „{action}”, tāpēc tas, iespējams, tika izpildīts, un tā noteikums tika apturēts, lai to netērētu atkārtoti. Pārbaudi izaicinājumu. {again} Lai scenāriju sāktu no jauna, izmanto pogu „Atiestatīt scenāriju” zemāk vai komandrindā (CLI) palaid scenario-reset --challenge={id}: tas var vēlreiz iztērēt darbību, uz kuru nebija atbildes, un atsāk scenārija tēriņu skaitīšanu.',
+    scenarioStatusSpendStoppedShort:
+        'GuruShots neatbildēja uz „{action}”: tā noteikums tika apturēts, lai to netērētu atkārtoti. Atver izaicinājumu, lai redzētu sīkāk.',
+    scenarioReset: 'Atiestatīt scenāriju…',
+    scenarioResetAll: 'Atiestatīt visu izaicinājumu progresu…',
+    scenarioResetTitle: 'Scenārija progresa atiestatīšana',
+    scenarioResetBody:
+        'Tas aizmirst, kurā scenārija vietā ir „{title}”: nākamajā balsošanas reizē plāns sāksies no pirmās fāzes. Tas var vēlreiz iztērēt darbību, uz kuru nebija atbildes, un atsāk scenārija tēriņu skaitīšanu.',
+    scenarioResetAllBody:
+        'Saglabāto scenāriju progresu nevar nolasīt, tāpēc to var atiestatīt tikai visiem izaicinājumiem uzreiz. Pazūd katra izaicinājuma progress: kurā vietā ir katrs plāns, kuri noteikumi jau darbojās (tie var darboties vēlreiz) un tēriņu skaitītāji. Darbība, uz kuru nebija atbildes, var tikt iztērēta vēlreiz.',
+    scenarioResetConfirm: 'Atiestatīt',
+    scenarioResetWorking: 'Notiek atiestatīšana…',
+    scenarioResetBusy:
+        'Šī izaicinājuma scenāriju izpilda cits process vai saglabāto progresu pašlaik izmanto cita lietotnes daļa. Nekas netika mainīts. Mēģini vēlreiz pēc brīža.',
+    scenarioResetUnreadable:
+        'Saglabāto progresu nevar nolasīt, tāpēc šo izaicinājumu nevar atiestatīt atsevišķi. Aizver šo logu un atver to vēlreiz, lai atiestatītu visus izaicinājumus.',
+    scenarioResetFailed: 'Pašlaik neizdevās atiestatīt scenāriju. Nekas netika mainīts. Mēģini vēlreiz pēc brīža.',
     scenarioStatusAgainPhase: 'Noteikums var darboties vēlreiz, kad fāze tiek sākta no jauna.',
     scenarioStatusAgainReset: 'Noteikums var darboties vēlreiz tikai pēc atiestatīšanas.',
     scenarioStatusAgainDay: 'Noteikums var darboties vēlreiz nākamajā dienā.',
@@ -555,7 +573,7 @@ export const app = {
     discoverUnconfirmed:
         'Par šī izaicinājuma maksājumu netika saņemta atbilde, tāpēc nav zināms, vai tas izdevās. Atkārtojot tiek iesniegts tikai tavs foto, tāpēc monētas netiks ieturētas divreiz. Ja GuruShots vietnē redzams, ka monētas netika ieturētas, nospied „Monētas netika ieturētas”, tad pievienojies vēlreiz.',
     discoverEarlierPayment:
-        'Šim izaicinājumam ir maksājuma ieraksts no vecākas lietotnes versijas, kurā konti vēl netika šķirti, tāpēc nav zināms, vai monētas tika ieturētas un kuram šajā ierīcē lietotajam GuruShots kontam tās tika ieturētas. „Mēģināt iesniegt vēlreiz” ir paredzēts kontam, kas maksāja: tas iesniedz tikai foto, tāpēc nevienam monētas netiek ieturētas divreiz. Šeit ierakstu aizmirst nevar, jo tas var piederēt citam kontam: tas pazudīs pats nākamajā pārbaudē pēc 30 dienām vai tad, kad konts, kas maksāja, pievienosies izaicinājumam. Ja šis nav konts, kas maksāja, tu pa to laiku vari pievienoties izaicinājumam GuruShots vietnē.',
+        'Šim izaicinājumam ir maksājuma ieraksts no vecākas lietotnes versijas, kurā konti vēl netika šķirti, tāpēc nav zināms, vai monētas tika ieturētas un kuram šajā ierīcē lietotajam GuruShots kontam tās tika ieturētas. „Mēģināt iesniegt vēlreiz” ir paredzēts kontam, kas maksāja: tas iesniedz tikai foto, tāpēc nevienam monētas netiek ieturētas divreiz. Šeit ierakstu aizmirst nevar, jo tas var piederēt citam kontam: tas vairs neattieksies uz citiem kontiem, kad konts, kas maksāja, pievienosies izaicinājumam, citādi tas pazudīs pats nākamajā pārbaudē pēc 30 dienām. Ja šis nav konts, kas maksāja, tu pa to laiku vari pievienoties izaicinājumam GuruShots vietnē.',
     discoverForgetPayment: 'Monētas netika ieturētas',
     discoverForgetPaymentLabel: 'Monētas netika ieturētas: {title}',
     discoverForgetTitle: 'Aizmirst šo maksājumu?',
@@ -572,9 +590,9 @@ export const app = {
     discoverForgetAccountUnknown:
         'Neizdevās noskaidrot, kurā kontā esi pieteicies, tāpēc nekas netika mainīts. Mēģini vēlreiz pēc brīža vai piesakies vēlreiz.',
     discoverForgetLegacyRecord:
-        'Šis ieraksts ir no vecākas lietotnes versijas un var piederēt citam šajā ierīcē lietotam GuruShots kontam, tāpēc to šeit aizmirst nevar. Tas pazudīs pats nākamajā pārbaudē pēc 30 dienām vai tad, kad konts, kas maksāja, pievienosies izaicinājumam. Nekas netika mainīts.',
+        'Šis ieraksts ir no vecākas lietotnes versijas un var piederēt citam šajā ierīcē lietotam GuruShots kontam, tāpēc to šeit aizmirst nevar. Tas vairs neattieksies uz citiem kontiem, kad konts, kas maksāja, pievienosies izaicinājumam, citādi tas pazudīs pats nākamajā pārbaudē pēc 30 dienām. Nekas netika mainīts.',
     discoverForgetBusy:
-        'Pašlaik notiek pievienošanās šim izaicinājumam, vai saglabātos maksājumu ierakstus izmanto cita lietotnes daļa. Nekas netika mainīts. Mēģini vēlreiz pēc brīža.',
+        'Pašlaik notiek pievienošanās šim izaicinājumam vai saglabātos maksājumu ierakstus izmanto cita lietotnes daļa. Nekas netika mainīts. Mēģini vēlreiz pēc brīža.',
     discoverForgetNotAuthenticated:
         'Neesi pieteicies, tāpēc nekas netika mainīts. Piesakies no jauna un mēģini vēlreiz.',
     discoverForgetUnreadable:
@@ -582,6 +600,8 @@ export const app = {
     discoverForgetFailed: 'Pašlaik neizdevās aizmirst maksājumu. Nekas netika mainīts. Mēģini vēlreiz pēc brīža.',
     discoverAccountUnknown:
         'Neizdevās noskaidrot, kurā kontā esi pieteicies, tāpēc šis mēģinājums neko nedarīja un monētas netērēja. Mēģini vēlreiz pēc brīža vai piesakies vēlreiz.',
+    discoverAlreadyJoined:
+        'Šis konts jau ir pievienojies šim izaicinājumam, tāpēc nekas netika iztērēts. Saraksts atjaunosies nākamajā pārbaudē.',
     discoverConfirmDialogFirst: 'Vispirms apstiprini vai aizver atvērto logu, tad pievienojies vēlreiz.',
     discoverRetrySubmit: 'Mēģināt iesniegt vēlreiz',
     discoverRetrySubmitLabel: 'Mēģināt vēlreiz iesniegt izaicinājumam „{title}”',

@@ -332,7 +332,9 @@ export const app = {
     scenarioTemplateFailed: "The template copy wasn't saved.",
     scenarioStatusMissing: 'Scenario "{name}" no longer exists — nothing runs. Pick another in the challenge settings.',
     scenarioStatusCorrupt:
-        'Scenario "{name}" progress is unreadable, so it is paused. Reset it (scenario-reset) to start the plan again.',
+        'Scenario "{name}": its saved progress cannot be read, so the plan is paused. Resetting the progress of every challenge starts the plans again.',
+    scenarioStatusCorruptShort:
+        'Scenario "{name}" is paused: its saved progress cannot be read. Open the challenge to reset it.',
     scenarioStatusPhase: 'phase {phase}',
     scenarioStatusNotStarted: 'starts in phase {phase} on the next run',
     scenarioStatusNext: 'next check in {time}',
@@ -340,7 +342,23 @@ export const app = {
     scenarioStatusSpendUnclear:
         'GuruShots gave no answer to “{action}”, so it may have gone through. It will not be spent again: the next cycle only checks whether it took effect.',
     scenarioStatusSpendStopped:
-        'GuruShots gave no answer to “{action}”, so it may have gone through, and its rule was stopped so that it is not spent again. Check the challenge. {again} To start the scenario over, run scenario-reset --challenge={id} in the CLI (the app has no reset): that may spend the unanswered action again, and it restarts the scenario’s spend counter.',
+        'GuruShots gave no answer to “{action}”, so it may have gone through, and its rule was stopped so that it is not spent again. Check the challenge. {again} To start the scenario over, use Reset scenario below or run scenario-reset --challenge={id} in the command line (CLI): that may spend the unanswered action again, and it restarts the scenario’s spend counter.',
+    scenarioStatusSpendStoppedShort:
+        'GuruShots gave no answer to “{action}”: its rule was stopped so that it is not spent again. Open the challenge for details.',
+    scenarioReset: 'Reset scenario…',
+    scenarioResetAll: 'Reset every challenge’s progress…',
+    scenarioResetTitle: 'Reset scenario progress',
+    scenarioResetBody:
+        'This forgets where “{title}” is in its scenario: the plan starts again from its first phase on the next voting pass. It can spend an action that got no answer again, and it restarts the scenario’s spend counter.',
+    scenarioResetAllBody:
+        'The saved scenario progress cannot be read, so it can only be reset for every challenge at once. Every challenge’s progress goes: where each plan stands, which rules already ran (they can run again) and the spend counters. An action that got no answer can be spent again.',
+    scenarioResetConfirm: 'Reset',
+    scenarioResetWorking: 'Resetting…',
+    scenarioResetBusy:
+        'Another process is running this challenge’s scenario, or using the saved progress. Nothing was changed. Try again in a moment.',
+    scenarioResetUnreadable:
+        'The saved progress cannot be read, so this challenge cannot be reset alone. Close this window and open it again to reset every challenge.',
+    scenarioResetFailed: 'Could not reset the scenario right now. Nothing was changed. Try again in a moment.',
     scenarioStatusAgainPhase: 'The rule can run again the next time the phase is entered.',
     scenarioStatusAgainReset: 'The rule can run again only after a reset.',
     scenarioStatusAgainDay: 'The rule can run again the next day.',
@@ -550,7 +568,7 @@ export const app = {
     discoverUnconfirmed:
         'The payment for this challenge got no answer, so it may or may not have gone through. Retrying only submits your photo, so you are never charged twice. If the GuruShots website shows the coins were not taken, press "I wasn\'t charged", then join again.',
     discoverEarlierPayment:
-        'This challenge has a payment record from an older version of the app, from before accounts were told apart, so it is not known whether the coins were taken, or by which GuruShots account used on this device. Retry submit is for the account that paid: it only submits the photo, so nobody is charged twice. The record cannot be forgotten here, because it may belong to another account: it clears by itself, at the next check after 30 days, or when the account that paid joins the challenge. If this is not the account that paid, you can join the challenge on the GuruShots website meanwhile.',
+        'This challenge has a payment record from an older version of the app, from before accounts were told apart, so it is not known whether the coins were taken, or by which GuruShots account used on this device. Retry submit is for the account that paid: it only submits the photo, so nobody is charged twice. The record cannot be forgotten here, because it may belong to another account: it stops applying to other accounts once the account that paid joins the challenge, and otherwise clears by itself, at the next check after 30 days. If this is not the account that paid, you can join the challenge on the GuruShots website meanwhile.',
     discoverForgetPayment: "I wasn't charged",
     discoverForgetPaymentLabel: "I wasn't charged for {title}",
     discoverForgetTitle: 'Forget this payment?',
@@ -567,7 +585,7 @@ export const app = {
     discoverForgetAccountUnknown:
         'Could not confirm which account is logged in, so nothing was changed. Try again shortly, or log in again.',
     discoverForgetLegacyRecord:
-        'This record is from an older version of the app and may belong to another GuruShots account used on this device, so it cannot be forgotten here. It clears by itself, at the next check after 30 days, or when the account that paid joins the challenge. Nothing was changed.',
+        'This record is from an older version of the app and may belong to another GuruShots account used on this device, so it cannot be forgotten here. It stops applying to other accounts once the account that paid joins the challenge, and otherwise clears by itself, at the next check after 30 days. Nothing was changed.',
     discoverForgetBusy:
         'A join of this challenge is in progress, or another part of the app is using the saved payment records. Nothing was changed. Try again in a moment.',
     discoverForgetNotAuthenticated: 'You are not logged in, so nothing was changed. Log in again, then try once more.',
@@ -576,6 +594,8 @@ export const app = {
     discoverForgetFailed: 'Could not forget the payment right now. Nothing was changed. Try again in a moment.',
     discoverAccountUnknown:
         'Could not confirm which account is logged in, so this attempt did nothing and spent no coins. Try again shortly, or log in again.',
+    discoverAlreadyJoined:
+        'This account has already joined this challenge, so nothing was spent. The list updates at the next check.',
     discoverConfirmDialogFirst: 'Confirm or cancel the open dialog first, then join again.',
     discoverRetrySubmit: 'Retry submit',
     discoverRetrySubmitLabel: 'Retry submit for {title}',

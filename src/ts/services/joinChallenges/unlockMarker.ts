@@ -5,6 +5,7 @@
  */
 
 import { isPlainObject } from '../../plainObject';
+import { acquireWithin } from '../../lockWait';
 import type { RawJsonStore } from '../../types/stores';
 import { errorMessage } from '../../errorMessage';
 import * as logger from '../../logger';
@@ -130,24 +131,12 @@ const STATE_LOCK_ID = 'joinstate';
 // changed rarely and held for a few milliseconds, a held lock means another process is in the middle of a change,
 // and a join that cannot record its claim in half a second fails safe (nothing is spent) instead of waiting longer.
 const STATE_LOCK_WAIT_MS = 500;
-const STATE_LOCK_STEP_MS = 10;
-
-const sleepSync = (ms: number): void => {
-    Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, ms);
-};
 
 /**
  * The lock of the claims file, waited for a moment when another process holds it. Null when it could not be had.
  */
-const acquireStateLock = (deps: JoinDeps, waitMs: number): { release: () => void } | null => {
-    const deadline = Date.now() + waitMs;
-    for (;;) {
-        const lock = lockFor(deps, STATE_LOCK_ID);
-        if (lock.ok) return lock;
-        if (Date.now() >= deadline) return null;
-        sleepSync(STATE_LOCK_STEP_MS);
-    }
-};
+const acquireStateLock = (deps: JoinDeps, waitMs: number): { release: () => void } | null =>
+    acquireWithin(() => lockFor(deps, STATE_LOCK_ID), waitMs);
 
 /**
  * How a change of the claims file ended: `done` (written, or nothing to write), `locked` (the file's lock could not be
@@ -256,14 +245,20 @@ const clearUnlocked = (deps: JoinDeps, key: string, waitMs?: number): Changed =>
 /**
  * The join the claim was for succeeded: the claim stays, marked joined, so a process that read the open list
  * before it (and then spent a while picking a photo) finds the proof under the lock and does not unlock again. It
- * is never forgettable, and pruning removes it once its challenge has left the list.
+ * is never forgettable, and pruning removes it once its challenge has left the list. Nothing but the time of the
+ * unlock and of the join is kept: the balance before the payment and any doubt about it have no purpose left.
+ * A bare claim from before accounts were told apart is replaced, in the same change, by this account's own joined
+ * claim: a bare one that stayed would end the join for every other account on the device.
+ *
+ * @param key - the key of the claim the join used
+ * @param ownKey - the key of this account's claim of the challenge (the same key when the claim is its own)
  */
-const markJoined = (deps: JoinDeps, key: string): void => {
+const markJoined = (deps: JoinDeps, key: string, ownKey: string): void => {
     changeClaims(deps, `mark the unlock marker for ${sanitizeLogString(idOfKey(key))} as joined`, (state) => {
         const claim = state[key];
         if (!isPlainObject(claim)) return false;
-        // `unconfirmed: undefined` is left out of the JSON: a join that went through has no payment left to doubt.
-        state[key] = { ...claim, unconfirmed: undefined, joinedAt: Date.now() };
+        delete state[key];
+        state[ownKey] = { unlockedAt: claim.unlockedAt, joinedAt: Date.now() };
         return true;
     });
 };
@@ -274,7 +269,8 @@ type ForgetResult = Extract<ForgetStatus, 'forgotten' | 'nothing-to-forget' | 'l
  * What the user may forget: this account's claim for the challenge when it is still unconfirmed. Never a confirmed
  * claim (its coins are known to be taken). A bare claim from before accounts were told apart is never forgotten
  * either: it may be ANOTHER account's protection against a second charge, and nothing on this device can tell
- * whose. It clears by itself (a paid submit that used it succeeds, or it passes CLAIM_MAX_AGE_MS).
+ * whose. It stops applying to the other accounts once the account that paid joins (its claim then becomes that
+ * account's own), and otherwise clears when it passes CLAIM_MAX_AGE_MS.
  *
  * @returns 'forgotten', 'nothing-to-forget' (no claim, or only a confirmed one), 'legacy-record' (a bare claim),
  *   'busy' (the claims file is locked by another process) or 'unreadable'

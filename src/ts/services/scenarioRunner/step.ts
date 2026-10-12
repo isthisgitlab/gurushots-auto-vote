@@ -14,7 +14,6 @@ import { evaluateScenario } from '../../scenarios/evaluate';
 import { entriesOf } from '../../scenarios/selectors';
 import { recordVoteSample } from '../../scenarios/speed';
 import { initialState } from '../../scenarioStateStore';
-import { acquireUnlockLock } from '../../joinStateStore';
 import type { Challenge } from '../../types/gurushots';
 import type { ScenarioState } from '../../types/stores';
 import type { PassContext } from '../votingOrchestrator';
@@ -22,6 +21,8 @@ import { errorMessage } from '../../errorMessage';
 import type { RunnerContext, ScenarioAction, ScenarioPass } from './types';
 import { log, nowSec, usesBalance } from './support';
 import { runRule, withNotice } from './rule';
+
+const NO_LOCK = { ok: true, release: () => {} };
 
 /**
  * The challenge's state for `scenario`, starting it (at the start phase) when
@@ -33,14 +34,22 @@ const loadState = (ctx: RunnerContext, now: number): ScenarioState | null => {
     const { corrupt, state } = ctx.ledger.get(ctx.challengeId);
     if (corrupt) {
         log().error(
-            `${logger.challengeTag(ctx.challenge)} scenario state is unreadable — reset it (scenario-reset) to start the plan again`,
+            `${logger.challengeTag(ctx.challenge)} scenario state is unreadable — reset the progress of every challenge (scenario-reset --all, or the Reset button on a challenge card) to start the plans again`,
+            null,
+        );
+        return null;
+    }
+    // A state that could not be written down earlier still is not: nothing runs on until it is.
+    if (ctx.ledger.hasUnsaved(ctx.challengeId)) {
+        log().warning(
+            `${logger.challengeTag(ctx.challenge)} scenario state could not be written yet — nothing runs this pass`,
             null,
         );
         return null;
     }
     if (state && state.scenario.toLowerCase() === ctx.scenario.name.toLowerCase()) return state;
     const fresh = initialState(ctx.scenario.name, ctx.scenario.start, now);
-    ctx.ledger.set(ctx.challengeId, fresh);
+    if (!ctx.ledger.set(ctx.challengeId, fresh)) return null;
     log().info(
         `${logger.challengeTag(ctx.challenge)} scenario "${ctx.scenario.name}" started in phase ${fresh.phase}`,
         null,
@@ -71,7 +80,7 @@ const advance = async (ctx: RunnerContext, now: number): Promise<void> => {
     if (!state) return;
     // One vote sample per pass feeds the speed conditions (scenarios/speed.ts).
     state = { ...state, history: recordVoteSample(state.history, entriesOf(challenge), now) };
-    ctx.ledger.set(challengeId, state);
+    if (!ctx.ledger.set(challengeId, state)) return;
 
     const firedThisPass: Set<string> = new Set();
     const visited = new Set([state.phase]);
@@ -144,7 +153,7 @@ const runScenarioStep = async (challenge: Challenge, now: number, pass: PassCont
             ledger: deps.ledger,
         };
         // The GUI and the CLI can run a pass at once: one rule step of a challenge runs at a time, or both would spend.
-        const lock = acquireUnlockLock(`scenario-${challengeId}`);
+        const lock = deps.lock ? deps.lock(challengeId) : NO_LOCK;
         if (!lock.ok) {
             log().debug(
                 `${logger.challengeTag(challenge)} another process is running its scenario — skipped this pass`,

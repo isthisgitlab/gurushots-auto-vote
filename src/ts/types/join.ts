@@ -7,8 +7,9 @@
  *                     retries the submit and never pays on that claim again
  *   earlier-payment — a payment record from before accounts were told apart, whose owner is unknown; the join
  *                     only retries the submit with it
+ *   already-joined  — this account has already joined the challenge (its claim says so); nothing was spent
  */
-type JoinReason = 'no-photo' | 'account-unknown' | 'unconfirmed' | 'earlier-payment';
+type JoinReason = 'no-photo' | 'account-unknown' | 'unconfirmed' | 'earlier-payment' | 'already-joined';
 
 /**
  * What forgetting a payment came to:

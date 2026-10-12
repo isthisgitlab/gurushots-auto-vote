@@ -1740,15 +1740,15 @@ describe('unlock markers are kept per account', () => {
         expect(store.read()).toEqual({ [`${A}:2`]: JOINED });
     });
 
-    test('a marker from before accounts were told apart still protects whoever is joining, and a submit that succeeds marks it joined', async () => {
+    test("a marker from before accounts were told apart still protects whoever is joining, and a submit that succeeds makes it that account's own joined one", async () => {
         for (const member of [A, B]) {
             memberIdentity.__resetMemberIdCache();
             const store = fileWith({ '2': { unlockedAt: RECENT } });
             const deps = joiningAs(member, store);
             expect((await joinChallengeSingle(2, 'tok', deps, { spendCoins: true })).status).toBe('joined');
             expect(deps.coinsUnlock).not.toHaveBeenCalled();
-            // The submit succeeding proves this account held the unlock.
-            expect(store.read()).toEqual({ '2': JOINED });
+            // The submit succeeding proves this account held the unlock: the bare record becomes its own.
+            expect(store.read()).toEqual({ [`${member}:2`]: JOINED });
         }
     });
 
@@ -2611,7 +2611,7 @@ describe('unlock markers are kept per account', () => {
         ])('%s of a challenge whose claim says joined unlocks nothing and submits nothing', async (_name, join) => {
             const store = fileWith(joined);
             const deps = joiningAs(A, store);
-            expect(await join(deps)).toMatchObject({ status: 'failed-no-charge' });
+            expect(await join(deps)).toMatchObject({ status: 'failed-no-charge', reason: 'already-joined' });
             nothingDone(deps);
             // Refused before a photo is even chosen.
             expect(photoPicker.pickPhotosForChallenge).not.toHaveBeenCalled();
@@ -2672,8 +2672,22 @@ describe('unlock markers are kept per account', () => {
             const store = fileWith({ [`${A}:2`]: { unlockedAt: RECENT, unconfirmed: true, coinsBefore: 500 } });
             expect((await joinChallengeSingle(2, 'tok', joiningAs(A, store))).status).toBe('joined');
             const kept = store.read()[`${A}:2`];
-            expect(kept).toEqual({ unlockedAt: RECENT, coinsBefore: 500, joinedAt: expect.any(Number) });
+            expect(kept).toEqual({ unlockedAt: RECENT, joinedAt: expect.any(Number) });
             expect(findClaim(store.read(), 2, A)).toMatchObject({ unconfirmed: false, joined: true });
+        });
+
+        test("a bare claim used by the join becomes this account's own joined claim, so no other account is held back", async () => {
+            const store = fileWith({ '2': { unlockedAt: RECENT, coinsBefore: 500 } });
+            expect((await joinChallengeSingle(2, 'tok', joiningAs(A, store), { spendCoins: true })).status).toBe(
+                'joined',
+            );
+            expect(store.read()).toEqual({ [`${A}:2`]: { unlockedAt: RECENT, joinedAt: expect.any(Number) } });
+            // The other account is not told it has joined: it asks for the price and pays as any first join.
+            memberIdentity.__resetMemberIdCache();
+            const other = joiningAs(B, store);
+            expect((await joinChallengeSingle(2, 'tok', other, { spendCoins: true })).status).toBe('joined');
+            expect(other.coinsUnlock).toHaveBeenCalledTimes(1);
+            expect(Object.keys(store.read()).sort()).toEqual([`${A}:2`, `${B}:2`]);
         });
 
         test('it is never forgettable', async () => {
@@ -2687,7 +2701,7 @@ describe('unlock markers are kept per account', () => {
 
         test('a claim whose record is no object is not marked: there is nothing to mark', () => {
             const store = fileWith({ [`${A}:2`]: 'not an object' });
-            markJoined(joiningAs(A, store), `${A}:2`);
+            markJoined(joiningAs(A, store), `${A}:2`, `${A}:2`);
             expect(store.writeRaw).not.toHaveBeenCalled();
         });
 

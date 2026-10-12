@@ -99,7 +99,14 @@ const spendUnclearOf = (
     challengeId: Challenge['id'],
 ): ScenarioSummary['spendUnclear'] => {
     const base = { challengeId, again: 'phase' as const, newerProblem: false };
-    if (state.inFlight?.unclear !== undefined) return { ...base, action: state.inFlight.unclear, stopped: false };
+    if (state.inFlight?.unclear !== undefined) {
+        return {
+            ...base,
+            action: state.inFlight.unclear,
+            stopped: false,
+            newerProblem: (state.lastError?.at ?? 0) > (state.inFlight.unclearAt ?? Infinity),
+        };
+    }
     const [stopped] = Object.entries(state.fired).flatMap(([ruleId, record]) =>
         record.unclearHalt !== undefined && record.phaseEnteredAt === state.phaseEnteredAt
             ? [{ ruleId, action: record.unclearHalt, at: record.at }]

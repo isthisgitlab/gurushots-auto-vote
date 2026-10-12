@@ -7,7 +7,7 @@
 
 import * as settings from '../settings';
 import { DEFAULT_TIMEZONE } from '../settings/uiDefaults';
-import { scenarioStateLedger, mockScenarioStateLedger } from '../scenarioStateStore';
+import { scenarioStateLedger, mockScenarioStateLedger, scenarioStepLock } from '../scenarioStateStore';
 
 import type { ScenarioState } from '../types/stores';
 import type { ScenarioDocument } from '../settings/scenarioSchema';
@@ -18,6 +18,13 @@ import type { ScenarioStateLedger } from '../types/votingPass';
  * mock voting pass writes.
  */
 const ledgerForMode = () => (settings.getSetting('mock') === true ? mockScenarioStateLedger : scenarioStateLedger);
+
+/**
+ * The lock a reset of one challenge's progress takes, so it never runs in the middle of that challenge's rule steps
+ * in another process. Mock mode has no other process, and no lock.
+ */
+const stepLockForMode = (challengeId: string | number) =>
+    settings.getSetting('mock') === true ? { ok: true, release: () => {} } : scenarioStepLock(challengeId);
 
 /**
  * @param ledger - defaults to the ledger for the current mode
@@ -61,4 +68,4 @@ const scenarioWakeInput = ({
     timezone: string;
 }) => (scenario && !corrupt ? { scenario, state, timezone } : null);
 
-export { getScenarioStatus, scenarioWakeInput, ledgerForMode };
+export { getScenarioStatus, scenarioWakeInput, ledgerForMode, stepLockForMode };

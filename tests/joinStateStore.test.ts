@@ -439,7 +439,18 @@ describe('acquireUnlockLock', () => {
         const lock = joinState.acquireUnlockLock('c9');
         expect(lock.ok).toBe(true);
         expect(logger.withCategory).toHaveBeenCalledWith('join');
-        expect(warning).toHaveBeenCalledWith('cross-process join lock unavailable for c9: EACCES', null);
+        expect(warning).toHaveBeenCalledWith('cross-process lock unavailable for c9: EACCES', null);
+    });
+
+    test('the failure is logged under the category of whoever took the lock', () => {
+        const warning = jest.fn();
+        jest.mocked(logger.withCategory).mockReturnValueOnce(invalid({ warning }));
+        fs.openSync.mockImplementationOnce(() => {
+            throw mockFsError('EACCES');
+        });
+        expect(joinState.acquireUnlockLock('scenario-7', 'scenario').ok).toBe(true);
+        expect(logger.withCategory).toHaveBeenCalledWith('scenario');
+        expect(warning).toHaveBeenCalledWith('cross-process lock unavailable for scenario-7: EACCES', null);
     });
 
     test('the challenge id is sanitized in what is logged', () => {
@@ -449,7 +460,7 @@ describe('acquireUnlockLock', () => {
             throw mockFsError('EACCES');
         });
         joinState.acquireUnlockLock('c9\nforged line');
-        expect(warning).toHaveBeenCalledWith('cross-process join lock unavailable for c9 forged line: EACCES', null);
+        expect(warning).toHaveBeenCalledWith('cross-process lock unavailable for c9 forged line: EACCES', null);
     });
 
     test('a thrown non-Error value is still reported and fails open', () => {
@@ -459,7 +470,7 @@ describe('acquireUnlockLock', () => {
             throw 'weird';
         });
         expect(joinState.acquireUnlockLock('c9').ok).toBe(true);
-        expect(warning).toHaveBeenCalledWith('cross-process join lock unavailable for c9: weird', null);
+        expect(warning).toHaveBeenCalledWith('cross-process lock unavailable for c9: weird', null);
     });
 
     test('an EEXIST that comes back after a takeover (lost the race for the new file) is busy, not a failure', () => {

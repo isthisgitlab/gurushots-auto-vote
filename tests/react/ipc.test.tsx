@@ -62,6 +62,7 @@ describe('scenario wrappers', () => {
         ['exportScenario', ['Plan']],
         ['getScenarioStatus', ['7']],
         ['resetScenarioState', ['7']],
+        ['resetAllScenarioState', []],
         ['dryRunScenario', ['7']],
         ['simulateScenario', ['7', { name: 'Draft' }]],
     ])('%s forwards its arguments', async (method, args) => {

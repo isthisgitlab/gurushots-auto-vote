@@ -450,8 +450,9 @@ repeated six times is one that gets forgotten at one of them.
   the challenge is under way, it re-reads the claims (an unreadable file aborts), and deletes this account's
   claim for the challenge only when it is still unconfirmed; never a claim known to have been charged. A
   bare claim from before accounts were told apart is **never** forgotten (`legacy-record`): it may be another
-  account's protection against a second charge and nothing on the device can tell whose, so it clears by itself
-  — after 30 days (any claim, bare or any account's, older than 30 days is pruned at the next open-list pruning,
+  account's protection against a second charge and nothing on the device can tell whose, so it stops applying
+  to the other accounts when the account that paid joins (the join replaces it, in one change of the claims, by
+  that account's own joined claim), and otherwise clears after 30 days (any claim, bare or any account's, older than 30 days is pruned at the next open-list pruning,
   except this account's own keyed claim of a challenge still in the list just read: a bare claim is never kept by
   the list, since the list says nothing of whose it is; no challenge lives that long, and it ends the keeping of
   other accounts' records and balances). The
@@ -471,7 +472,8 @@ repeated six times is one that gets forgotten at one of them.
   directory flushed where that can be), so a reader never sees it cut off; the temp files a crash left beside it
   (its own name pattern, untouched for a minute) are removed at the first read or write; an empty file reads as
   unreadable. A successful paid submit does **not** delete the claim it used: the claim stays, marked `joinedAt`
-  (and no longer `unconfirmed`), because a process that read the open list before that join and then spent a
+  (and nothing else but the time of the unlock: the balance before the payment, and any doubt about it, have no
+  purpose left), because a process that read the open list before that join and then spent a
   while picking a photo would otherwise find no claim under the lock and unlock the challenge a second time. A
   joined claim is never forgettable, makes every later paid attempt refuse (`failed-no-charge`: no unlock, no
   submit) wherever it is met (before the pick, under the unlock lock, under the submit lock), and is pruned like
@@ -717,15 +719,27 @@ caps (dependency-free, renderer-safe), and `scenarios/templates.ts` holds editab
 - **Runtime state** (`scenarioStateStore.ts`, per challenge: phase, memory, fired markers, in-flight action,
   spends, last action/error). An unreadable file or malformed record reads as **corrupt, never as a fresh
   start** (an empty file included: the file is written whole by temp file, flush and rename, so an empty one was cut
-  short, never "no state") — the challenge halts until `scenario-reset`, because replaying a plan could repeat
-  spends; every `fired` entry and every `unclear` / `unclearHalt` marker must be a plain record and a spend action to
+  short, never "no state") — the challenge halts, because replaying a plan could repeat spends, and the file is never replaced by one
+  challenge's change: a reset of one challenge on an unreadable file answers `state-unreadable`, and only a reset
+  of every challenge (`reset-all-scenario-state`, CLI `scenario-reset --all`, the card's "Reset every challenge's
+  progress…") clears it, with the warning that every challenge's progress, repeat protection and spend counters
+  go; a spend count must be finite and not negative; every `fired` entry and every `unclear` / `unclearHalt` marker must be a plain record and a spend action to
   be trusted. One process runs a challenge's rule steps at a time: the step takes the cross-process lock
   `scenario-<id>` (the unlock lock's machinery) before it reads the state and spends, and a challenge whose lock
-  another process holds is skipped for that pass. A step that fails at the place of a marked step (the scenario
+  another process holds is skipped for that pass (the pass is given the lock, so mock mode, which has no other process and must never
+  touch real files, has none). Every change of the file is read-modify-write of the whole, so it is made under a
+  second cross-process lock (`scenariostate`, a bounded wait of half a second, the file read again under it);
+  when the lock cannot be had, or the write fails, the change is not made, the state is kept in memory for the next
+  try (the next read returns it, after trying to write it first), and the runner stops the rule there and runs
+  nothing for the challenge while a state waits, so a spend that landed is never repeated for want of a write. A
+  reset takes the challenge's step lock and answers `busy` when another process holds it or the file, never a
+  silent success. A step that fails at the place of a marked step (the scenario
   was edited) keeps the marker, so a revert never spends it again. The card's notice for a rule stopped after a
   spend that got no answer says when that rule can run again by its repeat (the phase entered again, a reset, the
-  next day), names `scenario-reset --challenge=<id>` (the app has none) with its cost (it can spend the
-  unanswered action again and restarts the spend counter), and shows a later problem beside it. Mock
+  next day), points at the card's Reset button (a dialog that carries the cost: it can spend the unanswered action again and
+  restarts the spend counter) and at `scenario-reset --challenge=<id>` in the CLI, and shows a later problem
+  beside it, for a rule being checked on too (`inFlight.unclearAt` against `lastError.at`); the compact tile gets a
+  short notice, whole, with the details on the card. Mock
   mode uses the in-memory ledger. Android persists it through the native keyed bridge
   (`gs_scenario_state`); the app WebView `refreshAsync`es it before status reads, resets and each in-app
   pass, and when the native service is available only the background service advances scenarios

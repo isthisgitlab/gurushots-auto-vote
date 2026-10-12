@@ -30,16 +30,22 @@ const STALE_TEMP_MS = 60_000;
  * creating and renaming one). Only names of exactly that pattern, only ones untouched for a while. Best effort.
  */
 export const sweepStaleTemps = (filePath: string) => {
-    const base = path.basename(filePath);
     const dir = path.dirname(filePath);
+    const base = path.basename(filePath).replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    const own = new RegExp(`^${base}\\.\\d+\\.[0-9a-f]{8}\\.tmp$`);
+    let names: string[];
     try {
-        for (const name of fs.readdirSync(dir)) {
-            if (!name.startsWith(`${base}.`) || !/\.\d+\.[0-9a-f]{8}\.tmp$/.test(name)) continue;
+        names = fs.readdirSync(dir);
+    } catch {
+        return; // a directory that cannot be listed has only clutter to lose
+    }
+    for (const name of names.filter((candidate) => own.test(candidate))) {
+        try {
             const leftover = path.join(dir, name);
             if (Date.now() - fs.statSync(leftover).mtimeMs > STALE_TEMP_MS) fs.unlinkSync(leftover);
+        } catch {
+            // one that vanished meanwhile, or cannot be removed, does not stop the others
         }
-    } catch {
-        // a leftover that cannot be listed or removed is only clutter
     }
 };
 
@@ -57,10 +63,12 @@ export const writeAtomicOwnerOnly = (filePath: string, data: string) => {
     const temp = `${filePath}.${process.pid}.${randomBytes(4).toString('hex')}.tmp`;
     try {
         // The data is on disk before the rename makes it the file, so a power loss leaves the old file or the new
-        // one, never an empty or cut-off one.
+        // one, never an empty or cut-off one. (fsync is best effort where the platform's does not reach the drive's
+        // own cache: macOS needs F_FULLFSYNC for that, which node does not offer.) writeFileSync on the descriptor
+        // goes on until every byte is written, which a single writeSync does not promise.
         const fd = fs.openSync(temp, 'wx', 0o600);
         try {
-            fs.writeSync(fd, data);
+            fs.writeFileSync(fd, data);
             fs.fsyncSync(fd);
         } finally {
             fs.closeSync(fd);

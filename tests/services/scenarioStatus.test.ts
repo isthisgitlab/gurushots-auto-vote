@@ -8,6 +8,12 @@ jest.mock('../../src/ts/settings', () => ({
     getEffectiveSetting: jest.fn(),
     getScenario: jest.fn(),
 }));
+jest.mock('../../src/ts/joinStateStore', () => ({
+    acquireUnlockLock: jest.fn((id: string | number, _category?: string) => ({
+        ok: id !== 'scenario-9',
+        release: () => {},
+    })),
+}));
 jest.mock('../../src/ts/logger', () => ({ withCategory: jest.fn(() => ({ error: jest.fn() })) }));
 
 import settingsModule = require('../../src/ts/settings');
@@ -17,7 +23,7 @@ import type * as nodeResolversModule from '../../src/ts/scheduling/nodeResolvers
 import type * as scenarioStateStoreModule from '../../src/ts/scenarioStateStore';
 import type { ScenarioDocument } from '../../src/ts/settings/scenarioSchema';
 import { invalid } from '../helpers/invalid';
-const { getScenarioStatus, scenarioWakeInput, ledgerForMode } =
+const { getScenarioStatus, scenarioWakeInput, ledgerForMode, stepLockForMode } =
     require('../../src/ts/services/scenarioStatus') as typeof scenarioStatusModule;
 const { resolveScenarioWake } = require('../../src/ts/scheduling/nodeResolvers') as typeof nodeResolversModule;
 const { createMemoryStateLedger, initialState, scenarioStateLedger, mockScenarioStateLedger } =
@@ -95,5 +101,19 @@ describe('scenarioWakeInput / resolveScenarioWake', () => {
             timezone: 'Europe/Riga',
         });
         mockScenarioStateLedger.remove(9);
+    });
+});
+
+describe('stepLockForMode', () => {
+    test('is the challenge’s cross-process step lock, which another process can hold', () => {
+        expect(stepLockForMode(7).ok).toBe(true);
+        expect(stepLockForMode('9').ok).toBe(false);
+    });
+
+    test('mock mode has no other process and no lock, whatever is held', () => {
+        topLevel.mock = true;
+        const lock = stepLockForMode('9');
+        expect(lock.ok).toBe(true);
+        expect(() => lock.release()).not.toThrow();
     });
 });

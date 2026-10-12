@@ -1,7 +1,7 @@
-import { useEffect, useState } from 'react';
 import { useTranslation } from '@/contexts/TranslationContext';
 import { useCoinsNow } from '@/api/useCoinsNow';
-import { Modal, ModalActions } from '@/components/ui/Modal';
+import { ConfirmModal } from '@/components/ui/ConfirmModal';
+import { useConfirmedAction } from '@/hooks/useConfirmedAction';
 import { interp } from '@/utils/interp';
 import * as ipc from '@/api/ipc';
 
@@ -39,23 +39,6 @@ function BalanceHint({ before, now }: { before: number; now: number | null }) {
     );
 }
 
-// Stays focusable while the call is under way (aria-disabled, not disabled), and ignores clicks then.
-function ConfirmButton({ working, onConfirm }: { working: boolean; onConfirm: () => void }) {
-    const { t } = useTranslation();
-    return (
-        <button
-            className={`btn btn-warning btn-sm ${working ? 'btn-disabled' : ''}`}
-            onClick={() => {
-                if (!working) onConfirm();
-            }}
-            aria-disabled={working}
-            aria-busy={working}
-        >
-            {working ? t('app.discoverForgetWorking') : t('app.discoverForgetConfirm')}
-        </button>
-    );
-}
-
 /**
  * The user's way out of a payment that could not be confirmed: after checking GuruShots shows the coins were not
  * taken, confirming forgets the saved payment, so the row's next Join asks for the price as for any first join.
@@ -77,50 +60,35 @@ export function ForgetPaymentModal({
     onForgotten: (id: OpenChallenge['id']) => void;
 }) {
     const { t } = useTranslation();
-    const [working, setWorking] = useState(false);
-    const [problem, setProblem] = useState<string | null>(null);
+    const { working, problem, run } = useConfirmedAction(challenge);
     const coinsNow = useCoinsNow(challenge !== null && coinsBefore !== undefined);
 
-    // A problem from an earlier opening never shows in a later one: it goes whenever the dialog opens or closes.
-    useEffect(() => setProblem(null), [challenge]);
-
-    const forget = async (target: OpenChallenge) => {
-        setWorking(true);
-        setProblem(null);
-        try {
+    const forget = (target: OpenChallenge) =>
+        run(async () => {
             const answer = await ipc.callOrNull(() => ipc.forgetUnconfirmedPayment(target.id));
-            if (answer?.success) {
-                onForgotten(target.id);
-                onClose();
-            } else {
-                setProblem(problemOf(answer));
-            }
-        } finally {
-            setWorking(false);
-        }
-    };
+            if (!answer?.success) return problemOf(answer);
+            onForgotten(target.id);
+            onClose();
+            return null;
+        });
 
     return (
-        <Modal isOpen={challenge !== null} onClose={working ? undefined : onClose} title={t('app.discoverForgetTitle')}>
+        <ConfirmModal
+            isOpen={challenge !== null}
+            title={t('app.discoverForgetTitle')}
+            working={working}
+            problem={problem}
+            onClose={onClose}
+            onConfirm={() => challenge && void forget(challenge)}
+            confirmLabel="app.discoverForgetConfirm"
+            workingLabel="app.discoverForgetWorking"
+        >
             {challenge && (
                 <>
-                    <div className="space-y-2 text-sm">
-                        <p>{interp(t('app.discoverForgetBody'), { title: challenge.title || challenge.url })}</p>
-                        {coinsBefore !== undefined && <BalanceHint before={coinsBefore} now={coinsNow} />}
-                        {problem && (
-                            <p role="alert" className="text-error">
-                                {t(problem)}
-                            </p>
-                        )}
-                    </div>
-                    <ModalActions>
-                        <button className="btn btn-outline btn-sm" onClick={onClose} disabled={working}>
-                            {t('app.cancel')}
-                        </button>
-                        <ConfirmButton working={working} onConfirm={() => void forget(challenge)} />
-                    </ModalActions>
+                    <p>{interp(t('app.discoverForgetBody'), { title: challenge.title || challenge.url })}</p>
+                    {coinsBefore !== undefined && <BalanceHint before={coinsBefore} now={coinsNow} />}
                 </>
             )}
-        </Modal>
+        </ConfirmModal>
     );
 }

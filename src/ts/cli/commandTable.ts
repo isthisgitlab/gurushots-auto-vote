@@ -74,6 +74,18 @@ const runVote: CommandHandler = async (argv) => {
     return 0;
 };
 
+const SCENARIO_RESET_USAGE = 'Usage: scenario-reset --challenge=<id>  |  scenario-reset --all';
+
+// One challenge's progress, or (--all, alone) every challenge's: the only way past an unreadable progress file.
+const runScenarioReset: CommandHandler = async (argv) => {
+    if (!argv.includes('--all')) {
+        return challengeCommand(SCENARIO_RESET_USAGE, (id) => scenarioCommands.scenarioResetCmd(id))(argv);
+    }
+    return argv.length === 1
+        ? scenarioCommands.scenarioResetAllCmd()
+        : usageError('--all takes no other arguments', SCENARIO_RESET_USAGE);
+};
+
 const LOG_CATEGORY_FLAGS: Record<string, string> = {
     '--error': 'error',
     '--api': 'api',
@@ -295,9 +307,7 @@ const COMMANDS: Record<string, CommandHandler> = {
     'scenario-simulate': challengeCommand('Usage: scenario-simulate --challenge=<id>', (id) =>
         scenarioCommands.scenarioSimulateCmd(id),
     ),
-    'scenario-reset': challengeCommand('Usage: scenario-reset --challenge=<id>', (id) =>
-        scenarioCommands.scenarioResetCmd(id),
-    ),
+    'scenario-reset': runScenarioReset,
     'scenario-vocabulary': scenarioCommand('Usage: scenario-vocabulary', 0, () =>
         scenarioCommands.scenarioVocabulary(),
     ),

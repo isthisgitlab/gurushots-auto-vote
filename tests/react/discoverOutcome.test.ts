@@ -29,6 +29,12 @@ test('a status says what it says, unless a reason makes it more exact', () => {
         retry: false,
         forget: false,
     });
+    expect(outcomeMeta({ status: 'failed-no-charge', reason: 'already-joined' })).toEqual({
+        key: 'app.discoverAlreadyJoined',
+        variant: 'neutral',
+        retry: false,
+        forget: false,
+    });
 });
 
 test('an unconfirmed payment offers "I wasn\'t charged" as well as the retry; an older version\'s record only the retry', () => {

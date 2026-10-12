@@ -130,6 +130,7 @@ jest.mock('../../src/ts/cli/commands/scenarios', () =>
             'deleteScenarioCmd',
             'scenarioStatusCmd',
             'scenarioResetCmd',
+            'scenarioResetAllCmd',
             'scenarioDryRunCmd',
             'scenarioSimulateCmd',
             'scenarioVocabulary',
@@ -728,6 +729,7 @@ describe('scenario commands', () => {
         [['scenario-dry-run', '--challenge=7'], 'scenarioDryRunCmd', ['7']],
         [['scenario-simulate', '--challenge=7'], 'scenarioSimulateCmd', ['7']],
         [['scenario-reset', '--challenge=7'], 'scenarioResetCmd', ['7']],
+        [['scenario-reset', '--all'], 'scenarioResetAllCmd', []],
         [['scenario-vocabulary'], 'scenarioVocabulary', []],
     ])('%p runs %s', async (argv, fn, args) => {
         const m = await run(argv);
@@ -748,6 +750,17 @@ describe('scenario commands', () => {
         expect(m.msgs('error')).toContain('Wrong arguments');
         expect(m.exitCodes).toEqual([1]);
     });
+
+    test.each([[['scenario-reset', '--all', '--challenge=7']], [['scenario-reset', '--all', 'x']]])(
+        '%p: --all takes no other arguments, and resets nothing',
+        async (argv) => {
+            const m = await run(argv);
+            expect(m.msgs('error')).toContain('--all takes no other arguments');
+            expect(m.scenarios.scenarioResetAllCmd).not.toHaveBeenCalled();
+            expect(m.scenarios.scenarioResetCmd).not.toHaveBeenCalled();
+            expect(m.exitCodes).toEqual([1]);
+        },
+    );
 
     test('a failing command exits with its code', async () => {
         const m = await run(['delete-scenario', 'Plan'], (mods) =>

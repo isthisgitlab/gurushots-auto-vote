@@ -26,6 +26,7 @@ jest.mock('../../src/ts/ipc/scenarios.handlers', () => {
             'delete-scenario',
             'get-scenario-status',
             'reset-scenario-state',
+            'reset-all-scenario-state',
             'dry-run-scenario',
             'simulate-scenario',
         ].map((channel) => [channel, jest.fn()]),
@@ -323,6 +324,7 @@ describe('scenario-status', () => {
         expect(text('warning')).toContain('"Gone", which does not exist');
         h['get-scenario-status'].mockResolvedValueOnce(status({ corrupt: true }));
         await expect(cmd.scenarioStatusCmd('7')).resolves.toBe(1);
+        expect(text('error')).toContain('scenario-reset --all');
         h['get-scenario-status'].mockResolvedValueOnce(status());
         await cmd.scenarioStatusCmd('7');
         expect(text()).toContain('Not started yet');
@@ -379,6 +381,40 @@ describe('scenario-reset / dry-run / vocabulary', () => {
         h['reset-scenario-state'].mockResolvedValueOnce({ success: true }).mockResolvedValueOnce(invalid(failure));
         await expect(cmd.scenarioResetCmd('7')).resolves.toBe(0);
         await expect(cmd.scenarioResetCmd('7')).resolves.toBe(1);
+    });
+
+    test('the success line says what a reset costs, for one challenge and for all of them', async () => {
+        h['reset-scenario-state'].mockResolvedValueOnce({ success: true });
+        await cmd.scenarioResetCmd('7');
+        expect(text('success')).toContain('can spend an action that got no answer again');
+        expect(text('success')).toContain('restarts the scenario spend counter');
+        h['reset-all-scenario-state'].mockResolvedValueOnce({ success: true });
+        await expect(cmd.scenarioResetAllCmd()).resolves.toBe(0);
+        expect(text('success')).toContain('every challenge');
+        expect(text('success')).toContain('rules that already ran can run again');
+    });
+
+    test('a busy challenge or file is an error that changed nothing, never a success', async () => {
+        h['reset-scenario-state'].mockResolvedValueOnce({ success: false, error: 'busy' });
+        await expect(cmd.scenarioResetCmd('7')).resolves.toBe(1);
+        expect(text('error')).toContain('Nothing was changed. Try again in a moment.');
+        expect(text('success')).toBe('');
+        h['reset-all-scenario-state'].mockResolvedValueOnce({ success: false, error: 'busy' });
+        await expect(cmd.scenarioResetAllCmd()).resolves.toBe(1);
+    });
+
+    test('an unreadable progress file can only be reset for every challenge, and the line says what that costs', async () => {
+        h['reset-scenario-state'].mockResolvedValueOnce({ success: false, error: 'state-unreadable' });
+        await expect(cmd.scenarioResetCmd('7')).resolves.toBe(1);
+        expect(text('error')).toContain('scenario-reset --all');
+        expect(text('error')).toContain('forgets the progress of every challenge');
+        expect(text('error')).toContain('can spend an action that got no answer again');
+    });
+
+    test('any other failure of a reset of all is reported as it is', async () => {
+        h['reset-all-scenario-state'].mockResolvedValueOnce(invalid(failure));
+        await expect(cmd.scenarioResetAllCmd()).resolves.toBe(1);
+        expect(text('error')).toContain('Could not reset the scenarios');
     });
 
     test('dry run explains every rule and what would run', async () => {

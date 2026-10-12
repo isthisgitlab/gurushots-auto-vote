@@ -50,8 +50,8 @@ const failedNoCharge = (): JoinOutcome => ({ status: 'failed-no-charge', charged
  */
 const alreadyJoined = (challenge: Challenge, claim: Claim | null): JoinOutcome | null => {
     if (!claim?.joined) return null;
-    cat().warning(`${logger.challengeTag(challenge)}: this account has already joined it — nothing is unlocked`, null);
-    return failedNoCharge();
+    cat().debug(`${logger.challengeTag(challenge)}: this account has already joined it — nothing is unlocked`, null);
+    return { ...failedNoCharge(), reason: 'already-joined' };
 };
 
 // A pending submit, worded by what is known of the payment: an unconfirmed one (the unlock got no answer) says so,
@@ -202,9 +202,16 @@ const unlockUnderLock = async (
  * caller may already hold it). A lock another process holds leaves the claim as it is, which still protects: it is
  * pruned with its challenge.
  */
-const markClaimJoined = (deps: JoinDeps, id: string | number, key: string, holdsLock: boolean): void => {
+const markClaimJoined = (
+    deps: JoinDeps,
+    id: string | number,
+    claim: Claim,
+    owner: string | null,
+    holdsLock: boolean,
+): void => {
+    const ownKey = markerKey(id, owner);
     if (holdsLock) {
-        markJoined(deps, key);
+        markJoined(deps, claim.key, ownKey);
         return;
     }
     const lock = lockFor(deps, id);
@@ -216,7 +223,7 @@ const markClaimJoined = (deps: JoinDeps, id: string | number, key: string, holds
         return;
     }
     try {
-        markJoined(deps, key);
+        markJoined(deps, claim.key, ownKey);
     } finally {
         lock.release();
     }
@@ -235,6 +242,7 @@ const submitJoin = async (
     needsCoins: number,
     imageId: string,
     { charged, alreadyUnlocked, claim }: UnlockState,
+    owner: string | null,
     holdsLock: boolean,
 ): Promise<JoinOutcome> => {
     const id = challenge?.id;
@@ -251,7 +259,7 @@ const submitJoin = async (
         // another account's (a bare one from before accounts were told apart), or its owner is charged twice.
         // A paid submit that succeeds proves this account held the unlock: the claim it used stays, marked joined,
         // bare or not, for a process that read the open list before this join.
-        if (needsCoins > 0 && claim) markClaimJoined(deps, id, claim.key, holdsLock);
+        if (needsCoins > 0 && claim) markClaimJoined(deps, id, claim, owner, holdsLock);
         cat().success(
             `joined ${logger.challengeTag(challenge)}${needsCoins > 0 ? ` (spent ${needsCoins} coins)` : ''}`,
             null,
@@ -301,6 +309,7 @@ const submitOnClaim = async (
                 needsCoins,
                 imageId,
                 { charged: 0, alreadyUnlocked: true, claim },
+                owner,
                 true,
             ))
         );
@@ -402,7 +411,7 @@ const performJoin = async (
         if (needsCoins > 0 && unlock.alreadyUnlocked) {
             return await submitOnClaim(challenge, token, deps, needsCoins, imageId, owner);
         }
-        return await submitJoin(challenge, token, deps, needsCoins, imageId, unlock, false);
+        return await submitJoin(challenge, token, deps, needsCoins, imageId, unlock, owner, false);
     } finally {
         inFlight.delete(key);
     }

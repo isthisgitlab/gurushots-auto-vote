@@ -12,13 +12,47 @@ const AGAIN_KEY = {
 
 type Summary = NonNullable<ReturnType<typeof useScenarioStatusModule.useScenarioStatus>>;
 
+function ResetButton({ label, onReset }: { label: string; onReset: () => void }) {
+    const { t } = useTranslation();
+    return (
+        <button type="button" className="btn btn-warning btn-outline btn-xs" onClick={onReset}>
+            {t(label)}
+        </button>
+    );
+}
+
+// A scenario that is gone, or whose saved progress cannot be read: nothing runs, and the card says why.
+function Unavailable({
+    status,
+    compact,
+    onReset,
+}: {
+    status: Summary;
+    compact: boolean;
+    onReset: (() => void) | undefined;
+}) {
+    const { t } = useTranslation();
+    const corruptKey = compact ? 'app.scenarioStatusCorruptShort' : 'app.scenarioStatusCorrupt';
+    const key = status.missing ? 'app.scenarioStatusMissing' : corruptKey;
+    return (
+        <div className="text-xs text-warning space-y-1" role="status">
+            <div>
+                <span aria-hidden="true">⚠</span> {interp(t(key), { name: status.name })}
+            </div>
+            {status.corrupt && onReset && <ResetButton label="app.scenarioResetAll" onReset={onReset} />}
+        </div>
+    );
+}
+
 // What to say besides where the plan is: a spend that got no answer (and, after a stop, a problem that came later),
 // else the last problem.
 function Notice({ status, compact }: { status: Summary; compact: boolean }) {
     const { t } = useTranslation();
     const { spendUnclear, lastError } = status;
+    // The compact tile clamps its notices, so a stopped rule gets a short one there, whole; the card has the rest.
+    const stoppedKey = compact ? 'app.scenarioStatusSpendStoppedShort' : 'app.scenarioStatusSpendStopped';
     const spend = spendUnclear
-        ? interp(t(spendUnclear.stopped ? 'app.scenarioStatusSpendStopped' : 'app.scenarioStatusSpendUnclear'), {
+        ? interp(t(spendUnclear.stopped ? stoppedKey : 'app.scenarioStatusSpendUnclear'), {
               action: t(`app.sbAct_${spendUnclear.action}`),
               again: t(AGAIN_KEY[spendUnclear.again]),
               id: spendUnclear.challengeId,
@@ -51,22 +85,18 @@ function Notice({ status, compact }: { status: Summary; compact: boolean }) {
 export function ScenarioStatusLine({
     status,
     compact = false,
+    onReset,
 }: {
     status: ReturnType<typeof useScenarioStatusModule.useScenarioStatus>;
     compact?: boolean;
+    /** Offers the reset, for the notices that say a reset is the way on (a stopped rule, unreadable progress). */
+    onReset?: () => void;
 }) {
     const { t } = useTranslation();
     const now = useTick(1000, Boolean(status?.nextWakeAt));
     if (!status) return null;
 
-    if (status.missing || status.corrupt) {
-        const key = status.missing ? 'app.scenarioStatusMissing' : 'app.scenarioStatusCorrupt';
-        return (
-            <div className="text-xs text-warning" role="status">
-                <span aria-hidden="true">⚠</span> {interp(t(key), { name: status.name })}
-            </div>
-        );
-    }
+    if (status.missing || status.corrupt) return <Unavailable status={status} compact={compact} onReset={onReset} />;
 
     const phase = status.started
         ? interp(t('app.scenarioStatusPhase'), { phase: status.phase })
@@ -84,6 +114,7 @@ export function ScenarioStatusLine({
                 {next && <> · {next}</>}
             </div>
             <Notice status={status} compact={compact} />
+            {status.spendUnclear?.stopped && onReset && <ResetButton label="app.scenarioReset" onReset={onReset} />}
         </div>
     );
 }

@@ -31,7 +31,10 @@ const REASON_OUTCOME: Record<string, Partial<Record<JoinReason, OutcomeMeta>>> =
         unconfirmed: { key: 'app.discoverUnconfirmed', variant: 'error' },
         'earlier-payment': { key: 'app.discoverEarlierPayment', variant: 'error' },
     },
-    'failed-no-charge': { 'account-unknown': { key: 'app.discoverAccountUnknown', variant: 'error' } },
+    'failed-no-charge': {
+        'account-unknown': { key: 'app.discoverAccountUnknown', variant: 'error' },
+        'already-joined': { key: 'app.discoverAlreadyJoined', variant: 'neutral' },
+    },
 };
 
 /**

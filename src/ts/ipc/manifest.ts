@@ -117,6 +117,7 @@ const invokeChannels = [
     'export-scenario',
     'get-scenario-status',
     'reset-scenario-state',
+    'reset-all-scenario-state',
     'dry-run-scenario',
     'simulate-scenario',
     'reload-window',

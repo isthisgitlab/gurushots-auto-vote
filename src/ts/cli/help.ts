@@ -75,6 +75,8 @@ Commands:
   scenario-simulate --challenge=<id> - A what-if timeline until the challenge closes (spends nothing)
   scenario-reset --challenge=<id> - Forget a challenge's scenario progress (the plan restarts). It can spend an action
              that got no answer again, and it restarts the scenario's spend counter.
+  scenario-reset --all - Forget every challenge's scenario progress: the only way past a progress file that cannot be
+             read. The rules that already ran can run again, with the same warning as above.
   scenario-vocabulary - List every condition, selector and action a scenario can use
              Assign one with: set-setting scenario "<name>" --challenge=<id> (or a challenge rule)
   help-settings - Show detailed settings help (includes profile details)

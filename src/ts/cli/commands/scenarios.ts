@@ -199,7 +199,9 @@ const scenarioStatusCmd = async (challengeId: string) => {
         return 0;
     }
     if (status.corrupt) {
-        ui().error('Its scenario state is unreadable. Reset it (scenario-reset) to start the plan again.');
+        ui().error(
+            'The saved scenario progress is unreadable. Reset the progress of every challenge (scenario-reset --all) to start the plans again.',
+        );
         return 1;
     }
     const { state } = status;
@@ -225,11 +227,40 @@ const scenarioStatusCmd = async (challengeId: string) => {
     return 0;
 };
 
+const RESET_COST =
+    'Resetting can spend an action that got no answer again, and it restarts the scenario spend counter.';
+
+const RESET_BUSY =
+    'Another process is running this challenge’s scenario, or using the saved scenario progress. Nothing was changed. Try again in a moment.';
+
 const scenarioResetCmd = async (challengeId: string) => {
     const result = await handlers()['reset-scenario-state'](null, challengeId);
+    if (!result.success && result.error === 'busy') {
+        ui().error(RESET_BUSY);
+        return 1;
+    }
+    if (!result.success && result.error === 'state-unreadable') {
+        ui().error(
+            `The saved scenario progress cannot be read, so it can only be reset for every challenge at once: scenario-reset --all. That forgets the progress of every challenge, including which rules already ran and the spend counters. ${RESET_COST} Nothing was changed.`,
+        );
+        return 1;
+    }
     if (!result.success) return reportFailure(result, 'Could not reset the scenario');
     ui().success(
-        `Scenario progress reset for challenge ${challengeId} — the plan starts again on the next voting pass.`,
+        `Scenario progress reset for challenge ${challengeId} — the plan starts again on the next voting pass. ${RESET_COST}`,
+    );
+    return 0;
+};
+
+const scenarioResetAllCmd = async () => {
+    const result = await handlers()['reset-all-scenario-state']();
+    if (!result.success && result.error === 'busy') {
+        ui().error(RESET_BUSY);
+        return 1;
+    }
+    if (!result.success) return reportFailure(result, 'Could not reset the scenarios');
+    ui().success(
+        `Scenario progress reset for every challenge — every plan starts again on the next voting pass, and the rules that already ran can run again. ${RESET_COST}`,
     );
     return 0;
 };
@@ -292,6 +323,7 @@ export {
     deleteScenarioCmd,
     scenarioStatusCmd,
     scenarioResetCmd,
+    scenarioResetAllCmd,
     scenarioDryRunCmd,
     scenarioSimulateCmd,
     scenarioVocabulary,

@@ -159,6 +159,33 @@ describe('useScenarioStatus', () => {
                 note({ action: 'unlockBoost', stopped: false }),
             ],
             [
+                'a step being checked on, with a later problem (the scenario was edited and halted)',
+                {
+                    inFlight: { ruleId: 'r', actionIndex: 1, unclear: 'unlockBoost', unclearAt: NOW },
+                    lastError: { at: NOW + 5, message: 'halted' },
+                },
+                undefined,
+                note({ action: 'unlockBoost', stopped: false, newerProblem: true }),
+            ],
+            [
+                'a step being checked on, with no problem recorded',
+                {
+                    inFlight: { ruleId: 'r', actionIndex: 1, unclear: 'unlockBoost', unclearAt: NOW },
+                    lastError: null,
+                },
+                undefined,
+                note({ action: 'unlockBoost', stopped: false }),
+            ],
+            [
+                'a step being checked on, whose own message is the last problem',
+                {
+                    inFlight: { ruleId: 'r', actionIndex: 1, unclear: 'unlockBoost', unclearAt: NOW },
+                    lastError: { at: NOW, message: 'its own' },
+                },
+                undefined,
+                note({ action: 'unlockBoost', stopped: false }),
+            ],
+            [
                 'a rule stopped after one, in the phase it is in now',
                 { fired: halted },
                 undefined,
