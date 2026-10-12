@@ -1,5 +1,6 @@
 import { app, BrowserWindow, powerMonitor } from 'electron';
 import * as settings from '../settings';
+import { isCliSessionActive } from '../settings/cliSessionLock';
 import { initializeHeaders } from '../api/randomizer';
 import * as logger from '../logger';
 import { AutoUpdater } from '../services/AutoUpdater';
@@ -11,6 +12,31 @@ import { createApplicationMenu } from '../ui/applicationMenu';
 import { appState } from './state';
 import { checkAutoLogin } from './windows';
 import { installPermissionHandlers } from './permissions';
+
+/**
+ * A login a run left behind (a crash or a kill skips the quit-time clear) is cleared at the next start unless "Stay
+ * Logged In" is on. Only the desktop app does this, and only in the instance that holds the single-instance lock
+ * (onReady runs for no other): a CLI session that is running may be using the login, so it is left alone then.
+ */
+const clearLeftoverToken = () => {
+    try {
+        const userSettings = settings.loadSettings();
+        if (userSettings.stayLoggedIn || !userSettings.token) return;
+        if (isCliSessionActive()) {
+            logger
+                .withCategory('authentication')
+                .info('Kept the saved token: a CLI session is running and may be using it', null);
+            return;
+        }
+        if (settings.setSetting('token', '')) {
+            logger
+                .withCategory('authentication')
+                .info('Cleared a saved token left by an earlier run (Stay Logged In is off)', null);
+        }
+    } catch (error) {
+        logger.withCategory('authentication').error('Failed to clear a leftover token at startup:', error);
+    }
+};
 
 /**
  * Everything that runs once Electron has finished initialization.
@@ -29,6 +55,8 @@ async function onReady() {
     } catch (err) {
         logger.withCategory('settings').warning('Intent profile seeding failed (non-fatal):', err);
     }
+
+    clearLeftoverToken();
 
     logger.cleanup();
 

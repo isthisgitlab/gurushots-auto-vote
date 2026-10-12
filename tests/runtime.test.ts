@@ -64,21 +64,27 @@ describe('runtime app identity + user-data path (single source of truth)', () =>
         expect(fs.mkdirSync).not.toHaveBeenCalled();
     });
 
-    test('CLI branch falls back to cwd/userData when the platform dir cannot be created', () => {
-        const warnSpy = jest.spyOn(console, 'warn').mockImplementation(() => {});
+    test('CLI branch fails closed with a typed error when the platform dir cannot be created, never using cwd', () => {
         fs.existsSync.mockReturnValue(false);
-        fs.mkdirSync
-            .mockImplementationOnce(() => {
-                throw Object.assign(new Error('EACCES'), { code: 'EACCES' });
-            })
-            .mockImplementationOnce(() => {});
+        fs.mkdirSync.mockImplementation(() => {
+            throw Object.assign(new Error('EACCES'), { code: 'EACCES' });
+        });
+        const expected = runtime.getUserDataDir(runtime.getAppName());
 
-        const result = runtime.getAppUserDataPath();
+        let thrown: unknown;
+        try {
+            runtime.getAppUserDataPath();
+        } catch (error) {
+            thrown = error;
+        }
 
-        expect(result).toBe(`${process.cwd()}/userData`);
-        expect(warnSpy).toHaveBeenCalledWith(expect.stringContaining('falling back to cwd/userData'));
-        expect(fs.mkdirSync).toHaveBeenLastCalledWith(`${process.cwd()}/userData`, { recursive: true, mode: 0o700 });
-        warnSpy.mockRestore();
+        expect(thrown).toBeInstanceOf(runtime.UserDataUnavailableError);
+        const failure = thrown as InstanceType<typeof runtime.UserDataUnavailableError>;
+        expect(failure.path).toBe(expected);
+        expect(failure.message).toContain(expected);
+        expect(failure.message).toContain('EACCES');
+        expect(fs.mkdirSync).toHaveBeenCalledTimes(1);
+        expect(fs.mkdirSync).not.toHaveBeenCalledWith(`${process.cwd()}/userData`, expect.anything());
     });
 
     describe('Electron branch (simulated via process.versions.electron + virtual electron module)', () => {

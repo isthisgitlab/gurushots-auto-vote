@@ -82,6 +82,10 @@ Commands:
              Assign one with: set-setting scenario "<name>" --challenge=<id> (or a challenge rule)
   help-settings - Show detailed settings help (includes profile details)
   logs [--error|--api|--settings|--lexicon] [--lines=<n>] - Show logs or the local lexicon report
+  licenses - Print the third-party license notices
+  reset-data --yes - Delete everything stored on this device: settings and the saved login, every store, logs and
+             the extracted vision runtime. It cannot be undone, so it does nothing without --yes, and nothing
+             while auto-vote is running (in the app or in a CLI session).
   reset-windows  - Reset window positions to default
   help     - Show this help message
 

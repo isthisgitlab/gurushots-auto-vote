@@ -70,7 +70,6 @@ Object.assign(mockApi, {
     // Boost — preload exposes both names; hooks call applyBoost.
     applyBoost: jest.fn().mockResolvedValue({ success: true }),
     applyBoostToEntry: jest.fn().mockResolvedValue({ success: true }),
-    getBoostThreshold: jest.fn().mockResolvedValue(30),
 
     // Turbo
     applyTurbo: jest.fn().mockResolvedValue({ success: true }),

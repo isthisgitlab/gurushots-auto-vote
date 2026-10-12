@@ -79,19 +79,35 @@ describePosix('userData JSON writers leave files owner-only', () => {
         expect(modeOf(path.join(userData, 'settings.json'))).toBe(0o600);
     });
 
-    test('a chmod the filesystem refuses still lets the write land', () => {
+    test('a chmod the filesystem refuses still lets a plain store write land', () => {
         fs.mkdirSync(userData);
-        const file = path.join(userData, 'settings.json');
+        const file = path.join(userData, 'plain.json');
         fs.writeFileSync(file, '{}', { mode: 0o644 });
         fs.chmodSync(file, 0o644);
         const chmodSpy = jest.spyOn(fs, 'chmodSync').mockImplementation(() => {
             throw Object.assign(new Error('operation not permitted'), { code: 'EPERM' });
         });
+        const store = createJsonStore({ fileName: 'plain.json', prefKey: 'p' });
 
-        expect(() => storage.writeRaw('{"token":"t"}')).not.toThrow();
+        expect(() => store.writeRaw('{"token":"t"}')).not.toThrow();
 
         expect(chmodSpy).toHaveBeenCalledWith(file, 0o600);
         expect(modeOf(file)).toBe(0o644);
         expect(fs.readFileSync(file, 'utf8')).toBe('{"token":"t"}');
+    });
+
+    test('the settings file is replaced atomically and ends up 0o600 even when chmod is refused', () => {
+        fs.mkdirSync(userData);
+        const file = path.join(userData, 'settings.json');
+        fs.writeFileSync(file, '{}', { mode: 0o644 });
+        fs.chmodSync(file, 0o644);
+        jest.spyOn(fs, 'chmodSync').mockImplementation(() => {
+            throw Object.assign(new Error('operation not permitted'), { code: 'EPERM' });
+        });
+
+        expect(storage.writeRaw('{"token":"t"}')).toBe(true);
+
+        expect(modeOf(file)).toBe(0o600);
+        expect(fs.readdirSync(userData)).toEqual(['settings.json']);
     });
 });

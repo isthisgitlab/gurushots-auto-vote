@@ -222,7 +222,6 @@ const applyChallengeProfile = (name: unknown, challengeId: ChallengeIdInput): bo
     // Safety net: sanitizeProfileValues already validated these values against
     // the same {globals + profile} context, so this only fails if a schema rule
     // starts depending on the challenge id. Kept so nothing invalid is persisted.
-    /* istanbul ignore if */
     if (!replaceChallengeOverridesInSettings(settings, id, sanitized, true)) return false;
     return saveSettings(settings);
 };

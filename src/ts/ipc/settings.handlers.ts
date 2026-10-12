@@ -1,19 +1,23 @@
 /**
  * IPC handlers for everything settings-shaped: load/save, schema,
- * boost thresholds, per-challenge overrides, and the bulk-registered
+ * per-challenge overrides, and the bulk-registered
  * "thin" passthrough handlers that just delegate to a settings.*
  * method with a uniform try/catch shape.
  *
- * Also hosts get-environment-info, refresh-api, and cleanup-stale-
- * metadata since those are the small remaining settings-adjacent
- * orchestration channels.
+ * Also hosts get-environment-info, refresh-api, cleanup-stale-
+ * metadata, the stored-settings recovery notice, the third-party notices and
+ * the delete-all-local-data wipe since those are the small remaining
+ * settings-adjacent orchestration channels.
  */
 
 // Lazy require: esbuild must not resolve electron when this module is bundled
 // into the Capacitor renderer; only register() uses BrowserWindow.
 let BrowserWindow: typeof electronModule.BrowserWindow | null = null;
+let electronApp: typeof electronModule.app | null = null;
 try {
-    BrowserWindow = (require('electron') as typeof import('electron')).BrowserWindow;
+    const electron = require('electron') as typeof import('electron');
+    BrowserWindow = electron.BrowserWindow;
+    electronApp = electron.app;
 } catch {
     // Capacitor / CLI: register() in this module is never reached.
 }
@@ -27,9 +31,12 @@ import * as metadata from '../metadata';
 import { stampChosenPhotosOwner } from './chosenPhotosOwner';
 import { isIdArg } from './isIdArg';
 import { refuseInvalidArgs } from './actions/shared';
+import { wipeLocalData } from '../settings/localData';
+import { loadThirdPartyNotices } from '../thirdPartyNotices';
 
 import type { IpcMain } from 'electron';
 import type { SettingsSchemaEntry } from '../settings/schema';
+import type { AppSettings } from '../types/settings';
 import type * as electronModule from 'electron';
 
 /**
@@ -45,6 +52,25 @@ export type SerializableSchemaEntry = Pick<
  * renderer after a successful user-facing write.
  */
 type BroadcastSettingsChange = (settings: object) => void;
+
+/**
+ * What a shell hands the settings handlers: where a write is announced, and what happens once
+ * all local data has been deleted (relaunch to the login screen).
+ */
+type SettingsHandlerOptions = { broadcastSettingsChange?: BroadcastSettingsChange; afterWipe?: () => void };
+
+// Where the challenge id sits in each thin channel's arguments, and whether the channel may be called without one.
+// An id that is not a plain id (a non-blank string of bounded length, or a number) never reaches the settings.
+const CHALLENGE_ID_ARGS: Record<string, { index: number; optional?: boolean }> = {
+    'get-challenge-override': { index: 1 },
+    'set-challenge-override': { index: 1 },
+    'set-challenge-overrides': { index: 0 },
+    'remove-challenge-override': { index: 1 },
+    'get-effective-setting': { index: 1, optional: true },
+    'get-challenge-overrides': { index: 0 },
+    'replace-challenge-overrides': { index: 0 },
+    'apply-challenge-profile': { index: 1 },
+};
 
 // Channels that just delegate to a settings facade method. Each row:
 // [channel, lazy method lookup, fallback-on-error, verb-for-log]. The lookup
@@ -132,7 +158,7 @@ const CHOSEN_LIST_CHANNELS = new Set([
     'save-challenge-profile',
 ]);
 
-const handleGetSetting = async (key: unknown) => {
+const handleGetSetting = async (key: string) => {
     try {
         if (typeof key !== 'string') {
             throw new Error('Invalid key type, expected string');
@@ -145,14 +171,13 @@ const handleGetSetting = async (key: unknown) => {
         // A non-string key reaches here too; indexing coerces it like any
         // property access (and misses, falling back to null).
         const defaultSettings = settings.getDefaultSettings() as Record<string, unknown>;
-        const k = key as string;
-        return defaultSettings[k] !== undefined ? defaultSettings[k] : null;
+        return Object.hasOwn(defaultSettings, key) && defaultSettings[key] !== undefined ? defaultSettings[key] : null;
     }
 };
 
 const handleSetSetting = async (
     broadcastSettingsChange: BroadcastSettingsChange | undefined,
-    key: unknown,
+    key: string,
     value: unknown,
 ) => {
     try {
@@ -187,7 +212,7 @@ const handleClearChosenPhotos = async (broadcastSettingsChange: BroadcastSetting
     }
 };
 
-const buildSettingsHandlers = ({ broadcastSettingsChange }: { broadcastSettingsChange?: BroadcastSettingsChange }) => ({
+const buildSettingsHandlers = ({ broadcastSettingsChange }: SettingsHandlerOptions) => ({
     'get-settings': async () => {
         try {
             return toRendererSettings(settings.loadSettings());
@@ -197,22 +222,22 @@ const buildSettingsHandlers = ({ broadcastSettingsChange }: { broadcastSettingsC
         }
     },
 
-    'get-setting': (event: unknown, key: unknown) => handleGetSetting(key),
+    'get-setting': (event: unknown, key: string) => handleGetSetting(key),
 
-    'set-setting': (event: unknown, key: unknown, value: unknown) =>
+    'set-setting': (event: unknown, key: string, value: unknown) =>
         handleSetSetting(broadcastSettingsChange, key, value),
 
     'cleanup-stale-challenge-setting': handleCleanupStaleChallengeSetting,
 
     'clear-chosen-photos': async () => handleClearChosenPhotos(broadcastSettingsChange),
 
-    'save-settings': async (event: unknown, newSettings: unknown) => {
+    'save-settings': async (event: unknown, newSettings: Partial<AppSettings>) => {
         try {
             if (typeof newSettings !== 'object' || newSettings === null) {
                 throw new Error('Invalid settings type, expected object');
             }
             // Only the object shape is checked here; the facade validates each
-            // key. The token and its derived flag are not renderer-writable.
+            // key. The token, its derived flag and the API headers are not renderer-writable.
             const result = settings.saveSettings(withoutRendererHiddenKeys(newSettings));
             if (result && typeof broadcastSettingsChange === 'function') {
                 broadcastSettingsChange(toRendererSettings(settings.loadSettings()));
@@ -229,11 +254,14 @@ const buildSettingsHandlers = ({ broadcastSettingsChange }: { broadcastSettingsC
 // checked: a non-array, an empty one, or one holding anything but ids would
 // empty the lot. Ids are compared as the trimmed strings perChallenge is keyed by.
 // The settings layer then prunes only what the main process's own active list also lacks.
+// In mock mode the active list holds the mock challenges' ids, so pruning against it would delete the real ones' data:
+// both cleanup channels do nothing then.
 const handleCleanupStaleChallengeSetting = async (event: unknown, activeChallengeIds: Array<string | number>) => {
     if (!Array.isArray(activeChallengeIds) || activeChallengeIds.length === 0 || !activeChallengeIds.every(isIdArg)) {
         return refuseInvalidArgs('settings', 'cleanup-stale-challenge-setting');
     }
     try {
+        if (settings.getSetting('mock') === true) return { success: true as const };
         const saved = settings.cleanupStaleChallengeSetting(activeChallengeIds.map((id) => String(id).trim()));
         return saved
             ? { success: true as const }
@@ -273,43 +301,44 @@ const buildEnvironmentHandlers = () => ({
         }
     },
 
-    'cleanup-stale-metadata': async (event: unknown, activeChallengeIds: string[]) => {
+    'cleanup-stale-metadata': async (event: unknown, activeChallengeIds: Array<string | number>) => {
+        if (!Array.isArray(activeChallengeIds) || !activeChallengeIds.every(isIdArg)) {
+            return refuseInvalidArgs('api', 'cleanup-stale-metadata');
+        }
         try {
-            return metadata.cleanupStaleMetadata(activeChallengeIds);
+            if (settings.getSetting('mock') === true) return { success: true as const };
+            return metadata.cleanupStaleMetadata(activeChallengeIds.map(String))
+                ? { success: true as const }
+                : { success: false as const, error: 'The metadata could not be saved' };
         } catch (error) {
             logger.withCategory('api').error('Error cleaning up stale metadata:', error);
-            return false;
+            return errorResult(error, 'Failed to clean up stale metadata');
         }
     },
 });
 
-const buildBoostThresholdHandlers = () => ({
-    'get-boost-threshold': async (event: unknown, challengeId: string | number) => {
+const buildLocalDataHandlers = ({ afterWipe }: SettingsHandlerOptions) => ({
+    // Why the stored settings are not in use (a corrupt file moved aside, or one that cannot be read), or null.
+    'get-settings-recovery': async () => ({ success: true as const, recovery: settings.getSettingsRecovery() }),
+
+    'get-third-party-notices': async () => {
         try {
-            return settings.getEffectiveSetting('boostTime', challengeId);
+            return { success: true as const, text: await loadThirdPartyNotices() };
         } catch (error) {
-            logger.withCategory('settings').error('Error getting boost threshold:', error);
-            return settings.SETTINGS_SCHEMA.boostTime.default;
+            logger.withCategory('ui').error('Error reading the third-party notices:', error);
+            return errorResult(error, 'The third-party notices could not be read');
         }
     },
 
-    'set-boost-threshold': async (event: unknown, challengeId: string | number, threshold: number) => {
+    // Deletes everything the app stores on this device, then hands over to the shell (relaunch to the login screen).
+    'wipe-local-data': async () => {
         try {
-            settings.setChallengeOverride('boostTime', challengeId.toString(), threshold);
+            const result = await wipeLocalData();
+            if (!result.success) return result;
+            afterWipe?.();
             return { success: true as const };
         } catch (error) {
-            logger.withCategory('settings').error('Error setting boost threshold:', error);
-            return errorResult(error, 'Failed to set boost threshold');
-        }
-    },
-
-    'set-default-boost-threshold': async (event: unknown, threshold: number) => {
-        try {
-            settings.setGlobalDefault('boostTime', threshold);
-            return { success: true as const };
-        } catch (error) {
-            logger.withCategory('settings').error('Error setting default boost threshold:', error);
-            return errorResult(error, 'Failed to set default boost threshold');
+            return errorResult(error, 'Failed to delete the local data');
         }
     },
 });
@@ -361,10 +390,19 @@ const buildSchemaHandlers = () => ({
     },
 });
 
-const buildThinHandlers = ({ broadcastSettingsChange }: { broadcastSettingsChange?: BroadcastSettingsChange }) => {
+const buildThinHandlers = ({ broadcastSettingsChange }: SettingsHandlerOptions) => {
     const handlers: Record<string, IpcHandler> = {};
     thinRows().forEach(([channel, lookup, fallback, verb]) => {
+        const idArg = Object.hasOwn(CHALLENGE_ID_ARGS, channel) ? CHALLENGE_ID_ARGS[channel] : null;
         handlers[channel] = async (event, ...args: unknown[]) => {
+            if (idArg) {
+                const id = args[idArg.index];
+                if (!(idArg.optional && (id === undefined || id === null)) && !isIdArg(id)) {
+                    refuseInvalidArgs('settings', channel);
+                    // aislop-ignore-next-line ai-slop/hidden-fallback -- refused and logged by refuseInvalidArgs; the row's fallback is the channel contract
+                    return fallback;
+                }
+            }
             try {
                 const result = (lookup() as (...a: unknown[]) => unknown)(...args);
                 if (result && CHOSEN_LIST_CHANNELS.has(channel)) stampChosenPhotosOwner(args);
@@ -382,11 +420,11 @@ const buildThinHandlers = ({ broadcastSettingsChange }: { broadcastSettingsChang
     return handlers as ThinHandlers;
 };
 
-const buildHandlers = (options: { broadcastSettingsChange?: BroadcastSettingsChange } = {}) => {
+const buildHandlers = (options: SettingsHandlerOptions = {}) => {
     const handlers = {
         ...buildSettingsHandlers(options),
         ...buildEnvironmentHandlers(),
-        ...buildBoostThresholdHandlers(),
+        ...buildLocalDataHandlers(options),
         ...buildSchemaHandlers(),
     } satisfies IpcHandlerMap;
     return { ...handlers, ...buildThinHandlers(options) };
@@ -401,7 +439,15 @@ const register = (ipcMain: IpcMain) => {
             if (!win.isDestroyed()) win.webContents.send('settings-changed', newSettings);
         });
     };
-    registerHandlers(ipcMain, buildHandlers({ broadcastSettingsChange }));
+    // The window is closed by the exit, so the reply to the wipe is let out first.
+    const afterWipe = () => {
+        setTimeout(() => {
+            const app = electronApp as typeof electronModule.app;
+            app.relaunch();
+            app.exit(0);
+        }, 200);
+    };
+    registerHandlers(ipcMain, buildHandlers({ broadcastSettingsChange, afterWipe }));
 };
 
 export { register, buildHandlers };

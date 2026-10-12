@@ -147,17 +147,21 @@ export interface AppSettings extends ReturnType<typeof getUiDefaultSettings> {
 }
 
 /**
- * The settings a renderer sees: the stored blob without its auth token, plus
- * whether one exists. The token itself never leaves the main process.
+ * The settings a renderer sees: the stored blob without its auth token and API headers, plus
+ * whether a token exists. Neither the token nor the headers ever leave the main process.
  */
-export type RendererSettings = {
-    [K in keyof AppSettings as K extends 'token' ? never : K]: AppSettings[K];
-} & { token?: never; hasToken: boolean };
+export type RendererSettings = RendererVisibleSettings & { token?: never; apiHeaders?: never; hasToken: boolean };
+
+/** The stored blob without the keys a renderer may not see. */
+export type RendererVisibleSettings = {
+    [K in keyof AppSettings as K extends 'token' | 'apiHeaders' ? never : K]: AppSettings[K];
+};
 
 /** The Android headless-service bridge to the native settings store. */
 export interface AndroidHeadlessStore {
     read(): string | null;
-    write(data: string): void;
+    /** `false` when the native store refused the write; no answer (an older bridge) counts as written. */
+    write(data: string): boolean | void;
     readKey?(key: string): string | null;
     /** `true` when the native side persisted the value. Anything else (`false`, or no answer) is not a write a strict
      *  store takes for one. */

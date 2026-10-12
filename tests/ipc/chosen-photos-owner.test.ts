@@ -100,7 +100,12 @@ describe('the settings IPC records the owner after a successful write only', () 
             'save-challenge-profile': 'saveChallengeProfile',
         }[channel] as keyof typeof settings;
         const handlers = invalid<Record<string, (...args: unknown[]) => Promise<unknown>>>(buildHandlers());
-        const args = [{ chosenPhotos: ['a'] }];
+        // The channels that name a challenge carry its id where the handler checks for it.
+        const args: unknown[] = {
+            'set-challenge-override': ['chosenPhotos', '77', ['a']],
+            'set-challenge-overrides': ['77', { chosenPhotos: ['a'] }],
+            'replace-challenge-overrides': ['77', { chosenPhotos: ['a'] }],
+        }[channel] ?? [{ chosenPhotos: ['a'] }];
         invalid<jest.Mock<boolean, unknown[]>>(settings[method]).mockReturnValueOnce(false).mockReturnValueOnce(true);
         await handlers[channel]({}, ...args);
         expect(settings.setSetting).not.toHaveBeenCalled();

@@ -1,21 +1,26 @@
 /**
- * The renderer-facing projection of the settings blob. The auth token stays in
- * the main process / settings store; a renderer only learns whether one exists.
+ * The renderer-facing projection of the settings blob. The auth token and the API headers stay in
+ * the main process / settings store; a renderer only learns whether a token exists.
  * Dependency-free (types only) so the Capacitor renderer bundle can import it.
  */
 
-import type { AppSettings, RendererSettings } from '../types/settings';
+import type { AppSettings, RendererSettings, RendererVisibleSettings } from '../types/settings';
 
-/** Setting keys a renderer may neither read nor write: the token and its derived flag. */
-const isRendererHiddenKey = (key: string) => key === 'token' || key === 'hasToken';
+/**
+ * Setting keys a renderer may neither read nor write: the token and its derived flag, and the API request headers
+ * (which the API client sends under the account's name).
+ */
+const isRendererHiddenKey = (key: string) => key === 'token' || key === 'hasToken' || key === 'apiHeaders';
 
 /**
  * @param stored - the full settings as loaded from the store; `hasToken` is
  *   derived from its token, never from anything a renderer sent.
  */
 const toRendererSettings = (stored: AppSettings): RendererSettings => {
-    const { token, ...rest } = stored;
-    return { ...rest, hasToken: typeof token === 'string' && token !== '' };
+    const visible = Object.fromEntries(
+        Object.entries(stored).filter(([key]) => !isRendererHiddenKey(key)),
+    ) as RendererVisibleSettings;
+    return { ...visible, hasToken: typeof stored.token === 'string' && stored.token !== '' };
 };
 
 /**

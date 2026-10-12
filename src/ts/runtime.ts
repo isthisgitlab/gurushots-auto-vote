@@ -130,13 +130,29 @@ const isSourceCode = () => {
 const getAppName = () => (isSourceCode() ? `${APP_BASE_NAME}-dev` : APP_BASE_NAME);
 
 /**
+ * The app's user-data directory does not exist and cannot be created. The message says what happened, why and what to
+ * do next, so a shell can show it as it is.
+ */
+class UserDataUnavailableError extends Error {
+    readonly path: string;
+    constructor(userDataPath: string, reason: string) {
+        super(
+            `The app's data folder ${userDataPath} does not exist and could not be created (${reason}). Settings and the login are not stored anywhere else, so nothing was started. Create the folder, or make its parent writable by this account, and run again.`,
+        );
+        this.name = 'UserDataUnavailableError';
+        this.path = userDataPath;
+    }
+}
+
+/**
  * The app's user-data directory, resolved identically for every consumer
  * (logger, settings storage, scripts):
  *   - Electron: app.getPath('userData'), with `-dev` appended when running
  *     from source (canonical dev form).
  *   - CLI/SEA: the platform-native dir for getAppName(), created on first
- *     use with a cwd fallback.
- * Bootstrap-safe: no logger import (console.warn is the only channel here).
+ *     use.
+ * A directory that cannot be created throws UserDataUnavailableError: settings, tokens and logs are never put
+ * anywhere else. Bootstrap-safe: no logger import.
  */
 const getAppUserDataPath = () => {
     if (isElectron()) {
@@ -150,7 +166,7 @@ const getAppUserDataPath = () => {
             // fall through to the CLI resolution
         }
     }
-    let userDataPath = getUserDataDir(getAppName());
+    const userDataPath = getUserDataDir(getAppName());
     try {
         const fs = require('node:fs') as typeof import('node:fs');
         if (!fs.existsSync(userDataPath)) {
@@ -158,16 +174,11 @@ const getAppUserDataPath = () => {
                 fs.mkdirSync(userDataPath, { recursive: true, mode: 0o700 });
             } catch (error) {
                 const mkdirError = error as NodeJS.ErrnoException;
-                console.warn(
-                    `[runtime] failed to create userData dir ${userDataPath} (${mkdirError.code || mkdirError.message}); falling back to cwd/userData`,
-                );
-                userDataPath = path.join(process.cwd(), 'userData');
-                if (!fs.existsSync(userDataPath)) {
-                    fs.mkdirSync(userDataPath, { recursive: true, mode: 0o700 });
-                }
+                throw new UserDataUnavailableError(userDataPath, mkdirError.code || mkdirError.message);
             }
         }
-    } catch {
+    } catch (error) {
+        if (error instanceof UserDataUnavailableError) throw error;
         // No fs (Capacitor WebView) — return the stub path; writers fail-soft.
     }
     return userDataPath;
@@ -187,4 +198,5 @@ export {
     isSourceCode,
     getAppName,
     getAppUserDataPath,
+    UserDataUnavailableError,
 };

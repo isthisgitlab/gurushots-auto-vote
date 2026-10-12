@@ -130,6 +130,7 @@ describe('settings schema shape', () => {
             'skipUpdateVersion',
             'chosenPhotosMemberId',
             'chosenPhotosClearedAt',
+            'noticeAcknowledgedVersion',
         ]);
     });
 

@@ -85,6 +85,8 @@ describe('Capacitor entry', () => {
             flushScenarioStateWrites: jest.fn(async () => {}),
             initializeDiagnosticsAsync: jest.fn().mockResolvedValue(undefined),
             flushDiagnosticsWrites: jest.fn(),
+            initializePhotoStatsAsync: jest.fn().mockResolvedValue(undefined),
+            flushPhotoStatsWrites: jest.fn(),
             isCapacitor: jest.fn(() => native),
             categoryError: jest.fn(),
             withCategory: jest.fn((): Pick<CategoryLogger, 'error'> => ({ error: m.categoryError })),
@@ -126,6 +128,10 @@ describe('Capacitor entry', () => {
                 initializeDiagnosticsAsync: m.initializeDiagnosticsAsync,
                 flushDiagnosticsWrites: m.flushDiagnosticsWrites,
             }));
+            jest.doMock(`${SRC}/services/photoStats`, () => ({
+                initializePhotoStatsAsync: m.initializePhotoStatsAsync,
+                flushPhotoStatsWrites: m.flushPhotoStatsWrites,
+            }));
             jest.doMock(`${SRC}/runtime`, () => ({ isCapacitor: m.isCapacitor }));
             jest.doMock(`${SRC}/logger`, () => ({ withCategory: m.withCategory }));
             jest.doMock('@/pages/App', () => ({ mountApp: m.mountApp }));
@@ -164,6 +170,7 @@ describe('Capacitor entry', () => {
             m.initializeEntryAgesAsync,
             m.initializeScenarioStateAsync,
             m.initializeDiagnosticsAsync,
+            m.initializePhotoStatsAsync,
             m.mountApp,
         ].map((fn) => fn.mock.invocationCallOrder[0]);
         expect(order).toEqual([...order].sort((a, b) => a - b));
@@ -184,6 +191,7 @@ describe('Capacitor entry', () => {
             m.flushEntryAgeWrites,
             m.flushScenarioStateWrites,
             m.flushDiagnosticsWrites,
+            m.flushPhotoStatsWrites,
         ];
 
         const hidden = jest.spyOn(document, 'hidden', 'get').mockReturnValue(false);

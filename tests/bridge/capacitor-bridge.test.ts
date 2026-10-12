@@ -351,6 +351,15 @@ describe('Capacitor bridge', () => {
             await expect(api.reloadWindow()).resolves.toEqual({ success: true });
         });
 
+        test('once all local data is deleted the WebView reloads into the login screen', () => {
+            const reload = jest.fn();
+            globalThis.location = invalid({ reload });
+
+            mockSettingsDeps!.afterWipe!();
+
+            expect(reload).toHaveBeenCalledTimes(1);
+        });
+
         test('refreshMenu is a successful no-op on mobile', async () => {
             await expect(api.refreshMenu()).resolves.toEqual({ success: true });
         });

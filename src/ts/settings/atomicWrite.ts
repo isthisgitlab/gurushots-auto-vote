@@ -22,6 +22,32 @@ const syncDirectory = (dir: string) => {
     }
 };
 
+// Waits between the attempts to rename a temp file over its target: Windows reports a rename over a file another
+// process has open (an antivirus scan, a search indexer, a second reader) as EPERM or EBUSY, which passes in moments.
+const RENAME_RETRY_DELAYS_MS = [10, 25, 50, 100, 200];
+
+const sleepSync = (ms: number) => {
+    Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, ms);
+};
+
+const isBusyRenameError = (err: unknown) =>
+    err instanceof Error && 'code' in err && (err.code === 'EPERM' || err.code === 'EBUSY');
+
+/**
+ * Renames `from` over `to`, trying again a few times, briefly apart, when the rename is refused as busy.
+ */
+const renameWithRetry = (from: string, to: string) => {
+    for (let attempt = 0; ; attempt++) {
+        try {
+            fs.renameSync(from, to);
+            return;
+        } catch (err) {
+            if (!isBusyRenameError(err) || attempt >= RENAME_RETRY_DELAYS_MS.length) throw err;
+            sleepSync(RENAME_RETRY_DELAYS_MS[attempt]);
+        }
+    }
+};
+
 // A temp file of a write that was cut short; one younger than this may belong to a write still under way.
 const STALE_TEMP_MS = 60_000;
 
@@ -51,9 +77,9 @@ export const sweepStaleTemps = (filePath: string) => {
 
 /**
  * Writes a JSON store's file so that a reader never sees it half written: the data goes to a temp file next to it
- * (mode 0o600) and is renamed over it, which replaces it atomically. The settings file is not written this way —
- * its inode is watched — and neither are the stores that did not ask for it (`atomic`): the claims file asks, because
- * a claim read by a process that does not hold the claims-file lock must never see an empty or cut-off file.
+ * (mode 0o600) and is renamed over it, which replaces it atomically. The settings file is written this way, and so
+ * are the stores that ask for it (`atomic`): the claims file asks, because a claim read by a process that does not
+ * hold the claims-file lock must never see an empty or cut-off file.
  */
 export const writeAtomicOwnerOnly = (filePath: string, data: string) => {
     const dir = path.dirname(filePath);
@@ -73,7 +99,7 @@ export const writeAtomicOwnerOnly = (filePath: string, data: string) => {
         } finally {
             fs.closeSync(fd);
         }
-        fs.renameSync(temp, filePath);
+        renameWithRetry(temp, filePath);
         syncDirectory(dir);
     } catch (err) {
         try {

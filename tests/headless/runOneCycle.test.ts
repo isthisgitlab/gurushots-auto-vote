@@ -8,6 +8,7 @@
 jest.mock('../../src/ts/apiFactory', () => ({ getApiStrategy: jest.fn() }));
 jest.mock('../../src/ts/settings', () => ({
     getSetting: jest.fn(),
+    setSetting: jest.fn(),
     loadSettings: jest.fn(() => ({ checkFrequencyMin: 2, checkFrequencyMax: 2 })),
     getEffectiveSetting: jest.fn(),
 }));
@@ -63,6 +64,20 @@ describe('headless runOneCycle', () => {
     });
 
     const lastPayload = () => JSON.parse(onCycleComplete.mock.calls[0][0]) as CyclePayload;
+
+    test('a cycle never clears the saved login, whatever "Stay Logged In" says (only the desktop start does)', async () => {
+        settings.loadSettings.mockReturnValue(
+            invalid({ checkFrequencyMin: 2, checkFrequencyMax: 2, stayLoggedIn: false, token: 'tok' }),
+        );
+        const fetchChallengesAndVote = jest.fn().mockResolvedValue({ success: true, message: 'done' });
+        const getActiveChallenges = jest.fn().mockResolvedValue({ challenges: [] });
+        apiFactory.getApiStrategy.mockReturnValue(invalid({ fetchChallengesAndVote, getActiveChallenges }));
+
+        await g.GS!.runOneCycle();
+
+        expect(settings.setSetting).not.toHaveBeenCalled();
+        expect(lastPayload().ok).toBe(true);
+    });
 
     test('runs the full cycle and reports ok with a numeric nextDelayMs', async () => {
         const fetchChallengesAndVote = jest.fn().mockResolvedValue({ success: true, message: 'done' });

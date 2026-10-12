@@ -56,7 +56,8 @@ import type { VotingPassDeps } from '../../src/ts/types/votingPass';
 import { claimTurboRun, releaseTurboRun } from '../../src/ts/services/turboRunLock';
 import { recordManualTurboWin } from '../../src/ts/services/missions';
 import { invalid } from '../helpers/invalid';
-const { runVotingPass } = require('../../src/ts/services/votingOrchestrator') as typeof votingOrchestratorModule;
+const { runVotingPass, isVotingPassRunning } =
+    require('../../src/ts/services/votingOrchestrator') as typeof votingOrchestratorModule;
 const { buildChallenge } = require('../helpers/challengeFixtures') as typeof challengeFixturesModule;
 
 const NOW = Math.floor(Date.now() / 1000);
@@ -104,6 +105,39 @@ beforeEach(() => {
             targetExposure: 100,
         }),
     );
+});
+
+describe('pass activity (what the local-data wipe refuses to run beneath)', () => {
+    test('a pass is running while it works, and not once it has finished', async () => {
+        const api = makeApi([makeChallenge()]);
+        let during: boolean | null = null;
+        api.getActiveChallenges.mockImplementation(async () => {
+            during = isVotingPassRunning();
+            return { challenges: [makeChallenge()] };
+        });
+
+        expect(isVotingPassRunning()).toBe(false);
+        await runVotingPass('tok', null, deps(api));
+
+        expect(during).toBe(true);
+        expect(isVotingPassRunning()).toBe(false);
+    });
+
+    test('a pass that fails does not stay marked as running', async () => {
+        const api = makeApi([]);
+        api.getActiveChallenges.mockRejectedValue(new Error('network down'));
+
+        await runVotingPass('tok', null, deps(api));
+
+        expect(isVotingPassRunning()).toBe(false);
+    });
+
+    test('a pass that ends early (no active challenges, a filter miss) does not stay marked either', async () => {
+        await runVotingPass('tok', null, deps(makeApi([])));
+        await runVotingPass('tok', '999', deps(makeApi([makeChallenge({ id: 1 })])));
+
+        expect(isVotingPassRunning()).toBe(false);
+    });
 });
 
 describe('envelopes', () => {

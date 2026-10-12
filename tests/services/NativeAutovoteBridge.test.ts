@@ -74,6 +74,7 @@ describe('NativeAutovoteBridge', () => {
             stop: jest.fn().mockResolvedValue({ running: false }),
             getStatus: jest.fn().mockResolvedValue({ running: true, nextDelayMs: 180000 }),
             compareAndWrite: jest.fn(),
+            wipeLocalData: jest.fn(),
         };
         g.Capacitor = { Plugins: { AutoVoteBackground: plugin } };
         const bridge = loadBridge();
@@ -90,6 +91,7 @@ describe('NativeAutovoteBridge', () => {
             stop: jest.fn().mockRejectedValue(new Error('stop boom')),
             getStatus: jest.fn().mockRejectedValue(new Error('status boom')),
             compareAndWrite: jest.fn(),
+            wipeLocalData: jest.fn(),
         };
         g.Capacitor = { Plugins: { AutoVoteBackground: plugin } };
         const bridge = loadBridge();
@@ -111,6 +113,7 @@ describe('NativeAutovoteBridge', () => {
             stop: jest.fn().mockRejectedValue(stopFailure),
             getStatus: jest.fn().mockRejectedValue(new Error('status boom')),
             compareAndWrite: jest.fn(),
+            wipeLocalData: jest.fn(),
         };
         g.Capacitor = { Plugins: { AutoVoteBackground: plugin } };
         const bridge = loadBridge();

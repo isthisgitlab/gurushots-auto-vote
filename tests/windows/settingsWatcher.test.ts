@@ -12,11 +12,14 @@
 
 import { invalid } from '../helpers/invalid';
 
-const mockWatchHandlers: Array<(event: string) => void> = [];
+jest.unmock('path');
+jest.unmock('node:path');
+
+const mockWatchHandlers: Array<(event: string, fileName: string | null) => void> = [];
 
 jest.mock('node:fs', () => ({
     existsSync: jest.fn(() => true),
-    watch: jest.fn((_path: string, handler: (event: string) => void) => {
+    watch: jest.fn((_path: string, handler: (event: string, fileName: string | null) => void) => {
         mockWatchHandlers.push(handler);
         return { close: jest.fn() };
     }),
@@ -65,7 +68,7 @@ const makeDeps = (onSettingsChanged: Deps['onSettingsChanged']): Deps => ({
 
 // Drive one debounced change event through the watcher.
 const emitChange = async () => {
-    mockWatchHandlers.at(-1)!('change');
+    mockWatchHandlers.at(-1)!('change', 'settings.json');
     jest.advanceTimersByTime(500);
     await Promise.resolve();
 };
@@ -227,10 +230,10 @@ describe('watchSettingsFile change detection', () => {
         jest.useRealTimers();
     });
 
-    test('watches the facade-owned settings path', () => {
+    test('watches the directory of the facade-owned settings path, which a rename-replace save keeps', () => {
         settings.loadSettings.mockReturnValue(invalid({}));
         watchSettingsFile(deps());
-        expect(fs.watch).toHaveBeenCalledWith('/tmp/settings.json', expect.any(Function));
+        expect(fs.watch).toHaveBeenCalledWith('/tmp', expect.any(Function));
     });
 
     test('a nested reload-required change reloads the main window and broadcasts to the others only', async () => {
@@ -428,21 +431,39 @@ describe('watchSettingsFile change detection', () => {
         expect(reload).toHaveBeenCalledTimes(1);
     });
 
-    test('debounces bursts into one handler run and ignores non-change events', async () => {
+    test('debounces bursts into one handler run and ignores the other files of the directory', async () => {
         settings.loadSettings.mockReturnValue(invalid({ n: 1 }));
         watchSettingsFile(deps());
         settings.loadSettings.mockClear();
 
-        mockWatchHandlers.at(-1)!('rename');
+        // A save in progress (its temp file) and the other stores are not the settings.
+        mockWatchHandlers.at(-1)!('rename', 'settings.json.123.abcd1234.tmp');
+        mockWatchHandlers.at(-1)!('change', 'metadata.json');
         jest.advanceTimersByTime(1000);
         expect(settings.loadSettings).not.toHaveBeenCalled();
 
         settings.loadSettings.mockReturnValue(invalid({ n: 2 }));
-        mockWatchHandlers.at(-1)!('change');
+        mockWatchHandlers.at(-1)!('change', 'settings.json');
         jest.advanceTimersByTime(200);
         await emitChange();
 
         expect(settings.loadSettings).toHaveBeenCalledTimes(1);
+        expect(mockSend).toHaveBeenCalledTimes(1);
+    });
+
+    // The file is replaced by a rename on every save: the directory reports that as a rename of its name.
+    test.each([
+        ['a rename of the settings file (the atomic save)', 'rename', 'settings.json'],
+        ['an event that names no file', 'change', null],
+    ] as const)('reacts to %s', async (_name, event, fileName) => {
+        settings.loadSettings.mockReturnValue(invalid({ n: 1 }));
+        watchSettingsFile(deps());
+        settings.loadSettings.mockReturnValue(invalid({ n: 2 }));
+
+        mockWatchHandlers.at(-1)!(event, fileName);
+        jest.advanceTimersByTime(500);
+        await Promise.resolve();
+
         expect(mockSend).toHaveBeenCalledTimes(1);
     });
 

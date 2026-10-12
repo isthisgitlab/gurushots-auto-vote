@@ -65,7 +65,16 @@ const UPCOMING_GRACE_SEC = 600;
 const DEFAULT_STARTUP_DELAY_SECONDS = 60;
 const MAX_STARTUP_DELAY_SECONDS = 3600;
 
+// The range an API request's timeout (seconds) and its retry count may be set to. A stored value outside it
+// (hand-edited, or from an older build) is dropped for the default at load; the API client trusts what it reads.
+const API_TIMEOUT_MIN_SEC = 1;
+const API_TIMEOUT_MAX_SEC = 300;
+const API_MAX_RETRIES_MAX = 10;
+
 export {
+    API_TIMEOUT_MIN_SEC,
+    API_TIMEOUT_MAX_SEC,
+    API_MAX_RETRIES_MAX,
     DEFAULT_STARTUP_DELAY_SECONDS,
     MAX_STARTUP_DELAY_SECONDS,
     UPCOMING_GRACE_SEC,

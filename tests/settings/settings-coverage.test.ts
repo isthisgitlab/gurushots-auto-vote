@@ -89,11 +89,17 @@ describe('settings facade — edge cases', () => {
     });
 
     describe('load / save', () => {
-        test('a corrupt settings blob falls back to defaults and logs the parse error', () => {
+        test('a corrupt blob in the background service falls back to defaults, is left alone and refuses saves', () => {
             store.value = '{not json';
             const loaded = settings.loadSettings();
             expect(loaded).toEqual(settings.getDefaultSettings());
-            expect(cat.error).toHaveBeenCalledWith('Error loading settings:', expect.any(SyntaxError));
+            expect(cat.error).toHaveBeenCalledWith(expect.stringContaining('settings-unreadable'));
+            expect(settings.getSettingsRecovery()).toEqual({
+                code: 'settings-unreadable',
+                path: 'gurushots-settings',
+            });
+            expect(settings.saveSettings({ theme: 'dark' })).toBe(false);
+            expect(store.value).toBe('{not json');
         });
 
         test('saveSettings reports false instead of throwing on an unserializable value', () => {
@@ -971,6 +977,7 @@ describe('settings facade — edge cases', () => {
             delete g.__GS_HEADLESS__;
             fs.existsSync.mockReturnValue(true);
             fs.readFileSync.mockReturnValue(blob);
+            fs.readdirSync.mockReturnValue([]);
             fs.writeFileSync.mockImplementation(() => {
                 throw new Error('EROFS');
             });
@@ -979,6 +986,7 @@ describe('settings facade — edge cases', () => {
         afterEach(() => {
             fs.existsSync.mockReset();
             fs.readFileSync.mockReset();
+            fs.readdirSync.mockReset();
             fs.writeFileSync.mockReset();
         });
 

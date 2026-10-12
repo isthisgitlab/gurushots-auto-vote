@@ -10,6 +10,8 @@
 
 // In-memory stand-in for the cross-platform JSON store.
 let storeData: string | null = null;
+const mockInitializeAsync = jest.fn(async () => {});
+const mockFlushPendingWrites = jest.fn(async () => {});
 jest.mock('../../src/ts/settings/storage', () => ({
     createJsonStore: () => ({
         readRaw: () => storeData,
@@ -17,7 +19,8 @@ jest.mock('../../src/ts/settings/storage', () => ({
             storeData = data;
         },
         getFilePath: () => '/tmp/photo-stats.json',
-        initializeAsync: async () => {},
+        initializeAsync: mockInitializeAsync,
+        flushPendingWrites: mockFlushPendingWrites,
     }),
 }));
 
@@ -55,6 +58,16 @@ const payload = (votes: number, views: number, achievementCount = 0) => ({
     votes,
     views,
     achievements: Array.from({ length: achievementCount }, (_, i) => ({ name: `a${i}` })),
+});
+
+describe('the Android bootstrap hooks of the stats store', () => {
+    test("hydrate and flush are the store's own", async () => {
+        await photoStats.initializePhotoStatsAsync();
+        await photoStats.flushPhotoStatsWrites();
+
+        expect(mockInitializeAsync).toHaveBeenCalledTimes(1);
+        expect(mockFlushPendingWrites).toHaveBeenCalledTimes(1);
+    });
 });
 
 describe('photoStats.enrichCandidates', () => {

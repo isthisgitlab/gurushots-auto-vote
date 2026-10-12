@@ -16,6 +16,7 @@ import { scenarioPhaseSettings } from './scenarioOverlay';
 import { JOIN_KEPT_KEYS } from './staleChallengeCleanup';
 import { isActiveChallengeId } from './challengeFacts';
 import { loggableSettingValue } from './logValue';
+import { isUnsafeChallengeKey } from '../metadata/validation';
 
 import type {
     AppSettings,
@@ -36,10 +37,26 @@ const keepsEqualValue = (settingKey: string, challengeId: string | number): bool
     JOIN_KEPT_KEYS.includes(settingKey) && !isActiveChallengeId(challengeId);
 
 /**
- * Trimmed string form of a caller-supplied challenge id ('' when absent).
+ * Trimmed string form of a caller-supplied challenge id ('' when absent, or when it names an
+ * Object.prototype member rather than a challenge).
  */
-const trimmedChallengeId = (challengeId: string | number | null | undefined): string =>
-    challengeId === null || challengeId === undefined ? '' : String(challengeId).trim();
+const trimmedChallengeId = (challengeId: string | number | null | undefined): string => {
+    if (challengeId === null || challengeId === undefined) return '';
+    const id = String(challengeId).trim();
+    return isUnsafeChallengeKey(id) ? '' : id;
+};
+
+/**
+ * Whether a caller-supplied challenge id names an Object.prototype member, which no write may use as a key.
+ */
+const isUnsafeId = (challengeId: string | number): boolean => isUnsafeChallengeKey(String(challengeId).trim());
+
+/**
+ * A challenge's stored values, or undefined when it has none of its own: an id that names an
+ * Object.prototype member is never a challenge.
+ */
+const ownChallengeValues = (perChallenge: Record<string, ChallengeValues>, challengeId: string | number) =>
+    Object.hasOwn(perChallenge, challengeId) ? perChallenge[challengeId] : undefined;
 
 /**
  * Get global default value for a setting
@@ -101,9 +118,8 @@ const getChallengeOverride = <K extends string>(
     settingKey: K,
     challengeId: string | number,
 ): SettingValueOf<K> | null => {
-    const { perChallenge } = loadSettings().challengeSettings;
-    const overrides = perChallenge[challengeId];
-    if (overrides && Object.prototype.hasOwnProperty.call(overrides, settingKey)) {
+    const overrides = ownChallengeValues(loadSettings().challengeSettings.perChallenge, challengeId);
+    if (overrides && Object.hasOwn(overrides, settingKey)) {
         // Stored values are validated against the schema on load.
         return overrides[settingKey] as SettingValueOf<K>;
     }
@@ -116,11 +132,11 @@ const getChallengeOverride = <K extends string>(
  * exists on the given settings object and returns it.
  */
 const _ensureChallengeContainer = (settings: AppSettings, challengeId: string | number): ChallengeValues => {
-    const challengeSettings = settings.challengeSettings;
-    if (!challengeSettings.perChallenge[challengeId]) {
-        challengeSettings.perChallenge[challengeId] = {};
+    const { perChallenge } = settings.challengeSettings;
+    if (!Object.hasOwn(perChallenge, challengeId)) {
+        perChallenge[challengeId] = {};
     }
-    return challengeSettings.perChallenge[challengeId];
+    return perChallenge[challengeId];
 };
 
 /**
@@ -140,6 +156,10 @@ const _applyChallengeOverride = (
         logger.withCategory('settings').error(`Invalid setting key: ${settingKey}`, null);
         return 'invalid';
     }
+    if (isUnsafeId(challengeId)) {
+        logger.withCategory('settings').error(`Invalid challenge id: ${String(challengeId)}`, null);
+        return 'invalid';
+    }
     if (!entry.perChallenge) {
         logger.withCategory('settings').error(`Setting ${settingKey} does not support per-challenge overrides`, null);
         return 'invalid';
@@ -147,7 +167,7 @@ const _applyChallengeOverride = (
 
     const globalDefaults = globalChallengeValues(settings);
     const inheritedDefaults = { ...globalDefaults, ...ruleValuesForChallengeId(settings, challengeId) };
-    const existingOverrides = settings.challengeSettings?.perChallenge?.[challengeId] || {};
+    const existingOverrides = ownChallengeValues(settings.challengeSettings.perChallenge, challengeId) || {};
     const contextSettings = { ...inheritedDefaults, ...existingOverrides, [settingKey]: value };
 
     if (!challengeValueSetIsValid(contextSettings, { [settingKey]: value }, challengeId)) {
@@ -177,7 +197,7 @@ const setChallengeOverride = (settingKey: string, challengeId: string | number, 
     if (result === 'invalid') return false;
 
     // If the cleared override left the challenge container empty, drop it.
-    const container = settings.challengeSettings?.perChallenge?.[challengeId];
+    const container = ownChallengeValues(settings.challengeSettings.perChallenge, challengeId);
     if (container && Object.keys(container).length === 0) {
         delete settings.challengeSettings.perChallenge[challengeId];
     }
@@ -215,7 +235,7 @@ const replaceChallengeOverridesInSettings = (
     suppressTitleProfile: boolean,
 ): boolean => {
     const entries = _challengeOverrideEntries(overrides);
-    if (entries === null) return false;
+    if (entries === null || isUnsafeId(challengeId)) return false;
 
     const globalValues = globalChallengeValues(settings);
     const ruleValues = ruleValuesForChallengeId(settings, challengeId, suppressTitleProfile);
@@ -247,7 +267,7 @@ const setChallengeOverrides = (challengeId: ChallengeIdInput, overrides: unknown
     const id = trimmedChallengeId(challengeId);
     if (!id || !overrides || typeof overrides !== 'object' || Array.isArray(overrides)) return false;
     const settings = loadSettings();
-    const current = settings.challengeSettings.perChallenge?.[id] || {};
+    const current = ownChallengeValues(settings.challengeSettings.perChallenge, id) || {};
     const next = { ...current, ...overrides };
     if (!replaceChallengeOverridesInSettings(settings, id, next, isTitleProfileSuppressed(settings, id))) {
         return false;
@@ -259,17 +279,11 @@ const setChallengeOverrides = (challengeId: ChallengeIdInput, overrides: unknown
  * Remove per-challenge override for a setting
  */
 const removeChallengeOverride = (settingKey: string, challengeId: string): boolean => {
+    if (isUnsafeId(challengeId)) return false;
     const settings = loadSettings();
-    if (
-        !settings.challengeSettings ||
-        !settings.challengeSettings.perChallenge ||
-        !settings.challengeSettings.perChallenge[challengeId]
-    ) {
-        return true; // Nothing to remove
-    }
+    const current = ownChallengeValues(settings.challengeSettings.perChallenge, challengeId);
+    if (!current || !Object.hasOwn(current, settingKey)) return true; // Nothing to remove
 
-    const current = settings.challengeSettings.perChallenge[challengeId];
-    if (!Object.prototype.hasOwnProperty.call(current, settingKey)) return true;
     const next = { ...current };
     delete next[settingKey];
     if (
@@ -292,10 +306,9 @@ const removeChallengeOverride = (settingKey: string, challengeId: string): boole
  * load and the CLI save-profile snapshot.
  */
 const getChallengeOverrides = (challengeId: string | number): ChallengeValues => {
-    const { perChallenge } = loadSettings().challengeSettings;
+    const stored = ownChallengeValues(loadSettings().challengeSettings.perChallenge, challengeId);
     const overrides: ChallengeValues = {};
-    if (Object.prototype.hasOwnProperty.call(perChallenge, challengeId)) {
-        const stored = perChallenge[challengeId];
+    if (stored) {
         for (const key of Object.keys(stored)) {
             if (schemaEntry(key)?.perChallenge) {
                 overrides[key] = stored[key];
@@ -368,8 +381,8 @@ const _resolveEffectiveSetting = (
 
     // Explicit id-keyed settings remain the highest-precedence layer.
     if (challengeId && entry.perChallenge) {
-        const overrides = challengeSettings.perChallenge?.[challengeId];
-        if (overrides && Object.prototype.hasOwnProperty.call(overrides, settingKey)) {
+        const overrides = ownChallengeValues(challengeSettings.perChallenge, challengeId);
+        if (overrides && Object.hasOwn(overrides, settingKey)) {
             return overrides[settingKey];
         }
 

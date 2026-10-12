@@ -53,6 +53,7 @@ import { consumeMission, registerMissionNeeds } from './missions';
 import { turboRunSnapshot } from './turboRunLock';
 import { runScenarioStep } from './scenarioRunner';
 import * as cancellation from '../voting/cancellation';
+import { beginVotingPass, isVotingPassRunning } from '../voting/passActivity';
 import { failureText } from '../format/logSafe';
 import { buildFillDeps, cancelPass } from './votingOrchestrator/context';
 import { runDeadlineActions } from './votingOrchestrator/actionRunners';
@@ -234,6 +235,7 @@ const runVotingPass = async (
     photoStats.resetPassState();
     logger.withCategory('voting').startOperation('voting-process', 'Voting process');
     const unregisterMissionNeeds = registerMissionNeeds(token, missions);
+    const endPass = beginVotingPass();
 
     try {
         // Get all active challenges
@@ -325,9 +327,10 @@ const runVotingPass = async (
             error: errorMessage(error) || 'Voting process failed',
         };
     } finally {
+        endPass();
         unregisterMissionNeeds?.();
     }
 };
 
-export { runVotingPass, resetMissionVoteLog };
+export { runVotingPass, resetMissionVoteLog, isVotingPassRunning };
 export type { PassContext };

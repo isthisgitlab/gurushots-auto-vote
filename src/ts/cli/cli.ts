@@ -20,9 +20,11 @@ import * as logger from '../logger';
 logger.withCategory('api').debug('CLI module loaded, starting initialization', null);
 
 import * as settings from '../settings';
+import { UserDataUnavailableError } from '../runtime';
 import { initializeHeaders } from '../api/randomizer';
 import { COMMANDS } from './commandTable';
 import { usageError } from './commandKit';
+import { reportSettingsRecovery } from './commands/settingsRecovery';
 
 export type { CommandHandler } from './commandKit';
 
@@ -50,12 +52,17 @@ const main = async () => {
         } catch (err) {
             logger.withCategory('settings').warning('Intent profile seeding failed (non-fatal):', err);
         }
+        reportSettingsRecovery();
         logger.withCategory('api').debug('main: Command is:', command);
 
         const code = await dispatch(command, args.slice(1));
         if (code !== undefined) process.exit(code);
     } catch (error) {
-        logger.withCategory('api').error('Error');
+        if (error instanceof UserDataUnavailableError) {
+            logger.withCategory('ui').error(error.message);
+        } else {
+            logger.withCategory('api').error('Error');
+        }
         logger.withCategory('api').debug('Full main function error details:', error);
         process.exit(1);
     } finally {

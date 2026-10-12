@@ -39,6 +39,8 @@ export interface AutoVoteBackgroundPlugin {
         expected?: string | null;
         value: string;
     }): Promise<{ saved: boolean; current: string | null }>;
+    /** Stops the service, cancels its alarms and clears every native store and cache; `ok` when all of it went. */
+    wipeLocalData(): Promise<{ ok: boolean }>;
 }
 
 export interface CapacitorPlugins {

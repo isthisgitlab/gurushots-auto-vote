@@ -16,6 +16,7 @@ import { formatDuration } from '../../format/duration';
 import { openBoostWindows } from '../../voting/boostWindow';
 import { findActiveChallenge } from '../../services/findActiveChallenge';
 import { clearTokenUnlessStayingLoggedIn } from '../../services/auth';
+import { holdCliSessionLock } from '../../settings/cliSessionLock';
 
 // Reuse the GUI's single-challenge manual-vote handler (votes to 100%,
 // bypassing thresholds). Built lazily on first use so loading this module for
@@ -178,6 +179,11 @@ const startContinuousVoting = async () => {
         return;
     }
 
+    // The marker the desktop app and the local-data wipe look for: this session may be using the saved login. It is
+    // released on a signal, on any exit of the process, and when the scheduler fails to start.
+    const releaseSessionLock = holdCliSessionLock();
+    process.on('exit', releaseSessionLock);
+
     const scheduler = createScheduler({
         runVotingCycle: (cycleNumber) => runVotingCycle(cycleNumber),
         getActiveChallenges: () => getMiddleware().getActiveChallenges(),
@@ -189,6 +195,7 @@ const startContinuousVoting = async () => {
     const handleShutdown = () => {
         logger.withCategory('voting').info('🛑 Shutting down continuous voting...');
         scheduler.stop();
+        releaseSessionLock();
         void clearTokenUnlessStayingLoggedIn()
             .then((cleared) => {
                 if (cleared) {
@@ -206,7 +213,12 @@ const startContinuousVoting = async () => {
     process.on('SIGINT', handleShutdown);
     process.on('SIGTERM', handleShutdown);
 
-    await scheduler.start();
+    try {
+        await scheduler.start();
+    } catch (error) {
+        releaseSessionLock();
+        throw error;
+    }
     logger.withCategory('ui').info('Press Ctrl+C to stop');
 
     // Keep the process running.

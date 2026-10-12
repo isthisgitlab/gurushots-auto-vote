@@ -50,6 +50,14 @@ let capacitorPreferences: PreferencesPlugin | null = null;
 // guarantee durability (e.g. before the WebView is suspended).
 let writeChain = Promise.resolve();
 
+// Bumped by discardPendingWrites: a queued settings write finds the number changed on its turn and puts nothing down.
+let settingsWriteGeneration = 0;
+// Set by discardPendingWrites until resumeWrites: every store refuses writes, so nothing is created again while
+// local data is being deleted.
+let writesRefused = false;
+// Every store createJsonStore made, for discardPendingWrites to reach.
+const createdStores: Array<{ discard: () => void; settled: () => Promise<void> }> = [];
+
 const getCapacitorPreferences = (): PreferencesPlugin => {
     if (capacitorPreferences) return capacitorPreferences;
     const plugin: PreferencesPlugin = (require('@capacitor/preferences') as typeof import('@capacitor/preferences'))
@@ -76,8 +84,7 @@ const warnedUnrestrictable = new Set<string>();
  * what it needs, once per failure episode (until a chmod on that path succeeds
  * again, which is logged as the recovery), and does not fail the write: the
  * data still persists. The files can carry the auth token. The file is
- * rewritten in place rather than replaced by a rename, because settingsWatcher
- * watches its inode.
+ * rewritten in place rather than replaced by a rename.
  */
 const writeOwnerOnly = (filePath: string, data: string) => {
     const dir = path.dirname(filePath);
@@ -104,6 +111,15 @@ const writeOwnerOnly = (filePath: string, data: string) => {
     fs.writeFileSync(filePath, data, { encoding: 'utf8', mode: 0o600 });
 };
 
+// The backup of an unparseable Capacitor settings value lives under the settings key plus this suffix.
+const CORRUPT_SUFFIX = '_corrupt';
+
+// Temp files an earlier crash left beside settings.json are swept on the first write.
+let settingsSwept = false;
+
+/** What moving an unusable settings value aside came to: where it went, or why it did not. */
+type QuarantineResult = { ok: true; path: string } | { ok: false; error: string };
+
 const storage = {
     /**
      * Returns the raw settings JSON string, or null if not yet written.
@@ -124,19 +140,28 @@ const storage = {
         return fs.readFileSync(settingsPath, 'utf8');
     },
     /**
-     * Writes the raw settings JSON string. Sync on Electron/CLI; cache + async write-behind on Capacitor.
+     * Writes the raw settings JSON string. Sync on Electron/CLI (replaced atomically, so a reader or a crash never
+     * sees a cut-off file); cache + async write-behind on Capacitor.
+     *
+     * @returns false when the Android service's native store refused the write; true otherwise (a failed fs write throws)
      */
-    writeRaw: (data: string) => {
+    writeRaw: (data: string): boolean => {
+        if (writesRefused) return false;
         if (runtime.isHeadlessService()) {
             // Persist through the native bridge to the shared store; the
             // commit is synchronous so a later read() in the same cycle
             // sees the new value.
             try {
-                headlessStore()?.write(data);
+                const answer: unknown = headlessStore()?.write(data);
+                if (answer === false) {
+                    logger.withCategory('settings').error('Headless store refused the settings write', null);
+                    return false;
+                }
             } catch (err) {
                 logger.withCategory('settings').error('Headless store write failed:', err);
+                return false;
             }
-            return;
+            return true;
         }
         if (runtime.isCapacitor()) {
             // Update the cache so synchronous reads see the new value
@@ -150,14 +175,61 @@ const storage = {
             // Chain onto the previous write so persistence is ordered. A
             // failed write is logged but does not break the chain for the
             // next one (the cache still holds the latest value).
+            const issuedIn = settingsWriteGeneration;
             writeChain = writeChain
-                .then(() => getCapacitorPreferences().set({ key: SETTINGS_KEY, value: data }))
+                .then(async () => {
+                    if (issuedIn === settingsWriteGeneration) {
+                        await getCapacitorPreferences().set({ key: SETTINGS_KEY, value: data });
+                    }
+                })
                 .catch((err) => {
                     logger.withCategory('settings').error('Capacitor preferences write failed:', err);
                 });
-            return;
+            return true;
         }
-        writeOwnerOnly(getSettingsPath(), data);
+        const settingsPath = getSettingsPath();
+        if (!settingsSwept) {
+            settingsSwept = true;
+            sweepStaleTemps(settingsPath);
+        }
+        writeAtomicOwnerOnly(settingsPath, data);
+        return true;
+    },
+    /** Where the settings live, for a message: the file, or the preference key where there is no file. */
+    settingsLocation: (): string =>
+        runtime.isHeadlessService() || runtime.isCapacitor() ? SETTINGS_KEY : getSettingsPath(),
+    /**
+     * Moves a settings value that cannot be used out of the way, so the next save does not overwrite it: the file is
+     * renamed to `settings.json.corrupt-<time>` (Electron/CLI); the Preferences value is copied to
+     * `<key>_corrupt`, then removed from its own key, and the cache emptied (Capacitor). The Android service cannot do either, so it reports
+     * a failure and the caller refuses to save.
+     */
+    quarantineRaw: (raw: string): QuarantineResult => {
+        if (runtime.isHeadlessService()) {
+            return { ok: false, error: 'the background service cannot set an unusable settings value aside' };
+        }
+        if (runtime.isCapacitor()) {
+            const backupKey = `${SETTINGS_KEY}${CORRUPT_SUFFIX}`;
+            cachedSettingsJson = null;
+            writeChain = writeChain
+                .then(async () => {
+                    const preferences = getCapacitorPreferences();
+                    await preferences.set({ key: backupKey, value: raw });
+                    await preferences.remove({ key: SETTINGS_KEY });
+                })
+                .catch((err) => {
+                    logger.withCategory('settings').error('Capacitor preferences backup write failed:', err);
+                });
+            return { ok: true, path: backupKey };
+        }
+        const settingsPath = getSettingsPath();
+        const backupPath = `${settingsPath}.corrupt-${new Date().toISOString().replace(/[:.]/g, '-')}`;
+        try {
+            fs.renameSync(settingsPath, backupPath);
+            return { ok: true, path: backupPath };
+        } catch (err) {
+            return { ok: false, error: errorMessage(err) ?? 'unknown error' };
+        }
     },
 };
 
@@ -352,6 +424,7 @@ const createJsonStore = ({
          * Sync on Electron/CLI; cache + ordered write-behind on Capacitor; native keyed bridge on headless.
          */
         writeRaw: (data: string) => {
+            if (writesRefused) return;
             if (runtime.isHeadlessService()) {
                 // Only a write that is confirmed is read back: a failed first write leaves nothing to read.
                 writeHeadlessKey(prefKey, data, strict);
@@ -406,6 +479,7 @@ const createJsonStore = ({
         },
         /** Writes a value made from the current one that nothing reads before it is saved (see RawJsonStore). */
         updateThrough: (update: (current: string | null) => string | null): Promise<ThroughResult> => {
+            if (writesRefused) return Promise.resolve('failed');
             if (runtime.isHeadlessService() && shared) return Promise.resolve(headlessUpdate(prefKey, update));
             return runtime.isCapacitor() && !runtime.isHeadlessService()
                 ? writes.updateThrough(update)
@@ -419,10 +493,50 @@ const createJsonStore = ({
         /** fs path (Electron/CLI) — for debug/info surfaces. */
         getFilePath: filePath,
     };
+    createdStores.push({
+        discard: () => {
+            writes.discard();
+            cachedJson = null;
+        },
+        // A flush that reports a write which did not persist is of no interest to a store being deleted.
+        settled: () => writes.flush().catch(() => undefined),
+    });
     return store;
 };
 
+/**
+ * Gives up every write still queued (settings and every createJsonStore store), empties the caches, and makes every
+ * store refuse writes, so that nothing is persisted again while local data is deleted. Resolves once the writes
+ * already handed to Preferences have landed, so that removing their keys afterwards removes them for good.
+ */
+const discardPendingWrites = async (): Promise<void> => {
+    writesRefused = true;
+    settingsWriteGeneration++;
+    cachedSettingsJson = null;
+    for (const store of createdStores) store.discard();
+    await writeChain;
+    await Promise.all(createdStores.map((store) => store.settled()));
+};
+
+/** Lets the stores write again (a local-data wipe that did not finish). */
+const resumeWrites = () => {
+    writesRefused = false;
+};
+
+/**
+ * Removes Preferences keys (Capacitor): the stores' persisted values.
+ */
+const removePreferenceKeys = async (keys: readonly string[]): Promise<void> => {
+    const preferences = getCapacitorPreferences();
+    for (const key of keys) await preferences.remove({ key });
+};
+
 export {
+    SETTINGS_KEY,
+    CORRUPT_SUFFIX,
+    discardPendingWrites,
+    resumeWrites,
+    removePreferenceKeys,
     storage,
     initializeAsync,
     flushPendingWrites,

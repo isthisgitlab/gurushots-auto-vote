@@ -75,4 +75,17 @@ export const internalSettings = {
         label: 'app.chosenPhotosClearedAt',
         description: 'app.chosenPhotosClearedAtDesc',
     },
+    // The version of the "unofficial / not affiliated" notice the user acknowledged
+    // (noticeVersion.ts holds the current one). The notice shows while this is below
+    // it; 0 = never acknowledged.
+    noticeAcknowledgedVersion: {
+        type: 'number',
+        default: 0,
+        perChallenge: false,
+        validation: z.number().int().min(0),
+        min: 0,
+        validationOrder: 1,
+        label: 'app.noticeAcknowledgedVersion',
+        description: 'app.noticeAcknowledgedVersionDesc',
+    },
 } satisfies Record<string, SettingsSchemaEntry>;

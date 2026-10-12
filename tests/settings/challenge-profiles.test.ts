@@ -201,6 +201,32 @@ describe('settings facade — challenge profiles', () => {
             expect(settings.applyChallengeProfile('ghost', '123')).toBe(false);
         });
 
+        test('persists nothing when the challenge layer refuses the replace (the safety net after sanitizing)', () => {
+            settings.saveChallengeProfile('p', { exposure: 80 });
+            const before = store.value;
+            let isolated: typeof settings | undefined;
+            jest.isolateModules(() => {
+                jest.doMock('../../src/ts/settings/challengeOverrides', () => ({
+                    ...jest.requireActual<typeof import('../../src/ts/settings/challengeOverrides')>(
+                        '../../src/ts/settings/challengeOverrides',
+                    ),
+                    replaceChallengeOverridesInSettings: () => false,
+                }));
+                isolated = require('../../src/ts/settings') as typeof settings;
+            });
+            jest.dontMock('../../src/ts/settings/challengeOverrides');
+            // The first load of a fresh module graph runs its once-per-process cleanup: let it, then count writes.
+            isolated!.loadSettings();
+            const settled = store.value;
+            store.write.mockClear();
+
+            expect(isolated!.applyChallengeProfile('p', '123')).toBe(false);
+
+            expect(store.write).not.toHaveBeenCalled();
+            expect(store.value).toBe(settled);
+            expect(before).not.toBeNull();
+        });
+
         test('sets listed keys and removes unlisted ones atomically', () => {
             settings.setChallengeOverride('autoFill', '123', true);
             settings.setChallengeOverride('boostTime', '123', 1800);

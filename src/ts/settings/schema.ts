@@ -73,7 +73,7 @@ export type SettingValues = {
  * an unknown key.
  */
 const schemaEntry = (key: string): SettingsSchemaEntry | undefined =>
-    (SETTINGS_SCHEMA as Record<string, SettingsSchemaEntry | undefined>)[key];
+    Object.hasOwn(SETTINGS_SCHEMA, key) ? (SETTINGS_SCHEMA as Record<string, SettingsSchemaEntry>)[key] : undefined;
 
 /**
  * A key's schema default, typed as that key's value: every default passes its

@@ -10,6 +10,7 @@
 
 import type * as loggerModule from '../../src/ts/logger';
 import type * as settingsModule from '../../src/ts/settings';
+import type * as runtimeModule from '../../src/ts/runtime';
 import type * as randomizerModule from '../../src/ts/api/randomizer';
 import type * as guardsModule from '../../src/ts/cli/guards';
 import type * as authModule from '../../src/ts/cli/commands/auth';
@@ -52,12 +53,14 @@ jest.mock('../../src/ts/logger', () => {
         withCategory: jest.fn(() => cat),
         printLine: rec('stdout'),
         printDocument: rec('stdout'),
+        printStderr: rec('stderr'),
         cleanup: jest.fn(),
     };
 });
 
 jest.mock('../../src/ts/settings', () => ({
     loadSettings: jest.fn(() => ({ mock: false })),
+    getSettingsRecovery: jest.fn(() => null),
     seedIntentProfiles: jest.fn(),
 }));
 
@@ -221,6 +224,23 @@ describe('startup', () => {
         expect(m.logger.cleanup).toHaveBeenCalled();
     });
 
+    test('saved settings that are not in use are said on stderr before the command runs', async () => {
+        const m = await run(['status'], (mods) =>
+            mods.settings.getSettingsRecovery.mockReturnValue({
+                code: 'settings-corrupt',
+                path: '/u/settings.json.corrupt-1',
+            }),
+        );
+        expect(m.msgs('stderr')).toEqual([expect.stringContaining('/u/settings.json.corrupt-1')]);
+        expect(m.voting.showStatus).toHaveBeenCalled();
+        expect(m.exitCodes).toEqual([0]);
+    });
+
+    test('with the settings in use nothing is said', async () => {
+        const m = await run(['status']);
+        expect(m.msgs('stderr')).toEqual([]);
+    });
+
     test('a failed intent-profile seed is a warning, not fatal', async () => {
         const m = await run(['status'], (mods) =>
             mods.settings.seedIntentProfiles.mockImplementation(() => {
@@ -235,6 +255,20 @@ describe('startup', () => {
     test('a thrown command exits 1', async () => {
         const m = await run(['login'], (mods) => mods.auth.handleLogin.mockRejectedValue(new Error('x')));
         expect(m.msgs('error')).toEqual(['Error']);
+        expect(m.exitCodes).toEqual([1]);
+    });
+
+    test('a user-data folder that cannot be created is said in plain words and exits 1', async () => {
+        const m = await run(['status'], (mods) =>
+            mods.randomizer.initializeHeaders.mockImplementation(() => {
+                const runtime = require('../../src/ts/runtime') as typeof runtimeModule;
+                throw new runtime.UserDataUnavailableError('/data/gurushots', 'EACCES');
+            }),
+        );
+        expect(m.msgs('error')).toEqual([expect.stringContaining('/data/gurushots')]);
+        expect(m.msgs('error')[0]).toContain('EACCES');
+        expect(m.msgs('error')).not.toContain('Error');
+        expect(m.voting.showStatus).not.toHaveBeenCalled();
         expect(m.exitCodes).toEqual([1]);
     });
 

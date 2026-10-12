@@ -229,6 +229,8 @@ export const createWriteBehind = (
     // The latest value queued or written through (null until one is), and the one a queued write puts down.
     let intended: string | null = null;
     let queuedText = '';
+    // Bumped by `discard`: a queued write from before it finds the number changed on its turn and puts nothing down.
+    let generation = 0;
     const intend = (text: string) => {
         intended = text;
         queuedText = text;
@@ -258,14 +260,19 @@ export const createWriteBehind = (
             queued++;
             intend(data);
             knownKeys.add(prefKey);
-            latest = enqueue(() => preferences().set({ key: prefKey, value: queuedText })).then((outcome) => {
+            const issuedIn = generation;
+            latest = enqueue(async () => {
+                if (issuedIn === generation) await preferences().set({ key: prefKey, value: queuedText });
+            }).then((outcome) => {
                 lastFailed = !outcome.ok;
                 return outcome;
             });
         },
         updateThrough: async (update: (current: string | null) => string | null): Promise<ThroughResult> => {
             let result: ThroughResult = 'aborted';
+            const issuedIn = generation;
             const outcome = await enqueue(async () => {
+                if (issuedIn !== generation) return;
                 const before = issued;
                 const data = await save(update);
                 if (data === null) return;
@@ -303,6 +310,17 @@ export const createWriteBehind = (
             else intended = cache.get() ?? intended;
         },
         drained: () => ({ at: issued, done: drained() }),
+        /**
+         * Gives up every write still queued (each finds on its turn that it was discarded) and forgets what was
+         * intended, so nothing queued or written through before this is put down afterwards. A write already
+         * handed to Preferences is not recalled: wait for `flush`, then remove the key.
+         */
+        discard: () => {
+            generation++;
+            intended = null;
+            queuedText = '';
+            knownKeys.delete(prefKey);
+        },
         flush: async () => {
             const reportedAt = flushedAt;
             await quiet();

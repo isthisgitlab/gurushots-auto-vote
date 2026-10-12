@@ -29,6 +29,9 @@ const invokeChannels = [
     'set-setting',
     'save-settings',
     'get-environment-info',
+    'get-settings-recovery',
+    'get-third-party-notices',
+    'wipe-local-data',
     // Voting / strategy
     'gui-vote',
     'get-active-challenges',
@@ -49,10 +52,6 @@ const invokeChannels = [
     'get-error-log-file',
     'get-api-log-file',
     'get-log-backlog',
-    // Boost thresholds
-    'get-boost-threshold',
-    'set-boost-threshold',
-    'set-default-boost-threshold',
     // Schema-based settings
     'get-global-default',
     'set-global-default',

@@ -384,6 +384,9 @@ const __resetForTests = () => {
     breakerLoggedThisPass = false;
 };
 
+export const initializePhotoStatsAsync = statsStore.initializeAsync;
+export const flushPhotoStatsWrites = statsStore.flushPendingWrites;
+
 export {
     enrichCandidates,
     resetPassState,

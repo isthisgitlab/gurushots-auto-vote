@@ -77,6 +77,10 @@ const buildAllHandlers = () => {
     // onSettingsChanged subscribers fire.
     const settingsDeps = {
         broadcastSettingsChange: (newSettings: object) => emit('settings-changed', newSettings),
+        // Everything local is gone: the WebView reloads into the login screen.
+        afterWipe: () => {
+            void reloadWindow();
+        },
     };
 
     // Update channels: check / skip / releases URL are the shared

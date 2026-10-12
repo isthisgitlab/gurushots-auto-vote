@@ -24,6 +24,7 @@ import { initializeAutoSpendAsync, flushAutoSpendWrites } from '../../currencyAu
 import { initializeEntryAgesAsync, flushEntryAgeWrites } from '../../entryAgeStore';
 import { initializeScenarioStateAsync, flushScenarioStateWrites } from '../../scenarioStateStore';
 import { initializeDiagnosticsAsync, flushDiagnosticsWrites } from '../../services/semantic/diagnostics';
+import { initializePhotoStatsAsync, flushPhotoStatsWrites } from '../../services/photoStats';
 import { isCapacitor } from '../../runtime';
 import { withCategory } from '../../logger';
 import { mountForToken } from './mountForToken';
@@ -59,6 +60,8 @@ const bootstrap = async () => {
         // Where each challenge is in its user-defined scenario (phase, memory).
         await initializeScenarioStateAsync();
         await initializeDiagnosticsAsync();
+        // Photo stats (the ranking signals fetched per photo): hydrated so a relaunch does not refetch them all.
+        await initializePhotoStatsAsync();
 
         // Settings writes are write-behind (cache now, persist async). When
         // the OS backgrounds or tears down the WebView, push the latest
@@ -77,6 +80,7 @@ const bootstrap = async () => {
                     withCategory('general').error('Scenario state not persisted', err),
                 );
                 void flushDiagnosticsWrites();
+                void flushPhotoStatsWrites();
             } catch {
                 // never let a teardown handler throw
             }

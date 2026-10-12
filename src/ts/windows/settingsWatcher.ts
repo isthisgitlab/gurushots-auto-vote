@@ -1,6 +1,8 @@
 /**
  * Settings-file watcher for the Electron main process. Watches the
- * settings.json the facade owns and, on change, logs the diff, reloads the
+ * directory of the settings.json the facade owns, for that file's name (the
+ * file is replaced by a rename on every save, which ends a watch on the file
+ * itself), and, on change, logs the diff, reloads the
  * main window when a reload-required key changed, and broadcasts a
  * `settings-changed` event to every other renderer window (so React hooks can
  * refetch without a full reload — catches CLI-originated changes).
@@ -12,6 +14,7 @@
 
 import { BrowserWindow } from 'electron';
 import * as fs from 'node:fs';
+import { basename, dirname } from 'node:path';
 import * as settings from '../settings';
 import * as logger from '../logger';
 import { SENSITIVE_KEY_RE, REDACTED } from '../logger/sanitize';
@@ -185,8 +188,12 @@ function watchSettingsFile({
         notifyObserver(snapshot);
     };
 
-    return fs.watch(settingsPath, (eventType) => {
-        if (eventType === 'change') {
+    const settingsFileName = basename(settingsPath);
+    // A replaced file reports as a rename of its name, a rewritten one as a change; the other files of the directory
+    // (the temp file of a save in progress, the other stores) are not the settings. A platform that does not name
+    // the file might mean it.
+    return fs.watch(dirname(settingsPath), (_eventType, fileName) => {
+        if (fileName === null || fileName === settingsFileName) {
             // Clear existing timeout to debounce rapid file changes
             if (settingsReloadTimeout) {
                 clearTimeout(settingsReloadTimeout);
