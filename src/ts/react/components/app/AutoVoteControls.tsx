@@ -39,7 +39,7 @@ function ResumeHold({
     const noteId = useId();
     return (
         <div
-            className="alert alert-info alert-vertical sm:alert-horizontal mt-3"
+            className="alert alert-info mt-3 grid-flow-row grid-cols-1 text-start sm:grid-flow-col sm:grid-cols-[minmax(0,1fr)_auto]"
             onFocus={() => {
                 focusInside.current = true;
             }}
@@ -50,7 +50,7 @@ function ResumeHold({
             <div>
                 <ResumeCountdown startAt={startAt} /> <span id={noteId}>{t('app.resumeHoldNote')}</span>
             </div>
-            <div className="flex gap-2">
+            <div className="flex shrink-0 flex-wrap gap-2">
                 <button className="btn btn-sm btn-latvian" aria-describedby={noteId} onClick={() => void onStartNow()}>
                     {t('app.resumeStartNow')}
                 </button>

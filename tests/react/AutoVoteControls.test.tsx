@@ -189,11 +189,13 @@ describe('AutoVoteControls', () => {
             expect(alert.querySelector('[role], [aria-live]')).toBeNull();
         });
 
-        it('lays out vertically on narrow screens and horizontally from sm up (daisyUI 5 grid)', () => {
+        it('is one column on narrow screens and a text-plus-buttons grid from sm up', () => {
             const { container } = renderPending();
             const alert = container.querySelector('.alert.alert-info')!;
-            expect(alert.classList.contains('alert-vertical')).toBe(true);
-            expect(alert.classList.contains('sm:alert-horizontal')).toBe(true);
+            expect(alert.classList.contains('grid-cols-1')).toBe(true);
+            expect(alert.classList.contains('sm:grid-cols-[minmax(0,1fr)_auto]')).toBe(true);
+            expect(alert.classList.contains('alert-vertical')).toBe(false);
+            expect(alert.classList.contains('sm:alert-horizontal')).toBe(false);
         });
 
         it('keeps the countdown out of the static sentence both buttons are described by', () => {
