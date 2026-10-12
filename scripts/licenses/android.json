@@ -23,7 +23,7 @@
     },
     {
         "name": "OkHttp",
-        "coordinates": ["com.squareup.okhttp3:okhttp"],
+        "coordinates": ["com.squareup.okhttp3:okhttp", "com.squareup.okhttp3:okhttp-android"],
         "versionVariable": "okhttpVersion",
         "license": "Apache-2.0",
         "copyright": "Copyright Square, Inc.",
@@ -31,10 +31,34 @@
     },
     {
         "name": "Okio (dependency of OkHttp)",
-        "coordinates": ["com.squareup.okio:okio"],
+        "coordinates": ["com.squareup.okio:okio", "com.squareup.okio:okio-jvm"],
         "license": "Apache-2.0",
         "copyright": "Copyright Square, Inc.",
         "url": "https://github.com/square/okio",
+        "transitive": true
+    },
+    {
+        "name": "Kotlin Coroutines (dependency of the AndroidX libraries)",
+        "coordinates": ["org.jetbrains.kotlinx:kotlinx-coroutines-*"],
+        "license": "Apache-2.0",
+        "copyright": "Copyright JetBrains s.r.o. and contributors to the kotlinx.coroutines project",
+        "url": "https://github.com/Kotlin/kotlinx.coroutines",
+        "transitive": true
+    },
+    {
+        "name": "JSpecify annotations (dependency of the AndroidX libraries)",
+        "coordinates": ["org.jspecify:jspecify"],
+        "license": "Apache-2.0",
+        "copyright": "Copyright The JSpecify Authors",
+        "url": "https://github.com/jspecify/jspecify",
+        "transitive": true
+    },
+    {
+        "name": "Guava ListenableFuture (dependency of the AndroidX libraries)",
+        "coordinates": ["com.google.guava:listenablefuture"],
+        "license": "Apache-2.0",
+        "copyright": "Copyright The Guava Authors",
+        "url": "https://github.com/google/guava",
         "transitive": true
     },
     {

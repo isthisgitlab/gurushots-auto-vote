@@ -585,7 +585,9 @@ In the desktop app these libraries are separate files outside the application ar
 (app.asar.unpacked/node_modules/@img/) and can be replaced by a compatible build. In the CLI
 binaries they are part of the embedded runtime archive, which is extracted to the "vision"
 directory of the CLI's data folder and checked against a digest embedded at build time; to use
-a modified build of them, rebuild the CLI from this project's source.
+a modified build of them, rebuild the CLI from this project's source: the release tag that matches
+the version the CLI reports (the "Current version" line of its check-updates command) is listed at
+https://github.com/isthisgitlab/gurushots-auto-vote/releases.
 
   @img/sharp-freebsd-wasm32 0.35.5
   @img/sharp-libvips-darwin-arm64 1.3.4
@@ -10000,6 +10002,21 @@ Okio (dependency of OkHttp)
   License: Apache-2.0
   Copyright Square, Inc.
   https://github.com/square/okio
+
+Kotlin Coroutines (dependency of the AndroidX libraries)
+  License: Apache-2.0
+  Copyright JetBrains s.r.o. and contributors to the kotlinx.coroutines project
+  https://github.com/Kotlin/kotlinx.coroutines
+
+JSpecify annotations (dependency of the AndroidX libraries)
+  License: Apache-2.0
+  Copyright The JSpecify Authors
+  https://github.com/jspecify/jspecify
+
+Guava ListenableFuture (dependency of the AndroidX libraries)
+  License: Apache-2.0
+  Copyright The Guava Authors
+  https://github.com/google/guava
 
 Apache Cordova Android 14.0.1
   License: Apache-2.0

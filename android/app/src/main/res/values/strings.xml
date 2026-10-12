@@ -12,4 +12,10 @@
     <string name="notification_last_error">Last error at %1$s: %2$s</string>
     <string name="notification_error_no_token">Not logged in — open the app and log in</string>
     <string name="notification_error_cycle_timeout">Timed out — will retry</string>
+    <string name="notification_error_voting_failed">Voting did not finish — will retry</string>
+    <string name="notification_error_cycle_failed">The cycle failed — will retry</string>
+    <string name="notification_error_not_loaded">Background voting is not ready — will retry</string>
+    <string name="notification_error_fgs_timeout">Stopped by the system — will resume</string>
+    <string name="notification_error_fgs_not_allowed">The system did not allow background voting — will retry</string>
+    <string name="notification_error_generic">Something went wrong — will retry</string>
 </resources>

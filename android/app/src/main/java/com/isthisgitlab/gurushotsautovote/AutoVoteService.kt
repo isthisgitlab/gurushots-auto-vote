@@ -258,7 +258,7 @@ class AutoVoteService : Service() {
                 "(function(){try{" +
                     "if(window.GS&&window.GS.runOneCycle){window.GS.runOneCycle();}" +
                     "else{AndroidHeadlessBridge.onCycleComplete(JSON.stringify({ok:false,error:'not-loaded'}));}" +
-                    "}catch(e){AndroidHeadlessBridge.onCycleComplete(JSON.stringify({ok:false,error:String(e)}));}})()",
+                    "}catch(e){AndroidHeadlessBridge.onCycleComplete(JSON.stringify({ok:false,error:'cycle-failed'}));}})()",
                 null,
             )
         }
@@ -523,20 +523,32 @@ class AutoVoteService : Service() {
         fun compareAndWriteKey(key: String, expected: String?, data: String): Boolean =
             SideStores.compareAndSet(this@AutoVoteService, key, expected, data).outcome == SideStores.Outcome.SAVED
 
+        @Volatile private var writeRefusal = ""
+
         /**
          * Persists the settings blob only if it still holds what [read] last answered, under the lock the app window's
          * plugin takes too: a blob the window changed since is not overwritten, and JS reads it again and makes its
          * change on it. Answers whether it saved: false for that, for anything that is not one JSON object within
          * [SideStores.MAX_SETTINGS_BYTES], or for a commit that failed — a JS bug must not corrupt the blob the main
-         * app reads (the token included). The commit is synchronous.
+         * app reads (the token included). The commit is synchronous. [lastWriteRefusal] then says why.
          */
         @android.webkit.JavascriptInterface
         fun write(data: String): Boolean {
-            val saved = SideStores.compareAndSet(this@AutoVoteService, SETTINGS_KEY, lastRead, data).outcome ==
-                SideStores.Outcome.SAVED
+            val result = SideStores.compareAndSet(this@AutoVoteService, SETTINGS_KEY, lastRead, data)
+            val saved = result.outcome == SideStores.Outcome.SAVED
             if (saved) lastRead = data
+            writeRefusal = when (result.outcome) {
+                SideStores.Outcome.SAVED -> ""
+                SideStores.Outcome.TOO_LARGE -> SideStores.TOO_LARGE
+                SideStores.Outcome.MISMATCH -> "conflict"
+                SideStores.Outcome.REFUSED -> "refused"
+            }
             return saved
         }
+
+        /** Why the last [write] saved nothing: `too-large`, `conflict` (the blob changed since [read]) or `refused`; empty if it saved. */
+        @android.webkit.JavascriptInterface
+        fun lastWriteRefusal(): String = writeRefusal
     }
 
     /** Cycle-completion bridge — JS reports {ok, nextDelayMs, error} when a cycle finishes. */
@@ -648,12 +660,19 @@ class AutoVoteService : Service() {
         val text = localized()
         val time = SimpleDateFormat("HH:mm:ss", Locale.getDefault()).format(Date())
         val err = lastError ?: return text.getString(R.string.notification_last_cycle, time, cycleCount)
-        // Map internal codes to something an end user can act on.
-        val friendly = when (err) {
-            "no-token" -> text.getString(R.string.notification_error_no_token)
-            "cycle-timeout" -> text.getString(R.string.notification_error_cycle_timeout)
-            else -> err
-        }
+        // The runner reports stable codes only; a code this build does not know gets the generic text, never the raw one.
+        val friendly = text.getString(
+            when (err) {
+                "no-token" -> R.string.notification_error_no_token
+                "cycle-timeout" -> R.string.notification_error_cycle_timeout
+                "voting-failed" -> R.string.notification_error_voting_failed
+                "cycle-failed" -> R.string.notification_error_cycle_failed
+                "not-loaded" -> R.string.notification_error_not_loaded
+                ERROR_FGS_TIMEOUT -> R.string.notification_error_fgs_timeout
+                ERROR_FGS_NOT_ALLOWED -> R.string.notification_error_fgs_not_allowed
+                else -> R.string.notification_error_generic
+            },
+        )
         return text.getString(R.string.notification_last_error, time, friendly)
     }
 
@@ -712,7 +731,10 @@ internal object SideStores {
         "gs_join_state" to "join-state"
     )
 
-    enum class Outcome { SAVED, MISMATCH, REFUSED }
+    /** The `code` a plugin call rejects with, and the reason [HeadlessStore.lastWriteRefusal] answers, for a value past its cap. */
+    const val TOO_LARGE = "too-large"
+
+    enum class Outcome { SAVED, MISMATCH, REFUSED, TOO_LARGE }
 
     /** `current`: what is stored when nothing was saved. */
     data class Result(val outcome: Outcome, val current: String?)
@@ -723,12 +745,15 @@ internal object SideStores {
 
     private fun prefs(context: Context) = context.getSharedPreferences(PREFS_FILE, Context.MODE_PRIVATE)
 
-    /** One JSON object and nothing after it, within [maxBytes]; refusals are logged under the store's literal name. */
-    private fun valid(name: String, data: String, maxBytes: Int): Boolean {
-        if (data.toByteArray(Charsets.UTF_8).size > maxBytes) {
-            Log.w(AutoVoteService.TAG, "Refusing to persist oversized $name blob")
-            return false
-        }
+    /** Whether [data] is past [maxBytes]; a refusal is logged under the store's literal name. */
+    private fun tooLarge(name: String, data: String, maxBytes: Int): Boolean {
+        val large = data.toByteArray(Charsets.UTF_8).size > maxBytes
+        if (large) Log.w(AutoVoteService.TAG, "Refusing to persist oversized $name blob")
+        return large
+    }
+
+    /** Whether [data] is one JSON object and nothing after it; a refusal is logged under the store's literal name. */
+    private fun isJsonObject(name: String, data: String): Boolean {
         val tokener = JSONTokener(data)
         val ok = try {
             tokener.nextValue() is JSONObject && tokener.nextClean() == '\u0000'
@@ -764,7 +789,7 @@ internal object SideStores {
             Log.w(AutoVoteService.TAG, "Refusing a plain write of $name blob: it is changed by compare-and-set only")
             return false
         }
-        if (!valid(name, data, maxBytes(key))) return false
+        if (tooLarge(name, data, maxBytes(key)) || !isJsonObject(name, data)) return false
         val prefs = prefs(context)
         return commit(prefs, key, prefs.getString(key, null), data)
     }
@@ -773,7 +798,8 @@ internal object SideStores {
     @Synchronized
     fun compareAndSet(context: Context, key: String, expected: String?, data: String): Result {
         val name = names[key] ?: return Result(Outcome.REFUSED, null)
-        if (!valid(name, data, maxBytes(key))) return Result(Outcome.REFUSED, null)
+        if (tooLarge(name, data, maxBytes(key))) return Result(Outcome.TOO_LARGE, null)
+        if (!isJsonObject(name, data)) return Result(Outcome.REFUSED, null)
         val prefs = prefs(context)
         val current = prefs.getString(key, null)
         if (current != expected?.takeIf { it.isNotEmpty() }) return Result(Outcome.MISMATCH, current)

@@ -202,7 +202,7 @@ describe('the committed notices', () => {
 describe('the Android component list', () => {
     const components = loadAndroidComponents(path.join(LICENSES_DIR, 'android.json'));
     const matches = (pattern: string, coordinate: string) =>
-        pattern.endsWith('.*') ? coordinate.startsWith(pattern.slice(0, -1)) : pattern === coordinate;
+        pattern.endsWith('*') ? coordinate.startsWith(pattern.slice(0, -1)) : pattern === coordinate;
     const covers = (coordinate: string) =>
         components.some((component) => component.coordinates.some((pattern) => matches(pattern, coordinate)));
 
@@ -257,6 +257,120 @@ describe('the Android component list', () => {
                 !versioned.has(name),
         );
         expect(unaccounted).toEqual([]);
+    });
+
+    // What the release APK ships besides the Capacitor projects (npm packages, section 3):
+    // `cd android && ./gradlew :app:dependencies --configuration releaseRuntimeClasspath`, as group:artifact.
+    const RELEASE_RUNTIME_ARTIFACTS = [
+        'androidx.activity:activity',
+        'androidx.appcompat:appcompat',
+        'androidx.concurrent:concurrent-futures',
+        'androidx.core:core',
+        'androidx.core:core-splashscreen',
+        'androidx.lifecycle:lifecycle-runtime',
+        'androidx.webkit:webkit',
+        'com.google.guava:listenablefuture',
+        'com.squareup.okhttp3:okhttp',
+        'com.squareup.okhttp3:okhttp-android',
+        'com.squareup.okio:okio',
+        'com.squareup.okio:okio-jvm',
+        'org.apache.cordova:framework',
+        'org.jetbrains.kotlin:kotlin-stdlib',
+        'org.jetbrains.kotlinx:kotlinx-coroutines-android',
+        'org.jetbrains.kotlinx:kotlinx-coroutines-bom',
+        'org.jetbrains.kotlinx:kotlinx-coroutines-core',
+        'org.jetbrains.kotlinx:kotlinx-coroutines-core-jvm',
+        'org.jetbrains:annotations',
+        'org.jspecify:jspecify',
+    ];
+
+    // Artifacts of android/gradle/verification-metadata.xml that never reach the APK: the Android Gradle plugin and
+    // the build, lint, test and coverage tooling it resolves. Anything else the metadata lists must be a component.
+    const BUILD_AND_TEST_TOOLING = [
+        'com.almworks.sqlite4java:*', // Robolectric
+        'com.android:*', // Android Gradle plugin and SDK tooling
+        'com.android.*',
+        'com.google.android:*', // lint
+        'com.google.android.gms:*', // Google Services plugin
+        'com.google.api.grpc:*', // Gradle managed devices
+        'com.google.auto:*', // annotation processors
+        'com.google.auto.*',
+        'com.google.code.*', // findbugs, gson of the build tooling
+        'com.google.crypto.tink:*',
+        'com.google.dagger:*',
+        'com.google.errorprone:*',
+        'com.google.flatbuffers:*',
+        'com.google.gms:*',
+        'com.google.guava:failureaccess', // Guava of the build tooling (listenablefuture is the APK's)
+        'com.google.guava:guava',
+        'com.google.guava:guava-parent',
+        'com.google.j2objc:*',
+        'com.google.jimfs:*',
+        'com.google.protobuf:*',
+        'com.google.testing.platform:*', // Android test platform
+        'com.google.testparameterinjector:*',
+        'com.googlecode.juniversalchardet:*',
+        'com.ibm.icu:*',
+        'com.squareup:*', // javapoet, javawriter
+        'com.squareup.okhttp3:mockwebserver3', // unit tests
+        'com.sun.*',
+        'commons-*',
+        'io.grpc:*',
+        'io.mockk:*', // unit tests
+        'io.netty:*',
+        'io.opencensus:*',
+        'io.perfmark:*',
+        'jakarta.*',
+        'javax.*',
+        'junit:*', // unit tests
+        'net.*',
+        'org.apache.commons:*',
+        'org.apache.httpcomponents:*',
+        'org.apache:*',
+        'org.bitbucket.b_c:*',
+        'org.bouncycastle:*',
+        'org.checkerframework:*',
+        'org.codehaus.*',
+        'org.conscrypt:*',
+        'org.eclipse.ee4j:*',
+        'org.glassfish.*',
+        'org.hamcrest:*', // unit tests
+        'org.jacoco:*', // coverage
+        'org.jdom:*',
+        'org.jetbrains.kotlin:*', // Kotlin compiler and Gradle plugin (kotlin-stdlib is the APK's)
+        'org.jetbrains.kotlinx:atomicfu*',
+        'org.json:*', // unit tests
+        'org.junit:*',
+        'org.jvnet.staxex:*',
+        'org.mockito:*',
+        'org.objenesis:*',
+        'org.ow2:*',
+        'org.ow2.asm:*',
+        'org.robolectric:*', // unit tests
+        'org.slf4j:*',
+        'org.sonatype.oss:*',
+        'org.tensorflow:*',
+        'org.yaml:*',
+    ];
+    const isTooling = (coordinate: string) => BUILD_AND_TEST_TOOLING.some((pattern) => matches(pattern, coordinate));
+    const verified = [
+        ...new Set(
+            [
+                ...read('android', 'gradle', 'verification-metadata.xml').matchAll(
+                    /<component group="([^"]+)" name="([^"]+)"/g,
+                ),
+            ].map(([, group, artifact]) => `${group}:${artifact}`),
+        ),
+    ];
+
+    test('covers every artifact of the release runtime classpath, which the verification metadata lists', () => {
+        expect(verified.length).toBeGreaterThan(RELEASE_RUNTIME_ARTIFACTS.length);
+        expect(RELEASE_RUNTIME_ARTIFACTS.filter((coordinate) => !verified.includes(coordinate))).toEqual([]);
+        expect(RELEASE_RUNTIME_ARTIFACTS.filter((coordinate) => !covers(coordinate))).toEqual([]);
+    });
+
+    test('lists every artifact of the verification metadata as a component or as build and test tooling', () => {
+        expect(verified.filter((coordinate) => !covers(coordinate) && !isTooling(coordinate))).toEqual([]);
     });
 
     test('maps every Capacitor Gradle project to an npm package of the lockfile', () => {
@@ -553,7 +667,18 @@ describe('main failures and rendering', () => {
         fs.writeFileSync(path.join(options.licensesDir, 'packages.json'), JSON.stringify(packages));
         fs.writeFileSync(path.join(options.licensesDir, 'texts', 'LGPL-3.0.txt'), 'text of LGPL\n');
         main(options);
-        expect(fs.readFileSync(options.outPath, 'utf8')).toContain("this project's source.\n\n  plain 1.0.0\n");
+        expect(fs.readFileSync(options.outPath, 'utf8')).toContain(
+            'https://github.com/isthisgitlab/gurushots-auto-vote/releases.\n\n  plain 1.0.0\n',
+        );
+    });
+
+    test('points the LGPL note at the releases, whatever the version of the project', () => {
+        const options = fixture(ONNXRUNTIME_TEXTS_VERSION);
+        main(options);
+        const text = fs.readFileSync(options.outPath, 'utf8');
+        expect(text).toContain('the release tag that matches\nthe version the CLI reports');
+        expect(text).toContain('https://github.com/isthisgitlab/gurushots-auto-vote/releases.');
+        expect(text).not.toContain('/tree/v');
     });
 
     test('is deterministic', () => {

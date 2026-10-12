@@ -373,7 +373,7 @@ class AutoVoteServiceTest {
         assertEquals(SideStores.Outcome.REFUSED, SideStores.compareAndSet(ctx, "gs_join_state", null, "{}{}").outcome)
         assertEquals(SideStores.Outcome.REFUSED, SideStores.compareAndSet(ctx, "gs_join_state", null, "").outcome)
         val big = "{\"k\":\"" + "x".repeat(SideStores.MAX_BYTES) + "\"}"
-        assertEquals(SideStores.Outcome.REFUSED, SideStores.compareAndSet(ctx, "gs_join_state", null, big).outcome)
+        assertEquals(SideStores.Outcome.TOO_LARGE, SideStores.compareAndSet(ctx, "gs_join_state", null, big).outcome)
         assertNull(SideStores.read(ctx, "gs_join_state"))
         assertNull(SideStores.read(ctx, "unrelated-key"))
         // Refusals name the store from a literal, and the rejected key is silent.
@@ -775,11 +775,14 @@ class AutoVoteServiceTest {
         assertEquals("no-token", ServiceState.status(app).lastError)
         assertTrue(notificationText()!!.endsWith(": Not logged in — open the app and log in"))
 
+        // A code this build does not know — API-derived text included — is shown as the generic text, never as itself.
         runCycle(svc)
-        svc.HeadlessBridge().onCycleComplete("""{"ok":false,"error":"HTTP 503"}""")
+        svc.HeadlessBridge().onCycleComplete("""{"ok":false,"error":"HTTP 503 for user 42"}""")
         idle()
-        assertEquals("HTTP 503", AutoVoteService.lastError)
-        assertTrue(notificationText()!!.matches(Regex("""Last error at \d\d:\d\d:\d\d: HTTP 503""")))
+        assertEquals("HTTP 503 for user 42", AutoVoteService.lastError)
+        assertTrue(
+            notificationText()!!.matches(Regex("""Last error at \d\d:\d\d:\d\d: Something went wrong — will retry""")),
+        )
 
         // An empty error string clears the error.
         runCycle(svc)
@@ -787,6 +790,42 @@ class AutoVoteServiceTest {
         idle()
         assertNull(AutoVoteService.lastError)
         assertEquals(3, AutoVoteService.cycleCount)
+    }
+
+    @Test
+    fun everyErrorCodeHasItsOwnTranslatedNotificationText() {
+        val english = mapOf(
+            "no-token" to "Not logged in — open the app and log in",
+            "cycle-timeout" to "Timed out — will retry",
+            "voting-failed" to "Voting did not finish — will retry",
+            "cycle-failed" to "The cycle failed — will retry",
+            "not-loaded" to "Background voting is not ready — will retry",
+            AutoVoteService.ERROR_FGS_TIMEOUT to "Stopped by the system — will resume",
+            AutoVoteService.ERROR_FGS_NOT_ALLOWED to "The system did not allow background voting — will retry",
+            "anything-else" to "Something went wrong — will retry",
+        )
+        val latvian = mapOf(
+            "no-token" to "Pieteikšanās nav veikta — atver lietotni un piesakies",
+            "cycle-timeout" to "Laiks beidzies — mēģināšu vēlreiz",
+            "voting-failed" to "Balsošana nav pabeigta — mēģināšu vēlreiz",
+            "cycle-failed" to "Cikls neizdevās — mēģināšu vēlreiz",
+            "not-loaded" to "Fona balsošana vēl nav gatava — mēģināšu vēlreiz",
+            AutoVoteService.ERROR_FGS_TIMEOUT to "Sistēma apturēja fona darbu — atsāksies nākamajā reizē",
+            AutoVoteService.ERROR_FGS_NOT_ALLOWED to "Sistēma neļāva palaist fona balsošanu — mēģināšu vēlreiz",
+            "anything-else" to "Kaut kas nogāja greizi — mēģināšu vēlreiz",
+        )
+        for ((language, expected) in listOf("en" to english, "lv" to latvian)) {
+            settings("""{"language":"$language"}""")
+            val svc = startedAndReady()
+            for ((code, text) in expected) {
+                runCycle(svc)
+                svc.HeadlessBridge().onCycleComplete("""{"ok":false,"error":"$code"}""")
+                idle()
+                assertTrue("$language $code", notificationText()!!.endsWith(": $text"))
+            }
+            svc.command(AutoVoteService.ACTION_STOP)
+            idle()
+        }
     }
 
     @Test
@@ -1036,11 +1075,54 @@ class AutoVoteServiceTest {
         assertFalse(store.write(overCap))
         assertEquals(exactlyAtCap, TestSupport.readSettings(app))
 
+        // The reason a write was not saved is told apart: an oversize blob is not a conflict.
+        assertEquals("too-large", store.lastWriteRefusal())
+
         // A refusal says which blob and why, never what it held.
         val logged = ShadowLog.getLogsForTag(AutoVoteService.TAG).map { it.msg }
         assertEquals("Refusing to persist oversized settings blob", logged.last())
         assertTrue(logged.dropLast(1).all { it == "Refusing to persist non-JSON settings blob" })
         assertTrue(logged.none { it.contains("trailing") || it.contains("token") })
+
+        assertFalse(store.write("[1]"))
+        assertEquals("refused", store.lastWriteRefusal())
+        assertTrue(store.write(exactlyAtCap))
+        assertEquals("", store.lastWriteRefusal())
+    }
+
+    @Test
+    fun aPlainSideStoreWriteIsRefusedPastTheSideStoreCap() {
+        val ctx = sideStoreContext()
+        assertFalse(SideStores.write(ctx, "gs_lexicon_diagnostics", """{"k":"${"x".repeat(SideStores.MAX_BYTES)}"}"""))
+        assertNull(SideStores.read(ctx, "gs_lexicon_diagnostics"))
+    }
+
+    @Test
+    fun aSettingsWriteOnABlobTheWindowChangedIsReportedAsAConflictNotTooLarge() {
+        val store = newService().HeadlessStore()
+        TestSupport.writeSettings(app, """{"a":1}""")
+        assertEquals("""{"a":1}""", store.read())
+        TestSupport.writeSettings(app, """{"a":2}""")
+        assertFalse(store.write("""{"a":3}"""))
+        assertEquals("conflict", store.lastWriteRefusal())
+    }
+
+    @Test
+    fun aRealisticallyLargeSettingsBlobStaysFarBelowTheCap() {
+        // 400 challenges, each with 60 overrides of mixed kinds: far more than anyone accumulates.
+        val perChallenge = (1..60).joinToString(",") { i ->
+            when (i % 3) {
+                0 -> """"setting$i":true"""
+                1 -> """"setting$i":${i * 7}"""
+                else -> """"setting$i":"value-$i""""
+            }
+        }
+        val blob = """{"token":"${"t".repeat(600)}","challengeSettings":{""" +
+            (1..400).joinToString(",") { """"challenge-$it":{$perChallenge}""" } + "}}"
+        val size = blob.toByteArray(Charsets.UTF_8).size
+        assertTrue("$size bytes", size > 400 * 1024)
+        assertTrue("$size bytes", size < SideStores.MAX_SETTINGS_BYTES / 4)
+        assertTrue(newService().HeadlessStore().write(blob))
     }
 
     @Test
@@ -1455,7 +1537,7 @@ class AutoVoteServiceTest {
         runCycle(svc)
         svc.HeadlessBridge().onCycleComplete("""{"ok":false,"error":"HTTP 503"}""")
         idle()
-        assertTrue(notificationText()!!.matches(Regex("""Pēdējā kļūda plkst\. \d\d:\d\d:\d\d: HTTP 503""")))
+        assertTrue(notificationText()!!.matches(Regex("""Pēdējā kļūda plkst\. \d\d:\d\d:\d\d: Kaut kas nogāja greizi — mēģināšu vēlreiz""")))
     }
 
     @Test

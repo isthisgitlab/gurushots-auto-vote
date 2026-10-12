@@ -7,6 +7,7 @@ import android.os.Looper
 import android.util.Log
 import android.webkit.CookieManager
 import android.webkit.WebStorage
+import android.webkit.WebView
 import com.getcapacitor.JSObject
 import com.getcapacitor.Plugin
 import com.getcapacitor.PluginCall
@@ -58,7 +59,8 @@ class AutoVotePlugin : Plugin() {
      * Saves one side store, or the settings blob, only if it still holds what the window read (`expected`; absent or
      * null: nothing was stored), under the lock the background service's bridge takes too. Resolves `saved` and, when
      * it did not save because the store had changed, `current`: what is stored. Rejects a key that is neither, a value
-     * that is not one JSON object within the key's size cap, and a commit that failed.
+     * that is not one JSON object and a commit that failed ("not saved"), and a value past the key's size cap with the
+     * code `too-large`, which a caller can tell from a change it could retry.
      */
     @PluginMethod
     fun compareAndWrite(call: PluginCall) {
@@ -69,6 +71,10 @@ class AutoVotePlugin : Plugin() {
             return
         }
         val result = SideStores.compareAndSet(context, key, call.getString("expected"), value)
+        if (result.outcome == SideStores.Outcome.TOO_LARGE) {
+            call.reject("too large", SideStores.TOO_LARGE)
+            return
+        }
         if (result.outcome == SideStores.Outcome.REFUSED) {
             call.reject("not saved")
             return
@@ -97,7 +103,8 @@ class AutoVotePlugin : Plugin() {
     /**
      * Deletes everything the app holds on this device: stops the service and its alarm, forgets the service's state, the
      * whole `CapacitorStorage` file (settings with the token, every side store, whatever else JS saved), the WebView's
-     * storage and cookies, and the downloaded updates. Resolves `ok`: whether all of it was removed.
+     * storage, cookies and HTTP cache (the photos it fetched), and the downloaded updates. Resolves `ok`: whether all of
+     * it was removed.
      */
     @PluginMethod
     fun wipeLocalData(call: PluginCall) {
@@ -116,6 +123,11 @@ class AutoVotePlugin : Plugin() {
         Handler(Looper.getMainLooper()).post {
             val webGone = try {
                 WebStorage.getInstance().deleteAllData()
+                // The HTTP cache is shared by every WebView of the app, so a throwaway one clears it for all.
+                newWebView(ctx).apply {
+                    clearCache(true)
+                    destroy()
+                }
                 CookieManager.getInstance().apply {
                     removeAllCookies(null)
                     flush()
@@ -129,5 +141,10 @@ class AutoVotePlugin : Plugin() {
             ret.put("ok", filesGone and webGone)
             call.resolve(ret)
         }
+    }
+
+    internal companion object {
+        /** How the wipe obtains the WebView that clears the HTTP cache; a test swaps it for one it can inspect. */
+        @JvmField var newWebView: (Context) -> WebView = { WebView(it) }
     }
 }

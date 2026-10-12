@@ -14,7 +14,9 @@
  * with the desktop scheduler), compute the next cadence with the shared
  * threshold/random-delay helpers, and report {ok, nextDelayMs, ...} back
  * through AndroidHeadlessBridge.onCycleComplete so the service can
- * schedule the next alarm. Reusing the JS keeps a single source of truth
+ * schedule the next alarm. A failure is reported as a stable code only
+ * (`no-token`, `voting-failed`, `cycle-failed`): the service shows it in
+ * its notification through translated text, so the detail goes to the log. Reusing the JS keeps a single source of truth
  * rather than re-porting the strategy to Kotlin.
  */
 
@@ -130,15 +132,12 @@ const runOneCycle = async () => {
         // fresh fetch there, which detects fetchFailed and caps the retry.
         const nextDelayMs = await computeNextDelayMs(token, ok ? result?.challenges : null);
         log('cycle complete', { ok, nextDelayMs });
-        reportComplete({ ok, message: (result && (result.message || result.error)) || null, nextDelayMs });
+        if (ok) return reportComplete({ ok, nextDelayMs });
+        log('voting failed', result?.message || result?.error);
+        reportComplete({ ok, error: 'voting-failed', nextDelayMs });
     } catch (err) {
-        const thrown = errorMessage(err);
-        log('cycle threw', thrown);
-        reportComplete({
-            ok: false,
-            error: thrown || 'cycle-failed',
-            nextDelayMs: fallbackDelay(),
-        });
+        log('cycle threw', errorMessage(err));
+        reportComplete({ ok: false, error: 'cycle-failed', nextDelayMs: fallbackDelay() });
     }
 };
 

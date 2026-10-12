@@ -31,6 +31,8 @@ import { runIfMain } from './lib/run-if-main';
 
 const ROOT = path.join(__dirname, '..');
 
+const PROJECT_SOURCE_URL = 'https://github.com/isthisgitlab/gurushots-auto-vote';
+
 // The Node.js release whose LICENSE is vendored (scripts/licenses/texts/Node.js-LICENSE.txt),
 // and the ONNX Runtime release whose LICENSE and ThirdPartyNotices are.
 const NODE_LICENSE_VERSION = '26.10.0';
@@ -56,7 +58,7 @@ interface LicenseEntry {
 /** One android.json entry: a native library group the Android app ships. */
 interface AndroidComponent {
     name: string;
-    /** `group:artifact`, or `group.*` for every artifact of a group. */
+    /** `group:artifact`, or a pattern ending in `*` for every coordinate that starts with the rest (`androidx.*`, `group:prefix-*`). */
     coordinates: string[];
     license: string;
     copyright: string;
@@ -233,7 +235,9 @@ const renderLgplSection = (libvips: string[]) => [
     '(app.asar.unpacked/node_modules/@img/) and can be replaced by a compatible build. In the CLI',
     'binaries they are part of the embedded runtime archive, which is extracted to the "vision"',
     "directory of the CLI's data folder and checked against a digest embedded at build time; to use",
-    "a modified build of them, rebuild the CLI from this project's source.",
+    "a modified build of them, rebuild the CLI from this project's source: the release tag that matches",
+    'the version the CLI reports (the "Current version" line of its check-updates command) is listed at',
+    `${PROJECT_SOURCE_URL}/releases.`,
     '',
     ...libvips.map((entry) => `  ${entry}`),
     '',

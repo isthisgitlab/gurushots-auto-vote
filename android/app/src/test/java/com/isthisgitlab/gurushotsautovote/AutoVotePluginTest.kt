@@ -5,6 +5,7 @@ import android.app.Application
 import android.content.Context
 import android.os.Looper
 import android.webkit.WebStorage
+import android.webkit.WebView
 import androidx.test.core.app.ApplicationProvider
 import com.getcapacitor.Bridge
 import com.getcapacitor.JSObject
@@ -52,6 +53,7 @@ class AutoVotePluginTest {
         AutoVoteService.lastRunAtMillis = 0L
         AutoVoteService.lastError = null
         ServiceState.clear(app)
+        AutoVotePlugin.newWebView = { WebView(it) }
     }
 
     private fun resolved(block: (PluginCall) -> Unit): JSObject {
@@ -156,7 +158,9 @@ class AutoVotePluginTest {
         every { call.getString("expected") } returns past
         every { call.getString("value") } returns """{"k":"${"x".repeat(SideStores.MAX_SETTINGS_BYTES)}"}"""
         plugin.compareAndWrite(call)
-        verify(exactly = 1) { call.reject(any<String>()) }
+        // An oversize blob is rejected with its own code, which a conflict (resolved as saved:false) never carries.
+        verify(exactly = 1) { call.reject("too large", "too-large") }
+        verify(exactly = 0) { call.reject(any<String>()) }
         assertEquals(past, TestSupport.readSettings(app))
     }
 
@@ -237,6 +241,19 @@ class AutoVotePluginTest {
         assertEquals(ServiceState.Status(false, 0, 0L, null), ServiceState.status(app))
         assertTrue(prefs.all.isEmpty())
         assertFalse(updates.exists())
+    }
+
+    @Test
+    fun wipeLocalDataClearsTheWebViewHttpCacheFromDiskToo() {
+        val created = mutableListOf<WebView>()
+        AutoVotePlugin.newWebView = { ctx -> WebView(ctx).also { created.add(it) } }
+
+        assertTrue(wiped().getBoolean("ok"))
+
+        val webView = created.single()
+        assertTrue(shadowOf(webView).wasClearCacheCalled())
+        assertTrue(shadowOf(webView).didClearCacheIncludeDiskFiles())
+        assertTrue(shadowOf(webView).wasDestroyCalled())
     }
 
     @Test
