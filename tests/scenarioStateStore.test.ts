@@ -195,7 +195,7 @@ describe('createStateLedger', () => {
         test('set writes nothing, and remove says the file is unreadable', () => {
             const store = rawStore('{not json');
             const ledger = createStateLedger(store);
-            expect(ledger.set(7, state())).toBe(false);
+            expect(ledger.set(7, state())).toBe('failed');
             expect(ledger.remove(7)).toBe('unreadable');
             expect(store.writeRaw).not.toHaveBeenCalled();
             expect(store.raw).toBe('{not json');
@@ -206,7 +206,7 @@ describe('createStateLedger', () => {
             const ledger = createStateLedger(store);
             expect(ledger.removeAll()).toBe('removed');
             expect(ledger.get(7)).toMatchObject({ corrupt: false, state: null });
-            expect(ledger.set(7, state())).toBe(true);
+            expect(ledger.set(7, state())).toBe('saved');
         });
 
         test('a readable file loses only the challenge removed, and removeAll loses them all', () => {
@@ -257,6 +257,28 @@ describe('createStateLedger', () => {
             );
             createStateLedger(store).set(8, state());
             expect(kept(store)).toEqual(['10', '11', '8', '@all']);
+        });
+
+        test('a record that still holds a spend not known to have been made, or a stopped rule, is kept until it is reset', () => {
+            const fresh = Date.now();
+            const store = rawStore(
+                JSON.stringify({
+                    1: { ...state(), updatedAt: OLD, inFlight: { ruleId: 'r', actionIndex: 0, unclear: ['swap'] } },
+                    2: { ...state(), updatedAt: OLD, inFlight: { ruleId: 'r', actionIndex: 0, pending: 'swap' } },
+                    3: { ...state(), updatedAt: OLD, fired: { r: { at: 1, unclearHalt: 'swap' } } },
+                    4: { ...state(), updatedAt: OLD, fired: { r: { at: 1 } } },
+                    5: { ...state(), updatedAt: OLD, inFlight: { ruleId: 'r', actionIndex: 0 } },
+                    6: { ...state(), updatedAt: fresh },
+                }),
+            );
+            const ledger = createStateLedger(store);
+            ledger.set(8, state());
+            // Those that guard against a second spend stay; an old record that guards nothing goes.
+            expect(kept(store)).toEqual(['1', '2', '3', '6', '8']);
+            ledger.remove(1);
+            ledger.set(8, state());
+            expect(kept(store)).toEqual(['1', '2', '3', '6', '8']);
+            expect((JSON.parse(store.raw!) as Record<string, unknown>)['1']).toMatchObject({ tombstone: true });
         });
 
         test('what cannot be read is not deleted by the write of another challenge: it is for its user to reset', () => {
@@ -345,7 +367,7 @@ describe('the file’s changes are made under a lock across processes', () => {
             }
             return 'timed-out';
         });
-        expect(first.set(7, { ...state(), phase: 'first' })).toBe(true);
+        expect(first.set(7, { ...state(), phase: 'first' })).toBe('saved');
         expect(Object.keys(JSON.parse(store.raw!) as Record<string, unknown>).sort()).toEqual(['7', '8']);
     });
 
@@ -354,7 +376,7 @@ describe('the file’s changes are made under a lock across processes', () => {
         const lock = sharedLock();
         const ledger = createStateLedger(store, lock.forWho('mine'));
         lock.take('other');
-        expect(ledger.set(7, state())).toBe(false);
+        expect(ledger.set(7, state())).toBe('failed');
         expect(store.writeRaw).not.toHaveBeenCalled();
         // About half a second, in small steps.
         expect(jest.mocked(Atomics.wait).mock.calls.length).toBeGreaterThanOrEqual(40);
@@ -366,7 +388,7 @@ describe('the file’s changes are made under a lock across processes', () => {
         // It is not kept anywhere: what was not written is not state (the write-ahead marker is what guards a spend).
         expect(ledger.get(7).state).toBeNull();
         lock.free();
-        expect(ledger.set(7, state())).toBe(true);
+        expect(ledger.set(7, state())).toBe('saved');
         expect(JSON.parse(store.raw!)).toEqual({ 7: expect.objectContaining({ phase: 'buildup' }) });
     });
 
@@ -403,13 +425,13 @@ describe('the file’s changes are made under a lock across processes', () => {
         jest.mocked(store.writeRaw).mockImplementationOnce(() => {
             throw new Error('disk full');
         });
-        expect(ledger.set(7, state())).toBe(false);
+        expect(ledger.set(7, state())).toBe('failed');
         expect(release).toHaveBeenCalledTimes(1);
         expect(invalid<() => CategoryLogger>(logger.withCategory)().error).toHaveBeenCalledWith(
             'scenario state could not be written: disk full',
             null,
         );
-        expect(ledger.set(7, state())).toBe(true);
+        expect(ledger.set(7, state())).toBe('saved');
         expect(release).toHaveBeenCalledTimes(2);
     });
 });
@@ -423,7 +445,7 @@ describe('a reset is not undone by what was running when it was made', () => {
         a.set(7, state());
         const running = a.get(7).state!;
         expect(b.remove(7)).toBe('removed');
-        expect(a.set(7, { ...running, phase: 'old progress' })).toBe(false);
+        expect(a.set(7, { ...running, phase: 'old progress' })).toBe('refused');
         expect(a.get(7)).toMatchObject({ corrupt: false, state: null });
         expect(invalid<() => CategoryLogger>(logger.withCategory)().warning).toHaveBeenCalledWith(
             'scenario state of challenge 7 was reset meanwhile — not written',
@@ -438,12 +460,12 @@ describe('a reset is not undone by what was running when it was made', () => {
         const first = a.get(7).state!;
         const second = a.get(8).state!;
         expect(b.removeAll()).toBe('removed');
-        expect(a.set(7, first)).toBe(false);
-        expect(a.set(8, second)).toBe(false);
+        expect(a.set(7, first)).toBe('refused');
+        expect(a.set(8, second)).toBe('refused');
         expect(a.get(7).state).toBeNull();
         // What is read after it is under the new count, and is written.
         const fresh = a.get(7);
-        expect(a.set(7, { ...state(), epoch: fresh.epoch })).toBe(true);
+        expect(a.set(7, { ...state(), epoch: fresh.epoch })).toBe('saved');
     });
 
     test('a reset of one challenge leaves the steps of the others running', () => {
@@ -452,7 +474,7 @@ describe('a reset is not undone by what was running when it was made', () => {
         a.set(8, state());
         const other = a.get(8).state!;
         b.remove(7);
-        expect(a.set(8, { ...other, phase: 'moved on' })).toBe(true);
+        expect(a.set(8, { ...other, phase: 'moved on' })).toBe('saved');
         expect(a.get(8).state!.phase).toBe('moved on');
     });
 
@@ -460,7 +482,7 @@ describe('a reset is not undone by what was running when it was made', () => {
         const { a, b } = twoOver();
         const { epoch } = a.get(7);
         b.remove(7);
-        expect(a.set(7, { ...state(), epoch })).toBe(false);
+        expect(a.set(7, { ...state(), epoch })).toBe('refused');
     });
 
     test('a reset is counted as a reset even where the earlier count is not to be read, and counts keep rising', () => {
@@ -494,7 +516,7 @@ describe('a reset is not undone by what was running when it was made', () => {
         ledger.set(7, state());
         const running = ledger.get(7).state!;
         ledger.removeAll();
-        expect(ledger.set(7, running)).toBe(false);
+        expect(ledger.set(7, running)).toBe('refused');
     });
 });
 
@@ -547,9 +569,9 @@ describe('on Android a reset is asked for, never written into a file the service
         asApp();
         app.remove(7);
         asService();
-        expect(service.set(7, { ...running, phase: 'old progress' })).toBe(false);
+        expect(service.set(7, { ...running, phase: 'old progress' })).toBe('refused');
         // Another challenge's write is made on the file as it reads with the reset applied: no other progress is lost.
-        expect(service.set(8, { ...service.get(8).state!, phase: 'moved on' })).toBe(true);
+        expect(service.set(8, { ...service.get(8).state!, phase: 'moved on' })).toBe('saved');
         const written = JSON.parse(main.raw!) as Record<string, Record<string, unknown>>;
         expect(written['7']).toMatchObject({ tombstone: true });
         expect(written['8']).toMatchObject({ phase: 'moved on' });
@@ -566,10 +588,47 @@ describe('on Android a reset is asked for, never written into a file the service
         asService();
         const afterReset = service.get(7);
         expect(afterReset.state).toBeNull();
-        expect(service.set(7, { ...state(), epoch: afterReset.epoch })).toBe(true);
+        expect(service.set(7, { ...state(), epoch: afterReset.epoch })).toBe('saved');
         // The request stays where it was asked, and is not applied again over what was written since.
         expect(service.get(7).state).not.toBeNull();
         expect(JSON.parse(main.raw!)).toHaveProperty('7');
+    });
+
+    describe('requests do not outlive what they asked for, and do not make it again', () => {
+        const OLD = Date.now() - 31 * 24 * 3600 * 1000;
+
+        test('a request older than a tombstone is kept for is ignored, so a pruned tombstone is not made again', () => {
+            const { main, asked, app } = both(
+                rawStore(JSON.stringify({ 8: { ...state(), updatedAt: Date.now() } })),
+                rawStore(JSON.stringify({ 7: OLD, '@all': OLD })),
+            );
+            asApp();
+            expect(app.get(7)).toMatchObject({ corrupt: false, state: null, epoch: { all: 0, gen: 0 } });
+            expect(app.set(8, { ...app.get(8).state!, phase: 'moved on' })).toBe('saved');
+            expect(Object.keys(JSON.parse(main.raw!) as Record<string, unknown>)).toEqual(['8']);
+            expect(asked.writeRaw).not.toHaveBeenCalled();
+        });
+
+        test('what a recent request makes ages from when it was asked, not from when it was seen', () => {
+            const recent = Date.now() - 29 * 24 * 3600 * 1000;
+            const { main, app, service } = both(rawStore(), rawStore(JSON.stringify({ 7: recent })));
+            asService();
+            service.set(8, state());
+            expect((JSON.parse(main.raw!) as Record<string, Record<string, unknown>>)['7']).toEqual({
+                tombstone: true,
+                gen: recent,
+                updatedAt: recent,
+            });
+            asApp();
+            expect(app.get(7).epoch.gen).toBe(recent);
+        });
+
+        test('the app drops the requests that have aged out when it asks for another', () => {
+            const { asked, app } = both(rawStore(), rawStore(JSON.stringify({ 7: OLD, 9: Date.now() })));
+            asApp();
+            app.remove(8);
+            expect(Object.keys(requestsOf(asked)).sort()).toEqual(['8', '9']);
+        });
     });
 
     test('a second reset of the same challenge counts past the first', () => {
@@ -625,7 +684,7 @@ describe('a lock the app cannot make at all is not a lock held by another', () =
         const store = rawStore();
         const acquire = jest.fn((_id: string) => unavailable());
         const ledger = createStateLedger(store, acquire);
-        expect(ledger.set(7, state())).toBe(false);
+        expect(ledger.set(7, state())).toBe('failed');
         expect(ledger.remove(7)).toBe('unavailable');
         expect(ledger.removeAll()).toBe('unavailable');
         expect(store.writeRaw).not.toHaveBeenCalled();

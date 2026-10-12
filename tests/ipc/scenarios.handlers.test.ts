@@ -26,7 +26,10 @@ jest.mock('../../src/ts/services/scenarioStatus', () => {
         __release: release,
     };
 });
-jest.mock('../../src/ts/scenarioStateStore', () => ({ refreshScenarioStateAsync: jest.fn(async () => {}) }));
+jest.mock('../../src/ts/scenarioStateStore', () => ({
+    refreshScenarioStateAsync: jest.fn(async () => {}),
+    flushScenarioStateWrites: jest.fn(async () => {}),
+}));
 jest.mock('../../src/ts/services/auth', () => ({ requireAuthToken: jest.fn(() => ({ ok: true, token: 'tok' })) }));
 jest.mock('../../src/ts/apiFactory', () => ({ getApiStrategy: jest.fn() }));
 jest.mock('../../src/ts/logger', () => ({
@@ -42,7 +45,7 @@ import settingsModule = require('../../src/ts/settings');
 const settings = jest.mocked(settingsModule);
 import scenarioStatusModule = require('../../src/ts/services/scenarioStatus');
 const scenarioStatus = jest.mocked(scenarioStatusModule);
-const { refreshScenarioStateAsync } = jest.mocked(
+const { refreshScenarioStateAsync, flushScenarioStateWrites } = jest.mocked(
     require('../../src/ts/scenarioStateStore') as typeof scenarioStateStoreModule,
 );
 import authModule = require('../../src/ts/services/auth');
@@ -263,6 +266,20 @@ describe('status and reset', () => {
         mocked.__ledger.remove.mockReturnValueOnce(answer);
         await expect(handlers['reset-scenario-state'](null, 7)).resolves.toEqual({ success: false, error });
         expect(mocked.__release).toHaveBeenCalledTimes(1);
+    });
+
+    test('a reset waits for what it wrote to reach storage, and one that did not is an error, not a success', async () => {
+        await handlers['reset-scenario-state'](null, 7);
+        await handlers['reset-all-scenario-state']();
+        expect(flushScenarioStateWrites).toHaveBeenCalledTimes(2);
+        flushScenarioStateWrites.mockRejectedValueOnce(new Error('not persisted'));
+        await expect(handlers['reset-scenario-state'](null, 7)).resolves.toEqual({
+            success: false,
+            error: 'not-saved',
+        });
+        expect(mocked.__release).toHaveBeenCalledTimes(2);
+        flushScenarioStateWrites.mockRejectedValueOnce(new Error('not persisted'));
+        await expect(handlers['reset-all-scenario-state']()).resolves.toEqual({ success: false, error: 'not-saved' });
     });
 
     test('a reset of every challenge, the only way past an unreadable file', async () => {

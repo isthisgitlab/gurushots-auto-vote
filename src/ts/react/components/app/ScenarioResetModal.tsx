@@ -9,7 +9,7 @@ import type { Challenge } from '../../../types/gurushots';
 // The text of each answer that resets nothing; a call that failed outright reads as the general one.
 const problemOf = (error: string | undefined, everyChallenge: boolean): string => {
     if (error === 'busy') return everyChallenge ? 'app.scenarioResetAllBusy' : 'app.scenarioResetBusy';
-    if (error === 'locks-unavailable') return 'app.scenarioResetLocksUnavailable';
+    if (error === 'locks-unavailable') return 'app.locksUnavailable';
     return error === 'state-unreadable' ? 'app.scenarioResetUnreadable' : 'app.scenarioResetFailed';
 };
 

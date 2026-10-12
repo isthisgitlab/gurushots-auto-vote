@@ -742,8 +742,9 @@ caps (dependency-free, renderer-safe), and `scenarios/templates.ts` holds editab
   leaves no marker, and one whose marker could not be written is not made (the step is deferred). If the result of the
   spend is then never written (the lock was busy, the disk failed, the process died, the one-shot CLI exited), the
   next run in any process finds the marker and treats it like `unclear`: it looks at the live challenge, goes on only
-  when that positively shows the spend landed, and otherwise stops the rule (the notice says the app stopped before
-  it knew, `haltOrigin: 'pending'`, not that GuruShots gave no answer); it never spends again. A spend recovered
+  when that positively shows the spend landed, and otherwise stops the rule (the notice says the app did not record
+  whether it was sent or what came of it, `haltOrigin: 'pending'`, not that GuruShots gave no answer; a marker that is
+  absorbed keeps that origin in `inFlight.lost`); it never spends again. A spend recovered
   from `pending` is counted in `spent` when it is recovered (a spend that got no answer is counted when it is
   marked, and not twice), so the scenario's limits hold across a crash. The markers are per spend: `unclear` is a
   list of action types, so an edit of the step never overwrites one with another; a `pending` marker the step now
@@ -754,8 +755,8 @@ caps (dependency-free, renderer-safe), and `scenarios/templates.ts` holds editab
   **What gives that guarantee, by platform**: Electron and the CLI write the file synchronously through a temp file,
   fsync and rename, under the cross-process lock, so a write that returned is on disk. The Android background
   service writes through the native bridge, whose `writeKey` now commits synchronously and answers whether it
-  persisted (a refused key, a value that is no JSON, or a failed commit throws in the store, so the marker is
-  not taken as written); a write that returned there is on disk. The Android app's WebView does not give it: its
+  persisted (a refused key, a value that is no JSON, a failed commit, or no answer at all throws in the store, so
+  the marker is not taken as written, and a failed write is never read back); a write that returned there is on disk. The Android app's WebView does not give it: its
   writes go to `@capacitor/preferences` behind a cache and return before they are persisted, so a crash right after
   can lose a marker; the app does not run scenarios while the native service is available, and where the WebView
   does run them (no service) the marker is best effort. Mock mode keeps everything in memory.
@@ -767,12 +768,16 @@ caps (dependency-free, renderer-safe), and `scenarios/templates.ts` holds editab
   not rewrite the file from its cache for a reset (the service may have written it since): it writes the reset into a
   store of its own, `gs_scenario_resets` (`{ "<challengeId>": count, "@all": count }`, a side key of the native
   bridge), and the reset is applied, idempotently, by whichever runtime reads or writes the state file next (the app's
-  own reads apply it as well); an unreadable file has nothing to lose and is cleared by the app itself. A progress
+  own reads apply it as well); the reset waits for that write to reach storage and answers an error when it did not.
+  A request ages like what it asked for (its count is when it was asked): one older than 30 days is ignored, so it
+  cannot make a pruned tombstone again, and the app drops it when it next asks for a reset; an unreadable file has nothing to lose and is cleared by the app itself. A progress
   that cannot be read is `file` (all of it: only the reset of every challenge, `reset-all-scenario-state`, clears it)
   or `record` (this challenge's: its own reset does; a write of another challenge keeps it until then, only valid
-  records and tombstones age out). A reset takes the challenge's step lock and answers `busy` when that or the file's
+  records and tombstones age out). A record that still holds a spend marker or a stopped rule (`unclearHalt`) does not
+  age out either, until it is reset: it is small, and an unattended stop is for the user to look at. A reset takes the challenge's step lock and answers `busy` when that or the file's
   lock is held (by the app's own pass or by another process), never a silent success, and `locks-unavailable` when the
-  app cannot create its lock files at all (the app's own locks fail closed and say so: the dialogs and the CLI send
+  app cannot create its lock files at all (the app's own locks fail closed and say so, and are logged as errors with
+  the path and the error code, so `logs --error` shows them: the dialogs and the CLI send
   the user to the data folder's permissions and the free disk space, and the runner warns every pass, where a lock
   merely held is a debug line until it persists for three); the reset of every challenge takes no step locks, the
   counts make them unnecessary. Every card reads its status again after a reset (`refreshScenarioStatuses`). The

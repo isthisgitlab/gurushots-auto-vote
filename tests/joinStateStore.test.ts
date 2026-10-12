@@ -439,7 +439,10 @@ describe('acquireUnlockLock', () => {
         const lock = joinState.acquireUnlockLock('c9');
         expect(lock.ok).toBe(true);
         expect(logger.withCategory).toHaveBeenCalledWith('join');
-        expect(warning).toHaveBeenCalledWith('cross-process lock unavailable for c9: EACCES', null);
+        expect(warning).toHaveBeenCalledWith(
+            'cross-process lock unavailable for c9 (/cfg/joinlock-c9.lock): EACCES [EACCES]',
+            null,
+        );
     });
 
     describe('the app’s own locks are not any challenge’s', () => {
@@ -461,7 +464,8 @@ describe('acquireUnlockLock', () => {
 
         test('when a lock cannot be made at all, the challenge’s unlock lock fails open and the app’s own fail closed', () => {
             const warning = jest.fn();
-            jest.mocked(logger.withCategory).mockReturnValue(invalid({ warning }));
+            const error = jest.fn();
+            jest.mocked(logger.withCategory).mockReturnValue(invalid({ warning, error }));
             const original = fs.openSync.getMockImplementation()!;
             fs.openSync.mockImplementation(() => {
                 throw mockFsError('EACCES');
@@ -476,7 +480,14 @@ describe('acquireUnlockLock', () => {
                 expect(joinState.acquireUnlockLock('scenario-7', { category: 'scenario', internal: true }).ok).toBe(
                     false,
                 );
-                expect(warning).toHaveBeenCalledTimes(4);
+                // The challenge's lock goes on, so it is a warning; the app's own stop something the user can fix, so
+                // they are errors (`logs --error`), saying where and why.
+                expect(warning).toHaveBeenCalledTimes(2);
+                expect(error).toHaveBeenCalledTimes(2);
+                expect(error).toHaveBeenCalledWith(
+                    'cross-process lock unavailable for joinstate (/cfg/statelock-joinstate.lock): EACCES [EACCES]',
+                    null,
+                );
             } finally {
                 fs.openSync.mockImplementation(original);
             }
@@ -491,7 +502,10 @@ describe('acquireUnlockLock', () => {
         });
         expect(joinState.acquireUnlockLock('scenario-7', { category: 'scenario' }).ok).toBe(true);
         expect(logger.withCategory).toHaveBeenCalledWith('scenario');
-        expect(warning).toHaveBeenCalledWith('cross-process lock unavailable for scenario-7: EACCES', null);
+        expect(warning).toHaveBeenCalledWith(
+            'cross-process lock unavailable for scenario-7 (/cfg/joinlock-scenario-7.lock): EACCES [EACCES]',
+            null,
+        );
     });
 
     test('the challenge id is sanitized in what is logged', () => {
@@ -501,7 +515,10 @@ describe('acquireUnlockLock', () => {
             throw mockFsError('EACCES');
         });
         joinState.acquireUnlockLock('c9\nforged line');
-        expect(warning).toHaveBeenCalledWith('cross-process lock unavailable for c9 forged line: EACCES', null);
+        expect(warning).toHaveBeenCalledWith(
+            'cross-process lock unavailable for c9 forged line (/cfg/joinlock-c9_forged_line.lock): EACCES [EACCES]',
+            null,
+        );
     });
 
     test('a thrown non-Error value is still reported and fails open', () => {
@@ -511,7 +528,10 @@ describe('acquireUnlockLock', () => {
             throw 'weird';
         });
         expect(joinState.acquireUnlockLock('c9').ok).toBe(true);
-        expect(warning).toHaveBeenCalledWith('cross-process lock unavailable for c9: weird', null);
+        expect(warning).toHaveBeenCalledWith(
+            'cross-process lock unavailable for c9 (/cfg/joinlock-c9.lock): weird',
+            null,
+        );
     });
 
     test('an EEXIST that comes back after a takeover (lost the race for the new file) is busy, not a failure', () => {

@@ -17,6 +17,12 @@ const CORRUPT_KEY = {
     record: ['app.scenarioStatusCorruptRecord', 'app.scenarioStatusCorruptRecordShort'],
 } as const;
 
+// The notice for a spend that is being checked on, by what the doubt came from.
+const CHECKED_KEY = {
+    unclear: 'app.scenarioStatusSpendUnclear',
+    pending: 'app.scenarioStatusSpendUnclearPending',
+} as const;
+
 // The notice for a rule that was stopped, on the card and (short) on the compact tile, by what the stop came from.
 const STOPPED_KEY = [
     { unclear: 'app.scenarioStatusSpendStopped', pending: 'app.scenarioStatusSpendStoppedPending' },
@@ -74,12 +80,14 @@ function Notice({ status, compact }: { status: Summary; compact: boolean }) {
               t(
                   spendUnclear.stopped
                       ? STOPPED_KEY[compact ? 1 : 0][spendUnclear.origin]
-                      : 'app.scenarioStatusSpendUnclear',
+                      : CHECKED_KEY[spendUnclear.origin],
               ),
               {
                   action: t(`app.sbAct_${spendUnclear.action}`),
-                  again: t(AGAIN_KEY[spendUnclear.again]),
-                  id: spendUnclear.challengeId,
+                  hint: interp(t('app.scenarioStatusResetHint'), {
+                      again: t(AGAIN_KEY[spendUnclear.again]),
+                      id: spendUnclear.challengeId,
+                  }),
                   details: t('app.details'),
               },
           )

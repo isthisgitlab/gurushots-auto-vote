@@ -46,6 +46,17 @@ const SPEND: Record<SpendAction, { action: 'swap' | 'key' | 'fill'; limit: Spend
 const isSpend = (action: ScenarioAction): action is ScenarioAction & { type: SpendAction } =>
     Object.hasOwn(SPEND, action.type);
 
+/**
+ * What a spend is given to make its request with: it sends the request only after the spend is written down.
+ */
+type SpendRequest = (send: () => Promise<SpendOutcome>) => Promise<SpendOutcome>;
+
+/**
+ * The retry of a step whose spend is not known to have been made: whether it still has to be counted (it was only
+ * written down before, never counted) and what it came from (GuruShots giving no answer, or the app not recording).
+ */
+type Retry = { count: boolean; origin: 'unclear' | 'pending' };
+
 // The outcome of a spend that was not made because its marker could not be written down first.
 const NOT_WRITTEN = 'not-written';
 
@@ -64,16 +75,17 @@ const failed = (message: string): NotDoneOutcome => ({ status: 'failed', message
  * The end of a rule whose spend got no answer and cannot be shown to have taken effect: it is not spent again, and
  * the rule stops rather than going on to spend on a later step.
  */
-const unclearHalted = (actionType: SpendAction, from: 'unclear' | 'pending'): NotDoneOutcome => ({
+const unclearHalted = (actionType: SpendAction, from: Retry): NotDoneOutcome => ({
     ...failed(
-        from === 'pending'
-            ? `the app stopped before it knew whether the ${SPEND[actionType].label} was sent, so it may have gone through and is not repeated, and the rule was stopped`
+        from.origin === 'pending'
+            ? `the app did not record whether the ${SPEND[actionType].label} was sent or what came of it, so it may have gone through and is not repeated, and the rule was stopped`
             : `the ${SPEND[actionType].label} may have gone through earlier, so it is not repeated and the rule was stopped`,
     ),
     unclear: actionType,
     halt: true,
+    ...(from.origin === 'pending' ? { origin: 'pending' as const } : {}),
     // A spend recovered from its marker was never counted: it is now, as if it had gone through.
-    ...(from === 'pending' ? { origin: 'pending' as const, spent: SPEND[actionType].limit } : {}),
+    ...(from.count ? { spent: SPEND[actionType].limit } : {}),
 });
 
 /**
@@ -142,19 +154,14 @@ const TRANSIENT_OUTCOMES: ReadonlySet<string> = new Set([
 const lockedCurrencySpend = async (
     actionType: SpendAction,
     ctx: RunnerContext,
-    spend: () => Promise<SpendOutcome>,
+    spend: (request: SpendRequest) => Promise<SpendOutcome>,
 ): Promise<NotDoneOutcome | null> => {
-    const result = await lockedSpend(
-        SPEND[actionType].action,
-        ctx.challenge,
-        async () => {
-            // Written down only now, with everything that could refuse the spend itself behind it and the request next:
-            // a spend its own checks refuse leaves no marker, and one that could not be written down is not made.
-            if (ctx.beforeSpend && !ctx.beforeSpend(actionType)) return { ok: false, outcome: NOT_WRITTEN };
-            return spend();
-        },
-        LABEL,
-    );
+    // The only way a spend's request is made: the marker is written down first, and a request whose marker could not
+    // be written (or that has no way to write one) is not made. Whatever the spend does before its request (a
+    // preview, say) leaves no marker if it is refused there.
+    const request: SpendRequest = async (send) =>
+        ctx.beforeSpend?.(actionType) ? send() : { ok: false, outcome: NOT_WRITTEN };
+    const result = await lockedSpend(SPEND[actionType].action, ctx.challenge, () => spend(request), LABEL);
     if (result === null) return { status: 'deferred', message: 'another spend is in progress' };
     // Every spend resolves {ok, outcome}; null is reserved for a busy lock.
     if (result.ok) return null;
@@ -211,3 +218,4 @@ export {
     selectContext,
     rememberedPhoto,
 };
+export type { Retry };

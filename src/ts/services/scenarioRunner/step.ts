@@ -44,7 +44,7 @@ const loadState = (ctx: RunnerContext, now: number): ScenarioState | null => {
     if (state && state.scenario.toLowerCase() === ctx.scenario.name.toLowerCase()) return state;
     // Stamped with the resets it starts under, like any state read: a reset in between is not undone by it.
     const fresh = { ...initialState(ctx.scenario.name, ctx.scenario.start, now), epoch };
-    if (!ctx.ledger.set(ctx.challengeId, fresh)) return null;
+    if (ctx.ledger.set(ctx.challengeId, fresh) !== 'saved') return null;
     log().info(
         `${logger.challengeTag(ctx.challenge)} scenario "${ctx.scenario.name}" started in phase ${fresh.phase}`,
         null,
@@ -75,7 +75,7 @@ const advance = async (ctx: RunnerContext, now: number): Promise<void> => {
     if (!state) return;
     // One vote sample per pass feeds the speed conditions (scenarios/speed.ts).
     state = { ...state, history: recordVoteSample(state.history, entriesOf(challenge), now) };
-    if (!ctx.ledger.set(challengeId, state)) return;
+    if (ctx.ledger.set(challengeId, state) !== 'saved') return;
 
     const firedThisPass: Set<string> = new Set();
     const visited = new Set([state.phase]);
@@ -172,6 +172,7 @@ const runScenarioStep = async (challenge: Challenge, now: number, pass: PassCont
             timezone,
             pass: scenarioPass,
             ledger: deps.ledger,
+            beforeSpend: null,
         };
         // The GUI and the CLI can run a pass at once: one rule step of a challenge runs at a time, or both would spend.
         const lock = deps.lock ? deps.lock(challengeId) : NO_LOCK;

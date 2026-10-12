@@ -18,6 +18,7 @@ import type {
     ValidatedRule,
 } from './types';
 import { isSpend, limitOf, log, nowSec } from './support';
+import type { Retry } from './support';
 import { ACTIONS, settleUnclearSpend } from './actions';
 
 /** Notices kept for the host notifiers: the newest, within a day. */
@@ -89,7 +90,13 @@ const stoppedAt = (
         const prior = state.inFlight;
         const unclear = [...(prior?.unclear ?? []), ...(result.unclear ? [result.unclear] : [])];
         // `unclearAt`: when the spend got no answer, for the card to tell a later problem from it.
-        const marker = unclear.length ? { unclear, unclearAt: result.unclear ? at : prior?.unclearAt } : {};
+        const marker = unclear.length
+            ? {
+                  unclear,
+                  unclearAt: result.unclear ? at : prior?.unclearAt,
+                  ...(prior?.lost?.length ? { lost: prior.lost } : {}),
+              }
+            : {};
         next.inFlight = { ruleId: rule.id, actionIndex: index, ...marker };
     }
     if (result.status !== 'deferred') next.lastError = { at, message };
@@ -100,15 +107,13 @@ const stoppedAt = (
  * Which marker the step about to run is the retry of: its spend got no answer (counted already), or it was written
  * down before it was made and nothing says it was (not counted yet). Null when it is not a retry.
  */
-const retryOf = (
-    start: ScenarioState,
-    ruleId: string,
-    firstStep: boolean,
-    action: ScenarioAction,
-): 'unclear' | 'pending' | null => {
+const retryOf = (start: ScenarioState, ruleId: string, firstStep: boolean, action: ScenarioAction): Retry | null => {
     const marker = firstStep && start.inFlight?.ruleId === ruleId ? start.inFlight : null;
-    if (marker?.unclear?.some((type) => type === action.type)) return 'unclear';
-    return marker?.pending === action.type ? 'pending' : null;
+    if (marker?.unclear?.some((type) => type === action.type)) {
+        // Counted already; the app, not GuruShots, did not know when it came from a marker the app absorbed.
+        return { count: false, origin: marker.lost?.some((type) => type === action.type) ? 'pending' : 'unclear' };
+    }
+    return marker?.pending === action.type ? { count: true, origin: 'pending' } : null;
 };
 
 /**
@@ -125,6 +130,7 @@ const absorbLeftover = (state: ScenarioState, own: SpendAction | undefined): Sce
         spent: { ...state.spent, [limitOf(pending)]: (state.spent[limitOf(pending)] ?? 0) + 1 },
         inFlight: {
             ...rest,
+            lost: [...(inFlight.lost ?? []), pending],
             unclear: [...(inFlight.unclear ?? []), pending],
             unclearAt: inFlight.unclearAt ?? nowSec(),
         },
@@ -147,7 +153,7 @@ const markPending = (
         ...state,
         inFlight: { ...state.inFlight, ruleId: at.ruleId, actionIndex: at.index, pending: at.spend },
     };
-    return ctx.ledger.set(ctx.challengeId, marked) ? marked : null;
+    return ctx.ledger.set(ctx.challengeId, marked) === 'saved' ? marked : null;
 };
 
 /**
@@ -171,7 +177,13 @@ const spendWriter =
  * spend that is known to have landed must not turn into a rule that stops for want of a write).
  */
 const saveResult = (ctx: RunnerContext, state: ScenarioState): boolean => {
-    if (ctx.ledger.set(ctx.challengeId, state) || ctx.ledger.set(ctx.challengeId, state)) return true;
+    const first = ctx.ledger.set(ctx.challengeId, state);
+    if (first === 'saved') return true;
+    // Reset meanwhile: its progress is not to be brought back, so there is nothing to try again or to warn about.
+    if (first === 'refused') return false;
+    const second = ctx.ledger.set(ctx.challengeId, state);
+    if (second === 'saved') return true;
+    if (second === 'refused') return false;
     log().warning(
         `${logger.challengeTag(ctx.challenge)} the result of the last step could not be written down: the next pass may stop this rule needlessly`,
         null,
@@ -183,12 +195,7 @@ const saveResult = (ctx: RunnerContext, state: ScenarioState): boolean => {
  * One action of a rule. A step whose spend got no answer is never spent again: its retry only looks at the live
  * challenge.
  */
-const runAction = (
-    ctx: RunnerContext,
-    state: ScenarioState,
-    action: ScenarioAction,
-    retry: 'unclear' | 'pending' | null,
-) =>
+const runAction = (ctx: RunnerContext, state: ScenarioState, action: ScenarioAction, retry: Retry | null) =>
     retry && isSpend(action)
         ? settleUnclearSpend(action, ctx, state, retry)
         : // ACTIONS pairs each type with its handler; the union call needs the widened view.
@@ -269,7 +276,7 @@ const runRule = async (
         // A spend is written down by the step itself, just before its request (see lockedCurrencySpend); one that
         // could not be is not made. A retry makes no spend.
         ctx.beforeSpend = retry
-            ? undefined
+            ? null
             : spendWriter(ctx, { ruleId: rule.id, index }, { get: () => state, set: (next) => (state = next) });
         const result = await runAction(ctx, state, action, retry);
         const at = nowSec();

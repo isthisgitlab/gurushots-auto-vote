@@ -36,9 +36,10 @@ type RunnerContext = {
     ledger: ScenarioStateLedger;
     /**
      * Set by the rule for the step it is running: writes the spend down just before its request is made (the
-     * pending marker). False means it could not be written, and the spend is not made.
+     * pending marker). False means it could not be written, and the spend is not made. Null where the step makes no
+     * spend (a retry only looks): a spend asked for with none is refused, never made without its marker.
      */
-    beforeSpend?: (action: SpendAction) => boolean;
+    beforeSpend: ((action: SpendAction) => boolean) | null;
 };
 
 /**

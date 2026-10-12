@@ -122,6 +122,8 @@ const spendUnclearOf = (
             ...base,
             action: checkedOn,
             stopped: false,
+            // The app, not GuruShots, did not know, when the marker came from one the app absorbed.
+            origin: state.inFlight?.lost?.includes(checkedOn) ? ('pending' as const) : ('unclear' as const),
             newerProblem: (state.lastError?.at ?? 0) > (state.inFlight?.unclearAt ?? Infinity),
         };
     }

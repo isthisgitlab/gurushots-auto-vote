@@ -334,25 +334,29 @@ export const app = {
     scenarioStatusCorrupt:
         'Scenario "{name}": the saved progress of the scenarios cannot be read, so the plans of every challenge are paused. Resetting the progress of every challenge starts them again.',
     scenarioStatusCorruptShort:
-        'Press “{details}” to reset every challenge’s progress — scenario "{name}" is paused: the saved progress cannot be read.',
+        'Press “{details}”, then Reset — scenario "{name}" is paused: the saved progress cannot be read.',
     scenarioStatusCorruptRecord:
         'Scenario "{name}": the saved progress of this challenge cannot be read, so its plan is paused. Resetting it starts the plan again.',
     scenarioStatusCorruptRecordShort:
-        'Press “{details}” to reset it — scenario "{name}" is paused: this challenge’s saved progress cannot be read.',
+        'Press “{details}”, then Reset — scenario "{name}" is paused: this challenge’s saved progress cannot be read.',
     scenarioStatusPhase: 'phase {phase}',
     scenarioStatusNotStarted: 'starts in phase {phase} on the next run',
     scenarioStatusNext: 'next check in {time}',
     scenarioStatusProblem: 'Last step skipped: {message}',
     scenarioStatusSpendUnclear:
         'GuruShots gave no answer to “{action}”, so it may have gone through. It will not be spent again: the next cycle only checks whether it took effect.',
+    scenarioStatusSpendUnclearPending:
+        'The app did not record whether “{action}” was sent, so it may have gone through. It will not be spent again: the next cycle only checks whether it took effect.',
     scenarioStatusSpendStopped:
-        'GuruShots gave no answer to “{action}”, so it may have gone through, and its rule was stopped so that it is not spent again. Check the challenge. {again} To start the scenario over, use Reset scenario below or run scenario-reset --challenge={id} in the command line (CLI): that may spend the unanswered action again, and it restarts the scenario’s spend counter.',
+        'GuruShots gave no answer to “{action}”, so it may have gone through, and its rule was stopped so that it is not spent again. Check the challenge. {hint}',
+    scenarioStatusResetHint:
+        '{again} To start the scenario over, use Reset scenario below or run scenario-reset --challenge={id} in the command line (CLI): that may spend the action again, and it restarts the scenario’s spend counter.',
     scenarioStatusSpendStoppedShort:
         'Press “{details}” for more — GuruShots gave no answer to “{action}”: its rule was stopped so that it is not spent again.',
     scenarioStatusSpendStoppedPending:
-        'The app stopped before it knew whether “{action}” was sent, so it may have gone through, and its rule was stopped so that it is not spent again. Check the challenge. {again} To start the scenario over, use Reset scenario below or run scenario-reset --challenge={id} in the command line (CLI): that may spend the unconfirmed action again, and it restarts the scenario’s spend counter.',
+        'The app did not record whether “{action}” was sent or what came of it (it stopped, or could not save the result), so it may have gone through, and its rule was stopped so that it is not spent again. Check the challenge. {hint}',
     scenarioStatusSpendStoppedPendingShort:
-        'Press “{details}” for more — the app stopped before it knew whether “{action}” was sent: its rule was stopped so that it is not spent again.',
+        'Press “{details}” for more — the app did not record whether “{action}” was sent: its rule was stopped so that it is not spent again.',
     scenarioReset: 'Reset scenario…',
     scenarioResetAll: 'Reset every challenge’s progress…',
     scenarioResetTitle: 'Reset scenario progress',
@@ -368,7 +372,7 @@ export const app = {
         'The saved scenario progress is being updated right now (by the app or by another process). Nothing was changed. Try again in a moment.',
     scenarioResetUnreadable:
         'The saved progress cannot be read, so this challenge cannot be reset alone. Close this window and open it again to reset every challenge.',
-    scenarioResetLocksUnavailable:
+    locksUnavailable:
         'The app cannot create its lock files in its data folder, so it cannot do this safely. Nothing was changed. Check the folder’s permissions and the free disk space (the log has the details), then try again.',
     scenarioResetFailed: 'Could not reset the scenario right now. Nothing was changed. Try again in a moment.',
     scenarioStatusAgainPhase: 'The rule can run again the next time the phase is entered.',
@@ -603,8 +607,6 @@ export const app = {
     discoverForgetNotAuthenticated: 'You are not logged in, so nothing was changed. Log in again, then try once more.',
     discoverForgetUnreadable:
         'The saved payment records could not be read, so nothing was changed. Restart the app and try again; if it keeps happening, the join-state file needs attention — check the log.',
-    discoverForgetLocksUnavailable:
-        'The app cannot create its lock files in its data folder, so it cannot do this safely. Nothing was changed. Check the folder’s permissions and the free disk space (the log has the details), then try again.',
     discoverForgetFailed: 'Could not forget the payment right now. Nothing was changed. Try again in a moment.',
     discoverAccountUnknown:
         'Could not confirm which account is logged in, so this attempt did nothing and spent no coins. Try again shortly, or log in again.',

@@ -56,6 +56,7 @@ import nativeAutovoteModule = require('../../src/ts/services/NativeAutovoteBridg
 const nativeAutovote = jest.mocked(nativeAutovoteModule);
 import type * as scenarioRunnerModule from '../../src/ts/services/scenarioRunner';
 import type * as ruleModule from '../../src/ts/services/scenarioRunner/rule';
+import type * as supportModule from '../../src/ts/services/scenarioRunner/support';
 import type * as scenarioStateStoreModule from '../../src/ts/scenarioStateStore';
 import type { Challenge, ChallengeMember, MemberRanking, RankingEntry } from '../../src/ts/types/gurushots';
 import type { ScenarioDocument } from '../../src/ts/settings/scenarioSchema';
@@ -67,6 +68,7 @@ import { invalid } from '../helpers/invalid';
 const { runScenarioStep, backgroundServiceOwnsScenarios } =
     require('../../src/ts/services/scenarioRunner') as typeof scenarioRunnerModule;
 const { runRule } = require('../../src/ts/services/scenarioRunner/rule') as typeof ruleModule;
+const { lockedCurrencySpend } = require('../../src/ts/services/scenarioRunner/support') as typeof supportModule;
 const { createMemoryStateLedger, createStateLedger, initialState } =
     require('../../src/ts/scenarioStateStore') as typeof scenarioStateStoreModule;
 
@@ -349,7 +351,7 @@ describe('a state that cannot be written down is never run on', () => {
     const failAfter = (writes: number) => {
         const real = ledger.set.bind(ledger);
         let calls = 0;
-        jest.spyOn(ledger, 'set').mockImplementation((id, next) => (++calls <= writes ? real(id, next) : false));
+        jest.spyOn(ledger, 'set').mockImplementation((id, next) => (++calls <= writes ? real(id, next) : 'failed'));
     };
 
     test('a plan that cannot be started is not run', async () => {
@@ -470,7 +472,7 @@ describe('a spend is written down before it is made, so that a result that is ne
         // The start, the sample and the marker are written; the result is not (the lock was busy, the process died).
         const real = first.set.bind(first);
         let writes = 0;
-        jest.spyOn(first, 'set').mockImplementation((id, next) => (++writes <= 3 ? real(id, next) : false));
+        jest.spyOn(first, 'set').mockImplementation((id, next) => (++writes <= 3 ? real(id, next) : 'failed'));
         const c = lockedBoost();
         await runIn(first, c);
         expect(currencyActions.unlockBoostWithKey).toHaveBeenCalledTimes(1);
@@ -490,7 +492,7 @@ describe('a spend is written down before it is made, so that a result that is ne
         setup(single([{ type: 'unlockBoost' }]));
         const real = first.set.bind(first);
         let writes = 0;
-        jest.spyOn(first, 'set').mockImplementation((id, next) => (++writes <= 3 ? real(id, next) : false));
+        jest.spyOn(first, 'set').mockImplementation((id, next) => (++writes <= 3 ? real(id, next) : 'failed'));
         const c = lockedBoost();
         await runIn(first, c);
         c.member.boost!.state = 'LOCKED';
@@ -512,7 +514,7 @@ describe('a spend is written down before it is made, so that a result that is ne
         expect(currencyActions.unlockBoostWithKey).not.toHaveBeenCalled();
         expect(state().fired.r1.unclearHalt).toBe('unlockBoost');
         expect(state().lastError!.message).toContain(
-            'the app stopped before it knew whether the boost unlock was sent',
+            'the app did not record whether the boost unlock was sent or what came of it',
         );
         expect(state().fired.r1.haltOrigin).toBe('pending');
     });
@@ -532,6 +534,7 @@ describe('a spend is written down before it is made, so that a result that is ne
             ruleId: 'r1',
             actionIndex: 0,
             unclear: ['unlockBoost', 'fillExposure'],
+            lost: ['unlockBoost'],
             unclearAt: expect.any(Number),
         });
         expect(state().spent).toEqual(expect.objectContaining({ keys: 1, fills: 1 }));
@@ -543,6 +546,8 @@ describe('a spend is written down before it is made, so that a result that is ne
         await run(c);
         expect(currencyActions.unlockBoostWithKey).not.toHaveBeenCalled();
         expect(state().fired.r1.unclearHalt).toBe('unlockBoost');
+        // The app did not know about the key, GuruShots was not asked: the halt says which.
+        expect(state().fired.r1.haltOrigin).toBe('pending');
         expect(state().spent.keys).toBe(1);
     });
 
@@ -558,6 +563,7 @@ describe('a spend is written down before it is made, so that a result that is ne
             ruleId: 'r1',
             actionIndex: 0,
             unclear: ['swap', 'unlockBoost'],
+            lost: ['unlockBoost'],
             unclearAt: NOW - 500,
         });
     });
@@ -586,6 +592,7 @@ describe('a spend is written down before it is made, so that a result that is ne
             ruleId: 'r1',
             actionIndex: 0,
             unclear: ['unlockBoost'],
+            lost: ['unlockBoost'],
             unclearAt: expect.any(Number),
         });
         expect(state().spent.keys).toBe(1);
@@ -621,7 +628,7 @@ describe('a spend is written down before it is made, so that a result that is ne
             setup({ ...single([{ type: 'unlockBoost' }]), limits: { keys: 1 } });
             const real = first.set.bind(first);
             let writes = 0;
-            jest.spyOn(first, 'set').mockImplementation((id, next) => (++writes <= 3 ? real(id, next) : false));
+            jest.spyOn(first, 'set').mockImplementation((id, next) => (++writes <= 3 ? real(id, next) : 'failed'));
             const c = lockedBoost();
             await runIn(first, c);
             expect(currencyActions.unlockBoostWithKey).toHaveBeenCalled();
@@ -630,16 +637,74 @@ describe('a spend is written down before it is made, so that a result that is ne
             await runIn(second, c);
             expect(currencyActions.unlockBoostWithKey).not.toHaveBeenCalled();
             expect(second.get(7).state!.spent.keys).toBe(1);
+            // The pass after that: the limit holds, whether the rule is held back (it was stopped) or free to run
+            // again (it went on), so no further key is spent.
+            await runIn(second, c);
+            expect(currencyActions.unlockBoostWithKey).not.toHaveBeenCalled();
+            expect(second.get(7).state!.spent.keys).toBe(1);
         }
     });
 
-    test('a spend its own checks refuse leaves no marker, and does not even write: the scenario’s limit, a missing photo', async () => {
-        setup({ ...single([{ type: 'unlockBoost' }]), limits: { keys: 0 } });
+    test.each([
+        ['the scenario’s limit', { ...single([{ type: 'unlockBoost' }]), limits: { keys: 0 } }],
+        [
+            'a missing photo to swap in',
+            single([{ type: 'swap', entry: { by: 'mostVotes' }, with: { memory: 'held' } }]),
+        ],
+    ])('a spend its own checks refuse leaves no marker, and writes nothing about it: %s', async (_name, doc) => {
+        setup(doc);
         const set = jest.spyOn(ledger, 'set');
         await run();
-        const markers = set.mock.calls.filter(([, written]) => written.inFlight?.pending !== undefined);
-        expect(markers).toEqual([]);
+        expect(set.mock.calls.filter(([, written]) => written.inFlight?.pending !== undefined)).toEqual([]);
+        expect(state().inFlight).toBeNull();
         expect(currencyActions.unlockBoostWithKey).not.toHaveBeenCalled();
+        expect(currencyActions.swapEntry).not.toHaveBeenCalled();
+    });
+
+    test('a swap whose photo a selector chooses is written down after the preview, just before the swap', async () => {
+        const order: string[] = [];
+        currencyActions.previewSwap.mockImplementationOnce(async () => {
+            order.push('preview');
+            return invalid({ ok: true, candidate: { id: 'n1', member_id: 'm' } });
+        });
+        jest.spyOn(ledger, 'set').mockImplementation((id, next) => {
+            if (next.inFlight?.pending !== undefined) order.push('marker');
+            return createMemoryStateLedger().set(id, next);
+        });
+        currencyActions.swapEntry.mockImplementationOnce(async () => {
+            order.push('swap');
+            return { ok: true, outcome: 'ok' };
+        });
+        setup(single([{ type: 'swap', entry: { by: 'mostVotes' }, with: 'best' }]));
+        await run();
+        expect(order).toEqual(['preview', 'marker', 'swap']);
+    });
+
+    test('a preview that is refused leaves no marker: nothing was spent, and nothing is said to have been', async () => {
+        currencyActions.previewSwap.mockResolvedValueOnce(invalid({ ok: false, outcome: 'no-alternative' }));
+        const set = jest.spyOn(ledger, 'set');
+        setup(single([{ type: 'swap', entry: { by: 'mostVotes' }, with: 'best' }]));
+        await run();
+        expect(set.mock.calls.filter(([, written]) => written.inFlight?.pending !== undefined)).toEqual([]);
+        expect(currencyActions.swapEntry).not.toHaveBeenCalled();
+        expect(state().inFlight).toBeNull();
+    });
+
+    test('a spend that has no way to write its marker is never made: a missing writer is not permission', async () => {
+        const doc = single([{ type: 'fillExposure' }]);
+        const request = jest.fn<Promise<{ ok: boolean; outcome: string }>, []>(async () => ({
+            ok: true,
+            outcome: 'ok',
+        }));
+        for (const beforeSpend of [null, () => false]) {
+            const refused = await lockedCurrencySpend(
+                'fillExposure',
+                invalid({ challenge: challenge(), scenario: doc, beforeSpend }),
+                (send) => send(request),
+            );
+            expect(refused).toMatchObject({ status: 'deferred' });
+        }
+        expect(request).not.toHaveBeenCalled();
     });
 
     test('the marker is written inside the spend lock, after the spend’s own checks, just before the request', async () => {
@@ -678,7 +743,7 @@ describe('a result that cannot be written is written once more', () => {
         let calls = 0;
         const set = jest
             .spyOn(ledger, 'set')
-            .mockImplementation((id, next) => (numbers.includes(++calls) ? false : real(id, next)));
+            .mockImplementation((id, next) => (numbers.includes(++calls) ? 'failed' : real(id, next)));
         return set;
     };
 
@@ -700,6 +765,21 @@ describe('a result that cannot be written is written once more', () => {
         await run();
         expect(currencyActions.unlockBoostWithKey).not.toHaveBeenCalled();
         expect(log.warning).toHaveBeenCalledWith(expect.stringContaining('may stop this rule needlessly'), null);
+    });
+
+    test('one whose second try finds the progress was reset meanwhile is not a failed write to warn about', async () => {
+        const real = ledger.set.bind(ledger);
+        let calls = 0;
+        jest.spyOn(ledger, 'set').mockImplementation((id, next) => {
+            calls += 1;
+            if (calls === 4) return 'failed';
+            return calls === 5 ? 'refused' : real(id, next);
+        });
+        currencyActions.fillExposure.mockResolvedValue(invalid({ ok: true }));
+        setup(single([{ type: 'fillExposure' }, { type: 'unlockBoost' }]));
+        await run();
+        expect(currencyActions.unlockBoostWithKey).not.toHaveBeenCalled();
+        expect(log.warning).not.toHaveBeenCalledWith(expect.stringContaining('may stop this rule needlessly'), null);
     });
 
     test('the same for the state a step that stopped its rule leaves: once more, and said when it still fails', async () => {
@@ -748,10 +828,20 @@ describe('a reset made while a step runs is not undone by it', () => {
         });
         currencyActions.unlockBoostWithKey.mockResolvedValue(invalid({ ok: true }));
         setup(single([{ type: 'fillExposure' }, { type: 'unlockBoost' }]));
+        const real = ledger.set.bind(ledger);
+        const answers: string[] = [];
+        jest.spyOn(ledger, 'set').mockImplementation((id, next) => {
+            const answer = real(id, next);
+            answers.push(answer);
+            return answer;
+        });
         await run();
         // The step that was running stops at its first write: nothing more is spent, and nothing comes back.
         expect(currencyActions.unlockBoostWithKey).not.toHaveBeenCalled();
         expect(ledger.get(7).state).toBeNull();
+        // A write that was refused for a reset is not tried again, and is not a reason to say the rule may stop needlessly.
+        expect(answers.filter((answer) => answer === 'refused')).toHaveLength(1);
+        expect(log.warning).not.toHaveBeenCalledWith(expect.stringContaining('may stop this rule needlessly'), null);
     });
 });
 

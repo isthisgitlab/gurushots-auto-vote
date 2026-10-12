@@ -120,6 +120,8 @@ export interface ScenarioState {
         unclear?: SpendAction[];
         unclearAt?: number;
         pending?: SpendAction;
+        /** The `unclear` spends that came from a `pending` marker: the app, not GuruShots, did not know. */
+        lost?: SpendAction[];
     } | null;
     /** currency spent, by kind (swaps / keys / fills) */
     spent: Record<string, number>;

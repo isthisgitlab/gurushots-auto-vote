@@ -178,6 +178,21 @@ const keepFresh = (lockPath: string, token: string): NodeJS.Timeout => {
 };
 
 /**
+ * Logs a lock that could not be made, with where and why. The ones that fail closed stop something the user can fix,
+ * so they are errors (`logs --error`); the challenge's, which goes on without it, is a warning.
+ */
+const reportUnavailable = (
+    caught: unknown,
+    lock: { id: string | number; lockPath: string; category: 'join' | 'scenario'; internal: boolean },
+): void => {
+    const errno = isPlainObject(caught) && typeof caught.code === 'string' ? ` [${caught.code}]` : '';
+    const said = `cross-process lock unavailable for ${sanitizeLogString(lock.id)} (${sanitizeLogString(lock.lockPath)}): ${errorMessage(caught) || sanitizeLogString(caught)}${errno}`;
+    const log = logger.withCategory(lock.category);
+    if (lock.internal) log.error(said, null);
+    else log.warning(said, null);
+};
+
+/**
  * Acquire a cross-process lock for one challenge's unlock critical section, or (`internal`) one of the app's own, for
  * a shared file or a challenge's scenario steps.
  *
@@ -227,12 +242,7 @@ const acquireUnlockLock = (
     } catch (caught) {
         if (isErrnoCode(caught, 'EEXIST')) return NOT_HELD;
         // Lock infrastructure failed (permissions, etc.): see above for which locks fail open.
-        logger
-            .withCategory(category)
-            .warning(
-                `cross-process lock unavailable for ${sanitizeLogString(id)}: ${errorMessage(caught) || sanitizeLogString(caught)}`,
-                null,
-            );
+        reportUnavailable(caught, { id, lockPath, category, internal });
         return internal ? UNAVAILABLE : NO_LOCK;
     }
 };

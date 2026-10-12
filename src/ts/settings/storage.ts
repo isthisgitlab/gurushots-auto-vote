@@ -22,16 +22,9 @@ import * as runtime from '../runtime';
 
 import type { App } from 'electron';
 import type { PreferencesPlugin } from '@capacitor/preferences';
-import type { AndroidHeadlessStore } from '../types/settings';
 import { errorMessage } from '../errorMessage';
 import { sweepStaleTemps, writeAtomicOwnerOnly } from './atomicWrite';
-
-/**
- * The Android headless-service bridge, read at call time (absent everywhere
- * else).
- */
-const headlessStore = (): AndroidHeadlessStore | undefined =>
-    (globalThis as typeof globalThis & { AndroidHeadlessStore?: AndroidHeadlessStore }).AndroidHeadlessStore;
+import { createWriteBehind, headlessStore, readHeadlessKey, writeHeadlessKey } from './storeTransport';
 
 // Try to import electron, but don't fail if it's not available (CLI context)
 let electronApp: App | null | undefined = null;
@@ -262,34 +255,6 @@ const getEnvironmentInfo = () => {
     };
 };
 
-const readHeadlessKey = (prefKey: string, fallback: string | null): string | null => {
-    try {
-        // aislop-ignore-next-line ai-slop/hidden-fallback -- an absent key is the caller's cached value; the read contract
-        return headlessStore()?.readKey?.(prefKey) ?? fallback;
-    } catch (err) {
-        logger.withCategory('settings').error(`Headless ${prefKey} read failed:`, err);
-        // aislop-ignore-next-line ai-slop/hidden-fallback -- logged via the settings logger; the caller's cached value is the read contract
-        return fallback;
-    }
-};
-
-/**
- * Writes one key through the native bridge. The bridge answers `false` when it did not persist the value (a
- * refused key, a value that is no JSON, a failed commit); no answer, or `true`, is a write that was. A write that
- * was not passes quietly, unless `strict`: then it throws.
- */
-const writeHeadlessKey = (prefKey: string, data: string, strict: boolean): void => {
-    const persisted = ((): boolean => {
-        try {
-            return headlessStore()?.writeKey?.(prefKey, data) !== false;
-        } catch (err) {
-            logger.withCategory('settings').error(`Headless ${prefKey} write failed:`, err);
-            return false;
-        }
-    })();
-    if (!persisted && strict) throw new Error(`Headless ${prefKey} was not persisted`);
-};
-
 /**
  * Generic platform-aware JSON store — the same transport pattern the
  * settings store above uses, packaged for other stores (metadata.ts).
@@ -317,7 +282,7 @@ const createJsonStore = ({
 }) => {
     let initialized = false;
     let cachedJson: string | null = null;
-    let chain = Promise.resolve();
+    const writes = createWriteBehind(prefKey, strict, getCapacitorPreferences);
     let swept = false;
 
     const filePath = () => path.join(path.dirname(getSettingsPath()), fileName);
@@ -349,17 +314,14 @@ const createJsonStore = ({
          */
         writeRaw: (data: string) => {
             if (runtime.isHeadlessService()) {
-                cachedJson = data;
+                // Only a write that is confirmed is read back: a failed first write leaves nothing to read.
                 writeHeadlessKey(prefKey, data, strict);
+                cachedJson = data;
                 return;
             }
             if (runtime.isCapacitor()) {
                 cachedJson = data;
-                chain = chain
-                    .then(() => getCapacitorPreferences().set({ key: prefKey, value: data }))
-                    .catch((err) => {
-                        logger.withCategory('settings').error(`Capacitor ${prefKey} write failed:`, err);
-                    });
+                writes.queue(data);
                 return;
             }
             sweepOnce();
@@ -386,7 +348,7 @@ const createJsonStore = ({
          */
         refreshAsync: async () => {
             if (!runtime.isCapacitor() || runtime.isHeadlessService()) return;
-            await chain;
+            await writes.drained();
             try {
                 const { value } = await getCapacitorPreferences().get({ key: prefKey });
                 cachedJson = value;
@@ -395,8 +357,11 @@ const createJsonStore = ({
                 logger.withCategory('settings').error(`Capacitor ${prefKey} refresh failed:`, err);
             }
         },
-        /** Await to guarantee the write-behind queue has drained. */
-        flushPendingWrites: () => chain,
+        /**
+         * Await to guarantee the write-behind queue has drained. A `strict` store rejects when a write since the last
+         * flush did not persist, so a caller that waits for it can tell.
+         */
+        flushPendingWrites: () => writes.flush(),
         /** fs path (Electron/CLI) — for debug/info surfaces. */
         getFilePath: filePath,
     };

@@ -91,6 +91,9 @@ const initialState = (scenario: string, phase: string, nowSec: number): Scenario
     lastError: null,
 });
 
+/** What writing a state came to. */
+type SetResult = 'saved' | 'refused' | 'failed';
+
 /**
  * Ledger over a raw-JSON store ({readRaw, writeRaw}).
  *
@@ -100,8 +103,8 @@ const initialState = (scenario: string, phase: string, nowSec: number): Scenario
 const createStateLedger = (store: RawJsonStore, acquireLock?: (id: string) => StateLock, requests?: RawJsonStore) => {
     const { read, mutate, resetOne, resetAll } = createStateFile(store, acquireLock, requests);
 
-    // Writes one challenge's state into the file as it is now; false when it could not be (see `set`).
-    const persist = (key: string, { epoch, ...state }: ScenarioState): boolean => {
+    // Writes one challenge's state into the file as it is now (see `set` for what it answers).
+    const persist = (key: string, { epoch, ...state }: ScenarioState): SetResult => {
         const log = logger.withCategory('scenario');
         let result: Mutation = 'unreadable';
         try {
@@ -116,7 +119,8 @@ const createStateLedger = (store: RawJsonStore, acquireLock?: (id: string) => St
         }
         if (result === 'refused')
             log.warning(`scenario state of challenge ${key} was reset meanwhile — not written`, null);
-        return result === 'done';
+        if (result === 'done') return 'saved';
+        return result === 'refused' ? 'refused' : 'failed';
     };
 
     return {
@@ -141,11 +145,12 @@ const createStateLedger = (store: RawJsonStore, acquireLock?: (id: string) => St
         },
 
         /**
-         * Store the state for one challenge, under the file's lock. False when it could not be written (the lock
-         * is held or cannot be made, the file is unreadable, the write failed, or the state was read before a
-         * reset): the caller must not go on to spend anything.
+         * Store the state for one challenge, under the file's lock: `saved`, `refused` (the state was read before a
+         * reset: there is nothing to try again) or `failed` (the lock is held or cannot be made, the file is
+         * unreadable, or the write failed: another try may do). Anything but `saved` means the caller must not go
+         * on to spend anything.
          */
-        set: (challengeId: string | number, state: ScenarioState): boolean => persist(String(challengeId), state),
+        set: (challengeId: string | number, state: ScenarioState): SetResult => persist(String(challengeId), state),
 
         /**
          * Forget one challenge's state (a reset), leaving a count of its resets that keeps a step that was running
@@ -210,4 +215,4 @@ export {
     initialState,
     scenarioStepLock,
 };
-export type { ResetResult, StateLock };
+export type { ResetResult, SetResult, StateLock };

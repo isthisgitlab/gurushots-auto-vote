@@ -53,7 +53,8 @@ const unclear = (over: Partial<NonNullable<ScenarioSummary['spendUnclear']>> = {
 
 const WORDS: Record<string, string> = {
     'app.scenarioStatusSpendUnclear': 'Not spent again: “{action}”',
-    'app.scenarioStatusSpendStopped': 'Rule stopped: “{action}”. {again} Reset: --challenge={id}',
+    'app.scenarioStatusSpendStopped': 'Rule stopped: “{action}”. {hint}',
+    'app.scenarioStatusResetHint': '{again} Reset: --challenge={id}',
     'app.scenarioStatusAgainPhase': 'phase again',
     'app.scenarioStatusAgainReset': 'reset only',
     'app.scenarioStatusAgainDay': 'next day',
@@ -179,6 +180,11 @@ describe('the reset button', () => {
         cleanup();
         render(<ScenarioStatusLine status={{ name: 'Plan', corrupt: 'record' }} compact />);
         expect(screen.getByRole('status').textContent).toContain('app.scenarioStatusCorruptRecordShort');
+    });
+
+    test('a spend the app did not record, being checked on, says so too', () => {
+        render(<ScenarioStatusLine status={unclear({ origin: 'pending' })} />);
+        expect(screen.getByRole('status').textContent).toBe('app.scenarioStatusSpendUnclearPending');
     });
 
     test('a rule stopped before the app knew whether the spend was sent says so, on the card and on the tile', () => {

@@ -257,6 +257,20 @@ describe('useScenarioStatus', () => {
                 note({ action: 'swap', stopped: true, origin: 'pending' }),
             ],
             [
+                'a step being checked on whose marker the app, not GuruShots, left in doubt',
+                {
+                    inFlight: {
+                        ruleId: 'r',
+                        actionIndex: 1,
+                        unclear: ['swap', 'unlockBoost'],
+                        lost: ['swap'],
+                        unclearAt: NOW,
+                    },
+                },
+                undefined,
+                note({ action: 'swap', stopped: false, origin: 'pending' }),
+            ],
+            [
                 'a step that more than one spend of is being checked on: the first is what the card names',
                 { inFlight: { ruleId: 'r', actionIndex: 1, unclear: ['fillExposure', 'swap'], unclearAt: NOW } },
                 undefined,

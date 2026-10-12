@@ -33,6 +33,7 @@ import {
     unclearHalted,
     limitOf,
 } from './support';
+import type { Retry } from './support';
 
 const ACTIONS: { [K in ActionType]: ActionHandler<Extract<ScenarioAction, { type: K }>> } = {
     enterPhoto: async (action, ctx, state) => {
@@ -81,7 +82,7 @@ const ACTIONS: { [K in ActionType]: ActionHandler<Extract<ScenarioAction, { type
 
         let replacement: SwapPhoto | null =
             newPhoto === null ? null : { id: newPhoto, member_id: String(target.member_id ?? '') };
-        const refused = await lockedCurrencySpend('swap', ctx, async () => {
+        const refused = await lockedCurrencySpend('swap', ctx, async (request) => {
             if (replacement === null) {
                 const preview = await currencyActions.previewSwap(
                     challenge.id,
@@ -93,10 +94,14 @@ const ACTIONS: { [K in ActionType]: ActionHandler<Extract<ScenarioAction, { type
                 // An ok preview always carries its candidate.
                 replacement = preview.candidate as SwapPhoto;
             }
-            return currencyActions.swapEntry(challenge.id, target.id, replacement.id, pass.token, {
-                ...currencyDeps(ctx),
-                ledger: pass.currency.swapLedger ?? null,
-            });
+            // The preview is a read: only the swap itself is written down first.
+            const photo = replacement;
+            return request(() =>
+                currencyActions.swapEntry(challenge.id, target.id, photo.id, pass.token, {
+                    ...currencyDeps(ctx),
+                    ledger: pass.currency.swapLedger ?? null,
+                }),
+            );
         });
         if (refused) return refused;
         // The spend went through, so the replacement was given or previewed.
@@ -147,8 +152,8 @@ const ACTIONS: { [K in ActionType]: ActionHandler<Extract<ScenarioAction, { type
     unlockBoost: async (action, ctx, state) => {
         const blocked = await spendAllowed('unlockBoost', ctx, state);
         if (blocked) return skipped(blocked);
-        const refused = await lockedCurrencySpend('unlockBoost', ctx, () =>
-            currencyActions.unlockBoostWithKey(ctx.challenge.id, ctx.pass.token, currencyDeps(ctx)),
+        const refused = await lockedCurrencySpend('unlockBoost', ctx, (request) =>
+            request(() => currencyActions.unlockBoostWithKey(ctx.challenge.id, ctx.pass.token, currencyDeps(ctx))),
         );
         if (refused) return refused;
         const member = (ctx.challenge as ActedChallenge).member;
@@ -159,8 +164,8 @@ const ACTIONS: { [K in ActionType]: ActionHandler<Extract<ScenarioAction, { type
     fillExposure: async (action, ctx, state) => {
         const blocked = await spendAllowed('fillExposure', ctx, state);
         if (blocked) return skipped(blocked);
-        const refused = await lockedCurrencySpend('fillExposure', ctx, () =>
-            currencyActions.fillExposure(ctx.challenge.id, ctx.pass.token, currencyDeps(ctx)),
+        const refused = await lockedCurrencySpend('fillExposure', ctx, (request) =>
+            request(() => currencyActions.fillExposure(ctx.challenge.id, ctx.pass.token, currencyDeps(ctx))),
         );
         if (refused) return refused;
         const ranking = (ctx.challenge as ActedChallenge).member.ranking;
@@ -221,11 +226,11 @@ const settleUnclearSpend = async (
     action: ScenarioAction & { type: SpendAction },
     ctx: RunnerContext,
     state: ScenarioState,
-    from: 'unclear' | 'pending',
+    from: Retry,
 ): Promise<ActionOutcome> => {
     const { landed, remember } = await spendLanded(action, ctx, state);
     // A spend that got no answer was counted when it was marked; one recovered from its pending marker is counted now.
-    if (landed) return done({ remember, ...(from === 'pending' ? { spent: limitOf(action.type) } : {}) });
+    if (landed) return done({ remember, ...(from.count ? { spent: limitOf(action.type) } : {}) });
     return unclearHalted(action.type, from);
 };
 

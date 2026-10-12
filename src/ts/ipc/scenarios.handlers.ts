@@ -29,13 +29,14 @@ import * as auth from '../services/auth';
 import { registerHandlers } from './registerHandlers';
 import { errorResult } from './errorResult';
 import { isIdArg } from './isIdArg';
+import { errorMessage } from '../errorMessage';
 import { stampChosenPhotosOwner } from './chosenPhotosOwner';
 import { getScenarioStatus, ledgerForMode, stepLockForMode } from '../services/scenarioStatus';
 import { findActiveChallenge } from '../services/findActiveChallenge';
 import { evaluateScenario, startState } from '../scenarios/evaluate';
 import { simulateScenario } from '../scenarios/simulate';
 import { SCENARIO_TEMPLATES } from '../scenarios/templates';
-import { refreshScenarioStateAsync } from '../scenarioStateStore';
+import { flushScenarioStateWrites, refreshScenarioStateAsync } from '../scenarioStateStore';
 
 import type { IpcMain } from 'electron';
 import type { IpcHandlerMap } from './registerHandlers';
@@ -165,6 +166,20 @@ const RESET_ERROR = {
 } as const;
 
 /**
+ * Waits for a reset to reach storage (on Android the app's writes go behind a cache): a reset that did not is an error,
+ * not a success.
+ */
+const persisted = async (): Promise<boolean> => {
+    try {
+        await flushScenarioStateWrites();
+        return true;
+    } catch (error) {
+        log().error(`scenario reset was not persisted: ${errorMessage(error)}`, null);
+        return false;
+    }
+};
+
+/**
  * Forgets one challenge's progress, under the challenge's step lock so that it never runs in the middle of its rule
  * steps in another process. An unreadable file is cleared only by a reset of every challenge.
  */
@@ -175,6 +190,7 @@ const resetScenario = async (challengeId: string | number) => {
     try {
         const result = ledgerForMode().remove(String(challengeId));
         if (result !== 'removed') return { success: false as const, error: RESET_ERROR[result] };
+        if (!(await persisted())) return { success: false as const, error: 'not-saved' };
         log().info(`Scenario progress reset for challenge ${logger.sanitizeLogString(String(challengeId))}`, null);
         return { success: true as const };
     } finally {
@@ -189,6 +205,7 @@ const resetEveryScenario = async () => {
     await refreshScenarioStateAsync();
     const result = ledgerForMode().removeAll();
     if (result !== 'removed') return { success: false as const, error: RESET_ERROR[result] };
+    if (!(await persisted())) return { success: false as const, error: 'not-saved' };
     log().warning('Scenario progress reset for every challenge', null);
     return { success: true as const };
 };

@@ -308,6 +308,28 @@ describe('createJsonStore', () => {
             expect(mockPrefSet).toHaveBeenCalledWith({ key: 'gurushots-metadata', value: '{"x":1}' });
         });
 
+        describe('a write that did not persist', () => {
+            const strictStore = () => {
+                const { createJsonStore } = require('../../src/ts/settings/storage') as typeof storageModule;
+                return createJsonStore({ fileName: 'scenarioState.json', prefKey: 'gs_scenario_state', strict: true });
+            };
+
+            test('is told by the flush of a strict store, once, and the next flush is clean', async () => {
+                const strict = strictStore();
+                mockPrefSet.mockRejectedValueOnce(new Error('disk full'));
+                strict.writeRaw('{"x":1}');
+                await expect(strict.flushPendingWrites()).rejects.toThrow('gs_scenario_state was not persisted');
+                strict.writeRaw('{"x":2}');
+                await expect(strict.flushPendingWrites()).resolves.toBeUndefined();
+            });
+
+            test('passes quietly through the flush of any other store, as before', async () => {
+                mockPrefSet.mockRejectedValueOnce(new Error('disk full'));
+                store.writeRaw('{"x":1}');
+                await expect(store.flushPendingWrites()).resolves.toBeUndefined();
+            });
+        });
+
         test('writes are serialized in issue order', async () => {
             const persisted: string[] = [];
             let releaseFirst: ((value: void) => void) | undefined;
@@ -401,11 +423,30 @@ describe('createJsonStore', () => {
                 return createJsonStore({ fileName: 'scenarioState.json', prefKey: 'gs_scenario_state', strict: true });
             };
 
-            test.each([[true], [undefined]])('a write the bridge answers %p for passes, strict or not', (answer) => {
-                const native = bridge(() => answer);
+            test('a write the bridge answers true for passes, strict or not', () => {
+                const native = bridge(() => true);
                 expect(() => strictStore().writeRaw('{"a":1}')).not.toThrow();
                 expect(() => store.writeRaw('{"a":1}')).not.toThrow();
                 expect(native.writeKey).toHaveBeenCalledTimes(2);
+            });
+
+            test('no answer is a write that passes for the others, and one that was not persisted for a strict store', () => {
+                bridge(() => undefined);
+                expect(() => store.writeRaw('{"a":1}')).not.toThrow();
+                expect(() => strictStore().writeRaw('{"a":1}')).toThrow('was not persisted');
+                // Nor with no bridge at all.
+                delete (globalThis as typeof globalThis & { AndroidHeadlessStore?: unknown }).AndroidHeadlessStore;
+                expect(() => strictStore().writeRaw('{"a":1}')).toThrow('was not persisted');
+            });
+
+            test('what a write that was not persisted tried to say is never read back', () => {
+                bridge(() => false);
+                const strict = strictStore();
+                expect(() => strict.writeRaw('{"a":1}')).toThrow();
+                expect(strict.readRaw()).toBeNull();
+                bridge(() => true);
+                strict.writeRaw('{"a":2}');
+                expect(strict.readRaw()).toBe('{"a":2}');
             });
 
             test('a write the bridge says it did not persist fails a strict store, and passes quietly for the others', () => {

@@ -64,6 +64,7 @@ const isInFlight = (value: unknown): boolean =>
     Number.isInteger(value.actionIndex) &&
     (value.unclear === undefined || (Array.isArray(value.unclear) && value.unclear.every(isSpendAction))) &&
     (value.pending === undefined || isSpendAction(value.pending)) &&
+    (value.lost === undefined || (Array.isArray(value.lost) && value.lost.every(isSpendAction))) &&
     (value.unclearAt === undefined || Number.isFinite(value.unclearAt));
 
 /**
@@ -87,7 +88,8 @@ const isRecord = (r: unknown): r is ScenarioState =>
 // What a reset of one challenge leaves in its place: the record is gone, its count of resets is not.
 const isTombstone = (r: unknown): boolean => isPlainObject(r) && r.tombstone === true && isCount(r.gen);
 
-const tombstone = (gen: number) => ({ tombstone: true, gen, updatedAt: Date.now() });
+// `updatedAt` is when the reset was made: what a tombstone is worth ages from then, wherever it is written.
+const tombstone = (gen: number, updatedAt = Date.now()) => ({ tombstone: true, gen, updatedAt });
 
 /**
  * The resets a challenge's state is read under: of every challenge, and of this one. A tombstone keeps the count of
@@ -126,18 +128,37 @@ const parseRequests = (raw: string | null): ResetRequests => {
 };
 
 /**
+ * The requests that are not older than a tombstone or a record is kept for. A count is when the reset was asked
+ * for, so a request ages out together with the tombstone it made, and cannot make a pruned one again.
+ */
+const liveRequests = (requests: ResetRequests): ResetRequests => {
+    const cutoff = Date.now() - MAX_AGE_MS;
+    return Object.fromEntries(Object.entries(requests).filter(([, count]) => count > cutoff));
+};
+
+/**
  * The map as the resets asked for since it was written leave it: every challenge's records gone, and a tombstone for
  * each challenge asked to be reset, for each request that is ahead of what the map already counts. Applying one
  * twice changes nothing, so it can be applied by whichever runtime reads or writes next.
  */
-const withRequests = (map: Record<string, unknown>, requests: ResetRequests): Record<string, unknown> => {
+const withRequests = (map: Record<string, unknown>, asked: ResetRequests): Record<string, unknown> => {
+    const requests = liveRequests(asked);
     const all = requests[ALL_KEY] ?? 0;
     let next = all > countOf(map[ALL_KEY]) ? { [ALL_KEY]: all } : map;
     for (const [key, count] of Object.entries(requests)) {
-        if (key !== ALL_KEY && count > epochOf(next, key).gen) next = { ...next, [key]: tombstone(count) };
+        if (key !== ALL_KEY && count > epochOf(next, key).gen) next = { ...next, [key]: tombstone(count, count) };
     }
     return next;
 };
+
+/**
+ * Whether a record still holds a spend that is not known to have been made or not (a marker) or a rule that was
+ * stopped for one: what protects against spending it again. It is kept until it is reset, however long nothing
+ * touched it: such a record is small, and an unattended stop is for the user to look at, not for a clock to forget.
+ */
+const holdsStop = (record: ScenarioState): boolean =>
+    Boolean(record.inFlight?.unclear?.length || record.inFlight?.pending) ||
+    Object.values(record.fired).some((fired) => fired.unclearHalt !== undefined);
 
 /**
  * The map without the records of challenges that finished long ago (the count of resets of every challenge stays).
@@ -149,6 +170,7 @@ const pruned = (map: Record<string, unknown>): Record<string, unknown> => {
     const keep = (key: string, entry: unknown): boolean =>
         key === ALL_KEY ||
         !(isRecord(entry) || isTombstone(entry)) ||
+        (isRecord(entry) && holdsStop(entry)) ||
         (isPlainObject(entry) && typeof entry.updatedAt === 'number' && entry.updatedAt > cutoff);
     return Object.fromEntries(Object.entries(map).filter(([key, entry]) => keep(key, entry)));
 };
@@ -174,7 +196,7 @@ const viewOf = (raw: string | null, asked: string | null): ParsedStateFile => {
 const askFor = (requests: RawJsonStore | undefined, key: string, current: number): boolean => {
     if (!requests) return false;
     const asked = parseRequests(requests.readRaw());
-    requests.writeRaw(JSON.stringify({ ...asked, [key]: nextCount(Math.max(asked[key] ?? 0, current)) }));
+    requests.writeRaw(JSON.stringify({ ...liveRequests(asked), [key]: nextCount(Math.max(asked[key] ?? 0, current)) }));
     return true;
 };
 

@@ -213,7 +213,7 @@ Run `scenario-vocabulary` in the CLI for the complete list with every field.
 **Safe to leave running.**
 
 - Before each action the challenge is read again, so an action whose target has gone is skipped instead of guessed.
-- Progress is saved after every action. After a crash or restart a half-done rule carries on where it stopped and never repeats a spend that already went through.
+- Progress is saved after every action. After a crash or restart a half-done rule carries on where it stopped and never repeats a spend that already went through. (On Android, in the app window without the background service, that is best effort: the window saves behind the scenes, so a crash right after a spend can lose the note that it was made.)
 - Spending respects your currency reserves and the scenario's own optional **spending limits** (swaps / keys / fills).
 - If a scenario's saved progress can't be read, or you edit away the phase or rule it was in the middle of, that challenge **stops** and tells you (a warning on the card, and a notification). It never restarts on its own. Fix the scenario, or start it over with the Reset button on the challenge card (or `scenario-reset --challenge=<id>` in the CLI); when the progress of a challenge alone can't be read, its own reset clears it, and when none of it can, only a reset of every challenge helps (`scenario-reset --all`, or the same button). A reset can spend an action that got no answer again, and it restarts the spend counter.
 - Vote-speed conditions need at least 10 minutes of vote history. Until then they are false.
