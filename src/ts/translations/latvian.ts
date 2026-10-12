@@ -119,9 +119,9 @@ export const app = {
     autovoteRunning: 'Automātiskā balsošana darbojas',
     autovoteRunningDesc:
         'Iekšējs — atceras, vai automātiskā balsošana bija ieslēgta, lai pēc lietotnes restartēšanas tā atsāktos pati',
-    autovoteStartedAt: 'Automātiskās balsošanas sākuma laiks',
-    autovoteStartedAtDesc:
-        'Iekšējs — kad automātiskā balsošana pēdējo reizi tika sākta, lai lietotne atšķirtu šajā palaišanas reizē sākto balsošanu no tādas, kas vēl gaida atsākšanu',
+    autovoteStartedLaunch: 'Palaišanas reize, kurā sākta automātiskā balsošana',
+    autovoteStartedLaunchDesc:
+        'Iekšējs — lietotnes palaišanas reize, kurā automātiskā balsošana pēdējo reizi tika sākta, lai lietotne atšķirtu šajā reizē sākto balsošanu no tādas, kas vēl gaida atsākšanu',
     skipUpdateVersion: 'Izlaistā atjauninājuma versija',
     skipUpdateVersionDesc:
         'Iekšējs — atjauninājuma versija, ko lietotājs izvēlējās izlaist; lietotne šo versiju nepiedāvās, kamēr šī vērtība nav notīrīta',
@@ -1030,7 +1030,7 @@ export const app = {
         'Cik tālu uz priekšu „Atrast izaicinājumus” rāda izaicinājumus, kas vēl nav sākušies, lai foto tiem varētu izvēlēties jau iepriekš. Tiem nevar pievienoties, kamēr tie nav sākušies, un izvēlētos foto lietotne izmanto automātiski tikai tad, ja šim izaicinājumam ir ieslēgta automātiskā pievienošanās. 0 = izslēgts: rāda tikai atvērtos izaicinājumus.',
     autovoteStartupDelay: 'Gaidīt pēc palaišanas, pirms atsākt automātisko balsošanu',
     autovoteStartupDelayDesc:
-        'Ja lietotne tika aizvērta, kamēr automātiskā balsošana bija ieslēgta, cik sekundes pēc palaišanas tā uzgaida, pirms atsāk balsošanu pati, lai vari vispirms pārbaudīt uzstādījumus. Kamēr tā gaida, galvenajā ekrānā ir pogas „Sākt tūlīt” un „Neatsākt”. Attiecas tikai uz lietotnes automātisko atsākšanu, nevis uz sākšanu no komandrindas. 0 = izslēgts: balsošana atsākas uzreiz. Android ierīcē, ja lietotni aizver gaidīšanas laikā, balsošana atsāksies nākamreiz, kad to atver.',
+        'Ja lietotne tika aizvērta, kamēr automātiskā balsošana bija ieslēgta, cik sekundes pēc palaišanas tā uzgaida, pirms atsāk balsošanu pati, lai vari vispirms pārbaudīt uzstādījumus. Kamēr tā gaida, galvenajā ekrānā ir pogas „Sākt tūlīt” un „Neatsākt”. Attiecas tikai uz lietotnes automātisko atsākšanu, nevis uz sākšanu no komandrindas. 0 = izslēgts: balsošana atsākas uzreiz. Android ierīcē, ja gaidīšanas laikā no lietotnes iziet vai to aizver, balsošana atsāksies nākamreiz, kad to atver.',
     override: 'Pielāgots',
     overrideForChallenge: 'Pielāgot uzstādījumus izaicinājumam',
     photo: 'foto',
@@ -1060,9 +1060,10 @@ export const app = {
     skipThisVersion: 'Izlaist šo versiju',
     speed: 'Ātrums',
     startAutoVote: 'Sākt automātisko balsošanu',
-    statusStarting: 'Sāk darbu',
-    resumeHold:
-        'Automātiskā balsošana atsāksies pēc {time}. Pēc palaišanas lietotne uzgaida, lai vari vispirms pārbaudīt uzstādījumus.',
+    statusWaiting: 'Gaida',
+    resumeHold: 'Automātiskā balsošana atsāksies pēc {time}.',
+    resumeHoldNote:
+        'Līdz tam turi lietotni atvērtu — pēc palaišanas tā uzgaida, lai vari vispirms pārbaudīt uzstādījumus.',
     resumeStartNow: 'Sākt tūlīt',
     resumeCancel: 'Neatsākt',
     stayLoggedIn: 'Saglabāt pieteikšanos',

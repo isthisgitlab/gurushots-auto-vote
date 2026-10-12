@@ -84,8 +84,10 @@ beforeEach(() => {
         settle(...challenges.map(() => 'applied' as const)),
     );
     apiFactory.getApiStrategy.mockReturnValue(invalid({ applyBoostsOnSuspend }));
-    settings.getSetting.mockImplementation((key) => (key === 'autovoteStartedAt' ? 1000 : key === 'autovoteRunning'));
-    settings.getEnvironmentInfo.mockReturnValue(invalid({ launchedAt: 0 }));
+    settings.getSetting.mockImplementation((key) =>
+        key === 'autovoteStartedLaunch' ? 777 : key === 'autovoteRunning',
+    );
+    settings.getEnvironmentInfo.mockReturnValue(invalid({ launchedAt: 777 }));
     settings.getEffectiveSetting.mockReturnValue(true);
     settings.loadSettings.mockReturnValue(invalid({ token: TOKEN, mock: false }));
     guard.rememberChallenges([boostChallenge(1, 'One'), boostChallenge(2, 'Two'), boostChallenge(3, 'Three')], false);
@@ -112,17 +114,25 @@ describe('applyImminentBoostsOnSuspend — no-ops', () => {
 
     test('does nothing for a resume still held at launch, but runs for a session started in this launch', async () => {
         settings.getEnvironmentInfo.mockReturnValue(invalid({ launchedAt: 5000 }));
-        // Held: autovoteStartedAt is still the previous launch's.
+        // Held: the launch marker is still the previous launch's.
         await run();
         expect(applyBoostsOnSuspend).not.toHaveBeenCalled();
         expect(settings.loadSettings).not.toHaveBeenCalled();
 
-        // Start / Start now inside the hold persists a newer one: live at once.
+        // Start / Start now inside the hold records this launch: live at once.
         settings.getSetting.mockImplementation((key) =>
-            key === 'autovoteStartedAt' ? 6000 : key === 'autovoteRunning',
+            key === 'autovoteStartedLaunch' ? 5000 : key === 'autovoteRunning',
         );
         await run();
         expect(applyBoostsOnSuspend).toHaveBeenCalledTimes(1);
+    });
+
+    test('does nothing when the launch marker is not a number', async () => {
+        settings.getSetting.mockImplementation((key) =>
+            key === 'autovoteStartedLaunch' ? 'x' : key === 'autovoteRunning',
+        );
+        await run();
+        expect(applyBoostsOnSuspend).not.toHaveBeenCalled();
     });
 
     test('does nothing without a token', async () => {

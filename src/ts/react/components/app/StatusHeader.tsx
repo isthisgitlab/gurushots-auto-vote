@@ -151,17 +151,25 @@ function MissedBoostsJump({
  * against a 1Hz cascade). The time is advisory: computeNextCycleDelayMs
  * recomputes each cycle, so it is `~`-prefixed like the deadline timeline.
  */
-type CountdownProps = { nextRunAt: number | null | undefined; running: boolean; titleKey?: string };
-function NextActionCountdown({ nextRunAt, running, titleKey = 'app.statusHeaderNextApprox' }: CountdownProps) {
+type CountdownProps = {
+    nextRunAt: number | null | undefined;
+    running: boolean;
+    titleKey?: string;
+    /** a fixed instant, not an estimate: rounded up and without the `~` (as the resume notice shows it) */
+    exact?: boolean;
+};
+function NextActionCountdown({ nextRunAt, running, titleKey = 'app.statusHeaderNextApprox', exact }: CountdownProps) {
     const { t } = useTranslation();
     const enabled = running && typeof nextRunAt === 'number';
     const now = useTick(1000, enabled);
     if (!running) return <span className="opacity-70">{t('app.statusHeaderNotRunning')}</span>;
     if (typeof nextRunAt !== 'number') return <span className="opacity-70">—</span>;
-    const remaining = Math.round(nextRunAt / 1000) - now;
+    const remaining = (exact ? Math.ceil : Math.round)(nextRunAt / 1000) - now;
     return (
         <span title={t(titleKey)}>
-            {remaining > 0 ? `~${formatDuration(remaining, { includeSeconds: true })}` : t('app.deadlineDue')}
+            {remaining > 0
+                ? `${exact ? '' : '~'}${formatDuration(remaining, { includeSeconds: true })}`
+                : t('app.deadlineDue')}
         </span>
     );
 }
@@ -247,6 +255,7 @@ export function StatusHeader({
                     nextRunAt={pending ? pendingStartAt : nextRunAt}
                     running={pending || running}
                     titleKey={pending ? 'app.statusHeaderResumesInHint' : undefined}
+                    exact={pending}
                 />
                 {autoClaimStatus?.enabled && (
                     <HeaderCountdown

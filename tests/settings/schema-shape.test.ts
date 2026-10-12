@@ -126,7 +126,7 @@ describe('settings schema shape', () => {
             'notifyOnEmergencyFill',
             'notifyLeadTime',
             'autovoteRunning',
-            'autovoteStartedAt',
+            'autovoteStartedLaunch',
             'skipUpdateVersion',
             'chosenPhotosMemberId',
             'chosenPhotosClearedAt',

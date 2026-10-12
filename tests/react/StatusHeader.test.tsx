@@ -93,9 +93,9 @@ describe('StatusHeader', () => {
         expect(screen.getByText('app.statusHeaderResumesIn:')).toBeTruthy();
         expect(screen.queryByText('app.statusHeaderNext:')).toBeNull();
         const resumes = screen.getByTitle('app.statusHeaderResumesInHint');
-        expect(resumes.textContent).toBe('~45s');
+        expect(resumes.textContent).toBe('45s');
         act(() => jest.advanceTimersByTime(1000));
-        expect(resumes.textContent).toBe('~44s');
+        expect(resumes.textContent).toBe('44s');
         // The claim countdown stays as it was (autovote is not running yet).
         expect(screen.getByText('app.statusHeaderNextClaim:').parentElement!.textContent).toContain(
             'app.statusHeaderNotRunning',

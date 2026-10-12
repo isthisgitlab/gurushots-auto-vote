@@ -556,9 +556,9 @@ describe('quit guard wiring', () => {
     it('before-quit asks first; a held quit neither clears the token nor force-exits', () => {
         m.ipcMain.handlers['login-success']({});
         m.settings.getSetting.mockImplementation((key) =>
-            key === 'autovoteStartedAt' ? 1 : key === 'autovoteRunning',
+            key === 'autovoteStartedLaunch' ? 1 : key === 'autovoteRunning',
         );
-        m.settings.getEnvironmentInfo.mockReturnValue(invalid({ launchedAt: 0 }));
+        m.settings.getEnvironmentInfo.mockReturnValue(invalid({ launchedAt: 1 }));
         m.quitGuard.holdQuitForOpenBoosts.mockReturnValueOnce(true);
         const event = { preventDefault: jest.fn() };
 
@@ -580,17 +580,17 @@ describe('quit guard wiring', () => {
     it('the quit guard holds for a session started in this launch, not for a resume still held at launch', () => {
         m.ipcMain.handlers['login-success']({});
         m.settings.getEnvironmentInfo.mockReturnValue(invalid({ launchedAt: 5000 }));
-        const sessionStartedAt = (startedAt: number) =>
+        const sessionStartedBy = (launch: number) =>
             m.settings.getSetting.mockImplementation((key) =>
-                key === 'autovoteStartedAt' ? startedAt : key === 'autovoteRunning',
+                key === 'autovoteStartedLaunch' ? launch : key === 'autovoteRunning',
             );
 
-        sessionStartedAt(1000);
+        sessionStartedBy(1000);
         m.app.handlers['before-quit']({ preventDefault: jest.fn() });
         expect(m.quitGuard.holdQuitForOpenBoosts.mock.calls[0][1].autovoteRunning).toBe(false);
 
         m.quitGuard.holdQuitForOpenBoosts.mockClear();
-        sessionStartedAt(6000);
+        sessionStartedBy(5000);
         m.app.handlers['before-quit']({ preventDefault: jest.fn() });
         expect(m.quitGuard.holdQuitForOpenBoosts.mock.calls[0][1].autovoteRunning).toBe(true);
     });

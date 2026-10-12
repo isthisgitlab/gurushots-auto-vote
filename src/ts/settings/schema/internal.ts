@@ -21,10 +21,11 @@ export const internalSettings = {
         label: 'app.autovoteRunning',
         description: 'app.autovoteRunningDesc',
     },
-    // Unix ms the renderer last started a session (written just before
-    // autovoteRunning). The main process compares it with the launch time to
-    // tell a session started in this launch from one still held at launch.
-    autovoteStartedAt: {
+    // The launch time (Unix ms) of the app launch whose renderer last started a
+    // session, written just before autovoteRunning. The main process compares it
+    // for equality with its own launch time to tell a session started in this
+    // launch from one still held at launch. 0 = unknown / never started.
+    autovoteStartedLaunch: {
         type: 'number',
         default: 0,
         perChallenge: false,
@@ -32,8 +33,8 @@ export const internalSettings = {
         min: 0,
         unit: 'app.unitMilliseconds',
         validationOrder: 1,
-        label: 'app.autovoteStartedAt',
-        description: 'app.autovoteStartedAtDesc',
+        label: 'app.autovoteStartedLaunch',
+        description: 'app.autovoteStartedLaunchDesc',
     },
     // Update version the user chose to skip. Electron persists this in
     // metadata.json (fs); the Android/Capacitor bridge has no fs, so it

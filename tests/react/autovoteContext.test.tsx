@@ -181,17 +181,53 @@ describe('AutovoteContext', () => {
             expect(window.api.runVotingCycle).toHaveBeenCalledTimes(1);
         });
 
-        it('persists when it started, just before the running flag', async () => {
-            jest.setSystemTime(1_700_000_000_000);
-            renderProvider();
-            await act(async () => {
-                await ctx.start();
+        describe('launch marker', () => {
+            const markerWrites = () =>
+                jest.mocked(window.api.setSetting).mock.calls.filter(([key]) => key === 'autovoteStartedLaunch');
+
+            it('persists the launch time it read, just before the running flag', async () => {
+                jest.mocked(window.api.getEnvironmentInfo).mockResolvedValue(
+                    invalid({ launchedAt: 1_700_000_000_000 }),
+                );
+                renderProvider();
+                await act(async () => {
+                    await ctx.start();
+                });
+
+                const calls = jest.mocked(window.api.setSetting).mock.calls;
+                const marker = calls.findIndex(([key]) => key === 'autovoteStartedLaunch');
+                expect(calls[marker]).toEqual(['autovoteStartedLaunch', 1_700_000_000_000]);
+                expect(calls[marker + 1]).toEqual(['autovoteRunning', true]);
             });
 
-            const calls = jest.mocked(window.api.setSetting).mock.calls;
-            const startedAt = calls.findIndex(([key]) => key === 'autovoteStartedAt');
-            expect(calls[startedAt]).toEqual(['autovoteStartedAt', 1_700_000_000_000]);
-            expect(calls[startedAt + 1]).toEqual(['autovoteRunning', true]);
+            it.each([
+                ['unreadable', () => jest.mocked(window.api.getEnvironmentInfo).mockRejectedValue(new Error('io'))],
+                ['missing', () => jest.mocked(window.api.getEnvironmentInfo).mockResolvedValue(invalid({}))],
+            ])('persists 0 (matches no launch) when the launch time is %s', async (_label, breakEnv) => {
+                breakEnv();
+                renderProvider();
+                await act(async () => {
+                    await ctx.start();
+                });
+                expect(markerWrites()).toEqual([['autovoteStartedLaunch', 0]]);
+                expect(ctx.running).toBe(true);
+            });
+
+            it.each([
+                [new Error('disk full'), 'Could not record the auto-vote launch marker: disk full'],
+                [null, 'Could not record the auto-vote launch marker: null'],
+            ])('a failed write (%p) is logged as a warning and the start goes on', async (thrown, logged) => {
+                jest.mocked(window.api.setSetting).mockImplementation((key) =>
+                    key === 'autovoteStartedLaunch' ? Promise.reject(thrown) : Promise.resolve(invalid(undefined)),
+                );
+                renderProvider();
+                await act(async () => {
+                    await ctx.start();
+                });
+                expect(window.api.logWarning).toHaveBeenCalledWith(logged);
+                expect(window.api.setSetting).toHaveBeenCalledWith('autovoteRunning', true);
+                expect(ctx.running).toBe(true);
+            });
         });
 
         it('stops: clears the timer, persisted flag, native loop and refreshes challenges', async () => {
@@ -537,19 +573,60 @@ describe('AutovoteContext', () => {
             it('a manual start during the mount awaits leaves no pending state and no timer', async () => {
                 interrupted(10);
                 const gate = deferred();
-                jest.mocked(window.api.getEnvironmentInfo).mockImplementation(() => invalid(gate.promise));
+                // start() reads the launch time itself, so the gate sits on the delay read instead.
+                jest.mocked(window.api.getGlobalDefault).mockImplementation(() => invalid(gate.promise));
                 renderProvider();
                 await flush();
 
                 await act(async () => {
                     await ctx.start();
                 });
-                gate.resolve({ launchedAt: Date.now() });
+                gate.resolve(60);
                 await flush();
 
                 expect(ctx.running).toBe(true);
                 expect(ctx.pendingStartAt).toBeNull();
                 await advance(2 * 60 * SEC);
+                expect(window.api.runVotingCycle).toHaveBeenCalledTimes(1);
+            });
+
+            it('a start then a stop during the mount awaits does not arm the hold afterwards', async () => {
+                interrupted(10);
+                const gate = deferred();
+                // start() reads the launch time itself, so the gate sits on the delay read instead.
+                jest.mocked(window.api.getGlobalDefault).mockImplementation(() => invalid(gate.promise));
+                renderProvider();
+                await flush();
+
+                await act(async () => {
+                    await ctx.start();
+                });
+                await act(async () => {
+                    await ctx.stop();
+                });
+                jest.mocked(window.api.runVotingCycle).mockClear();
+                gate.resolve(60);
+                await flush();
+
+                expect(ctx.running).toBe(false);
+                expect(ctx.pendingStartAt).toBeNull();
+                await advance(2 * 60 * SEC);
+                expect(ctx.running).toBe(false);
+                expect(window.api.runVotingCycle).not.toHaveBeenCalled();
+            });
+
+            it('a system sleep does not stretch the hold: the wall clock decides, in chunks of 5 s', async () => {
+                interrupted(10);
+                renderProvider();
+                await flush();
+                expect(ctx.pendingStartAt).not.toBeNull();
+
+                // The machine sleeps for 50 s: monotonic timers fire late, Date.now() jumps
+                // past the resume time, and the next 5 s chunk notices.
+                jest.setSystemTime(Date.now() + 50 * SEC);
+                await advance(5 * SEC);
+                expect(ctx.running).toBe(true);
+                expect(ctx.pendingStartAt).toBeNull();
                 expect(window.api.runVotingCycle).toHaveBeenCalledTimes(1);
             });
 

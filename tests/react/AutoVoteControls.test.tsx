@@ -118,21 +118,25 @@ describe('AutoVoteControls', () => {
     });
 
     describe('while an auto-resume is held at launch', () => {
+        const controls = (
+            pendingStartAt: number | null,
+            over: { onStartNow?: () => void; onCancelResume?: () => void } = {},
+        ) => (
+            <AutoVoteControls
+                running={false}
+                status="Stopped"
+                statusClass="badge-neutral"
+                lastRun={null}
+                cycles={0}
+                onToggle={jest.fn()}
+                autoJoinActive={false}
+                pendingStartAt={pendingStartAt}
+                onStartNow={over.onStartNow ?? jest.fn()}
+                onCancelResume={over.onCancelResume ?? jest.fn()}
+            />
+        );
         const renderPending = (over: { onStartNow?: () => void; onCancelResume?: () => void } = {}) =>
-            render(
-                <AutoVoteControls
-                    running={false}
-                    status="Stopped"
-                    statusClass="badge-neutral"
-                    lastRun={null}
-                    cycles={0}
-                    onToggle={jest.fn()}
-                    autoJoinActive={false}
-                    pendingStartAt={BASE_MS + 45_000}
-                    onStartNow={over.onStartNow ?? jest.fn()}
-                    onCancelResume={over.onCancelResume ?? jest.fn()}
-                />,
-            );
+            render(controls(BASE_MS + 45_000, over));
 
         beforeEach(() => {
             jest.useFakeTimers();
@@ -149,7 +153,7 @@ describe('AutoVoteControls', () => {
         it('shows the translated Starting badge, hides the toggle, and counts down', () => {
             renderPending();
 
-            expect(screen.getByText('app.statusStarting').className).toContain('badge-warning');
+            expect(screen.getByText('app.statusWaiting').className).toContain('badge-warning');
             expect(screen.queryByText('Stopped')).toBeNull();
             expect(screen.queryByText('app.startAutoVote')).toBeNull();
             expect(screen.getByText('Resumes in 45s.')).toBeTruthy();
@@ -183,6 +187,51 @@ describe('AutoVoteControls', () => {
             expect(alert.getAttribute('role')).toBeNull();
             expect(alert.getAttribute('aria-live')).toBeNull();
             expect(alert.querySelector('[role], [aria-live]')).toBeNull();
+        });
+
+        it('lays out vertically on narrow screens and horizontally from sm up (daisyUI 5 grid)', () => {
+            const { container } = renderPending();
+            const alert = container.querySelector('.alert.alert-info')!;
+            expect(alert.classList.contains('alert-vertical')).toBe(true);
+            expect(alert.classList.contains('sm:alert-horizontal')).toBe(true);
+        });
+
+        it('keeps the countdown out of the static sentence both buttons are described by', () => {
+            renderPending();
+            const note = screen.getByText('app.resumeHoldNote');
+            expect(note.id).toBeTruthy();
+            expect(note.closest('[id]')).toBe(note);
+            for (const label of ['app.resumeStartNow', 'app.resumeCancel']) {
+                expect(screen.getByText(label).getAttribute('aria-describedby')).toBe(note.id);
+            }
+            expect(note.textContent).not.toContain('45');
+        });
+
+        describe('focus', () => {
+            // After Start now the controls show the Stop toggle; after Don't resume, Start.
+            const vanish = (view: ReturnType<typeof renderPending>) => view.rerender(controls(null));
+
+            it('moves to the toggle when the notice goes away with focus inside it', () => {
+                const view = renderPending();
+                fireEvent.focus(screen.getByText('app.resumeStartNow'));
+                vanish(view);
+                expect(document.activeElement).toBe(screen.getByText('app.startAutoVote').closest('button'));
+            });
+
+            it('is left alone when focus was not in the notice', () => {
+                const view = renderPending();
+                vanish(view);
+                expect(document.activeElement).not.toBe(screen.getByText('app.startAutoVote').closest('button'));
+            });
+
+            it('is left alone when focus had already left the notice', () => {
+                const view = renderPending();
+                const startNow = screen.getByText('app.resumeStartNow');
+                fireEvent.focus(startNow);
+                fireEvent.blur(startNow);
+                vanish(view);
+                expect(document.activeElement).not.toBe(screen.getByText('app.startAutoVote').closest('button'));
+            });
         });
     });
 });

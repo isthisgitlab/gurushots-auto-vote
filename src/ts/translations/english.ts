@@ -118,9 +118,9 @@ export const app = {
     autovoteRunning: 'Auto-Vote Running',
     autovoteRunningDesc:
         'Internal flag — persists auto-vote state across app restarts so voting can resume automatically',
-    autovoteStartedAt: 'Auto-Vote Started At',
-    autovoteStartedAtDesc:
-        'Internal — when auto-vote was last started, so the app can tell a session started in this launch from one still waiting to resume',
+    autovoteStartedLaunch: 'Auto-Vote Started In Launch',
+    autovoteStartedLaunchDesc:
+        'Internal — the launch of the app in which auto-vote was last started, so the app can tell a session started in this launch from one still waiting to resume',
     skipUpdateVersion: 'Skipped Update Version',
     skipUpdateVersionDesc:
         'Internal — the update version the user chose to skip; the app stops prompting for this version until cleared',
@@ -1013,7 +1013,7 @@ export const app = {
         'How far ahead Discover Challenges lists challenges that have not started yet, so you can choose photos for them early. They cannot be joined until they start, and chosen photos are used automatically only if auto-join is on for that challenge. 0 = off: Discover lists the open challenges alone.',
     autovoteStartupDelay: 'Wait after launch before resuming auto-vote',
     autovoteStartupDelayDesc:
-        "When the app was closed with auto-vote on, how long it waits after launching before it resumes by itself, so you can check your settings first. Start now or Don't resume are on the main screen while it waits. Applies to the app's automatic resume only, not to the command-line start. 0 = off: auto-vote resumes at once. On Android, closing the app during the wait means it resumes the next time you open it.",
+        "When the app was closed with auto-vote on, how long it waits after launching before it resumes by itself, so you can check your settings first. Start now or Don't resume are on the main screen while it waits. Applies to the app's automatic resume only, not to the command-line start. 0 = off: auto-vote resumes at once. On Android, leaving or closing the app during the wait means it resumes the next time you open it.",
     override: 'Override',
     overrideForChallenge: 'Override for Challenge',
     photo: 'photo',
@@ -1043,8 +1043,9 @@ export const app = {
     skipThisVersion: 'Skip This Version',
     speed: 'Speed',
     startAutoVote: 'Start Auto Vote',
-    statusStarting: 'Starting',
-    resumeHold: 'Auto-vote resumes in {time}. After launch it waits so you can check your settings first.',
+    statusWaiting: 'Waiting',
+    resumeHold: 'Auto-vote resumes in {time}.',
+    resumeHoldNote: 'Keep the app open until then — after launch it waits so you can check your settings first.',
     resumeStartNow: 'Start now',
     resumeCancel: "Don't resume",
     stayLoggedIn: 'Stay Logged In',

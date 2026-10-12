@@ -53,16 +53,16 @@ import {
 let running = false;
 
 /**
- * Auto-vote is running AND was started in this launch. A resume still held at
- * launch carries the previous launch's `autovoteStartedAt`, so it is not live
+ * Auto-vote is running AND was started by this launch's renderer. A resume still
+ * held at launch carries the previous launch's marker, so it is not live
  * (nothing to boost or forfeit); a manual Start or Start now is live at once.
  */
 const autovoteSessionLive = (): boolean => {
-    const startedAt = settings.getSetting('autovoteStartedAt');
+    const startedLaunch = settings.getSetting('autovoteStartedLaunch');
     return (
         settings.getSetting('autovoteRunning') === true &&
-        isInteger(startedAt) &&
-        startedAt >= settings.getEnvironmentInfo().launchedAt
+        isInteger(startedLaunch) &&
+        startedLaunch === settings.getEnvironmentInfo().launchedAt
     );
 };
 

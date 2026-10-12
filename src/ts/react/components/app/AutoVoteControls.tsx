@@ -1,3 +1,4 @@
+import { useEffect, useId, useRef } from 'react';
 import { useTranslation } from '@/contexts/TranslationContext';
 import { StrokeIcon, ICON_PATHS } from '@/components/ui/StrokeIcon';
 import { formatDuration } from '@/utils/formatters';
@@ -16,28 +17,44 @@ function ResumeCountdown({ startAt }: { startAt: number }) {
 }
 
 /**
- * The held-resume notice: the countdown with Start now / Don't resume. No
- * role="alert"/aria-live: the countdown ticks every second, and a live region
- * would be re-announced on each tick.
+ * The held-resume notice: the countdown and a static sentence, with Start now /
+ * Don't resume. No role="alert"/aria-live: the countdown ticks every second,
+ * and a live region would be re-announced on each tick; the static sentence
+ * describes both buttons instead. `focusInside` records whether focus is in the
+ * notice (removing a focused node fires no blur), so the parent can move focus
+ * on when the notice goes away.
  */
 function ResumeHold({
     startAt,
     onStartNow,
     onCancelResume,
+    focusInside,
 }: {
     startAt: number;
     onStartNow: () => void | Promise<void>;
     onCancelResume: () => void | Promise<void>;
+    focusInside: { current: boolean };
 }) {
     const { t } = useTranslation();
+    const noteId = useId();
     return (
-        <div className="alert alert-info mt-3 flex-wrap justify-between">
-            <ResumeCountdown startAt={startAt} />
+        <div
+            className="alert alert-info alert-vertical sm:alert-horizontal mt-3"
+            onFocus={() => {
+                focusInside.current = true;
+            }}
+            onBlur={() => {
+                focusInside.current = false;
+            }}
+        >
+            <div>
+                <ResumeCountdown startAt={startAt} /> <span id={noteId}>{t('app.resumeHoldNote')}</span>
+            </div>
             <div className="flex gap-2">
-                <button className="btn btn-sm btn-latvian" onClick={() => void onStartNow()}>
+                <button className="btn btn-sm btn-latvian" aria-describedby={noteId} onClick={() => void onStartNow()}>
                     {t('app.resumeStartNow')}
                 </button>
-                <button className="btn btn-sm" onClick={() => void onCancelResume()}>
+                <button className="btn btn-sm" aria-describedby={noteId} onClick={() => void onCancelResume()}>
                     {t('app.resumeCancel')}
                 </button>
             </div>
@@ -75,6 +92,15 @@ export function AutoVoteControls({
 }) {
     const { t } = useTranslation();
     const pending = pendingStartAt !== null;
+    const toggleRef = useRef<HTMLButtonElement>(null);
+    const focusInHold = useRef(false);
+    // The notice just went away (Start now, Don't resume, or the timer): if focus
+    // was in it, it would drop to the page, so hand it to the toggle (WCAG 2.4.3).
+    useEffect(() => {
+        if (pending || !focusInHold.current) return;
+        focusInHold.current = false;
+        toggleRef.current?.focus();
+    }, [pending]);
 
     return (
         <div className="card bg-base-100 shadow-md mb-4">
@@ -83,6 +109,7 @@ export function AutoVoteControls({
                     {/* Toggle Button — hidden while a held resume offers Start now */}
                     {!pending && (
                         <button
+                            ref={toggleRef}
                             className={`btn btn-sm ${running ? 'btn-error' : 'btn-latvian'}`}
                             onClick={() => void onToggle()}
                         >
@@ -106,7 +133,7 @@ export function AutoVoteControls({
                         <div className="flex items-center gap-2">
                             <span className="text-sm font-medium">{t('app.status')}</span>
                             <span className={`badge badge-sm ${pending ? 'badge-warning' : statusClass}`}>
-                                {pending ? t('app.statusStarting') : status}
+                                {pending ? t('app.statusWaiting') : status}
                             </span>
                             {/* Auto-join is a property of the running autovote, so it
                                 sits next to the running status. Shown only while
@@ -143,7 +170,12 @@ export function AutoVoteControls({
                 </div>
 
                 {pending && (
-                    <ResumeHold startAt={pendingStartAt} onStartNow={onStartNow} onCancelResume={onCancelResume} />
+                    <ResumeHold
+                        startAt={pendingStartAt}
+                        onStartNow={onStartNow}
+                        onCancelResume={onCancelResume}
+                        focusInside={focusInHold}
+                    />
                 )}
             </div>
         </div>
