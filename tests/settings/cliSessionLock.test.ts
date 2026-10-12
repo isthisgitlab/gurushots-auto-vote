@@ -32,6 +32,8 @@ const {
     APP_LOCK_FILE_NAME,
     HEARTBEAT_MS,
     STALE_AFTER_MS,
+    SETTLE_MS,
+    refreshDesktopAppLock,
 } = require('../../src/ts/settings/cliSessionLock') as typeof lockModule;
 
 // Sets the age of a marker file: the time it was last refreshed.
@@ -55,44 +57,44 @@ describe('cli session lock', () => {
         fs.rmSync(root, { recursive: true, force: true });
     });
 
-    test('no marker: no session', () => {
-        expect(isCliSessionActive()).toBe(false);
+    test('no marker: no session', async () => {
+        await expect(isCliSessionActive()).resolves.toBe(false);
     });
 
-    test('a marker of another live process is an active session', () => {
+    test('a marker of another live process is an active session', async () => {
         fs.writeFileSync(lockFile, JSON.stringify({ pid: process.ppid }));
-        expect(isCliSessionActive()).toBe(true);
+        await expect(isCliSessionActive()).resolves.toBe(true);
     });
 
-    test('a process this account may not signal is still alive', () => {
+    test('a process this account may not signal is still alive', async () => {
         fs.writeFileSync(lockFile, JSON.stringify({ pid: 4242 }));
         jest.spyOn(process, 'kill').mockImplementation(() => {
             throw Object.assign(new Error('operation not permitted'), { code: 'EPERM' });
         });
-        expect(isCliSessionActive()).toBe(true);
+        await expect(isCliSessionActive()).resolves.toBe(true);
     });
 
-    test('a marker whose process is gone is stale', () => {
+    test('a marker whose process is gone is stale', async () => {
         fs.writeFileSync(lockFile, JSON.stringify({ pid: 2 ** 22 + 12345 }));
-        expect(isCliSessionActive()).toBe(false);
+        await expect(isCliSessionActive()).resolves.toBe(false);
     });
 
-    test('a process error that is not an EPERM counts as gone, as does one that is no Error', () => {
+    test('a process error that is not an EPERM counts as gone, as does one that is no Error', async () => {
         fs.writeFileSync(lockFile, JSON.stringify({ pid: 4242 }));
         const kill = jest.spyOn(process, 'kill');
         kill.mockImplementationOnce(() => {
             throw Object.assign(new Error('no such process'), { code: 'ESRCH' });
         });
-        expect(isCliSessionActive()).toBe(false);
+        await expect(isCliSessionActive()).resolves.toBe(false);
         kill.mockImplementationOnce(() => {
             throw 'odd';
         });
-        expect(isCliSessionActive()).toBe(false);
+        await expect(isCliSessionActive()).resolves.toBe(false);
     });
 
-    test('this process\'s own marker is not "another" session', () => {
+    test('this process\'s own marker is not "another" session', async () => {
         fs.writeFileSync(lockFile, JSON.stringify({ pid: process.pid }));
-        expect(isCliSessionActive()).toBe(false);
+        await expect(isCliSessionActive()).resolves.toBe(false);
     });
 
     test.each([
@@ -100,9 +102,9 @@ describe('cli session lock', () => {
         ['not an object', '[1]'],
         ['without a pid', '{"startedAt":"x"}'],
         ['a pid that is no integer', '{"pid":"12"}'],
-    ])('a marker that is %s is no session', (_name, text) => {
+    ])('a marker that is %s is no session', async (_name, text) => {
         fs.writeFileSync(lockFile, text);
-        expect(isCliSessionActive()).toBe(false);
+        await expect(isCliSessionActive()).resolves.toBe(false);
     });
 
     test('holding writes the marker for this process; release removes it', () => {
@@ -141,28 +143,82 @@ describe('cli session lock', () => {
     });
 
     describe('a marker that has not been refreshed lately', () => {
-        test('is stale even when its process id is alive (the id was reused after a crash or a reboot)', () => {
+        // An old marker whose process exists is read again after SETTLE_MS before it is taken as stale.
+        const settled = async (check: Promise<boolean>) => {
+            await jest.advanceTimersByTimeAsync(SETTLE_MS);
+            return check;
+        };
+
+        beforeEach(() => {
+            jest.useFakeTimers();
+        });
+
+        afterEach(() => {
+            jest.useRealTimers();
+        });
+
+        test('is stale when its process id is alive and nothing refreshes it (the id was reused after a crash or a reboot)', async () => {
             fs.writeFileSync(lockFile, JSON.stringify({ pid: process.ppid, startedAt: '2020-01-01T00:00:00.000Z' }));
 
             age(lockFile, STALE_AFTER_MS - 5_000);
-            expect(isCliSessionActive()).toBe(true);
+            await expect(isCliSessionActive()).resolves.toBe(true);
 
             age(lockFile, STALE_AFTER_MS + 5_000);
-            expect(isCliSessionActive()).toBe(false);
+            await expect(settled(isCliSessionActive())).resolves.toBe(false);
         });
 
-        test('is stale after a reboot: a marker a day old, whatever process now has its id', () => {
+        test('is live when its holder slept and writes it again within a beat', async () => {
+            fs.writeFileSync(lockFile, JSON.stringify({ pid: process.ppid }));
+            age(lockFile, STALE_AFTER_MS + 5_000);
+
+            const active = isCliSessionActive();
+            await jest.advanceTimersByTimeAsync(HEARTBEAT_MS);
+            const now = new Date();
+            fs.utimesSync(lockFile, now, now);
+
+            await expect(settled(active)).resolves.toBe(true);
+        });
+
+        test('waits no longer than a beat and a margin, and not at all for a fresh one', async () => {
+            fs.writeFileSync(lockFile, JSON.stringify({ pid: process.ppid }));
+            age(lockFile, STALE_AFTER_MS + 5_000);
+            let answered = false;
+            void isCliSessionActive().then(() => {
+                answered = true;
+            });
+
+            await jest.advanceTimersByTimeAsync(SETTLE_MS - 1);
+            expect(answered).toBe(false);
+            await jest.advanceTimersByTimeAsync(1);
+            expect(answered).toBe(true);
+            expect(SETTLE_MS).toBeGreaterThan(HEARTBEAT_MS);
+
+            age(lockFile, 0);
+            expect(jest.getTimerCount()).toBe(0);
+            await expect(isCliSessionActive()).resolves.toBe(true);
+            expect(jest.getTimerCount()).toBe(0);
+        });
+
+        test('is stale at once when its process is gone, whatever its age', async () => {
+            fs.writeFileSync(lockFile, JSON.stringify({ pid: 2 ** 22 + 12345 }));
+            age(lockFile, STALE_AFTER_MS + 5_000);
+
+            await expect(isCliSessionActive()).resolves.toBe(false);
+            expect(jest.getTimerCount()).toBe(0);
+        });
+
+        test('is stale after a reboot: a marker a day old, whatever process now has its id', async () => {
             fs.writeFileSync(lockFile, JSON.stringify({ pid: process.ppid }));
             age(lockFile, 24 * 60 * 60 * 1000);
-            expect(isCliSessionActive()).toBe(false);
+            await expect(settled(isCliSessionActive())).resolves.toBe(false);
         });
 
-        test('is no session when the marker cannot be examined', () => {
+        test('is no session when the marker cannot be examined', async () => {
             fs.writeFileSync(lockFile, JSON.stringify({ pid: process.ppid }));
             jest.spyOn(fs, 'statSync').mockImplementationOnce(() => {
                 throw new Error('gone');
             });
-            expect(isCliSessionActive()).toBe(false);
+            await expect(isCliSessionActive()).resolves.toBe(false);
         });
     });
 
@@ -275,23 +331,53 @@ describe('cli session lock', () => {
             appLockFile = path.join(root, APP_LOCK_FILE_NAME);
         });
 
-        test('is a file of its own, separate from the CLI session marker', () => {
+        test('is a file of its own, separate from the CLI session marker', async () => {
             fs.writeFileSync(appLockFile, JSON.stringify({ pid: process.ppid }));
 
-            expect(isDesktopAppActive()).toBe(true);
-            expect(isCliSessionActive()).toBe(false);
+            await expect(isDesktopAppActive()).resolves.toBe(true);
+            await expect(isCliSessionActive()).resolves.toBe(false);
         });
 
-        test("is stale when it was not refreshed lately, or its process is gone, or it is this process's own", () => {
-            fs.writeFileSync(appLockFile, JSON.stringify({ pid: process.ppid }));
-            age(appLockFile, STALE_AFTER_MS + 5_000);
-            expect(isDesktopAppActive()).toBe(false);
+        test("is stale when it was not refreshed lately, or its process is gone, or it is this process's own", async () => {
+            jest.useFakeTimers();
+            try {
+                fs.writeFileSync(appLockFile, JSON.stringify({ pid: process.ppid }));
+                age(appLockFile, STALE_AFTER_MS + 5_000);
+                const old = isDesktopAppActive();
+                await jest.advanceTimersByTimeAsync(SETTLE_MS);
+                await expect(old).resolves.toBe(false);
+            } finally {
+                jest.useRealTimers();
+            }
 
             fs.writeFileSync(appLockFile, JSON.stringify({ pid: 2 ** 22 + 12345 }));
-            expect(isDesktopAppActive()).toBe(false);
+            await expect(isDesktopAppActive()).resolves.toBe(false);
 
             fs.writeFileSync(appLockFile, JSON.stringify({ pid: process.pid }));
-            expect(isDesktopAppActive()).toBe(false);
+            await expect(isDesktopAppActive()).resolves.toBe(false);
+        });
+
+        test('refreshing writes it again now, without waiting for the beat', () => {
+            const release = holdDesktopAppLock();
+            age(appLockFile, STALE_AFTER_MS + 5_000);
+            const stale = fs.statSync(appLockFile).mtimeMs;
+
+            refreshDesktopAppLock();
+
+            expect(fs.statSync(appLockFile).mtimeMs).toBeGreaterThan(stale);
+            release();
+        });
+
+        test('refreshing leaves a marker another process holds alone, and survives a directory that is gone', () => {
+            fs.writeFileSync(appLockFile, JSON.stringify({ pid: process.ppid }));
+            age(appLockFile, 1_000);
+            const before = fs.statSync(appLockFile).mtimeMs;
+
+            refreshDesktopAppLock();
+            expect(fs.statSync(appLockFile).mtimeMs).toBe(before);
+
+            fs.rmSync(root, { recursive: true, force: true });
+            expect(() => refreshDesktopAppLock()).not.toThrow();
         });
 
         test('holding writes it for this process; release removes it', () => {

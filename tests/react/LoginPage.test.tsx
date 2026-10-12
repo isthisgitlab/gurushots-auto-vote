@@ -42,6 +42,7 @@ describe('Login page', () => {
         document.documentElement.removeAttribute('data-theme');
         document.body.innerHTML = '';
         delete (globalThis as RendererGlobals).__capacitorBootstrap;
+        delete (globalThis as RendererGlobals).Capacitor;
     });
 
     const renderReady = async () => {
@@ -195,6 +196,27 @@ describe('Login page', () => {
         const text = await screen.findByText('errors.tokenNotSaved');
         expect(text.closest('[role="alert"]')).not.toBeNull();
         expect(window.api.login).not.toHaveBeenCalled();
+    });
+
+    test('on Android a login that could not be saved says to restart the app, not to fix a file', async () => {
+        (globalThis as RendererGlobals).Capacitor = { isNativePlatform: () => true };
+        jest.mocked(window.api.authenticate).mockResolvedValue({ success: false, error: 'token-not-saved' });
+        await renderReady();
+        submit('alice', 'pw');
+        const text = await screen.findByText('errors.tokenNotSavedAndroid');
+        expect(text.closest('[role="alert"]')).not.toBeNull();
+        expect(screen.queryByText('errors.tokenNotSaved')).toBeNull();
+    });
+
+    test('a failure the shell met before the page loaded shows at once, and an attempt that answers replaces it', async () => {
+        jest.mocked(window.api.authenticate).mockResolvedValue({ success: false, error: 'Invalid credentials' });
+        render(<LoginPage startupError="web-shell-token" />);
+        const text = await screen.findByText('errors.webShellToken');
+        expect(text.closest('[role="alert"]')).not.toBeNull();
+
+        submit('alice', 'wrong');
+        await waitFor(() => expect(screen.getByText('errors.invalidCredentials')).toBeTruthy());
+        expect(screen.queryByText('errors.webShellToken')).toBeNull();
     });
 
     test('a web shell page without a valid access token says to open the printed URL', async () => {

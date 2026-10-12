@@ -63,6 +63,20 @@ describe('cliLogin', () => {
         expect(settings.forgetOpenChallengeIds).toHaveBeenCalledTimes(1);
     });
 
+    test('a login whose token could not be saved fails with a message that says what to do', async () => {
+        settings.setSetting.mockReturnValueOnce(false);
+        const mw = make({ authenticate: jest.fn(async () => ({ token: 'new-tok' })) });
+
+        await expect(mw.cliLogin('a@b.c', 'pw')).resolves.toEqual({
+            success: false,
+            error: expect.stringContaining('the token could not be saved'),
+        });
+
+        expect(cat.endOperation).toHaveBeenCalledWith('cli-login', null, 'The token was not saved');
+        expect(cat.success).not.toHaveBeenCalled();
+        expect(settings.forgetOpenChallengeIds).not.toHaveBeenCalled();
+    });
+
     test('invalid credentials do not persist anything', async () => {
         const mw = make({ authenticate: jest.fn(async () => ({ error: 'bad' })) });
         await expect(mw.cliLogin('a', 'b')).resolves.toEqual({
@@ -99,6 +113,12 @@ describe('guiLogin', () => {
         await expect(mw.guiLogin('a', 'b')).resolves.toEqual({ success: true, token: 'gui-tok', data: response });
         expect(settings.setSetting).toHaveBeenCalledWith('token', 'gui-tok');
         expect(settings.forgetOpenChallengeIds).toHaveBeenCalledTimes(1);
+    });
+
+    test('a login whose token could not be saved is refused with the code the window words', async () => {
+        settings.setSetting.mockReturnValueOnce(false);
+        const mw = make({ authenticate: jest.fn(async () => ({ access_token: 'gui-tok' })) });
+        await expect(mw.guiLogin('a', 'b')).resolves.toEqual({ success: false, error: 'token-not-saved' });
     });
 
     test('logging in again with the stored token keeps what is remembered', async () => {

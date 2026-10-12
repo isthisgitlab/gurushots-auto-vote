@@ -6,7 +6,8 @@
  *
  * A marker counts only while its process exists and the marker was refreshed lately: the holder rewrites it every
  * HEARTBEAT_MS, so one left by a crash or a reboot goes stale even when its process id has since been given to another
- * process.
+ * process. Node's timers do not count the time a machine is suspended, so after a long sleep a live holder's marker is
+ * old until its next beat: an old marker whose process exists is read again after one beat before it is taken as stale.
  */
 
 import * as fs from 'node:fs';
@@ -19,9 +20,11 @@ const LOCK_FILE_NAME = 'cli-session.lock';
 const APP_LOCK_FILE_NAME = 'desktop-app.lock';
 
 // How often a running holder refreshes its marker, and how long a marker may go unrefreshed before it is stale
-// (three beats: one late beat, such as the machine waking from sleep, does not make a live session look gone).
+// (three beats: one late beat does not make a live session look gone). An old marker with a live process is read once
+// more after SETTLE_MS, a beat plus a margin, which a holder that slept through its beats has used to write it again.
 const HEARTBEAT_MS = 30_000;
 const STALE_AFTER_MS = 3 * HEARTBEAT_MS;
+const SETTLE_MS = HEARTBEAT_MS + 5_000;
 
 const markerPath = (fileName: string) => path.join(getUserDataPath(), fileName);
 
@@ -49,19 +52,34 @@ const readHolder = (file: string): number | null => {
     }
 };
 
+type MarkerState = 'fresh' | 'old' | 'none';
+
 /**
- * Whether another process holds the marker: it is alive, and the marker was refreshed within STALE_AFTER_MS.
+ * Another process's marker: `fresh` when it is alive and was refreshed within STALE_AFTER_MS, `old` when it is alive but
+ * was not (a holder that slept, or a process id reused after a crash or a reboot), `none` otherwise.
  */
-const isMarkerActive = (fileName: string): boolean => {
+const markerState = (fileName: string): MarkerState => {
     try {
         const file = markerPath(fileName);
         const pid = readHolder(file);
-        if (pid === null || pid === process.pid) return false;
-        if (Date.now() - fs.statSync(file).mtimeMs > STALE_AFTER_MS) return false;
-        return processExists(pid);
+        if (pid === null || pid === process.pid || !processExists(pid)) return 'none';
+        return Date.now() - fs.statSync(file).mtimeMs > STALE_AFTER_MS ? 'old' : 'fresh';
     } catch {
-        return false;
+        return 'none';
     }
+};
+
+/**
+ * Whether another process holds the marker. An old marker with a live process is read again after SETTLE_MS: a holder
+ * that was asleep has written it by then, one that is not the holder any more has not.
+ */
+const isMarkerActive = async (fileName: string): Promise<boolean> => {
+    const state = markerState(fileName);
+    if (state !== 'old') return state === 'fresh';
+    await new Promise<void>((resolve) => {
+        setTimeout(resolve, SETTLE_MS);
+    });
+    return markerState(fileName) === 'fresh';
 };
 
 const writeMarker = (file: string) => {
@@ -69,6 +87,16 @@ const writeMarker = (file: string) => {
         encoding: 'utf8',
         mode: 0o600,
     });
+};
+
+/** Writes the marker again when it is missing or unreadable; one another process has taken over is left alone. */
+const beat = (file: string) => {
+    try {
+        const holder = readHolder(file);
+        if (holder === null || holder === process.pid) writeMarker(file);
+    } catch {
+        // the directory is gone or not writable: the next beat tries again
+    }
 };
 
 /**
@@ -79,15 +107,7 @@ const writeMarker = (file: string) => {
 const holdMarker = (fileName: string): (() => void) => {
     const file = markerPath(fileName);
     writeMarker(file);
-    const heartbeat = setInterval(() => {
-        try {
-            // A missing or unreadable marker is written again; one another process has taken over is left alone.
-            const holder = readHolder(file);
-            if (holder === null || holder === process.pid) writeMarker(file);
-        } catch {
-            // the directory is gone or not writable: the next beat tries again
-        }
-    }, HEARTBEAT_MS);
+    const heartbeat = setInterval(() => beat(file), HEARTBEAT_MS);
     // A held marker never keeps the process alive.
     heartbeat.unref();
     return () => {
@@ -101,24 +121,29 @@ const holdMarker = (fileName: string): (() => void) => {
 };
 
 /** Whether another process holds the CLI session marker. */
-const isCliSessionActive = (): boolean => isMarkerActive(LOCK_FILE_NAME);
+const isCliSessionActive = (): Promise<boolean> => isMarkerActive(LOCK_FILE_NAME);
 
 /** Takes the CLI session marker for this process (see holdMarker). */
 const holdCliSessionLock = (): (() => void) => holdMarker(LOCK_FILE_NAME);
 
 /** Whether another process (the desktop app) holds the desktop-app marker. */
-const isDesktopAppActive = (): boolean => isMarkerActive(APP_LOCK_FILE_NAME);
+const isDesktopAppActive = (): Promise<boolean> => isMarkerActive(APP_LOCK_FILE_NAME);
 
 /** Takes the desktop-app marker for this process (see holdMarker). */
 const holdDesktopAppLock = (): (() => void) => holdMarker(APP_LOCK_FILE_NAME);
+
+/** Refreshes the desktop-app marker now (the machine just woke from sleep, which its timer did not count). */
+const refreshDesktopAppLock = () => beat(markerPath(APP_LOCK_FILE_NAME));
 
 export {
     LOCK_FILE_NAME,
     APP_LOCK_FILE_NAME,
     HEARTBEAT_MS,
     STALE_AFTER_MS,
+    SETTLE_MS,
     isCliSessionActive,
     holdCliSessionLock,
     isDesktopAppActive,
     holdDesktopAppLock,
+    refreshDesktopAppLock,
 };

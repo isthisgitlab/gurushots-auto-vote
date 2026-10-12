@@ -231,12 +231,13 @@ const buildLocalDataHandlers = ({ afterWipe }: SettingsHandlerOptions) => ({
     },
 
     // Deletes everything the app stores on this device, then hands over to the shell (relaunch to the login screen).
-    'wipe-local-data': async () => {
+    // `reload`: the wipe emptied the window's caches (Android), so the window reloads once the failure has been shown.
+    'wipe-local-data': async (): Promise<{ success: true } | { success: false; error: string; reload?: true }> => {
         try {
             const result = await wipeLocalData();
             if (!result.success) return result;
             afterWipe?.();
-            return { success: true as const };
+            return { success: true };
         } catch (error) {
             return errorResult(error, 'Failed to delete the local data');
         }

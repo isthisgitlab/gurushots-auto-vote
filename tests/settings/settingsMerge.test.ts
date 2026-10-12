@@ -80,7 +80,8 @@ describe('rebaseSettingsText', () => {
             rebaseSettingsText('{}', '{"a":1}', '{"__proto__":{"polluted":true},"b":1}'),
         );
         if (!isPlainObject(merged)) throw new Error('not an object');
-        expect(Object.hasOwn(merged, '__proto__')).toBe(true);
+        // A load drops such a key, so it is not carried over; either way it never becomes the prototype.
+        expect(Object.hasOwn(merged, '__proto__')).toBe(false);
         expect(Object.getPrototypeOf(merged)).toBe(Object.prototype);
         expect(({} as Record<string, unknown>).polluted).toBeUndefined();
         expect(merged.a).toBe(1);
@@ -106,18 +107,18 @@ describe('rebaseSettingsText', () => {
         test('a key absent from the earlier text and set by the other writer survives', () => {
             const base = '{"token":"t1"}';
             const ours = blob({ token: 't2' });
-            const theirs = '{"token":"t1","noticeAcknowledgedVersion":"9.9.9"}';
+            const theirs = '{"token":"t1","noticeAcknowledgedVersion":9}';
             const merged = rebaseBlob(base, ours, theirs);
-            expect(merged.noticeAcknowledgedVersion).toBe('9.9.9');
+            expect(merged.noticeAcknowledgedVersion).toBe(9);
             expect(merged.token).toBe('t2');
         });
 
         test('with no earlier text, only what this side changed from the defaults is applied', () => {
             const ours = blob({ language: 'lv' });
-            const theirs = '{"token":"theirs-token","noticeAcknowledgedVersion":"9.9.9"}';
+            const theirs = '{"token":"theirs-token","noticeAcknowledgedVersion":9}';
             const merged = rebaseBlob(null, ours, theirs);
             expect(merged.token).toBe('theirs-token');
-            expect(merged.noticeAcknowledgedVersion).toBe('9.9.9');
+            expect(merged.noticeAcknowledgedVersion).toBe(9);
             expect(merged.language).toBe('lv');
         });
 
@@ -131,6 +132,28 @@ describe('rebaseSettingsText', () => {
             }
             expect(challengeSettings.globalDefaults.exposure).toBe(12);
             expect(merged.language).toBe('lv');
+        });
+
+        test('a stored value the load replaced is not a change this side made', () => {
+            const { apiTimeout } = getDefaultSettings();
+            // The earlier text holds an out-of-range value; the load turned it into the default in `ours`.
+            const base = JSON.stringify({ apiTimeout: -5, language: 'en' });
+            const ours = blob({ language: 'lv' });
+            const theirs = JSON.stringify({ apiTimeout: apiTimeout + 10, language: 'en' });
+
+            const merged = rebaseBlob(base, ours, theirs);
+
+            expect(merged.apiTimeout).toBe(apiTimeout + 10);
+            expect(merged.language).toBe('lv');
+        });
+
+        test('an invalid value the other writer stored is read as the default, as a load reads it', () => {
+            const { apiTimeout } = getDefaultSettings();
+            const base = JSON.stringify({ language: 'en' });
+            const ours = blob({ language: 'lv' });
+            const theirs = JSON.stringify({ apiTimeout: -5, language: 'en' });
+
+            expect(rebaseBlob(base, ours, theirs).apiTimeout).toBe(apiTimeout);
         });
     });
 });

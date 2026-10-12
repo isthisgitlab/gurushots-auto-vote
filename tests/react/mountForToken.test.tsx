@@ -23,7 +23,13 @@ const mockMount = (name: string) => () =>
     createRoot(document.getElementById('root')!).render(name === 'app' ? <AppProbe /> : <LoginProbe />);
 
 jest.mock('@/pages/App', () => ({ mountApp: () => mockMount('app')() }));
-jest.mock('@/pages/Login', () => ({ mountLogin: () => mockMount('login')() }));
+const mockMountLogin = jest.fn();
+jest.mock('@/pages/Login', () => ({
+    mountLogin: (startupError?: string) => {
+        mockMountLogin(startupError);
+        mockMount('login')();
+    },
+}));
 
 import { mountForToken } from '@/pages/mountForToken';
 
@@ -56,4 +62,16 @@ test('swapping trees unmounts the previous one and clears stale DOM', async () =
     await flush();
     expect(cleanups).toEqual(['login', 'app']);
     expect(root.textContent).toBe('login');
+});
+
+test('a failure the shell met is handed to Login, and only to Login', () => {
+    const root = document.createElement('div');
+    root.id = 'root';
+    document.body.appendChild(root);
+
+    mountForToken(false, 'web-shell-token');
+    expect(mockMountLogin).toHaveBeenLastCalledWith('web-shell-token');
+
+    mountForToken(true, 'web-shell-token');
+    expect(mockMountLogin).toHaveBeenCalledTimes(1);
 });

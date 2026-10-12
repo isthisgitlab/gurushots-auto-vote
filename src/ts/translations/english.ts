@@ -48,7 +48,9 @@ export const errors = {
     accountChanged: 'The account changed while the list was loading, so the result was dropped. Open the list again.',
     accountCheckFailed: 'The account could not be checked. GuruShots did not answer. Try again in a moment.',
     tokenNotSaved:
-        "You are logged in, but the login could not be saved. The settings can't be written; the settings notice above says why. Fix or move the settings file, then log in again.",
+        "Your login was accepted, but it could not be saved. The settings could not be written. Check the settings file's permissions and the free disk space (a settings notice may say more), then log in again.",
+    tokenNotSavedAndroid:
+        "Your login was accepted, but it could not be saved. The device's settings storage did not take it. Restart the app, then log in again.",
     webShellToken:
         "This page can't talk to the web server. It was opened without this run's access token, or the server was restarted since. Open the URL that pnpm web printed.",
     boundaryBody:
@@ -1423,11 +1425,18 @@ export const notice = {
         'The app could not open {path}. It may be locked by another program, or its permissions may block access.',
     recoveryUnreadableNext:
         'Close other programs that use it, or fix its permissions, then restart the app. Nothing was overwritten.',
+    recoveryUnreadableWhyAndroid:
+        "The app could not read its stored settings. The device's storage may be busy or full.",
+    recoveryUnreadableNextAndroid:
+        'Restart the app. Nothing was overwritten, and saving settings stays off until they can be read.',
     recoveryMigrationWhat:
         'Your settings file comes from another version and could not be updated, so saving settings is turned off.',
     recoveryMigrationWhy: 'The file at {path} could not be converted to the format this version uses.',
     recoveryMigrationNext:
         'Restart the app. If this keeps happening, move that file aside to start with default settings; the file is not overwritten.',
+    recoveryMigrationWhyAndroid: 'The stored settings could not be converted to the format this version uses.',
+    recoveryMigrationNextAndroid:
+        'Restart the app. If this keeps happening, use "Delete all local data" under About and data to start with default settings; nothing is overwritten until then.',
     recoveryDroppedWhat: 'A change to your settings could not be saved.',
     recoveryDroppedWhyConflict: 'The background service changed the settings at the same time.',
     recoveryDroppedWhyTooLarge: 'The settings are too large to save.',

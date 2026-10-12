@@ -237,6 +237,44 @@ describe('Delete all local data', () => {
         expect(window.api.logError).toHaveBeenCalledWith('Deleting the local data threw: undefined');
     });
 
+    test('a failure that emptied the caches shows why first and reloads the window only when the dialog is closed', async () => {
+        jest.mocked(window.api.wipeLocalData).mockResolvedValue({
+            success: false,
+            error: 'the background service data',
+            reload: true,
+        });
+        render(<AboutDataSection />);
+        openDelete();
+        confirm();
+
+        expect((await within(dialog()).findByRole('alert')).textContent).toBe('about.deleteFailed');
+        expect(window.api.reloadWindow).not.toHaveBeenCalled();
+
+        fireEvent.click(within(dialog()).getByRole('button', { name: 'app.cancel' }));
+        expect(screen.queryByRole('dialog')).toBeNull();
+        expect(window.api.reloadWindow).toHaveBeenCalledTimes(1);
+    });
+
+    test('a failure that asks for no reload, and a later success after one that did, never reload', async () => {
+        jest.mocked(window.api.wipeLocalData).mockResolvedValueOnce({ success: false, error: 'EBUSY' });
+        jest.mocked(window.api.wipeLocalData).mockResolvedValueOnce({ success: false, error: 'x', reload: true });
+        jest.mocked(window.api.wipeLocalData).mockResolvedValueOnce({ success: true });
+        render(<AboutDataSection />);
+        openDelete();
+        confirm();
+        await within(dialog()).findByRole('alert');
+        fireEvent.click(within(dialog()).getByRole('button', { name: 'app.cancel' }));
+        expect(window.api.reloadWindow).not.toHaveBeenCalled();
+
+        openDelete();
+        confirm();
+        await within(dialog()).findByRole('alert');
+        confirm();
+        await waitFor(() => expect(within(dialog()).getByRole('status').textContent).toBe('about.deleteDone'));
+        fireEvent.click(within(dialog()).getByRole('button', { name: 'app.close' }));
+        expect(window.api.reloadWindow).not.toHaveBeenCalled();
+    });
+
     test('closing after an error clears it for the next time', async () => {
         jest.mocked(window.api.wipeLocalData).mockResolvedValue({ success: false, error: 'busy-pass' });
         render(<AboutDataSection />);

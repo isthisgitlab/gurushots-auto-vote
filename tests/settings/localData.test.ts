@@ -232,12 +232,14 @@ describe('wipeLocalData', () => {
                 prefKey: 'gurushots-metadata',
             });
 
-            const wiping = ctx.localData.wipeLocalData({ clearSession: async () => {} });
-            // Writes made while it runs and right after: settings, a store, a store's atomic write, the token write.
-            expect(ctx.storage.storage.writeRaw('{"token":"late"}')).toBe(false);
-            metadataStore.writeRaw('{"late":1}');
-            expect(await metadataStore.updateThrough(() => '{"late":2}')).toBe('failed');
-            await wiping;
+            await ctx.localData.wipeLocalData({
+                // Writes made while it runs and right after: settings, a store, a store's atomic write, the token write.
+                clearSession: async () => {
+                    expect(ctx.storage.storage.writeRaw('{"token":"late"}')).toBe(false);
+                    metadataStore.writeRaw('{"late":1}');
+                    expect(await metadataStore.updateThrough(() => '{"late":2}')).toBe('failed');
+                },
+            });
             expect(ctx.settings.setSetting('token', 'later')).toBe(false);
             metadataStore.writeRaw('{"later":1}');
 
@@ -423,13 +425,40 @@ describe('wipeLocalData', () => {
                 fs.utimesSync(path.join(userData, name), longAgo, longAgo);
             }
 
-            await expect(ctx.localData.wipeLocalData({ clearSession: async () => {} })).resolves.toEqual({
-                success: true,
-                removed: expect.arrayContaining([
-                    path.join(userData, 'cli-session.lock'),
-                    path.join(userData, 'desktop-app.lock'),
-                ]),
-            });
+            jest.useFakeTimers();
+            try {
+                const wipe = ctx.localData.wipeLocalData({ clearSession: async () => {} });
+                // Each old marker with a live process is read again after a beat, and is still old.
+                await jest.advanceTimersByTimeAsync(2 * ctx.lock.SETTLE_MS);
+                await expect(wipe).resolves.toEqual({
+                    success: true,
+                    removed: expect.arrayContaining([
+                        path.join(userData, 'cli-session.lock'),
+                        path.join(userData, 'desktop-app.lock'),
+                    ]),
+                });
+            } finally {
+                jest.useRealTimers();
+            }
+        });
+
+        test('a live holder that was asleep and wrote its marker again within a beat still blocks', async () => {
+            load();
+            markerOfAnotherProcess('cli-session.lock');
+            const longAgo = new Date(Date.now() - ctx.lock.STALE_AFTER_MS - 5_000);
+            fs.utimesSync(path.join(userData, 'cli-session.lock'), longAgo, longAgo);
+
+            jest.useFakeTimers();
+            try {
+                const wipe = ctx.localData.wipeLocalData({ clearSession: async () => {} });
+                await jest.advanceTimersByTimeAsync(ctx.lock.HEARTBEAT_MS);
+                const now = new Date();
+                fs.utimesSync(path.join(userData, 'cli-session.lock'), now, now);
+                await jest.advanceTimersByTimeAsync(ctx.lock.SETTLE_MS);
+                await expect(wipe).resolves.toEqual({ success: false, error: 'busy-cli' });
+            } finally {
+                jest.useRealTimers();
+            }
         });
     });
 
@@ -557,66 +586,40 @@ describe('wipeLocalData', () => {
                 success: false,
                 error: 'the background service data',
                 removed: expect.any(Array),
+                reload: true,
             });
             expect(ctx.storage.storage.writeRaw('{}')).toBe(true);
         });
 
-        test('a failed wipe reloads the window, so the app never keeps running on emptied caches', async () => {
+        test('a failed wipe asks the caller to reload the window, so the app never keeps running on emptied caches', async () => {
             load();
             wipeNative.mockResolvedValue({ ok: false });
-            const reloadWindow = jest.fn();
 
-            await ctx.localData.wipeLocalData({ reloadWindow });
-
-            expect(reloadWindow).toHaveBeenCalledTimes(1);
+            await expect(ctx.localData.wipeLocalData()).resolves.toEqual({
+                success: false,
+                error: 'the background service data',
+                removed: expect.any(Array),
+                reload: true,
+            });
         });
 
-        test('a Preferences key that cannot be removed fails the wipe and reloads the window too', async () => {
+        test('a Preferences key that cannot be removed fails the wipe and asks for a reload too', async () => {
             load();
             mockPreferences.remove.mockRejectedValueOnce(new Error('preferences gone'));
-            const reloadWindow = jest.fn();
 
-            const result = await ctx.localData.wipeLocalData({ reloadWindow });
+            const result = await ctx.localData.wipeLocalData();
 
-            expect(result).toEqual({ success: false, error: 'preferences gone', removed: [] });
-            expect(reloadWindow).toHaveBeenCalledTimes(1);
+            expect(result).toEqual({ success: false, error: 'preferences gone', removed: [], reload: true });
         });
 
-        test('a wipe that went through, or one that was refused, does not reload', async () => {
+        test('a wipe that went through, or one that was refused, asks for no reload', async () => {
             load();
-            const reloadWindow = jest.fn();
 
-            await ctx.localData.wipeLocalData({ reloadWindow });
-            await ctx.localData.wipeLocalData({ reloadWindow, busyReason: () => 'busy-app' });
+            const done = await ctx.localData.wipeLocalData();
+            const refused = await ctx.localData.wipeLocalData({ busyReason: () => 'busy-app' });
 
-            expect(reloadWindow).not.toHaveBeenCalled();
-        });
-
-        test("by default the reload is the WebView's own", async () => {
-            load();
-            wipeNative.mockResolvedValue({ ok: false });
-            const reload = jest.fn();
-            const original = Object.getOwnPropertyDescriptor(globalThis, 'location');
-            const setLocation = (value: unknown) =>
-                Object.defineProperty(globalThis, 'location', { value, configurable: true, writable: true });
-            try {
-                setLocation({ reload });
-                await ctx.localData.wipeLocalData();
-                expect(reload).toHaveBeenCalledTimes(1);
-
-                // A window without a reload (or without a location) is not an error.
-                setLocation({});
-                await expect(ctx.localData.wipeLocalData()).resolves.toEqual(
-                    expect.objectContaining({ success: false }),
-                );
-                setLocation(undefined);
-                await expect(ctx.localData.wipeLocalData()).resolves.toEqual(
-                    expect.objectContaining({ success: false }),
-                );
-            } finally {
-                if (original) Object.defineProperty(globalThis, 'location', original);
-                else Reflect.deleteProperty(globalThis, 'location');
-            }
+            expect(done).not.toHaveProperty('reload');
+            expect(refused).not.toHaveProperty('reload');
         });
 
         test('a build without the plugin carries on', async () => {
@@ -634,6 +637,7 @@ describe('wipeLocalData', () => {
                 success: false,
                 error: 'the background service data',
                 removed: expect.any(Array),
+                reload: true,
             });
         });
 

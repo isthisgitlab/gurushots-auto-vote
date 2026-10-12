@@ -43,14 +43,22 @@ const DROPPED_WHY = new Map([
     ['storage', 'notice.recoveryDroppedWhyStorage'],
 ]);
 
-// The text keys of a notice: its code's, refined by what the platform and the cause make true. A damaged settings
-// copy on Android sits in app-private storage the user cannot open; a dropped save is worded by why it was dropped.
+// Where the settings are not a file the user can open (Android: app-private storage), the notice names no path and
+// asks for no step on a file.
+const NO_FILE_KEYS: Partial<Record<RecoveryCode, { why: string; next: string }>> = {
+    'settings-corrupt': { why: 'notice.recoveryCorruptWhyAndroid', next: 'notice.recoveryCorruptNextAndroid' },
+    'settings-unreadable': { why: 'notice.recoveryUnreadableWhyAndroid', next: 'notice.recoveryUnreadableNextAndroid' },
+    'settings-migration-failed': {
+        why: 'notice.recoveryMigrationWhyAndroid',
+        next: 'notice.recoveryMigrationNextAndroid',
+    },
+};
+
+// The text keys of a notice: its code's, refined by what the platform and the cause make true. A dropped save is
+// worded by why it was dropped.
 const keysFor = (recovery: Recovery, settingsFile: boolean) => {
     const keys = { ...RECOVERY_KEYS[recovery.code] };
-    if (recovery.code === 'settings-corrupt' && !settingsFile) {
-        keys.why = 'notice.recoveryCorruptWhyAndroid';
-        keys.next = 'notice.recoveryCorruptNextAndroid';
-    }
+    if (!settingsFile) Object.assign(keys, NO_FILE_KEYS[recovery.code]);
     if (recovery.code === 'settings-save-dropped') {
         keys.why = DROPPED_WHY.get(recovery.cause ?? '') ?? 'notice.recoveryDroppedWhyUnknown';
         if (recovery.cause === 'too-large') keys.next = 'notice.recoveryDroppedNextTooLarge';

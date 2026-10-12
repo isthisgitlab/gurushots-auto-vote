@@ -4,13 +4,14 @@
  * and what is stored now (`theirs`). Only what `ours` changed against `base` is applied, so a setting the other
  * writer changed is kept; where both changed one value, `ours` wins.
  *
- * `ours` is the blob persistence writes: the stored values over the defaults. `base` and `theirs` are normalised the
- * same way before they are compared, so a setting that is absent from the stored text but filled by its default in
- * `ours` is not a change `ours` made.
+ * `ours` is the blob persistence writes: the stored values over the defaults, with the values a load rejects replaced
+ * by their defaults. `base` and `theirs` are normalised the same way before they are compared, so a setting that is
+ * absent from the stored text but filled by its default in `ours`, or a stored value the load replaced, is not a
+ * change `ours` made.
  */
 
 import { isPlainObject } from '../plainObject';
-import { mergeWithDefaults } from './loadValidation';
+import { dropInvalidValues, mergeWithDefaults } from './loadValidation';
 
 const own = (object: Record<string, unknown>, key: string): unknown =>
     Object.hasOwn(object, key) ? object[key] : undefined;
@@ -50,10 +51,13 @@ const parseObject = (text: string | null, what: string): Record<string, unknown>
     return parsed;
 };
 
-// A stored text as the blob persistence would have made of it: over the defaults, as the text `ours` was made from.
-const parseStored = (text: string | null, what: string): Record<string, unknown> => ({
-    ...mergeWithDefaults(parseObject(text, what)),
-});
+// A stored text as the load would have made of it: over the defaults, without the values it rejects, as the text `ours`
+// was made from.
+const parseStored = (text: string | null, what: string): Record<string, unknown> => {
+    const settings = mergeWithDefaults(parseObject(text, what));
+    dropInvalidValues(settings);
+    return { ...settings };
+};
 
 /**
  * The text of `ours` made on `theirs` (JSON, as persistence writes it); `ours` itself when nothing else was saved since

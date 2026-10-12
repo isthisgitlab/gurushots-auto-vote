@@ -47,7 +47,9 @@ export const errors = {
     fetchChallengesFailed: 'Izaicinājumus neizdevās ielādēt. GuruShots neatbildēja. Mēģini vēlreiz pēc brīža.',
     accountChanged: 'Saraksta ielādes laikā mainījās konts, tāpēc rezultāts tika atmests. Atver sarakstu vēlreiz.',
     tokenNotSaved:
-        'Tu esi pieteicies, bet pieteikšanos neizdevās saglabāt. Uzstādījumus nevar ierakstīt; iemeslu skaties uzstādījumu paziņojumā augstāk. Salabo vai pārvieto uzstādījumu failu un piesakies vēlreiz.',
+        'Pieteikšanās tika pieņemta, bet to neizdevās saglabāt. Uzstādījumus neizdevās ierakstīt. Pārbaudi uzstādījumu faila atļaujas un brīvo vietu diskā (iemeslu var norādīt arī uzstādījumu paziņojums) un piesakies vēlreiz.',
+    tokenNotSavedAndroid:
+        'Pieteikšanās tika pieņemta, bet to neizdevās saglabāt. Ierīces uzstādījumu krātuve to nepieņēma. Restartē lietotni un piesakies vēlreiz.',
     webShellToken:
         'Šī lapa nevar sazināties ar tīmekļa serveri. Tā ir atvērta bez šīs palaišanas piekļuves tokena, vai serveris kopš tā laika ir restartēts. Atver adresi, ko izvadīja pnpm web.',
     accountCheckFailed: 'Kontu neizdevās pārbaudīt. GuruShots neatbildēja. Mēģini vēlreiz pēc brīža.',
@@ -1448,11 +1450,18 @@ export const notice = {
         'Lietotne nevarēja atvērt failu {path}. Iespējams, to bloķē cita programma vai piekļuvi liedz atļaujas.',
     recoveryUnreadableNext:
         'Aizver citas programmas, kas to izmanto, vai salabo atļaujas un pēc tam restartē lietotni. Nekas netika pārrakstīts.',
+    recoveryUnreadableWhyAndroid:
+        'Lietotne nevarēja nolasīt saglabātos uzstādījumus. Iespējams, ierīces krātuve ir aizņemta vai pilna.',
+    recoveryUnreadableNextAndroid:
+        'Restartē lietotni. Nekas netika pārrakstīts, un uzstādījumu saglabāšana paliek izslēgta, kamēr tos nevar nolasīt.',
     recoveryMigrationWhat:
         'Tavs uzstādījumu fails ir no citas versijas, un to neizdevās atjaunināt, tāpēc uzstādījumu saglabāšana ir izslēgta.',
     recoveryMigrationWhy: 'Failu {path} neizdevās pārveidot formātā, ko izmanto šī versija.',
     recoveryMigrationNext:
         'Restartē lietotni. Ja tas atkārtojas, pārvieto šo failu citur, lai sāktu ar noklusētajiem uzstādījumiem; fails netiek pārrakstīts.',
+    recoveryMigrationWhyAndroid: 'Saglabātos uzstādījumus neizdevās pārveidot formātā, ko izmanto šī versija.',
+    recoveryMigrationNextAndroid:
+        'Restartē lietotni. Ja tas atkārtojas, sadaļā „Par lietotni un datiem” izmanto „Dzēst visus vietējos datus”, lai sāktu ar noklusētajiem uzstādījumiem; līdz tam nekas netiek pārrakstīts.',
     recoveryDroppedWhat: 'Vienu no tavām izmaiņām uzstādījumos neizdevās saglabāt.',
     recoveryDroppedWhyConflict: 'Fona pakalpojums tajā pašā laikā mainīja uzstādījumus.',
     recoveryDroppedWhyTooLarge: 'Uzstādījumi ir pārāk lieli, lai tos varētu saglabāt.',

@@ -47,12 +47,26 @@ describe('redactMessage', () => {
         ['email=person@example.com', 'email=[REDACTED]'],
         ['login: person@example.com', 'login: [REDACTED]'],
         ['user_name = "alice b"', 'user_name = [REDACTED]'],
+        ['username: alice b', 'username: [REDACTED]'],
         ['username=alice', 'username=[REDACTED]'],
         ['user-name: alice', 'user-name: [REDACTED]'],
-        ['Phone: +371 20000000', 'Phone: [REDACTED] 20000000'],
+        ['Phone: +371 20000000', 'Phone: [REDACTED]'],
+        ['phone: +371 2000 0000 trailing  ', 'phone: [REDACTED]  '],
         ['phone="+371 20000000"', 'phone=[REDACTED]'],
     ])('redacts the account identifier in %s', (message, expected) => {
         expect(redactMessage(message)).toBe(expected);
+    });
+
+    test('an identifier value ends at a comma, a semicolon, a closing bracket or the end of the line', () => {
+        expect(redactMessage('user (username: alice b), retrying')).toBe('user (username: [REDACTED]), retrying');
+        expect(redactMessage('phone: +371 20000000; email: a@b.c, ok')).toBe(
+            'phone: [REDACTED]; email: [REDACTED], ok',
+        );
+        expect(redactMessage('login: alice b\nnext line')).toBe('login: [REDACTED]\nnext line');
+    });
+
+    test('a credential value still ends at whitespace', () => {
+        expect(redactMessage('password: hunter2 for alice')).toBe('password: [REDACTED] for alice');
     });
 
     test('does not redact words that merely start with an identifier key', () => {

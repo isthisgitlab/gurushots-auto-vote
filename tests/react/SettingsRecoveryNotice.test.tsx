@@ -59,16 +59,28 @@ describe('SettingsRecoveryNotice', () => {
         expect(alert.textContent?.match(/recoveryDroppedWhy/g)).toHaveLength(1);
     });
 
-    test('a damaged settings copy on Android says the app kept it and the settings were reset', async () => {
+    test.each([
+        ['settings-corrupt', 'Corrupt', 'gurushots-settings_corrupt'],
+        ['settings-unreadable', 'Unreadable', 'gurushots-settings'],
+        ['settings-migration-failed', 'Migration', 'gurushots-settings'],
+    ])('%s on Android names no file and asks for no step on one', async (code, key, path) => {
         (globalThis as RendererGlobals).Capacitor = { isNativePlatform: () => true };
-        answer({ code: 'settings-corrupt', path: 'gurushots-settings_corrupt' });
+        answer({ code, path });
         render(<SettingsRecoveryNotice />);
 
         const alert = await screen.findByRole('alert');
-        expect(alert.textContent).toContain('notice.recoveryCorruptWhat');
-        expect(alert.textContent).toContain('notice.recoveryCorruptWhyAndroid');
-        expect(alert.textContent).toContain('notice.recoveryCorruptNextAndroid');
-        expect(alert.textContent).not.toContain('gurushots-settings_corrupt');
+        expect(alert.textContent).toContain(`notice.recovery${key}What`);
+        expect(alert.textContent).toContain(`notice.recovery${key}WhyAndroid`);
+        expect(alert.textContent).toContain(`notice.recovery${key}NextAndroid`);
+        expect(alert.textContent).not.toContain(path);
+    });
+
+    test('a dropped save words the same on Android as elsewhere', async () => {
+        (globalThis as RendererGlobals).Capacitor = { isNativePlatform: () => true };
+        answer({ code: 'settings-save-dropped', path: 'gurushots-settings', cause: 'storage' });
+        render(<SettingsRecoveryNotice />);
+
+        expect((await screen.findByRole('alert')).textContent).toContain('notice.recoveryDroppedWhyStorage');
     });
 
     test('Dismiss hides it', async () => {

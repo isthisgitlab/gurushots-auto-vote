@@ -54,15 +54,20 @@ const sanitizeLogString = (value: unknown, maxLength: number = 200): string =>
 // sensitive key written as `key: value` or `key=value` (quotes optional)
 // and runs on every writeLog message. The key set mirrors SENSITIVE_KEY_RE;
 // \b anchors keep `tokenizer` etc. from matching, and a run of `=` is no value, so a banner line such as
-// `=== Login ===` is left alone.
-const SENSITIVE_MSG_RE =
-    /\b(token|auth[_-]?token|access[_-]?token|refresh[_-]?token|bearer|password|api[_-]?key|secret|cookie|authorization|x[_-]?auth[_-]?token|x[_-]?token|email|login|user[_-]?name|phone)\b(\s*[:=]\s*)("[^"]*"|'[^']*'|(?!=+(?:\s|$))\S+)/gi;
+// `=== Login ===` is left alone. A credential's unquoted value ends at whitespace; an account identifier's
+// (email, login, username, phone) runs to the end of the field (`,` `;` `)` or the end of the line), because such a
+// value may hold spaces (`+371 20000000`, `alice b`) and a part left behind would still identify the account.
+const CREDENTIAL_MSG_RE =
+    /\b(token|auth[_-]?token|access[_-]?token|refresh[_-]?token|bearer|password|api[_-]?key|secret|cookie|authorization|x[_-]?auth[_-]?token|x[_-]?token)\b(\s*[:=]\s*)("[^"]*"|'[^']*'|(?!=+(?:\s|$))\S+)/gi;
+const IDENTITY_MSG_RE =
+    /\b(email|login|user[_-]?name|phone)\b(\s*[:=]\s*)("[^"]*"|'[^']*'|(?!=+(?:\s|$))[^,;)\r\n]*[^,;)\s])/gi;
 
 function redactMessage(message: string): string;
 function redactMessage(message: unknown): unknown;
 function redactMessage(message: unknown): unknown {
     if (typeof message !== 'string') return message;
-    return message.replace(SENSITIVE_MSG_RE, (_match, key, sep) => `${key}${sep}${REDACTED}`);
+    const redact = (_match: string, key: string, sep: string) => `${key}${sep}${REDACTED}`;
+    return message.replace(CREDENTIAL_MSG_RE, redact).replace(IDENTITY_MSG_RE, redact);
 }
 
 export { sanitizeForLog, sanitizeLogString, redactMessage, SENSITIVE_KEY_RE, REDACTED };

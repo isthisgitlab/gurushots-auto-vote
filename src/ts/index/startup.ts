@@ -1,6 +1,6 @@
 import { app, BrowserWindow, powerMonitor } from 'electron';
 import * as settings from '../settings';
-import { holdDesktopAppLock, isCliSessionActive } from '../settings/cliSessionLock';
+import { holdDesktopAppLock, isCliSessionActive, refreshDesktopAppLock } from '../settings/cliSessionLock';
 import { initializeHeaders } from '../api/randomizer';
 import * as logger from '../logger';
 import { AutoUpdater } from '../services/AutoUpdater';
@@ -18,11 +18,11 @@ import { installPermissionHandlers } from './permissions';
  * Logged In" is on. Only the desktop app does this, and only in the instance that holds the single-instance lock
  * (onReady runs for no other): a CLI session that is running may be using the login, so it is left alone then.
  */
-const clearLeftoverToken = () => {
+const clearLeftoverToken = async () => {
     try {
         const userSettings = settings.loadSettings();
         if (userSettings.stayLoggedIn || !userSettings.token) return;
-        if (isCliSessionActive()) {
+        if (await isCliSessionActive()) {
             logger
                 .withCategory('authentication')
                 .info('Kept the saved token: a CLI session is running and may be using it', null);
@@ -53,7 +53,7 @@ const holdAppMarker = () => {
 };
 
 /** Setup that needs no window: permissions, headers, presets, the leftover login, the log cleanup and the menu. */
-const prepareApp = () => {
+const prepareApp = async () => {
     logger.withCategory('ui').info(`[App] UserData path: ${settings.getUserDataPath()}`, null);
 
     // Before any window exists: a page must never see Electron's grant-by-default.
@@ -68,7 +68,7 @@ const prepareApp = () => {
         logger.withCategory('settings').warning('Intent profile seeding failed (non-fatal):', err);
     }
 
-    clearLeftoverToken();
+    await clearLeftoverToken();
 
     logger.cleanup();
 
@@ -78,6 +78,9 @@ const prepareApp = () => {
 const registerPowerHandlers = () => {
     // Linux/macOS shutdown or reboot: never veto the OS with a dialog.
     powerMonitor.on('shutdown', bypassQuitGuard);
+
+    // Waking: the app marker's timer did not count the sleep, so it is refreshed now rather than at its next beat.
+    powerMonitor.on('resume', refreshDesktopAppLock);
 
     // Sleep: a boost due soon goes out now, while the network is still up
     // (best effort — see windows/suspendBoost.ts). Auto-vote state is read at event time.
@@ -167,7 +170,7 @@ const registerLifecycleHandlers = () => {
  */
 async function onReady() {
     holdAppMarker();
-    prepareApp();
+    await prepareApp();
     registerPowerHandlers();
     await openFirstWindow();
     registerLifecycleHandlers();

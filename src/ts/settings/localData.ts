@@ -60,20 +60,23 @@ const appSession = () => (require('electron') as typeof import('electron')).sess
 /** Why a wipe was refused: a voting pass in this process, a live CLI session, or the running desktop app. */
 type WipeBusyCode = 'busy-pass' | 'busy-cli' | 'busy-app';
 
-/** `error` is a WipeBusyCode when nothing was touched; otherwise what could not be deleted, with what was `removed`. */
-type WipeResult = { success: true; removed: string[] } | { success: false; error: string; removed?: string[] };
+/**
+ * `error` is a WipeBusyCode when nothing was touched; otherwise what could not be deleted, with what was `removed` and,
+ * on Capacitor, `reload`: the window's caches were emptied, so the caller reloads it once the user has been told.
+ */
+type WipeResult =
+    | { success: true; removed: string[] }
+    | { success: false; error: string; removed?: string[]; reload?: true };
 
 type WipeDeps = {
     /** What the app is doing that a wipe would pull the files out from under (live activity only), or null. */
-    busyReason: () => WipeBusyCode | null;
+    busyReason: () => WipeBusyCode | null | Promise<WipeBusyCode | null>;
     /** Stops a voting pass that is under way. */
     stopScheduler: () => void;
     /** Android: stops the background service and clears its native stores (resolves ok: whether it all went). */
     wipeNative: () => Promise<{ ok: boolean } | null>;
     /** Electron: clears the windows' cookies, local storage and cache. */
     clearSession: () => Promise<void>;
-    /** Capacitor: reloads the window, which hydrates every cache from what is stored. */
-    reloadWindow: () => void;
 };
 
 /**
@@ -87,10 +90,10 @@ const nativeWipe = async (): Promise<{ ok: boolean } | null> => {
 };
 
 // A saved "auto-vote running" flag is only a wish to resume at the next start: it is no activity, and does not block.
-const liveBusyReason = (): WipeBusyCode | null => {
+const liveBusyReason = async (): Promise<WipeBusyCode | null> => {
     if (isVotingPassRunning()) return 'busy-pass';
-    if (isCliSessionActive()) return 'busy-cli';
-    return isDesktopAppActive() ? 'busy-app' : null;
+    if (await isCliSessionActive()) return 'busy-cli';
+    return (await isDesktopAppActive()) ? 'busy-app' : null;
 };
 
 const defaultDeps = (): WipeDeps => ({
@@ -103,7 +106,6 @@ const defaultDeps = (): WipeDeps => ({
         await session.clearStorageData();
         await session.clearCache();
     },
-    reloadWindow: () => (globalThis as { location?: { reload?: () => void } }).location?.reload?.(),
 });
 
 const vision = (dir: string) => path.join(dir, 'vision');
@@ -141,13 +143,13 @@ const localDataPaths = (userData: string): string[] => {
  * extracted vision runtime, the Android service's native stores, the windows' browser storage. Pending writes are
  * given up first and stores refuse writes from then on, so nothing re-creates a file. The caller relaunches (or exits)
  * afterwards; the app is not usable until it does. A failure partway leaves what is left and says what; on Capacitor
- * the window then reloads, because the caches were emptied and what is stored is only partly gone.
+ * the result then asks for a reload (`reload`), because the caches were emptied and what is stored is only partly gone.
  *
  * @returns the paths and keys removed; a WipeBusyCode as `error` when the app is working and nothing was touched
  */
 const wipeLocalData = async (overrides: Partial<WipeDeps> = {}): Promise<WipeResult> => {
     const deps = { ...defaultDeps(), ...overrides };
-    const busy = deps.busyReason();
+    const busy = await deps.busyReason();
     if (busy !== null) return { success: false, error: busy };
 
     const log = logger.withCategory('settings');
@@ -184,9 +186,13 @@ const wipeLocalData = async (overrides: Partial<WipeDeps> = {}): Promise<WipeRes
 
     if (failures.length > 0) {
         resumeWrites();
-        // Never keep running on caches the wipe emptied.
-        if (runtime.isCapacitor()) deps.reloadWindow();
-        return { success: false, error: failures.join('; '), removed };
+        // Never keep running on caches the wipe emptied: the caller reloads once the failure has been shown.
+        return {
+            success: false,
+            error: failures.join('; '),
+            removed,
+            ...(runtime.isCapacitor() ? { reload: true as const } : {}),
+        };
     }
     return { success: true, removed };
 };

@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useRef, useState } from 'react';
 import { useTranslation } from '@/contexts/TranslationContext';
 import { usePlatformCapabilities } from '@/api/usePlatformCapabilities';
 import { Modal, ModalActions } from '@/components/ui/Modal';
@@ -21,7 +21,8 @@ const isBusy = (error: unknown): error is Busy => typeof error === 'string' && O
  * Confirms and runs "Delete all local data". It lists what goes (the background service state only on Android),
  * and starts with focus on Cancel — Cancel is the first control and there is no close button, so nothing is
  * deleted by a stray Enter. While the delete runs the dialog cannot be dismissed. A refusal (a voting pass, a command-line
- * session or the desktop app is in the way) or a failure is worded for the user and stays on screen; on success the
+ * session or the desktop app is in the way) or a failure is worded for the user and stays on screen (a failure that left the
+ * window's caches emptied reloads it when the dialog is closed); on success the
  * shell relaunches the app, or, where it cannot (the web shell's server stops), the text says to start it again.
  */
 export function DeleteLocalDataModal({ isOpen, onClose }: { isOpen: boolean; onClose: () => void }) {
@@ -29,10 +30,13 @@ export function DeleteLocalDataModal({ isOpen, onClose }: { isOpen: boolean; onC
     const { backgroundService, relaunchesAfterWipe } = usePlatformCapabilities();
     const [deleting, setDeleting] = useState(false);
     const [outcome, setOutcome] = useState<Outcome>('idle');
+    // A failed delete may have emptied the window's caches: the window reloads when the dialog is closed.
+    const reloadOnClose = useRef(false);
 
     const handleDelete = async () => {
         setDeleting(true);
         setOutcome('idle');
+        reloadOnClose.current = false;
         try {
             const result = await ipc.wipeLocalData();
             if (result?.success) {
@@ -41,6 +45,7 @@ export function DeleteLocalDataModal({ isOpen, onClose }: { isOpen: boolean; onC
                 setOutcome(result.error);
             } else {
                 void ipc.logRendererError(`Deleting the local data failed: ${result?.error ?? 'no answer'}`);
+                reloadOnClose.current = result?.success === false && result.reload === true;
                 setOutcome('failed');
             }
         } catch (err) {
@@ -54,6 +59,10 @@ export function DeleteLocalDataModal({ isOpen, onClose }: { isOpen: boolean; onC
     const handleClose = () => {
         setOutcome('idle');
         onClose();
+        if (reloadOnClose.current) {
+            reloadOnClose.current = false;
+            void ipc.reloadWindow();
+        }
     };
 
     const done = outcome === 'done';

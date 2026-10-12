@@ -97,6 +97,7 @@ export const getSettingsRecovery = forward('getSettingsRecovery');
 // This device's data and bundled notices
 export const getThirdPartyNotices = forward('getThirdPartyNotices');
 export const wipeLocalData = forward('wipeLocalData');
+export const reloadWindow = forward('reloadWindow');
 
 // Per-challenge overrides, profiles and title rules
 export const getChallengeOverride = forward('getChallengeOverride');

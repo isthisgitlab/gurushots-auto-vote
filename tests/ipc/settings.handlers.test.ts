@@ -528,6 +528,18 @@ describe('wipe-local-data', () => {
         expect(afterWipe).not.toHaveBeenCalled();
     });
 
+    test('a partial failure keeps the reload request for the window to act on', async () => {
+        const afterWipe = jest.fn();
+        localData.wipeLocalData.mockResolvedValue({ success: false, error: 'x', removed: [], reload: true });
+        await expect(buildHandlers({ afterWipe })['wipe-local-data']()).resolves.toEqual({
+            success: false,
+            error: 'x',
+            removed: [],
+            reload: true,
+        });
+        expect(afterWipe).not.toHaveBeenCalled();
+    });
+
     test('never throws across IPC', async () => {
         localData.wipeLocalData.mockRejectedValue(new Error('boom'));
         await expect(handlers['wipe-local-data']()).resolves.toEqual({ success: false, error: 'boom' });

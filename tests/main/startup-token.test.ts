@@ -17,8 +17,9 @@ jest.mock('../../src/ts/settings', () => ({
     seedIntentProfiles: jest.fn(),
 }));
 jest.mock('../../src/ts/settings/cliSessionLock', () => ({
-    isCliSessionActive: jest.fn(() => false),
+    isCliSessionActive: jest.fn(() => Promise.resolve(false)),
     holdDesktopAppLock: jest.fn(() => mockReleaseAppLock),
+    refreshDesktopAppLock: jest.fn(),
 }));
 jest.mock('../../src/ts/api/randomizer', () => ({ initializeHeaders: jest.fn() }));
 jest.mock('../../src/ts/logger', () => {
@@ -36,7 +37,7 @@ jest.mock('../../src/ts/index/windows', () => ({ checkAutoLogin: jest.fn() }));
 jest.mock('../../src/ts/index/permissions', () => ({ installPermissionHandlers: jest.fn() }));
 jest.mock('../../src/ts/index/state', () => ({ appState: {} }));
 
-import { app } from 'electron';
+import { app, powerMonitor } from 'electron';
 import loggerModule = require('../../src/ts/logger');
 import settingsModule = require('../../src/ts/settings');
 import lockModule = require('../../src/ts/settings/cliSessionLock');
@@ -61,7 +62,7 @@ describe('desktop startup clears a leftover login', () => {
     beforeEach(() => {
         jest.useFakeTimers();
         jest.clearAllMocks();
-        lock.isCliSessionActive.mockReturnValue(false);
+        lock.isCliSessionActive.mockResolvedValue(false);
         settings.setSetting.mockReturnValue(true);
     });
 
@@ -92,7 +93,7 @@ describe('desktop startup clears a leftover login', () => {
 
     test('with a CLI session holding its marker it is kept', async () => {
         stored({ token: 'cli-uses-this', stayLoggedIn: false });
-        lock.isCliSessionActive.mockReturnValue(true);
+        lock.isCliSessionActive.mockResolvedValue(true);
 
         await onReady();
 
@@ -170,5 +171,11 @@ describe('desktop startup marks the app as running', () => {
             expect.any(Error),
         );
         expect(jest.mocked(app.on)).not.toHaveBeenCalledWith('will-quit', expect.anything());
+    });
+
+    test('waking from sleep refreshes the marker at once', async () => {
+        await onReady();
+
+        expect(jest.mocked(powerMonitor.on)).toHaveBeenCalledWith('resume', lock.refreshDesktopAppLock);
     });
 });

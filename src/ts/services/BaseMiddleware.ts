@@ -20,6 +20,9 @@ const requireToken = () => {
     return token;
 };
 
+const TOKEN_NOT_SAVED_CLI =
+    'Logged in at GuruShots, but the token could not be saved because the settings cannot be written (the settings notice above or stderr says why). Fix the settings file, then log in again.';
+
 class BaseMiddleware {
     apiStrategy: ApiStrategy;
 
@@ -34,17 +37,21 @@ class BaseMiddleware {
         // success indicators.
         const { ok, token } = extractAuthResult(response);
         if (ok) {
-            switchAccountToken(token);
-            return { ok: true, token, response };
+            // `saved` is false when the settings refused the write: the login then ends with this run.
+            return { ok: true, token, response, saved: switchAccountToken(token) };
         }
-        return { ok: false, token: null, response };
+        return { ok: false, token: null, response, saved: false };
     }
 
     async cliLogin(email: string, password: string) {
         logger.withCategory('authentication').info('=== GuruShots Auto Voter - CLI Login ===', null);
         logger.withCategory('authentication').startOperation('cli-login', 'CLI Authentication');
         try {
-            const { ok, token } = await this._login(email, password);
+            const { ok, token, saved } = await this._login(email, password);
+            if (ok && !saved) {
+                logger.withCategory('authentication').endOperation('cli-login', null, 'The token was not saved');
+                return { success: false, error: TOKEN_NOT_SAVED_CLI };
+            }
             if (ok) {
                 logger.withCategory('authentication').endOperation('cli-login', 'Authentication successful');
                 logger.withCategory('authentication').success('Token obtained and saved to settings');
@@ -60,7 +67,8 @@ class BaseMiddleware {
 
     async guiLogin(email: string, password: string) {
         try {
-            const { ok, token, response } = await this._login(email, password);
+            const { ok, token, response, saved } = await this._login(email, password);
+            if (ok && !saved) return { success: false, error: 'token-not-saved' };
             if (ok) return { success: true, token, data: response };
             return { success: false, error: 'Invalid credentials' };
         } catch (error) {

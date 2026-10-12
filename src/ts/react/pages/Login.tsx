@@ -15,16 +15,18 @@ import { useNoticeGate } from '@/hooks/useNoticeGate';
 import { UnofficialNoticeModal } from '@/components/app/UnofficialNoticeModal';
 import { SettingsRecoveryNotice } from '@/components/app/SettingsRecoveryNotice';
 import { ipcErrorText } from '@/api/ipcErrorText';
+import { usePlatformCapabilities } from '@/api/usePlatformCapabilities';
 
 /**
  * Login page content component
  */
-function LoginPageContent() {
+function LoginPageContent({ startupError }: { startupError?: string }) {
     const { ready, t } = useTranslation();
     const { settings, loading: settingsLoading, updateSetting } = useSettings();
     const { envInfo, loading: envLoading } = useEnvironmentInfo();
     const notice = useNoticeGate(settings, settingsLoading, updateSetting);
     const { authenticate, login, loading: authLoading, error: authError } = useAuth();
+    const { settingsFile } = usePlatformCapabilities();
 
     // Local state
     const [theme, setTheme] = useState('light');
@@ -101,6 +103,14 @@ function LoginPageContent() {
         [authenticate, login, mockMode, stayLoggedIn, updateSetting],
     );
 
+    // A failure the shell reported before any login attempt shows until an attempt answers.
+    const shownError = authError ?? startupError;
+    // A login that could not be saved: the next step differs where the settings are not a file the user can open.
+    const shownText =
+        shownError === 'token-not-saved' && !settingsFile
+            ? t('errors.tokenNotSavedAndroid')
+            : ipcErrorText(shownError, t, 'errors.loginFailed');
+
     // Show loading while initializing
     if (!ready || settingsLoading || envLoading) {
         return <PageLoader text={t('common.loading')} />;
@@ -119,10 +129,10 @@ function LoginPageContent() {
                     <h2 className="card-title text-2xl font-bold text-center mb-6">{t('login.heading')}</h2>
 
                     {/* Auth Error */}
-                    {authError && (
+                    {shownError && (
                         <div className="alert alert-error mb-4" role="alert">
                             <StrokeIcon className="stroke-current shrink-0 h-6 w-6" d={ICON_PATHS.xCircle} />
-                            <span>{ipcErrorText(authError, t, 'errors.loginFailed')}</span>
+                            <span>{shownText}</span>
                         </div>
                     )}
 
@@ -152,11 +162,13 @@ function LoginPageContent() {
 
 /**
  * Login page with providers
+ *
+ * @param startupError - an IPC failure the shell met before the page loaded, shown as a login error
  */
-function LoginPage() {
+function LoginPage({ startupError }: { startupError?: string }) {
     return (
         <TranslationProvider>
-            <LoginPageContent />
+            <LoginPageContent startupError={startupError} />
         </TranslationProvider>
     );
 }
@@ -165,11 +177,11 @@ function LoginPage() {
 // __capacitorBootstrap before importing this module so it can
 // conditionally mount Login vs App; everywhere else (Electron's
 // loginWindow) auto-mounts.
-export const mountLogin = () => {
+export const mountLogin = (startupError?: string) => {
     const container = document.getElementById('root');
     if (container) {
         const root = createRoot(container);
-        root.render(<LoginPage />);
+        root.render(<LoginPage startupError={startupError} />);
     }
 };
 
