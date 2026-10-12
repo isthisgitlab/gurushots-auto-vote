@@ -411,7 +411,13 @@ repeated six times is one that gets forgotten at one of them.
 - **Paid-join money safety** (`services/joinChallenges/performJoin.ts`, with the unlock claim in `unlockMarker.ts` and the in-flight lock in `shared.ts`): the order is load-bearing — resolve an eligible
   photo **before** any `coins_unlock` (no photo ⇒ skip, no spend); persist the unlock claim
   (`joinState.json`) **before** the charge so a crash can never let a later pass re-unlock (idempotent
-  retry), and if the claim can't be written, don't spend; a per-process in-flight `Set` **plus** a
+  retry), and if the claim can't be written, don't spend. A claim is keyed `<member id>:<challenge id>`
+  (the account's member id, which survives a re-login; a token does not), so a marker one account left never
+  makes another account's join a submit-only retry; an unkeyed marker from before that stays in force for
+  whoever reads it, and when the account cannot be told any account's marker for the challenge counts. A
+  manual join that finds a marker skips the price and balance checks and only submits (`submitOnly`: the join
+  re-reads the marker and refuses to unlock if it is gone; no eligible photo then reports
+  `charged-pending-submit`, not "no coins charged"); a per-process in-flight `Set` **plus** a
   cross-process lockfile (`acquireUnlockLock`, real-fs platforms, TTL stale-recovery, fail-open) guard the
   check→unlock→mark section; a corrupt/unreadable join-state **refuses to spend** (fail-safe, not fail-open);
   the pass is cancellation-checked between candidates and before each spend, and each candidate is

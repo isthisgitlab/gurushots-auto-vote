@@ -7,7 +7,10 @@
 import { isPlainObject } from '../../plainObject';
 import type { RawJsonStore } from '../../types/stores';
 import { errorMessage } from '../../errorMessage';
+import * as logger from '../../logger';
+import { resolveMemberId } from '../autoFill/memberIdentity';
 import { cat } from './shared';
+import type { JoinDeps } from './shared';
 
 // Read the marker map, distinguishing "empty/never-written" (ok:true, {}) from
 // "unreadable/corrupt" (ok:false). A corrupt file must NOT silently look empty:
@@ -39,18 +42,44 @@ const readUnlockedState = (store: RawJsonStore | null | undefined): { state: Rec
 
 const readUnlocked = (store: RawJsonStore | null | undefined) => readUnlockedState(store).state;
 
-const isUnlocked = (store: RawJsonStore | null | undefined, id: string | number) =>
-    Object.prototype.hasOwnProperty.call(readUnlocked(store), String(id));
+const has = (state: Record<string, unknown>, key: string) => Object.prototype.hasOwnProperty.call(state, key);
+
+/**
+ * The account whose join this is: its member id, which survives a re-login (a token does not). Null
+ * when it cannot be told (no profile read wired in, or the lookup failed).
+ */
+const markerOwner = (token: string, deps: JoinDeps): Promise<string | null> =>
+    deps.getCurrentMemberProfile
+        ? resolveMemberId(token, deps.getCurrentMemberProfile, logger, 'join')
+        : Promise.resolve(null);
+
+// A marker is keyed `<member id>:<challenge id>`, so a challenge another account left a marker on is
+// not one this account has paid for. A marker from before accounts were told apart is keyed by the
+// challenge id alone: it stays in force for whoever reads it, which can only err towards not charging twice.
+const markerKey = (id: string | number, owner: string | null) => (owner ? `${owner}:${id}` : String(id));
+
+/**
+ * Whether coins were already spent on this challenge by this account. An owner that cannot be told
+ * counts any account's marker for the challenge: whose it is cannot be verified, so do not spend.
+ */
+const hasMarker = (state: Record<string, unknown>, id: string | number, owner: string | null) => {
+    if (has(state, String(id))) return true;
+    if (owner) return has(state, markerKey(id, owner));
+    return Object.keys(state).some((key) => key.endsWith(`:${id}`));
+};
+
+const isUnlocked = (store: RawJsonStore | null | undefined, id: string | number, owner: string | null) =>
+    hasMarker(readUnlocked(store), id, owner);
 
 // Persist the unlock claim. Returns true on success (or when there is no store
 // — mock mode, which spends no real coins). Returns false when a real store
 // write fails: the caller MUST NOT spend coins it cannot record, or a crash /
 // retry could re-unlock and double-charge.
-const markUnlocked = (store: RawJsonStore | null | undefined, id: string | number): boolean => {
+const markUnlocked = (store: RawJsonStore | null | undefined, id: string | number, owner: string | null): boolean => {
     if (!store) return true;
     try {
         const state = readUnlocked(store);
-        state[String(id)] = { unlockedAt: Date.now() };
+        state[markerKey(id, owner)] = { unlockedAt: Date.now() };
         store.writeRaw(JSON.stringify(state));
         return true;
     } catch (error) {
@@ -59,12 +88,13 @@ const markUnlocked = (store: RawJsonStore | null | undefined, id: string | numbe
     }
 };
 
-const clearUnlocked = (store: RawJsonStore | null | undefined, id: string | number) => {
+const clearUnlocked = (store: RawJsonStore | null | undefined, id: string | number, owner: string | null) => {
     if (!store) return;
     try {
         const state = readUnlocked(store);
-        if (Object.prototype.hasOwnProperty.call(state, String(id))) {
-            delete state[String(id)];
+        const keys = [String(id), markerKey(id, owner)].filter((key) => has(state, key));
+        if (keys.length > 0) {
+            keys.forEach((key) => delete state[key]);
             store.writeRaw(JSON.stringify(state));
         }
     } catch (error) {
@@ -72,4 +102,4 @@ const clearUnlocked = (store: RawJsonStore | null | undefined, id: string | numb
     }
 };
 
-export { readUnlockedState, isUnlocked, markUnlocked, clearUnlocked };
+export { readUnlockedState, markerOwner, hasMarker, isUnlocked, markUnlocked, clearUnlocked };

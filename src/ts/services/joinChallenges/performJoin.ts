@@ -25,7 +25,7 @@ import * as cancellation from '../../voting/cancellation';
 import type { Challenge } from '../../types/gurushots';
 import { cat, inFlight } from './shared';
 import type { JoinDeps, JoinOutcome, UnlockState } from './shared';
-import { clearUnlocked, isUnlocked, markUnlocked, readUnlockedState } from './unlockMarker';
+import { clearUnlocked, hasMarker, isUnlocked, markUnlocked, markerOwner, readUnlockedState } from './unlockMarker';
 import { pickJoinPhoto } from './photoPick';
 
 const failedNoCharge = (): JoinOutcome => ({ status: 'failed-no-charge', charged: 0 });
@@ -43,6 +43,7 @@ const claimAndUnlock = async (
     token: string,
     deps: JoinDeps,
     needsCoins: number,
+    owner: string | null,
 ): Promise<{ outcome: JoinOutcome } | UnlockState> => {
     const id = challenge?.id;
     const { state, ok: stateOk } = readUnlockedState(deps.joinStateStore);
@@ -52,20 +53,20 @@ const claimAndUnlock = async (
         cat().error(`${logger.challengeTag(challenge)}: join-state is unreadable — not spending coins`, null);
         return { outcome: failedNoCharge() };
     }
-    if (Object.prototype.hasOwnProperty.call(state, String(id))) {
+    if (hasMarker(state, id, owner)) {
         return { charged: 0, alreadyUnlocked: true }; // another process already paid → retry submit only
     }
     if (cancellation.isCancelled()) return { outcome: failedNoCharge() };
     // Persist the claim BEFORE spending, so a crash the instant
     // after the charge can never let a later pass re-unlock. If
     // the claim cannot be recorded, do not spend at all.
-    if (!markUnlocked(deps.joinStateStore, id)) {
+    if (!markUnlocked(deps.joinStateStore, id, owner)) {
         cat().error(`${logger.challengeTag(challenge)}: could not record the unlock claim — not spending coins`, null);
         return { outcome: failedNoCharge() };
     }
     const unlock = await deps.coinsUnlock(id, token);
     if (!unlock?.ok) {
-        clearUnlocked(deps.joinStateStore, id);
+        clearUnlocked(deps.joinStateStore, id, owner);
         cat().warning(`coins_unlock failed for ${logger.challengeTag(challenge)} — no coins charged`, null);
         return { outcome: failedNoCharge() };
     }
@@ -81,6 +82,7 @@ const unlockUnderLock = async (
     token: string,
     deps: JoinDeps,
     needsCoins: number,
+    owner: string | null,
 ): ReturnType<typeof claimAndUnlock> => {
     const id = challenge?.id;
     const xlock = deps.acquireUnlockLock ? deps.acquireUnlockLock(id) : { ok: true, release: () => {} };
@@ -88,7 +90,7 @@ const unlockUnderLock = async (
         return { outcome: { status: 'busy', charged: 0 } };
     }
     try {
-        return await claimAndUnlock(challenge, token, deps, needsCoins);
+        return await claimAndUnlock(challenge, token, deps, needsCoins, owner);
     } finally {
         xlock.release();
     }
@@ -107,6 +109,7 @@ const submitJoin = async (
     needsCoins: number,
     imageId: string,
     { charged, alreadyUnlocked }: UnlockState,
+    owner: string | null,
 ): Promise<JoinOutcome> => {
     const id = challenge?.id;
     const coinsSpent = charged > 0 || alreadyUnlocked;
@@ -118,7 +121,7 @@ const submitJoin = async (
     }
     const submit = await deps.submitToChallenge(id, [imageId], token);
     if (submit?.ok) {
-        clearUnlocked(deps.joinStateStore, id);
+        clearUnlocked(deps.joinStateStore, id, owner);
         cat().success(
             `joined ${logger.challengeTag(challenge)}${needsCoins > 0 ? ` (spent ${needsCoins} coins)` : ''}`,
             null,
@@ -145,7 +148,11 @@ const submitJoin = async (
  * @param needsCoins paid cost (0 = free)
  * @param options.manual the user asked for this join: Submit Only Chosen Photos
  *   does not apply (the call site says so, never the renderer)
- *   status ∈ joined | skipped-no-photo | skipped-no-chosen |
+ * @param options.submitOnly the caller saw an unlock marker and skipped the price and balance checks
+ *   on that account: if this call's own read of the marker finds none (another process cleared it,
+ *   or the file is unreadable) nothing is unlocked — a charge nobody consented to
+ *
+ * status ∈ joined | skipped-no-photo | skipped-no-chosen |
  *            charged-pending-submit | failed-no-charge | busy.
  *   `charged` is coins spent THIS call.
  */
@@ -154,7 +161,7 @@ const performJoin = async (
     token: string,
     deps: JoinDeps,
     needsCoins: number,
-    { manual = false }: { manual?: boolean } = {},
+    { manual = false, submitOnly = false }: { manual?: boolean; submitOnly?: boolean } = {},
 ): Promise<JoinOutcome> => {
     const id = challenge?.id;
     const key = String(id);
@@ -167,7 +174,15 @@ const performJoin = async (
         // spent must submit something, so Submit Only Chosen Photos is lifted for
         // it — stranding paid coins behind a skipped pick would be worse than an
         // automatic photo.
-        let unlock = { charged: 0, alreadyUnlocked: isUnlocked(deps.joinStateStore, id) };
+        const owner = await markerOwner(token, deps);
+        let unlock = { charged: 0, alreadyUnlocked: isUnlocked(deps.joinStateStore, id, owner) };
+        if (submitOnly && !unlock.alreadyUnlocked) {
+            cat().warning(
+                `${logger.challengeTag(challenge)}: the unlock marker is gone — not unlocking without consent`,
+                null,
+            );
+            return failedNoCharge();
+        }
 
         // 1. Photo first — no photo, no spend.
         const pick = await pickJoinPhoto(challenge, token, deps, {
@@ -175,18 +190,20 @@ const performJoin = async (
         });
         const imageId = pick.id;
         if (!imageId) {
+            // Coins spent earlier are still owed their join: not "no coins were charged", and the marker stays.
+            if (unlock.alreadyUnlocked && needsCoins > 0) return { status: 'charged-pending-submit', charged: 0 };
             return { status: pick.reason === 'no-chosen' ? 'skipped-no-chosen' : 'skipped-no-photo', charged: 0 };
         }
 
         // 2. Paid unlock (skipped when a prior pass already unlocked → retry submit only).
         if (needsCoins > 0 && !unlock.alreadyUnlocked) {
-            const claimed = await unlockUnderLock(challenge, token, deps, needsCoins);
+            const claimed = await unlockUnderLock(challenge, token, deps, needsCoins, owner);
             if ('outcome' in claimed) return claimed.outcome;
             unlock = claimed;
         }
 
         // 3. Submit the photo (the actual join).
-        return await submitJoin(challenge, token, deps, needsCoins, imageId, unlock);
+        return await submitJoin(challenge, token, deps, needsCoins, imageId, unlock, owner);
     } finally {
         inFlight.delete(key);
     }

@@ -2,14 +2,16 @@
  * The manual single join, on the user's explicit request. A paid challenge needs
  * explicit paid consent (`spendCoins`): without it nothing is spent and the cost
  * is returned as `needs-confirm`. The live candidate and balance are re-read, so
- * a stale renderer list cannot trigger a wasted spend.
+ * a stale renderer list cannot trigger a wasted spend. A paid challenge whose coins
+ * were already spent (an unlock marker, left by a join whose submit failed) is only
+ * submitted: no consent to a price and no balance check, and nothing is charged.
  */
 
 import { errorMessage } from '../../errorMessage';
 import { cat } from './shared';
 import type { JoinDeps, JoinSingleResult } from './shared';
 import { performJoin } from './performJoin';
-import { isUnlocked } from './unlockMarker';
+import { isUnlocked, markerOwner } from './unlockMarker';
 
 /**
  * Live balance check for a confirmed paid manual join.
@@ -67,6 +69,8 @@ const notOpenResult = async (
  * spend. A paid challenge without `spendCoins` returns `needs-confirm` (with the
  * cost) and spends nothing; so does one whose live cost is above `expectedCost`, the
  * cost the caller's confirmation named (a price that rose since then is not consented to).
+ * A paid challenge with an unlock marker skips both of those and the balance check: it is
+ * submitted alone (`performJoin` re-reads the marker and refuses to unlock if it is gone).
  */
 const joinChallengeSingle = async (
     challengeId: string | number,
@@ -93,7 +97,7 @@ const joinChallengeSingle = async (
     // Coins already spent (an unlock marker, left by a join whose submit failed) are not spent again:
     // the retry only submits, so neither consent to a price nor the balance has a say in it. An
     // unreadable marker file reads as "no marker" here, as in performJoin, whose paid path then refuses.
-    const retryOnly = cost > 0 && isUnlocked(deps.joinStateStore, challengeId);
+    const retryOnly = cost > 0 && isUnlocked(deps.joinStateStore, challengeId, await markerOwner(token, deps));
 
     // Consent covers a price: a cost above the one the caller confirmed (`expectedCost`) needs a new
     // confirmation, with the live cost, and unlocks nothing.
@@ -107,7 +111,7 @@ const joinChallengeSingle = async (
     }
 
     // An explicit click auto-picks even with Submit Only Chosen Photos on.
-    const outcome = await performJoin(challenge, token, deps, cost, { manual: true });
+    const outcome = await performJoin(challenge, token, deps, cost, { manual: true, submitOnly: retryOnly });
     return { status: outcome.status, challengeId, cost, imageId: outcome.imageId };
 };
 

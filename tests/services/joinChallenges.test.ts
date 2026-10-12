@@ -53,6 +53,7 @@ const photoPicker = jest.mocked(photoPickerModule);
 import settingsModule = require('../../src/ts/settings');
 const settings = jest.mocked(settingsModule);
 import type * as joinChallengesModule from '../../src/ts/services/joinChallenges';
+import type * as memberIdentityModule from '../../src/ts/services/autoFill/memberIdentity';
 import type * as autoFillModule from '../../src/ts/services/autoFill';
 import type { Challenge } from '../../src/ts/types/gurushots';
 import type { RawJsonStore } from '../../src/ts/types/stores';
@@ -1236,7 +1237,7 @@ describe('joinChallengeSingle — manual', () => {
 
         describe('a retry after coins were charged and the submit failed (an unlock marker is left)', () => {
             const MARKED = JSON.stringify({ '2': { unlockedAt: 1 } });
-            const retrying = (marker: string | null, over: Record<string, unknown> = {}) => {
+            const retrying = (marker: string | null, over: NonNullable<Parameters<typeof makeDeps>[0]> = {}) => {
                 const deps = makeDeps({
                     getMemberChallenges: jest.fn(async () => [{ id: 2, join_coins: 100, type: 'flash' }]),
                     getBankroll: jest.fn(async () => ({ coins: 500 })),
@@ -1317,12 +1318,83 @@ describe('joinChallengeSingle — manual', () => {
                 expect(unreadable.coinsUnlock).not.toHaveBeenCalled();
             });
 
-            test('a free challenge has nothing to retry, whatever the marker says', async () => {
+            test('a free challenge never looks at the marker on its own: only the join itself reads it (to check, and to clear)', async () => {
+                const readRaw = jest.fn(() => MARKED);
                 const deps = makeDeps({
                     getMemberChallenges: jest.fn(async () => [{ id: 2, join_coins: 0, type: 'flash' }]),
-                    joinStateStore: { readRaw: () => MARKED, writeRaw: jest.fn() },
+                    joinStateStore: { readRaw, writeRaw: jest.fn() },
                 });
                 expect((await joinChallengeSingle(2, 'tok', deps, { spendCoins: false })).status).toBe('joined');
+                expect(readRaw).toHaveBeenCalledTimes(2);
+            });
+
+            test('without spendCoins (the CLI first call, the Discover ask) it submits at once, with nothing to ask or pay', async () => {
+                const deps = retrying(MARKED);
+                const res = await joinChallengeSingle(2, 'tok', deps, { spendCoins: false });
+                expect(res).toMatchObject({ status: 'joined', cost: 100 });
+                expect(deps.coinsUnlock).not.toHaveBeenCalled();
+                expect(deps.getBankroll).not.toHaveBeenCalled();
+                expect(deps.submitToChallenge).toHaveBeenCalledTimes(1);
+            });
+
+            describe('the marker is read twice: by the caller, then by the join', () => {
+                const flaky = (second: () => string | null) => {
+                    const readRaw = jest.fn().mockReturnValueOnce(MARKED).mockImplementation(second);
+                    return { readRaw, deps: retrying(null, { joinStateStore: { readRaw, writeRaw: jest.fn() } }) };
+                };
+
+                test('another process cleared it in between: nothing is unlocked, no charge nobody agreed to', async () => {
+                    const { readRaw, deps } = flaky(() => null);
+                    const res = await joinChallengeSingle(2, 'tok', deps, { spendCoins: true, expectedCost: 40 });
+                    expect(res.status).toBe('failed-no-charge');
+                    expect(readRaw).toHaveBeenCalledTimes(2);
+                    expect(deps.coinsUnlock).not.toHaveBeenCalled();
+                    expect(deps.submitToChallenge).not.toHaveBeenCalled();
+                });
+
+                test('the file became unreadable in between: the same', async () => {
+                    const { deps } = flaky(() => {
+                        throw new Error('disk');
+                    });
+                    expect((await joinChallengeSingle(2, 'tok', deps, { spendCoins: true })).status).toBe(
+                        'failed-no-charge',
+                    );
+                    expect(deps.coinsUnlock).not.toHaveBeenCalled();
+                });
+
+                test('a join that was not a submit-only retry is unchanged: a missing marker means unlock, as ever', async () => {
+                    const deps = retrying(null);
+                    const res = await performJoin(invalid({ id: 2 }), 'tok', deps, 100);
+                    expect(res.status).toBe('joined');
+                    expect(deps.coinsUnlock).toHaveBeenCalledTimes(1);
+                });
+            });
+
+            describe('no eligible photo to submit', () => {
+                test('coins already spent: reported as pending, not "no coins were charged", and the marker stays', async () => {
+                    photoPicker.pickPhotosForChallenge.mockReturnValue([]);
+                    const writeRaw = jest.fn();
+                    const deps = retrying(MARKED, { joinStateStore: { readRaw: () => MARKED, writeRaw } });
+                    const res = await joinChallengeSingle(2, 'tok', deps, { spendCoins: true });
+                    expect(res).toMatchObject({ status: 'charged-pending-submit', cost: 100 });
+                    expect(deps.submitToChallenge).not.toHaveBeenCalled();
+                    expect(deps.coinsUnlock).not.toHaveBeenCalled();
+                    expect(writeRaw).not.toHaveBeenCalled();
+                });
+
+                test('nothing spent yet: still "no eligible photo"', async () => {
+                    photoPicker.pickPhotosForChallenge.mockReturnValue([]);
+                    const deps = retrying(null);
+                    expect((await joinChallengeSingle(2, 'tok', deps, { spendCoins: true })).status).toBe(
+                        'skipped-no-photo',
+                    );
+                });
+
+                test('a free join with a stray marker is not turned into a charge that never happened', async () => {
+                    photoPicker.pickPhotosForChallenge.mockReturnValue([]);
+                    const deps = makeDeps({ joinStateStore: { readRaw: () => MARKED, writeRaw: jest.fn() } });
+                    expect((await performJoin(invalid({ id: 2 }), 'tok', deps, 0)).status).toBe('skipped-no-photo');
+                });
             });
         });
 
@@ -1336,6 +1408,121 @@ describe('joinChallengeSingle — manual', () => {
                 cost: 40,
             });
             expect(untouched(turnedPaid)).toBe(true);
+        });
+    });
+});
+
+/**
+ * Unlock markers belong to an account: one account's leftover marker must not turn another account's
+ * join of the same challenge into a submit-only retry (that join would fail forever, unpaid).
+ */
+describe('unlock markers are kept per account', () => {
+    const A = 'a'.repeat(32);
+    const B = 'b'.repeat(32);
+    const memberIdentity = require('../../src/ts/services/autoFill/memberIdentity') as typeof memberIdentityModule;
+
+    // A joinState file kept in memory, as the file store would, so what is written can be read back.
+    const fileWith = (initial: Record<string, unknown>) => {
+        let raw: string | null = JSON.stringify(initial);
+        const writeRaw = jest.fn((data: string) => {
+            raw = data;
+        });
+        return { readRaw: () => raw, writeRaw, read: () => JSON.parse(raw ?? '{}') as Record<string, unknown> };
+    };
+    const joiningAs = (
+        member: string | null,
+        store: ReturnType<typeof fileWith>,
+        over: NonNullable<Parameters<typeof makeDeps>[0]> = {},
+    ) =>
+        makeDeps({
+            getMemberChallenges: jest.fn(async () => [{ id: 2, join_coins: 100, type: 'flash' }]),
+            getBankroll: jest.fn(async () => ({ coins: 500 })),
+            getCurrentMemberProfile: member === null ? undefined : jest.fn(async () => ({ id: member, userName: 'u' })),
+            joinStateStore: store,
+            ...over,
+        });
+
+    beforeEach(() => memberIdentity.__resetMemberIdCache());
+
+    test("another account's marker does not make this account's join a submit-only retry: it pays, and keeps its own marker apart", async () => {
+        const store = fileWith({ [`${A}:2`]: { unlockedAt: 1 } });
+        const deps = joiningAs(B, store, { submitToChallenge: jest.fn(async () => ({ ok: false, raw: null })) });
+        const res = await joinChallengeSingle(2, 'tok', deps, { spendCoins: true, expectedCost: 100 });
+        // B is asked and charged as any first-time join; the submit failed, so B's own marker is left.
+        expect(deps.coinsUnlock).toHaveBeenCalledTimes(1);
+        expect(res.status).toBe('charged-pending-submit');
+        expect(Object.keys(store.read()).sort()).toEqual([`${A}:2`, `${B}:2`]);
+    });
+
+    test("a join that succeeds clears its own account's marker and leaves the other account's", async () => {
+        const store = fileWith({ [`${A}:2`]: { unlockedAt: 1 } });
+        const deps = joiningAs(B, store);
+        expect((await joinChallengeSingle(2, 'tok', deps, { spendCoins: true })).status).toBe('joined');
+        expect(Object.keys(store.read())).toEqual([`${A}:2`]);
+    });
+
+    test('the same account retries submit-only, as before', async () => {
+        const store = fileWith({ [`${A}:2`]: { unlockedAt: 1 } });
+        const deps = joiningAs(A, store);
+        const res = await joinChallengeSingle(2, 'tok', deps, { spendCoins: true, expectedCost: 40 });
+        expect(res.status).toBe('joined');
+        expect(deps.coinsUnlock).not.toHaveBeenCalled();
+        expect(deps.getBankroll).not.toHaveBeenCalled();
+        expect(store.read()).toEqual({});
+    });
+
+    test('a marker from before accounts were told apart still protects whoever is joining', async () => {
+        for (const member of [A, B]) {
+            memberIdentity.__resetMemberIdCache();
+            const store = fileWith({ '2': { unlockedAt: 1 } });
+            const deps = joiningAs(member, store);
+            expect((await joinChallengeSingle(2, 'tok', deps, { spendCoins: true })).status).toBe('joined');
+            expect(deps.coinsUnlock).not.toHaveBeenCalled();
+            // The retry that finished it removes it.
+            expect(store.read()).toEqual({});
+        }
+    });
+
+    test('a new claim is written under the account that makes it', async () => {
+        const store = fileWith({});
+        const deps = joiningAs(A, store, { submitToChallenge: jest.fn(async () => ({ ok: false, raw: null })) });
+        await joinChallengeSingle(2, 'tok', deps, { spendCoins: true });
+        expect(Object.keys(store.read())).toEqual([`${A}:2`]);
+    });
+
+    test('a failed unlock gives the claim back, and only its own', async () => {
+        const store = fileWith({ [`${A}:2`]: { unlockedAt: 1 } });
+        const deps = joiningAs(B, store, { coinsUnlock: jest.fn(async () => ({ ok: false, raw: null })) });
+        expect((await joinChallengeSingle(2, 'tok', deps, { spendCoins: true })).status).toBe('failed-no-charge');
+        expect(Object.keys(store.read())).toEqual([`${A}:2`]);
+    });
+
+    describe('when the account cannot be told (no profile read, or it failed)', () => {
+        test.each([
+            ['no profile read is wired in', () => null],
+            ['the profile read fails', () => 'throws'],
+        ])(
+            "%s: any account's marker for the challenge is respected, so nothing is charged twice",
+            async (_name, kind) => {
+                const store = fileWith({ [`${A}:2`]: { unlockedAt: 1 } });
+                const deps = joiningAs(null, store);
+                if (kind() === 'throws') {
+                    deps.getCurrentMemberProfile = jest.fn(async () => {
+                        throw new Error('down');
+                    });
+                }
+                const res = await joinChallengeSingle(2, 'tok', deps, { spendCoins: true });
+                expect(res.status).toBe('joined');
+                expect(deps.coinsUnlock).not.toHaveBeenCalled();
+            },
+        );
+
+        test('a marker for another challenge does not count', async () => {
+            const store = fileWith({ [`${A}:9`]: { unlockedAt: 1 }, '19': { unlockedAt: 1 } });
+            const deps = joiningAs(null, store);
+            expect((await joinChallengeSingle(2, 'tok', deps, { spendCoins: true, expectedCost: 40 })).status).toBe(
+                'needs-confirm',
+            );
         });
     });
 });
