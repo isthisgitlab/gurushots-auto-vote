@@ -5,6 +5,7 @@ import * as autoFill from '../autoFill';
 import { formatDuration } from '../../format/duration';
 import { failureText, oneLine } from '../../format/logSafe';
 import { finiteOr } from '../../numbers';
+import { consumeMission } from '../missions';
 import { buildFillDeps } from './context';
 
 import type { Challenge, MemberBoost } from '../../types/gurushots';
@@ -287,8 +288,18 @@ export const runBoost = async (ctx: ActionContext) => {
     const timeUntilDisplayBase = secondsToBoostDeadline(challenge, now, availability);
 
     if (!shouldApplyBoost) {
-        logBoostNotReady(challenge, isTimerBasedAvailable, timeUntilDisplayBase, effectiveBoostTime);
-        return;
+        // A "Use a boost" mission still needing one pulls an already-free boost forward.
+        const boostNeed = ctx.missions?.boost ?? 0;
+        if (!votingLogic.isBoostDueForMission(challenge, now, boostNeed)) {
+            logBoostNotReady(challenge, isTimerBasedAvailable, timeUntilDisplayBase, effectiveBoostTime);
+            return;
+        }
+        logger
+            .withCategory('boost')
+            .info(
+                `${logger.challengeTag(challenge)} Boost applied early for the boost mission (${boostNeed} to go)`,
+                null,
+            );
     }
     const target = await resolveBoostTarget(ctx);
     if (
@@ -297,7 +308,9 @@ export const runBoost = async (ctx: ActionContext) => {
         holdBoostForFreshEntry(ctx, target.imageId)
     )
         return;
-    await applyAvailableBoost(ctx, target, isTimerBasedAvailable, timeUntilDisplayBase);
+    if (await applyAvailableBoost(ctx, target, isTimerBasedAvailable, timeUntilDisplayBase)) {
+        consumeMission(ctx.missions, 'boost');
+    }
 };
 
 /**

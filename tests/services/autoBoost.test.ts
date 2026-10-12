@@ -264,3 +264,56 @@ describe('getBoostHoldUntil — fresh-entry wait', () => {
         expect(VotingLogic.getBoostHoldUntil(timer(200), now, now)).toBeNull();
     });
 });
+
+describe('isBoostDueForMission', () => {
+    beforeEach(() => jest.clearAllMocks());
+
+    const withBoost = (now: number, boost: object, closeInSeconds = 7200) =>
+        buildChallenge({ id: '777', close_time: now + closeInSeconds, member: { boost } });
+
+    test('is due for a timer boost still outside its own window', () => {
+        mockSettings({ emergencyFill: 0 });
+        const now = NOW();
+        const challenge = withBoost(now, { state: 'AVAILABLE', timeout: now + 36000 });
+        expect(VotingLogic.shouldApplyBoost(challenge, now)).toBe(false);
+        expect(VotingLogic.isBoostDueForMission(challenge, now, 1)).toBe(true);
+    });
+
+    test('is due for a key-unlocked boost still outside its close window', () => {
+        mockSettings({ emergencyFill: 0 });
+        const now = NOW();
+        const challenge = withBoost(now, { state: 'AVAILABLE_KEY', timeout: 0 });
+        expect(VotingLogic.shouldApplyBoost(challenge, now)).toBe(false);
+        expect(VotingLogic.isBoostDueForMission(challenge, now, 2)).toBe(true);
+    });
+
+    test('is not due for a locked boost', () => {
+        mockSettings();
+        const now = NOW();
+        expect(VotingLogic.isBoostDueForMission(withBoost(now, { state: 'LOCKED' }), now, 1)).toBe(false);
+    });
+
+    test('is not due with Auto-Apply Boost off for the challenge', () => {
+        mockSettings({ autoBoost: false });
+        const now = NOW();
+        expect(
+            VotingLogic.isBoostDueForMission(withBoost(now, { state: 'AVAILABLE', timeout: now + 36000 }), now, 1),
+        ).toBe(false);
+    });
+
+    test('is not due when the mission needs no boost', () => {
+        mockSettings();
+        const now = NOW();
+        expect(
+            VotingLogic.isBoostDueForMission(withBoost(now, { state: 'AVAILABLE', timeout: now + 36000 }), now, 0),
+        ).toBe(false);
+    });
+
+    test('is not due on a closed challenge', () => {
+        mockSettings();
+        const now = NOW();
+        expect(
+            VotingLogic.isBoostDueForMission(withBoost(now, { state: 'AVAILABLE_KEY', timeout: 0 }, 0), now, 1),
+        ).toBe(false);
+    });
+});

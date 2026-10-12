@@ -21,6 +21,8 @@ export type ActionContext = {
     api: VotingPassApi;
     fillDeps: FillDeps;
     entryAges: EntryAgeLedger | null;
+    /** The pass's mission needs; absent on the sleep-boost path, which never counts. */
+    missions?: MissionNeeds | null;
 };
 
 /**

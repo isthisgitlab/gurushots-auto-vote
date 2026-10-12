@@ -952,6 +952,9 @@ export const app = {
     missionUseFills: 'Use Fills for Missions',
     missionUseFillsDesc:
         'While a "Use Fill" mission is active, spend fills on challenges below 100% exposure until the mission is done. Keeps your fill reserve. Off by default.',
+    missionUseBoosts: 'Use Boosts for Missions',
+    missionUseBoostsDesc:
+        'While a "Use a boost" mission is active, apply a boost that is already available instead of waiting for its Auto-Apply time, until the mission is done. Never spends a key. Needs Auto-Apply Boost on. Off by default.',
     missionVote: 'Vote for Missions',
     missionVoteDesc:
         'While a "Vote on photos" mission is active, vote every cycle instead of waiting for your exposure threshold — the votes still needed are split across your challenges, each voted up to 100% exposure (also during the Final Window Exposure period); whatever is left waits for the next cycle. Flash challenges are skipped; Only Boost Mode, Vote Only in Last Minute, Voting Pause and Scheduled Voting Only still apply. Off by default.',

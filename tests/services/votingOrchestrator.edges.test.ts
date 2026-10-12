@@ -16,6 +16,7 @@ jest.mock('../../src/ts/services/VotingLogic', () => ({
     orderDeadlineActions: jest.fn(() => []),
     shouldApplyBoost: jest.fn(() => false),
     isWithinEmergencyWindow: jest.fn(() => false),
+    isBoostDueForMission: jest.fn(() => false),
     resolveBoostFillNewMode: jest.fn(() => 'no'),
     pickBoostEntry: jest.fn(() => null),
     getBoostHoldUntil: jest.fn(() => null),
@@ -108,6 +109,7 @@ beforeEach(() => {
     votingLogic.orderDeadlineActions.mockReturnValue([]);
     votingLogic.shouldApplyBoost.mockReturnValue(false);
     votingLogic.isWithinEmergencyWindow.mockReturnValue(false);
+    votingLogic.isBoostDueForMission.mockReturnValue(false);
     votingLogic.resolveBoostFillNewMode.mockReturnValue('no');
     votingLogic.pickBoostEntry.mockReturnValue(null);
     votingLogic.getBoostHoldUntil.mockReturnValue(null);
@@ -173,6 +175,69 @@ describe('runBoost — availability and readiness', () => {
         api.applyBoost.mockResolvedValue(invalid(null));
         await run(api);
         expect(messages('endOperation').some((m) => m.includes('Boost applied successfully'))).toBe(false);
+    });
+
+    describe('boost mission', () => {
+        const needs = (boost: number) => ({ join: 0, fill: 0, turbo: 0, boost, vote: 0 });
+        const notDue = () => makeApi([withBoost({ state: 'AVAILABLE', timeout: NOW + 7200 })]);
+
+        test('a not-yet-due boost is applied early while the mission needs one, and counts it down', async () => {
+            votingLogic.isBoostDueForMission.mockReturnValue(true);
+            const missions = needs(2);
+            const api = notDue();
+            await run(api, { missions });
+            expect(votingLogic.isBoostDueForMission).toHaveBeenCalledWith(expect.anything(), expect.any(Number), 2);
+            expect(api.applyBoost).toHaveBeenCalledTimes(1);
+            expect(missions.boost).toBe(1);
+            expect(messages('info')).toContain(
+                '[Challenge 101: Orchestrated] Boost applied early for the boost mission (2 to go)',
+            );
+            expect(messages('info').some((m) => m.includes('Boost not ready'))).toBe(false);
+        });
+
+        test('with no need (or no mission) the boost stays "not ready"', async () => {
+            const missions = needs(0);
+            const withMissions = notDue();
+            await run(withMissions, { missions });
+            expect(votingLogic.isBoostDueForMission).toHaveBeenCalledWith(expect.anything(), expect.any(Number), 0);
+            const withoutMissions = notDue();
+            await run(withoutMissions);
+            expect(withMissions.applyBoost).not.toHaveBeenCalled();
+            expect(withoutMissions.applyBoost).not.toHaveBeenCalled();
+            expect(missions.boost).toBe(0);
+            expect(messages('info').filter((m) => m.includes('Boost not ready'))).toHaveLength(2);
+        });
+
+        test('a not-yet-due boost stays held when the mission cannot take it (autoBoost off)', async () => {
+            votingLogic.isBoostDueForMission.mockReturnValue(false);
+            const missions = needs(1);
+            const api = notDue();
+            await run(api, { missions });
+            expect(api.applyBoost).not.toHaveBeenCalled();
+            expect(missions.boost).toBe(1);
+            expect(messages('info').some((m) => m.includes('Boost not ready'))).toBe(true);
+        });
+
+        test('a normally due boost counts the mission down without the early log', async () => {
+            votingLogic.shouldApplyBoost.mockReturnValue(true);
+            const missions = needs(1);
+            const api = makeApi([withBoost({ state: 'AVAILABLE', timeout: NOW + 60 })]);
+            await run(api, { missions });
+            expect(votingLogic.isBoostDueForMission).not.toHaveBeenCalled();
+            expect(api.applyBoost).toHaveBeenCalledTimes(1);
+            expect(missions.boost).toBe(0);
+            expect(messages('info').some((m) => m.includes('applied early'))).toBe(false);
+        });
+
+        test('a failed apply does not count', async () => {
+            votingLogic.isBoostDueForMission.mockReturnValue(true);
+            const missions = needs(1);
+            const api = notDue();
+            api.applyBoost.mockResolvedValue(invalid(null));
+            await run(api, { missions });
+            expect(api.applyBoost).toHaveBeenCalledTimes(1);
+            expect(missions.boost).toBe(1);
+        });
     });
 
     test('a non-Error throw is surfaced verbatim on the boost operation', async () => {
@@ -531,7 +596,7 @@ describe('vote mission', () => {
             ...extra,
         });
     const waiting = { shouldVote: false, voteReason: 'below threshold', targetExposure: 100 };
-    const withVotes = (vote: number) => ({ missions: { join: 0, fill: 0, turbo: 0, vote } });
+    const withVotes = (vote: number) => ({ missions: { join: 0, fill: 0, turbo: 0, boost: 0, vote } });
     const decide = (byId: (id: number) => Record<string, unknown>) =>
         votingLogic.evaluateVotingDecision.mockImplementation((challenge) => invalid(byId(Number(challenge?.id))));
     const quotaLine = (left: number) =>

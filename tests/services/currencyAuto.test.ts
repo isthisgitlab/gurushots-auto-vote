@@ -436,7 +436,14 @@ const infoLines = (): string[] =>
 // The mission needs a pass hands over, with one "Use Fill" mission (id 77: 1 of 3 done) unless told otherwise.
 const fillNeeds = (over: Partial<FillMission> = {}) => {
     const mission = { id: '77', required: 3, current: 1, remaining: 2, spentThisPass: 0, ...over };
-    return invalid<MissionNeeds>({ join: 0, fill: mission.remaining, turbo: 0, vote: 0, fillMissions: [mission] });
+    return invalid<MissionNeeds>({
+        join: 0,
+        fill: mission.remaining,
+        turbo: 0,
+        boost: 0,
+        vote: 0,
+        fillMissions: [mission],
+    });
 };
 
 describe('runMissionFill', () => {
@@ -471,9 +478,9 @@ describe('runMissionFill', () => {
         expect(await runMissionFill(makeCtx(), fillNeeds({ remaining: 0 }))).toBe(false);
         expect(await runMissionFill(makeCtx(), null)).toBe(false);
         // A need no "Use Fill" mission stands behind cannot be counted, so it is not spent on.
-        expect(await runMissionFill(makeCtx(), invalid<MissionNeeds>({ join: 0, fill: 2, turbo: 0, vote: 0 }))).toBe(
-            false,
-        );
+        expect(
+            await runMissionFill(makeCtx(), invalid<MissionNeeds>({ join: 0, fill: 2, turbo: 0, boost: 0, vote: 0 })),
+        ).toBe(false);
         const noLedger = makeCtx();
         (noLedger.currency as CurrencyPassDeps).spendLedger = null;
         expect(await runMissionFill(noLedger, fillNeeds())).toBe(false);

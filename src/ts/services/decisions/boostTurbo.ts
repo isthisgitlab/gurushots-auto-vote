@@ -146,6 +146,20 @@ const isBoostWindowOpen = (challenge: Challenge, now: number): boolean =>
     boostWindowOpen(challenge?.member?.boost, now);
 
 /**
+ * True when a free boost should be applied now for a "Use a boost" mission: the
+ * challenge is open, its boost is usable right now (never a LOCKED one, so no
+ * key is spent), Auto-Apply Boost is on for it and the mission still needs one.
+ * Only pulls the timing of shouldApplyBoost forward.
+ * @param now - Unix timestamp in seconds
+ * @param boostNeed - boosts the mission still needs
+ */
+const isBoostDueForMission = (challenge: Challenge, now: number, boostNeed: number): boolean =>
+    boostNeed > 0 &&
+    challenge.close_time > now &&
+    isBoostWindowOpen(challenge, now) &&
+    settings.getEffectiveSetting('autoBoost', challenge.id.toString());
+
+/**
  * Decides whether to play the Turbo mini-game on a challenge.
  * @param now - Unix timestamp in seconds
  */
@@ -274,6 +288,7 @@ export {
     shouldApplyBoost,
     getBoostHoldUntil,
     isBoostWindowOpen,
+    isBoostDueForMission,
     shouldPlayAutoTurbo,
     isTurboEarnSaved,
     shouldApplyTurbo,

@@ -213,7 +213,7 @@ describe('vote mission through the real rule engine', () => {
     const runMission = (api: ReturnType<typeof makeMissionApi>) =>
         runVotingPass('tok', null, {
             ...deps(api, createMemoryEntryTracker()),
-            missions: { join: 0, fill: 0, turbo: 0, vote: 40 },
+            missions: { join: 0, fill: 0, turbo: 0, boost: 0, vote: 40 },
         });
 
     test('onlyBoost is a hard block: no mission vote, and it takes no share of the split', async () => {

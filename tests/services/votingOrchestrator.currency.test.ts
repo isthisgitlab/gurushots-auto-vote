@@ -170,7 +170,7 @@ describe('fill missions', () => {
     test('a mission fill gets what the mission still needs, counts it down and lands before the vote', async () => {
         vote();
         currencyAuto.runMissionFill.mockResolvedValueOnce(true);
-        const missions = { join: 0, fill: 2, turbo: 0, vote: 0 };
+        const missions = { join: 0, fill: 2, turbo: 0, boost: 0, vote: 0 };
         const api = makeApi();
         await runVotingPass('tok', null, {
             api: invalid(api),
@@ -192,7 +192,7 @@ describe('fill missions', () => {
 
     test('an exposure-rule fill after the vote counts toward the mission', async () => {
         currencyAuto.runAutoExposureFill.mockResolvedValueOnce(true);
-        const missions = { join: 0, fill: 2, turbo: 0, vote: 0 };
+        const missions = { join: 0, fill: 2, turbo: 0, boost: 0, vote: 0 };
         await runWithMissions(missions);
         expect(currencyAuto.runMissionFill).toHaveBeenCalledTimes(1);
         expect(missions.fill).toBe(1);
@@ -204,7 +204,7 @@ describe('fill missions', () => {
     });
 
     test('a mission fill that spent nothing leaves the mission as it was', async () => {
-        const missions = { join: 0, fill: 2, turbo: 0, vote: 0 };
+        const missions = { join: 0, fill: 2, turbo: 0, boost: 0, vote: 0 };
         await runWithMissions(missions);
         expect(missions.fill).toBe(2);
     });
@@ -231,7 +231,7 @@ describe('vote missions', () => {
             cleanupStaleMetadata: null,
             interChallengeDelay: () => 0,
             currency,
-            missions: { join: 0, fill: 0, turbo: 0, vote: 5 },
+            missions: { join: 0, fill: 0, turbo: 0, boost: 0, vote: 5 },
         });
 
     test('a capped mission pool is handed to the fill step whole', async () => {

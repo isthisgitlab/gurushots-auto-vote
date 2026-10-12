@@ -118,6 +118,7 @@ describe('settings schema shape', () => {
             'missionSaveTurbos',
             'missionJoinEarly',
             'missionUseFills',
+            'missionUseBoosts',
             'missionVote',
             'notifyOnScenario',
             'notifyOnBoost',

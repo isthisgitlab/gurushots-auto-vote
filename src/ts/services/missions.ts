@@ -1,7 +1,7 @@
 /**
  * Mission-aware automation. The main GuruShots mission slot rotates through
- * "Join N challenges", "Use Fill N times", "Win Turbo N times", "Vote on N
- * photos" and an all-star mission (nothing to automate there). A "Vote on N
+ * "Join N challenges", "Use Fill N times", "Win Turbo N times", "Use a boost",
+ * "Vote on N photos" and an all-star mission (nothing to automate there). A "Vote on N
  * photos in Flash" mission isn't a vote mission either: the normal rules already
  * vote every joined flash challenge to 100% each cycle, so it moves on its own
  * and the vote spread (which skips flash challenges) must not chase it.
@@ -12,7 +12,7 @@
  *
  * Read at the start of a voting cycle — only while one of the mission settings
  * is on — and handed to the join pre-step and the voting pass as a mutable
- * MissionNeeds. Each step that lands a join, a fill or a turbo win counts it
+ * MissionNeeds. Each step that lands a join, a fill, a turbo win or a boost counts it
  * down (consumeMission), so the rest of the cycle doesn't overshoot on the
  * progress the server reported at its start. The headless Android pass also
  * refreshes progress before using a saved Turbo.
@@ -28,7 +28,7 @@ import * as settings from '../settings';
 import type { Challenge, Mission } from '../types/gurushots';
 import { errorMessage } from '../errorMessage';
 
-type MissionKind = 'join' | 'fill' | 'turbo' | 'vote';
+type MissionKind = 'join' | 'fill' | 'turbo' | 'boost' | 'vote';
 
 /**
  * A "Use Fill" mission the pass can spend on: its server progress when the pass read it, what it still needs (counted
@@ -47,6 +47,7 @@ const MISSION_KEYWORDS: ReadonlyArray<[MissionKind, RegExp]> = [
     ['turbo', /\bturbo/i],
     ['fill', /\b(?:auto)?fills?\b/i],
     ['join', /\bjoin\b/i],
+    ['boost', /\bboosts?\b/i],
     // "Vote on 400 photos" — not "Fulfill 3 votes", "Get 500 votes" or "Receive a vote for your photo".
     ['vote', /\bvote\s+(?:on|for)\s+(?:\d[\d.,\s]*\s)?photos?\b/i],
 ];
@@ -62,11 +63,15 @@ const FLASH = /\bflash/i;
 // The settings that follow each mission kind. Joining early serves a turbo
 // mission too: a turbo is only winnable in a joined challenge.
 const MISSION_SETTINGS: Readonly<
-    Record<MissionKind, ReadonlyArray<'missionJoinEarly' | 'missionUseFills' | 'missionSaveTurbos' | 'missionVote'>>
+    Record<
+        MissionKind,
+        ReadonlyArray<'missionJoinEarly' | 'missionUseFills' | 'missionSaveTurbos' | 'missionUseBoosts' | 'missionVote'>
+    >
 > = Object.freeze({
     join: ['missionJoinEarly'],
     fill: ['missionUseFills'],
     turbo: ['missionSaveTurbos', 'missionJoinEarly'],
+    boost: ['missionUseBoosts'],
     vote: ['missionVote'],
 });
 
@@ -129,7 +134,7 @@ const readMissionNeeds = async (
     if (!token || enabled.length === 0) return null;
     const missions = await getMyMissions(token);
     const nowSec = Math.floor(nowMs / 1000);
-    const needs: MissionNeeds = { join: 0, fill: 0, turbo: 0, vote: 0 };
+    const needs: MissionNeeds = { join: 0, fill: 0, turbo: 0, boost: 0, vote: 0 };
     for (const mission of Array.isArray(missions) ? missions : []) {
         const kind = classifyMission(mission);
         if (!kind || !enabled.includes(kind)) continue;
@@ -217,7 +222,7 @@ const missionVoteQuota = (
 };
 
 /**
- * Count one landed join / fill / turbo win against the mission.
+ * Count one landed join / fill / turbo win / boost against the mission.
  */
 const consumeMission = (needs: MissionNeeds | null | undefined, kind: MissionKind) => {
     if (!needs || !(needs[kind] > 0)) return;

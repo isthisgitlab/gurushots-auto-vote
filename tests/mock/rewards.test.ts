@@ -59,12 +59,13 @@ describe('mock prize-claim endpoints', () => {
         );
     });
 
-    test('getMyMissions returns one claimable and two in-progress missions', async () => {
+    test('getMyMissions returns one claimable and three in-progress missions', async () => {
         const list = await mockApiClient.getMyMissions('tok');
         expect(list.map((m) => [m.id, m.claim_state])).toEqual([
             [900201, 'CLAIM'],
             [900202, 'DISABLED'],
             [900203, 'DISABLED'],
+            [900204, 'DISABLED'],
         ]);
     });
 

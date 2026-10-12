@@ -69,6 +69,7 @@ export const runDeadlineActions = async (
         api: pass.api,
         fillDeps: pass.fillDeps,
         entryAges: pass.entryAges,
+        missions: pass.missions,
     };
     for (const { action } of votingLogic.orderDeadlineActions(challenge)) {
         // Honor cancellation between actions, same as the per-challenge guard.
