@@ -124,8 +124,27 @@ describe('classifyMission', () => {
         ['Vote on 1.000 photos', 'vote'],
         ['Get 500 votes', null],
         ['Receive a vote for your photo', null],
+        // The count never matters: the keyword does.
+        ['Use 1 fill', 'fill'],
+        ['Use 2 fills', 'fill'],
+        ['Win 1 turbo', 'turbo'],
+        ['Win 3 turbos', 'turbo'],
+        ['Join 1 challenge', 'join'],
+        ['Vote on 1 photo', 'vote'],
+        // A flash vote mission moves through the normal flash voting, not the vote spread.
+        ['Vote on 30 photos in Flash', null],
     ])('%s → %s', (name, kind) => {
         expect(classifyMission({ id: 1, name })).toBe(kind);
+    });
+
+    test('a vote mission whose description names flash is not a vote mission', () => {
+        expect(
+            classifyMission({ id: 1, name: 'Vote on 30 photos', description: 'Vote in Flash challenges' }),
+        ).toBeNull();
+        expect(classifyMission({ id: 1, description: 'Vote on 30 photos in Flash' })).toBeNull();
+        expect(classifyMission({ id: 1, name: 'Vote on 30 photos', description: 'Vote in any challenge' })).toBe(
+            'vote',
+        );
     });
 
     test('falls back to the description and survives a missing name', () => {

@@ -1,9 +1,12 @@
 /**
  * Mission-aware automation. The main GuruShots mission slot rotates through
  * "Join N challenges", "Use Fill N times", "Win Turbo N times", "Vote on N
- * photos" and an all-star mission (nothing to automate there). get_my_missions
- * carries no type field, so a mission is recognised by the action its wording
- * asks for (its name first, else its description: the first keyword in the text,
+ * photos" and an all-star mission (nothing to automate there). A "Vote on N
+ * photos in Flash" mission isn't a vote mission either: the normal rules already
+ * vote every joined flash challenge to 100% each cycle, so it moves on its own
+ * and the vote spread (which skips flash challenges) must not chase it.
+ * get_my_missions carries no type field, so a mission is recognised by the
+ * action its wording asks for (its name first, else its description: the first keyword in the text,
  * not the reward it goes on to name); how many are still needed comes from its
  * progress, never from the text.
  *
@@ -52,6 +55,10 @@ const MISSION_KEYWORDS: ReadonlyArray<[MissionKind, RegExp]> = [
 // joining — never let it read as a join (or fill) mission.
 const ALL_STAR = /all.?star/i;
 
+// A flash vote mission advances through the normal flash voting, which the vote
+// spread would only dilute over challenges that never count toward it.
+const FLASH = /\bflash/i;
+
 // The settings that follow each mission kind. Joining early serves a turbo
 // mission too: a turbo is only winnable in a joined challenge.
 const MISSION_SETTINGS: Readonly<
@@ -87,7 +94,8 @@ const classifyMission = (mission: Mission): MissionKind | null => {
     const name = mission?.name ?? '';
     const description = mission?.description ?? '';
     if (ALL_STAR.test(`${name} ${description}`)) return null;
-    return firstKindIn(name) ?? firstKindIn(description);
+    const kind = firstKindIn(name) ?? firstKindIn(description);
+    return kind === 'vote' && FLASH.test(`${name} ${description}`) ? null : kind;
 };
 
 /**

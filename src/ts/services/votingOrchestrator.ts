@@ -38,9 +38,10 @@
  *   automatic-fill counter. Mock passes in-memory ledgers for the same reason it passes
  *   cleanupStaleMetadata: null. Omitting it makes the automation inert.
  *   `missions` is what the active missions still need (services/missions.ts): a
- *   turbo win or a fill this pass counts down its mission, and a vote mission
- *   splits its remaining votes over the challenges (missionVoteQuota). Omitted =
- *   no mission is followed.
+ *   turbo win or a fill this pass counts down its mission (a mission fill is
+ *   spent before the challenge's vote), and a vote mission splits its remaining
+ *   votes over the challenges (missionVoteQuota). Omitted = no mission is
+ *   followed.
  *   `challenges` is the full active list this cycle fetched (not the
  *   filtered subset) so callers can reuse it for threshold scheduling.
  */
@@ -124,8 +125,8 @@ const selectPassChallenges = (
 
 /**
  * One challenge's full pass: its user-defined scenario, turbo-earn, currency
- * automation, deadline actions, new-entry detection, the vote, and the
- * post-vote exposure fill — in that order.
+ * automation, deadline actions, the mission fill, new-entry detection, the
+ * vote, and the post-vote exposure fill — in that order.
  *
  * @param position - 1-based index for progress reporting
  * @returns the cancelled-pass result, or null to continue
@@ -164,6 +165,11 @@ const processChallenge = async (
     const actionsCancelled = await runDeadlineActions(challenge, now, pass);
     if (actionsCancelled) return actionsCancelled;
 
+    // A "Use Fill" mission's fill goes BEFORE the vote: the vote lifts exposure to
+    // ~100%, and a fill on a full challenge is refused. It reflects 100% exposure
+    // onto the challenge, so the vote decision below sees it and spends no votes.
+    if (await currencyAuto.runMissionFill(currencyCtx, pass.missions)) consumeMission(pass.missions, 'fill');
+
     // New-entry detection runs AFTER the deadline actions on purpose: auto-fill /
     // emergency fill / boost-turbo fill-new all reflect their new entry into
     // challenge.member.ranking.entries, so an entry submitted seconds ago in this
@@ -200,12 +206,9 @@ const processChallenge = async (
 
     // Automatic exposure fill, AFTER the vote: a fill is only worth spending
     // when this pass's voting could not lift exposure to the fill threshold.
-    // Failing that, a "Use Fill" mission may want one; either counts toward it.
-    if (!vote.voteThrew) {
-        const filled =
-            (await currencyAuto.runAutoExposureFill(currencyCtx, vote.votePool)) ||
-            (await currencyAuto.runMissionFill(currencyCtx, pass.missions));
-        if (filled) consumeMission(pass.missions, 'fill');
+    // It counts toward a "Use Fill" mission too.
+    if (!vote.voteThrew && (await currencyAuto.runAutoExposureFill(currencyCtx, vote.votePool))) {
+        consumeMission(pass.missions, 'fill');
     }
     return null;
 };
