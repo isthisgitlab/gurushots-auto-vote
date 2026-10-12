@@ -176,7 +176,16 @@ describe('cli session lock', () => {
             writeOld();
 
             await expect(settled(isCliSessionActive())).resolves.toBe(false);
-            await expect(settled(isCliSessionActive())).resolves.toBe(false);
+
+            // The marker stays, so the next check pays the same wait again.
+            let second: boolean | undefined;
+            void isCliSessionActive().then((active) => {
+                second = active;
+            });
+            await jest.advanceTimersByTimeAsync(SETTLE_MS - 1);
+            expect(second).toBeUndefined();
+            await jest.advanceTimersByTimeAsync(1);
+            expect(second).toBe(false);
 
             expect(fs.existsSync(lockFile)).toBe(true);
         });

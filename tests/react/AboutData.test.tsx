@@ -252,8 +252,9 @@ describe('Delete all local data', () => {
         openDelete();
         confirm();
 
-        expect((await within(dialog()).findByRole('alert')).textContent).toBe('about.deleteFailedAndroid');
-        expect(within(dialog()).getByText('about.deleteRestartsOnClose')).toBeTruthy();
+        const alert = await within(dialog()).findByRole('alert');
+        expect(alert.textContent).toBe('about.deleteFailedAndroid about.deleteRestartsOnClose');
+        expect(within(alert).getByText('about.deleteRestartsOnClose')).toBeTruthy();
         expect(window.api.reloadWindow).not.toHaveBeenCalled();
 
         fireEvent.click(within(dialog()).getByRole('button', { name: 'app.close' }));
@@ -290,8 +291,8 @@ describe('Delete all local data', () => {
         confirm();
         await within(dialog()).findByRole('alert');
         confirm();
-        await waitFor(() => expect(within(dialog()).getByRole('alert').textContent).toBe('about.deleteBusyPass'));
-        expect(within(dialog()).getByText('about.deleteRestartsOnClose')).toBeTruthy();
+        await waitFor(() => expect(within(dialog()).getByRole('alert').textContent).toContain('about.deleteBusyPass'));
+        expect(within(within(dialog()).getByRole('alert')).getByText('about.deleteRestartsOnClose')).toBeTruthy();
         expect(window.api.reloadWindow).not.toHaveBeenCalled();
 
         fireEvent.click(within(dialog()).getByRole('button', { name: 'app.close' }));
@@ -304,7 +305,9 @@ describe('Delete all local data', () => {
         render(<AboutDataSection />);
         openDelete();
         confirm();
-        expect((await within(dialog()).findByRole('alert')).textContent).toBe('about.deleteFailedAndroid');
+        const alert = await within(dialog()).findByRole('alert');
+        expect(alert.textContent).toBe('about.deleteFailedAndroid about.deleteRestartsOnClose');
+        expect(within(alert).getByText('about.deleteRestartsOnClose')).toBeTruthy();
     });
 
     test('on Android a failure that asks for no reload, or a call that throws, uses the plain text', async () => {
@@ -331,7 +334,11 @@ describe('Delete all local data', () => {
         await within(dialog()).findByRole('alert');
 
         confirm();
-        await waitFor(() => expect(within(dialog()).getByRole('alert').textContent).toBe('about.deleteFailedAndroid'));
+        await waitFor(() =>
+            expect(within(dialog()).getByRole('alert').textContent).toBe(
+                'about.deleteFailedAndroid about.deleteRestartsOnClose',
+            ),
+        );
         fireEvent.click(within(dialog()).getByRole('button', { name: 'app.close' }));
         expect(window.api.reloadWindow).toHaveBeenCalledTimes(1);
     });

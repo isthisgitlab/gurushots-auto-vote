@@ -1480,8 +1480,9 @@ export const about = {
     deleteBusyApp: 'The desktop app is open, so nothing was deleted. Quit the desktop app, then try again.',
     deleteFailed:
         "Not everything could be deleted. A file or store could not be removed. Close other programs that use the app's files, then try again.",
-    deleteFailedAndroid: 'Not everything could be deleted. Try again.',
-    deleteRestartsOnClose: 'Closing this window restarts the app.',
+    deleteFailedAndroid:
+        "Not everything could be deleted. Some stored data or the background service's data could not be removed. Try again now, or close this dialog to restart the app first.",
+    deleteRestartsOnClose: 'Closing this dialog restarts the app.',
     deleteDone: 'All local data was deleted. The app restarts now; if it does not, close it and open it again.',
     deleteDoneWeb:
         'All local data was deleted. The web server has stopped. Start pnpm web again and open the URL it prints.',

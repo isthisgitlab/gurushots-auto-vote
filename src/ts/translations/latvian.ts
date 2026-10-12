@@ -1507,8 +1507,9 @@ export const about = {
         'Darbvirsmas lietotne ir atvērta, tāpēc nekas netika dzēsts. Aizver darbvirsmas lietotni un mēģini vēlreiz.',
     deleteFailed:
         'Ne viss tika izdzēsts. Kādu failu vai krātuvi neizdevās noņemt. Aizver citas programmas, kas izmanto lietotnes failus, un mēģini vēlreiz.',
-    deleteFailedAndroid: 'Ne viss tika izdzēsts. Mēģini vēlreiz.',
-    deleteRestartsOnClose: 'Aizverot šo logu, lietotne tiks palaista no jauna.',
+    deleteFailedAndroid:
+        'Ne viss tika izdzēsts. Daļu saglabāto datu vai fona pakalpojuma datu neizdevās noņemt. Mēģini vēlreiz tūlīt vai aizver šo dialoglodziņu, lai lietotne vispirms tiktu palaista no jauna.',
+    deleteRestartsOnClose: 'Kad aizvērsi šo dialoglodziņu, lietotne tiks palaista no jauna.',
     deleteDone:
         'Visi vietējie dati ir dzēsti. Lietotne tūlīt tiks palaista no jauna. Ja tas nenotiek, aizver to un atver vēlreiz.',
     deleteDoneWeb:

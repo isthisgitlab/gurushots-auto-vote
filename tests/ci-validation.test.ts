@@ -111,25 +111,32 @@ describe('test typing', () => {
 
 describe('sends toward the Logs window', () => {
     // restrictToLogsChannels (ipc/registerHandlers.ts) filters only `webContents.send`; `postMessage`, a frame's
-    // `send` (`mainFrame.send`, `frames[i].send`, `sendToFrame`) and a `webFrameMain` handle reach a window
-    // unfiltered, so no source may touch a frame handle (`mainFrame`, `framesInSubtree`, `webFrameMain`) or post a
-    // message. A legitimate line is listed here as `relative/path.ts`, with the text of the line and the reason.
+    // `send` (`mainFrame.send`, `frames[i].send`, `sendToFrame`), an event's `reply` and a `webFrameMain` handle reach
+    // a window unfiltered, so no source may touch a frame handle (`mainFrame`, `senderFrame`, `framesInSubtree`,
+    // `webFrameMain`), reply on an event or post a message. A legitimate line is listed here as `relative/path.ts`,
+    // with the text of the line and the reason.
     const ALLOWED: Readonly<Record<string, readonly string[]>> = {
-        // The trusted-sender check compares the sender's frame with the window's main frame; it sends nothing.
+        // The trusted-sender check and the refusal log read the sender's frame (its url, and whether it is the window's
+        // main frame); they send nothing.
         'ipc/registerHandlers.ts': [
             'event.sender?.mainFrame && frame !== event.sender.mainFrame',
             '`postMessage` and `mainFrame.send` are not',
+            'Read senderFrame inside the try',
+            'const frame = event.senderFrame;',
+            'event.senderFrame?.url ??',
         ],
     };
     const UNFILTERED_SEND_RE =
-        /\bpostMessage\(|\bmainFrame\b|\bframesInSubtree\b|\bsendToFrame\(|\bwebFrameMain\b|\bframes\[[^\]]*\]\??\.send\(/g;
+        /\bpostMessage\(|\bmainFrame\b|\bsenderFrame\b|\bframesInSubtree\b|\bsendToFrame\(|\bwebFrameMain\b|\bframes\[[^\]]*\]\??\.send\(|\.reply\(/g;
     const SOURCE_FILE_RE = /\.(?:[cm]?ts|tsx)$/;
+    const hitLines = (text: string) => [
+        ...new Set(
+            [...text.matchAll(UNFILTERED_SEND_RE)].map((match) => text.slice(0, match.index).split('\n').length),
+        ),
+    ];
     const unfilteredSends = (text: string, allowedLines: readonly string[] = []) => {
         const lines = text.split('\n');
-        const hits = new Set(
-            [...text.matchAll(UNFILTERED_SEND_RE)].map((match) => text.slice(0, match.index).split('\n').length),
-        );
-        return [...hits].filter((line) => !allowedLines.some((allowed) => lines[line - 1].includes(allowed)));
+        return hitLines(text).filter((line) => !allowedLines.some((allowed) => lines[line - 1].includes(allowed)));
     };
 
     test('no source uses postMessage or a frame handle (mainFrame, framesInSubtree, webFrameMain)', () => {
@@ -153,6 +160,21 @@ describe('sends toward the Logs window', () => {
         expect(offenders).toEqual([]);
     });
 
+    test('every allowed line still matches the check in its file, so none goes stale', () => {
+        const fs = jest.requireActual<typeof import('node:fs')>('node:fs');
+        const path = jest.requireActual<typeof import('node:path')>('node:path');
+        const stale: string[] = [];
+        for (const [relative, allowedLines] of Object.entries(ALLOWED)) {
+            const text = fs.readFileSync(path.join(__dirname, '..', 'src', 'ts', relative), 'utf8');
+            const lines = text.split('\n');
+            for (const allowed of allowedLines) {
+                if (!hitLines(text).some((line) => lines[line - 1].includes(allowed)))
+                    stale.push(`${relative}: ${allowed}`);
+            }
+        }
+        expect(stale).toEqual([]);
+    });
+
     test('the check catches each unfiltered send, and passes the filtered one', () => {
         for (const offender of [
             'win.webContents.mainFrame.send("c", x);',
@@ -166,6 +188,8 @@ describe('sends toward the Logs window', () => {
             'const frame = win.webContents.mainFrame;',
             'const frames = win.webContents.mainFrame.framesInSubtree;',
             'const all = framesInSubtree;',
+            'const frame = event.senderFrame;',
+            'event.reply("c", x);',
         ]) {
             expect(unfilteredSends(`ok\n${offender}`)).toEqual([2]);
         }

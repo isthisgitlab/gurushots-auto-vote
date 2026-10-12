@@ -106,10 +106,12 @@ export function DeleteLocalDataModal({ isOpen, onClose }: { isOpen: boolean; onC
                         role={done ? 'status' : 'alert'}
                         className={`alert ${done ? 'alert-success' : 'alert-error'} py-2 text-sm`}
                     >
-                        <span>{t(outcomeKey)}</span>
+                        <span>
+                            {t(outcomeKey)}
+                            {reloadOnClose.current && <span> {t('about.deleteRestartsOnClose')}</span>}
+                        </span>
                     </div>
                 )}
-                {outcomeKey && reloadOnClose.current && <p>{t('about.deleteRestartsOnClose')}</p>}
             </div>
             <ModalActions>
                 <button type="button" className="btn btn-outline btn-sm" onClick={handleClose} disabled={deleting}>
