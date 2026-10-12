@@ -14,7 +14,7 @@ import type * as settingsModule from '../../src/ts/settings';
 import type * as loggerModule from '../../src/ts/logger';
 import type * as runtimeModule from '../../src/ts/runtime';
 import type * as coreModule from '@capacitor/core';
-const { makePostRequest, createCommonHeaders, FORM_CONTENT_TYPE } =
+const { makePostRequest, postOnce, createCommonHeaders, FORM_CONTENT_TYPE } =
     require('../../src/ts/api/api-client') as typeof api_clientModule;
 
 // The logger factory below also exports its shared api/apiRequest mocks.
@@ -485,6 +485,148 @@ describe('api-client', () => {
         });
     });
 
+    describe('postOnce: a request that spends is told apart as answered, refused or unclear', () => {
+        const headers = createCommonHeaders(mockToken);
+        const once = () => postOnce(mockUrl, headers, mockData);
+
+        const timeoutError = () => {
+            const e: Error & { code?: string } = new Error('timeout of 30000ms exceeded');
+            e.code = 'ECONNABORTED';
+            return e;
+        };
+        const httpError = (status: number, data: unknown = {}) => {
+            const e: Error & { response?: { status: number; data: unknown; headers: Record<string, string> } } =
+                new Error(`Request failed with status code ${status}`);
+            e.response = { status, data, headers: {} };
+            return e;
+        };
+        const codeError = (code: string) => {
+            const e: Error & { code?: string } = new Error(code);
+            e.code = code;
+            return e;
+        };
+
+        afterEach(() => {
+            jest.useRealTimers();
+        });
+
+        test('a JSON object body is the answer, whatever it says', async () => {
+            axios.mockResolvedValueOnce({ status: 200, headers: {}, data: { success: false } });
+            expect(await once()).toEqual({ kind: 'body', body: { success: false } });
+            expect(axios).toHaveBeenCalledTimes(1);
+        });
+
+        test('the body defaults to empty', async () => {
+            axios.mockResolvedValueOnce({ status: 200, headers: {}, data: { success: true } });
+            await postOnce(mockUrl, headers);
+            expect(axios.mock.calls[0][0].data).toBe('');
+        });
+
+        test('a 429 is retried after its Retry-After, and the answer that follows is the answer', async () => {
+            jest.useFakeTimers();
+            axios
+                .mockRejectedValueOnce(httpError(429, { retry_after: 5 }))
+                .mockResolvedValueOnce({ status: 200, headers: {}, data: { success: true } });
+            const promise = once();
+            await jest.advanceTimersByTimeAsync(6000);
+            expect(await promise).toEqual({ kind: 'body', body: { success: true } });
+            expect(axios).toHaveBeenCalledTimes(2);
+        });
+
+        test('a 429 that outlasts the retries is refused: the server never processed it', async () => {
+            axios.mockRejectedValue(httpError(429));
+            expect(await once()).toEqual({ kind: 'refused' });
+            expect(axios).toHaveBeenCalledTimes(4);
+        });
+
+        test('a 429 whose cooldown is past the in-call cap is refused without waiting', async () => {
+            axios.mockRejectedValue(httpError(429, { retry_after: 60 }));
+            expect(await once()).toEqual({ kind: 'refused' });
+            expect(axios).toHaveBeenCalledTimes(1);
+        });
+
+        test.each([400, 401, 403, 404, 422])('a %i is refused, and not repeated', async (status) => {
+            axios.mockRejectedValue(httpError(status));
+            expect(await once()).toEqual({ kind: 'refused' });
+            expect(axios).toHaveBeenCalledTimes(1);
+        });
+
+        test('a redirect (3xx, never followed) is refused', async () => {
+            axios.mockRejectedValue(httpError(302));
+            expect(await once()).toEqual({ kind: 'refused' });
+            expect(axios).toHaveBeenCalledTimes(1);
+        });
+
+        test('a timeout is unclear, and sent once', async () => {
+            axios.mockRejectedValue(timeoutError());
+            expect(await once()).toEqual({ kind: 'unclear' });
+            expect(axios).toHaveBeenCalledTimes(1);
+        });
+
+        test.each(['ECONNRESET', 'ETIMEDOUT', 'ERR_NETWORK'])('%s is unclear, and sent once', async (code) => {
+            axios.mockRejectedValue(codeError(code));
+            expect(await once()).toEqual({ kind: 'unclear' });
+            expect(axios).toHaveBeenCalledTimes(1);
+        });
+
+        test.each([500, 502, 503, 504])('a %i is unclear, and sent once', async (status) => {
+            axios.mockRejectedValue(httpError(status));
+            expect(await once()).toEqual({ kind: 'unclear' });
+            expect(axios).toHaveBeenCalledTimes(1);
+        });
+
+        test('a 2xx whose body is not a JSON object is unclear', async () => {
+            axios.mockResolvedValueOnce({ status: 200, headers: {}, data: '<html>oops</html>' });
+            expect(await once()).toEqual({ kind: 'unclear' });
+            axios.mockResolvedValueOnce({ status: 200, headers: {}, data: [1] });
+            expect(await once()).toEqual({ kind: 'unclear' });
+        });
+
+        test('an error with no error object, or an adapter bug, is unclear', async () => {
+            axios.mockRejectedValueOnce(undefined);
+            expect(await once()).toEqual({ kind: 'unclear' });
+            axios.mockRejectedValueOnce(new TypeError('adapter bug'));
+            expect(await once()).toEqual({ kind: 'unclear' });
+        });
+
+        test.each(['ENOTFOUND', 'ECONNREFUSED', 'EAI_AGAIN'])(
+            '%s never left this machine: retried like any request, refused when it runs out',
+            async (code) => {
+                axios.mockRejectedValueOnce(codeError(code)).mockResolvedValueOnce({
+                    status: 200,
+                    headers: {},
+                    data: { success: true },
+                });
+                expect(await once()).toEqual({ kind: 'body', body: { success: true } });
+                expect(axios).toHaveBeenCalledTimes(2);
+
+                axios.mockReset();
+                axios.mockRejectedValue(codeError(code));
+                expect(await once()).toEqual({ kind: 'refused' });
+                expect(axios).toHaveBeenCalledTimes(4);
+            },
+        );
+
+        test('an error with a code but no response, and none of the never-sent ones, is unclear', async () => {
+            axios.mockRejectedValue(new Error('Network Error'));
+            expect(await once()).toEqual({ kind: 'unclear' });
+            expect(axios).toHaveBeenCalledTimes(1);
+        });
+
+        test('a read through makePostRequest still retries a timeout and a 5xx, as before', async () => {
+            axios
+                .mockRejectedValueOnce(timeoutError())
+                .mockRejectedValueOnce(httpError(503))
+                .mockResolvedValueOnce({
+                    status: 200,
+                    headers: {},
+                    data: { ok: true },
+                });
+            expect(await makePostRequest(mockUrl, headers, mockData)).toEqual({ ok: true });
+            expect(axios).toHaveBeenCalledTimes(3);
+        });
+    });
+
     describe('makePostRequest retry/backoff', () => {
         const headers = createCommonHeaders(mockToken);
 
@@ -535,23 +677,6 @@ describe('api-client', () => {
 
             expect(result).toBeNull();
             expect(axios).toHaveBeenCalledTimes(4);
-        });
-
-        test('retry: false makes a single attempt on a 5xx and on a timeout (a call that must not be repeated)', async () => {
-            axios.mockRejectedValueOnce(httpError(503));
-            expect(await makePostRequest(mockUrl, headers, mockData, { retry: false })).toBeNull();
-            expect(axios).toHaveBeenCalledTimes(1);
-
-            axios.mockClear();
-            axios.mockRejectedValueOnce(timeoutError());
-            expect(await makePostRequest(mockUrl, headers, mockData, { retry: false })).toBeNull();
-            expect(axios).toHaveBeenCalledTimes(1);
-        });
-
-        test('retry: false still returns the body of a successful request', async () => {
-            axios.mockResolvedValueOnce({ status: 200, headers: {}, data: { ok: true } });
-            expect(await makePostRequest(mockUrl, headers, mockData, { retry: false })).toEqual({ ok: true });
-            expect(axios).toHaveBeenCalledTimes(1);
         });
 
         test('does not retry a non-retryable 4xx response', async () => {

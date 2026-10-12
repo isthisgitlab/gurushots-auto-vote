@@ -12,10 +12,11 @@ const { getMemberChallenges, coinsUnlock, getBankroll } = require('../../src/ts/
 
 jest.mock('../../src/ts/api/api-client', () => ({
     makePostRequest: jest.fn(),
+    postOnce: jest.fn(),
     FORM_CONTENT_TYPE: 'application/x-www-form-urlencoded; charset=utf-8',
 }));
 
-const { makePostRequest } = jest.mocked(require('../../src/ts/api/api-client') as typeof api_clientModule);
+const { makePostRequest, postOnce } = jest.mocked(require('../../src/ts/api/api-client') as typeof api_clientModule);
 const token = 'tok-123';
 
 beforeEach(() => jest.clearAllMocks());
@@ -58,23 +59,20 @@ describe('getMemberChallenges', () => {
 
 describe('coinsUnlock', () => {
     test('posts encoded challenge_id + usage and maps success', async () => {
-        makePostRequest.mockResolvedValueOnce({ success: true });
+        postOnce.mockResolvedValueOnce({ kind: 'body', body: { success: true } });
         const res = await coinsUnlock('13 39', token);
-        expect(makePostRequest.mock.calls[0][2]).toBe('challenge_id=13%2039&usage=JOIN_CHALLENGE');
+        expect(postOnce.mock.calls[0][2]).toBe('challenge_id=13%2039&usage=JOIN_CHALLENGE');
         expect(res).toEqual({ ok: true, raw: { success: true } });
     });
 
-    test('is a single attempt: a timeout or 5xx that was retried could charge twice', async () => {
-        makePostRequest.mockResolvedValueOnce({ success: true });
-        await coinsUnlock(1, token);
-        expect(makePostRequest.mock.calls[0][3]).toEqual({ retry: false });
-    });
-
-    test('ok:false on success:false and on null', async () => {
-        makePostRequest.mockResolvedValueOnce({ success: false });
-        expect((await coinsUnlock(1, token)).ok).toBe(false);
-        makePostRequest.mockResolvedValueOnce(null);
+    test('is a single attempt that tells a refusal from an unclear answer: a retried timeout could charge twice', async () => {
+        postOnce.mockResolvedValueOnce({ kind: 'body', body: { success: false } });
+        expect(await coinsUnlock(1, token)).toEqual({ ok: false, raw: { success: false } });
+        postOnce.mockResolvedValueOnce({ kind: 'refused' });
         expect(await coinsUnlock(1, token)).toEqual({ ok: false, raw: null });
+        postOnce.mockResolvedValueOnce({ kind: 'unclear' });
+        expect(await coinsUnlock(1, token)).toEqual({ ok: false, raw: null, unclear: true });
+        expect(makePostRequest).not.toHaveBeenCalled();
     });
 });
 

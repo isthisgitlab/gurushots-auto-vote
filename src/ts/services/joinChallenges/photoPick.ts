@@ -44,7 +44,7 @@ const loadJoinCandidates = async (
     deps: JoinDeps,
     tagOpts: TagOptions,
 ): Promise<{ eligible: PickerPhoto[]; walkedUnfiltered: boolean } | null> => {
-    const trace = { walkedUnfiltered: false };
+    const trace = { walkedUnfiltered: false, readFailed: false };
     try {
         const eligible = await fetchCandidatesForChallenge(challenge, token, tagOpts, {
             getEligiblePhotos: deps.getEligiblePhotos,
@@ -57,9 +57,14 @@ const loadJoinCandidates = async (
             getCurrentMemberProfile: deps.getCurrentMemberProfile,
             trace,
         });
+        if (trace.readFailed) {
+            cat().warning(`could not read your photo library for ${challenge?.id}: its first page failed`, null);
+            return null;
+        }
         return { eligible, walkedUnfiltered: trace.walkedUnfiltered };
     } catch (error) {
         cat().warning(`could not read eligible photos for ${challenge?.id}: ${errorMessage(error) || error}`, null);
+        // aislop-ignore-next-line ai-slop/hidden-fallback -- warned via the join logger above; null is the documented "unreadable" result
         return null;
     }
 };

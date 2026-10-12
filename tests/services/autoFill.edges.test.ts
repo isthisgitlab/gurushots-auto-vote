@@ -453,4 +453,80 @@ describe('themed search edge shapes', () => {
         expect(result).toEqual(LIB);
         expect(lines.info.some((m) => m.includes('resolved theme'))).toBe(false);
     });
+
+    describe('trace.readFailed: the whole library read failed, not "no photos"', () => {
+        // A read as the real one reports it: an empty list, and readState saying whether its first page failed.
+        const reading =
+            (failedFirstPage: (opts: { order?: string }) => boolean, items: LibraryPhoto[] = []) =>
+            async (_id: string | number, _tok: string, opts: Parameters<FillDeps['getEligiblePhotos']>[2] = {}) => {
+                if (opts.readState && failedFirstPage(opts)) opts.readState.firstPageFailed = true;
+                return opts.search ? [] : items;
+            };
+        const run = async (impl: ReturnType<typeof reading>) => {
+            const { logger } = makeCapturingLogger();
+            const trace = { walkedUnfiltered: false, readFailed: false };
+            const getEligiblePhotos = jest.fn<
+                ReturnType<FillDeps['getEligiblePhotos']>,
+                Parameters<FillDeps['getEligiblePhotos']>
+            >(impl);
+            const result = await fetchCandidatesForChallenge(
+                invalid({ id: 'c1', title: 'Pink' }),
+                'tok',
+                {},
+                { getEligiblePhotos, logger, trace },
+            );
+            return { result, trace };
+        };
+
+        test('both unfiltered reads failing on their first page is a failed read', async () => {
+            const { result, trace } = await run(reading(() => true));
+            expect(result).toEqual([]);
+            expect(trace).toEqual({ walkedUnfiltered: true, readFailed: true });
+        });
+
+        test('one of them succeeding, even empty, is a read library', async () => {
+            expect((await run(reading((opts) => opts.order !== 'default'))).trace.readFailed).toBe(false);
+            expect((await run(reading((opts) => opts.order === 'default'))).trace.readFailed).toBe(false);
+            expect((await run(reading(() => false))).trace.readFailed).toBe(false);
+        });
+
+        test('photos that were found are never a failed read', async () => {
+            const { result, trace } = await run(reading(() => false, LIB));
+            expect(result).toEqual(LIB);
+            expect(trace.readFailed).toBe(false);
+        });
+
+        test('a trace that did not ask for the read to be tracked gets the same calls as ever', async () => {
+            const { logger } = makeCapturingLogger();
+            const getEligiblePhotos = jest.fn<
+                ReturnType<FillDeps['getEligiblePhotos']>,
+                Parameters<FillDeps['getEligiblePhotos']>
+            >(reading(() => true));
+            const trace = { walkedUnfiltered: false };
+            await fetchCandidatesForChallenge(
+                invalid({ id: 'c1', title: 'Pink' }),
+                'tok',
+                {},
+                { getEligiblePhotos, logger, trace },
+            );
+            expect(getEligiblePhotos).toHaveBeenLastCalledWith('c1', 'tok', { order: 'default', logLabel: 'autoFill' });
+            expect(trace).toEqual({ walkedUnfiltered: true });
+        });
+
+        test('no trace asked for, nothing to set', async () => {
+            const { logger } = makeCapturingLogger();
+            const getEligiblePhotos = jest.fn<
+                ReturnType<FillDeps['getEligiblePhotos']>,
+                Parameters<FillDeps['getEligiblePhotos']>
+            >(reading(() => true));
+            expect(
+                await fetchCandidatesForChallenge(
+                    invalid({ id: 'c1', title: 'Pink' }),
+                    'tok',
+                    {},
+                    { getEligiblePhotos, logger },
+                ),
+            ).toEqual([]);
+        });
+    });
 });

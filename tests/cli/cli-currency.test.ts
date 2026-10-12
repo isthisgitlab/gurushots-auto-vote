@@ -115,6 +115,13 @@ describe.each([
         expect(contains(msgsAt('error'), 'none of that currency left')).toBe(true);
     });
 
+    test('a spend that got no answer says it may have gone through, not that it was rejected', async () => {
+        handlers[channel].mockResolvedValue({ success: false, outcome: 'unclear' });
+        await cmd('111', { yes: true });
+        expect(contains(msgsAt('error'), 'may or may not have gone through')).toBe(true);
+        expect(contains(msgsAt('error'), 'rejected')).toBe(false);
+    });
+
     test('unknown challenge: nothing dispatched', async () => {
         await cmd('999', { yes: true });
         expect(handlers[channel]).not.toHaveBeenCalled();

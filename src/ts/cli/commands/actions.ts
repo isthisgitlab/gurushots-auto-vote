@@ -161,6 +161,8 @@ const OUTCOME_TEXT: Record<string, string> = {
         'The replacement photo changed since the preview. Nothing was spent — re-run without --yes to see the new suggestion.',
     busy: 'Another currency action is still running. Try again in a moment.',
     'invalid-args': INVALID_ID_TEXT,
+    unclear:
+        'The request got no answer, so it may or may not have gone through. Check the challenge (or your balance) before trying again.',
     'api-failed': 'GuruShots rejected the request. Nothing further was attempted — check the log for details.',
 };
 

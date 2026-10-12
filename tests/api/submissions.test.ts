@@ -411,3 +411,58 @@ describe('getEligiblePhotos usage option', () => {
         }
     });
 });
+
+describe('getEligiblePhotos readState: a failed first page is told apart from an empty library', () => {
+    const token = 'tok-123';
+    const { makePostRequest } = jest.mocked(require('../../src/ts/api/api-client') as typeof api_clientModule);
+    const state = () => ({ firstPageFailed: false });
+
+    beforeEach(() => jest.clearAllMocks());
+
+    test('one page: a failed request or a payload with no list sets it, an empty list does not', async () => {
+        for (const [answer, failed] of [
+            [null, true],
+            [{ nope: true }, true],
+            [{ items: [] }, false],
+        ] as const) {
+            makePostRequest.mockResolvedValueOnce(answer);
+            const readState = state();
+            expect(await getEligiblePhotos('1', token, { readState })).toEqual([]);
+            expect(readState.firstPageFailed).toBe(failed);
+        }
+    });
+
+    test('a walk: a failed or unreadable first page sets it, and so does one that throws', async () => {
+        for (const first of [null, { nope: true }]) {
+            makePostRequest.mockResolvedValueOnce(first);
+            const readState = state();
+            expect(await getEligiblePhotos('1', token, { paginate: true, readState })).toEqual([]);
+            expect(readState.firstPageFailed).toBe(true);
+        }
+        makePostRequest.mockRejectedValueOnce(new Error('boom'));
+        const thrown = state();
+        expect(await getEligiblePhotos('1', token, { paginate: true, readState: thrown })).toEqual([]);
+        expect(thrown.firstPageFailed).toBe(true);
+    });
+
+    test('a walk that read its first page and failed on a later one is a partial read, not a failed one', async () => {
+        makePostRequest.mockResolvedValueOnce({ items: [{ id: 'a' }, { id: 'b' }] }).mockResolvedValueOnce(null);
+        const readState = state();
+        const photos = await getEligiblePhotos('1', token, { paginate: true, limit: 2, readState });
+        expect(photos).toHaveLength(2);
+        expect(readState.firstPageFailed).toBe(false);
+        makePostRequest
+            .mockResolvedValueOnce({ items: [{ id: 'a' }, { id: 'b' }] })
+            .mockRejectedValueOnce(new Error('x'));
+        const thrown = state();
+        await getEligiblePhotos('1', token, { paginate: true, limit: 2, readState: thrown });
+        expect(thrown.firstPageFailed).toBe(false);
+    });
+
+    test('without a readState nothing changes', async () => {
+        makePostRequest.mockResolvedValueOnce(null);
+        expect(await getEligiblePhotos('1', token)).toEqual([]);
+        makePostRequest.mockResolvedValueOnce(null);
+        expect(await getEligiblePhotos('1', token, { paginate: true })).toEqual([]);
+    });
+});

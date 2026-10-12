@@ -50,6 +50,7 @@ test('a missing bankroll reads as an unknown balance', () => {
 test('unmapped outcomes fall back to the generic failure message', () => {
     const t = (key: string) => key;
     expect(currencyOutcomeText(t, 'busy')).toBe('app.currencyOutcomeBusy');
+    expect(currencyOutcomeText(t, 'unclear')).toBe('app.currencyOutcomeUnclear');
     expect(currencyOutcomeText(t, 'HTTP 500')).toBe('app.currencyOutcomeFailed');
     expect(currencyOutcomeText(t, invalid(null))).toBe('app.currencyOutcomeFailed');
 });

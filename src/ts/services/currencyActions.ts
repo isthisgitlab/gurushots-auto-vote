@@ -16,6 +16,7 @@
  * handlers and the automatic runners (services/currencyAuto.ts) share it.
  */
 
+import { errorMessage } from '../errorMessage';
 import { findActiveChallenge } from './findActiveChallenge';
 import { rankCandidatesForChallenge, resolveMemberId } from './autoFill';
 import { resetPassState as resetPhotoStatsPassState } from './photoStats';
@@ -137,14 +138,49 @@ const spendResult = (
     logger: Logger,
     label: string,
     challenge: Challenge,
-    result: { ok?: boolean } | null | undefined,
+    result: { ok?: boolean; unclear?: boolean } | null | undefined,
 ): SpendOutcome => {
     if (result?.ok) {
         cat(logger).info(`${label}: done for ${logger.challengeTag(challenge)}`, null);
         return { ok: true, outcome: CURRENCY_OUTCOME.ok };
     }
+    if (result?.unclear) {
+        cat(logger).warning(
+            `${label}: no usable answer for ${logger.challengeTag(challenge)} — it may have gone through`,
+            null,
+        );
+        return { ok: false, outcome: CURRENCY_OUTCOME.unclear };
+    }
     cat(logger).warning(`${label}: rejected by the server for ${logger.challengeTag(challenge)}`, null);
     return { ok: false, outcome: CURRENCY_OUTCOME.apiFailed };
+};
+
+/**
+ * A swap that got no answer, settled against the live entries: it went through when the photo it put in is
+ * entered and the one it took out is not. Anything else (not entered, or the challenge cannot be read) stays unclear.
+ */
+const settleUnclearSwap = async (
+    result: SpendOutcome,
+    challengeId: string | number,
+    entered: { out: string; in: string },
+    token: string,
+    { strategy, logger }: { strategy: CurrencyStrategy; logger: Logger },
+): Promise<SpendOutcome> => {
+    if (result.outcome !== CURRENCY_OUTCOME.unclear) return result;
+    let landed = false;
+    try {
+        const { challenge } = await loadLive(challengeId, token, strategy);
+        const ids = challenge ? entryIds(challenge) : new Set<string>();
+        landed = ids.has(entered.in) && !ids.has(entered.out);
+    } catch (error) {
+        cat(logger).warning(
+            `swap: could not read the challenge to settle an unanswered request: ${errorMessage(error) || error}`,
+            null,
+        );
+    }
+    if (!landed) return result;
+    cat(logger).info(`swap: the unanswered request had gone through for challenge ${challengeId}`, null);
+    return { ok: true, outcome: CURRENCY_OUTCOME.ok };
 };
 
 /**
@@ -260,11 +296,12 @@ const swapEntry = async (
         return { ok: false, outcome: CURRENCY_OUTCOME.staleCandidate };
     }
     const oldEntry = findEntry(challenge, imageId);
-    const result = spendResult(
-        logger,
-        'swap',
-        challenge,
-        await strategy.swapPhoto(challenge.id, imageId, newImageId, token),
+    const result = await settleUnclearSwap(
+        spendResult(logger, 'swap', challenge, await strategy.swapPhoto(challenge.id, imageId, newImageId, token)),
+        challenge.id,
+        { out: imageId, in: newImageId },
+        token,
+        { strategy, logger },
     );
     if (result.ok && ledger) ledger.onSwapped(challenge.id, oldEntry, newImageId);
     return result;
@@ -295,11 +332,17 @@ const swapBack = async (
         ledger.remove(challengeId, record.currentId);
         return { ok: false, outcome: CURRENCY_OUTCOME.notAvailable };
     }
-    const result = spendResult(
-        logger,
-        'swapBack',
-        challenge,
-        await strategy.swapPhoto(challenge.id, record.currentId, record.previousId, token),
+    const result = await settleUnclearSwap(
+        spendResult(
+            logger,
+            'swapBack',
+            challenge,
+            await strategy.swapPhoto(challenge.id, record.currentId, record.previousId, token),
+        ),
+        challenge.id,
+        { out: record.currentId, in: record.previousId },
+        token,
+        { strategy, logger },
     );
     if (result.ok) ledger.remove(challengeId, record.currentId);
     return result;

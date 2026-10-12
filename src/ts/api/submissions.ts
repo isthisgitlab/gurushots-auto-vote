@@ -93,6 +93,11 @@ type LibraryOptions = {
     usage?: string;
     budgetMs?: number;
     order?: 'default';
+    /**
+     * Out-parameter: `firstPageFailed` is set when the first page could not be read (a failed request or an
+     * unreadable payload), which the empty list returned for it cannot tell from a library with nothing in it.
+     */
+    readState?: { firstPageFailed: boolean };
 };
 
 /** A walk's photos, and whether it stopped before the library was exhausted. */
@@ -115,6 +120,11 @@ const normalizeLibraryOptions = (options: LibraryOptions) => ({
     usage: options.usage === 'swap' ? 'swap' : 'submit',
     order: options.order,
 });
+
+/** Notes in a caller's readState that the first page (page index 0) of a read failed. */
+const markFirstPageFailed = (readState: LibraryOptions['readState'], page: number): void => {
+    if (page === 0 && readState) readState.firstPageFailed = true;
+};
 
 /**
  * The paginated library walk (see getEligiblePhotos for its stop conditions).
@@ -164,6 +174,7 @@ const walkLibrary = async (
                 order,
             });
         } catch (error) {
+            markFirstPageFailed(options.readState, page);
             warn(
                 `reading page ${page + 1} of your photo library failed (${oneLine(errorMessage(error) || error)}); continuing with the ${byId.size} photo(s) already read`,
             );
@@ -174,6 +185,7 @@ const walkLibrary = async (
             // Malformed/missing payload. Page 1 means "no photos" (the
             // long-standing empty-array contract); a later page means a partial
             // walk the caller should know about.
+            markFirstPageFailed(options.readState, page);
             if (page > 0) {
                 warn(
                     `page ${page + 1} of your photo library came back empty or unreadable; continuing with the ${byId.size} photo(s) already read`,
@@ -233,7 +245,7 @@ const walkLibrary = async (
  *
  *   budgetMs: override the wall-clock budget for this walk. Callers running
  *   against a deadline should pass something smaller.
- * @returns list of photo items, or empty array on failure
+ * @returns list of photo items, or empty array on failure (`readState.firstPageFailed` tells the two apart)
  */
 const getEligiblePhotos = async (
     challengeId: string | number,
@@ -245,7 +257,9 @@ const getEligiblePhotos = async (
 
     if (options.paginate !== true) {
         const { limit, start, search, usage, order } = normalizeLibraryOptions(options);
-        return (await fetchPhotoPage(challengeId, token, { limit, start, search, usage, order })) || [];
+        const items = await fetchPhotoPage(challengeId, token, { limit, start, search, usage, order });
+        if (items === null) markFirstPageFailed(options.readState, 0);
+        return items ?? [];
     }
     return (await walkLibrary(challengeId, token, options)).items;
 };

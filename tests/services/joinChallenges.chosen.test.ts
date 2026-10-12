@@ -37,6 +37,11 @@ jest.mock('../../src/ts/settings/storage', () => ({
     }),
 }));
 jest.mock('../../src/ts/voting/cancellation', () => ({ isCancelled: jest.fn(() => false) }));
+// The real library read (api/submissions.ts) runs over this transport: null is a failed request.
+jest.mock('../../src/ts/api/api-client', () => ({
+    makePostRequest: jest.fn(),
+    FORM_CONTENT_TYPE: 'application/x-www-form-urlencoded; charset=utf-8',
+}));
 jest.mock('../../src/ts/services/visionVerifier', () => ({
     rankVisually: jest.fn(async (_c: unknown, ids: string[], _e: unknown, want: number) => ids.slice(0, want)),
 }));
@@ -60,6 +65,8 @@ const lines = invalid<{ __lines: Record<string, string[]> }>(loggerModule).__lin
 import visionModule = require('../../src/ts/services/visionVerifier');
 const vision = jest.mocked(visionModule);
 import type * as joinChallengesModule from '../../src/ts/services/joinChallenges';
+import type * as apiClientModule from '../../src/ts/api/api-client';
+import type * as submissionsModule from '../../src/ts/api/submissions';
 import type * as autoFillModule from '../../src/ts/services/autoFill';
 import type * as chosenPhotosModule from '../../src/ts/services/autoFill/chosenPhotos';
 import type { Challenge } from '../../src/ts/types/gurushots';
@@ -72,6 +79,9 @@ const { performJoin, runJoinPass, joinChallengeSingle, resolveJoinSetting, inFli
 const { __resetMemberIdCache } = require('../../src/ts/services/autoFill') as typeof autoFillModule;
 const { forgetChosenPhotosMemory } =
     require('../../src/ts/services/autoFill/chosenPhotos') as typeof chosenPhotosModule;
+
+const { makePostRequest } = jest.mocked(require('../../src/ts/api/api-client') as typeof apiClientModule);
+const { getEligiblePhotos } = require('../../src/ts/api/submissions') as typeof submissionsModule;
 
 const photo = (id: string, labels: string[]): PickerPhoto => ({
     id,
@@ -318,6 +328,54 @@ describe('Submit Only Chosen Photos on a join', () => {
         const deps = makeDeps(undefined, { getMemberChallenges: jest.fn(async () => invalid(null)) });
         await runJoinPass('tok', Date.now(), deps);
         expect(settings.rememberOpenChallengeIds).not.toHaveBeenCalled();
+    });
+});
+
+describe('a photo library that cannot be read is not an empty one (the real read, over a failing transport)', () => {
+    const owed = JSON.stringify({ 'member-1:1': { unlockedAt: 1 } });
+    const paidRetry = (items: unknown) => {
+        makePostRequest.mockResolvedValue(items === null ? null : { items });
+        return makeDeps(eleven, { getEligiblePhotos, joinStateStore: makeStore(owed) });
+    };
+
+    test('coins already spent: a failed request is the ordinary pending-submit (Retry helps), with no reason', async () => {
+        const deps = paidRetry(null);
+        expect(await performJoin(challenge(), 'tok', deps, 50)).toEqual({
+            status: 'charged-pending-submit',
+            charged: 0,
+        });
+        expect(deps.submitToChallenge).not.toHaveBeenCalled();
+        expect(deps.coinsUnlock).not.toHaveBeenCalled();
+    });
+
+    test('coins already spent: a payload with no photo list reads the same', async () => {
+        makePostRequest.mockResolvedValue({ nope: true });
+        const deps = makeDeps(eleven, { getEligiblePhotos, joinStateStore: makeStore(owed) });
+        expect((await performJoin(challenge(), 'tok', deps, 50)).reason).toBeUndefined();
+    });
+
+    test('coins already spent: a library that was read and holds nothing eligible is "no photo"', async () => {
+        const deps = paidRetry([]);
+        expect(await performJoin(challenge(), 'tok', deps, 50)).toEqual({
+            status: 'charged-pending-submit',
+            charged: 0,
+            reason: 'no-photo',
+        });
+    });
+
+    test('nothing spent: either way it is a skip, and the failed read is logged', async () => {
+        for (const items of [null, []]) {
+            makePostRequest.mockResolvedValue(items === null ? null : { items });
+            const deps = makeDeps(eleven, { getEligiblePhotos });
+            expect(await performJoin(challenge(), 'tok', deps, 0)).toEqual({ status: 'skipped-no-photo', charged: 0 });
+        }
+        expect(lines.warning.some((m) => m.includes('could not read your photo library'))).toBe(true);
+    });
+
+    test('one failed attempt is not enough: the default-order read that does return photos is used', async () => {
+        makePostRequest.mockResolvedValueOnce(null).mockResolvedValue({ items: eleven });
+        const deps = makeDeps(eleven, { getEligiblePhotos });
+        expect((await performJoin(challenge(), 'tok', deps, 0)).status).toBe('joined');
     });
 });
 

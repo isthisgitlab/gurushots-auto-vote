@@ -7,6 +7,8 @@ import { useDiscoverRows } from '@/hooks/useDiscoverRows';
 import { useDiscoverJoins } from '@/hooks/useDiscoverJoins';
 import type { JoinPhase } from '@/hooks/useDiscoverJoins';
 import { costOf } from '@/utils/discoverCost';
+import { outcomeMeta } from '@/utils/discoverOutcome';
+import type { OutcomeVariant } from '@/utils/discoverOutcome';
 import { Modal, ModalActions } from '@/components/ui/Modal';
 import { InlineLoader } from '@/components/ui/LoadingSpinner';
 import { StatusBadge } from '@/components/ui/StatusBadge';
@@ -17,6 +19,7 @@ import { ipcErrorText } from '@/api/ipcErrorText';
 import { PhotoChooserModal } from './PhotoChooserModal';
 
 import type { Bankroll, Challenge, OpenChallenge } from '../../../types/gurushots';
+import type { JoinReason } from '../../../types/join';
 
 /**
  * What a join left behind for its row: the join-challenge result (either arm)
@@ -28,31 +31,12 @@ export type JoinOutcome = {
     cost?: number;
     coins?: number;
     error?: string;
-    reason?: string;
-};
-
-// Map a join outcome status to a translated, colored inline message. Distinct
-// wording for the money-critical "charged but not joined" case, which also
-// surfaces a resume-submit action (see below).
-const OUTCOME: Record<string, { key: string; variant: keyof typeof TEXT_CLASS }> = {
-    joined: { key: 'app.discoverJoined', variant: 'success' },
-    'skipped-unaffordable': { key: 'app.discoverUnaffordable', variant: 'warning' },
-    'balance-unknown': { key: 'app.discoverBalanceUnknown', variant: 'warning' },
-    'charged-pending-submit': { key: 'app.discoverChargedPending', variant: 'error' },
-    'failed-no-charge': { key: 'app.discoverFailedNoCharge', variant: 'error' },
-    'skipped-no-photo': { key: 'app.discoverNoPhoto', variant: 'warning' },
-    unavailable: { key: 'app.discoverUnavailable', variant: 'neutral' },
-    'not-started': { key: 'app.discoverNotStarted', variant: 'neutral' },
-    // The price rose after the cost was shown: nothing was spent, and the list shows the new cost.
-    'needs-confirm': { key: 'app.discoverPriceChanged', variant: 'warning' },
-    // A join answered while another row's price dialog was open: it is not shown, and asks to be pressed again.
-    'confirm-dialog-open': { key: 'app.discoverConfirmDialogFirst', variant: 'neutral' },
-    busy: { key: 'app.discoverBusy', variant: 'neutral' },
+    reason?: JoinReason;
 };
 
 // Static (purge-safe) text color per outcome variant — never build Tailwind
 // class names dynamically, the JIT can't see them.
-const TEXT_CLASS = {
+const TEXT_CLASS: Record<OutcomeVariant, string> = {
     success: 'text-success',
     warning: 'text-warning',
     error: 'text-error',
@@ -264,14 +248,7 @@ function RowOutcome({
     onRetry: () => void;
 }) {
     const { t } = useTranslation();
-    // Coins spent earlier, nothing eligible left to finish with: a photo is what is missing, not a retry.
-    const noPhoto = outcome.status === 'charged-pending-submit' && outcome.reason === 'no-photo';
-    const accountUnknown = outcome.status === 'failed-no-charge' && outcome.reason === 'account-unknown';
-    const meta: { key: string | null; variant: keyof typeof TEXT_CLASS } = noPhoto
-        ? { key: 'app.discoverPendingNoPhoto', variant: 'error' }
-        : accountUnknown
-          ? { key: 'app.discoverAccountUnknown', variant: 'error' }
-          : OUTCOME[outcome.status as string] || { key: null, variant: 'error' };
+    const meta = outcomeMeta(outcome);
     return (
         // Announced when it appears: a problem interrupts (alert), a result or a note waits its turn (status).
         <div
@@ -281,7 +258,7 @@ function RowOutcome({
             {meta.key
                 ? interp(t(meta.key), { coins: outcome.cost ?? cost, have: outcome.coins })
                 : ipcErrorText(outcome.error, t) || t('app.discoverGenericError')}
-            {outcome.status === 'charged-pending-submit' && !noPhoto && (
+            {meta.retry && (
                 <button
                     className="btn btn-outline btn-sm ml-2"
                     aria-label={interp(t('app.discoverRetrySubmitLabel'), { title: name })}

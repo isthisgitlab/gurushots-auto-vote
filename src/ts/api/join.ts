@@ -19,7 +19,8 @@
  * the header names it lists.
  */
 
-import { makePostRequest } from './api-client';
+import { makePostRequest, postOnce } from './api-client';
+import { toActionResult } from './postOutcome';
 import { ENDPOINTS, createWebHeaders, makeRequireValue } from './constants';
 
 import type {
@@ -74,11 +75,7 @@ const coinsUnlock = async (
         '&',
     );
     // One attempt: a charge is not known to be idempotent, so a retry after a timeout could charge twice.
-    const response = await makePostRequest<SuccessResponse>(ENDPOINTS.coinsUnlock, headers, data, { retry: false });
-    if (!response) {
-        return { ok: false, raw: null };
-    }
-    return { ok: response.success === true, raw: response };
+    return toActionResult(await postOnce<SuccessResponse>(ENDPOINTS.coinsUnlock, headers, data));
 };
 
 // Map the API's currency `type` tokens to our normalized field names.

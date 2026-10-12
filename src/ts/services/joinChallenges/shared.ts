@@ -6,6 +6,7 @@ import * as logger from '../../logger';
 import type { rankVisually } from '../visionVerifier';
 import type { ActiveChallengesResponse } from '../../types/gurushots';
 import type { RawJsonStore } from '../../types/stores';
+import type { JoinReason } from '../../types/join';
 import type * as joinApi from '../../api/join';
 import type * as submissionsApi from '../../api/submissions';
 import type * as tagsApi from '../../api/tags';
@@ -35,18 +36,29 @@ export interface JoinDeps {
 }
 
 /**
- * Why a join ended as it did, where the status alone would mislead: `no-photo` — coins were spent
- * earlier, but no photo qualifies to finish the join with; `account-unknown` — a paid join could not
- * tell which account is logged in, and did nothing (this attempt spent no coins).
+ * One join's result. `charged` is coins spent THIS call; `maybeCharged` is the cost of an unlock that got no
+ * answer, which may or may not have been spent (a pass counts it against its budget and balance, and does not
+ * report it as charged).
  */
-type JoinReason = 'no-photo' | 'account-unknown';
+type JoinOutcome = {
+    status: string;
+    charged: number;
+    maybeCharged?: number;
+    imageId?: string;
+    reason?: JoinReason;
+};
 
 /**
- * One join's result. `charged` is coins spent THIS call.
+ * A persisted unlock claim as one join reads it: where it is stored, whether its payment is unconfirmed (an
+ * unlock that got no answer, with the balance read just before it), and whether it is a bare one from before
+ * accounts were told apart (whose coins it holds is unknown).
  */
-type JoinOutcome = { status: string; charged: number; imageId?: string; reason?: JoinReason };
+type Claim = { key: string; unconfirmed: boolean; coinsBefore: number | null; legacy: boolean };
 
-type UnlockState = { charged: number; alreadyUnlocked: boolean };
+/**
+ * The claim a join continues from (null: none), and the coins this call spent unlocking.
+ */
+type UnlockState = { charged: number; alreadyUnlocked: boolean; claim: Claim | null };
 
 /**
  * The manual single join's result.
@@ -68,4 +80,4 @@ const inFlight: Set<string> = new Set();
 const cat = () => logger.withCategory('join');
 
 export { inFlight, cat };
-export type { JoinOutcome, UnlockState, JoinSingleResult };
+export type { Claim, JoinOutcome, UnlockState, JoinSingleResult };

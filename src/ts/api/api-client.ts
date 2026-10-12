@@ -15,21 +15,14 @@ import { FORM_CONTENT_TYPE } from './constants';
 import { isPlainObject } from '../plainObject';
 
 import type { AxiosAdapter, AxiosRequestConfig, AxiosResponse } from 'axios';
+import { failureVerdict, isSafeToRepeat } from './postOutcome';
+import type { PostOutcome, RequestFailure } from './postOutcome';
 
 /**
  * Request headers as the api/ modules build them. A value may be undefined
  * (login sends no token); axios drops it.
  */
 type RequestHeaders = Record<string, string | undefined>;
-
-/**
- * What a failed axios call rejects with, as far as the retry layer reads it.
- */
-interface RequestFailure {
-    message?: string;
-    code?: string;
-    response?: { status?: number; data?: { retry_after?: unknown }; headers?: Record<string, unknown> };
-}
 
 /**
  * The native bridge globals of the Android headless-service WebView.
@@ -257,30 +250,53 @@ const warnIfRedirect = (url: string, response: RequestFailure['response']): void
 };
 
 /**
- * Makes a POST request to the GuruShots API
- *
- * Transient failures (network drop, timeout, 429, 5xx) are retried with
- * exponential backoff + jitter up to `apiMaxRetries` times so an
- * unattended voting cycle survives a momentary blip. The contract is
- * unchanged: the resolved response body on success, `null` on ultimate
- * failure — callers continue to branch on `null`.
- *
- * @param url - The API endpoint URL
- * @param headers - Request headers including authentication token
- * @param data - URL-encoded form data (default: empty string)
- * @param options.retry - false makes exactly one attempt: for a request that spends something and is
- *   not known to be idempotent, where a retry after a timeout could spend twice (default: true)
- * @returns The response body as `T` (the shape the endpoint wrapper reads, all
- *   fields optional), or null if the request failed or the body was not a JSON
- *   object. Only the object check is enforced: the wrapper guards every read.
+ * The axios request of one POST attempt, on the adapter of the platform it runs on.
  */
-const makePostRequest = async <T extends object>(
+const postConfig = (url: string, headers: RequestHeaders, data: string): AxiosRequestConfig => {
+    const requestConfig: AxiosRequestConfig = {
+        method: 'post',
+        url,
+        headers,
+        data,
+        timeout: settings.getSetting('apiTimeout') * 1000, // Convert seconds to milliseconds
+        // The API never redirects; following one would replay the x-token header at the target.
+        maxRedirects: 0,
+    };
+    if (runtime.isHeadlessService()) {
+        requestConfig.adapter = getHeadlessHttpAdapter();
+    } else if (runtime.isCapacitor()) {
+        requestConfig.adapter = getCapacitorHttpAdapter();
+    }
+    return requestConfig;
+};
+
+/**
+ * How long to wait before the next attempt: an explicit server cooldown when present, else exponential
+ * backoff with jitter. Null when the cooldown is longer than the in-call cap, which defers the request to the
+ * next scheduled cycle.
+ */
+const retryDelayMs = (error: RequestFailure, attempt: number, baseDelayMs: number): number | null => {
+    const cooldownMs = getRetryAfterMs(error);
+    if (cooldownMs == null) {
+        return Math.min(baseDelayMs * 2 ** attempt + Math.random() * baseDelayMs, MAX_RETRY_DELAY_MS);
+    }
+    return cooldownMs > MAX_RETRY_DELAY_MS ? null : Math.max(cooldownMs, MIN_RETRY_DELAY_MS);
+};
+
+/**
+ * The retry loop behind both POST entry points.
+ *
+ * @param repeatable - true: transient failures (network drop, timeout, 429, 5xx) are retried with exponential
+ *   backoff + jitter up to `apiMaxRetries` times. false: only a 429 and a request that never left are retried;
+ *   any other failure ends the call, as refused or unclear.
+ */
+const sendPost = async <T extends object>(
     url: string,
     headers: RequestHeaders,
-    data: string = '',
-    { retry = true }: { retry?: boolean } = {},
-): Promise<T | null> => {
-    const maxRetries = retry ? coerceNonNegInt(settings.getSetting('apiMaxRetries'), 3) : 0;
+    data: string,
+    repeatable: boolean,
+): Promise<PostOutcome<T>> => {
+    const maxRetries = coerceNonNegInt(settings.getSetting('apiMaxRetries'), 3);
     const baseDelayMs = coerceNonNegInt(settings.getSetting('apiRetryBaseDelayMs'), 1000);
 
     for (let attempt = 0; ; attempt++) {
@@ -290,21 +306,7 @@ const makePostRequest = async <T extends object>(
         logger.withCategory('api').apiRequest('POST', url);
 
         try {
-            const requestConfig: AxiosRequestConfig = {
-                method: 'post',
-                url,
-                headers,
-                data,
-                timeout: settings.getSetting('apiTimeout') * 1000, // Convert seconds to milliseconds
-                // The API never redirects; following one would replay the x-token header at the target.
-                maxRedirects: 0,
-            };
-            if (runtime.isHeadlessService()) {
-                requestConfig.adapter = getHeadlessHttpAdapter();
-            } else if (runtime.isCapacitor()) {
-                requestConfig.adapter = getCapacitorHttpAdapter();
-            }
-            const response = await axios(requestConfig);
+            const response = await axios(postConfig(url, headers, data));
 
             const duration = Date.now() - startTime;
 
@@ -317,7 +319,8 @@ const makePostRequest = async <T extends object>(
                 responseData: response.data as unknown,
             });
 
-            return responseObject<T>(url, response.data);
+            const body = responseObject<T>(url, response.data);
+            return body ? { kind: 'body', body } : { kind: 'unclear' };
         } catch (caught) {
             const error = caught as RequestFailure | null | undefined;
             const duration = Date.now() - startTime;
@@ -336,22 +339,14 @@ const makePostRequest = async <T extends object>(
 
             warnIfRedirect(url, error?.response);
 
-            if (!isRetryableError(error) || attempt >= maxRetries) {
-                return null; // Return null instead of throwing to prevent crashing
+            const mayRepeat = repeatable ? isRetryableError(error) : isSafeToRepeat(error);
+            if (!mayRepeat || attempt >= maxRetries) {
+                return { kind: failureVerdict(error) }; // An outcome instead of a throw, to prevent crashing
             }
 
-            // Honor an explicit server cooldown when present, else use
-            // exponential backoff with jitter. A cooldown longer than the
-            // in-call cap is deferred to the next scheduled cycle.
-            // isRetryableError already rejected a null/undefined failure.
-            const cooldownMs = getRetryAfterMs(error as RequestFailure);
-            let delayMs;
-            if (cooldownMs != null) {
-                if (cooldownMs > MAX_RETRY_DELAY_MS) return null;
-                delayMs = Math.max(cooldownMs, MIN_RETRY_DELAY_MS);
-            } else {
-                delayMs = Math.min(baseDelayMs * 2 ** attempt + Math.random() * baseDelayMs, MAX_RETRY_DELAY_MS);
-            }
+            // isRetryableError / isSafeToRepeat already rejected a null/undefined failure.
+            const delayMs = retryDelayMs(error as RequestFailure, attempt, baseDelayMs);
+            if (delayMs === null) return { kind: failureVerdict(error) };
 
             logger.withCategory('api').warning('Retrying API request after transient failure', {
                 url,
@@ -367,6 +362,43 @@ const makePostRequest = async <T extends object>(
 };
 
 /**
+ * Makes a POST request to the GuruShots API
+ *
+ * Transient failures (network drop, timeout, 429, 5xx) are retried with
+ * exponential backoff + jitter up to `apiMaxRetries` times so an
+ * unattended voting cycle survives a momentary blip. The contract is
+ * unchanged: the resolved response body on success, `null` on ultimate
+ * failure — callers continue to branch on `null`.
+ *
+ * @param url - The API endpoint URL
+ * @param headers - Request headers including authentication token
+ * @param data - URL-encoded form data (default: empty string)
+ * @returns The response body as `T` (the shape the endpoint wrapper reads, all
+ *   fields optional), or null if the request failed or the body was not a JSON
+ *   object. Only the object check is enforced: the wrapper guards every read.
+ */
+const makePostRequest = async <T extends object>(
+    url: string,
+    headers: RequestHeaders,
+    data: string = '',
+): Promise<T | null> => {
+    const outcome = await sendPost<T>(url, headers, data, true);
+    return outcome.kind === 'body' ? outcome.body : null;
+};
+
+/**
+ * Makes a POST request that spends something and is not known to be idempotent: a retry after a timeout could
+ * spend twice. A 429 (honouring its Retry-After, as makePostRequest does) and a request that never left
+ * (ECONNREFUSED, ENOTFOUND, EAI_AGAIN) are retried; any other failure is one attempt and says which kind it was.
+ *
+ * @returns `body` with the response; `refused` when the server did not process it (3xx, 4xx, a 429 that ran out of
+ *   retries, a request that never left); `unclear` when it was sent and no usable answer came (a timeout, a reset,
+ *   a 5xx, a 2xx whose body is not a JSON object), so it may or may not have been processed.
+ */
+const postOnce = <T extends object>(url: string, headers: RequestHeaders, data: string = ''): Promise<PostOutcome<T>> =>
+    sendPost<T>(url, headers, data, false);
+
+/**
  * Creates common headers for all API requests to GuruShots
  *
  * These headers mimic an iOS device to ensure compatibility with the API.
@@ -379,4 +411,4 @@ const createCommonHeaders = (token: string | undefined): RequestHeaders => {
     return generateRandomHeaders(token);
 };
 
-export { makePostRequest, createCommonHeaders, FORM_CONTENT_TYPE };
+export { makePostRequest, postOnce, createCommonHeaders, FORM_CONTENT_TYPE };

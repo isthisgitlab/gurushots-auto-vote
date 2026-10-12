@@ -386,6 +386,7 @@ describe('actions', () => {
             ],
             ['a refused preview', {}, {}, 'swap was refused (no-alternative)', 'preview'],
             ['a refused swap', {}, {}, 'swap was refused (api-failed)', 'swap'],
+            ['a swap that got no answer', {}, {}, 'swap was refused (unclear)', 'unclear'],
             ['a refused swap without an outcome', {}, {}, 'swap was refused (no response)', 'bare'],
         ])('%s', async (label, extra, memory, message, mode) => {
             setup(swapRule(extra));
@@ -394,6 +395,7 @@ describe('actions', () => {
             if (mode === 'preview')
                 currencyActions.previewSwap.mockResolvedValueOnce({ ok: false, outcome: 'no-alternative' });
             if (mode === 'swap') currencyActions.swapEntry.mockResolvedValueOnce({ ok: false, outcome: 'api-failed' });
+            if (mode === 'unclear') currencyActions.swapEntry.mockResolvedValueOnce({ ok: false, outcome: 'unclear' });
             if (mode === 'bare') currencyActions.swapEntry.mockResolvedValueOnce(invalid({ ok: false }));
             await run();
             expect(state().lastError!.message).toContain(message);
@@ -621,6 +623,14 @@ describe('rule execution', () => {
         await run();
         expect(currencyActions.fillExposure).toHaveBeenCalledTimes(1);
         expect(state()).toEqual(expect.objectContaining({ inFlight: null, lastError: null }));
+    });
+
+    test('a step whose spend got no answer is a failure to resume at (the live re-read guards the repeat), not a skip', async () => {
+        currencyActions.fillExposure.mockResolvedValueOnce(invalid({ ok: true }));
+        currencyActions.unlockBoostWithKey.mockResolvedValueOnce({ ok: false, outcome: 'unclear' });
+        setup(single([{ type: 'fillExposure' }, { type: 'unlockBoost' }]));
+        await run();
+        expect(state().inFlight).toEqual({ ruleId: 'r1', actionIndex: 1 });
     });
 
     test('a committed rule passes over a permanently skipped step and still reaches its goto', async () => {

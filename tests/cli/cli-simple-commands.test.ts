@@ -426,7 +426,17 @@ describe('join', () => {
         );
         await joinChallengeCmd('7');
         expect(msgs('error')).toEqual([
-            'Coins were already spent on 7, but no photo qualifies for this challenge. Add an eligible photo, or loosen Must Include Tags or turn on Submit Even Without a Tag Match, then re-run "join 7 --yes" — you will NOT be charged again.',
+            'Coins were already spent on 7, but no photo qualifies for this challenge. Add an eligible photo, then re-run "join 7 --yes" — you will NOT be charged again. If you use Must Include Tags, or have turned off Submit Even Without a Tag Match, those can also be what blocks the pick.',
+        ]);
+    });
+
+    test('a payment that got no answer says it may or may not have gone through, and that only the submit is retried', async () => {
+        handlers['join-challenge'].mockResolvedValue(
+            invalid({ status: 'charged-pending-submit', reason: 'unconfirmed', cost: 100 }),
+        );
+        await joinChallengeCmd('7');
+        expect(msgs('error')).toEqual([
+            'The payment for 7 got no answer, so it may or may not have gone through, and the join did not finish. Re-run "join 7 --yes": to avoid paying twice it only retries the submit, and checks your coin balance first.',
         ]);
     });
 

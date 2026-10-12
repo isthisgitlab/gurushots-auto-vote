@@ -8,10 +8,11 @@
  */
 
 import { errorMessage } from '../../errorMessage';
+import type { Challenge } from '../../types/gurushots';
 import { cat } from './shared';
 import type { JoinDeps, JoinSingleResult } from './shared';
 import { performJoin } from './performJoin';
-import { isUnlocked, markerOwner, paidOwnerUnknown } from './unlockMarker';
+import { markerOwner, paidOwnerUnknown, pruneClosedClaims, reconcileClaim } from './unlockMarker';
 
 /**
  * Live balance check for a confirmed paid manual join.
@@ -88,6 +89,22 @@ const joinChallengeSingle = async (
         return { status: 'fetch-failed', challengeId, cost: 0 };
     }
     if (candidates === null) return { status: 'fetch-failed', challengeId, cost: 0 };
+    const result = await joinListed(candidates, challengeId, token, deps, { spendCoins, expectedCost });
+    // Last, so the join's own reads of the claims come first; a list that is read is what lets old claims go.
+    await pruneClosedClaims(candidates, token, deps);
+    return result;
+};
+
+/**
+ * The join of the one challenge in a successfully read open list.
+ */
+const joinListed = async (
+    candidates: Challenge[],
+    challengeId: string | number,
+    token: string,
+    deps: JoinDeps,
+    { spendCoins, expectedCost }: { spendCoins: boolean; expectedCost?: number },
+): Promise<JoinSingleResult> => {
     const challenge = candidates.find((c) => String(c?.id) === String(challengeId));
     if (!challenge) return notOpenResult(challengeId, token, deps);
 
@@ -104,8 +121,10 @@ const joinChallengeSingle = async (
 
     // Coins already spent (an unlock marker, left by a join whose submit failed) are not spent again:
     // the retry only submits, so neither consent to a price nor the balance has a say in it. An
-    // unreadable marker file reads as "no marker" here, as in performJoin, whose paid path then refuses.
-    const retryOnly = cost > 0 && isUnlocked(deps.joinStateStore, challengeId, owner);
+    // unreadable marker file reads as "no marker" here, as in performJoin, whose paid path then refuses. A payment
+    // that got no answer is settled against the balance first: one that did not go through is forgotten, and this
+    // is an ordinary unpaid join again.
+    const retryOnly = cost > 0 && (await reconcileClaim(challengeId, cost, token, deps, owner));
 
     // Consent covers a price: a cost above the one the caller confirmed (`expectedCost`) needs a new
     // confirmation, with the live cost, and unlocks nothing.

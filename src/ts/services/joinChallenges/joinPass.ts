@@ -20,7 +20,7 @@ import {
     warnMissingCloseTime,
 } from './settingsResolution';
 import { performJoin } from './performJoin';
-import { paidByThisAccount } from './unlockMarker';
+import { paidByThisAccount, pruneClosedClaims } from './unlockMarker';
 
 /**
  * Mutable per-pass join state: the balance and budget kept locally accurate as
@@ -181,13 +181,15 @@ const joinCandidate = async (
         cat().warning(`join failed for ${logger.challengeTag(challenge)}: ${errorMessage(error) || error}`, null);
         return 'error';
     }
-    if (outcome.charged > 0) {
-        pass.remainingBudget -= outcome.charged;
+    // An unlock that got no answer may have charged: it counts against the pass as if it had.
+    const spent = outcome.charged + (outcome.maybeCharged ?? 0);
+    if (spent > 0) {
+        pass.remainingBudget -= spent;
         // A charge only follows a passed affordability check, which already
         // proved Number(bankroll.coins) finite. Coerce the same way so a
         // numeric-string balance is still decremented for the rest of the pass.
         const bankroll = pass.bankroll as Bankroll;
-        bankroll.coins = Number(bankroll.coins) - outcome.charged;
+        bankroll.coins = Number(bankroll.coins) - spent;
     }
     return outcome.status;
 };
@@ -300,6 +302,8 @@ const runJoinPass = async (
         results.push({ id: challenge?.id, status });
     }
 
+    // After the joins, so each one's own reads of the claims come first.
+    await pruneClosedClaims(candidates, token, deps);
     if (joined > 0) {
         cat().info(`join pass complete: joined ${joined} of ${candidates.length} open challenge(s)`, null);
     }

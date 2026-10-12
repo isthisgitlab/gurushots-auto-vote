@@ -95,7 +95,13 @@ const joinLine = (
             if (result?.reason === 'no-photo') {
                 return {
                     level: 'error',
-                    text: `Coins were already spent on ${challengeId}, but no photo qualifies for this challenge. Add an eligible photo, or loosen Must Include Tags or turn on Submit Even Without a Tag Match, then re-run "join ${challengeId} --yes" — you will NOT be charged again.`,
+                    text: `Coins were already spent on ${challengeId}, but no photo qualifies for this challenge. Add an eligible photo, then re-run "join ${challengeId} --yes" — you will NOT be charged again. If you use Must Include Tags, or have turned off Submit Even Without a Tag Match, those can also be what blocks the pick.`,
+                };
+            }
+            if (result?.reason === 'unconfirmed') {
+                return {
+                    level: 'error',
+                    text: `The payment for ${challengeId} got no answer, so it may or may not have gone through, and the join did not finish. Re-run "join ${challengeId} --yes": to avoid paying twice it only retries the submit, and checks your coin balance first.`,
                 };
             }
             return {

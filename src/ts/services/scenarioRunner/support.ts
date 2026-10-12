@@ -99,6 +99,7 @@ const spendAllowed = async (
  */
 const TRANSIENT_OUTCOMES: ReadonlySet<string> = new Set([
     CURRENCY_OUTCOME.apiFailed,
+    CURRENCY_OUTCOME.unclear,
     CURRENCY_OUTCOME.balanceUnknown,
     CURRENCY_OUTCOME.busy,
 ]);

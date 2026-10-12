@@ -31,8 +31,7 @@ const _postBoost = async (challengeId: string, imageId: string, token: string): 
         ...createCommonHeaders(token),
         'content-type': FORM_CONTENT_TYPE,
     };
-    // One attempt: a boost is not known to be idempotent, so a retry after a timeout could consume a second one.
-    return await makePostRequest<SuccessResponse>(ENDPOINTS.boostPhoto, headers, data, { retry: false });
+    return await makePostRequest<SuccessResponse>(ENDPOINTS.boostPhoto, headers, data);
 };
 
 /**

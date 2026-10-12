@@ -174,10 +174,15 @@ export interface SuccessResponse {
     success?: boolean;
 }
 
-/** `{ ok, raw }` from a spend / submit / apply call; `raw` is null when the request failed. */
+/**
+ * `{ ok, raw }` from a spend / submit / apply call; `raw` is null when the request failed. `unclear` is set by a
+ * spend that goes out once: the request was sent and no usable answer came, so it may have been processed.
+ * A refusal (`raw` null, not unclear) was not.
+ */
 export interface ActionResult {
     ok: boolean;
     raw: SuccessResponse | null;
+    unclear?: boolean;
 }
 
 /** rest_mobile/signup. */

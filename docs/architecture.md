@@ -414,22 +414,47 @@ repeated six times is one that gets forgotten at one of them.
   retry), and if the claim can't be written, don't spend. Whose coins a claim holds is part of its key: a
   new claim is always written as `<member id>:<challenge id>` (the member id survives a re-login; a token
   does not), so one account's leftover claim never makes another account's join a submit-only retry. A
-  bare `<challenge id>` claim, from before accounts were told apart, is only ever read: it counts for
-  every account (it can only err towards not charging twice) and is never deleted once the member id is known:
-  a paid join that finishes with coins it spent or found spent removes only the account's own keyed claim,
-  and a free join removes none. `coins_unlock` is a single attempt (`makePostRequest(..., { retry: false })`,
-  since a retried timeout or 5xx could charge twice), and a body that says no is the only answer that gives
-  the claim back: no answer at all (timeout, 5xx, network) may have charged, so the claim stays and the join
-  answers `charged-pending-submit`. A **paid** join whose account cannot be identified (a real claim store
-  and a profile read are wired in, but no member id came) does nothing paid: no unlock, no submit, and it
-  answers `failed-no-charge` with `reason: 'account-unknown'`, which the GUI and CLI word as "could not
-  confirm the account; this attempt spent no coins", not as "no coins were charged". A manual join or an auto-join pass that
+  bare `<challenge id>` claim, from before accounts were told apart, counts for every account (it can only
+  err towards not charging twice) and is never deleted by a failure; a paid submit that succeeds using it
+  clears it (the submit proves this account held the unlock), and a paid join that only a bare claim holds
+  and whose submit fails answers `reason: 'unconfirmed'`, since whose coins it holds is unknown. A free join
+  removes no claim. **Refused vs unclear** (`api/api-client.ts`): `coins_unlock` and the currency spends go
+  through `postOnce`, a request that is never repeated after it was sent, and answers `body`, `refused` or
+  `unclear`. A 429 (after its Retry-After) and a request that never left (ECONNREFUSED, ENOTFOUND,
+  EAI_AGAIN) are retried like any request and are refused when they run out; a 3xx or 4xx is refused (the
+  server did not process it); a timeout, a reset, any 5xx and a 2xx whose body is no JSON object are
+  unclear. Boosts and Turbos keep the normal retrying `makePostRequest`: once USED the server refuses a
+  replay, and a single attempt would only lose a boost in its last window. A refused unlock gives the claim
+  back and answers `failed-no-charge`. An **unclear** unlock may have charged: the claim stays, stored as
+  `{ unlockedAt, unconfirmed: true, coinsBefore }` (`coinsBefore` is the balance `performJoin` read just
+  before the unlock, null when that read failed), and the join answers `charged-pending-submit` with
+  `reason: 'unconfirmed'` (GUI and CLI: the payment may or may not have gone through; only the submit is
+  retried) and `maybeCharged`, which the auto pass subtracts from its budget and balance without reporting
+  it as charged. The next attempt, manual or automatic, **settles** an unconfirmed claim of this account
+  (`reconcileClaim`) before anything else decides on the join: balance equal to `coinsBefore` → it was not
+  charged, the claim is cleared and the join is an ordinary unpaid one (manual: `needs-confirm` unless the
+  call was a consented spend with a matching `expectedCost`; auto: the normal paid decision with its budget
+  and balance checks); balance down by at least the cost → it was, the claim is confirmed and only the
+  submit is left; anything else (another amount, an unreadable balance, no `coinsBefore`) → still unknown,
+  the claim stays unconfirmed and the submit alone is retried. Spends of currency (keys, swaps, fills) that
+  are unclear say so (`outcome: 'unclear'`, never "rejected"), and an unclear swap re-reads the live entries
+  and records the swap in the swap-back ledger when it did land. A **paid** join whose account cannot be
+  identified (a real claim store and a profile read are wired in, but no member id came) does nothing
+  paid: no unlock, no submit, and it answers `failed-no-charge` with `reason: 'account-unknown'`, which the
+  GUI and CLI word as "could not confirm the account; this attempt spent no coins", not as "no coins were
+  charged". The reasons are one union (`types/join.ts`) shared by core and renderer. Claims whose challenge is no longer open are dropped when a successful, non-empty open list is read
+  (`pruneClosedClaims`, after the pass or manual join): only this account's own keyed claims, only ones older
+  than six hours (a list read a moment ago cannot know of a join under way), never on an unknown account,
+  and never another account's or a bare one. A manual join or an auto-join pass that
   finds this account's claim skips the price, balance and budget checks and only submits (`submitOnly`: the
   join re-reads the claim and refuses to unlock if it is gone); with no eligible photo it answers
-  `charged-pending-submit` with `reason: 'no-photo'` only when the photo library was read and held nothing
-  eligible (the GUI and CLI name Must Include Tags and Submit Even Without a Tag Match, not Chosen Photos:
-  Submit Only Chosen Photos is lifted for a join whose coins are spent, and only for a paid one); a library
-  that could not be read answers plain `charged-pending-submit`, the ordinary Retry; a per-process in-flight `Set` **plus** a
+  `charged-pending-submit` with `reason: 'no-photo'` only when the photo library was actually read and held
+  nothing eligible (the GUI and CLI lead with adding an eligible photo, and name Must Include Tags and Submit
+  Even Without a Tag Match only as what can also block the pick; Submit Only Chosen Photos is lifted for a
+  join whose coins are spent, and only for a paid one). A library whose read failed (both unfiltered reads
+  failed on their first page: `readState.firstPageFailed` out of `getEligiblePhotos`, carried through
+  `trace.readFailed` to `pickJoinPhoto`) is `unreadable`, answers plain `charged-pending-submit` (the
+  ordinary Retry) and skips a free join; an unconfirmed claim's wording wins over "no photo". a per-process in-flight `Set` **plus** a
   cross-process lockfile (`acquireUnlockLock`, real-fs platforms, TTL stale-recovery, fail-open) guard the
   check→unlock→mark section; a corrupt/unreadable join-state **refuses to spend** (fail-safe, not fail-open);
   the pass is cancellation-checked between candidates and before each spend, and each candidate is

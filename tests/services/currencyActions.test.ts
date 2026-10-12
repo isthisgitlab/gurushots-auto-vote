@@ -444,3 +444,104 @@ describe('edge paths', () => {
         expect(strategy.exposureAutofill).not.toHaveBeenCalled();
     });
 });
+
+describe('a spend that got no answer is not "rejected"', () => {
+    const { createMemoryLedger } = require('../../src/ts/swapBackStore') as typeof swapBackStoreModule;
+    const { swapBack } = require('../../src/ts/services/currencyActions') as typeof currencyActionsModule;
+    const noAnswer = { ok: false, raw: null, unclear: true };
+
+    test('a key and a fill say "unclear": they may have gone through, which a rejection would deny', async () => {
+        const key = stubStrategy({ overrides: { keyUnlock: jest.fn().mockResolvedValue(noAnswer) } });
+        expect(await unlockBoostWithKey(555, 'tok', { strategy: key, logger })).toEqual({
+            ok: false,
+            outcome: 'unclear',
+        });
+        const fill = stubStrategy({ overrides: { exposureAutofill: jest.fn().mockResolvedValue(noAnswer) } });
+        expect(await fillExposure(555, 'tok', { strategy: fill, logger })).toEqual({ ok: false, outcome: 'unclear' });
+    });
+
+    // The live challenge before the swap, then after it: 'old' replaced by 'fresh'.
+    const afterSwap = () => {
+        const challenge = makeChallenge();
+        challenge.member.ranking.entries = [
+            { id: 'entered', member_id: 'mem1' },
+            { id: 'fresh', member_id: 'mem1' },
+        ];
+        challenge.member.ranking.swaps = [{ id: 'swapped-before' }, { id: 'old' }];
+        return challenge;
+    };
+    const boostedOld = () => {
+        const challenge = makeChallenge();
+        challenge.member.ranking.entries![1].boosted = true;
+        return challenge;
+    };
+    const unclearSwap = (live: Array<FixtureChallenge | Error>) => {
+        const strategy = stubStrategy({
+            challenge: boostedOld(),
+            overrides: { swapPhoto: jest.fn().mockResolvedValue(noAnswer) },
+        });
+        // The first read is the live re-check before the spend; the next ones settle the unanswered request.
+        const reads = jest.fn().mockResolvedValueOnce({ challenges: [boostedOld()] });
+        for (const next of live) {
+            if (next instanceof Error) reads.mockRejectedValueOnce(next);
+            else reads.mockResolvedValueOnce({ challenges: [next] });
+        }
+        strategy.getActiveChallenges = reads;
+        return strategy;
+    };
+
+    test('a swap that did land is recorded as one, so its boosted photo can be swapped back', async () => {
+        const strategy = unclearSwap([afterSwap()]);
+        const ledger = createMemoryLedger();
+        expect(await swapEntry(555, 'old', 'fresh', 'tok', { strategy, logger, ledger })).toEqual({
+            ok: true,
+            outcome: 'ok',
+        });
+        expect(ledger.list(555)).toEqual([
+            expect.objectContaining({ currentId: 'fresh', previousId: 'old', kind: 'boost' }),
+        ]);
+    });
+
+    test('a swap that did not land stays unclear, and nothing is recorded', async () => {
+        const strategy = unclearSwap([boostedOld()]);
+        const ledger = createMemoryLedger();
+        expect((await swapEntry(555, 'old', 'fresh', 'tok', { strategy, logger, ledger })).outcome).toBe('unclear');
+        expect(ledger.list(555)).toEqual([]);
+    });
+
+    test('a challenge that cannot be read to settle it, or that has left the list, stays unclear', async () => {
+        for (const live of [[new Error('down')], [new Error('')], []]) {
+            const strategy = unclearSwap(live);
+            const ledger = createMemoryLedger();
+            expect((await swapEntry(555, 'old', 'fresh', 'tok', { strategy, logger, ledger })).outcome).toBe('unclear');
+            expect(ledger.list(555)).toEqual([]);
+        }
+    });
+
+    test('a swap-back that did land drops its record; one that did not keeps it', async () => {
+        const entered = (id: string) => {
+            const challenge = makeChallenge();
+            challenge.member.ranking.entries = [{ id, member_id: 'mem1' }];
+            challenge.member.ranking.swaps = [{ id: id === 'repl' ? 'orig' : 'repl' }];
+            return challenge;
+        };
+        for (const [after, landed] of [
+            [entered('orig'), true],
+            [entered('repl'), false],
+        ] as const) {
+            const strategy = stubStrategy({
+                challenge: entered('repl'),
+                overrides: { swapPhoto: jest.fn().mockResolvedValue(noAnswer) },
+            });
+            strategy.getActiveChallenges = jest
+                .fn()
+                .mockResolvedValueOnce({ challenges: [entered('repl')] })
+                .mockResolvedValueOnce({ challenges: [after] });
+            const ledger = createMemoryLedger();
+            ledger.onSwapped(555, { id: 'orig', member_id: 'mem1', boosted: true }, 'repl');
+            const result = await swapBack(555, 'repl', 'tok', { strategy, logger, ledger });
+            expect(result.outcome).toBe(landed ? 'ok' : 'unclear');
+            expect(ledger.list(555)).toHaveLength(landed ? 0 : 1);
+        }
+    });
+});

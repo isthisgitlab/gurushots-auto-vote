@@ -797,6 +797,23 @@ describe('edge paths', () => {
         expect(screen.queryByText('app.discoverRetrySubmit')).toBeNull();
     });
 
+    test('a payment that got no answer says so, and keeps the Retry that only submits', async () => {
+        window.api.joinChallenge = joinMock().mockResolvedValue(
+            invalid({ success: false, status: 'charged-pending-submit', reason: 'unconfirmed' }),
+        );
+        renderSection();
+        await screen.findByText('Paid One');
+        fireEvent.click(screen.getByText('app.discoverJoinPaid'));
+        const note = await screen.findByText('app.discoverUnconfirmed');
+        expect(note.getAttribute('role')).toBe('alert');
+        expect(screen.queryByText('app.discoverChargedPending')).toBeNull();
+        expect(screen.queryByText('app.discoverPendingNoPhoto')).toBeNull();
+        const retry = screen.getByText<HTMLButtonElement>('app.discoverRetrySubmit');
+        expect(retry.disabled).toBe(false);
+        fireEvent.click(retry);
+        await waitFor(() => expect(window.api.joinChallenge).toHaveBeenLastCalledWith(900002, false));
+    });
+
     test('the Retry submit button is named by its challenge', async () => {
         window.api.joinChallenge = spendLater({ status: 'charged-pending-submit', cost: 100 });
         mockTranslator.t.mockImplementation((key) =>

@@ -19,21 +19,19 @@
  * header names it lists.
  */
 
-import { makePostRequest } from './api-client';
+import { postOnce } from './api-client';
+import { toActionResult } from './postOutcome';
 import { ENDPOINTS, createWebHeaders, makeRequireValue } from './constants';
 
 import type { ActionResult, SuccessResponse } from '../types/gurushots';
 
 const requireValue = makeRequireValue('currency');
 
-const toResult = (response: SuccessResponse | null): ActionResult =>
-    response ? { ok: response.success === true, raw: response } : { ok: false, raw: null };
-
 const post = async (url: string, token: string, fields: Record<string, string>): Promise<ActionResult> => {
     const headers = createWebHeaders(token);
     const data = new URLSearchParams(fields).toString();
     // One attempt: a spend is not known to be idempotent, so a retry after a timeout could spend twice.
-    return toResult(await makePostRequest<SuccessResponse>(url, headers, data, { retry: false }));
+    return toActionResult(await postOnce<SuccessResponse>(url, headers, data));
 };
 
 /**

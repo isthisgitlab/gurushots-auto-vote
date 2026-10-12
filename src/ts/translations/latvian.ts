@@ -291,6 +291,8 @@ export const app = {
     currencyOutcomeStaleCandidate:
         'Ieteiktais foto vairs nav aktuāls. Vēlreiz nospied „Apmainīt”, lai saņemtu jaunu ieteikumu.',
     currencyOutcomeBusy: 'Vēl notiek cita valūtas darbība — pēc brīža mēģini vēlreiz.',
+    currencyOutcomeUnclear:
+        'Uz pieprasījumu netika saņemta atbilde, tāpēc nav zināms, vai tas izdevās. Atsvaidzini izaicinājumu un pārbaudi to, pirms mēģini vēlreiz.',
     currencyOutcomeFailed: 'GuruShots noraidīja pieprasījumu. Mēģini vēlāk; ja tas atkārtojas, pārbaudi žurnālus.',
     scenario: 'Scenārijs',
     scenarioDesc:
@@ -542,9 +544,11 @@ export const app = {
     discoverJoining: 'Pievienojas…',
     discoverChecking: 'Pārbauda…',
     discoverPendingNoPhoto:
-        'Monētas jau ir iztērētas, bet šim izaicinājumam neder neviens foto. Pievieno derīgu foto, mīkstini „Obligātie tagi” vai ieslēdz „Iesniegt arī bez tagu sakritības”, tad nospied „Pievienoties”.',
+        'Monētas jau ir iztērētas, bet šim izaicinājumam neder neviens foto. Pievieno derīgu foto un nospied „Pievienoties”. Ja izmanto „Obligātie tagi” vai ir izslēgts „Iesniegt arī bez tagu sakritības”, arī tie var neļaut izvēlēties foto.',
+    discoverUnconfirmed:
+        'Par šī izaicinājuma maksājumu netika saņemta atbilde, tāpēc nav zināms, vai tas izdevās, un pievienošanās nav pabeigta. Lai nemaksātu divreiz, lietotne mēģinās tikai iesniegt foto un nākamajā reizē pārbaudīs tavu monētu atlikumu.',
     discoverAccountUnknown:
-        'Neizdevās noskaidrot, kurš konts ir pieteicies, tāpēc šis mēģinājums neko nedarīja un monētas netērēja. Mēģini vēlreiz pēc brīža vai piesakies vēlreiz.',
+        'Neizdevās noskaidrot, kurā kontā esi pieteicies, tāpēc šis mēģinājums neko nedarīja un monētas netērēja. Mēģini vēlreiz pēc brīža vai piesakies vēlreiz.',
     discoverConfirmDialogFirst: 'Vispirms apstiprini vai aizver atvērto logu, tad pievienojies vēlreiz.',
     discoverRetrySubmit: 'Mēģināt iesniegt vēlreiz',
     discoverRetrySubmitLabel: 'Mēģināt vēlreiz iesniegt izaicinājumam „{title}”',

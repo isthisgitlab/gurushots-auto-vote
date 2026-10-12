@@ -14,6 +14,7 @@ const OUTCOME_KEY: Partial<Record<string, string>> = {
     'no-alternative': 'app.currencyOutcomeNoAlternative',
     'stale-candidate': 'app.currencyOutcomeStaleCandidate',
     busy: 'app.currencyOutcomeBusy',
+    unclear: 'app.currencyOutcomeUnclear',
 };
 
 /**

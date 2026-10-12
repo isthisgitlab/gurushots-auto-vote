@@ -287,6 +287,8 @@ export const app = {
         'No different photo is available to swap in — every eligible photo is already used here.',
     currencyOutcomeStaleCandidate: 'The suggested replacement expired. Press Swap again for a fresh pick.',
     currencyOutcomeBusy: 'Another currency action is still running — try again in a moment.',
+    currencyOutcomeUnclear:
+        'The request got no answer, so it may or may not have gone through. Refresh the challenge and check it before trying again.',
     currencyOutcomeFailed: 'GuruShots rejected the request. Try again later; check the logs if it keeps happening.',
     scenario: 'Scenario',
     scenarioDesc:
@@ -537,7 +539,9 @@ export const app = {
     discoverJoining: 'Joining…',
     discoverChecking: 'Checking…',
     discoverPendingNoPhoto:
-        'Coins were already spent, but no photo qualifies for this challenge. Add an eligible photo, or loosen Must Include Tags or turn on Submit Even Without a Tag Match, then press Join.',
+        'Coins were already spent, but no photo qualifies for this challenge. Add an eligible photo, then press Join. If you use Must Include Tags, or have turned off Submit Even Without a Tag Match, those can also be what blocks the pick.',
+    discoverUnconfirmed:
+        'The payment for this challenge got no answer, so it may or may not have gone through, and the join did not finish. To avoid paying twice, the app will only retry the submit; it checks your coin balance on the next attempt.',
     discoverAccountUnknown:
         'Could not confirm which account is logged in, so this attempt did nothing and spent no coins. Try again shortly, or log in again.',
     discoverConfirmDialogFirst: 'Confirm or cancel the open dialog first, then join again.',
