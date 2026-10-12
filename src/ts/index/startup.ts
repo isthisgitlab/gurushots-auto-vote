@@ -16,18 +16,23 @@ import { installPermissionHandlers } from './permissions';
 /**
  * A login a run left behind (a crash or a kill skips the quit-time clear) is cleared at the next start unless "Stay
  * Logged In" is on. Only the desktop app does this, and only in the instance that holds the single-instance lock
- * (onReady runs for no other): a CLI session that is running may be using the login, so it is left alone then.
+ * (onReady runs for no other): a CLI session that is running may be using the login, so it is left alone then. Looking
+ * for a CLI session can wait a few seconds on an old marker, so this runs beside the first window rather than before
+ * it; the login window needs no token, and a login made meanwhile is never cleared (the token is read again first).
  */
 const clearLeftoverToken = async () => {
     try {
         const userSettings = settings.loadSettings();
-        if (userSettings.stayLoggedIn || !userSettings.token) return;
+        const leftover = userSettings.token;
+        if (userSettings.stayLoggedIn || !leftover) return;
         if (await isCliSessionActive()) {
             logger
                 .withCategory('authentication')
                 .info('Kept the saved token: a CLI session is running and may be using it', null);
             return;
         }
+        const now = settings.loadSettings();
+        if (now.token !== leftover || now.stayLoggedIn) return;
         if (settings.setSetting('token', '')) {
             logger
                 .withCategory('authentication')
@@ -53,7 +58,7 @@ const holdAppMarker = () => {
 };
 
 /** Setup that needs no window: permissions, headers, presets, the leftover login, the log cleanup and the menu. */
-const prepareApp = async () => {
+const prepareApp = () => {
     logger.withCategory('ui').info(`[App] UserData path: ${settings.getUserDataPath()}`, null);
 
     // Before any window exists: a page must never see Electron's grant-by-default.
@@ -68,7 +73,8 @@ const prepareApp = async () => {
         logger.withCategory('settings').warning('Intent profile seeding failed (non-fatal):', err);
     }
 
-    await clearLeftoverToken();
+    // Never rejects, and never holds the first window back (see clearLeftoverToken).
+    void clearLeftoverToken();
 
     logger.cleanup();
 
@@ -170,7 +176,7 @@ const registerLifecycleHandlers = () => {
  */
 async function onReady() {
     holdAppMarker();
-    await prepareApp();
+    prepareApp();
     registerPowerHandlers();
     await openFirstWindow();
     registerLifecycleHandlers();

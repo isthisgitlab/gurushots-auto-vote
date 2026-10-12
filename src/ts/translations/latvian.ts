@@ -1453,7 +1453,7 @@ export const notice = {
     recoveryUnreadableWhyAndroid:
         'Lietotne nevarēja nolasīt saglabātos uzstādījumus. Iespējams, ierīces krātuve ir aizņemta vai pilna.',
     recoveryUnreadableNextAndroid:
-        'Restartē lietotni. Nekas netika pārrakstīts, un uzstādījumu saglabāšana paliek izslēgta, kamēr tos nevar nolasīt.',
+        'Restartē lietotni. Nekas netika pārrakstīts, un uzstādījumu saglabāšana paliek izslēgta, kamēr tos nevar nolasīt. Ja tas atkārtojas, sadaļā „Par lietotni un datiem” izmanto „Dzēst visus vietējos datus”, lai sāktu ar noklusētajiem uzstādījumiem.',
     recoveryMigrationWhat:
         'Tavs uzstādījumu fails ir no citas versijas, un to neizdevās atjaunināt, tāpēc uzstādījumu saglabāšana ir izslēgta.',
     recoveryMigrationWhy: 'Failu {path} neizdevās pārveidot formātā, ko izmanto šī versija.',
@@ -1505,7 +1505,9 @@ export const about = {
     deleteBusyApp:
         'Darbvirsmas lietotne ir atvērta, tāpēc nekas netika dzēsts. Aizver darbvirsmas lietotni un mēģini vēlreiz.',
     deleteFailed:
-        'Ne viss tika izdzēsts. Kādu failu vai krātuvi neizdevās noņemt; sīkāka informācija ir žurnālos. Aizver citas programmas, kas izmanto lietotnes failus, un mēģini vēlreiz.',
+        'Ne viss tika izdzēsts. Kādu failu vai krātuvi neizdevās noņemt. Aizver citas programmas, kas izmanto lietotnes failus, un mēģini vēlreiz.',
+    deleteFailedAndroid:
+        'Ne viss tika izdzēsts: daļu fona pakalpojuma datu neizdevās notīrīt. Aizverot šo paziņojumu, lietotne tiks palaista no jauna. Pēc tam mēģini vēlreiz.',
     deleteDone:
         'Visi vietējie dati ir dzēsti. Lietotne tūlīt tiks palaista no jauna. Ja tas nenotiek, aizver to un atver vēlreiz.',
     deleteDoneWeb:

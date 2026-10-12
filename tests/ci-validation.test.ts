@@ -109,6 +109,36 @@ describe('test typing', () => {
     });
 });
 
+describe('sends toward the Logs window', () => {
+    // restrictToLogsChannels (ipc/registerHandlers.ts) filters only `webContents.send`; `postMessage` and
+    // `mainFrame.send` reach a window unfiltered, so no source may use them. A legitimate use is listed here as
+    // `relative/path.ts`, with the reason.
+    const ALLOWED: readonly string[] = [];
+
+    test('no source uses postMessage or mainFrame.send', () => {
+        const fs = jest.requireActual<typeof import('node:fs')>('node:fs');
+        const path = jest.requireActual<typeof import('node:path')>('node:path');
+        const srcDir = path.join(__dirname, '..', 'src', 'ts');
+        const offenders: string[] = [];
+        const walk = (dir: string) => {
+            for (const entry of fs.readdirSync(dir, { withFileTypes: true })) {
+                const full = path.join(dir, entry.name);
+                if (entry.isDirectory()) walk(full);
+                else if (/\.(c?ts|tsx)$/.test(entry.name) && !ALLOWED.includes(path.relative(srcDir, full))) {
+                    const text = fs.readFileSync(full, 'utf8');
+                    for (const match of text.matchAll(/\.postMessage\(|\bmainFrame\.send\(/g)) {
+                        offenders.push(
+                            `${path.relative(srcDir, full)}:${text.slice(0, match.index).split('\n').length}`,
+                        );
+                    }
+                }
+            }
+        };
+        walk(srcDir);
+        expect(offenders).toEqual([]);
+    });
+});
+
 describe('stylesheet sources', () => {
     // Tailwind generates only the classes it finds in its @source files, so a
     // glob that matches nothing (a renamed extension, a moved folder) silently

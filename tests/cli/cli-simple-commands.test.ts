@@ -170,7 +170,7 @@ describe('auth: login', () => {
         [true, false],
     ])('refuses a non-terminal session (stdin TTY=%p, stdout TTY=%p)', async (inTTY, outTTY) => {
         setTTY(inTTY, outTTY);
-        await handleLogin();
+        await expect(handleLogin()).resolves.toBe(false);
         expect(prompts.createReadlineInterface).not.toHaveBeenCalled();
         expect(msgs('error')[0]).toMatch(/requires a terminal/);
     });
@@ -178,7 +178,7 @@ describe('auth: login', () => {
     test('keeps the mode and saves the token on success', async () => {
         prompts.askYesNo.mockResolvedValueOnce(false);
         apiFactory.__mw.cliLogin.mockResolvedValue(invalid({ success: true }));
-        await handleLogin();
+        await expect(handleLogin()).resolves.toBe(true);
         expect(msgs('info')).toContain('Current mode: REAL');
         expect(settings.setSetting).not.toHaveBeenCalled();
         expect(apiFactory.refreshApi).toHaveBeenCalled();
@@ -199,7 +199,7 @@ describe('auth: login', () => {
         settings.loadSettings.mockReturnValue(invalid({ mock: true }));
         prompts.askYesNo.mockResolvedValueOnce(true).mockResolvedValueOnce(false);
         apiFactory.__mw.cliLogin.mockResolvedValue({ success: false, error: 'bad creds' });
-        await handleLogin();
+        await expect(handleLogin()).resolves.toBe(false);
         expect(msgs('info')).toContain('Current mode: MOCK');
         expect(settings.setSetting).toHaveBeenCalledWith('mock', false);
         expect(msgs('success')).toEqual(['Mode changed to: REAL']);
@@ -209,13 +209,13 @@ describe('auth: login', () => {
     test('a failed login without an error message falls back to "Unknown error"', async () => {
         prompts.askYesNo.mockResolvedValueOnce(false);
         apiFactory.__mw.cliLogin.mockResolvedValue(invalid({ success: false }));
-        await handleLogin();
+        await expect(handleLogin()).resolves.toBe(false);
         expect(logger.__calls.find((c) => c.level === 'endOperation')!.data).toBe('Unknown error');
     });
 
     test('a thrown error is logged and the readline is still closed', async () => {
         prompts.askYesNo.mockRejectedValueOnce(new Error('stdin closed'));
-        await handleLogin();
+        await expect(handleLogin()).resolves.toBe(false);
         expect(msgs('error')).toEqual(['Login error']);
         expect(rl.close).toHaveBeenCalled();
     });

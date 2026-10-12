@@ -57,7 +57,7 @@ const LOCK_FILE_RE = /^(?:(?:statelock|joinlock)-.+\.lock(?:\.stale-.+)?|cli-ses
  */
 const appSession = () => (require('electron') as typeof import('electron')).session.fromPartition(APP_PARTITION);
 
-/** Why a wipe was refused: a voting pass in this process, a live CLI session, or the running desktop app. */
+/** Why a wipe was refused: a live CLI session, the running desktop app, or a voting pass in this process. */
 type WipeBusyCode = 'busy-pass' | 'busy-cli' | 'busy-app';
 
 /**
@@ -89,11 +89,15 @@ const nativeWipe = async (): Promise<{ ok: boolean } | null> => {
     return isPlainObject(answer) ? { ok: answer.ok === true } : { ok: false };
 };
 
-// A saved "auto-vote running" flag is only a wish to resume at the next start: it is no activity, and does not block.
+// A saved "auto-vote running" flag is only a wish to resume at next start: it is no activity, and does not block. The
+// markers can take a few seconds to read, so the pass is asked last, synchronously, right before the files go: a pass
+// that began during the wait is refused too.
 const liveBusyReason = async (): Promise<WipeBusyCode | null> => {
-    if (isVotingPassRunning()) return 'busy-pass';
-    if (await isCliSessionActive()) return 'busy-cli';
-    return (await isDesktopAppActive()) ? 'busy-app' : null;
+    // Together, so two old markers cost one wait, not two.
+    const [cli, app] = await Promise.all([isCliSessionActive(), isDesktopAppActive()]);
+    if (cli) return 'busy-cli';
+    if (app) return 'busy-app';
+    return isVotingPassRunning() ? 'busy-pass' : null;
 };
 
 const defaultDeps = (): WipeDeps => ({

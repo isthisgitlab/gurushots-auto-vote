@@ -41,12 +41,14 @@ import { app, powerMonitor } from 'electron';
 import loggerModule = require('../../src/ts/logger');
 import settingsModule = require('../../src/ts/settings');
 import lockModule = require('../../src/ts/settings/cliSessionLock');
+import windowsModule = require('../../src/ts/index/windows');
 import type * as startupModule from '../../src/ts/index/startup';
 import type { AppSettings } from '../../src/ts/types/settings';
 import { invalid } from '../helpers/invalid';
 
 const settings = jest.mocked(settingsModule);
 const lock = jest.mocked(lockModule);
+const windows = jest.mocked(windowsModule);
 const cat = invalid<{
     __cat: {
         info: jest.Mock<void, [string, ...unknown[]]>;
@@ -55,6 +57,24 @@ const cat = invalid<{
     };
 }>(loggerModule).__cat;
 const { onReady } = require('../../src/ts/index/startup') as typeof startupModule;
+
+// Each onReady adds process listeners (SIGINT, SIGTERM, exit); the ones a test added are taken off again after it.
+const SIGNAL_EVENTS = ['SIGINT', 'SIGTERM', 'exit'] as const;
+let listenersBefore: Record<(typeof SIGNAL_EVENTS)[number], Function[]>;
+beforeEach(() => {
+    listenersBefore = {
+        SIGINT: process.listeners('SIGINT'),
+        SIGTERM: process.listeners('SIGTERM'),
+        exit: process.listeners('exit'),
+    };
+});
+afterEach(() => {
+    for (const event of SIGNAL_EVENTS) {
+        for (const listener of process.listeners(event)) {
+            if (!listenersBefore[event].includes(listener)) process.removeListener(event, listener as () => void);
+        }
+    }
+});
 
 const stored = (over: Partial<AppSettings>) => settings.loadSettings.mockReturnValue(invalid(over));
 
@@ -81,14 +101,44 @@ describe('desktop startup clears a leftover login', () => {
         expect(cat.info).toHaveBeenCalledWith(expect.stringContaining('Cleared a saved token'), null);
     });
 
-    test('it is cleared before the auto-login decision reads the settings', async () => {
+    test('the first window opens without waiting for an old marker to be read, and the token is cleared once it has been', async () => {
         stored({ token: 'left-over', stayLoggedIn: false });
+        let answer: (active: boolean) => void = () => {};
+        lock.isCliSessionActive.mockReturnValue(
+            new Promise<boolean>((resolve) => {
+                answer = resolve;
+            }),
+        );
 
         await onReady();
 
-        const clearedAt = settings.setSetting.mock.invocationCallOrder[0];
-        const autoLoginReadAt = settings.loadSettings.mock.invocationCallOrder.at(-1)!;
-        expect(clearedAt).toBeLessThan(autoLoginReadAt);
+        expect(windows.checkAutoLogin).toHaveBeenCalledTimes(1);
+        expect(settings.setSetting).not.toHaveBeenCalled();
+
+        answer(false);
+        await jest.advanceTimersByTimeAsync(0);
+
+        expect(settings.setSetting).toHaveBeenCalledWith('token', '');
+    });
+
+    test.each([
+        ['a new login', { token: 'fresh-login', stayLoggedIn: false }],
+        ['Stay Logged In turned on', { token: 'left-over', stayLoggedIn: true }],
+    ])('%s made while the marker was being read is never cleared', async (_name, meanwhile) => {
+        stored({ token: 'left-over', stayLoggedIn: false });
+        let answer: (active: boolean) => void = () => {};
+        lock.isCliSessionActive.mockReturnValue(
+            new Promise<boolean>((resolve) => {
+                answer = resolve;
+            }),
+        );
+
+        await onReady();
+        stored(meanwhile);
+        answer(false);
+        await jest.advanceTimersByTimeAsync(0);
+
+        expect(settings.setSetting).not.toHaveBeenCalled();
     });
 
     test('with a CLI session holding its marker it is kept', async () => {

@@ -35,6 +35,7 @@ const resetDataCmd = async (argv: string[]): Promise<number> => {
         );
     }
     // Console only, never the log: the log directory is one of the things deleted, and writing to it would bring it back.
+    logger.printLine('Checking whether a CLI session or the desktop app is still running…');
     const result = await wipeLocalData();
     if (!result.success) {
         const nextStep = Object.entries(BUSY_NEXT_STEP).find(([code]) => code === result.error)?.[1];

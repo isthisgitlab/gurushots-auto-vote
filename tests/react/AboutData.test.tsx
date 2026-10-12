@@ -275,6 +275,30 @@ describe('Delete all local data', () => {
         expect(window.api.reloadWindow).not.toHaveBeenCalled();
     });
 
+    test('a failure that emptied the caches still reloads on Close after a retry that was refused as busy', async () => {
+        jest.mocked(window.api.wipeLocalData).mockResolvedValueOnce({ success: false, error: 'x', reload: true });
+        jest.mocked(window.api.wipeLocalData).mockResolvedValueOnce({ success: false, error: 'busy-pass' });
+        render(<AboutDataSection />);
+        openDelete();
+        confirm();
+        await within(dialog()).findByRole('alert');
+        confirm();
+        await waitFor(() => expect(within(dialog()).getByRole('alert').textContent).toBe('about.deleteBusyPass'));
+        expect(window.api.reloadWindow).not.toHaveBeenCalled();
+
+        fireEvent.click(within(dialog()).getByRole('button', { name: 'app.cancel' }));
+        expect(window.api.reloadWindow).toHaveBeenCalledTimes(1);
+    });
+
+    test('on Android the failure text is the one that says what Closing does', async () => {
+        jest.mocked(window.api.wipeLocalData).mockResolvedValue({ success: false, error: 'x', reload: true });
+        (globalThis as RendererGlobals).Capacitor = { isNativePlatform: () => true };
+        render(<AboutDataSection />);
+        openDelete();
+        confirm();
+        expect((await within(dialog()).findByRole('alert')).textContent).toBe('about.deleteFailedAndroid');
+    });
+
     test('closing after an error clears it for the next time', async () => {
         jest.mocked(window.api.wipeLocalData).mockResolvedValue({ success: false, error: 'busy-pass' });
         render(<AboutDataSection />);

@@ -32,6 +32,7 @@ const {
     APP_LOCK_FILE_NAME,
     HEARTBEAT_MS,
     STALE_AFTER_MS,
+    TICK_MS,
     SETTLE_MS,
     refreshDesktopAppLock,
 } = require('../../src/ts/settings/cliSessionLock') as typeof lockModule;
@@ -167,19 +168,80 @@ describe('cli session lock', () => {
             await expect(settled(isCliSessionActive())).resolves.toBe(false);
         });
 
-        test('is live when its holder slept and writes it again within a beat', async () => {
+        test('a leftover (its process id was reused) is removed once judged, so the next check does not wait', async () => {
+            fs.writeFileSync(lockFile, JSON.stringify({ pid: process.ppid }));
+            age(lockFile, STALE_AFTER_MS + 5_000);
+
+            await expect(settled(isCliSessionActive())).resolves.toBe(false);
+            expect(fs.existsSync(lockFile)).toBe(false);
+
+            expect(jest.getTimerCount()).toBe(0);
+            await expect(isCliSessionActive()).resolves.toBe(false);
+            expect(jest.getTimerCount()).toBe(0);
+        });
+
+        test('a marker refreshed between the two reads is live and is not removed', async () => {
             fs.writeFileSync(lockFile, JSON.stringify({ pid: process.ppid }));
             age(lockFile, STALE_AFTER_MS + 5_000);
 
             const active = isCliSessionActive();
-            await jest.advanceTimersByTimeAsync(HEARTBEAT_MS);
+            await jest.advanceTimersByTimeAsync(SETTLE_MS - 1);
+            age(lockFile, 0);
+
+            await expect(settled(active)).resolves.toBe(true);
+            expect(fs.existsSync(lockFile)).toBe(true);
+        });
+
+        test.each([
+            ['another process took the marker over', 'holder'],
+            ['the marker was refreshed', 'mtime'],
+        ])('a marker that changes after it was judged old, as %s, is left alone', async (_name, change) => {
+            fs.writeFileSync(lockFile, JSON.stringify({ pid: process.ppid }));
+            age(lockFile, STALE_AFTER_MS + 5_000);
+            const realStat = fs.statSync;
+            const realRead = fs.readFileSync;
+            let reads = 0;
+            // The read that decides the removal is the last of three reads of the marker (two judgements, then it).
+            jest.spyOn(fs, 'readFileSync').mockImplementation(((file: fs.PathOrFileDescriptor, ...rest: never[]) => {
+                reads += 1;
+                if (reads === 3 && change === 'holder') return JSON.stringify({ pid: process.pid + 1 });
+                return (realRead as (f: fs.PathOrFileDescriptor, ...r: never[]) => unknown)(file, ...rest);
+            }) as typeof fs.readFileSync);
+            let stats = 0;
+            jest.spyOn(fs, 'statSync').mockImplementation(((file: fs.PathLike, ...rest: never[]) => {
+                stats += 1;
+                const stat = (realStat as (f: fs.PathLike, ...r: never[]) => fs.Stats)(file, ...rest);
+                return stats === 3 && change === 'mtime' ? Object.assign(stat, { mtimeMs: stat.mtimeMs + 1 }) : stat;
+            }) as typeof fs.statSync);
+
+            await expect(settled(isCliSessionActive())).resolves.toBe(false);
+
+            expect(fs.existsSync(lockFile)).toBe(true);
+        });
+
+        test('a leftover that cannot be removed is still no session', async () => {
+            fs.writeFileSync(lockFile, JSON.stringify({ pid: process.ppid }));
+            age(lockFile, STALE_AFTER_MS + 5_000);
+            jest.spyOn(fs, 'unlinkSync').mockImplementationOnce(() => {
+                throw new Error('busy');
+            });
+
+            await expect(settled(isCliSessionActive())).resolves.toBe(false);
+        });
+
+        test('is live when its holder woke and writes it again within a tick', async () => {
+            fs.writeFileSync(lockFile, JSON.stringify({ pid: process.ppid }));
+            age(lockFile, STALE_AFTER_MS + 5_000);
+
+            const active = isCliSessionActive();
+            await jest.advanceTimersByTimeAsync(TICK_MS);
             const now = new Date();
             fs.utimesSync(lockFile, now, now);
 
             await expect(settled(active)).resolves.toBe(true);
         });
 
-        test('waits no longer than a beat and a margin, and not at all for a fresh one', async () => {
+        test('waits no longer than a tick and a margin, and not at all for a fresh one', async () => {
             fs.writeFileSync(lockFile, JSON.stringify({ pid: process.ppid }));
             age(lockFile, STALE_AFTER_MS + 5_000);
             let answered = false;
@@ -191,9 +253,11 @@ describe('cli session lock', () => {
             expect(answered).toBe(false);
             await jest.advanceTimersByTimeAsync(1);
             expect(answered).toBe(true);
-            expect(SETTLE_MS).toBeGreaterThan(HEARTBEAT_MS);
+            expect(SETTLE_MS).toBeGreaterThan(TICK_MS);
+            expect(SETTLE_MS).toBeLessThan(HEARTBEAT_MS);
 
-            age(lockFile, 0);
+            // The leftover went with the wait; a holder that is alive writes its marker again.
+            fs.writeFileSync(lockFile, JSON.stringify({ pid: process.ppid }));
             expect(jest.getTimerCount()).toBe(0);
             await expect(isCliSessionActive()).resolves.toBe(true);
             expect(jest.getTimerCount()).toBe(0);
@@ -244,6 +308,32 @@ describe('cli session lock', () => {
             expect(
                 parseJsonAs(fs.readFileSync(lockFile, 'utf8'), isShape<{ pid: number }>({ pid: isNumber })).pid,
             ).toBe(process.pid);
+            release();
+        });
+
+        test('after a sleep the marker is written again within a tick of waking, not a beat', () => {
+            const release = holdCliSessionLock();
+            jest.advanceTimersByTime(HEARTBEAT_MS / 2);
+            age(lockFile, STALE_AFTER_MS + 5_000);
+            const stale = mtime();
+
+            // The machine sleeps: the timers stood still but the clock moved on.
+            jest.setSystemTime(Date.now() + 10 * HEARTBEAT_MS);
+            jest.advanceTimersByTime(TICK_MS);
+
+            expect(mtime()).toBeGreaterThan(stale);
+            release();
+        });
+
+        test('between beats it only checks the clock: the marker is not rewritten every tick', () => {
+            const release = holdCliSessionLock();
+            const write = jest.spyOn(fs, 'writeFileSync');
+
+            jest.advanceTimersByTime(HEARTBEAT_MS - TICK_MS);
+            expect(write).not.toHaveBeenCalled();
+
+            jest.advanceTimersByTime(TICK_MS);
+            expect(write).toHaveBeenCalledTimes(1);
             release();
         });
 

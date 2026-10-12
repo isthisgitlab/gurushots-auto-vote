@@ -57,12 +57,37 @@ describe('redactMessage', () => {
         expect(redactMessage(message)).toBe(expected);
     });
 
-    test('an identifier value ends at a comma, a semicolon, a closing bracket or the end of the line', () => {
+    test('an identifier value ends at a semicolon, a closing bracket or the end of the line, not at a comma', () => {
         expect(redactMessage('user (username: alice b), retrying')).toBe('user (username: [REDACTED]), retrying');
-        expect(redactMessage('phone: +371 20000000; email: a@b.c, ok')).toBe(
-            'phone: [REDACTED]; email: [REDACTED], ok',
-        );
+        expect(redactMessage('phone: +371 20000000; email: a@b.c, ok')).toBe('phone: [REDACTED]; email: [REDACTED]');
+        expect(redactMessage('email: Smith, John <a@b.c>')).toBe('email: [REDACTED]');
         expect(redactMessage('login: alice b\nnext line')).toBe('login: [REDACTED]\nnext line');
+    });
+
+    test.each([
+        ['Authorization: Bearer abc123', 'Authorization: [REDACTED]'],
+        ['authorization=Bearer xyz', 'authorization=[REDACTED]'],
+        ['authorization: Basic dXNlcjpwYXNz', 'authorization: [REDACTED]'],
+        ['authorization: Token abc123 sent', 'authorization: [REDACTED] sent'],
+        ['authorization: bearer abc123', 'authorization: [REDACTED]'],
+        ['authorization: "Bearer abc123"', 'authorization: [REDACTED]'],
+        ['authorization: Bearer', 'authorization: [REDACTED]'],
+    ])('redacts the credential itself, not just its auth scheme, in %s', (message, expected) => {
+        const out = redactMessage(message);
+        expect(out).toBe(expected);
+        expect(out).not.toMatch(/abc123|xyz|dXNlcjpwYXNz/);
+    });
+
+    test.each([
+        ['{"email":"a@b.c"}', '{"email":[REDACTED]}'],
+        ['{"token": "abc123", "ok": true}', '{"token": [REDACTED], "ok": true}'],
+        ['{"password":"p w","user":1}', '{"password":[REDACTED],"user":1}'],
+        ["{'login':'alice b'}", "{'login':[REDACTED]}"],
+        ['{"authorization":"Bearer abc123"}', '{"authorization":[REDACTED]}'],
+        // An unquoted value runs to whitespace, so the rest of a compact JSON line goes with it: never a part left behind.
+        ['{"token":12345,"ok":true}', '{"token":[REDACTED]'],
+    ])('redacts a JSON-style quoted key in message text: %s', (message, expected) => {
+        expect(redactMessage(message)).toBe(expected);
     });
 
     test('a credential value still ends at whitespace', () => {

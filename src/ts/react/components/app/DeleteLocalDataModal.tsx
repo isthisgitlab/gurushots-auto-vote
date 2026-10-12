@@ -30,22 +30,24 @@ export function DeleteLocalDataModal({ isOpen, onClose }: { isOpen: boolean; onC
     const { backgroundService, relaunchesAfterWipe } = usePlatformCapabilities();
     const [deleting, setDeleting] = useState(false);
     const [outcome, setOutcome] = useState<Outcome>('idle');
-    // A failed delete may have emptied the window's caches: the window reloads when the dialog is closed.
+    // A failed delete may have emptied the window's caches: the window reloads when the dialog is closed, and stays
+    // set through a retry, since an earlier attempt's damage is still there.
     const reloadOnClose = useRef(false);
 
     const handleDelete = async () => {
         setDeleting(true);
         setOutcome('idle');
-        reloadOnClose.current = false;
         try {
             const result = await ipc.wipeLocalData();
             if (result?.success) {
+                // The wipe went through: the app restarts, and no reload is wanted on top of that.
+                reloadOnClose.current = false;
                 setOutcome('done');
             } else if (isBusy(result?.error)) {
                 setOutcome(result.error);
             } else {
                 void ipc.logRendererError(`Deleting the local data failed: ${result?.error ?? 'no answer'}`);
-                reloadOnClose.current = result?.success === false && result.reload === true;
+                reloadOnClose.current ||= result?.success === false && result.reload === true;
                 setOutcome('failed');
             }
         } catch (err) {
@@ -69,7 +71,8 @@ export function DeleteLocalDataModal({ isOpen, onClose }: { isOpen: boolean; onC
     const outcomeKey = (() => {
         if (outcome === 'idle') return null;
         if (outcome === 'done') return relaunchesAfterWipe ? 'about.deleteDone' : 'about.deleteDoneWeb';
-        return outcome === 'failed' ? 'about.deleteFailed' : BUSY_KEYS[outcome];
+        if (outcome === 'failed') return backgroundService ? 'about.deleteFailedAndroid' : 'about.deleteFailed';
+        return BUSY_KEYS[outcome];
     })();
     const label = t('about.deleteConfirm');
     return (

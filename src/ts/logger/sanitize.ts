@@ -53,14 +53,16 @@ const sanitizeLogString = (value: unknown, maxLength: number = 200): string =>
 // otherwise leak plaintext to disk. This scrubs the value after any
 // sensitive key written as `key: value` or `key=value` (quotes optional)
 // and runs on every writeLog message. The key set mirrors SENSITIVE_KEY_RE;
-// \b anchors keep `tokenizer` etc. from matching, and a run of `=` is no value, so a banner line such as
-// `=== Login ===` is left alone. A credential's unquoted value ends at whitespace; an account identifier's
-// (email, login, username, phone) runs to the end of the field (`,` `;` `)` or the end of the line), because such a
-// value may hold spaces (`+371 20000000`, `alice b`) and a part left behind would still identify the account.
+// \b anchors keep `tokenizer` etc. from matching, a run of `=` is no value, so a banner line such as
+// `=== Login ===` is left alone, and a key may be quoted (`"email":"a@b.c"`, as in JSON text). A credential's value may
+// follow an auth scheme (`Authorization: Bearer abc`: the token is what is secret, so it goes with the scheme) and ends
+// at whitespace; an account identifier's (email, login, username, phone) runs to the end of the field (`;` `)` or the
+// end of the line, not a comma), because such a value may hold spaces (`+371 20000000`, `alice b`) and a part left
+// behind would still identify the account.
 const CREDENTIAL_MSG_RE =
-    /\b(token|auth[_-]?token|access[_-]?token|refresh[_-]?token|bearer|password|api[_-]?key|secret|cookie|authorization|x[_-]?auth[_-]?token|x[_-]?token)\b(\s*[:=]\s*)("[^"]*"|'[^']*'|(?!=+(?:\s|$))\S+)/gi;
+    /\b(token|auth[_-]?token|access[_-]?token|refresh[_-]?token|bearer|password|api[_-]?key|secret|cookie|authorization|x[_-]?auth[_-]?token|x[_-]?token)\b(["']?\s*[:=]\s*)(?:(?:bearer|basic|token|digest)\s+(?=\S))?("[^"]*"|'[^']*'|(?!=+(?:\s|$))\S+)/gi;
 const IDENTITY_MSG_RE =
-    /\b(email|login|user[_-]?name|phone)\b(\s*[:=]\s*)("[^"]*"|'[^']*'|(?!=+(?:\s|$))[^,;)\r\n]*[^,;)\s])/gi;
+    /\b(email|login|user[_-]?name|phone)\b(["']?\s*[:=]\s*)("[^"]*"|'[^']*'|(?!=+(?:\s|$))[^;)\r\n]*[^;)\s])/gi;
 
 function redactMessage(message: string): string;
 function redactMessage(message: unknown): unknown;

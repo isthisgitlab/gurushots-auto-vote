@@ -222,7 +222,7 @@ const runListProfiles: CommandHandler = async (argv) => {
  * running (continuous mode).
  */
 const COMMANDS: Record<string, CommandHandler> = {
-    login: exitsZero(handleLogin),
+    login: async () => exitCodeOf(await handleLogin()),
     logout: exitsZero(handleLogout),
     vote: runVote,
     run: runRun,

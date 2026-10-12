@@ -612,16 +612,25 @@ repeated six times is one that gets forgotten at one of them.
   to write back. Desktop and the CLI write the file atomically and are unchanged.
 - **Session markers and "Delete all local data".** Two processes can hold the user-data directory at once, so each
   running one leaves a marker file there (`settings/cliSessionLock.ts`): a CLI session (`start`, continuous voting)
-  holds `cli-session.lock`, the desktop app holds `desktop-app.lock` for its lifetime. A marker names its process id
-  and its holder rewrites it every 30 s (`HEARTBEAT_MS`); it counts only while that process exists **and** the marker
-  was refreshed within three beats (`STALE_AFTER_MS`), so one left by a crash or a reboot goes stale even when its
-  process id has since been given to another process. The desktop app reads the CLI marker at startup so it does not
-  clear a login the CLI session is using. The wipe (`wipeLocalData`) refuses to run while anything live is in the way
-  and touches nothing, answering the code of what it found, in this order: `busy-pass` (a voting pass runs in this
-  process), `busy-cli` (a live CLI session holds its marker) or `busy-app` (the desktop app holds its marker — what the
-  CLI's `reset-data` and the web shell see). A saved "auto-vote running" flag is only a wish to resume at the next
-  start and does not block. The delete modal words each code with its own next step (stop auto-vote / stop the CLI
-  session in its terminal / quit the desktop app); any other failure reads as the generic "not everything was
+  holds `cli-session.lock`, the desktop app holds `desktop-app.lock` for its lifetime. A marker names its process id.
+  The holder checks the clock every 2 s (`TICK_MS`) and rewrites the marker once a beat of wall-clock time (30 s,
+  `HEARTBEAT_MS`) has passed since its last write: timers do not count a machine's sleep, so after waking the marker is
+  rewritten within one tick (the desktop app also rewrites it on the `resume` event). A marker counts only while its
+  process exists **and** it was refreshed within three beats (`STALE_AFTER_MS`), so one left by a crash or a reboot
+  goes stale even when its process id has since been given to another process. An old marker whose process exists is
+  read again after `SETTLE_MS` (5 s, a tick plus a margin): a holder that just woke has written it by then. One still
+  old is a confirmed leftover (its process id was reused) and is removed, but only if a re-read right before the
+  unlink still shows the same holder and mtime, so a marker another process just took over or refreshed is never
+  deleted; the wait is paid once per leftover. The desktop app reads the CLI marker at startup so it does not clear a
+  login the CLI session is using; that check runs beside the first window, which never waits for it, and re-reads the
+  settings before clearing, so a login made meanwhile is kept. The wipe (`wipeLocalData`) refuses to run while
+  anything live is in the way and touches nothing, answering the code of what it found, in this order: `busy-cli` (a
+  live CLI session holds its marker), `busy-app` (the desktop app holds its marker — what the CLI's `reset-data` and
+  the web shell see) or `busy-pass` (a voting pass runs in this process). The two markers are read together (one
+  wait, not two) and the pass is asked last, synchronously, right before the files go, so a pass that began during
+  the wait is refused too. A saved "auto-vote running" flag is only a wish to resume at the next start and does not
+  block. The delete modal words each code with its own next step (stop the CLI session in its terminal / quit the
+  desktop app / stop auto-vote); any other failure reads as the generic "not everything was
   deleted". After a successful wipe Electron and Android relaunch; the web shell's server stops, so its text says to
   start `pnpm web` again (`usePlatformCapabilities().relaunchesAfterWipe`, read from the flag the web bridge sets).
 - Write-behind is **ordered** (writes chain onto a promise) and `flushPendingWrites()` awaits durability

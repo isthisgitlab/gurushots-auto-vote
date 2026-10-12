@@ -381,18 +381,44 @@ describe('wipeLocalData', () => {
             expectNothingTouched();
         });
 
-        test('names the pass first, then the CLI session, then the app', async () => {
+        test('names the CLI session first, then the app, then the pass', async () => {
             load();
             markerOfAnotherProcess('cli-session.lock');
             markerOfAnotherProcess('desktop-app.lock');
             const endPass = ctx.passActivity.beginVotingPass();
 
-            const both = await ctx.localData.wipeLocalData({ clearSession: async () => {} });
+            const all = await ctx.localData.wipeLocalData({ clearSession: async () => {} });
+            fs.rmSync(path.join(userData, 'cli-session.lock'));
+            const appAndPass = await ctx.localData.wipeLocalData({ clearSession: async () => {} });
+            fs.rmSync(path.join(userData, 'desktop-app.lock'));
+            const onlyPass = await ctx.localData.wipeLocalData({ clearSession: async () => {} });
             endPass();
-            const onlyMarkers = await ctx.localData.wipeLocalData({ clearSession: async () => {} });
 
-            expect(both).toEqual({ success: false, error: 'busy-pass' });
-            expect(onlyMarkers).toEqual({ success: false, error: 'busy-cli' });
+            expect(all).toEqual({ success: false, error: 'busy-cli' });
+            expect(appAndPass).toEqual({ success: false, error: 'busy-app' });
+            expect(onlyPass).toEqual({ success: false, error: 'busy-pass' });
+        });
+
+        test('a pass that starts while the markers are being checked is refused (busy-pass), touching nothing', async () => {
+            load();
+            fillUserData();
+            markerOfAnotherProcess('cli-session.lock');
+            const longAgo = new Date(Date.now() - ctx.lock.STALE_AFTER_MS - 5_000);
+            fs.utimesSync(path.join(userData, 'cli-session.lock'), longAgo, longAgo);
+
+            jest.useFakeTimers();
+            try {
+                const wipe = ctx.localData.wipeLocalData({ clearSession: async () => {} });
+                // The old marker is read again after the settle wait; a pass begins meanwhile.
+                await jest.advanceTimersByTimeAsync(ctx.lock.SETTLE_MS - 1);
+                const endPass = ctx.passActivity.beginVotingPass();
+                await jest.advanceTimersByTimeAsync(1);
+                await expect(wipe).resolves.toEqual({ success: false, error: 'busy-pass' });
+                endPass();
+            } finally {
+                jest.useRealTimers();
+            }
+            expectNothingTouched();
         });
 
         test('a saved "auto-vote running" flag alone is no activity and does not block', async () => {
@@ -428,21 +454,18 @@ describe('wipeLocalData', () => {
             jest.useFakeTimers();
             try {
                 const wipe = ctx.localData.wipeLocalData({ clearSession: async () => {} });
-                // Each old marker with a live process is read again after a beat, and is still old.
-                await jest.advanceTimersByTimeAsync(2 * ctx.lock.SETTLE_MS);
-                await expect(wipe).resolves.toEqual({
-                    success: true,
-                    removed: expect.arrayContaining([
-                        path.join(userData, 'cli-session.lock'),
-                        path.join(userData, 'desktop-app.lock'),
-                    ]),
-                });
+                // Both old markers with a live process are read again after one settle wait (together), and are still old.
+                await jest.advanceTimersByTimeAsync(ctx.lock.SETTLE_MS);
+                // Judged left over, each marker was removed on the way (nothing left for the wipe to list).
+                await expect(wipe).resolves.toEqual({ success: true, removed: [] });
+                expect(fs.existsSync(path.join(userData, 'cli-session.lock'))).toBe(false);
+                expect(fs.existsSync(path.join(userData, 'desktop-app.lock'))).toBe(false);
             } finally {
                 jest.useRealTimers();
             }
         });
 
-        test('a live holder that was asleep and wrote its marker again within a beat still blocks', async () => {
+        test('a live holder that was asleep and wrote its marker again within a tick of waking still blocks', async () => {
             load();
             markerOfAnotherProcess('cli-session.lock');
             const longAgo = new Date(Date.now() - ctx.lock.STALE_AFTER_MS - 5_000);
@@ -451,7 +474,7 @@ describe('wipeLocalData', () => {
             jest.useFakeTimers();
             try {
                 const wipe = ctx.localData.wipeLocalData({ clearSession: async () => {} });
-                await jest.advanceTimersByTimeAsync(ctx.lock.HEARTBEAT_MS);
+                await jest.advanceTimersByTimeAsync(ctx.lock.TICK_MS);
                 const now = new Date();
                 fs.utimesSync(path.join(userData, 'cli-session.lock'), now, now);
                 await jest.advanceTimersByTimeAsync(ctx.lock.SETTLE_MS);

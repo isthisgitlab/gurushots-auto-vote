@@ -1428,7 +1428,7 @@ export const notice = {
     recoveryUnreadableWhyAndroid:
         "The app could not read its stored settings. The device's storage may be busy or full.",
     recoveryUnreadableNextAndroid:
-        'Restart the app. Nothing was overwritten, and saving settings stays off until they can be read.',
+        'Restart the app. Nothing was overwritten, and saving settings stays off until they can be read. If this keeps happening, use "Delete all local data" under About and data to start with default settings.',
     recoveryMigrationWhat:
         'Your settings file comes from another version and could not be updated, so saving settings is turned off.',
     recoveryMigrationWhy: 'The file at {path} could not be converted to the format this version uses.',
@@ -1478,7 +1478,9 @@ export const about = {
         'A command-line session is running, so nothing was deleted. Stop it in the terminal where it runs (Ctrl+C), then try again.',
     deleteBusyApp: 'The desktop app is open, so nothing was deleted. Quit the desktop app, then try again.',
     deleteFailed:
-        "Not everything could be deleted. A file or store could not be removed; the details are in the logs. Close other programs that use the app's files, then try again.",
+        "Not everything could be deleted. A file or store could not be removed. Close other programs that use the app's files, then try again.",
+    deleteFailedAndroid:
+        "Not everything could be deleted: some of the background service's data could not be cleared. Closing this message restarts the app. Then try again.",
     deleteDone: 'All local data was deleted. The app restarts now; if it does not, close it and open it again.',
     deleteDoneWeb:
         'All local data was deleted. The web server has stopped. Start pnpm web again and open the URL it prints.',

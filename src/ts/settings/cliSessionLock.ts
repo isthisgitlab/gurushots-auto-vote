@@ -6,8 +6,10 @@
  *
  * A marker counts only while its process exists and the marker was refreshed lately: the holder rewrites it every
  * HEARTBEAT_MS, so one left by a crash or a reboot goes stale even when its process id has since been given to another
- * process. Node's timers do not count the time a machine is suspended, so after a long sleep a live holder's marker is
- * old until its next beat: an old marker whose process exists is read again after one beat before it is taken as stale.
+ * process. Node's timers do not count the time a machine is suspended, so the holder ticks every TICK_MS and compares
+ * wall-clock time: after a sleep it writes the marker again within a tick of waking. An old marker whose process exists
+ * is read again after SETTLE_MS (a tick plus a margin) before it is taken as stale; one still old then is a leftover
+ * (its process id was reused) and is removed, so that wait is paid once.
  */
 
 import * as fs from 'node:fs';
@@ -20,11 +22,13 @@ const LOCK_FILE_NAME = 'cli-session.lock';
 const APP_LOCK_FILE_NAME = 'desktop-app.lock';
 
 // How often a running holder refreshes its marker, and how long a marker may go unrefreshed before it is stale
-// (three beats: one late beat does not make a live session look gone). An old marker with a live process is read once
-// more after SETTLE_MS, a beat plus a margin, which a holder that slept through its beats has used to write it again.
+// (three beats: one late beat does not make a live session look gone). The holder checks the clock every TICK_MS and
+// writes once a beat has passed, so a holder that slept through its beats writes again within a tick of waking. An old
+// marker with a live process is read once more after SETTLE_MS, which a holder that just woke has used to write it.
 const HEARTBEAT_MS = 30_000;
 const STALE_AFTER_MS = 3 * HEARTBEAT_MS;
-const SETTLE_MS = HEARTBEAT_MS + 5_000;
+const TICK_MS = 2_000;
+const SETTLE_MS = 5_000;
 
 const markerPath = (fileName: string) => path.join(getUserDataPath(), fileName);
 
@@ -54,32 +58,55 @@ const readHolder = (file: string): number | null => {
 
 type MarkerState = 'fresh' | 'old' | 'none';
 
+/** What was judged of a marker: its state, and (when another live process holds it) the holder and the mtime judged. */
+type MarkerJudgement = { state: MarkerState; pid: number; mtimeMs: number };
+
+const NO_MARKER: MarkerJudgement = { state: 'none', pid: 0, mtimeMs: 0 };
+
 /**
  * Another process's marker: `fresh` when it is alive and was refreshed within STALE_AFTER_MS, `old` when it is alive but
  * was not (a holder that slept, or a process id reused after a crash or a reboot), `none` otherwise.
  */
-const markerState = (fileName: string): MarkerState => {
+const judgeMarker = (fileName: string): MarkerJudgement => {
     try {
         const file = markerPath(fileName);
         const pid = readHolder(file);
-        if (pid === null || pid === process.pid || !processExists(pid)) return 'none';
-        return Date.now() - fs.statSync(file).mtimeMs > STALE_AFTER_MS ? 'old' : 'fresh';
+        if (pid === null || pid === process.pid || !processExists(pid)) return NO_MARKER;
+        const mtimeMs = fs.statSync(file).mtimeMs;
+        return { state: Date.now() - mtimeMs > STALE_AFTER_MS ? 'old' : 'fresh', pid, mtimeMs };
     } catch {
-        return 'none';
+        return NO_MARKER;
+    }
+};
+
+/**
+ * Removes a marker judged old, so the settle wait is paid once per leftover and not at every start: it is read again
+ * right here and goes only while it still names the same holder and has the same mtime, so one another process has just
+ * taken over or refreshed is never deleted.
+ */
+const removeLeftover = (fileName: string, judged: MarkerJudgement) => {
+    try {
+        const file = markerPath(fileName);
+        if (readHolder(file) === judged.pid && fs.statSync(file).mtimeMs === judged.mtimeMs) fs.unlinkSync(file);
+    } catch {
+        // already gone, or not removable: it is judged again next time
     }
 };
 
 /**
  * Whether another process holds the marker. An old marker with a live process is read again after SETTLE_MS: a holder
- * that was asleep has written it by then, one that is not the holder any more has not.
+ * that was asleep has written it by then, one that is not the holder any more (its process id was reused) has not, and
+ * its marker is removed.
  */
 const isMarkerActive = async (fileName: string): Promise<boolean> => {
-    const state = markerState(fileName);
-    if (state !== 'old') return state === 'fresh';
+    const first = judgeMarker(fileName);
+    if (first.state !== 'old') return first.state === 'fresh';
     await new Promise<void>((resolve) => {
         setTimeout(resolve, SETTLE_MS);
     });
-    return markerState(fileName) === 'fresh';
+    const second = judgeMarker(fileName);
+    if (second.state === 'old') removeLeftover(fileName, second);
+    return second.state === 'fresh';
 };
 
 const writeMarker = (file: string) => {
@@ -107,7 +134,12 @@ const beat = (file: string) => {
 const holdMarker = (fileName: string): (() => void) => {
     const file = markerPath(fileName);
     writeMarker(file);
-    const heartbeat = setInterval(() => beat(file), HEARTBEAT_MS);
+    let lastBeat = Date.now();
+    const heartbeat = setInterval(() => {
+        if (Date.now() - lastBeat < HEARTBEAT_MS) return;
+        lastBeat = Date.now();
+        beat(file);
+    }, TICK_MS);
     // A held marker never keeps the process alive.
     heartbeat.unref();
     return () => {
@@ -140,6 +172,7 @@ export {
     APP_LOCK_FILE_NAME,
     HEARTBEAT_MS,
     STALE_AFTER_MS,
+    TICK_MS,
     SETTLE_MS,
     isCliSessionActive,
     holdCliSessionLock,

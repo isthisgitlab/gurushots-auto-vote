@@ -10,7 +10,10 @@ import { refreshApi, getMiddleware } from '../../apiFactory';
 import { clearAuthToken } from '../../services/auth';
 import { createReadlineInterface, askYesNo, askInput, askSecret } from '../prompts';
 
-const handleLogin = async () => {
+/**
+ * @returns whether a token was saved: false for a non-terminal session, rejected credentials, an unsaved token or an error
+ */
+const handleLogin = async (): Promise<boolean> => {
     // askSecret's mute only works on a real terminal — _writeToOutput is
     // bypassed when stdin is piped or when readline runs in non-terminal
     // mode. Refuse interactive login in that case so a user piping
@@ -22,7 +25,7 @@ const handleLogin = async () => {
             .error(
                 'Interactive login requires a terminal. Run the `login` command directly in a terminal session — piped or redirected stdin is not supported because the password prompt cannot mute echo.',
             );
-        return;
+        return false;
     }
 
     const rl = createReadlineInterface();
@@ -66,13 +69,13 @@ const handleLogin = async () => {
         if (loginResult.success) {
             logger.withCategory('authentication').endOperation('login-auth', 'Login successful');
             logger.withCategory('authentication').success(`Token saved for ${useMockMode ? 'MOCK' : 'REAL'} mode`);
-        } else {
-            logger
-                .withCategory('authentication')
-                .endOperation('login-auth', null, loginResult.error || 'Unknown error');
+            return true;
         }
+        logger.withCategory('authentication').endOperation('login-auth', null, loginResult.error || 'Unknown error');
+        return false;
     } catch (error) {
         logger.withCategory('authentication').error('Login error', error);
+        return false;
     } finally {
         rl.close();
     }

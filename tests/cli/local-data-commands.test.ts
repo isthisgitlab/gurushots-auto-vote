@@ -45,6 +45,20 @@ describe('reset-data', () => {
         },
     );
 
+    test('says it is checking for a running session or app before the (possibly slow) busy check', async () => {
+        localData.wipeLocalData.mockResolvedValue({ success: true, removed: [] });
+
+        await resetDataCmd(['--yes']);
+
+        expect(logger.printLine).toHaveBeenNthCalledWith(
+            1,
+            'Checking whether a CLI session or the desktop app is still running…',
+        );
+        expect(jest.mocked(logger.printLine).mock.invocationCallOrder[0]).toBeLessThan(
+            localData.wipeLocalData.mock.invocationCallOrder[0],
+        );
+    });
+
     test('with --yes it deletes and lists what went', async () => {
         localData.wipeLocalData.mockResolvedValue({ success: true, removed: ['/u/settings.json', '/u/logs'] });
 
@@ -68,7 +82,7 @@ describe('reset-data', () => {
 
         expect(logger.printStderr).toHaveBeenCalledTimes(1);
         expect(logger.printStderr).toHaveBeenCalledWith(`Nothing was deleted: ${nextStep}`);
-        expect(logger.printLine).not.toHaveBeenCalled();
+        expect(logger.printLine).toHaveBeenCalledTimes(1); // only the "checking" line
     });
 
     test('a partial failure is reported with its reason and with what was removed, and exits 1', async () => {
@@ -90,11 +104,12 @@ describe('reset-data', () => {
         localData.wipeLocalData.mockResolvedValue({ success: false, error: 'unknown error', removed: [] });
         await expect(resetDataCmd(['--yes'])).resolves.toBe(1);
         expect(logger.printStderr).toHaveBeenCalledWith('Some data could not be deleted: unknown error');
-        expect(logger.printLine).not.toHaveBeenCalled();
+        expect(logger.printLine).toHaveBeenCalledTimes(1); // only the "checking" line
 
+        jest.mocked(logger.printLine).mockClear();
         localData.wipeLocalData.mockResolvedValue({ success: false, error: 'unknown error' });
         await expect(resetDataCmd(['--yes'])).resolves.toBe(1);
-        expect(logger.printLine).not.toHaveBeenCalled();
+        expect(logger.printLine).toHaveBeenCalledTimes(1); // only the "checking" line
     });
 
     test('is registered in the command table', async () => {

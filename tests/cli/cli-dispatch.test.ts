@@ -262,6 +262,14 @@ describe('startup', () => {
         expect(m.exitCodes).toEqual([0]);
     });
 
+    test.each([
+        [true, 0],
+        [false, 1],
+    ])('login that answers %p (token saved) exits %p', async (saved, code) => {
+        const m = await run(['login'], (mods) => mods.auth.handleLogin.mockResolvedValue(saved));
+        expect(m.exitCodes).toEqual([code]);
+    });
+
     test('a thrown command exits 1', async () => {
         const m = await run(['login'], (mods) => mods.auth.handleLogin.mockRejectedValue(new Error('x')));
         expect(m.msgs('error')).toEqual(['Error']);
