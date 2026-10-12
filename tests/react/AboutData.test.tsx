@@ -253,6 +253,7 @@ describe('Delete all local data', () => {
         confirm();
 
         expect((await within(dialog()).findByRole('alert')).textContent).toBe('about.deleteFailedAndroid');
+        expect(within(dialog()).getByText('about.deleteRestartsOnClose')).toBeTruthy();
         expect(window.api.reloadWindow).not.toHaveBeenCalled();
 
         fireEvent.click(within(dialog()).getByRole('button', { name: 'app.close' }));
@@ -276,6 +277,7 @@ describe('Delete all local data', () => {
         await within(dialog()).findByRole('alert');
         confirm();
         await waitFor(() => expect(within(dialog()).getByRole('status').textContent).toBe('about.deleteDone'));
+        expect(within(dialog()).queryByText('about.deleteRestartsOnClose')).toBeNull();
         fireEvent.click(within(dialog()).getByRole('button', { name: 'app.close' }));
         expect(window.api.reloadWindow).not.toHaveBeenCalled();
     });
@@ -289,6 +291,7 @@ describe('Delete all local data', () => {
         await within(dialog()).findByRole('alert');
         confirm();
         await waitFor(() => expect(within(dialog()).getByRole('alert').textContent).toBe('about.deleteBusyPass'));
+        expect(within(dialog()).getByText('about.deleteRestartsOnClose')).toBeTruthy();
         expect(window.api.reloadWindow).not.toHaveBeenCalled();
 
         fireEvent.click(within(dialog()).getByRole('button', { name: 'app.close' }));
@@ -312,6 +315,7 @@ describe('Delete all local data', () => {
         openDelete();
         confirm();
         expect((await within(dialog()).findByRole('alert')).textContent).toBe('about.deleteFailed');
+        expect(within(dialog()).queryByText('about.deleteRestartsOnClose')).toBeNull();
 
         confirm();
         await waitFor(() => expect(within(dialog()).getByRole('alert').textContent).toBe('about.deleteFailed'));

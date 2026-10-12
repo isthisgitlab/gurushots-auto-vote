@@ -112,15 +112,27 @@ describe('test typing', () => {
 describe('sends toward the Logs window', () => {
     // restrictToLogsChannels (ipc/registerHandlers.ts) filters only `webContents.send`; `postMessage`, a frame's
     // `send` (`mainFrame.send`, `frames[i].send`, `sendToFrame`) and a `webFrameMain` handle reach a window
-    // unfiltered, so no source may use them. A legitimate use is listed here as `relative/path.ts`, with the reason.
-    const ALLOWED: readonly string[] = [];
+    // unfiltered, so no source may touch a frame handle (`mainFrame`, `framesInSubtree`, `webFrameMain`) or post a
+    // message. A legitimate line is listed here as `relative/path.ts`, with the text of the line and the reason.
+    const ALLOWED: Readonly<Record<string, readonly string[]>> = {
+        // The trusted-sender check compares the sender's frame with the window's main frame; it sends nothing.
+        'ipc/registerHandlers.ts': [
+            'event.sender?.mainFrame && frame !== event.sender.mainFrame',
+            '`postMessage` and `mainFrame.send` are not',
+        ],
+    };
     const UNFILTERED_SEND_RE =
-        /\bpostMessage\(|\bmainFrame\??\.send\(|\bsendToFrame\(|\bwebFrameMain\b|\bframes\[[^\]]*\]\??\.send\(/g;
+        /\bpostMessage\(|\bmainFrame\b|\bframesInSubtree\b|\bsendToFrame\(|\bwebFrameMain\b|\bframes\[[^\]]*\]\??\.send\(/g;
     const SOURCE_FILE_RE = /\.(?:[cm]?ts|tsx)$/;
-    const unfilteredSends = (text: string) =>
-        [...text.matchAll(UNFILTERED_SEND_RE)].map((match) => text.slice(0, match.index).split('\n').length);
+    const unfilteredSends = (text: string, allowedLines: readonly string[] = []) => {
+        const lines = text.split('\n');
+        const hits = new Set(
+            [...text.matchAll(UNFILTERED_SEND_RE)].map((match) => text.slice(0, match.index).split('\n').length),
+        );
+        return [...hits].filter((line) => !allowedLines.some((allowed) => lines[line - 1].includes(allowed)));
+    };
 
-    test('no source uses postMessage, a frame send or webFrameMain', () => {
+    test('no source uses postMessage or a frame handle (mainFrame, framesInSubtree, webFrameMain)', () => {
         const fs = jest.requireActual<typeof import('node:fs')>('node:fs');
         const path = jest.requireActual<typeof import('node:path')>('node:path');
         const srcDir = path.join(__dirname, '..', 'src', 'ts');
@@ -129,9 +141,10 @@ describe('sends toward the Logs window', () => {
             for (const entry of fs.readdirSync(dir, { withFileTypes: true })) {
                 const full = path.join(dir, entry.name);
                 if (entry.isDirectory()) walk(full);
-                else if (SOURCE_FILE_RE.test(entry.name) && !ALLOWED.includes(path.relative(srcDir, full))) {
-                    for (const line of unfilteredSends(fs.readFileSync(full, 'utf8'))) {
-                        offenders.push(`${path.relative(srcDir, full)}:${line}`);
+                else if (SOURCE_FILE_RE.test(entry.name)) {
+                    const relative = path.relative(srcDir, full);
+                    for (const line of unfilteredSends(fs.readFileSync(full, 'utf8'), ALLOWED[relative])) {
+                        offenders.push(`${relative}:${line}`);
                     }
                 }
             }
@@ -150,9 +163,15 @@ describe('sends toward the Logs window', () => {
             'const { webFrameMain } = require("electron");',
             'win.webContents.mainFrame.frames[0].send("c", x);',
             'frames[i]?.send("c", x);',
+            'const frame = win.webContents.mainFrame;',
+            'const frames = win.webContents.mainFrame.framesInSubtree;',
+            'const all = framesInSubtree;',
         ]) {
             expect(unfilteredSends(`ok\n${offender}`)).toEqual([2]);
         }
+        expect(
+            unfilteredSends('a\nconst frame = sender.mainFrame; // checked', ['sender.mainFrame; // checked']),
+        ).toEqual([]);
         expect(unfilteredSends('win.webContents.send("c", x);\nconst postMessageCount = 1;')).toEqual([]);
     });
 

@@ -204,16 +204,22 @@ describe('wipeLocalData', () => {
     });
 
     describe('desktop (files)', () => {
-        test('removes a .stale- copy of a session marker a crash left, and nothing else that merely looks like one', async () => {
+        test('removes the session markers and a .stale- copy of a join or scenario lock, and nothing else that merely looks like one', async () => {
             load();
             for (const name of [
-                'cli-session.lock.stale-12-abcd1234',
-                'desktop-app.lock.stale-12-abcd1234',
                 'cli-session.lock',
+                'desktop-app.lock',
+                'joinlock-77.lock.stale-12-abcd1234',
+                'statelock-scenario.lock.stale-12-abcd1234',
             ]) {
                 fs.writeFileSync(path.join(userData, name), '{"pid":1}');
             }
-            for (const name of ['cli-session.lock.bak', 'other.lock.stale-12', 'cli-session.lockstale-1']) {
+            for (const name of [
+                'cli-session.lock.bak',
+                'cli-session.lock.stale-12',
+                'other.lock.stale-12',
+                'cli-session.lockstale-1',
+            ]) {
                 fs.writeFileSync(path.join(userData, name), 'keep');
             }
 
@@ -222,6 +228,7 @@ describe('wipeLocalData', () => {
             expect(result.success).toBe(true);
             expect(fs.readdirSync(userData).sort()).toEqual([
                 'cli-session.lock.bak',
+                'cli-session.lock.stale-12',
                 'cli-session.lockstale-1',
                 'other.lock.stale-12',
             ]);

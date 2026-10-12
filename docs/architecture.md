@@ -621,13 +621,9 @@ repeated six times is one that gets forgotten at one of them.
   left by a crash or a reboot goes stale even when its process id has since been given to another process. An old
   marker whose process exists is read again after `SETTLE_MS` (10 s, five ticks, the longest a check waits): a holder
   that just woke has written it by then, and a marker that is fresh or whose holder or mtime changed counts as held. One
-  still old and unchanged is not counted, and it is removed only when this process also judged the same holder and mtime
-  old more than one `HEARTBEAT_MS` earlier (the first check never removes; the wait is paid until a later check does).
-  The removal is a rename of the marker to a name of its own, then a check of the renamed file's holder and mtime: the
-  judged file is unlinked, any other file is put back with a hard link (which fails, leaving the newer file in place,
-  when another marker has been written meanwhile), so a marker written between the decision and the removal survives.
-  For the instant the file is moved the marker path is absent: a reader sees no marker and a holder's beat writes it
-  again. A crash in that instant leaves a `*.stale-<pid>-<random>` file beside the marker, which the wipe removes. The desktop app reads the
+  still old and unchanged is not counted, and it is left where it is: the next holder overwrites it and the wipe deletes
+  it, so until then a check that finds it waits `SETTLE_MS` (desktop startup in the background, a wipe or the CLI's
+  `reset-data` with its "checking" status). The desktop app reads the
   CLI marker at startup so it does not clear a login the CLI session is using; that check runs beside the first
   window, which never waits for it, and re-reads the settings before clearing, so a login made meanwhile is kept. The
   wipe (`wipeLocalData`) refuses to run while anything live is in the way and touches nothing, answering the code of
