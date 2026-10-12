@@ -373,6 +373,8 @@ describe('ChallengeSettingsModal group applicability', () => {
         });
         const deleteProfile = screen.getByRole('button', { name: 'app.deleteProfile' });
         await act(async () => invalid<void>(fireEvent.click(deleteProfile)));
+        // With the profile gone, the settings say no rule applies one: the dialog reads that again.
+        mockApi.getTitleProfile.mockResolvedValue(titleRuleInfo());
         await act(async () =>
             invalid<void>(fireEvent.click(screen.getByRole('button', { name: 'app.confirmDelete' }))),
         );

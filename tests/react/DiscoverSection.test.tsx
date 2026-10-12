@@ -93,9 +93,34 @@ test('paid join opens the confirm modal and only spends on confirm', async () =>
     await screen.findByText('app.discoverConfirmTitle');
     expect(window.api.joinChallenge).not.toHaveBeenCalled();
 
-    // Confirm → spends with spendCoins=true.
+    // Confirm → spends with spendCoins=true, naming the cost the modal showed (100): a price that rose since
+    // then is not consented to.
     fireEvent.click(screen.getByText('app.discoverConfirmSpend'));
-    await waitFor(() => expect(window.api.joinChallenge).toHaveBeenCalledWith(900002, true));
+    await waitFor(() => expect(window.api.joinChallenge).toHaveBeenCalledWith(900002, true, 100));
+});
+
+test('a price that rose after it was shown spends nothing: the row says so, and the list is read again', async () => {
+    window.api.joinChallenge = jest.fn().mockResolvedValue({ success: false, status: 'needs-confirm', cost: 150 });
+    mockTranslator.t.mockImplementation((key) => (key === 'app.discoverPriceChanged' ? 'Now {coins} coins' : key));
+    try {
+        render(<DiscoverSection isLoggedIn bankroll={invalid({ coins: 500 })} onJoined={jest.fn()} />);
+        await screen.findByText('Paid One');
+        const reads = jest.mocked(window.api.getMemberChallenges).mock.calls.length;
+        fireEvent.click(screen.getByText('app.discoverJoinPaid'));
+        fireEvent.click(await screen.findByText('app.discoverConfirmSpend'));
+        expect(await screen.findByText('Now 150 coins')).toBeTruthy();
+        expect(window.api.joinChallenge).toHaveBeenCalledWith(900002, true, 100);
+        await waitFor(() => expect(jest.mocked(window.api.getMemberChallenges).mock.calls.length).toBe(reads + 1));
+    } finally {
+        mockTranslator.t.mockImplementation((key) => key);
+    }
+});
+
+test('a free join sends no cost to confirm', async () => {
+    render(<DiscoverSection isLoggedIn bankroll={invalid({ coins: 500 })} onJoined={jest.fn()} />);
+    await screen.findByText('Free One');
+    fireEvent.click(screen.getByText('app.discoverJoin'));
+    await waitFor(() => expect(window.api.joinChallenge).toHaveBeenCalledWith(900001, false));
 });
 
 test('a statusless failure (auth expiry / handler error) still shows a message', async () => {
@@ -267,7 +292,7 @@ describe('edge paths', () => {
         jest.mocked(window.api.joinChallenge).mockResolvedValue(invalid({ success: true, status: 'joined' }));
         fireEvent.click(screen.getByText('app.discoverRetrySubmit'));
         await screen.findByText('app.discoverJoined');
-        expect(window.api.joinChallenge).toHaveBeenLastCalledWith(900002, true);
+        expect(window.api.joinChallenge).toHaveBeenLastCalledWith(900002, true, 100);
         expect(onJoined).toHaveBeenCalledTimes(2);
     });
 

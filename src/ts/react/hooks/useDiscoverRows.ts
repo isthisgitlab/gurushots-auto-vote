@@ -1,11 +1,10 @@
 import { useEffect, useRef, useState } from 'react';
 import { useTick } from './useTick';
 import { useLatestRef } from './useLatestRef';
+import { UPCOMING_GRACE_SEC } from '../../settings/limits';
 
 import type { OpenChallenge } from '../../types/gurushots';
 
-/** How long a challenge whose start has passed waits for the open list to show it. */
-const STARTING_GRACE_SEC = 600;
 /** How often the list is re-read meanwhile. */
 const STARTING_RECHECK_MS = 60_000;
 /** How often "Starts in …" text is refreshed (minute granularity, so no faster). */
@@ -22,7 +21,7 @@ const startOf = (c: OpenChallenge): number => Number(c.start_time);
  * The open list can lag the moment a challenge starts: the upcoming list drops it and the open one
  * has not picked it up yet, so it would vanish from the list — with its chosen photos — for a while.
  * A row that was upcoming and whose start has passed therefore stays, as "starting now", for up to
- * STARTING_GRACE_SEC after the start or until the open list shows it, and the list is re-read every
+ * UPCOMING_GRACE_SEC after the start or until the open list shows it, and the list is re-read every
  * STARTING_RECHECK_MS meanwhile. The list is also re-read when the soonest upcoming start arrives.
  * A failed read (`failed`) changes nothing: the rows that were shown are the ones to keep.
  *
@@ -38,7 +37,7 @@ export function useDiscoverRows(
     const keptRef = useLatestRef(kept);
     const refetchRef = useLatestRef(refetch);
     const nowSec = Math.floor(Date.now() / 1000);
-    const lingering = kept.filter((c) => nowSec < startOf(c) + STARTING_GRACE_SEC);
+    const lingering = kept.filter((c) => nowSec < startOf(c) + UPCOMING_GRACE_SEC);
     const waiting = lingering.length > 0;
     // The tick only re-renders (the text is minute-grained); the time itself is read fresh.
     useTick(CLOCK_TICK_MS, items.some(isUpcoming) || waiting);
@@ -51,7 +50,7 @@ export function useDiscoverRows(
         const candidates = [...shown.current.filter(isUpcoming), ...keptRef.current];
         const carried = new Map(
             candidates
-                .filter((c) => !present.has(String(c.id)) && startOf(c) <= now && now < startOf(c) + STARTING_GRACE_SEC)
+                .filter((c) => !present.has(String(c.id)) && startOf(c) <= now && now < startOf(c) + UPCOMING_GRACE_SEC)
                 .map((c) => [String(c.id), c] as const),
         );
         if (!failed) shown.current = items;

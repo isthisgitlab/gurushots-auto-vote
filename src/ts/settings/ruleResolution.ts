@@ -16,10 +16,10 @@ import {
     findProfileKey,
     sanitizeProfileValues,
 } from './profileStore';
-import { sanitizeTitleRuleInline, ruleLogLabel } from './titleRuleSanitize';
+import { sanitizeTitleRuleInline } from './titleRuleSanitize';
 import { DEFAULT_TIMEZONE } from './uiDefaults';
 
-import type { AppSettings, ChallengeValues, RuleMatchChallenge, TitleRule } from '../types/settings';
+import type { AppSettings, ChallengeValues, RuleMatchChallenge, RuleSource, TitleRule } from '../types/settings';
 
 /**
  * The one profile a challenge's matching rules apply, and the rule naming it.
@@ -64,35 +64,37 @@ const ruleTimeZone = (settings: AppSettings): string => settings.timezone || DEF
  * global default (the caller's job).
  *
  * `suppressProfile` drops the profile layer (a challenge whose rule profile was
- * replaced by a manually applied one). `sources` names, per key an inline value
- * won, the rule that set it (the profile's keys have none).
+ * replaced by a manually applied one). `sources` names, per key, the rule whose value won: the rule
+ * itself for an inline value, the rule owning the profile for a profile's value (`viaProfile`).
  */
 const ruleValuesFor = (
     settings: AppSettings,
     target: RuleMatchChallenge | string | null | undefined,
     suppressProfile: boolean = false,
-): { values: ChallengeValues; profile: RuleProfile | null; sources: Record<string, string> } => {
+): { values: ChallengeValues; profile: RuleProfile | null; sources: Record<string, RuleSource> } => {
     const matches = matchingRules(settings.challengeSettings?.titleRules, target, ruleTimeZone(settings));
     const profile = suppressProfile ? null : profileFromMatches(settings, matches);
     const values: ChallengeValues = {};
-    const sources: Record<string, string> = {};
-    /**
-     * @param source
-     * @param label - the rule an inline source comes from; absent for a profile's values
-     */
-    const take = (source: ChallengeValues, label?: string) => {
+    const sources: Record<string, RuleSource> = {};
+    const sourceOf = (rule: TitleRule, viaProfile: boolean): RuleSource => ({
+        ...(typeof rule.title === 'string' && rule.title.trim() !== '' ? { title: rule.title } : {}),
+        // Only called for a matching rule, so the rule list exists.
+        index: settings.challengeSettings.titleRules.indexOf(rule) + 1,
+        ...(viaProfile ? { viaProfile } : {}),
+    });
+    const take = (source: ChallengeValues, from: RuleSource) => {
         for (const [key, value] of Object.entries(source)) {
             if (Object.prototype.hasOwnProperty.call(values, key)) continue;
             values[key] = value;
-            if (label !== undefined) sources[key] = label;
+            sources[key] = from;
         }
     };
     for (const rule of matches) {
         // Re-validated on read: a hand-edited settings file can hold anything,
         // and a rule with an invalid inline value contributes no inline values.
         const inline = sanitizeTitleRuleInline(rule);
-        if (inline) take(inline, ruleLogLabel(rule, typeof rule.title === 'string' ? rule.title : undefined));
-        if (profile && profile.rule === rule) take(profile.values);
+        if (inline) take(inline, sourceOf(rule, false));
+        if (profile && profile.rule === rule) take(profile.values, sourceOf(rule, true));
     }
     return { values, profile, sources };
 };

@@ -34,6 +34,8 @@ const OUTCOME: Record<string, { key: string; variant: keyof typeof TEXT_CLASS }>
     'skipped-no-photo': { key: 'app.discoverNoPhoto', variant: 'warning' },
     unavailable: { key: 'app.discoverUnavailable', variant: 'neutral' },
     'not-started': { key: 'app.discoverNotStarted', variant: 'neutral' },
+    // The price rose after the cost was shown: nothing was spent, and the list shows the new cost.
+    'needs-confirm': { key: 'app.discoverPriceChanged', variant: 'warning' },
     busy: { key: 'app.discoverBusy', variant: 'neutral' },
 };
 
@@ -116,30 +118,34 @@ function ChosenMarks({ c, name, onChoose }: { c: OpenChallenge; name: string; on
 /**
  * A row's Join button, named by its challenge (and, when paid, its cost) for assistive
  * technology; while joining the visible text says so, so no static label contradicts it.
- * A challenge that has not started cannot be joined: the button is disabled and its name says why.
+ * A challenge that has not started cannot be joined, and neither can one that has only just started
+ * and is not in the open list yet (a join would answer "no longer open"): the button is disabled and
+ * its name says why.
  */
 function JoinButton({
     name,
     cost,
     busy,
-    notStarted,
+    waiting,
     onClick,
 }: {
     name: string;
     cost: number;
     busy: boolean;
-    notStarted: boolean;
+    waiting: 'notStarted' | 'startingNow' | null;
     onClick: () => void;
 }) {
     const { t } = useTranslation();
     const paid = cost > 0;
     const label = interp(
         t(
-            notStarted
+            waiting === 'notStarted'
                 ? 'app.discoverJoinNotStartedLabel'
-                : paid
-                  ? 'app.discoverJoinPaidLabel'
-                  : 'app.discoverJoinLabel',
+                : waiting === 'startingNow'
+                  ? 'app.discoverJoinOpeningLabel'
+                  : paid
+                    ? 'app.discoverJoinPaidLabel'
+                    : 'app.discoverJoinLabel',
         ),
         { title: name, coins: cost },
     );
@@ -148,7 +154,7 @@ function JoinButton({
             className={`btn btn-sm ${paid ? 'btn-warning' : 'btn-primary'}`}
             aria-label={busy ? undefined : label}
             onClick={onClick}
-            disabled={busy || notStarted}
+            disabled={busy || waiting !== null}
         >
             {busy ? t('app.discoverJoining') : paid ? t('app.discoverJoinPaid') : t('app.discoverJoin')}
         </button>
@@ -292,7 +298,8 @@ function DiscoverRow({
     const { t } = useTranslation();
     const cost = costOf(c);
     const name = rowName(c, t('app.discoverUntitled'));
-    const notStarted = secondsToStart(c, nowSec) !== null;
+    // Upcoming rows wait: until the start, then until the open list shows the challenge.
+    const waiting = c.status !== 'upcoming' ? null : secondsToStart(c, nowSec) !== null ? 'notStarted' : 'startingNow';
     return (
         <li className="flex flex-wrap items-center justify-between gap-2 rounded border border-base-200 px-2 py-1.5">
             <div className="min-w-0">
@@ -305,7 +312,7 @@ function DiscoverRow({
                 </div>
                 <StartLine c={c} nowSec={nowSec} />
                 <ChosenMarks c={c} name={name} onChoose={onChoose} />
-                {notStarted && c.chosenEffectiveCount > 0 && (
+                {waiting !== null && c.chosenEffectiveCount > 0 && (
                     <div className="text-xs text-base-content/60 mt-0.5">{t('app.discoverUpcomingChosenHint')}</div>
                 )}
                 {outcome && <RowOutcome outcome={outcome} cost={cost} name={name} busy={busy} onRetry={onRetry} />}
@@ -318,7 +325,7 @@ function DiscoverRow({
                 >
                     {t('app.choosePhotos')}
                 </button>
-                <JoinButton name={name} cost={cost} busy={busy} notStarted={notStarted} onClick={onJoin} />
+                <JoinButton name={name} cost={cost} busy={busy} waiting={waiting} onClick={onJoin} />
             </div>
         </li>
     );
@@ -360,12 +367,19 @@ export function DiscoverSection({
             const id = challenge?.id;
             setBusyId(id);
             try {
-                const res: JoinOutcome = await ipc.joinChallenge(id, spendCoins);
+                // A paid join names the cost the user was shown: a price that rose since then is not consented to.
+                const res: JoinOutcome = spendCoins
+                    ? await ipc.joinChallenge(id, true, costOf(challenge))
+                    : await ipc.joinChallenge(id, false);
                 setResults((prev) => ({ ...prev, [id]: res }));
                 // Refetch on any outcome that changes what's joinable (joined,
                 // coins charged, or the challenge is gone) so a stale row/button
                 // doesn't linger. Refresh balances only when coins moved.
-                const gone = res?.success || res?.status === 'charged-pending-submit' || res?.status === 'unavailable';
+                const gone =
+                    res?.success ||
+                    res?.status === 'charged-pending-submit' ||
+                    res?.status === 'unavailable' ||
+                    res?.status === 'needs-confirm';
                 if (gone) void refetch();
                 if (res?.success || res?.status === 'charged-pending-submit') onJoined();
                 return res;

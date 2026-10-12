@@ -7,7 +7,7 @@
  */
 
 import { act, fireEvent, render, screen, waitFor, within } from './helpers/test-utils';
-import { PhotoChooserModal } from '@/components/app/PhotoChooserModal';
+import { PhotoChooserModal, PhotoGrid } from '@/components/app/PhotoChooserModal';
 import { Modal } from '@/components/ui/Modal';
 import { rememberCurrentMember } from '@/api/useChosenPhotosOwner';
 import { fireSettingsChanged, mockTranslator } from './helpers/setup';
@@ -263,6 +263,43 @@ describe('selection', () => {
             fireEvent.click(tile(1));
             fireEvent.click(screen.getByRole('button', { name: 'Use these photos' }));
             await waitFor(() => expect(onSave).toHaveBeenCalledWith([idOf(2), idOf(3), idOf(1)]));
+        });
+    });
+
+    describe('numbering when a selected photo is left out of the grid', () => {
+        // Selected [1, 9, 2], where 9 is not in the listing: with another account's list it is not shown.
+        const grid = (hideUnlisted: boolean) => {
+            const photos = [photo(1), photo(2), photo(3)];
+            return render(
+                <PhotoGrid
+                    state={{ status: 'ready', listing: listing(photos) }}
+                    known={new Map(photos.map((p) => [p.id, p]))}
+                    selected={[idOf(1), idOf(9), idOf(2)]}
+                    hideUnlisted={hideUnlisted}
+                    locked={false}
+                    onToggle={jest.fn()}
+                    onRetry={jest.fn()}
+                />,
+            );
+        };
+        const numberOf = (n: number) => within(tile(n)).queryByText(/^\d+$/)?.textContent ?? null;
+
+        test('the visible tiles are numbered 1 and 2, with no gap where the hidden one was, in badge and name', () => {
+            grid(true);
+            expect([numberOf(1), numberOf(2)]).toEqual(['1', '2']);
+            expect(tile(1).getAttribute('aria-label')).toMatch(/Number 1 in your list\.$/);
+            expect(tile(2).getAttribute('aria-label')).toMatch(/Number 2 in your list\.$/);
+            expect(screen.queryByRole('button', { name: new RegExp(`^Chosen photo ${shortOf(9)}:`) })).toBeNull();
+            // The unselected tile has none.
+            expect(numberOf(3)).toBeNull();
+        });
+
+        test('shown (this account), the unlisted photo holds its place and the next one is 3', () => {
+            grid(false);
+            const missing = screen.getByRole('button', { name: new RegExp(`^Chosen photo ${shortOf(9)}:`) });
+            expect(missing.getAttribute('aria-label')).toMatch(/Number 2 in your list\.$/);
+            expect([numberOf(1), numberOf(2)]).toEqual(['1', '3']);
+            expect(tile(2).getAttribute('aria-label')).toMatch(/Number 3 in your list\.$/);
         });
     });
 

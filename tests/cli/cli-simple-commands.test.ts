@@ -302,6 +302,28 @@ describe('discover', () => {
         expect(info.some((l) => l.includes('list-photos'))).toBe(false);
     });
 
+    test('prints the cost as a number, whatever the server sent', async () => {
+        const esc = String.fromCharCode(27);
+        handlers['get-member-challenges'].mockResolvedValue(
+            invalid({
+                success: true,
+                items: [
+                    { id: 1, title: 'A', join_coins: `5\r${esc}[2Jgone` },
+                    { id: 2, title: 'B', join_coins: '12' },
+                    { id: 3, title: 'C', join_coins: 40 },
+                ],
+            }),
+        );
+        await showDiscover();
+        const info = msgs('info');
+        // A value that is no number is not printed at all; one that is, is printed as the number.
+        expect(info).toContain('  • [1] A (?) — free');
+        expect(info).toContain('  • [2] B (?) — 12 coins');
+        expect(info).toContain('  • [3] C (?) — 40 coins');
+        expect(all()).not.toContain(String.fromCharCode(27));
+        expect(all()).not.toContain('\r');
+    });
+
     describe('upcoming challenges', () => {
         const NOW_SEC = 1_800_000_000;
         beforeEach(() => {
@@ -417,8 +439,16 @@ describe('join', () => {
         expect(handlers['join-challenge']).toHaveBeenCalledTimes(1);
         expect(msgs('info')).toEqual([
             'Challenge 7 is a PAID challenge — joining costs 25 coins.',
-            'To spend the coins and join, re-run: join 7 --yes',
+            'To spend the coins and join, re-run: join 7 --yes --max-coins=25',
         ]);
+    });
+
+    test('the cost it prints is a number, whatever the handler sent', async () => {
+        handlers['join-challenge'].mockResolvedValue(invalid({ status: 'needs-confirm', cost: '25\r\u001b[2Jfree' }));
+        await joinChallengeCmd('7');
+        expect(msgs('info').join('\n')).not.toContain(String.fromCharCode(27));
+        expect(msgs('info').join('\n')).not.toContain('\r');
+        expect(msgs('info')[0]).toBe('Challenge 7 is a PAID challenge — joining costs NaN coins.');
     });
 
     test('a paid challenge with --yes spends and reports the confirmed join', async () => {
@@ -426,8 +456,29 @@ describe('join', () => {
             .mockResolvedValueOnce(invalid({ status: 'needs-confirm', cost: 25 }))
             .mockResolvedValueOnce(invalid({ status: 'joined' }));
         await joinChallengeCmd('7', { yes: true });
+        // --yes alone accepts the cost at that moment: no cost is named.
         expect(handlers['join-challenge']).toHaveBeenLastCalledWith(null, '7', true);
         expect(msgs('info')).toContain('✅ Joined challenge 7.');
+    });
+
+    test('--max-coins is the most the confirmed join may cost', async () => {
+        handlers['join-challenge']
+            .mockResolvedValueOnce(invalid({ status: 'needs-confirm', cost: 25 }))
+            .mockResolvedValueOnce(invalid({ status: 'joined' }));
+        await joinChallengeCmd('7', { yes: true, maxCoins: 25 });
+        expect(handlers['join-challenge']).toHaveBeenLastCalledWith(null, '7', true, 25);
+        expect(msgs('info')).toContain('✅ Joined challenge 7.');
+    });
+
+    test('a price that rose past --max-coins is refused with the new cost, and nothing is spent', async () => {
+        handlers['join-challenge']
+            .mockResolvedValueOnce(invalid({ status: 'needs-confirm', cost: 25 }))
+            .mockResolvedValueOnce(invalid({ success: false, status: 'needs-confirm', cost: 40 }));
+        await joinChallengeCmd('7', { yes: true, maxCoins: 25 });
+        expect(msgs('error')).toEqual([
+            'Challenge 7 now costs 40 coins, more than you agreed to. Nothing was spent — to pay the new cost, re-run: join 7 --yes --max-coins=40',
+        ]);
+        expect(msgs('info')).not.toContain('✅ Joined challenge 7.');
     });
 });
 

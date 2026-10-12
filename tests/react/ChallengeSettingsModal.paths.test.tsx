@@ -296,6 +296,10 @@ describe('profiles bar interplay', () => {
         renderModal();
         await loaded();
         fireEvent.input(screen.getByPlaceholderText('app.profileNamePlaceholder'), { target: { value: 'AUTO' } });
+        // The profile is saved first; the dialog then reads what the rules make of it.
+        mockApi.getTitleProfile.mockResolvedValue(
+            titleRuleInfo({ profile: { name: 'AUTO', values: { boostTime: 8 } } }),
+        );
         await act(async () =>
             invalid<void>(fireEvent.click(screen.getByRole('button', { name: 'app.saveAsProfile' }))),
         );
@@ -328,6 +332,7 @@ describe('profiles bar interplay', () => {
         await select('Manual');
         fireEvent.click(screen.getByRole('button', { name: 'app.applyProfile' }));
         await select('Auto');
+        mockApi.getTitleProfile.mockResolvedValue(titleRuleInfo());
         await act(async () =>
             invalid<void>(fireEvent.click(screen.getByRole('button', { name: 'app.deleteProfile' }))),
         );

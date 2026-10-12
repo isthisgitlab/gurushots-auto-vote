@@ -405,6 +405,13 @@ describe('settings facade — class conditions and the rule cascade', () => {
     });
 
     describe('getTitleProfile — what the matching rules contribute', () => {
+        // Where a value comes from: the rule's title and its 1-based place in the list.
+        const rule = (title: string | undefined, index: number, viaProfile = false) => ({
+            ...(title === undefined ? {} : { title }),
+            index,
+            ...(viaProfile ? { viaProfile } : {}),
+        });
+
         test('a rule-assigned scenario, auto-join and chosen photos are inline values with the rule that set them', () => {
             seed(
                 base({
@@ -413,12 +420,14 @@ describe('settings facade — class conditions and the rule cascade', () => {
                     ],
                 }),
             );
+            const seaside = rule('Seaside', 1);
             expect(settings.getTitleProfile('Seaside')).toEqual({
                 profile: null,
                 suppressed: false,
                 ruleValues: { scenario: 'Plan', autoJoin: true, chosenPhotos: ['p1', 'p2'] },
                 inlineValues: { scenario: 'Plan', autoJoin: true, chosenPhotos: ['p1', 'p2'] },
-                ruleSources: { scenario: 'Seaside', autoJoin: 'Seaside', chosenPhotos: 'Seaside' },
+                ruleSources: { scenario: seaside, autoJoin: seaside, chosenPhotos: seaside },
+                inlineSources: { scenario: seaside, autoJoin: seaside, chosenPhotos: seaside },
             });
         });
 
@@ -430,6 +439,7 @@ describe('settings facade — class conditions and the rule cascade', () => {
                 ruleValues: {},
                 inlineValues: {},
                 ruleSources: {},
+                inlineSources: {},
             });
         });
 
@@ -450,11 +460,11 @@ describe('settings facade — class conditions and the rule cascade', () => {
             expect(settings.getTitleProfile('Whatever').inlineValues).toEqual({});
             expect(settings.getTitleProfile('Whatever', 1)).toMatchObject({
                 inlineValues: { scenario: 'ByTag' },
-                ruleSources: { scenario: 'Exhibition' },
+                ruleSources: { scenario: rule(undefined, 1) },
             });
             expect(settings.getTitleProfile('Whatever', 2)).toMatchObject({
                 inlineValues: { autoFill: true },
-                ruleSources: { autoFill: 'flash' },
+                ruleSources: { autoFill: rule(undefined, 2) },
             });
         });
 
@@ -469,7 +479,8 @@ describe('settings facade — class conditions and the rule cascade', () => {
             );
             const info = settings.getTitleProfile('Seaside');
             expect(info.inlineValues).toEqual({ scenario: 'First', autoJoin: true });
-            expect(info.ruleSources).toEqual({ scenario: 'Seaside', autoJoin: 'Sea' });
+            expect(info.ruleSources).toEqual({ scenario: rule('Seaside', 1), autoJoin: rule('Sea', 2) });
+            expect(info.inlineSources).toEqual(info.ruleSources);
         });
 
         test("the rule's profile and inline values are separate layers, inline winning in the combined one", () => {
@@ -479,13 +490,47 @@ describe('settings facade — class conditions and the rule cascade', () => {
                     titleRules: [withTags({ title: 'Seaside', profile: 'Quad', autoFill: true, scenario: 'Plan' })],
                 }),
             );
+            const seaside = rule('Seaside', 1);
             expect(settings.getTitleProfile('Seaside')).toEqual({
                 profile: { name: 'Quad', values: { exposure: 70, autoFill: false } },
                 suppressed: false,
                 ruleValues: { autoFill: true, scenario: 'Plan', exposure: 70 },
                 inlineValues: { autoFill: true, scenario: 'Plan' },
-                ruleSources: { autoFill: 'Seaside', scenario: 'Seaside' },
+                // exposure comes from the profile of that same rule.
+                ruleSources: { autoFill: seaside, scenario: seaside, exposure: rule('Seaside', 1, true) },
+                inlineSources: { autoFill: seaside, scenario: seaside },
             });
+        });
+
+        test("a key an earlier rule's profile supplies is not credited to a later rule that sets it inline; the other layer is", () => {
+            seed(
+                base({
+                    profiles: { Quad: { autoFill: false } },
+                    titleRules: [
+                        withTags({ title: 'Seaside', profile: 'Quad' }),
+                        withTags({ title: 'Sea', match: 'contains', autoFill: true, autoJoin: true }),
+                    ],
+                }),
+            );
+            const info = settings.getTitleProfile('Seaside');
+            // While the profile applies: autoFill is the profile's (rule 1), autoJoin the later rule's own.
+            expect(info.ruleValues).toEqual({ autoFill: false, autoJoin: true });
+            expect(info.ruleSources).toEqual({ autoFill: rule('Seaside', 1, true), autoJoin: rule('Sea', 2) });
+            // Once the profile is suppressed, the later rule's inline autoFill is what runs.
+            expect(info.inlineValues).toEqual({ autoFill: true, autoJoin: true });
+            expect(info.inlineSources).toEqual({ autoFill: rule('Sea', 2), autoJoin: rule('Sea', 2) });
+        });
+
+        test('a title of only spaces names nothing: the rule is untitled', () => {
+            seed(base({ titleRules: [withTags({ title: '   ', challengeTag: 'Comm', autoFill: true })] }));
+            settings.rememberChallengeTitles([{ id: 3, title: 'Seaside', tags: ['Comm'] }]);
+            expect(settings.getTitleProfile('Seaside', 3).ruleSources).toEqual({ autoFill: { index: 1 } });
+        });
+
+        test('a hand-edited title that is no text names nothing either', () => {
+            seed(base({ titleRules: [withTags({ title: 42, challengeTag: 'Comm', autoFill: true })] }));
+            settings.rememberChallengeTitles([{ id: 3, title: 'Seaside', tags: ['Comm'] }]);
+            expect(settings.getTitleProfile('Seaside', 3).ruleSources).toEqual({ autoFill: { index: 1 } });
         });
 
         test('with the profile suppressed the inline values still apply and the profile still shows, flagged', () => {
@@ -501,14 +546,15 @@ describe('settings facade — class conditions and the rule cascade', () => {
                 profile: { name: 'Quad' },
                 suppressed: true,
                 inlineValues: { scenario: 'Plan' },
-                ruleSources: { scenario: 'Seaside' },
+                inlineSources: { scenario: rule('Seaside', 1) },
             });
         });
 
-        test('an untitled rule is named by its tag or type, and a hand-edited invalid inline value contributes nothing', () => {
+        test('an untitled rule is named by its place in the list, and a hand-edited invalid inline value contributes nothing', () => {
             seed(
                 base({
                     titleRules: [
+                        withTags({ title: 'Other', scenario: 'Unrelated' }),
                         withTags({ title: '', challengeTag: 'Comm', autoFill: true }),
                         withTags({ title: 'Seaside', autoJoin: 'not a boolean' }),
                     ],
@@ -517,7 +563,9 @@ describe('settings facade — class conditions and the rule cascade', () => {
             settings.rememberChallengeTitles([{ id: 3, title: 'Seaside', tags: ['Comm'] }]);
             const info = settings.getTitleProfile('Seaside', 3);
             expect(info.inlineValues).toEqual({ autoFill: true });
-            expect(info.ruleSources).toEqual({ autoFill: 'Comm' });
+            // The untitled rule carries no title, only its place (the renderer words it, translated).
+            expect(info.ruleSources).toEqual({ autoFill: { index: 2 } });
+            expect(info.ruleSources.autoFill).not.toHaveProperty('title');
         });
     });
 

@@ -70,6 +70,21 @@ describe('clearAuthToken', () => {
         expect(settings.forgetOpenChallengeIds).toHaveBeenCalledTimes(1);
     });
 
+    it('moves the account generation, so a Discover request begun before the logout writes nothing', async () => {
+        const { accountGeneration } =
+            require('../../src/ts/services/discoverChallenges') as typeof discoverChallengesModule;
+        const before = accountGeneration();
+        await clearAuthToken();
+        expect(accountGeneration()).not.toBe(before);
+        const afterLogout = accountGeneration();
+        switchAccountToken('another-token');
+        expect(accountGeneration()).not.toBe(afterLogout);
+        // The same token again is the same account.
+        const same = accountGeneration();
+        switchAccountToken('another-token');
+        expect(accountGeneration()).toBe(same);
+    });
+
     it("forgets the cached upcoming list, so the next account is never shown the previous one's", async () => {
         const { fetchUpcoming } =
             require('../../src/ts/services/discoverChallenges') as typeof discoverChallengesModule;

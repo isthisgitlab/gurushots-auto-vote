@@ -6,7 +6,10 @@
 
 import type * as formattersModule from '../../src/ts/react/utils/formatters';
 
+import type * as rendererModule from '../../src/ts/translations/renderer';
+
 const { formatDuration } = require('../../src/ts/react/utils/formatters') as typeof formattersModule;
+const { rendererTranslator } = require('../../src/ts/translations/renderer') as typeof rendererModule;
 
 describe('formatDuration', () => {
     test('sub-minute (and zero / negative) reads "<1m", never "0m"', () => {
@@ -31,5 +34,18 @@ describe('formatDuration', () => {
     test('days + hours for multi-day windows', () => {
         expect(formatDuration(86400)).toBe('1d 0h');
         expect(formatDuration(2 * 86400 + 3 * 3600 + 1800)).toBe('2d 3h');
+    });
+});
+
+describe('formatDuration in the UI language', () => {
+    afterEach(() => jest.restoreAllMocks());
+
+    test('Latvian writes minutes "min" (not "m", metres), English keeps "m"', () => {
+        const language = jest.spyOn(rendererTranslator, 'getCurrentLanguage').mockReturnValue('lv');
+        expect(formatDuration(3700)).toBe('1h 1min');
+        expect(formatDuration(30)).toBe('<1min');
+        expect(formatDuration(90, { includeSeconds: true })).toBe('1min 30s');
+        language.mockReturnValue('en');
+        expect(formatDuration(3700)).toBe('1h 1m');
     });
 });

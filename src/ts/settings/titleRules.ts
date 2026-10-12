@@ -179,14 +179,15 @@ const getTitleProfile = (
             if (challenge[key] === undefined) challenge[key] = value;
         }
     }
-    const { values: ruleValues, profile } = ruleValuesFor(settings, challenge);
-    const { values: inlineValues, sources: ruleSources } = ruleValuesFor(settings, challenge, true);
+    const { values: ruleValues, profile, sources: ruleSources } = ruleValuesFor(settings, challenge);
+    const { values: inlineValues, sources: inlineSources } = ruleValuesFor(settings, challenge, true);
     return {
         profile: profile ? { name: profile.name, values: profile.values } : null,
         suppressed: hasId && isTitleProfileSuppressed(settings, challengeId),
         ruleValues,
         inlineValues,
         ruleSources,
+        inlineSources,
     };
 };
 

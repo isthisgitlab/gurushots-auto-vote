@@ -116,14 +116,14 @@ describe("what the challenge's rules contribute", () => {
         titleRuleInfo({
             profile: { name: 'Quad', values: { exposure: 60 } },
             inlineValues: { scenario: 'Plan', autoJoin: true },
-            ruleSources: { scenario: 'Seaside', autoJoin: 'Seaside' },
+            ruleSources: { scenario: { title: 'Seaside', index: 1 }, autoJoin: { title: 'Seaside', index: 1 } },
         });
 
     test('a rule-assigned scenario and auto-join are the inherited values, not the default, and name their rule', async () => {
         const { result } = await open(seaside());
         expect(result.current.inheritedOf('scenario')).toBe('Plan');
         expect(result.current.effectiveOf('autoJoin')).toBe(true);
-        expect(result.current.ruleSourceOf('scenario')).toBe('Seaside');
+        expect(result.current.ruleSourceOf('scenario')).toEqual({ title: 'Seaside', index: 1 });
         // A key only the profile sets is the profile's, with no rule named.
         expect(result.current.inheritedOf('exposure')).toBe(60);
         expect(result.current.ruleSourceOf('exposure')).toBeUndefined();
@@ -145,7 +145,7 @@ describe("what the challenge's rules contribute", () => {
         expect(result.current.inheritedOf('scenario')).toBe('Plan');
         expect(result.current.inheritedOf('exposure')).toBe(70);
         expect(result.current.profileValues).toEqual({});
-        expect(result.current.ruleSourceOf('scenario')).toBe('Seaside');
+        expect(result.current.ruleSourceOf('scenario')).toEqual({ title: 'Seaside', index: 1 });
     });
 
     test('applying a profile suppresses the matched one but keeps the rule values; Clear all brings it back', async () => {
@@ -160,36 +160,112 @@ describe("what the challenge's rules contribute", () => {
         expect(result.current.inheritedOf('scenario')).toBe('Plan');
     });
 
-    test('editing the matched profile re-derives the rule layer under the inline values', async () => {
-        const { result } = await open(seaside());
-        // The edit changes a profile-only key and tries to change an inline one: the inline value wins.
-        act(() => result.current.onProfilesChanged({ name: 'quad', values: { exposure: 80, scenario: 'Other' } }));
-        expect(result.current.inheritedOf('exposure')).toBe(80);
-        expect(result.current.inheritedOf('scenario')).toBe('Plan');
-        expect(result.current.titleRules?.profile).toEqual({
-            name: 'quad',
-            values: { exposure: 80, scenario: 'Other' },
+    describe('when the matched profile is edited or deleted, the rules are read again from the settings', () => {
+        const callsAfterOpen = () => mockApi.getTitleProfile.mock.calls.length;
+
+        test('an edit shows what the settings now say, not a client-side merge', async () => {
+            const { result } = await open(seaside());
+            const opened = callsAfterOpen();
+            // The settings' first-match order decides: the edited profile's autoFill (rule 1) beats rule 2's inline one.
+            mockApi.getTitleProfile.mockResolvedValue(
+                titleRuleInfo({
+                    profile: { name: 'quad', values: { exposure: 80, autoFill: false } },
+                    inlineValues: { scenario: 'Plan', autoJoin: true, autoFill: true },
+                    ruleValues: { exposure: 80, autoFill: false, scenario: 'Plan', autoJoin: true },
+                    ruleSources: {
+                        scenario: { title: 'Seaside', index: 1 },
+                        autoFill: { title: 'Seaside', index: 1, viaProfile: true },
+                    },
+                    inlineSources: { autoFill: { title: 'Sea', index: 2 }, scenario: { title: 'Seaside', index: 1 } },
+                }),
+            );
+            act(() => result.current.onProfilesChanged({ name: 'quad', values: { exposure: 80, autoFill: false } }));
+            await waitFor(() => expect(result.current.inheritedOf('exposure')).toBe(80));
+            expect(callsAfterOpen()).toBe(opened + 1);
+            expect(mockApi.getTitleProfile).toHaveBeenLastCalledWith('Challenge 1', '1');
+            // The profile's value runs, so it is not credited to rule 2, which only sets it inline.
+            expect(result.current.inheritedOf('autoFill')).toBe(false);
+            expect(result.current.ruleSourceOf('autoFill')).toBeUndefined();
+            expect(result.current.ruleSourceOf('scenario')).toEqual({ title: 'Seaside', index: 1 });
         });
-    });
 
-    test('deleting the matched profile keeps the inline values, with or without a suppression', async () => {
-        const { result } = await open(seaside());
-        act(() => result.current.onProfilesChanged({ name: 'Quad', deleted: true }));
-        expect(result.current.titleRules?.profile).toBeNull();
-        expect(result.current.inheritedOf('exposure')).toBe(70);
-        expect(result.current.inheritedOf('scenario')).toBe('Plan');
-        expect(result.current.inheritedOf('autoJoin')).toBe(true);
+        test('with the profile suppressed, the key then names the rule that sets it inline', async () => {
+            const { result } = await open({ ...seaside(), suppressed: true });
+            mockApi.getTitleProfile.mockResolvedValue(
+                titleRuleInfo({
+                    suppressed: true,
+                    profile: { name: 'quad', values: { autoFill: false } },
+                    inlineValues: { autoFill: true },
+                    ruleSources: { autoFill: { title: 'Seaside', index: 1, viaProfile: true } },
+                    inlineSources: { autoFill: { title: 'Sea', index: 2 } },
+                }),
+            );
+            act(() => result.current.onProfilesChanged({ name: 'Quad', values: { autoFill: false } }));
+            await waitFor(() => expect(result.current.inheritedOf('autoFill')).toBe(true));
+            expect(result.current.ruleSourceOf('autoFill')).toEqual({ title: 'Sea', index: 2 });
+        });
 
-        const { result: suppressed } = await open({ ...seaside(), suppressed: true });
-        act(() => suppressed.current.onProfilesChanged({ name: 'Quad', deleted: true }));
-        expect(suppressed.current.titleRules).toMatchObject({ profile: null, suppressed: true });
-        expect(suppressed.current.inheritedOf('scenario')).toBe('Plan');
+        test('a deletion leaves the inline values, with or without a suppression', async () => {
+            const { result } = await open(seaside());
+            mockApi.getTitleProfile.mockResolvedValue(
+                titleRuleInfo({
+                    inlineValues: { scenario: 'Plan', autoJoin: true },
+                    ruleSources: { scenario: { title: 'Seaside', index: 1 } },
+                }),
+            );
+            act(() => result.current.onProfilesChanged({ name: 'Quad', deleted: true }));
+            await waitFor(() => expect(result.current.titleRules?.profile).toBeNull());
+            expect(result.current.inheritedOf('exposure')).toBe(70);
+            expect(result.current.inheritedOf('scenario')).toBe('Plan');
+            expect(result.current.inheritedOf('autoJoin')).toBe(true);
+
+            const { result: suppressed } = await open({ ...seaside(), suppressed: true });
+            mockApi.getTitleProfile.mockResolvedValue(
+                titleRuleInfo({ inlineValues: { scenario: 'Plan' }, ruleSources: {} }),
+            );
+            act(() => suppressed.current.onProfilesChanged({ name: 'Quad', deleted: true }));
+            await waitFor(() => expect(suppressed.current.titleRules?.profile).toBeNull());
+            expect(suppressed.current.titleRules?.suppressed).toBe(true);
+            expect(suppressed.current.inheritedOf('scenario')).toBe('Plan');
+        });
+
+        test("the dialog's own unsaved suppression survives the reread, either way", async () => {
+            const { result } = await open(seaside());
+            act(() => result.current.applyProfile({ exposure: 90 }));
+            expect(result.current.titleRules?.suppressed).toBe(true);
+            // The settings still say "not suppressed" (nothing is saved yet).
+            act(() => result.current.onProfilesChanged({ name: 'Quad', values: { exposure: 60 } }));
+            await waitFor(() => expect(callsAfterOpen()).toBeGreaterThan(1));
+            await act(async () => undefined);
+            expect(result.current.titleRules?.suppressed).toBe(true);
+            act(() => result.current.clearAll());
+            expect(result.current.titleRules?.suppressed).toBe(false);
+        });
+
+        test('a reread that fails changes nothing', async () => {
+            const { result } = await open(seaside());
+            mockApi.getTitleProfile.mockRejectedValue(new Error('ipc'));
+            act(() => result.current.onProfilesChanged({ name: 'Quad', values: { exposure: 1 } }));
+            await waitFor(() => expect(mockApi.getTitleProfile).toHaveBeenCalledTimes(2));
+            await act(async () => undefined);
+            expect(result.current.inheritedOf('exposure')).toBe(60);
+        });
+
+        test('nothing is read without a challenge to ask about', async () => {
+            mockApi.getChallengeOverrides.mockReset().mockResolvedValue({});
+            const p = { ...props(), challengeId: null };
+            const { result } = renderHook(() => useChallengeOverrides(p));
+            act(() => result.current.onProfilesChanged({ name: 'Quad' }));
+            expect(mockApi.getTitleProfile).not.toHaveBeenCalled();
+        });
     });
 
     test('a change to a profile that is not the matched one is ignored', async () => {
         const { result } = await open(seaside());
+        const opened = mockApi.getTitleProfile.mock.calls.length;
         act(() => result.current.onProfilesChanged({ name: 'Elsewhere', values: { exposure: 1 } }));
         expect(result.current.inheritedOf('exposure')).toBe(60);
+        expect(mockApi.getTitleProfile).toHaveBeenCalledTimes(opened);
         const { result: none } = await open(titleRuleInfo({ inlineValues: { scenario: 'Plan' } }));
         act(() => none.current.onProfilesChanged({ name: 'Quad', values: { exposure: 1 } }));
         expect(none.current.inheritedOf('exposure')).toBe(70);

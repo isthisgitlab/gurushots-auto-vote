@@ -524,9 +524,10 @@ export const app = {
     discoverCountLabel: 'Atvērtie izaicinājumi: {count}',
     discoverCountSplit: 'Atvērti: {open} · gaidāmi: {upcoming}',
     discoverStartsIn: 'Sākas pēc {time} — tad varēs pievienoties',
-    discoverStartingNow: 'Tūlīt sāksies — atsvaidzini',
+    discoverStartingNow: 'Sākas tagad — drīz parādīsies atvērto sarakstā',
     discoverUpcomingChosenHint:
         'Izvēlētos foto automātiski izmanto tikai tad, ja šim izaicinājumam ir ieslēgta automātiskā pievienošanās; citādi pievienojies pats, kad tas sāksies.',
+    discoverJoinOpeningLabel: 'Pievienoties izaicinājumam „{title}” — pievienošanās atvērsies pēc brīža',
     discoverJoinNotStartedLabel: 'Pievienoties izaicinājumam „{title}” — iespējams tikai pēc tā sākuma',
     discoverRefresh: 'Atsvaidzināt',
     discoverEmpty: 'Šobrīd nav atvērtu izaicinājumu, kuriem pievienoties.',
@@ -559,6 +560,8 @@ export const app = {
     discoverNoPhoto: 'Nav piemērota foto, ko iesniegt. Monētas netika norakstītas.',
     discoverUnavailable: 'Šim izaicinājumam vairs nevar pievienoties.',
     discoverNotStarted: 'Šis izaicinājums vēl nav sācies. Pievienoties varēs, kad tas sāksies.',
+    discoverPriceChanged:
+        'Cena mainījusies — tagad monētas: {coins}. Nekas netika iztērēts; nospied „Pievienoties”, lai apstiprinātu jauno cenu.',
     discoverBusy: 'Pievienošanās jau notiek.',
     validationOutOfRange: 'Ievadi vērtību no {min} līdz {max}.',
     validationAtLeast: 'Ievadi vērtību, kas nav mazāka par {min}.',
@@ -573,7 +576,7 @@ export const app = {
         'Vēlamais kritērijs gan automātiskajai iesniegšanai, gan manuālajām foto pogām. Dot priekšroku foto, kuru tagi sakrīt ar šiem; tie tiek vērtēti augstāk nekā pēc automātiski noteiktajiem izaicinājuma atslēgvārdiem, bet pārējie foto netiek izslēgti. Ja neviens nesakrīt, foto izvēlas kā parasti. Salīdzināšanai ir tie paši veselo vārdu noteikumi kā obligātajiem tagiem.',
     chosenPhotos: 'Izvēlētie foto',
     chosenPhotosDesc:
-        'Foto, ko automātiskā pievienošanās un automātiskā iesniegšana mēģina izmantot pirmos. Tiem joprojām jāatbilst taviem tagu uzstādījumiem (ja vien nav ieslēgts „Iesniegt arī bez tagu sakritības” un neviens foto tiem neatbilst), un lietotne tos kārto tāpat, kā kārto savas automātiskās izvēles. Foto var būt tikai vienā izaicinājumā, tāpēc ar kopīgu sarakstu to paņem izaicinājums, kas tiek aizpildīts pirmais. Saraksts pieder kontam, kas to saglabāja, un citā kontā tiek ignorēts; ja citā kontā saglabā sarakstu, pirmajā kontā saglabātie saraksti sāk attiekties arī uz to, ja vien tos iepriekš neizņem. Scenārija saraksts tiek izmantots tikai pēc pievienošanās. Apmaiņa sarakstu neņem vērā.',
+        'Foto, ko automātiskā pievienošanās un automātiskā iesniegšana mēģina izmantot pirmos. Tiem joprojām jāatbilst taviem tagu uzstādījumiem (ja vien nav ieslēgts „Iesniegt arī bez tagu sakritības” un neviens foto tiem neatbilst), un lietotne tos kārto tāpat, kā kārto savas automātiskās izvēles (ja vien nav ieslēgts „Izmantot izvēlētos foto tādā secībā, kādā tos izvēlējos”). Foto var būt tikai vienā izaicinājumā, tāpēc ar kopīgu sarakstu to paņem izaicinājums, kas tiek aizpildīts pirmais. Saraksts pieder kontam, kas to saglabāja, un citā kontā tiek ignorēts; ja citā kontā saglabā sarakstu, pirmajā kontā saglabātie saraksti sāk attiekties arī uz to, ja vien tos iepriekš neizņem. Scenārija saraksts tiek izmantots tikai pēc pievienošanās. Apmaiņa sarakstu neņem vērā.',
     chosenPhotosInOrder: 'Izmantot izvēlētos foto tādā secībā, kādā tos izvēlējos',
     chosenPhotosInOrderDesc:
         'Kad ir uzstādīti izvēlētie foto, iesniedz tos tādā secībā, kādā tos izvēlējies (numuri izvēles logā), nevis kārto tā, kā lietotne kārto savas automātiskās izvēles. Foto, kas neiztur tavus obligātos tagus, jau ir iesniegts vai šim izaicinājumam nav pieejams, izlaiž un izmanto nākamo sarakstā; atlikušās vietas aizpilda pēc kārtojuma kā parasti. Pēc noklusējuma izslēgts.',
@@ -596,7 +599,7 @@ export const app = {
         'Tas attiecas uz katru izaicinājumu, ko aptver: automātiskā pievienošanās un iesniegšana izlaiž katru izaicinājumu, kuram nav derīga izvēlētā foto.',
     photoChooserTitle: 'Izvēlēties foto',
     photoChooserHelp:
-        'Lietotne šos foto izmanto pirmos, un tiem joprojām jāiztur tavi tagu filtri. Tos kārto tāpat, kā kārto savas automātiskās izvēles, vai arī iet pēc šeit redzamajiem numuriem, ja ir ieslēgts „Izmantot izvēlētos foto tādā secībā, kādā tos izvēlējos” (uzstādījumi „Automātiskā iesniegšana”, globāli vai katram izaicinājumam).',
+        'Lietotne šos foto izmanto pirmos, un tiem joprojām jāiztur tavi tagu filtri. Tos kārto tāpat, kā kārto savas automātiskās izvēles, vai arī izmanto tos šeit redzamo numuru secībā, ja ir ieslēgts „Izmantot izvēlētos foto tādā secībā, kādā tos izvēlējos” (uzstādījumi „Automātiskā iesniegšana”, globāli vai katram izaicinājumam).',
     photoChooserSearchLabel: 'Meklēt savus foto pēc taga',
     photoChooserSearchPlaceholder: 'piem., saulriets',
     photoChooserSearch: 'Meklēt',
@@ -738,6 +741,7 @@ export const app = {
         'Vēl nav noteikumu. Pievieno kādu, lai atlasītu izaicinājumus pēc nosaukuma, taga, veida, foto skaita, ilguma vai beigu laika.',
     usingProfile: 'Izmanto profilu',
     fromRule: 'No noteikuma: {title}',
+    ruleNumber: 'Nr. {n}',
     ruleSettingsHint: 'Uzstādījumus nosaka izaicinājumu noteikums',
     none: '(nav)',
     addOnePhoto: 'Iesniegt vienu foto tukšā vietā',
@@ -928,7 +932,7 @@ export const app = {
     voteOnNewEntry: 'Balsot par jaunu foto',
     voteOnNewEntryDesc:
         'Kad šajā izaicinājumā parādās jauns foto — pievienots pašā GuruShots vai ar automātisko iesniegšanu, ārkārtas iesniegšanu vai kā jauns Boost/Turbo foto —, nobalsot vienu reizi arī tad, ja redzamība jau sasniegusi slieksni vai to pārsniegusi. Lietotne balso līdz tai robežai, ko izaicinājums izmantotu parasti: redzamības mērķim (vai redzamībai, ja mērķis ir 0) vai beigu loga laikā — beigu loga redzamības mērķim, ja ieslēgts „Izmantot beigu loga redzamību”. Tas neapiet uzstādījumus „Tikai Boost režīms”, „Balsot tikai pēdējās minūtes laikā” un „Tikai plānotā balsošana”: ja kāds no tiem to aizliedz, balsošana nenotiek.',
-    discoverUpcomingHours: 'Rādīt gaidāmos izaicinājumus, kas sākas tuvāko',
+    discoverUpcomingHours: 'Cik stundas uz priekšu rādīt gaidāmos izaicinājumus',
     discoverUpcomingHoursDesc:
         'Cik tālu uz priekšu „Atrast izaicinājumus” rāda izaicinājumus, kas vēl nav sākušies, lai foto tiem varētu izvēlēties jau iepriekš. Tiem nevar pievienoties, kamēr tie nav sākušies, un izvēlētos foto lietotne izmanto automātiski tikai tad, ja šim izaicinājumam ir ieslēgta automātiskā pievienošanās. 0 = izslēgts: rāda tikai atvērtos izaicinājumus.',
     override: 'Pielāgots',

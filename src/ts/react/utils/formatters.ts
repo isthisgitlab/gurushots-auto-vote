@@ -5,13 +5,17 @@ import type { SerializableSchemaEntry } from '../../ipc/settings.handlers';
  */
 
 import { formatSecondsAsHoursMinutes } from './timeFieldUnits';
-import { formatDuration } from '../../format/duration';
+import { formatDuration as formatDurationIn } from '../../format/duration';
+import { rendererTranslator } from '../../translations/renderer';
 import { buildPhotoUrl, entryPhotoUrl } from '../../format/photoUrl';
 import { finiteOr } from '../../numbers';
 import { interp } from './interp';
 
-// Re-exported from the shared core so the renderer, the CLI, and the voting pass
-// (services/votingOrchestrator/boost.ts) all format durations identically — see src/ts/format/duration.ts.
+// The shared core's formatter, so the renderer, the CLI, and the voting pass
+// (services/votingOrchestrator/boost.ts) all format durations identically — see src/ts/format/duration.ts —
+// in the UI's language: Latvian writes minutes "min", not "m" (metres).
+const formatDuration = (seconds: number, options: { includeSeconds?: boolean } = {}): string =>
+    formatDurationIn(seconds, { ...options, locale: rendererTranslator.getCurrentLanguage() });
 export { formatDuration };
 
 // Entry thumbnails. Re-exported here rather than imported straight into the

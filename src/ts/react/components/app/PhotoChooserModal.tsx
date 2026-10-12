@@ -213,7 +213,7 @@ function MissingTile({
  * The library listing with its states: loading, an error with Retry, the
  * missing-challenge explanation, and the tiles (selected ones pinned first).
  */
-function PhotoGrid({
+export function PhotoGrid({
     state,
     known,
     selected,

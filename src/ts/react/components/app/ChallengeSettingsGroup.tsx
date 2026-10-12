@@ -11,6 +11,7 @@ import { SettingHintList } from './SettingHints';
 import type { SerializableSchemaEntry } from '../../../ipc/settings.handlers';
 import type { useChallengeOverrides } from '@/hooks/useChallengeOverrides';
 import type { Challenge } from '../../../types/gurushots';
+import type { RuleSource } from '../../../types/settings';
 import type { FillSchedule } from '../../../services/scheduleRemap';
 import type { HintsFor } from '../../../types/settingsEditor';
 
@@ -31,19 +32,19 @@ export interface ChallengeGroupContext {
  */
 function ValueSourceBadge({
     hasOverride,
-    ruleTitle,
+    ruleSource,
     hasProfileValue,
 }: {
     hasOverride: boolean;
-    ruleTitle: string | undefined;
+    ruleSource: RuleSource | undefined;
     hasProfileValue: boolean;
 }) {
     const { t } = useTranslation();
     if (hasOverride) return <span className="badge badge-accent badge-sm">{t('app.overridden')}</span>;
-    if (ruleTitle !== undefined) {
-        return (
-            <span className="badge badge-secondary badge-sm">{interp(t('app.fromRule'), { title: ruleTitle })}</span>
-        );
+    if (ruleSource !== undefined) {
+        // A rule without a title is named by its place in the list, in the UI's language.
+        const title = ruleSource.title ?? interp(t('app.ruleNumber'), { n: ruleSource.index });
+        return <span className="badge badge-secondary badge-sm">{interp(t('app.fromRule'), { title })}</span>;
     }
     if (hasProfileValue) return <span className="badge badge-info badge-sm">{t('app.usingProfile')}</span>;
     return <span className="badge badge-ghost badge-sm">{t('app.usingGlobal')}</span>;
@@ -98,7 +99,7 @@ function ChallengeSettingCell({
                 <div className="flex gap-1">
                     <ValueSourceBadge
                         hasOverride={hasOverride}
-                        ruleTitle={form.ruleSourceOf(key)}
+                        ruleSource={form.ruleSourceOf(key)}
                         hasProfileValue={hasProfileValue}
                     />
                 </div>

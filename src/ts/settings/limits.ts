@@ -55,7 +55,12 @@ const CHOSEN_PHOTO_ID_RE = /^[A-Za-z0-9_-]{1,64}$/;
 // settings field offers it as its maximum.
 const MAX_UPCOMING_HOURS = 168;
 
+// How long, in seconds, a challenge whose start has passed is still treated as "starting now"
+// while the open list has not shown it: Discover keeps its row, and cleanup keeps its chosen photos.
+const UPCOMING_GRACE_SEC = 600;
+
 export {
+    UPCOMING_GRACE_SEC,
     MAX_SCHEDULED_FILL_ENTRIES,
     MAX_VOTING_PAUSE_MINUTES,
     MAX_TAG_LENGTH,

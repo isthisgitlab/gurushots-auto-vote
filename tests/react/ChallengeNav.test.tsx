@@ -125,7 +125,10 @@ describe('ChallengeNav', () => {
     test('marks a challenge a rule customizes on its own with its own marker and text, not the profile one', async () => {
         jest.mocked(window.api.getTitleProfile).mockImplementation(async (_title, id) =>
             id === '8'
-                ? titleRuleInfo({ inlineValues: { scenario: 'Plan' }, ruleSources: { scenario: 'Seaside' } })
+                ? titleRuleInfo({
+                      inlineValues: { scenario: 'Plan' },
+                      ruleSources: { scenario: { title: 'Seaside', index: 1 } },
+                  })
                 : // Join-only values change nothing once joined.
                   titleRuleInfo({ inlineValues: { autoJoin: true } }),
         );

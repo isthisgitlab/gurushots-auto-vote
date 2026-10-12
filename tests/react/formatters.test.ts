@@ -184,8 +184,11 @@ describe('getEntryStatus', () => {
 describe('re-exports from the shared core', () => {
     test('formatters exposes the same functions the core modules define', () => {
         const fm = require('../../src/ts/react/utils/formatters') as typeof formattersModule;
-        expect(fm.formatDuration).toBe(
-            (require('../../src/ts/format/duration') as typeof import('../../src/ts/format/duration')).formatDuration,
+        // formatDuration is the shared one in the UI's language (see formatDuration.test.ts): same text in English.
+        const core = (require('../../src/ts/format/duration') as typeof import('../../src/ts/format/duration'))
+            .formatDuration;
+        expect([0, 59, 630, 3700, 90_000].map((seconds) => fm.formatDuration(seconds))).toEqual(
+            [0, 59, 630, 3700, 90_000].map((seconds) => core(seconds)),
         );
         expect(fm.entryPhotoUrl).toBe(
             (require('../../src/ts/format/photoUrl') as typeof import('../../src/ts/format/photoUrl')).entryPhotoUrl,

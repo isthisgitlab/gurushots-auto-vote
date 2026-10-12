@@ -268,6 +268,17 @@ describe('runTurboMiniGame', () => {
 });
 
 describe('joinChallenge', () => {
+    test('passes the confirmed cost on, and only when there is one', async () => {
+        joinChallengeSingle.mockResolvedValue(invalid({ status: 'needs-confirm' }));
+        await joinChallenge(7, true, 'tok', 100);
+        expect(joinChallengeSingle).toHaveBeenLastCalledWith(7, 'tok', expect.anything(), {
+            spendCoins: true,
+            expectedCost: 100,
+        });
+        await joinChallenge(7, true, 'tok');
+        expect(joinChallengeSingle).toHaveBeenLastCalledWith(7, 'tok', expect.anything(), { spendCoins: true });
+    });
+
     test('forwards to joinChallengeSingle with the shared join deps', async () => {
         joinChallengeSingle.mockResolvedValue(invalid({ status: 'joined' }));
 

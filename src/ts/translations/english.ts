@@ -516,13 +516,14 @@ export const app = {
         'Total coins auto-join may spend in one cycle. 0 = spend nothing (paid joins off). Both this and the per-challenge cap must be above 0 to join paid challenges.',
     // Discover (un-joined challenges)
     discoverTitle: 'Discover Challenges',
-    discoverCountLabel: '{count} open challenges',
+    discoverCountLabel: 'Open challenges: {count}',
     discoverCountSplit: '{open} open · {upcoming} upcoming',
     discoverStartsIn: 'Starts in {time} — opens for joining then',
-    discoverStartingNow: 'Starting now — refresh',
+    discoverStartingNow: 'Starting now — it will appear in the open list shortly',
     discoverUpcomingChosenHint:
         'Chosen photos are used automatically only if auto-join is on for this challenge; otherwise join by hand once it starts.',
     discoverJoinNotStartedLabel: 'Join {title} — not open until it starts',
+    discoverJoinOpeningLabel: 'Join {title} — opens for joining in a moment',
     discoverRefresh: 'Refresh',
     discoverEmpty: 'No open challenges to join right now.',
     discoverUnavailableList: 'Could not load open challenges. Check your connection and try again.',
@@ -553,6 +554,7 @@ export const app = {
     discoverNoPhoto: 'No eligible photo to submit. No coins were charged.',
     discoverUnavailable: 'This challenge is no longer open to join.',
     discoverNotStarted: 'This challenge has not started yet. You can join once it starts.',
+    discoverPriceChanged: 'The cost changed to {coins} coins. Nothing was spent — press Join to confirm the new cost.',
     discoverBusy: 'A join is already in progress.',
     validationOutOfRange: 'Enter a value between {min} and {max}.',
     validationAtLeast: 'Enter a value of {min} or more.',
@@ -567,7 +569,7 @@ export const app = {
         'Soft preference for both auto-submit and the manual photo buttons. Prefer photos whose labels match these tags; matches rank above the auto-detected challenge keyword score but do not exclude other photos. If nothing matches, photos are picked by the normal ranking. Matching follows the same whole-word rules as Must Include Tags.',
     chosenPhotos: 'Chosen Photos',
     chosenPhotosDesc:
-        "Photos that auto-join and auto-submit try first. They must still fit your tag settings (unless Submit Even Without a Tag Match is on and no photo fits them at all), and they are ranked the way the app ranks its own picks. A photo can be in only one challenge, so with a shared list the challenge filled first takes it. The list belongs to the account that saved it and is ignored on another account; saving a list there makes the lists saved under the first account apply to it too, unless you remove them first. A scenario's list applies only after joining. Swap ignores the list.",
+        "Photos that auto-join and auto-submit try first. They must still fit your tag settings (unless Submit Even Without a Tag Match is on and no photo fits them at all), and they are ranked the way the app ranks its own picks (unless “Use Chosen Photos in the order I picked them” is on). A photo can be in only one challenge, so with a shared list the challenge filled first takes it. The list belongs to the account that saved it and is ignored on another account; saving a list there makes the lists saved under the first account apply to it too, unless you remove them first. A scenario's list applies only after joining. Swap ignores the list.",
     chosenPhotosInOrder: 'Use Chosen Photos in the order I picked them',
     chosenPhotosInOrderDesc:
         "With Chosen Photos set, enter them in the order you picked them (the numbers in the chooser) instead of ranking them the way the app ranks its own picks. A photo that fails your must-include tags, is already entered or isn't offered for the challenge is skipped, and the next one in the list is used; any slots left over are filled by ranking as usual. Off by default.",
@@ -732,6 +734,7 @@ export const app = {
         'No rules yet. Add one to match challenges by title, tag, type, photo count, length or close time.',
     usingProfile: 'Using profile',
     fromRule: 'From rule: {title}',
+    ruleNumber: 'rule #{n}',
     ruleSettingsHint: 'Set by a challenge rule',
     none: '(none)',
     addOnePhoto: 'Submit one photo to an empty slot',

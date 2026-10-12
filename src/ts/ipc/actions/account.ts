@@ -8,7 +8,7 @@ import { isAutoJoinActive } from '../../services/joinChallenges';
 import { forgetFailedMemberId, resolveMemberId } from '../../services/autoFill';
 import { chosenAnnotator, annotateOpenIds, MAX_ANNOTATED_IDS } from './chosenAnnotations';
 import { rememberOpenChallenges } from '../../services/openChallengeCache';
-import { fetchUpcoming, mergeDiscoverLists } from '../../services/discoverChallenges';
+import { fetchUpcoming, mergeDiscoverLists, accountGeneration } from '../../services/discoverChallenges';
 import { getAutoClaimStatus } from '../../services/autoClaim';
 import { rememberChallenges } from '../../windows/quitGuard';
 import { sanitizeForLog, refuseInvalidArgs } from './shared';
@@ -144,24 +144,33 @@ const handleGetMemberChallenges = (async () => {
         const guard = auth.requireAuthToken('member challenges');
         if (!guard.ok) return guard.response;
         const strategy = apiFactory.getApiStrategy();
+        const generation = accountGeneration();
         const [open, upcoming] = await Promise.all([
             strategy.getMemberChallenges(guard.token, 'open'),
             // Fetched whatever the window: every upcoming id is what keeps its chosen photos from cleanup.
             fetchUpcomingOrNull(guard.token, strategy),
         ]);
+        // The account logged out (or changed) while the lists were on their way: they are not this
+        // account's to remember.
+        if (generation !== accountGeneration()) {
+            return { success: false as const, error: 'The account changed while listing challenges', items: [] };
+        }
         if (open === null) return { success: false as const, error: 'Could not list challenges', items: [] };
         // These lists keep a chosen-photos entry alive for a challenge that is not joined yet (see
         // cleanupStaleChallengeSetting); the upcoming one is written only from a successful fetch.
         settings.rememberOpenChallengeIds(idsOf(open));
-        if (upcoming !== null) settings.rememberUpcomingChallengeIds(idsOf(upcoming));
-        const hours = Number(settings.getEffectiveSetting('discoverUpcomingHours', null));
+        if (upcoming !== null) settings.rememberUpcomingChallenges(upcoming);
         const merged = mergeDiscoverLists({
             open,
             upcoming: upcoming ?? [],
-            hours: Number.isFinite(hours) ? hours : 0,
+            hours: settings.getEffectiveSetting('discoverUpcomingHours', null),
             nowSec: Date.now() / 1000,
         });
-        rememberOpenChallenges(merged);
+        // A challenge the upcoming feed dropped but the open one does not list yet stays in the
+        // cache, so its rules (by title or tags) still resolve while it is "starting now".
+        const fetched = new Set(idsOf(upcoming ?? []).map(String));
+        const lingering = Array.from(settings.getUpcomingChallengeIds() ?? []).filter((id) => !fetched.has(id));
+        rememberOpenChallenges(merged, lingering);
         const annotate = await chosenAnnotator(guard.token);
         return {
             success: true as const,
@@ -228,9 +237,22 @@ const handleConfirmAccount = (async () => {
 // so this handler stays thin.
 /**
  * @param spendCoins - Only `true` authorizes a paid join.
+ * @param expectedCost - The cost the caller's confirmation named: a challenge that now costs more is
+ *   not joined (it answers `needs-confirm` with the live cost). Absent: the current cost is accepted.
  */
-const handleJoinChallenge = (async (event: unknown, challengeId: string | number, spendCoins?: boolean) => {
+const handleJoinChallenge = (async (
+    event: unknown,
+    challengeId: string | number,
+    spendCoins?: boolean,
+    expectedCost?: number,
+) => {
     if (!isIdArg(challengeId)) return refuseInvalidArgs('join', 'join-challenge');
+    if (
+        expectedCost !== undefined &&
+        !(typeof expectedCost === 'number' && Number.isFinite(expectedCost) && expectedCost >= 0)
+    ) {
+        return refuseInvalidArgs('join', 'join-challenge');
+    }
     const safeId = sanitizeForLog(challengeId);
     try {
         logger
@@ -243,6 +265,7 @@ const handleJoinChallenge = (async (event: unknown, challengeId: string | number
             challengeId,
             spendCoins === true,
             guard.token,
+            ...(expectedCost === undefined ? [] : [expectedCost]),
         );
         return {
             success: outcome?.status === 'joined',

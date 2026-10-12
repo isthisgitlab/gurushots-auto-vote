@@ -1194,6 +1194,58 @@ describe('joinChallengeSingle — manual', () => {
         expect(res.status).toBe('joined');
         expect(deps.coinsUnlock).toHaveBeenCalledTimes(1);
     });
+
+    describe('expectedCost — consent covers the price the user was shown', () => {
+        const priced = (join_coins: number) =>
+            makeDeps({
+                getMemberChallenges: jest.fn(async () => [{ id: 2, join_coins, type: 'flash' }]),
+                getBankroll: jest.fn(async () => ({ coins: 500 })),
+            });
+        const untouched = (deps: ReturnType<typeof makeDeps>) =>
+            [deps.getBankroll, deps.coinsUnlock, deps.submitToChallenge].every(
+                (fn) => jest.mocked(fn).mock.calls.length === 0,
+            );
+
+        test.each([[100], [150], [100.5]])(
+            'a live cost of 100 within the confirmed %p is joined',
+            async (expectedCost) => {
+                const deps = priced(100);
+                const res = await joinChallengeSingle(2, 'tok', deps, { spendCoins: true, expectedCost });
+                expect(res).toMatchObject({ status: 'joined', cost: 100 });
+                expect(deps.coinsUnlock).toHaveBeenCalledTimes(1);
+            },
+        );
+
+        test.each([[99], [0], [99.99]])(
+            'a live cost of 100 above the confirmed %p needs a new confirmation, with the live cost, and unlocks nothing',
+            async (expectedCost) => {
+                const deps = priced(100);
+                expect(await joinChallengeSingle(2, 'tok', deps, { spendCoins: true, expectedCost })).toEqual({
+                    status: 'needs-confirm',
+                    challengeId: 2,
+                    cost: 100,
+                });
+                expect(untouched(deps)).toBe(true);
+            },
+        );
+
+        test('without it the current cost is accepted, as ever', async () => {
+            const deps = priced(300);
+            expect((await joinChallengeSingle(2, 'tok', deps, { spendCoins: true })).status).toBe('joined');
+        });
+
+        test('a free challenge joins whatever was confirmed, and one that turned paid is not joined for free', async () => {
+            expect((await joinChallengeSingle(2, 'tok', priced(0), { spendCoins: true, expectedCost: 0 })).status).toBe(
+                'joined',
+            );
+            const turnedPaid = priced(40);
+            expect(await joinChallengeSingle(2, 'tok', turnedPaid, { expectedCost: 0 })).toMatchObject({
+                status: 'needs-confirm',
+                cost: 40,
+            });
+            expect(untouched(turnedPaid)).toBe(true);
+        });
+    });
 });
 
 /**

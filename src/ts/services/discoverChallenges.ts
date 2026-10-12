@@ -59,9 +59,17 @@ const fetchUpcoming = (
     return list;
 };
 
+// Bumped whenever the account's memory is forgotten (logout, account switch): a request that
+// began before it belongs to the account that left, and must not write anything afterwards.
+let generation = 0;
+
+/** Which account's memory is current; compare before and after an await to see it was forgotten meanwhile. */
+const accountGeneration = (): number => generation;
+
 /** Forget every cached upcoming list (an account left, and tests start clean). */
 const clearUpcomingCache = (): void => {
     cache = new Map();
+    generation += 1;
 };
 
 const idOf = (c: Challenge | null): string | null => (c?.id == null ? null : String(c.id));
@@ -106,5 +114,12 @@ const mergeDiscoverLists = ({
     ];
 };
 
-export { fetchUpcoming, clearUpcomingCache, mergeDiscoverLists, UPCOMING_CACHE_MS, MAX_UPCOMING_ROWS };
+export {
+    fetchUpcoming,
+    clearUpcomingCache,
+    accountGeneration,
+    mergeDiscoverLists,
+    UPCOMING_CACHE_MS,
+    MAX_UPCOMING_ROWS,
+};
 export type { ListFetcher };

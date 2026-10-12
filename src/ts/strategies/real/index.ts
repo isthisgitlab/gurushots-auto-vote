@@ -93,8 +93,11 @@ const claimDeps = {
  * Manual single-challenge join (real strategy). Paid joins require an explicit
  * `spendCoins` — otherwise the call returns `needs-confirm` and spends nothing.
  */
-const joinChallenge = (challengeId: string | number, spendCoins: boolean, token: string) =>
-    joinChallengeSingle(challengeId, token, joinDeps, { spendCoins: spendCoins === true });
+const joinChallenge = (challengeId: string | number, spendCoins: boolean, token: string, expectedCost?: number) =>
+    joinChallengeSingle(challengeId, token, joinDeps, {
+        spendCoins: spendCoins === true,
+        ...(expectedCost === undefined ? {} : { expectedCost }),
+    });
 
 /**
  * Plays one unresolved battle: picks first_image, and on a lost or errored

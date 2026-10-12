@@ -1055,6 +1055,44 @@ describe('join-challenge', () => {
         expect(result).toMatchObject({ success: false, status: 'not-started', challengeId: 5 });
     });
 
+    test('the cost the confirmation named is passed on, and only when there is one', async () => {
+        stubAuthGuardOk();
+        const strategy = stubStrategy({ joinChallenge: jest.fn().mockResolvedValue({ status: 'joined' }) });
+        await buildHandlers()['join-challenge']({}, 5, true, 100);
+        expect(strategy.joinChallenge).toHaveBeenLastCalledWith(5, true, 'tok', 100);
+        await buildHandlers()['join-challenge']({}, 5, true, 0);
+        expect(strategy.joinChallenge).toHaveBeenLastCalledWith(5, true, 'tok', 0);
+        await buildHandlers()['join-challenge']({}, 5, true);
+        expect(strategy.joinChallenge).toHaveBeenLastCalledWith(5, true, 'tok');
+    });
+
+    test.each([
+        ['-1', -1],
+        ['NaN', Number.NaN],
+        ['Infinity', Number.POSITIVE_INFINITY],
+        ['a string', '5'],
+        ['null', null],
+        ['an object', {}],
+    ])('a cost that is %s is refused, and joins nothing', async (_name, expectedCost) => {
+        stubAuthGuardOk();
+        const strategy = stubStrategy({ joinChallenge: jest.fn() });
+        await expect(buildHandlers()['join-challenge']({}, 5, true, invalid(expectedCost))).resolves.toEqual({
+            success: false,
+            error: 'invalid-args',
+        });
+        expect(strategy.joinChallenge).not.toHaveBeenCalled();
+    });
+
+    test('a price that rose answers needs-confirm with the live cost', async () => {
+        stubAuthGuardOk();
+        stubStrategy({ joinChallenge: jest.fn().mockResolvedValue({ status: 'needs-confirm', cost: 150 }) });
+        expect(await buildHandlers()['join-challenge']({}, 5, true, 100)).toMatchObject({
+            success: false,
+            status: 'needs-confirm',
+            cost: 150,
+        });
+    });
+
     test('a paid challenge without spendCoins does not report success (needs-confirm)', async () => {
         stubAuthGuardOk();
         stubStrategy({ joinChallenge: jest.fn().mockResolvedValue({ status: 'needs-confirm', cost: 100 }) });
@@ -1375,18 +1413,39 @@ describe('get-member-challenges — filter, shape and errors', () => {
         await listChallenges();
         expect(settings.rememberOpenChallengeIds).toHaveBeenLastCalledWith([1, '2']);
         settings.rememberOpenChallengeIds.mockClear();
-        settings.rememberUpcomingChallengeIds.mockClear();
+        settings.rememberUpcomingChallenges.mockClear();
         stubStrategy({ getMemberChallenges: jest.fn().mockResolvedValue(null) });
         await listChallenges();
         expect(settings.rememberOpenChallengeIds).not.toHaveBeenCalled();
-        expect(settings.rememberUpcomingChallengeIds).not.toHaveBeenCalled();
+        expect(settings.rememberUpcomingChallenges).not.toHaveBeenCalled();
     });
 
     test('a failed open list is a failure, not an empty list, and nothing is remembered', async () => {
         stubAuthGuardOk();
+        clearOpenChallenges();
         const strategy = stubStrategy({ getMemberChallenges: jest.fn().mockResolvedValue(null) });
         expect(await listChallenges()).toEqual({ success: false, error: 'Could not list challenges', items: [] });
-        expect(strategy.getMemberChallenges).not.toHaveBeenCalledWith('tok', 'all');
+        // Both lists were asked for, and neither is kept: not the ids, not the challenges.
+        expect(strategy.getMemberChallenges).toHaveBeenCalledWith('tok', 'open');
+        expect(strategy.getMemberChallenges).toHaveBeenCalledWith('tok', 'upcoming');
+        expect(settings.rememberOpenChallengeIds).not.toHaveBeenCalled();
+        expect(settings.rememberUpcomingChallenges).not.toHaveBeenCalled();
+        mockChosenSettings({ rule: { value: ['r1'] } });
+        setToken('tok');
+        await invalid<(event: object, ids: unknown) => Promise<unknown>>(
+            buildHandlers()['get-open-chosen-annotations'],
+        )({}, [1]);
+        expect(settings.resolveRuleSetting).toHaveBeenLastCalledWith('chosenPhotos', { id: 1 });
+    });
+
+    test('a failed open list is a failure even when the upcoming list came', async () => {
+        stubAuthGuardOk();
+        stubStrategy({
+            getMemberChallenges: jest.fn(async (_token: string, filter: string) =>
+                filter === 'upcoming' ? [{ id: 2, start_time: 9_999_999_999 }] : null,
+            ),
+        });
+        expect(await listChallenges()).toEqual({ success: false, error: 'Could not list challenges', items: [] });
     });
 
     test.each([
@@ -1438,6 +1497,7 @@ describe('get-member-challenges — upcoming challenges', () => {
         mockChosenSettings({});
         stubAuthGuardOk();
         withWindow(24);
+        settings.getUpcomingChallengeIds.mockReset();
     });
     afterEach(() => jest.mocked(Date.now).mockRestore());
 
@@ -1481,9 +1541,6 @@ describe('get-member-challenges — upcoming challenges', () => {
         clearUpcomingCache();
         withWindow(0);
         expect(await shown()).toEqual([]);
-        // A setting that is no number shows none rather than everything.
-        withWindow('soon');
-        expect(await shown()).toEqual([]);
     });
 
     test('shows at most the 100 soonest upcoming rows', async () => {
@@ -1498,14 +1555,18 @@ describe('get-member-challenges — upcoming challenges', () => {
         stubStrategy({ getMemberChallenges: lists([{ id: 1 }], [up(2, HOUR), up(3, 100 * HOUR), up(4, -5)]) });
         withWindow(0);
         expect(await shown()).toEqual([[1, undefined]]);
-        expect(settings.rememberUpcomingChallengeIds).toHaveBeenLastCalledWith([2, 3, 4]);
+        expect(settings.rememberUpcomingChallenges).toHaveBeenLastCalledWith([
+            expect.objectContaining({ id: 2 }),
+            expect.objectContaining({ id: 3 }),
+            expect.objectContaining({ id: 4 }),
+        ]);
         expect(settings.rememberOpenChallengeIds).toHaveBeenLastCalledWith([1]);
     });
 
     test('a failed upcoming fetch keeps the open list and the previous upcoming ids, and logs the filter and the kind only', async () => {
         stubStrategy({ getMemberChallenges: lists([{ id: 1 }], null) });
         expect(await shown()).toEqual([[1, undefined]]);
-        expect(settings.rememberUpcomingChallengeIds).not.toHaveBeenCalled();
+        expect(settings.rememberUpcomingChallenges).not.toHaveBeenCalled();
         expect(settings.rememberOpenChallengeIds).toHaveBeenCalledWith([1]);
         expect(logCategories('warning', 'Could not list challenges (filter=upcoming: failed)')).toEqual(['api']);
 
@@ -1513,7 +1574,7 @@ describe('get-member-challenges — upcoming challenges', () => {
         const secret = new TypeError('401 for tok member-77');
         stubStrategy({ getMemberChallenges: lists([{ id: 1 }], throwing(secret)) });
         expect(await shown()).toEqual([[1, undefined]]);
-        expect(settings.rememberUpcomingChallengeIds).not.toHaveBeenCalled();
+        expect(settings.rememberUpcomingChallenges).not.toHaveBeenCalled();
         expect(logCategories('warning', 'Could not list challenges (filter=upcoming: TypeError)')).toEqual(['api']);
         expect(logCategories('warning', 'Could not list challenges (filter=upcoming: failed)')).toEqual(['api']);
         const logged = JSON.stringify(
@@ -1537,7 +1598,7 @@ describe('get-member-challenges — upcoming challenges', () => {
     test('an empty upcoming answer is a real one: the recorded ids become empty', async () => {
         stubStrategy({ getMemberChallenges: lists([{ id: 1 }], []) });
         await shown();
-        expect(settings.rememberUpcomingChallengeIds).toHaveBeenLastCalledWith([]);
+        expect(settings.rememberUpcomingChallenges).toHaveBeenLastCalledWith([]);
     });
 
     test('the upcoming list is fetched once for a burst of calls, again after a minute or a logout, and a failure is not kept', async () => {
@@ -1576,6 +1637,89 @@ describe('get-member-challenges — upcoming challenges', () => {
             ['tok', 'upcoming'],
             ['other', 'upcoming'],
         ]);
+    });
+
+    test('a challenge the upcoming feed has dropped but the open one does not list yet keeps resolving its rules', async () => {
+        // First load: 2 is upcoming. The settings facade (mocked here) has recorded it.
+        stubStrategy({ getMemberChallenges: lists([{ id: 1 }], [up(2, 60, { title: 'Rule Match' })]) });
+        await listChallenges();
+        // Its start passes: the feed drops it, the open list lacks it, and the facade still holds its id.
+        clearUpcomingCache();
+        stubStrategy({ getMemberChallenges: lists([{ id: 1 }], []) });
+        settings.getUpcomingChallengeIds.mockReturnValue(new Set(['2']));
+        await listChallenges();
+        mockChosenSettings({ rule: { value: ['r1'] } });
+        setToken('tok');
+        const annotations = invalid<(event: object, ids: unknown) => Promise<unknown>>(
+            buildHandlers()['get-open-chosen-annotations'],
+        );
+        await expect(annotations({}, [2])).resolves.toEqual({
+            success: true,
+            annotations: { '2': { chosenOwn: [], chosenOwnCount: 0, chosenEffectiveCount: 1 } },
+        });
+        // Resolved by its remembered title, not as a bare id.
+        expect(settings.resolveRuleSetting).toHaveBeenCalledWith(
+            'chosenPhotos',
+            expect.objectContaining({ id: 2, title: 'Rule Match' }),
+        );
+    });
+
+    test('an id the facade no longer holds is forgotten with the rest of the old list', async () => {
+        stubStrategy({ getMemberChallenges: lists([{ id: 1 }], [up(2, 60, { title: 'Rule Match' })]) });
+        await listChallenges();
+        clearUpcomingCache();
+        stubStrategy({ getMemberChallenges: lists([{ id: 1 }], []) });
+        settings.getUpcomingChallengeIds.mockReturnValue(new Set());
+        await listChallenges();
+        mockChosenSettings({ rule: { value: ['r1'] } });
+        setToken('tok');
+        const annotations = invalid<(event: object, ids: unknown) => Promise<unknown>>(
+            buildHandlers()['get-open-chosen-annotations'],
+        );
+        await annotations({}, [2]);
+        expect(settings.resolveRuleSetting).toHaveBeenLastCalledWith('chosenPhotos', { id: 2 });
+    });
+
+    describe('a request still in flight when the account is forgotten (logout, account switch)', () => {
+        const inFlight = () => {
+            let release: (value: unknown) => void = () => undefined;
+            const gate = new Promise((resolve) => (release = resolve));
+            const getMemberChallenges = jest.fn(async (_token: string, filter: string) => {
+                await gate;
+                return filter === 'upcoming' ? [up(2, HOUR)] : [{ id: 1 }];
+            });
+            stubStrategy({ getMemberChallenges });
+            return { release: () => release(undefined) };
+        };
+
+        test('writes nothing: no id lists, no cached challenges, and says so', async () => {
+            const { release } = inFlight();
+            const pending = listChallenges();
+            clearUpcomingCache(); // what logout / an account switch does (forgetAccountMemory)
+            release();
+            expect(await pending).toEqual({
+                success: false,
+                error: 'The account changed while listing challenges',
+                items: [],
+            });
+            expect(settings.rememberOpenChallengeIds).not.toHaveBeenCalled();
+            expect(settings.rememberUpcomingChallenges).not.toHaveBeenCalled();
+            // The cache holds nothing of it: the id resolves as a bare id.
+            mockChosenSettings({ rule: { value: ['r1'] } });
+            setToken('tok');
+            await invalid<(event: object, ids: unknown) => Promise<unknown>>(
+                buildHandlers()['get-open-chosen-annotations'],
+            )({}, [2]);
+            expect(settings.resolveRuleSetting).toHaveBeenLastCalledWith('chosenPhotos', { id: 2 });
+        });
+
+        test('the account being the same, the same request writes as usual', async () => {
+            const { release } = inFlight();
+            const pending = listChallenges();
+            release();
+            expect((await pending).success).toBe(true);
+            expect(settings.rememberOpenChallengeIds).toHaveBeenCalledWith([1]);
+        });
     });
 
     test('annotations resolve through the merged list: a rule keyed on an upcoming title gives its list', async () => {

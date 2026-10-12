@@ -106,7 +106,7 @@ describe('an upcoming row', () => {
     test('with nothing upcoming the list is exactly the open one, counted as before', async () => {
         renderSection([open(1, 'A'), open(2, 'B')]);
         await settle();
-        expect(screen.getByRole('img', { name: '2 open challenges' }).textContent).toBe('2');
+        expect(screen.getByRole('img', { name: 'Open challenges: 2' }).textContent).toBe('2');
         expect(screen.queryByText(/Starts in|Starting now/)).toBeNull();
     });
 });
@@ -162,7 +162,7 @@ describe('a challenge that has just started but is not in the open list yet', ()
         getMemberChallenges.mockResolvedValue(invalid(answer([])));
         await advance(32 * 1000);
         expect(getMemberChallenges).toHaveBeenCalledTimes(2);
-        expect(screen.getByText('Starting now — refresh')).toBeTruthy();
+        expect(screen.getByText('Starting now — it will appear in the open list shortly')).toBeTruthy();
         expect(screen.getByText('Soon')).toBeTruthy();
         expect(screen.getByRole('button', { name: /Chosen/ })).toBeTruthy();
         expect(screen.queryByText(app.discoverEmpty)).toBeNull();
@@ -171,13 +171,13 @@ describe('a challenge that has just started but is not in the open list yet', ()
 
         await advance(60 * 1000);
         expect(getMemberChallenges).toHaveBeenCalledTimes(3);
-        expect(screen.getByText('Starting now — refresh')).toBeTruthy();
+        expect(screen.getByText('Starting now — it will appear in the open list shortly')).toBeTruthy();
 
         // Now the open list has it.
         getMemberChallenges.mockResolvedValue(invalid(answer([open(2, 'Soon', { chosenOwnCount: 1 })])));
         await advance(60 * 1000);
         expect(getMemberChallenges).toHaveBeenCalledTimes(4);
-        expect(screen.queryByText('Starting now — refresh')).toBeNull();
+        expect(screen.queryByText('Starting now — it will appear in the open list shortly')).toBeNull();
         expect(screen.getAllByText('Soon')).toHaveLength(1);
         // And the asking stops.
         await advance(5 * 60 * 1000);
@@ -189,10 +189,10 @@ describe('a challenge that has just started but is not in the open list yet', ()
         await settle();
         getMemberChallenges.mockResolvedValue(invalid(answer([])));
         await advance(32 * 1000);
-        expect(screen.getByText('Starting now — refresh')).toBeTruthy();
+        expect(screen.getByText('Starting now — it will appear in the open list shortly')).toBeTruthy();
         // The start was at +30 s: ten minutes on, it is gone.
         await advance(10 * 60 * 1000);
-        expect(screen.queryByText('Starting now — refresh')).toBeNull();
+        expect(screen.queryByText('Starting now — it will appear in the open list shortly')).toBeNull();
         expect(screen.getByText(app.discoverEmpty)).toBeTruthy();
         const calls = getMemberChallenges.mock.calls.length;
         await advance(5 * 60 * 1000);
@@ -207,7 +207,7 @@ describe('a challenge that has just started but is not in the open list yet', ()
         expect(screen.getByText(app.discoverUnavailableList, { selector: 'p' })).toBeTruthy();
         getMemberChallenges.mockResolvedValue(invalid(answer([])));
         await advance(60 * 1000);
-        expect(screen.getByText('Starting now — refresh')).toBeTruthy();
+        expect(screen.getByText('Starting now — it will appear in the open list shortly')).toBeTruthy();
     });
 
     test('a row that merely left the list before its start is not kept', async () => {
@@ -222,21 +222,50 @@ describe('a challenge that has just started but is not in the open list yet', ()
         expect(screen.getByText(app.discoverEmpty)).toBeTruthy();
     });
 
-    test('its Join is not disabled, and a live "not started" answer is shown', async () => {
+    test('its Join stays disabled until the open list shows it, named for what is happening, and joins nothing', async () => {
         renderSection([lagging()]);
         await settle();
         getMemberChallenges.mockResolvedValue(invalid(answer([])));
         await advance(32 * 1000);
+        expect(screen.queryByRole('button', { name: 'Join Soon' })).toBeNull();
+        const join = screen.getByRole<HTMLButtonElement>('button', {
+            name: 'Join Soon — opens for joining in a moment',
+        });
+        expect(join.disabled).toBe(true);
+        expect(join.textContent).toBe(app.discoverJoin);
+        fireEvent.click(join);
+        expect(joinChallenge).not.toHaveBeenCalled();
+        // The text says what is happening, and does not tell the user to refresh: the list reads itself.
+        expect(screen.getByText(/^Starting now/).textContent).not.toMatch(/refresh/i);
+
+        // Once the open list shows it, it joins.
+        getMemberChallenges.mockResolvedValue(invalid(answer([open(2, 'Soon')])));
+        await advance(60 * 1000);
+        expect(screen.getByRole<HTMLButtonElement>('button', { name: 'Join Soon' }).disabled).toBe(false);
+    });
+
+    test('a row whose start has passed but which the server still lists as upcoming waits the same way', async () => {
+        renderSection([upcoming(2, 'Soon', 90)]);
+        await settle();
+        getMemberChallenges.mockResolvedValue(invalid(answer([upcoming(2, 'Soon', -5)])));
+        await advance(91 * 1000);
+        expect(screen.getByText('Starting now — it will appear in the open list shortly')).toBeTruthy();
+        expect(
+            screen.getByRole<HTMLButtonElement>('button', { name: 'Join Soon — opens for joining in a moment' })
+                .disabled,
+        ).toBe(true);
+    });
+
+    test('a "not started" answer from the server is worded, and changes nothing else', async () => {
+        renderSection([open(1, 'Open One')]);
+        await settle();
         joinChallenge.mockResolvedValue(invalid({ success: false, status: 'not-started' }));
-        const join = screen.getByRole<HTMLButtonElement>('button', { name: 'Join Soon' });
-        expect(join.disabled).toBe(false);
         await act(async () => {
-            fireEvent.click(join);
+            fireEvent.click(screen.getByRole('button', { name: 'Join Open One' }));
             await jest.advanceTimersByTimeAsync(0);
         });
         expect(screen.getByText(app.discoverNotStarted)).toBeTruthy();
-        // Nothing else changed: no refetch for an answer that changes nothing.
-        expect(getMemberChallenges).toHaveBeenCalledTimes(2);
+        expect(getMemberChallenges).toHaveBeenCalledTimes(1);
     });
 });
 

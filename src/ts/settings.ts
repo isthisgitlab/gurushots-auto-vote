@@ -111,7 +111,7 @@ export const cleanupStaleChallengeSetting = staleChallengeCleanup.cleanupStaleCh
 export const rememberOpenChallengeIds = openChallenges.rememberOpenChallengeIds;
 export const getOpenChallengeIds = openChallenges.getOpenChallengeIds;
 // The upcoming (not started) ids Discover listed: written by the Discover handler alone
-export const rememberUpcomingChallengeIds = openChallenges.rememberUpcomingChallengeIds;
+export const rememberUpcomingChallenges = openChallenges.rememberUpcomingChallenges;
 export const getUpcomingChallengeIds = openChallenges.getUpcomingChallengeIds;
 export const forgetOpenChallengeIds = openChallenges.forgetOpenChallengeIds;
 export const cleanupObsoleteSettings = persistence.cleanupObsoleteSettings;

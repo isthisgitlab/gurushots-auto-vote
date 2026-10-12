@@ -97,7 +97,12 @@ const runRun: CommandHandler = async (argv) => {
 const runJoin: CommandHandler = async (argv) => {
     const yes = argv.includes('--yes');
     const id = argv.find((a) => !a.startsWith('--'));
-    await joinChallengeCmd(id, { yes });
+    const maxFlag = argv.find((a) => a.startsWith('--max-coins='));
+    const maxText = maxFlag?.slice('--max-coins='.length);
+    if (maxText !== undefined && !/^\d+$/.test(maxText)) {
+        return usageError('Wrong arguments', 'Usage: join <id> [--yes [--max-coins=<coins>]]');
+    }
+    await joinChallengeCmd(id, { yes, ...(maxText === undefined ? {} : { maxCoins: Number(maxText) }) });
     return 0;
 };
 

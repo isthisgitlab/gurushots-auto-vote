@@ -10,6 +10,7 @@ import { mockApi, mockTranslator } from './helpers/setup';
 import { titleRuleInfo } from './helpers/titleRules';
 import type { useSettingsSchema } from '@/api/useSettingsSchema';
 import { invalid } from '../helpers/invalid';
+import { app as lvApp } from '../../src/ts/translations/latvian';
 
 const field = (type: string, dflt: unknown, label: string) => ({
     type,
@@ -73,7 +74,11 @@ const scenarioSelect = () => document.getElementById('challenge-setting-scenario
 const withRule = () =>
     titleRuleInfo({
         inlineValues: { scenario: 'Plan', autoJoin: true, chosenPhotos: [PHOTO] },
-        ruleSources: { scenario: 'Seaside', autoJoin: 'Seaside', chosenPhotos: 'Seaside' },
+        ruleSources: {
+            scenario: { title: 'Seaside', index: 1 },
+            autoJoin: { title: 'Seaside', index: 1 },
+            chosenPhotos: { title: 'Seaside', index: 1 },
+        },
     });
 
 test('a scenario, auto-join and chosen photos a rule sets show as inherited, with the rule, not as "None"', async () => {
@@ -95,7 +100,7 @@ test('with several matching rules each key names the rule that set it', async ()
     mockApi.getTitleProfile.mockResolvedValue(
         titleRuleInfo({
             inlineValues: { scenario: 'Plan', autoJoin: true },
-            ruleSources: { scenario: 'First rule', autoJoin: 'Comm' },
+            ruleSources: { scenario: { title: 'First rule', index: 1 }, autoJoin: { title: 'Comm', index: 1 } },
         }),
     );
     await open();
@@ -108,7 +113,7 @@ test('a profile value is "Using profile", an inline value of the same rule is "F
         titleRuleInfo({
             profile: { name: 'Quad', values: { boostTime: 17 } },
             inlineValues: { scenario: 'Plan' },
-            ruleSources: { scenario: 'Seaside' },
+            ruleSources: { scenario: { title: 'Seaside', index: 1 } },
         }),
     );
     await open();
@@ -130,7 +135,7 @@ test("with the profile suppressed the rule's own values stay and the profile's g
             profile: { name: 'Quad', values: { boostTime: 17 } },
             suppressed: true,
             inlineValues: { scenario: 'Plan' },
-            ruleSources: { scenario: 'Seaside' },
+            ruleSources: { scenario: { title: 'Seaside', index: 1 } },
         }),
     );
     await open();
@@ -138,6 +143,45 @@ test("with the profile suppressed the rule's own values stay and the profile's g
     expect(cell('app.scenario').textContent).toContain('From rule: Seaside');
     expect(cell('app.boostTime').textContent).toContain('app.usingGlobal');
     expect(document.body.textContent).not.toContain('app.usingProfile');
+});
+
+test("a key the matched profile supplies is the profile's, not credited to a later rule that sets it inline; suppressed, that rule is", async () => {
+    mockApi.getTitleProfile.mockResolvedValue(
+        titleRuleInfo({
+            profile: { name: 'Quad', values: { autoJoin: false } },
+            inlineValues: { autoJoin: true, scenario: 'Plan' },
+            ruleValues: { autoJoin: false, scenario: 'Plan' },
+            ruleSources: {
+                autoJoin: { title: 'Seaside', index: 1, viaProfile: true },
+                scenario: { title: 'Sea', index: 2 },
+            },
+            inlineSources: { autoJoin: { title: 'Sea', index: 2 }, scenario: { title: 'Sea', index: 2 } },
+        }),
+    );
+    mockApi.getChallengeProfiles.mockResolvedValue({ Reset: {} });
+    await open();
+    await waitFor(() => expect(document.body.textContent).toContain('Reset (0)'));
+    expect(cell('app.autoJoin').textContent).toContain('app.usingProfile');
+    expect(cell('app.autoJoin').textContent).not.toContain('From rule');
+    expect(cell('app.scenario').textContent).toContain('From rule: Sea');
+
+    // Applying a manual profile suppresses Quad: now the later rule's own value is what runs.
+    await choose(profileSelect('Reset'), 'Reset');
+    fireEvent.click(screen.getByRole('button', { name: 'app.applyProfile' }));
+    await waitFor(() => expect(cell('app.autoJoin').textContent).toContain('From rule: Sea'));
+});
+
+test('a rule without a title is named by its place in the list, in the UI language', async () => {
+    mockTranslator.t.mockImplementation((key) => (lvApp as Record<string, string>)[key.replace('app.', '')] ?? key);
+    mockApi.getTitleProfile.mockResolvedValue(
+        titleRuleInfo({
+            inlineValues: { scenario: 'Plan' },
+            ruleSources: { scenario: { index: 3 } },
+        }),
+    );
+    render(<ChallengeSettingsModal isOpen onClose={jest.fn()} challengeId="1" challengeTitle="Seaside" />);
+    const label = await screen.findByText(lvApp.scenario);
+    await waitFor(() => expect(label.closest('.rounded-box')!.textContent).toContain('No noteikuma: Nr. 3'));
 });
 
 test('a manual override wins over the rule value and says so', async () => {
@@ -163,7 +207,7 @@ const quadRule = () =>
     titleRuleInfo({
         profile: { name: 'Quad', values: { boostTime: 17 } },
         inlineValues: { scenario: 'Plan' },
-        ruleSources: { scenario: 'Seaside' },
+        ruleSources: { scenario: { title: 'Seaside', index: 1 } },
     });
 
 test('applying a manual profile keeps the values the rule sets directly, and saves only the suppression', async () => {
@@ -193,6 +237,13 @@ test("deleting the matched profile in the open modal keeps the rule's values", a
 
     await choose(profileSelect('Quad'), 'Quad');
     await act(async () => invalid<void>(fireEvent.click(screen.getByRole('button', { name: 'app.deleteProfile' }))));
+    // The settings, read again, hold the rule's own values and no profile.
+    mockApi.getTitleProfile.mockResolvedValue(
+        titleRuleInfo({
+            inlineValues: { scenario: 'Plan' },
+            ruleSources: { scenario: { title: 'Seaside', index: 1 } },
+        }),
+    );
     await act(async () => invalid<void>(fireEvent.click(screen.getByRole('button', { name: 'app.confirmDelete' }))));
 
     await waitFor(() => expect(cell('app.boostTime').textContent).toContain('app.usingGlobal'));

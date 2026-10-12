@@ -4,7 +4,7 @@ import * as ipc from '@/api/ipc';
 import { useOnChosenPhotosCleared, withoutChosenPhotos } from '@/api/chosenPhotosCleared';
 
 import type { Dispatch, SetStateAction } from 'react';
-import type { ChallengeValues, TitleRuleInfo } from '../../types/settings';
+import type { ChallengeValues, RuleSource, TitleRuleInfo } from '../../types/settings';
 import type { RendererSchema, SettingChangeHandler, SettingResetHandler } from '../../types/settingsEditor';
 import { errorMessage } from '../../errorMessage';
 
@@ -20,7 +20,14 @@ export type SetOverrides = Dispatch<SetStateAction<ChallengeValues>>;
 export type SetTitleRules = Dispatch<SetStateAction<TitleRulesState>>;
 
 /** What matching rules contribute when none match (or none has loaded): nothing. */
-const NO_RULES: TitleRuleInfo = { profile: null, suppressed: false, ruleValues: {}, inlineValues: {}, ruleSources: {} };
+const NO_RULES: TitleRuleInfo = {
+    profile: null,
+    suppressed: false,
+    ruleValues: {},
+    inlineValues: {},
+    ruleSources: {},
+    inlineSources: {},
+};
 
 const hasOwn = (obj: object, key: string) => Object.prototype.hasOwnProperty.call(obj, key);
 
@@ -180,14 +187,28 @@ const rulesWithoutChosenPhotos = (rules: TitleRuleInfo): TitleRuleInfo => ({
 });
 
 /**
- * The rules' contribution with their matched profile replaced (or, with null/undefined, gone): the
- * combined layer is the profile's values under the inline ones again, which stay as they are.
+ * The rule behind a value the rules' active layer takes from a rule's own inline values, for the
+ * "From rule" badge. The layer that runs names its own sources, so a key a profile supplies is never
+ * credited to a later rule that merely sets it inline.
  */
-const rulesWithProfile = (rules: TitleRuleInfo, profile: TitleRuleInfo['profile'] | undefined): TitleRuleInfo => ({
-    ...rules,
-    profile: profile ?? null,
-    ruleValues: { ...profile?.values, ...rules.inlineValues },
-});
+const ruleSourceFor = (rules: TitleRuleInfo, ruleLayer: ChallengeValues, key: string): RuleSource | undefined => {
+    const source = (rules.suppressed ? rules.inlineSources : rules.ruleSources)[key];
+    return hasOwn(ruleLayer, key) && source && !source.viaProfile ? source : undefined;
+};
+
+/**
+ * Read the rules' contribution again from the settings (a failed read changes nothing). The
+ * suppression this dialog holds, saved or not, stays as it is.
+ */
+const rereadTitleRules = async (
+    challengeTitle: string,
+    challengeId: string | number,
+    setTitleRules: SetTitleRules,
+): Promise<void> => {
+    const fresh = await ipc.callOrNull(() => ipc.getTitleProfile(challengeTitle, challengeId.toString()));
+    // Reached only with a matched profile on screen, so the state is loaded.
+    if (fresh) setTitleRules((state) => ({ ...fresh, suppressed: (state as TitleRuleInfo).suppressed }));
+};
 
 /**
  * What the challenge's rules contribute and the value resolution built on it:
@@ -197,12 +218,16 @@ const rulesWithProfile = (rules: TitleRuleInfo, profile: TitleRuleInfo['profile'
  */
 function useTitleRules({
     isOpen,
+    challengeId,
+    challengeTitle,
     schema,
     defaults,
     overrides,
     setOverrides,
 }: {
     isOpen: boolean;
+    challengeId: string | number | null | undefined;
+    challengeTitle: string;
     schema: RendererSchema | null | undefined;
     defaults: Record<string, unknown> | null | undefined;
     overrides: ChallengeValues;
@@ -224,9 +249,7 @@ function useTitleRules({
     const inheritedOf = (key: string) =>
         hasOwn(ruleLayer, key) ? ruleLayer[key] : (defaults?.[key] ?? schema?.[key]?.default);
     const effectiveOf = (key: string) => (key in overrides ? overrides[key] : inheritedOf(key));
-    // The rule behind a value taken from the rules' inline layer, for the "From rule" badge.
-    const ruleSourceOf = (key: string): string | undefined =>
-        hasOwn(rules.inlineValues, key) && hasOwn(ruleLayer, key) ? rules.ruleSources[key] : undefined;
+    const ruleSourceOf = (key: string) => ruleSourceFor(rules, ruleLayer, key);
 
     /**
      * Load a saved profile's values into the form (schema-filtered,
@@ -242,14 +265,11 @@ function useTitleRules({
         setTitleRules((current) => ({ ...(current ?? NO_RULES), suppressed: true }));
     };
 
-    /**
-     * Keep the rules' matched profile in step when that named profile is edited or deleted: the
-     * rule layer is the profile's values under the inline ones again, or the inline ones alone.
-     */
-    const onProfilesChanged = ({ name, values }: { name: string; values?: ChallengeValues; deleted?: boolean }) => {
-        if (name.toLowerCase() !== titleRules?.profile?.name.toLowerCase()) return;
-        // Reached only once the name matched, so the state holds that profile.
-        setTitleRules((state) => rulesWithProfile(state as TitleRuleInfo, values && { name, values }));
+    // Keep the rules' contribution in step when the matched profile is edited or deleted: the settings'
+    // first-match order decides what runs, so it is read again rather than merged client-side.
+    const onProfilesChanged = ({ name }: { name: string; values?: ChallengeValues; deleted?: boolean }) => {
+        if (name.toLowerCase() !== titleRules?.profile?.name.toLowerCase() || !challengeId) return;
+        void rereadTitleRules(challengeTitle, challengeId, setTitleRules);
     };
 
     // The matched profile's own values, while it applies (the "Using profile" badge).
@@ -321,7 +341,15 @@ export function useChallengeOverrides({
         if (isOpen) void refetchSchema();
     }, [isOpen, refetchSchema]);
 
-    const { setTitleRules, ...profile } = useTitleRules({ isOpen, schema, defaults, overrides, setOverrides });
+    const { setTitleRules, ...profile } = useTitleRules({
+        isOpen,
+        challengeId,
+        challengeTitle,
+        schema,
+        defaults,
+        overrides,
+        setOverrides,
+    });
     // Saving writes the whole override map: lists removed meanwhile must not come back with it.
     useOnChosenPhotosCleared(() => {
         setOverrides(withoutChosenPhotos);

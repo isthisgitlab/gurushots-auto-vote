@@ -15,6 +15,10 @@ export const titleRuleInfo = (over: Partial<TitleRuleInfo> = {}): TitleRuleInfo 
         ruleValues: { ...profile?.values, ...inlineValues },
         inlineValues,
         ruleSources: {},
+        // The inline layer's sources are the combined ones, less what the profile supplies.
+        inlineSources: Object.fromEntries(
+            Object.entries(over.ruleSources ?? {}).filter(([, source]) => !source.viaProfile),
+        ),
         ...over,
     };
 };

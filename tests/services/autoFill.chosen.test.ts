@@ -963,7 +963,7 @@ describe('chosen photos in the order they were picked', () => {
         expect(deps.rankVisually.mock.calls.flatMap(([, ids]) => ids)).toEqual(expect.arrayContaining(['pink']));
     });
 
-    test('a photo that is entered, missing from the library, not allowed, or refused is skipped for the next one in the list', async () => {
+    test('a photo that is entered, missing from the library or not allowed is skipped for the next one in the list', async () => {
         const blocked = photo('blocked', ['Pink'], { permission: { allowed: false, message: 'used' } });
         const deps = makeDeps({
             library: [blocked, ...library(), photo('entered', ['Pink'])],
@@ -975,16 +975,24 @@ describe('chosen photos in the order they were picked', () => {
             expect.objectContaining({ success: true }),
         );
         expect(submittedIds(deps)).toEqual([['car', 'pink']]);
+    });
 
-        // A refused photo: the server answers a submit with a failure, so the remembered photos in
-        // that batch are held back, and the next attempt goes down the list past them.
+    test('a photo the server refuses is skipped by the next attempt, which goes on down the list', async () => {
+        // 'car' is off theme: the lookup finds it, and it heads the list. The server refuses it.
+        const deps = makeDeps({
+            library: [photo('pink', ['Pink']), photo('both', ['Pink', 'Nature'])],
+            walkItems: [photo('pink', ['Pink']), photo('both', ['Pink', 'Nature']), photo('car', ['Car'])],
+            settings: { chosen: ['car', 'pink', 'both'], inOrder: true },
+        });
         deps.submitToChallenge.mockResolvedValueOnce(invalid({ ok: false, raw: { success: false } }));
-        const again = makeChallenge({ entries: [], maxSubmits: 3 });
-        forgetChosenPhotosMemory();
-        const refusing = makeDeps({ library: library(), settings: { chosen: ['car', 'pink', 'both'], inOrder: true } });
-        refusing.submitToChallenge.mockResolvedValueOnce(invalid({ ok: false, raw: { success: false } }));
-        await fillChallengeNow(again, 'tok', 'all', refusing);
-        expect(submittedIds(refusing)[0].slice(0, 3)).toEqual(['car', 'pink', 'both']);
+        const challenge = makeChallenge({ entries: [], maxSubmits: 3 });
+        await fillChallengeNow(challenge, 'tok', 'one', deps);
+        expect(submittedIds(deps)).toEqual([['car']]);
+        // The next attempt does not try the refused photo again: it takes the next one in the list.
+        await fillChallengeNow(challenge, 'tok', 'one', deps);
+        expect(submittedIds(deps)).toEqual([['car'], ['pink']]);
+        await fillChallengeNow(challenge, 'tok', 'one', deps);
+        expect(submittedIds(deps)[2]).toEqual(['pink']);
     });
 
     test('a chosen photo the themed fetch missed is found by the lookup and keeps its place in the list', async () => {

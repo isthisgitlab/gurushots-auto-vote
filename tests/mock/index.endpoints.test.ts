@@ -290,6 +290,14 @@ describe('join endpoints', () => {
         expect(cat.debug).toHaveBeenCalledWith('Join challenge ID: 900002, spendCoins: true', null);
     });
 
+    test('joinChallenge passes the confirmed cost on to the shared service', async () => {
+        await mockApiClient.joinChallenge(900002, true, 'tok', 100);
+        expect(joinChallengeSingle).toHaveBeenLastCalledWith(900002, 'tok', expect.any(Object), {
+            spendCoins: true,
+            expectedCost: 100,
+        });
+    });
+
     test('joinChallenge treats anything but a literal true as "do not spend"', async () => {
         await mockApiClient.joinChallenge(900002, invalid('yes'), 'tok');
         expect(joinChallengeSingle).toHaveBeenCalledWith(900002, 'tok', expect.any(Object), { spendCoins: false });

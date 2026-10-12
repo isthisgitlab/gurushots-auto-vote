@@ -75,9 +75,20 @@ export interface RuleMatchChallenge {
 }
 
 /**
+ * The rule a value comes from: its title when it has one, and its 1-based place in the rule list
+ * (the renderer words an untitled one as "rule #n", in the UI's language). `viaProfile` marks a
+ * value the rule's profile supplies rather than one the rule sets itself.
+ */
+export interface RuleSource {
+    title?: string;
+    index: number;
+    viaProfile?: boolean;
+}
+
+/**
  * What a challenge's matching rules contribute, as the renderer reads it (`get-title-profile`):
  * the one profile they apply, whether this challenge suppresses it, the sparse value map with and
- * without the profile layer, and — per inline key — the title or label of the rule that set it.
+ * without the profile layer, and — per key — the rule each value comes from, one map per layer.
  */
 export interface TitleRuleInfo {
     profile: { name: string; values: ChallengeValues } | null;
@@ -87,8 +98,10 @@ export interface TitleRuleInfo {
     ruleValues: ChallengeValues;
     /** The inline values alone (what still applies with the profile suppressed). */
     inlineValues: ChallengeValues;
-    /** Inline key -> the rule that set it. */
-    ruleSources: Record<string, string>;
+    /** Key -> the rule its value comes from in `ruleValues`: the layer that runs while the profile applies. */
+    ruleSources: Record<string, RuleSource>;
+    /** Key -> the rule that set it in `inlineValues`: the layer that runs once the profile is suppressed. */
+    inlineSources: Record<string, RuleSource>;
 }
 
 /** The bounded match facts remembered for one active challenge. */

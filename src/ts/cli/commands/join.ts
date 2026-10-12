@@ -12,6 +12,7 @@ import { stripTerminalControl } from '../../format/logSafe';
 import { formatDuration } from '../../format/duration';
 
 import type { NullEventHandlers } from '../../types/cli';
+import type { OpenChallenge } from '../../types/gurushots';
 import type * as actions_handlersModule from '../../ipc/actions.handlers';
 type ActionHandlers = NullEventHandlers<ReturnType<typeof actions_handlersModule.buildHandlers>>;
 let _handlers: ActionHandlers | undefined;
@@ -20,19 +21,13 @@ const handlers = (): ActionHandlers =>
         require('../../ipc/actions.handlers') as typeof import('../../ipc/actions.handlers')
     ).buildHandlers());
 
-type DiscoverItem = {
-    id?: string | number;
-    title?: string;
-    url?: string;
-    type?: string;
-    status?: string;
-    join_coins?: number;
-    start_time?: number;
-};
+type DiscoverItem = Pick<OpenChallenge, 'id' | 'title' | 'url' | 'type' | 'status' | 'join_coins' | 'start_time'>;
 
 /** One row of the listing. Everything that came from the server is stripped of terminal control. */
 const discoverLine = (c: DiscoverItem, nowSec: number): string => {
-    const cost = Number(c?.join_coins) > 0 ? `${c.join_coins} coins` : 'free';
+    // A number, whatever the server sent: it is printed as text.
+    const coins = Number(c?.join_coins);
+    const cost = coins > 0 ? `${coins} coins` : 'free';
     const name = stripTerminalControl(c?.title || c?.url || 'untitled');
     const type = stripTerminalControl(c?.type || '?');
     const timing = c?.status === 'upcoming' ? ` — starts in ${formatDuration(Number(c.start_time) - nowSec)}` : '';
@@ -111,6 +106,11 @@ const joinLine = (
                 level: 'info',
                 text: `Challenge ${challengeId} has not started yet, so it can't be joined. Choose its photos now — list-photos --challenge=${challengeId}, then set-setting chosenPhotos '["<photo id>"]' --challenge=${challengeId} — and join once it starts.`,
             };
+        case 'needs-confirm':
+            return {
+                level: 'error',
+                text: `Challenge ${challengeId} now costs ${Number(result?.cost)} coins, more than you agreed to. Nothing was spent — to pay the new cost, re-run: join ${challengeId} --yes --max-coins=${Number(result?.cost)}`,
+            };
         case 'busy':
             return { level: 'info', text: `A join is already in progress for ${challengeId}.` };
         case 'not-authenticated':
@@ -138,11 +138,17 @@ const reportJoin = (result: JoinOutcome | null | undefined, challengeId: string 
 
 /**
  * Join one challenge. Free challenges join immediately; paid challenges print
- * the cost and require `--yes` (yes=true) before any coins are spent.
+ * the cost and require `--yes` (yes=true) before any coins are spent. The re-run line
+ * names that cost as `--max-coins`: with it, a challenge whose live cost has risen above it
+ * is not joined. `--yes` alone accepts whatever the cost is at that moment.
  *
  * @param challengeId - from argv; a missing id exits with usage
+ * @param options.maxCoins - the most the user agreed to pay (`--max-coins=<coins>`)
  */
-const joinChallengeCmd = async (challengeId: string | number | undefined, { yes = false }: { yes?: boolean } = {}) => {
+const joinChallengeCmd = async (
+    challengeId: string | number | undefined,
+    { yes = false, maxCoins }: { yes?: boolean; maxCoins?: number } = {},
+) => {
     if (!ensureAuthenticated()) return;
     if (!challengeId) {
         logger.withCategory('ui').error('Please specify a challenge id');
@@ -158,12 +164,18 @@ const joinChallengeCmd = async (challengeId: string | number | undefined, { yes 
         return;
     }
 
-    logger.withCategory('ui').info(`Challenge ${challengeId} is a PAID challenge — joining costs ${first.cost} coins.`);
+    logger
+        .withCategory('ui')
+        .info(`Challenge ${challengeId} is a PAID challenge — joining costs ${Number(first.cost)} coins.`);
     if (!yes) {
-        logger.withCategory('ui').info(`To spend the coins and join, re-run: join ${challengeId} --yes`);
+        logger
+            .withCategory('ui')
+            .info(`To spend the coins and join, re-run: join ${challengeId} --yes --max-coins=${Number(first.cost)}`);
         return;
     }
-    const confirmed = (await handlers()['join-challenge'](null, challengeId, true)) as JoinOutcome;
+    const confirmed = (await (maxCoins === undefined
+        ? handlers()['join-challenge'](null, challengeId, true)
+        : handlers()['join-challenge'](null, challengeId, true, maxCoins))) as JoinOutcome;
     reportJoin(confirmed, challengeId);
 };
 

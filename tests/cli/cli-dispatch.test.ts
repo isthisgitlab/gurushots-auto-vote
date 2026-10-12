@@ -427,6 +427,22 @@ describe('challenge-scoped actions', () => {
         expect(m.join.joinChallengeCmd).toHaveBeenCalledWith('77', { yes: true });
         expect(m.exitCodes).toEqual([0]);
     });
+
+    test('join --max-coins names the most a confirmed join may cost', async () => {
+        const m = await run(['join', '77', '--yes', '--max-coins=30']);
+        expect(m.join.joinChallengeCmd).toHaveBeenCalledWith('77', { yes: true, maxCoins: 30 });
+        const zero = await run(['join', '77', '--yes', '--max-coins=0']);
+        expect(zero.join.joinChallengeCmd).toHaveBeenCalledWith('77', { yes: true, maxCoins: 0 });
+    });
+
+    test.each([['--max-coins='], ['--max-coins=abc'], ['--max-coins=-5'], ['--max-coins=1.5']])(
+        'join %p is a usage error and joins nothing',
+        async (flag) => {
+            const m = await run(['join', '77', '--yes', flag]);
+            expect(m.join.joinChallengeCmd).not.toHaveBeenCalled();
+            expect(m.exitCodes).toEqual([1]);
+        },
+    );
 });
 
 describe('list-photos', () => {

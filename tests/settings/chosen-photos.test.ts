@@ -268,6 +268,11 @@ describe('Chosen Photos settings', () => {
             settings.setChallengeOverride('chosenPhotos', '104', ['c']);
         };
         const keys = () => Object.keys(blob().challengeSettings.perChallenge).sort();
+        // An upcoming challenge as the feed lists it: it starts `startsIn` seconds from now.
+        const upcoming = (id: number, startsIn = 3600) => ({
+            id,
+            start_time: Math.floor(Date.now() / 1000) + startsIn,
+        });
 
         // The main process's own active list: cleanup only prunes what that list also lacks.
         beforeEach(() => {
@@ -288,7 +293,7 @@ describe('Chosen Photos settings', () => {
             seed();
             settings.rememberChallengeTitles([{ id: '102', title: 'Live' }]);
             settings.rememberOpenChallengeIds([100]);
-            settings.rememberUpcomingChallengeIds([]);
+            settings.rememberUpcomingChallenges([]);
             // The caller names only 104: 102 is protected by the main process, 103 is gone for both.
             expect(settings.cleanupStaleChallengeSetting(['104'])).toBe(true);
             expect(keys()).toEqual(['100', '102', '104']);
@@ -297,7 +302,7 @@ describe('Chosen Photos settings', () => {
         test('a challenge only the caller names is kept too: a newer list than the main process has', () => {
             seed();
             settings.rememberOpenChallengeIds([100]);
-            settings.rememberUpcomingChallengeIds([]);
+            settings.rememberUpcomingChallenges([]);
             settings.cleanupStaleChallengeSetting(['102']);
             expect(keys()).toEqual(['100', '102']);
         });
@@ -305,7 +310,7 @@ describe('Chosen Photos settings', () => {
         test('a chosen entry for an open challenge is kept; stale ones of other kinds are pruned', () => {
             seed();
             settings.rememberOpenChallengeIds([100, '101']);
-            settings.rememberUpcomingChallengeIds([]);
+            settings.rememberUpcomingChallenges([]);
             expect(settings.cleanupStaleChallengeSetting(['104'])).toBe(true);
             // 100/101 are open, 104 is active; 102 holds no chosen key, 103 is gone.
             expect(keys()).toEqual(['100', '101', '104']);
@@ -315,7 +320,7 @@ describe('Chosen Photos settings', () => {
             settings.setChallengeOverride('chosenPhotosInOrder', '105', true);
             settings.setChallengeOverride('chosenPhotosInOrder', '106', true);
             settings.rememberOpenChallengeIds([105]);
-            settings.rememberUpcomingChallengeIds([]);
+            settings.rememberUpcomingChallenges([]);
             expect(settings.cleanupStaleChallengeSetting([])).toBe(true);
             expect(keys()).toEqual(['105']);
             expect(settings.getChallengeOverride('chosenPhotosInOrder', '105')).toBe(true);
@@ -335,7 +340,7 @@ describe('Chosen Photos settings', () => {
         test('once the list is known, a chosen entry that is neither open nor active goes', () => {
             seed();
             settings.rememberOpenChallengeIds([100]);
-            settings.rememberUpcomingChallengeIds([]);
+            settings.rememberUpcomingChallenges([]);
             settings.cleanupStaleChallengeSetting([]);
             expect(keys()).toEqual(['100']);
             expect(settings.cleanupStaleChallengeSetting([])).toBe(true);
@@ -354,7 +359,7 @@ describe('Chosen Photos settings', () => {
                 seedUpcoming();
                 // Discover: the open list and the whole upcoming list, whatever window it shows.
                 settings.rememberOpenChallengeIds([100]);
-                settings.rememberUpcomingChallengeIds([200]);
+                settings.rememberUpcomingChallenges([upcoming(200)]);
                 // The join pass remembers the open list alone and never touches the upcoming one.
                 settings.rememberOpenChallengeIds([100, 101]);
                 expect([...(getUpcomingChallengeIds() ?? [])]).toEqual(['200']);
@@ -368,7 +373,7 @@ describe('Chosen Photos settings', () => {
                 seedUpcoming();
                 settings.rememberOpenChallengeIds([100]);
                 // The handler records all of the fetch's ids; the window only decides what is shown.
-                settings.rememberUpcomingChallengeIds([200, 202, 203]);
+                settings.rememberUpcomingChallenges([upcoming(200), upcoming(202), upcoming(203)]);
                 settings.cleanupStaleChallengeSetting([]);
                 expect(early()).toEqual(['early']);
             });
@@ -385,24 +390,135 @@ describe('Chosen Photos settings', () => {
 
             test('once the challenge has started it is in the open list and the entry stays', () => {
                 seedUpcoming();
-                settings.rememberUpcomingChallengeIds([]);
+                settings.rememberUpcomingChallenges([]);
                 settings.rememberOpenChallengeIds([200]);
                 settings.cleanupStaleChallengeSetting([]);
                 expect(early()).toEqual(['early']);
             });
 
-            test('a successful fetch that no longer lists the challenge lets its entry go', () => {
+            test('a successful fetch that no longer lists a challenge long past its start lets its entry go', () => {
                 seedUpcoming();
                 settings.rememberOpenChallengeIds([100]);
-                settings.rememberUpcomingChallengeIds([200]);
-                settings.rememberUpcomingChallengeIds([]);
+                settings.rememberUpcomingChallenges([upcoming(200, -3600)]);
+                settings.rememberUpcomingChallenges([]);
                 settings.cleanupStaleChallengeSetting([]);
                 expect(early()).toBeNull();
             });
 
+            describe('a challenge that has just started: the upcoming feed drops it, the open feed does not list it yet', () => {
+                const T0 = 1_800_000_000;
+                const at = (seconds: number) => jest.spyOn(Date, 'now').mockReturnValue((T0 + seconds) * 1000);
+                afterEach(() => jest.mocked(Date.now).mockRestore?.());
+
+                // 200 starts at T0 + 60; the open list is known and does not hold it.
+                const fetchWith200 = () => {
+                    at(0);
+                    settings.rememberOpenChallengeIds([100]);
+                    settings.rememberUpcomingChallenges([{ id: 200, start_time: T0 + 60 }]);
+                };
+                const feedDropsIt = (seconds: number) => {
+                    at(seconds);
+                    settings.rememberUpcomingChallenges([]);
+                };
+
+                test('its chosen photos survive the cleanup that follows', () => {
+                    seedUpcoming();
+                    fetchWith200();
+                    feedDropsIt(120); // it started a minute ago
+                    expect([...(getUpcomingChallengeIds() ?? [])]).toEqual(['200']);
+                    settings.cleanupStaleChallengeSetting([]);
+                    expect(early()).toEqual(['early']);
+                    // The id that was never in a list is pruned as before.
+                    expect(settings.getChallengeOverride('chosenPhotos', '201')).toBeNull();
+                });
+
+                test('it is carried across several fetches, keeping its start time', () => {
+                    fetchWith200();
+                    feedDropsIt(100);
+                    feedDropsIt(300);
+                    feedDropsIt(659); // the last second inside the 600 s after its start
+                    expect([...(getUpcomingChallengeIds() ?? [])]).toEqual(['200']);
+                    feedDropsIt(660);
+                    expect([...(getUpcomingChallengeIds() ?? [])]).toEqual([]);
+                });
+
+                test('600 s after its start, still in neither list, its entry is pruned', () => {
+                    seedUpcoming();
+                    fetchWith200();
+                    feedDropsIt(60 + 601);
+                    settings.cleanupStaleChallengeSetting([]);
+                    expect(early()).toBeNull();
+                });
+
+                test('the open list showing it ends the carrying, and the entry is kept by the open list', () => {
+                    seedUpcoming();
+                    fetchWith200();
+                    settings.rememberOpenChallengeIds([100, 200]);
+                    feedDropsIt(120);
+                    expect([...(getUpcomingChallengeIds() ?? [])]).toEqual([]);
+                    settings.cleanupStaleChallengeSetting([]);
+                    expect(early()).toEqual(['early']);
+                });
+
+                test('so does the active list (the entry is then protected as active)', () => {
+                    fetchWith200();
+                    settings.rememberChallengeTitles([
+                        { id: '999', title: 'Elsewhere' },
+                        { id: '200', title: 'Joined' },
+                    ]);
+                    feedDropsIt(120);
+                    expect([...(getUpcomingChallengeIds() ?? [])]).toEqual([]);
+                });
+
+                test('a start time that is no number counts as the fetch time', () => {
+                    at(0);
+                    settings.rememberUpcomingChallenges([{ id: 200, start_time: 'soon' }, { id: null }, null]);
+                    feedDropsIt(599);
+                    expect([...(getUpcomingChallengeIds() ?? [])]).toEqual(['200']);
+                    feedDropsIt(601);
+                    expect([...(getUpcomingChallengeIds() ?? [])]).toEqual([]);
+                });
+            });
+
+            describe('a list fetched by this process long ago says nothing about what other processes saved since', () => {
+                const T0 = 1_800_000_000;
+                afterEach(() => jest.mocked(Date.now).mockRestore?.());
+
+                test('older than five minutes it is unknown, and cleanup keeps every entry', () => {
+                    seedUpcoming();
+                    jest.spyOn(Date, 'now').mockReturnValue(T0 * 1000);
+                    settings.rememberOpenChallengeIds([100]);
+                    settings.rememberUpcomingChallenges([{ id: 200, start_time: T0 + 3600 }]);
+                    // Exactly five minutes on it still counts...
+                    jest.mocked(Date.now).mockReturnValue((T0 + 300) * 1000);
+                    expect(getUpcomingChallengeIds()).not.toBeNull();
+                    // ...a moment later it does not: the CLI may have chosen photos for a newly announced id.
+                    jest.mocked(Date.now).mockReturnValue((T0 + 300) * 1000 + 1);
+                    expect(getUpcomingChallengeIds()).toBeNull();
+                    settings.setChallengeOverride('chosenPhotos', '202', ['from-the-cli']);
+                    settings.cleanupStaleChallengeSetting([]);
+                    expect(early()).toEqual(['early']);
+                    expect(settings.getChallengeOverride('chosenPhotos', '202')).toEqual(['from-the-cli']);
+                    expect(settings.getChallengeOverride('chosenPhotos', '201')).toEqual(['gone']);
+                });
+
+                test('a fresh fetch makes it known again', () => {
+                    seedUpcoming();
+                    jest.spyOn(Date, 'now').mockReturnValue(T0 * 1000);
+                    settings.rememberOpenChallengeIds([100]);
+                    settings.rememberUpcomingChallenges([]);
+                    jest.mocked(Date.now).mockReturnValue((T0 + 600) * 1000);
+                    expect(getUpcomingChallengeIds()).toBeNull();
+                    settings.rememberUpcomingChallenges([{ id: 200, start_time: T0 + 3600 }]);
+                    settings.cleanupStaleChallengeSetting([]);
+                    expect(early()).toEqual(['early']);
+                    expect(settings.getChallengeOverride('chosenPhotos', '201')).toBeNull();
+                });
+            });
+
             test('logging out forgets both lists', () => {
                 settings.rememberOpenChallengeIds([100]);
-                settings.rememberUpcomingChallengeIds([200]);
+                settings.rememberUpcomingChallenges([upcoming(200)]);
                 forgetOpenChallengeIds();
                 expect(getOpenChallengeIds()).toBeNull();
                 expect(getUpcomingChallengeIds()).toBeNull();

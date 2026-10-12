@@ -128,38 +128,47 @@ describe('chosen photos in the picker', () => {
     });
 
     describe('in the order the user picked them', () => {
-        // The scorer ranks theme-a > theme-b > off-a > off-b, the library lists them the same way,
-        // and the user picked them in a third order.
+        // Three orders that all differ: the library lists the photos as `pool` (eligible order), the scorer
+        // ranks theme-a > theme-b > off-a > off-b (tier order), and the user picked a third.
+        const pool = [library[3], library[1], library[2], library[0]]; // off-b, theme-b, off-a, theme-a
         const picked = ['off-a', 'theme-b', 'theme-a'];
         const chosen = { ids: picked, inOrder: true, only: false };
 
+        test('the fixture orders really differ from one another', () => {
+            const eligible = pool.map((p) => p.id);
+            const tiers = pickPhotosForChallenge(challenge, pool, 4, {});
+            expect(tiers).toEqual(['theme-a', 'theme-b', 'off-a', 'off-b']);
+            const orders = [
+                eligible.filter((id) => picked.includes(id)),
+                tiers.filter((id) => picked.includes(id)),
+                picked,
+            ];
+            expect(new Set(orders.map((order) => order.join())).size).toBe(3);
+        });
+
         test('buildChosenCandidates returns the usable chosen ids in list order', () => {
             const blocked = { ...photo('blocked', ['Pink']), permission: { allowed: false, message: 'used' } };
-            const { orderedIds, chosenIds } = buildChosenCandidates(challenge, [...library, blocked], {
+            const { orderedIds, chosenIds } = buildChosenCandidates(challenge, [...pool, blocked], {
                 chosen: { ...chosen, ids: ['blocked', 'gone', ...picked], excludeIds: new Set(['theme-b']) },
             });
             expect(orderedIds).toEqual(['off-a', 'theme-a']);
             expect([...(chosenIds as ReadonlySet<string>)]).toEqual(orderedIds);
-            expect(buildChosenCandidates(challenge, library, {}).orderedIds).toEqual([]);
+            expect(buildChosenCandidates(challenge, pool, {}).orderedIds).toEqual([]);
         });
 
         test('the chosen block follows the list and the top-up still follows the scorer', () => {
-            expect(pickPhotosForChallenge(challenge, library, 4, { chosen })).toEqual([
+            expect(pickPhotosForChallenge(challenge, pool, 4, { chosen })).toEqual([
                 'off-a',
                 'theme-b',
                 'theme-a',
                 'off-b',
             ]);
-            expect(pickPhotosForChallenge(challenge, library, 2, { chosen })).toEqual(['off-a', 'theme-b']);
+            expect(pickPhotosForChallenge(challenge, pool, 2, { chosen })).toEqual(['off-a', 'theme-b']);
             // Two chosen photos: the list's order for them, then the scorer's best of the rest (theme-a).
             const two = { ...chosen, ids: ['off-b', 'off-a'] };
-            expect(pickPhotosForChallenge(challenge, library, 3, { chosen: two })).toEqual([
-                'off-b',
-                'off-a',
-                'theme-a',
-            ]);
+            expect(pickPhotosForChallenge(challenge, pool, 3, { chosen: two })).toEqual(['off-b', 'off-a', 'theme-a']);
             // Without the setting the scorer orders the same block.
-            expect(pickPhotosForChallenge(challenge, library, 3, { chosen: { ...chosen, inOrder: false } })).toEqual([
+            expect(pickPhotosForChallenge(challenge, pool, 3, { chosen: { ...chosen, inOrder: false } })).toEqual([
                 'theme-a',
                 'theme-b',
                 'off-a',
@@ -167,7 +176,7 @@ describe('chosen photos in the picker', () => {
         });
 
         test('finalizePick puts a chosen photo the list does not name after the named ones', () => {
-            const scored = buildScoredCandidates(challenge, library, {});
+            const scored = buildScoredCandidates(challenge, pool, {});
             const picks = finalizePick(scored, 3, new Set(['off-a', 'off-b', 'theme-b']), ['off-b', 'off-a']);
             expect(picks).toEqual(['off-b', 'off-a', 'theme-b']);
         });

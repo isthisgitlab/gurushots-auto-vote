@@ -185,8 +185,11 @@ const createMockStrategy = (client: MockEndpoints) => {
             },
             onNoToken: (challengeId) => ({ status: 'not-authenticated', challengeId, cost: 0 }),
         },
-        async (challengeId, spendCoins, token) =>
-            joinChallengeSingle(challengeId, token, mockJoinDeps(client), { spendCoins: spendCoins === true }),
+        async (challengeId, spendCoins, token, expectedCost) =>
+            joinChallengeSingle(challengeId, token, mockJoinDeps(client), {
+                spendCoins: spendCoins === true,
+                ...(expectedCost === undefined ? {} : { expectedCost }),
+            }),
     );
 
     /**

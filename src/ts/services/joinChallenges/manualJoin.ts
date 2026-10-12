@@ -34,8 +34,8 @@ const checkAffordable = async (
 
 /**
  * What an id the live open list does not hold is: `not-started` when a live look at the upcoming
- * challenges names it (nothing is unlocked or submitted), `unavailable` when that look does not
- * (joined already, or closed), and `fetch-failed` when the look itself fails. A live call, not a
+ * challenges names it (nothing is unlocked or submitted), and `unavailable` when that look does not
+ * (joined already, or closed) or itself fails. A live call, not a
  * remembered list, so it holds in a fresh process and never calls a challenge that has since
  * started or been joined "not started".
  */
@@ -64,13 +64,14 @@ const notOpenResult = async (
  * Re-fetches the live candidate so a
  * stale/closed entry in the renderer's cached list cannot trigger a wasted
  * spend. A paid challenge without `spendCoins` returns `needs-confirm` (with the
- * cost) and spends nothing.
+ * cost) and spends nothing; so does one whose live cost is above `expectedCost`, the
+ * cost the caller's confirmation named (a price that rose since then is not consented to).
  */
 const joinChallengeSingle = async (
     challengeId: string | number,
     token: string,
     deps: JoinDeps,
-    { spendCoins = false }: { spendCoins?: boolean } = {},
+    { spendCoins = false, expectedCost }: { spendCoins?: boolean; expectedCost?: number } = {},
 ): Promise<JoinSingleResult> => {
     if (!token) return { status: 'not-authenticated', challengeId, cost: 0 };
 
@@ -88,7 +89,9 @@ const joinChallengeSingle = async (
     const rawCost = Number(challenge.join_coins);
     const cost = Number.isFinite(rawCost) && rawCost > 0 ? rawCost : 0;
 
-    if (cost > 0 && !spendCoins) {
+    // Consent covers a price: a cost above the one the caller confirmed (`expectedCost`) needs a new
+    // confirmation, with the live cost, and unlocks nothing.
+    if (cost > 0 && (!spendCoins || (expectedCost !== undefined && cost > expectedCost))) {
         return { status: 'needs-confirm', challengeId, cost };
     }
 
