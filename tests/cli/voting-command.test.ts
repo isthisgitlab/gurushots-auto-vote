@@ -317,7 +317,7 @@ describe('startContinuousVoting', () => {
 describe('showStatus', () => {
     test('unauthenticated REAL mode: no token line and no boost-window fetch', async () => {
         settings.loadSettings.mockReturnValue(invalid({ mock: false, checkFrequencyMin: 3, checkFrequencyMax: 3 }));
-        settings.getEffectiveSetting.mockReturnValue(undefined);
+        settings.getEffectiveSetting.mockReturnValue(1);
         mw.isAuthenticated.mockReturnValue(false);
         await showStatus();
         const info = msgs('info');

@@ -192,11 +192,6 @@ describe('shared gates', () => {
         expect(currencyActions.unlockBoostWithKey).not.toHaveBeenCalled();
     });
 
-    test('a corrupt reserve counts as none', async () => {
-        set({ currencyReserveKeys: 'x' });
-        expect(await runAutoKey(makeCtx({ bankroll: { keys: 1 } }))).toBe(true);
-    });
-
     test('another spend in flight defers the action', async () => {
         let release: ((value?: unknown) => void) | undefined;
         const held = currencyActions.withSpendLock(() => new Promise((resolve) => (release = resolve)));

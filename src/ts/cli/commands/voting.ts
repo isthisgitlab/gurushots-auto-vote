@@ -256,7 +256,7 @@ const showStatus = async () => {
     logger
         .withCategory('settings')
         .info(
-            `  Last Minute Check Frequency: ${settings.getEffectiveSetting('lastMinuteCheckFrequency', 'global') || 1}min`,
+            `  Last Minute Check Frequency: ${settings.getEffectiveSetting('lastMinuteCheckFrequency', 'global')}min`,
         );
 
     if (userSettings.challengeSettings && Object.keys(userSettings.challengeSettings).length > 0) {

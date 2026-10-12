@@ -36,6 +36,7 @@ const mockSettings = (overrides: Record<string, unknown> = {}) => {
         turboTime: 7200,
         emergencyFill: 300,
         boostTime: 3600,
+        keyUnlockedBoostTime: 900,
     };
     settings.getEffectiveSetting = invalid(jest.fn((key: string) => ({ ...defaults, ...overrides })[key]));
 };

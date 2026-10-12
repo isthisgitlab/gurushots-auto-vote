@@ -3,7 +3,7 @@
  * `hasOwnProperty`) are never settings, setting keys or challenge ids: none of
  * them persists, pollutes Object.prototype, or turns the next load into a
  * defaults fallback that the next save writes over the file. Also: the API
- * timeout and retry count are bounded at load and on write.
+ * timeout, retry count and retry delay, and the check frequency, are bounded at load and on write.
  *
  * Drives the in-memory headless-store seam, like settings-coverage.test.ts.
  */
@@ -199,7 +199,7 @@ describe('prototype-named keys', () => {
         expect(settings.getChallengeOverride('toString', 'hasOwnProperty')).toBeNull();
     });
 
-    describe('the API timeout and retry count are bounded', () => {
+    describe('the API timeout, retry count and delay, and the check frequency are bounded', () => {
         test.each([
             ['apiTimeout', 0],
             ['apiTimeout', -5],
@@ -208,6 +208,15 @@ describe('prototype-named keys', () => {
             ['apiMaxRetries', -1],
             ['apiMaxRetries', 11],
             ['apiMaxRetries', 2.5],
+            ['apiRetryBaseDelayMs', 99],
+            ['apiRetryBaseDelayMs', 10_001],
+            ['apiRetryBaseDelayMs', 1000.5],
+            ['apiRetryBaseDelayMs', Number.NaN],
+            ['checkFrequencyMin', 0],
+            ['checkFrequencyMin', 61],
+            ['checkFrequencyMin', Number.NaN],
+            ['checkFrequencyMax', 0.5],
+            ['checkFrequencyMax', 61],
         ])('%s = %p is refused on write', (key, bad) => {
             seed({ theme: 'dark' });
             const before = value;
@@ -222,6 +231,11 @@ describe('prototype-named keys', () => {
             ['apiTimeout', 300],
             ['apiMaxRetries', 0],
             ['apiMaxRetries', 10],
+            ['apiRetryBaseDelayMs', 100],
+            ['apiRetryBaseDelayMs', 10_000],
+            ['checkFrequencyMin', 1],
+            ['checkFrequencyMax', 60],
+            ['checkFrequencyMax', 2.5],
         ])('%s = %p is accepted', (key, ok) => {
             seed({ theme: 'dark' });
             expect(settings.setSetting(key, ok)).toBe(true);
@@ -233,6 +247,12 @@ describe('prototype-named keys', () => {
             ['apiTimeout', 0, 30],
             ['apiMaxRetries', 1000, 3],
             ['apiMaxRetries', -2, 3],
+            ['apiRetryBaseDelayMs', 0, 1000],
+            ['apiRetryBaseDelayMs', 1e9, 1000],
+            ['checkFrequencyMin', 0, 3],
+            ['checkFrequencyMin', -4, 3],
+            ['checkFrequencyMax', 1000, 3],
+            ['checkFrequencyMax', 0, 3],
         ])('a stored %s of %p is dropped for the default %p', (key, bad, fallback) => {
             value = JSON.stringify({ theme: 'dark', [key]: bad });
 

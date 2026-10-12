@@ -202,17 +202,6 @@ const MAX_RETRY_DELAY_MS = 30_000;
 // less (or 0) — guards against a misbehaving server spinning the loop.
 const MIN_RETRY_DELAY_MS = 100;
 
-// Coerce a user/CLI-supplied setting to a non-negative integer, falling
-// back to the default for missing / negative / non-numeric values. The
-// retry knobs aren't in the schema, so this is the only guard against a
-// bad `set-setting apiMaxRetries -1` turning the loop into a no-op (or a
-// NaN bound that never terminates).
-const coerceNonNegInt = (value: unknown, fallback: number): number => {
-    if (value == null) return fallback; // undefined/null → default, not Number(null)===0
-    const n = Number(value);
-    return Number.isFinite(n) && n >= 0 ? Math.floor(n) : fallback;
-};
-
 /**
  * The one place a 2xx body becomes a response type. Anything that is not a
  * JSON object (an HTML error page, a bare string, an array) is no GuruShots
@@ -277,8 +266,8 @@ const sendPost = async <T extends object>(
     data: string,
     repeatable: boolean,
 ): Promise<PostOutcome<T>> => {
-    const maxRetries = coerceNonNegInt(settings.getSetting('apiMaxRetries'), 3);
-    const baseDelayMs = coerceNonNegInt(settings.getSetting('apiRetryBaseDelayMs'), 1000);
+    const maxRetries = settings.getSetting('apiMaxRetries');
+    const baseDelayMs = settings.getSetting('apiRetryBaseDelayMs');
 
     for (let attempt = 0; ; attempt++) {
         const startTime = Date.now();

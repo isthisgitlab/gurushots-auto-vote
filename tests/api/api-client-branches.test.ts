@@ -433,18 +433,3 @@ describe('retry delay selection', () => {
         expect(timing.sleep).toHaveBeenCalledWith(30_000);
     });
 });
-
-describe('retry settings coercion', () => {
-    test.each([
-        ['null', null, 4],
-        ['a non-numeric string', 'lots', 4],
-        ['a numeric string', '1', 2],
-        ['a fractional value (floored)', 2.9, 3],
-    ])('apiMaxRetries of %s gives the expected attempt count', async (_label, value, attempts) => {
-        defaultSettings({ apiMaxRetries: value });
-        axios.mockRejectedValue(httpError(502, null));
-
-        await expect(makePostRequest(URL, {}, '')).resolves.toBeNull();
-        expect(axios).toHaveBeenCalledTimes(attempts);
-    });
-});

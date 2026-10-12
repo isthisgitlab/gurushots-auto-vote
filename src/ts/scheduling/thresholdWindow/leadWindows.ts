@@ -92,10 +92,10 @@ const boostPrefillWindow = (
     if (!Number.isFinite(closeTime)) return null;
 
     const boostTimeSec = Number(config.boostTimeSec);
-    // Mirrors VotingLogic.getEffectiveKeyUnlockedBoostTime: an explicit 0 is the
-    // off sentinel and must be honoured, but a missing/negative/NaN value falls
-    // back to the schema default rather than skipping the challenge — otherwise
-    // the rule would be armed at 900s for a boundary the scheduler never wakes for.
+    // An explicit 0 is the off sentinel and must be honoured, but a missing/negative/NaN
+    // value from the resolver falls back to the schema default rather than skipping the
+    // challenge — otherwise the rule, which reads the validated setting (default 900s),
+    // would be armed for a boundary the scheduler never wakes for.
     const rawKeyUnlocked = Number(config.keyUnlockedBoostTimeSec);
     const keyUnlockedBoostTimeSec = Number.isFinite(rawKeyUnlocked) && rawKeyUnlocked >= 0 ? rawKeyUnlocked : 900;
     const { thresholdSec, branch } = boostApplyThreshold(challenge.member?.boost, closeTime, {
@@ -129,8 +129,8 @@ const boostPrefillWindow = (
  * Fail-soft like the other cadence helpers: a challenge whose resolver throws or
  * whose config is disabled is skipped. An out-of-range leadSec (sub-minute, over
  * 59 min, or NaN) falls back to the schema default (15 min) so a bad override
- * can't disable the cap — the valid range mirrors VotingLogic's
- * getBoostPrefillLeadSec so the two same-purpose guards can't drift. The
+ * can't disable the cap — the valid range is voteBeforeBoostLeadMin's own
+ * (1..59 min), which getBoostPrefillLeadSec reads as validated. The
  * `0 = off` sentinel on whichever boost window the branch measures against is
  * honoured here exactly as the vote rule honours it, so the scheduler never wakes
  * for a fill the rule would then decline to perform.

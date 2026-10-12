@@ -275,7 +275,7 @@ const runJoinPass = async (
     const nowSec = toPassNowSec(now);
     const pass: JoinPassState = {
         bankroll,
-        remainingBudget: Number(settings.getEffectiveSetting('autoJoinCycleCoinBudget', null)) || 0,
+        remainingBudget: settings.getEffectiveSetting('autoJoinCycleCoinBudget', null),
         nowSec,
         // One diagnostic per pass, not per candidate (see warnMissingCloseTime).
         missingCloseTimeLogged: false,

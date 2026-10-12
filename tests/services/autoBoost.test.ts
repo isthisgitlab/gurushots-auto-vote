@@ -38,6 +38,7 @@ const mockSettings = (overrides = {}) => {
     const defaults = {
         autoBoost: true,
         boostTime: 3600,
+        keyUnlockedBoostTime: 900,
         emergencyFill: 300,
     };
     settings.getEffectiveSetting = invalid(
@@ -195,17 +196,6 @@ describe('shouldApplyBoost — key-unlocked window', () => {
         expect(VotingLogic.shouldApplyBoost(keyUnlockedChallenge(now, 2400), now)).toBe(false);
     });
 
-    test('falls back to 15 minutes when the setting is absent', () => {
-        // Settings written before this key existed must keep a 15-minute window rather
-        // than reading as 0 and silently disabling key-unlocked boosts altogether.
-        mockSettings({ emergencyFill: 0 });
-        const now = NOW();
-
-        expect(VotingLogic.getEffectiveKeyUnlockedBoostTime('777')).toBe(900);
-        expect(VotingLogic.shouldApplyBoost(keyUnlockedChallenge(now, 600), now)).toBe(true);
-        expect(VotingLogic.shouldApplyBoost(keyUnlockedChallenge(now, 1200), now)).toBe(false);
-    });
-
     test('an explicit 0 turns key-unlocked auto-apply off', () => {
         // 0-is-off is the convention boostTime and emergencyFill already use, and both the
         // schema and the GUI input accept 0 — so it must be honoured, not overridden by the
@@ -217,17 +207,6 @@ describe('shouldApplyBoost — key-unlocked window', () => {
         expect(VotingLogic.getEffectiveKeyUnlockedBoostTime('777')).toBe(0);
         expect(VotingLogic.shouldApplyBoost(keyUnlockedChallenge(now, 600), now)).toBe(false);
         expect(VotingLogic.shouldApplyBoost(keyUnlockedChallenge(now, 1), now)).toBe(false);
-    });
-
-    test('an unusable value falls back rather than disabling boosts', () => {
-        const now = NOW();
-        // Reachable from an under-mocked caller or a hand-edited settings file — unlike an
-        // explicit 0, none of these express an intent to switch the feature off.
-        for (const bad of [-1, 'nonsense', null, undefined]) {
-            mockSettings({ keyUnlockedBoostTime: bad, emergencyFill: 0 });
-            expect(VotingLogic.getEffectiveKeyUnlockedBoostTime('777')).toBe(900);
-            expect(VotingLogic.shouldApplyBoost(keyUnlockedChallenge(now, 600), now)).toBe(true);
-        }
     });
 
     test('does not affect the timer-based window, which still reads boostTime', () => {

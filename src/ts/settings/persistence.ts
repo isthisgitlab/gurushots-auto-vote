@@ -80,10 +80,14 @@ const hasDefaultsType = (value: unknown, fallback: unknown) =>
         ? Array.isArray(value) && value.every((item) => typeof item === 'string')
         : typeof value === typeof fallback;
 
-// The top-level numbers with a range narrower than their type: the API client trusts them.
+// The top-level numbers with a range narrower than their type: the API client and the cadence trust them. The
+// retry delay and the check frequency have the range the settings form offers.
 const NUMERIC_BOUNDS: Record<string, { min: number; max: number; integer: boolean }> = {
     apiTimeout: { min: API_TIMEOUT_MIN_SEC, max: API_TIMEOUT_MAX_SEC, integer: false },
     apiMaxRetries: { min: 0, max: API_MAX_RETRIES_MAX, integer: true },
+    apiRetryBaseDelayMs: { min: 100, max: 10_000, integer: true },
+    checkFrequencyMin: { min: 1, max: 60, integer: false },
+    checkFrequencyMax: { min: 1, max: 60, integer: false },
 };
 
 /**

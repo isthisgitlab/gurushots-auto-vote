@@ -70,7 +70,7 @@ const computeNextDelayMs = async (token: string, prefetched: Challenge[] | null 
             fetchFailedNow = fetched?.fetchFailed === true;
         }
         const now = Math.floor(Date.now() / 1000);
-        const lastMinuteCheckMinutes = Number(settings.getEffectiveSetting('lastMinuteCheckFrequency', 'global')) || 1;
+        const lastMinuteCheckMinutes = settings.getEffectiveSetting('lastMinuteCheckFrequency', 'global');
         const { delayMs, mode } = await computeNextCycleDelayMs(list, now, {
             resolveThreshold,
             normalDelayMs: getRandomCheckFrequencyMs(userSettings),

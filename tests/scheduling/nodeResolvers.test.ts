@@ -48,11 +48,6 @@ describe('resolveFinalWindowTopUp', () => {
         });
         expect(resolveFinalWindowTopUp('c1')).toEqual({ enabled, leadSec: 900, durationSec: 3600 });
     });
-
-    test('a missing lead yields NaN for thresholdWindow to re-guard', () => {
-        withSettings({ voteBeforeFinalWindow: true, useFinalWindowExposure: true });
-        expect(resolveFinalWindowTopUp('c1').leadSec).toBeNaN();
-    });
 });
 
 describe('resolveBoostPrefill', () => {

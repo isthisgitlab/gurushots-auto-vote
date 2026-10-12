@@ -115,8 +115,7 @@ const reserveAllows = async (
         log().warning(`${label}: balance unreadable for ${logger.challengeTag(challenge)} — not spending`, null);
         return false;
     }
-    const reserve = Number(settings.getEffectiveSetting(RESERVE_KEY[action]));
-    const keep = Number.isFinite(reserve) && reserve > 0 ? reserve : 0;
+    const keep = settings.getEffectiveSetting(RESERVE_KEY[action]);
     if (balance > keep) return true;
     log().info(
         `${label}: ${logger.challengeTag(challenge)} skipped — balance ${balance} would go below the reserve of ${keep}`,
@@ -205,7 +204,7 @@ const runAutoSwap = guarded('swap', async (ctx) => {
 
     const ranking = (challenge.member as ChallengeMember).ranking;
     const swapsDone = Array.isArray(ranking?.swaps) ? ranking.swaps.length : 0;
-    const maxSwaps = Number(settings.getEffectiveSetting('autoSwapMax', id));
+    const maxSwaps = settings.getEffectiveSetting('autoSwapMax', id);
     if (swapsDone >= maxSwaps) return false;
 
     const target = pickSwapTarget(entriesOf(challenge), {
@@ -280,7 +279,7 @@ const runAutoExposureFill: (ctx: CurrencyCtx, votePool: VotePool | null | undefi
         if (!baseGate('fill', 'autoExposureFill', ctx)) return false;
         const ledger = ctx.currency.spendLedger;
         if (!ledger || ctx.currency.fillsLeftToService) return false;
-        const maxFills = Number(settings.getEffectiveSetting('autoExposureFillMax', id));
+        const maxFills = settings.getEffectiveSetting('autoExposureFillMax', id);
         if (ledger.fills(id) >= maxFills) return false;
 
         const exposure = Number(challenge.member?.ranking?.exposure?.exposure_factor);
