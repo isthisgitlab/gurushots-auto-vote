@@ -61,7 +61,7 @@ export interface ScenarioDeps {
     /** False while another loop (the Android background service) owns scenarios. */
     enabled?: () => boolean;
     /** The cross-process lock of one challenge's rule steps; absent where one process runs them (mock mode). */
-    lock?: (challengeId: string) => { ok: boolean; release: () => void };
+    lock?: (challengeId: string) => { ok: boolean; release: () => void; unavailable?: true };
 }
 
 /** runVotingPass's injected, strategy-specific behavior. */

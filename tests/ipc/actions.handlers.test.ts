@@ -1055,6 +1055,7 @@ describe('forget-unconfirmed-payment', () => {
         'busy',
         'account-unknown',
         'unreadable',
+        'locks-unavailable',
         'not-authenticated',
     ] as const)('a %s answer is a failure that names it, and never throws', async (status) => {
         stubAuthGuardOk();

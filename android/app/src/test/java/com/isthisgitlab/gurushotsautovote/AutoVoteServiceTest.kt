@@ -278,23 +278,30 @@ class AutoVoteServiceTest {
     fun headlessSideStoresUseOnlyTheAllowedPreferenceKeys() {
         val store = newService().HeadlessStore()
         ShadowLog.clear()
-        store.writeKey("gs_lexicon_diagnostics", "{\"challenges\":1}")
+        // A write answers whether it persisted: true for an allowed key and valid JSON, false for anything refused.
+        assertTrue(store.writeKey("gs_lexicon_diagnostics", "{\"challenges\":1}"))
         assertEquals("{\"challenges\":1}", store.readKey("gs_lexicon_diagnostics"))
-        store.writeKey("unrelated-key", "{\"challenges\":2}")
+        assertFalse(store.writeKey("unrelated-key", "{\"challenges\":2}"))
         assertNull(store.readKey("unrelated-key"))
-        store.writeKey("gs_lexicon_diagnostics", "invalid JSON")
+        assertFalse(store.writeKey("gs_lexicon_diagnostics", "invalid JSON"))
         assertEquals("{\"challenges\":1}", store.readKey("gs_lexicon_diagnostics"))
-        store.writeKey("gs_scenario_state", "{\"7\":{\"phase\":\"buildup\"}}")
+        assertTrue(store.writeKey("gs_scenario_state", "{\"7\":{\"phase\":\"buildup\"}}"))
         assertEquals("{\"7\":{\"phase\":\"buildup\"}}", store.readKey("gs_scenario_state"))
-        store.writeKey("gs_scenario_state", "invalid JSON")
+        assertFalse(store.writeKey("gs_scenario_state", "invalid JSON"))
         assertEquals("{\"7\":{\"phase\":\"buildup\"}}", store.readKey("gs_scenario_state"))
+        // The resets the app asks for are a side store of their own.
+        assertTrue(store.writeKey("gs_scenario_resets", "{\"7\":1}"))
+        assertEquals("{\"7\":1}", store.readKey("gs_scenario_resets"))
+        assertFalse(store.writeKey("gs_scenario_resets", "invalid JSON"))
+        assertEquals("{\"7\":1}", store.readKey("gs_scenario_resets"))
         // A refusal names the store from a literal — the JS-supplied key never
         // reaches the log line (CodeQL java/log-injection), and the rejected
         // key is silent.
         assertEquals(
             listOf(
                 "Refusing to persist non-JSON lexicon diagnostics blob",
-                "Refusing to persist non-JSON scenario state blob"
+                "Refusing to persist non-JSON scenario state blob",
+                "Refusing to persist non-JSON scenario resets blob"
             ),
             ShadowLog.getLogsForTag(AutoVoteService.TAG).map { it.msg }
         )

@@ -15,6 +15,7 @@ const PROBLEM_TEXT: Record<Exclude<ForgetStatus, 'forgotten'>, string> = {
     'legacy-record': 'app.discoverForgetLegacyRecord',
     busy: 'app.discoverForgetBusy',
     unreadable: 'app.discoverForgetUnreadable',
+    'locks-unavailable': 'app.discoverForgetLocksUnavailable',
     'account-unknown': 'app.discoverForgetAccountUnknown',
     'not-authenticated': 'app.discoverForgetNotAuthenticated',
 };

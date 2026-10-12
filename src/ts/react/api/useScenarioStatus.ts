@@ -43,6 +43,8 @@ export type ScenarioSummary = {
         again: 'phase' | 'reset' | 'day';
         challengeId: Challenge['id'];
         newerProblem: boolean;
+        /** What the stop came from: GuruShots giving no answer, or the app stopping before it knew (`pending`). */
+        origin: 'unclear' | 'pending';
     } | null;
     nextWakeAt?: number | null;
 };
@@ -112,18 +114,20 @@ const spendUnclearOf = (
     scenario: ScenarioDocument,
     challengeId: Challenge['id'],
 ): ScenarioSummary['spendUnclear'] => {
-    const base = { challengeId, again: 'phase' as const, newerProblem: false };
-    if (state.inFlight?.unclear !== undefined) {
+    const base = { challengeId, again: 'phase' as const, newerProblem: false, origin: 'unclear' as const };
+    // One spend is shown even when an edit left several (they are all kept; the first is what the notice names).
+    const [checkedOn] = state.inFlight?.unclear ?? [];
+    if (checkedOn !== undefined) {
         return {
             ...base,
-            action: state.inFlight.unclear,
+            action: checkedOn,
             stopped: false,
-            newerProblem: (state.lastError?.at ?? 0) > (state.inFlight.unclearAt ?? Infinity),
+            newerProblem: (state.lastError?.at ?? 0) > (state.inFlight?.unclearAt ?? Infinity),
         };
     }
     const [stopped] = Object.entries(state.fired).flatMap(([ruleId, record]) =>
         record.unclearHalt !== undefined && record.phaseEnteredAt === state.phaseEnteredAt
-            ? [{ ruleId, action: record.unclearHalt, at: record.at }]
+            ? [{ ruleId, action: record.unclearHalt, at: record.at, origin: record.haltOrigin ?? ('unclear' as const) }]
             : [],
     );
     if (stopped === undefined) return null;
@@ -134,6 +138,7 @@ const spendUnclearOf = (
         ...base,
         action: stopped.action,
         stopped: true,
+        origin: stopped.origin,
         again: AGAIN[rule?.repeat ?? ''] ?? 'phase',
         newerProblem: (state.lastError?.at ?? 0) > stopped.at,
     };

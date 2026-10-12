@@ -133,16 +133,18 @@ const STATE_LOCK_ID = 'joinstate';
 const STATE_LOCK_WAIT_MS = 500;
 
 /**
- * The lock of the claims file, waited for a moment when another process holds it. Null when it could not be had.
+ * The lock of the claims file, waited for a moment when another process holds it: the lock, `'busy'`, or
+ * `'unavailable'` (the app cannot create its lock files).
  */
-const acquireStateLock = (deps: JoinDeps, waitMs: number): { release: () => void } | null =>
+const acquireStateLock = (deps: JoinDeps, waitMs: number) =>
     acquireWithin(() => lockFor(deps, STATE_LOCK_ID, true), waitMs);
 
 /**
  * How a change of the claims file ended: `done` (written, or nothing to write), `locked` (the file's lock could not be
- * had in a moment) or `failed` (the file is unreadable, or the write failed).
+ * had in a moment), `unavailable` (the app cannot create its lock files at all) or `failed` (the file is unreadable,
+ * or the write failed).
  */
-type Changed = 'done' | 'locked' | 'failed';
+type Changed = 'done' | 'locked' | 'unavailable' | 'failed';
 
 /**
  * Reads the claims, lets `change` edit them and writes them back, under the claims-file lock. Nothing is written
@@ -159,7 +161,14 @@ const changeClaims = (
     const store = deps.joinStateStore;
     if (!store) return 'done';
     const lock = acquireStateLock(deps, waitMs);
-    if (!lock) {
+    if (lock === 'unavailable') {
+        cat().error(
+            `could not ${what}: the app cannot create its lock files in its data folder — nothing written`,
+            null,
+        );
+        return 'unavailable';
+    }
+    if (lock === 'busy') {
         cat().warning(`could not ${what}: join-state is locked by another process — nothing written`, null);
         return 'locked';
     }
@@ -263,7 +272,10 @@ const markJoined = (deps: JoinDeps, key: string, ownKey: string): void => {
     });
 };
 
-type ForgetResult = Extract<ForgetStatus, 'forgotten' | 'nothing-to-forget' | 'legacy-record' | 'busy' | 'unreadable'>;
+type ForgetResult = Extract<
+    ForgetStatus,
+    'forgotten' | 'nothing-to-forget' | 'legacy-record' | 'busy' | 'unreadable' | 'locks-unavailable'
+>;
 
 /**
  * What the user may forget: this account's claim for the challenge when it is still unconfirmed. Never a confirmed
@@ -273,7 +285,8 @@ type ForgetResult = Extract<ForgetStatus, 'forgotten' | 'nothing-to-forget' | 'l
  * account's own), and otherwise clears when it passes CLAIM_MAX_AGE_MS.
  *
  * @returns 'forgotten', 'nothing-to-forget' (no claim, or only a confirmed one), 'legacy-record' (a bare claim),
- *   'busy' (the claims file is locked by another process) or 'unreadable'
+ *   'busy' (the claims file is locked by another process), 'locks-unavailable' (the app cannot create its lock
+ *   files) or 'unreadable'
  */
 const forgetClaim = (deps: JoinDeps, id: string | number, owner: string | null): ForgetResult => {
     let result: ForgetResult = 'nothing-to-forget';
@@ -290,6 +303,7 @@ const forgetClaim = (deps: JoinDeps, id: string | number, owner: string | null):
         return true;
     });
     if (done === 'locked') return 'busy';
+    if (done === 'unavailable') return 'locks-unavailable';
     return done === 'done' ? result : 'unreadable';
 };
 

@@ -337,13 +337,13 @@ export const app = {
     scenarioStatusMissing:
         'Scenārijs „{name}” vairs nepastāv — nekas netiek izpildīts. Izvēlies citu izaicinājuma uzstādījumos.',
     scenarioStatusCorrupt:
-        'Scenārijs „{name}”: scenāriju saglabāto progresu nevar nolasīt, tāpēc visu izaicinājumu plāni ir apturēti. Atiestatot visu izaicinājumu progresu, tie sāksies no jauna.',
+        'Scenārijs „{name}”: scenāriju saglabāto progresu nevar nolasīt, tāpēc visu izaicinājumu plāni ir apturēti. Ja atiestatīsi visu izaicinājumu progresu, plāni sāksies no jauna.',
     scenarioStatusCorruptShort:
-        'Scenārijs „{name}” ir apturēts: saglabāto progresu nevar nolasīt. Spied „{details}”, lai atiestatītu visu izaicinājumu progresu.',
+        'Spied „{details}”, lai atiestatītu visu izaicinājumu progresu — scenārijs „{name}” ir apturēts: saglabāto progresu nevar nolasīt.',
     scenarioStatusCorruptRecord:
-        'Scenārijs „{name}”: šī izaicinājuma saglabāto progresu nevar nolasīt, tāpēc tā plāns ir apturēts. Atiestatot to, plāns sāksies no jauna.',
+        'Scenārijs „{name}”: šī izaicinājuma saglabāto progresu nevar nolasīt, tāpēc tā plāns ir apturēts. Ja to atiestatīsi, plāns sāksies no jauna.',
     scenarioStatusCorruptRecordShort:
-        'Scenārijs „{name}” ir apturēts: šī izaicinājuma saglabāto progresu nevar nolasīt. Spied „{details}”, lai to atiestatītu.',
+        'Spied „{details}”, lai to atiestatītu — scenārijs „{name}” ir apturēts: šī izaicinājuma saglabāto progresu nevar nolasīt.',
     scenarioStatusPhase: 'fāze {phase}',
     scenarioStatusNotStarted: 'nākamajā palaišanā sāksies fāzē {phase}',
     scenarioStatusNext: 'nākamā pārbaude pēc {time}',
@@ -353,7 +353,11 @@ export const app = {
     scenarioStatusSpendStopped:
         'GuruShots neatbildēja uz „{action}”, tāpēc tas, iespējams, tika izpildīts, un tā noteikums tika apturēts, lai to netērētu atkārtoti. Pārbaudi izaicinājumu. {again} Lai scenāriju sāktu no jauna, izmanto pogu „Atiestatīt scenāriju” zemāk vai komandrindā (CLI) palaid scenario-reset --challenge={id}: tas var vēlreiz iztērēt darbību, uz kuru nebija atbildes, un atsāk scenārija tēriņu skaitīšanu.',
     scenarioStatusSpendStoppedShort:
-        'GuruShots neatbildēja uz „{action}”: tā noteikums tika apturēts, lai to netērētu atkārtoti. Spied „{details}”, lai redzētu sīkāk.',
+        'Spied „{details}”, lai redzētu sīkāk — GuruShots neatbildēja uz „{action}”: tā noteikums tika apturēts, lai to netērētu atkārtoti.',
+    scenarioStatusSpendStoppedPending:
+        'Lietotne apstājās, pirms zināja, vai „{action}” tika nosūtīts, tāpēc tas, iespējams, tika izpildīts, un tā noteikums tika apturēts, lai to netērētu atkārtoti. Pārbaudi izaicinājumu. {again} Lai scenāriju sāktu no jauna, izmanto pogu „Atiestatīt scenāriju” zemāk vai komandrindā (CLI) palaid scenario-reset --challenge={id}: tas var vēlreiz iztērēt darbību, kuras iznākums nebija zināms, un atsāk scenārija tēriņu skaitīšanu.',
+    scenarioStatusSpendStoppedPendingShort:
+        'Spied „{details}”, lai redzētu sīkāk — lietotne apstājās, pirms zināja, vai „{action}” tika nosūtīts: tā noteikums tika apturēts, lai to netērētu atkārtoti.',
     scenarioReset: 'Atiestatīt scenāriju…',
     scenarioResetAll: 'Atiestatīt visu izaicinājumu progresu…',
     scenarioResetTitle: 'Scenārija progresa atiestatīšana',
@@ -369,6 +373,8 @@ export const app = {
         'Saglabāto scenāriju progresu pašlaik atjaunina lietotne vai cits process. Nekas netika mainīts. Mēģini vēlreiz pēc brīža.',
     scenarioResetUnreadable:
         'Saglabāto progresu nevar nolasīt, tāpēc šo izaicinājumu nevar atiestatīt atsevišķi. Aizver šo logu un atver to vēlreiz, lai atiestatītu visus izaicinājumus.',
+    scenarioResetLocksUnavailable:
+        'Lietotne nevar izveidot savus bloķēšanas failus savā datu mapē, tāpēc to nevar droši izdarīt. Nekas netika mainīts. Pārbaudi mapes atļaujas un brīvo vietu diskā (sīkāk žurnālā) un mēģini vēlreiz.',
     scenarioResetFailed: 'Pašlaik neizdevās atiestatīt scenāriju. Nekas netika mainīts. Mēģini vēlreiz pēc brīža.',
     scenarioStatusAgainPhase: 'Noteikums var darboties vēlreiz, kad fāze tiek sākta no jauna.',
     scenarioStatusAgainReset: 'Noteikums var darboties vēlreiz tikai pēc atiestatīšanas.',
@@ -603,6 +609,8 @@ export const app = {
         'Neesi pieteicies, tāpēc nekas netika mainīts. Piesakies no jauna un mēģini vēlreiz.',
     discoverForgetUnreadable:
         'Saglabātos maksājumu ierakstus neizdevās nolasīt, tāpēc nekas netika mainīts. Restartē lietotni un mēģini vēlreiz; ja tas atkārtojas, jāpārbauda pievienošanās stāvokļa fails — skati žurnālu.',
+    discoverForgetLocksUnavailable:
+        'Lietotne nevar izveidot savus bloķēšanas failus savā datu mapē, tāpēc to nevar droši izdarīt. Nekas netika mainīts. Pārbaudi mapes atļaujas un brīvo vietu diskā (sīkāk žurnālā) un mēģini vēlreiz.',
     discoverForgetFailed: 'Pašlaik neizdevās aizmirst maksājumu. Nekas netika mainīts. Mēģini vēlreiz pēc brīža.',
     discoverAccountUnknown:
         'Neizdevās noskaidrot, kurā kontā esi pieteicies, tāpēc šis mēģinājums neko nedarīja un monētas netērēja. Mēģini vēlreiz pēc brīža vai piesakies vēlreiz.',

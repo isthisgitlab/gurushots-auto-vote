@@ -45,6 +45,7 @@ const unclear = (over: Partial<NonNullable<ScenarioSummary['spendUnclear']>> = {
         again: 'phase',
         challengeId: 7,
         newerProblem: false,
+        origin: 'unclear',
         ...over,
     },
     nextWakeAt: null,
@@ -178,6 +179,14 @@ describe('the reset button', () => {
         cleanup();
         render(<ScenarioStatusLine status={{ name: 'Plan', corrupt: 'record' }} compact />);
         expect(screen.getByRole('status').textContent).toContain('app.scenarioStatusCorruptRecordShort');
+    });
+
+    test('a rule stopped before the app knew whether the spend was sent says so, on the card and on the tile', () => {
+        render(<ScenarioStatusLine status={stoppedStatus({ origin: 'pending' })} />);
+        expect(screen.getByRole('status').textContent).toBe('app.scenarioStatusSpendStoppedPending');
+        cleanup();
+        render(<ScenarioStatusLine status={stoppedStatus({ origin: 'pending' })} compact />);
+        expect(screen.getByRole('status').textContent).toBe('app.scenarioStatusSpendStoppedPendingShort');
     });
 
     test('a short notice names the control that opens the card, by its own label', () => {

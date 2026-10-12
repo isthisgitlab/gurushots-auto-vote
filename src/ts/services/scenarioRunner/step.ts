@@ -22,7 +22,7 @@ import type { RunnerContext, ScenarioAction, ScenarioPass } from './types';
 import { log, nowSec, usesBalance } from './support';
 import { runRule, withNotice } from './rule';
 
-const NO_LOCK = { ok: true, release: () => {} };
+const NO_LOCK: { ok: boolean; release: () => void; unavailable?: true } = { ok: true, release: () => {} };
 
 const corruptText = (kind: 'file' | 'record', challengeId: string) =>
     kind === 'file'
@@ -113,6 +113,32 @@ const advance = async (ctx: RunnerContext, now: number): Promise<void> => {
     }
 };
 
+// How many passes in a row each challenge's step was skipped because its lock was held: one is ordinary, several are
+// something holding it that should not.
+const skippedPasses = new Map<string, number>();
+const WARN_AFTER_SKIPS = 3;
+
+/**
+ * Says why a challenge's step was skipped: a lock held by another process is ordinary (debug) until it persists, a
+ * lock the app cannot make at all never is (warning: nothing runs, and the user can fix it).
+ */
+const noteSkipped = (challenge: Challenge, unavailable: boolean) => {
+    const tag = logger.challengeTag(challenge);
+    if (unavailable) {
+        log().warning(
+            `${tag} the app cannot create its lock files in its data folder — scenario steps are paused until it can (check the folder's permissions and the free disk space)`,
+            null,
+        );
+        return;
+    }
+    const id = String(challenge.id);
+    const skipped = (skippedPasses.get(id) ?? 0) + 1;
+    skippedPasses.set(id, skipped);
+    const said = `${tag} another process is running its scenario — skipped this pass`;
+    if (skipped >= WARN_AFTER_SKIPS) log().warning(`${said} (${skipped} passes in a row)`, null);
+    else log().debug(said, null);
+};
+
 /**
  * One pass's scenario step for a challenge. No-op when the pass has no
  * scenario deps, the host defers scenarios to another loop, or the
@@ -150,12 +176,10 @@ const runScenarioStep = async (challenge: Challenge, now: number, pass: PassCont
         // The GUI and the CLI can run a pass at once: one rule step of a challenge runs at a time, or both would spend.
         const lock = deps.lock ? deps.lock(challengeId) : NO_LOCK;
         if (!lock.ok) {
-            log().debug(
-                `${logger.challengeTag(challenge)} another process is running its scenario — skipped this pass`,
-                null,
-            );
+            noteSkipped(challenge, lock.unavailable === true);
             return;
         }
+        skippedPasses.delete(challengeId);
         try {
             await advance(ctx, now);
         } finally {

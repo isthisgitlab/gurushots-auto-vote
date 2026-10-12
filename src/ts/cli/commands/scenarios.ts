@@ -238,10 +238,17 @@ const RESET_BUSY =
 const RESET_ALL_BUSY =
     'The saved scenario progress is being updated right now (by the app or by another process). Nothing was changed. Try again in a moment.';
 
+const RESET_LOCKS_UNAVAILABLE =
+    'The app cannot create its lock files in its data folder, so it cannot do this safely. Nothing was changed. Check the folder’s permissions and the free disk space (logs --error has the details), then try again.';
+
 const scenarioResetCmd = async (challengeId: string) => {
     const result = await handlers()['reset-scenario-state'](null, challengeId);
     if (!result.success && result.error === 'busy') {
         ui().error(RESET_BUSY);
+        return 1;
+    }
+    if (!result.success && result.error === 'locks-unavailable') {
+        ui().error(RESET_LOCKS_UNAVAILABLE);
         return 1;
     }
     if (!result.success && result.error === 'state-unreadable') {
@@ -261,6 +268,10 @@ const scenarioResetAllCmd = async () => {
     const result = await handlers()['reset-all-scenario-state']();
     if (!result.success && result.error === 'busy') {
         ui().error(RESET_ALL_BUSY);
+        return 1;
+    }
+    if (!result.success && result.error === 'locks-unavailable') {
+        ui().error(RESET_LOCKS_UNAVAILABLE);
         return 1;
     }
     if (!result.success) return reportFailure(result, 'Could not reset the scenarios');

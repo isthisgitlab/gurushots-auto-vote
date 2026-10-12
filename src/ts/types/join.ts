@@ -18,6 +18,7 @@ type JoinReason = 'no-photo' | 'account-unknown' | 'unconfirmed' | 'earlier-paym
  *   legacy-record     — only a record from an older version, which is never forgotten (it may be another account's)
  *   busy              — a join of the challenge is under way, or the claims file is locked by another process
  *   unreadable        — the claims file cannot be read or written, so nothing was changed
+ *   locks-unavailable — the app cannot create its lock files in its data folder, so nothing was changed
  *   account-unknown   — the account could not be told, so nothing was changed
  *   not-authenticated — nobody is logged in
  */
@@ -27,6 +28,7 @@ type ForgetStatus =
     | 'legacy-record'
     | 'busy'
     | 'unreadable'
+    | 'locks-unavailable'
     | 'account-unknown'
     | 'not-authenticated';
 

@@ -34,6 +34,11 @@ type RunnerContext = {
     timezone: string;
     pass: ScenarioPass;
     ledger: ScenarioStateLedger;
+    /**
+     * Set by the rule for the step it is running: writes the spend down just before its request is made (the
+     * pending marker). False means it could not be written, and the spend is not made.
+     */
+    beforeSpend?: (action: SpendAction) => boolean;
 };
 
 /**
@@ -66,6 +71,8 @@ type NotDoneOutcome = {
     spent?: SpendKind;
     unclear?: SpendAction;
     halt?: true;
+    /** `pending`: the rule is stopped from a marker written before the spend, not from a spend that got no answer. */
+    origin?: 'pending';
 };
 
 type ActionOutcome = DoneOutcome | NotDoneOutcome;

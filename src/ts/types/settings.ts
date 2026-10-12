@@ -159,5 +159,6 @@ export interface AndroidHeadlessStore {
     read(): string | null;
     write(data: string): void;
     readKey?(key: string): string | null;
-    writeKey?(key: string, data: string): void;
+    /** `false` when the native side did not persist the value; `true` (or nothing) when it did. */
+    writeKey?(key: string, data: string): boolean | void;
 }

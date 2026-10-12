@@ -26,6 +26,13 @@ describe('acquireWithin', () => {
         expect(Atomics.wait).not.toHaveBeenCalled();
     });
 
+    test('a lock that cannot be had at all is given up on at once, without waiting', () => {
+        const acquire = jest.fn(() => ({ ok: false, release: () => {}, unavailable: true as const }));
+        expect(acquireWithin(acquire, 500)).toBe('unavailable');
+        expect(acquire).toHaveBeenCalledTimes(1);
+        expect(Atomics.wait).not.toHaveBeenCalled();
+    });
+
     test('a lock held for a moment is taken once it is let go', () => {
         const acquire = jest.fn().mockReturnValueOnce(busy).mockReturnValueOnce(busy).mockReturnValue(lock);
         expect(acquireWithin(acquire, 500)).toBe(lock);
@@ -34,7 +41,7 @@ describe('acquireWithin', () => {
 
     test('one that is not free within the bound is given up on, after about that long', () => {
         const acquire = jest.fn(() => busy);
-        expect(acquireWithin(acquire, 100)).toBeNull();
+        expect(acquireWithin(acquire, 100)).toBe('busy');
         expect(Atomics.wait).toHaveBeenCalledTimes(10);
         expect(clock).toBe(1_100);
     });

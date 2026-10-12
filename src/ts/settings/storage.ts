@@ -273,12 +273,21 @@ const readHeadlessKey = (prefKey: string, fallback: string | null): string | nul
     }
 };
 
-const writeHeadlessKey = (prefKey: string, data: string) => {
-    try {
-        headlessStore()?.writeKey?.(prefKey, data);
-    } catch (err) {
-        logger.withCategory('settings').error(`Headless ${prefKey} write failed:`, err);
-    }
+/**
+ * Writes one key through the native bridge. The bridge answers `false` when it did not persist the value (a
+ * refused key, a value that is no JSON, a failed commit); no answer, or `true`, is a write that was. A write that
+ * was not passes quietly, unless `strict`: then it throws.
+ */
+const writeHeadlessKey = (prefKey: string, data: string, strict: boolean): void => {
+    const persisted = ((): boolean => {
+        try {
+            return headlessStore()?.writeKey?.(prefKey, data) !== false;
+        } catch (err) {
+            logger.withCategory('settings').error(`Headless ${prefKey} write failed:`, err);
+            return false;
+        }
+    })();
+    if (!persisted && strict) throw new Error(`Headless ${prefKey} was not persisted`);
 };
 
 /**
@@ -297,11 +306,14 @@ const createJsonStore = ({
     fileName,
     prefKey,
     atomic = false,
+    strict = false,
 }: {
     fileName: string;
     prefKey: string;
     /** replace the file atomically on every write (temp file + rename), for a store read outside any lock */
     atomic?: boolean;
+    /** a write the Android service's native bridge did not persist throws, instead of passing quietly */
+    strict?: boolean;
 }) => {
     let initialized = false;
     let cachedJson: string | null = null;
@@ -338,7 +350,7 @@ const createJsonStore = ({
         writeRaw: (data: string) => {
             if (runtime.isHeadlessService()) {
                 cachedJson = data;
-                writeHeadlessKey(prefKey, data);
+                writeHeadlessKey(prefKey, data, strict);
                 return;
             }
             if (runtime.isCapacitor()) {

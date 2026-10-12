@@ -157,6 +157,13 @@ const runInput = ({ status, challenge, state, now, bankroll }: LiveScenario) => 
     bankroll,
 });
 
+// What a reset that was not made says: a lock is held, the app cannot make its locks, or the file cannot be read.
+const RESET_ERROR = {
+    busy: 'busy',
+    unavailable: 'locks-unavailable',
+    unreadable: 'state-unreadable',
+} as const;
+
 /**
  * Forgets one challenge's progress, under the challenge's step lock so that it never runs in the middle of its rule
  * steps in another process. An unreadable file is cleared only by a reset of every challenge.
@@ -164,12 +171,10 @@ const runInput = ({ status, challenge, state, now, bankroll }: LiveScenario) => 
 const resetScenario = async (challengeId: string | number) => {
     await refreshScenarioStateAsync();
     const lock = stepLockForMode(challengeId);
-    if (!lock.ok) return { success: false as const, error: 'busy' };
+    if (!lock.ok) return { success: false as const, error: lock.unavailable ? 'locks-unavailable' : 'busy' };
     try {
         const result = ledgerForMode().remove(String(challengeId));
-        if (result !== 'removed') {
-            return { success: false as const, error: result === 'busy' ? 'busy' : 'state-unreadable' };
-        }
+        if (result !== 'removed') return { success: false as const, error: RESET_ERROR[result] };
         log().info(`Scenario progress reset for challenge ${logger.sanitizeLogString(String(challengeId))}`, null);
         return { success: true as const };
     } finally {
@@ -182,7 +187,8 @@ const resetScenario = async (challengeId: string | number) => {
  */
 const resetEveryScenario = async () => {
     await refreshScenarioStateAsync();
-    if (ledgerForMode().removeAll() === 'busy') return { success: false as const, error: 'busy' };
+    const result = ledgerForMode().removeAll();
+    if (result !== 'removed') return { success: false as const, error: RESET_ERROR[result] };
     log().warning('Scenario progress reset for every challenge', null);
     return { success: true as const };
 };

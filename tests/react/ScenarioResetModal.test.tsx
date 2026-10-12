@@ -60,6 +60,8 @@ describe('ScenarioResetModal', () => {
     test.each([
         [{ success: false, error: 'busy' } as const, false, 'app.scenarioResetBusy'],
         [{ success: false, error: 'busy' } as const, true, 'app.scenarioResetAllBusy'],
+        [{ success: false, error: 'locks-unavailable' } as const, false, 'app.scenarioResetLocksUnavailable'],
+        [{ success: false, error: 'locks-unavailable' } as const, true, 'app.scenarioResetLocksUnavailable'],
         [{ success: false, error: 'something else' } as const, false, 'app.scenarioResetFailed'],
         [null, false, 'app.scenarioResetFailed'],
     ])(

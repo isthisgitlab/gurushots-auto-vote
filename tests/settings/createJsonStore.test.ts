@@ -386,5 +386,41 @@ describe('createJsonStore', () => {
             expect(mockPrefSet).not.toHaveBeenCalled();
             expect(fs.writeFileSync).not.toHaveBeenCalled();
         });
+
+        describe('through the native bridge', () => {
+            const bridge = (writeKey: (key: string, data: string) => boolean | void) => {
+                const native = { read: () => null, write: jest.fn(), readKey: () => null, writeKey: jest.fn(writeKey) };
+                (globalThis as typeof globalThis & { AndroidHeadlessStore?: unknown }).AndroidHeadlessStore = native;
+                return native;
+            };
+            afterEach(() => {
+                delete (globalThis as typeof globalThis & { AndroidHeadlessStore?: unknown }).AndroidHeadlessStore;
+            });
+            const strictStore = () => {
+                const { createJsonStore } = require('../../src/ts/settings/storage') as typeof storageModule;
+                return createJsonStore({ fileName: 'scenarioState.json', prefKey: 'gs_scenario_state', strict: true });
+            };
+
+            test.each([[true], [undefined]])('a write the bridge answers %p for passes, strict or not', (answer) => {
+                const native = bridge(() => answer);
+                expect(() => strictStore().writeRaw('{"a":1}')).not.toThrow();
+                expect(() => store.writeRaw('{"a":1}')).not.toThrow();
+                expect(native.writeKey).toHaveBeenCalledTimes(2);
+            });
+
+            test('a write the bridge says it did not persist fails a strict store, and passes quietly for the others', () => {
+                bridge(() => false);
+                expect(() => strictStore().writeRaw('{"a":1}')).toThrow('Headless gs_scenario_state was not persisted');
+                expect(() => store.writeRaw('{"a":1}')).not.toThrow();
+            });
+
+            test('a bridge that throws is a write that was not persisted too', () => {
+                bridge(() => {
+                    throw new Error('bridge down');
+                });
+                expect(() => strictStore().writeRaw('{"a":1}')).toThrow('was not persisted');
+                expect(() => store.writeRaw('{"a":1}')).not.toThrow();
+            });
+        });
     });
 });

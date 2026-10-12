@@ -407,6 +407,19 @@ describe('scenario-reset / dry-run / vocabulary', () => {
         await expect(cmd.scenarioResetAllCmd()).resolves.toBe(1);
     });
 
+    test('a lock the app cannot make is said so, with where to look, not "try again in a moment"', async () => {
+        h['reset-scenario-state'].mockResolvedValueOnce({ success: false, error: 'locks-unavailable' });
+        await expect(cmd.scenarioResetCmd('7')).resolves.toBe(1);
+        h['reset-all-scenario-state'].mockResolvedValueOnce({ success: false, error: 'locks-unavailable' });
+        await expect(cmd.scenarioResetAllCmd()).resolves.toBe(1);
+        expect(lines('error')).toHaveLength(2);
+        for (const line of lines('error')) {
+            expect(line).toContain('cannot create its lock files in its data folder');
+            expect(line).toContain('Check the folder’s permissions and the free disk space');
+        }
+        expect(text('error')).not.toContain('Try again in a moment');
+    });
+
     test('an unreadable progress file can only be reset for every challenge, and the line says what that costs', async () => {
         h['reset-scenario-state'].mockResolvedValueOnce({ success: false, error: 'state-unreadable' });
         await expect(cmd.scenarioResetCmd('7')).resolves.toBe(1);

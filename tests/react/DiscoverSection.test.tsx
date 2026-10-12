@@ -970,6 +970,7 @@ describe('edge paths', () => {
             ['legacy-record', 'app.discoverForgetLegacyRecord'],
             ['busy', 'app.discoverForgetBusy'],
             ['unreadable', 'app.discoverForgetUnreadable'],
+            ['locks-unavailable', 'app.discoverForgetLocksUnavailable'],
             ['not-authenticated', 'app.discoverForgetNotAuthenticated'],
         ])('an answer of %s keeps the dialog open and says so, changing nothing', async (error, key) => {
             window.api.forgetUnconfirmedPayment = forgetMock().mockResolvedValue(

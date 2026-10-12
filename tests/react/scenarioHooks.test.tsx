@@ -169,20 +169,26 @@ describe('useScenarioStatus', () => {
                 main: { rules: [{ id: 'r', ...(repeat ? { repeat } : {}), if: [], do: [] }] },
             },
         });
-        const note = (over: object) => ({ challengeId: 7, again: 'phase', newerProblem: false, ...over });
+        const note = (over: object) => ({
+            challengeId: 7,
+            again: 'phase',
+            newerProblem: false,
+            origin: 'unclear',
+            ...over,
+        });
         const halted = { r: { at: NOW, phaseEnteredAt: NOW, unclearHalt: 'swap' } };
 
         test.each([
             [
                 'a step being checked on, carried by the rule in flight',
-                { inFlight: { ruleId: 'r', actionIndex: 1, unclear: 'unlockBoost' } },
+                { inFlight: { ruleId: 'r', actionIndex: 1, unclear: ['unlockBoost'] } },
                 undefined,
                 note({ action: 'unlockBoost', stopped: false }),
             ],
             [
                 'a step being checked on, with a later problem (the scenario was edited and halted)',
                 {
-                    inFlight: { ruleId: 'r', actionIndex: 1, unclear: 'unlockBoost', unclearAt: NOW },
+                    inFlight: { ruleId: 'r', actionIndex: 1, unclear: ['unlockBoost'], unclearAt: NOW },
                     lastError: { at: NOW + 5, message: 'halted' },
                 },
                 undefined,
@@ -191,7 +197,7 @@ describe('useScenarioStatus', () => {
             [
                 'a step being checked on, with no problem recorded',
                 {
-                    inFlight: { ruleId: 'r', actionIndex: 1, unclear: 'unlockBoost', unclearAt: NOW },
+                    inFlight: { ruleId: 'r', actionIndex: 1, unclear: ['unlockBoost'], unclearAt: NOW },
                     lastError: null,
                 },
                 undefined,
@@ -200,7 +206,7 @@ describe('useScenarioStatus', () => {
             [
                 'a step being checked on, whose own message is the last problem',
                 {
-                    inFlight: { ruleId: 'r', actionIndex: 1, unclear: 'unlockBoost', unclearAt: NOW },
+                    inFlight: { ruleId: 'r', actionIndex: 1, unclear: ['unlockBoost'], unclearAt: NOW },
                     lastError: { at: NOW, message: 'its own' },
                 },
                 undefined,
@@ -243,6 +249,18 @@ describe('useScenarioStatus', () => {
                 { fired: { gone: { at: NOW, phaseEnteredAt: NOW, unclearHalt: 'swap' } } },
                 'once',
                 note({ action: 'swap', stopped: true }),
+            ],
+            [
+                'a rule stopped from a marker written before the spend (the app stopped before it knew)',
+                { fired: { r: { at: NOW, phaseEnteredAt: NOW, unclearHalt: 'swap', haltOrigin: 'pending' } } },
+                undefined,
+                note({ action: 'swap', stopped: true, origin: 'pending' }),
+            ],
+            [
+                'a step that more than one spend of is being checked on: the first is what the card names',
+                { inFlight: { ruleId: 'r', actionIndex: 1, unclear: ['fillExposure', 'swap'], unclearAt: NOW } },
+                undefined,
+                note({ action: 'fillExposure', stopped: false }),
             ],
             [
                 'a stop followed by a later problem',

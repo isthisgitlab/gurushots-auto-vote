@@ -632,6 +632,7 @@ describe('forget-payment', () => {
             'A join of 7 is in progress, or another process is using the saved payment records. Nothing was changed.',
         ],
         ['account-unknown', 'error', 'Could not confirm which account is logged in, so nothing was changed'],
+        ['locks-unavailable', 'error', 'The app cannot create its lock files in its data folder'],
         ['not-authenticated', 'error', 'Not logged in'],
         [
             'unreadable',

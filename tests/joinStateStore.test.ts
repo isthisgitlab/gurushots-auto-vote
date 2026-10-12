@@ -467,12 +467,16 @@ describe('acquireUnlockLock', () => {
                 throw mockFsError('EACCES');
             });
             try {
-                expect(joinState.acquireUnlockLock('c1').ok).toBe(true);
-                expect(joinState.acquireUnlockLock('joinstate', { internal: true }).ok).toBe(false);
+                expect(joinState.acquireUnlockLock('c1')).toMatchObject({ ok: true });
+                expect(joinState.acquireUnlockLock('c1')).not.toHaveProperty('unavailable');
+                // Not held by anyone: told from a lock that is, so that nobody is asked to "try again in a moment".
+                const none = joinState.acquireUnlockLock('joinstate', { internal: true });
+                expect(none).toMatchObject({ ok: false, unavailable: true });
+                expect(() => none.release()).not.toThrow();
                 expect(joinState.acquireUnlockLock('scenario-7', { category: 'scenario', internal: true }).ok).toBe(
                     false,
                 );
-                expect(warning).toHaveBeenCalledTimes(3);
+                expect(warning).toHaveBeenCalledTimes(4);
             } finally {
                 fs.openSync.mockImplementation(original);
             }

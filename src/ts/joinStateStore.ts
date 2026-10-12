@@ -35,9 +35,11 @@ const LOCK_TTL_MS = 60_000;
 // A lock that is held is touched this often, so a join that outlasts the TTL (a retried submit can) is not stale.
 const LOCK_RENEW_MS = LOCK_TTL_MS / 3;
 
-type UnlockLock = { ok: boolean; release: () => void };
+// `unavailable`: not held by another, but not to be had: the lock files cannot be made (only the app's own locks).
+type UnlockLock = { ok: boolean; release: () => void; unavailable?: true };
 
 const NOT_HELD: UnlockLock = { ok: false, release: () => {} };
+const UNAVAILABLE: UnlockLock = { ok: false, release: () => {}, unavailable: true };
 const NO_LOCK: UnlockLock = { ok: true, release: () => {} };
 
 // A challenge's unlock lock and the app's own locks (the claims file's, the scenario state file's, a challenge's
@@ -185,10 +187,11 @@ const keepFresh = (lockPath: string, token: string): NodeJS.Timeout => {
  *
  * When the lock cannot be made at all (permissions, a full disk) the challenge's unlock lock fails OPEN, which its
  * claim already covers: no coins are spent without a claim recorded first, by compare-and-set under the claims-file
- * lock. The app's own locks fail CLOSED, as busy: nothing guards what they guard but them.
+ * lock. The app's own locks fail CLOSED, as `unavailable` (not held by anyone, and not to be had: callers tell it
+ * from busy and say so): nothing guards what they guard but them.
  *
  * @returns ok=false means another process
- *   holds it right now (caller should treat as busy). release() is always safe.
+ *   holds it right now (caller should treat as busy), unless `unavailable`. release() is always safe.
  */
 const acquireUnlockLock = (
     id: string | number,
@@ -230,7 +233,7 @@ const acquireUnlockLock = (
                 `cross-process lock unavailable for ${sanitizeLogString(id)}: ${errorMessage(caught) || sanitizeLogString(caught)}`,
                 null,
             );
-        return internal ? NOT_HELD : NO_LOCK;
+        return internal ? UNAVAILABLE : NO_LOCK;
     }
 };
 

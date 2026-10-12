@@ -238,6 +238,24 @@ describe('status and reset', () => {
         expect(mocked.__release).not.toHaveBeenCalled();
     });
 
+    test('a lock the app cannot make at all is said so, not called busy: for the step lock and for the file', async () => {
+        scenarioStatus.stepLockForMode.mockReturnValueOnce({ ok: false, release: mocked.__release, unavailable: true });
+        await expect(handlers['reset-scenario-state'](null, 7)).resolves.toEqual({
+            success: false,
+            error: 'locks-unavailable',
+        });
+        mocked.__ledger.remove.mockReturnValueOnce('unavailable');
+        await expect(handlers['reset-scenario-state'](null, 7)).resolves.toEqual({
+            success: false,
+            error: 'locks-unavailable',
+        });
+        mocked.__ledger.removeAll.mockReturnValueOnce('unavailable');
+        await expect(handlers['reset-all-scenario-state']()).resolves.toEqual({
+            success: false,
+            error: 'locks-unavailable',
+        });
+    });
+
     test.each<['busy' | 'unreadable', string]>([
         ['busy', 'busy'],
         ['unreadable', 'state-unreadable'],

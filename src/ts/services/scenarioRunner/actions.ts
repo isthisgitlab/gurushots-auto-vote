@@ -31,6 +31,7 @@ import {
     skipped,
     spendAllowed,
     unclearHalted,
+    limitOf,
 } from './support';
 
 const ACTIONS: { [K in ActionType]: ActionHandler<Extract<ScenarioAction, { type: K }>> } = {
@@ -220,9 +221,12 @@ const settleUnclearSpend = async (
     action: ScenarioAction & { type: SpendAction },
     ctx: RunnerContext,
     state: ScenarioState,
+    from: 'unclear' | 'pending',
 ): Promise<ActionOutcome> => {
     const { landed, remember } = await spendLanded(action, ctx, state);
-    return landed ? done({ remember }) : unclearHalted(action.type);
+    // A spend that got no answer was counted when it was marked; one recovered from its pending marker is counted now.
+    if (landed) return done({ remember, ...(from === 'pending' ? { spent: limitOf(action.type) } : {}) });
+    return unclearHalted(action.type, from);
 };
 
 export { ACTIONS, settleUnclearSpend };

@@ -85,6 +85,7 @@ class AutoVoteService : Service() {
         // Side stores the headless JS persists outside that blob (see HeadlessStore).
         private const val KEY_LEXICON_DIAGNOSTICS = "gs_lexicon_diagnostics"
         private const val KEY_SCENARIO_STATE = "gs_scenario_state"
+        private const val KEY_SCENARIO_RESETS = "gs_scenario_resets"
         private const val HEADLESS_URL = "https://appassets.androidplatform.net/assets/public/headless.html"
 
         // Test seam: JVM unit tests swap in a client whose interceptor reroutes
@@ -381,10 +382,12 @@ class AutoVoteService : Service() {
     /** Settings bridge — same store @capacitor/preferences uses, so token/settings stay in sync. */
     inner class HeadlessStore {
         // The only side stores the background service persists besides the
-        // settings blob: lexicon diagnostics, and scenario runtime state (the
+        // settings blob: lexicon diagnostics, scenario runtime state (the
         // phase and memory a user-defined scenario is at — losing it on a
-        // service restart would restart the plan).
-        private val allowedKeys = setOf(KEY_LEXICON_DIAGNOSTICS, KEY_SCENARIO_STATE)
+        // service restart would restart the plan), and the resets of that state
+        // the app asked for (the app does not rewrite the state itself: this
+        // service may have written it since).
+        private val allowedKeys = setOf(KEY_LEXICON_DIAGNOSTICS, KEY_SCENARIO_STATE, KEY_SCENARIO_RESETS)
 
         @android.webkit.JavascriptInterface
         fun read(): String? = getSharedPreferences(PREFS_FILE, Context.MODE_PRIVATE).getString(SETTINGS_KEY, null)
@@ -393,9 +396,14 @@ class AutoVoteService : Service() {
         fun readKey(key: String): String? =
             if (key in allowedKeys) getSharedPreferences(PREFS_FILE, Context.MODE_PRIVATE).getString(key, null) else null
 
+        /**
+         * Persists one side store. Answers whether it did: false for a key that is not allowed, a value that is no
+         * JSON, or a commit that failed — JS treats the write-ahead of a scenario spend as not made then. The commit
+         * is synchronous, so a true answer means the value is on disk, not queued.
+         */
         @android.webkit.JavascriptInterface
-        fun writeKey(key: String, data: String) {
-            if (key !in allowedKeys) return
+        fun writeKey(key: String, data: String): Boolean {
+            if (key !in allowedKeys) return false
             try {
                 JSONObject(data)
             } catch (t: Throwable) {
@@ -404,12 +412,14 @@ class AutoVoteService : Service() {
                 // java/log-injection). Add an arm when you allow a new key.
                 if (key == KEY_SCENARIO_STATE) {
                     Log.w(TAG, "Refusing to persist non-JSON scenario state blob")
+                } else if (key == KEY_SCENARIO_RESETS) {
+                    Log.w(TAG, "Refusing to persist non-JSON scenario resets blob")
                 } else {
                     Log.w(TAG, "Refusing to persist non-JSON lexicon diagnostics blob")
                 }
-                return
+                return false
             }
-            getSharedPreferences(PREFS_FILE, Context.MODE_PRIVATE).edit().putString(key, data).apply()
+            return getSharedPreferences(PREFS_FILE, Context.MODE_PRIVATE).edit().putString(key, data).commit()
         }
 
         @android.webkit.JavascriptInterface

@@ -62,6 +62,7 @@ import { invalid } from '../helpers/invalid';
 import { isPlainObject } from '../../src/ts/plainObject';
 import { clearUnlocked, findClaim, markJoined, markUnlocked } from '../../src/ts/services/joinChallenges/unlockMarker';
 import type { JoinDeps } from '../../src/ts/services/joinChallenges';
+import type { acquireUnlockLock as AcquireUnlockLock } from '../../src/ts/joinStateStore';
 const {
     performJoin,
     runJoinPass,
@@ -2072,7 +2073,7 @@ describe('unlock markers are kept per account', () => {
         const stateRelease = jest.fn();
         // The answers are for the challenge locks, in turn; the lock of the claims file is always had.
         const lockOf = (answers: boolean[]) =>
-            jest.fn((id: string | number) =>
+            jest.fn<ReturnType<typeof AcquireUnlockLock>, Parameters<typeof AcquireUnlockLock>>((id) =>
                 id === 'joinstate' ? { ok: true, release: stateRelease } : { ok: answers.shift() ?? true, release },
             );
         const challengeLocks = (acquire: ReturnType<typeof lockOf>) =>
@@ -2109,18 +2110,53 @@ describe('unlock markers are kept per account', () => {
             expect(release).toHaveBeenCalledTimes(1);
         });
 
+        describe('a claims-file lock the app cannot make at all', () => {
+            const unavailableState = () =>
+                jest.fn<ReturnType<typeof AcquireUnlockLock>, Parameters<typeof AcquireUnlockLock>>((id) =>
+                    id === 'joinstate'
+                        ? { ok: false, release: stateRelease, unavailable: true }
+                        : { ok: true, release },
+                );
+
+            test('no coins are spent without a claim recorded, and the log says why, not "locked by another process"', async () => {
+                const logged: LoggerMock = invalid(require('../../src/ts/logger'));
+                const store = fileWith({});
+                const deps = joiningAs(A, store, { acquireUnlockLock: unavailableState() });
+                expect(await joinChallengeSingle(2, 'tok', deps, { spendCoins: true })).toMatchObject({
+                    status: 'failed-no-charge',
+                });
+                expect(deps.coinsUnlock).not.toHaveBeenCalled();
+                expect(logged.withCategory().error).toHaveBeenCalledWith(
+                    expect.stringContaining('the app cannot create its lock files in its data folder'),
+                    null,
+                );
+                // It does not wait for a lock that will not come: asked for once per change, not once per ten milliseconds.
+                expect(deps.acquireUnlockLock).toHaveBeenCalledTimes(2);
+            });
+
+            test('forgetting a payment says the same, to the dialog and the CLI', async () => {
+                const store = fileWith({ [`${A}:2`]: { unlockedAt: RECENT, unconfirmed: true } });
+                const deps = joiningAs(A, store, { acquireUnlockLock: unavailableState() });
+                expect(await forgetUnconfirmedPayment(2, 'tok', deps)).toEqual({
+                    status: 'locks-unavailable',
+                    challengeId: 2,
+                });
+                expect(store.read()).toEqual({ [`${A}:2`]: { unlockedAt: RECENT, unconfirmed: true } });
+            });
+        });
+
         test('the claims file’s lock is one of the app’s own, a challenge’s is not: they are asked for apart', async () => {
             const store = fileWith({ [`${A}:2`]: { unlockedAt: RECENT } });
             const acquire = lockOf([]);
             const deps = joiningAs(A, store, { acquireUnlockLock: acquire });
             await joinChallengeSingle(2, 'tok', deps);
-            const asked = invalid<Array<[string | number, { internal: boolean }]>>(acquire.mock.calls);
+            const asked = acquire.mock.calls;
             const claimsFile = asked.filter(([id]) => id === 'joinstate');
             const challenge = asked.filter(([id]) => id !== 'joinstate');
             expect(claimsFile.length).toBeGreaterThan(0);
             expect(challenge.length).toBeGreaterThan(0);
-            expect(claimsFile.every(([, options]) => options.internal)).toBe(true);
-            expect(challenge.every(([, options]) => !options.internal)).toBe(true);
+            expect(claimsFile.every(([, options]) => options?.internal)).toBe(true);
+            expect(challenge.every(([, options]) => !options?.internal)).toBe(true);
         });
 
         test('submitting and marking the claim joined happen under one lock, which is let go', async () => {

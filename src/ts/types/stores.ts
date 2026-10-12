@@ -90,6 +90,11 @@ export interface ScenarioFiredRecord {
      * again: the rule stays held for the phase it stopped in (see repeatBlock).
      */
     unclearHalt?: SpendAction;
+    /**
+     * Set when the rule was stopped from a `pending` marker (the app stopped before it knew whether the spend was
+     * sent), not from one that got no answer from GuruShots: the notice words them differently.
+     */
+    haltOrigin?: 'pending';
 }
 
 /** A challenge's runtime position in its scenario (scenarioStateStore record). */
@@ -103,15 +108,16 @@ export interface ScenarioState {
     /** rule id → when it fired */
     fired: Record<string, ScenarioFiredRecord>;
     /**
-     * `unclear`: the action type of the step at `actionIndex`, whose spend got no answer and is never spent again;
-     * `unclearAt`: when (unix seconds); `pending`: the spend the step is about to make, written down BEFORE it is
-     * made, so that a step whose result was never written (a crash, a lock held) is found on the next run and
-     * treated like `unclear`: looked at, never spent again
+     * `unclear`: the spends of the step at `actionIndex` that got no answer (one per action type: an edit of the
+     * scenario can leave several) and are never spent again, already counted in `spent`; `unclearAt`: when (unix
+     * seconds); `pending`: the spend the step is about to make, written down BEFORE it is made, so that a step whose
+     * result was never written (a crash, a lock held) is found on the next run and treated like `unclear`: looked
+     * at, never spent again, and counted when it is recovered
      */
     inFlight: {
         ruleId: string;
         actionIndex: number;
-        unclear?: SpendAction;
+        unclear?: SpendAction[];
         unclearAt?: number;
         pending?: SpendAction;
     } | null;

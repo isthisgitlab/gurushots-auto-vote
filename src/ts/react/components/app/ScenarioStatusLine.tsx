@@ -17,6 +17,12 @@ const CORRUPT_KEY = {
     record: ['app.scenarioStatusCorruptRecord', 'app.scenarioStatusCorruptRecordShort'],
 } as const;
 
+// The notice for a rule that was stopped, on the card and (short) on the compact tile, by what the stop came from.
+const STOPPED_KEY = [
+    { unclear: 'app.scenarioStatusSpendStopped', pending: 'app.scenarioStatusSpendStoppedPending' },
+    { unclear: 'app.scenarioStatusSpendStoppedShort', pending: 'app.scenarioStatusSpendStoppedPendingShort' },
+] as const;
+
 type Summary = NonNullable<ReturnType<typeof useScenarioStatusModule.useScenarioStatus>>;
 
 function ResetButton({ label, onReset }: { label: string; onReset: () => void }) {
@@ -61,15 +67,22 @@ function Unavailable({
 function Notice({ status, compact }: { status: Summary; compact: boolean }) {
     const { t } = useTranslation();
     const { spendUnclear, lastError } = status;
-    // The compact tile clamps its notices, so a stopped rule gets a short one there, whole; the card has the rest.
-    const stoppedKey = compact ? 'app.scenarioStatusSpendStoppedShort' : 'app.scenarioStatusSpendStopped';
+    // The compact tile clamps its notices, so a stopped rule gets a short one there, whole, with the control to press
+    // first; the card has the rest.
     const spend = spendUnclear
-        ? interp(t(spendUnclear.stopped ? stoppedKey : 'app.scenarioStatusSpendUnclear'), {
-              action: t(`app.sbAct_${spendUnclear.action}`),
-              again: t(AGAIN_KEY[spendUnclear.again]),
-              id: spendUnclear.challengeId,
-              details: t('app.details'),
-          })
+        ? interp(
+              t(
+                  spendUnclear.stopped
+                      ? STOPPED_KEY[compact ? 1 : 0][spendUnclear.origin]
+                      : 'app.scenarioStatusSpendUnclear',
+              ),
+              {
+                  action: t(`app.sbAct_${spendUnclear.action}`),
+                  again: t(AGAIN_KEY[spendUnclear.again]),
+                  id: spendUnclear.challengeId,
+                  details: t('app.details'),
+              },
+          )
         : null;
     const problem =
         lastError && (!spendUnclear || spendUnclear.newerProblem)

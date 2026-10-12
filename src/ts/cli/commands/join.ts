@@ -274,6 +274,11 @@ const FORGET_LINES: Record<ForgetStatus, ForgetLine> = {
         text: () =>
             'Could not confirm which account is logged in, so nothing was changed. Try again shortly, or run "login" again.',
     },
+    'locks-unavailable': {
+        level: 'error',
+        text: () =>
+            'The app cannot create its lock files in its data folder, so it cannot do this safely. Nothing was changed. Check the folder’s permissions and the free disk space (logs --error has the details), then try again.',
+    },
     'not-authenticated': {
         level: 'error',
         text: () => 'Not logged in — run "login" first. Nothing was changed.',

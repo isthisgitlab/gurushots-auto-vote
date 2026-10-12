@@ -518,7 +518,8 @@ repeated six times is one that gets forgotten at one of them.
   claims file's, the scenario state file's, a challenge's scenario steps) are different files whatever their
   names, so no id can name one of the app's. When a lock cannot be made at all (permissions, a full disk) the
   challenge's fails open (a spend still needs its claim recorded first, by compare-and-set under the claims-file
-  lock) and the app's own fail closed, as busy: nothing guards what they guard but them. A corrupt/unreadable join-state **refuses to spend** (fail-safe, not fail-open);
+  lock) and the app's own fail closed, as `unavailable` (not held, and not to be had: told from busy, and said
+  so, to the user and in the log): nothing guards what they guard but them. A corrupt/unreadable join-state **refuses to spend** (fail-safe, not fail-open);
   the pass is cancellation-checked between candidates and before each spend, and each candidate is
   independently try/caught. Decision precedence in `VotingLogic.shouldJoinChallenge` (pure): a rule opt-in
   (a named profile, or an inline `autoJoin: true` on the rule) wins over the type-exclude veto; otherwise the
@@ -734,28 +735,53 @@ caps (dependency-free, renderer-safe), and `scenarios/templates.ts` holds editab
   touch real files, has none). Every change of the file is read-modify-write of the whole, so it is made under a
   second cross-process lock (`scenariostate`, a bounded wait of half a second, the file read again under it);
   when the lock cannot be had, or the write fails, the change is not made and the runner stops the rule there. A
-  read never writes, waits or takes a lock. **A spend is written down before it is made**: before every currency
-  spend (swap, unlock a boost, fill) the runner persists `inFlight.pending` for that step, and a spend whose marker
-  could not be written is not made. If the result of the spend is then never written (the lock was busy, the disk
-  failed, the process died, the one-shot CLI exited), the next run in any process finds the marker and treats it
-  like `unclear`: it looks at the live challenge, goes on only when that positively shows the spend landed, and
-  otherwise stops the rule; it never spends again. Nothing is kept in memory for that: the file is what protects a
-  spend. **Resets are counted**: the file keeps a count of resets of every challenge (`@all`) and each challenge's
+  read never writes, waits or takes a lock. **A spend is written down before it is made**: a currency spend
+  (swap, unlock a boost, fill) persists `inFlight.pending` for its step inside the spend path itself
+  (`lockedCurrencySpend`), under the spend lock and just before its request, after everything the scenario itself
+  can refuse it on (the memory slot, the limit, the reserve, a busy spend lock): a spend that is refused there
+  leaves no marker, and one whose marker could not be written is not made (the step is deferred). If the result of the
+  spend is then never written (the lock was busy, the disk failed, the process died, the one-shot CLI exited), the
+  next run in any process finds the marker and treats it like `unclear`: it looks at the live challenge, goes on only
+  when that positively shows the spend landed, and otherwise stops the rule (the notice says the app stopped before
+  it knew, `haltOrigin: 'pending'`, not that GuruShots gave no answer); it never spends again. A spend recovered
+  from `pending` is counted in `spent` when it is recovered (a spend that got no answer is counted when it is
+  marked, and not twice), so the scenario's limits hold across a crash. The markers are per spend: `unclear` is a
+  list of action types, so an edit of the step never overwrites one with another; a `pending` marker the step now
+  running is not for (the edit) is counted and kept as `unclear`, also when the step is not a spend, so reverting the
+  edit never spends it. The result of a step is written down, and written once more if that fails, before it is given
+  up on (a short hold of the lock after a spend that landed must not stop a rule for good); when it still fails the
+  log says the next pass may stop the rule needlessly. Nothing is kept in memory: the file is what protects a spend.
+  **What gives that guarantee, by platform**: Electron and the CLI write the file synchronously through a temp file,
+  fsync and rename, under the cross-process lock, so a write that returned is on disk. The Android background
+  service writes through the native bridge, whose `writeKey` now commits synchronously and answers whether it
+  persisted (a refused key, a value that is no JSON, or a failed commit throws in the store, so the marker is
+  not taken as written); a write that returned there is on disk. The Android app's WebView does not give it: its
+  writes go to `@capacitor/preferences` behind a cache and return before they are persisted, so a crash right after
+  can lose a marker; the app does not run scenarios while the native service is available, and where the WebView
+  does run them (no service) the marker is best effort. Mock mode keeps everything in memory.
+  **Resets are counted**: the file keeps a count of resets of every challenge (`@all`) and each challenge's
   record (a tombstone, for a challenge reset away) keeps its own; a state carries the counts it was read under
   (`epoch`) and a write of a state read under older ones is refused, so a step that was running when its challenge,
   or every challenge, was reset cannot bring the old progress back, in this process or another, and with no lock
-  to rely on (the Android service has none). The refused step stops, and says it was reset. A progress that cannot
-  be read is `file` (all of it: only the reset of every challenge, `reset-all-scenario-state`, clears it) or
-  `record` (this challenge's: its own reset does). A reset takes the challenge's step lock and answers `busy` when
-  that or the file's lock is held (by the app's own pass or by another process), never a silent success; the reset
-  of every challenge takes no step locks, the counts make them unnecessary. Every card reads its status again after
-  a reset (`refreshScenarioStatuses`). A step that fails at the place of a marked step (the scenario
-  was edited) keeps the marker, so a revert never spends it again. The card's notice for a rule stopped after a
-  spend that got no answer says when that rule can run again by its repeat (the phase entered again, a reset, the
+  to rely on (the Android service has none). The refused step stops, and says it was reset. On Android the app does
+  not rewrite the file from its cache for a reset (the service may have written it since): it writes the reset into a
+  store of its own, `gs_scenario_resets` (`{ "<challengeId>": count, "@all": count }`, a side key of the native
+  bridge), and the reset is applied, idempotently, by whichever runtime reads or writes the state file next (the app's
+  own reads apply it as well); an unreadable file has nothing to lose and is cleared by the app itself. A progress
+  that cannot be read is `file` (all of it: only the reset of every challenge, `reset-all-scenario-state`, clears it)
+  or `record` (this challenge's: its own reset does; a write of another challenge keeps it until then, only valid
+  records and tombstones age out). A reset takes the challenge's step lock and answers `busy` when that or the file's
+  lock is held (by the app's own pass or by another process), never a silent success, and `locks-unavailable` when the
+  app cannot create its lock files at all (the app's own locks fail closed and say so: the dialogs and the CLI send
+  the user to the data folder's permissions and the free disk space, and the runner warns every pass, where a lock
+  merely held is a debug line until it persists for three); the reset of every challenge takes no step locks, the
+  counts make them unnecessary. Every card reads its status again after a reset (`refreshScenarioStatuses`). The
+  card's notice for a rule stopped after
+  a spend that got no answer says when that rule can run again by its repeat (the phase entered again, a reset, the
   next day), points at the card's Reset button (a dialog that carries the cost: it can spend the unanswered action again and
   restarts the spend counter) and at `scenario-reset --challenge=<id>` in the CLI, and shows a later problem
   beside it, for a rule being checked on too (`inFlight.unclearAt` against `lastError.at`); the compact tile gets a
-  short notice, whole, with the details on the card. Mock
+  short notice, whole, that begins with the control to press ("Details"). Mock
   mode uses the in-memory ledger. Android persists it through the native keyed bridge
   (`gs_scenario_state`); the app WebView `refreshAsync`es it before status reads, resets and each in-app
   pass, and when the native service is available only the background service advances scenarios
