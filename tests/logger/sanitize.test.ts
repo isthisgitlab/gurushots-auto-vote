@@ -116,3 +116,20 @@ describe('sanitizeForLog', () => {
         expect(input).toEqual(snapshot);
     });
 });
+
+describe('account identifiers', () => {
+    test.each(['email', 'login', 'username', 'userName', 'user_name', 'user-name', 'phone', 'EMAIL'])(
+        'redacts %s',
+        (key) => {
+            expect(sanitizeForLog({ [key]: 'value', other: 'kept' })).toEqual({ [key]: '[REDACTED]', other: 'kept' });
+        },
+    );
+
+    test('does not redact keys that merely contain an identifier word', () => {
+        expect(sanitizeForLog({ emailSent: true, loginCount: 2, phoneme: 'a' })).toEqual({
+            emailSent: true,
+            loginCount: 2,
+            phoneme: 'a',
+        });
+    });
+});

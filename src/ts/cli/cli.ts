@@ -25,6 +25,7 @@ import { initializeHeaders } from '../api/randomizer';
 import { COMMANDS } from './commandTable';
 import { usageError } from './commandKit';
 import { reportSettingsRecovery } from './commands/settingsRecovery';
+import { showUnofficialNotice } from './commands/unofficialNotice';
 
 export type { CommandHandler } from './commandKit';
 
@@ -53,6 +54,7 @@ const main = async () => {
             logger.withCategory('settings').warning('Intent profile seeding failed (non-fatal):', err);
         }
         reportSettingsRecovery();
+        showUnofficialNotice();
         logger.withCategory('api').debug('main: Command is:', command);
 
         const code = await dispatch(command, args.slice(1));

@@ -1,5 +1,5 @@
 import * as fs from 'node:fs';
-import { oneLine, sentenceCaseLogMessage, stripTerminalControl } from '../format/logSafe';
+import { sentenceCaseLogMessage, stripTerminalControl } from '../format/logSafe';
 import { getContext } from './context';
 import { writeConsole } from './consoleSink';
 import { logsDir, currentLogFiles } from './files';
@@ -53,22 +53,24 @@ const writeLog = (
         // Scrub credentials folded into the message string before it reaches
         // the ring buffer, disk, console, or the GUI fan-out below.
         message = redactMessage(message);
-        // Collapse CR/LF in the composed message centrally (defense-in-depth
-        // against log injection / CWE-117). Per-call-site oneLine()/challengeTag()
+        // Strip ANSI escapes and other control characters and collapse CR/LF in the composed message
+        // centrally (defense-in-depth against log injection / CWE-117 and terminal escape injection into
+        // the console, GUI and file sinks). Per-call-site oneLine()/challengeTag()
         // on untrusted API strings is still the first line of defence, but a
         // single missed call site (e.g. a raw `${challenge.title}` in a log
         // message) must not be able to forge a fake log line in the plain-text
         // log file. Messages are single-line by convention; structured detail
         // goes in `data`, which is serialised separately below.
-        if (typeof message === 'string') message = sentenceCaseLogMessage(withIcon(oneLine(message), icon));
+        if (typeof message === 'string')
+            message = sentenceCaseLogMessage(withIcon(stripTerminalControl(message), icon));
         let sanitized = data ? sanitizeForLog(data) : null;
         // A bare-string (or number) `data` value is written to the log file
         // verbatim (the non-object branch below), and rendered in the GUI, so it
-        // needs the same CR/LF collapse as the message to close the log-injection
+        // needs the same control-character strip as the message to close the log-injection
         // (CWE-117) path — e.g. an error string echoing a malformed API/update-feed
         // response must not forge a log line. Object data is already newline-safe:
         // JSON.stringify escapes embedded CR/LF into a literal \n.
-        if (sanitized != null && typeof sanitized !== 'object') sanitized = oneLine(sanitized);
+        if (sanitized != null && typeof sanitized !== 'object') sanitized = stripTerminalControl(sanitized);
         const seq = nextSeq++;
         const entry = { seq, level, context, category: cat, timestamp, message, data: sanitized };
 

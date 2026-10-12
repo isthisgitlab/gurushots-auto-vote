@@ -46,6 +46,7 @@ jest.mock('electron', () => ({ session: { fromPartition: mockFromPartition } }))
 import * as fs from 'node:fs';
 import * as os from 'node:os';
 import * as path from 'node:path';
+import { APP_PARTITION } from '../../src/ts/index/session';
 import type * as runtimeModule from '../../src/ts/runtime';
 import type * as localDataModule from '../../src/ts/settings/localData';
 import type * as storageModule from '../../src/ts/settings/storage';
@@ -383,8 +384,7 @@ describe('wipeLocalData', () => {
 
             await ctx.localData.wipeLocalData();
 
-            expect(mockFromPartition).toHaveBeenCalledWith(ctx.localData.APP_PARTITION);
-            expect(ctx.localData.APP_PARTITION).toBe('persist:gurushots');
+            expect(mockFromPartition).toHaveBeenCalledWith(APP_PARTITION);
             expect(mockSession.clearStorageData).toHaveBeenCalledTimes(1);
             expect(mockSession.clearCache).toHaveBeenCalledTimes(1);
         });

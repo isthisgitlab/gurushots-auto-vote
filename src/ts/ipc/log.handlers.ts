@@ -19,6 +19,12 @@ import type { IpcMain, IpcMainInvokeEvent, WebContents } from 'electron';
 import type { IpcHandlerMap } from './registerHandlers';
 import type { GuiLogEntry, GuiLogSink } from '../logger';
 
+// Longest message a renderer log call may write; a compromised window cannot push more into the log files.
+const MAX_LOG_MESSAGE_LENGTH = 8 * 1024;
+
+// A renderer-supplied message as one bounded line.
+const clip = (message: unknown): string => logger.sanitizeLogString(message, MAX_LOG_MESSAGE_LENGTH);
+
 const logStreamWindows: Set<WebContents> = new Set();
 
 // logger.ts calls this with a full entry object: { seq, level, context,
@@ -35,28 +41,28 @@ const buildHandlers = () =>
     ({
         'log-debug': async (event: unknown, message: string, data: unknown) => {
             logger.setContext('GUI');
-            logger.withCategory('ui').debug(message, data);
+            logger.withCategory('ui').debug(clip(message), data);
             logger.clearContext();
             return { success: true as const };
         },
 
         'log-error': async (event: unknown, message: string, data: unknown) => {
             logger.setContext('GUI');
-            logger.withCategory('ui').error(message, data);
+            logger.withCategory('ui').error(clip(message), data);
             logger.clearContext();
             return { success: true as const };
         },
 
         'log-warning': async (event: unknown, message: string, data: unknown) => {
             logger.setContext('GUI');
-            logger.withCategory('ui').warning(message, data);
+            logger.withCategory('ui').warning(clip(message), data);
             logger.clearContext();
             return { success: true as const };
         },
 
         'log-api': async (event: unknown, message: string, data: unknown) => {
             logger.setContext('GUI');
-            logger.withCategory('api').api(message, data);
+            logger.withCategory('api').api(clip(message), data);
             logger.clearContext();
             return { success: true as const };
         },

@@ -24,6 +24,7 @@ import type * as logsModule from '../../src/ts/cli/commands/logs';
 import type * as settingsCommandsModule from '../../src/ts/cli/commands/settings';
 import type * as scenariosModule from '../../src/ts/cli/commands/scenarios';
 import { invalid } from '../helpers/invalid';
+import { CURRENT_NOTICE_VERSION } from '../../src/ts/noticeVersion';
 
 type Mods = {
     logger: jest.MockedObjectDeep<typeof loggerModule> & { __calls: { level: string; msg: unknown }[] };
@@ -61,6 +62,8 @@ jest.mock('../../src/ts/logger', () => {
 jest.mock('../../src/ts/settings', () => ({
     loadSettings: jest.fn(() => ({ mock: false })),
     getSettingsRecovery: jest.fn(() => null),
+    getSetting: jest.fn(() => 1),
+    setSetting: jest.fn(() => true),
     seedIntentProfiles: jest.fn(),
 }));
 
@@ -239,6 +242,13 @@ describe('startup', () => {
     test('with the settings in use nothing is said', async () => {
         const m = await run(['status']);
         expect(m.msgs('stderr')).toEqual([]);
+    });
+
+    test('the unofficial-tool notice is said on stderr before the command runs, once', async () => {
+        const m = await run(['status'], (mods) => mods.settings.getSetting.mockReturnValue(0));
+        expect(m.msgs('stderr')).toEqual([expect.stringContaining('not affiliated with or endorsed by GuruShots')]);
+        expect(m.settings.setSetting).toHaveBeenCalledWith('noticeAcknowledgedVersion', CURRENT_NOTICE_VERSION);
+        expect(m.voting.showStatus).toHaveBeenCalled();
     });
 
     test('a failed intent-profile seed is a warning, not fatal', async () => {

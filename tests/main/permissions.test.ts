@@ -1,12 +1,13 @@
 /**
  * src/ts/index/permissions.ts — notifications from the app's own file: pages
- * are the only permission granted, on both the default and the persistent
- * session. The page is judged on webContents.getURL(), never on the origin a
+ * are the only permission granted, on both the default and the app-window
+ * (in-memory) session. The page is judged on webContents.getURL(), never on the origin a
  * check reports (always `file:///` for a file: page).
  */
 
 import type { WebContents } from 'electron';
 import type * as permissionsModule from '../../src/ts/index/permissions';
+import type * as sessionModule from '../../src/ts/index/session';
 import type * as loggerModule from '../../src/ts/logger';
 import type { CategoryLogger } from '../../src/ts/logger';
 import { invalid } from '../helpers/invalid';
@@ -29,13 +30,15 @@ function fakeSession() {
     return session;
 }
 
-const mockSessions = { default: fakeSession(), persistent: fakeSession() };
+const mockSessions = { default: fakeSession(), appWindow: fakeSession() };
 
 jest.mock('electron', () => ({
     session: {
         defaultSession: mockSessions.default,
         fromPartition: jest.fn((partition: string) =>
-            partition === 'persist:gurushots' ? mockSessions.persistent : null,
+            partition === jest.requireActual<typeof sessionModule>('../../src/ts/index/session').APP_PARTITION
+                ? mockSessions.appWindow
+                : null,
         ),
     },
 }));
@@ -55,9 +58,17 @@ beforeEach(() => {
     installPermissionHandlers();
 });
 
+it('locks down the partition the app windows use, which is an in-memory one', () => {
+    const { APP_PARTITION } = require('../../src/ts/index/session') as typeof sessionModule;
+    const { session } = require('electron') as { session: { fromPartition: jest.Mock<unknown, [string]> } };
+
+    expect(session.fromPartition).toHaveBeenCalledWith(APP_PARTITION);
+    expect(APP_PARTITION.startsWith('persist:')).toBe(false);
+});
+
 describe.each([
     ['the default session', () => mockSessions.default],
-    ['the persist:gurushots session', () => mockSessions.persistent],
+    ['the app-window session', () => mockSessions.appWindow],
 ])('%s', (_name, get) => {
     const session = get;
 

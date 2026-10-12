@@ -13,6 +13,7 @@ import * as runtime from '../runtime';
 import { errorMessage } from '../errorMessage';
 import { isPlainObject } from '../plainObject';
 import * as cancellation from '../voting/cancellation';
+import { APP_PARTITION } from '../index/session';
 import { isVotingPassRunning } from '../voting/passActivity';
 import {
     CORRUPT_SUFFIX,
@@ -51,9 +52,6 @@ const VISION_APP_NAME = 'gurushots-auto-vote';
 // Files that are not stores but sit beside them: the CLI session marker, and the lock files of the join and scenario
 // state (with the ".stale-<token>" copy a lock takeover can leave).
 const LOCK_FILE_RE = /^(?:(?:statelock|joinlock)-.+\.lock(?:\.stale-.+)?|cli-session\.lock)$/;
-
-// The electron session partition every window of the app uses (index/windows.ts).
-const APP_PARTITION = 'persist:gurushots';
 
 /**
  * The electron session the app's windows use, for the wipe to clear its cookies, local storage and cache.
@@ -176,5 +174,5 @@ const wipeLocalData = async (overrides: Partial<WipeDeps> = {}): Promise<WipeRes
     return { success: true, removed };
 };
 
-export { LOCAL_DATA_STORES, LOCAL_DATA_DIRECTORIES, APP_PARTITION, appSession, wipeLocalData };
+export { LOCAL_DATA_STORES, LOCAL_DATA_DIRECTORIES, appSession, wipeLocalData };
 export type { LocalDataStore, WipeResult, WipeDeps };

@@ -13,9 +13,14 @@
  * Localhost only: whatever reaches the port drives the whole window.api
  * surface — the GuruShots session, currency spends — so the server listens on
  * the loopback interface, answers only a localhost Host header (a DNS-rebinding
- * page carries its own hostname) and refuses cross-origin POSTs.
+ * page carries its own hostname) and refuses cross-origin POSTs. Every /api/ request
+ * must also carry the per-run token the server prints in its launch URL (a fragment,
+ * which a browser never sends): a header on POSTs, a `t` query parameter on the event
+ * stream (EventSource cannot set headers). A page that is not the launch URL's own
+ * cannot learn it.
  */
 
+import * as crypto from 'node:crypto';
 import * as http from 'node:http';
 import * as fs from 'node:fs';
 import * as path from 'node:path';
@@ -44,6 +49,8 @@ import type { ShellUpdateHandlers } from '../ipc/releaseUpdates';
 import type { GuiLogSink } from '../logger';
 
 const LOOPBACK_HOST = '127.0.0.1';
+const TOKEN_HEADER = 'x-web-shell-token';
+const TOKEN_QUERY_PARAM = 't';
 const LOCAL_HOSTNAMES = new Set(['localhost', '127.0.0.1', '[::1]']);
 // Generous for a scenario import or a full settings save, small enough that a
 // runaway client cannot balloon the process.
@@ -66,8 +73,9 @@ type Emit = (channel: string, payload?: unknown) => void;
 /**
  * Every invoke channel the server answers, keyed by channel name.
  * @param emit - broadcasts an event to every connected browser
+ * @param afterWipe - called once a "Delete all local data" has succeeded
  */
-const buildWebHandlers = (emit: Emit): Record<string, IpcHandler> => {
+const buildWebHandlers = (emit: Emit, { afterWipe }: { afterWipe?: () => void } = {}): Record<string, IpcHandler> => {
     const releaseUpdates = buildReleaseUpdateHandlers({ emit, assetSuffix: async () => null });
     // No updater ships with the web shell: can-auto-update is false, so the
     // renderer's download button opens the releases page instead.
@@ -86,6 +94,7 @@ const buildWebHandlers = (emit: Emit): Record<string, IpcHandler> => {
     return {
         ...settingsHandlers.buildHandlers({
             broadcastSettingsChange: (newSettings: object) => emit('settings-changed', newSettings),
+            afterWipe,
         }),
         ...votingHandlers.buildHandlers(),
         ...logHandlers.buildHandlers(),
@@ -108,6 +117,23 @@ const sendJson = (res: ServerResponse, status: number, body: object) => {
 // An absent message is fine: the bridge then reports the status code.
 const fail = (res: ServerResponse, status: number, error: string | undefined) =>
     sendJson(res, status, { success: false, error });
+
+// 256 bits from the OS: not guessable, new on every run.
+const newShellToken = () => crypto.randomBytes(32).toString('hex');
+
+// Constant-time comparison; a token of the wrong length is a refusal without comparing.
+const isShellToken = (provided: unknown, token: string) => {
+    if (typeof provided !== 'string') return false;
+    const given = Buffer.from(provided);
+    const expected = Buffer.from(token);
+    return given.length === expected.length && crypto.timingSafeEqual(given, expected);
+};
+
+// Where the page puts the token: the event stream's URL (EventSource sets no headers), a header otherwise.
+const requestToken = (req: IncomingMessage, pathname: string, searchParams: URLSearchParams) =>
+    req.method === 'GET' && pathname === '/api/events'
+        ? searchParams.get(TOKEN_QUERY_PARAM)
+        : req.headers[TOKEN_HEADER];
 
 const isLocalHost = (host: string | undefined) => {
     if (!host) return false;
@@ -245,27 +271,50 @@ const handleApi = async (
 interface WebServerOptions {
     /** The built renderer (dist/): web.html, web-bundle.js, styles.css. */
     distDir: string;
+    /** The token every /api/ request must carry; a fresh random one when absent. */
+    token?: string;
+    /** Called after a local-data wipe, once its reply is sent and the server has stopped. */
+    onLocalDataWiped?: () => void;
 }
 
 /**
  * Build the server without listening. The returned `emit` pushes an event to
- * every connected browser.
+ * every connected browser; `token` is what the pages must send. After a
+ * successful local-data wipe the server stops: every store refuses writes, so
+ * the web shell has to be started again.
  */
-const createWebServer = ({ distDir }: WebServerOptions) => {
+const createWebServer = ({ distDir, token = newShellToken(), onLocalDataWiped }: WebServerOptions) => {
     const root = path.resolve(distDir);
     const clients = new Set<ServerResponse>();
+    let wiped = false;
     const emit: Emit = (channel, payload) => {
         const frame = `event: ${channel}\ndata: ${JSON.stringify(payload ?? null)}\n\n`;
         for (const client of clients) client.write(frame);
     };
-    const handlers = buildWebHandlers(emit);
+    const handlers = buildWebHandlers(emit, {
+        afterWipe: () => {
+            wiped = true;
+        },
+    });
+
+    // Runs when a reply has been sent: after a wipe, ends the event streams and stops listening.
+    const stopIfWiped = () => {
+        if (!wiped) return;
+        for (const client of clients) client.end();
+        server.close();
+        onLocalDataWiped?.();
+    };
 
     const route = async (req: IncomingMessage, res: ServerResponse) => {
-        const { pathname } = new URL(String(req.url), 'http://localhost');
+        const { pathname, searchParams } = new URL(String(req.url), 'http://localhost');
         if (!isLocalHost(req.headers.host)) fail(res, 403, 'Refused: non-local Host header');
-        else if (req.method === 'GET' && pathname === '/api/events') openEventStream(res, clients);
-        else if (pathname.startsWith('/api/')) await handleApi(handlers, req, res, pathname);
-        else if (req.method !== 'GET' && req.method !== 'HEAD') fail(res, 405, 'Method not allowed');
+        else if (pathname.startsWith('/api/') && !isShellToken(requestToken(req, pathname, searchParams), token)) {
+            fail(res, 403, 'Refused: missing or invalid web shell token — open the URL the server printed');
+        } else if (req.method === 'GET' && pathname === '/api/events') openEventStream(res, clients);
+        else if (pathname.startsWith('/api/')) {
+            res.once('finish', stopIfWiped);
+            await handleApi(handlers, req, res, pathname);
+        } else if (req.method !== 'GET' && req.method !== 'HEAD') fail(res, 405, 'Method not allowed');
         else serveStatic(root, pathname, res);
     };
 
@@ -275,7 +324,7 @@ const createWebServer = ({ distDir }: WebServerOptions) => {
             fail(res, 500, 'Internal error');
         });
     });
-    return { server, emit };
+    return { server, emit, token };
 };
 
 interface StartOptions extends WebServerOptions {
@@ -285,7 +334,9 @@ interface StartOptions extends WebServerOptions {
 /**
  * Boot the shared state the Electron main process boots, then listen on the
  * loopback interface.
- * @returns the listening server and the URL it answers on
+ * @returns the listening server, the token its pages need, and the URL that
+ *   opens the UI: it carries the token in its fragment, so print it to stdout
+ *   only and keep it out of the logs
  */
 const startWebServer = async ({ port, distDir }: StartOptions) => {
     initializeHeaders();
@@ -294,7 +345,11 @@ const startWebServer = async ({ port, distDir }: StartOptions) => {
     } catch (err) {
         logger.withCategory('settings').warning('Intent profile seeding failed (non-fatal):', err);
     }
-    const { server, emit } = createWebServer({ distDir });
+    const { server, emit, token } = createWebServer({
+        distDir,
+        onLocalDataWiped: () =>
+            logger.printLine('Local data was deleted. The web shell has stopped: start it again to continue.'),
+    });
     // logger.ts fans live entries out through this global (see log.handlers).
     (globalThis as typeof globalThis & { sendLogToGUI?: GuiLogSink }).sendLogToGUI = (entry) =>
         emit('log-message', entry);
@@ -304,9 +359,9 @@ const startWebServer = async ({ port, distDir }: StartOptions) => {
         server.listen(port, LOOPBACK_HOST, () => resolve());
     });
     const address = server.address() as { port: number };
-    const url = `http://localhost:${address.port}/`;
-    logger.withCategory('ui').info(`Web UI listening on ${url}`, { userData: settings.getUserDataPath() });
-    return { server, url };
+    const origin = `http://localhost:${address.port}/`;
+    logger.withCategory('ui').info(`Web UI listening on ${origin}`, { userData: settings.getUserDataPath() });
+    return { server, token, url: `${origin}#t=${token}` };
 };
 
 export { createWebServer, startWebServer, buildWebHandlers };

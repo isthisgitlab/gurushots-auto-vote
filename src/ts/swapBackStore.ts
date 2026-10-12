@@ -25,6 +25,7 @@ import type { RawJsonStore, SwapBackRecord } from './types/stores';
 import * as logger from './logger';
 import { createJsonStore } from './settings/storage';
 import { isPlainObject } from './plainObject';
+import { errorMessage } from './errorMessage';
 
 const swapBackStore = createJsonStore({ fileName: 'swapBacks.json', prefKey: 'gs_swap_backs' });
 
@@ -53,7 +54,7 @@ const createLedger = (store: RawJsonStore) => {
         } catch (error) {
             logger
                 .withCategory('currency')
-                .warning(`swap-back ledger unreadable: ${(error as Error | undefined)?.message || error}`, null);
+                .warning(`swap-back ledger unreadable: ${errorMessage(error) ?? String(error)}`, null);
             return {};
         }
     };

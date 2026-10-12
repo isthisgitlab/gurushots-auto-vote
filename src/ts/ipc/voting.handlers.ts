@@ -20,6 +20,7 @@ import * as apiFactory from '../apiFactory';
 import * as cancellation from '../voting/cancellation';
 import { submitVotesForChallenge, voteAllChallengesManual } from '../services/manualVote';
 import { findActiveChallenge } from '../services/findActiveChallenge';
+import { isIdArg } from './isIdArg';
 
 import type { IpcMain } from 'electron';
 import type { IpcHandlerMap, IpcReplyFn } from './registerHandlers';
@@ -37,22 +38,24 @@ const runStrategyOnceViaMiddleware = (challengeId: string | number | null) =>
 // the `manual` flag flips those wording bits.
 /**
  * @param challengeId - Renderer-supplied; validated below.
- * @param challengeTitle - Renderer-supplied; validated below.
+ * @param rawChallengeTitle - Renderer-supplied; validated and bounded below.
  */
 const voteOnSingleChallenge = (async (
     challengeId: string | number,
-    challengeTitle: string,
+    rawChallengeTitle: string,
     { manual }: { manual: boolean },
 ) => {
     // IPC boundary — validate inputs from the renderer. Without these
     // checks, parseInt(undefined) below returns NaN and the find() call
     // produces a misleading "Challenge not found" error.
-    if (challengeId == null || challengeId === '' || Number.isNaN(Number(challengeId))) {
+    if (!isIdArg(challengeId) || Number.isNaN(Number(challengeId))) {
         return { success: false as const, error: 'Invalid challenge ID' };
     }
-    if (typeof challengeTitle !== 'string' || challengeTitle.length === 0) {
+    if (typeof rawChallengeTitle !== 'string' || rawChallengeTitle.length === 0) {
         return { success: false as const, error: 'Challenge title is required' };
     }
+    // Only a bounded, single-line title is logged or echoed back.
+    const challengeTitle = logger.sanitizeLogString(rawChallengeTitle);
 
     const requestPrefix = manual ? '🔄 Manual vote on challenge request' : '🔄 Vote on challenge request';
     logger
@@ -211,10 +214,12 @@ const buildHandlers = () =>
 
         'run-voting-cycle-for-challenge': async (_event: unknown, challengeId: string | number) => {
             try {
-                if (challengeId == null || challengeId === '') {
+                if (!isIdArg(challengeId)) {
                     return { success: false as const, error: 'challengeId is required' };
                 }
-                logger.withCategory('voting').info(`🔄 Starting single-challenge cycle: ${challengeId}`, null);
+                logger
+                    .withCategory('voting')
+                    .info(`🔄 Starting single-challenge cycle: ${logger.sanitizeLogString(challengeId)}`, null);
                 return await runStrategyOnceViaMiddleware(challengeId);
             } catch (error) {
                 logger.withCategory('voting').error('Error handling run-voting-cycle-for-challenge request:', error);

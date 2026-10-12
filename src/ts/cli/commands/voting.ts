@@ -8,6 +8,7 @@
 
 import * as logger from '../../logger';
 import { ensureAuthenticated } from '../guards';
+import { formatSettingForLog } from './settings/shared';
 import * as settings from '../../settings';
 import { getMiddleware } from '../../apiFactory';
 import { createScheduler } from '../../scheduling/runScheduler';
@@ -264,7 +265,7 @@ const showStatus = async () => {
             ([challengeId, challengeSettings]: [string, unknown]) => {
                 logger.withCategory('settings').info(`  Challenge ${challengeId}:`);
                 Object.entries(challengeSettings as object).forEach(([key, value]: [string, unknown]) => {
-                    logger.withCategory('settings').info(`    ${key}: ${value}`);
+                    logger.withCategory('settings').info(`    ${key}: ${formatSettingForLog(key, value)}`);
                 });
             },
         );

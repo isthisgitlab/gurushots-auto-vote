@@ -26,7 +26,9 @@ import type * as suspendBoostModule from '../../src/ts/windows/suspendBoost';
 import type * as applicationMenuModule from '../../src/ts/ui/applicationMenu';
 import type * as navigationGuardModule from '../../src/ts/index/navigationGuard';
 import type * as permissionsModule from '../../src/ts/index/permissions';
+import type * as sessionModule from '../../src/ts/index/session';
 import { invalid } from '../helpers/invalid';
+import { APP_PARTITION } from '../../src/ts/index/session';
 
 /** An event / IPC / process listener the fakes record by name. */
 type Listener = (...args: unknown[]) => void;
@@ -204,7 +206,7 @@ jest.mock('../../src/ts/settings', () => ({
     __esModule: true,
     getWindowBounds: jest.fn((kind) => ({ width: 800, height: 600, x: kind === 'main' ? 10 : 20, y: 30 })),
     saveWindowBounds: jest.fn(),
-    loadSettings: jest.fn(() => ({})),
+    loadSettings: jest.fn(() => ({ token: 't' })),
     getSetting: jest.fn(() => false),
     setSetting: jest.fn(),
     getUserDataPath: jest.fn(() => '/tmp/userData'),
@@ -246,6 +248,10 @@ jest.mock('../../src/ts/windows/suspendBoost', () => ({
 }));
 jest.mock('../../src/ts/ui/applicationMenu', () => ({ createApplicationMenu: jest.fn() }));
 jest.mock('../../src/ts/index/navigationGuard', () => ({ register: jest.fn() }));
+jest.mock('../../src/ts/index/session', () => ({
+    ...jest.requireActual<typeof sessionModule>('../../src/ts/index/session'),
+    removeStalePartitionData: jest.fn(),
+}));
 jest.mock('../../src/ts/index/permissions', () => ({ installPermissionHandlers: jest.fn() }));
 jest.mock('../../src/ts/translations/index', () => ({
     translationManager: { t: (k: string) => k, getCurrentLanguage: () => 'lv' },
@@ -379,6 +385,19 @@ describe('module bootstrap', () => {
         // The replaced updater (not the original) is handed the new window.
         expect(replacement.setMainWindow).toHaveBeenCalledWith(mainWin());
         expect(autoUpdaterInstance().setMainWindow).not.toHaveBeenCalled();
+    });
+
+    it('clears stale on-disk session data only in the instance that holds the lock', async () => {
+        load();
+        const { removeStalePartitionData } = jest.mocked(require('../../src/ts/index/session') as typeof sessionModule);
+        expect(removeStalePartitionData).toHaveBeenCalledWith(m.settings.getUserDataPath);
+        await flush();
+
+        load({ lock: false });
+        expect(
+            jest.mocked(require('../../src/ts/index/session') as typeof sessionModule).removeStalePartitionData,
+        ).not.toHaveBeenCalled();
+        await flush();
     });
 
     it('a losing second instance quits and never boots or registers second-instance', async () => {
@@ -633,8 +652,9 @@ describe('login window', () => {
             contextIsolation: true,
             sandbox: true,
             webSecurity: true,
-            partition: 'persist:gurushots',
+            partition: APP_PARTITION,
         });
+        expect(APP_PARTITION.startsWith('persist:')).toBe(false);
         expect(win.opts.webPreferences.preload).toMatch(/preload-bundle\.js$/);
     });
 
@@ -754,6 +774,7 @@ describe('main window', () => {
         it('logs when the app page fails to load', async () => {
             const err = new Error('bad html');
             m.BrowserWindow.nextLoadResult = Promise.reject(err);
+            mainWin()!.handlers.closed();
             m.ipcMain.handlers['login-success']({});
             await flush();
             expect(m.cat.error).toHaveBeenCalledWith('Failed to load main window content:', err);
@@ -855,8 +876,35 @@ describe('login-success IPC', () => {
         expect(mainWin()).toBeDefined();
 
         login.handlers.closed();
+        mainWin()!.handlers.closed();
         m.ipcMain.handlers['login-success']({});
         expect(m.BrowserWindow.instances.filter((w) => w.file.endsWith('app.html'))).toHaveLength(2);
+    });
+
+    it('does nothing without a login token', () => {
+        m.settings.loadSettings.mockReturnValue(invalid({ token: '' }));
+        const login = loginWin()!;
+        m.ipcMain.handlers['login-success']({});
+        expect(login.close).not.toHaveBeenCalled();
+        expect(mainWin()).toBeUndefined();
+        expect(m.cat.warning).toHaveBeenCalledWith(
+            "Ignored IPC 'login-success': no login token, or a main window is open",
+            null,
+        );
+    });
+
+    it('does nothing while a main window is open', () => {
+        m.ipcMain.handlers['login-success']({});
+        const main = mainWin()!;
+        const windowsBefore = m.BrowserWindow.instances.length;
+        const login = loginWin()!;
+        login.close.mockClear();
+
+        m.ipcMain.handlers['login-success']({});
+
+        expect(m.BrowserWindow.instances).toHaveLength(windowsBefore);
+        expect(login.close).not.toHaveBeenCalled();
+        expect(mainWin()).toBe(main);
     });
 });
 

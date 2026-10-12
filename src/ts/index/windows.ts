@@ -8,6 +8,7 @@ import { holdQuitForOpenBoosts, bypassQuitGuard, resetQuitGuard } from '../windo
 import { autovoteSessionLive } from '../windows/suspendBoost';
 import { translationManager } from '../translations/index';
 import { appState } from './state';
+import { APP_PARTITION } from './session';
 
 import type { WebPreferences } from 'electron';
 
@@ -51,8 +52,8 @@ function createAppWindow(
             // require() the relative channel manifest, so it ships pre-bundled.
             preload: appPath('dist', 'preload-bundle.js'),
             webSecurity: true,
-            // Use a custom session partition to isolate storage
-            partition: 'persist:gurushots',
+            // The app's own in-memory session partition (index/session.ts), isolated from the default session
+            partition: APP_PARTITION,
         },
     });
 

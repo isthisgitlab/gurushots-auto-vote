@@ -30,11 +30,24 @@ class FakeEventSource {
 }
 
 const g = globalThis as typeof globalThis & { api?: object };
-const saved = { fetch: g.fetch, EventSource: g.EventSource, location: g.location, open: g.open };
+const saved = {
+    fetch: g.fetch,
+    EventSource: g.EventSource,
+    location: g.location,
+    history: g.history,
+    open: g.open,
+};
 
 const mockFetch = jest.fn<Promise<FetchReply>, [string, RequestInit]>();
 const mockOpen = jest.fn();
 const mockReload = jest.fn();
+const mockReplaceState = jest.fn();
+const TOKEN = 'a1b2c3';
+
+/** The page's location the bridge reads: the launch URL's fragment carries the token. */
+const stubLocation = (hash: string) => {
+    g.location = invalid({ reload: mockReload, hash, pathname: '/', search: '?lang=lv' });
+};
 
 const reply = (status: number, body: unknown): FetchReply => ({
     ok: status >= 200 && status < 300,
@@ -50,9 +63,11 @@ beforeEach(() => {
     mockFetch.mockReset().mockResolvedValue(reply(200, { result: { success: true } }));
     mockOpen.mockReset();
     mockReload.mockReset();
+    mockReplaceState.mockReset();
     g.fetch = invalid(mockFetch);
     g.EventSource = invalid(FakeEventSource);
-    g.location = invalid({ reload: mockReload });
+    stubLocation(`#t=${TOKEN}`);
+    g.history = invalid({ replaceState: mockReplaceState });
     g.open = mockOpen;
     jest.resetModules();
     bridge = require('../../src/ts/bridge/web') as typeof bridgeModule;
@@ -74,7 +89,7 @@ describe('web bridge — invoke', () => {
         await expect(api.getSetting('theme')).resolves.toBe('dark');
         expect(mockFetch).toHaveBeenCalledWith('/api/invoke/get-setting', {
             method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
+            headers: { 'Content-Type': 'application/json', 'x-web-shell-token': TOKEN },
             body: JSON.stringify({ args: ['theme'], undefinedAt: [] }),
         });
     });
@@ -108,6 +123,45 @@ describe('web bridge — invoke', () => {
     });
 });
 
+describe('web bridge — access token', () => {
+    const reinstall = (hash: string) => {
+        stubLocation(hash);
+        mockReplaceState.mockReset();
+        jest.resetModules();
+        bridge = require('../../src/ts/bridge/web') as typeof bridgeModule;
+        return bridge.installWebBridge();
+    };
+    const sentHeaders = () => mockFetch.mock.calls[0][1].headers as Record<string, string>;
+
+    test('the launch URL fragment is read once and taken out of the address bar', () => {
+        expect(mockReplaceState).toHaveBeenCalledTimes(1);
+        expect(mockReplaceState).toHaveBeenCalledWith(null, '', '/?lang=lv');
+    });
+
+    test('every request sends it as a header, the event stream as a query parameter', async () => {
+        await api.guiVote();
+        await api.logout();
+        expect(sentHeaders()['x-web-shell-token']).toBe(TOKEN);
+        expect((mockFetch.mock.calls[1][1].headers as Record<string, string>)['x-web-shell-token']).toBe(TOKEN);
+
+        const other = reinstall('#t=a%20b&x=1');
+        other.onSettingsChanged(jest.fn());
+        expect(FakeEventSource.instances[0].url).toBe('/api/events?t=a%20b');
+    });
+
+    test('a page opened without the fragment sends an empty token', async () => {
+        const bare = reinstall('');
+        await bare.guiVote();
+        expect(sentHeaders()['x-web-shell-token']).toBe('');
+    });
+
+    test('a reload carries the token in the fragment, which the next load takes out again', async () => {
+        await api.reloadWindow();
+        expect(mockReplaceState).toHaveBeenLastCalledWith(null, '', `/?lang=lv#t=${TOKEN}`);
+        expect(mockReplaceState.mock.invocationCallOrder.at(-1)!).toBeLessThan(mockReload.mock.invocationCallOrder[0]);
+    });
+});
+
 describe('web bridge — events', () => {
     test('one EventSource feeds every subscriber of a channel until it unsubscribes', () => {
         const a = jest.fn();
@@ -118,7 +172,7 @@ describe('web bridge — events', () => {
         api.onLogMessage(logs);
         expect(FakeEventSource.instances).toHaveLength(1);
         const [source] = FakeEventSource.instances;
-        expect(source.url).toBe('/api/events');
+        expect(source.url).toBe(`/api/events?t=${TOKEN}`);
 
         source.fire('settings-changed', { theme: 'dark' });
         expect(a).toHaveBeenCalledWith({ theme: 'dark' });

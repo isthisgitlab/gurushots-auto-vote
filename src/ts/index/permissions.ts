@@ -1,5 +1,6 @@
 import { session } from 'electron';
 import * as logger from '../logger';
+import { APP_PARTITION } from './session';
 
 import type { Session, WebContents } from 'electron';
 
@@ -7,7 +8,7 @@ import type { Session, WebContents } from 'electron';
  * Permission policy for every session the app's windows use.
  *
  * Electron grants a permission request unless a handler says otherwise, so a
- * page that reached the shared `persist:gurushots` session would get camera,
+ * page that reached the shared app-window session (`APP_PARTITION`) would get camera,
  * geolocation and the rest. The only permission the app uses is notifications
  * (react/notifications/deadlineNotifier.ts), and only from its own `file:`
  * pages.
@@ -40,12 +41,12 @@ const lockDown = (target: Session) => {
 };
 
 /**
- * Installs the policy on the default session and on the app windows' persistent
+ * Installs the policy on the default session and on the app windows' in-memory
  * partition. Call once Electron is ready, before the first window is created.
  */
 const installPermissionHandlers = () => {
     lockDown(session.defaultSession);
-    lockDown(session.fromPartition('persist:gurushots'));
+    lockDown(session.fromPartition(APP_PARTITION));
 };
 
 export { installPermissionHandlers };

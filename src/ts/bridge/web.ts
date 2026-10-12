@@ -5,6 +5,9 @@
  *
  *   - invoke methods POST to /api/invoke/<channel>; a handler that throws
  *     rejects the call, as ipcRenderer.invoke does;
+ *   - every request carries the per-run token from the launch URL's fragment,
+ *     kept in memory only: a header on POSTs, a query parameter on the event
+ *     stream (EventSource sets no headers);
  *   - event methods subscribe to one shared EventSource on /api/events;
  *   - login / logout are local mount swaps (pages/Web.tsx listens through
  *     onShellEvent); logout clears the token on the server first.
@@ -29,13 +32,23 @@ type Listener = (payload: unknown) => void;
 // web/server.ts.
 const BROWSER_CHANNELS: ReadonlySet<string> = new Set(['open-external-url', 'reload-window', 'refresh-menu']);
 
+const TOKEN_HEADER = 'x-web-shell-token';
+
+// The per-run token the server printed in the launch URL (`#t=<token>`). Read once, then taken out of
+// the address bar so it is not left in the page's URL, history entry or a bookmark.
+let shellToken = '';
+const takeShellToken = () => {
+    shellToken = new URLSearchParams(globalThis.location.hash.slice(1)).get('t') ?? '';
+    globalThis.history.replaceState(null, '', globalThis.location.pathname + globalThis.location.search);
+};
+
 const post = async (url: string, args: unknown[]) => {
     // JSON has no undefined: send each one as null plus its position so the
     // server restores it and a handler's default parameter still applies.
     const undefinedAt = args.flatMap((arg, index) => (arg === undefined ? [index] : []));
     const response = await fetch(url, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 'Content-Type': 'application/json', [TOKEN_HEADER]: shellToken },
         body: JSON.stringify({ args, undefinedAt }),
     });
     const body = (await response.json()) as { result?: unknown; error?: string };
@@ -61,7 +74,7 @@ const emitShellEvent = (channel: string) => {
 let events: EventSource | null = null;
 const serverListeners = new Map<string, Set<Listener>>();
 const subscribeServer = (channel: string, fn: Listener) => {
-    events ??= new EventSource('/api/events');
+    events ??= new EventSource(`/api/events?t=${encodeURIComponent(shellToken)}`);
     let set = serverListeners.get(channel);
     if (!set) {
         const subscribers = new Set<Listener>();
@@ -77,6 +90,7 @@ const subscribeServer = (channel: string, fn: Listener) => {
 };
 
 const installWebBridge = (): WindowApi => {
+    takeShellToken();
     const api: Record<string, (...args: never[]) => unknown> = {};
 
     for (const channel of invokeChannels.filter((name) => !BROWSER_CHANNELS.has(name))) {
@@ -108,6 +122,12 @@ const installWebBridge = (): WindowApi => {
         return Promise.resolve({ success: true });
     };
     api.reloadWindow = () => {
+        // The token lives in memory only, so it rides the reload in the fragment (taken out again at startup).
+        globalThis.history.replaceState(
+            null,
+            '',
+            `${globalThis.location.pathname}${globalThis.location.search}#t=${encodeURIComponent(shellToken)}`,
+        );
         globalThis.location.reload();
         return Promise.resolve({ success: true });
     };

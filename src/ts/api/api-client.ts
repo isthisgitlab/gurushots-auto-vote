@@ -11,7 +11,7 @@ import { generateRandomHeaders } from './randomizer';
 import { sleep } from '../timing';
 import * as settings from '../settings';
 import * as runtime from '../runtime';
-import { FORM_CONTENT_TYPE } from './constants';
+import { ENDPOINTS, FORM_CONTENT_TYPE } from './constants';
 import { isPlainObject } from '../plainObject';
 
 import type { AxiosAdapter, AxiosRequestConfig, AxiosResponse } from 'axios';
@@ -109,6 +109,31 @@ const ensureHeadlessResolver = () => {
     };
 };
 
+type HeadlessResult = { error?: string; status: number; body: string; headers: Record<string, string> };
+
+/**
+ * The native bridge's result JSON as a HeadlessResult. It is parsed as `unknown` and checked: a result with no
+ * numeric status (and no `error`), or a body that is not a string, is rejected as malformed.
+ */
+const parseHeadlessResult = (resultJson: string): HeadlessResult => {
+    const parsed: unknown = JSON.parse(resultJson);
+    if (!isPlainObject(parsed)) throw new Error('Malformed native HTTP result');
+    if (parsed.error) {
+        if (typeof parsed.error !== 'string') throw new Error('Malformed native HTTP result');
+        return { error: parsed.error, status: 0, body: '', headers: {} };
+    }
+    if (typeof parsed.status !== 'number' || !Number.isFinite(parsed.status) || typeof parsed.body !== 'string') {
+        throw new Error('Malformed native HTTP result');
+    }
+    const headers: Record<string, string> = {};
+    if (isPlainObject(parsed.headers)) {
+        for (const [name, value] of Object.entries(parsed.headers)) {
+            if (typeof value === 'string') headers[name] = value;
+        }
+    }
+    return { status: parsed.status, body: parsed.body, headers };
+};
+
 let headlessAdapter: AxiosAdapter | null = null;
 const getHeadlessHttpAdapter = (): AxiosAdapter => {
     if (headlessAdapter) return headlessAdapter;
@@ -119,12 +144,7 @@ const getHeadlessHttpAdapter = (): AxiosAdapter => {
             headlessPending.set(id, (resultJson) => {
                 try {
                     // The AndroidHeadlessHttp result contract (see the adapter note above).
-                    const parsed = JSON.parse(resultJson) as {
-                        error?: string;
-                        status: number;
-                        body: string;
-                        headers?: Record<string, string>;
-                    };
+                    const parsed = parseHeadlessResult(resultJson);
                     // A transport/network failure on the native side — reject so
                     // the retry layer treats it as a (retryable) no-response error.
                     if (parsed.error) {
@@ -143,7 +163,7 @@ const getHeadlessHttpAdapter = (): AxiosAdapter => {
                         data,
                         status: parsed.status,
                         statusText: '',
-                        headers: parsed.headers || {},
+                        headers: parsed.headers,
                         config,
                     };
                     // finalizeAdapterResponse throws on non-2xx (with the
@@ -167,6 +187,10 @@ const getHeadlessHttpAdapter = (): AxiosAdapter => {
         });
     return headlessAdapter;
 };
+
+// Endpoints whose response bodies carry account data (the login token and the member profile): the api log
+// records the status and timing of these calls, never the body.
+const BODY_UNLOGGED_URLS = new Set<string>([ENDPOINTS.signup, ENDPOINTS.currentMemberProfile]);
 
 // Upper bound on how long a single request will block while retrying.
 // A server-sent cooldown longer than this (e.g. a multi-minute 429
@@ -267,25 +291,26 @@ const sendPost = async <T extends object>(
 
             const duration = Date.now() - startTime;
 
-            // Log successful response with full data
+            // Log successful response with full data (but for the account endpoints)
             logger.withCategory('api').api('API Response', {
                 method: 'POST',
                 url: url,
                 status: response.status,
                 duration: duration,
-                responseData: response.data as unknown,
+                ...(BODY_UNLOGGED_URLS.has(url) ? {} : { responseData: response.data as unknown }),
             });
 
             const body = responseObject<T>(url, response.data);
             return body ? { kind: 'body', body } : { kind: 'unclear' };
         } catch (caught) {
-            const failure = describeFailure(caught);
+            const { responseData, ...failure } = describeFailure(caught);
 
-            // Log failed response with full error details
+            // Log failed response with full error details (but for the account endpoints)
             logger.withCategory('api').api('API Error Response', {
                 method: 'POST',
                 url: url,
                 ...failure,
+                ...(BODY_UNLOGGED_URLS.has(url) ? {} : { responseData }),
                 duration: Date.now() - startTime,
             });
 

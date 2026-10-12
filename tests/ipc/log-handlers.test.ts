@@ -31,6 +31,9 @@ jest.mock('../../src/ts/logger', () => {
     return {
         categories,
         withCategory,
+        sanitizeLogString:
+            jest.requireActual<typeof import('../../src/ts/logger/sanitize')>('../../src/ts/logger/sanitize')
+                .sanitizeLogString,
         setContext: jest.fn(),
         clearContext: jest.fn(),
         getLogFile: jest.fn(() => '/logs/app.log'),
@@ -103,6 +106,20 @@ describe('log.handlers — renderer log writes and file lookups', () => {
         expect(logger.setContext.mock.invocationCallOrder[0]).toBeLessThan(
             logger.clearContext.mock.invocationCallOrder[0],
         );
+    });
+
+    test('a renderer message is cut to 8 KB and written as one line', async () => {
+        await handlers['log-error'](invalid({}), `first\nsecond\tthird${'x'.repeat(9000)}`, null);
+
+        const [written] = jest.mocked(logger.categories.ui.error).mock.calls[0];
+        expect(written).toHaveLength(8 * 1024);
+        expect(written.startsWith('first second third')).toBe(true);
+    });
+
+    test('a non-string renderer message is written as text', async () => {
+        await handlers['log-warning'](invalid({}), invalid(undefined), null);
+
+        expect(logger.categories.ui.warning).toHaveBeenCalledWith('', null);
     });
 
     test.each([

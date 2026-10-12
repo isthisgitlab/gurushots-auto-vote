@@ -1,10 +1,10 @@
-// Keys whose values must never reach disk in plaintext. Match is case-
-// insensitive and covers the OAuth-style underscored names the GuruShots
-// auth response actually uses (access_token, auth_token, refresh_token)
-// alongside the camelCase + standard HTTP credential header names.
+// Keys whose values must never reach disk in plaintext: credentials and account identifiers (email,
+// login, username, phone). Match is case-insensitive and covers the OAuth-style underscored names the
+// GuruShots auth response actually uses (access_token, auth_token, refresh_token) alongside the camelCase
+// + standard HTTP credential header names.
 // Bounded recursion depth + a seen-set prevent pathological inputs.
 const SENSITIVE_KEY_RE =
-    /^(token|auth[_-]?token|access[_-]?token|refresh[_-]?token|bearer|password|api[_-]?key|secret|cookie|authorization|x[_-]auth[_-]token|x[_-]token)$/i;
+    /^(token|auth[_-]?token|access[_-]?token|refresh[_-]?token|bearer|password|api[_-]?key|secret|cookie|authorization|x[_-]auth[_-]token|x[_-]token|email|login|user[_-]?name|phone)$/i;
 const REDACTED = '[REDACTED]';
 const MAX_SANITIZE_DEPTH = 6;
 

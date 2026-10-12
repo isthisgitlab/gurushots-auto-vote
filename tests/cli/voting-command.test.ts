@@ -23,6 +23,7 @@ jest.mock('../../src/ts/logger', () => {
 jest.mock('../../src/ts/settings', () => ({
     loadSettings: jest.fn(() => ({ mock: true })),
     getEffectiveSetting: jest.fn(),
+    SETTINGS_SCHEMA: { chosenPhotos: { type: 'photos', perChallenge: true, default: [] } },
 }));
 
 jest.mock('../../src/ts/apiFactory', () => {
@@ -346,6 +347,27 @@ describe('showStatus', () => {
         expect(info).toContain('  Challenge 42:');
         expect(info).toContain('    exposure: 80');
         expect(info).toContain('  None');
+    });
+
+    test('per-challenge settings are masked like every other settings print', async () => {
+        settings.loadSettings.mockReturnValue(
+            invalid({
+                mock: true,
+                challengeSettings: {
+                    42: {
+                        chosenPhotos: ['p1', 'p2'],
+                        lastUsername: 'me@example.com',
+                        apiHeaders: { 'x-token': 'abc' },
+                    },
+                },
+            }),
+        );
+        await showStatus();
+        const printed = msgs('info').join('\n');
+        expect(printed).toContain('    chosenPhotos: 2 photo(s)');
+        expect(printed).toContain('    lastUsername: [REDACTED]');
+        expect(printed).toContain('    apiHeaders: [REDACTED]');
+        expect(printed).not.toMatch(/p1|me@example\.com|abc/);
     });
 
     test('an empty challengeSettings map prints no section', async () => {

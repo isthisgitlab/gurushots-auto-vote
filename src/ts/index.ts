@@ -18,6 +18,7 @@ import { appState } from './index/state';
 import { holdForOpenBoosts, createLoginWindow, createMainWindow } from './index/windows';
 import { onReady } from './index/startup';
 import { register as registerNavigationGuard } from './index/navigationGuard';
+import { removeStalePartitionData } from './index/session';
 
 import type { AutoUpdater } from './services/AutoUpdater';
 
@@ -27,11 +28,11 @@ import type { AutoUpdater } from './services/AutoUpdater';
 // effective service worker block.
 app.commandLine.appendSwitch('disable-features', 'ServiceWorker');
 
-// Chromium encrypts the persist:gurushots cookie store with a key it keeps in
-// the macOS Keychain, and re-prompts for it whenever the Electron binary
-// changes. Nothing here relies on those cookies (the auth token lives in the
-// settings store, API calls go through Node), so skip the real Keychain.
-// No-op on other platforms.
+// Chromium encrypts the cookie store of Electron's default on-disk session with a key it
+// keeps in the macOS Keychain, and re-prompts for it whenever the Electron binary changes.
+// The app windows' own partition is in memory (index/session.ts) and nothing here relies on
+// cookies (the auth token lives in the settings store, API calls go through Node), so skip
+// the real Keychain. No-op on other platforms.
 app.commandLine.appendSwitch('use-mock-keychain');
 
 // Applies to every web contents created from here on, so it is registered at
@@ -73,6 +74,9 @@ currencyIpc.register(ipcMain);
 scenariosIpc.register(ipcMain);
 
 if (gotSingleInstanceLock) {
+    // Only the instance holding the lock may touch the user-data directory.
+    removeStalePartitionData(settings.getUserDataPath);
+
     // Registered synchronously, not inside whenReady: second-instance can
     // fire while the primary is still booting, and an event emitted before
     // a listener exists is lost, not queued.
@@ -143,6 +147,14 @@ app.on('window-all-closed', () => {
 ipcMain.on('login-success', (event) => {
     if (!isTrustedSender(event)) {
         logger.withCategory('api').warning("Refused IPC 'login-success' from untrusted frame", null);
+        return;
+    }
+    // A login window is swapped for the main window only after a login has stored its token, and
+    // never twice: a page that fires this without a login (or with a main window up) changes nothing.
+    if (!settings.loadSettings().token || appState.mainWindow) {
+        logger
+            .withCategory('api')
+            .warning("Ignored IPC 'login-success': no login token, or a main window is open", null);
         return;
     }
     // Close login window

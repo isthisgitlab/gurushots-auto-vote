@@ -24,6 +24,7 @@ import * as logger from './logger';
 import { createJsonStore } from './settings/storage';
 import { isPlainObject } from './plainObject';
 import { finiteOr } from './numbers';
+import { errorMessage } from './errorMessage';
 
 const entryAgeStore = createJsonStore({ fileName: 'entryAges.json', prefKey: 'gs_entry_ages' });
 
@@ -69,7 +70,7 @@ const readState = (store: RawJsonStore): Record<string, StoredEntryAgeRecord> =>
     } catch (error) {
         logger
             .withCategory('boost')
-            .warning(`entry-age ledger unreadable: ${(error as Error | undefined)?.message || error}`, null);
+            .warning(`entry-age ledger unreadable: ${errorMessage(error) ?? String(error)}`, null);
         return {};
     }
 };
