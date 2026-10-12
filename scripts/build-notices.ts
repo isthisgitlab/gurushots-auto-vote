@@ -27,7 +27,7 @@ import { isPlainObject } from '../src/ts/plainObject';
 import { GLOVE_URL } from './fetch-embeddings/config';
 import { REPOS } from './fetch-vision-model';
 import { readLicenseText, visionModelNotice } from './lib/licenses';
-import { loadAndroidComponents, loadLicenses, loadNoticeFiles } from './lib/noticeData';
+import { NOTICE_ID_PREFIX, loadAndroidComponents, loadLicenses, loadNoticeFiles } from './lib/noticeData';
 import type { AndroidComponent, LicenseEntry } from './lib/noticeData';
 import { runIfMain } from './lib/run-if-main';
 
@@ -246,8 +246,6 @@ const renderRuntimesSection = ({ readText, onnxruntimeVersion }: NoticeInputs) =
     '',
 ];
 
-const NOTICE_ID_PREFIX = 'NOTICE-';
-
 /** Whether an android.json coordinate (`group:artifact`, or a pattern ending in `*`) names this artifact. */
 const coordinateMatches = (pattern: string, coordinate: string) =>
     pattern.endsWith('*') ? coordinate.startsWith(pattern.slice(0, -1)) : coordinate === pattern;
@@ -268,7 +266,6 @@ const renderAndroidSection = (inputs: NoticeInputs, usedTexts: Set<string>) => {
             `${component.name}${version ? ` ${version}` : ''}`,
             `  License: ${component.license}`,
             `  ${component.copyright}`,
-            ...(component.attribution ? [`  ${component.attribution}`] : []),
             `  ${component.url}`,
             '',
         );
@@ -348,7 +345,12 @@ const main = ({
         );
     }
     const textsDir = path.join(licensesDir, 'texts');
-    const notices = loadNoticeFiles(path.join(licensesDir, 'notices.json'));
+    const notices = Object.fromEntries(
+        Object.entries(loadNoticeFiles(path.join(licensesDir, 'notices.json'))).map(([coordinate, file]) => [
+            coordinate,
+            file.id,
+        ]),
+    );
     const named = new Set(Object.values(notices));
     const unnamed = fs
         .readdirSync(textsDir)

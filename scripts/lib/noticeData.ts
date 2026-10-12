@@ -22,14 +22,20 @@ interface AndroidComponent {
     coordinates: string[];
     license: string;
     copyright: string;
-    /** An attribution line the library's license asks to travel with it, shown after the copyright. */
-    attribution?: string;
     url: string;
     /** The android/variables.gradle variable holding the version. */
     versionVariable?: string;
     /** Pulled in by another library rather than declared by the app. */
     transitive?: boolean;
 }
+
+/** One notices.json entry: the id of the vendored NOTICE text and the release of the artifact it was taken from. */
+interface NoticeFile {
+    id: string;
+    version: string;
+}
+
+const NOTICE_ID_PREFIX = 'NOTICE-';
 
 const isStringArray = (value: unknown): value is string[] =>
     Array.isArray(value) && value.every((item) => typeof item === 'string');
@@ -47,7 +53,6 @@ const isAndroidComponent = (value: unknown): value is AndroidComponent =>
     isStringArray(value.coordinates) &&
     typeof value.license === 'string' &&
     typeof value.copyright === 'string' &&
-    (value.attribution === undefined || typeof value.attribution === 'string') &&
     typeof value.url === 'string' &&
     (value.versionVariable === undefined || typeof value.versionVariable === 'string') &&
     (value.transitive === undefined || typeof value.transitive === 'boolean');
@@ -69,15 +74,24 @@ const loadLicenses = (file: string): Record<string, LicenseEntry> => {
 /**
  * Reads and validates scripts/licenses/notices.json: the `group:artifact` of each Android artifact whose NOTICE file is
  * vendored, mapped to the id of its text in scripts/licenses/texts (`NOTICE-<name>`, the name free of the coordinate's
- * `:`, so two coordinates never share a file).
+ * `:`, so two coordinates never share a file, and no two entries sharing an id) and the version of the artifact the text
+ * was taken from.
  */
-const loadNoticeFiles = (file: string): Record<string, string> => {
+const loadNoticeFiles = (file: string): Record<string, NoticeFile> => {
     const data = readJson(file);
     if (!isPlainObject(data)) throw new Error(`${file} must hold a JSON object`);
-    const notices: Record<string, string> = {};
-    for (const [coordinate, id] of Object.entries(data)) {
-        if (typeof id !== 'string') throw new Error(`${file}: invalid entry for ${coordinate}`);
-        notices[coordinate] = id;
+    const notices: Record<string, NoticeFile> = {};
+    const ids = new Set<string>();
+    for (const [coordinate, entry] of Object.entries(data)) {
+        if (!isPlainObject(entry) || typeof entry.id !== 'string' || typeof entry.version !== 'string') {
+            throw new Error(`${file}: invalid entry for ${coordinate}`);
+        }
+        if (!entry.id.startsWith(NOTICE_ID_PREFIX)) {
+            throw new Error(`${file}: the id of ${coordinate} must start with ${NOTICE_ID_PREFIX}`);
+        }
+        if (ids.has(entry.id)) throw new Error(`${file}: the id ${entry.id} is used by more than one entry`);
+        ids.add(entry.id);
+        notices[coordinate] = { id: entry.id, version: entry.version };
     }
     return notices;
 };
@@ -89,5 +103,5 @@ const loadAndroidComponents = (file: string): AndroidComponent[] => {
     return data;
 };
 
-export { loadAndroidComponents, loadLicenses, loadNoticeFiles };
+export { NOTICE_ID_PREFIX, loadAndroidComponents, loadLicenses, loadNoticeFiles };
 export type { AndroidComponent, LicenseEntry };

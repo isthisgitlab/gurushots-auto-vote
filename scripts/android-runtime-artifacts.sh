@@ -34,15 +34,16 @@ trap cleanup EXIT
 # Prints "SCANNED group:artifact" for every module of the release runtime classpath it opened, "NOTICE group:artifact"
 # for the ones whose jar, or a jar inside its aar (classes.jar, libs/*.jar), has a META-INF/NOTICE* entry, and
 # "UNSCANNED group:artifact" for a module that resolves to a file the scan did not open, "NOFILE group:artifact" for a
-# module of the resolved graph that has no file at all (a BOM or platform), and "FAILED <reason>" for an artifact the
-# configuration could not resolve, other than the Capacitor projects (the lenient views would otherwise skip it
-# silently).
+# module of the resolved graph that has no file because it is a BOM, a platform or a redirect to another module, and
+# "FAILED <reason>" for an artifact the configuration could not resolve, other than the Capacitor projects (the
+# lenient views would otherwise skip it silently), or a module that has no file for any other reason.
 cat > "$work/notices.init.gradle" <<'GRADLE'
 import java.util.zip.ZipEntry
 import java.util.zip.ZipFile
 import java.util.zip.ZipInputStream
 import org.gradle.api.artifacts.component.ModuleComponentIdentifier
 import org.gradle.api.attributes.Attribute
+import org.gradle.api.attributes.Category
 
 allprojects {
     tasks.register('printRuntimeNotices') {
@@ -95,13 +96,24 @@ allprojects {
             // The Capacitor projects (npm packages, not Maven artifacts) are ambiguous for a view without attributes and
             // are not what is scanned; a failure about any other component is a module the scan cannot see.
             def failures = everything.failures.collect { it.message.readLines().first() }.findAll { !(it ==~ /.*project ':.*/) }
-            // A module of the resolved graph with no file at all is a BOM or a platform: there is nothing to open.
+            // A module of the resolved graph with no file at all is a BOM or a platform (its selected variant has the
+            // category platform or enforced-platform) or the root of a multiplatform module whose variant redirects to
+            // another module (that one is scanned): there is nothing to open. Any other module without a file is a gap
+            // in the scan.
             def noFile = new TreeSet<String>()
             configurations.getByName('releaseRuntimeClasspath').incoming.resolutionResult.allComponents.each { component ->
                 def id = component.id
                 if (id instanceof ModuleComponentIdentifier) {
                     def coordinate = "${id.group}:${id.module}".toString()
-                    if (!resolved.contains(coordinate)) noFile.add(coordinate)
+                    if (!resolved.contains(coordinate)) {
+                        def hasNoFileByDesign = component.variants.any { variant ->
+                            def category = variant.attributes.getAttribute(Category.CATEGORY_ATTRIBUTE)
+                            (category != null && (category.name == Category.REGULAR_PLATFORM || category.name == Category.ENFORCED_PLATFORM)) ||
+                                variant.externalVariant.present
+                        }
+                        if (hasNoFileByDesign) noFile.add(coordinate)
+                        else failures.add("${coordinate} resolves to no file and is neither a platform nor a redirect".toString())
+                    }
                 }
             }
             scanned.each { println "SCANNED ${it}" }

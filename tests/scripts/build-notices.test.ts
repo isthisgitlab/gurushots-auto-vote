@@ -329,7 +329,7 @@ describe('the Android component list', () => {
     const vendoredNotices = loadNoticeFiles(path.join(LICENSES_DIR, 'notices.json'));
     const noticeText = (coordinate: string) =>
         fs
-            .readFileSync(path.join(LICENSES_DIR, 'texts', `${vendoredNotices[coordinate]}.txt`), 'utf8')
+            .readFileSync(path.join(LICENSES_DIR, 'texts', `${vendoredNotices[coordinate]?.id}.txt`), 'utf8')
             .replace(/\s+$/, '');
 
     test('lists no artifact with a NOTICE file today', () => {
@@ -361,11 +361,20 @@ describe('the Android component list', () => {
     });
 
     test("carries Apache Cordova's own NOTICE for the Cordova Android entry", () => {
-        const cordova = components.find((component) => component.coordinates.includes('org.apache.cordova:framework'));
-        expect(cordova?.attribution).toBeUndefined();
         expect(noticeText('org.apache.cordova:framework')).toContain(
             'This product includes software developed at\nThe Apache Software Foundation (http://www.apache.org/).',
         );
+    });
+
+    test("takes Cordova's NOTICE from the Cordova Android release the build uses", () => {
+        const vendored = vendoredNotices['org.apache.cordova:framework']?.version;
+        if (vendored !== variables.cordovaAndroidVersion) {
+            throw new Error(
+                `scripts/licenses/notices.json holds the NOTICE of cordova-android ${vendored}, but android/variables.gradle ` +
+                    `builds ${variables.cordovaAndroidVersion}: re-fetch the NOTICE from that release of ` +
+                    'https://github.com/apache/cordova-android, replace the vendored text, and update the version in notices.json.',
+            );
+        }
     });
 
     test('keeps the runtime lists current: the Android CI job regenerates and diffs them, and so does the metadata script', () => {
@@ -548,9 +557,7 @@ describe('license data files', () => {
     test('android.json must be a list of valid components', () => {
         const good = { name: 'n', coordinates: ['g:a'], license: 'Apache-2.0', copyright: 'c', url: 'u' };
         expect(
-            loadAndroidComponents(
-                write('ok.json', [{ ...good, versionVariable: 'v', transitive: true, attribution: 'a' }]),
-            ),
+            loadAndroidComponents(write('ok.json', [{ ...good, versionVariable: 'v', transitive: true }])),
         ).toHaveLength(1);
         expect(() => loadAndroidComponents(write('object.json', {}))).toThrow('invalid component list');
         for (const bad of [
@@ -558,7 +565,6 @@ describe('license data files', () => {
             { ...good, coordinates: [1] },
             { ...good, license: 1 },
             { ...good, copyright: 1 },
-            { ...good, attribution: 1 },
             { ...good, url: 1 },
             { ...good, versionVariable: 1 },
             { ...good, transitive: 'yes' },
@@ -567,10 +573,32 @@ describe('license data files', () => {
         }
     });
 
-    test('notices.json must map each coordinate to a text id', () => {
-        expect(loadNoticeFiles(write('ok.json', { 'g:a': 'NOTICE-g-a' }))).toEqual({ 'g:a': 'NOTICE-g-a' });
+    test('notices.json must map each coordinate to a text id and the version the text was taken from', () => {
+        const good = { id: 'NOTICE-g-a', version: '1.0' };
+        expect(loadNoticeFiles(write('ok.json', { 'g:a': good }))).toEqual({ 'g:a': good });
         expect(() => loadNoticeFiles(write('list.json', []))).toThrow('must hold a JSON object');
-        expect(() => loadNoticeFiles(write('bad.json', { 'g:a': 1 }))).toThrow('invalid entry for g:a');
+        for (const bad of [
+            'NOTICE-g-a',
+            { id: 1, version: '1.0' },
+            { id: 'NOTICE-g-a', version: 1 },
+            { id: 'NOTICE-g-a' },
+        ]) {
+            expect(() => loadNoticeFiles(write('bad.json', { 'g:a': bad }))).toThrow('invalid entry for g:a');
+        }
+    });
+
+    test('notices.json ids start with NOTICE- and are not shared between entries', () => {
+        expect(() => loadNoticeFiles(write('prefix.json', { 'g:a': { id: 'g-a', version: '1' } }))).toThrow(
+            'the id of g:a must start with NOTICE-',
+        );
+        expect(() =>
+            loadNoticeFiles(
+                write('dupe.json', {
+                    'g:a': { id: 'NOTICE-g', version: '1' },
+                    'g:b': { id: 'NOTICE-g', version: '1' },
+                }),
+            ),
+        ).toThrow('the id NOTICE-g is used by more than one entry');
     });
 
     test('Gradle variables are read from quoted assignments', () => {
@@ -676,7 +704,10 @@ describe('main failures and rendering', () => {
         const texts = path.join(options.licensesDir, 'texts');
         fs.writeFileSync(path.join(texts, 'NOTICE-g-a.txt'), 'Notice of A\nline two\n');
         fs.writeFileSync(path.join(texts, 'NOTICE-notes.md'), 'not a notice');
-        fs.writeFileSync(path.join(options.licensesDir, 'notices.json'), JSON.stringify({ 'g:a': 'NOTICE-g-a' }));
+        fs.writeFileSync(
+            path.join(options.licensesDir, 'notices.json'),
+            JSON.stringify({ 'g:a': { id: 'NOTICE-g-a', version: '1' } }),
+        );
         main(options);
         const text = fs.readFileSync(options.outPath, 'utf8');
         expect(text).toContain(
@@ -765,7 +796,6 @@ describe('main failures and rendering', () => {
                         coordinates: ['org.y:*', 'org.z:pre-*'],
                         license: 'Apache-2.0',
                         copyright: 'C2',
-                        attribution: 'Includes work of Y.',
                         url: 'u2',
                     },
                 ],
@@ -775,7 +805,7 @@ describe('main failures and rendering', () => {
                 readText: (id) => (id.startsWith('NOTICE-') ? noticeText : `text of ${id}`),
             });
 
-        test('renders each vendored NOTICE text with the component it belongs to, indented, and the attribution line', () => {
+        test('renders each vendored NOTICE text with the component it belongs to, indented', () => {
             const text = withNotices({
                 'com.x:one': 'NOTICE-com.x-one',
                 'org.z:pre-two': 'NOTICE-org.z-pre-two',
@@ -784,7 +814,7 @@ describe('main failures and rendering', () => {
             expect(text).toContain(
                 'Exact\n  License: Apache-2.0\n  C1\n  u1\n\n' +
                     '  NOTICE of com.x:one:\n\n    Apache Thing\n    Copyright 2012\n\n    Includes more.\n\n' +
-                    'Pattern\n  License: Apache-2.0\n  C2\n  Includes work of Y.\n  u2\n\n' +
+                    'Pattern\n  License: Apache-2.0\n  C2\n  u2\n\n' +
                     '  NOTICE of org.z:pre-two:\n\n    Apache Thing\n',
             );
         });
