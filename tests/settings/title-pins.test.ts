@@ -8,9 +8,11 @@
  * uses) so the facade's loadSettings/saveSettings round-trip without touching fs.
  */
 
-import type { AndroidHeadlessStore, AppSettings } from '../../src/ts/types/settings';
+import type { AndroidHeadlessStore } from '../../src/ts/types/settings';
 import { invalid } from '../helpers/invalid';
 import settings = require('../../src/ts/settings');
+import { isAppSettings } from '../helpers/storedShapes';
+import { isRecordOf, isString, parseJsonAs } from '../helpers/parseJson';
 
 jest.mock('../../src/ts/logger', () => ({
     info: jest.fn(),
@@ -111,7 +113,7 @@ describe('settings facade — first-seen title pins', () => {
         settings.mergeTitlePins({ 1: 'Real' }, []);
         // Simulate external tampering: inject a whitespace-only pin directly
         // into the persisted blob, bypassing mergeTitlePins' validation.
-        const blob = JSON.parse(store.value!) as AppSettings;
+        const blob = parseJsonAs(store.value!, isAppSettings);
         blob.challengeSettings.titlePins!['2'] = '   ';
         store.value = JSON.stringify(blob);
 
@@ -120,7 +122,7 @@ describe('settings facade — first-seen title pins', () => {
 
     test('legacy boundary-length truncated pins are filtered on read', () => {
         settings.mergeTitlePins({ 1: 'Real' }, []);
-        const blob = JSON.parse(store.value!) as AppSettings;
+        const blob = parseJsonAs(store.value!, isAppSettings);
         blob.challengeSettings.titlePins!['2'] = 'x'.repeat(settings.MAX_TITLE_LENGTH);
         store.value = JSON.stringify(blob);
 
@@ -140,7 +142,7 @@ describe('settings facade — first-seen title pins', () => {
         // JSON.parse (like an API payload) makes `__proto__` a real own key; a
         // plain `__proto__:` literal would only set the prototype.
         settings.mergeTitlePins(
-            JSON.parse('{"__proto__":"Proto Title","constructor":"Ctor Title","1":"Real"}') as Record<string, string>,
+            parseJsonAs('{"__proto__":"Proto Title","constructor":"Ctor Title","1":"Real"}', isRecordOf(isString)),
             [],
         );
         const pins = settings.getTitlePins();

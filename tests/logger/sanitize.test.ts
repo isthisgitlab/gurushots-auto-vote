@@ -1,3 +1,4 @@
+import { parseJson } from '../helpers/parseJson';
 /**
  * sanitizeForLog covers the redaction contract that protects on-disk logs
  * from leaking auth tokens / passwords. Each test below maps to one
@@ -111,7 +112,7 @@ describe('sanitizeForLog', () => {
 
     test('does not mutate the input object', () => {
         const input = { token: 'plain', user: { password: 'hunter2' } };
-        const snapshot = JSON.parse(JSON.stringify(input)) as typeof input;
+        const snapshot = parseJson(JSON.stringify(input));
         sanitizeForLog(input);
         expect(input).toEqual(snapshot);
     });

@@ -40,8 +40,8 @@ import type * as fetch_vision_modelModule from '../../scripts/fetch-vision-model
 import type * as visionCliAssetsModule from '../../src/ts/services/visionCliAssets';
 import type * as node_osModule from 'node:os';
 import type { PathLike } from 'node:fs';
-import type { SeaConfig } from '../../scripts/build-cli';
 import { invalid } from '../helpers/invalid';
+import { parseJsonObject } from '../helpers/parseJson';
 
 const ROOT = path.join(__dirname, '..', '..');
 const DIST_DIR = path.join(ROOT, 'dist');
@@ -208,7 +208,7 @@ describe('build-cli', () => {
     });
 
     describe('generateSeaBlob', () => {
-        const writtenConfig = () => JSON.parse(fs.writeFileSync.mock.calls[0][1] as string) as SeaConfig;
+        const writtenConfig = () => parseJsonObject(String(fs.writeFileSync.mock.calls[0][1]));
 
         test('embeds the lexicon asset when present', () => {
             existing.add(LEXICON);

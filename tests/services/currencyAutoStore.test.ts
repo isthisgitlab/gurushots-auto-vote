@@ -10,6 +10,7 @@ const { createAutoSpendLedger, createMemoryAutoSpendLedger } =
     require('../../src/ts/currencyAutoStore') as typeof currencyAutoStoreModule;
 import type { AutoSpendRecord } from '../../src/ts/types/stores';
 import { invalid } from '../helpers/invalid';
+import { isNumber, isRecordOf, isShape, parseJsonAs } from '../helpers/parseJson';
 
 const rawStore = (initial: string | null) => {
     let raw = initial;
@@ -22,9 +23,11 @@ const rawStore = (initial: string | null) => {
             raw = data;
         },
         raw: () => raw,
-        peek: () => JSON.parse(raw!) as Record<string, AutoSpendRecord>,
+        peek: () => parseJsonAs(raw!, isRecordOf(isAutoSpendRecord)),
     };
 };
+
+const isAutoSpendRecord = isShape<AutoSpendRecord>({ fills: isNumber, at: isNumber });
 
 describe('auto-spend ledger', () => {
     test('counts fills per challenge', async () => {
@@ -367,7 +370,7 @@ describe('whether the ledger of the real store can be trusted', () => {
         };
         const ledger = load();
         await expect(ledger.reserveFill(1)).resolves.toBe(true);
-        const saved = JSON.parse(stored!) as Record<string, { fills: number }>;
+        const saved = parseJsonAs(stored!, isRecordOf(isAutoSpendRecord));
         expect(saved['1'].fills).toBe(1);
         expect(saved['2'].fills).toBe(2);
     });

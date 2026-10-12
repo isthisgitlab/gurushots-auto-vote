@@ -7,12 +7,14 @@
  * round-trip without touching fs.
  */
 
-import type { AndroidHeadlessStore, AppSettings } from '../../src/ts/types/settings';
+import type { AndroidHeadlessStore } from '../../src/ts/types/settings';
 import type { Challenge } from '../../src/ts/types/gurushots';
 import type { CategoryLogger } from '../../src/ts/logger';
 import { invalid } from '../helpers/invalid';
 import rules = require('../../src/ts/settings/challengeRules');
 import settings = require('../../src/ts/settings');
+import { isAppSettings } from '../helpers/storedShapes';
+import { parseJsonAs } from '../helpers/parseJson';
 
 jest.mock('../../src/ts/logger', () => {
     const cat = { info: jest.fn(), error: jest.fn(), debug: jest.fn(), success: jest.fn(), warning: jest.fn() };
@@ -260,7 +262,7 @@ describe('settings facade — class conditions and the rule cascade', () => {
         settings.loadSettings();
         store.write.mockClear();
     };
-    const saved = () => JSON.parse(store.value!) as AppSettings;
+    const saved = () => parseJsonAs(store.value!, isAppSettings);
     const base = (over = {}) => ({ challengeSettings: { globalDefaults: {}, ...over } });
     const withTags = (rule: Record<string, unknown>) => ({ mustIncludeTags: [], shouldIncludeTags: [], ...rule });
 

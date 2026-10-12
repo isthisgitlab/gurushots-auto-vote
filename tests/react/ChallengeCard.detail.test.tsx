@@ -16,6 +16,7 @@ import type { EntryBadge as RealEntryBadge } from '@/components/app/EntryBadge';
 import type { Challenge, MemberTurbo, RankingTotal } from '../../src/ts/types/gurushots';
 import type { WindowApi } from '../../src/ts/types/ipc';
 import { invalid } from '../helpers/invalid';
+import { parseJson, parseJsonObject } from '../helpers/parseJson';
 
 jest.mock('@/components/app/EntryBadge', () => ({
     EntryBadge: ({
@@ -494,30 +495,14 @@ describe('entries, tags and alerts', () => {
         );
         expect(screen.getByText('night')).toBeTruthy();
         expect(screen.getByText('city')).toBeTruthy();
-        await waitFor(() =>
-            expect(
-                (
-                    JSON.parse(screen.getByTestId('entry-2').textContent) as Pick<
-                        Parameters<typeof RealEntryBadge>[0],
-                        'swapBack'
-                    >
-                ).swapBack,
-            ).not.toBeNull(),
-        );
-        expect(JSON.parse(screen.getByTestId('entry-2').textContent)).toEqual({
+        await waitFor(() => expect(parseJsonObject(screen.getByTestId('entry-2').textContent).swapBack).not.toBeNull());
+        expect(parseJson(screen.getByTestId('entry-2').textContent)).toEqual({
             swapBack: { currentId: '2', previousId: '9', previousMemberId: 'm', kind: 'turbo' },
             swapAvailable: false,
             boostAvailable: true,
             turboAvailable: true,
         });
-        expect(
-            (
-                JSON.parse(screen.getByTestId('entry-1').textContent) as Pick<
-                    Parameters<typeof RealEntryBadge>[0],
-                    'swapBack'
-                >
-            ).swapBack,
-        ).toBeNull();
+        expect(parseJsonObject(screen.getByTestId('entry-1').textContent).swapBack).toBeNull();
     });
 
     test('a settings change refreshes the deadline preview in place, without remounting the card', async () => {

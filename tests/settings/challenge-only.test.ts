@@ -8,9 +8,11 @@
  * so the facade's loadSettings/saveSettings round-trip without touching fs.
  */
 
-import type { AndroidHeadlessStore, AppSettings } from '../../src/ts/types/settings';
+import type { AndroidHeadlessStore } from '../../src/ts/types/settings';
 import type { SettingsSchemaEntry } from '../../src/ts/settings/schema';
 import settings = require('../../src/ts/settings');
+import { isAppSettings } from '../helpers/storedShapes';
+import { parseJsonAs } from '../helpers/parseJson';
 
 describe('challengeOnly settings', () => {
     const { SETTINGS_SCHEMA } = settings;
@@ -47,7 +49,7 @@ describe('challengeOnly settings', () => {
 
     test('a stored global value (hand-edited / older build) is ignored everywhere', () => {
         settings.setGlobalDefault('exposure', 90);
-        const raw = JSON.parse(store.value!) as AppSettings;
+        const raw = parseJsonAs(store.value!, isAppSettings);
         raw.challengeSettings.globalDefaults.autoSwap = true;
         store.value = JSON.stringify(raw);
         expect(settings.getGlobalDefault('autoSwap')).toBe(false);

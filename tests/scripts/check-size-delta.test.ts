@@ -13,6 +13,7 @@ import type * as pathModule from 'node:path';
 import type * as checkSizeDelta from '../../scripts/check-size-delta';
 import type * as zlibModule from 'node:zlib';
 import type * as cryptoModule from 'node:crypto';
+import { parseJson } from '../helpers/parseJson';
 
 const realPath = jest.requireActual<typeof pathModule>('path');
 const zlib = jest.requireActual<typeof zlibModule>('zlib');
@@ -192,7 +193,7 @@ describe('scripts/check-size-delta.ts', () => {
             expect(run(['--update'])).toBe(1);
             const { preload, ...rest } = sizes;
             void preload;
-            expect(JSON.parse(mockFiles.get(BASELINE) as string)).toEqual(rest);
+            expect(parseJson(String(mockFiles.get(BASELINE)))).toEqual(rest);
             expect(err()).toContain('bundle not found at dist/preload-bundle.js');
         });
     });

@@ -72,29 +72,40 @@ describe('shipped dependency tree', () => {
 });
 
 describe('test typing', () => {
-    // `Mock` without type arguments is `Mock<any, any>`, an `any` the lint rules
-    // cannot see until a value is used; a mock names the function it stands in
-    // for (`jest.fn<R, [Args]>()`, `jest.MockedFunction<typeof fn>`).
-    test('every mock type names the function it stands in for', () => {
-        const fs = jest.requireActual<typeof import('node:fs')>('node:fs');
-        const path = jest.requireActual<typeof import('node:path')>('node:path');
+    const fs = jest.requireActual<typeof import('node:fs')>('node:fs');
+    const path = jest.requireActual<typeof import('node:path')>('node:path');
+    // `file:line` of every match of the global `pattern` in the test sources.
+    const offendersOf = (pattern: RegExp) => {
         const offenders: string[] = [];
         const walk = (dir: string) => {
             for (const entry of fs.readdirSync(dir, { withFileTypes: true })) {
                 const full = path.join(dir, entry.name);
                 if (entry.isDirectory()) walk(full);
                 else if (/\.(c?ts|tsx)$/.test(entry.name)) {
-                    fs.readFileSync(full, 'utf8')
-                        .split('\n')
-                        .forEach((line, i) => {
-                            if (/\bjest\.Mock\b(?!<)/.test(line))
-                                offenders.push(`${path.relative(__dirname, full)}:${i + 1}`);
-                        });
+                    const text = fs.readFileSync(full, 'utf8');
+                    for (const match of text.matchAll(pattern)) {
+                        const line = text.slice(0, match.index).split('\n').length;
+                        offenders.push(`${path.relative(__dirname, full)}:${line}`);
+                    }
                 }
             }
         };
         walk(__dirname);
-        expect(offenders).toEqual([]);
+        return offenders;
+    };
+
+    // `Mock` without type arguments is `Mock<any, any>`, an `any` the lint rules
+    // cannot see until a value is used; a mock names the function it stands in
+    // for (`jest.fn<R, [Args]>()`, `jest.MockedFunction<typeof fn>`).
+    test('every mock type names the function it stands in for', () => {
+        expect(offendersOf(/\bjest\.Mock\b(?!<)/g)).toEqual([]);
+    });
+
+    // Parsed JSON is `unknown` until `tests/helpers/parseJson.ts` (or a guard
+    // built from it) has checked the fields a test reads; a cast would assert
+    // a shape nothing verified.
+    test('parsed JSON is narrowed by a guard, never cast', () => {
+        expect(offendersOf(/JSON\.parse\((?:[^;()]|\([^()]*\))*\)\s+as\s/g)).toEqual([]);
     });
 });
 

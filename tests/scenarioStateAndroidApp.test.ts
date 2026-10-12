@@ -37,6 +37,7 @@ jest.mock('../src/ts/logger', () => {
 
 import type * as scenarioStateStoreModule from '../src/ts/scenarioStateStore';
 import type { AndroidHeadlessStore } from '../src/ts/types/settings';
+import { parseJsonObject } from './helpers/parseJson';
 
 const g = globalThis as typeof globalThis & {
     Capacitor?: { isNativePlatform: () => boolean; getPlatform: () => string };
@@ -106,7 +107,7 @@ describe('a reset asked for on the app window', () => {
         expect(ledger().get(7).state).not.toBeNull();
         failing.delete(RESETS);
         await expect(ledger().remove(8)).resolves.toBe('removed');
-        expect(Object.keys(JSON.parse(stored.get(RESETS) ?? '{}') as object)).toEqual(['8']);
+        expect(Object.keys(parseJsonObject(stored.get(RESETS) ?? '{}'))).toEqual(['8']);
         expect(ledger().get(7).state).not.toBeNull();
         expect(ledger().get(8).state).toBeNull();
     });

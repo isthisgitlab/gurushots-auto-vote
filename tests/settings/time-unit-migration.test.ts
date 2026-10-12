@@ -13,8 +13,9 @@
 
 import type * as fsModule from 'node:fs';
 import type * as settingsModule from '../../src/ts/settings';
-import type { AppSettings } from '../../src/ts/types/settings';
 import type * as challengeFixturesModule from '../helpers/challengeFixtures';
+import { isAppSettings } from '../helpers/storedShapes';
+import { parseJsonAs } from '../helpers/parseJson';
 
 const { buildSettingsFixture: buildFixture } =
     require('../helpers/challengeFixtures') as typeof challengeFixturesModule;
@@ -33,7 +34,7 @@ describe('time-unit migration in loadSettings', () => {
         for (let i = calls.length - 1; i >= 0; i -= 1) {
             const [, body] = calls[i];
             if (typeof body === 'string' && body.includes('_timeUnitMigratedV1')) {
-                return JSON.parse(body) as AppSettings;
+                return parseJsonAs(body, isAppSettings);
             }
         }
         return null;

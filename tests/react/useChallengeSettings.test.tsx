@@ -6,6 +6,7 @@
 import { render, screen, fireEvent, waitFor, act } from './helpers/test-utils';
 import { useChallengeSettings } from '@/hooks/useChallengeSettings';
 import { invalid } from '../helpers/invalid';
+import { isBoolean, isShape, parseJsonAs } from '../helpers/parseJson';
 
 function Probe({ id = 42, initialCompact, version }: { id?: number; initialCompact?: boolean; version?: number }) {
     const s = useChallengeSettings(id, initialCompact, version);
@@ -26,7 +27,11 @@ function Probe({ id = 42, initialCompact, version }: { id?: number; initialCompa
 
 /** What Probe renders into its state span. */
 type ProbeState = { custom: boolean; fill: boolean; compact: boolean; override: boolean };
-const state = () => JSON.parse(screen.getByTestId('state').textContent) as ProbeState;
+const state = () =>
+    parseJsonAs(
+        screen.getByTestId('state').textContent,
+        isShape<ProbeState>({ custom: isBoolean, fill: isBoolean, compact: isBoolean, override: isBoolean }),
+    );
 
 let overrides: Record<string, unknown>;
 let effective: Record<string, unknown>;

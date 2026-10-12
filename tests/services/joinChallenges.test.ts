@@ -89,6 +89,7 @@ import {
 } from '../../src/ts/services/joinChallenges/unlockMarker';
 import type { JoinDeps } from '../../src/ts/services/joinChallenges';
 import type { acquireUnlockLock as AcquireUnlockLock } from '../../src/ts/joinStateStore';
+import { parseJsonObject } from '../helpers/parseJson';
 // Whether this call recorded the unlock claim (the others found one there, or could not write).
 const recorded = async (...args: Parameters<typeof claimUnlock>): Promise<boolean> =>
     (await claimUnlock(...args)).status === 'recorded';
@@ -103,8 +104,6 @@ const {
 } = require('../../src/ts/services/joinChallenges') as typeof joinChallengesModule;
 
 // The logger factory above: withCategory() hands back one shared level object.
-// The join-state file readUnlockedState parses: one unlock marker per challenge id.
-type UnlockMarkers = Record<string, { unlockedAt: number }>;
 type LogMock = jest.Mock<void, [message: string, data?: unknown]>;
 type LoggerMock = { withCategory: () => Record<'info' | 'error' | 'debug' | 'success' | 'warning', LogMock> };
 
@@ -227,7 +226,7 @@ describe('performJoin — ordering & idempotency', () => {
         const res = await performJoin(invalid({ id: 7 }), 'tok', deps, 100);
         expect(res).toMatchObject({ status: 'joined', charged: 100 });
         expect(deps.coinsUnlock).toHaveBeenCalledTimes(1);
-        const state = JSON.parse(deps.joinStateStore.readRaw() || '{}') as UnlockMarkers;
+        const state = parseJsonObject(deps.joinStateStore.readRaw() || '{}');
         expect(state['7']).toEqual(JOINED);
     });
 
@@ -237,14 +236,14 @@ describe('performJoin — ordering & idempotency', () => {
         });
         const first = await performJoin(invalid({ id: 9 }), 'tok', deps, 100);
         expect(first).toMatchObject({ status: 'charged-pending-submit', charged: 100 });
-        expect((JSON.parse(deps.joinStateStore.readRaw()!) as UnlockMarkers)['9']).toBeDefined();
+        expect(parseJsonObject(deps.joinStateStore.readRaw()!)['9']).toBeDefined();
         expect(deps.coinsUnlock).toHaveBeenCalledTimes(1);
 
         // Retry: marker present → skip unlock, submit only.
         const second = await performJoin(invalid({ id: 9 }), 'tok', deps, 100);
         expect(second.status).toBe('joined');
         expect(deps.coinsUnlock).toHaveBeenCalledTimes(1); // NOT called again
-        expect((JSON.parse(deps.joinStateStore.readRaw() || '{}') as UnlockMarkers)['9']).toEqual(JOINED);
+        expect(parseJsonObject(deps.joinStateStore.readRaw() || '{}')['9']).toEqual(JOINED);
     });
 
     test('a refusal (the body says no) → failed-no-charge, no submit, the claim given back', async () => {
@@ -396,7 +395,7 @@ describe('performJoin — ordering & idempotency', () => {
             joinStateStore: store,
             coinsUnlock: double<'coinsUnlock'>(async (id) => {
                 // The claim must already be on disk at the moment we spend.
-                expect((JSON.parse(store.readRaw()!) as UnlockMarkers)[String(id)]).toBeDefined();
+                expect(parseJsonObject(store.readRaw()!)[String(id)]).toBeDefined();
                 return { ok: true };
             }),
         });
@@ -3645,12 +3644,12 @@ const nativeClaims = (initial: Record<string, unknown> | null = null) => {
         }
         return false;
     };
-    const keys = () => Object.keys(JSON.parse(state.value ?? '{}') as object).sort();
+    const keys = () => Object.keys(parseJsonObject(state.value ?? '{}')).sort();
     // The other context's own claim of a challenge, made as the code under test makes one: decided on what is stored.
     const claimLikeTheOtherContext = (key: string): boolean => {
         for (let attempt = 0; attempt < 5; attempt++) {
             const current = state.value;
-            const claims = JSON.parse(current ?? '{}') as Record<string, unknown>;
+            const claims = parseJsonObject(current ?? '{}');
             if (Object.prototype.hasOwnProperty.call(claims, key)) return false;
             if (
                 casSave(
@@ -3708,7 +3707,7 @@ describe('on the background service, whose claims go through the native bridge',
         expect(await recorded(first, 7, null, 50)).toBe(true);
         expect(compareAndWriteKey).toHaveBeenCalledWith('gs_join_state', '', expect.stringContaining('unlockedAt'));
         const second = session();
-        expect(findClaim(JSON.parse(second.readRaw() ?? '{}') as Record<string, unknown>, 7, null)).not.toBeNull();
+        expect(findClaim(parseJsonObject(second.readRaw() ?? '{}'), 7, null)).not.toBeNull();
         // The restarted service pays for nothing it already paid for: the claim is found, not written again.
         expect(await recorded(makeDeps({ joinStateStore: second }), 7, null, 50)).toBe(false);
         expect(native.state.saves).toBe(1);
@@ -3896,13 +3895,13 @@ describe('on the app window, where the background service writes the same claims
         const { deps, mod } = await appWindow(null);
         const seen: string[] = [];
         const coinsUnlock = double<'coinsUnlock'>(async () => {
-            seen.push(...Object.keys(JSON.parse(sharedPrefs.get('gs_join_state') ?? '{}') as object));
+            seen.push(...Object.keys(parseJsonObject(sharedPrefs.get('gs_join_state') ?? '{}')));
             return { ok: true };
         });
         expect((await performJoin(paidChallenge(), 'tok', deps({ coinsUnlock }), 100)).status).toBe('joined');
         await mod.flushJoinStateWrites();
         expect(seen).toEqual(['3']);
-        expect(Object.keys(JSON.parse(sharedPrefs.get('gs_join_state') ?? '{}') as object)).toEqual(['3']);
+        expect(Object.keys(parseJsonObject(sharedPrefs.get('gs_join_state') ?? '{}'))).toEqual(['3']);
     });
 
     test('a claim the service committed is what the window’s checks decide on, once they read it again', async () => {

@@ -6,9 +6,9 @@
 import { act, render, screen, waitFor } from './helpers/test-utils';
 import { useScenarios } from '@/api/useScenarios';
 import { refreshScenarioStatuses, useScenarioStatus } from '@/api/useScenarioStatus';
-import type { ScenarioSummary } from '@/api/useScenarioStatus';
 import { invalid } from '../helpers/invalid';
 import type { Challenge } from '../../src/ts/types/gurushots';
+import { parseJsonObject } from '../helpers/parseJson';
 
 function ScenariosProbe({ enabled }: { enabled?: boolean }) {
     const { scenarios, templates, error, loading } = useScenarios(enabled);
@@ -140,7 +140,7 @@ describe('useScenarioStatus', () => {
         );
         render(<StatusProbe challenge={challenge()} />);
         await waitFor(() => expect(out()).not.toBe('none'));
-        const summary = JSON.parse(out()) as ScenarioSummary;
+        const summary = parseJsonObject(out());
         expect(summary).toEqual(
             expect.objectContaining({ name: 'Plan', phase: 'main', started: false, lastError: null }),
         );
@@ -319,7 +319,7 @@ describe('useScenarioStatus', () => {
             );
             render(<StatusProbe challenge={challenge()} />);
             await waitFor(() => expect(out()).not.toBe('none'));
-            expect((JSON.parse(out()) as ScenarioSummary).spendUnclear ?? null).toEqual(spend);
+            expect(parseJsonObject(out()).spendUnclear ?? null).toEqual(spend);
         });
     });
 

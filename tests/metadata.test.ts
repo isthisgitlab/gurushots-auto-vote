@@ -25,8 +25,10 @@ jest.mock('../src/ts/settings', () => ({
 import metadata = require('../src/ts/metadata');
 import type * as loggerModule from '../src/ts/logger';
 import type { CategoryLogger } from '../src/ts/logger';
-import type { ChallengeMetadataEntry, MetadataFile } from '../src/ts/types/stores';
+import type { ChallengeMetadataEntry, MetadataFile, UpdateCheckData } from '../src/ts/types/stores';
+import { isPlainObject } from '../src/ts/plainObject';
 import { invalid } from './helpers/invalid';
+import { isArrayOf, isNumber, isShape, isString, nullable, optional, parseJsonAs } from './helpers/parseJson';
 
 const setStoredMetadata = (obj: unknown) => {
     fs.existsSync.mockReturnValue(true);
@@ -37,9 +39,20 @@ const setNoStoredFile = () => {
     fs.existsSync.mockReturnValue(false);
 };
 
+const isUpdateCheck = isShape<UpdateCheckData>({ lastCheck: nullable(isNumber), skipVersion: nullable(isString) });
+const isEntry = isShape<ChallengeMetadataEntry>({
+    lastVoteTime: optional(isString),
+    exposureBump: optional(isNumber),
+    entryIds: optional(isArrayOf(isString)),
+});
+const isMetadataFile = (value: unknown): value is MetadataFile =>
+    isPlainObject(value) &&
+    isUpdateCheck(value.updateCheck) &&
+    Object.entries(value).every(([key, entry]) => key === 'updateCheck' || isEntry(entry));
+
 const captureWrites = () => {
     const writes: MetadataFile[] = [];
-    fs.writeFileSync.mockImplementation((p, data) => writes.push(JSON.parse(data as string) as MetadataFile));
+    fs.writeFileSync.mockImplementation((p, data) => writes.push(parseJsonAs(String(data), isMetadataFile)));
     return writes;
 };
 

@@ -32,9 +32,10 @@ jest.mock('../../src/ts/logger', () => {
 import photoStats = require('../../src/ts/services/photoStats');
 import type { PickerPhoto } from '../../src/ts/types/photoPicker';
 import type { RankDeps } from '../../src/ts/types/autoFill';
-import type { PhotoStatsFile } from '../../src/ts/services/photoStats';
 import type { CategoryLogger } from '../../src/ts/logger';
 import { invalid } from '../helpers/invalid';
+import { isPhotoStatsFile } from '../helpers/storedShapes';
+import { parseJson, parseJsonAs } from '../helpers/parseJson';
 const { enrichCandidates, resetPassState, MAX_ENRICH_PER_FILL, MAX_ENRICH_PER_PASS, MAX_CACHE_ENTRIES, STATS_TTL_MS } =
     photoStats;
 const { __level: log } = invalid<{ __level: LevelMock }>(require('../../src/ts/logger'));
@@ -110,7 +111,7 @@ describe('photoStats.enrichCandidates', () => {
     });
 
     test('a "__proto__" key in the payload cannot pollute Object.prototype', async () => {
-        const evil = JSON.parse('{"votes":5,"views":5,"achievements":[],"__proto__":{"polluted":true}}') as unknown;
+        const evil = parseJson('{"votes":5,"views":5,"achievements":[],"__proto__":{"polluted":true}}');
         const getImageData = jest.fn().mockResolvedValue(evil);
         await enrichCandidates([photo('p1')], 'tok', { getImageData });
         expect(({} as { polluted?: unknown }).polluted).toBeUndefined();
@@ -216,7 +217,7 @@ describe('photoStats.enrichCandidates', () => {
         expect(out[0]).toEqual(
             expect.objectContaining({ votes: 373147, views: 12000, achievementCount: 10, statsKnown: true }),
         );
-        expect((JSON.parse(storeData) as PhotoStatsFile).photos.portfolio.fetchedAt).toBe(fetchedAt);
+        expect(parseJsonAs(storeData, isPhotoStatsFile).photos.portfolio.fetchedAt).toBe(fetchedAt);
     });
 
     test('a failed refresh preserves expired counts, including after the breaker opens', async () => {
@@ -236,7 +237,7 @@ describe('photoStats.enrichCandidates', () => {
         const second = await enrichCandidates(input, 'tok', { getImageData });
         expect(getImageData).not.toHaveBeenCalled();
         expect(second[0]).toEqual(expect.objectContaining({ votes: 100000, statsKnown: true }));
-        expect((JSON.parse(storeData) as PhotoStatsFile).photos.portfolio.fetchedAt).toBe(fetchedAt);
+        expect(parseJsonAs(storeData, isPhotoStatsFile).photos.portfolio.fetchedAt).toBe(fetchedAt);
     });
 
     test('one photo failing leaves only that photo unknown', async () => {
@@ -421,7 +422,7 @@ describe('photoStats.enrichCandidates', () => {
         const getImageData = jest.fn().mockResolvedValue(payload(1, 1));
         await enrichCandidates([photo('brand-new')], 'tok', { getImageData });
 
-        const persisted = (JSON.parse(storeData) as PhotoStatsFile).photos;
+        const persisted = parseJsonAs(storeData, isPhotoStatsFile).photos;
         expect(Object.keys(persisted).length).toBeLessThanOrEqual(MAX_CACHE_ENTRIES);
         // Newest survive, oldest are dropped — a flipped comparator would
         // silently invert this and nothing else would notice.

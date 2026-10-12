@@ -5,9 +5,10 @@
  * never touched.
  */
 
-import type { AndroidHeadlessStore, AppSettings } from '../../src/ts/types/settings';
+import type { AndroidHeadlessStore } from '../../src/ts/types/settings';
 import settings = require('../../src/ts/settings');
 import type * as scenarioStateStoreModule from '../../src/ts/scenarioStateStore';
+import { isNumber, isRecordOf, isShape, parseJsonAs } from '../helpers/parseJson';
 const { scenarioStateLedger, mockScenarioStateLedger, initialState } =
     require('../../src/ts/scenarioStateStore') as typeof scenarioStateStoreModule;
 
@@ -137,9 +138,14 @@ describe('scenario phase-settings overlay', () => {
     test('no overlay when the stored scenario no longer validates', () => {
         assign();
         scenarioStateLedger.set(7, initialState('Plan', 'buildup', 1));
-        const blob = JSON.parse(store.value!) as AppSettings & {
-            challengeSettings: { scenarios: Record<string, { version: number }> };
-        };
+        const blob = parseJsonAs(
+            store.value!,
+            isShape<{ challengeSettings: { scenarios: Record<string, { version: number }> } }>({
+                challengeSettings: isShape<{ scenarios: Record<string, { version: number }> }>({
+                    scenarios: isRecordOf(isShape<{ version: number }>({ version: isNumber })),
+                }),
+            }),
+        );
         blob.challengeSettings.scenarios.Plan.version = 99;
         store.value = JSON.stringify(blob);
         expect(settings.getEffectiveSetting('exposure', '7')).toBe(100);

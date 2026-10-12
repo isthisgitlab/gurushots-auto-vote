@@ -26,6 +26,7 @@ const logger = jest.mocked(loggerModule);
 import type * as scenarioStateStoreModule from '../src/ts/scenarioStateStore';
 import type { CategoryLogger } from '../src/ts/logger';
 import { invalid } from './helpers/invalid';
+import { isNumber, isRecordOf, parseJsonAs, parseJsonObject } from './helpers/parseJson';
 
 jest.mock('../src/ts/logger', () => {
     const category = { info: jest.fn(), error: jest.fn(), debug: jest.fn(), success: jest.fn(), warning: jest.fn() };
@@ -251,8 +252,7 @@ describe('createStateLedger', () => {
 
     describe('what is pruned on a write', () => {
         const OLD = Date.now() - 31 * 24 * 3600 * 1000;
-        const kept = (store: ReturnType<typeof rawStore>) =>
-            Object.keys(JSON.parse(store.raw!) as Record<string, unknown>).sort();
+        const kept = (store: ReturnType<typeof rawStore>) => Object.keys(parseJsonObject(store.raw!)).sort();
 
         test('records and tombstones older than 30 days go; fresh ones, and the count of every reset, stay', () => {
             const store = rawStore(
@@ -287,7 +287,7 @@ describe('createStateLedger', () => {
             await ledger.remove(1);
             ledger.set(8, state());
             expect(kept(store)).toEqual(['1', '2', '3', '6', '8']);
-            expect((JSON.parse(store.raw!) as Record<string, unknown>)['1']).toMatchObject({ tombstone: true });
+            expect(parseJsonObject(store.raw!)['1']).toMatchObject({ tombstone: true });
         });
 
         test('what cannot be read is not deleted by the write of another challenge: it is for its user to reset', async () => {
@@ -377,7 +377,7 @@ describe('the file’s changes are made under a lock across processes', () => {
             return 'timed-out';
         });
         expect(first.set(7, { ...state(), phase: 'first' })).toBe('saved');
-        expect(Object.keys(JSON.parse(store.raw!) as Record<string, unknown>).sort()).toEqual(['7', '8']);
+        expect(Object.keys(parseJsonObject(store.raw!)).sort()).toEqual(['7', '8']);
     });
 
     test('a lock that is not free in time fails the write safe: nothing is written', () => {
@@ -578,7 +578,7 @@ describe('a reset is not undone by what was running when it was made', () => {
         const { store, a } = twoOver();
         await a.removeAll();
         a.set(7, { ...state(), epoch: a.get(7).epoch });
-        const written = JSON.parse(store.raw!) as Record<string, Record<string, unknown>>;
+        const written = parseJsonObject(store.raw!);
         expect(written['@all']).toEqual(expect.any(Number));
         expect(written['7']).toHaveProperty('gen', 0);
         expect(written['7']).not.toHaveProperty('epoch');
@@ -615,7 +615,7 @@ describe('on Android a reset is asked for, never written into a file the service
         app: createStateLedger(main, undefined, asked),
         service: createStateLedger(main, undefined, asked),
     });
-    const requestsOf = (store: ReturnType<typeof rawStore>) => JSON.parse(store.raw!) as Record<string, number>;
+    const requestsOf = (store: ReturnType<typeof rawStore>) => parseJsonAs(store.raw!, isRecordOf(isNumber));
 
     test('the app writes the request and leaves the file alone; the service sees the reset when it reads', async () => {
         const { main, asked, app, service } = both();
@@ -646,7 +646,7 @@ describe('on Android a reset is asked for, never written into a file the service
         expect(service.set(7, { ...running, phase: 'old progress' })).toBe('refused');
         // Another challenge's write is made on the file as it reads with the reset applied: no other progress is lost.
         expect(service.set(8, { ...service.get(8).state!, phase: 'moved on' })).toBe('saved');
-        const written = JSON.parse(main.raw!) as Record<string, Record<string, unknown>>;
+        const written = parseJsonObject(main.raw!);
         expect(written['7']).toMatchObject({ tombstone: true });
         expect(written['8']).toMatchObject({ phase: 'moved on' });
     });
@@ -679,7 +679,7 @@ describe('on Android a reset is asked for, never written into a file the service
             asApp();
             expect(app.get(7)).toMatchObject({ corrupt: false, state: null, epoch: { all: 0, gen: 0 } });
             expect(app.set(8, { ...app.get(8).state!, phase: 'moved on' })).toBe('saved');
-            expect(Object.keys(JSON.parse(main.raw!) as Record<string, unknown>)).toEqual(['8']);
+            expect(Object.keys(parseJsonObject(main.raw!))).toEqual(['8']);
             expect(asked.writeRaw).not.toHaveBeenCalled();
         });
 
@@ -733,7 +733,7 @@ describe('on Android a reset is asked for, never written into a file the service
             const { main, app, service } = both(rawStore(), rawStore(JSON.stringify({ 7: recent })));
             asService();
             service.set(8, state());
-            expect((JSON.parse(main.raw!) as Record<string, Record<string, unknown>>)['7']).toEqual({
+            expect(parseJsonObject(main.raw!)['7']).toEqual({
                 tombstone: true,
                 gen: recent,
                 updatedAt: recent,
@@ -774,7 +774,7 @@ describe('on Android a reset is asked for, never written into a file the service
         app.set(7, state());
         await expect(app.remove(7)).resolves.toBe('removed');
         expect(asked.writeRaw).not.toHaveBeenCalled();
-        expect((JSON.parse(main.raw!) as Record<string, unknown>)['7']).toMatchObject({ tombstone: true });
+        expect(parseJsonObject(main.raw!)['7']).toMatchObject({ tombstone: true });
     });
 
     test('requests that are no JSON, or carry no counts, ask for nothing', () => {
@@ -836,7 +836,7 @@ describe('a reset is saved before anything can read it', () => {
         expect(asked.raw).toBeNull();
         expect(app.get(7).state).not.toBeNull();
         await expect(app.remove(8)).resolves.toBe('removed');
-        expect(Object.keys(JSON.parse(asked.raw!) as object)).toEqual(['8']);
+        expect(Object.keys(parseJsonObject(asked.raw!))).toEqual(['8']);
         expect(app.get(7).state).not.toBeNull();
         expect(app.get(8).state).toBeNull();
     });
@@ -851,7 +851,7 @@ describe('a reset is saved before anything can read it', () => {
         expect(asked.updateThrough).toHaveBeenCalledTimes(2);
         asked.raw = JSON.stringify({ 7: Date.now() });
         const update = asked.updateThrough.mock.calls[1][0];
-        expect(Object.keys(JSON.parse(update(asked.raw) ?? '{}') as object).sort()).toEqual(['7', '8']);
+        expect(Object.keys(parseJsonObject(update(asked.raw) ?? '{}')).sort()).toEqual(['7', '8']);
     });
 
     test('is the same change when made again on a newer value: the count it asks for is worked out once', async () => {
@@ -863,9 +863,9 @@ describe('a reset is saved before anything can read it', () => {
         const now = jest.spyOn(Date, 'now');
         try {
             now.mockReturnValue(Date.now() + 10_000);
-            const first = JSON.parse(update(null) ?? '{}') as Record<string, number>;
+            const first = parseJsonAs(update(null) ?? '{}', isRecordOf(isNumber));
             now.mockReturnValue(Date.now() + 50_000);
-            const again = JSON.parse(update(JSON.stringify({ 8: Date.now() })) ?? '{}') as Record<string, number>;
+            const again = parseJsonAs(update(JSON.stringify({ 8: Date.now() })) ?? '{}', isRecordOf(isNumber));
             expect(again[7]).toBe(first[7]);
             expect(again[8]).toEqual(expect.any(Number));
         } finally {

@@ -18,7 +18,15 @@ import pathModule = require('node:path');
 const path = jest.mocked(pathModule);
 import crypto = require('node:crypto');
 import type * as build_lexiconModule from '../../scripts/build-lexicon';
+import { isArrayOf, isRecordOf, isShape, isString, isUnknown, parseJsonAs } from '../helpers/parseJson';
 import type { LexiconAsset } from '../../scripts/build-lexicon';
+
+type WrittenAsset = Pick<LexiconAsset, 'surfaces' | 'packed'> & { searchGroups: unknown[] };
+const isAsset = isShape<WrittenAsset>({
+    surfaces: isRecordOf(isString),
+    packed: isRecordOf(isString),
+    searchGroups: isArrayOf(isUnknown),
+});
 
 const { main } = require('../../scripts/build-lexicon') as typeof build_lexiconModule;
 
@@ -123,7 +131,7 @@ describe('build-lexicon main', () => {
     test('accepts an older intermediate without search surfaces', () => {
         writeFixture({ omitSurfaces: true });
         main(paths);
-        const asset = JSON.parse(fs.readFileSync(paths.outAsset, 'utf8')) as LexiconAsset;
+        const asset = parseJsonAs(fs.readFileSync(paths.outAsset, 'utf8'), isAsset);
         expect(asset.surfaces).toEqual({});
     });
 
@@ -151,7 +159,7 @@ describe('build-lexicon main', () => {
         writeFixture();
         main(paths);
         expect(exitSpy).not.toHaveBeenCalled();
-        const asset = JSON.parse(fs.readFileSync(paths.outAsset, 'utf8')) as LexiconAsset;
+        const asset = parseJsonAs(fs.readFileSync(paths.outAsset, 'utf8'), isAsset);
         expect(asset).toMatchObject({ version: 2, dims: 4, packed: PACKED });
         expect(asset.surfaces).toEqual({});
         expect(asset.searchGroups).toEqual([{ triggers: ['cat', 'kitten'], words: ['cat', 'kitten'] }]);
@@ -170,7 +178,7 @@ describe('build-lexicon main', () => {
             },
         });
         main(paths);
-        const asset = JSON.parse(fs.readFileSync(paths.outAsset, 'utf8')) as LexiconAsset;
+        const asset = parseJsonAs(fs.readFileSync(paths.outAsset, 'utf8'), isAsset);
         expect(asset.searchGroups).toEqual([{ triggers: ['cat', 'kitten'], words: ['cat', 'kitten', 'candle'] }]);
         expect(Object.keys(asset.packed)).toEqual(['cat', 'kitten']);
     });

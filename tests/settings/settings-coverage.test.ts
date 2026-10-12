@@ -29,8 +29,10 @@ const logger = jest.mocked(loggerModule);
 import type * as settingsModule from '../../src/ts/settings';
 import type * as node_fsModule from 'node:fs';
 import type { CategoryLogger } from '../../src/ts/logger';
-import type { AndroidHeadlessStore, AppSettings } from '../../src/ts/types/settings';
+import type { AndroidHeadlessStore } from '../../src/ts/types/settings';
 import { invalid } from '../helpers/invalid';
+import { isAppSettings } from '../helpers/storedShapes';
+import { parseJsonAs } from '../helpers/parseJson';
 
 const g = globalThis as typeof globalThis & {
     __GS_HEADLESS__?: boolean;
@@ -58,7 +60,7 @@ describe('settings facade — edge cases', () => {
         settings.loadSettings();
         store.write.mockClear();
     };
-    const saved = () => JSON.parse(store.value!) as AppSettings;
+    const saved = () => parseJsonAs(store.value!, isAppSettings);
 
     beforeAll(() => {
         // Burn the once-per-process obsolete-settings cleanup so it never

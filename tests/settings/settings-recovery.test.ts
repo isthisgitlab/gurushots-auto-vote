@@ -40,6 +40,7 @@ import type * as settingsModule from '../../src/ts/settings';
 import type * as loggerModule from '../../src/ts/logger';
 import type { CategoryLogger } from '../../src/ts/logger';
 import { invalid } from '../helpers/invalid';
+import { isShape, isString, parseJsonAs, parseJsonObject } from '../helpers/parseJson';
 
 type CatDouble = jest.Mocked<Pick<CategoryLogger, 'info' | 'error' | 'debug' | 'success' | 'warning'>>;
 
@@ -108,7 +109,10 @@ describe('settings recovery (real fs)', () => {
             // Saves work normally, including the token write a login makes.
             expect(settings.setSetting('theme', 'dark')).toBe(true);
             expect(settings.setSetting('token', 'new-token')).toBe(true);
-            const saved = JSON.parse(fs.readFileSync(settingsFile, 'utf8')) as { theme: string; token: string };
+            const saved = parseJsonAs(
+                fs.readFileSync(settingsFile, 'utf8'),
+                isShape<{ theme: string; token: string }>({ theme: isString, token: isString }),
+            );
             expect(saved.theme).toBe('dark');
             expect(saved.token).toBe('new-token');
             expect(settings.loadSettings().token).toBe('new-token');
@@ -215,7 +219,7 @@ describe('settings recovery (real fs)', () => {
             expect(settings.loadSettings().token).toBe('keep-me');
             expect(settings.getSettingsRecovery()).toBeNull();
             expect(settings.saveSettings({ theme: 'light' })).toBe(true);
-            expect((JSON.parse(fs.readFileSync(settingsFile, 'utf8')) as { token: string }).token).toBe('keep-me');
+            expect(parseJsonObject(fs.readFileSync(settingsFile, 'utf8')).token).toBe('keep-me');
         });
     });
 
@@ -259,7 +263,7 @@ describe('settings recovery (real fs)', () => {
 
             expect(settings.loadSettings().token).toBe('cli-token');
             expect(settings.getSetting('token')).toBe('cli-token');
-            expect(JSON.parse(fs.readFileSync(settingsFile, 'utf8')) as { token: string }).toEqual(
+            expect(parseJsonObject(fs.readFileSync(settingsFile, 'utf8'))).toEqual(
                 expect.objectContaining({ token: 'cli-token' }),
             );
         });
@@ -275,7 +279,7 @@ describe('settings recovery (real fs)', () => {
             expect(fs.readdirSync(userData)).toEqual(['settings.json']);
             expect(fs.statSync(settingsFile).ino).not.toBe(inode);
             if (process.platform !== 'win32') expect(fs.statSync(settingsFile).mode & 0o777).toBe(0o600);
-            expect((JSON.parse(fs.readFileSync(settingsFile, 'utf8')) as { theme: string }).theme).toBe('light');
+            expect(parseJsonObject(fs.readFileSync(settingsFile, 'utf8')).theme).toBe('light');
         });
 
         test('temp files an earlier crash left beside the settings are swept on the first write', () => {

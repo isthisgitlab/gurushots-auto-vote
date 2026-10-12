@@ -9,6 +9,8 @@ import type { ComponentType } from 'preact';
 import { act, render, screen, fireEvent, within } from './helpers/test-utils';
 import { ItemEditor, ConditionList, ActionList } from '@/components/app/scenarioBuilder/ItemEditors';
 import { invalid } from '../helpers/invalid';
+import { isPlainObject } from '../../src/ts/plainObject';
+import { isArrayOf, isUnknown, parseJson, parseJsonAs, parseJsonObject } from '../helpers/parseJson';
 
 /** A form control the tests drive: a select, or an input for text / number / checkbox fields. */
 type Control = HTMLInputElement | HTMLSelectElement;
@@ -52,8 +54,11 @@ function Probe({
     );
 }
 
-/** The editor's current value, as the JSON the Probe shows; `T` names the part a test reads. */
-const value = <T = unknown,>() => JSON.parse(screen.getByTestId('value').textContent) as T;
+/** The editor's current value, as the JSON the Probe shows. */
+const value = () => parseJson(screen.getByTestId('value').textContent);
+const valueObject = () => parseJsonObject(screen.getByTestId('value').textContent);
+const valueList = () => parseJsonAs(screen.getByTestId('value').textContent, isArrayOf(isUnknown));
+const valueObjects = () => parseJsonAs(screen.getByTestId('value').textContent, isArrayOf(isPlainObject));
 // A field's label names both its group and its control; tests want the control.
 const controlIn = (container: HTMLElement, name: string) =>
     within(container)
@@ -98,9 +103,9 @@ describe('ConditionList', () => {
         ]);
         expect(up[0].disabled).toBe(true);
         fireEvent.click(up[1]);
-        expect(value<{ type: string }[]>().map((c: { type: string }) => c.type)).toEqual(['freeSlots', 'entries']);
+        expect(valueObjects().map((c) => c.type)).toEqual(['freeSlots', 'entries']);
         fireEvent.click(screen.getAllByRole('button', { name: /app\.sbMoveDown/ })[0]);
-        expect(value<{ type: string }[]>().map((c: { type: string }) => c.type)).toEqual(['entries', 'freeSlots']);
+        expect(valueObjects().map((c) => c.type)).toEqual(['entries', 'freeSlots']);
         fireEvent.click(screen.getByRole('button', { name: 'app.sbRemove: app.sbCond_entries 1' }));
         expect(value()).toEqual([{ type: 'freeSlots', op: '>', value: 0 }]);
     });
@@ -154,7 +159,7 @@ describe('field kinds', () => {
             />,
         );
         changeSelect(control('app.sbField_currency'), 'keys');
-        expect(value<{ currency: string }>().currency).toBe('keys');
+        expect(valueObject().currency).toBe('keys');
         second.unmount();
         render(<Probe Editor={ItemEditor} kind="condition" initial={{ type: 'memorySet', slot: 'held' }} />);
         fireEvent.change(control('app.sbField_slot'), { target: { value: 'top' } });
@@ -183,7 +188,7 @@ describe('field kinds', () => {
         changeSelect(control('app.sbField_field'), 'boosted');
         expect(value()).toEqual({ type: 'entry', select: { by: 'bestRank' }, field: 'boosted', op: '=', value: true });
         changeSelect(control('app.sbField_value'), 'false');
-        expect(value<{ value: unknown }>().value).toBe(false);
+        expect(valueObject().value).toBe(false);
         changeSelect(control('app.sbField_field'), 'turbo');
         expect(value()).toEqual(expect.objectContaining({ field: 'turbo', value: false }));
         changeSelect(control('app.sbField_field'), 'rank');
@@ -192,12 +197,12 @@ describe('field kinds', () => {
         const selector = group('app.sbField_select');
         changeSelect(controlIn(selector, 'app.sbPickType'), 'slot');
         changeSelect(controlIn(selector, 'app.sbField_index'), '0');
-        expect(value<{ select: unknown }>().select).toEqual({ by: 'slot', index: 0 });
+        expect(valueObject().select).toEqual({ by: 'slot', index: 0 });
         changeSelect(controlIn(selector, 'app.sbPickType'), 'fastest');
         fireEvent.click(controlIn(selector, 'app.sbField_skipProtected'));
-        expect(value<{ select: unknown }>().select).toEqual({ by: 'fastest', skipProtected: true });
+        expect(valueObject().select).toEqual({ by: 'fastest', skipProtected: true });
         fireEvent.click(controlIn(selector, 'app.sbField_skipProtected'));
-        expect(value<{ select: unknown }>().select).toEqual({ by: 'fastest' });
+        expect(valueObject().select).toEqual({ by: 'fastest' });
     });
 
     test('nested all / any / not', () => {
@@ -211,7 +216,7 @@ describe('field kinds', () => {
         const inner = group('app.sbField_condition');
         changeSelect(controlIn(inner, 'app.sbPickType'), 'any');
         changeSelect(control('app.sbAddCondition'), 'freeSlots');
-        expect(value<{ condition: unknown }>().condition).toEqual({
+        expect(valueObject().condition).toEqual({
             type: 'any',
             of: [
                 { type: 'exposure', op: '<', value: 50 },
@@ -237,14 +242,14 @@ describe('ActionList', () => {
         changeSelect(control('app.sbField_with'), 'memory');
         fireEvent.change(control('app.sbField_slot'), { target: { value: 'held' } });
         fireEvent.change(control('app.sbField_rememberAdded'), { target: { value: 'filler' } });
-        expect(value<unknown[]>()[0]).toEqual({
+        expect(valueList()[0]).toEqual({
             type: 'swap',
             entry: { by: 'bestRank' },
             with: { memory: 'held' },
             rememberAdded: 'filler',
         });
         changeSelect(control('app.sbField_with'), 'best');
-        expect(value<{ with: unknown }[]>()[0].with).toBe('best');
+        expect(valueObjects()[0].with).toBe('best');
 
         changeSelect(control('app.sbAddAction'), 'goto');
         changeSelect(control('app.sbField_phase'), 'later');
@@ -252,7 +257,7 @@ describe('ActionList', () => {
         fireEvent.change(control('app.sbField_message'), { target: { value: 'Boost now' } });
         changeSelect(control('app.sbAddAction'), 'vote');
         fireEvent.change(control('app.sbField_toExposure'), { target: { value: '80' } });
-        expect(value<unknown[]>().slice(1)).toEqual([
+        expect(valueList().slice(1)).toEqual([
             { type: 'goto', phase: 'later' },
             { type: 'notify', message: 'Boost now' },
             { type: 'vote', toExposure: 80 },

@@ -22,6 +22,11 @@ const path = jest.mocked(pathModule);
 import type * as buildNoticesModule from '../../scripts/build-notices';
 import type * as fetchVisionModelModule from '../../scripts/fetch-vision-model';
 import { invalid } from '../helpers/invalid';
+import { isArrayOf, isRecordOf, isShape, isString, parseJsonAs } from '../helpers/parseJson';
+
+const isPackageJson = isShape<{ devDependencies: Record<string, string> }>({
+    devDependencies: isRecordOf(isString),
+});
 
 const {
     BUNDLED_DEV_DEPENDENCIES,
@@ -154,8 +159,7 @@ describe('the committed notices', () => {
         });
 
         test('add the bundled build-time packages the renderer compiles in', () => {
-            const devDependencies = (JSON.parse(read('package.json')) as { devDependencies: Record<string, string> })
-                .devDependencies;
+            const devDependencies = parseJsonAs(read('package.json'), isPackageJson).devDependencies;
             for (const name of BUNDLED_DEV_DEPENDENCIES) expect(devDependencies).toHaveProperty(name);
             const css = read('src', 'styles', 'styles.css');
             expect(css).toContain("@import 'tailwindcss'");
@@ -164,9 +168,7 @@ describe('the committed notices', () => {
         });
 
         test('account for every devDependency imported from shipped code', () => {
-            const devDependencies = Object.keys(
-                (JSON.parse(read('package.json')) as { devDependencies: Record<string, string> }).devDependencies,
-            );
+            const devDependencies = Object.keys(parseJsonAs(read('package.json'), isPackageJson).devDependencies);
             const imported = new Set<string>();
             const walk = (dir: string) => {
                 for (const entry of fs.readdirSync(dir, { withFileTypes: true })) {
@@ -543,10 +545,10 @@ describe('main failures and rendering', () => {
 
     test('renders the LGPL list only for packages that carry the LGPL text', () => {
         const options = fixture(ONNXRUNTIME_TEXTS_VERSION);
-        const packages = JSON.parse(fs.readFileSync(path.join(options.licensesDir, 'packages.json'), 'utf8')) as Record<
-            string,
-            { texts: string[] }
-        >;
+        const packages = parseJsonAs(
+            fs.readFileSync(path.join(options.licensesDir, 'packages.json'), 'utf8'),
+            isRecordOf(isShape<{ texts: string[] }>({ texts: isArrayOf(isString) })),
+        );
         packages.plain.texts = ['MIT', 'LGPL-3.0'];
         fs.writeFileSync(path.join(options.licensesDir, 'packages.json'), JSON.stringify(packages));
         fs.writeFileSync(path.join(options.licensesDir, 'texts', 'LGPL-3.0.txt'), 'text of LGPL\n');

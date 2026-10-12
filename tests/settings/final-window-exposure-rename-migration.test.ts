@@ -20,6 +20,8 @@ import type * as fsModule from 'node:fs';
 import type * as settingsModule from '../../src/ts/settings';
 import type { AppSettings } from '../../src/ts/types/settings';
 import type * as challengeFixturesModule from '../helpers/challengeFixtures';
+import { isAppSettings } from '../helpers/storedShapes';
+import { parseJsonAs } from '../helpers/parseJson';
 
 const { buildSettingsFixture: buildFixture } =
     require('../helpers/challengeFixtures') as typeof challengeFixturesModule;
@@ -196,7 +198,7 @@ describe('last-hour → final-window key rename migration in loadSettings', () =
         for (let i = calls.length - 1; i >= 0; i -= 1) {
             const [, body] = calls[i];
             if (typeof body === 'string' && body.includes('_finalWindowExposureRenamedV1')) {
-                persisted = JSON.parse(body) as AppSettings;
+                persisted = parseJsonAs(body, isAppSettings);
                 break;
             }
         }

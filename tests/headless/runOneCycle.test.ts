@@ -22,6 +22,7 @@ import type * as indexModule from '../../src/ts/headless/index';
 import type * as loggerModule from '../../src/ts/logger';
 import type { HeadlessGlobals } from '../../src/ts/types/capacitor';
 import { invalid } from '../helpers/invalid';
+import { isBoolean, isNumber, isShape, isString, nullable, optional, parseJsonAs } from '../helpers/parseJson';
 const { OFFLINE_RETRY_MS } = require('../../src/ts/scheduling/randomDelay') as typeof randomDelayModule;
 
 // Requiring the entry installs globalThis.GS.
@@ -31,6 +32,14 @@ const { computeNextDelayMs } = require('../../src/ts/headless/index') as typeof 
 type CyclePayload = { ok: boolean; nextDelayMs: number; message?: string | null; error?: string; skipped?: string };
 
 // The headless WebView's globals (the native bridge and the GS entry point).
+const isCyclePayload = isShape<CyclePayload>({
+    ok: isBoolean,
+    nextDelayMs: isNumber,
+    message: optional(nullable(isString)),
+    error: optional(isString),
+    skipped: optional(isString),
+});
+
 const g = globalThis as HeadlessGlobals;
 
 describe('headless runOneCycle', () => {
@@ -63,7 +72,7 @@ describe('headless runOneCycle', () => {
         delete g.AndroidHeadlessBridge;
     });
 
-    const lastPayload = () => JSON.parse(onCycleComplete.mock.calls[0][0]) as CyclePayload;
+    const lastPayload = () => parseJsonAs(onCycleComplete.mock.calls[0][0], isCyclePayload);
 
     test('a cycle never clears the saved login, whatever "Stay Logged In" says (only the desktop start does)', async () => {
         settings.loadSettings.mockReturnValue(

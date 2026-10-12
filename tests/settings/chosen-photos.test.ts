@@ -12,7 +12,9 @@ import type * as openChallengesModule from '../../src/ts/settings/openChallenges
 import type * as clearModule from '../../src/ts/settings/chosenPhotosClear';
 import type * as cliClearModule from '../../src/ts/cli/commands/settings/chosenPhotos';
 import type * as scenarioStateStoreModule from '../../src/ts/scenarioStateStore';
-import type { AndroidHeadlessStore, AppSettings } from '../../src/ts/types/settings';
+import type { AndroidHeadlessStore } from '../../src/ts/types/settings';
+import { isAppSettings } from '../helpers/storedShapes';
+import { isRecordOf, isShape, isUnknown, parseJsonAs } from '../helpers/parseJson';
 const { forgetOpenChallengeIds, getOpenChallengeIds, getUpcomingChallengeIds } =
     require('../../src/ts/settings/openChallenges') as typeof openChallengesModule;
 const { scenarioStateLedger, initialState } =
@@ -41,7 +43,7 @@ describe('Chosen Photos settings', () => {
         readKey: (key: string) => string | null;
         writeKey: (key: string, data: string) => void;
     };
-    const blob = () => JSON.parse(store.value!) as AppSettings;
+    const blob = () => parseJsonAs(store.value!, isAppSettings);
 
     beforeEach(() => {
         g.__GS_HEADLESS__ = true;
@@ -693,11 +695,15 @@ describe('Chosen Photos settings', () => {
             },
         };
 
+        const isScenarioDoc = isShape<{ phases: Record<string, { settings: unknown }> }>({
+            phases: isRecordOf(isShape<{ settings: unknown }>({ settings: isUnknown })),
+        });
+
         test('export drops the photo ids and says so; everything else stays', () => {
             settings.saveScenario(doc);
             const exported = settings.exportScenarioWithNotes('Plan')!;
             expect(exported.omitted).toEqual(['chosenPhotos']);
-            const parsed = JSON.parse(exported.json) as typeof doc;
+            const parsed = parseJsonAs(exported.json, isScenarioDoc);
             expect(parsed.phases.main.settings).toEqual({ chosenPhotosOnly: true, exposure: 40, exposureTarget: 50 });
             expect(parsed.phases.late.settings).toEqual({ chosenPhotosOnly: false });
             expect(settings.exportScenario('Plan')).toBe(exported.json);

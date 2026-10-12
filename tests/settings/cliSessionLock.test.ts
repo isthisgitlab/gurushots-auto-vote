@@ -19,6 +19,7 @@ import * as os from 'node:os';
 import * as path from 'node:path';
 import type * as runtimeModule from '../../src/ts/runtime';
 import type * as lockModule from '../../src/ts/settings/cliSessionLock';
+import { isNumber, isShape, isString, parseJsonAs } from '../helpers/parseJson';
 
 const runtime = require('../../src/ts/runtime') as typeof runtimeModule;
 const { holdCliSessionLock, isCliSessionActive, LOCK_FILE_NAME } =
@@ -92,7 +93,10 @@ describe('cli session lock', () => {
     test('holding writes the marker for this process; release removes it', () => {
         const release = holdCliSessionLock();
 
-        const held = JSON.parse(fs.readFileSync(lockFile, 'utf8')) as { pid: number; startedAt: string };
+        const held = parseJsonAs(
+            fs.readFileSync(lockFile, 'utf8'),
+            isShape<{ pid: number; startedAt: string }>({ pid: isNumber, startedAt: isString }),
+        );
         expect(held.pid).toBe(process.pid);
         expect(Number.isNaN(Date.parse(held.startedAt))).toBe(false);
         if (process.platform !== 'win32') expect(fs.statSync(lockFile).mode & 0o777).toBe(0o600);

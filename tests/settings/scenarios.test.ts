@@ -11,7 +11,9 @@ import type * as templatesModule from '../../src/ts/scenarios/templates';
 import type * as scenariosModule from '../../src/ts/settings/scenarios';
 const { SCENARIO_TEMPLATES } = require('../../src/ts/scenarios/templates') as typeof templatesModule;
 import { invalid } from '../helpers/invalid';
-import type { AndroidHeadlessStore, AppSettings, ChallengeSettings } from '../../src/ts/types/settings';
+import type { AndroidHeadlessStore, ChallengeSettings } from '../../src/ts/types/settings';
+import { isAppSettings } from '../helpers/storedShapes';
+import { parseJsonAs } from '../helpers/parseJson';
 
 const g = globalThis as typeof globalThis & { __GS_HEADLESS__?: boolean; AndroidHeadlessStore?: AndroidHeadlessStore };
 
@@ -45,7 +47,7 @@ const simple = (name = 'Plan') => ({
 describe('settings facade — scenarios', () => {
     let store: AndroidHeadlessStore & { value: string | null };
 
-    const storedMap = () => (JSON.parse(store.value!) as AppSettings).challengeSettings.scenarios!;
+    const storedMap = () => parseJsonAs(store.value!, isAppSettings).challengeSettings.scenarios!;
 
     beforeEach(() => {
         g.__GS_HEADLESS__ = true;
@@ -109,7 +111,7 @@ describe('settings facade — scenarios', () => {
 
     test('a stored document that no longer validates is skipped and logged', () => {
         settings.saveScenario(simple('Good'));
-        const blob = JSON.parse(store.value!) as AppSettings;
+        const blob = parseJsonAs(store.value!, isAppSettings);
         blob.challengeSettings.scenarios!.Broken = { name: 'Broken', version: 99 };
         store.value = JSON.stringify(blob);
         expect(Object.keys(settings.getScenarios())).toEqual(['Good']);
@@ -127,7 +129,7 @@ describe('settings facade — scenarios', () => {
 
     test('a corrupted (non-object) scenarios map reads as empty', () => {
         settings.saveScenario(simple());
-        const blob = JSON.parse(store.value!) as AppSettings;
+        const blob = parseJsonAs(store.value!, isAppSettings);
         blob.challengeSettings.scenarios = invalid(['not', 'a', 'map']);
         store.value = JSON.stringify(blob);
         expect(settings.getScenarios()).toEqual({});
@@ -250,7 +252,7 @@ describe('settings facade — scenarios', () => {
 
 describe('settings facade — scenario assignment', () => {
     let store: AndroidHeadlessStore & { value: string | null };
-    const blob = (): ChallengeSettings => (JSON.parse(store.value!) as AppSettings).challengeSettings;
+    const blob = (): ChallengeSettings => parseJsonAs(store.value!, isAppSettings).challengeSettings;
 
     beforeEach(() => {
         g.__GS_HEADLESS__ = true;
@@ -337,7 +339,7 @@ describe('settings facade — scenario assignment', () => {
     });
 
     test('a delete copes with missing or corrupted assignment containers', () => {
-        const raw = JSON.parse(store.value!) as AppSettings;
+        const raw = parseJsonAs(store.value!, isAppSettings);
         raw.challengeSettings.profiles = invalid({ Broken: null });
         raw.challengeSettings.titleRules = invalid('not a list');
         store.value = JSON.stringify(raw);

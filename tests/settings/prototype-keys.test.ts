@@ -27,6 +27,8 @@ import settings = require('../../src/ts/settings');
 import type * as schemaModule from '../../src/ts/settings/schema';
 import type { AndroidHeadlessStore, AppSettings } from '../../src/ts/types/settings';
 import { invalid } from '../helpers/invalid';
+import { isAppSettings } from '../helpers/storedShapes';
+import { parseJson, parseJsonAs } from '../helpers/parseJson';
 
 const { schemaEntry } = require('../../src/ts/settings/schema') as typeof schemaModule;
 
@@ -39,7 +41,7 @@ const PROTOTYPE_KEYS = ['constructor', 'toString', '__proto__', 'hasOwnProperty'
 
 describe('prototype-named keys', () => {
     let value: string | null;
-    const saved = () => JSON.parse(value!) as AppSettings;
+    const saved = () => parseJsonAs(value!, isAppSettings);
     const seed = (obj: unknown) => {
         value = JSON.stringify(obj);
         settings.loadSettings();
@@ -120,9 +122,7 @@ describe('prototype-named keys', () => {
         test('saveSettings refuses a payload carrying it, whole', () => {
             seed({ theme: 'dark' });
             const before = value;
-            const payload: Partial<AppSettings> = JSON.parse(
-                `{"theme":"light","${key}":{"polluted":true}}`,
-            ) as Partial<AppSettings>;
+            const payload = invalid<Partial<AppSettings>>(parseJson(`{"theme":"light","${key}":{"polluted":true}}`));
             expect(settings.saveSettings(payload)).toBe(false);
             expect(value).toBe(before);
         });

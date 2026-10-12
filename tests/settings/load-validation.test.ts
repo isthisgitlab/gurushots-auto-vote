@@ -9,6 +9,7 @@
 import type { AndroidHeadlessStore } from '../../src/ts/types/settings';
 import settings = require('../../src/ts/settings');
 import type * as defaultsModule from '../../src/ts/settings/defaults';
+import { isRecordOf, isShape, isUnknown, parseJsonAs } from '../helpers/parseJson';
 const { getDefaultSettings } = require('../../src/ts/settings/defaults') as typeof defaultsModule;
 
 const mockWarning = jest.fn<void, [message: string, data?: unknown]>();
@@ -107,7 +108,10 @@ describe('loadSettings validation', () => {
         // A current blob (no migration rewrites it) that predates one container.
         seed(getDefaultSettings());
         settings.loadSettings();
-        const current = JSON.parse(store.value as string) as ReturnType<typeof getDefaultSettings>;
+        const current = parseJsonAs(
+            store.value as string,
+            isShape<{ challengeSettings: Record<string, unknown> }>({ challengeSettings: isRecordOf(isUnknown) }),
+        );
         const challengeSettings = Object.fromEntries(
             Object.entries(current.challengeSettings).filter(([key]) => key !== 'titleProfileSuppressions'),
         );

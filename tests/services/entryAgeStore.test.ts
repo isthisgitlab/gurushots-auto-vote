@@ -8,10 +8,27 @@ import type * as entryAgeStoreModule from '../../src/ts/entryAgeStore';
 import type { Challenge } from '../../src/ts/types/gurushots';
 import type { EntryAgeRecord } from '../../src/ts/types/stores';
 import { invalid } from '../helpers/invalid';
+import {
+    isArrayOf,
+    isNumber,
+    isRecordOf,
+    isShape,
+    isString,
+    nullable,
+    optional,
+    parseJsonAs,
+} from '../helpers/parseJson';
 const { createEntryAgeLedger, createMemoryEntryAgeLedger } =
     require('../../src/ts/entryAgeStore') as typeof entryAgeStoreModule;
 
 const NOW = 1_800_000_000;
+
+const isEntryAgeRecord = isShape<EntryAgeRecord>({
+    closeTime: isNumber,
+    entered: isRecordOf(isNumber),
+    pending: nullable(isString),
+    uncertain: optional(isArrayOf(isString)),
+});
 
 const rawStore = (initial: string | null) => {
     let raw = initial;
@@ -20,7 +37,7 @@ const rawStore = (initial: string | null) => {
         writeRaw: jest.fn((data: string) => {
             raw = data;
         }),
-        peek: () => JSON.parse(raw!) as Record<string, EntryAgeRecord>,
+        peek: () => parseJsonAs(raw!, isRecordOf(isEntryAgeRecord)),
     };
     return store;
 };
