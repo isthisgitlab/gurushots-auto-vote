@@ -259,100 +259,10 @@ describe('the Android component list', () => {
         expect(unaccounted).toEqual([]);
     });
 
-    // What the release APK ships besides the Capacitor projects (npm packages, section 3):
-    // `cd android && ./gradlew :app:dependencies --configuration releaseRuntimeClasspath`, as group:artifact.
-    const RELEASE_RUNTIME_ARTIFACTS = [
-        'androidx.activity:activity',
-        'androidx.appcompat:appcompat',
-        'androidx.concurrent:concurrent-futures',
-        'androidx.core:core',
-        'androidx.core:core-splashscreen',
-        'androidx.lifecycle:lifecycle-runtime',
-        'androidx.webkit:webkit',
-        'com.google.guava:listenablefuture',
-        'com.squareup.okhttp3:okhttp',
-        'com.squareup.okhttp3:okhttp-android',
-        'com.squareup.okio:okio',
-        'com.squareup.okio:okio-jvm',
-        'org.apache.cordova:framework',
-        'org.jetbrains.kotlin:kotlin-stdlib',
-        'org.jetbrains.kotlinx:kotlinx-coroutines-android',
-        'org.jetbrains.kotlinx:kotlinx-coroutines-bom',
-        'org.jetbrains.kotlinx:kotlinx-coroutines-core',
-        'org.jetbrains.kotlinx:kotlinx-coroutines-core-jvm',
-        'org.jetbrains:annotations',
-        'org.jspecify:jspecify',
-    ];
-
-    // Artifacts of android/gradle/verification-metadata.xml that never reach the APK: the Android Gradle plugin and
-    // the build, lint, test and coverage tooling it resolves. Anything else the metadata lists must be a component.
-    const BUILD_AND_TEST_TOOLING = [
-        'com.almworks.sqlite4java:*', // Robolectric
-        'com.android:*', // Android Gradle plugin and SDK tooling
-        'com.android.*',
-        'com.google.android:*', // lint
-        'com.google.android.gms:*', // Google Services plugin
-        'com.google.api.grpc:*', // Gradle managed devices
-        'com.google.auto:*', // annotation processors
-        'com.google.auto.*',
-        'com.google.code.*', // findbugs, gson of the build tooling
-        'com.google.crypto.tink:*',
-        'com.google.dagger:*',
-        'com.google.errorprone:*',
-        'com.google.flatbuffers:*',
-        'com.google.gms:*',
-        'com.google.guava:failureaccess', // Guava of the build tooling (listenablefuture is the APK's)
-        'com.google.guava:guava',
-        'com.google.guava:guava-parent',
-        'com.google.j2objc:*',
-        'com.google.jimfs:*',
-        'com.google.protobuf:*',
-        'com.google.testing.platform:*', // Android test platform
-        'com.google.testparameterinjector:*',
-        'com.googlecode.juniversalchardet:*',
-        'com.ibm.icu:*',
-        'com.squareup:*', // javapoet, javawriter
-        'com.squareup.okhttp3:mockwebserver3', // unit tests
-        'com.sun.*',
-        'commons-*',
-        'io.grpc:*',
-        'io.mockk:*', // unit tests
-        'io.netty:*',
-        'io.opencensus:*',
-        'io.perfmark:*',
-        'jakarta.*',
-        'javax.*',
-        'junit:*', // unit tests
-        'net.*',
-        'org.apache.commons:*',
-        'org.apache.httpcomponents:*',
-        'org.apache:*',
-        'org.bitbucket.b_c:*',
-        'org.bouncycastle:*',
-        'org.checkerframework:*',
-        'org.codehaus.*',
-        'org.conscrypt:*',
-        'org.eclipse.ee4j:*',
-        'org.glassfish.*',
-        'org.hamcrest:*', // unit tests
-        'org.jacoco:*', // coverage
-        'org.jdom:*',
-        'org.jetbrains.kotlin:*', // Kotlin compiler and Gradle plugin (kotlin-stdlib is the APK's)
-        'org.jetbrains.kotlinx:atomicfu*',
-        'org.json:*', // unit tests
-        'org.junit:*',
-        'org.jvnet.staxex:*',
-        'org.mockito:*',
-        'org.objenesis:*',
-        'org.ow2:*',
-        'org.ow2.asm:*',
-        'org.robolectric:*', // unit tests
-        'org.slf4j:*',
-        'org.sonatype.oss:*',
-        'org.tensorflow:*',
-        'org.yaml:*',
-    ];
-    const isTooling = (coordinate: string) => BUILD_AND_TEST_TOOLING.some((pattern) => matches(pattern, coordinate));
+    // What the release APK ships besides the Capacitor projects (npm packages, section 3), as group:artifact:
+    // android/release-runtime-artifacts.txt, which scripts/android-verification-metadata.sh writes from
+    // `./gradlew :app:dependencies --configuration releaseRuntimeClasspath`.
+    const runtimeArtifacts = read('android', 'release-runtime-artifacts.txt').split('\n').filter(Boolean);
     const verified = [
         ...new Set(
             [
@@ -363,14 +273,33 @@ describe('the Android component list', () => {
         ),
     ];
 
-    test('covers every artifact of the release runtime classpath, which the verification metadata lists', () => {
-        expect(verified.length).toBeGreaterThan(RELEASE_RUNTIME_ARTIFACTS.length);
-        expect(RELEASE_RUNTIME_ARTIFACTS.filter((coordinate) => !verified.includes(coordinate))).toEqual([]);
-        expect(RELEASE_RUNTIME_ARTIFACTS.filter((coordinate) => !covers(coordinate))).toEqual([]);
+    test('has a release runtime list that is plausible: sorted, unique, and led by the declared libraries', () => {
+        expect(runtimeArtifacts).toEqual([...new Set(runtimeArtifacts)].sort());
+        expect(runtimeArtifacts.every((coordinate) => /^[\w.-]+:[\w.-]+$/.test(coordinate))).toBe(true);
+        expect(runtimeArtifacts).toEqual(expect.arrayContaining(declared));
     });
 
-    test('lists every artifact of the verification metadata as a component or as build and test tooling', () => {
-        expect(verified.filter((coordinate) => !covers(coordinate) && !isTooling(coordinate))).toEqual([]);
+    test('covers every artifact of the release runtime classpath, which the verification metadata lists', () => {
+        expect(runtimeArtifacts.filter((coordinate) => !verified.includes(coordinate))).toEqual([]);
+        expect(runtimeArtifacts.filter((coordinate) => !covers(coordinate))).toEqual([]);
+    });
+
+    test('lists no component that matches nothing the release APK ships', () => {
+        const stale = components.filter(
+            (component) =>
+                !component.coordinates.some((pattern) =>
+                    runtimeArtifacts.some((coordinate) => matches(pattern, coordinate)),
+                ),
+        );
+        expect(stale.map((component) => component.name)).toEqual([]);
+    });
+
+    // Anything else the verification metadata lists is the Android Gradle plugin and the build, lint, test and coverage
+    // tooling it resolves, which never reaches the APK.
+    test('leaves a component for every artifact the release APK ships, and none for tooling', () => {
+        const tooling = verified.filter((coordinate) => !runtimeArtifacts.includes(coordinate));
+        expect(tooling.length).toBeGreaterThan(runtimeArtifacts.length);
+        expect(tooling.filter((coordinate) => covers(coordinate) && !coordinate.startsWith('androidx.'))).toEqual([]);
     });
 
     test('maps every Capacitor Gradle project to an npm package of the lockfile', () => {
@@ -668,7 +597,7 @@ describe('main failures and rendering', () => {
         fs.writeFileSync(path.join(options.licensesDir, 'texts', 'LGPL-3.0.txt'), 'text of LGPL\n');
         main(options);
         expect(fs.readFileSync(options.outPath, 'utf8')).toContain(
-            'https://github.com/isthisgitlab/gurushots-auto-vote/releases.\n\n  plain 1.0.0\n',
+            'A CLI built from a source checkout corresponds to the source of that\ncheckout.\n\n  plain 1.0.0\n',
         );
     });
 
@@ -678,6 +607,7 @@ describe('main failures and rendering', () => {
         const text = fs.readFileSync(options.outPath, 'utf8');
         expect(text).toContain('the release tag that matches\nthe version the CLI reports');
         expect(text).toContain('https://github.com/isthisgitlab/gurushots-auto-vote/releases.');
+        expect(text).toContain('A CLI built from a source checkout corresponds to the source of that\ncheckout.');
         expect(text).not.toContain('/tree/v');
     });
 

@@ -700,6 +700,7 @@ jobs:
             # was pushed finds it at the branch tip (a commit on top of the
             # built one, carrying the new version) and reuses it instead of
             # committing the same bump a second time, which would be rejected.
+            # The reuse only applies while the bump commit is still the branch tip.
             - name: Commit and push version bump
               id: bump_commit
               env:

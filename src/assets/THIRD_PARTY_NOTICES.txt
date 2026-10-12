@@ -587,7 +587,8 @@ binaries they are part of the embedded runtime archive, which is extracted to th
 directory of the CLI's data folder and checked against a digest embedded at build time; to use
 a modified build of them, rebuild the CLI from this project's source: the release tag that matches
 the version the CLI reports (the "Current version" line of its check-updates command) is listed at
-https://github.com/isthisgitlab/gurushots-auto-vote/releases.
+https://github.com/isthisgitlab/gurushots-auto-vote/releases. A CLI built from a source checkout corresponds to the source of that
+checkout.
 
   @img/sharp-freebsd-wasm32 0.35.5
   @img/sharp-libvips-darwin-arm64 1.3.4

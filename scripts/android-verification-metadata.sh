@@ -1,6 +1,8 @@
 #!/usr/bin/env bash
 # Regenerates android/gradle/verification-metadata.xml, the SHA-256 of every artifact Gradle resolves for the Android
-# build (plugins, libraries, the Gradle-side tooling), which CI checks on every run.
+# build (plugins, libraries, the Gradle-side tooling), which CI checks on every run, and
+# android/release-runtime-artifacts.txt, the libraries the release APK ships (group:artifact, one per line), which the
+# third-party notices test holds the notices' Android component list to.
 #
 # Run it after any change to the Android dependency graph: android/build.gradle, android/app/build.gradle,
 # android/variables.gradle, a Capacitor plugin, or the Gradle wrapper. Dependabot's npm PRs that bump @capacitor/* change
@@ -55,6 +57,7 @@ fi
 
 repo=$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)
 metadata="$repo/android/gradle/verification-metadata.xml"
+runtime_artifacts="$repo/android/release-runtime-artifacts.txt"
 
 # A failed run puts the previous file back rather than leave half of one.
 succeeded=false
@@ -66,6 +69,7 @@ restore() {
 trap restore EXIT
 rm -f "$metadata.bak"
 if [ -f "$metadata" ]; then mv "$metadata" "$metadata.bak"; fi
+tree=$(mktemp)
 
 echo "==> host pass ($(uname -s))"
 (
@@ -73,7 +77,13 @@ echo "==> host pass ($(uname -s))"
     export GRADLE_USER_HOME
     GRADLE_USER_HOME=$(mktemp -d)
     ./gradlew --no-daemon --console=plain --write-verification-metadata sha256 --rerun-tasks "${TASKS[@]}"
+    # The release runtime classpath without version constraints ("(c)") and the Capacitor projects (npm packages).
+    ./gradlew --no-daemon --console=plain -q :app:dependencies --configuration releaseRuntimeClasspath > "$tree"
 )
+grep -v ' (c)$' "$tree" |
+    sed -nE 's/^[|+\\ -]*([A-Za-z0-9_.-]+:[A-Za-z0-9_.-]+)([: ]|$).*/\1/p' |
+    LC_ALL=C sort -u > "$runtime_artifacts"
+rm -f "$tree"
 
 echo "==> linux/amd64 pass ($CONTAINER_IMAGE)"
 mounts=(-v "$repo:/work")
