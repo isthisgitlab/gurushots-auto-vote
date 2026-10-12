@@ -381,9 +381,13 @@ Deliberate semantics and caveats:
   The _next-delay decision_ is the shared one: the headless JS entry
   (`src/ts/headless/index.ts`) runs one cycle per alarm and reports
   `nextDelayMs` from `computeNextCycleDelayMs` back to the plugin, which
-  schedules the next alarm accordingly. The JS-side `AutovoteContext` cycle
-  still runs while the app is open so the user gets immediate visual
-  feedback (cycle counter, last-run timestamp).
+  schedules the next alarm accordingly. While the app is open, `AutovoteContext`
+  also runs its own cadence chain in the WebView (`createCadenceChain`, the
+  same shared decision, its own timer), so the user gets immediate visual
+  feedback (cycle counter, last-run timestamp) and the in-app boost / turbo /
+  submit surfaces keep working. The two loops do not both spend: with the
+  native service installed, the app's pass leaves automatic joins and fills to
+  the service, and only the service advances scenarios.
 - **Lifecycle**: independent of the WebView. Survives swipe-to-close.
   Only stopped explicitly via `nativeAutovote.stop()` or by
   vendor-specific battery killers (Samsung / Xiaomi / OnePlus may kill

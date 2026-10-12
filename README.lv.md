@@ -6,6 +6,8 @@
 
 Automātiska balsošana GuruShots izaicinājumos. Viens un tas pats balsošanas dzinējs pieejams trīs veidos: kā darbvirsmas **grafiskā lietotne** (Electron), kā **komandrindas rīks** (`gurucli`) un kā **Android** lietotne (APK fails, ko instalē ārpus Play Store), kas turpina balsot fonā.
 
+> **⚠️ Neoficiāla lietotne — lietojiet uz savu atbildību.** GuruShots Auto Voter ir neatkarīgs projekts. Tas **nav saistīts ar GuruShots, un GuruShots to nav apstiprinājis vai atbalstījis**; "GuruShots" ir tā īpašnieka preču zīme, un šeit tā lietota tikai tāpēc, lai nosauktu pakalpojumu, ar kuru lietotne strādā. Automātiska balsošana var pārkāpt GuruShots lietošanas noteikumus un var novest pie konta ierobežojumiem vai apturēšanas. Par lietotnes lietošanu atbildat jūs paši.
+
 **🇬🇧 [Documentation in English →](README.md)**
 
 ## Saturs
@@ -113,7 +115,7 @@ Nepieciešama konkrēta versija? Apskatiet **[visus izlaidumus](https://github.c
 1. Lejupielādējiet augstāk norādīto `.exe` failu.
 2. Palaidiet to ar dubultklikšķi — instalēt nav nepieciešams, lietotne darbojas tieši no izpildfaila.
 3. Pirmajā palaišanas reizē lietotne izveido konfigurāciju un žurnālfailus mapē `%APPDATA%\gurushots-auto-vote\`.
-4. Ja SmartScreen rāda brīdinājumu, izvēlieties **Papildinformācija → Tomēr palaist**.
+4. Ja SmartScreen rāda brīdinājumu (lietotni nav parakstījis izdevējs), izvēlieties **Papildinformācija → Tomēr palaist**.
 
 #### 🍎 macOS
 
@@ -124,6 +126,8 @@ Nepieciešama konkrēta versija? Apskatiet **[visus izlaidumus](https://github.c
     ```bash
     xattr -rd com.apple.quarantine /Applications/GuruShotsAutoVote.app
     ```
+
+3. Šīs versijas pirmajā palaišanas reizē lietotne vēlreiz lūdz atļauju sūtīt paziņojumus: lietotnes identifikators ir `com.isthisgitlab.gurushotsautovote`, tāpēc macOS to uzskata par jaunu lietotni. Atļaujiet paziņojumus, lai turpinātu saņemt brīdinājumus pirms termiņa beigām.
 
 **CLI operētājsistēmā macOS:**
 
@@ -205,10 +209,14 @@ Norādījumus par grafisko lietotni un CLI, balsošanas noteikumus, uzstādījum
 
 - Visi API pieprasījumi tiek sūtīti, izmantojot HTTPS.
 - Akreditācijas dati žurnālos netiek rādīti — pirms jebkura ieraksta žurnālā jutīgo lauku vērtības tiek maskētas.
-- Lietotne jūsu tokenu glabā lokāli uzstādījumu failā un sūta to tikai uz GuruShots; uzstādījumi un konfigurācija nekad nepamet jūsu ierīci.
+- Lietotne jūsu tokenu glabā lokāli uzstādījumu failā (darbvirsmā un CLI — failā, ko var lasīt tikai tā īpašnieks; Android — lietotnes privātajā krātuvē) un sūta to tikai uz GuruShots; uzstādījumi un konfigurācija nekad nepamet jūsu ierīci.
+- **Kas atstāj jūsu ierīci:** pieprasījumi uz GuruShots (balsošana un konta dati, foto miniatūras) un pieprasījumi uz GitHub (`api.github.com` un GitHub izlaidumu lejupielādes), lai pārbaudītu un lejupielādētu atjauninājumus. Citām adresēm lietotne nesazinās, un foto analīze notiek ierīcē.
+- Izrakstoties tiek noņemts tikai pieteikšanās tokens. **Dzēst visus vietējos datus** (Uzstādījumi → Par lietotni un datiem; CLI `reset-data --yes`) izdzēš visu, ko lietotne glabā ierīcē; skatiet [kur tiek glabāti jūsu dati](docs/usage.lv.md#️-kur-tiek-glabāti-jūsu-dati--kā-tos-dzēst).
 - Kļūdu ziņojumos nav jutīgas informācijas.
-- Tīmekļa saskarne (`pnpm web`) ir pieejama tikai šajā datorā (localhost) un noraida pieprasījumus no citām vietnēm. Tai nav savas paroles, tāpēc nekad nepadariet tās portu pieejamu tīklā.
+- Tīmekļa saskarne (`pnpm web`) ir pieejama tikai šajā datorā (localhost), noraida pieprasījumus no citām vietnēm un tai nav savas paroles — tā vietā katrā palaišanas reizē tiek izveidots nejaušs tokens, kas jānorāda katram pieprasījumam. Atveriet precīzu adresi, ko komanda izvada (tā beidzas ar `#t=<tokens>`); lapa tokenu saglabā arī pēc pārlādēšanas, bet adrese bez tā tiek noraidīta. Nekad nepadariet tās portu pieejamu tīklā.
 - Automātiskās iesniegšanas vizuālā pārbaude darbojas lokāli ar iebūvētu modeli; tā no GuruShots lejupielādē tikai jūsu pašu foto sīktēlus un neko nesūta citiem pakalpojumiem.
+- Darbvirsmas būvējumus neparaksta izdevējs, tāpēc atjauninājumiem uzticas, pamatojoties uz projekta GitHub izlaidumiem. Skatiet [pieņemtos ierobežojumus](docs/architecture.md#10-security-renderer--main--state-the-limits-dont-over-promise) (angliski).
+- Trešo pušu programmatūra un dati, ko lietotne iekļauj, ar to licencēm: Uzstādījumi → Par lietotni un datiem vai CLI komanda `licenses`.
 
 ## 📄 Licence un atbalsts
 
@@ -226,4 +234,4 @@ Ja šis rīks jums noder, varat atbalstīt tā izstrādi:
 
 ---
 
-**Piezīme:** šī lietotne paredzēta izglītojošiem un izstrādes nolūkiem. Lūdzu, ievērojiet GuruShots lietošanas noteikumus un izmantojiet lietotni atbildīgi.
+**Neoficiāla lietotne:** šī lietotne nav saistīta ar GuruShots, un GuruShots to nav apstiprinājis vai atbalstījis; "GuruShots" ir tā īpašnieka preču zīme. Automātiska balsošana var pārkāpt GuruShots lietošanas noteikumus un var novest pie konta ierobežojumiem vai apturēšanas. Lietojiet to uz savu atbildību.

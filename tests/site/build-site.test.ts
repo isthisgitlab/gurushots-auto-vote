@@ -58,13 +58,25 @@ import type * as marked_gfm_heading_idModule from 'marked-gfm-heading-id';
 import type * as build_siteModule from '../../scripts/build-site';
 const { resetHeadings } = jest.mocked(require('marked-gfm-heading-id') as typeof marked_gfm_heading_idModule);
 
-const { hasScheme, srcDirOf, toRepoPath, rewriteLink, rewriteImage, render, buildNav, PAGES, main, runCli } =
-    require('../../scripts/build-site') as typeof build_siteModule;
+const {
+    hasScheme,
+    srcDirOf,
+    toRepoPath,
+    rewriteLink,
+    rewriteImage,
+    badgeSvg,
+    render,
+    buildNav,
+    PAGES,
+    BADGES,
+    main,
+    runCli,
+} = require('../../scripts/build-site') as typeof build_siteModule;
 
 const pageBySrc = (src: string) => PAGES.find((p) => p.src === src);
 
 const BLOB = 'https://github.com/isthisgitlab/gurushots-auto-vote/blob/master';
-const RAW = 'https://raw.githubusercontent.com/isthisgitlab/gurushots-auto-vote/master';
+const REAL_LAYOUT = nodePath.join(__dirname, '..', '..', 'scripts', 'site', 'layout.html');
 
 describe('hasScheme', () => {
     it('recognises absolute, mailto, custom-scheme, and protocol-relative URLs', () => {
@@ -136,11 +148,51 @@ describe('rewriteLink', () => {
 });
 
 describe('rewriteImage', () => {
-    it('rewrites relative images to the raw host and leaves absolute ones', () => {
-        expect(rewriteImage('src/assets/logo.png', '')).toBe(`${RAW}/src/assets/logo.png`);
-        expect(rewriteImage('https://img.shields.io/badge.svg', '')).toBe('https://img.shields.io/badge.svg');
-        expect(rewriteImage('', '')).toBe('');
-        expect(rewriteImage('#frag', '')).toBe('#frag');
+    it('serves relative images from the site, resolved against the source directory', () => {
+        expect(rewriteImage('src/assets/logo.png', 'Logo', '')).toBe('./images/src/assets/logo.png');
+        expect(rewriteImage('shot.png', 'Shot', 'docs')).toBe('./images/docs/shot.png');
+    });
+
+    it('keeps a remote image only as a known static badge and drops every other one', () => {
+        expect(rewriteImage('https://img.shields.io/badge/license-ISC-blue.svg', 'License', '')).toBe(
+            './badges/license.svg',
+        );
+        expect(rewriteImage('https://img.shields.io/badge/Bitcoin-000', 'Bitcoin', '')).toBe('./badges/bitcoin.svg');
+        expect(rewriteImage('https://coveralls.io/badge.svg', 'Coverage Status', '')).toBeNull();
+        expect(rewriteImage('//cdn.example.com/x.png', 'Ethereum', '')).toBe('./badges/ethereum.svg');
+        expect(rewriteImage('https://example.com/x.png', 'constructor', '')).toBeNull();
+    });
+
+    it('drops empty, anchor-only and out-of-repo images', () => {
+        expect(rewriteImage('', 'x', '')).toBeNull();
+        expect(rewriteImage('#frag', 'x', '')).toBeNull();
+        expect(rewriteImage('../../outside.png', 'x', 'docs')).toBeNull();
+        expect(rewriteImage('..', 'x', '')).toBeNull();
+    });
+});
+
+describe('badgeSvg', () => {
+    it('draws a two-part badge with an accessible name', () => {
+        const svg = badgeSvg(BADGES.License);
+        expect(svg).toContain('role="img" aria-label="license: ISC"');
+        expect(svg).toContain('<title>license: ISC</title>');
+        expect(svg).toContain('fill="#555"');
+        expect(svg).toContain('fill="#007ec6"');
+        expect(svg).toContain('>license</text>');
+        expect(svg).toContain('>ISC</text>');
+    });
+
+    it('draws a single coloured block when there is no label, and escapes the text', () => {
+        const svg = badgeSvg({ message: 'A&B <"x">', color: '#000' });
+        expect(svg).not.toContain('fill="#555"');
+        expect(svg).toContain('aria-label="A&#38;B &#60;&#34;x&#34;&#62;"');
+        expect(svg).not.toContain('<"x">');
+    });
+
+    it('references no other host', () => {
+        for (const badge of Object.values(BADGES)) {
+            expect(badgeSvg(badge)).not.toMatch(/https?:\/\/(?!www\.w3\.org\/2000\/svg)/);
+        }
     });
 });
 
@@ -167,6 +219,12 @@ describe('buildNav (language switch)', () => {
         // the Latvian side has no separate scheduling page, and shouldn't offer "Latviski"
         expect(nav).not.toContain('href="./scheduling.html"');
         expect(nav).not.toContain('🇱🇻 Latviski');
+    });
+
+    it('keeps the privacy pages out of the navbar (the footer links them)', () => {
+        expect(buildNav(pageBySrc('README.md')!)).not.toContain('privacy');
+        expect(buildNav(pageBySrc('README.lv.md')!)).not.toContain('privacy');
+        expect(buildNav(pageBySrc('docs/privacy.md')!)).not.toContain('privacy');
     });
 });
 
@@ -228,23 +286,38 @@ describe('main (full render into a temp tree)', () => {
         );
         write('docs/usage.md', '[Home](../README.md)\n[Latviski](usage.lv.md)');
         write('docs/usage.lv.md', '[Sākums](../README.lv.md)\n[English](usage.md)');
+        write('docs/privacy.md', '[Home](../README.md)');
+        write('docs/privacy.lv.md', '[Sākums](../README.lv.md)');
         write('dist-site/stale.html', 'old');
 
         await main(opts());
 
         expect(fs.readdirSync(out).sort()).toEqual([
+            'badges',
+            'images',
             'index.html',
             'logo.png',
             'lv.html',
+            'privacy.html',
+            'privacy.lv.html',
             'scheduling.html',
             'usage.html',
             'usage.lv.html',
         ]);
+        expect(fs.readdirSync(nodePath.join(out, 'badges')).sort()).toEqual([
+            'bitcoin.svg',
+            'ethereum.svg',
+            'license.svg',
+        ]);
+        expect(fs.readFileSync(nodePath.join(out, 'badges', 'license.svg'), 'utf8')).toContain(
+            'aria-label="license: ISC"',
+        );
+        expect(fs.readFileSync(nodePath.join(out, 'images', 'src', 'assets', 'logo.png'), 'utf8')).toBe('PNG');
         const index = fs.readFileSync(nodePath.join(out, 'index.html'), 'utf8');
         expect(index).toContain('<title>GuruShots Auto Vote</title>');
         expect(index).toContain('<a href="./scheduling.html">Scheduling</a>');
         expect(index).toContain('<a href="./usage.html#-usage">Usage</a>');
-        expect(index).toContain(`<img src="${RAW}/src/assets/logo.png" alt="Logo">`);
+        expect(index).toContain('<img src="./images/src/assets/logo.png" alt="Logo">');
         expect(index).toContain(`<a href="${BLOB}/LICENSE">Lic</a>`);
         expect(index).toContain('<p># Title</p>');
         expect(index).toContain('v9.9.9');
@@ -264,6 +337,100 @@ describe('main (full render into a temp tree)', () => {
         expect(logSpy).toHaveBeenCalledWith(
             `✓ copied logo.png\n✓ rendered ${PAGES.length} page(s) to dist-site/ for v9.9.9`,
         );
+    });
+
+    describe('built with the real layout', () => {
+        const seedSite = () => {
+            seedRepo();
+            write('docs/usage.md', 'usage');
+            write('docs/scheduling.md', 'scheduling');
+            write('docs/usage.lv.md', 'lietošana');
+            write('docs/privacy.md', 'privacy');
+            write('docs/privacy.lv.md', 'privātums');
+        };
+        const built = (name: string) => fs.readFileSync(nodePath.join(out, name), 'utf8');
+
+        it('loads nothing from another host: remote badges become static files or text, scripts and styles are local', async () => {
+            seedSite();
+            write(
+                'README.md',
+                [
+                    '![License](https://img.shields.io/badge/license-ISC-blue.svg)',
+                    '![Build Status](https://github.com/isthisgitlab/gurushots-auto-vote/actions/workflows/build.yml/badge.svg)',
+                    '![Coverage Status](//coveralls.io/repos/github/x/y/badge.svg)',
+                    '![Logo](src/assets/logo.png)',
+                    '[External](https://example.com)',
+                ].join('\n'),
+            );
+
+            await main({ ...opts(), layoutFile: REAL_LAYOUT });
+
+            const index = built('index.html');
+            expect(index).toContain('<img src="./badges/license.svg" alt="License">');
+            expect(index).toContain('<p>Build Status</p>');
+            expect(index).toContain('<p>Coverage Status</p>');
+            expect(index).toContain('<img src="./images/src/assets/logo.png" alt="Logo">');
+            for (const page of PAGES) {
+                const html = built(page.out);
+                const hosts = [
+                    ...[...html.matchAll(/<(?:img|script|iframe|source|video|audio)\b[^>]*\bsrc="([^"]*)"/g)].map(
+                        (m) => m[1],
+                    ),
+                    ...[...html.matchAll(/<link\b[^>]*\bhref="([^"]*)"/g)].map((m) => m[1]),
+                ];
+                expect(hosts.length).toBeGreaterThan(0);
+                for (const url of hosts) expect(url).not.toMatch(/^(?:[a-z][a-z0-9+.-]*:)?\/\//i);
+            }
+        });
+
+        it('asks browsers for no referrer on every page', async () => {
+            seedSite();
+
+            await main({ ...opts(), layoutFile: REAL_LAYOUT });
+
+            for (const page of PAGES) {
+                expect(built(page.out)).toContain('<meta name="referrer" content="no-referrer" />');
+            }
+        });
+
+        it('builds the privacy page in both languages and links it from the footer in that language', async () => {
+            seedSite();
+
+            await main({ ...opts(), layoutFile: REAL_LAYOUT });
+
+            expect(built('privacy.html')).toContain('<title>Website privacy — GuruShots Auto Vote</title>');
+            expect(built('privacy.lv.html')).toContain('<title>Vietnes privātums — GuruShots Auto Vote</title>');
+            for (const page of PAGES) {
+                const href = page.lang === 'en' ? './privacy.html' : './privacy.lv.html';
+                const label = page.lang === 'en' ? 'Website privacy' : 'Vietnes privātums';
+                expect(built(page.out)).toContain(`<a class="link" href="${href}">${label}</a>`);
+            }
+        });
+
+        it('translates the footer and the page language on Latvian pages', async () => {
+            seedSite();
+
+            await main({ ...opts(), layoutFile: REAL_LAYOUT });
+
+            const lv = built('lv.html');
+            expect(lv).toContain('<html lang="lv"');
+            expect(lv).toContain('Nav saistīts ar GuruShots.');
+            expect(lv).toContain('Pirmkods vietnē GitHub');
+            expect(lv).not.toContain('Not affiliated');
+            const en = built('index.html');
+            expect(en).toContain('<html lang="en"');
+            expect(en).toContain('Not affiliated with GuruShots.');
+            expect(en).toContain('Source on GitHub');
+        });
+
+        it('exits 1 when a page uses an image that is not in the repo', async () => {
+            seedSite();
+            write('README.md', '![Shot](missing.png)');
+
+            await expect(main({ ...opts(), layoutFile: REAL_LAYOUT })).rejects.toThrow('exit 1');
+
+            expect(errorSpy).toHaveBeenCalledWith('✗ image not found: missing.png');
+        });
     });
 
     it('exits 1 before touching the output dir when the logo is missing', async () => {

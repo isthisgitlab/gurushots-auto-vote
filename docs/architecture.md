@@ -5,15 +5,11 @@ the application's own conventions — the voting engine, scheduler, API transpor
 renderer, i18n, and security — the things a contributor (human or agent) must not break but that the code
 alone doesn't spell out. For the three per-platform timer engines, see the companion `scheduling.md`.
 
-**Citation convention.** Each reference leads with the **symbol/function name**; any line number is a
-_secondary hint_ ("around L204"), because this repo has high edit velocity and bare line ranges rot on the
-next unrelated edit. If a number is stale, search by name and update it here.
+**Citation convention.** Each reference names the **symbol/function** and its file, and carries no line
+numbers: this repo has high edit velocity and line ranges rot on the next unrelated edit. Search by name.
 
 **Path convention.** Paths are relative to `src/ts/`; renderer paths keep their `react/…` segments
 (e.g. `react/components/ui/Modal.tsx`).
-
-**Verified as of commit `e21931f`.** If a symbol has moved, trust the name over the line number and update
-this file.
 
 ---
 
@@ -47,7 +43,7 @@ Domain terms used throughout, in reader's terms:
 - The per-challenge action **runners are strictly sequential, never parallelised**: auto-fill mutates the
   shared challenge object (`reflectNewEntry`) so a later turbo/boost in the same cycle sees the new entry
   and the consumed slot.
-- The decision engine is `_runVotingRules()` (`services/decisions/ruleEngine.ts` — around L95). Its precedence
+- The decision engine is `_runVotingRules()` (`services/decisions/ruleEngine.ts`). Its precedence
   order is load-bearing: onlyBoost → not-started / already-ended → flash (→100) → last-minute window
   (→100) → **pre-boost fill** (→100) → **voting pause** → scheduled-fill window → **pre-final-window top-up** →
   final-window rule → normal threshold. The **pre-boost fill** (`voteBeforeBoost`, default off) votes to
@@ -81,21 +77,21 @@ Domain terms used throughout, in reader's terms:
 - **Trigger ≠ target, and there are two _different_ sentinel families — do not merge them:**
     - `exposureTarget` / `finalWindowExposureTarget`: `0` or null means **"target == trigger"** — the rule
       stays **active**, it simply votes up to the trigger value.
-      `getEffectiveExposureTarget()` (`services/decisions/thresholds.ts` — around L81); schema note in
+      `getEffectiveExposureTarget()` (`services/decisions/thresholds.ts`); schema note in
       the `exposureTarget` entry comment in `settings/schema/general.ts`.
     - `boostTime` / `emergencyFill` / `keyUnlockedBoostTime`: `0` means **feature off / never auto-apply**.
-      See the explicit comment in `getEffectiveKeyUnlockedBoostTime()` (`services/decisions/thresholds.ts` — around
-      L120: _"An explicit 0 means 'never auto-apply', matching the 0-is-off convention boostTime and
-      emergencyFill already use"_), and `maybeEmergencyFillChallenge()` (`services/autoFill/emergencyFill.ts` — around
-      L102: `emergencySeconds <= 0` → `'disabled'`).
+      See the explicit comment in `getEffectiveKeyUnlockedBoostTime()` (`services/decisions/thresholds.ts`:
+      _"An explicit 0 means 'never auto-apply', matching the 0-is-off convention boostTime and
+      emergencyFill already use"_), and `maybeEmergencyFillChallenge()` (`services/autoFill/emergencyFill.ts`:
+      `emergencySeconds <= 0` → `'disabled'`).
 - Magic constants: final-window width defaults to 3600 s — the `finalWindowDuration` setting's default
   (configurable 60 s … 30 d); key-unlock boost default window = 900 s when the setting is
   unusable (explicit `0` still = never).
 - Vote submission votes over a **Fisher-Yates-shuffled, de-duplicated** pool (structural termination — rejection
   sampling could loop forever on duplicate ids) and never posts an empty ballot
-  (`api/voting.ts` — around L61, L160).
+  (`api/voting.ts`).
 - **≤1 boost and ≤1 turbo per challenge, on different entries** — enforced by `pickEntryAvoidingConflict()`
-  (`services/decisions/entryPick.ts` — around L24) plus a `reflectEntryFlag` marker. Entry-pick logic lives in
+  (`services/decisions/entryPick.ts`) plus a `reflectEntryFlag` marker. Entry-pick logic lives in
   the shared decision core (behind the `VotingLogic` facade) rather than in `api/boost.ts` so mock mode honours the same rule.
 - **Sleep boost** (`runSuspendBoost` / `runSuspendBoosts` in `services/votingOrchestrator/boost.ts`, driven by
   `windows/suspendBoost.ts` on `powerMonitor` `'suspend'`): not a fork of the pass — it reuses `runBoost`'s target
@@ -111,8 +107,10 @@ Domain terms used throughout, in reader's terms:
 ## 2. Scheduling
 
 - `createCadenceChain()` (`scheduling/cadenceChain/chain.ts`) is a single recursive `setTimeout`
-  chain — **no cron** — shared by CLI, GUI, and Android headless. See `scheduling.md` for the three timer
-  engines that drive it per platform.
+  chain — **no cron** — shared by the CLI (`scheduling/runScheduler.ts`) and the GUI
+  (`react/contexts/AutovoteContext.tsx`). The Android headless service (`headless/index.ts`) has no chain: the
+  native service's `AlarmManager` ticks, each tick runs one cycle, and the next delay comes from
+  `computeNextCycleDelayMs()` below. See `scheduling.md` for the three timer engines per platform.
 - The single cadence decision is `computeNextCycleDelayMs()` (`scheduling/thresholdWindow/cadenceDecision.ts`): modes `last-minute` / `approaching` / `scheduled` / `normal`, with the invariant **never sleep
   past an upcoming boundary**.
 - Double-fire guard: a **stale-timer identity check** (`getTimer() !== timeoutId`) ensures only the
@@ -227,11 +225,14 @@ Domain terms used throughout, in reader's terms:
   `getActiveChallenges` calls per token and pins first-seen titles via `services/challengeTitlePin.ts` on a
   successful fetch only). `apiFactory.ts` assembles the real surface from these and selects it or
   `mock/index.ts#mockApiClient`.
-- All POSTs go through `makePostRequest<T>()` (`api/api-client.ts` — around L260). **Contract: it returns the
-  response body as `T` on success and `null` on ultimate failure or when the body is not a JSON object — it
-  never throws.** Every caller branches on `null`, not on a catch. Only the object check is enforced: `T`
-  declares every field optional and each endpoint wrapper guards its reads (a tolerant reader — a strict
-  schema would turn harmless upstream drift into a failed request).
+- Every POST goes through `api/api-client.ts`. `makePostRequest<T>()`, used by every request but a spend, has this
+  **contract: it returns the response body as `T` on success and `null` on ultimate failure or when the body is
+  not a JSON object — it never throws.** Every caller branches on `null`, not on a catch. Only the object check
+  is enforced: `T` declares every field optional and each endpoint wrapper guards its reads (a tolerant reader —
+  a strict schema would turn harmless upstream drift into a failed request).
+- **Spends are the exception.** `coins_unlock` (`api/join.ts`) and the currency spends (`api/currency.ts`) go
+  through `postOnce` (`api/api-client.ts`, `api/postOutcome.ts`): sent once, never repeated, and answered as a
+  `PostOutcome` — `body`, `refused` or `unclear` — instead of `null` (see §5).
 - Auth: `authenticate(email, password)` posts form-encoded credentials and returns the token payload
   (`api/login.ts`). The token is then threaded **explicitly** from caller to caller and injected as the
   `x-token` header — there is no refresh flow.
@@ -553,7 +554,8 @@ repeated six times is one that gets forgotten at one of them.
 ## 6. IPC contract
 
 - `ipc/manifest.ts` is the **dependency-free single source of truth** for the whole `window.api` surface —
-  four lists: `invokeChannels`, `aliases`, `sendMethods`, `eventMethods`. Both shells generate from it:
+  four lists: `invokeChannels`, `aliases`, `sendMethods`, `eventMethods`, plus the Logs window's subsets
+  `logsWindowInvokeChannels` / `logsWindowEventMethods`. Both shells generate from it:
   Electron `preload.ts` builds `contextBridge.exposeInMainWorld('api', …)`; Capacitor
   `bridge/capacitor.ts` builds the identical surface in-process.
 - **Drift is CI-enforced** by `tests/ipc/manifest.test.ts` at the name level. Signatures travel through the
@@ -577,11 +579,12 @@ repeated six times is one that gets forgotten at one of them.
 
 ## 7. Persistence & platform detection
 
-- **Don't hand-roll `fs`.** `createJsonStore({fileName, prefKey})` (`settings/storage.ts` — around L253) is
+- **Don't hand-roll `fs`.** `createJsonStore({fileName, prefKey})` (`settings/storage.ts`) is
   the reusable three-platform JSON store: sync fs at `userData/<fileName>` (mode `0o600`) on Electron/CLI,
-  hydrate-once cache + ordered async write-behind to `@capacitor/preferences` on Capacitor, in-memory only
-  on the Android headless service. `metadata.ts` and `joinStateStore.ts` (paid-unlock idempotency markers)
-  are the other consumers.
+  hydrate-once cache + ordered async write-behind to `@capacitor/preferences` on Capacitor, and the native
+  keyed preference bridge (`settings/storeTransport.ts`) on the Android headless service. Every consumer is
+  listed in the store registry `settings/localData.ts` (`LOCAL_DATA_STORES`) — also what "Delete all local
+  data" removes — and `tests/settings/localData.test.ts` fails for a `createJsonStore` call site missing there.
 - Write-behind is **ordered** (writes chain onto a promise) and `flushPendingWrites()` awaits durability
   before session invalidation. On Capacitor, `initializeAsync()` must be awaited before the first sync
   read — **each store hydrates independently**, so a new store must be wired into the Capacitor bootstrap
@@ -612,8 +615,8 @@ repeated six times is one that gets forgotten at one of them.
   `settings-changed` to every open window (Electron) or the in-process bus (Capacitor); `useIpcQuery`
   subscribers refetch in the background without toggling `loading`, and the translation provider reads
   `language` straight from the payload.
-- **No router.** "Pages" are separate mount entry points chosen by auth state: `mountApp()` / `mountLogin()`
-  (`react/pages/App.tsx`). Electron swaps native windows; Capacitor swaps React trees into `#root`.
+- **No router.** "Pages" are separate mount entry points chosen by auth state: `mountApp()`
+  (`react/pages/App.tsx`) / `mountLogin()` (`react/pages/Login.tsx`). Electron swaps native windows; Capacitor swaps React trees into `#root`.
 - **No toast library.** Error surfaces are: inline DaisyUI `alert` banners with a translated message; and
   `react/components/ui/ErrorBoundary.tsx` (an `alert alert-error` with Dismiss/Reload) wrapped around every
   major subtree. Action failures generally log via `ipc.logRendererError` rather than showing a banner.
@@ -622,7 +625,7 @@ repeated six times is one that gets forgotten at one of them.
   the user — internal detail goes to `logError`, not the UI.
 - **Reuse the `react/components/ui/` primitives** rather than re-rolling: `Modal` (+`ModalActions`),
   `AsyncActionButton`, `StatusBadge` (+`ConnectionBadge`), `LoadingSpinner`,
-  `ResetButton`. New modals **must** go through `ui/Modal.tsx` (around L34–166) — it owns the a11y bar:
+  `ResetButton`. New modals **must** go through `ui/Modal.tsx` — it owns the a11y bar:
   `role="dialog"` / `aria-modal`, a full Tab/Shift+Tab focus trap, focus-move-in on open and restore on
   close, Escape-to-close, and body-scroll lock. Modals stack: only the topmost open one answers Escape and
   Tab (the photo chooser opens from inside a settings modal), and the scroll lock holds until the last closes.
@@ -664,6 +667,13 @@ repeated six times is one that gets forgotten at one of them.
   the file lies inside the app, so a packaged or portable layout can't lock itself out — the navigation
   guard below is what keeps a window on the app's own pages. The check is reused by the manual
   `ipcMain.on` channels, and its refusal log line carries the sender URL.
+- **Logs window** (`ui/applicationMenu.ts`): it loads its own sandboxed preload, `dist/preloadLogs-bundle.js`
+  (`preloadLogs.ts`), built from the same `preloadApi.ts` helpers as the main preload but from the manifest's
+  `logsWindowInvokeChannels` (`get-setting`, `log-error`, `get-log-backlog`, `start-log-stream`,
+  `stop-log-stream`) and `logsWindowEventMethods` (`onLogMessage`, `onSettingsChanged`) only — no spend, no
+  settings write, no other log channel. The main process enforces the same set per sender, whatever the
+  preload exposes: the menu registers the window's `webContents` with `restrictToLogsChannels`, and
+  `registerHandlers` refuses any other invoke from it (`isChannelAllowedForSender`), next to `isTrustedSender`.
 - **Navigation guard** (`index/navigationGuard.ts`, registered in `index.ts` on `web-contents-created`
   so it covers every window): no window opens another — `setWindowOpenHandler` always denies, and hands
   the URL to the system (`shell.openExternal`) only when `isOpenableLinkUrl` (`format/urlSafe.ts`)
@@ -674,13 +684,19 @@ repeated six times is one that gets forgotten at one of them.
   openable, else logged as refused. Challenge `welcome_message` links (`sanitizeWelcomeMessage`) rely on
   this: they never load in an app window.
 - **Permission handlers** (`index/permissions.ts`, installed in `onReady` before the first window): on
-  the default session and on `persist:gurushots`, only `notifications` is granted (the deadline
+  the default session and on the in-memory app session `gurushots` (`APP_PARTITION`, `index/session.ts`:
+  no `persist:` prefix, so its cookies, storage and cache never reach the disk; a stale on-disk partition
+  directory is removed at startup), only `notifications` is granted (the deadline
   notifier), and only when the requesting `webContents.getURL()` starts with `file:`. Checks are judged
   on that URL, never on `requestingOrigin` (always `file:///` for a file page), and a check with no
   web contents is denied. Every denial is logged.
-- **CSP**: the Electron pages (`app.html`, `login.html`, `logs.html`) and the web shell page use
-  `connect-src 'self'`; the renderer makes no fetch/XHR to a remote host (all network calls run in the
-  main process), and remote images load through `img-src https:`. The Capacitor page carries no CSP.
+- **CSP**: every renderer page carries a policy with `object-src 'none'`, `form-action 'none'` and
+  `img-src 'self' data: https://photos.gurushots.com`, and a build test fails on a missing policy or an inline
+  script. The Electron pages (`app.html`, `login.html`, `logs.html`) and the web shell page use
+  `connect-src 'self'`: the renderer makes no fetch/XHR to a remote host (all network calls run in the
+  main process). The Android pages (the Capacitor page and `headless.html`) run network code in the WebView,
+  so their `connect-src` also allows `https://api.github.com` and the photo CDN, and their `script-src`
+  adds `'wasm-unsafe-eval'` for the vision runtime.
 - The settings/token file is written mode `0o600` — but **only at creation. A pre-existing or
   backup-restored file keeps whatever mode it already had** (the source says as much); don't state 0600 as
   an always-guarantee.
@@ -699,6 +715,30 @@ repeated six times is one that gets forgotten at one of them.
   only strips terminal control — ANSI sequences, control and invisible format characters — so use it
   only for a document that holds no credentials, and escape the JSON first (`escapeTerminalUnsafe`,
   `format/logSafe.ts`) when the same text is also written to a file.
+
+### Accepted limits
+
+These are known and deliberate; don't describe the app as stronger than this.
+
+- **The login token is stored in plaintext in the settings store.** On desktop and the CLI it is a field of
+  `settings.json` in the app data folder, a file created owner-only (`0o600`); on Android it is a
+  `@capacitor/preferences` entry in app-private storage, excluded from cloud backup and device transfer
+  (`data_extraction_rules.xml`). It is not encrypted because the Node CLI shares `settings.json` with the GUI and
+  cannot read Electron `safeStorage`, and macOS runs Chromium on a mock keychain on purpose
+  (`use-mock-keychain`, `index.ts`), so `safeStorage` would add no real protection there. Anything that can read
+  the owner's files, or run as that user, can read the token; logging out removes it, and so does "Delete all
+  local data".
+- **Desktop builds are not signed by a publisher** (no Developer ID or notarization on macOS, no publisher
+  certificate on Windows). The update trust root is therefore write access to the project's GitHub releases: the
+  update check and download go to `api.github.com` and GitHub release downloads, branches and tags are
+  protected, but a stolen maintainer token could still publish a build. Android APKs are signed in an isolated
+  release job with a pinned certificate, and that job refuses any other.
+- **`[skip ci]` anywhere in a commit message skips CI.** GitHub reads the marker from the whole message, not only
+  the subject, so a commit that carries it (the release's own version-bump commit does, on purpose) is not built
+  or tested. Review such a commit by hand.
+- **The Android background service is a `specialUse` foreground service** (`AutoVoteService`, subtype declared
+  in `AndroidManifest.xml`): unlike `dataSync` it has no run-time cap. The app is sideloaded, so Play's review of
+  that service type does not apply, and the app is not offered on Google Play.
 
 ## 11. User-defined scenarios
 

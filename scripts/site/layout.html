@@ -1,9 +1,10 @@
 <!doctype html>
-<html lang="en" data-theme="light">
+<html lang="{{lang}}" data-theme="light">
     <head>
         <meta charset="utf-8" />
         <meta name="viewport" content="width=device-width, initial-scale=1" />
         <meta name="description" content="{{description}}" />
+        <meta name="referrer" content="no-referrer" />
         <title>{{title}}</title>
         <link rel="icon" href="./logo.png" />
         <link rel="stylesheet" href="./styles.css" />
@@ -51,9 +52,10 @@
             <aside class="space-y-1">
                 <p>
                     GuruShots Auto Vote · v{{version}} ·
-                    <a class="link" href="https://github.com/isthisgitlab/gurushots-auto-vote">Source on GitHub</a>
+                    <a class="link" href="https://github.com/isthisgitlab/gurushots-auto-vote">{{sourceLabel}}</a> ·
+                    <a class="link" href="{{privacyHref}}">{{privacyLabel}}</a>
                 </p>
-                <p class="text-xs">Rendered from the project README. Not affiliated with GuruShots.</p>
+                <p class="text-xs">{{footerNote}}</p>
             </aside>
         </footer>
 

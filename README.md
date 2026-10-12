@@ -6,6 +6,8 @@
 
 Automated voting for GuruShots challenges. The same voting engine ships three ways: a desktop **GUI** (Electron), a **CLI** (`gurucli`), and an **Android** app (sideloaded APK) that keeps voting in the background.
 
+> **⚠️ Unofficial app — use at your own risk.** GuruShots Auto Voter is an independent project. It is **not affiliated with, endorsed by or sponsored by GuruShots**; "GuruShots" is a trademark of its owner and is used here only to name the service the app works with. Voting automatically may break the GuruShots terms of use and can lead to account restrictions or suspension. You are responsible for how you use it.
+
 **🇱🇻 [Dokumentācija latviešu valodā →](README.lv.md)**
 
 ## Table of Contents
@@ -113,7 +115,7 @@ Prefer a specific version? Browse **[all releases](https://github.com/isthisgitl
 1. Download the `.exe` above.
 2. Double-click to run — no installation needed; it runs straight from the executable.
 3. On first run it creates its config and logs under `%APPDATA%\gurushots-auto-vote\`.
-4. If SmartScreen warns, choose **More info → Run anyway**.
+4. If SmartScreen warns (the app is not signed by a publisher), choose **More info → Run anyway**.
 
 #### 🍎 macOS
 
@@ -124,6 +126,8 @@ Prefer a specific version? Browse **[all releases](https://github.com/isthisgitl
     ```bash
     xattr -rd com.apple.quarantine /Applications/GuruShotsAutoVote.app
     ```
+
+3. The first launch of this release asks for notification permission again: the app's identifier is `com.isthisgitlab.gurushotsautovote`, so macOS treats it as a new app. Allow notifications to keep the pre-deadline warnings.
 
 **CLI on macOS:**
 
@@ -205,10 +209,14 @@ For GUI and CLI instructions, voting rules, settings, logs, and troubleshooting,
 
 - All API calls use HTTPS.
 - Credentials are redacted from logs — sensitive keys are masked before any log write.
-- Your token is stored locally in the app's settings file and is sent only to GuruShots; settings and config never leave your device.
+- Your token is stored locally in the app's settings file (owner-only on desktop and the CLI; app-private storage on Android) and is sent only to GuruShots; settings and config never leave your device.
+- **What leaves your device:** requests to GuruShots (voting and your account data, photo thumbnails) and requests to GitHub (`api.github.com` and GitHub release downloads) to check for and download updates. Nothing else is contacted, and the photo analysis runs on the device.
+- Logging out removes only the login token. **Delete all local data** (Settings → About & data; CLI `reset-data --yes`) removes everything the app stores on the device — see [where your data is stored](docs/usage.md#️-where-your-data-is-stored--how-to-erase-it).
 - Error messages don't expose sensitive information.
-- The web UI (`pnpm web`) listens only on this computer (localhost) and refuses requests from other websites. It has no password of its own, so never expose its port to a network.
+- The web UI (`pnpm web`) listens only on this computer (localhost), refuses requests from other websites, and has no password of its own — instead each run generates a random token that every request must carry. Open the exact URL the command prints (it ends in `#t=<token>`); the page keeps the token through a reload, but the bare address without it is refused. Never expose its port to a network.
 - The auto-submit image check runs locally with a bundled model; it only downloads your own photo thumbnails from GuruShots and sends nothing to any other service.
+- Desktop builds are not signed by a publisher, so updates are trusted on the strength of the project's GitHub releases. See [accepted limits](docs/architecture.md#10-security-renderer--main--state-the-limits-dont-over-promise).
+- Third-party software and data the app includes, with their licenses: Settings → About & data, or `licenses` in the CLI.
 
 ## 📄 License & Support
 
@@ -226,4 +234,4 @@ If this tool is useful to you, you can support development:
 
 ---
 
-**Note:** This application is for educational and development purposes. Please respect GuruShots' terms of service and use it responsibly.
+**Unofficial:** this application is not affiliated with, endorsed by or sponsored by GuruShots, and "GuruShots" is a trademark of its owner. Automating votes may violate the GuruShots terms of use and can lead to account restrictions or suspension. Use it at your own risk.

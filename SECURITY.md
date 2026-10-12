@@ -18,4 +18,6 @@ This is a hobby project maintained by volunteers, so there is no response-time g
 
 In scope: the desktop app, CLI and Android app in this repository, for example token handling, Electron isolation and IPC, and the update channel.
 
+Known and deliberate limits (for example, how the login token is stored and that desktop builds are not signed by a publisher) are listed under [Accepted limits](docs/architecture.md#accepted-limits).
+
 Out of scope: GuruShots' own service and API. Report those to GuruShots.
