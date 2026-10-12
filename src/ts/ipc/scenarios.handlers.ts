@@ -260,7 +260,7 @@ const buildHandlers = () =>
             if (!isIdArg(challengeId)) return invalidArgs;
             return safely('get-scenario-status', async () => {
                 await refreshScenarioStateAsync();
-                // `serviceRuns`: the plans are advanced by the background service, whatever this window could read.
+                // `serviceRuns`: the background service is installed, so it alone advances the plans, whatever this window could read.
                 return {
                     success: true as const,
                     ...getScenarioStatus(challengeId),

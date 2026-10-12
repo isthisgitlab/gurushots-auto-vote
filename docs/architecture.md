@@ -768,7 +768,7 @@ caps (dependency-free, renderer-safe), and `scenarios/templates.ts` holds editab
   not rewrite the file from its cache for a reset (the service may have written it since): it writes the reset into a
   store of its own, `gs_scenario_resets` (`{ "<challengeId>": count, "@all": count }`, a side key of the native
   bridge), and the reset is applied, idempotently, by whichever runtime reads or writes the state file next (the app's
-  own reads apply it as well); the request is **written through**: it waits its turn in the store's write queue, is made from the cache as it is then, and goes into the cache only once Preferences has it (`createJsonStore().updateThrough`), so a reset that could not be saved (`not-saved`) changed nothing, and no read, refresh or engine pass ever saw it. The same holds for the reset of every challenge on a file that cannot be read (its one direct write). A queued write puts down the cache as it is on its turn, so one built before a write-through landed cannot overwrite it.
+  own reads apply it as well); the request is **written through**: it waits its turn in the store's write queue, is made from the cache as it is then, and goes into the cache only once Preferences has it (`createJsonStore().updateThrough`), so a reset that could not be saved (`not-saved`) changed nothing, and no read, refresh or engine pass ever saw it. The same holds for the reset of every challenge on a file that cannot be read (its one direct write). A queued write puts down `intended` on its turn, the latest value queued or written through (no refresh changes it), so one built before a write-through landed cannot overwrite it; and a write queued while a write-through is being saved is rebased onto it, so both changes are saved.
   A request ages like what it asked for (its count is when it was asked): one older than 30 days is ignored, so it
   cannot make a pruned tombstone again, and the app drops it when it next asks for a reset; an unreadable file has nothing to lose and is cleared by the app itself. A progress
   that cannot be read is `file` (all of it: only the reset of every challenge, `reset-all-scenario-state`, clears it)
@@ -797,8 +797,11 @@ caps (dependency-free, renderer-safe), and `scenarios/templates.ts` holds editab
   headless service a read through the bridge that threw reads the same (`headlessReadFailed`; a missing key answers the cache,
   a throw is a failure, and so is a strict store with no bridge). While it holds, `read()` answers unloaded: nothing is
   written, nothing is reset (`state-unloaded`), the plans of that process pause, and the card offers no reset. The card
-  words it by who runs the plans: with the background service only this window lacks the progress and the service
-  keeps running them (`serviceRuns` in the status payload), without it the plans are paused. The app window's pass
+  words it by who owns the plans: where the background service is installed (`serviceRuns` in the status payload: it
+  owns scenarios, which is not the same as running at this moment) only this window lacks the progress and the card says
+  the service runs the plans from its own copy if it is running, without it the plans are paused. The service's own
+  pause (a failed read in its context) is not shown by the app yet: it lives in the service's headless WebView, whose
+  logs do not reach the app's log views on a release build, and it ends at the next successful read. The app window's pass
   re-reads (`refreshScenarioStateAsync`) before running while the cache is not loaded, whoever owns scenarios. A reset
   of every challenge that the dialog offers for unreadable progress is asked for `onlyIfUnreadable`: decided on the file
   as it is where the write is made (under the lock, or when the write's turn comes), a file that reads again is left

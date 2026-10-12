@@ -53,7 +53,8 @@ function Unavailable({
     onReset: (() => void) | undefined;
 }) {
     const { t } = useTranslation();
-    // Not loaded in this window: with the background service the plans go on, without it they are paused.
+    // Not loaded in this window: where the background service is installed it owns the plans (and runs them if it is
+    // on); without it the plans are paused.
     const kind = status.corrupt === 'unloaded' && status.serviceRuns ? 'unloadedService' : status.corrupt;
     const corruptKeys = kind ? CORRUPT_KEY[kind] : null;
     const key = corruptKeys ? corruptKeys[compact ? 1 : 0] : 'app.scenarioStatusMissing';

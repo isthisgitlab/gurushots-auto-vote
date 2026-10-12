@@ -120,12 +120,13 @@ const createQueue = (prefKey: string) => {
  *
  * `updateThrough` is for a write that must not show before it is saved: it waits its turn in the queue, makes the
  * value from the cache as it is then (`update` answers null to write nothing), and puts it in the cache only once
- * Preferences has it. When it fails the cache was never changed, so nothing read, applied or written since has seen
+ * Preferences has it. A write queued while it is being saved gets its change as well (it is applied to that newer
+ * value), and a queued write that failed before it, which it was built on, is no longer one a flush reports. When it fails the cache was never changed, so nothing read, applied or written since has seen
  * it, and it is not a queued write: a flush does not report it.
  *
  * A read takes a snapshot first (`drained`) and gives it back to `confirm`: a write queued or written through since,
- * or a strict store's queued write that did not persist, means the read may not hold what was written, and the cache
- * keeps `intended`.
+ * or a queued write that did not persist, means the read may not hold what was written, and the cache keeps
+ * `intended` (a spend ledger that lost a write would undercount against its limits).
  *
  * @param cache - the store's cache (null: nothing is there)
  */
@@ -160,12 +161,18 @@ export const createWriteBehind = (
             const outcome = await enqueue(async () => {
                 const data = update(cache.get());
                 if (data === null) return;
+                const before = issued;
                 await preferences().set({ key: prefKey, value: data });
+                // A write queued during the save has the newer value, and puts it down on its turn: this change is
+                // applied to that one, so that it saves both. Otherwise this write is the latest, and any queued
+                // write that failed before it is made up for (it was built on).
+                const rebased = issued !== before;
+                intended = rebased ? (update(intended) ?? intended) : data;
+                if (!rebased) latest = Promise.resolve({ ok: true });
                 issued++;
-                intended = data;
                 lastFailed = false;
                 knownKeys.add(prefKey);
-                cache.set(data);
+                cache.set(intended);
                 result = 'saved';
             });
             return outcome.ok ? result : 'failed';
@@ -176,15 +183,17 @@ export const createWriteBehind = (
          */
         confirm: (at: number) => {
             knownKeys.add(prefKey);
-            if (issued !== at || (strict && lastFailed)) cache.set(intended);
+            if (issued !== at || lastFailed) cache.set(intended);
         },
         drained: () => ({ at: issued, done: drained() }),
         flush: async () => {
             const reportedAt = flushedAt;
             await quiet();
-            const outcome = await latest;
-            flushedAt = queued;
-            if (strict && queued > reportedAt && !outcome.ok)
+            // Taken together, with nothing awaited between: a write queued after is not one this flush reports.
+            const [target, upTo] = [latest, queued];
+            const outcome = await target;
+            flushedAt = Math.max(flushedAt, upTo);
+            if (strict && upTo > reportedAt && !outcome.ok)
                 throw new Error(`Capacitor ${prefKey} was not persisted`, { cause: outcome.error });
         },
     };
