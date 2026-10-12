@@ -361,8 +361,9 @@ describe('Delete all local data', () => {
 
 describe('the Android delete failure text', () => {
     // The restart is announced once, by about.deleteRestartsOnClose; the failure text itself says nothing about it.
-    const ENGLISH_RESTART = /restart|relaunch|start again|open (?:it|the app) again|reopen/i;
-    const LATVIAN_RESTART = /palai|restart|pārstart|atsāknē|no jauna|atver\S*\s+(?:\S+\s+)?(?:vēlreiz|no jauna)/i;
+    const ENGLISH_RESTART = /restart|relaunch|reopen|\b(?:start|launch|open)\b[^.;]*\bagain\b/i;
+    const LATVIAN_RESTART =
+        /palai|restart|pārstart|atsāknē|startē|atkal|no jauna|atver\S*\s+(?:\S+\s+){0,3}(?:vēlreiz|atkal|no jauna)/i;
 
     test('does not mention a restart in either language', () => {
         expect(englishAbout.deleteFailedAndroid).not.toMatch(ENGLISH_RESTART);
@@ -374,9 +375,28 @@ describe('the Android delete failure text', () => {
             expect(englishAbout[key]).toMatch(ENGLISH_RESTART);
             expect(latvianAbout[key]).toMatch(LATVIAN_RESTART);
         }
-        expect('Open the app again.').toMatch(ENGLISH_RESTART);
-        expect('Reopen it.').toMatch(ENGLISH_RESTART);
-        expect('Lūdzu atver lietotni vēlreiz.').toMatch(LATVIAN_RESTART);
-        expect('Atver no jauna.').toMatch(LATVIAN_RESTART);
+        for (const example of [
+            'Restart it.',
+            'Relaunch the app.',
+            'Reopen it.',
+            'Start the app again.',
+            'Launch it again.',
+            'Open the app again.',
+        ]) {
+            expect(example).toMatch(ENGLISH_RESTART);
+        }
+        for (const example of [
+            'Palaid lietotni.',
+            'Restart lietotni.',
+            'Pārstarto lietotni.',
+            'Atsāknē lietotni.',
+            'Startē lietotni.',
+            'Mēģini atkal.',
+            'Palaid no jauna.',
+            'Lūdzu atver lietotni vēlreiz.',
+            'Atver lietotni pēc tam vēlreiz.',
+        ]) {
+            expect(example).toMatch(LATVIAN_RESTART);
+        }
     });
 });

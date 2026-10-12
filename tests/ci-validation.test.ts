@@ -113,9 +113,11 @@ describe('sends toward the Logs window', () => {
     // restrictToLogsChannels (ipc/registerHandlers.ts) filters only `webContents.send`; `postMessage`, a frame's
     // `send` (`mainFrame.send`, `frames[i].send`, `sendToFrame`, or `send` on a stored frame handle), an event's
     // `reply` and a `webFrameMain` handle reach a window unfiltered, so no source may touch a frame handle
-    // (`mainFrame`, `senderFrame`, `framesInSubtree`, `webFrameMain`, `focusedFrame`, `opener`, the `frame-created` event, and the `frame` or `initiator` an event or a navigation's details carry), call `send` on anything but `webContents`,
-    // reply on an event or post a message. A legitimate line is listed here as `relative/path.ts`, with the text of
-    // the line and the reason.
+    // (`mainFrame`, `senderFrame`, `framesInSubtree`, `webFrameMain`, `focusedFrame`, `opener`, the `frame-created`
+    // event, a `.frame` or `.initiator` property read off any receiver, and a one-line brace pair that names `frame` or
+    // `initiator` in a binding position: followed by `=`, `)` or `=>`, or opening a parameter list with `(`), call
+    // `send` on anything but `webContents`, reply on an event or post a message. A legitimate line is listed here as
+    // `relative/path.ts`, with the text of the line and the reason.
     const ALLOWED: Readonly<Record<string, readonly string[]>> = {
         // The trusted-sender check and the refusal log read the sender's frame (its url, and whether it is the window's
         // main frame); they send nothing.
@@ -130,8 +132,14 @@ describe('sends toward the Logs window', () => {
         'preloadApi.ts': ['ipcRenderer.send(channel)'],
     };
     const UNFILTERED_SEND_RE =
-        /\bpostMessage\(|\bmainFrame\b|\bsenderFrame\b|\bframesInSubtree\b|\bsendToFrame\(|\bwebFrameMain\b|\bfocusedFrame\b|\bopener\b|\bframe-created\b|\b(?:details|event)\.(?:frame|initiator)\b|\bframes\[[^\]]*\]\??\.send\(|(?<!\bwebContents\??)\.send\(|\.reply\(/g;
+        /\bpostMessage\(|\bmainFrame\b|\bsenderFrame\b|\bframesInSubtree\b|\bsendToFrame\(|\bwebFrameMain\b|\bfocusedFrame\b|\bopener\b|\bframe-created\b|\??\.(?:frame|initiator)\b|\{[^{}\n]*\b(?:frame|initiator)\b[^{}\n]*\}[ \t]*(?:=(?!=)|\)|=>)|\([ \t]*\{[^{}\n]*\b(?:frame|initiator)\b|\bframes\[[^\]]*\]\??\.send\(|(?<!\bwebContents\??)\.send\(|\.reply\(/g;
     const SOURCE_FILE_RE = /\.(?:[cm]?ts|tsx)$/;
+    // Lines that share a prefix with a flagged name and are cleared by the check's `\b` boundaries alone.
+    const WORD_BOUNDARY_NEGATIVES = [
+        'const id = details.frameId;',
+        'const o = event.initiatorOrigin;',
+        'const s = "iframe-created";',
+    ];
     const hitLines = (text: string) => [
         ...new Set(
             [...text.matchAll(UNFILTERED_SEND_RE)].map((match) => text.slice(0, match.index).split('\n').length),
@@ -142,7 +150,7 @@ describe('sends toward the Logs window', () => {
         return hitLines(text).filter((line) => !allowedLines.some((allowed) => lines[line - 1].includes(allowed)));
     };
 
-    test('no source uses postMessage, a frame handle (mainFrame, senderFrame, framesInSubtree, webFrameMain, sendToFrame, focusedFrame, opener, frame-created, event.frame, details.initiator), a send off webContents, or .reply(', () => {
+    test('no source uses postMessage, a frame handle (mainFrame, senderFrame, framesInSubtree, webFrameMain, sendToFrame, focusedFrame, opener, frame-created, a .frame or .initiator read, a destructured frame or initiator), a send off webContents, or .reply(', () => {
         const fs = jest.requireActual<typeof import('node:fs')>('node:fs');
         const path = jest.requireActual<typeof import('node:path')>('node:path');
         const srcDir = path.join(__dirname, '..', 'src', 'ts');
@@ -220,6 +228,13 @@ describe('sends toward the Logs window', () => {
             'const frame = event.senderFrame; frame.send("x");',
             'frame.send("c", x);',
             'port?.send("c", x);',
+            'const f = details?.frame;',
+            'const g = ({ frame, initiator }) => frame;',
+            'const h = (e) => e.frame;',
+            'const i = params.frame;',
+            'const { frame } = details;',
+            'function f({ initiator }) {}',
+            'on(({ frame }, x) => x);',
         ]) {
             expect(unfilteredSends(`ok\n${offender}`)).toEqual([2]);
         }
@@ -235,11 +250,21 @@ describe('sends toward the Logs window', () => {
                     'window.open(url, "_blank", "noopener");',
                     'const openerCount = 1;',
                     'const focusedFrameId = 1;',
-                    'const frameCreatedAt = 1;',
-                    'const detailsFrameCount = 1;',
+                    ...WORD_BOUNDARY_NEGATIVES,
+                    'const block = {\n    a: 1,\n    note: "the frame",\n};',
+                    'if (ok) {\n    const frame = 1;\n}\nfoo(a, b);',
                 ].join('\n'),
             ),
         ).toEqual([]);
+    });
+
+    test('each boundary negative passes only because of a word boundary in the check', () => {
+        const withoutBoundaries = new RegExp(UNFILTERED_SEND_RE.source.replaceAll('\\b', ''), 'g');
+        expect(withoutBoundaries.source).not.toBe(UNFILTERED_SEND_RE.source);
+        for (const negative of WORD_BOUNDARY_NEGATIVES) {
+            expect(unfilteredSends(`ok\n${negative}`)).toEqual([]);
+            expect([...negative.matchAll(withoutBoundaries)]).not.toEqual([]);
+        }
     });
 
     test('every TypeScript source extension is scanned', () => {
