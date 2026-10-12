@@ -170,7 +170,8 @@ describe('fill missions', () => {
         currencyAuto.runMissionFill.mockResolvedValueOnce(true);
         const missions = { join: 0, fill: 2, turbo: 0, vote: 0 };
         await runWithMissions(missions);
-        expect(currencyAuto.runMissionFill).toHaveBeenCalledWith(expect.objectContaining({ currency }), 2);
+        // The mission needs themselves are handed over, for the fill to be counted against its mission.
+        expect(currencyAuto.runMissionFill).toHaveBeenCalledWith(expect.objectContaining({ currency }), missions);
         expect(currencyAuto.runMissionFill.mock.invocationCallOrder[0]).toBeGreaterThan(
             currencyAuto.runAutoExposureFill.mock.invocationCallOrder[0],
         );
@@ -185,9 +186,9 @@ describe('fill missions', () => {
         expect(missions.fill).toBe(1);
     });
 
-    test('without missions the mission fill is asked for 0', async () => {
+    test('without missions the mission fill is handed none', async () => {
         await run(makeApi());
-        expect(currencyAuto.runMissionFill).toHaveBeenCalledWith(expect.any(Object), 0);
+        expect(currencyAuto.runMissionFill).toHaveBeenCalledWith(expect.any(Object), null);
     });
 
     test('a mission fill that spent nothing leaves the mission as it was', async () => {

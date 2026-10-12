@@ -334,6 +334,87 @@ describe('one process at a time per challenge', () => {
         expect(held.size).toBe(0);
     });
 
+    describe('a lock that went stale while the process slept may have been taken over: it is asked about right before a spend', () => {
+        test('a lock this process no longer owns spends nothing, writes no marker, and says so', async () => {
+            const held = jest.fn(() => false);
+            pass.scenarios = { ledger, lock: () => ({ ok: true, release: jest.fn(), held }) };
+            currencyActions.fillExposure.mockResolvedValue(invalid({ ok: true }));
+            setup(single([{ type: 'fillExposure' }]));
+            await run();
+            expect(held).toHaveBeenCalledTimes(1);
+            expect(currencyActions.fillExposure).not.toHaveBeenCalled();
+            expect(state().inFlight).toBeNull();
+            expect(log.warning).toHaveBeenCalledWith(
+                expect.stringContaining("lock of this challenge's steps was lost"),
+                null,
+            );
+        });
+
+        test('a lock that is still owned spends, once per spend', async () => {
+            const held = jest.fn(() => true);
+            pass.scenarios = { ledger, lock: () => ({ ok: true, release: jest.fn(), held }) };
+            currencyActions.fillExposure.mockResolvedValue(invalid({ ok: true }));
+            setup(single([{ type: 'fillExposure' }]));
+            await run();
+            expect(held).toHaveBeenCalledTimes(1);
+            expect(currencyActions.fillExposure).toHaveBeenCalledTimes(1);
+        });
+
+        test('two runners over one state file, the lock taken over from the first while it waited: one spend is sent', async () => {
+            const store = { raw: null as string | null };
+            const shared = {
+                readRaw: () => store.raw,
+                writeRaw: (data: string) => {
+                    store.raw = data;
+                },
+            };
+            const ledgerA = createStateLedger(shared);
+            const ledgerB = createStateLedger(shared);
+            // The first runner is held up on its balance read, as a machine is when it sleeps.
+            let wake!: () => void;
+            const asleep = new Promise<void>((resolve) => (wake = resolve));
+            const bankroll = { keys: 5, swaps: 5, fills: 5, coins: 0 };
+            const passFor = (
+                own: typeof ledgerA,
+                getBankroll: () => Promise<typeof bankroll>,
+            ): Parameters<typeof runScenarioStep>[2] =>
+                invalid({
+                    ...pass,
+                    scenarios: { ledger: own, lock: () => ({ ok: true, release: jest.fn() }) },
+                    currency: { strategy: { getBankroll: jest.fn(getBankroll) } },
+                });
+            currencyActions.fillExposure.mockResolvedValue(invalid({ ok: true }));
+            setup(single([{ type: 'fillExposure' }]));
+
+            const first = runScenarioStep(
+                challenge(),
+                NOW,
+                passFor(ledgerA, async () => {
+                    await asleep;
+                    return bankroll;
+                }),
+            );
+            // Another process takes the step over and finishes it.
+            await runScenarioStep(
+                challenge(),
+                NOW,
+                passFor(ledgerB, async () => bankroll),
+            );
+            expect(currencyActions.fillExposure).toHaveBeenCalledTimes(1);
+            wake();
+            await first;
+
+            expect(currencyActions.fillExposure).toHaveBeenCalledTimes(1);
+            expect(log.warning).toHaveBeenCalledWith(
+                expect.stringContaining('was changed by another process meanwhile'),
+                null,
+            );
+            // What the second runner recorded stands: the rule fired once.
+            expect(ledgerB.get(7).state!.fired.r1).toBeDefined();
+            expect(ledgerB.get(7).state!.spent.fills).toBe(1);
+        });
+    });
+
     test('the lock is released when the step fails', async () => {
         const { release } = lockWith(true);
         setup(single([{ type: 'fillExposure' }]));

@@ -109,6 +109,12 @@ describe('descriptionLead', () => {
         expect(descriptionLead('Good luck & have fun!')).toBe('');
         expect(descriptionLead(`${'word '.repeat(80)}.`).length).toBeLessThanOrEqual(200);
     });
+
+    test('a long run of opening brackets (no tag among them) is read in linear time', () => {
+        const started = Date.now();
+        expect(descriptionLead(`${'<'.repeat(100_000)}Share photos of balloons.`).length).toBeLessThanOrEqual(200);
+        expect(Date.now() - started).toBeLessThan(1000);
+    });
 });
 
 describe('challengePrompts', () => {
