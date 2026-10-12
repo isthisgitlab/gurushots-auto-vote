@@ -1,0 +1,49 @@
+[
+    {
+        "name": "AndroidX libraries (appcompat, activity, core, core-splashscreen, coordinatorlayout, fragment, webkit and their AndroidX dependencies)",
+        "coordinates": ["androidx.*"],
+        "license": "Apache-2.0",
+        "copyright": "Copyright The Android Open Source Project",
+        "url": "https://developer.android.com/jetpack/androidx"
+    },
+    {
+        "name": "Kotlin Standard Library",
+        "coordinates": ["org.jetbrains.kotlin:kotlin-stdlib"],
+        "license": "Apache-2.0",
+        "copyright": "Copyright JetBrains s.r.o. and Kotlin Programming Language contributors",
+        "url": "https://github.com/JetBrains/kotlin"
+    },
+    {
+        "name": "JetBrains Annotations (dependency of the Kotlin Standard Library)",
+        "coordinates": ["org.jetbrains:annotations"],
+        "license": "Apache-2.0",
+        "copyright": "Copyright JetBrains s.r.o.",
+        "url": "https://github.com/JetBrains/java-annotations",
+        "transitive": true
+    },
+    {
+        "name": "OkHttp",
+        "coordinates": ["com.squareup.okhttp3:okhttp"],
+        "versionVariable": "okhttpVersion",
+        "license": "Apache-2.0",
+        "copyright": "Copyright Square, Inc.",
+        "url": "https://github.com/square/okhttp"
+    },
+    {
+        "name": "Okio (dependency of OkHttp)",
+        "coordinates": ["com.squareup.okio:okio"],
+        "license": "Apache-2.0",
+        "copyright": "Copyright Square, Inc.",
+        "url": "https://github.com/square/okio",
+        "transitive": true
+    },
+    {
+        "name": "Apache Cordova Android",
+        "coordinates": ["org.apache.cordova:framework"],
+        "versionVariable": "cordovaAndroidVersion",
+        "license": "Apache-2.0",
+        "copyright": "Copyright The Apache Software Foundation",
+        "url": "https://github.com/apache/cordova-android",
+        "transitive": true
+    }
+]

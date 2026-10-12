@@ -8,6 +8,7 @@ import crypto from 'node:crypto';
 import packageJson from '../package.json';
 import { runIfMain } from './lib/run-if-main';
 import { ensureVisionModel } from './fetch-vision-model';
+import { digestVisionRuntime } from '../src/ts/services/visionCliAssets';
 
 const { version } = packageJson;
 
@@ -106,8 +107,16 @@ async function prepareVisionRuntime() {
     execFileSync('pnpm', ['deploy', '--prod', '--ignore-scripts', deployDir], { cwd: ROOT, stdio: 'inherit' });
     pruneVisionRuntime(path.join(deployDir, 'node_modules', '.pnpm'));
     fs.cpSync(modelDir, path.join(deployDir, 'vision-model'), { recursive: true });
+    // The binary embeds this digest of the runtime's code; loading the extracted
+    // copy recomputes it (services/visionCliAssets.ts).
+    fs.writeFileSync(path.join(BUILD_DIR, 'vision-runtime.code.sha256'), digestVisionRuntime(deployDir));
     const archive = path.join(BUILD_DIR, 'vision-runtime.tar.gz');
-    execFileSync('tar', ['-czf', archive, '-C', deployDir, 'node_modules', 'vision-model'], { stdio: 'inherit' });
+    // COPYFILE_DISABLE: macOS tar would otherwise add `._*` AppleDouble entries for
+    // extended attributes, which extract as extra files in the runtime tree.
+    execFileSync('tar', ['-czf', archive, '-C', deployDir, 'node_modules', 'vision-model'], {
+        stdio: 'inherit',
+        env: { ...process.env, COPYFILE_DISABLE: '1' },
+    });
     const digest = crypto.createHash('sha256').update(fs.readFileSync(archive)).digest('hex');
     fs.writeFileSync(path.join(BUILD_DIR, 'vision-runtime.sha256'), digest);
     fs.rmSync(deployDir, { recursive: true, force: true });
@@ -130,11 +139,19 @@ function generateSeaBlob(nodeBinary = process.execPath, { lite = false } = {}) {
     if (fs.existsSync(lexiconAsset)) {
         seaConfig.assets = { 'semantic-vectors.json': lexiconAsset };
     }
+    // The third-party license notices the binary must carry (src/assets/THIRD_PARTY_NOTICES.txt,
+    // read by the `licenses` command). Unlike the lexicon it is required: a build
+    // without it fails here rather than shipping without notices.
+    seaConfig.assets = {
+        ...seaConfig.assets,
+        'THIRD_PARTY_NOTICES.txt': path.join(ROOT, 'src', 'assets', 'THIRD_PARTY_NOTICES.txt'),
+    };
     if (!lite) {
         seaConfig.assets = {
             ...seaConfig.assets,
             'vision-runtime.tar.gz': path.join(BUILD_DIR, 'vision-runtime.tar.gz'),
             'vision-runtime.sha256': path.join(BUILD_DIR, 'vision-runtime.sha256'),
+            'vision-runtime.code.sha256': path.join(BUILD_DIR, 'vision-runtime.code.sha256'),
         };
     }
     fs.writeFileSync(seaConfigPath, JSON.stringify(seaConfig, null, 2));

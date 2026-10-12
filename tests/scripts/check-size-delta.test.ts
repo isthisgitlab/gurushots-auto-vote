@@ -10,6 +10,7 @@
  */
 
 import type * as pathModule from 'node:path';
+import type * as checkSizeDelta from '../../scripts/check-size-delta';
 import type * as zlibModule from 'node:zlib';
 import type * as cryptoModule from 'node:crypto';
 
@@ -102,7 +103,7 @@ describe('scripts/check-size-delta.ts', () => {
         process.argv = ['node', 'scripts/check-size-delta.ts', ...args];
         try {
             jest.isolateModules(() => {
-                require('../../scripts/check-size-delta');
+                (require('../../scripts/check-size-delta') as typeof checkSizeDelta).main();
             });
         } catch (err) {
             if (err instanceof ExitCalled) return err.code;

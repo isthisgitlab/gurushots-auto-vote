@@ -19,6 +19,8 @@ jest.mock('../../scripts/fetch-vision-model', () => ({
     ensureVisionModel: jest.fn().mockResolvedValue('/mock/vision-model'),
 }));
 
+jest.mock('../../src/ts/services/visionCliAssets', () => ({ digestVisionRuntime: jest.fn(() => 'code-digest') }));
+
 import fsModule = require('node:fs');
 const fs = jest.mocked(fsModule);
 const realReadFileSync = fs.readFileSync;
@@ -35,6 +37,7 @@ import type * as esbuildModule from 'esbuild';
 import type * as node_child_processModule from 'node:child_process';
 import type * as package_jsonModule from '../../package.json';
 import type * as fetch_vision_modelModule from '../../scripts/fetch-vision-model';
+import type * as visionCliAssetsModule from '../../src/ts/services/visionCliAssets';
 import type * as node_osModule from 'node:os';
 import type { PathLike } from 'node:fs';
 import type { SeaConfig } from '../../scripts/build-cli';
@@ -45,6 +48,7 @@ const DIST_DIR = path.join(ROOT, 'dist');
 const BUILD_DIR = path.join(ROOT, 'build', 'cli');
 const NODE_CACHE_DIR = path.join(ROOT, '.cache', 'node-binaries');
 const LEXICON = path.join(ROOT, 'src', 'assets', 'semantic-vectors.json');
+const NOTICES = path.join(ROOT, 'src', 'assets', 'THIRD_PARTY_NOTICES.txt');
 const SEA_BLOB = path.join(BUILD_DIR, 'sea-prep.blob');
 const POSTJECT = path.join(ROOT, 'node_modules', '.bin', 'postject');
 const NODE_VER = process.versions.node;
@@ -216,8 +220,10 @@ describe('build-cli', () => {
                 disableExperimentalSEAWarning: true,
                 assets: {
                     'semantic-vectors.json': LEXICON,
+                    'THIRD_PARTY_NOTICES.txt': NOTICES,
                     'vision-runtime.tar.gz': path.join(BUILD_DIR, 'vision-runtime.tar.gz'),
                     'vision-runtime.sha256': path.join(BUILD_DIR, 'vision-runtime.sha256'),
+                    'vision-runtime.code.sha256': path.join(BUILD_DIR, 'vision-runtime.code.sha256'),
                 },
             });
             expect(execFileSync).toHaveBeenCalledWith(
@@ -230,15 +236,48 @@ describe('build-cli', () => {
         test('still embeds the visual runtime when the lexicon is absent', () => {
             buildCli.generateSeaBlob();
             expect(writtenConfig().assets).toEqual({
+                'THIRD_PARTY_NOTICES.txt': NOTICES,
                 'vision-runtime.tar.gz': path.join(BUILD_DIR, 'vision-runtime.tar.gz'),
                 'vision-runtime.sha256': path.join(BUILD_DIR, 'vision-runtime.sha256'),
+                'vision-runtime.code.sha256': path.join(BUILD_DIR, 'vision-runtime.code.sha256'),
             });
         });
 
-        test('a lite blob embeds no visual runtime', () => {
+        test('a lite blob embeds no visual runtime but keeps the notices', () => {
             existing.add(LEXICON);
             buildCli.generateSeaBlob(process.execPath, { lite: true });
-            expect(writtenConfig().assets).toEqual({ 'semantic-vectors.json': LEXICON });
+            expect(writtenConfig().assets).toEqual({
+                'semantic-vectors.json': LEXICON,
+                'THIRD_PARTY_NOTICES.txt': NOTICES,
+            });
+        });
+    });
+
+    describe('prepareVisionRuntime', () => {
+        const DEPLOY_DIR = path.join(ROOT, '.cache', 'vision-cli-deploy');
+
+        test('embeds a digest of the runtime code taken over the tree it archives', async () => {
+            const { digestVisionRuntime } = jest.mocked(
+                require('../../src/ts/services/visionCliAssets') as typeof visionCliAssetsModule,
+            );
+            await buildCli.prepareVisionRuntime();
+            expect(digestVisionRuntime).toHaveBeenCalledWith(DEPLOY_DIR);
+            expect(fs.writeFileSync).toHaveBeenCalledWith(
+                path.join(BUILD_DIR, 'vision-runtime.code.sha256'),
+                'code-digest',
+            );
+            const callOrder = [fs.writeFileSync.mock.invocationCallOrder[0], execFileSync.mock.invocationCallOrder[1]];
+            expect(callOrder[0]).toBeLessThan(callOrder[1]);
+        });
+
+        test('archives without macOS AppleDouble entries', async () => {
+            await buildCli.prepareVisionRuntime();
+            const archiving = execFileSync.mock.calls.find(
+                ([command, args]) => command === 'tar' && args?.[0] === '-czf',
+            );
+            expect(archiving?.[2]).toEqual(
+                expect.objectContaining({ env: expect.objectContaining({ COPYFILE_DISABLE: '1' }) }),
+            );
         });
     });
 

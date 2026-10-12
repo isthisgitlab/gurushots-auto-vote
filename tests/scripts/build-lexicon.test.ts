@@ -93,6 +93,20 @@ describe('build-lexicon main', () => {
         expect(existsSpy).toHaveBeenCalledWith(path.join(__dirname, '..', '..', 'scripts', 'lexicon-embeddings.json'));
     });
 
+    test('fails when the intermediate is not a JSON object', () => {
+        writeFixture();
+        fs.writeFileSync(paths.embeddingsPath, '[]');
+        expect(() => main(paths)).toThrow('exit 1');
+        expect(errors()).toContain('lexicon-embeddings.json is not a JSON object');
+    });
+
+    test('fails when the concepts file has no concepts list', () => {
+        writeFixture();
+        fs.writeFileSync(paths.conceptsPath, JSON.stringify({ extraWords: ['cat'] }));
+        expect(() => main(paths)).toThrow('exit 1');
+        expect(errors()).toContain('lexicon-concepts.json must be a JSON object with a `concepts` list');
+    });
+
     test('fails the tamper check when the sidecar hash does not match the payload', () => {
         writeFixture({ sidecar: 'deadbeef' });
         expect(() => main(paths)).toThrow('exit 1');

@@ -24,10 +24,17 @@ import {
     RETROFIT_BETA,
 } from './config';
 import { fail, sha256OfFile, sha256OfString } from './support';
-import { collectAuthoredWords, parseGloveLine, normalize, retrofit, assignStems, quantizePack } from './vectors';
+import {
+    collectAuthoredWords,
+    isConceptsConfig,
+    parseGloveLine,
+    normalize,
+    retrofit,
+    assignStems,
+    quantizePack,
+} from './vectors';
 import { download, streamEntryLines } from './archive';
 
-import type { ConceptsConfig } from '../build-lexicon';
 import type { ScanRow } from './vectors';
 
 /** main()'s options; every one defaults to the pinned production value. */
@@ -61,7 +68,8 @@ export const main = async ({
     topN = TOP_N,
     meanCenter = MEAN_CENTER,
 }: MainOptions = {}): Promise<void> => {
-    const concepts = JSON.parse(fs.readFileSync(conceptsPath, 'utf8')) as ConceptsConfig | null;
+    const parsedConcepts: unknown = JSON.parse(fs.readFileSync(conceptsPath, 'utf8'));
+    const concepts = isConceptsConfig(parsedConcepts) ? parsedConcepts : null;
     const { bySurface: authored, collisions } = collectAuthoredWords(concepts);
     if (collisions.length) {
         fail([

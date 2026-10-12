@@ -31,6 +31,9 @@ import fs from 'node:fs';
 import path from 'node:path';
 import zlib from 'node:zlib';
 
+import { isPlainObject } from '../src/ts/plainObject';
+import { runIfMain } from './lib/run-if-main';
+
 const ROOT = path.join(__dirname, '..');
 const BASELINE_PATH = path.join(ROOT, '.size-baseline.json');
 
@@ -66,7 +69,7 @@ const readBaseline = (): Record<string, unknown> => {
     try {
         const raw = fs.readFileSync(BASELINE_PATH, 'utf8');
         const parsed: unknown = JSON.parse(raw);
-        return parsed && typeof parsed === 'object' ? (parsed as Record<string, unknown>) : {};
+        return isPlainObject(parsed) ? parsed : {};
     } catch {
         return {};
     }
@@ -145,4 +148,6 @@ const main = () => {
     process.exit(0);
 };
 
-main();
+runIfMain(require.main, module, main);
+
+export { main };

@@ -76,6 +76,7 @@ jest.mock('../../src/ts/cli/commands/settings', () => ({
     resetAllSettings: jest.fn(() => true),
 }));
 
+import type * as settingsCli from '../../scripts/settings-cli';
 import { invalid } from '../helpers/invalid';
 
 import sharedCommandsModule = require('../../src/ts/cli/commands/settings');
@@ -102,7 +103,7 @@ const runScript = async (...argv: string[]) => {
     try {
         scriptHooks.beforeRequire?.({ exitSpy });
         jest.isolateModules(() => {
-            require('../../scripts/settings-cli');
+            void (require('../../scripts/settings-cli') as typeof settingsCli).run();
         });
         await scriptHooks.afterRequire?.();
         // main() is async; flush its promise chain before asserting.

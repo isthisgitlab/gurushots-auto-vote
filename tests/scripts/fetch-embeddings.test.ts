@@ -368,6 +368,13 @@ describe('fetch-embeddings', () => {
             expect(errors()).toContain('1 authored stem collision(s) across clusters');
         });
 
+        test('treats a concepts file without a concepts list as no authored words', async () => {
+            setup({ concepts: [], expectedZipSha256: 'f'.repeat(64) });
+            await expect(main(opts)).rejects.toThrow('exit 1');
+            expect(errors()).not.toContain('authored stem collision');
+            expect(errors()).toContain('SHA-256 mismatch for the archive');
+        });
+
         test('fails on an archive whose SHA-256 does not match the pin', async () => {
             setup({ expectedZipSha256: 'f'.repeat(64) });
             await expect(main(opts)).rejects.toThrow('exit 1');

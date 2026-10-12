@@ -29,11 +29,12 @@
 
 import fs from 'node:fs';
 import path from 'node:path';
+import { isPlainObject } from '../src/ts/plainObject';
 import { stem } from '../src/ts/services/photoPicker';
 // The collision/vocab rules are shared with the fetch step ON PURPOSE — two
 // hand-rolled copies of "stem -> owner, fail on cross-cluster collision"
 // would drift apart silently.
-import { collectAuthoredWords, sha256OfString } from './fetch-embeddings';
+import { collectAuthoredWords, isConceptsConfig, sha256OfString } from './fetch-embeddings';
 // The runtime's own decode + pooling, so the shipped axis is measured in exactly
 // the space concreteness() later projects onto.
 import { buildTable, embedIn } from '../src/ts/services/semantic/lexicon';
@@ -72,6 +73,9 @@ export interface ConceptsConfig {
         cases?: SubjectCase[];
     };
 }
+
+/** True for a parsed intermediate: every field is optional, so any JSON object qualifies. */
+export const isIntermediate = (value: unknown): value is Intermediate => isPlainObject(value);
 
 /** Provenance block fetch-embeddings writes into the intermediate. */
 interface EmbeddingsSource {
@@ -242,10 +246,16 @@ const main = ({
         );
         process.exit(1);
     }
-    // Committed, generated files (the intermediate is hash-checked below), so
-    // they are typed as their writers produce them rather than re-validated.
-    const intermediate = JSON.parse(fs.readFileSync(embeddingsPath, 'utf8')) as Intermediate;
-    const concepts = JSON.parse(fs.readFileSync(conceptsPath, 'utf8')) as ConceptsConfig;
+    const intermediate: unknown = JSON.parse(fs.readFileSync(embeddingsPath, 'utf8'));
+    const concepts: unknown = JSON.parse(fs.readFileSync(conceptsPath, 'utf8'));
+    if (!isIntermediate(intermediate)) {
+        console.error('❌ scripts/lexicon-embeddings.json is not a JSON object — run `pnpm fetch:embeddings`.');
+        process.exit(1);
+    }
+    if (!isConceptsConfig(concepts)) {
+        console.error('❌ scripts/lexicon-concepts.json must be a JSON object with a `concepts` list.');
+        process.exit(1);
+    }
 
     // Tamper check: the intermediate is a multi-MB base64 blob nobody can
     // review line-by-line, so its payload hash lives in a one-line sidecar

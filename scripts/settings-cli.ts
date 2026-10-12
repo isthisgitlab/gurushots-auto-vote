@@ -13,6 +13,7 @@ import {
 } from '../src/ts/cli/commands/settings';
 import { spawn } from 'node:child_process';
 import { errorMessage } from '../src/ts/errorMessage';
+import { runIfMain } from './lib/run-if-main';
 
 /**
  * CLI Settings Management Script
@@ -345,11 +346,16 @@ async function main() {
     }
 }
 
-main()
-    .then(() => {
-        process.exit(0);
-    })
-    .catch((error: unknown) => {
-        console.error('❌ Unhandled error:', errorMessage(error));
-        process.exit(1);
-    });
+const run = () =>
+    main()
+        .then(() => {
+            process.exit(0);
+        })
+        .catch((error: unknown) => {
+            console.error('❌ Unhandled error:', errorMessage(error));
+            process.exit(1);
+        });
+
+runIfMain(require.main, module, run);
+
+export { run };

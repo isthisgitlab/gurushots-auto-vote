@@ -66,6 +66,21 @@ describe('scripts/fetch-vision-model.ts', () => {
         expect(fetchImpl).toHaveBeenCalledTimes(1);
     });
 
+    test('writes the model license and derivative-work notice next to the model files', async () => {
+        await ensureVisionModel({ modelDir: directory, fetchImpl: async () => okResponse(''), files: [] });
+
+        const license = fs.readFileSync(path.join(directory, 'LICENSE'), 'utf8');
+        expect(license).toContain('Apache License');
+        expect(license).toContain('Version 2.0, January 2004');
+        const notice = fs.readFileSync(path.join(directory, 'NOTICE'), 'utf8');
+        expect(notice).toContain(
+            'onnx-community/siglip-base-patch16-224-ONNX, revision 9f0328bdd0eb4f62d0f6c10625f43d882b32102b',
+        );
+        expect(notice).toContain('google/siglip-base-patch16-224, revision 7fd15f0689c79d79e38b1c2e2e2370a7bf2761ed');
+        expect(notice).toContain('quantized (8-bit) ONNX conversion');
+        expect(notice).toContain('modified derivative');
+    });
+
     test('re-downloads a cached file whose hash no longer matches', async () => {
         const files: VisionModelFile[] = [['tokenizer', 'spiece.model', sha('fresh')]];
         fs.writeFileSync(path.join(directory, 'spiece.model'), 'stale');
