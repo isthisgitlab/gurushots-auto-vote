@@ -362,7 +362,7 @@ describe('Delete all local data', () => {
 describe('the Android delete failure text', () => {
     // The restart is announced once, by about.deleteRestartsOnClose; the failure text itself says nothing about it.
     test('does not mention a restart in either language', () => {
-        expect(englishAbout.deleteFailedAndroid).not.toMatch(/restart/i);
-        expect(latvianAbout.deleteFailedAndroid).not.toMatch(/palaist|no jauna/i);
+        expect(englishAbout.deleteFailedAndroid).not.toMatch(/restart|relaunch|start again/i);
+        expect(latvianAbout.deleteFailedAndroid).not.toMatch(/palai|restart|pārstart|atsāknē|no jauna/i);
     });
 });
