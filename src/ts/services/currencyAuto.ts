@@ -44,6 +44,11 @@ export interface CurrencyPassDeps {
     strategy: CurrencyStrategy & { getVoteImages: (challenge: Challenge, token: string) => Promise<VotePool | null> };
     swapLedger?: SwapBackLedger | null;
     spendLedger?: AutoSpendLedger | null;
+    /**
+     * The fills (the exposure rule's and a mission's) are left to the Android background service: it counts them in
+     * the one stored ledger, and a second loop in the app window would count them down on its own. Set only there.
+     */
+    fillsLeftToService?: boolean;
 }
 
 /**
@@ -269,7 +274,7 @@ const runAutoExposureFill: (ctx: CurrencyCtx, votePool: VotePool | null | undefi
         if (settings.getEffectiveSetting('autoExposureFill', id) !== true) return false;
         if (!baseGate('fill', 'autoExposureFill', ctx)) return false;
         const ledger = ctx.currency.spendLedger;
-        if (!ledger) return false;
+        if (!ledger || ctx.currency.fillsLeftToService) return false;
         if (ledger.fills(id) >= Number(settings.getEffectiveSetting('autoExposureFillMax', id))) return false;
 
         const exposure = Number(challenge.member?.ranking?.exposure?.exposure_factor);
@@ -296,7 +301,7 @@ const runAutoExposureFill: (ctx: CurrencyCtx, votePool: VotePool | null | undefi
         // The count is written down first: a fill that could not be counted is not made.
         if (!ledger.reserveFill(id)) {
             log().warning(
-                `${logger.challengeTag(challenge)} auto fill: the count of fills could not be saved — not spending`,
+                `${logger.challengeTag(challenge)} auto fill: the count of fills could not be saved — not spending; tries again next cycle`,
                 null,
             );
             return false;
@@ -326,7 +331,7 @@ const runMissionFill: (ctx: CurrencyCtx, missionNeed: number) => Promise<boolean
     'fill',
     async (ctx, missionNeed) => {
         const { challenge, token, now, currency } = ctx;
-        if (!(missionNeed > 0) || !currency?.strategy) return false;
+        if (!(missionNeed > 0) || !currency?.strategy || currency.fillsLeftToService) return false;
         if (!challengeAllows('fill', challenge, now)) return false;
         if (!(await reserveAllows('fill', { challenge, token, currency }, 'mission fill'))) return false;
 

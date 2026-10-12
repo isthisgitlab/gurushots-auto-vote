@@ -3,11 +3,12 @@
  * keep one process's change from undoing another's (see scenarioStateStore.ts for the shape and the ledger over it).
  */
 
-import type { RawJsonStore, ScenarioEpoch, ScenarioState, SpendAction, ThroughResult } from './types/stores';
+import type { RawJsonStore, ScenarioEpoch, ScenarioState, SpendAction } from './types/stores';
 import * as logger from './logger';
 import * as runtime from './runtime';
 import { isPlainObject } from './plainObject';
 import { acquireWithin } from './lockWait';
+import { throughStore } from './settings/storeTransport';
 
 /** A cross-process lock, as joinStateStore's acquireUnlockLock gives one. */
 type StateLock = { ok: boolean; release: () => void; unavailable?: true };
@@ -199,21 +200,6 @@ const viewOf = (raw: string | null, asked: string | null): ParsedStateFile => {
     return parsed;
 };
 
-/**
- * Writes to `target` a text made from its current one, saved before anything can read it where that takes a moment (the
- * Android app: see RawJsonStore.updateThrough); `update` answers null to write nothing.
- */
-const through = async (
-    target: RawJsonStore,
-    update: (current: string | null) => string | null,
-): Promise<ThroughResult> => {
-    if (target.updateThrough) return target.updateThrough(update);
-    const data = update(target.readRaw());
-    if (data === null) return 'aborted';
-    target.writeRaw(data);
-    return 'saved';
-};
-
 // What a write that was or was not made comes to for a reset: asked for or made, left alone for a file that reads (when
 // that was the condition), or not saved.
 const RESET_OF = { saved: 'removed', aborted: 'readable', failed: 'not-saved' } as const;
@@ -300,7 +286,7 @@ const createResets = ({
         // Worked out once: the update may be made again on a newer value, and must ask for the same count.
         let count: number | undefined;
         return RESET_OF[
-            await through(asking, (current) => {
+            await throughStore(asking, (current) => {
                 if (onlyIfUnreadable && parseStateFile(store.readRaw()).ok) return null;
                 const asked = parseRequests(current);
                 count ??= nextCount(Math.max(asked[key] ?? 0, resetsOf(read().map, key)));
@@ -345,7 +331,7 @@ const createResets = ({
         const ran = await underLockAsync(acquireLock, async () => {
             result =
                 RESET_OF[
-                    await through(store, (current) => {
+                    await throughStore(store, (current) => {
                         const parsed = parseStateFile(current);
                         if (onlyIfUnreadable && parsed.ok) return null;
                         return JSON.stringify({ [ALL_KEY]: nextCount(parsed.ok ? countOf(parsed.map[ALL_KEY]) : 0) });

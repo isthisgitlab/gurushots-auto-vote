@@ -375,6 +375,22 @@ describe('runAutoExposureFill', () => {
         expect(currencyActions.fillExposure).not.toHaveBeenCalled();
     });
 
+    test('a spend that throws after the count was written down stays counted', async () => {
+        currencyActions.fillExposure.mockRejectedValue(new Error('boom'));
+        const ctx = makeCtx();
+        expect(await runAutoExposureFill(ctx, null)).toBe(false);
+        expect(ctx.currency.spendLedger.fills('555')).toBe(1);
+    });
+
+    test('with the fills left to the background service the window spends none, the exposure rule or a mission', async () => {
+        const ctx = makeCtx();
+        (ctx.currency as CurrencyPassDeps).fillsLeftToService = true;
+        expect(await runAutoExposureFill(ctx, null)).toBe(false);
+        expect(await runMissionFill(ctx, 2)).toBe(false);
+        expect(currencyActions.fillExposure).not.toHaveBeenCalled();
+        expect(ctx.currency.spendLedger.fills('555')).toBe(0);
+    });
+
     test('a fill that got no answer stays counted: it may have been made', async () => {
         currencyActions.fillExposure.mockResolvedValue({ ok: false, outcome: 'unclear' });
         const ctx = makeCtx();

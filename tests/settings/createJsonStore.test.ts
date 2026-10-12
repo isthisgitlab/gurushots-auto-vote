@@ -25,11 +25,14 @@ const fs = jest.mocked(fsModule);
 import type * as storageModule from '../../src/ts/settings/storage';
 import type * as storeTransportModule from '../../src/ts/settings/storeTransport';
 import * as logger from '../../src/ts/logger';
+import type { AndroidHeadlessStore } from '../../src/ts/types/settings';
+import type { AutoVoteBackgroundPlugin } from '../../src/ts/types/capacitor';
 import { invalid } from '../helpers/invalid';
 
 const g = globalThis as typeof globalThis & {
     Capacitor?: { isNativePlatform: () => boolean; getPlatform: () => string };
     __GS_HEADLESS__?: boolean;
+    AndroidHeadlessStore?: AndroidHeadlessStore;
 };
 
 describe('createJsonStore', () => {
@@ -821,6 +824,69 @@ describe('createJsonStore', () => {
                 expect(store.readRaw()).toBe('{"stored":2}');
             });
 
+            test('a write-through that fails while a refresh is in flight does not make the refresh drop what it read', async () => {
+                const strict = strictStore();
+                await strict.initializeAsync();
+                const answer = deferredGet();
+                const refreshing = strict.refreshAsync();
+                await inFlight();
+                mockPrefSet.mockRejectedValueOnce(new Error('disk full'));
+                await expect(strict.updateThrough(() => '{"asked":1}')).resolves.toBe('failed');
+                answer('{"service":1}');
+                await refreshing;
+                expect(strict.readRaw()).toBe('{"service":1}');
+            });
+
+            test('with nothing hydrated, a refresh in flight over a failed write-through reads in what is stored, not an empty text', async () => {
+                const strict = strictStore();
+                mockPrefGet.mockRejectedValueOnce(new Error('bridge down'));
+                await strict.initializeAsync();
+                const answer = deferredGet();
+                const refreshing = strict.refreshAsync();
+                await inFlight();
+                mockPrefSet.mockRejectedValueOnce(new Error('disk full'));
+                await expect(strict.updateThrough(() => '{"asked":1}')).resolves.toBe('failed');
+                answer('{"service":1}');
+                await refreshing;
+                expect(strict.readRaw()).toBe('{"service":1}');
+            });
+
+            test('a write-through that is saved while a refresh is in flight is not read over, and a write queued meanwhile is not either', async () => {
+                const strict = strictStore();
+                await strict.initializeAsync();
+                const answer = deferredGet();
+                const refreshing = strict.refreshAsync();
+                await inFlight();
+                await expect(strict.updateThrough(() => '{"asked":1}')).resolves.toBe('saved');
+                strict.writeRaw('{"queued":1}');
+                answer('{"stale":1}');
+                await refreshing;
+                expect(strict.readRaw()).toBe('{"queued":1}');
+            });
+
+            test('a write-through that declines on the newer value was saved for a moment, and a queued write that then fails keeps the cache as queued', async () => {
+                const strict = strictStore();
+                await strict.initializeAsync();
+                const release = holdOne();
+                let calls = 0;
+                const saved = strict.updateThrough((current) => (calls++ === 0 ? `${current}+asked` : null));
+                await inFlight();
+                mockPrefSet.mockRejectedValueOnce(new Error('disk full'));
+                strict.writeRaw('{"queued":1}');
+                release();
+                await expect(saved).resolves.toBe('aborted');
+                // What the write-through saved first is what Preferences holds until the queued write lands; it did not.
+                expect(mockPrefSet).toHaveBeenNthCalledWith(1, {
+                    key: 'gs_scenario_state',
+                    value: '{"persisted":true}+asked',
+                });
+                await expect(strict.flushPendingWrites()).rejects.toThrow('was not persisted');
+                expect(strict.readRaw()).toBe('{"queued":1}');
+                mockPrefGet.mockResolvedValueOnce({ value: '{"persisted":true}+asked' });
+                await strict.refreshAsync();
+                expect(strict.readRaw()).toBe('{"queued":1}');
+            });
+
             test('leaves a write that was not saved out of the cache, whatever the read says', async () => {
                 const strict = strictStore();
                 await strict.initializeAsync();
@@ -921,7 +987,7 @@ describe('createJsonStore', () => {
         test('a failed refresh keeps the cache', async () => {
             store.writeRaw('{"kept":1}');
             mockPrefGet.mockRejectedValueOnce(new Error('bridge down'));
-            await expect(store.refreshAsync()).resolves.toBeUndefined();
+            await expect(store.refreshAsync()).resolves.toBe(false);
             expect(store.readRaw()).toBe('{"kept":1}');
         });
 
@@ -1061,6 +1127,284 @@ describe('createJsonStore', () => {
                 expect(() => strictStore().writeRaw('{"a":1}')).toThrow('was not persisted');
                 expect(() => store.writeRaw('{"a":1}')).not.toThrow();
             });
+        });
+    });
+});
+
+describe('a store the app window shares with the background service (shared)', () => {
+    type Storage = typeof storageModule;
+    type NativeCall = { expected: string | null; value: string };
+    // The native side: one value, and the compare-and-write over it; `beforeAnswer` runs the service's own change
+    // while a call is in flight.
+    const native = (initial: string | null = null) => {
+        const state = { value: initial, calls: [] as NativeCall[], beforeAnswer: [] as Array<() => void> };
+        const compareAndWrite = jest.fn(async (call: { key: string; expected?: string | null; value: string }) => {
+            state.calls.push({ expected: call.expected ?? null, value: call.value });
+            state.beforeAnswer.shift()?.();
+            if ((call.expected ?? null) === state.value) {
+                state.value = call.value;
+                return { saved: true, current: null };
+            }
+            return { saved: false, current: state.value };
+        });
+        return { state, compareAndWrite };
+    };
+    const asWindow = (plugin?: {
+        compareAndWrite: jest.MockedFunction<AutoVoteBackgroundPlugin['compareAndWrite']>;
+    }) => {
+        g.Capacitor = invalid({
+            isNativePlatform: () => true,
+            getPlatform: () => 'android',
+            Plugins: plugin ? { AutoVoteBackground: invalid(plugin) } : {},
+        });
+        let storage!: Storage;
+        jest.isolateModules(() => {
+            storage = require('../../src/ts/settings/storage') as Storage;
+        });
+        return storage.createJsonStore({
+            fileName: 'joinState.json',
+            prefKey: 'gs_join_state',
+            strict: true,
+            shared: true,
+        });
+    };
+    // What an earlier suite left queued on the Preferences mock is not this suite's.
+    beforeEach(() => {
+        mockPrefSet.mockReset().mockResolvedValue();
+        mockPrefGet.mockReset().mockResolvedValue({ value: null });
+        const level = { info: jest.fn(), error: jest.fn(), warning: jest.fn(), debug: jest.fn(), success: jest.fn() };
+        jest.mocked(logger.withCategory).mockReset().mockReturnValue(invalid(level));
+    });
+    afterEach(() => {
+        delete g.Capacitor;
+        delete g.__GS_HEADLESS__;
+        jest.clearAllMocks();
+    });
+
+    test('a change is saved by the native compare-and-write, from what the cache holds, and the cache takes it once saved', async () => {
+        const { state, compareAndWrite } = native('{"a":1}');
+        mockPrefGet.mockResolvedValue({ value: '{"a":1}' });
+        const store = asWindow({ compareAndWrite });
+        await store.initializeAsync();
+        await expect(store.updateThrough((current) => `${current}+b`)).resolves.toBe('saved');
+        expect(state.calls).toEqual([{ expected: '{"a":1}', value: '{"a":1}+b' }]);
+        expect(mockPrefSet).not.toHaveBeenCalled();
+        expect(store.readRaw()).toBe('{"a":1}+b');
+    });
+
+    test('the service saves while the window’s change is in flight: the change is made again on what the service saved, and both survive', async () => {
+        const { state, compareAndWrite } = native('{"a":1}');
+        mockPrefGet.mockResolvedValue({ value: '{"a":1}' });
+        const store = asWindow({ compareAndWrite });
+        await store.initializeAsync();
+        state.beforeAnswer.push(() => {
+            state.value = '{"a":1,"service":1}';
+        });
+        const seen: Array<string | null> = [];
+        await expect(
+            store.updateThrough((current) => {
+                seen.push(current);
+                return `${current}+window`;
+            }),
+        ).resolves.toBe('saved');
+        expect(seen).toEqual(['{"a":1}', '{"a":1,"service":1}']);
+        expect(state.value).toBe('{"a":1,"service":1}+window');
+        expect(store.readRaw()).toBe('{"a":1,"service":1}+window');
+    });
+
+    test('two contexts claiming the same thing: the one that decides on what is stored is the only one to claim', async () => {
+        const { state, compareAndWrite } = native(null);
+        const store = asWindow({ compareAndWrite });
+        await store.initializeAsync();
+        // The service's claim lands while the window's change is in flight.
+        state.beforeAnswer.push(() => {
+            state.value = '{"3":"service"}';
+        });
+        const claimed = await store.updateThrough((current) => {
+            if (current !== null && current.includes('"3"')) return null;
+            return '{"3":"window"}';
+        });
+        expect(claimed).toBe('aborted');
+        expect(state.value).toBe('{"3":"service"}');
+    });
+
+    test('a change that keeps losing the race is given up as not saved, with the cache as it was', async () => {
+        const { state, compareAndWrite } = native('{"a":1}');
+        mockPrefGet.mockResolvedValue({ value: '{"a":1}' });
+        const store = asWindow({ compareAndWrite });
+        await store.initializeAsync();
+        for (let i = 0; i < 5; i++) state.beforeAnswer.push(() => (state.value = `{"a":${i + 2}}`));
+        await expect(store.updateThrough((current) => `${current}+b`)).resolves.toBe('failed');
+        expect(compareAndWrite).toHaveBeenCalledTimes(5);
+        expect(store.readRaw()).toBe('{"a":1}');
+    });
+
+    test('a change that failed once and then succeeded is saved', async () => {
+        const { state, compareAndWrite } = native('{"a":1}');
+        mockPrefGet.mockResolvedValue({ value: '{"a":1}' });
+        const store = asWindow({ compareAndWrite });
+        await store.initializeAsync();
+        state.beforeAnswer.push(() => (state.value = '{"a":2}'));
+        await expect(store.updateThrough((current) => `${current}+b`)).resolves.toBe('saved');
+        expect(state.value).toBe('{"a":2}+b');
+    });
+
+    test('a plugin that rejects is not a save, and the cache is as it was', async () => {
+        const compareAndWrite = jest.fn().mockRejectedValue(new Error('not saved'));
+        mockPrefGet.mockResolvedValue({ value: '{"a":1}' });
+        const store = asWindow({ compareAndWrite });
+        await store.initializeAsync();
+        await expect(store.updateThrough((current) => `${current}+b`)).resolves.toBe('failed');
+        expect(store.readRaw()).toBe('{"a":1}');
+    });
+
+    test('a cache that was never filled meets what is stored at the first mismatch', async () => {
+        const { state, compareAndWrite } = native('{"a":1}');
+        mockPrefGet.mockRejectedValue(new Error('bridge down'));
+        const store = asWindow({ compareAndWrite });
+        await store.initializeAsync();
+        await expect(store.updateThrough((current) => `${current}+b`)).resolves.toBe('saved');
+        expect(state.calls).toEqual([
+            { expected: null, value: 'null+b' },
+            { expected: '{"a":1}', value: '{"a":1}+b' },
+        ]);
+    });
+
+    test('a build without the plugin (the window is the only writer) saves through Preferences, as any other store', async () => {
+        mockPrefGet.mockResolvedValue({ value: '{"a":1}' });
+        const store = asWindow();
+        await store.initializeAsync();
+        await expect(store.updateThrough((current) => `${current}+b`)).resolves.toBe('saved');
+        expect(mockPrefSet).toHaveBeenCalledWith({ key: 'gs_join_state', value: '{"a":1}+b' });
+        expect(store.readRaw()).toBe('{"a":1}+b');
+    });
+
+    test('refreshing says whether it read, and the plugin-less and the failing cases differ', async () => {
+        const store = asWindow();
+        await expect(store.refreshAsync()).resolves.toBe(true);
+        mockPrefGet.mockRejectedValueOnce(new Error('bridge down'));
+        await expect(store.refreshAsync()).resolves.toBe(false);
+        delete g.Capacitor;
+        await expect(store.refreshAsync()).resolves.toBe(true);
+    });
+
+    describe('in the service’s own context', () => {
+        const bridge = (initial: string | null, over: Partial<NonNullable<typeof g.AndroidHeadlessStore>> = {}) => {
+            const state = { value: initial, beforeAnswer: [] as Array<() => void> };
+            const compareAndWriteKey = jest.fn((_key: string, expected: string, data: string) => {
+                state.beforeAnswer.shift()?.();
+                if ((expected === '' ? null : expected) === state.value) {
+                    state.value = data;
+                    return true;
+                }
+                return false;
+            });
+            g.AndroidHeadlessStore = {
+                read: () => null,
+                write: jest.fn(),
+                readKey: () => state.value,
+                writeKey: jest.fn(() => true),
+                compareAndWriteKey,
+                ...over,
+            };
+            return { state, compareAndWriteKey };
+        };
+        const asService = () => {
+            g.__GS_HEADLESS__ = true;
+            let storage!: Storage;
+            jest.isolateModules(() => {
+                storage = require('../../src/ts/settings/storage') as Storage;
+            });
+            return storage.createJsonStore({
+                fileName: 'joinState.json',
+                prefKey: 'gs_join_state',
+                strict: true,
+                shared: true,
+            });
+        };
+        afterEach(() => {
+            delete g.AndroidHeadlessStore;
+        });
+
+        test('reads the key, makes the change from it and saves it only if the key still holds what was read', async () => {
+            const { state, compareAndWriteKey } = bridge('{"a":1}');
+            await expect(asService().updateThrough((current) => `${current}+b`)).resolves.toBe('saved');
+            expect(compareAndWriteKey).toHaveBeenCalledWith('gs_join_state', '{"a":1}', '{"a":1}+b');
+            expect(state.value).toBe('{"a":1}+b');
+        });
+
+        test('a key that was not there is read as none, and is saved against that', async () => {
+            const { compareAndWriteKey } = bridge(null);
+            await expect(asService().updateThrough((current) => `${current}+b`)).resolves.toBe('saved');
+            expect(compareAndWriteKey).toHaveBeenCalledWith('gs_join_state', '', 'null+b');
+        });
+
+        test('the window saves while the change is in flight: it is made again on what the window saved', async () => {
+            const { state } = bridge('{"a":1}');
+            state.beforeAnswer.push(() => (state.value = '{"a":1,"window":1}'));
+            await expect(asService().updateThrough((current) => `${current}+service`)).resolves.toBe('saved');
+            expect(state.value).toBe('{"a":1,"window":1}+service');
+        });
+
+        test('declining is aborted, and nothing is written', async () => {
+            const { compareAndWriteKey } = bridge('{"a":1}');
+            await expect(asService().updateThrough(() => null)).resolves.toBe('aborted');
+            expect(compareAndWriteKey).not.toHaveBeenCalled();
+        });
+
+        test('a key that keeps changing is given up as failed', async () => {
+            const { state, compareAndWriteKey } = bridge('{"a":1}');
+            for (let i = 0; i < 5; i++) state.beforeAnswer.push(() => (state.value = `{"a":${i + 2}}`));
+            await expect(asService().updateThrough((current) => `${current}+b`)).resolves.toBe('failed');
+            expect(compareAndWriteKey).toHaveBeenCalledTimes(5);
+        });
+
+        test('a save the bridge refused, with nothing changed under it, is failed at once', async () => {
+            const { compareAndWriteKey } = bridge('{"a":1}', { compareAndWriteKey: jest.fn(() => false) });
+            await expect(asService().updateThrough((current) => `${current}+b`)).resolves.toBe('failed');
+            expect(g.AndroidHeadlessStore?.compareAndWriteKey).toHaveBeenCalledTimes(1);
+            expect(compareAndWriteKey).not.toHaveBeenCalled();
+        });
+
+        test('a refused save that the bridge’s own memory still shows is not a change made under it: failed at once, not applied again', async () => {
+            let offered: string | null = null;
+            const compareAndWriteKey = jest.fn((_key: string, _expected: string, data: string) => {
+                offered = data;
+                return false;
+            });
+            bridge('{"a":1}', {
+                compareAndWriteKey,
+                // After the refusal the value just offered still reads back.
+                readKey: () => offered ?? '{"a":1}',
+            });
+            await expect(asService().updateThrough((current) => `${current}+b`)).resolves.toBe('failed');
+            expect(compareAndWriteKey).toHaveBeenCalledTimes(1);
+        });
+
+        test('a bridge that cannot read, or has no compare-and-write, or throws, is failed', async () => {
+            bridge('{}', {
+                readKey: () => {
+                    throw new Error('bridge down');
+                },
+            });
+            await expect(asService().updateThrough((current) => `${current}`)).resolves.toBe('failed');
+            bridge('{}', { compareAndWriteKey: undefined });
+            await expect(asService().updateThrough((current) => `${current}`)).resolves.toBe('failed');
+            delete g.AndroidHeadlessStore;
+            await expect(asService().updateThrough((current) => `${current}`)).resolves.toBe('failed');
+        });
+
+        test('a store that is not shared writes through the bridge as before', async () => {
+            const writeKey = jest.fn(() => true);
+            bridge(null, { writeKey });
+            g.__GS_HEADLESS__ = true;
+            let storage!: Storage;
+            jest.isolateModules(() => {
+                storage = require('../../src/ts/settings/storage') as Storage;
+            });
+            const plain = storage.createJsonStore({ fileName: 'x.json', prefKey: 'gs_scenario_state', strict: true });
+            await expect(plain.updateThrough(() => '{}')).resolves.toBe('saved');
+            expect(writeKey).toHaveBeenCalledWith('gs_scenario_state', '{}');
         });
     });
 });

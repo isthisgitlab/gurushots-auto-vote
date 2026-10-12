@@ -17,13 +17,16 @@ import type { AutoVoteBackgroundPlugin, CapacitorGlobals } from '../types/capaci
 import { errorMessage } from '../errorMessage';
 
 let pluginInstance: AutoVoteBackgroundPlugin | null = null;
+// A build without the plugin is looked at on every call (claim changes ask too): it is said once.
+let warnedAbsent = false;
 const getPlugin = () => {
     if (!runtime.isCapacitor()) return null;
     if (pluginInstance) return pluginInstance;
     try {
         const cap = (globalThis as CapacitorGlobals).Capacitor;
         pluginInstance = cap?.Plugins?.AutoVoteBackground || null;
-        if (!pluginInstance) {
+        if (!pluginInstance && !warnedAbsent) {
+            warnedAbsent = true;
             logger.withCategory('voting').warning('AutoVoteBackground plugin not registered on this build');
         }
         return pluginInstance;
@@ -57,4 +60,15 @@ const getStatus = () => callPlugin('getStatus', false);
 
 const isAvailable = () => getPlugin() !== null;
 
-export { start, stop, getStatus, isAvailable };
+/** What a compare-and-write came to: saved, or not because the store had changed (`current` is what it holds). */
+type CompareAndWriteAnswer = { saved: boolean; current: string | null };
+
+/**
+ * Saves a side store (see AutoVotePlugin.compareAndWrite) only if it still holds `expected`. Null when there is no
+ * native plugin (a build without the service): the caller is then the only writer. A rejection (a refused key or
+ * value, a commit that failed) is the caller's to treat as not saved.
+ */
+const compareAndWrite = (key: string, expected: string | null, value: string): Promise<CompareAndWriteAnswer> | null =>
+    getPlugin()?.compareAndWrite({ key, expected, value }) ?? null;
+
+export { start, stop, getStatus, isAvailable, compareAndWrite };

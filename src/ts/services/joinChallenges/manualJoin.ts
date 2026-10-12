@@ -123,7 +123,14 @@ const joinListed = async (
     // the retry only submits, so neither consent to a price nor the balance has a say in it. An
     // unreadable marker file reads as "no marker" here, as in performJoin, whose paid path then refuses. An
     // unconfirmed claim stands like any other: only a submit that succeeds, or the user forgetting it, ends it.
-    if (cost > 0) await refreshClaims(deps);
+    // A claim that could not be looked for again is not known to be absent: nothing is decided on the stale one.
+    if (cost > 0 && !(await refreshClaims(deps))) {
+        cat().warning(
+            `challenge ${challengeId}: the saved claims could not be read again — not joining — try again in a moment`,
+            null,
+        );
+        return { status: 'failed-no-charge', challengeId, cost };
+    }
     const retryOnly = cost > 0 && claimOf(deps.joinStateStore, challengeId, owner) !== null;
 
     // Consent covers a price: a cost above the one the caller confirmed (`expectedCost`) needs a new

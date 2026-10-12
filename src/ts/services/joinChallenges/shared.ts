@@ -33,10 +33,11 @@ export interface JoinDeps {
     acquireUnlockLock?: typeof joinStateStore.acquireUnlockLock;
     /**
      * Reads the claims again from where they are saved (the Android app window, whose cache the background service
-     * writes behind). Awaited before a claim is read to decide a spend, and before one is changed: the whole file is
-     * written back, so a stale cache would erase a claim the service made. Absent where one process owns the file.
+     * writes behind); false when that failed. Awaited before a claim is read to decide a spend, which is refused when
+     * it failed. A claim is changed through the store's atomic `updateThrough`, not from this read. Absent where one
+     * process owns the file.
      */
-    refreshJoinState?: () => Promise<void>;
+    refreshJoinState?: () => Promise<boolean>;
     /** test seam over the visual re-rank */
     rankVisually?: typeof rankVisually;
 }

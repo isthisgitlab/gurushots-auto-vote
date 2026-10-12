@@ -9,9 +9,11 @@ import io.mockk.every
 import io.mockk.mockk
 import io.mockk.slot
 import io.mockk.verify
+import org.json.JSONObject
 import org.junit.After
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
+import org.junit.Assert.assertSame
 import org.junit.Assert.assertTrue
 import org.junit.Before
 import org.junit.Test
@@ -80,6 +82,64 @@ class AutoVotePluginTest {
         assertEquals(3, ret.getInt("cycleCount"))
         assertEquals(1234L, ret.getLong("lastRunAt"))
         assertEquals("", ret.getString("lastError"))
+    }
+
+    @Test
+    fun compareAndWriteSavesOnlyWhileTheStoreHoldsWhatTheWindowRead() {
+        val saved = resolved {
+            every { it.getString("key") } returns "gs_join_state"
+            every { it.getString("expected") } returns null
+            every { it.getString("value") } returns "{\"a\":1}"
+            plugin.compareAndWrite(it)
+        }
+        assertTrue(saved.getBoolean("saved"))
+        val lost = resolved {
+            every { it.getString("key") } returns "gs_join_state"
+            every { it.getString("expected") } returns null
+            every { it.getString("value") } returns "{\"b\":1}"
+            plugin.compareAndWrite(it)
+        }
+        assertFalse(lost.getBoolean("saved"))
+        assertEquals("{\"a\":1}", lost.getString("current"))
+        val matched = resolved {
+            every { it.getString("key") } returns "gs_join_state"
+            every { it.getString("expected") } returns "{\"a\":1}"
+            every { it.getString("value") } returns "{\"a\":1,\"b\":1}"
+            plugin.compareAndWrite(it)
+        }
+        assertTrue(matched.getBoolean("saved"))
+    }
+
+    @Test
+    fun compareAndWriteAnswersCurrentAsJsonNullNotTheTextNullWhenNothingIsStored() {
+        val lost = resolved {
+            every { it.getString("key") } returns "gs_join_state"
+            every { it.getString("expected") } returns "{\"a\":1}"
+            every { it.getString("value") } returns "{\"b\":1}"
+            plugin.compareAndWrite(it)
+        }
+        assertFalse(lost.getBoolean("saved"))
+        assertTrue(lost.has("current"))
+        assertTrue(lost.isNull("current"))
+        assertSame(JSONObject.NULL, lost.get("current"))
+    }
+
+    @Test
+    fun compareAndWriteRejectsWhatIsNotASideStoreOrNotAValidValue() {
+        fun rejected(key: String?, value: String?) {
+            val call = mockk<PluginCall>(relaxed = true)
+            every { call.getString("key") } returns key
+            every { call.getString("value") } returns value
+            every { call.getString("expected") } returns null
+            plugin.compareAndWrite(call)
+            verify(exactly = 1) { call.reject(any<String>()) }
+            verify(exactly = 0) { call.resolve(any()) }
+        }
+        rejected(null, "{}")
+        rejected("gs_join_state", null)
+        rejected("gurushots-settings", "{}")
+        rejected("gs_join_state", "[1]")
+        rejected("gs_join_state", "{} trailing")
     }
 
     @Test

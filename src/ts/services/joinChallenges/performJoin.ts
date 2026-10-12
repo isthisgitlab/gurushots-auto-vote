@@ -33,7 +33,7 @@ import {
     findClaim,
     markJoined,
     markUnconfirmed,
-    markUnlocked,
+    claimUnlock,
     markerKey,
     markerOwner,
     paidOwnerUnknown,
@@ -53,6 +53,16 @@ const alreadyJoined = (challenge: Challenge, claim: Claim | null): JoinOutcome |
     if (!claim?.joined) return null;
     cat().debug(`${logger.challengeTag(challenge)}: this account has already joined it — nothing is unlocked`, null);
     return { ...failedNoCharge(), reason: 'already-joined' };
+};
+
+// Whether the claims could not be read again (and so may be stale): a paid decision is not made on them.
+const claimsStale = async (challenge: Challenge, deps: JoinDeps, doing: string): Promise<boolean> => {
+    if (await refreshClaims(deps)) return false;
+    cat().warning(
+        `${logger.challengeTag(challenge)}: the saved claims could not be read again — not ${doing} — try again in a moment`,
+        null,
+    );
+    return true;
 };
 
 // A pending submit, worded by what is known of the payment: an unconfirmed one (the unlock got no answer) says so,
@@ -80,8 +90,7 @@ const unclearUnlock = async (
     coinsBefore: number | null,
 ): Promise<JoinOutcome> => {
     const tag = logger.challengeTag(challenge);
-    await refreshClaims(deps);
-    const flagged = markUnconfirmed(deps, challenge?.id, owner);
+    const flagged = await markUnconfirmed(deps, challenge?.id, owner);
     cat().error(
         `${tag}: coins_unlock got no usable answer — the charge may have gone through, keeping the claim`,
         null,
@@ -107,12 +116,11 @@ const CLEAR_RETRY_WAIT_MS = 100;
  * trying again; a file that cannot be read or written will not be any better a moment later.
  */
 const releaseRefusedClaim = async (deps: JoinDeps, id: string | number, owner: string | null): Promise<void> => {
-    await refreshClaims(deps);
     const key = markerKey(id, owner);
-    let cleared = clearUnlocked(deps, key);
-    if (cleared === 'locked') cleared = clearUnlocked(deps, key, CLEAR_RETRY_WAIT_MS);
+    let cleared = await clearUnlocked(deps, key);
+    if (cleared === 'locked') cleared = await clearUnlocked(deps, key, CLEAR_RETRY_WAIT_MS);
     if (cleared === 'done') return;
-    const flagged = markUnconfirmed(deps, id, owner);
+    const flagged = await markUnconfirmed(deps, id, owner);
     cat().error(
         `challenge ${sanitizeLogString(id)}: the unlock was refused but its claim could not be removed — ${flagged ? 'it is flagged as unconfirmed, so it can be forgotten' : 'it could not be flagged either'}`,
         null,
@@ -136,7 +144,6 @@ const claimAndUnlock = async (
     coinsBefore: number | null,
 ): Promise<{ outcome: JoinOutcome } | UnlockState> => {
     const id = challenge?.id;
-    await refreshClaims(deps);
     const { state, ok: stateOk } = readUnlockedState(deps.joinStateStore);
     if (!stateOk) {
         // Cannot verify prior unlocks → refuse to spend (a re-charge
@@ -154,7 +161,14 @@ const claimAndUnlock = async (
     // Persist the claim BEFORE spending, so a crash the instant
     // after the charge can never let a later pass re-unlock. If
     // the claim cannot be recorded, do not spend at all.
-    if (!markUnlocked(deps, id, owner, coinsBefore)) {
+    const marked = await claimUnlock(deps, id, owner, coinsBefore);
+    if (marked.status === 'exists') {
+        // Recorded by another process between the read above and this change (the background service, say): it is
+        // unlocking this challenge now, and its unlock may still be refused, so nothing is said of a payment: busy,
+        // and the next pass finds the claim and only submits.
+        return { outcome: alreadyJoined(challenge, marked.claim) ?? { status: 'busy', charged: 0 } };
+    }
+    if (marked.status === 'failed') {
         cat().error(`${logger.challengeTag(challenge)}: could not record the unlock claim — not spending coins`, null);
         return { outcome: failedNoCharge() };
     }
@@ -214,9 +228,8 @@ const markClaimJoined = async (
     holdsLock: boolean,
 ): Promise<void> => {
     const ownKey = markerKey(id, owner);
-    await refreshClaims(deps);
     if (holdsLock) {
-        markJoined(deps, claim.key, ownKey);
+        await markJoined(deps, claim.key, ownKey);
         return;
     }
     const lock = lockFor(deps, id);
@@ -228,7 +241,7 @@ const markClaimJoined = async (
         return;
     }
     try {
-        markJoined(deps, claim.key, ownKey);
+        await markJoined(deps, claim.key, ownKey);
     } finally {
         lock.release();
     }
@@ -300,7 +313,7 @@ const submitOnClaim = async (
     const lock = lockFor(deps, challenge?.id);
     if (!lock.ok) return { status: 'busy', charged: 0 };
     try {
-        await refreshClaims(deps);
+        if (await claimsStale(challenge, deps, 'submitting')) return failedNoCharge();
         const claim = claimOf(deps.joinStateStore, challenge?.id, owner);
         if (!claim) {
             cat().warning(`${logger.challengeTag(challenge)}: the unlock marker is gone — not submitting`, null);
@@ -387,7 +400,7 @@ const performJoin = async (
             );
             return { ...failedNoCharge(), reason: 'account-unknown' };
         }
-        if (needsCoins > 0) await refreshClaims(deps);
+        if (needsCoins > 0 && (await claimsStale(challenge, deps, 'joining a paid challenge'))) return failedNoCharge();
         const claim = claimOf(deps.joinStateStore, id, owner);
         const joined = needsCoins > 0 ? alreadyJoined(challenge, claim) : null;
         if (joined) return joined;

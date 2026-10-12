@@ -808,15 +808,28 @@ caps (dependency-free, renderer-safe), and `scenarios/templates.ts` holds editab
   alone and the answer is `state-readable`. A strict store's cache keeps a queued write that did not persist (a spend
   marker), and a refresh does not replace it with the older stored value until a queued write persists.
 - **Automatic fills** (`currencyAutoStore.ts`, `services/currencyAuto.ts`): the count of fills spent per challenge
-  (`gs_auto_spends`, what `autoExposureFillMax` caps) is persisted by the Android service through the bridge like the
-  scenario state (`gs_swap_backs`, the swap-back offers, as well), in the one `CapacitorStorage` file the app window
-  also reads. The count is written down **before** the fill (`reserveFill`): a write the bridge refused means no fill,
-  a fill that was refused and never made is given back, and one that got no answer stays counted. A ledger that could
-  not be read counts as unboundedly many (no fill is spent against a count that is not known). With the background
-  service the app window leaves fills (`spendLedger: null`) and the automatic joins (`runJoinPass` is skipped; the claims file is written whole) to it, and re-reads the claims before any manual join reads or changes them (`refreshJoinState`): two loops with a copy of one ledger each would
-  overwrite each other's counts. The other service stores can stay unpersisted: `gs_entry_ages` only times a boost
-  (a lost age never holds one) and remembers a submitted photo, `gurushots-metadata` and `gurushots-photo-stats` hold
-  last-vote times and statistics: none of them guards a spend.
+  (`gs_auto_spends`, what `autoExposureFillMax` caps) is persisted by the Android service through the bridge, like the
+  scenario state, in the one `CapacitorStorage` file the app window also reads. The count is written down **before**
+  the fill (`reserveFill`): a write the bridge refused means no fill, a fill that was refused and never made is given
+  back, and one that got no answer stays counted. A ledger that cannot be trusted (a store that could not be read, a
+  value that is not a JSON object) counts as unboundedly many, is logged once and is never written over, so no fill is
+  spent against a count that is not known. A record older than 30 days does not count.
+  With the background service the app window leaves the automatic joins (`runJoinPass` is skipped) and both kinds of
+  fills (`fillsLeftToService`: the exposure rule's and a mission's) to it, and says so in the log when one of those
+  settings is on. Two loops would count down and overspend separately.
+  **Claims are changed by compare-and-set.** The paid-join claims (`gs_join_state`) can be changed by both contexts
+  that pay: the service through its bridge (`compareAndWriteKey`), the window through the plugin (`compareAndWrite`).
+  Both go into one process-wide synchronized compare-and-set on the side stores (`SideStores` in `AutoVoteService.kt`;
+  the service runs in the app's own process): a value is saved only if the key still holds what the writer read, and
+  is one JSON object of at most 256 KiB. A change (`updateThrough` on a `shared` store) reads, decides on what is
+  stored, saves, and on a mismatch reads again and decides again (5 attempts, then it is not saved). So exactly one
+  context records the claim of a challenge, and nothing is paid before the claim was saved. A decision that only reads
+  (is this challenge paid for?) re-reads the claims first, and a paid one refuses when that fails. A build without the
+  plugin has one writer and keeps the write-behind.
+  The swap-back ledger (`gs_swap_backs`) still has two writers, and losing an offer is harmless by design. The other
+  service stores can stay unpersisted: `gs_entry_ages` only times a boost (a lost age never holds one) and remembers a
+  submitted photo, and `gurushots-metadata` and `gurushots-photo-stats` hold last-vote times and statistics. None of
+  them guards a spend.
 - **Engine** (`scenarios/conditions.ts`, `selectors.ts`, `evaluate.ts`, `nextWake.ts`, pure): unknown data
   fails closed (never makes a condition true); entry ids are compared as strings, never by position (except
   the explicit `slot` selector); an in-flight rule resumes first; a phase or in-flight rule the edited

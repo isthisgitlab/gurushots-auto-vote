@@ -14,8 +14,9 @@
  * where the same account can be driven by two processes at once (GUI + CLI). It
  * is a best-effort OS lockfile: it blocks a genuinely-held lock, keeps its own lock fresh while held, takes a
  * lock over only when its owner stopped touching it (atomically, by renaming it away), releases only a lock
- * that still holds its own token, and fails OPEN on any other lock-infra error (never deadlocks a join). Capacitor/headless are single-process for a given surface,
- * so the lock is a no-op there.
+ * that still holds its own token, and fails OPEN on any other lock-infra error (never deadlocks a join). On Android there
+ * is no file lock: the app window and the background service share one process and one store, and the claims are
+ * changed only by the native compare-and-write (`shared` above), which is the mutual exclusion there.
  */
 
 import * as fs from 'node:fs';
@@ -31,22 +32,28 @@ import { sanitizeLogString } from './logger/sanitize';
 
 const JOIN_STATE_KEY = 'gs_join_state';
 // `strict`: a claim the service's native bridge did not persist is not recorded, and nothing paid is spent on it.
+// `shared`: the app window and the background service both change the claims, and each change is saved by the native
+// compare-and-write, so that neither erases the other's (and exactly one of them records the claim of a challenge).
 const joinStateFile = createJsonStore({
     fileName: 'joinState.json',
     prefKey: JOIN_STATE_KEY,
     atomic: true,
     strict: true,
+    shared: true,
 });
 
 // A store that could not be read (the service's bridge threw, the app's start-up read failed) throws when read, so
-// that the claims read as unreadable, never as none: a claim forgotten is a paid unlock charged twice.
+// that the claims read as unreadable, never as none: a claim forgotten is a paid unlock charged twice. Nor is a
+// change made on a cache that was never filled.
 const joinStateStore = {
     ...joinStateFile,
     readRaw: (): string | null => {
         const raw = joinStateFile.readRaw();
-        if (!storeLoaded(JOIN_STATE_KEY)) throw new Error('join-state could not be read');
+        if (!storeLoaded(JOIN_STATE_KEY)) throw new Error('the saved claims have not loaded');
         return raw;
     },
+    updateThrough: (update: (current: string | null) => string | null) =>
+        storeLoaded(JOIN_STATE_KEY) ? joinStateFile.updateThrough(update) : Promise.resolve('failed' as const),
 };
 
 // A held lock whose file has not been touched for this long is treated as stale (its owner crashed) and taken over.
@@ -235,7 +242,7 @@ const acquireUnlockLock = (
     { category = 'join', internal = false }: { category?: 'join' | 'scenario'; internal?: boolean } = {},
 ): UnlockLock => {
     // Only the real-fs platforms (Electron/CLI) can run two processes against one
-    // account; Capacitor/headless are single-process for a given surface.
+    // account; on Android the claims are changed by the native compare-and-write instead (see joinStateFile).
     if (runtime.isCapacitor() || runtime.isHeadlessService()) return NO_LOCK;
 
     const lockPath = lockPathFor(id, internal);
@@ -272,5 +279,10 @@ const acquireUnlockLock = (
 export const initializeJoinStateAsync = joinStateStore.initializeAsync;
 // Reads the claims again from Preferences, where the background service writes them (a no-op off the app window).
 export const refreshJoinStateAsync = joinStateStore.refreshAsync;
-export const flushJoinStateWrites = joinStateStore.flushPendingWrites;
+// The window flushes on teardown without waiting on the answer: a write that did not persist is logged here, not left
+// as a rejection nobody handles.
+export const flushJoinStateWrites = (): Promise<void> =>
+    joinStateStore.flushPendingWrites().catch(() => {
+        logger.withCategory('settings').error('join-state writes were not persisted', null);
+    });
 export { joinStateStore, acquireUnlockLock };

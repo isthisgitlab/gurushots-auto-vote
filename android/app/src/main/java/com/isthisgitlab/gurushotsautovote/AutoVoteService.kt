@@ -8,6 +8,7 @@ import android.app.PendingIntent
 import android.app.Service
 import android.content.Context
 import android.content.Intent
+import android.content.SharedPreferences
 import android.os.Build
 import android.os.Handler
 import android.os.IBinder
@@ -29,7 +30,9 @@ import okhttp3.OkHttpClient
 import okhttp3.Request
 import okhttp3.RequestBody.Companion.toRequestBody
 import okhttp3.Response
+import org.json.JSONException
 import org.json.JSONObject
+import org.json.JSONTokener
 import java.io.IOException
 import java.text.SimpleDateFormat
 import java.util.Date
@@ -79,16 +82,9 @@ class AutoVoteService : Service() {
         private const val CYCLE_TIMEOUT_MS = 120_000L
         // Clamp JS-supplied cadence to a sane band (1s .. 6h).
         private const val MAX_DELAY_MS = 6L * 60L * 60L * 1000L
-        // @capacitor/preferences store the JS settings module reads/writes.
-        private const val PREFS_FILE = "CapacitorStorage"
+        // @capacitor/preferences store the JS settings module reads/writes (the side stores live in it too: SideStores).
+        private const val PREFS_FILE = SideStores.PREFS_FILE
         private const val SETTINGS_KEY = "gurushots-settings"
-        // Side stores the headless JS persists outside that blob (see HeadlessStore).
-        private const val KEY_LEXICON_DIAGNOSTICS = "gs_lexicon_diagnostics"
-        private const val KEY_SCENARIO_STATE = "gs_scenario_state"
-        private const val KEY_SCENARIO_RESETS = "gs_scenario_resets"
-        private const val KEY_AUTO_SPENDS = "gs_auto_spends"
-        private const val KEY_SWAP_BACKS = "gs_swap_backs"
-        private const val KEY_JOIN_STATE = "gs_join_state"
         private const val HEADLESS_URL = "https://appassets.androidplatform.net/assets/public/headless.html"
 
         // Test seam: JVM unit tests swap in a client whose interceptor reroutes
@@ -384,49 +380,28 @@ class AutoVoteService : Service() {
 
     /** Settings bridge — same store @capacitor/preferences uses, so token/settings stay in sync. */
     inner class HeadlessStore {
-        // The only side stores the background service persists besides the
-        // settings blob: lexicon diagnostics, scenario runtime state (the
-        // phase and memory a user-defined scenario is at — losing it on a
-        // service restart would restart the plan), and the resets of that state
-        // the app asked for (the app does not rewrite the state itself: this
-        // service may have written it since), and the two ledgers of the automatic currency spends: the fills
-        // already spent per challenge (what autoExposureFillMax counts against: a service that started from an
-        // empty one after every restart would spend past the cap), the swap-back offers, and the paid-join claims
-        // (an unlock that was charged and not yet submitted: forgotten on a restart, it would be charged again).
-        // Each key with the name its refusal is logged under: a literal of this map, never the JS-supplied key
-        // (a newline in it would render as a forged second log line: CodeQL java/log-injection).
-        private val sideStores = mapOf(
-            KEY_LEXICON_DIAGNOSTICS to "lexicon diagnostics",
-            KEY_SCENARIO_STATE to "scenario state",
-            KEY_SCENARIO_RESETS to "scenario resets",
-            KEY_AUTO_SPENDS to "auto-spend ledger",
-            KEY_SWAP_BACKS to "swap-back ledger",
-            KEY_JOIN_STATE to "join-state"
-        )
-
         @android.webkit.JavascriptInterface
         fun read(): String? = getSharedPreferences(PREFS_FILE, Context.MODE_PRIVATE).getString(SETTINGS_KEY, null)
 
         @android.webkit.JavascriptInterface
-        fun readKey(key: String): String? =
-            if (key in sideStores) getSharedPreferences(PREFS_FILE, Context.MODE_PRIVATE).getString(key, null) else null
+        fun readKey(key: String): String? = SideStores.read(this@AutoVoteService, key)
 
         /**
-         * Persists one side store. Answers whether it did: false for a key that is not allowed, a value that is no
-         * JSON, or a commit that failed — JS treats the write-ahead of a scenario spend as not made then. The commit
-         * is synchronous, so a true answer means the value is on disk, not queued.
+         * Persists one side store. Answers whether it did: false for a key that is not allowed, a value that is not
+         * one JSON object (or is too large), or a commit that failed — JS treats the write-ahead of a scenario spend
+         * as not made then. The commit is synchronous, so a true answer means the value is on disk, not queued.
          */
         @android.webkit.JavascriptInterface
-        fun writeKey(key: String, data: String): Boolean {
-            val name = sideStores[key] ?: return false
-            try {
-                JSONObject(data)
-            } catch (t: Throwable) {
-                Log.w(TAG, "Refusing to persist non-JSON $name blob")
-                return false
-            }
-            return getSharedPreferences(PREFS_FILE, Context.MODE_PRIVATE).edit().putString(key, data).commit()
-        }
+        fun writeKey(key: String, data: String): Boolean = SideStores.write(this@AutoVoteService, key, data)
+
+        /**
+         * Persists one side store only if it still holds what the caller read (`expected`; empty: nothing was
+         * there), under the lock the app window's plugin takes too: the one way two contexts change one store
+         * without overwriting each other. True only when it was saved.
+         */
+        @android.webkit.JavascriptInterface
+        fun compareAndWriteKey(key: String, expected: String?, data: String): Boolean =
+            SideStores.compareAndSet(this@AutoVoteService, key, expected, data).outcome == SideStores.Outcome.SAVED
 
         @android.webkit.JavascriptInterface
         fun write(data: String) {
@@ -590,5 +565,98 @@ class AutoVoteService : Service() {
             Log.w(TAG, "Failed to acquire wakelock", t)
             null
         }
+    }
+}
+
+/**
+ * The side stores that hold state across contexts: the background service (through its bridge) and the app window
+ * (through the AutoVoteBackground plugin) write the same keys of the one `CapacitorStorage` SharedPreferences, in one
+ * process. Every change of one goes through here, under one lock; a change that rests on what its writer read
+ * (`compareAndSet`) is saved only if that is still what is stored.
+ *
+ * The name each key is logged under is a literal of the map, never the JS-supplied key (a newline in it would render
+ * as a forged second log line: CodeQL java/log-injection).
+ */
+internal object SideStores {
+    const val PREFS_FILE = "CapacitorStorage"
+
+    /** The most a store may hold: they are small ledgers, and a value past this is a bug or an attack. */
+    const val MAX_BYTES = 256 * 1024
+
+    // Lexicon diagnostics; the scenario state and the resets of it the app asks for; the fills spent (what
+    // autoExposureFillMax counts against: a service that started from an empty one after every restart would spend
+    // past the cap) and the swap-back offers; the paid-join claims (an unlock that was charged and not yet submitted:
+    // forgotten on a restart, it would be charged again).
+    private val names = mapOf(
+        "gs_lexicon_diagnostics" to "lexicon diagnostics",
+        "gs_scenario_state" to "scenario state",
+        "gs_scenario_resets" to "scenario resets",
+        "gs_auto_spends" to "auto-spend ledger",
+        "gs_swap_backs" to "swap-back ledger",
+        "gs_join_state" to "join-state"
+    )
+
+    enum class Outcome { SAVED, MISMATCH, REFUSED }
+
+    /** `current`: what is stored when nothing was saved. */
+    data class Result(val outcome: Outcome, val current: String?)
+
+    fun isAllowed(key: String): Boolean = key in names
+
+    private fun prefs(context: Context) = context.getSharedPreferences(PREFS_FILE, Context.MODE_PRIVATE)
+
+    /** One JSON object and nothing after it, within the cap; refusals are logged under the store's literal name. */
+    private fun valid(name: String, data: String): Boolean {
+        if (data.toByteArray(Charsets.UTF_8).size > MAX_BYTES) {
+            Log.w(AutoVoteService.TAG, "Refusing to persist oversized $name blob")
+            return false
+        }
+        val tokener = JSONTokener(data)
+        val ok = try {
+            tokener.nextValue() is JSONObject && tokener.nextClean() == '\u0000'
+        } catch (e: JSONException) {
+            false
+        }
+        if (!ok) Log.w(AutoVoteService.TAG, "Refusing to persist non-JSON $name blob")
+        return ok
+    }
+
+    fun read(context: Context, key: String): String? = if (isAllowed(key)) prefs(context).getString(key, null) else null
+
+    // Saves `data` under `key`, synchronously. SharedPreferences applies a commit to its in-memory map before it writes the
+    // disk, so one that failed has still made the value readable: it is put back (and that committed), so that nothing
+    // reads, or builds on, what was not saved.
+    private fun commit(prefs: SharedPreferences, key: String, previous: String?, data: String): Boolean {
+        if (prefs.edit().putString(key, data).commit()) return true
+        val undo = prefs.edit()
+        if (previous == null) undo.remove(key) else undo.putString(key, previous)
+        undo.commit()
+        return false
+    }
+
+    // Stores that are changed only by `compareAndSet`: a plain write would replace what another context saved.
+    private val compareAndSetOnly = setOf("gs_join_state")
+
+    @Synchronized
+    fun write(context: Context, key: String, data: String): Boolean {
+        val name = names[key] ?: return false
+        if (key in compareAndSetOnly) {
+            Log.w(AutoVoteService.TAG, "Refusing a plain write of $name blob: it is changed by compare-and-set only")
+            return false
+        }
+        if (!valid(name, data)) return false
+        val prefs = prefs(context)
+        return commit(prefs, key, prefs.getString(key, null), data)
+    }
+
+    /** @param expected what the caller read; null or empty: nothing was stored */
+    @Synchronized
+    fun compareAndSet(context: Context, key: String, expected: String?, data: String): Result {
+        val name = names[key] ?: return Result(Outcome.REFUSED, null)
+        if (!valid(name, data)) return Result(Outcome.REFUSED, null)
+        val prefs = prefs(context)
+        val current = prefs.getString(key, null)
+        if (current != expected?.takeIf { it.isNotEmpty() }) return Result(Outcome.MISMATCH, current)
+        return if (commit(prefs, key, current, data)) Result(Outcome.SAVED, null) else Result(Outcome.REFUSED, current)
     }
 }

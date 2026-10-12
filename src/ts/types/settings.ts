@@ -162,4 +162,9 @@ export interface AndroidHeadlessStore {
     /** `true` when the native side persisted the value. Anything else (`false`, or no answer) is not a write a strict
      *  store takes for one. */
     writeKey?(key: string, data: string): boolean | void;
+    /**
+     * Saves `data` only if the key still holds what the caller read (`expected`; '' when nothing was stored), under the
+     * lock the app window's plugin takes too. `true` only when it was saved.
+     */
+    compareAndWriteKey?(key: string, expected: string, data: string): boolean;
 }

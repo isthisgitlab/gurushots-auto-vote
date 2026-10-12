@@ -9,7 +9,7 @@
 import { cat, inFlight, lockFor } from './shared';
 import type { JoinDeps } from './shared';
 import { sanitizeLogString } from '../../logger/sanitize';
-import { forgetClaim, markerOwner, paidOwnerUnknown, refreshClaims } from './unlockMarker';
+import { forgetClaim, markerOwner, paidOwnerUnknown } from './unlockMarker';
 import type { ForgetStatus } from '../../types/join';
 
 type ForgetOutcome = { status: ForgetStatus; challengeId: string | number };
@@ -37,8 +37,7 @@ const forgetUnconfirmedPayment = async (
     const lock = lockFor(deps, challengeId);
     if (!lock.ok) return { status: 'busy', challengeId };
     try {
-        await refreshClaims(deps);
-        const status = forgetClaim(deps, challengeId, owner);
+        const status = await forgetClaim(deps, challengeId, owner);
         if (status === 'forgotten') cat().info(`challenge ${safe}: the unconfirmed payment was forgotten`, null);
         return { status, challengeId };
     } finally {

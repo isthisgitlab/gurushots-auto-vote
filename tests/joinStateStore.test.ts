@@ -64,7 +64,13 @@ jest.mock('../src/ts/runtime', () => ({
     isHeadlessService: jest.fn(() => false),
 }));
 
-const mockStore = { initializeAsync: jest.fn(), flushPendingWrites: jest.fn(), readRaw: jest.fn(() => '{"c1":{}}') };
+const mockStore = {
+    initializeAsync: jest.fn(),
+    refreshAsync: jest.fn(async () => true),
+    flushPendingWrites: jest.fn(async () => {}),
+    readRaw: jest.fn(() => '{"c1":{}}'),
+    updateThrough: jest.fn(async () => 'saved' as const),
+};
 jest.mock('../src/ts/settings/storage', () => ({
     createJsonStore: jest.fn(() => mockStore),
     getSettingsPath: jest.fn(() => '/cfg/settings.json'),
@@ -84,20 +90,38 @@ import { invalid } from './helpers/invalid';
 const createJsonStoreCalls = [...storage.createJsonStore.mock.calls];
 
 describe('store wiring', () => {
-    test('uses the platform-aware JSON store and re-exports its hydrate/flush hooks', () => {
+    test('uses the platform-aware JSON store, shared with the service, and re-exports its hydrate and refresh hooks', () => {
         expect(createJsonStoreCalls).toEqual([
-            [{ fileName: 'joinState.json', prefKey: 'gs_join_state', atomic: true, strict: true }],
+            [{ fileName: 'joinState.json', prefKey: 'gs_join_state', atomic: true, strict: true, shared: true }],
         ]);
         expect(joinState.initializeJoinStateAsync).toBe(mockStore.initializeAsync);
-        expect(joinState.flushJoinStateWrites).toBe(mockStore.flushPendingWrites);
+        expect(joinState.refreshJoinStateAsync).toBe(mockStore.refreshAsync);
     });
 
     test('claims read as the store has them, and as unreadable (a throw) when the store was never filled', () => {
-        const runtime = jest.mocked(require('../src/ts/runtime') as typeof import('../src/ts/runtime'));
         expect(joinState.joinStateStore.readRaw()).toBe('{"c1":{}}');
         // The app window, whose start-up read has not filled the cache: not "no claims".
         runtime.isCapacitor.mockReturnValueOnce(true);
-        expect(() => joinState.joinStateStore.readRaw()).toThrow('join-state could not be read');
+        expect(() => joinState.joinStateStore.readRaw()).toThrow('the saved claims have not loaded');
+    });
+
+    test('a claim is changed through the store, and not at all on a cache that was never filled', async () => {
+        const update = (current: string | null) => `${current}+x`;
+        await expect(joinState.joinStateStore.updateThrough(update)).resolves.toBe('saved');
+        expect(mockStore.updateThrough).toHaveBeenCalledWith(update);
+        mockStore.updateThrough.mockClear();
+        runtime.isCapacitor.mockReturnValueOnce(true);
+        await expect(joinState.joinStateStore.updateThrough(update)).resolves.toBe('failed');
+        expect(mockStore.updateThrough).not.toHaveBeenCalled();
+    });
+
+    test('flushing on teardown logs a write that did not persist (the store name only) and never rejects', async () => {
+        const error = jest.fn();
+        jest.mocked(logger.withCategory).mockReturnValueOnce(invalid({ error }));
+        mockStore.flushPendingWrites.mockRejectedValueOnce(new Error('Capacitor gs_join_state was not persisted'));
+        await expect(joinState.flushJoinStateWrites()).resolves.toBeUndefined();
+        expect(error).toHaveBeenCalledWith('join-state writes were not persisted', null);
+        await expect(joinState.flushJoinStateWrites()).resolves.toBeUndefined();
     });
 });
 

@@ -24,7 +24,8 @@ import type { App } from 'electron';
 import type { PreferencesPlugin } from '@capacitor/preferences';
 import { errorMessage } from '../errorMessage';
 import { sweepStaleTemps, writeAtomicOwnerOnly } from './atomicWrite';
-import { createWriteBehind, headlessStore, readHeadlessKey, writeHeadlessKey } from './storeTransport';
+import { createWriteBehind, headlessStore, headlessUpdate, readHeadlessKey, writeHeadlessKey } from './storeTransport';
+import { compareAndWrite } from '../services/NativeAutovoteBridge';
 import type { ThroughResult } from '../types/stores';
 
 // Try to import electron, but don't fail if it's not available (CLI context)
@@ -261,11 +262,7 @@ const getEnvironmentInfo = () => {
     };
 };
 
-/**
- * Writes a value made from a store's current one, before answering where a write is made at once (not behind a cache).
- *
- * @returns `failed` when the write threw: nothing was saved; `aborted` when `update` answered null
- */
+/** Writes a value made from a store's current one at once (not behind a cache); `failed` when the write threw. */
 const writeBeforeAnswering = async (
     prefKey: string,
     store: { readRaw: () => string | null; writeRaw: (data: string) => void },
@@ -299,6 +296,7 @@ const createJsonStore = ({
     prefKey,
     atomic = false,
     strict = false,
+    shared = false,
 }: {
     fileName: string;
     prefKey: string;
@@ -306,6 +304,8 @@ const createJsonStore = ({
     atomic?: boolean;
     /** a write the Android service's native bridge did not persist throws, instead of passing quietly */
     strict?: boolean;
+    /** the Android service writes this key too: `updateThrough` saves by the native compare-and-write, so no change is erased */
+    shared?: boolean;
 }) => {
     let initialized = false;
     let cachedJson: string | null = null;
@@ -315,7 +315,13 @@ const createJsonStore = ({
             cachedJson = value;
         },
     };
-    const writes = createWriteBehind(prefKey, strict, getCapacitorPreferences, cache);
+    const writes = createWriteBehind(
+        prefKey,
+        strict,
+        getCapacitorPreferences,
+        cache,
+        shared ? (expected, data) => compareAndWrite(prefKey, expected, data) : undefined,
+    );
     let swept = false;
 
     const filePath = () => path.join(path.dirname(getSettingsPath()), fileName);
@@ -379,9 +385,12 @@ const createJsonStore = ({
          * Android background service (a separate JS context) also writes.
          * Waits for this context's own queued writes first, so none is lost.
          * No-op off the Capacitor app WebView.
+         *
+         * @returns false when the read failed (the cache is as it was); a decision that must not rest on a stale cache
+         *   (a paid one) refuses then
          */
-        refreshAsync: async () => {
-            if (!runtime.isCapacitor() || runtime.isHeadlessService()) return;
+        refreshAsync: async (): Promise<boolean> => {
+            if (!runtime.isCapacitor() || runtime.isHeadlessService()) return true;
             const { at, done } = writes.drained();
             await done;
             try {
@@ -389,15 +398,19 @@ const createJsonStore = ({
                 cachedJson = value;
                 writes.confirm(at);
                 initialized = true;
+                return true;
             } catch (err) {
                 logger.withCategory('settings').error(`Capacitor ${prefKey} refresh failed:`, err);
+                return false;
             }
         },
         /** Writes a value made from the current one that nothing reads before it is saved (see RawJsonStore). */
-        updateThrough: (update: (current: string | null) => string | null): Promise<ThroughResult> =>
-            runtime.isCapacitor() && !runtime.isHeadlessService()
+        updateThrough: (update: (current: string | null) => string | null): Promise<ThroughResult> => {
+            if (runtime.isHeadlessService() && shared) return Promise.resolve(headlessUpdate(prefKey, update));
+            return runtime.isCapacitor() && !runtime.isHeadlessService()
                 ? writes.updateThrough(update)
-                : writeBeforeAnswering(prefKey, store, update),
+                : writeBeforeAnswering(prefKey, store, update);
+        },
         /**
          * Await to guarantee the write-behind queue has drained. A `strict` store rejects when a write since the last
          * flush did not persist, so a caller that waits for it can tell.

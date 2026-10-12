@@ -6,6 +6,7 @@ import com.getcapacitor.Plugin
 import com.getcapacitor.PluginCall
 import com.getcapacitor.PluginMethod
 import com.getcapacitor.annotation.CapacitorPlugin
+import org.json.JSONObject
 
 /**
  * Capacitor plugin entry point for native background voting.
@@ -43,6 +44,31 @@ class AutoVotePlugin : Plugin() {
         ctx.startService(intent)
         val ret = JSObject()
         ret.put("running", false)
+        call.resolve(ret)
+    }
+
+    /**
+     * Saves one side store only if it still holds what the window read (`expected`; absent or null: nothing was
+     * stored), under the lock the background service's bridge takes too. Resolves `saved` and, when it did not save
+     * because the store had changed, `current`: what is stored. Rejects a key that is not a side store, a value that
+     * is not one JSON object within the size cap, and a commit that failed.
+     */
+    @PluginMethod
+    fun compareAndWrite(call: PluginCall) {
+        val key = call.getString("key")
+        val value = call.getString("value")
+        if (key == null || value == null || !SideStores.isAllowed(key)) {
+            call.reject("not a side store")
+            return
+        }
+        val result = SideStores.compareAndSet(context, key, call.getString("expected"), value)
+        if (result.outcome == SideStores.Outcome.REFUSED) {
+            call.reject("not saved")
+            return
+        }
+        val ret = JSObject()
+        ret.put("saved", result.outcome == SideStores.Outcome.SAVED)
+        ret.put("current", result.current ?: JSONObject.NULL)
         call.resolve(ret)
     }
 

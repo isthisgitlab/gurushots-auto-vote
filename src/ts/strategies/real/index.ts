@@ -31,6 +31,7 @@ import {
 import { backgroundServiceOwnsScenarios } from '../../services/scenarioRunner';
 import { sleep, getRandomDelay } from '../../timing';
 import * as logger from '../../logger';
+import * as settings from '../../settings';
 import { runVotingPass } from '../../services/votingOrchestrator';
 import { runSuspendBoosts } from '../../services/votingOrchestrator/boost';
 import { createMetadataEntryTracker } from '../../services/newEntryTracker';
@@ -218,6 +219,15 @@ const votingPassApi = () => ({
 const applyBoostsOnSuspend = (challenges: readonly Challenge[], token: string) =>
     runSuspendBoosts(challenges, token, { api: votingPassApi(), entryAges: entryAgeLedger });
 
+// Whether a setting the window leaves to the background service is on (the global default; a challenge's own rule may
+// turn it on too); it is said once a process, so that a vote started in the app that does not join or fill has a
+// reason in the log without repeating it every run.
+let saidLeftToService = false;
+const leftToServiceIsOn = (): boolean =>
+    settings.getSetting('autoJoin') === true ||
+    settings.getSetting('autoExposureFill') === true ||
+    settings.getSetting('missionUseFills') === true;
+
 /**
  * Main function that fetches active challenges and processes them — thin
  * binder over the shared orchestration (services/votingOrchestrator.ts),
@@ -243,6 +253,14 @@ const fetchChallengesAndVote = async (
         // Auto-join pre-step (gated by the default-off `autoJoin` setting inside
         // runJoinPass). Skipped for a single-challenge "Run" (challengeIdFilter set)
         // and never allowed to abort voting — a join failure is logged, not thrown.
+        if (!saidLeftToService && backgroundServiceOwnsScenarios() && leftToServiceIsOn()) {
+            saidLeftToService = true;
+            logger
+                .withCategory('voting')
+                .info(
+                    'auto-join and automatic fills are left to the background service on Android; they run while auto-vote is on',
+                );
+        }
         if (challengeIdFilter === null) {
             // With the background service the window leaves the automatic joins to it: two loops paying from one
             // claims file would overwrite each other's unlock markers.
@@ -284,9 +302,11 @@ const fetchChallengesAndVote = async (
             currency: {
                 strategy: currencyStrategy,
                 swapLedger: swapBackLedger,
-                // The service counts the automatic fills against autoExposureFillMax, in the same stored ledger: two
-                // loops with a copy each would overwrite each other's counts, so the window leaves fills to it.
-                spendLedger: backgroundServiceOwnsScenarios() ? null : autoSpendLedger,
+                spendLedger: autoSpendLedger,
+                // The service counts the automatic fills against autoExposureFillMax, in the same stored ledger, and
+                // a mission's fills down on its own: two loops would overwrite and overspend, so the window leaves
+                // fills to it.
+                fillsLeftToService: backgroundServiceOwnsScenarios(),
             },
             // User-defined scenarios over the persisted state ledger. In the Android
             // app WebView the native background service owns them (it runs a pass

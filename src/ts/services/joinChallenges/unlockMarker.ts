@@ -14,20 +14,13 @@ import { sanitizeLogString } from '../../logger/sanitize';
 import { cat, lockFor } from './shared';
 import type { Claim, JoinDeps } from './shared';
 import type { ForgetStatus } from '../../types/join';
+import { throughStore } from '../../settings/storeTransport';
 
-// Read the marker map, distinguishing "empty/never-written" (ok:true, {}) from
+// Parse the marker map's text, distinguishing "empty/never-written" (ok:true, {}) from
 // "unreadable/corrupt" (ok:false). A corrupt file must NOT silently look empty:
 // that would forget a real unlock marker and let a retry re-charge. Callers on
-// the paid path treat ok:false as "cannot verify — do not spend".
-const readUnlockedState = (store: RawJsonStore | null | undefined): { state: Record<string, unknown>; ok: boolean } => {
-    if (!store) return { state: {}, ok: true };
-    let raw;
-    try {
-        raw = store.readRaw();
-    } catch (error) {
-        cat().warning(`could not read join-state: ${errorMessage(error) || error}`, null);
-        return { state: {}, ok: false };
-    }
+// the paid path treat ok:false as "cannot verify — do not spend". Logs say what was wrong, never what was in it.
+const parseClaims = (raw: string | null | undefined): { state: Record<string, unknown>; ok: boolean } => {
     // Never written reads as null. An empty file is not a claims file: every write is a whole JSON object (and a
     // file that is replaced atomically is never seen half written), so an empty one is a write cut short by
     // something that does not write atomically — it may have held a claim, and is not read as having none.
@@ -44,21 +37,34 @@ const readUnlockedState = (store: RawJsonStore | null | undefined): { state: Rec
         cat().warning('join-state file is malformed (not an object) — treating as unreadable', null);
         return { state: {}, ok: false };
     } catch (error) {
-        // JSON.parse only ever throws a SyntaxError here (readRaw returns a string).
-        cat().warning(`join-state file is corrupt: ${errorMessage(error)}`, null);
+        // JSON.parse only ever throws a SyntaxError here (raw is a string): its message can quote the text, so only its
+        // name (what precedes the first colon of its text) is logged.
+        cat().warning(`join-state file is corrupt (${String(error).split(':')[0]})`, null);
         return { state: {}, ok: false };
     }
+};
+
+// Read the marker map from the store (see parseClaims); a store that cannot be read at all is unreadable too.
+const readUnlockedState = (store: RawJsonStore | null | undefined): { state: Record<string, unknown>; ok: boolean } => {
+    if (!store) return { state: {}, ok: true };
+    let raw;
+    try {
+        raw = store.readRaw();
+    } catch (error) {
+        cat().warning(`could not read join-state: ${errorMessage(error) || error}`, null);
+        return { state: {}, ok: false };
+    }
+    return parseClaims(raw);
 };
 
 const readUnlocked = (store: RawJsonStore | null | undefined) => readUnlockedState(store).state;
 
 /**
- * Reads the claims again before they are read for a spend or changed (see JoinDeps.refreshJoinState). A refresh that
- * failed leaves the cache as it was; a cache that was never filled stays unreadable, and nothing is spent on it.
+ * Reads the claims again before they are read to decide a spend (see JoinDeps.refreshJoinState). False when that failed
+ * (the cache is as it was, and may be stale): a paid decision refuses on it. A claim is changed atomically on what is
+ * stored (changeClaims), whatever this read said.
  */
-const refreshClaims = async (deps: JoinDeps): Promise<void> => {
-    await deps.refreshJoinState?.();
-};
+const refreshClaims = async (deps: JoinDeps): Promise<boolean> => (await deps.refreshJoinState?.()) ?? true;
 
 const has = (state: Record<string, unknown>, key: string) => Object.prototype.hasOwnProperty.call(state, key);
 
@@ -129,7 +135,8 @@ const paidByThisAccount = async (
     const cost = Number(challenge?.join_coins);
     if (challenge?.id == null || !(cost > 0) || !deps.joinStateStore) return false;
     const owner = await markerOwner(token, deps);
-    await refreshClaims(deps);
+    // A claim that could not be looked for again is not known to be there: not read as "already paid".
+    if (!(await refreshClaims(deps))) return false;
     return !paidOwnerUnknown(deps, owner) && claimOf(deps.joinStateStore, challenge.id, owner) !== null;
 };
 
@@ -156,17 +163,20 @@ const acquireStateLock = (deps: JoinDeps, waitMs: number) =>
 type Changed = 'done' | 'locked' | 'unavailable' | 'failed';
 
 /**
- * Reads the claims, lets `change` edit them and writes them back, under the claims-file lock. Nothing is written
- * when the file cannot be read (an unreadable file read as empty would wipe every other claim on the next write)
- * or the lock cannot be had in a moment. `change` answers whether it changed anything. A store of none (mock mode)
- * changes nothing and succeeds. Failures are logged by challenge id only.
+ * Lets `change` edit the claims and saves them, atomically on what is stored: through the store's `updateThrough`, so
+ * `change` decides on the value the write replaces (on Android, where the app window and the background service
+ * both change the file, a save is made only if the file still holds what `change` was made from, else `change` is
+ * made again on what is there). `change` answers whether it changed anything, and may be called more than once: it
+ * must start from nothing each time. Nothing is written when the file cannot be read (an unreadable file read as
+ * empty would wipe every other claim on the next write) or, where there is a file lock, the lock cannot be had in a
+ * moment. A store of none (mock mode) changes nothing and succeeds. Failures are logged by challenge id only.
  */
-const changeClaims = (
+const changeClaims = async (
     deps: JoinDeps,
     what: string,
     change: (state: Record<string, unknown>) => boolean,
     waitMs = STATE_LOCK_WAIT_MS,
-): Changed => {
+): Promise<Changed> => {
     const store = deps.joinStateStore;
     if (!store) return 'done';
     const lock = acquireStateLock(deps, waitMs);
@@ -182,13 +192,17 @@ const changeClaims = (
         return 'locked';
     }
     try {
-        const { state, ok } = readUnlockedState(store);
-        if (!ok) {
+        let unreadable = false;
+        const saved = await throughStore(store, (current) => {
+            const { state, ok } = parseClaims(current);
+            unreadable = !ok;
+            return ok && change(state) ? JSON.stringify(state) : null;
+        });
+        if (unreadable) {
             cat().warning(`could not ${what}: join-state is unreadable — nothing written`, null);
             return 'failed';
         }
-        if (change(state)) store.writeRaw(JSON.stringify(state));
-        return 'done';
+        return saved === 'failed' ? 'failed' : 'done';
     } catch (error) {
         cat().warning(`could not ${what}: ${errorMessage(error) || error}`, null);
         // aislop-ignore-next-line ai-slop/hidden-fallback -- logged just above; 'failed' is the typed outcome every caller handles
@@ -201,28 +215,36 @@ const changeClaims = (
 // The challenge id of a stored claim key (`<member id>:<challenge id>`, or the bare id).
 const idOfKey = (key: string) => key.slice(key.lastIndexOf(':') + 1);
 
+// What recording the unlock claim came to: `recorded` (this call wrote it), `exists` (a claim of this account's was
+// there already, written by another process or an earlier pass: it is the one to continue from) or `failed` (the file
+// cannot be read, the file's lock cannot be had or a real store write fails).
+type Unlocking = { status: 'recorded' } | { status: 'exists'; claim: Claim } | { status: 'failed' };
+
 // Persist the unlock claim — only when this account has none for the challenge yet (own or bare), decided inside
-// the same locked read-modify-write that writes it, so two holders of the challenge's lock cannot both record one.
-// Returns true on success (or when there is no store — mock mode, which spends no real coins). Returns false when
-// the file cannot be read, a claim is there already, the file's lock cannot be had or a real store write fails: the
-// caller MUST NOT spend coins it cannot record, or a crash / retry could re-unlock and double-charge.
-const markUnlocked = (
+// the same atomic change that writes it, on what is stored, so two holders of the challenge (the app window and the
+// background service, say) cannot both record one: exactly one gets `recorded`. A store of none (mock mode, which
+// spends no real coins) records. The caller MUST NOT spend coins unless it got `recorded`, or a crash / retry could
+// re-unlock and double-charge.
+const claimUnlock = async (
     deps: JoinDeps,
     id: string | number,
     owner: string | null,
     coinsBefore: number | null,
-): boolean => {
-    let recorded = false;
-    const done = changeClaims(deps, `persist unlock marker for ${sanitizeLogString(id)}`, (state) => {
-        if (findClaim(state, id, owner) !== null) return false;
+): Promise<Unlocking> => {
+    if (!deps.joinStateStore) return { status: 'recorded' };
+    // Set by the last call of the change, which may be made more than once.
+    const seen: { claim: Claim | null } = { claim: null };
+    const done = await changeClaims(deps, `persist unlock marker for ${sanitizeLogString(id)}`, (state) => {
+        seen.claim = findClaim(state, id, owner);
+        if (seen.claim) return false;
         state[markerKey(id, owner)] = {
             unlockedAt: Date.now(),
             ...(isFiniteNumber(coinsBefore) ? { coinsBefore } : {}),
         };
-        recorded = true;
         return true;
     });
-    return !deps.joinStateStore || (done === 'done' && recorded);
+    if (done !== 'done') return { status: 'failed' };
+    return seen.claim ? { status: 'exists', claim: seen.claim } : { status: 'recorded' };
 };
 
 /**
@@ -230,15 +252,19 @@ const markUnlocked = (
  *
  * @returns whether the flag is on the claim now: a claim that could not be flagged reads as a confirmed one
  */
-const markUnconfirmed = (deps: JoinDeps, id: string | number, owner: string | null): boolean => {
+const markUnconfirmed = async (deps: JoinDeps, id: string | number, owner: string | null): Promise<boolean> => {
     let flagged = false;
-    const done = changeClaims(deps, `flag the unlock marker for ${sanitizeLogString(id)} as unconfirmed`, (state) => {
-        const claim = state[markerKey(id, owner)];
-        if (!isPlainObject(claim)) return false;
-        state[markerKey(id, owner)] = { ...claim, unconfirmed: true };
-        flagged = true;
-        return true;
-    });
+    const done = await changeClaims(
+        deps,
+        `flag the unlock marker for ${sanitizeLogString(id)} as unconfirmed`,
+        (state) => {
+            const claim = state[markerKey(id, owner)];
+            flagged = isPlainObject(claim);
+            if (!isPlainObject(claim)) return false;
+            state[markerKey(id, owner)] = { ...claim, unconfirmed: true };
+            return true;
+        },
+    );
     return !deps.joinStateStore || (done === 'done' && flagged);
 };
 
@@ -248,7 +274,7 @@ const markUnconfirmed = (deps: JoinDeps, id: string | number, owner: string | nu
  *
  * @returns how the change ended: `done` means the claim is gone (or was never there)
  */
-const clearUnlocked = (deps: JoinDeps, key: string, waitMs?: number): Changed =>
+const clearUnlocked = (deps: JoinDeps, key: string, waitMs?: number): Promise<Changed> =>
     changeClaims(
         deps,
         `clear unlock marker for ${sanitizeLogString(idOfKey(key))}`,
@@ -271,8 +297,8 @@ const clearUnlocked = (deps: JoinDeps, key: string, waitMs?: number): Changed =>
  * @param key - the key of the claim the join used
  * @param ownKey - the key of this account's claim of the challenge (the same key when the claim is its own)
  */
-const markJoined = (deps: JoinDeps, key: string, ownKey: string): void => {
-    changeClaims(deps, `mark the unlock marker for ${sanitizeLogString(idOfKey(key))} as joined`, (state) => {
+const markJoined = async (deps: JoinDeps, key: string, ownKey: string): Promise<void> => {
+    await changeClaims(deps, `mark the unlock marker for ${sanitizeLogString(idOfKey(key))} as joined`, (state) => {
         const claim = state[key];
         if (!isPlainObject(claim)) return false;
         delete state[key];
@@ -297,9 +323,10 @@ type ForgetResult = Extract<
  *   'busy' (the claims file is locked by another process), 'locks-unavailable' (the app cannot create its lock
  *   files) or 'unreadable'
  */
-const forgetClaim = (deps: JoinDeps, id: string | number, owner: string | null): ForgetResult => {
+const forgetClaim = async (deps: JoinDeps, id: string | number, owner: string | null): Promise<ForgetResult> => {
     let result: ForgetResult = 'nothing-to-forget';
-    const done = changeClaims(deps, `forget the unlock marker for ${sanitizeLogString(id)}`, (state) => {
+    const done = await changeClaims(deps, `forget the unlock marker for ${sanitizeLogString(id)}`, (state) => {
+        result = 'nothing-to-forget';
         const claim = findClaim(state, id, owner);
         if (!claim) return false;
         if (claim.legacy) {
@@ -339,7 +366,6 @@ const pruneClosedClaims = async (
     const store = deps.joinStateStore;
     const openIds = new Set(open.flatMap((c) => (c?.id == null ? [] : [String(c.id)])));
     if (!store || openIds.size === 0) return;
-    await refreshClaims(deps);
     if (Object.keys(readUnlocked(store)).length === 0) return;
     const owner = await markerOwner(token, deps);
     const ownerKnown = !paidOwnerUnknown(deps, owner);
@@ -363,7 +389,9 @@ const pruneClosedClaims = async (
     const held: Array<{ release: () => void }> = [];
     let dropped = 0;
     try {
-        const done = changeClaims(deps, 'prune the unlock markers', (state) => {
+        const done = await changeClaims(deps, 'prune the unlock markers', (state) => {
+            // Made again on what another writer saved: what the earlier call took is let go first, not kept twice.
+            held.splice(0).forEach((lock) => lock.release());
             const stale = Object.keys(state)
                 .filter((key) => droppable(key, state[key]))
                 .filter((key) => {
@@ -395,7 +423,7 @@ export {
     markerOwner,
     paidOwnerUnknown,
     paidByThisAccount,
-    markUnlocked,
+    claimUnlock,
     markJoined,
     clearUnlocked,
 };

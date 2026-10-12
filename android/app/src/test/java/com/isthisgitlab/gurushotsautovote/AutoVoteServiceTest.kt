@@ -23,6 +23,7 @@ import io.mockk.mockk
 import io.mockk.mockkObject
 import io.mockk.unmockkObject
 import io.mockk.verify
+import io.mockk.verifyOrder
 import mockwebserver3.MockResponse
 import mockwebserver3.MockWebServer
 import okhttp3.HttpUrl
@@ -274,6 +275,137 @@ class AutoVoteServiceTest {
         assertNull(client.shouldInterceptRequest(wv, request))
     }
 
+    private fun sideStoreContext(): Context = ApplicationProvider.getApplicationContext()
+
+    @Test
+    fun aSideStoreIsSavedByCompareAndSetOnlyWhileItHoldsWhatTheCallerRead() {
+        val ctx = sideStoreContext()
+        // Nothing stored: an absent (null or empty) expectation matches, a value does not.
+        assertEquals(SideStores.Outcome.MISMATCH, SideStores.compareAndSet(ctx, "gs_join_state", "{\"a\":1}", "{\"b\":1}").outcome)
+        assertEquals(SideStores.Outcome.SAVED, SideStores.compareAndSet(ctx, "gs_join_state", null, "{\"a\":1}").outcome)
+        // Stored now: the one who read nothing is told what is there, and saves nothing.
+        val lost = SideStores.compareAndSet(ctx, "gs_join_state", "", "{\"b\":1}")
+        assertEquals(SideStores.Outcome.MISMATCH, lost.outcome)
+        assertEquals("{\"a\":1}", lost.current)
+        assertEquals("{\"a\":1}", SideStores.read(ctx, "gs_join_state"))
+        // The one who read it saves.
+        assertEquals(SideStores.Outcome.SAVED, SideStores.compareAndSet(ctx, "gs_join_state", "{\"a\":1}", "{\"a\":1,\"b\":1}").outcome)
+        assertEquals("{\"a\":1,\"b\":1}", SideStores.read(ctx, "gs_join_state"))
+    }
+
+    @Test
+    fun aCompareAndSetRefusesWhatIsNotASideStoreOrNotOneBoundedJsonObject() {
+        val ctx = sideStoreContext()
+        ShadowLog.clear()
+        assertEquals(SideStores.Outcome.REFUSED, SideStores.compareAndSet(ctx, "unrelated-key", null, "{}").outcome)
+        assertEquals(SideStores.Outcome.REFUSED, SideStores.compareAndSet(ctx, "gs_join_state", null, "[1]").outcome)
+        assertEquals(SideStores.Outcome.REFUSED, SideStores.compareAndSet(ctx, "gs_join_state", null, "{} trailing").outcome)
+        assertEquals(SideStores.Outcome.REFUSED, SideStores.compareAndSet(ctx, "gs_join_state", null, "{}{}").outcome)
+        assertEquals(SideStores.Outcome.REFUSED, SideStores.compareAndSet(ctx, "gs_join_state", null, "").outcome)
+        val big = "{\"k\":\"" + "x".repeat(SideStores.MAX_BYTES) + "\"}"
+        assertEquals(SideStores.Outcome.REFUSED, SideStores.compareAndSet(ctx, "gs_join_state", null, big).outcome)
+        assertNull(SideStores.read(ctx, "gs_join_state"))
+        assertNull(SideStores.read(ctx, "unrelated-key"))
+        // Refusals name the store from a literal, and the rejected key is silent.
+        assertEquals(
+            listOf(
+                "Refusing to persist non-JSON join-state blob",
+                "Refusing to persist non-JSON join-state blob",
+                "Refusing to persist non-JSON join-state blob",
+                "Refusing to persist non-JSON join-state blob",
+                "Refusing to persist oversized join-state blob"
+            ),
+            ShadowLog.getLogsForTag(AutoVoteService.TAG).map { it.msg }
+        )
+        // A write takes the same checks.
+        assertFalse(SideStores.write(ctx, "gs_join_state", "{} trailing"))
+    }
+
+    @Test
+    fun aCompareAndSetThatCannotCommitIsRefusedAndSaysWhatIsStored() {
+        val ctx = mockk<Context>()
+        val prefs = mockk<android.content.SharedPreferences>()
+        val editor = mockk<android.content.SharedPreferences.Editor>()
+        every { ctx.getSharedPreferences(SideStores.PREFS_FILE, Context.MODE_PRIVATE) } returns prefs
+        every { prefs.getString("gs_join_state", null) } returns "{\"a\":1}"
+        every { prefs.edit() } returns editor
+        every { editor.putString("gs_join_state", "{\"b\":1}") } returns editor
+        every { editor.putString("gs_join_state", "{\"a\":1}") } returns editor
+        every { editor.commit() } returnsMany listOf(false, true)
+        val result = SideStores.compareAndSet(ctx, "gs_join_state", "{\"a\":1}", "{\"b\":1}")
+        assertEquals(SideStores.Outcome.REFUSED, result.outcome)
+        assertEquals("{\"a\":1}", result.current)
+        // The commit that failed had already made the new value readable in memory: the old one is put back.
+        verifyOrder {
+            editor.putString("gs_join_state", "{\"b\":1}")
+            editor.commit()
+            editor.putString("gs_join_state", "{\"a\":1}")
+            editor.commit()
+        }
+    }
+
+    @Test
+    fun aCommitThatFailsLeavesNeitherAPlainWriteNorACompareAndSetReadable() {
+        val ctx = mockk<Context>()
+        val prefs = mockk<android.content.SharedPreferences>()
+        val editor = mockk<android.content.SharedPreferences.Editor>()
+        every { ctx.getSharedPreferences(SideStores.PREFS_FILE, Context.MODE_PRIVATE) } returns prefs
+        every { prefs.edit() } returns editor
+        every { editor.putString(any(), any()) } returns editor
+        every { editor.remove(any()) } returns editor
+        every { editor.commit() } returnsMany listOf(false, true)
+        // Nothing was stored: the failed value is removed again.
+        every { prefs.getString("gs_auto_spends", null) } returns null
+        assertFalse(SideStores.write(ctx, "gs_auto_spends", "{\"7\":{\"fills\":1,\"at\":1}}"))
+        verifyOrder {
+            editor.putString("gs_auto_spends", "{\"7\":{\"fills\":1,\"at\":1}}")
+            editor.commit()
+            editor.remove("gs_auto_spends")
+            editor.commit()
+        }
+        // Something was: it is put back.
+        every { editor.commit() } returnsMany listOf(false, true)
+        every { prefs.getString("gs_auto_spends", null) } returns "{\"7\":{\"fills\":0,\"at\":1}}"
+        assertFalse(SideStores.write(ctx, "gs_auto_spends", "{\"7\":{\"fills\":1,\"at\":1}}"))
+        verify { editor.putString("gs_auto_spends", "{\"7\":{\"fills\":0,\"at\":1}}") }
+    }
+
+    @Test
+    fun twoContextsChangingOneStoreFromTheSameReadSaveExactlyOne() {
+        val ctx = sideStoreContext()
+        repeat(40) { round ->
+            val key = "gs_auto_spends"
+            SideStores.write(ctx, key, "{}")
+            val saved = java.util.concurrent.atomic.AtomicInteger(0)
+            val start = java.util.concurrent.CountDownLatch(1)
+            val threads = listOf("service", "window").map { who ->
+                Thread {
+                    start.await()
+                    if (SideStores.compareAndSet(ctx, key, "{}", "{\"$who\":$round}").outcome == SideStores.Outcome.SAVED) {
+                        saved.incrementAndGet()
+                    }
+                }
+            }
+            threads.forEach { it.start() }
+            start.countDown()
+            threads.forEach { it.join() }
+            assertEquals(1, saved.get())
+        }
+    }
+
+    @Test
+    fun theBridgeComparesAndWritesThroughTheSameLock() {
+        val store = newService().HeadlessStore()
+        assertTrue(store.compareAndWriteKey("gs_join_state", null, "{\"a\":1}"))
+        assertFalse(store.compareAndWriteKey("gs_join_state", "", "{\"b\":1}"))
+        assertEquals("{\"a\":1}", store.readKey("gs_join_state"))
+        assertTrue(store.compareAndWriteKey("gs_join_state", "{\"a\":1}", "{\"a\":1,\"b\":1}"))
+        assertFalse(store.compareAndWriteKey("unrelated-key", null, "{}"))
+        assertFalse(store.compareAndWriteKey("gs_join_state", "{\"a\":1,\"b\":1}", "{} x"))
+        // A plain write is held to the same size and shape.
+        assertFalse(store.writeKey("gs_join_state", "{} x"))
+    }
+
     @Test
     fun headlessSideStoresUseOnlyTheAllowedPreferenceKeys() {
         val store = newService().HeadlessStore()
@@ -303,10 +435,13 @@ class AutoVoteServiceTest {
         assertEquals("{\"7\":[]}", store.readKey("gs_swap_backs"))
         assertFalse(store.writeKey("gs_swap_backs", "invalid JSON"))
         assertEquals("{\"7\":[]}", store.readKey("gs_swap_backs"))
-        // The paid-join claims are a side store too: a claim that did not survive a restart would charge twice.
-        assertTrue(store.writeKey("gs_join_state", "{\"7:9\":{\"unlockedAt\":1}}"))
+        // The paid-join claims are a side store too (a claim that did not survive a restart would charge twice), but
+        // changed by compare-and-set only: a plain write would replace what the other context saved.
+        assertFalse(store.writeKey("gs_join_state", "{\"7:9\":{\"unlockedAt\":1}}"))
+        assertNull(store.readKey("gs_join_state"))
+        assertTrue(store.compareAndWriteKey("gs_join_state", null, "{\"7:9\":{\"unlockedAt\":1}}"))
         assertEquals("{\"7:9\":{\"unlockedAt\":1}}", store.readKey("gs_join_state"))
-        assertFalse(store.writeKey("gs_join_state", "invalid JSON"))
+        assertFalse(store.compareAndWriteKey("gs_join_state", "{\"7:9\":{\"unlockedAt\":1}}", "invalid JSON"))
         assertEquals("{\"7:9\":{\"unlockedAt\":1}}", store.readKey("gs_join_state"))
         // A refusal names the store from a literal — the JS-supplied key never
         // reaches the log line (CodeQL java/log-injection), and the rejected
@@ -318,6 +453,7 @@ class AutoVoteServiceTest {
                 "Refusing to persist non-JSON scenario resets blob",
                 "Refusing to persist non-JSON auto-spend ledger blob",
                 "Refusing to persist non-JSON swap-back ledger blob",
+                "Refusing a plain write of join-state blob: it is changed by compare-and-set only",
                 "Refusing to persist non-JSON join-state blob"
             ),
             ShadowLog.getLogsForTag(AutoVoteService.TAG).map { it.msg }

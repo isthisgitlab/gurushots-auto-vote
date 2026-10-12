@@ -7,7 +7,7 @@ import * as logger from '../logger';
 import * as runtime from '../runtime';
 import type { PreferencesPlugin } from '@capacitor/preferences';
 import type { AndroidHeadlessStore } from '../types/settings';
-import type { ThroughResult } from '../types/stores';
+import type { RawJsonStore, ThroughResult } from '../types/stores';
 
 /**
  * The Android headless-service bridge, read at call time (absent everywhere
@@ -132,6 +132,59 @@ const applyAgain = (
     }
 };
 
+// How often a change made against a shared store is made again on what another writer saved meanwhile, before it
+// is given up as not saved.
+const MAX_ATTEMPTS = 5;
+
+/** What the native compare-and-write answered: saved, or not because the key had changed (and what it holds). */
+export type CasAnswer = { saved: boolean; current: string | null };
+
+/**
+ * A change of a key that the background service writes too, made in the service's own context: read the key through
+ * the bridge, make the new value from it, and save it only if the key still holds what was read (the native side
+ * takes one lock for both contexts). A key that changed meanwhile is read again and the change made again on it.
+ * `update` may be called more than once, and must make the same change each time.
+ *
+ * @returns `saved`; `aborted` (`update` answered null); `failed` (no bridge, a refused or failed save, or a key that
+ *   kept changing)
+ */
+export const headlessUpdate = (prefKey: string, update: (current: string | null) => string | null): ThroughResult => {
+    try {
+        const bridge = headlessStore();
+        if (!bridge?.readKey || !bridge.compareAndWriteKey) throw new Error('no bridge to change through');
+        let current = bridge.readKey(prefKey);
+        for (let attempt = 0; attempt < MAX_ATTEMPTS; attempt++) {
+            const data = update(current);
+            if (data === null) return 'aborted';
+            if (bridge.compareAndWriteKey(prefKey, current ?? '', data)) return 'saved';
+            const now = bridge.readKey(prefKey);
+            // Nothing changed under it, or what is there is the value just offered (a refused save that the bridge's own
+            // memory still shows): the save itself was refused, and trying again will not help.
+            if (now === current || now === data) throw new Error('the bridge refused the value');
+            current = now;
+        }
+        throw new Error('the key kept changing');
+    } catch (error) {
+        logger.withCategory('settings').error(`Headless ${prefKey} could not be changed:`, error);
+        return 'failed';
+    }
+};
+
+/**
+ * Writes to `target` a text made from its current one, saved before anything can read it where that takes a moment (the
+ * Android app: see RawJsonStore.updateThrough); `update` answers null to write nothing.
+ */
+export const throughStore = async (
+    target: RawJsonStore,
+    update: (current: string | null) => string | null,
+): Promise<ThroughResult> => {
+    if (target.updateThrough) return target.updateThrough(update);
+    const data = update(target.readRaw());
+    if (data === null) return 'aborted';
+    target.writeRaw(data);
+    return 'saved';
+};
+
 /**
  * The ordered write-behind of one Capacitor key: writes apply in issue order, and one that fails is logged without
  * breaking the queue. Every write holds the whole value, and a queued write puts down `intended` on its turn, the
@@ -144,11 +197,14 @@ const applyAgain = (
  *
  * `updateThrough` is for a write that must not show before it is saved: it waits its turn in the queue, makes the
  * value from the cache as it is then (`update` answers null to write nothing), and puts it in the cache only once
- * Preferences has it. A write queued while it is being saved gets its change as well (`update` is called again on
- * that newer value, and must make the same change: `aborted` when it declines or throws), and a queued write that
- * failed before it, which it was built on, is no longer one a flush reports. When it fails the cache was never
- * changed, so nothing read, applied or written since has seen it, and it is not a queued write: a flush does not
- * report it.
+ * Preferences has it. Where the key is shared with the background service (`cas`: the native compare-and-write, null
+ * where there is none) the value is saved only if the key still holds what it was made from, and is made again on
+ * what the service saved meanwhile (up to MAX_ATTEMPTS). A write queued while it is being saved gets its change as
+ * well (`update` is called again on that newer value, and must make the same change: `aborted` when it declines or
+ * throws, in which case the first value had already been saved, and was visible for a moment, until the queued write
+ * put its own down — no caller of a write-through key queues writes); and a queued write that failed before it, which
+ * it was built on, is no longer one a flush reports. When it fails the cache was never changed, so nothing read,
+ * applied or written since has seen it, and it is not a queued write: a flush does not report it.
  *
  * A read takes a snapshot first (`drained`) and gives it back to `confirm`: a write queued or written through since,
  * or a queued write that did not persist, means the read may not hold what was written, and the cache keeps
@@ -162,6 +218,7 @@ export const createWriteBehind = (
     strict: boolean,
     preferences: () => PreferencesPlugin,
     cache: { get: () => string | null; set: (value: string | null) => void },
+    cas?: (expected: string | null, data: string) => Promise<CasAnswer> | null,
 ) => {
     const { enqueue, quiet, drained } = createQueue(prefKey);
     let latest: Promise<WriteOutcome> = Promise.resolve({ ok: true });
@@ -169,16 +226,39 @@ export const createWriteBehind = (
     let issued = 0;
     let queued = 0;
     let flushedAt = 0;
-    // Only read once something was queued or written through, which is what sets it.
-    let intended = '';
+    // The latest value queued or written through (null until one is), and the one a queued write puts down.
+    let intended: string | null = null;
+    let queuedText = '';
+    const intend = (text: string) => {
+        intended = text;
+        queuedText = text;
+    };
     knownKeys.delete(prefKey);
+    // The value the write-through makes from the cache and saves: through the native compare-and-write, where there is
+    // one, else straight to Preferences. Null: `update` declined.
+    const save = async (update: (current: string | null) => string | null): Promise<string | null> => {
+        let base = cache.get();
+        for (let attempt = 0; attempt < MAX_ATTEMPTS; attempt++) {
+            const data = update(base);
+            if (data === null) return null;
+            const answer = cas?.(base, data) ?? null;
+            if (answer === null) {
+                await preferences().set({ key: prefKey, value: data });
+                return data;
+            }
+            const { saved, current } = await answer;
+            if (saved) return data;
+            base = current;
+        }
+        throw new Error('the key kept changing');
+    };
     return {
         queue: (data: string) => {
             issued++;
             queued++;
-            intended = data;
+            intend(data);
             knownKeys.add(prefKey);
-            latest = enqueue(() => preferences().set({ key: prefKey, value: intended })).then((outcome) => {
+            latest = enqueue(() => preferences().set({ key: prefKey, value: queuedText })).then((outcome) => {
                 lastFailed = !outcome.ok;
                 return outcome;
             });
@@ -186,28 +266,29 @@ export const createWriteBehind = (
         updateThrough: async (update: (current: string | null) => string | null): Promise<ThroughResult> => {
             let result: ThroughResult = 'aborted';
             const outcome = await enqueue(async () => {
-                const data = update(cache.get());
+                const before = issued;
+                const data = await save(update);
                 if (data === null) return;
-                // From here a refresh that started is told a write is under way (it may read what is not saved yet).
-                const before = ++issued;
-                await preferences().set({ key: prefKey, value: data });
                 knownKeys.add(prefKey);
                 // A write queued during the save has the newer value, and puts it down on its turn: this change is
-                // applied to that one, so that it saves both (`update` is called again: it must make the same change).
-                // One that declines, or throws, leaves that value as it is: this change did not make it.
+                // applied to that one, so that it saves both. One that declines, or throws, leaves that value as it
+                // is: this change did not make it.
                 if (issued === before) {
-                    intended = data;
+                    intend(data);
                     latest = Promise.resolve({ ok: true });
                     lastFailed = false;
                     result = 'saved';
                 } else {
-                    const rebased = applyAgain(prefKey, update, intended);
+                    const rebased = applyAgain(prefKey, update, queuedText);
                     if (rebased !== null) {
-                        intended = rebased;
+                        intend(rebased);
                         result = 'saved';
                     }
                 }
-                cache.set(intended);
+                // Only a save moves the counter a read in flight is told by: one that failed changed nothing it could
+                // have read over.
+                issued++;
+                cache.set(queuedText);
             });
             return outcome.ok ? result : 'failed';
         },
@@ -217,7 +298,7 @@ export const createWriteBehind = (
          */
         confirm: (at: number) => {
             knownKeys.add(prefKey);
-            if (issued !== at || lastFailed) cache.set(intended);
+            if (intended !== null && (issued !== at || lastFailed)) cache.set(intended);
             // Nothing is under way or unsaved: what was read is what is stored, and what the next write builds on.
             else intended = cache.get() ?? intended;
         },

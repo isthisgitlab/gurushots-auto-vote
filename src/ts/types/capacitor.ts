@@ -29,6 +29,16 @@ export interface AutoVoteBackgroundPlugin {
     start(): Promise<{ running: boolean }>;
     stop(): Promise<{ running: boolean }>;
     getStatus(): Promise<{ running: boolean; cycleCount: number; lastRunAt: number; lastError: string }>;
+    /**
+     * Saves a side store only if it still holds `expected` (absent or null: nothing was stored). `current` is what is
+     * stored when it was not saved. Rejects a key that is not a side store, a value that is not one JSON object within
+     * the size cap, and a commit that failed.
+     */
+    compareAndWrite(options: {
+        key: string;
+        expected?: string | null;
+        value: string;
+    }): Promise<{ saved: boolean; current: string | null }>;
 }
 
 export interface CapacitorPlugins {
