@@ -295,11 +295,56 @@ describe('the Android component list', () => {
     });
 
     // Anything else the verification metadata lists is the Android Gradle plugin and the build, lint, test and coverage
-    // tooling it resolves, which never reaches the APK.
+    // tooling it resolves, which never reaches the APK. The androidx.* component pattern matches some of that tooling
+    // by its name; these exact artifacts are the only ones allowed to, each for the reason of its group. A new one has
+    // to be listed here (or the component list narrowed), and one that is gone has to be dropped.
+    const TOOLING_UNDER_ANDROIDX = [
+        // AGP's data binding compiler, resolved by the build only.
+        'androidx.databinding:databinding-common',
+        'androidx.databinding:databinding-compiler-common',
+        // The instrumentation and JVM test libraries (Espresso, the test runner, AndroidX Test core and its monitor).
+        'androidx.test.espresso:espresso-core',
+        'androidx.test.espresso:espresso-idling-resource',
+        'androidx.test.ext:junit',
+        'androidx.test.services:storage',
+        'androidx.test:core',
+        'androidx.test:monitor',
+        'androidx.test:runner',
+        // A test-classpath companion of androidx.concurrent:concurrent-futures, which does ship.
+        'androidx.concurrent:concurrent-futures-ktx',
+    ];
+
     test('leaves a component for every artifact the release APK ships, and none for tooling', () => {
         const tooling = verified.filter((coordinate) => !runtimeArtifacts.includes(coordinate));
         expect(tooling.length).toBeGreaterThan(runtimeArtifacts.length);
-        expect(tooling.filter((coordinate) => covers(coordinate) && !coordinate.startsWith('androidx.'))).toEqual([]);
+        expect(tooling.filter(covers).sort()).toEqual([...TOOLING_UNDER_ANDROIDX].sort());
+    });
+
+    // android/release-runtime-notices.txt (scripts/android-runtime-artifacts.sh) names the runtime artifacts whose jar or
+    // aar carries a META-INF/NOTICE* file. A NOTICE has to travel with the app (Apache-2.0 section 4(d)), so each one is
+    // vendored as scripts/licenses/texts/NOTICE-<group>-<artifact>.txt and rendered in section 6 before it is accepted here.
+    const noticeArtifacts = read('android', 'release-runtime-notices.txt').split('\n').filter(Boolean);
+
+    test('lists the artifacts with a NOTICE file: sorted, unique, and among those the release APK ships', () => {
+        expect(noticeArtifacts).toEqual([...new Set(noticeArtifacts)].sort());
+        expect(noticeArtifacts.filter((coordinate) => !runtimeArtifacts.includes(coordinate))).toEqual([]);
+    });
+
+    test('has every NOTICE file of a shipped artifact vendored', () => {
+        const unvendored = noticeArtifacts.filter(
+            (coordinate) =>
+                !fs.existsSync(path.join(LICENSES_DIR, 'texts', `NOTICE-${coordinate.replace(':', '-')}.txt`)),
+        );
+        expect(unvendored).toEqual([]);
+    });
+
+    test('keeps the runtime lists current: the Android CI job regenerates and diffs them, and so does the metadata script', () => {
+        const workflow = read('.github', 'workflows', 'test.yml');
+        expect(workflow).toContain('scripts/android-runtime-artifacts.sh');
+        expect(workflow).toMatch(
+            /git diff --exit-code -- android\/release-runtime-artifacts\.txt android\/release-runtime-notices\.txt/,
+        );
+        expect(read('scripts', 'android-verification-metadata.sh')).toContain('scripts/android-runtime-artifacts.sh');
     });
 
     test('maps every Capacitor Gradle project to an npm package of the lockfile', () => {
@@ -597,7 +642,7 @@ describe('main failures and rendering', () => {
         fs.writeFileSync(path.join(options.licensesDir, 'texts', 'LGPL-3.0.txt'), 'text of LGPL\n');
         main(options);
         expect(fs.readFileSync(options.outPath, 'utf8')).toContain(
-            'A CLI built from a source checkout corresponds to the source of that\ncheckout.\n\n  plain 1.0.0\n',
+            'A CLI built from a source checkout corresponds to the source of that checkout.\n\n  plain 1.0.0\n',
         );
     });
 
@@ -607,7 +652,7 @@ describe('main failures and rendering', () => {
         const text = fs.readFileSync(options.outPath, 'utf8');
         expect(text).toContain('the release tag that matches\nthe version the CLI reports');
         expect(text).toContain('https://github.com/isthisgitlab/gurushots-auto-vote/releases.');
-        expect(text).toContain('A CLI built from a source checkout corresponds to the source of that\ncheckout.');
+        expect(text).toContain('A CLI built from a source checkout corresponds to the source of that checkout.');
         expect(text).not.toContain('/tree/v');
     });
 

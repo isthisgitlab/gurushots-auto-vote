@@ -726,7 +726,7 @@ jobs:
                   git add package.json README.md README.lv.md docs/usage.md docs/usage.lv.md
                   git commit -m "Bump version to $NEW_VERSION ($BUMP_TYPE) and update documentation [skip ci]"
                   if ! git push origin "HEAD:refs/heads/$REF_NAME"; then
-                    echo "::error::Could not push the version bump to $REF_NAME (non-fast-forward: the branch moved past the built commit, or the push was refused). Nothing was published; re-run after the branch settles."
+                    echo "::error::Could not push the version bump to $REF_NAME (non-fast-forward: the branch moved past the built commit, or the push was refused). Nothing was published. A re-run succeeds only while the bump commit is still the branch tip; once the branch has moved on, push a new commit to release a new version."
                     exit 1
                   fi
                   echo "sha=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
