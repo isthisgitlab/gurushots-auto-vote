@@ -27,7 +27,7 @@ import { isPlainObject } from '../src/ts/plainObject';
 import { GLOVE_URL } from './fetch-embeddings/config';
 import { REPOS } from './fetch-vision-model';
 import { readLicenseText, visionModelNotice } from './lib/licenses';
-import { loadAndroidComponents, loadLicenses } from './lib/noticeData';
+import { loadAndroidComponents, loadLicenses, loadNoticeFiles } from './lib/noticeData';
 import type { AndroidComponent, LicenseEntry } from './lib/noticeData';
 import { runIfMain } from './lib/run-if-main';
 
@@ -60,8 +60,8 @@ interface NoticeInputs {
     android: AndroidComponent[];
     androidVersions: Record<string, string>;
     onnxruntimeVersion: string;
-    /** The ids (`NOTICE-<group>-<artifact>`) of the vendored NOTICE files of shipped Android artifacts. */
-    noticeIds: string[];
+    /** The vendored NOTICE file (its text id) of each shipped Android artifact, by `group:artifact`. */
+    notices: Record<string, string>;
     readText: (id: string) => string;
 }
 
@@ -248,13 +248,9 @@ const renderRuntimesSection = ({ readText, onnxruntimeVersion }: NoticeInputs) =
 
 const NOTICE_ID_PREFIX = 'NOTICE-';
 
-/** Whether a vendored NOTICE file (`NOTICE-<group>-<artifact>`) belongs to the artifacts an android.json pattern names. */
-const noticeBelongsTo = (pattern: string, noticeId: string) => {
-    const name = noticeId.slice(NOTICE_ID_PREFIX.length);
-    return pattern.endsWith('*')
-        ? name.startsWith(pattern.slice(0, -1).replace(':', '-'))
-        : name === pattern.replace(':', '-');
-};
+/** Whether an android.json coordinate (`group:artifact`, or a pattern ending in `*`) names this artifact. */
+const coordinateMatches = (pattern: string, coordinate: string) =>
+    pattern.endsWith('*') ? coordinate.startsWith(pattern.slice(0, -1)) : coordinate === pattern;
 
 /** Section 6 lines; records each component's license text. Every vendored NOTICE file is rendered with its component. */
 const renderAndroidSection = (inputs: NoticeInputs, usedTexts: Set<string>) => {
@@ -276,11 +272,11 @@ const renderAndroidSection = (inputs: NoticeInputs, usedTexts: Set<string>) => {
             `  ${component.url}`,
             '',
         );
-        for (const id of inputs.noticeIds) {
-            if (!component.coordinates.some((pattern) => noticeBelongsTo(pattern, id))) continue;
-            rendered.add(id);
+        for (const [coordinate, id] of Object.entries(inputs.notices).sort(([a], [b]) => a.localeCompare(b))) {
+            if (!component.coordinates.some((pattern) => coordinateMatches(pattern, coordinate))) continue;
+            rendered.add(coordinate);
             lines.push(
-                `  NOTICE of ${id.slice(NOTICE_ID_PREFIX.length)}:`,
+                `  NOTICE of ${coordinate}:`,
                 '',
                 ...inputs
                     .readText(id)
@@ -290,9 +286,9 @@ const renderAndroidSection = (inputs: NoticeInputs, usedTexts: Set<string>) => {
             );
         }
     }
-    const orphans = inputs.noticeIds.filter((id) => !rendered.has(id));
+    const orphans = Object.keys(inputs.notices).filter((coordinate) => !rendered.has(coordinate));
     if (orphans.length > 0) {
-        throw new Error(`No scripts/licenses/android.json component for the vendored ${orphans.join(', ')}`);
+        throw new Error(`No scripts/licenses/android.json component for the vendored NOTICE of ${orphans.join(', ')}`);
     }
     return lines;
 };
@@ -352,22 +348,27 @@ const main = ({
         );
     }
     const textsDir = path.join(licensesDir, 'texts');
-    const noticeIds = fs
+    const notices = loadNoticeFiles(path.join(licensesDir, 'notices.json'));
+    const named = new Set(Object.values(notices));
+    const unnamed = fs
         .readdirSync(textsDir)
         .filter((file) => file.startsWith(NOTICE_ID_PREFIX) && file.endsWith('.txt'))
         .map((file) => file.slice(0, -'.txt'.length))
-        .sort();
-    const notices = renderNotices({
+        .filter((id) => !named.has(id));
+    if (unnamed.length > 0) {
+        throw new Error(`scripts/licenses/notices.json names no artifact for the vendored ${unnamed.join(', ')}`);
+    }
+    const text = renderNotices({
         projectLicense: fs.readFileSync(licensePath, 'utf8').trimEnd(),
         packages,
         licenses: loadLicenses(path.join(licensesDir, 'packages.json')),
         android: loadAndroidComponents(path.join(licensesDir, 'android.json')),
         androidVersions: parseGradleVariables(fs.readFileSync(androidVariablesPath, 'utf8')),
         onnxruntimeVersion: onnxruntime.version,
-        noticeIds,
+        notices,
         readText: (id) => readLicenseText(id, textsDir),
     });
-    fs.writeFileSync(outPath, notices);
+    fs.writeFileSync(outPath, text);
     console.log(`✅ Notices: ${packages.length} npm packages → ${path.relative(ROOT, outPath)}`);
 };
 
@@ -380,6 +381,7 @@ export {
     collectPackages,
     loadAndroidComponents,
     loadLicenses,
+    loadNoticeFiles,
     lookupLicense,
     main,
     parseGradleVariables,

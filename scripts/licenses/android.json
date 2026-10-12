@@ -67,7 +67,6 @@
         "versionVariable": "cordovaAndroidVersion",
         "license": "Apache-2.0",
         "copyright": "Copyright The Apache Software Foundation",
-        "attribution": "This product includes software developed at The Apache Software Foundation (http://www.apache.org/).",
         "url": "https://github.com/apache/cordova-android",
         "transitive": true
     }

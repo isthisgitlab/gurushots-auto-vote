@@ -10022,8 +10022,15 @@ Guava ListenableFuture (dependency of the AndroidX libraries)
 Apache Cordova Android 14.0.1
   License: Apache-2.0
   Copyright The Apache Software Foundation
-  This product includes software developed at The Apache Software Foundation (http://www.apache.org/).
   https://github.com/apache/cordova-android
+
+  NOTICE of org.apache.cordova:framework:
+
+    Apache Cordova
+    Copyright 2015-2020 The Apache Software Foundation
+
+    This product includes software developed at
+    The Apache Software Foundation (http://www.apache.org/).
 
 7. License texts
 ----------------

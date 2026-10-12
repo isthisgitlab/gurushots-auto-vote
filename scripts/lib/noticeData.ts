@@ -1,6 +1,6 @@
 /**
- * The curated license data the notices generator reads (`scripts/licenses/packages.json` and `android.json`), with
- * the shape each entry must have: a file that does not match fails the build instead of rendering a partial notice.
+ * The curated license data the notices generator reads (`scripts/licenses/packages.json`, `android.json` and
+ * `notices.json`), with the shape each entry must have: a file that does not match fails the build instead of rendering a partial notice.
  */
 
 import fs from 'node:fs';
@@ -66,6 +66,22 @@ const loadLicenses = (file: string): Record<string, LicenseEntry> => {
     return licenses;
 };
 
+/**
+ * Reads and validates scripts/licenses/notices.json: the `group:artifact` of each Android artifact whose NOTICE file is
+ * vendored, mapped to the id of its text in scripts/licenses/texts (`NOTICE-<name>`, the name free of the coordinate's
+ * `:`, so two coordinates never share a file).
+ */
+const loadNoticeFiles = (file: string): Record<string, string> => {
+    const data = readJson(file);
+    if (!isPlainObject(data)) throw new Error(`${file} must hold a JSON object`);
+    const notices: Record<string, string> = {};
+    for (const [coordinate, id] of Object.entries(data)) {
+        if (typeof id !== 'string') throw new Error(`${file}: invalid entry for ${coordinate}`);
+        notices[coordinate] = id;
+    }
+    return notices;
+};
+
 /** Reads and validates scripts/licenses/android.json. */
 const loadAndroidComponents = (file: string): AndroidComponent[] => {
     const data = readJson(file);
@@ -73,5 +89,5 @@ const loadAndroidComponents = (file: string): AndroidComponent[] => {
     return data;
 };
 
-export { loadAndroidComponents, loadLicenses };
+export { loadAndroidComponents, loadLicenses, loadNoticeFiles };
 export type { AndroidComponent, LicenseEntry };

@@ -33,8 +33,10 @@ trap cleanup EXIT
 
 # Prints "SCANNED group:artifact" for every module of the release runtime classpath it opened, "NOTICE group:artifact"
 # for the ones whose jar, or a jar inside its aar (classes.jar, libs/*.jar), has a META-INF/NOTICE* entry, and
-# "UNSCANNED group:artifact" for a module that resolves to a file the scan did not open (a BOM or platform has no file,
-# so it is not one).
+# "UNSCANNED group:artifact" for a module that resolves to a file the scan did not open, "NOFILE group:artifact" for a
+# module of the resolved graph that has no file at all (a BOM or platform), and "FAILED <reason>" for an artifact the
+# configuration could not resolve, other than the Capacitor projects (the lenient views would otherwise skip it
+# silently).
 cat > "$work/notices.init.gradle" <<'GRADLE'
 import java.util.zip.ZipEntry
 import java.util.zip.ZipFile
@@ -80,17 +82,33 @@ allprojects {
                 }
             }
             // Lenient resolution skips what a view cannot take, so what resolves to a file at all is asked of a view
-            // that takes whatever the configuration gives; a module it lists that was not opened is a gap in the scan.
+            // that takes whatever the configuration gives; a module it lists that was not opened is a gap in the scan,
+            // and an artifact it failed to resolve is reported rather than hidden.
             def resolved = new TreeSet<String>()
-            configurations.getByName('releaseRuntimeClasspath').incoming.artifactView { config ->
+            def everything = configurations.getByName('releaseRuntimeClasspath').incoming.artifactView { config ->
                 config.lenient = true
-            }.artifacts.artifacts.each { artifact ->
+            }.artifacts
+            everything.artifacts.each { artifact ->
                 def id = artifact.id.componentIdentifier
                 if (id instanceof ModuleComponentIdentifier) resolved.add("${id.group}:${id.module}".toString())
+            }
+            // The Capacitor projects (npm packages, not Maven artifacts) are ambiguous for a view without attributes and
+            // are not what is scanned; a failure about any other component is a module the scan cannot see.
+            def failures = everything.failures.collect { it.message.readLines().first() }.findAll { !(it ==~ /.*project ':.*/) }
+            // A module of the resolved graph with no file at all is a BOM or a platform: there is nothing to open.
+            def noFile = new TreeSet<String>()
+            configurations.getByName('releaseRuntimeClasspath').incoming.resolutionResult.allComponents.each { component ->
+                def id = component.id
+                if (id instanceof ModuleComponentIdentifier) {
+                    def coordinate = "${id.group}:${id.module}".toString()
+                    if (!resolved.contains(coordinate)) noFile.add(coordinate)
+                }
             }
             scanned.each { println "SCANNED ${it}" }
             withNotice.each { println "NOTICE ${it}" }
             resolved.findAll { !scanned.contains(it) }.each { println "UNSCANNED ${it}" }
+            noFile.each { println "NOFILE ${it}" }
+            failures.each { println "FAILED ${it}" }
         }
     }
 }
@@ -103,8 +121,9 @@ GRADLE
     ./gradlew --no-daemon --console=plain -q -I "$work/notices.init.gradle" :app:printRuntimeNotices > "$work/notices"
 )
 
-# A scan that opened nothing would report "no NOTICE" for everything, and one that skipped a module that resolves to a
-# file would hide its NOTICE: either is a failure, not an empty answer.
+# A scan that opened nothing would report "no NOTICE" for everything, one that skipped a module that resolves to a
+# file would hide its NOTICE, and an artifact that failed to resolve has no file to look in: each is a failure, not an
+# empty answer.
 sed -nE 's/^SCANNED ([A-Za-z0-9_.-]+:[A-Za-z0-9_.-]+)$/\1/p' "$work/notices" > "$work/scanned"
 if [ ! -s "$work/scanned" ]; then
     echo "The NOTICE scan opened no artifact of the release runtime classpath; nothing was written." >&2
@@ -119,11 +138,26 @@ if [ -n "$unscanned" ]; then
     exit 1
 fi
 
+failed=$(sed -n 's/^FAILED //p' "$work/notices")
+if [ -n "$failed" ]; then
+    echo "These release runtime artifacts failed to resolve, so the NOTICE scan may have missed them; nothing was written:" >&2
+    echo "$failed" | sed 's/^/    /' >&2
+    exit 1
+fi
+
 grep -v ' (c)$' "$work/tree" |
     sed -nE 's/^[|+\\ -]*([A-Za-z0-9_.-]+:[A-Za-z0-9_.-]+)([: ]|$).*/\1/p' |
     LC_ALL=C sort -u > "$new_artifacts"
 if [ ! -s "$new_artifacts" ]; then
     echo "No release runtime artifacts were found in the Gradle output; nothing was written." >&2
+    exit 1
+fi
+# Every artifact of the dependency tree has to be one the scan opened, or one that has no file (a BOM or platform).
+sed -nE 's/^NOFILE ([A-Za-z0-9_.-]+:[A-Za-z0-9_.-]+)$/\1/p' "$work/notices" > "$work/nofile"
+unaccounted=$(LC_ALL=C sort -u "$work/scanned" "$work/nofile" | LC_ALL=C comm -13 - "$new_artifacts")
+if [ -n "$unaccounted" ]; then
+    echo "These release runtime artifacts were neither scanned for a NOTICE file nor are a BOM or platform; nothing was written:" >&2
+    echo "$unaccounted" | sed 's/^/    /' >&2
     exit 1
 fi
 sed -nE 's/^NOTICE ([A-Za-z0-9_.-]+:[A-Za-z0-9_.-]+)$/\1/p' "$work/notices" | LC_ALL=C sort -u > "$new_notices"

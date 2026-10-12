@@ -34,6 +34,7 @@ const {
     ONNXRUNTIME_TEXTS_VERSION,
     collectPackages,
     loadAndroidComponents,
+    loadNoticeFiles,
     loadLicenses,
     lookupLicense,
     main,
@@ -322,8 +323,18 @@ describe('the Android component list', () => {
 
     // android/release-runtime-notices.txt (scripts/android-runtime-artifacts.sh) names the runtime artifacts whose jar or
     // aar carries a META-INF/NOTICE* file. A NOTICE has to travel with the app (Apache-2.0 section 4(d)), so each one is
-    // vendored as scripts/licenses/texts/NOTICE-<group>-<artifact>.txt and rendered in section 6 before it is accepted here.
+    // vendored under scripts/licenses/texts, named by coordinate in scripts/licenses/notices.json, and rendered in
+    // section 6 before it is accepted here. (Cordova's NOTICE is vendored from upstream but its aar carries none.)
     const noticeArtifacts = read('android', 'release-runtime-notices.txt').split('\n').filter(Boolean);
+    const vendoredNotices = loadNoticeFiles(path.join(LICENSES_DIR, 'notices.json'));
+    const noticeText = (coordinate: string) =>
+        fs
+            .readFileSync(path.join(LICENSES_DIR, 'texts', `${vendoredNotices[coordinate]}.txt`), 'utf8')
+            .replace(/\s+$/, '');
+
+    test('lists no artifact with a NOTICE file today', () => {
+        expect(noticeArtifacts).toEqual([]);
+    });
 
     test('lists the artifacts with a NOTICE file: sorted, unique, and among those the release APK ships', () => {
         expect(noticeArtifacts).toEqual([...new Set(noticeArtifacts)].sort());
@@ -331,11 +342,7 @@ describe('the Android component list', () => {
     });
 
     test('has every NOTICE file of a shipped artifact vendored', () => {
-        const unvendored = noticeArtifacts.filter(
-            (coordinate) =>
-                !fs.existsSync(path.join(LICENSES_DIR, 'texts', `NOTICE-${coordinate.replace(':', '-')}.txt`)),
-        );
-        expect(unvendored).toEqual([]);
+        expect(noticeArtifacts.filter((coordinate) => !(coordinate in vendoredNotices))).toEqual([]);
     });
 
     test('renders the text of every NOTICE file it lists in the committed notices, under section 6', () => {
@@ -344,24 +351,21 @@ describe('the Android component list', () => {
             committed.indexOf('6. Android native libraries'),
             committed.indexOf('7. License texts'),
         );
-        for (const coordinate of noticeArtifacts) {
-            const notice = fs
-                .readFileSync(path.join(LICENSES_DIR, 'texts', `NOTICE-${coordinate.replace(':', '-')}.txt`), 'utf8')
-                .replace(/\s+$/, '');
-            const indented = notice
+        for (const coordinate of Object.keys(vendoredNotices)) {
+            const indented = noticeText(coordinate)
                 .split('\n')
                 .map((line) => (line ? `    ${line}` : ''))
                 .join('\n');
-            expect(section).toContain(`  NOTICE of ${coordinate.replace(':', '-')}:\n\n${indented}\n`);
+            expect(section).toContain(`  NOTICE of ${coordinate}:\n\n${indented}\n`);
         }
     });
 
-    test('names the Apache Software Foundation in the Cordova Android entry', () => {
+    test("carries Apache Cordova's own NOTICE for the Cordova Android entry", () => {
         const cordova = components.find((component) => component.coordinates.includes('org.apache.cordova:framework'));
-        expect(cordova?.attribution).toBe(
-            'This product includes software developed at The Apache Software Foundation (http://www.apache.org/).',
+        expect(cordova?.attribution).toBeUndefined();
+        expect(noticeText('org.apache.cordova:framework')).toContain(
+            'This product includes software developed at\nThe Apache Software Foundation (http://www.apache.org/).',
         );
-        expect(read('src', 'assets', 'THIRD_PARTY_NOTICES.txt')).toContain(`  ${cordova?.attribution}\n`);
     });
 
     test('keeps the runtime lists current: the Android CI job regenerates and diffs them, and so does the metadata script', () => {
@@ -563,6 +567,12 @@ describe('license data files', () => {
         }
     });
 
+    test('notices.json must map each coordinate to a text id', () => {
+        expect(loadNoticeFiles(write('ok.json', { 'g:a': 'NOTICE-g-a' }))).toEqual({ 'g:a': 'NOTICE-g-a' });
+        expect(() => loadNoticeFiles(write('list.json', []))).toThrow('must hold a JSON object');
+        expect(() => loadNoticeFiles(write('bad.json', { 'g:a': 1 }))).toThrow('invalid entry for g:a');
+    });
+
     test('Gradle variables are read from quoted assignments', () => {
         expect(parseGradleVariables("ext {\n    a = '1'\n    b='2.0'\n    c = 3\n}")).toEqual({ a: '1', b: '2.0' });
     });
@@ -610,6 +620,7 @@ describe('main failures and rendering', () => {
                 { name: 'Plain', coordinates: ['g:b'], license: 'Apache-2.0', copyright: 'C2', url: 'u2' },
             ]),
         );
+        fs.writeFileSync(path.join(directory, 'licenses', 'notices.json'), JSON.stringify({}));
         fs.writeFileSync(path.join(directory, 'variables.gradle'), "ext {\n  v = '7.1'\n}\n");
         fs.writeFileSync(path.join(directory, 'LICENSE'), 'ISC License\n\nCopyright (c) test\n\n');
         const dependencies = onnxruntimeVersion
@@ -665,18 +676,19 @@ describe('main failures and rendering', () => {
         const texts = path.join(options.licensesDir, 'texts');
         fs.writeFileSync(path.join(texts, 'NOTICE-g-a.txt'), 'Notice of A\nline two\n');
         fs.writeFileSync(path.join(texts, 'NOTICE-notes.md'), 'not a notice');
+        fs.writeFileSync(path.join(options.licensesDir, 'notices.json'), JSON.stringify({ 'g:a': 'NOTICE-g-a' }));
         main(options);
         const text = fs.readFileSync(options.outPath, 'utf8');
         expect(text).toContain(
-            'Versioned 7.1\n  License: Apache-2.0\n  C1\n  u1\n\n  NOTICE of g-a:\n\n    Notice of A\n    line two\n\nPlain',
+            'Versioned 7.1\n  License: Apache-2.0\n  C1\n  u1\n\n  NOTICE of g:a:\n\n    Notice of A\n    line two\n\nPlain',
         );
         expect(text).not.toContain('not a notice');
     });
 
-    test('fails on a NOTICE file no component claims', () => {
+    test('fails on a vendored NOTICE file notices.json names no artifact for', () => {
         const options = fixture(ONNXRUNTIME_TEXTS_VERSION);
         fs.writeFileSync(path.join(options.licensesDir, 'texts', 'NOTICE-nobody-home.txt'), 'x');
-        expect(() => main(options)).toThrow('for the vendored NOTICE-nobody-home');
+        expect(() => main(options)).toThrow('names no artifact for the vendored NOTICE-nobody-home');
     });
 
     test('renders the LGPL list only for packages that carry the LGPL text', () => {
@@ -731,14 +743,17 @@ describe('main failures and rendering', () => {
                 android: [],
                 androidVersions: {},
                 onnxruntimeVersion: '1.0.0',
-                noticeIds: [],
+                notices: {},
                 readText: () => '',
             }),
         ).toThrow('No license entry for mystery');
     });
 
     describe('NOTICE files of Android artifacts', () => {
-        const withNotices = (noticeIds: string[], noticeText = 'Apache Thing\nCopyright 2012\n\nIncludes more.') =>
+        const withNotices = (
+            notices: Record<string, string>,
+            noticeText = 'Apache Thing\nCopyright 2012\n\nIncludes more.',
+        ) =>
             renderNotices({
                 projectLicense: '',
                 packages: [],
@@ -756,28 +771,54 @@ describe('main failures and rendering', () => {
                 ],
                 androidVersions: {},
                 onnxruntimeVersion: '1.0.0',
-                noticeIds,
+                notices,
                 readText: (id) => (id.startsWith('NOTICE-') ? noticeText : `text of ${id}`),
             });
 
         test('renders each vendored NOTICE text with the component it belongs to, indented, and the attribution line', () => {
-            const text = withNotices(['NOTICE-com.x-one', 'NOTICE-org.z-pre-two']);
+            const text = withNotices({
+                'com.x:one': 'NOTICE-com.x-one',
+                'org.z:pre-two': 'NOTICE-org.z-pre-two',
+            });
 
             expect(text).toContain(
                 'Exact\n  License: Apache-2.0\n  C1\n  u1\n\n' +
-                    '  NOTICE of com.x-one:\n\n    Apache Thing\n    Copyright 2012\n\n    Includes more.\n\n' +
+                    '  NOTICE of com.x:one:\n\n    Apache Thing\n    Copyright 2012\n\n    Includes more.\n\n' +
                     'Pattern\n  License: Apache-2.0\n  C2\n  Includes work of Y.\n  u2\n\n' +
-                    '  NOTICE of org.z-pre-two:\n\n    Apache Thing\n',
+                    '  NOTICE of org.z:pre-two:\n\n    Apache Thing\n',
             );
         });
 
         test('renders no NOTICE block when none is vendored', () => {
-            expect(withNotices([])).not.toContain('NOTICE of');
+            expect(withNotices({})).not.toContain('NOTICE of');
         });
 
         test('fails on a vendored NOTICE that belongs to no component, so it cannot go unrendered', () => {
-            expect(() => withNotices(['NOTICE-com.x-one', 'NOTICE-com.other-lib'])).toThrow(
-                'No scripts/licenses/android.json component for the vendored NOTICE-com.other-lib',
+            expect(() =>
+                withNotices({ 'com.x:one': 'NOTICE-com.x-one', 'com.other:lib': 'NOTICE-com.other-lib' }),
+            ).toThrow('No scripts/licenses/android.json component for the vendored NOTICE of com.other:lib');
+        });
+
+        test('matches by coordinate, so two coordinates whose names would collide each get their own notice', () => {
+            const text = renderNotices({
+                projectLicense: '',
+                packages: [],
+                licenses: {},
+                android: [
+                    { name: 'First', coordinates: ['com.a-b:c'], license: 'Apache-2.0', copyright: 'C1', url: 'u1' },
+                    { name: 'Second', coordinates: ['com.a:b-c'], license: 'Apache-2.0', copyright: 'C2', url: 'u2' },
+                ],
+                androidVersions: {},
+                onnxruntimeVersion: '1.0.0',
+                notices: { 'com.a-b:c': 'NOTICE-first', 'com.a:b-c': 'NOTICE-second' },
+                readText: (id) => `text of ${id}`,
+            });
+
+            expect(text).toContain(
+                'First\n  License: Apache-2.0\n  C1\n  u1\n\n  NOTICE of com.a-b:c:\n\n    text of NOTICE-first\n\nSecond',
+            );
+            expect(text).toContain(
+                'Second\n  License: Apache-2.0\n  C2\n  u2\n\n  NOTICE of com.a:b-c:\n\n    text of NOTICE-second\n',
             );
         });
     });
