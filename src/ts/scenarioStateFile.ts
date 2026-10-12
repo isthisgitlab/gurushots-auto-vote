@@ -296,15 +296,18 @@ const createResets = ({
      * saved, so one that was not has taken effect nowhere. With `onlyIfUnreadable` it is not asked for while the file
      * reads: that is decided on the file as it is when the request is written.
      */
-    const askFor = async (asking: RawJsonStore, key: string, onlyIfUnreadable = false): Promise<ResetResult> =>
-        RESET_OF[
+    const askFor = async (asking: RawJsonStore, key: string, onlyIfUnreadable = false): Promise<ResetResult> => {
+        // Worked out once: the update may be made again on a newer value, and must ask for the same count.
+        let count: number | undefined;
+        return RESET_OF[
             await through(asking, (current) => {
                 if (onlyIfUnreadable && parseStateFile(store.readRaw()).ok) return null;
                 const asked = parseRequests(current);
-                const count = nextCount(Math.max(asked[key] ?? 0, resetsOf(read().map, key)));
-                return JSON.stringify({ ...liveRequests(asked, stored()), [key]: count });
+                count ??= nextCount(Math.max(asked[key] ?? 0, resetsOf(read().map, key)));
+                return JSON.stringify({ ...liveRequests(asked, stored()), [key]: Math.max(asked[key] ?? 0, count) });
             })
         ];
+    };
 
     /**
      * Resets one challenge: asked for where resets are asked for, else made on the file under its lock (a tombstone

@@ -368,6 +368,7 @@ describe('createJsonStore', () => {
             });
 
             test('a failed write queued just as a flush finishes is told by that flush or by the next, never by neither', async () => {
+                const seen = new Set<string>();
                 for (let hops = 0; hops <= 12; hops++) {
                     const strict = strictStore();
                     mockPrefSet.mockImplementation(async ({ value }) => {
@@ -397,9 +398,13 @@ describe('createJsonStore', () => {
                             () => 'told',
                         ),
                     );
-                    expect([await first, await second]).toContain('told');
+                    const told = [await first, await second];
+                    expect(told).toContain('told');
+                    seen.add(told.join(','));
                     mockPrefSet.mockImplementation(() => Promise.resolve());
                 }
+                // The race window was hit: one flush finished before the write was queued, the next told of it.
+                expect(seen).toContain('resolved,told');
             });
 
             test('is waited for until the queue is quiet, a write queued meanwhile included', async () => {
@@ -668,7 +673,7 @@ describe('createJsonStore', () => {
                 expect(strict.readRaw()).toBe('{"marker":1}');
             });
 
-            test('a queued write puts down the latest value queued, not what a refresh put in the cache since', async () => {
+            test('a refresh that began before the writes, and read while the first was held, leaves the second write as it was queued', async () => {
                 const strict = strictStore();
                 await strict.initializeAsync();
                 // The refresh starts before the writes (its snapshot predates them), and its read lands while the first
@@ -714,9 +719,65 @@ describe('createJsonStore', () => {
                 await inFlight();
                 strict.writeRaw('{"queued":1}');
                 release();
-                await expect(saved).resolves.toBe('saved');
+                await expect(saved).resolves.toBe('aborted');
                 await strict.flushPendingWrites();
                 expect(mockPrefSet).toHaveBeenLastCalledWith({ key: 'gs_scenario_state', value: '{"queued":1}' });
+            });
+
+            test('a write-through whose change cannot be made again on the newer value leaves it as it is, logged', async () => {
+                const strict = strictStore();
+                await strict.initializeAsync();
+                const error = jest.fn();
+                jest.mocked(logger.withCategory).mockReturnValue(invalid({ error }));
+                const release = holdOne();
+                let calls = 0;
+                const saved = strict.updateThrough((current) => {
+                    if (calls++ > 0) throw new Error('cannot apply');
+                    return `${current}+reset`;
+                });
+                await inFlight();
+                strict.writeRaw('{"queued":1}');
+                release();
+                await expect(saved).resolves.toBe('aborted');
+                await strict.flushPendingWrites();
+                expect(mockPrefSet).toHaveBeenLastCalledWith({ key: 'gs_scenario_state', value: '{"queued":1}' });
+                expect(strict.readRaw()).toBe('{"queued":1}');
+                expect(error).toHaveBeenCalledWith(
+                    expect.stringContaining('could not be applied again'),
+                    expect.any(Error),
+                );
+            });
+
+            test('a refresh that starts while a write-through is being saved does not take what it read over it', async () => {
+                const strict = strictStore();
+                await strict.initializeAsync();
+                const release = holdOne();
+                const saved = strict.updateThrough((current) => `${current}+reset`);
+                await inFlight();
+                const answer = deferredGet();
+                const refreshing = strict.refreshAsync();
+                strict.writeRaw('{"queued":1}');
+                release();
+                await saved;
+                answer('{"persisted":true}');
+                await refreshing;
+                await strict.flushPendingWrites();
+                expect(strict.readRaw()).toBe('{"queued":1}+reset');
+            });
+
+            test('what a refresh took, with nothing under way, is what the next write builds on: a failed write-through leaves it', async () => {
+                const strict = strictStore();
+                await strict.initializeAsync();
+                strict.writeRaw('{"mine":1}');
+                await strict.flushPendingWrites();
+                mockPrefGet.mockResolvedValueOnce({ value: '{"service":1}' });
+                await strict.refreshAsync();
+                mockPrefSet.mockRejectedValueOnce(new Error('disk full'));
+                await expect(strict.updateThrough(() => '{"asked":1}')).resolves.toBe('failed');
+                mockPrefGet.mockResolvedValueOnce({ value: '{"service":1}' });
+                const refreshing = strict.refreshAsync();
+                await refreshing;
+                expect(strict.readRaw()).toBe('{"service":1}');
             });
 
             test('a queued write that failed, then a write-through that saved on top of it: a flush has nothing to report', async () => {
@@ -745,7 +806,7 @@ describe('createJsonStore', () => {
                 expect(strict.readRaw()).toBe('{"service":1}');
             });
 
-            test('a store that is not strict keeps a queued write that did not persist too: a spend ledger would undercount without it', async () => {
+            test('a store that is not strict keeps a queued write that did not persist too: the rule is the same for every store', async () => {
                 await store.initializeAsync();
                 mockPrefSet.mockRejectedValueOnce(new Error('quota'));
                 store.writeRaw('{"x":1}');

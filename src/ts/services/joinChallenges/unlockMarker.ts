@@ -52,6 +52,14 @@ const readUnlockedState = (store: RawJsonStore | null | undefined): { state: Rec
 
 const readUnlocked = (store: RawJsonStore | null | undefined) => readUnlockedState(store).state;
 
+/**
+ * Reads the claims again before they are read for a spend or changed (see JoinDeps.refreshJoinState). A refresh that
+ * failed leaves the cache as it was; a cache that was never filled stays unreadable, and nothing is spent on it.
+ */
+const refreshClaims = async (deps: JoinDeps): Promise<void> => {
+    await deps.refreshJoinState?.();
+};
+
 const has = (state: Record<string, unknown>, key: string) => Object.prototype.hasOwnProperty.call(state, key);
 
 /**
@@ -121,6 +129,7 @@ const paidByThisAccount = async (
     const cost = Number(challenge?.join_coins);
     if (challenge?.id == null || !(cost > 0) || !deps.joinStateStore) return false;
     const owner = await markerOwner(token, deps);
+    await refreshClaims(deps);
     return !paidOwnerUnknown(deps, owner) && claimOf(deps.joinStateStore, challenge.id, owner) !== null;
 };
 
@@ -329,7 +338,9 @@ const pruneClosedClaims = async (
 ): Promise<void> => {
     const store = deps.joinStateStore;
     const openIds = new Set(open.flatMap((c) => (c?.id == null ? [] : [String(c.id)])));
-    if (!store || openIds.size === 0 || Object.keys(readUnlocked(store)).length === 0) return;
+    if (!store || openIds.size === 0) return;
+    await refreshClaims(deps);
+    if (Object.keys(readUnlocked(store)).length === 0) return;
     const owner = await markerOwner(token, deps);
     const ownerKnown = !paidOwnerUnknown(deps, owner);
     const now = Date.now();
@@ -374,6 +385,7 @@ const pruneClosedClaims = async (
 
 export {
     readUnlockedState,
+    refreshClaims,
     markerKey,
     findClaim,
     claimOf,

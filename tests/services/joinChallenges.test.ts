@@ -11,6 +11,24 @@ jest.mock('../../src/ts/logger', () => {
         challengeTag: (c: { id?: string | number } | null) => `challenge ${c?.id}`,
     };
 });
+// The Preferences the Android app window and the background service share (one SharedPreferences file).
+const sharedPrefs = new Map<string, string>();
+const failingPrefReads = new Set<string>();
+jest.mock(
+    '@capacitor/preferences',
+    () => ({
+        Preferences: {
+            set: async ({ key, value }: { key: string; value: string }) => {
+                sharedPrefs.set(key, value);
+            },
+            get: async ({ key }: { key: string }) => {
+                if (failingPrefReads.has(key)) throw new Error('bridge down');
+                return { value: sharedPrefs.get(key) ?? null };
+            },
+        },
+    }),
+    { virtual: true },
+);
 jest.mock('../../src/ts/voting/cancellation', () => ({ isCancelled: jest.fn(() => false) }));
 jest.mock('../../src/ts/services/autoFill', () => ({
     // The join's chosen-photos helpers are reached through this facade; they are the real ones.
@@ -57,10 +75,18 @@ import type * as memberIdentityModule from '../../src/ts/services/autoFill/membe
 import type * as autoFillModule from '../../src/ts/services/autoFill';
 import type { Challenge } from '../../src/ts/types/gurushots';
 import type { RawJsonStore } from '../../src/ts/types/stores';
+import type { AndroidHeadlessStore } from '../../src/ts/types/settings';
 import type { RuleMatchChallenge } from '../../src/ts/types/settings';
 import { invalid } from '../helpers/invalid';
 import { isPlainObject } from '../../src/ts/plainObject';
-import { clearUnlocked, findClaim, markJoined, markUnlocked } from '../../src/ts/services/joinChallenges/unlockMarker';
+import {
+    clearUnlocked,
+    findClaim,
+    markJoined,
+    markUnlocked,
+    paidByThisAccount,
+    pruneClosedClaims,
+} from '../../src/ts/services/joinChallenges/unlockMarker';
 import type { JoinDeps } from '../../src/ts/services/joinChallenges';
 import type { acquireUnlockLock as AcquireUnlockLock } from '../../src/ts/joinStateStore';
 const {
@@ -3505,5 +3531,304 @@ describe('joinChallenges — edge paths', () => {
             });
             expect(deps.getBankroll).not.toHaveBeenCalled();
         });
+    });
+});
+
+describe('on the background service, whose claims go through the native bridge', () => {
+    const h = globalThis as typeof globalThis & {
+        __GS_HEADLESS__?: boolean;
+        AndroidHeadlessStore?: AndroidHeadlessStore;
+    };
+    const stored = new Map<string, string>();
+    const bridge = (over: Partial<AndroidHeadlessStore> = {}) => {
+        const writeKey = jest.fn((key: string, data: string) => {
+            stored.set(key, data);
+            return true;
+        });
+        h.AndroidHeadlessStore = {
+            read: () => null,
+            write: jest.fn(),
+            readKey: (key: string) => stored.get(key) ?? null,
+            writeKey,
+            ...over,
+        };
+        return writeKey;
+    };
+    // One service session: the store as a freshly started service builds it.
+    const session = () => {
+        h.__GS_HEADLESS__ = true;
+        let store!: RawJsonStore;
+        jest.isolateModules(() => {
+            store = (require('../../src/ts/joinStateStore') as typeof import('../../src/ts/joinStateStore'))
+                .joinStateStore;
+        });
+        return store;
+    };
+    afterEach(() => {
+        delete h.__GS_HEADLESS__;
+        delete h.AndroidHeadlessStore;
+        stored.clear();
+    });
+
+    test('a claim written in one session is still there when the service starts again', async () => {
+        const writeKey = bridge();
+        const first = makeDeps({ joinStateStore: session() });
+        expect(markUnlocked(first, 7, null, 50)).toBe(true);
+        expect(writeKey).toHaveBeenCalledWith('gs_join_state', expect.stringContaining('unlockedAt'));
+        const second = session();
+        expect(findClaim(JSON.parse(second.readRaw() ?? '{}') as Record<string, unknown>, 7, null)).not.toBeNull();
+        // The restarted service pays for nothing it already paid for: the claim is found, not written again.
+        const deps = makeDeps({ joinStateStore: second });
+        expect(markUnlocked(deps, 7, null, 50)).toBe(false);
+    });
+
+    test('a claim the bridge refused is not a claim: the unlock is not paid for', async () => {
+        const writeKey = bridge({ writeKey: jest.fn(() => false) });
+        const deps = makeDeps({ joinStateStore: session() });
+        expect(await performJoin(invalid({ id: 3 }), 'tok', deps, 100)).toEqual({
+            status: 'failed-no-charge',
+            charged: 0,
+        });
+        expect(writeKey).not.toHaveBeenCalled();
+        expect(deps.coinsUnlock).not.toHaveBeenCalled();
+    });
+
+    test('claims that could not be read are not "no claims": nothing is paid for', async () => {
+        const writeKey = bridge({
+            readKey: () => {
+                throw new Error('bridge down');
+            },
+        });
+        const deps = makeDeps({ joinStateStore: session() });
+        expect(await performJoin(invalid({ id: 3 }), 'tok', deps, 100)).toEqual({
+            status: 'failed-no-charge',
+            charged: 0,
+        });
+        expect(deps.coinsUnlock).not.toHaveBeenCalled();
+        expect(writeKey).not.toHaveBeenCalled();
+    });
+
+    test('a claim that is there lets the paid join go on: it is the proof the unlock was paid', async () => {
+        stored.set('gs_join_state', JSON.stringify({ '3': { unlockedAt: Date.now() } }));
+        bridge();
+        const deps = makeDeps({ joinStateStore: session() });
+        const res = await performJoin(invalid({ id: 3 }), 'tok', deps, 100);
+        expect(res.status).toBe('joined');
+        expect(deps.coinsUnlock).not.toHaveBeenCalled();
+    });
+});
+
+describe('on the app window, where the background service writes the same claims', () => {
+    const h = globalThis as typeof globalThis & { Capacitor?: unknown };
+    type JoinStateModule = typeof import('../../src/ts/joinStateStore');
+    const appWindow = async () => {
+        h.Capacitor = { isNativePlatform: () => true, getPlatform: () => 'android' };
+        let mod!: JoinStateModule;
+        jest.isolateModules(() => {
+            mod = require('../../src/ts/joinStateStore') as JoinStateModule;
+        });
+        await mod.initializeJoinStateAsync();
+        return mod;
+    };
+    const paidChallenge = () => invalid<Challenge>({ id: 3 });
+    afterEach(() => {
+        delete h.Capacitor;
+        sharedPrefs.clear();
+        failingPrefReads.clear();
+    });
+
+    test('a claim the service wrote after the window hydrated survives the window’s own claim write', async () => {
+        const mod = await appWindow();
+        // The service pays for challenge 9 and saves its claim; the window's cache does not have it.
+        sharedPrefs.set('gs_join_state', JSON.stringify({ '9': { unlockedAt: Date.now() } }));
+        const deps = makeDeps({ joinStateStore: mod.joinStateStore, refreshJoinState: mod.refreshJoinStateAsync });
+        expect((await performJoin(paidChallenge(), 'tok', deps, 100)).status).toBe('joined');
+        await mod.flushJoinStateWrites();
+        const saved = JSON.parse(sharedPrefs.get('gs_join_state') ?? '{}') as Record<string, unknown>;
+        expect(Object.keys(saved).sort()).toEqual(['3', '9']);
+    });
+
+    test('without the refresh, the same write erases it: what the refresh is for', async () => {
+        const mod = await appWindow();
+        sharedPrefs.set('gs_join_state', JSON.stringify({ '9': { unlockedAt: Date.now() } }));
+        const deps = makeDeps({ joinStateStore: mod.joinStateStore });
+        await performJoin(paidChallenge(), 'tok', deps, 100);
+        await mod.flushJoinStateWrites();
+        expect(Object.keys(JSON.parse(sharedPrefs.get('gs_join_state') ?? '{}') as object)).toEqual(['3']);
+    });
+
+    test('the window does not pay for a challenge whose claim the service wrote after it hydrated', async () => {
+        const mod = await appWindow();
+        sharedPrefs.set('gs_join_state', JSON.stringify({ '3': { unlockedAt: Date.now() } }));
+        const deps = makeDeps({ joinStateStore: mod.joinStateStore, refreshJoinState: mod.refreshJoinStateAsync });
+        const res = await performJoin(paidChallenge(), 'tok', deps, 100);
+        expect(res.status).toBe('joined');
+        expect(deps.coinsUnlock).not.toHaveBeenCalled();
+    });
+
+    test('a claim the service wrote is seen by the other checks that decide a spend or change a claim', async () => {
+        const mod = await appWindow();
+        sharedPrefs.set('gs_join_state', JSON.stringify({ '3': { unlockedAt: Date.now(), unconfirmed: true } }));
+        const deps = makeDeps({
+            joinStateStore: mod.joinStateStore,
+            refreshJoinState: mod.refreshJoinStateAsync,
+            getMemberChallenges: openList([{ id: 3, join_coins: 100 }]),
+        });
+        // The card's forget, which changes the claims file.
+        expect((await forgetUnconfirmedPayment(3, 'tok', deps)).status).toBe('forgotten');
+        await mod.flushJoinStateWrites();
+        expect(JSON.parse(sharedPrefs.get('gs_join_state') ?? '{}')).toEqual({});
+    });
+
+    test('claims that could not be read, even by the refresh, are not "no claims": nothing is paid for', async () => {
+        failingPrefReads.add('gs_join_state');
+        sharedPrefs.set('gs_join_state', JSON.stringify({ '3': { unlockedAt: Date.now() } }));
+        const mod = await appWindow();
+        const deps = makeDeps({ joinStateStore: mod.joinStateStore, refreshJoinState: mod.refreshJoinStateAsync });
+        expect(await performJoin(paidChallenge(), 'tok', deps, 100)).toEqual({
+            status: 'failed-no-charge',
+            charged: 0,
+        });
+        expect(deps.coinsUnlock).not.toHaveBeenCalled();
+    });
+
+    // The service saves a claim of another challenge at the moment `during` runs; what the window then writes keeps it.
+    const savedKeys = () => Object.keys(JSON.parse(sharedPrefs.get('gs_join_state') ?? '{}') as object).sort();
+    const serviceClaims = (key = '9') => {
+        const saved = JSON.parse(sharedPrefs.get('gs_join_state') ?? '{}') as Record<string, unknown>;
+        sharedPrefs.set('gs_join_state', JSON.stringify({ ...saved, [key]: { unlockedAt: Date.now() } }));
+    };
+
+    test('a claim the service wrote while the photo was being picked is found before the window pays', async () => {
+        const mod = await appWindow();
+        photoPicker.pickPhotosForChallenge.mockImplementation(() => {
+            serviceClaims('3');
+            return ['imgA'];
+        });
+        const deps = makeDeps({ joinStateStore: mod.joinStateStore, refreshJoinState: mod.refreshJoinStateAsync });
+        expect((await performJoin(paidChallenge(), 'tok', deps, 100)).status).toBe('joined');
+        expect(deps.coinsUnlock).not.toHaveBeenCalled();
+    });
+
+    test('a submit-only retry sees a claim the service wrote after the window hydrated', async () => {
+        const mod = await appWindow();
+        serviceClaims('3');
+        const deps = makeDeps({ joinStateStore: mod.joinStateStore, refreshJoinState: mod.refreshJoinStateAsync });
+        const res = await performJoin(paidChallenge(), 'tok', deps, 100, { submitOnly: true });
+        expect(res.status).toBe('joined');
+        expect(deps.coinsUnlock).not.toHaveBeenCalled();
+    });
+
+    test('a claim the service wrote while the unlock was being paid survives the window flagging it unconfirmed', async () => {
+        const mod = await appWindow();
+        const coinsUnlock = double<'coinsUnlock'>(async () => {
+            // The window's claim has reached Preferences by the time the service writes its own.
+            await new Promise((resolve) => setTimeout(resolve, 0));
+            serviceClaims();
+            return { ok: false, raw: null, unclear: true };
+        });
+        const deps = makeDeps({
+            joinStateStore: mod.joinStateStore,
+            refreshJoinState: mod.refreshJoinStateAsync,
+            coinsUnlock,
+        });
+        expect((await performJoin(paidChallenge(), 'tok', deps, 100)).status).toBe('charged-pending-submit');
+        await mod.flushJoinStateWrites();
+        expect(savedKeys()).toEqual(['3', '9']);
+    });
+
+    test('a claim the service wrote while an unlock was refused survives the window giving its own back', async () => {
+        const mod = await appWindow();
+        const coinsUnlock = double<'coinsUnlock'>(async () => {
+            // The window's claim has reached Preferences by the time the service writes its own.
+            await new Promise((resolve) => setTimeout(resolve, 0));
+            serviceClaims();
+            return { ok: false };
+        });
+        const deps = makeDeps({
+            joinStateStore: mod.joinStateStore,
+            refreshJoinState: mod.refreshJoinStateAsync,
+            coinsUnlock,
+        });
+        expect((await performJoin(paidChallenge(), 'tok', deps, 100)).status).toBe('failed-no-charge');
+        await mod.flushJoinStateWrites();
+        expect(savedKeys()).toEqual(['9']);
+    });
+
+    test('a claim the service wrote while the photo was being submitted survives the window marking its own joined', async () => {
+        const mod = await appWindow();
+        const submitToChallenge = double<'submitToChallenge'>(async () => {
+            serviceClaims();
+            return { ok: true };
+        });
+        const deps = makeDeps({
+            joinStateStore: mod.joinStateStore,
+            refreshJoinState: mod.refreshJoinStateAsync,
+            submitToChallenge,
+        });
+        expect((await performJoin(paidChallenge(), 'tok', deps, 100)).status).toBe('joined');
+        await mod.flushJoinStateWrites();
+        expect(savedKeys()).toEqual(['3', '9']);
+    });
+
+    test('a submit on a claim is not made once the claim is gone from where the service keeps it', async () => {
+        const mod = await appWindow();
+        serviceClaims('3');
+        const deps = makeDeps({ joinStateStore: mod.joinStateStore, refreshJoinState: mod.refreshJoinStateAsync });
+        // The window learns of the claim, then it is forgotten (by the user, in the service's context).
+        await mod.refreshJoinStateAsync();
+        photoPicker.pickPhotosForChallenge.mockImplementation(() => {
+            sharedPrefs.set('gs_join_state', '{}');
+            return ['imgA'];
+        });
+        expect(await performJoin(paidChallenge(), 'tok', deps, 100)).toEqual({
+            status: 'failed-no-charge',
+            charged: 0,
+        });
+        expect(deps.submitToChallenge).not.toHaveBeenCalled();
+    });
+
+    test('a paid check sees a claim the service wrote after the window hydrated', async () => {
+        const mod = await appWindow();
+        serviceClaims('3');
+        const deps = makeDeps({ joinStateStore: mod.joinStateStore, refreshJoinState: mod.refreshJoinStateAsync });
+        expect(await paidByThisAccount({ id: 3, join_coins: 100 }, 'tok', deps)).toBe(true);
+    });
+
+    test('a manual join sees a claim the service wrote, and goes on as a retry without asking for the price', async () => {
+        const mod = await appWindow();
+        serviceClaims('3');
+        const deps = makeDeps({
+            joinStateStore: mod.joinStateStore,
+            refreshJoinState: mod.refreshJoinStateAsync,
+            getMemberChallenges: openList([{ id: 3, join_coins: 100 }]),
+        });
+        const res = await joinChallengeSingle(3, 'tok', deps, { spendCoins: false });
+        expect(res.status).toBe('joined');
+        expect(deps.coinsUnlock).not.toHaveBeenCalled();
+    });
+
+    test('pruning keeps a claim the service wrote after the window hydrated', async () => {
+        sharedPrefs.set('gs_join_state', JSON.stringify({ old: { unlockedAt: Date.now() - 40 * 24 * 3600 * 1000 } }));
+        const mod = await appWindow();
+        serviceClaims();
+        sharedPrefs.set(
+            'gs_join_state',
+            JSON.stringify({
+                '9': { unlockedAt: Date.now() },
+                old: { unlockedAt: Date.now() - 40 * 24 * 3600 * 1000 },
+            }),
+        );
+        const deps = makeDeps({ joinStateStore: mod.joinStateStore, refreshJoinState: mod.refreshJoinStateAsync });
+        await pruneClosedClaims([{ id: 1 }], 'tok', deps);
+        await mod.flushJoinStateWrites();
+        expect(savedKeys()).toEqual(['9']);
+    });
+
+    test('a refresh that failed once the claims were loaded leaves them as they were', async () => {
+        const mod = await appWindow();
+        failingPrefReads.add('gs_join_state');
+        const deps = makeDeps({ joinStateStore: mod.joinStateStore, refreshJoinState: mod.refreshJoinStateAsync });
+        expect((await performJoin(paidChallenge(), 'tok', deps, 100)).status).toBe('joined');
     });
 });

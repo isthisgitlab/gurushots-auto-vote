@@ -42,7 +42,7 @@ import {
 import { runClaimPass } from '../../services/autoClaim';
 import { loadMissionNeeds, registerMissionNeeds } from '../../services/missions';
 import * as runtime from '../../runtime';
-import { joinStateStore, acquireUnlockLock } from '../../joinStateStore';
+import { joinStateStore, acquireUnlockLock, refreshJoinStateAsync } from '../../joinStateStore';
 
 import type { Challenge, TurboMiniGameResult } from '../../types/gurushots';
 import { errorMessage } from '../../errorMessage';
@@ -72,6 +72,7 @@ const joinDeps = {
     getActiveChallenges,
     joinStateStore,
     acquireUnlockLock,
+    refreshJoinState: refreshJoinStateAsync,
 };
 
 // Endpoints the automatic currency spends use (services/currencyAuto.ts) — the
@@ -243,12 +244,16 @@ const fetchChallengesAndVote = async (
         // runJoinPass). Skipped for a single-challenge "Run" (challengeIdFilter set)
         // and never allowed to abort voting — a join failure is logged, not thrown.
         if (challengeIdFilter === null) {
-            try {
-                await runJoinPass(token, Date.now(), joinDeps, missions);
-            } catch (error) {
-                logger
-                    .withCategory('join')
-                    .warning(`join pass errored (voting continues): ${errorMessage(error) || error}`, null);
+            // With the background service the window leaves the automatic joins to it: two loops paying from one
+            // claims file would overwrite each other's unlock markers.
+            if (!backgroundServiceOwnsScenarios()) {
+                try {
+                    await runJoinPass(token, Date.now(), joinDeps, missions);
+                } catch (error) {
+                    logger
+                        .withCategory('join')
+                        .warning(`join pass errored (voting continues): ${errorMessage(error) || error}`, null);
+                }
             }
             // Prize-claim pre-step: gated by the default-off `autoClaimPrizes`
             // setting and throttled to once an hour inside runClaimPass.
@@ -279,7 +284,9 @@ const fetchChallengesAndVote = async (
             currency: {
                 strategy: currencyStrategy,
                 swapLedger: swapBackLedger,
-                spendLedger: autoSpendLedger,
+                // The service counts the automatic fills against autoExposureFillMax, in the same stored ledger: two
+                // loops with a copy each would overwrite each other's counts, so the window leaves fills to it.
+                spendLedger: backgroundServiceOwnsScenarios() ? null : autoSpendLedger,
             },
             // User-defined scenarios over the persisted state ledger. In the Android
             // app WebView the native background service owns them (it runs a pass

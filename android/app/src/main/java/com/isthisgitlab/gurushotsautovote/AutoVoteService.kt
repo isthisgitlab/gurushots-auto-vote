@@ -86,6 +86,9 @@ class AutoVoteService : Service() {
         private const val KEY_LEXICON_DIAGNOSTICS = "gs_lexicon_diagnostics"
         private const val KEY_SCENARIO_STATE = "gs_scenario_state"
         private const val KEY_SCENARIO_RESETS = "gs_scenario_resets"
+        private const val KEY_AUTO_SPENDS = "gs_auto_spends"
+        private const val KEY_SWAP_BACKS = "gs_swap_backs"
+        private const val KEY_JOIN_STATE = "gs_join_state"
         private const val HEADLESS_URL = "https://appassets.androidplatform.net/assets/public/headless.html"
 
         // Test seam: JVM unit tests swap in a client whose interceptor reroutes
@@ -386,15 +389,27 @@ class AutoVoteService : Service() {
         // phase and memory a user-defined scenario is at — losing it on a
         // service restart would restart the plan), and the resets of that state
         // the app asked for (the app does not rewrite the state itself: this
-        // service may have written it since).
-        private val allowedKeys = setOf(KEY_LEXICON_DIAGNOSTICS, KEY_SCENARIO_STATE, KEY_SCENARIO_RESETS)
+        // service may have written it since), and the two ledgers of the automatic currency spends: the fills
+        // already spent per challenge (what autoExposureFillMax counts against: a service that started from an
+        // empty one after every restart would spend past the cap), the swap-back offers, and the paid-join claims
+        // (an unlock that was charged and not yet submitted: forgotten on a restart, it would be charged again).
+        // Each key with the name its refusal is logged under: a literal of this map, never the JS-supplied key
+        // (a newline in it would render as a forged second log line: CodeQL java/log-injection).
+        private val sideStores = mapOf(
+            KEY_LEXICON_DIAGNOSTICS to "lexicon diagnostics",
+            KEY_SCENARIO_STATE to "scenario state",
+            KEY_SCENARIO_RESETS to "scenario resets",
+            KEY_AUTO_SPENDS to "auto-spend ledger",
+            KEY_SWAP_BACKS to "swap-back ledger",
+            KEY_JOIN_STATE to "join-state"
+        )
 
         @android.webkit.JavascriptInterface
         fun read(): String? = getSharedPreferences(PREFS_FILE, Context.MODE_PRIVATE).getString(SETTINGS_KEY, null)
 
         @android.webkit.JavascriptInterface
         fun readKey(key: String): String? =
-            if (key in allowedKeys) getSharedPreferences(PREFS_FILE, Context.MODE_PRIVATE).getString(key, null) else null
+            if (key in sideStores) getSharedPreferences(PREFS_FILE, Context.MODE_PRIVATE).getString(key, null) else null
 
         /**
          * Persists one side store. Answers whether it did: false for a key that is not allowed, a value that is no
@@ -403,20 +418,11 @@ class AutoVoteService : Service() {
          */
         @android.webkit.JavascriptInterface
         fun writeKey(key: String, data: String): Boolean {
-            if (key !in allowedKeys) return false
+            val name = sideStores[key] ?: return false
             try {
                 JSONObject(data)
             } catch (t: Throwable) {
-                // Name the store from a literal instead of logging the JS-supplied
-                // key: a newline in it renders as a forged second log line (CodeQL
-                // java/log-injection). Add an arm when you allow a new key.
-                if (key == KEY_SCENARIO_STATE) {
-                    Log.w(TAG, "Refusing to persist non-JSON scenario state blob")
-                } else if (key == KEY_SCENARIO_RESETS) {
-                    Log.w(TAG, "Refusing to persist non-JSON scenario resets blob")
-                } else {
-                    Log.w(TAG, "Refusing to persist non-JSON lexicon diagnostics blob")
-                }
+                Log.w(TAG, "Refusing to persist non-JSON $name blob")
                 return false
             }
             return getSharedPreferences(PREFS_FILE, Context.MODE_PRIVATE).edit().putString(key, data).commit()

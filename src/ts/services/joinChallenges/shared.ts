@@ -31,6 +31,12 @@ export interface JoinDeps {
     joinStateStore?: RawJsonStore | null;
     /** absent in mock mode */
     acquireUnlockLock?: typeof joinStateStore.acquireUnlockLock;
+    /**
+     * Reads the claims again from where they are saved (the Android app window, whose cache the background service
+     * writes behind). Awaited before a claim is read to decide a spend, and before one is changed: the whole file is
+     * written back, so a stale cache would erase a claim the service made. Absent where one process owns the file.
+     */
+    refreshJoinState?: () => Promise<void>;
     /** test seam over the visual re-rank */
     rankVisually?: typeof rankVisually;
 }

@@ -64,7 +64,7 @@ jest.mock('../src/ts/runtime', () => ({
     isHeadlessService: jest.fn(() => false),
 }));
 
-const mockStore = { initializeAsync: jest.fn(), flushPendingWrites: jest.fn() };
+const mockStore = { initializeAsync: jest.fn(), flushPendingWrites: jest.fn(), readRaw: jest.fn(() => '{"c1":{}}') };
 jest.mock('../src/ts/settings/storage', () => ({
     createJsonStore: jest.fn(() => mockStore),
     getSettingsPath: jest.fn(() => '/cfg/settings.json'),
@@ -86,11 +86,18 @@ const createJsonStoreCalls = [...storage.createJsonStore.mock.calls];
 describe('store wiring', () => {
     test('uses the platform-aware JSON store and re-exports its hydrate/flush hooks', () => {
         expect(createJsonStoreCalls).toEqual([
-            [{ fileName: 'joinState.json', prefKey: 'gs_join_state', atomic: true }],
+            [{ fileName: 'joinState.json', prefKey: 'gs_join_state', atomic: true, strict: true }],
         ]);
-        expect(joinState.joinStateStore).toBe(mockStore);
         expect(joinState.initializeJoinStateAsync).toBe(mockStore.initializeAsync);
         expect(joinState.flushJoinStateWrites).toBe(mockStore.flushPendingWrites);
+    });
+
+    test('claims read as the store has them, and as unreadable (a throw) when the store was never filled', () => {
+        const runtime = jest.mocked(require('../src/ts/runtime') as typeof import('../src/ts/runtime'));
+        expect(joinState.joinStateStore.readRaw()).toBe('{"c1":{}}');
+        // The app window, whose start-up read has not filled the cache: not "no claims".
+        runtime.isCapacitor.mockReturnValueOnce(true);
+        expect(() => joinState.joinStateStore.readRaw()).toThrow('join-state could not be read');
     });
 });
 

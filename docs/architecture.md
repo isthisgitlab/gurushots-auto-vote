@@ -411,7 +411,7 @@ repeated six times is one that gets forgotten at one of them.
 - **Paid-join money safety** (`services/joinChallenges/performJoin.ts`, with the unlock claim in `unlockMarker.ts` and the in-flight lock in `shared.ts`): the order is load-bearing — resolve an eligible
   photo **before** any `coins_unlock` (no photo ⇒ skip, no spend); persist the unlock claim
   (`joinState.json`) **before** the charge so a crash can never let a later pass re-unlock (idempotent
-  retry), and if the claim can't be written, don't spend. Whose coins a claim holds is part of its key: a
+  retry), and if the claim can't be written, don't spend: on Android the background service writes it through the native bridge (`gs_join_state`, strict: a write the bridge refuses throws), and a store that could not be read (the bridge threw, or the app window's start-up read failed) reads as unreadable, never as no claims (`storeLoaded`). Whose coins a claim holds is part of its key: a
   new claim is always written as `<member id>:<challenge id>` (the member id survives a re-login; a token
   does not), so one account's leftover claim never makes another account's join a submit-only retry. A
   bare `<challenge id>` claim, from before accounts were told apart, counts for every account (it can only
@@ -807,6 +807,16 @@ caps (dependency-free, renderer-safe), and `scenarios/templates.ts` holds editab
   as it is where the write is made (under the lock, or when the write's turn comes), a file that reads again is left
   alone and the answer is `state-readable`. A strict store's cache keeps a queued write that did not persist (a spend
   marker), and a refresh does not replace it with the older stored value until a queued write persists.
+- **Automatic fills** (`currencyAutoStore.ts`, `services/currencyAuto.ts`): the count of fills spent per challenge
+  (`gs_auto_spends`, what `autoExposureFillMax` caps) is persisted by the Android service through the bridge like the
+  scenario state (`gs_swap_backs`, the swap-back offers, as well), in the one `CapacitorStorage` file the app window
+  also reads. The count is written down **before** the fill (`reserveFill`): a write the bridge refused means no fill,
+  a fill that was refused and never made is given back, and one that got no answer stays counted. A ledger that could
+  not be read counts as unboundedly many (no fill is spent against a count that is not known). With the background
+  service the app window leaves fills (`spendLedger: null`) and the automatic joins (`runJoinPass` is skipped; the claims file is written whole) to it, and re-reads the claims before any manual join reads or changes them (`refreshJoinState`): two loops with a copy of one ledger each would
+  overwrite each other's counts. The other service stores can stay unpersisted: `gs_entry_ages` only times a boost
+  (a lost age never holds one) and remembers a submitted photo, `gurushots-metadata` and `gurushots-photo-stats` hold
+  last-vote times and statistics: none of them guards a spend.
 - **Engine** (`scenarios/conditions.ts`, `selectors.ts`, `evaluate.ts`, `nextWake.ts`, pure): unknown data
   fails closed (never makes a condition true); entry ids are compared as strings, never by position (except
   the explicit `slot` selector); an in-flight rule resumes first; a phase or in-flight rule the edited

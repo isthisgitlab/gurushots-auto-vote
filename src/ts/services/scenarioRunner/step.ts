@@ -196,7 +196,9 @@ const runScenarioStep = async (challenge: Challenge, now: number, pass: PassCont
 /**
  * True in the Android app WebView when the native background service is
  * available: that service runs its own voting pass (and its own copy of the
- * scenario state) alongside the in-app loop, so it alone advances scenarios.
+ * scenario state) alongside the in-app loop, so it alone advances scenarios —
+ * and runs the automatic joins and the automatic fills, whose claims and counts
+ * the app window would otherwise overwrite with its own copy.
  */
 const backgroundServiceOwnsScenarios = () =>
     runtime.isCapacitor() && !runtime.isHeadlessService() && nativeAutovote.isAvailable();

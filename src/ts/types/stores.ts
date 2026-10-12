@@ -19,7 +19,9 @@ export interface RawJsonStore {
      * Writes a value made from the current one that nothing reads before it is saved (the Android app, whose writes
      * go behind a cache, puts it in the cache only once it is): `saved`; `failed` (it was not, and nothing changed); or
      * `aborted` (`update` answered null: it looked at the value it would overwrite, as it is when its turn comes, and
-     * wrote nothing). Absent where a write is made before it returns.
+     * wrote nothing). `update` may be called again, on a newer value, when a write was queued while this one was
+     * being saved: it must make the same change (compute anything that varies, a count, once, outside it).
+     * Absent where a write is made before it returns.
      */
     updateThrough?(update: (current: string | null) => string | null): Promise<ThroughResult>;
 }

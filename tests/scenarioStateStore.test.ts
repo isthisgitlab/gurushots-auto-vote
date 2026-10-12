@@ -780,6 +780,25 @@ describe('a reset is saved before anything can read it', () => {
         expect(Object.keys(JSON.parse(update(asked.raw) ?? '{}') as object).sort()).toEqual(['7', '8']);
     });
 
+    test('is the same change when made again on a newer value: the count it asks for is worked out once', async () => {
+        const main = rawStore(live);
+        const { store: asked } = throughStore();
+        const app = createStateLedger(main, undefined, asked);
+        await app.remove(7);
+        const update = asked.updateThrough.mock.calls[0][0];
+        const now = jest.spyOn(Date, 'now');
+        try {
+            now.mockReturnValue(Date.now() + 10_000);
+            const first = JSON.parse(update(null) ?? '{}') as Record<string, number>;
+            now.mockReturnValue(Date.now() + 50_000);
+            const again = JSON.parse(update(JSON.stringify({ 8: Date.now() })) ?? '{}') as Record<string, number>;
+            expect(again[7]).toBe(first[7]);
+            expect(again[8]).toEqual(expect.any(Number));
+        } finally {
+            now.mockRestore();
+        }
+    });
+
     test('of every challenge, on a file that cannot be read, is written into the file only once it is saved', async () => {
         const { store: main, refuse } = throughStore('{no');
         const app = createStateLedger(main, undefined, rawStore());

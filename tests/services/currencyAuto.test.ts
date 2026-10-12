@@ -356,7 +356,7 @@ describe('runAutoExposureFill', () => {
 
     test('stops at the per-challenge automatic fill cap', async () => {
         const ctx = makeCtx();
-        ctx.currency.spendLedger.addFill('555');
+        ctx.currency.spendLedger.reserveFill('555');
         expect(await runAutoExposureFill(ctx, null)).toBe(false);
         set({ autoExposureFillMax: 2 });
         expect(await runAutoExposureFill(ctx, null)).toBe(true);
@@ -366,6 +366,30 @@ describe('runAutoExposureFill', () => {
         const ctx = makeCtx();
         (ctx.currency as CurrencyPassDeps).spendLedger = null;
         expect(await runAutoExposureFill(ctx, null)).toBe(false);
+    });
+
+    test('a fill whose count could not be written down is not made', async () => {
+        const ctx = makeCtx();
+        jest.spyOn(ctx.currency.spendLedger, 'reserveFill').mockReturnValue(false);
+        expect(await runAutoExposureFill(ctx, null)).toBe(false);
+        expect(currencyActions.fillExposure).not.toHaveBeenCalled();
+    });
+
+    test('a fill that got no answer stays counted: it may have been made', async () => {
+        currencyActions.fillExposure.mockResolvedValue({ ok: false, outcome: 'unclear' });
+        const ctx = makeCtx();
+        expect(await runAutoExposureFill(ctx, null)).toBe(false);
+        expect(ctx.currency.spendLedger.fills('555')).toBe(1);
+    });
+
+    test('a fill deferred behind another spend is not counted', async () => {
+        let release: ((value?: unknown) => void) | undefined;
+        const held = currencyActions.withSpendLock(() => new Promise((resolve) => (release = resolve)));
+        const ctx = makeCtx();
+        expect(await runAutoExposureFill(ctx, null)).toBe(false);
+        expect(ctx.currency.spendLedger.fills('555')).toBe(0);
+        release!();
+        await held;
     });
 
     test('a refused fill is not counted', async () => {

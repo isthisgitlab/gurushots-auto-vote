@@ -22,7 +22,7 @@
 import * as logger from '../logger';
 import * as settings from '../settings';
 import * as currencyActions from './currencyActions';
-import { CURRENCY_FIELD, challengeAllows } from '../voting/currencyActions';
+import { CURRENCY_FIELD, CURRENCY_OUTCOME, challengeAllows } from '../voting/currencyActions';
 import { isRuleOpen, pickSwapTarget, votePoolReach, fillBeatsVoting } from '../voting/currencyAuto';
 
 import type { Challenge, ChallengeMember, MemberRanking, VoteImagesResponse } from '../types/gurushots';
@@ -293,11 +293,22 @@ const runAutoExposureFill: (ctx: CurrencyCtx, votePool: VotePool | null | undefi
             `${logger.challengeTag(challenge)} auto fill: exposure ${exposure}% < ${below}%, ${reachText}`,
             null,
         );
+        // The count is written down first: a fill that could not be counted is not made.
+        if (!ledger.reserveFill(id)) {
+            log().warning(
+                `${logger.challengeTag(challenge)} auto fill: the count of fills could not be saved — not spending`,
+                null,
+            );
+            return false;
+        }
         const result = await lockedSpend('fill', challenge, () =>
             currencyActions.fillExposure(challenge.id, token, { strategy: ctx.currency.strategy, logger }),
         );
-        if (!result?.ok) return false;
-        ledger.addFill(id);
+        // A fill that got no answer may have been made: it stays counted.
+        if (!result?.ok) {
+            if (result?.outcome !== CURRENCY_OUTCOME.unclear) ledger.releaseFill(id);
+            return false;
+        }
         reflectFill(challenge);
         return true;
     },

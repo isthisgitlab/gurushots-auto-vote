@@ -294,6 +294,20 @@ class AutoVoteServiceTest {
         assertEquals("{\"7\":1}", store.readKey("gs_scenario_resets"))
         assertFalse(store.writeKey("gs_scenario_resets", "invalid JSON"))
         assertEquals("{\"7\":1}", store.readKey("gs_scenario_resets"))
+        // The ledgers of the automatic currency spends are side stores too: the fills spent survive a restart.
+        assertTrue(store.writeKey("gs_auto_spends", "{\"7\":{\"fills\":1,\"at\":1}}"))
+        assertEquals("{\"7\":{\"fills\":1,\"at\":1}}", store.readKey("gs_auto_spends"))
+        assertFalse(store.writeKey("gs_auto_spends", "invalid JSON"))
+        assertEquals("{\"7\":{\"fills\":1,\"at\":1}}", store.readKey("gs_auto_spends"))
+        assertTrue(store.writeKey("gs_swap_backs", "{\"7\":[]}"))
+        assertEquals("{\"7\":[]}", store.readKey("gs_swap_backs"))
+        assertFalse(store.writeKey("gs_swap_backs", "invalid JSON"))
+        assertEquals("{\"7\":[]}", store.readKey("gs_swap_backs"))
+        // The paid-join claims are a side store too: a claim that did not survive a restart would charge twice.
+        assertTrue(store.writeKey("gs_join_state", "{\"7:9\":{\"unlockedAt\":1}}"))
+        assertEquals("{\"7:9\":{\"unlockedAt\":1}}", store.readKey("gs_join_state"))
+        assertFalse(store.writeKey("gs_join_state", "invalid JSON"))
+        assertEquals("{\"7:9\":{\"unlockedAt\":1}}", store.readKey("gs_join_state"))
         // A refusal names the store from a literal — the JS-supplied key never
         // reaches the log line (CodeQL java/log-injection), and the rejected
         // key is silent.
@@ -301,7 +315,10 @@ class AutoVoteServiceTest {
             listOf(
                 "Refusing to persist non-JSON lexicon diagnostics blob",
                 "Refusing to persist non-JSON scenario state blob",
-                "Refusing to persist non-JSON scenario resets blob"
+                "Refusing to persist non-JSON scenario resets blob",
+                "Refusing to persist non-JSON auto-spend ledger blob",
+                "Refusing to persist non-JSON swap-back ledger blob",
+                "Refusing to persist non-JSON join-state blob"
             ),
             ShadowLog.getLogsForTag(AutoVoteService.TAG).map { it.msg }
         )

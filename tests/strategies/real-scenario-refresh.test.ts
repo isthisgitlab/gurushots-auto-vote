@@ -30,6 +30,10 @@ const { backgroundServiceOwnsScenarios } = jest.mocked(
 const { refreshScenarioStateAsync, scenarioStateLoaded } = jest.mocked(
     require('../../src/ts/scenarioStateStore') as typeof scenarioStateStoreModule,
 );
+import joinChallengesModule = require('../../src/ts/services/joinChallenges');
+import autoClaimModule = require('../../src/ts/services/autoClaim');
+const { runJoinPass } = jest.mocked(joinChallengesModule);
+const { runClaimPass } = jest.mocked(autoClaimModule);
 const { fetchChallengesAndVote } = require('../../src/ts/strategies/real') as typeof realModule;
 
 beforeEach(() => jest.clearAllMocks());
@@ -51,6 +55,17 @@ test('elsewhere the pass starts straight away and owns scenarios', async () => {
     expect(runVotingPass.mock.calls[0][2].scenarios!.enabled!()).toBe(true);
 });
 
+test('with the background service the window leaves the automatic fills to it: one loop counts them', async () => {
+    backgroundServiceOwnsScenarios.mockReturnValue(true);
+    await fetchChallengesAndVote('tok', '7');
+    expect(runVotingPass.mock.calls[0][2].currency?.spendLedger).toBeNull();
+    backgroundServiceOwnsScenarios.mockReturnValue(false);
+    await fetchChallengesAndVote('tok', '7');
+    expect(runVotingPass.mock.calls[1][2].currency?.spendLedger).toEqual(
+        expect.objectContaining({ reserveFill: expect.any(Function) }),
+    );
+});
+
 test('a cache of the scenario state that was never filled is read again before the pass, whoever owns scenarios', async () => {
     backgroundServiceOwnsScenarios.mockReturnValue(false);
     scenarioStateLoaded.mockReturnValueOnce(false);
@@ -60,4 +75,19 @@ test('a cache of the scenario state that was never filled is read again before t
         runVotingPass.mock.invocationCallOrder[0],
     );
     expect(runVotingPass.mock.calls[0][2].scenarios!.enabled!()).toBe(true);
+});
+
+test('with the background service the window leaves the automatic joins to it, and still claims prizes', async () => {
+    backgroundServiceOwnsScenarios.mockReturnValue(true);
+    await fetchChallengesAndVote('tok', null);
+    expect(runJoinPass).not.toHaveBeenCalled();
+    expect(runClaimPass).toHaveBeenCalledTimes(1);
+});
+
+test('without it the pass joins as before, over claims it reads again before it spends on them', async () => {
+    backgroundServiceOwnsScenarios.mockReturnValue(false);
+    await fetchChallengesAndVote('tok', null);
+    expect(runJoinPass).toHaveBeenCalledTimes(1);
+    expect(runJoinPass.mock.calls[0][2]).toEqual(expect.objectContaining({ refreshJoinState: expect.any(Function) }));
+    expect(runClaimPass).toHaveBeenCalledTimes(1);
 });

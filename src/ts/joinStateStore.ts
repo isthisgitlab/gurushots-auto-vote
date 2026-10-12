@@ -24,11 +24,30 @@ import { randomBytes } from 'node:crypto';
 import * as runtime from './runtime';
 import * as logger from './logger';
 import { createJsonStore, getSettingsPath } from './settings/storage';
+import { storeLoaded } from './settings/storeTransport';
 import { errorMessage } from './errorMessage';
 import { isPlainObject } from './plainObject';
 import { sanitizeLogString } from './logger/sanitize';
 
-const joinStateStore = createJsonStore({ fileName: 'joinState.json', prefKey: 'gs_join_state', atomic: true });
+const JOIN_STATE_KEY = 'gs_join_state';
+// `strict`: a claim the service's native bridge did not persist is not recorded, and nothing paid is spent on it.
+const joinStateFile = createJsonStore({
+    fileName: 'joinState.json',
+    prefKey: JOIN_STATE_KEY,
+    atomic: true,
+    strict: true,
+});
+
+// A store that could not be read (the service's bridge threw, the app's start-up read failed) throws when read, so
+// that the claims read as unreadable, never as none: a claim forgotten is a paid unlock charged twice.
+const joinStateStore = {
+    ...joinStateFile,
+    readRaw: (): string | null => {
+        const raw = joinStateFile.readRaw();
+        if (!storeLoaded(JOIN_STATE_KEY)) throw new Error('join-state could not be read');
+        return raw;
+    },
+};
 
 // A held lock whose file has not been touched for this long is treated as stale (its owner crashed) and taken over.
 const LOCK_TTL_MS = 60_000;
@@ -251,5 +270,7 @@ const acquireUnlockLock = (
 };
 
 export const initializeJoinStateAsync = joinStateStore.initializeAsync;
+// Reads the claims again from Preferences, where the background service writes them (a no-op off the app window).
+export const refreshJoinStateAsync = joinStateStore.refreshAsync;
 export const flushJoinStateWrites = joinStateStore.flushPendingWrites;
 export { joinStateStore, acquireUnlockLock };
