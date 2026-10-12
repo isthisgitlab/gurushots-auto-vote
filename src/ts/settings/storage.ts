@@ -24,7 +24,16 @@ import type { App } from 'electron';
 import type { PreferencesPlugin } from '@capacitor/preferences';
 import { errorMessage } from '../errorMessage';
 import { sweepStaleTemps, writeAtomicOwnerOnly } from './atomicWrite';
-import { createWriteBehind, headlessStore, headlessUpdate, readHeadlessKey, writeHeadlessKey } from './storeTransport';
+import {
+    createWriteBehind,
+    headlessSettingsWrite,
+    headlessStore,
+    headlessUpdate,
+    readHeadlessKey,
+    saveThroughCas,
+    writeHeadlessKey,
+} from './storeTransport';
+import { rebaseSettingsText } from './settingsMerge';
 import { compareAndWrite } from '../services/NativeAutovoteBridge';
 import type { ThroughResult } from '../types/stores';
 
@@ -44,6 +53,12 @@ let capacitorInitialized = false;
 let cachedSettingsJson: string | null = null;
 let capacitorPreferences: PreferencesPlugin | null = null;
 
+// What the app window knows Preferences to hold for the settings key: what it read, or saved last. The compare-and-write
+// of the next save expects it, and the change is made again on what the background service saved since.
+let persistedSettingsJson: string | null = null;
+// The text the Android service's JS last read from the native store: the text its next write is a change of.
+let headlessSettingsBase: string | null = null;
+
 // Serializes Capacitor write-behind so concurrent full-blob writes apply
 // in issue order — an earlier write can never resolve after a later one
 // and clobber it. flushPendingWrites() awaits the tail so callers can
@@ -52,6 +67,9 @@ let writeChain = Promise.resolve();
 
 // Bumped by discardPendingWrites: a queued settings write finds the number changed on its turn and puts nothing down.
 let settingsWriteGeneration = 0;
+// Bumped by every settings write and by moving the stored value aside: a write that finds it moved on is not the latest,
+// and leaves the cache to the one that is.
+let settingsWriteSerial = 0;
 // Set by discardPendingWrites until resumeWrites: every store refuses writes, so nothing is created again while
 // local data is being deleted.
 let writesRefused = false;
@@ -111,6 +129,23 @@ const writeOwnerOnly = (filePath: string, data: string) => {
     fs.writeFileSync(filePath, data, { encoding: 'utf8', mode: 0o600 });
 };
 
+// Saves the settings text the app window changed (`data`, made from `base`, the cache before the change): only if
+// Preferences still holds what was last known of it, else the change is made again on what the background service saved
+// since. Once the latest write is saved, the cache holds the merged text.
+const saveSettingsThroughCas = async (base: string | null, data: string, serial: number): Promise<void> => {
+    // The text of the attempt that saved is the last one made.
+    let saved = data;
+    await saveThroughCas(
+        SETTINGS_KEY,
+        getCapacitorPreferences,
+        persistedSettingsJson,
+        (stored) => (saved = rebaseSettingsText(base, data, stored)),
+        (expected, text) => compareAndWrite(SETTINGS_KEY, expected, text),
+    );
+    persistedSettingsJson = saved;
+    if (serial === settingsWriteSerial) cachedSettingsJson = saved;
+};
+
 // The backup of an unparseable Capacitor settings value lives under the settings key plus this suffix.
 const CORRUPT_SUFFIX = '_corrupt';
 
@@ -130,7 +165,8 @@ const storage = {
             // same store the app's @capacitor/preferences uses, so the token
             // and settings stay in sync between app and background.
             const store = headlessStore();
-            return (store && store.read()) || null;
+            headlessSettingsBase = (store && store.read()) || null;
+            return headlessSettingsBase;
         }
         if (runtime.isCapacitor()) {
             return cachedSettingsJson;
@@ -148,15 +184,16 @@ const storage = {
     writeRaw: (data: string): boolean => {
         if (writesRefused) return false;
         if (runtime.isHeadlessService()) {
-            // Persist through the native bridge to the shared store; the
-            // commit is synchronous so a later read() in the same cycle
-            // sees the new value.
+            // Persist through the native bridge to the shared store, as a change of the text this context read: the
+            // app window saves the same blob, and what it saved meanwhile is kept (see headlessSettingsWrite). The
+            // commit is synchronous so a later read() in the same cycle sees the new value.
             try {
-                const answer: unknown = headlessStore()?.write(data);
-                if (answer === false) {
+                const saved = headlessSettingsWrite(headlessSettingsBase, data);
+                if (saved === null) {
                     logger.withCategory('settings').error('Headless store refused the settings write', null);
                     return false;
                 }
+                headlessSettingsBase = saved;
             } catch (err) {
                 logger.withCategory('settings').error('Headless store write failed:', err);
                 return false;
@@ -171,19 +208,24 @@ const storage = {
             // resolves and we flipped the flag, initializeAsync would
             // skip its hydration and previously-persisted settings would
             // be lost on the next read of an unwritten key.
+            const base = cachedSettingsJson;
             cachedSettingsJson = data;
             // Chain onto the previous write so persistence is ordered. A
             // failed write is logged but does not break the chain for the
-            // next one (the cache still holds the latest value).
+            // next one.
             const issuedIn = settingsWriteGeneration;
+            const serial = ++settingsWriteSerial;
             writeChain = writeChain
                 .then(async () => {
-                    if (issuedIn === settingsWriteGeneration) {
-                        await getCapacitorPreferences().set({ key: SETTINGS_KEY, value: data });
-                    }
+                    if (issuedIn === settingsWriteGeneration) await saveSettingsThroughCas(base, data, serial);
                 })
                 .catch((err) => {
                     logger.withCategory('settings').error('Capacitor preferences write failed:', err);
+                    // What the cache shows must be what is stored: the change was not saved, and no later write
+                    // carries it (each carries its own).
+                    if (issuedIn === settingsWriteGeneration && serial === settingsWriteSerial) {
+                        cachedSettingsJson = persistedSettingsJson;
+                    }
                 });
             return true;
         }
@@ -211,11 +253,13 @@ const storage = {
         if (runtime.isCapacitor()) {
             const backupKey = `${SETTINGS_KEY}${CORRUPT_SUFFIX}`;
             cachedSettingsJson = null;
+            settingsWriteSerial++;
             writeChain = writeChain
                 .then(async () => {
                     const preferences = getCapacitorPreferences();
                     await preferences.set({ key: backupKey, value: raw });
                     await preferences.remove({ key: SETTINGS_KEY });
+                    persistedSettingsJson = null;
                 })
                 .catch((err) => {
                     logger.withCategory('settings').error('Capacitor preferences backup write failed:', err);
@@ -245,9 +289,11 @@ const initializeAsync = async () => {
         const prefs = getCapacitorPreferences();
         const { value } = await prefs.get({ key: SETTINGS_KEY });
         cachedSettingsJson = value; // null if no preferences entry exists
+        persistedSettingsJson = value;
     } catch (err) {
         logger.withCategory('settings').error('Capacitor preferences read failed:', err);
         cachedSettingsJson = null;
+        persistedSettingsJson = null;
     } finally {
         capacitorInitialized = true;
     }
@@ -513,6 +559,7 @@ const discardPendingWrites = async (): Promise<void> => {
     writesRefused = true;
     settingsWriteGeneration++;
     cachedSettingsJson = null;
+    persistedSettingsJson = null;
     for (const store of createdStores) store.discard();
     await writeChain;
     await Promise.all(createdStores.map((store) => store.settled()));

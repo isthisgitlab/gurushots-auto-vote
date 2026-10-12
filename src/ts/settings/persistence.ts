@@ -407,9 +407,9 @@ const setSetting = (key: string, value: unknown): boolean => {
         logger.withCategory('settings').error(`Invalid setting key: ${oneLine(key)}`, null);
         return false;
     }
-    const settings = loadSettings();
-    settings[key] = value;
-    return saveSettings(settings);
+    // Only the changed key: saveSettings merges it onto the settings it loads itself, so what another writer saved
+    // between two reads is not written back over.
+    return saveSettings({ [key]: value });
 };
 
 /**

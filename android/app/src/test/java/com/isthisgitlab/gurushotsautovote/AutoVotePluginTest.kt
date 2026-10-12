@@ -131,6 +131,36 @@ class AutoVotePluginTest {
     }
 
     @Test
+    fun compareAndWriteSavesTheSettingsBlobOnlyWhileItHoldsWhatTheWindowRead() {
+        fun settingsWrite(expected: String?, value: String) = resolved {
+            every { it.getString("key") } returns "gurushots-settings"
+            every { it.getString("expected") } returns expected
+            every { it.getString("value") } returns value
+            plugin.compareAndWrite(it)
+        }
+        assertTrue(settingsWrite(null, """{"theme":"dark"}""").getBoolean("saved"))
+        // The service saved a different key meanwhile: the window's write built on the old text is not saved.
+        assertTrue(
+            SideStores.compareAndSet(app, "gurushots-settings", """{"theme":"dark"}""", """{"theme":"dark","token":"t"}""")
+                .outcome == SideStores.Outcome.SAVED
+        )
+        val lost = settingsWrite("""{"theme":"dark"}""", """{"theme":"light"}""")
+        assertFalse(lost.getBoolean("saved"))
+        assertEquals("""{"theme":"dark","token":"t"}""", lost.getString("current"))
+        assertEquals("""{"theme":"dark","token":"t"}""", TestSupport.readSettings(app))
+        // It carries the settings cap, not the side stores': past the side-store cap is saved, past its own is not.
+        val past = """{"k":"${"x".repeat(SideStores.MAX_BYTES * 4)}"}"""
+        assertTrue(settingsWrite("""{"theme":"dark","token":"t"}""", past).getBoolean("saved"))
+        val call = mockk<PluginCall>(relaxed = true)
+        every { call.getString("key") } returns "gurushots-settings"
+        every { call.getString("expected") } returns past
+        every { call.getString("value") } returns """{"k":"${"x".repeat(SideStores.MAX_SETTINGS_BYTES)}"}"""
+        plugin.compareAndWrite(call)
+        verify(exactly = 1) { call.reject(any<String>()) }
+        assertEquals(past, TestSupport.readSettings(app))
+    }
+
+    @Test
     fun compareAndWriteAnswersCurrentAsJsonNullNotTheTextNullWhenNothingIsStored() {
         val lost = resolved {
             every { it.getString("key") } returns "gs_join_state"
@@ -157,7 +187,7 @@ class AutoVotePluginTest {
         }
         rejected(null, "{}")
         rejected("gs_join_state", null)
-        rejected("gurushots-settings", "{}")
+        rejected("unrelated-key", "{}")
         rejected("gs_join_state", "[1]")
         rejected("gs_join_state", "{} trailing")
     }

@@ -495,8 +495,13 @@ class AutoVoteService : Service() {
 
     /** Settings bridge — same store @capacitor/preferences uses, so token/settings stay in sync. */
     inner class HeadlessStore {
+        // What this context's JS last read of the settings blob: the text its next write is a change of.
+        @Volatile
+        private var lastRead: String? = null
+
         @android.webkit.JavascriptInterface
-        fun read(): String? = getSharedPreferences(PREFS_FILE, Context.MODE_PRIVATE).getString(SETTINGS_KEY, null)
+        fun read(): String? =
+            getSharedPreferences(PREFS_FILE, Context.MODE_PRIVATE).getString(SETTINGS_KEY, null).also { lastRead = it }
 
         @android.webkit.JavascriptInterface
         fun readKey(key: String): String? = SideStores.read(this@AutoVoteService, key)
@@ -519,12 +524,19 @@ class AutoVoteService : Service() {
             SideStores.compareAndSet(this@AutoVoteService, key, expected, data).outcome == SideStores.Outcome.SAVED
 
         /**
-         * Persists the settings blob. Answers whether it did: false for anything that is not one JSON object within
-         * [SideStores.MAX_SETTINGS_BYTES], or a commit that failed — a JS bug must not corrupt the blob the main app
-         * reads (the token included), and JS surfaces a refused write. The commit is synchronous.
+         * Persists the settings blob only if it still holds what [read] last answered, under the lock the app window's
+         * plugin takes too: a blob the window changed since is not overwritten, and JS reads it again and makes its
+         * change on it. Answers whether it saved: false for that, for anything that is not one JSON object within
+         * [SideStores.MAX_SETTINGS_BYTES], or for a commit that failed — a JS bug must not corrupt the blob the main
+         * app reads (the token included). The commit is synchronous.
          */
         @android.webkit.JavascriptInterface
-        fun write(data: String): Boolean = SideStores.writeSettings(this@AutoVoteService, data)
+        fun write(data: String): Boolean {
+            val saved = SideStores.compareAndSet(this@AutoVoteService, SETTINGS_KEY, lastRead, data).outcome ==
+                SideStores.Outcome.SAVED
+            if (saved) lastRead = data
+            return saved
+        }
     }
 
     /** Cycle-completion bridge — JS reports {ok, nextDelayMs, error} when a cycle finishes. */
@@ -691,6 +703,7 @@ internal object SideStores {
     // past the cap) and the swap-back offers; the paid-join claims (an unlock that was charged and not yet submitted:
     // forgotten on a restart, it would be charged again).
     private val names = mapOf(
+        SETTINGS_KEY to "settings",
         "gs_lexicon_diagnostics" to "lexicon diagnostics",
         "gs_scenario_state" to "scenario state",
         "gs_scenario_resets" to "scenario resets",
@@ -706,10 +719,12 @@ internal object SideStores {
 
     fun isAllowed(key: String): Boolean = key in names
 
+    private fun maxBytes(key: String): Int = if (key == SETTINGS_KEY) MAX_SETTINGS_BYTES else MAX_BYTES
+
     private fun prefs(context: Context) = context.getSharedPreferences(PREFS_FILE, Context.MODE_PRIVATE)
 
     /** One JSON object and nothing after it, within [maxBytes]; refusals are logged under the store's literal name. */
-    private fun valid(name: String, data: String, maxBytes: Int = MAX_BYTES): Boolean {
+    private fun valid(name: String, data: String, maxBytes: Int): Boolean {
         if (data.toByteArray(Charsets.UTF_8).size > maxBytes) {
             Log.w(AutoVoteService.TAG, "Refusing to persist oversized $name blob")
             return false
@@ -738,8 +753,9 @@ internal object SideStores {
     }
 
     // Stores that are changed only by `compareAndSet`: a plain write would replace what another context saved (a spend
-    // or a claim that one context recorded and the other, writing from an older read, then lost).
-    private val compareAndSetOnly = setOf("gs_join_state", "gs_auto_spends")
+    // or a claim that one context recorded and the other, writing from an older read, then lost; a setting one context
+    // toggled and the other, writing the whole blob from an older read, then undid).
+    private val compareAndSetOnly = setOf("gs_join_state", "gs_auto_spends", SETTINGS_KEY)
 
     @Synchronized
     fun write(context: Context, key: String, data: String): Boolean {
@@ -748,24 +764,16 @@ internal object SideStores {
             Log.w(AutoVoteService.TAG, "Refusing a plain write of $name blob: it is changed by compare-and-set only")
             return false
         }
-        if (!valid(name, data)) return false
+        if (!valid(name, data, maxBytes(key))) return false
         val prefs = prefs(context)
         return commit(prefs, key, prefs.getString(key, null), data)
-    }
-
-    /** Saves the settings blob like [write] does a side store: one bounded JSON object, committed synchronously. */
-    @Synchronized
-    fun writeSettings(context: Context, data: String): Boolean {
-        if (!valid("settings", data, MAX_SETTINGS_BYTES)) return false
-        val prefs = prefs(context)
-        return commit(prefs, SETTINGS_KEY, prefs.getString(SETTINGS_KEY, null), data)
     }
 
     /** @param expected what the caller read; null or empty: nothing was stored */
     @Synchronized
     fun compareAndSet(context: Context, key: String, expected: String?, data: String): Result {
         val name = names[key] ?: return Result(Outcome.REFUSED, null)
-        if (!valid(name, data)) return Result(Outcome.REFUSED, null)
+        if (!valid(name, data, maxBytes(key))) return Result(Outcome.REFUSED, null)
         val prefs = prefs(context)
         val current = prefs.getString(key, null)
         if (current != expected?.takeIf { it.isNotEmpty() }) return Result(Outcome.MISMATCH, current)

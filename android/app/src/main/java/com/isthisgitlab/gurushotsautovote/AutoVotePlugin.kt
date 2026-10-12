@@ -55,10 +55,10 @@ class AutoVotePlugin : Plugin() {
     }
 
     /**
-     * Saves one side store only if it still holds what the window read (`expected`; absent or null: nothing was
-     * stored), under the lock the background service's bridge takes too. Resolves `saved` and, when it did not save
-     * because the store had changed, `current`: what is stored. Rejects a key that is not a side store, a value that
-     * is not one JSON object within the size cap, and a commit that failed.
+     * Saves one side store, or the settings blob, only if it still holds what the window read (`expected`; absent or
+     * null: nothing was stored), under the lock the background service's bridge takes too. Resolves `saved` and, when
+     * it did not save because the store had changed, `current`: what is stored. Rejects a key that is neither, a value
+     * that is not one JSON object within the key's size cap, and a commit that failed.
      */
     @PluginMethod
     fun compareAndWrite(call: PluginCall) {

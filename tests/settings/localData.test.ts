@@ -405,7 +405,7 @@ describe('wipeLocalData', () => {
         beforeEach(() => {
             g.Capacitor = {
                 isNativePlatform: () => true,
-                Plugins: { AutoVoteBackground: { wipeLocalData: wipeNative } },
+                Plugins: { AutoVoteBackground: { wipeLocalData: wipeNative, compareAndWrite: jest.fn() } },
             };
             wipeNative.mockReset();
             wipeNative.mockResolvedValue({ ok: true });
@@ -442,8 +442,8 @@ describe('wipeLocalData', () => {
             store.writeRaw('{"second":2}');
             store.writeRaw('{"third":3}');
             ctx.storage.storage.writeRaw('{"settings":1}');
-            await Promise.resolve();
-            await Promise.resolve();
+            // The settings' write takes a few turns to reach Preferences.
+            while (mockPreferences.set.mock.calls.length < 2) await Promise.resolve();
             expect(mockPreferences.set).toHaveBeenCalledTimes(2);
 
             const wiping = ctx.localData.wipeLocalData();

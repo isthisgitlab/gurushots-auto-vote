@@ -8,6 +8,7 @@ import * as runtime from '../runtime';
 import type { PreferencesPlugin } from '@capacitor/preferences';
 import type { AndroidHeadlessStore } from '../types/settings';
 import type { RawJsonStore, ThroughResult } from '../types/stores';
+import { rebaseSettingsText } from './settingsMerge';
 
 /**
  * The Android headless-service bridge, read at call time (absent everywhere
@@ -139,6 +140,65 @@ const MAX_ATTEMPTS = 5;
 /** What the native compare-and-write answered: saved, or not because the key had changed (and what it holds). */
 export type CasAnswer = { saved: boolean; current: string | null };
 
+/** The native compare-and-write of one key, null where there is none (see NativeAutovoteBridge.compareAndWrite). */
+export type CasWrite = (expected: string | null, data: string) => Promise<CasAnswer> | null;
+
+/**
+ * Saves the value `update` makes from `start` (what the writer last knew the key to hold): through the native
+ * compare-and-write, where there is one, so that it is saved only if the key still holds what it was made from, and is
+ * made again, on what the other writer saved meanwhile (up to MAX_ATTEMPTS); else straight to Preferences.
+ * `update` may be called more than once, and must make the same change each time.
+ *
+ * @returns the value saved; null when `update` declined (answered null)
+ * @throws when the save was refused, or the key kept changing; whatever `update` throws
+ */
+export const saveThroughCas = async (
+    prefKey: string,
+    preferences: () => PreferencesPlugin,
+    start: string | null,
+    update: (current: string | null) => string | null,
+    cas?: CasWrite,
+): Promise<string | null> => {
+    let base = start;
+    for (let attempt = 0; attempt < MAX_ATTEMPTS; attempt++) {
+        const data = update(base);
+        if (data === null) return null;
+        const answer = cas?.(base, data) ?? null;
+        if (answer === null) {
+            await preferences().set({ key: prefKey, value: data });
+            return data;
+        }
+        const { saved, current } = await answer;
+        if (saved) return data;
+        base = current;
+    }
+    throw new Error('the key kept changing');
+};
+
+/**
+ * Saves the settings text `ours`, made from `base` (what this context last read), through the bridge's `write`, which
+ * the native side takes only while the settings still hold what the latest `read` answered. A blob the other writer
+ * changed since is read again and `ours` made on it (see rebaseSettingsText), up to MAX_ATTEMPTS.
+ *
+ * @returns the text saved (`ours` when no bridge answers: there is nothing to refuse it); null when the bridge refused
+ *   it, which trying again does not help
+ * @throws when the bridge threw, the stored settings are unreadable, or they kept changing
+ */
+export const headlessSettingsWrite = (base: string | null, ours: string): string | null => {
+    const bridge = headlessStore();
+    if (!bridge) return ours;
+    let theirs = base;
+    for (let attempt = 0; attempt < MAX_ATTEMPTS; attempt++) {
+        const text = rebaseSettingsText(base, ours, theirs);
+        if (bridge.write(text) !== false) return text;
+        const now = bridge.read();
+        // Nothing changed under it: the save itself was refused.
+        if (now === theirs) return null;
+        theirs = now;
+    }
+    throw new Error('the settings kept changing');
+};
+
 /**
  * A change of a key that the background service writes too, made in the service's own context: read the key through
  * the bridge, make the new value from it, and save it only if the key still holds what was read (the native side
@@ -218,7 +278,7 @@ export const createWriteBehind = (
     strict: boolean,
     preferences: () => PreferencesPlugin,
     cache: { get: () => string | null; set: (value: string | null) => void },
-    cas?: (expected: string | null, data: string) => Promise<CasAnswer> | null,
+    cas?: CasWrite,
 ) => {
     const { enqueue, quiet, drained } = createQueue(prefKey);
     let latest: Promise<WriteOutcome> = Promise.resolve({ ok: true });
@@ -236,24 +296,8 @@ export const createWriteBehind = (
         queuedText = text;
     };
     knownKeys.delete(prefKey);
-    // The value the write-through makes from the cache and saves: through the native compare-and-write, where there is
-    // one, else straight to Preferences. Null: `update` declined.
-    const save = async (update: (current: string | null) => string | null): Promise<string | null> => {
-        let base = cache.get();
-        for (let attempt = 0; attempt < MAX_ATTEMPTS; attempt++) {
-            const data = update(base);
-            if (data === null) return null;
-            const answer = cas?.(base, data) ?? null;
-            if (answer === null) {
-                await preferences().set({ key: prefKey, value: data });
-                return data;
-            }
-            const { saved, current } = await answer;
-            if (saved) return data;
-            base = current;
-        }
-        throw new Error('the key kept changing');
-    };
+    const save = (update: (current: string | null) => string | null): Promise<string | null> =>
+        saveThroughCas(prefKey, preferences, cache.get(), update, cas);
     return {
         queue: (data: string) => {
             issued++;

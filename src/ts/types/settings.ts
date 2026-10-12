@@ -160,7 +160,11 @@ export type RendererVisibleSettings = {
 /** The Android headless-service bridge to the native settings store. */
 export interface AndroidHeadlessStore {
     read(): string | null;
-    /** `false` when the native store refused the write; no answer (an older bridge) counts as written. */
+    /**
+     * Saves the settings blob only if it still holds what `read` last answered, under the lock the app window's plugin
+     * takes too. `false` when it did not: the blob changed since that read (read it again and make the change on it),
+     * or the native store refused the value. No answer counts as written.
+     */
     write(data: string): boolean | void;
     readKey?(key: string): string | null;
     /** `true` when the native side persisted the value. Anything else (`false`, or no answer) is not a write a strict

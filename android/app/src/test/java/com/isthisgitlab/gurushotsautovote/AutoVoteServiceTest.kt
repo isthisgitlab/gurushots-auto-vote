@@ -1054,13 +1054,77 @@ class AutoVoteServiceTest {
         every { editor.putString(any(), any()) } returns editor
         every { editor.commit() } returnsMany listOf(false, true)
 
-        assertFalse(SideStores.writeSettings(ctx, """{"token":"new"}"""))
+        val result = SideStores.compareAndSet(ctx, "gurushots-settings", """{"token":"old"}""", """{"token":"new"}""")
+        assertEquals(SideStores.Outcome.REFUSED, result.outcome)
 
         verifyOrder {
             editor.putString("gurushots-settings", """{"token":"new"}""")
             editor.commit()
             editor.putString("gurushots-settings", """{"token":"old"}""")
             editor.commit()
+        }
+    }
+
+    @Test
+    fun aSettingsWriteFromAnOlderReadIsNotSavedAndTheNextReadSeesWhatTheWindowSaved() {
+        val store = newService().HeadlessStore()
+        TestSupport.writeSettings(app, """{"theme":"dark"}""")
+        assertEquals("""{"theme":"dark"}""", store.read())
+
+        // The window saved another setting after the service read.
+        TestSupport.writeSettings(app, """{"theme":"dark","language":"lv"}""")
+        assertFalse(store.write("""{"theme":"dark","token":"abc"}"""))
+        assertEquals("""{"theme":"dark","language":"lv"}""", TestSupport.readSettings(app))
+
+        // Read again, make the change on what is there: saved, and a following write builds on it.
+        assertEquals("""{"theme":"dark","language":"lv"}""", store.read())
+        assertTrue(store.write("""{"theme":"dark","language":"lv","token":"abc"}"""))
+        assertTrue(store.write("""{"theme":"dark","language":"lv","token":"abc","x":1}"""))
+        assertEquals("""{"theme":"dark","language":"lv","token":"abc","x":1}""", TestSupport.readSettings(app))
+    }
+
+    @Test
+    fun aSettingsWriteBeforeAnyReadIsSavedOnlyWhereNothingIsStored() {
+        val store = newService().HeadlessStore()
+        TestSupport.writeSettings(app, null)
+        assertTrue(store.write("""{"token":"abc"}"""))
+
+        val other = newService().HeadlessStore()
+        assertFalse(other.write("""{"token":"zzz"}"""))
+        assertEquals("""{"token":"abc"}""", TestSupport.readSettings(app))
+    }
+
+    @Test
+    fun theSettingsBlobIsNeverReplacedByAPlainWrite() {
+        val ctx = sideStoreContext()
+        TestSupport.writeSettings(app, """{"theme":"dark"}""")
+        ShadowLog.clear()
+        assertFalse(SideStores.write(ctx, "gurushots-settings", """{"theme":"light"}"""))
+        assertEquals("""{"theme":"dark"}""", TestSupport.readSettings(app))
+        assertEquals(
+            listOf("Refusing a plain write of settings blob: it is changed by compare-and-set only"),
+            ShadowLog.getLogsForTag(AutoVoteService.TAG).map { it.msg }
+        )
+    }
+
+    @Test
+    fun theWindowAndTheServiceChangingTheSettingsFromTheSameReadSaveExactlyOne() {
+        val ctx = sideStoreContext()
+        repeat(40) { round ->
+            TestSupport.writeSettings(app, "{}")
+            val saved = java.util.concurrent.atomic.AtomicInteger(0)
+            val start = java.util.concurrent.CountDownLatch(1)
+            val threads = listOf("service", "window").map { who ->
+                Thread {
+                    start.await()
+                    val outcome = SideStores.compareAndSet(ctx, "gurushots-settings", "{}", "{\"$who\":$round}").outcome
+                    if (outcome == SideStores.Outcome.SAVED) saved.incrementAndGet()
+                }
+            }
+            threads.forEach { it.start() }
+            start.countDown()
+            threads.forEach { it.join() }
+            assertEquals(1, saved.get())
         }
     }
 

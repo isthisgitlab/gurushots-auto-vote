@@ -585,6 +585,16 @@ repeated six times is one that gets forgotten at one of them.
   keyed preference bridge (`settings/storeTransport.ts`) on the Android headless service. Every consumer is
   listed in the store registry `settings/localData.ts` (`LOCAL_DATA_STORES`) — also what "Delete all local
   data" removes — and `tests/settings/localData.test.ts` fails for a `createJsonStore` call site missing there.
+- **The Android settings blob has two writers and is changed by compare-and-set.** The app window (through the
+  plugin's `compareAndWrite`, behind its cache) and the background service (`HeadlessStore.write`) both go through
+  the one synchronized `SideStores.compareAndSet` on the `gurushots-settings` key, which takes one JSON object of at
+  most 2 MiB and refuses a plain write. A save is accepted only while the blob still holds what the writer last read;
+  otherwise the writer reads again and makes **only its own change** again on what is there (`rebaseSettingsText`,
+  a three-way merge of the text it was made from, the changed text and the stored one: nested objects merge key by
+  key, and where both sides changed one value the writer's wins), up to 5 attempts. A blob that cannot be read is
+  never overwritten, and a save that is not made is logged and leaves the window cache showing what is stored.
+  `setSetting` hands `saveSettings` only the changed key, so the service's own load-and-save has no stale whole blob
+  to write back. Desktop and the CLI write the file atomically and are unchanged.
 - Write-behind is **ordered** (writes chain onto a promise) and `flushPendingWrites()` awaits durability
   before session invalidation. On Capacitor, `initializeAsync()` must be awaited before the first sync
   read — **each store hydrates independently**, so a new store must be wired into the Capacitor bootstrap
