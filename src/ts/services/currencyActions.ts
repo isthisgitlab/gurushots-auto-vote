@@ -115,6 +115,10 @@ const swappedOutIds = (challenge: Challenge) =>
         ),
     );
 
+// How many swaps the challenge's swap history holds.
+const swapsMade = (challenge: Challenge): number =>
+    Array.isArray(challenge?.member?.ranking?.swaps) ? challenge.member.ranking.swaps.length : 0;
+
 /**
  * Live re-check shared by every action. Returns the blocking outcome, or null
  * with the live challenge when the spend may go ahead.
@@ -278,17 +282,27 @@ const previewSwap = async (
  *
  * @param deps - ledger: the swap-back
  *   ledger (swapBackStore.ts), told about every successful swap so a swapped-out
- *   boosted/turbo'd photo can be swapped back later
+ *   boosted/turbo'd photo can be swapped back later; maxSwaps: spend nothing when the live
+ *   challenge's swap history already holds that many
  */
 const swapEntry = async (
     challengeId: string | number,
     imageId: string,
     newImageId: string,
     token: string,
-    { strategy, logger, ledger = null }: { strategy: CurrencyStrategy; logger: Logger; ledger?: SwapBackLedger | null },
+    {
+        strategy,
+        logger,
+        ledger = null,
+        maxSwaps,
+    }: { strategy: CurrencyStrategy; logger: Logger; ledger?: SwapBackLedger | null; maxSwaps?: number },
 ): Promise<SpendOutcome> => {
     const { blocked, challenge } = await checkLive('swap', challengeId, token, strategy);
     if (blocked) return { ok: false, outcome: blocked };
+    if (maxSwaps !== undefined && swapsMade(challenge) >= maxSwaps) {
+        cat(logger).info(`swap: ${logger.challengeTag(challenge)} is already at its limit of ${maxSwaps} swaps`, null);
+        return { ok: false, outcome: CURRENCY_OUTCOME.notAvailable };
+    }
     if (!entryIds(challenge).has(imageId)) {
         return { ok: false, outcome: CURRENCY_OUTCOME.notAvailable };
     }

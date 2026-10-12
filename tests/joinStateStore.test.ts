@@ -248,6 +248,58 @@ describe('acquireUnlockLock', () => {
         expect(joinState.acquireUnlockLock('c1').ok).toBe(true);
     });
 
+    describe('held: whether the holder still owns the lock, asked right before something that must not be done twice', () => {
+        test('a lock that is held and fresh is still held', () => {
+            const lock = joinState.acquireUnlockLock('c1');
+            expect(lock.held?.()).toBe(true);
+            lock.release();
+        });
+
+        test('a lock another process took over is not held, and nothing is touched', () => {
+            const lock = joinState.acquireUnlockLock('c1');
+            mockFiles.set(LOCK, { content: 'another-process-token', mtimeMs: Date.now() });
+            expect(lock.held?.()).toBe(false);
+            expect(lockFile()?.content).toBe('another-process-token');
+            lock.release();
+        });
+
+        test('a lock whose file is gone is not held', () => {
+            const lock = joinState.acquireUnlockLock('c1');
+            mockFiles.delete(LOCK);
+            expect(lock.held?.()).toBe(false);
+        });
+
+        test('a lock that went stale while the process slept, and nobody took over, is touched and held again', () => {
+            const lock = joinState.acquireUnlockLock('c1');
+            // The machine slept: the renewal timer did not run, and the file aged past the TTL.
+            const file = lockFile()!;
+            file.mtimeMs = Date.now() - 5 * 60_000;
+            expect(lock.held?.()).toBe(true);
+            expect(Date.now() - lockFile()!.mtimeMs).toBeLessThan(60_000);
+            // A rival that looks now finds it live.
+            expect(joinState.acquireUnlockLock('c1').ok).toBe(false);
+            lock.release();
+        });
+
+        test('a stale lock that cannot be touched is not held', () => {
+            const lock = joinState.acquireUnlockLock('c1');
+            lockFile()!.mtimeMs = Date.now() - 5 * 60_000;
+            fs.utimesSync.mockImplementationOnce(() => {
+                throw mockFsError('EACCES');
+            });
+            expect(lock.held?.()).toBe(false);
+        });
+
+        test('a stale lock another process took over in the moment of the touch is not held', () => {
+            const lock = joinState.acquireUnlockLock('c1');
+            lockFile()!.mtimeMs = Date.now() - 5 * 60_000;
+            fs.utimesSync.mockImplementationOnce(() => {
+                mockFiles.set(LOCK, { content: 'another-process-token', mtimeMs: Date.now() });
+            });
+            expect(lock.held?.()).toBe(false);
+        });
+    });
+
     test('renewal stops when the lock was lost to another owner, and when the file cannot be touched', () => {
         const lost = joinState.acquireUnlockLock('c1');
         mockFiles.set(LOCK, { content: 'another-process-token', mtimeMs: Date.now() });

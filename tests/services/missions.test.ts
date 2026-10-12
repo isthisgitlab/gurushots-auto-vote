@@ -30,6 +30,7 @@ const {
     classifyMission,
     loadMissionNeeds,
     consumeMission,
+    neediestFillMission,
     isMissionVoteCandidate,
     missionVoteQuota,
     registerMissionNeeds,
@@ -131,6 +132,34 @@ describe('classifyMission', () => {
         expect(classifyMission({ id: 1, description: 'Join 3 challenges' })).toBe('join');
         expect(classifyMission(invalid(null))).toBeNull();
     });
+
+    test.each([
+        // The action the mission asks for is the first keyword, not the reward it goes on to name.
+        ['Join 3 challenges and get 2 fills', 'join'],
+        ['Join 3 challenges to win 2 Turbos', 'join'],
+        ['Use Fill 3 times to get a free join', 'fill'],
+        ['Win Turbo 4 times and join a challenge', 'turbo'],
+        ['Get 2 fills for joining 3 challenges', 'fill'],
+    ])('%s → %s', (name, kind) => {
+        expect(classifyMission({ id: 1, name })).toBe(kind);
+    });
+
+    test('the name says what is asked for, the description is only its fallback', () => {
+        expect(classifyMission({ id: 1, name: 'Join 3 challenges', description: 'Reward: get 2 fills' })).toBe('join');
+        expect(classifyMission({ id: 1, name: 'Daily mission', description: 'Join 3 challenges, get 2 fills' })).toBe(
+            'join',
+        );
+        expect(classifyMission({ id: 1, name: 'Daily mission', description: 'Reach the top' })).toBeNull();
+    });
+
+    test('a join mission that names fills in its description is not a fill mission', async () => {
+        const needs = await loadMissionNeeds('tok', NOW_MS, {
+            getMyMissions: jest.fn(async () => [
+                mission('Join 3 challenges', 0, 3, { description: 'Join 3 challenges and get 2 fills' }),
+            ]),
+        });
+        expect(needs).toEqual({ join: 3, fill: 0, turbo: 0, vote: 0 });
+    });
 });
 
 describe('loadMissionNeeds', () => {
@@ -150,6 +179,7 @@ describe('loadMissionNeeds', () => {
             turbo: 4,
             vote: 300,
             turboRequirements: [{ remaining: 4, expiresAtSec: NOW_SEC + 3600 }],
+            fillMissions: [{ id: 'Use Fill 3 times', required: 3, current: 1, remaining: 2, spentThisPass: 0 }],
         });
         expect(d.getMyMissions).toHaveBeenCalledWith('tok');
     });
@@ -364,5 +394,47 @@ describe('consumeMission', () => {
         consumeMission(needs, 'fill');
         expect(needs).toEqual({ join: 0, fill: 0, turbo: 1, vote: 0 });
         expect(() => consumeMission(null, 'join')).not.toThrow();
+    });
+
+    test('a fill counts toward every "Use Fill" mission, never below what it needs', () => {
+        const mission = (id: string, remaining: number) => ({
+            id,
+            required: 5,
+            current: 0,
+            remaining,
+            spentThisPass: 0,
+        });
+        const needs = {
+            join: 0,
+            fill: 2,
+            turbo: 0,
+            vote: 0,
+            fillMissions: [mission('a', 2), mission('b', 1)],
+        };
+        consumeMission(needs, 'fill');
+        expect(needs.fillMissions.map((m) => m.remaining)).toEqual([1, 0]);
+        consumeMission(needs, 'fill');
+        consumeMission(needs, 'fill');
+        expect(needs.fillMissions.map((m) => m.remaining)).toEqual([0, 0]);
+        expect(needs.fill).toBe(0);
+    });
+});
+
+describe('neediestFillMission', () => {
+    const mission = (id: string, remaining: number) => ({ id, required: 5, current: 0, remaining, spentThisPass: 0 });
+
+    test('is the "Use Fill" mission that still needs the most, and none when none does', () => {
+        const needs = {
+            join: 0,
+            fill: 3,
+            turbo: 0,
+            vote: 0,
+            fillMissions: [mission('a', 1), mission('b', 3), mission('c', 0)],
+        };
+        expect(neediestFillMission(needs)?.id).toBe('b');
+        needs.fillMissions = [mission('c', 0)];
+        expect(neediestFillMission(needs)).toBeNull();
+        expect(neediestFillMission({ join: 0, fill: 0, turbo: 0, vote: 0 })).toBeNull();
+        expect(neediestFillMission(null)).toBeNull();
     });
 });

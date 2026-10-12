@@ -458,6 +458,91 @@ describe('performJoin — ordering & idempotency', () => {
     });
 });
 
+describe('a paid join the pass decided: the price is read again right before the claim', () => {
+    const open = (cost: number | undefined, id = 7) => [{ id, join_coins: cost }];
+    const warned = () => invalid<LoggerMock>(require('../../src/ts/logger')).withCategory().warning;
+
+    test('a price that is unchanged joins', async () => {
+        const deps = makeDeps({ getMemberChallenges: openList(open(100)) });
+        const res = await performJoin(invalid({ id: 7 }), 'tok', deps, 100, { priceCeiling: 100 });
+        expect(res).toMatchObject({ status: 'joined', charged: 100 });
+        expect(deps.getMemberChallenges).toHaveBeenCalledWith('tok', 'open');
+        expect(deps.coinsUnlock).toHaveBeenCalledTimes(1);
+    });
+
+    test('a price that fell joins', async () => {
+        const deps = makeDeps({ getMemberChallenges: openList(open(80)) });
+        const res = await performJoin(invalid({ id: 7 }), 'tok', deps, 100, { priceCeiling: 100 });
+        expect(res.status).toBe('joined');
+    });
+
+    test('a price that rose is refused: no claim is written and nothing is unlocked', async () => {
+        const store = fileWith({});
+        const deps = makeDeps({ getMemberChallenges: openList(open(120)), joinStateStore: store });
+        const res = await performJoin(invalid({ id: 7 }), 'tok', deps, 100, { priceCeiling: 100 });
+        expect(res).toEqual({ status: 'failed-no-charge', charged: 0 });
+        expect(deps.coinsUnlock).not.toHaveBeenCalled();
+        expect(deps.submitToChallenge).not.toHaveBeenCalled();
+        expect(store.writeRaw).not.toHaveBeenCalled();
+        expect(warned()).toHaveBeenCalledWith(expect.stringContaining('the price rose from 100 to 120'), null);
+    });
+
+    test.each([
+        ['the challenge is no longer on the open list', open(100, 8)],
+        ['the list has no price for it', open(undefined)],
+    ])('%s: the price cannot be read again, so nothing is spent', async (_label, rows) => {
+        const deps = makeDeps({ getMemberChallenges: openList(rows) });
+        const res = await performJoin(invalid({ id: 7 }), 'tok', deps, 100, { priceCeiling: 100 });
+        expect(res.status).toBe('failed-no-charge');
+        expect(deps.coinsUnlock).not.toHaveBeenCalled();
+        expect(warned()).toHaveBeenCalledWith(expect.stringContaining('could not be read again'), null);
+    });
+
+    test('a list that cannot be read at all spends nothing', async () => {
+        const deps = makeDeps({ getMemberChallenges: double<'getMemberChallenges'>(async () => null) });
+        const res = await performJoin(invalid({ id: 7 }), 'tok', deps, 100, { priceCeiling: 100 });
+        expect(res.status).toBe('failed-no-charge');
+        expect(deps.coinsUnlock).not.toHaveBeenCalled();
+    });
+
+    test.each([
+        ['an error', new Error('offline'), 'offline'],
+        ['a bare value', 'plain', 'plain'],
+    ])('a list read that throws %s spends nothing', async (_label, thrown, said) => {
+        const deps = makeDeps({
+            getMemberChallenges: double<'getMemberChallenges'>(async () => {
+                throw thrown;
+            }),
+        });
+        const res = await performJoin(invalid({ id: 7 }), 'tok', deps, 100, { priceCeiling: 100 });
+        expect(res.status).toBe('failed-no-charge');
+        expect(deps.coinsUnlock).not.toHaveBeenCalled();
+        expect(warned()).toHaveBeenCalledWith(expect.stringContaining(said), null);
+    });
+
+    test('a claim that already exists is only submitted: the price is not asked again', async () => {
+        const deps = makeDeps({
+            getMemberChallenges: openList(open(500)),
+            submitToChallenge: jest.fn().mockResolvedValueOnce({ ok: false }).mockResolvedValueOnce({ ok: true }),
+        });
+        await performJoin(invalid({ id: 9 }), 'tok', deps, 100);
+        const second = await performJoin(invalid({ id: 9 }), 'tok', deps, 100, { priceCeiling: 100 });
+        expect(second.status).toBe('joined');
+        expect(deps.getMemberChallenges).not.toHaveBeenCalled();
+    });
+
+    test('the automatic pass hands its decision price to the join: a rise between decision and claim refuses it', async () => {
+        const open = jest
+            .fn<ReturnType<Endpoint<'getMemberChallenges'>>, Parameters<Endpoint<'getMemberChallenges'>>>()
+            .mockResolvedValueOnce(invalid([{ id: 1, join_coins: 100, type: 'flash' }]))
+            .mockResolvedValue(invalid([{ id: 1, join_coins: 140, type: 'flash' }]));
+        const deps = makeDeps({ getMemberChallenges: open });
+        const res = await runJoinPass('tok', Date.now(), deps);
+        expect(res.results).toEqual([{ id: 1, status: 'failed-no-charge' }]);
+        expect(deps.coinsUnlock).not.toHaveBeenCalled();
+    });
+});
+
 describe('isAutoJoinActive', () => {
     test('true when the master default is on', () => {
         settings.getEffectiveSetting.mockImplementation((k) => (k === 'autoJoin' ? true : DEFAULT_SETTINGS[k]));

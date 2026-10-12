@@ -5,6 +5,7 @@
 import type { Challenge, ChallengeMember, MemberRanking, RankingEntry } from '../../types/gurushots';
 import type { ScenarioState, SpendAction } from '../../types/stores';
 import type { ScenarioStateLedger } from '../../types/votingPass';
+import type { StateLock } from '../../scenarioStateStore';
 import type { CurrencyPassDeps } from '../currencyAuto';
 import type { ScenarioDocument } from '../../settings/scenarioSchema';
 import type { PassContext } from '../votingOrchestrator';
@@ -34,6 +35,8 @@ type RunnerContext = {
     timezone: string;
     pass: ScenarioPass;
     ledger: ScenarioStateLedger;
+    /** The cross-process lock of the challenge's steps that this step runs under (none where one process runs them). */
+    stepLock?: StateLock;
     /**
      * Set by the rule for the step it is running: writes the spend down just before its request is made (the
      * pending marker). False means it could not be written, and the spend is not made. Null where the step makes no

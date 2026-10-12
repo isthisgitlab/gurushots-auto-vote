@@ -180,6 +180,15 @@ describe('createStateLedger', () => {
         ],
         ['bad history', { ...initialState('Plan', 'a', 1), history: [] }],
         ['bad outbox', { ...initialState('Plan', 'a', 1), outbox: {} }],
+        ['a photo’s history that is not a list', { ...initialState('Plan', 'a', 1), history: { 9: {} } }],
+        ['a sample that is not a pair', { ...initialState('Plan', 'a', 1), history: { 9: [[1, 2, 3]] } }],
+        ['a sample that is not numbers', { ...initialState('Plan', 'a', 1), history: { 9: [[1, 'x']] } }],
+        ['a notice that is not an object', { ...initialState('Plan', 'a', 1), outbox: ['x'] }],
+        ['a notice without a message', { ...initialState('Plan', 'a', 1), outbox: [{ id: 'a', at: 1 }] }],
+        [
+            'a notice with a time that is not a number',
+            { ...initialState('Plan', 'a', 1), outbox: [{ id: 'a', at: 'x', message: 'm' }] },
+        ],
         ['a count of resets that is not a number', { ...initialState('Plan', 'a', 1), gen: 'x' }],
     ])(
         'a malformed record (%s) is corrupt, as a record and not as a file, without affecting others',
@@ -433,6 +442,71 @@ describe('the file’s changes are made under a lock across processes', () => {
         );
         expect(ledger.set(7, state())).toBe('saved');
         expect(release).toHaveBeenCalledTimes(2);
+    });
+});
+
+describe('a state is written only over the record it was read from', () => {
+    // Two ledgers over one file: two processes whose step lock one of them lost.
+    const twoOver = (store = rawStore()) => ({ store, a: createStateLedger(store), b: createStateLedger(store) });
+    const warned = () => invalid<() => CategoryLogger>(logger.withCategory)().warning;
+
+    test('a state whose record another process changed since it was read is refused, and the other change stays', () => {
+        const { a, b } = twoOver();
+        a.set(7, state());
+        const mine = a.get(7).state!;
+        const theirs = b.get(7).state!;
+        expect(b.set(7, { ...theirs, phase: 'theirs' })).toBe('saved');
+        expect(a.set(7, { ...mine, phase: 'mine' })).toBe('refused');
+        expect(a.get(7).state!.phase).toBe('theirs');
+        expect(warned()).toHaveBeenCalledWith(
+            'scenario state of challenge 7 was changed by another process meanwhile — not written',
+            null,
+        );
+    });
+
+    test('a write-ahead marker is refused the same way, so a step does not spend over the other process’s marker', () => {
+        const { a, b } = twoOver();
+        a.set(7, state());
+        const mine = a.get(7).state!;
+        const theirs = b.get(7).state!;
+        const marker = (from: typeof mine) => ({
+            ...from,
+            inFlight: { ruleId: 'r', actionIndex: 0, pending: 'swap' as const },
+        });
+        expect(b.set(7, marker(theirs))).toBe('saved');
+        expect(a.set(7, marker(mine))).toBe('refused');
+    });
+
+    test('the writer’s own successive writes go on from what it wrote, and a state derived from the read keeps its place', () => {
+        const { a } = twoOver();
+        a.set(7, state());
+        const read = a.get(7).state!;
+        expect(a.set(7, { ...read, phase: 'one' })).toBe('saved');
+        expect(a.set(7, { ...read, phase: 'two' })).toBe('saved');
+        expect(a.set(7, { ...read, phase: 'two', lastError: { at: 1, message: 'x' } })).toBe('saved');
+        expect(a.get(7).state!.phase).toBe('two');
+    });
+
+    test('a first write over no record is refused when another process has made one since', () => {
+        const { a, b } = twoOver();
+        const { state: none, epoch } = a.get(7);
+        expect(none).toBeNull();
+        expect(b.set(7, state())).toBe('saved');
+        expect(a.set(7, { ...state(), epoch })).toBe('refused');
+        expect(a.get(7).state).not.toBeNull();
+    });
+
+    test('a failed write leaves its place as it was, and a state that was not read from the ledger is not compared', () => {
+        const { a, store } = twoOver();
+        a.set(7, state());
+        const read = a.get(7).state!;
+        jest.mocked(store.writeRaw).mockImplementationOnce(() => {
+            throw new Error('disk full');
+        });
+        expect(a.set(7, { ...read, phase: 'x' })).toBe('failed');
+        expect(a.set(7, { ...read, phase: 'y' })).toBe('saved');
+        // No epoch: nothing to be compared against.
+        expect(a.set(7, { ...state(), phase: 'z' })).toBe('saved');
     });
 });
 

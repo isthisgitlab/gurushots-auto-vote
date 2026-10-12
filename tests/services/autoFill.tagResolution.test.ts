@@ -230,6 +230,22 @@ describe('fetchCandidatesForChallenge — tag resolution', () => {
         expect(category.info).toHaveBeenCalledWith(expect.stringContaining(`Description: "${stripped}"`), null);
     });
 
+    test('a description that is a long run of opening brackets is logged cut short, in linear time', async () => {
+        const { logger, category } = makeLogger();
+        const started = Date.now();
+        await fetchCandidatesForChallenge(
+            invalid({ id: 'c-brackets', title: 'Roads to Anywhere', welcome_message: '<'.repeat(100_000) }),
+            'tok',
+            {},
+            { getEligiblePhotos: makeGetEligiblePhotos(), logger },
+        );
+        expect(Date.now() - started).toBeLessThan(1000);
+        const line = category.info.mock.calls
+            .map(([message]) => String(message))
+            .find((m) => m.includes('Description: "'));
+        expect(line!.length).toBeLessThan(5000);
+    });
+
     test('a contest-cadence title reads as an open theme and says so', async () => {
         // "week" is a stopword, so "Guru of The Week" yields no search term at
         // all — a different case from a theme that was searched and missed, and

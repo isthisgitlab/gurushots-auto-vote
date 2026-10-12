@@ -23,6 +23,7 @@
 
 import * as logger from '../../logger';
 import * as cancellation from '../../voting/cancellation';
+import { errorMessage } from '../../errorMessage';
 import type { Challenge } from '../../types/gurushots';
 import { sanitizeLogString } from '../../logger/sanitize';
 import { cat, inFlight, lockFor } from './shared';
@@ -128,6 +129,38 @@ const releaseRefusedClaim = async (deps: JoinDeps, id: string | number, owner: s
 };
 
 /**
+ * Whether the price still holds: the open list is read again, and the challenge must still be on it at no more than
+ * the price the decision to join used. A price that cannot be read again is not one to spend on.
+ */
+const priceHolds = async (challenge: Challenge, token: string, deps: JoinDeps, ceiling: number): Promise<boolean> => {
+    const tag = logger.challengeTag(challenge);
+    let open;
+    try {
+        open = await deps.getMemberChallenges(token, 'open');
+    } catch (error) {
+        cat().warning(
+            `${tag}: could not read the price again (${errorMessage(error) || error}) — not spending coins`,
+            null,
+        );
+        return false;
+    }
+    const live = open?.find((c) => String(c?.id) === String(challenge?.id));
+    const cost = Number(live?.join_coins);
+    if (!Number.isFinite(cost)) {
+        cat().warning(`${tag}: its price could not be read again — not spending coins`, null);
+        return false;
+    }
+    if (cost > ceiling) {
+        cat().warning(
+            `${tag}: the price rose from ${ceiling} to ${cost} coins since it was decided — not spending coins`,
+            null,
+        );
+        return false;
+    }
+    return true;
+};
+
+/**
  * The check→claim→unlock section, run under the cross-process lock. Re-reads
  * the unlock claim authoritatively — another process may have unlocked between
  * the caller's first check and acquiring the lock.
@@ -142,6 +175,7 @@ const claimAndUnlock = async (
     needsCoins: number,
     owner: string | null,
     coinsBefore: number | null,
+    priceCeiling: number | undefined,
 ): Promise<{ outcome: JoinOutcome } | UnlockState> => {
     const id = challenge?.id;
     const { state, ok: stateOk } = readUnlockedState(deps.joinStateStore);
@@ -158,6 +192,10 @@ const claimAndUnlock = async (
         return joined ? { outcome: joined } : { charged: 0, alreadyUnlocked: true, claim: existing };
     }
     if (cancellation.isCancelled()) return { outcome: failedNoCharge() };
+    // The price the decision used may have moved while the photo was picked: asked right before the claim.
+    if (priceCeiling !== undefined && !(await priceHolds(challenge, token, deps, priceCeiling))) {
+        return { outcome: failedNoCharge() };
+    }
     // Persist the claim BEFORE spending, so a crash the instant
     // after the charge can never let a later pass re-unlock. If
     // the claim cannot be recorded, do not spend at all.
@@ -202,6 +240,7 @@ const unlockUnderLock = async (
     needsCoins: number,
     owner: string | null,
     coinsBefore: number | null,
+    priceCeiling: number | undefined,
 ): ReturnType<typeof claimAndUnlock> => {
     const id = challenge?.id;
     const xlock = lockFor(deps, id);
@@ -209,7 +248,7 @@ const unlockUnderLock = async (
         return { outcome: { status: 'busy', charged: 0 } };
     }
     try {
-        return await claimAndUnlock(challenge, token, deps, needsCoins, owner, coinsBefore);
+        return await claimAndUnlock(challenge, token, deps, needsCoins, owner, coinsBefore, priceCeiling);
     } finally {
         xlock.release();
     }
@@ -362,6 +401,8 @@ const noPhotoOutcome = (reason: JoinPick['reason'], owedClaim: Claim | null): Jo
  *   does not apply (the call site says so, never the renderer)
  * @param options.coinsBefore the balance the caller already had, kept in the claim for the user to compare with
  *   GuruShots if the unlock gets no answer; nothing decides on it, and it costs no request
+ * @param options.priceCeiling the price the decision to join used (the automatic pass): the open list is read again
+ *   right before the claim, and a price above it, or one that cannot be read, spends nothing
  * @param options.submitOnly the caller saw an unlock marker and skipped the price and balance checks
  *   on that account: if this call's own read of the marker finds none (another process cleared it,
  *   or the file is unreadable) nothing is unlocked — a charge nobody consented to
@@ -379,7 +420,8 @@ const performJoin = async (
         manual = false,
         submitOnly = false,
         coinsBefore = null,
-    }: { manual?: boolean; submitOnly?: boolean; coinsBefore?: number | null } = {},
+        priceCeiling,
+    }: { manual?: boolean; submitOnly?: boolean; coinsBefore?: number | null; priceCeiling?: number } = {},
 ): Promise<JoinOutcome> => {
     const id = challenge?.id;
     const key = String(id);
@@ -422,7 +464,7 @@ const performJoin = async (
 
         // 2. Paid unlock (skipped when a prior pass already unlocked → retry submit only).
         if (needsCoins > 0 && !unlock.alreadyUnlocked) {
-            const claimed = await unlockUnderLock(challenge, token, deps, needsCoins, owner, coinsBefore);
+            const claimed = await unlockUnderLock(challenge, token, deps, needsCoins, owner, coinsBefore, priceCeiling);
             if ('outcome' in claimed) return claimed.outcome;
             unlock = claimed;
         }

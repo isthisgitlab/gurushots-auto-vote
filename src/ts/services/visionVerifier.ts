@@ -14,7 +14,7 @@ import * as runtime from '../runtime';
 import { appPath } from '../appPaths';
 import { entryPhotoUrl } from '../format/photoUrl';
 import { oneLine } from '../format/logSafe';
-import { visualSubjectWords } from './photoPicker';
+import { stripTags, visualSubjectWords } from './photoPicker';
 
 import type { ChallengeText, IgnoreWords, PickerPhoto } from '../types/photoPicker';
 import type { FillLogger } from '../types/autoFill';
@@ -131,8 +131,7 @@ const getClassifier = () => {
  */
 const descriptionLead = (message: string | undefined): string => {
     if (typeof message !== 'string') return '';
-    let text = message
-        .replace(/<[^>]*>/g, ' ')
+    let text = stripTags(message)
         .replace(
             /&(?:amp|quot|#39|apos|nbsp);/g,
             // The pattern only matches the table's own keys.

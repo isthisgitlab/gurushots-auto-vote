@@ -27,23 +27,23 @@ const rawStore = (initial: string | null) => {
 };
 
 describe('auto-spend ledger', () => {
-    test('counts fills per challenge', () => {
+    test('counts fills per challenge', async () => {
         const ledger = createMemoryAutoSpendLedger();
         expect(ledger.fills(1)).toBe(0);
-        ledger.reserveFill(1);
-        ledger.reserveFill('1');
-        ledger.reserveFill(2);
+        await ledger.reserveFill(1);
+        await ledger.reserveFill('1');
+        await ledger.reserveFill(2);
         expect(ledger.fills('1')).toBe(2);
         expect(ledger.fills(2)).toBe(1);
     });
 
-    test('a value that is no JSON object, or a store that cannot be read, is not an empty ledger: unknown, never written over', () => {
+    test('a value that is no JSON object, or a store that cannot be read, is not an empty ledger: unknown, never written over', async () => {
         for (const raw of ['{nope', '[1,2]', 'null', '"x"', '']) {
             const store = rawStore(raw);
             const ledger = createAutoSpendLedger(store);
             expect(ledger.fills(1)).toBe(Number.POSITIVE_INFINITY);
-            expect(ledger.reserveFill(1)).toBe(false);
-            ledger.releaseFill(1);
+            await expect(ledger.reserveFill(1)).resolves.toBe(false);
+            await ledger.releaseFill(1);
             expect(store.raw()).toBe(raw);
         }
         const unreadable = createAutoSpendLedger(
@@ -56,7 +56,7 @@ describe('auto-spend ledger', () => {
         expect(unreadable.fills(1)).toBe(Number.POSITIVE_INFINITY);
     });
 
-    test('says once that the fills stopped, naming the reason and never quoting the text, and again after it recovered', () => {
+    test('says once that the fills stopped, naming the reason and never quoting the text, and again after it recovered', async () => {
         const warning = jest.fn();
         // One category lookup for each warning said.
         jest.mocked(logger.withCategory)
@@ -66,7 +66,7 @@ describe('auto-spend ledger', () => {
         const ledger = createAutoSpendLedger(store);
         ledger.fills(1);
         ledger.fills(1);
-        ledger.reserveFill(1);
+        await ledger.reserveFill(1);
         expect(warning).toHaveBeenCalledTimes(1);
         expect(warning).toHaveBeenCalledWith(
             'auto-spend ledger is not valid JSON (SyntaxError) — no automatic fills until it can be read (tries again next cycle)',
@@ -83,50 +83,50 @@ describe('auto-spend ledger', () => {
         );
     });
 
-    test('malformed records read as 0 and are dropped on the next write', () => {
+    test('malformed records read as 0 and are dropped on the next write', async () => {
         const store = rawStore(JSON.stringify({ 1: { fills: 'x', at: 1 }, 2: { fills: -1, at: 1 }, 3: null }));
         const ledger = createAutoSpendLedger(store);
         expect(ledger.fills(1)).toBe(0);
         expect(ledger.fills(2)).toBe(0);
-        ledger.reserveFill(4);
+        await ledger.reserveFill(4);
         expect(Object.keys(store.peek())).toEqual(['4']);
     });
 
-    test('records older than 30 days are pruned on write', () => {
+    test('records older than 30 days are pruned on write', async () => {
         const store = rawStore(JSON.stringify({ old: { fills: 2, at: Date.now() - 31 * 24 * 3600 * 1000 } }));
         const ledger = createAutoSpendLedger(store);
         // A finished challenge does not count, on read either.
         expect(ledger.fills('old')).toBe(0);
-        ledger.reserveFill('new');
+        await ledger.reserveFill('new');
         expect(store.peek()).toEqual({ new: { fills: 1, at: expect.any(Number) } });
     });
 
-    test('a fill reserved and not made is taken back, and never below none', () => {
+    test('a fill reserved and not made is taken back, and never below none', async () => {
         const ledger = createMemoryAutoSpendLedger();
-        ledger.reserveFill(1);
-        ledger.reserveFill(1);
-        ledger.releaseFill(1);
+        await ledger.reserveFill(1);
+        await ledger.reserveFill(1);
+        await ledger.releaseFill(1);
         expect(ledger.fills(1)).toBe(1);
-        ledger.releaseFill(1);
-        ledger.releaseFill(1);
+        await ledger.releaseFill(1);
+        await ledger.releaseFill(1);
         expect(ledger.fills(1)).toBe(0);
     });
 
-    test('a ledger that was not loaded is not an empty one: no count, nothing reserved, nothing written', () => {
+    test('a ledger that was not loaded is not an empty one: no count, nothing reserved, nothing written', async () => {
         const store = rawStore(JSON.stringify({ 1: { fills: 3, at: Date.now() } }));
         const writeRaw = jest.spyOn(store, 'writeRaw');
         let loaded = false;
         const ledger = createAutoSpendLedger(store, () => loaded);
         expect(ledger.fills(1)).toBe(Number.POSITIVE_INFINITY);
-        expect(ledger.reserveFill(1)).toBe(false);
-        ledger.releaseFill(1);
+        await expect(ledger.reserveFill(1)).resolves.toBe(false);
+        await ledger.releaseFill(1);
         expect(writeRaw).not.toHaveBeenCalled();
         loaded = true;
         expect(ledger.fills(1)).toBe(3);
-        expect(ledger.reserveFill(1)).toBe(true);
+        await expect(ledger.reserveFill(1)).resolves.toBe(true);
     });
 
-    test('a release the store refuses leaves the fill counted: a count too high only holds a fill back', () => {
+    test('a release the store refuses leaves the fill counted: a count too high only holds a fill back', async () => {
         let writes = 0;
         let raw: string | null = null;
         const ledger = createAutoSpendLedger({
@@ -136,12 +136,12 @@ describe('auto-spend ledger', () => {
                 raw = data;
             },
         });
-        expect(ledger.reserveFill(1)).toBe(true);
-        ledger.releaseFill(1);
+        await expect(ledger.reserveFill(1)).resolves.toBe(true);
+        await ledger.releaseFill(1);
         expect(ledger.fills(1)).toBe(1);
     });
 
-    test('a write the store refused is not a reserved fill, and is logged', () => {
+    test('a write the store refused is not a reserved fill, and is logged', async () => {
         const error = jest.fn();
         jest.mocked(logger.withCategory).mockReturnValue(invalid({ error, warning: jest.fn() }));
         const ledger = createAutoSpendLedger({
@@ -150,9 +150,123 @@ describe('auto-spend ledger', () => {
                 throw new Error('Headless gs_auto_spends was not persisted');
             },
         });
-        expect(ledger.reserveFill(1)).toBe(false);
+        await expect(ledger.reserveFill(1)).resolves.toBe(false);
         expect(error).toHaveBeenCalledWith(expect.stringContaining('was not persisted'), null);
     });
+});
+
+describe('auto-spend ledger — caps are held where the count is written', () => {
+    test('a reserve with a cap refuses once the count has reached it, as it stands when the write is made', async () => {
+        const store = rawStore(null);
+        const ledger = createAutoSpendLedger(store);
+        await expect(ledger.reserveFill(1, { max: 2 })).resolves.toBe(true);
+        await expect(ledger.reserveFill(1, { max: 2 })).resolves.toBe(true);
+        await expect(ledger.reserveFill(1, { max: 2 })).resolves.toBe(false);
+        expect(ledger.fills(1)).toBe(2);
+    });
+
+    test('a count another context saved after the caller looked is not spent past: the cap is checked on what is stored', async () => {
+        const store = rawStore(null);
+        const ledger = createAutoSpendLedger(store);
+        // What the caller saw before deciding to spend.
+        expect(ledger.fills(1)).toBe(0);
+        // The other context counts its fill.
+        store.set(JSON.stringify({ 1: { fills: 1, at: Date.now() } }));
+        await expect(ledger.reserveFill(1, { max: 1 })).resolves.toBe(false);
+        expect(store.peek()['1'].fills).toBe(1);
+    });
+
+    test('two reserves made together count once each, never twice for the same fill, and never past the cap', async () => {
+        // A store that saves behind a moment, as the app does, one write after another.
+        let raw: string | null = null;
+        let queue: Promise<unknown> = Promise.resolve();
+        const store = {
+            readRaw: () => raw,
+            writeRaw: (data: string) => {
+                raw = data;
+            },
+            updateThrough: (update: (current: string | null) => string | null) => {
+                const run = queue.then(async () => {
+                    await Promise.resolve();
+                    const data = update(raw);
+                    if (data === null) return 'aborted' as const;
+                    raw = data;
+                    return 'saved' as const;
+                });
+                queue = run;
+                return run;
+            },
+        };
+        const ledger = createAutoSpendLedger(store);
+        const [a, b, c] = await Promise.all([
+            ledger.reserveFill(1, { max: 2 }),
+            ledger.reserveFill(1, { max: 2 }),
+            ledger.reserveFill(1, { max: 2 }),
+        ]);
+        expect([a, b, c].filter(Boolean)).toHaveLength(2);
+        expect(ledger.fills(1)).toBe(2);
+    });
+
+    test('a release for a challenge with no count leaves it at none', async () => {
+        const ledger = createMemoryAutoSpendLedger();
+        await ledger.releaseFill('never-counted');
+        expect(ledger.fills('never-counted')).toBe(0);
+    });
+
+    test('the progress of a mission is kept with its count, and survives a release', async () => {
+        const store = rawStore(null);
+        const ledger = createAutoSpendLedger(store);
+        expect(ledger.lastProgress('mission:5')).toBeNull();
+        await ledger.reserveFill('mission:5', { progress: 2 });
+        expect(ledger.lastProgress('mission:5')).toBe(2);
+        await ledger.reserveFill('mission:5');
+        expect(ledger.lastProgress('mission:5')).toBe(2);
+        await ledger.releaseFill('mission:5');
+        expect(ledger.fills('mission:5')).toBe(1);
+        expect(ledger.lastProgress('mission:5')).toBe(2);
+    });
+
+    test('a record with a progress that is not a number is not a record', async () => {
+        const store = rawStore(JSON.stringify({ 'mission:5': { fills: 1, at: Date.now(), progress: 'x' } }));
+        const ledger = createAutoSpendLedger(store);
+        expect(ledger.fills('mission:5')).toBe(0);
+        expect(ledger.lastProgress('mission:5')).toBeNull();
+    });
+
+    test('a ledger that cannot be trusted has no progress to say', () => {
+        expect(createAutoSpendLedger(rawStore('[]')).lastProgress('mission:5')).toBeNull();
+    });
+
+    test('a write the store reports as failed is logged and is not a reserved fill', async () => {
+        const error = jest.fn();
+        jest.mocked(logger.withCategory).mockReturnValue(invalid({ error, warning: jest.fn() }));
+        const ledger = createAutoSpendLedger({
+            readRaw: () => null,
+            writeRaw: jest.fn(),
+            updateThrough: async () => 'failed' as const,
+        });
+        await expect(ledger.reserveFill(1)).resolves.toBe(false);
+        expect(error).toHaveBeenCalledWith('auto-spend ledger not written', null);
+    });
+
+    test.each(['[1]', '{nope'])(
+        'a ledger that stops being readable while a write waits (%s) is not written over',
+        async (text) => {
+            const store = rawStore(null);
+            const ledger = createAutoSpendLedger({
+                readRaw: () => store.raw(),
+                writeRaw: store.writeRaw,
+                updateThrough: async (update) => {
+                    // By its turn the stored text is no JSON object.
+                    store.set(text);
+                    const data = update(store.raw());
+                    return data === null ? 'aborted' : 'saved';
+                },
+            });
+            await expect(ledger.reserveFill(1)).resolves.toBe(false);
+            expect(store.raw()).toBe(text);
+        },
+    );
 });
 
 describe('flushing the ledger on teardown', () => {
@@ -199,7 +313,7 @@ describe('whether the ledger of the real store can be trusted', () => {
         return ledger;
     };
 
-    test('on the service a read that threw is not a count of none', () => {
+    test('on the service a read that threw is not a count of none', async () => {
         g.__GS_HEADLESS__ = true;
         g.AndroidHeadlessStore = {
             read: () => null,
@@ -208,23 +322,54 @@ describe('whether the ledger of the real store can be trusted', () => {
                 throw new Error('bridge down');
             },
             writeKey: jest.fn(() => true),
+            compareAndWriteKey: jest.fn(() => true),
         };
         const ledger = load();
         expect(ledger.fills(1)).toBe(Number.POSITIVE_INFINITY);
-        expect(ledger.reserveFill(1)).toBe(false);
+        await expect(ledger.reserveFill(1)).resolves.toBe(false);
     });
 
-    test('on the service a write the bridge refused is not a reserved fill', () => {
+    test('on the service a write the bridge refused is not a reserved fill', async () => {
         g.__GS_HEADLESS__ = true;
         g.AndroidHeadlessStore = {
             read: () => null,
             write: jest.fn(),
             readKey: () => null,
             writeKey: jest.fn(() => false),
+            compareAndWriteKey: jest.fn(() => false),
         };
         const ledger = load();
         expect(ledger.fills(1)).toBe(0);
-        expect(ledger.reserveFill(1)).toBe(false);
+        await expect(ledger.reserveFill(1)).resolves.toBe(false);
+    });
+
+    test('on the service a count is saved by the native compare-and-write, made again on what the app window saved meanwhile', async () => {
+        let stored: string | null = JSON.stringify({ 2: { fills: 1, at: Date.now() } });
+        const compareAndWriteKey = jest.fn((_key: string, expected: string, data: string) => {
+            if (expected !== (stored ?? '')) return false;
+            stored = data;
+            return true;
+        });
+        g.__GS_HEADLESS__ = true;
+        // The window saves a fill of its own between the service's read of the key and its save.
+        let reads = 0;
+        g.AndroidHeadlessStore = {
+            read: () => null,
+            write: jest.fn(),
+            readKey: () => {
+                const seen = stored;
+                // The first read is the ledger's own look; the second is the change's.
+                if (++reads === 2) stored = JSON.stringify({ 2: { fills: 2, at: Date.now() } });
+                return seen;
+            },
+            writeKey: jest.fn(() => false),
+            compareAndWriteKey,
+        };
+        const ledger = load();
+        await expect(ledger.reserveFill(1)).resolves.toBe(true);
+        const saved = JSON.parse(stored!) as Record<string, { fills: number }>;
+        expect(saved['1'].fills).toBe(1);
+        expect(saved['2'].fills).toBe(2);
     });
 
     test('in the app window a cache that was never filled is not a count of none', () => {
@@ -233,12 +378,12 @@ describe('whether the ledger of the real store can be trusted', () => {
         expect(ledger.fills(1)).toBe(Number.POSITIVE_INFINITY);
     });
 
-    test('on the desktop the file is the ledger, replaced whole on every write so a crash cannot leave half of it', () => {
+    test('on the desktop the file is the ledger, replaced whole on every write so a crash cannot leave half of it', async () => {
         jest.mocked(fsModule.readdirSync).mockReturnValue([]);
         jest.mocked(fsModule.existsSync).mockReturnValue(false);
         const ledger = load();
         expect(ledger.fills(1)).toBe(0);
-        expect(ledger.reserveFill(1)).toBe(true);
+        await expect(ledger.reserveFill(1)).resolves.toBe(true);
         // Written to a temporary file and renamed over it.
         expect(fsModule.renameSync).toHaveBeenCalledWith(
             expect.stringContaining('autoSpends.json.'),

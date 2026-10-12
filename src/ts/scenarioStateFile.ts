@@ -11,7 +11,7 @@ import { acquireWithin } from './lockWait';
 import { throughStore } from './settings/storeTransport';
 
 /** A cross-process lock, as joinStateStore's acquireUnlockLock gives one. */
-type StateLock = { ok: boolean; release: () => void; unavailable?: true };
+type StateLock = { ok: boolean; release: () => void; unavailable?: true; held?: () => boolean };
 
 // `unloaded`: the app's cache has not been filled yet (a start-up read of the file failed), which is not the same as a
 // file that cannot be read: nothing is known of what is stored, and nothing is reset until it is.
@@ -64,6 +64,20 @@ const isFiredRecord = (value: unknown): boolean =>
 const isStringMap = (value: unknown): boolean =>
     isPlainObject(value) && Object.values(value).every((v) => typeof v === 'string');
 
+// One vote sample, [unixSec, votes] (scenarios/speed.ts), and the samples of every photo.
+const isSample = (value: unknown): boolean =>
+    Array.isArray(value) && value.length === 2 && value.every((n) => Number.isFinite(n));
+
+const isHistory = (value: unknown): boolean =>
+    isPlainObject(value) && Object.values(value).every((samples) => Array.isArray(samples) && samples.every(isSample));
+
+// One notice for the host notifiers (scenarioRunner/rule.ts withNotice).
+const isNotice = (value: unknown): boolean =>
+    isPlainObject(value) &&
+    typeof value.id === 'string' &&
+    Number.isFinite(value.at) &&
+    typeof value.message === 'string';
+
 const isInFlight = (value: unknown): boolean =>
     isPlainObject(value) &&
     typeof value.ruleId === 'string' &&
@@ -86,8 +100,8 @@ const isRecord = (r: unknown): r is ScenarioState =>
     Object.values(r.fired).every(isFiredRecord) &&
     isPlainObject(r.spent) &&
     Object.values(r.spent).every((count) => Number.isFinite(count) && Number(count) >= 0) &&
-    (r.history === undefined || isPlainObject(r.history)) &&
-    (r.outbox === undefined || Array.isArray(r.outbox)) &&
+    (r.history === undefined || isHistory(r.history)) &&
+    (r.outbox === undefined || (Array.isArray(r.outbox) && r.outbox.every(isNotice))) &&
     (r.inFlight === null || isInFlight(r.inFlight)) &&
     (r.gen === undefined || isCount(r.gen));
 

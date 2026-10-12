@@ -46,7 +46,7 @@ const { runJoinPass, joinChallengeSingle, forgetUnconfirmedPayment } = jest.mock
 const { loadMissionNeeds, registerMissionNeeds } = jest.mocked(
     require('../../src/ts/services/missions') as typeof missionsModule,
 );
-const { mockApiClient, clearSessionCache } = require('../../src/ts/mock/index') as typeof indexModule;
+const { mockApiClient, mockMetadata, clearSessionCache } = require('../../src/ts/mock/index') as typeof indexModule;
 
 /** Resolve a promise that is gated on simulated latency. */
 const settle = async <T>(promise: Promise<T>): Promise<T> => {
@@ -339,7 +339,7 @@ describe('searchTagAutocomplete', () => {
 describe('submitVotes — metadata bookkeeping', () => {
     const images = [{ id: 'i1' }];
 
-    test('records the ORIGINAL exposure for the challenge after a successful mock vote', async () => {
+    test('records the ORIGINAL exposure for the challenge after a successful mock vote, in memory only', async () => {
         await settle(
             mockApiClient.submitVotes(
                 { images, challenge: invalid({ id: 31 }), voting: { exposure: { exposure_factor: 42.4 } } },
@@ -347,7 +347,11 @@ describe('submitVotes — metadata bookkeeping', () => {
                 80,
             ),
         );
-        expect(metadata.updateChallengeVoteMetadata).toHaveBeenCalledWith('31', 42);
+        expect(mockMetadata.getChallengeMetadata('31')).toEqual({
+            lastVoteTime: expect.any(String),
+            exposureBump: 42,
+        });
+        expect(metadata.updateChallengeVoteMetadata).not.toHaveBeenCalled();
         expect(cat.debug).toHaveBeenCalledWith('Exposure threshold: 80', null);
         expect(cat.success).toHaveBeenCalledWith(
             'Mock metadata updated for challenge 31: original exposure 42%',
@@ -358,27 +362,16 @@ describe('submitVotes — metadata bookkeeping', () => {
 
     test('defaults the original exposure to 50% when the payload has none', async () => {
         await settle(mockApiClient.submitVotes(invalid({ images, challenge: { id: 32 } }), 'tok'));
-        expect(metadata.updateChallengeVoteMetadata).toHaveBeenCalledWith('32', 50);
+        expect(mockMetadata.getChallengeMetadata(32)).toMatchObject({ exposureBump: 50 });
     });
 
-    test('a failed metadata write is a warning, the vote still succeeds', async () => {
-        metadata.updateChallengeVoteMetadata.mockReturnValueOnce(false);
-        const res = await settle(mockApiClient.submitVotes(invalid({ images, challenge: { id: 33 } }), 'tok'));
-        expect(res).toEqual(expect.objectContaining({ success: true }));
-        expect(cat.warning).toHaveBeenCalledWith('Failed to update mock metadata for challenge 33', null);
-    });
-
-    test('a throwing metadata write is logged, the vote still succeeds', async () => {
-        metadata.updateChallengeVoteMetadata.mockImplementationOnce(() => {
-            throw new Error('disk');
-        });
-        const res = await settle(mockApiClient.submitVotes(invalid({ images, challenge: { id: 34 } }), 'tok'));
-        expect(res).toEqual(expect.objectContaining({ success: true }));
-        expect(cat.error).toHaveBeenCalledWith('Error updating mock metadata: disk', null);
+    test('a challenge that was not voted on has no entry', () => {
+        expect(mockMetadata.getChallengeMetadata('no-such-challenge')).toBeNull();
     });
 
     test.each([[undefined], [{}]])('no challenge id (%p) → no metadata write', async (challenge) => {
         await settle(mockApiClient.submitVotes(invalid({ images, challenge }), 'tok'));
+        expect(cat.success).not.toHaveBeenCalled();
         expect(metadata.updateChallengeVoteMetadata).not.toHaveBeenCalled();
     });
 

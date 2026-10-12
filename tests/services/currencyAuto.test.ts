@@ -21,9 +21,11 @@ import settingsModule = require('../../src/ts/settings');
 const settings = jest.mocked(settingsModule);
 import currencyActionsModule = require('../../src/ts/services/currencyActions');
 const currencyActions = jest.mocked(currencyActionsModule);
+import type * as loggerModule from '../../src/ts/logger';
 import type * as currencyAutoModule from '../../src/ts/services/currencyAuto';
 import type * as currencyAutoStoreModule from '../../src/ts/currencyAutoStore';
 import type { CurrencyPassDeps } from '../../src/ts/services/currencyAuto';
+import type { FillMission, MissionNeeds } from '../../src/ts/services/missions';
 import type {
     Challenge,
     MemberBoost,
@@ -34,7 +36,8 @@ import type {
 import { invalid } from '../helpers/invalid';
 const { runAutoKey, runAutoSwap, runAutoExposureFill, runMissionFill } =
     require('../../src/ts/services/currencyAuto') as typeof currencyAutoModule;
-const { createMemoryAutoSpendLedger } = require('../../src/ts/currencyAutoStore') as typeof currencyAutoStoreModule;
+const { createMemoryAutoSpendLedger, createAutoSpendLedger } =
+    require('../../src/ts/currencyAutoStore') as typeof currencyAutoStoreModule;
 
 const NOW = 1_000_000;
 const H = 3600;
@@ -254,7 +257,7 @@ describe('runAutoSwap', () => {
             'e2',
             'new1',
             'tok',
-            expect.objectContaining({ ledger: ctx.currency.swapLedger }),
+            expect.objectContaining({ ledger: ctx.currency.swapLedger, maxSwaps: 1 }),
         );
         const ranking = ctx.challenge.member.ranking;
         expect(ranking.entries.map((e) => e.id)).toEqual(['e1', 'new1']);
@@ -356,7 +359,7 @@ describe('runAutoExposureFill', () => {
 
     test('stops at the per-challenge automatic fill cap', async () => {
         const ctx = makeCtx();
-        ctx.currency.spendLedger.reserveFill('555');
+        await ctx.currency.spendLedger.reserveFill('555');
         expect(await runAutoExposureFill(ctx, null)).toBe(false);
         set({ autoExposureFillMax: 2 });
         expect(await runAutoExposureFill(ctx, null)).toBe(true);
@@ -368,9 +371,20 @@ describe('runAutoExposureFill', () => {
         expect(await runAutoExposureFill(ctx, null)).toBe(false);
     });
 
+    test('a fill counted by another context since the cap was looked at is not spent past it', async () => {
+        const ctx = makeCtx();
+        const ledger = ctx.currency.spendLedger;
+        // The look at the cap sees no fill; one is counted before this one is.
+        jest.spyOn(ledger, 'fills').mockReturnValueOnce(0);
+        await ledger.reserveFill('555');
+        expect(await runAutoExposureFill(ctx, null)).toBe(false);
+        expect(currencyActions.fillExposure).not.toHaveBeenCalled();
+        expect(ledger.fills('555')).toBe(1);
+    });
+
     test('a fill whose count could not be written down is not made', async () => {
         const ctx = makeCtx();
-        jest.spyOn(ctx.currency.spendLedger, 'reserveFill').mockReturnValue(false);
+        jest.spyOn(ctx.currency.spendLedger, 'reserveFill').mockResolvedValue(false);
         expect(await runAutoExposureFill(ctx, null)).toBe(false);
         expect(currencyActions.fillExposure).not.toHaveBeenCalled();
     });
@@ -386,7 +400,7 @@ describe('runAutoExposureFill', () => {
         const ctx = makeCtx();
         (ctx.currency as CurrencyPassDeps).fillsLeftToService = true;
         expect(await runAutoExposureFill(ctx, null)).toBe(false);
-        expect(await runMissionFill(ctx, 2)).toBe(false);
+        expect(await runMissionFill(ctx, fillNeeds())).toBe(false);
         expect(currencyActions.fillExposure).not.toHaveBeenCalled();
         expect(ctx.currency.spendLedger.fills('555')).toBe(0);
     });
@@ -416,43 +430,183 @@ describe('runAutoExposureFill', () => {
     });
 });
 
+// Every line the code under test has logged at info level.
+const infoLines = (): string[] =>
+    jest
+        .mocked(require('../../src/ts/logger') as typeof loggerModule)
+        .withCategory.mock.results.flatMap((result) =>
+            jest.mocked((result.value as loggerModule.CategoryLogger).info).mock.calls.map((call) => String(call[0])),
+        );
+
+// The mission needs a pass hands over, with one "Use Fill" mission (id 77: 1 of 3 done) unless told otherwise.
+const fillNeeds = (over: Partial<FillMission> = {}) => {
+    const mission = { id: '77', required: 3, current: 1, remaining: 2, spentThisPass: 0, ...over };
+    return invalid<MissionNeeds>({ join: 0, fill: mission.remaining, turbo: 0, vote: 0, fillMissions: [mission] });
+};
+
 describe('runMissionFill', () => {
+    // A context on a fresh challenge over a ledger the passes share: one fill raises a challenge to 100%.
+    const ctxOn = (ledger: ReturnType<typeof createMemoryAutoSpendLedger>) => {
+        const ctx = makeCtx();
+        ctx.currency.spendLedger = ledger;
+        return ctx;
+    };
+
     test('fills toward the mission regardless of the exposure rule, without touching its cap', async () => {
         set({ autoExposureFill: false, autoExposureFillBelow: 0 });
         const ctx = makeCtx({
             challenge: makeChallenge({ member: { ranking: { exposure: { exposure_factor: 95 } } } }),
         });
-        expect(await runMissionFill(ctx, 2)).toBe(true);
+        expect(await runMissionFill(ctx, fillNeeds())).toBe(true);
         expect(currencyActions.fillExposure).toHaveBeenCalledWith(555, 'tok', expect.any(Object));
         expect(ctx.challenge.member.ranking.exposure.exposure_factor).toBe(100);
         expect(ctx.currency.spendLedger.fills('555')).toBe(0);
     });
 
-    test('nothing to do without a mission need or currency endpoints', async () => {
-        expect(await runMissionFill(makeCtx(), 0)).toBe(false);
+    test('counts the fill against the mission, with the progress it had', async () => {
+        const ctx = makeCtx();
+        const needs = fillNeeds();
+        expect(await runMissionFill(ctx, needs)).toBe(true);
+        expect(ctx.currency.spendLedger.fills('mission:77')).toBe(1);
+        expect(ctx.currency.spendLedger.lastProgress('mission:77')).toBe(1);
+        expect(needs.fillMissions![0].spentThisPass).toBe(1);
+    });
+
+    test('nothing to do without a mission need, a mission to count against, a ledger or currency endpoints', async () => {
+        expect(await runMissionFill(makeCtx(), fillNeeds({ remaining: 0 }))).toBe(false);
+        expect(await runMissionFill(makeCtx(), null)).toBe(false);
+        // A need no "Use Fill" mission stands behind cannot be counted, so it is not spent on.
+        expect(await runMissionFill(makeCtx(), invalid<MissionNeeds>({ join: 0, fill: 2, turbo: 0, vote: 0 }))).toBe(
+            false,
+        );
+        const noLedger = makeCtx();
+        (noLedger.currency as CurrencyPassDeps).spendLedger = null;
+        expect(await runMissionFill(noLedger, fillNeeds())).toBe(false);
         const ctx = makeCtx();
         (ctx as Parameters<typeof runMissionFill>[0]).currency = null;
-        expect(await runMissionFill(ctx, 1)).toBe(false);
+        expect(await runMissionFill(ctx, fillNeeds())).toBe(false);
         expect(currencyActions.fillExposure).not.toHaveBeenCalled();
     });
 
     test('skips a challenge that cannot take a fill (full exposure, fill locked)', async () => {
         const full = makeChallenge({ member: { ranking: { exposure: { exposure_factor: 100 } } } });
-        expect(await runMissionFill(makeCtx({ challenge: full }), 1)).toBe(false);
-        expect(await runMissionFill(makeCtx({ challenge: makeChallenge({ fill_locked: true }) }), 1)).toBe(false);
+        expect(await runMissionFill(makeCtx({ challenge: full }), fillNeeds())).toBe(false);
+        expect(await runMissionFill(makeCtx({ challenge: makeChallenge({ fill_locked: true }) }), fillNeeds())).toBe(
+            false,
+        );
         expect(currencyActions.fillExposure).not.toHaveBeenCalled();
     });
 
     test('keeps the fill reserve', async () => {
         set({ currencyReserveFills: 3 });
-        expect(await runMissionFill(makeCtx(), 1)).toBe(false);
+        const ctx = makeCtx();
+        expect(await runMissionFill(ctx, fillNeeds())).toBe(false);
+        expect(currencyActions.fillExposure).not.toHaveBeenCalled();
+        expect(ctx.currency.spendLedger.fills('mission:77')).toBe(0);
+    });
+
+    test('a refused fill leaves the challenge as it was, and is not counted', async () => {
+        currencyActions.fillExposure.mockResolvedValue({ ok: false, outcome: 'api-failed' });
+        const ctx = makeCtx();
+        expect(await runMissionFill(ctx, fillNeeds())).toBe(false);
+        expect(ctx.challenge.member.ranking.exposure.exposure_factor).toBe(20);
+        expect(ctx.currency.spendLedger.fills('mission:77')).toBe(0);
+    });
+
+    test('a fill that got no answer stays counted: it may have been made', async () => {
+        currencyActions.fillExposure.mockResolvedValue({ ok: false, outcome: 'unclear' });
+        const ctx = makeCtx();
+        expect(await runMissionFill(ctx, fillNeeds())).toBe(false);
+        expect(ctx.currency.spendLedger.fills('mission:77')).toBe(1);
+    });
+
+    test('a fill whose count could not be written down is not made', async () => {
+        const ctx = makeCtx();
+        jest.spyOn(ctx.currency.spendLedger, 'reserveFill').mockResolvedValue(false);
+        expect(await runMissionFill(ctx, fillNeeds())).toBe(false);
         expect(currencyActions.fillExposure).not.toHaveBeenCalled();
     });
 
-    test('a refused fill leaves the challenge as it was', async () => {
-        currencyActions.fillExposure.mockResolvedValue({ ok: false, outcome: 'api-failed' });
-        const ctx = makeCtx();
-        expect(await runMissionFill(ctx, 1)).toBe(false);
-        expect(ctx.challenge.member.ranking.exposure.exposure_factor).toBe(20);
+    describe('a mission is not filled for on every pass', () => {
+        test('the fills stop once as many were spent as the mission asks for in all', async () => {
+            const ctx = makeCtx();
+            const ledger = ctx.currency.spendLedger;
+            await ledger.reserveFill('mission:77');
+            await ledger.reserveFill('mission:77');
+            await ledger.reserveFill('mission:77');
+            expect(await runMissionFill(ctx, fillNeeds())).toBe(false);
+            expect(currencyActions.fillExposure).not.toHaveBeenCalled();
+            expect(infoLines().some((line) => line.includes('3 fills already spent on mission 77'))).toBe(true);
+            // The count is held to the cap where it is written, too: not counted past it.
+            expect(ledger.fills('mission:77')).toBe(3);
+        });
+
+        test('across passes: fills that moved the mission go on, up to what it asks for', async () => {
+            const ledger = createMemoryAutoSpendLedger();
+            // Pass 1: 0 of 3 done, two challenges take a fill each.
+            const pass1 = fillNeeds({ current: 0, remaining: 3 });
+            expect(await runMissionFill(ctxOn(ledger), pass1)).toBe(true);
+            expect(await runMissionFill(ctxOn(ledger), pass1)).toBe(true);
+            // Pass 2: the mission moved to 2 of 3: one more.
+            const pass2 = fillNeeds({ current: 2, remaining: 1 });
+            expect(await runMissionFill(ctxOn(ledger), pass2)).toBe(true);
+            expect(ledger.fills('mission:77')).toBe(3);
+            // Pass 3: it asks for no more.
+            expect(await runMissionFill(ctxOn(ledger), fillNeeds({ current: 2, remaining: 1 }))).toBe(false);
+            expect(currencyActions.fillExposure).toHaveBeenCalledTimes(3);
+        });
+
+        test('a pass after one whose fill did not move the mission spends none, and says so once', async () => {
+            const ledger = createMemoryAutoSpendLedger();
+            expect(await runMissionFill(ctxOn(ledger), fillNeeds({ id: '88', current: 0, remaining: 3 }))).toBe(true);
+            // Next pass: the mission still reads 0 of 3.
+            const next = fillNeeds({ id: '88', current: 0, remaining: 3 });
+            expect(await runMissionFill(ctxOn(ledger), next)).toBe(false);
+            expect(await runMissionFill(ctxOn(ledger), next)).toBe(false);
+            expect(currencyActions.fillExposure).toHaveBeenCalledTimes(1);
+            expect(ledger.fills('mission:88')).toBe(1);
+            expect(infoLines().filter((line) => line.includes('mission 88 did not move'))).toHaveLength(1);
+        });
+
+        test('the second fill of the same pass is not held to the progress the pass started from', async () => {
+            const ledger = createMemoryAutoSpendLedger();
+            const needs = fillNeeds({ id: '99', current: 0, remaining: 3 });
+            expect(await runMissionFill(ctxOn(ledger), needs)).toBe(true);
+            expect(await runMissionFill(ctxOn(ledger), needs)).toBe(true);
+            expect(currencyActions.fillExposure).toHaveBeenCalledTimes(2);
+        });
+
+        test('a mission that moves again after it stalled is filled for again', async () => {
+            const ledger = createMemoryAutoSpendLedger();
+            expect(await runMissionFill(ctxOn(ledger), fillNeeds({ id: '55', current: 0, remaining: 3 }))).toBe(true);
+            expect(await runMissionFill(ctxOn(ledger), fillNeeds({ id: '55', current: 0, remaining: 3 }))).toBe(false);
+            expect(await runMissionFill(ctxOn(ledger), fillNeeds({ id: '55', current: 1, remaining: 2 }))).toBe(true);
+        });
+
+        test('the count lasts across a restart: a ledger read again from what was saved holds the same stop', async () => {
+            const saved: { raw: string | null } = { raw: null };
+            const store = { readRaw: () => saved.raw, writeRaw: (data: string) => (saved.raw = data) };
+            expect(
+                await runMissionFill(
+                    ctxOn(createAutoSpendLedger(store)),
+                    fillNeeds({ id: '66', current: 0, remaining: 3 }),
+                ),
+            ).toBe(true);
+            const restarted = createAutoSpendLedger(store);
+            expect(await runMissionFill(ctxOn(restarted), fillNeeds({ id: '66', current: 0, remaining: 3 }))).toBe(
+                false,
+            );
+            expect(await runMissionFill(ctxOn(restarted), fillNeeds({ id: '66', current: 1, remaining: 2 }))).toBe(
+                true,
+            );
+            expect(currencyActions.fillExposure).toHaveBeenCalledTimes(2);
+        });
+
+        test('a ledger that cannot be trusted spends nothing for a mission', async () => {
+            const ctx = makeCtx();
+            ctx.currency.spendLedger = createAutoSpendLedger({ readRaw: () => '{nope', writeRaw: () => {} });
+            expect(await runMissionFill(ctx, fillNeeds())).toBe(false);
+            expect(currencyActions.fillExposure).not.toHaveBeenCalled();
+        });
     });
 });

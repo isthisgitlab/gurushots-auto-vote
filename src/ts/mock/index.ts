@@ -7,10 +7,14 @@
 
 import { clearSessionCache } from './sessionCache';
 import { mockApiClient } from './apiClient';
+import { mockMetadata } from './metadata';
 
 export {
     // Mock API client
     mockApiClient,
+
+    // Vote metadata kept in memory, never in metadata.json
+    mockMetadata,
 
     // Session cache control
     clearSessionCache,

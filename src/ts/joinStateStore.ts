@@ -62,7 +62,9 @@ const LOCK_TTL_MS = 60_000;
 const LOCK_RENEW_MS = LOCK_TTL_MS / 3;
 
 // `unavailable`: not held by another, but not to be had: the lock files cannot be made (only the app's own locks).
-type UnlockLock = { ok: boolean; release: () => void; unavailable?: true };
+// `held`: whether this holder still owns the lock, asked right before something that must not be done twice (a lock
+// that is not asked about, or has no file, is as held as it was got).
+type UnlockLock = { ok: boolean; release: () => void; unavailable?: true; held?: () => boolean };
 
 const NOT_HELD: UnlockLock = { ok: false, release: () => {} };
 const UNAVAILABLE: UnlockLock = { ok: false, release: () => {}, unavailable: true };
@@ -204,6 +206,25 @@ const keepFresh = (lockPath: string, token: string): NodeJS.Timeout => {
 };
 
 /**
+ * Whether the lock file still holds this owner's token. A lock that went past the TTL without a renewal (the machine
+ * slept: the timer that touches it did not run) is not yet anyone else's until another process renames it away, so it
+ * is touched here, and the token is read again: a process that took it over in between has made it its own, and a
+ * takeover that was in progress finds it live again (takeOverStale looks at what it moved).
+ */
+const holdsToken = (lockPath: string, token: string): boolean => {
+    const seen = inspectLock(lockPath);
+    if (seen === null || seen.token !== token) return false;
+    if (!isStale(seen)) return true;
+    try {
+        const now = new Date();
+        fs.utimesSync(lockPath, now, now);
+    } catch {
+        return false;
+    }
+    return tokenIn(lockPath) === token;
+};
+
+/**
  * Logs a lock that could not be made, with where and why. The ones that fail closed stop something the user can fix,
  * so they are errors (`logs --error`); the challenge's, which goes on without it, is a warning.
  */
@@ -258,6 +279,7 @@ const acquireUnlockLock = (
         const timer = keepFresh(lockPath, token);
         return {
             ok: true,
+            held: () => holdsToken(lockPath, token),
             release: () => {
                 clearInterval(timer);
                 if (tokenIn(lockPath) !== token) return;

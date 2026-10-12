@@ -256,6 +256,34 @@ describe('swapEntry', () => {
         const strategy = stubStrategy();
         expect((await swapEntry(555, 'gone', 'fresh', 'tok', { strategy, logger })).outcome).toBe('not-available');
     });
+
+    describe('with a limit on the swaps (autoSwapMax), held on the live challenge', () => {
+        test('a live swap history that already holds that many spends nothing', async () => {
+            // The pass counted none; the challenge read now holds one.
+            const strategy = stubStrategy();
+            expect(await swapEntry(555, 'old', 'fresh', 'tok', { strategy, logger, maxSwaps: 1 })).toEqual({
+                ok: false,
+                outcome: 'not-available',
+            });
+            expect(strategy.swapPhoto).not.toHaveBeenCalled();
+        });
+
+        test('one below the limit swaps', async () => {
+            const strategy = stubStrategy();
+            expect(await swapEntry(555, 'old', 'fresh', 'tok', { strategy, logger, maxSwaps: 2 })).toEqual({
+                ok: true,
+                outcome: 'ok',
+            });
+            expect(strategy.swapPhoto).toHaveBeenCalledTimes(1);
+        });
+
+        test('a challenge without a swap history has made none', async () => {
+            const challenge = makeChallenge();
+            delete challenge.member.ranking.swaps;
+            const strategy = stubStrategy({ challenge });
+            expect((await swapEntry(555, 'old', 'fresh', 'tok', { strategy, logger, maxSwaps: 1 })).ok).toBe(true);
+        });
+    });
 });
 
 describe('swap back', () => {

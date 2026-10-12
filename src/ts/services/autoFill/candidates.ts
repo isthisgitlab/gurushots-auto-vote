@@ -4,7 +4,7 @@
  * ignore-words lookup, and the semantic scores the picker ranks with.
  */
 
-import { buildSearchTerms, detectLetterPrefix, parseNegation, readChallengeTheme } from '../photoPicker';
+import { buildSearchTerms, detectLetterPrefix, parseNegation, readChallengeTheme, stripTags } from '../photoPicker';
 import { getSemanticScores } from '../semantic';
 import * as lexicon from '../semantic/lexicon';
 import { resolveTermsToTags } from '../tagResolver';
@@ -127,8 +127,7 @@ const describeTheme = (theme: ChallengeTheme, challenge: Challenge): string => {
             : theme.kind === 'subject'
               ? `has the subject ${theme.subjects.map((s) => `"${s}"`).join(', ')} (its description repeats it)`
               : 'has no subject its description confirms, so its title is searched head-noun first';
-    const description = String(challenge.welcome_message ?? '')
-        .replace(/<[^>]*>/g, ' ')
+    const description = stripTags(String(challenge.welcome_message ?? ''))
         .replace(/\s+/g, ' ')
         .trim();
     return `${verdict}. Description: "${description}"`;

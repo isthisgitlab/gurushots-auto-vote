@@ -203,7 +203,7 @@ const processChallenge = async (
     if (!vote.voteThrew) {
         const filled =
             (await currencyAuto.runAutoExposureFill(currencyCtx, vote.votePool)) ||
-            (await currencyAuto.runMissionFill(currencyCtx, pass.missions?.fill ?? 0));
+            (await currencyAuto.runMissionFill(currencyCtx, pass.missions));
         if (filled) consumeMission(pass.missions, 'fill');
     }
     return null;

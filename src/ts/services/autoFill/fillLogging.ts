@@ -4,7 +4,7 @@
  * rather than the theme decided a pick.
  */
 
-import { hasThemeMatch, splitByChosen } from '../photoPicker';
+import { hasThemeMatch, splitByChosen, stripTags } from '../photoPicker';
 import { oneLine } from '../../format/logSafe';
 
 import type { Challenge } from '../../types/gurushots';
@@ -85,11 +85,7 @@ const logSelectionDetails = ({
 const describeSubmitFailure = (raw: unknown): string => {
     if (!raw || typeof raw !== 'object') return 'no response body';
     const body: { message?: unknown; error?: unknown; error_message?: unknown; errors?: unknown } = raw;
-    const stripHtml = (s: string) =>
-        s
-            .replace(/<[^>]*>/g, ' ')
-            .replace(/\s+/g, ' ')
-            .trim();
+    const stripHtml = (s: string) => stripTags(s).replace(/\s+/g, ' ').trim();
     // Common shapes: a top-level message/error, or a per-image errors map/array.
     const direct = body.message || body.error || body.error_message;
     if (typeof direct === 'string' && direct.trim()) return stripHtml(direct);

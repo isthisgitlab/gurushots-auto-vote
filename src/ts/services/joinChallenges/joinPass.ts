@@ -181,6 +181,7 @@ const joinCandidate = async (
         outcome = await performJoin(challenge, token, deps, decision.needsCoins, {
             submitOnly: alreadyPaid,
             coinsBefore: Number.isFinite(coins) ? coins : null,
+            priceCeiling: decision.needsCoins,
         });
     } catch (error) {
         cat().warning(`join failed for ${logger.challengeTag(challenge)}: ${errorMessage(error) || error}`, null);

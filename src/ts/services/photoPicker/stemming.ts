@@ -276,6 +276,12 @@ const stem = (word: string): string => {
 // 4096 chars is far above anything legitimate and well under anything painful.
 const MAX_TOKENISE_CHARS = 4096;
 
+/**
+ * Untrusted text with its HTML tags blanked, cut to MAX_TOKENISE_CHARS first. A tag holds no `<`, so a run of `<` stays
+ * linear instead of rescanning to the end of the text from each one.
+ */
+const stripTags = (text: string): string => text.slice(0, MAX_TOKENISE_CHARS).replace(/<[^<>]*>/g, ' ');
+
 // keepStopwords skips the photography-noise stopword list. Challenge text
 // is full of boilerplate ("shots", "best", "good luck") that drowns out the
 // real subject, so the keyword path filters it. But a user who explicitly
@@ -392,4 +398,13 @@ const tokeniseTagList = (tags: readonly string[] | null | undefined): string[] =
     return Array.from(new Set(stems));
 };
 
-export { MAX_TOKENISE_CHARS, MIN_USER_TAG_STEM_LENGTH, stem, rawTokenise, tokenise, matches, tokeniseTagList };
+export {
+    MAX_TOKENISE_CHARS,
+    MIN_USER_TAG_STEM_LENGTH,
+    stem,
+    stripTags,
+    rawTokenise,
+    tokenise,
+    matches,
+    tokeniseTagList,
+};

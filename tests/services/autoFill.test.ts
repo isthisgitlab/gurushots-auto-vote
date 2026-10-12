@@ -2308,6 +2308,13 @@ describe('describeSubmitFailure — surfacing the server rejection reason', () =
         expect(out.length).toBeGreaterThan(0);
         expect(out).toContain('success');
     });
+
+    test('a message that is a long run of opening brackets is read in linear time', () => {
+        const started = Date.now();
+        expect(describeSubmitFailure({ message: `${'<'.repeat(100_000)} nope` }).length).toBeLessThanOrEqual(4096);
+        expect(describeSubmitFailure({ errors: ['<'.repeat(100_000)] })).toMatch(/^<+$/);
+        expect(Date.now() - started).toBeLessThan(1000);
+    });
 });
 
 describe('fillChallengeNow surfaces the rejection reason to the caller', () => {

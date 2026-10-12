@@ -4,7 +4,7 @@
  * Callers import this facade; the ranking lives in ./photoPicker/*.
  */
 
-import { stem, tokenise, matches, tokeniseTagList } from './photoPicker/stemming';
+import { stem, stripTags, tokenise, matches, tokeniseTagList } from './photoPicker/stemming';
 import { abstractTitleWords, detectLetterPrefix, parseNegation, readChallengeTheme } from './photoPicker/title';
 import {
     buildChallengeKeywords,
@@ -38,6 +38,7 @@ export {
     detectLetterPrefix,
     parseNegation,
     readChallengeTheme,
+    stripTags,
     labelWordStems,
     labelStemGroups,
     SEMANTIC_MATCH_FLOOR,

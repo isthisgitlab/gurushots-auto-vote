@@ -14,6 +14,7 @@ import { evaluateScenario } from '../../scenarios/evaluate';
 import { entriesOf } from '../../scenarios/selectors';
 import { recordVoteSample } from '../../scenarios/speed';
 import { initialState } from '../../scenarioStateStore';
+import type { StateLock } from '../../scenarioStateStore';
 import type { Challenge } from '../../types/gurushots';
 import type { ScenarioState } from '../../types/stores';
 import type { PassContext } from '../votingOrchestrator';
@@ -22,7 +23,7 @@ import type { RunnerContext, ScenarioAction, ScenarioPass } from './types';
 import { log, nowSec, usesBalance } from './support';
 import { runRule, withNotice } from './rule';
 
-const NO_LOCK: { ok: boolean; release: () => void; unavailable?: true } = { ok: true, release: () => {} };
+const NO_LOCK: StateLock = { ok: true, release: () => {} };
 
 const corruptText = (kind: 'file' | 'record' | 'unloaded', challengeId: string) =>
     kind === 'unloaded'
@@ -165,6 +166,12 @@ const runScenarioStep = async (challenge: Challenge, now: number, pass: PassCont
             return;
         }
         const timezone = settings.getSetting('timezone') || DEFAULT_TIMEZONE;
+        // The GUI and the CLI can run a pass at once: one rule step of a challenge runs at a time, or both would spend.
+        const lock: StateLock = deps.lock ? deps.lock(challengeId) : NO_LOCK;
+        if (!lock.ok) {
+            noteSkipped(challenge, lock.unavailable === true);
+            return;
+        }
         // Every host that runs scenarios passes the currency endpoints too.
         const scenarioPass = pass as ScenarioPass;
         const ctx: RunnerContext = {
@@ -174,14 +181,9 @@ const runScenarioStep = async (challenge: Challenge, now: number, pass: PassCont
             timezone,
             pass: scenarioPass,
             ledger: deps.ledger,
+            stepLock: lock,
             beforeSpend: null,
         };
-        // The GUI and the CLI can run a pass at once: one rule step of a challenge runs at a time, or both would spend.
-        const lock = deps.lock ? deps.lock(challengeId) : NO_LOCK;
-        if (!lock.ok) {
-            noteSkipped(challenge, lock.unavailable === true);
-            return;
-        }
         skippedPasses.delete(challengeId);
         try {
             await advance(ctx, now);

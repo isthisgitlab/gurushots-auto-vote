@@ -157,8 +157,10 @@ const markPending = (
 };
 
 /**
- * The write-ahead of the step now running, for it to call just before its request: it writes the marker onto the
- * state the rule holds and keeps what was written as that state.
+ * The write-ahead of the step now running, for it to call just before its request: it makes sure the step lock is
+ * still this process's (one that went stale while the machine slept may have been taken over: the step is then another
+ * process's, and nothing is spent), then writes the marker onto the state the rule holds and keeps what was written
+ * as that state.
  */
 const spendWriter =
     (
@@ -167,6 +169,13 @@ const spendWriter =
         held: { get: () => ScenarioState; set: (state: ScenarioState) => void },
     ) =>
     (spend: SpendAction): boolean => {
+        if (ctx.stepLock?.held && !ctx.stepLock.held()) {
+            log().warning(
+                `${logger.challengeTag(ctx.challenge)} the lock of this challenge's steps was lost to another process — not spending`,
+                null,
+            );
+            return false;
+        }
         const marked = markPending(ctx, held.get(), { ...at, spend });
         if (marked) held.set(marked);
         return marked !== null;

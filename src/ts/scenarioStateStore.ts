@@ -106,6 +106,9 @@ const initialState = (scenario: string, phase: string, nowSec: number): Scenario
     lastError: null,
 });
 
+// A record as text (null: there is none), for telling whether it changed.
+const textOf = (record: unknown): string | null => (record === undefined ? null : JSON.stringify(record));
+
 /** What writing a state came to. */
 type SetResult = 'saved' | 'refused' | 'failed';
 
@@ -124,24 +127,46 @@ const createStateLedger = (
 ) => {
     const { read, mutate, resetOne, resetAll } = createStateFile(store, acquireLock, requests, isLoaded);
 
+    // The record each read of a challenge found (as text, made when a write needs it; null: none), by the epoch it handed
+    // out, which every state derived from that read carries: what a write is compared against, so that a state is
+    // written only over the record it was made from. After a write it is the text written, for the next write of the
+    // same states.
+    const bases = new WeakMap<ScenarioEpoch, () => string | null>();
+
     // Writes one challenge's state into the file as it is now (see `set` for what it answers).
     const persist = (key: string, { epoch, ...state }: ScenarioState): SetResult => {
         const log = logger.withCategory('scenario');
         let result: Mutation = 'unreadable';
+        const made: { text: string | null; changed: boolean } = { text: null, changed: false };
         try {
             result = mutate((map) => {
                 const current = epochOf(map, key);
                 // Read before a reset: its progress is not brought back.
                 if (epoch && (epoch.all !== current.all || epoch.gen !== current.gen)) return null;
-                return { ...map, [key]: { ...state, gen: current.gen, updatedAt: Date.now() } };
+                // Changed since it was read (by a process whose step lock this one lost, say): not written over.
+                const base = epoch ? bases.get(epoch) : undefined;
+                if (base && base() !== textOf(map[key])) {
+                    made.changed = true;
+                    return null;
+                }
+                const record = { ...state, gen: current.gen, updatedAt: Date.now() };
+                made.text = JSON.stringify(record);
+                return { ...map, [key]: record };
             });
         } catch (error) {
             log.error(`scenario state could not be written: ${errorMessage(error)}`, null);
         }
-        if (result === 'refused')
-            log.warning(`scenario state of challenge ${key} was reset meanwhile — not written`, null);
-        if (result === 'done') return 'saved';
-        return result === 'refused' ? 'refused' : 'failed';
+        if (result === 'refused') {
+            log.warning(
+                made.changed
+                    ? `scenario state of challenge ${key} was changed by another process meanwhile — not written`
+                    : `scenario state of challenge ${key} was reset meanwhile — not written`,
+                null,
+            );
+        }
+        if (result !== 'done') return result === 'refused' ? 'refused' : 'failed';
+        if (epoch) bases.set(epoch, () => made.text);
+        return 'saved';
     };
 
     return {
@@ -160,6 +185,7 @@ const createStateLedger = (
             if (!ok) return { corrupt: unloaded ? 'unloaded' : 'file', state: null, epoch: { all: 0, gen: 0 } };
             const epoch = epochOf(map, key);
             const record = map[key];
+            bases.set(epoch, () => textOf(record));
             if (record === undefined || isTombstone(record)) return { corrupt: false, state: null, epoch };
             if (!isRecord(record)) return { corrupt: 'record', state: null, epoch };
             return { corrupt: false, state: { ...structuredClone(record), epoch }, epoch };

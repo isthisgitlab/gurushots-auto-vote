@@ -1,6 +1,8 @@
 /**
  * Automatic-spend counter: how many exposure FILLS the currency automation has
- * spent on each challenge, so `autoExposureFillMax` caps them.
+ * spent on each challenge, so `autoExposureFillMax` caps them, and on each
+ * "Use Fill" mission (under `mission:<id>`), so a mission that a fill does not
+ * move is not filled for on every pass.
  *
  * Fills need their own record: exposure decays again after a fill, so without a
  * count the rule would re-fire every time exposure dropped and the pool ran dry,
@@ -8,29 +10,33 @@
  * own swap history (member.ranking.swaps) is the authoritative count — and a key
  * unlock is one-shot by nature (the boost is no longer LOCKED afterwards).
  *
- * Shape, keyed by challenge id: { "<challengeId>": { fills, at } }.
+ * Shape, keyed by challenge id: { "<challengeId>": { fills, at } }; a mission's record also holds `progress`, the
+ * mission's server progress when its latest fill was counted.
  *
  * Same platform-aware transport as swapBackStore, so on Capacitor its cache
  * MUST be hydrated at boot (initializeAutoSpendAsync, wired in Capacitor.tsx).
  * Mock mode uses createMemoryAutoSpendLedger() and never touches the file.
  */
 
-import type { AutoSpendRecord, RawJsonStore } from './types/stores';
+import type { AutoSpendRecord, RawJsonStore, ThroughResult } from './types/stores';
 import * as logger from './logger';
 import { createJsonStore } from './settings/storage';
 import { isPlainObject } from './plainObject';
 import { errorMessage } from './errorMessage';
-import { storeLoaded } from './settings/storeTransport';
+import { storeLoaded, throughStore } from './settings/storeTransport';
 import * as runtime from './runtime';
 
 // `strict`: a write the service's native bridge did not persist is a failed write: the cap is only as good as the count.
 const AUTO_SPEND_KEY = 'gs_auto_spends';
 // `atomic`: a crash in the middle of a write must not leave a cut-short file, which would read as untrusted for good.
+// `shared`: the app window and the background service both count fills, and each count is saved by the native
+// compare-and-write, so that neither erases the other's.
 const autoSpendStore = createJsonStore({
     fileName: 'autoSpends.json',
     prefKey: AUTO_SPEND_KEY,
     atomic: true,
     strict: true,
+    shared: true,
 });
 
 // What to do about a ledger that cannot be trusted: on Android it is read again every cycle; on the desktop the file
@@ -43,11 +49,38 @@ const recoveryStep = (): string =>
 // Challenges run for days, not months; anything older is a finished challenge.
 const MAX_AGE_MS = 30 * 24 * 60 * 60 * 1000;
 
+/** A ledger record: the fills counted, and for a mission the progress it had when the latest was. */
+type AutoSpendEntry = AutoSpendRecord & { progress?: number };
+
+/** What `reserveFill` holds the count to, and records. */
+type ReserveOptions = {
+    /** refuse once this many are counted, as the count stands when the write is made */
+    max?: number;
+    /** the mission's progress when this fill is counted */
+    progress?: number;
+};
+
 /**
  * @param r - an untrusted parsed-JSON value
  */
-const isRecord = (r: unknown): r is AutoSpendRecord =>
-    isPlainObject(r) && Number.isInteger(r.fills) && Number(r.fills) >= 0 && Number.isFinite(r.at);
+const isRecord = (r: unknown): r is AutoSpendEntry =>
+    isPlainObject(r) &&
+    Number.isInteger(r.fills) &&
+    Number(r.fills) >= 0 &&
+    Number.isFinite(r.at) &&
+    (r.progress === undefined || Number.isFinite(r.progress));
+
+/**
+ * The ledger's text as its records, or null when it is not a JSON object (a store never written is an empty ledger).
+ */
+const parseRecords = (raw: string | null): Record<string, unknown> | null => {
+    try {
+        const parsed: unknown = raw === null ? {} : JSON.parse(raw);
+        return isPlainObject(parsed) ? parsed : null;
+    } catch {
+        return null;
+    }
+};
 
 /**
  * Ledger over a raw-JSON store ({readRaw, writeRaw}). A ledger that was never written is empty; one that cannot be
@@ -90,29 +123,50 @@ const createAutoSpendLedger = (
     };
 
     // The records that still count: a challenge older than this is finished.
-    const live = (records: Record<string, unknown>): Record<string, AutoSpendRecord> => {
+    const live = (records: Record<string, unknown>): Record<string, AutoSpendEntry> => {
         const cutoff = Date.now() - MAX_AGE_MS;
-        const kept: Record<string, AutoSpendRecord> = {};
+        const kept: Record<string, AutoSpendEntry> = {};
         for (const [id, record] of Object.entries(records)) {
             if (isRecord(record) && record.at > cutoff) kept[id] = record;
         }
         return kept;
     };
 
-    // Writes one challenge's count as `change` makes it; false when the ledger cannot be trusted or the write failed.
-    const adjust = (challengeId: string | number, change: (fills: number) => number): boolean => {
+    // The record of one key as it is stored now; null when the ledger cannot be trusted.
+    const entryOf = (key: string | number): AutoSpendEntry | undefined | null => {
         const records = read();
-        if (!records) return false;
-        const state = live(records);
+        return records ? live(records)[String(key)] : null;
+    };
+
+    // Writes one key's record as `change` makes it, on the ledger as it is when the write is made (through the store's
+    // `updateThrough`: on Android by the native compare-and-write, so a count the other context saved is not erased,
+    // and the change is made again on it); `change` answers null to write nothing. False when the ledger cannot be
+    // trusted, `change` declined or the write failed.
+    const adjust = async (
+        challengeId: string | number,
+        change: (record: AutoSpendEntry | undefined) => Omit<AutoSpendEntry, 'at'> | null,
+    ): Promise<boolean> => {
+        if (!read()) return false;
         const key = String(challengeId);
-        state[key] = { fills: Math.max(0, change(state[key]?.fills ?? 0)), at: Date.now() };
+        // Worked out once: the update may be made again on a newer value.
+        const at = Date.now();
+        let result: ThroughResult;
         try {
-            store.writeRaw(JSON.stringify(state));
-            return true;
+            result = await throughStore(store, (current) => {
+                const records = parseRecords(current);
+                if (!records) return null;
+                const state = live(records);
+                const next = change(state[key]);
+                if (!next) return null;
+                state[key] = { ...next, at };
+                return JSON.stringify(state);
+            });
         } catch (error) {
             logger.withCategory('currency').error(`auto-spend ledger not written: ${errorMessage(error)}`, null);
             return false;
         }
+        if (result === 'failed') logger.withCategory('currency').error('auto-spend ledger not written', null);
+        return result === 'saved';
     };
 
     return {
@@ -121,19 +175,32 @@ const createAutoSpendLedger = (
          * cap is never found open on a count that is not known.
          */
         fills: (challengeId: string | number): number => {
-            const records = read();
-            return records ? (live(records)[String(challengeId)]?.fills ?? 0) : Number.POSITIVE_INFINITY;
+            const entry = entryOf(challengeId);
+            return entry === null ? Number.POSITIVE_INFINITY : (entry?.fills ?? 0);
         },
+
+        /** The progress a mission had when its latest fill was counted; null when there is none, or none to trust. */
+        lastProgress: (challengeId: string | number): number | null => entryOf(challengeId)?.progress ?? null,
 
         /**
          * Count one more automatic fill on this challenge, BEFORE it is made: a count that was not written down is a
-         * fill that must not be made. False: not written, so not to be spent.
+         * fill that must not be made. With `max` the count is held to it where it is written, not where it was read:
+         * one that has reached it is not counted. False: not counted, so not to be spent.
          */
-        reserveFill: (challengeId: string | number): boolean => adjust(challengeId, (fills) => fills + 1),
+        reserveFill: (challengeId: string | number, { max, progress }: ReserveOptions = {}): Promise<boolean> =>
+            adjust(challengeId, (record) => {
+                const fills = record?.fills ?? 0;
+                if (max !== undefined && fills >= max) return null;
+                const kept = progress ?? record?.progress;
+                return { fills: fills + 1, ...(kept === undefined ? {} : { progress: kept }) };
+            }),
 
         /** Take back a reserved fill that was not made (best effort: a count too high only holds back a fill). */
-        releaseFill: (challengeId: string | number): void => {
-            adjust(challengeId, (fills) => fills - 1);
+        releaseFill: async (challengeId: string | number): Promise<void> => {
+            await adjust(challengeId, (record) => ({
+                fills: Math.max(0, (record?.fills ?? 0) - 1),
+                ...(record?.progress === undefined ? {} : { progress: record.progress }),
+            }));
         },
     };
 };
