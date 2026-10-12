@@ -273,6 +273,9 @@ const createStateFile = (store: RawJsonStore, acquireLock?: (id: string) => Stat
         return lastParsed;
     };
 
+    // The file as it is stored, without the resets asked for since: what a request is judged against.
+    const stored = () => parseStateFile(store.readRaw()).map;
+
     const write = (map: Record<string, unknown>) => store.writeRaw(JSON.stringify(pruned(map)));
 
     /**
@@ -298,7 +301,7 @@ const createStateFile = (store: RawJsonStore, acquireLock?: (id: string) => Stat
      */
     const resetOne = (key: string): ResetResult => {
         const view = read();
-        if (view.ok && askFor(asRequests(), key, epochOf(view.map, key).gen, view.map)) return 'removed';
+        if (view.ok && askFor(asRequests(), key, epochOf(view.map, key).gen, stored())) return 'removed';
         let result: ResetResult = 'unreadable';
         const ran = underLock(acquireLock, () => {
             const { ok, map } = read();
@@ -314,7 +317,7 @@ const createStateFile = (store: RawJsonStore, acquireLock?: (id: string) => Stat
      */
     const resetAll = (): ResetResult => {
         const view = read();
-        if (view.ok && askFor(asRequests(), ALL_KEY, countOf(view.map[ALL_KEY]), view.map)) return 'removed';
+        if (view.ok && askFor(asRequests(), ALL_KEY, countOf(view.map[ALL_KEY]), stored())) return 'removed';
         const ran = underLock(acquireLock, () => {
             const { ok, map } = read();
             write({ [ALL_KEY]: nextCount(ok ? countOf(map[ALL_KEY]) : 0) });

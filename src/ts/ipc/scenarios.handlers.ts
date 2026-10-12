@@ -36,7 +36,7 @@ import { findActiveChallenge } from '../services/findActiveChallenge';
 import { evaluateScenario, startState } from '../scenarios/evaluate';
 import { simulateScenario } from '../scenarios/simulate';
 import { SCENARIO_TEMPLATES } from '../scenarios/templates';
-import { flushScenarioStateWrites, refreshScenarioStateAsync } from '../scenarioStateStore';
+import { refreshScenarioStateAsync, watchScenarioWrites } from '../scenarioStateStore';
 
 import type { IpcMain } from 'electron';
 import type { IpcHandlerMap } from './registerHandlers';
@@ -166,12 +166,14 @@ const RESET_ERROR = {
 } as const;
 
 /**
- * Waits for a reset to reach storage (on Android the app's writes go behind a cache): a reset that did not is an error,
- * not a success.
+ * Waits for a reset's writes to reach storage (on Android the app's writes go behind a cache): a reset that did not is
+ * an error, not a success.
+ *
+ * @param written - what watchScenarioWrites answered just before the reset was made
  */
-const persisted = async (): Promise<boolean> => {
+const persisted = async (written: () => Promise<void>): Promise<boolean> => {
     try {
-        await flushScenarioStateWrites();
+        await written();
         return true;
     } catch (error) {
         log().error(`scenario reset was not persisted: ${errorMessage(error)}`, null);
@@ -188,9 +190,10 @@ const resetScenario = async (challengeId: string | number) => {
     const lock = stepLockForMode(challengeId);
     if (!lock.ok) return { success: false as const, error: lock.unavailable ? 'locks-unavailable' : 'busy' };
     try {
+        const written = watchScenarioWrites();
         const result = ledgerForMode().remove(String(challengeId));
         if (result !== 'removed') return { success: false as const, error: RESET_ERROR[result] };
-        if (!(await persisted())) return { success: false as const, error: 'not-saved' };
+        if (!(await persisted(written))) return { success: false as const, error: 'not-saved' };
         log().info(`Scenario progress reset for challenge ${logger.sanitizeLogString(String(challengeId))}`, null);
         return { success: true as const };
     } finally {
@@ -203,9 +206,10 @@ const resetScenario = async (challengeId: string | number) => {
  */
 const resetEveryScenario = async () => {
     await refreshScenarioStateAsync();
+    const written = watchScenarioWrites();
     const result = ledgerForMode().removeAll();
     if (result !== 'removed') return { success: false as const, error: RESET_ERROR[result] };
-    if (!(await persisted())) return { success: false as const, error: 'not-saved' };
+    if (!(await persisted(written))) return { success: false as const, error: 'not-saved' };
     log().warning('Scenario progress reset for every challenge', null);
     return { success: true as const };
 };

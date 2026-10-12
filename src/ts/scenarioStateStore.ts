@@ -52,24 +52,42 @@
 import type { RawJsonStore, ScenarioEpoch, ScenarioState } from './types/stores';
 import * as logger from './logger';
 import { createJsonStore } from './settings/storage';
+import { isCacheKnown, rollBackFailedWrites } from './settings/storeTransport';
+import * as runtime from './runtime';
 import { errorMessage } from './errorMessage';
 import { acquireUnlockLock } from './joinStateStore';
 import { createStateFile, epochOf, isRecord, isTombstone } from './scenarioStateFile';
 import type { Mutation, ResetResult, StateLock } from './scenarioStateFile';
 
+const STATE_KEY = 'gs_scenario_state';
+const RESETS_KEY = 'gs_scenario_resets';
+
 // `strict`: a write the native bridge did not persist is a failed write, not a quiet one (the write-ahead marker is
-// worth nothing otherwise).
-const scenarioStateStore = createJsonStore({
+// worth nothing otherwise). Its cache keeps the latest write when the app's Preferences refuse it: that is the record
+// of a spend that may already have been made, and taking it back would let the rule spend again.
+const scenarioStateFileStore = createJsonStore({
     fileName: 'scenarioState.json',
-    prefKey: 'gs_scenario_state',
+    prefKey: STATE_KEY,
     atomic: true,
     strict: true,
 });
 
-// The resets asked for on Android (see the header).
+// The app's cache of the file reads as unreadable (not as empty) until it holds something known: a Preferences read
+// that failed at start-up says nothing about what was there, and a plan restarted from nothing could spend again.
+const scenarioStateStore = {
+    ...scenarioStateFileStore,
+    readRaw: (): string | null =>
+        runtime.isCapacitor() && !runtime.isHeadlessService() && !isCacheKnown(STATE_KEY)
+            ? ''
+            : scenarioStateFileStore.readRaw(),
+};
+
+// The resets asked for on Android (see the header). A reset that was not saved must not take effect, so its cache goes
+// back to what is saved when a write fails.
+rollBackFailedWrites(RESETS_KEY);
 const scenarioResetsStore = createJsonStore({
     fileName: 'scenarioResets.json',
-    prefKey: 'gs_scenario_resets',
+    prefKey: RESETS_KEY,
     atomic: true,
     strict: true,
 });
@@ -211,6 +229,16 @@ export const flushScenarioStateWrites = async () => {
     ]);
     const failed = settled.find((outcome) => outcome.status === 'rejected');
     if (failed) throw failed.reason;
+};
+
+/**
+ * Marks now, as the point a reset's writes are counted from: call it just before making the reset, with nothing
+ * awaited in between. What it returns waits for the writes made since, and says so if one did not persist; a write
+ * that failed before the mark is not held against the reset.
+ */
+export const watchScenarioWrites = (): (() => Promise<void>) => {
+    void Promise.allSettled([scenarioStateStore.flushPendingWrites(), scenarioResetsStore.flushPendingWrites()]);
+    return flushScenarioStateWrites;
 };
 export {
     scenarioStateLedger,

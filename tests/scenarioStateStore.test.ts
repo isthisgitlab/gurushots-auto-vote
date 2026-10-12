@@ -17,6 +17,7 @@ const {
     initializeScenarioStateAsync,
     refreshScenarioStateAsync,
     flushScenarioStateWrites,
+    watchScenarioWrites,
 } = require('../src/ts/scenarioStateStore') as typeof scenarioStateStoreModule;
 import fsModule = require('node:fs');
 import joinStateStoreModule = require('../src/ts/joinStateStore');
@@ -627,24 +628,31 @@ describe('on Android a reset is asked for, never written into a file the service
             // The record holds a stop, so it was never pruned; the reset asked for it long ago still applies.
             expect(app.get(7)).toMatchObject({ corrupt: false, state: null });
             expect(app.get(8).state).not.toBeNull();
-            // Once applied it ages like any other, so the app asking for another does not keep it.
+            // The record still holds its stop in the file, so the request is kept when the app asks for another reset.
             app.remove(9);
-            expect(Object.keys(requestsOf(asked))).toEqual(['9']);
+            expect(Object.keys(requestsOf(asked)).sort()).toEqual(['7', '9']);
+            expect(app.get(7)).toMatchObject({ corrupt: false, state: null });
         });
 
-        test('a reset of every challenge asked for long ago still applies while any record stands, and goes once none does', () => {
+        test('a reset of every challenge asked for long ago is kept while a record stands that it was not applied to', () => {
             const { asked, app } = both(
                 rawStore(JSON.stringify({ 8: { ...state(), updatedAt: Date.now() } })),
                 rawStore(JSON.stringify({ '@all': OLD })),
             );
             asApp();
             expect(app.get(8).state).toBeNull();
-            // Applied: nothing is left of it to keep, and with no record to apply it to, an old request goes.
-            const none = both(rawStore(JSON.stringify({ '@all': OLD + 5 })), rawStore(JSON.stringify({ '@all': OLD })));
+            app.remove(9);
+            expect(Object.keys(requestsOf(asked)).sort()).toEqual(['9', '@all']);
+        });
+
+        test('a reset of every challenge asked for long ago goes when no record is left for it to apply to', () => {
+            const { asked, app } = both(
+                rawStore(JSON.stringify({ '@all': OLD - 1000 })),
+                rawStore(JSON.stringify({ '@all': OLD })),
+            );
             asApp();
-            none.app.remove(3);
-            expect(Object.keys(requestsOf(none.asked))).toEqual(['3']);
-            expect(asked.writeRaw).not.toHaveBeenCalled();
+            app.remove(9);
+            expect(Object.keys(requestsOf(asked))).toEqual(['9']);
         });
 
         test('what a recent request makes ages from when it was asked, not from when it was seen', () => {
@@ -759,13 +767,57 @@ describe('module ledgers', () => {
 });
 
 describe('flushing the state and the resets asked for', () => {
-    const flushOf = (outcomes: Array<'ok' | 'fails'>) => {
-        const flushes = outcomes.map((outcome, index) =>
-            jest.fn(async () => {
-                if (outcome === 'fails') throw new Error(`store ${index} not persisted`);
-            }),
-        );
+    const flushOf = (flushes: Array<() => Promise<void>>) => {
         let flush!: typeof flushScenarioStateWrites;
+        jest.isolateModules(() => {
+            let next = 0;
+            jest.doMock('../src/ts/settings/storage', () => ({
+                createJsonStore: jest.fn(() => ({
+                    readRaw: () => null,
+                    writeRaw: jest.fn(),
+                    initializeAsync: jest.fn(),
+                    refreshAsync: jest.fn(),
+                    flushPendingWrites: jest.fn(flushes[next++]),
+                })),
+            }));
+            flush = (require('../src/ts/scenarioStateStore') as typeof scenarioStateStoreModule)
+                .flushScenarioStateWrites;
+        });
+        jest.dontMock('../src/ts/settings/storage');
+        return flush;
+    };
+    const fails = (message: string) => async () => {
+        throw new Error(message);
+    };
+
+    test('waits for the second store while the first one has already failed, and then says so', async () => {
+        let finish!: () => void;
+        const flush = flushOf([
+            fails('store 0 not persisted'),
+            () =>
+                new Promise<void>((resolve) => {
+                    finish = resolve;
+                }),
+        ]);
+        let settled = false;
+        const told = flush().finally(() => {
+            settled = true;
+        });
+        told.catch(() => {});
+        await new Promise((resolve) => setTimeout(resolve, 0));
+        expect(settled).toBe(false);
+        finish();
+        await expect(told).rejects.toThrow('store 0 not persisted');
+    });
+
+    test('says so when only the second store did not persist', async () => {
+        const flush = flushOf([async () => {}, fails('store 1 not persisted')]);
+        await expect(flush()).rejects.toThrow('store 1 not persisted');
+    });
+
+    test('marking a point to count writes from asks both stores to judge nothing before it', async () => {
+        const flushes = [jest.fn(fails('old failure')), jest.fn(async () => {})];
+        let watch!: typeof watchScenarioWrites;
         jest.isolateModules(() => {
             let next = 0;
             jest.doMock('../src/ts/settings/storage', () => ({
@@ -777,22 +829,15 @@ describe('flushing the state and the resets asked for', () => {
                     flushPendingWrites: flushes[next++],
                 })),
             }));
-            flush = (require('../src/ts/scenarioStateStore') as typeof scenarioStateStoreModule)
-                .flushScenarioStateWrites;
+            watch = (require('../src/ts/scenarioStateStore') as typeof scenarioStateStoreModule).watchScenarioWrites;
         });
         jest.dontMock('../src/ts/settings/storage');
-        return { flush, flushes };
-    };
-
-    test('waits for both stores even when the first one did not persist, and then says so', async () => {
-        const { flush, flushes } = flushOf(['fails', 'ok']);
-        await expect(flush()).rejects.toThrow('store 0 not persisted');
+        const judge = watch();
+        expect(flushes[0]).toHaveBeenCalledTimes(1);
         expect(flushes[1]).toHaveBeenCalledTimes(1);
-    });
-
-    test('says so when only the second store did not persist', async () => {
-        const { flush } = flushOf(['ok', 'fails']);
-        await expect(flush()).rejects.toThrow('store 1 not persisted');
+        flushes[0].mockImplementationOnce(async () => {});
+        await expect(judge()).resolves.toBeUndefined();
+        expect(flushes[0]).toHaveBeenCalledTimes(2);
     });
 });
 

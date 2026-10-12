@@ -394,6 +394,7 @@ describe('scenario-reset / dry-run / vocabulary', () => {
             'may spend again an action whose outcome is unknown (GuruShots gave no answer, or the app could not record it)',
         );
         expect(text('success')).toContain('restarts the scenario spend counter');
+        expect(text('success')).toContain('the rules that already ran can run (and spend) again');
         h['reset-all-scenario-state'].mockResolvedValueOnce({ success: true });
         await expect(cmd.scenarioResetAllCmd()).resolves.toBe(0);
         expect(text('success')).toContain('every challenge');

@@ -265,7 +265,7 @@ const scenarioResetCmd = async (challengeId: string) => {
     }
     if (!result.success) return reportFailure(result, 'Could not reset the scenario');
     ui().success(
-        `Scenario progress reset for challenge ${challengeId} — the plan starts again on the next voting pass. ${RESET_COST}`,
+        `Scenario progress reset for challenge ${challengeId} — the plan starts again on the next voting pass, and the rules that already ran can run (and spend) again. ${RESET_COST}`,
     );
     return 0;
 };

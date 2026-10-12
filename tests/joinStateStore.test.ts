@@ -522,7 +522,7 @@ describe('acquireUnlockLock', () => {
     });
 
     test('what is logged names the lock file, not the folder it is in, even where the error itself carries the path', () => {
-        const warning = jest.fn();
+        const warning = jest.fn<void, [string, null]>();
         jest.mocked(logger.withCategory).mockReturnValueOnce(invalid({ warning }));
         fs.openSync.mockImplementationOnce(() => {
             throw Object.assign(new Error("EACCES: permission denied, open '/cfg/joinlock-c9.lock'"), {
@@ -530,10 +530,22 @@ describe('acquireUnlockLock', () => {
             });
         });
         joinState.acquireUnlockLock('c9');
-        const [said] = warning.mock.calls[0] as [string];
+        const [said] = warning.mock.calls[0];
         expect(said).toBe(
             "cross-process lock unavailable for c9 (joinlock-c9.lock): EACCES: permission denied, open 'joinlock-c9.lock' [EACCES]",
         );
+        expect(said).not.toContain('/cfg');
+    });
+
+    test('the folder is taken out before the message is cut short, so a long one cannot leave half of it in', () => {
+        const warning = jest.fn<void, [string, null]>();
+        jest.mocked(logger.withCategory).mockReturnValueOnce(invalid({ warning }));
+        fs.openSync.mockImplementationOnce(() => {
+            throw `${'x'.repeat(190)} /cfg/joinlock-c9.lock`;
+        });
+        joinState.acquireUnlockLock('c9');
+        const [said] = warning.mock.calls[0];
+        expect(said).toContain('x'.repeat(190));
         expect(said).not.toContain('/cfg');
     });
 
