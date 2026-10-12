@@ -25,6 +25,7 @@ import type { PreferencesPlugin } from '@capacitor/preferences';
 import { errorMessage } from '../errorMessage';
 import { sweepStaleTemps, writeAtomicOwnerOnly } from './atomicWrite';
 import { createWriteBehind, headlessStore, readHeadlessKey, writeHeadlessKey } from './storeTransport';
+import type { ThroughResult } from './storeTransport';
 
 // Try to import electron, but don't fail if it's not available (CLI context)
 let electronApp: App | null | undefined = null;
@@ -263,19 +264,21 @@ const getEnvironmentInfo = () => {
 /**
  * Writes a value made from a store's current one, before answering where a write is made at once (not behind a cache).
  *
- * @returns false when the write threw: nothing was saved
+ * @returns `failed` when the write threw: nothing was saved; `aborted` when `update` answered null
  */
 const writeBeforeAnswering = async (
     prefKey: string,
     store: { readRaw: () => string | null; writeRaw: (data: string) => void },
-    update: (current: string | null) => string,
-): Promise<boolean> => {
+    update: (current: string | null) => string | null,
+): Promise<ThroughResult> => {
     try {
-        store.writeRaw(update(store.readRaw()));
-        return true;
+        const data = update(store.readRaw());
+        if (data === null) return 'aborted';
+        store.writeRaw(data);
+        return 'saved';
     } catch (err) {
         logger.withCategory('settings').error(`${prefKey} write failed:`, err);
-        return false;
+        return 'failed';
     }
 };
 
@@ -329,7 +332,7 @@ const createJsonStore = ({
          */
         readRaw: (): string | null => {
             if (runtime.isHeadlessService()) {
-                return readHeadlessKey(prefKey, cachedJson);
+                return readHeadlessKey(prefKey, cachedJson, strict);
             }
             if (runtime.isCapacitor()) {
                 return cachedJson;
@@ -389,8 +392,8 @@ const createJsonStore = ({
                 logger.withCategory('settings').error(`Capacitor ${prefKey} refresh failed:`, err);
             }
         },
-        /** Writes a value made from the current one that nothing reads before it is saved; `false`: not saved, nothing changed. */
-        updateThrough: (update: (current: string | null) => string): Promise<boolean> =>
+        /** Writes a value made from the current one that nothing reads before it is saved (see RawJsonStore). */
+        updateThrough: (update: (current: string | null) => string | null): Promise<ThroughResult> =>
             runtime.isCapacitor() && !runtime.isHeadlessService()
                 ? writes.updateThrough(update)
                 : writeBeforeAnswering(prefKey, store, update),

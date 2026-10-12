@@ -14,6 +14,7 @@ const AGAIN_KEY = {
 // yet, on the card and (short) on the compact tile.
 const CORRUPT_KEY = {
     unloaded: ['app.scenarioStatusUnloaded', 'app.scenarioStatusUnloadedShort'],
+    unloadedService: ['app.scenarioStatusUnloadedService', 'app.scenarioStatusUnloadedServiceShort'],
     file: ['app.scenarioStatusCorrupt', 'app.scenarioStatusCorruptShort'],
     record: ['app.scenarioStatusCorruptRecord', 'app.scenarioStatusCorruptRecordShort'],
 } as const;
@@ -52,7 +53,9 @@ function Unavailable({
     onReset: (() => void) | undefined;
 }) {
     const { t } = useTranslation();
-    const corruptKeys = status.corrupt ? CORRUPT_KEY[status.corrupt] : null;
+    // Not loaded in this window: with the background service the plans go on, without it they are paused.
+    const kind = status.corrupt === 'unloaded' && status.serviceRuns ? 'unloadedService' : status.corrupt;
+    const corruptKeys = kind ? CORRUPT_KEY[kind] : null;
     const key = corruptKeys ? corruptKeys[compact ? 1 : 0] : 'app.scenarioStatusMissing';
     // The button's own label, which the compact tile's notice names (the tile has no button of its own).
     const resetLabel = status.corrupt === 'file' ? 'app.scenarioResetAll' : 'app.scenarioReset';

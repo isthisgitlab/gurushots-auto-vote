@@ -340,9 +340,13 @@ export const app = {
     scenarioTemplateFailed: "The template copy wasn't saved.",
     scenarioStatusMissing: 'Scenario "{name}" no longer exists — nothing runs. Pick another in the challenge settings.',
     scenarioStatusUnloaded:
-        'Scenario "{name}": the saved progress could not be loaded yet, so its plan is paused. The app retries; reopen it if this stays. Nothing is reset.',
+        'Scenario "{name}": the saved progress could not be loaded yet, so its plan is paused. The app retries; reopen the app if it persists. Nothing is reset.',
     scenarioStatusUnloadedShort:
         'Scenario "{name}" is paused: the saved progress could not be loaded yet. The app retries.',
+    scenarioStatusUnloadedService:
+        'Scenario "{name}": this window could not load the saved progress yet. The background service keeps running the plans; reopen the app if it persists. Nothing is reset.',
+    scenarioStatusUnloadedServiceShort:
+        'Scenario "{name}": this window could not load the saved progress yet. The background service keeps running the plans.',
     scenarioStatusCorrupt:
         'Scenario "{name}": the saved progress of the scenarios cannot be read, so the plans of every challenge are paused. Resetting the progress of every challenge starts them again.',
     scenarioStatusCorruptShort:
@@ -375,7 +379,7 @@ export const app = {
     scenarioResetBody:
         'This forgets where “{title}” is in its scenario: the plan starts again from its first phase on the next voting pass, and the rules that already ran can run (and spend) again. It may spend again an action whose outcome is unknown (GuruShots gave no answer, or the app could not record it), and it restarts the scenario’s spend counter.',
     scenarioResetAllBody:
-        'The saved scenario progress cannot be read, so it can only be reset for every challenge at once. Every challenge’s progress goes: where each plan stands, which rules already ran (they can run again) and the spend counters. An action whose outcome is unknown (no answer, or the app could not record it) can be spent again.',
+        'The saved scenario progress cannot be read, so it can only be reset for every challenge at once. Every challenge’s progress goes: where each plan stands, which rules already ran (they can run, and spend, again) and the spend counters. An action whose outcome is unknown (no answer, or the app could not record it) can be spent again.',
     scenarioResetConfirm: 'Reset',
     scenarioResetWorking: 'Resetting…',
     scenarioResetBusy:
@@ -383,7 +387,7 @@ export const app = {
     scenarioResetAllBusy:
         'The saved scenario progress is being updated right now (by the app or by another process). Nothing was changed. Try again in a moment.',
     scenarioResetUnloaded:
-        'The saved progress could not be loaded yet, so nothing was reset. The app retries; reopen it if this stays.',
+        'The saved progress could not be loaded yet, so nothing was reset. The app retries; reopen the app if it persists.',
     scenarioResetReadable:
         'The saved progress can be read again, so nothing was reset. Close this window to see where the plans are.',
     scenarioResetUnreadable:

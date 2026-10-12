@@ -139,6 +139,18 @@ describe('the reset button', () => {
         expect(screen.getByRole('status').textContent).toContain('app.scenarioStatusUnloadedShort');
     });
 
+    test('with the background service only this window lacks the progress, and the notice says the plans go on', () => {
+        render(<ScenarioStatusLine status={{ name: 'Plan', corrupt: 'unloaded', serviceRuns: true }} />);
+        expect(screen.getByRole('status').textContent).toContain('app.scenarioStatusUnloadedService');
+        cleanup();
+        render(<ScenarioStatusLine status={{ name: 'Plan', corrupt: 'unloaded', serviceRuns: true }} compact />);
+        expect(screen.getByRole('status').textContent).toContain('app.scenarioStatusUnloadedServiceShort');
+        cleanup();
+        render(<ScenarioStatusLine status={{ name: 'Plan', corrupt: 'unloaded', serviceRuns: false }} />);
+        expect(screen.getByRole('status').textContent).toContain('app.scenarioStatusUnloaded');
+        expect(screen.getByRole('status').textContent).not.toContain('Service');
+    });
+
     test('is the reset of this challenge alone when only its record cannot be read', () => {
         const onReset = jest.fn();
         render(<ScenarioStatusLine status={{ name: 'Plan', corrupt: 'record' }} onReset={onReset} />);

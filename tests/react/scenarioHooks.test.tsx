@@ -104,6 +104,16 @@ describe('useScenarioStatus', () => {
         await waitFor(() => expect(JSON.parse(out())).toEqual({ name: 'Plan', corrupt: 'record' }));
     });
 
+    test('progress this window could not load says whether the background service keeps running the plans', async () => {
+        jest.mocked(window.api.getScenarioStatus).mockResolvedValueOnce(
+            invalid({ success: true, assigned: 'Plan', scenario, corrupt: 'unloaded', serviceRuns: true }),
+        );
+        render(<StatusProbe challenge={challenge()} />);
+        await waitFor(() =>
+            expect(JSON.parse(out())).toEqual({ name: 'Plan', corrupt: 'unloaded', serviceRuns: true }),
+        );
+    });
+
     test('a reset anywhere makes every card read its status again', async () => {
         render(
             <>

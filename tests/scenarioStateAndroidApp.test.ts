@@ -81,6 +81,19 @@ describe('a spend’s marker when Preferences refuses it', () => {
     });
 });
 
+describe('a spend’s marker that Preferences refused, when the app window reads what is saved', () => {
+    test('is still there after the refresh, so the next pass finds it instead of spending again', async () => {
+        await boot();
+        failing.add(STATE);
+        const marker = { ...record(), inFlight: { ruleId: 'r', actionIndex: 0, pending: 'swap' as const } };
+        expect(store.scenarioStateLedger.set(7, marker)).toBe('saved');
+        await expect(store.flushScenarioStateWrites()).rejects.toThrow('was not persisted');
+        failing.delete(STATE);
+        await store.refreshScenarioStateAsync();
+        expect(store.scenarioStateLedger.get(7).state?.inFlight?.pending).toBe('swap');
+    });
+});
+
 describe('a reset asked for on the app window', () => {
     const files = () => ({ [STATE]: file({ 7: stopped(), 8: stopped() }) });
     const ledger = () => store.scenarioStateLedger;
@@ -176,19 +189,85 @@ describe('a start-up read that failed', () => {
         expect(mockPrefSet).not.toHaveBeenCalled();
     });
 
-    test('is retried by the next refresh, and the plans read again from what is saved', async () => {
-        failing.add(`read:${RESETS}`);
-        await boot({ [STATE]: file({ 7: stopped() }) });
-        failing.delete(`read:${RESETS}`);
-        await store.refreshScenarioStateAsync();
-        expect(store.scenarioStateLoaded()).toBe(true);
-        expect(ledger().get(7).state?.inFlight?.unclear).toEqual(['swap']);
-    });
+    test.each([STATE, RESETS])(
+        'of %s is retried by the next refresh, and the plans read again from what is saved',
+        async (key) => {
+            failing.add(`read:${key}`);
+            await boot({ [STATE]: file({ 7: stopped() }) });
+            failing.delete(`read:${key}`);
+            await store.refreshScenarioStateAsync();
+            expect(store.scenarioStateLoaded()).toBe(true);
+            expect(ledger().get(7).state?.inFlight?.unclear).toEqual(['swap']);
+        },
+    );
 
     test('is nothing to a platform that reads its files itself', async () => {
         delete g.Capacitor;
         failing.add(`read:${STATE}`);
         await boot();
         expect(store.scenarioStateLoaded()).toBe(true);
+    });
+});
+
+describe('the background service', () => {
+    const h = globalThis as typeof globalThis & { __GS_HEADLESS__?: boolean; AndroidHeadlessStore?: unknown };
+    const saved = new Map<string, string>();
+    const bridge = (readThrows: string[] = []) => {
+        const writeKey = jest.fn((key: string, data: string) => {
+            saved.set(key, data);
+            return true;
+        });
+        h.AndroidHeadlessStore = {
+            read: () => null,
+            write: jest.fn(),
+            readKey: (key: string) => {
+                if (readThrows.includes(key)) throw new Error('bridge down');
+                return saved.get(key) ?? null;
+            },
+            writeKey,
+        };
+        return writeKey;
+    };
+    const service = () => {
+        delete g.Capacitor;
+        h.__GS_HEADLESS__ = true;
+        jest.isolateModules(() => {
+            store = require('../src/ts/scenarioStateStore') as typeof scenarioStateStoreModule;
+        });
+    };
+    afterEach(() => {
+        delete h.__GS_HEADLESS__;
+        delete h.AndroidHeadlessStore;
+        saved.clear();
+    });
+
+    test.each([STATE, RESETS])(
+        'a read of %s that threw is not progress that is empty: plans pause, nothing is written',
+        (key) => {
+            saved.set(STATE, file({ 7: stopped() }));
+            const writeKey = bridge([key]);
+            service();
+            expect(store.scenarioStateLedger.get(7)).toMatchObject({ corrupt: 'unloaded', state: null });
+            expect(store.scenarioStateLedger.set(7, record())).toBe('failed');
+            expect(store.scenarioStateLoaded()).toBe(false);
+            expect(writeKey).not.toHaveBeenCalled();
+        },
+    );
+
+    test('a read that works again reads what is saved, and the progress is not lost to an empty one', async () => {
+        saved.set(STATE, file({ 7: stopped() }));
+        bridge([STATE]);
+        service();
+        expect(store.scenarioStateLedger.get(7).corrupt).toBe('unloaded');
+        bridge();
+        expect(store.scenarioStateLedger.get(7).state?.inFlight?.unclear).toEqual(['swap']);
+        expect(store.scenarioStateLoaded()).toBe(true);
+    });
+
+    test('a key that is not there is progress that was never made, not a failed read', () => {
+        bridge();
+        service();
+        expect(store.scenarioStateLedger.get(7)).toMatchObject({ corrupt: false, state: null });
+        expect(store.scenarioStateLedger.set(7, record())).toBe('saved');
     });
 });

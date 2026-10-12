@@ -36,6 +36,7 @@ import { evaluateScenario, startState } from '../scenarios/evaluate';
 import { simulateScenario } from '../scenarios/simulate';
 import { SCENARIO_TEMPLATES } from '../scenarios/templates';
 import { refreshScenarioStateAsync } from '../scenarioStateStore';
+import { backgroundServiceOwnsScenarios } from '../services/scenarioRunner';
 
 import type { IpcMain } from 'electron';
 import type { IpcHandlerMap } from './registerHandlers';
@@ -259,7 +260,12 @@ const buildHandlers = () =>
             if (!isIdArg(challengeId)) return invalidArgs;
             return safely('get-scenario-status', async () => {
                 await refreshScenarioStateAsync();
-                return { success: true as const, ...getScenarioStatus(challengeId) };
+                // `serviceRuns`: the plans are advanced by the background service, whatever this window could read.
+                return {
+                    success: true as const,
+                    ...getScenarioStatus(challengeId),
+                    serviceRuns: backgroundServiceOwnsScenarios(),
+                };
             });
         },
 

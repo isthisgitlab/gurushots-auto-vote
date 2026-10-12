@@ -54,7 +54,7 @@
 import type { RawJsonStore, ScenarioEpoch, ScenarioState } from './types/stores';
 import * as logger from './logger';
 import { createJsonStore } from './settings/storage';
-import { isCacheKnown } from './settings/storeTransport';
+import { headlessReadFailed, isCacheKnown } from './settings/storeTransport';
 import * as runtime from './runtime';
 import { errorMessage } from './errorMessage';
 import { acquireUnlockLock } from './joinStateStore';
@@ -83,12 +83,15 @@ const scenarioResetsStore = createJsonStore({
 });
 
 /**
- * Whether the stores hold what is saved. The Android app's caches are filled by a read at start-up that can fail: a
- * cache that was not is empty because it could not be filled, not because nothing is saved, and a plan restarted from
- * nothing could spend again. Everywhere else the stores are the files themselves.
+ * Whether the stores hold what is saved. A read that failed (the Android app's caches are filled by a read at start-up;
+ * the background service reads through its bridge each time) leaves a store empty because it could not be filled, not
+ * because nothing is saved, and a plan restarted from nothing could spend again. Everywhere else the stores are the
+ * files themselves.
  */
-const scenarioStateLoaded = (): boolean =>
-    !runtime.isCapacitor() || runtime.isHeadlessService() || (isCacheKnown(STATE_KEY) && isCacheKnown(RESETS_KEY));
+const scenarioStateLoaded = (): boolean => {
+    if (runtime.isHeadlessService()) return !headlessReadFailed(STATE_KEY) && !headlessReadFailed(RESETS_KEY);
+    return !runtime.isCapacitor() || (isCacheKnown(STATE_KEY) && isCacheKnown(RESETS_KEY));
+};
 
 /**
  * A fresh record for a challenge entering `scenario` at its start phase.

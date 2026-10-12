@@ -733,18 +733,23 @@ describe('a reset is saved before anything can read it', () => {
     // A store whose writes are saved before they show, and that can be made to refuse them.
     const throughStore = (initial: string | null = null) => {
         const refuse = { next: false };
+        // What shows up in the store while a write waits for its turn.
+        const meanwhile: { raw: string | null } = { raw: null };
         const base = rawStore(initial);
         const store = Object.assign(base, {
-            updateThrough: jest.fn(async (update: (current: string | null) => string) => {
+            updateThrough: jest.fn(async (update: (current: string | null) => string | null) => {
                 if (refuse.next) {
                     refuse.next = false;
-                    return false;
+                    return 'failed' as const;
                 }
-                base.raw = update(base.raw);
-                return true;
+                if (meanwhile.raw !== null) base.raw = meanwhile.raw;
+                const data = update(base.raw);
+                if (data === null) return 'aborted' as const;
+                base.raw = data;
+                return 'saved' as const;
             }),
         });
-        return { store, refuse };
+        return { store, refuse, meanwhile };
     };
     const live = JSON.stringify({ 7: { ...state(), updatedAt: Date.now() }, 8: { ...state(), updatedAt: Date.now() } });
 
@@ -772,7 +777,7 @@ describe('a reset is saved before anything can read it', () => {
         expect(asked.updateThrough).toHaveBeenCalledTimes(2);
         asked.raw = JSON.stringify({ 7: Date.now() });
         const update = asked.updateThrough.mock.calls[1][0];
-        expect(Object.keys(JSON.parse(update(asked.raw)) as object).sort()).toEqual(['7', '8']);
+        expect(Object.keys(JSON.parse(update(asked.raw) ?? '{}') as object).sort()).toEqual(['7', '8']);
     });
 
     test('of every challenge, on a file that cannot be read, is written into the file only once it is saved', async () => {
@@ -791,12 +796,32 @@ describe('a reset is saved before anything can read it', () => {
         const { store: asked } = throughStore();
         const app = createStateLedger(main, undefined, asked);
         await expect(app.removeAll(true)).resolves.toBe('readable');
-        expect(asked.updateThrough).not.toHaveBeenCalled();
+        expect(main.writeRaw).not.toHaveBeenCalled();
         expect(app.get(7).state).not.toBeNull();
+        // The same ledger, once the file cannot be read, makes it.
         main.raw = '{no';
-        const { store: unreadable } = throughStore('{no');
-        const again = createStateLedger(unreadable, undefined, rawStore());
-        await expect(again.removeAll(true)).resolves.toBe('removed');
+        await expect(app.removeAll(true)).resolves.toBe('removed');
+        expect(app.get(7).corrupt).toBe(false);
+    });
+
+    test('of every challenge, asked for only while the file cannot be read, decides on the file as it is where the write is made', async () => {
+        // The Android write waits for its turn, and the file reads again by then.
+        const { store: main, meanwhile } = throughStore('{no');
+        const app = createStateLedger(main, undefined, rawStore());
+        meanwhile.raw = live;
+        await expect(app.removeAll(true)).resolves.toBe('readable');
+        expect(main.raw).toBe(live);
+        // The desktop's waits for the lock, and the file reads again by then.
+        const file = rawStore('{no');
+        const acquire = jest.fn((_id: string) => {
+            file.raw = live;
+            return { ok: true, release: () => {} };
+        });
+        delete g.Capacitor;
+        const desktop = createStateLedger(file, acquire);
+        await expect(desktop.removeAll(true)).resolves.toBe('readable');
+        expect(file.writeRaw).not.toHaveBeenCalled();
+        expect(file.raw).toBe(live);
     });
 
     test('is not made at all while the saved progress was never loaded, and every challenge reads as paused', async () => {

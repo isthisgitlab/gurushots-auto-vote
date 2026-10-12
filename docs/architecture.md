@@ -768,7 +768,7 @@ caps (dependency-free, renderer-safe), and `scenarios/templates.ts` holds editab
   not rewrite the file from its cache for a reset (the service may have written it since): it writes the reset into a
   store of its own, `gs_scenario_resets` (`{ "<challengeId>": count, "@all": count }`, a side key of the native
   bridge), and the reset is applied, idempotently, by whichever runtime reads or writes the state file next (the app's
-  own reads apply it as well); the reset waits for that write to reach storage and answers an error when it did not.
+  own reads apply it as well); the request is **written through**: it waits its turn in the store's write queue, is made from the cache as it is then, and goes into the cache only once Preferences has it (`createJsonStore().updateThrough`), so a reset that could not be saved (`not-saved`) changed nothing, and no read, refresh or engine pass ever saw it. The same holds for the reset of every challenge on a file that cannot be read (its one direct write). A queued write puts down the cache as it is on its turn, so one built before a write-through landed cannot overwrite it.
   A request ages like what it asked for (its count is when it was asked): one older than 30 days is ignored, so it
   cannot make a pruned tombstone again, and the app drops it when it next asks for a reset; an unreadable file has nothing to lose and is cleared by the app itself. A progress
   that cannot be read is `file` (all of it: only the reset of every challenge, `reset-all-scenario-state`, clears it)
@@ -791,6 +791,19 @@ caps (dependency-free, renderer-safe), and `scenarios/templates.ts` holds editab
   (`gs_scenario_state`); the app WebView `refreshAsync`es it before status reads, resets and each in-app
   pass, and when the native service is available only the background service advances scenarios
   (`backgroundServiceOwnsScenarios`, `services/scenarioRunner/step.ts`).
+  **Not loaded** (`corrupt: 'unloaded'`, a third kind beside `file` and `record`): a store whose read failed holds
+  nothing known, and is never read as empty — a plan restarted from nothing could spend again. In the app window the
+  start-up read of `gs_scenario_state` or `gs_scenario_resets` can fail (`isCacheKnown`, `scenarioStateLoaded`); in the
+  headless service a read through the bridge that threw reads the same (`headlessReadFailed`; a missing key is null,
+  a throw is a failure, and so is a strict store with no bridge). While it holds, `read()` answers unloaded: nothing is
+  written, nothing is reset (`state-unloaded`), the plans of that process pause, and the card offers no reset. The card
+  words it by who runs the plans: with the background service only this window lacks the progress and the service
+  keeps running them (`serviceRuns` in the status payload), without it the plans are paused. The app window's pass
+  re-reads (`refreshScenarioStateAsync`) before running while the cache is not loaded, whoever owns scenarios. A reset
+  of every challenge that the dialog offers for unreadable progress is asked for `onlyIfUnreadable`: decided on the file
+  as it is where the write is made (under the lock, or when the write's turn comes), a file that reads again is left
+  alone and the answer is `state-readable`. A strict store's cache keeps a queued write that did not persist (a spend
+  marker), and a refresh does not replace it with the older stored value until a queued write persists.
 - **Engine** (`scenarios/conditions.ts`, `selectors.ts`, `evaluate.ts`, `nextWake.ts`, pure): unknown data
   fails closed (never makes a condition true); entry ids are compared as strings, never by position (except
   the explicit `slot` selector); an in-flight rule resumes first; a phase or in-flight rule the edited

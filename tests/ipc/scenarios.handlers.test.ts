@@ -29,6 +29,7 @@ jest.mock('../../src/ts/services/scenarioStatus', () => {
 jest.mock('../../src/ts/scenarioStateStore', () => ({
     refreshScenarioStateAsync: jest.fn(async () => {}),
 }));
+jest.mock('../../src/ts/services/scenarioRunner', () => ({ backgroundServiceOwnsScenarios: jest.fn(() => false) }));
 jest.mock('../../src/ts/services/auth', () => ({ requireAuthToken: jest.fn(() => ({ ok: true, token: 'tok' })) }));
 jest.mock('../../src/ts/apiFactory', () => ({ getApiStrategy: jest.fn() }));
 jest.mock('../../src/ts/logger', () => ({
@@ -40,6 +41,7 @@ import type { ScenarioDocument } from '../../src/ts/settings/scenarioSchema';
 import type { ScenarioStateLedger } from '../../src/ts/types/votingPass';
 import { invalid } from '../helpers/invalid';
 
+import scenarioRunner = require('../../src/ts/services/scenarioRunner');
 import settingsModule = require('../../src/ts/settings');
 const settings = jest.mocked(settingsModule);
 import scenarioStatusModule = require('../../src/ts/services/scenarioStatus');
@@ -206,6 +208,15 @@ describe('status and reset', () => {
             expect.objectContaining({ success: true, assigned: 'Plan' }),
         );
         expect(refreshScenarioStateAsync).toHaveBeenCalled();
+    });
+
+    test('status says whether the background service runs the plans, whatever this process could read', async () => {
+        scenarioStatus.getScenarioStatus.mockReturnValue(
+            invalid({ assigned: 'Plan', scenario, state: null, corrupt: 'unloaded' }),
+        );
+        await expect(handlers['get-scenario-status'](null, 7)).resolves.toMatchObject({ serviceRuns: false });
+        jest.mocked(scenarioRunner.backgroundServiceOwnsScenarios).mockReturnValueOnce(true);
+        await expect(handlers['get-scenario-status'](null, 7)).resolves.toMatchObject({ serviceRuns: true });
     });
 
     test.each([[undefined], [''], ['  '], [Number.NaN], [{}]])('refuses a bad challenge id %p', async (id) => {

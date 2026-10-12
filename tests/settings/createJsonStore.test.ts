@@ -335,13 +335,16 @@ describe('createJsonStore', () => {
                 await expect(strict.flushPendingWrites()).resolves.toBeUndefined();
             });
 
-            test('is told while the latest write is the one that failed, and not after a write that persisted', async () => {
+            test('is told once: a flush with no write since it does not tell of it again, a new failed write is told', async () => {
                 const strict = strictStore();
                 failOnce();
                 strict.writeRaw('{"x":1}');
                 await expect(strict.flushPendingWrites()).rejects.toThrow('was not persisted');
-                await expect(strict.flushPendingWrites()).rejects.toThrow('was not persisted');
+                await expect(strict.flushPendingWrites()).resolves.toBeUndefined();
+                failOnce();
                 strict.writeRaw('{"x":2}');
+                await expect(strict.flushPendingWrites()).rejects.toThrow('was not persisted');
+                strict.writeRaw('{"x":3}');
                 await expect(strict.flushPendingWrites()).resolves.toBeUndefined();
             });
 
@@ -381,13 +384,9 @@ describe('createJsonStore', () => {
         });
 
         describe('a write that must not show before it is saved (updateThrough)', () => {
-            const strictStore = () => {
+            const strictStore = (prefKey = 'gs_scenario_resets') => {
                 const { createJsonStore } = require('../../src/ts/settings/storage') as typeof storageModule;
-                return createJsonStore({
-                    fileName: 'scenarioResets.json',
-                    prefKey: 'gs_scenario_resets',
-                    strict: true,
-                });
+                return createJsonStore({ fileName: 'scenarioResets.json', prefKey, strict: true });
             };
             const hold = () => {
                 let release!: () => void;
@@ -399,31 +398,57 @@ describe('createJsonStore', () => {
                 );
                 return () => release();
             };
+            const settle = () => new Promise((resolve) => setTimeout(resolve, 0));
 
             test('is in the cache only once Preferences has it', async () => {
                 const strict = strictStore();
                 await strict.initializeAsync();
                 const release = hold();
                 const saved = strict.updateThrough(() => '{"asked":1}');
-                await new Promise((resolve) => setTimeout(resolve, 0));
+                await settle();
                 expect(mockPrefSet).toHaveBeenCalledWith({ key: 'gs_scenario_resets', value: '{"asked":1}' });
                 expect(strict.readRaw()).toBe('{"persisted":true}');
                 release();
-                await expect(saved).resolves.toBe(true);
+                await expect(saved).resolves.toBe('saved');
                 expect(strict.readRaw()).toBe('{"asked":1}');
             });
 
-            test('that was not saved answers false and leaves the cache, and what is read or written next, as they were', async () => {
+            test('that was not saved answers failed and leaves the cache, and what is read or written next, as they were', async () => {
                 const strict = strictStore();
                 await strict.initializeAsync();
                 mockPrefSet.mockRejectedValueOnce(new Error('disk full'));
-                await expect(strict.updateThrough(() => '{"asked":1}')).resolves.toBe(false);
+                await expect(strict.updateThrough(() => '{"asked":1}')).resolves.toBe('failed');
                 expect(strict.readRaw()).toBe('{"persisted":true}');
-                await expect(strict.updateThrough((current) => `${current}!`)).resolves.toBe(true);
+                await expect(strict.updateThrough((current) => `${current}!`)).resolves.toBe('saved');
                 expect(mockPrefSet).toHaveBeenLastCalledWith({
                     key: 'gs_scenario_resets',
                     value: '{"persisted":true}!',
                 });
+            });
+
+            test('that declines (answers null) writes nothing, and says so', async () => {
+                const strict = strictStore();
+                await strict.initializeAsync();
+                await expect(strict.updateThrough(() => null)).resolves.toBe('aborted');
+                expect(mockPrefSet).not.toHaveBeenCalled();
+                expect(strict.readRaw()).toBe('{"persisted":true}');
+            });
+
+            test('decides on the value as it is when its turn comes', async () => {
+                const strict = strictStore();
+                await strict.initializeAsync();
+                const release = hold();
+                strict.writeRaw('{"queued":1}');
+                const seen: Array<string | null> = [];
+                const decided = strict.updateThrough((current) => {
+                    seen.push(current);
+                    return null;
+                });
+                await settle();
+                expect(seen).toEqual([]);
+                release();
+                await expect(decided).resolves.toBe('aborted');
+                expect(seen).toEqual(['{"queued":1}']);
             });
 
             test('is made from the cache as it is when its turn comes, behind the writes queued before it', async () => {
@@ -441,33 +466,75 @@ describe('createJsonStore', () => {
                 expect(strict.readRaw()).toBe('{"a":1}12');
             });
 
-            test('shows to a flush as a write of its own, and fills a cache that was never read', async () => {
+            test('is not overwritten by a queued write built before it landed: both Preferences and the cache keep it', async () => {
+                const strict = strictStore();
+                await strict.initializeAsync();
+                const release = hold();
+                const saved = strict.updateThrough(() => '{"asked":1}');
+                await settle();
+                strict.writeRaw('{"built":"before it"}');
+                release();
+                await expect(saved).resolves.toBe('saved');
+                await strict.flushPendingWrites();
+                expect(mockPrefSet).toHaveBeenLastCalledWith({ key: 'gs_scenario_resets', value: '{"asked":1}' });
+                expect(strict.readRaw()).toBe('{"asked":1}');
+            });
+
+            test('that failed leaves no reset behind for a queued write after it to carry', async () => {
+                const strict = strictStore();
+                await strict.initializeAsync();
+                mockPrefSet.mockRejectedValueOnce(new Error('disk full'));
+                await expect(strict.updateThrough(() => '{"asked":1}')).resolves.toBe('failed');
+                strict.writeRaw('{"queued":1}');
+                await strict.flushPendingWrites();
+                expect(mockPrefSet).toHaveBeenLastCalledWith({ key: 'gs_scenario_resets', value: '{"queued":1}' });
+                expect(strict.readRaw()).toBe('{"queued":1}');
+            });
+
+            test('that failed is not a queued write: a flush does not tell of it, now or every time after', async () => {
                 const { isCacheKnown } = require('../../src/ts/settings/storeTransport') as typeof storeTransportModule;
                 const strict = strictStore();
                 expect(isCacheKnown('gs_scenario_resets')).toBe(false);
                 mockPrefSet.mockRejectedValueOnce(new Error('disk full'));
-                await strict.updateThrough(() => 'x');
-                await expect(strict.flushPendingWrites()).rejects.toThrow('was not persisted');
+                await expect(strict.updateThrough(() => 'x')).resolves.toBe('failed');
+                await expect(strict.flushPendingWrites()).resolves.toBeUndefined();
                 expect(isCacheKnown('gs_scenario_resets')).toBe(false);
                 await strict.updateThrough(() => '{"a":1}');
                 expect(isCacheKnown('gs_scenario_resets')).toBe(true);
             });
 
-            test('off the app window is written before it answers, and false when that write throws', async () => {
+            test('off the app window is written before it answers, failed when that write throws, aborted when it declines', async () => {
                 delete g.Capacitor;
                 fs.existsSync.mockReturnValue(false);
                 const { createJsonStore } = require('../../src/ts/settings/storage') as typeof storageModule;
                 const file = createJsonStore({ fileName: 'scenarioResets.json', prefKey: 'gs_scenario_resets' });
-                await expect(file.updateThrough((current) => `${current}!`)).resolves.toBe(true);
+                await expect(file.updateThrough((current) => `${current}!`)).resolves.toBe('saved');
                 expect(fs.writeFileSync).toHaveBeenCalledWith(expect.stringContaining('scenarioResets.json'), 'null!', {
                     encoding: 'utf8',
                     mode: 0o600,
                 });
+                fs.writeFileSync.mockClear();
+                await expect(file.updateThrough(() => null)).resolves.toBe('aborted');
+                expect(fs.writeFileSync).not.toHaveBeenCalled();
                 fs.writeFileSync.mockImplementationOnce(() => {
                     throw new Error('EACCES');
                 });
-                await expect(file.updateThrough(() => '{}')).resolves.toBe(false);
+                await expect(file.updateThrough(() => '{}')).resolves.toBe('failed');
             });
+        });
+
+        test('a queued write whose cache has nothing by its turn puts down what it was queued with', async () => {
+            const { createWriteBehind } =
+                require('../../src/ts/settings/storeTransport') as typeof storeTransportModule;
+            const writes = createWriteBehind(
+                'gs_test_empty_cache',
+                false,
+                () => invalid({ set: mockPrefSet, get: mockPrefGet }),
+                { get: () => null, set: () => {} },
+            );
+            writes.queue('{"queued":1}');
+            await writes.flush();
+            expect(mockPrefSet).toHaveBeenCalledWith({ key: 'gs_test_empty_cache', value: '{"queued":1}' });
         });
 
         describe('what a refresh reads while a write is queued', () => {
@@ -511,6 +578,22 @@ describe('createJsonStore', () => {
                 expect(strict.readRaw()).toBe('{"w":1}');
             });
 
+            test('does not replace a queued write that did not persist: it is the record of something done', async () => {
+                const strict = strictStore();
+                await strict.initializeAsync();
+                mockPrefSet.mockRejectedValueOnce(new Error('disk full'));
+                strict.writeRaw('{"marker":1}');
+                await expect(strict.flushPendingWrites()).rejects.toThrow('was not persisted');
+                mockPrefGet.mockResolvedValueOnce({ value: '{"older":1}' });
+                await strict.refreshAsync();
+                expect(strict.readRaw()).toBe('{"marker":1}');
+                strict.writeRaw('{"marker":2}');
+                await strict.flushPendingWrites();
+                mockPrefGet.mockResolvedValueOnce({ value: '{"service":1}' });
+                await strict.refreshAsync();
+                expect(strict.readRaw()).toBe('{"service":1}');
+            });
+
             test('leaves a write that was not saved out of the cache, whatever the read says', async () => {
                 const strict = strictStore();
                 await strict.initializeAsync();
@@ -518,7 +601,7 @@ describe('createJsonStore', () => {
                 const refreshed = strict.refreshAsync();
                 await inFlight();
                 mockPrefSet.mockRejectedValueOnce(new Error('disk full'));
-                await expect(strict.updateThrough(() => '{"w":1}')).resolves.toBe(false);
+                await expect(strict.updateThrough(() => '{"w":1}')).resolves.toBe('failed');
                 answer('{"persisted":true}');
                 await refreshed;
                 expect(strict.readRaw()).toBe('{"persisted":true}');
@@ -581,11 +664,12 @@ describe('createJsonStore', () => {
             store.writeRaw('A');
             store.writeRaw('B');
             await Promise.resolve();
-            expect(persisted).toEqual(['A']);
+            // Each puts down the cache as it is on its turn (every write holds the whole value), one after the other.
+            expect(persisted).toEqual(['B']);
 
             releaseFirst!();
             await store.flushPendingWrites();
-            expect(persisted).toEqual(['A', 'B']);
+            expect(persisted).toEqual(['B', 'B']);
         });
 
         test("refreshAsync re-reads Preferences after this context's queued writes drain", async () => {
@@ -655,6 +739,42 @@ describe('createJsonStore', () => {
                 const { createJsonStore } = require('../../src/ts/settings/storage') as typeof storageModule;
                 return createJsonStore({ fileName: 'scenarioState.json', prefKey: 'gs_scenario_state', strict: true });
             };
+
+            describe('a read that failed', () => {
+                const { headlessReadFailed } =
+                    require('../../src/ts/settings/storeTransport') as typeof storeTransportModule;
+                const readingBridge = (readKey: (key: string) => string | null) => {
+                    (globalThis as typeof globalThis & { AndroidHeadlessStore?: unknown }).AndroidHeadlessStore = {
+                        read: () => null,
+                        write: jest.fn(),
+                        readKey,
+                    };
+                };
+
+                test('is a read of a missing key told from one that threw: only the throw is a failure', () => {
+                    const strict = strictStore();
+                    readingBridge(() => null);
+                    expect(strict.readRaw()).toBeNull();
+                    expect(headlessReadFailed('gs_scenario_state')).toBe(false);
+                    readingBridge(() => {
+                        throw new Error('bridge down');
+                    });
+                    expect(strict.readRaw()).toBeNull();
+                    expect(headlessReadFailed('gs_scenario_state')).toBe(true);
+                    readingBridge(() => '{"a":1}');
+                    expect(strict.readRaw()).toBe('{"a":1}');
+                    expect(headlessReadFailed('gs_scenario_state')).toBe(false);
+                });
+
+                test('is also a strict store with no bridge to read through, but not a store that is memory-only', () => {
+                    const strict = strictStore();
+                    strict.writeRaw = jest.fn();
+                    expect(strict.readRaw()).toBeNull();
+                    expect(headlessReadFailed('gs_scenario_state')).toBe(true);
+                    expect(store.readRaw()).toBeNull();
+                    expect(headlessReadFailed('gurushots-metadata')).toBe(false);
+                });
+            });
 
             test('a write the bridge answers true for passes, strict or not', () => {
                 const native = bridge(() => true);

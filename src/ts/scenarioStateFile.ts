@@ -201,13 +201,22 @@ const viewOf = (raw: string | null, asked: string | null): ParsedStateFile => {
 
 /**
  * Writes to `target` a text made from its current one, saved before anything can read it where that takes a moment (the
- * Android app: see RawJsonStore.updateThrough). False: it was not saved, and nothing changed.
+ * Android app: see RawJsonStore.updateThrough); `update` answers null to write nothing.
  */
-const through = async (target: RawJsonStore, update: (current: string | null) => string): Promise<boolean> => {
+const through = async (
+    target: RawJsonStore,
+    update: (current: string | null) => string | null,
+): Promise<'saved' | 'aborted' | 'failed'> => {
     if (target.updateThrough) return target.updateThrough(update);
-    target.writeRaw(update(target.readRaw()));
-    return true;
+    const data = update(target.readRaw());
+    if (data === null) return 'aborted';
+    target.writeRaw(data);
+    return 'saved';
 };
+
+// What a write that was or was not made comes to for a reset: asked for or made, left alone for a file that reads (when
+// that was the condition), or not saved.
+const RESET_OF = { saved: 'removed', aborted: 'readable', failed: 'not-saved' } as const;
 
 // How many times `key` (a challenge id, or ALL_KEY) was reset, as the map has it.
 const resetsOf = (map: Record<string, unknown>, key: string): number =>
@@ -284,16 +293,18 @@ const createResets = ({
     /**
      * Asks for the reset of `key` (a challenge id, or ALL_KEY) rather than making it: writes only the small store of
      * requests, with a count ahead of the one asked for before and of the file's. The request shows only once it is
-     * saved, so one that was not has taken effect nowhere.
+     * saved, so one that was not has taken effect nowhere. With `onlyIfUnreadable` it is not asked for while the file
+     * reads: that is decided on the file as it is when the request is written.
      */
-    const askFor = async (asking: RawJsonStore, key: string): Promise<ResetResult> => {
-        const saved = await through(asking, (current) => {
-            const asked = parseRequests(current);
-            const count = nextCount(Math.max(asked[key] ?? 0, resetsOf(read().map, key)));
-            return JSON.stringify({ ...liveRequests(asked, stored()), [key]: count });
-        });
-        return saved ? 'removed' : 'not-saved';
-    };
+    const askFor = async (asking: RawJsonStore, key: string, onlyIfUnreadable = false): Promise<ResetResult> =>
+        RESET_OF[
+            await through(asking, (current) => {
+                if (onlyIfUnreadable && parseStateFile(store.readRaw()).ok) return null;
+                const asked = parseRequests(current);
+                const count = nextCount(Math.max(asked[key] ?? 0, resetsOf(read().map, key)));
+                return JSON.stringify({ ...liveRequests(asked, stored()), [key]: count });
+            })
+        ];
 
     /**
      * Resets one challenge: asked for where resets are asked for, else made on the file under its lock (a tombstone
@@ -317,21 +328,24 @@ const createResets = ({
     /**
      * Resets every challenge, an unreadable file included (there is nothing in it to lose). With `onlyIfUnreadable`
      * the reset is made only while the file cannot be read: one that reads again was a failed read, and its progress
-     * is not what the caller meant to wipe.
+     * is not what the caller meant to wipe. That is decided on the file as it is where the write is made (under the
+     * lock, or when the write's turn comes), not on what was read before.
      */
     const resetAll = async (onlyIfUnreadable = false): Promise<ResetResult> => {
         const view = read();
         if (view.unloaded) return 'unloaded';
-        if (onlyIfUnreadable && view.ok) return 'readable';
         const asking = asRequests();
-        if (view.ok && asking) return askFor(asking, ALL_KEY);
+        if (view.ok && asking) return askFor(asking, ALL_KEY, onlyIfUnreadable);
         let result: ResetResult = 'not-saved';
         const ran = await underLockAsync(acquireLock, async () => {
-            const { ok, map } = read();
-            const saved = await through(store, () =>
-                JSON.stringify({ [ALL_KEY]: nextCount(ok ? countOf(map[ALL_KEY]) : 0) }),
-            );
-            if (saved) result = 'removed';
+            result =
+                RESET_OF[
+                    await through(store, (current) => {
+                        const parsed = parseStateFile(current);
+                        if (onlyIfUnreadable && parsed.ok) return null;
+                        return JSON.stringify({ [ALL_KEY]: nextCount(parsed.ok ? countOf(parsed.map[ALL_KEY]) : 0) });
+                    })
+                ];
         });
         return ran === 'done' ? result : ran;
     };
@@ -368,9 +382,10 @@ const createStateFile = (
         runtime.isCapacitor() || runtime.isHeadlessService() ? requests : undefined;
 
     const read = (): ParsedStateFile => {
-        if (!isLoaded()) return { ok: false, map: {}, unloaded: true };
         const raw = store.readRaw();
         const asked = asRequests()?.readRaw() ?? null;
+        // After the reads: a read that failed says so only once it was made.
+        if (!isLoaded()) return { ok: false, map: {}, unloaded: true };
         // lastParsed is set together with lastRaw, and readRaw never returns undefined.
         if (raw === lastRaw && asked === lastRequests) return lastParsed as ParsedStateFile;
         lastRaw = raw;

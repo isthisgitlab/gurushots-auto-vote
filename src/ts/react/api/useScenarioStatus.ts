@@ -31,6 +31,8 @@ export type ScenarioSummary = {
      * in yet (`unloaded`: nothing is known of it, and nothing is reset).
      */
     corrupt?: 'file' | 'record' | 'unloaded';
+    /** With `unloaded`: the background service keeps running the plans, so only this window lacks the progress. */
+    serviceRuns?: boolean;
     phase?: string;
     started?: boolean;
     lastError?: string | null;
@@ -154,7 +156,7 @@ const spendUnclearOf = (
  */
 function summarize(status: ScenarioStatus, challenge: Challenge): ScenarioSummary {
     if (!status.scenario) return { name: status.assigned, missing: true };
-    if (status.corrupt) return { name: status.scenario.name, corrupt: status.corrupt };
+    if (status.corrupt) return { name: status.scenario.name, corrupt: status.corrupt, serviceRuns: status.serviceRuns };
     const now = Math.floor(Date.now() / 1000);
     const state = status.state ?? startState(status.scenario, now);
     return {
