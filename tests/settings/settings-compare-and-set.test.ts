@@ -501,3 +501,143 @@ describe('both writers saving different settings at once', () => {
         expect(parse(native.value)).toEqual({ a: 1, window: 'off', service: 'off' });
     });
 });
+
+describe('the app window being told that a save was given up', () => {
+    const nativeWindow = (initial: string | null) => {
+        const native = nativeStore(initial);
+        const compareAndWrite = jest.fn<ReturnType<CompareAndWrite>, Parameters<CompareAndWrite>>(
+            async ({ expected, value }) => native.compareAndSet(expected, value),
+        );
+        g.Capacitor = { isNativePlatform: () => true, Plugins: { AutoVoteBackground: { compareAndWrite } } };
+        mockPreferences.get.mockImplementation(() => Promise.resolve({ value: native.value }));
+        return { native, compareAndWrite };
+    };
+    /** The service changing the blob under every attempt of one save. */
+    const alwaysConflicting = (
+        native: ReturnType<typeof nativeStore>,
+        compareAndWrite: jest.MockedFunction<CompareAndWrite>,
+    ) => {
+        let n = 0;
+        compareAndWrite.mockImplementation(async () => {
+            native.value = `{"a":1,"n":${++n}}`;
+            return { saved: false, current: native.value };
+        });
+    };
+
+    test('a save that kept conflicting is reported once, and the next save that lands takes it back', async () => {
+        const { native, compareAndWrite } = nativeWindow('{"a":1}');
+        const { storage, initializeAsync, flushPendingWrites, isSaveDropped, onSaveDroppedChange } = loadStorage();
+        await initializeAsync();
+        const seen: boolean[] = [];
+        const listener = jest.fn(() => seen.push(isSaveDropped()));
+        onSaveDroppedChange(listener);
+        expect(isSaveDropped()).toBe(false);
+        const conflicting = compareAndWrite.getMockImplementation();
+        alwaysConflicting(native, compareAndWrite);
+
+        storage.writeRaw('{"a":1,"w":1}');
+        await flushPendingWrites();
+        expect(isSaveDropped()).toBe(true);
+        expect(listener).toHaveBeenCalledTimes(1);
+
+        // A second one given up while it is already reported is not a change.
+        storage.writeRaw('{"a":1,"w":2}');
+        await flushPendingWrites();
+        expect(listener).toHaveBeenCalledTimes(1);
+
+        compareAndWrite.mockImplementation(conflicting!);
+        storage.writeRaw('{"a":1,"w":3}');
+        await flushPendingWrites();
+        expect(isSaveDropped()).toBe(false);
+        expect(listener).toHaveBeenCalledTimes(2);
+        expect(seen).toEqual([true, false]);
+    });
+
+    test('a save the plugin rejected is reported as well', async () => {
+        const { compareAndWrite } = nativeWindow('{"a":1}');
+        const { storage, initializeAsync, flushPendingWrites, isSaveDropped } = loadStorage();
+        await initializeAsync();
+        compareAndWrite.mockRejectedValueOnce(new Error('refused'));
+
+        storage.writeRaw('{"a":1,"w":1}');
+        await flushPendingWrites();
+
+        expect(isSaveDropped()).toBe(true);
+    });
+
+    test('a failed save is reported although a later one lands: that one carries only its own change', async () => {
+        const { native, compareAndWrite } = nativeWindow('{"a":1}');
+        const { storage, initializeAsync, flushPendingWrites, isSaveDropped } = loadStorage();
+        await initializeAsync();
+        compareAndWrite.mockRejectedValueOnce(new Error('not saved'));
+
+        storage.writeRaw('{"a":1,"first":1}');
+        storage.writeRaw('{"a":1,"first":1,"second":2}');
+        await flushPendingWrites();
+
+        expect(isSaveDropped()).toBe(true);
+        expect(parse(native.value)).toEqual({ a: 1, second: 2 });
+
+        storage.writeRaw('{"a":1,"second":2,"third":3}');
+        await flushPendingWrites();
+        expect(isSaveDropped()).toBe(false);
+    });
+
+    test('a listener that is replaced is not told, and none is needed', async () => {
+        const { native, compareAndWrite } = nativeWindow('{"a":1}');
+        const { storage, initializeAsync, flushPendingWrites, isSaveDropped, onSaveDroppedChange } = loadStorage();
+        await initializeAsync();
+        const first = jest.fn();
+        const second = jest.fn();
+        onSaveDroppedChange(first);
+        onSaveDroppedChange(second);
+        alwaysConflicting(native, compareAndWrite);
+
+        storage.writeRaw('{"a":1,"w":1}');
+        await flushPendingWrites();
+        expect(first).not.toHaveBeenCalled();
+        expect(second).toHaveBeenCalledTimes(1);
+
+        onSaveDroppedChange(null);
+        compareAndWrite.mockImplementation(async ({ expected, value }) => native.compareAndSet(expected, value));
+        storage.writeRaw('{"a":1,"w":2}');
+        await flushPendingWrites();
+        expect(isSaveDropped()).toBe(false);
+        expect(second).toHaveBeenCalledTimes(1);
+    });
+
+    test('discarding the pending writes forgets it', async () => {
+        const { native, compareAndWrite } = nativeWindow('{"a":1}');
+        const { storage, initializeAsync, flushPendingWrites, discardPendingWrites, isSaveDropped } = loadStorage();
+        await initializeAsync();
+        alwaysConflicting(native, compareAndWrite);
+        storage.writeRaw('{"a":1,"w":1}');
+        await flushPendingWrites();
+        expect(isSaveDropped()).toBe(true);
+
+        await discardPendingWrites();
+
+        expect(isSaveDropped()).toBe(false);
+    });
+
+    test('through the facade the notice is a settings-save-dropped state at the preference key', async () => {
+        const { native, compareAndWrite } = nativeWindow('{"theme":"light"}');
+        let facade: typeof settingsModule | undefined;
+        jest.isolateModules(() => {
+            facade = require('../../src/ts/settings') as typeof settingsModule;
+        });
+        await facade!.initializeAsync();
+        const listener = jest.fn();
+        facade!.onSettingsSaveDroppedChange(listener);
+        expect(facade!.getSettingsSaveDropped()).toBeNull();
+        alwaysConflicting(native, compareAndWrite);
+
+        expect(facade!.setSetting('theme', 'dark')).toBe(true);
+        await facade!.flushPendingWrites();
+
+        expect(facade!.getSettingsSaveDropped()).toEqual({ code: 'settings-save-dropped', path: KEY });
+        expect(listener).toHaveBeenCalledTimes(1);
+        // The setting shows its stored value again.
+        expect(facade!.getSetting('theme')).toBe('light');
+    });
+});

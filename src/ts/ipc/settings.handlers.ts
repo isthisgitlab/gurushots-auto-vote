@@ -214,8 +214,12 @@ const buildEnvironmentHandlers = () => ({
 });
 
 const buildLocalDataHandlers = ({ afterWipe }: SettingsHandlerOptions) => ({
-    // Why the stored settings are not in use (a corrupt file moved aside, or one that cannot be read), or null.
-    'get-settings-recovery': async () => ({ success: true as const, recovery: settings.getSettingsRecovery() }),
+    // Why the stored settings are not in use (a corrupt file moved aside, or one that cannot be read), or else that the
+    // window's last change was not saved; null when neither.
+    'get-settings-recovery': async () => ({
+        success: true as const,
+        recovery: settings.getSettingsRecovery() ?? settings.getSettingsSaveDropped(),
+    }),
 
     'get-third-party-notices': async () => {
         try {
@@ -287,6 +291,14 @@ const buildSchemaHandlers = () => ({
 });
 
 const buildHandlers = (options: SettingsHandlerOptions = {}) => {
+    const { broadcastSettingsChange } = options;
+    // A save the window gave up (and the next one that lands) changes what get-settings-recovery answers, so the
+    // window re-reads on the same signal a settings change sends.
+    if (broadcastSettingsChange) {
+        settings.onSettingsSaveDroppedChange(() =>
+            broadcastSettingsChange(toRendererSettings(settings.loadSettings())),
+        );
+    }
     const handlers = {
         ...buildSettingsHandlers(options),
         ...buildEnvironmentHandlers(),

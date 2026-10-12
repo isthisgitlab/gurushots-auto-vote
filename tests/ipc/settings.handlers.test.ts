@@ -439,7 +439,49 @@ describe('get-settings-recovery', () => {
             recovery: { code: 'settings-corrupt', path: '/u/settings.json.corrupt-1' },
         });
         settings.getSettingsRecovery = jest.fn().mockReturnValue(null);
+        settings.getSettingsSaveDropped = jest.fn().mockReturnValue(null);
         await expect(handlers['get-settings-recovery']()).resolves.toEqual({ success: true, recovery: null });
+    });
+
+    test('reports a change the window could not save when the stored settings are in use', async () => {
+        settings.getSettingsRecovery = jest.fn().mockReturnValue(null);
+        settings.getSettingsSaveDropped = jest
+            .fn()
+            .mockReturnValue({ code: 'settings-save-dropped', path: 'gurushots-settings' });
+        await expect(handlers['get-settings-recovery']()).resolves.toEqual({
+            success: true,
+            recovery: { code: 'settings-save-dropped', path: 'gurushots-settings' },
+        });
+    });
+
+    test('a recovery of the stored settings comes before a dropped save', async () => {
+        settings.getSettingsRecovery = jest.fn().mockReturnValue({ code: 'settings-unreadable', path: '/u/s.json' });
+        settings.getSettingsSaveDropped = jest
+            .fn()
+            .mockReturnValue({ code: 'settings-save-dropped', path: 'gurushots-settings' });
+        await expect(handlers['get-settings-recovery']()).resolves.toEqual({
+            success: true,
+            recovery: { code: 'settings-unreadable', path: '/u/s.json' },
+        });
+    });
+});
+
+describe('a save the window gave up', () => {
+    test('is announced like a settings change, with the settings as the window now has them', () => {
+        const broadcast = jest.fn();
+        settings.loadSettings = jest.fn().mockReturnValue({ token: 'secret', theme: 'dark' });
+        buildHandlers({ broadcastSettingsChange: broadcast });
+
+        const [listener] = settings.onSettingsSaveDroppedChange.mock.calls.at(-1) ?? [];
+        listener?.();
+
+        expect(broadcast).toHaveBeenCalledWith({ theme: 'dark', hasToken: true });
+    });
+
+    test('is not listened for where nothing is announced', () => {
+        settings.onSettingsSaveDroppedChange.mockClear();
+        buildHandlers();
+        expect(settings.onSettingsSaveDroppedChange).not.toHaveBeenCalled();
     });
 });
 

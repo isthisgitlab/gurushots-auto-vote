@@ -593,6 +593,11 @@ repeated six times is one that gets forgotten at one of them.
   a three-way merge of the text it was made from, the changed text and the stored one: nested objects merge key by
   key, and where both sides changed one value the writer's wins), up to 5 attempts. A blob that cannot be read is
   never overwritten, and a save that is not made is logged and leaves the window cache showing what is stored.
+  A window save given up (5 conflicting attempts, a refused save, or a plugin error) is not silent: the window's
+  `get-settings-recovery` answers `{ code: 'settings-save-dropped', path }` (`getSettingsSaveDropped`, below the
+  recovery of the stored settings in precedence), the same `settings-changed` signal a write sends is emitted so
+  `SettingsRecoveryNotice` re-reads, and it tells the user in what / why / next terms that the change was not saved
+  and the setting shows its stored value again. It clears when a write issued after the dropped one lands.
   `setSetting` hands `saveSettings` only the changed key, so the service's own load-and-save has no stale whole blob
   to write back. Desktop and the CLI write the file atomically and are unchanged.
 - Write-behind is **ordered** (writes chain onto a promise) and `flushPendingWrites()` awaits durability

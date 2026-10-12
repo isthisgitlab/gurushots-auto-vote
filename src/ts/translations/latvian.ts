@@ -1440,6 +1440,9 @@ export const notice = {
     recoveryMigrationWhy: 'Failu {path} neizdevās pārveidot formātā, ko izmanto šī versija.',
     recoveryMigrationNext:
         'Restartē lietotni. Ja tas atkārtojas, pārvieto šo failu citur, lai sāktu ar noklusētajiem uzstādījumiem; fails netiek pārrakstīts.',
+    recoveryDroppedWhat: 'Vienu no tavām izmaiņām uzstādījumos neizdevās saglabāt.',
+    recoveryDroppedWhy: 'Fona pakalpojums tajā pašā laikā mainīja uzstādījumus.',
+    recoveryDroppedNext: 'Uzstādījums atkal rāda saglabāto vērtību. Ja vajag, nomaini to vēlreiz.',
 };
 // about
 export const about = {

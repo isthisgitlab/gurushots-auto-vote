@@ -64,6 +64,30 @@ let settingsWriteGeneration = 0;
 // and leaves the cache to the one that is.
 let settingsWriteSerial = 0;
 
+// Whether a settings save of the app window was given up: its change is in no store (and the cache is back to what is
+// stored, unless a later write is queued), and `droppedAfter` is the last write issued by then. Cleared by the next
+// write issued after that one that lands.
+let saveDropped = false;
+let droppedAfter = 0;
+let saveDroppedListener: (() => void) | null = null;
+
+const setSaveDropped = (dropped: boolean) => {
+    if (saveDropped === dropped) return;
+    saveDropped = dropped;
+    saveDroppedListener?.();
+};
+
+/** Whether a settings save of the app window was given up, and its change is not in the stored settings. */
+const isSaveDropped = (): boolean => saveDropped;
+
+/**
+ * Tells `listener` whenever {@link isSaveDropped} changes, so a window can re-read the settings (the one subscriber is
+ * replaced by the next).
+ */
+const onSaveDroppedChange = (listener: (() => void) | null): void => {
+    saveDroppedListener = listener;
+};
+
 // Saves the settings text the app window changed (`data`, made from `base`, the cache before the change): only if
 // Preferences still holds what was last known of it, else the change is made again on what the background service saved
 // since. Once the latest write is saved, the cache holds the merged text.
@@ -152,15 +176,20 @@ const storage = {
             const serial = ++settingsWriteSerial;
             writeChain = writeChain
                 .then(async () => {
-                    if (issuedIn === settingsWriteGeneration) await saveSettingsThroughCas(base, data, serial);
+                    if (issuedIn !== settingsWriteGeneration) return;
+                    await saveSettingsThroughCas(base, data, serial);
+                    // A write issued before the one given up does not carry its change either.
+                    if (serial > droppedAfter) setSaveDropped(false);
                 })
                 .catch((err) => {
                     logger.withCategory('settings').error('Capacitor preferences write failed:', err);
+                    if (issuedIn !== settingsWriteGeneration) return;
                     // What the cache shows must be what is stored: the change was not saved, and no later write
                     // carries it (each carries its own).
-                    if (issuedIn === settingsWriteGeneration && serial === settingsWriteSerial) {
-                        cachedSettingsJson = persistedSettingsJson;
-                    }
+                    if (serial === settingsWriteSerial) cachedSettingsJson = persistedSettingsJson;
+                    // The window is told, so the user can make the change again.
+                    droppedAfter = settingsWriteSerial;
+                    setSaveDropped(true);
                 });
             return true;
         }
@@ -256,6 +285,7 @@ const discardPendingWrites = async (): Promise<void> => {
     settingsWriteGeneration++;
     cachedSettingsJson = null;
     persistedSettingsJson = null;
+    saveDropped = false;
     discardStores();
     await writeChain;
     await settleStores();
@@ -268,6 +298,8 @@ export {
     resumeWrites,
     removePreferenceKeys,
     storage,
+    isSaveDropped,
+    onSaveDroppedChange,
     initializeAsync,
     flushPendingWrites,
     getSettingsPath,

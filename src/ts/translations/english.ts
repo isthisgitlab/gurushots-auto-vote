@@ -1415,6 +1415,9 @@ export const notice = {
     recoveryMigrationWhy: 'The file at {path} could not be converted to the format this version uses.',
     recoveryMigrationNext:
         'Restart the app. If this keeps happening, move that file aside to start with default settings; the file is not overwritten.',
+    recoveryDroppedWhat: 'A change to your settings could not be saved.',
+    recoveryDroppedWhy: 'The background service changed the settings at the same time.',
+    recoveryDroppedNext: 'Your setting shows its saved value again. Change it again if needed.',
 };
 // about
 export const about = {

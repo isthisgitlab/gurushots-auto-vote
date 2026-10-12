@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useTranslation } from '@/contexts/TranslationContext';
 import { useIpcQuery } from '@/api/useIpcQuery';
 import * as ipc from '@/api/ipc';
@@ -6,7 +6,7 @@ import { interp } from '@/utils/interp';
 
 import type { IpcQueryTools } from '@/api/useIpcQuery';
 
-type RecoveryCode = 'settings-corrupt' | 'settings-unreadable' | 'settings-migration-failed';
+type RecoveryCode = 'settings-corrupt' | 'settings-unreadable' | 'settings-migration-failed' | 'settings-save-dropped';
 type Recovery = { code: RecoveryCode; path: string };
 
 // The translation keys of each code's what happened / why / what next text.
@@ -26,6 +26,11 @@ const RECOVERY_KEYS: Record<RecoveryCode, { what: string; why: string; next: str
         why: 'notice.recoveryMigrationWhy',
         next: 'notice.recoveryMigrationNext',
     },
+    'settings-save-dropped': {
+        what: 'notice.recoveryDroppedWhat',
+        why: 'notice.recoveryDroppedWhy',
+        next: 'notice.recoveryDroppedNext',
+    },
 };
 
 const fetchRecovery = () => ipc.getSettingsRecovery();
@@ -42,16 +47,22 @@ const applyRecovery = (
 
 /**
  * Tells the user when their stored settings are not in use: a damaged file moved aside (with where the copy went), or
- * a file that cannot be read or brought up to date (saving is off until it can be). What happened, why, what next;
- * dismissable for the session.
+ * a file that cannot be read or brought up to date (saving is off until it can be), or a change the window could not
+ * save. What happened, why, what next; dismissable until the notice goes away. It reads again on every settings
+ * change, which is how a save given up later (or one that lands after) reaches it.
  */
 export function SettingsRecoveryNotice() {
     const { t } = useTranslation();
     const { data: recovery } = useIpcQuery(fetchRecovery, {
         initialData: null as Recovery | null,
         apply: applyRecovery,
+        subscribe: true,
     });
     const [dismissed, setDismissed] = useState(false);
+    // A notice that went away and comes back is a new one.
+    useEffect(() => {
+        if (!recovery) setDismissed(false);
+    }, [recovery]);
     if (!recovery || dismissed) return null;
     const keys = RECOVERY_KEYS[recovery.code];
     return (

@@ -8,7 +8,7 @@
 
 import * as logger from '../logger';
 import { schemaEntry } from './schema';
-import { storage } from './storage';
+import { isSaveDropped, onSaveDroppedChange, storage } from './storage';
 import { errorMessage } from '../errorMessage';
 import { getDefaultSettings } from './defaults';
 import { dropInvalidValues, isPrototypeKey, mergeWithDefaults, topLevelValueAllowed } from './loadValidation';
@@ -42,6 +42,13 @@ type SettingsRecovery = {
     code: 'settings-corrupt' | 'settings-unreadable' | 'settings-migration-failed';
     path: string;
 };
+
+/**
+ * A change the app window made to the settings that could not be saved (Android: the background service kept changing
+ * the settings, or the save was refused), so the setting shows its stored value again. Not a recovery of the stored
+ * settings, which are in use; `path` is where they live. Cleared by the next save that lands.
+ */
+type SettingsSaveDropped = { code: 'settings-save-dropped'; path: string };
 
 // Set while the stored settings cannot be used and must not be overwritten; cleared by the next load that gets through.
 let blocked: SettingsRecovery | null = null;
@@ -192,6 +199,12 @@ const getSettingsRecovery = (): SettingsRecovery | null =>
     blocked ?? (corruptBackupPath ? { code: 'settings-corrupt', path: corruptBackupPath } : null);
 
 /**
+ * The change the app window made last that could not be saved, or null: see SettingsSaveDropped.
+ */
+const getSettingsSaveDropped = (): SettingsSaveDropped | null =>
+    isSaveDropped() ? { code: 'settings-save-dropped', path: storage.settingsLocation() } : null;
+
+/**
  * Write the whole settings blob, unless the stored settings are not usable (writing then would erase them).
  */
 const _persist = (settings: object): boolean => {
@@ -308,6 +321,8 @@ const getWindowBounds = (windowType: WindowType): WindowBounds => {
 export type { SettingsRecovery };
 export {
     getSettingsRecovery,
+    getSettingsSaveDropped,
+    onSaveDroppedChange as onSettingsSaveDroppedChange,
     isPrototypeKey,
     loadSettings,
     saveSettings,

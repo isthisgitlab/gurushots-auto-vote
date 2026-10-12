@@ -58,6 +58,8 @@ export const setSetting = persistence.setSetting;
 export const isReloadRequired = persistence.isReloadRequired;
 export const getSettingsRecovery = persistence.getSettingsRecovery;
 export type SettingsRecovery = persistence.SettingsRecovery;
+export const getSettingsSaveDropped = persistence.getSettingsSaveDropped;
+export const onSettingsSaveDroppedChange = persistence.onSettingsSaveDroppedChange;
 export const saveWindowBounds = persistence.saveWindowBounds;
 export const getWindowBounds = persistence.getWindowBounds;
 // Challenge-specific settings
