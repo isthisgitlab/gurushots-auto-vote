@@ -296,10 +296,7 @@ export const runBoost = async (ctx: ActionContext) => {
         }
         logger
             .withCategory('boost')
-            .info(
-                `${logger.challengeTag(challenge)} Boost applied early for the boost mission (${boostNeed} to go)`,
-                null,
-            );
+            .info(`${logger.challengeTag(challenge)} Boost due early for the boost mission (${boostNeed} to go)`, null);
     }
     const target = await resolveBoostTarget(ctx);
     if (

@@ -190,7 +190,7 @@ describe('runBoost — availability and readiness', () => {
             expect(api.applyBoost).toHaveBeenCalledTimes(1);
             expect(missions.boost).toBe(1);
             expect(messages('info')).toContain(
-                '[Challenge 101: Orchestrated] Boost applied early for the boost mission (2 to go)',
+                '[Challenge 101: Orchestrated] Boost due early for the boost mission (2 to go)',
             );
             expect(messages('info').some((m) => m.includes('Boost not ready'))).toBe(false);
         });
