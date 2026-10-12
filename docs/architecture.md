@@ -447,14 +447,18 @@ repeated six times is one that gets forgotten at one of them.
   Discover row with a confirmation dialog, CLI `forget-payment <id>`): for a user who checked on GuruShots
   that the coins were not taken. Under the same cross-process lock as the unlock, and refused while a join of
   the challenge is under way, it re-reads the claims (an unreadable file aborts), and deletes this account's
-  claim for the challenge only when it is still unconfirmed, or is a bare one while the account has none of
-  its own; never a claim known to have been charged. A bare claim may be another account's protection against
-  a second charge, so it goes only while the store holds no claim keyed by another account: otherwise the
-  answer is `other-account-possible` (it can only be cleared from the account that paid, or once the challenge
-  has ended and the claim is pruned). A key with a colon is never read as a bare claim, and the IPC handler and
+  claim for the challenge only when it is still unconfirmed; never a claim known to have been charged. A
+  bare claim from before accounts were told apart is **never** forgotten (`legacy-record`): it may be another
+  account's protection against a second charge and nothing on the device can tell whose, so it clears by itself
+  — when a paid submit that used it succeeds, or after 30 days (any claim, bare or any account's, older than 30
+  days is pruned with the open-list pruning; no challenge lives that long, and it ends the keeping of other
+  accounts' records and balances). The GUI offers no "I wasn't charged" for it. A key with a colon is never read as a bare claim, and the IPC handler and
   the CLI take only a plain challenge id (digits), so a crafted id cannot name another account's record. It
   refuses when the account cannot be told. The next
-  join then asks for the price like any first one. Every writer of the claims reads them with
+  join then asks for the price like any first one. Every change of the claims is read-modify-write of one
+  file for every challenge, so it is made under its own cross-process lock (`joinstate`, taken after any
+  challenge lock and waited for up to half a second; when it cannot be had the change fails, and an unlock
+  records no claim, so spends nothing). Every writer of the claims reads them with
   `readUnlockedState` and writes nothing when the file is unreadable (read as empty it would wipe every other
   claim; `markUnlocked` then returns false and nothing is spent), and logs by challenge id only, never by the
   member id in a key. Spends of currency (keys, swaps, fills) that are unclear say so (`outcome: 'unclear'`,
@@ -463,14 +467,18 @@ repeated six times is one that gets forgotten at one of them.
   (conservatively, so a limit is never exceeded), is retried from the same step, and says it "may have gone
   through" (the status line words it in the user's language from the stored `kind: 'spend-unclear'` and action,
   not as a skipped step). Such a step as a rule's first commits the rule (`inFlight` at that index), so the
-  retry resumes there and a live re-check that then skips it passes over to the steps that follow. A **paid** join whose account cannot be identified (a real claim store and a profile read are
+  retry resumes there. The retry of such a step never spends again: it only looks at the live challenge, passes
+  the step over when that positively shows it took effect (the boost unlocked by a key, the exposure full, the
+  replacement photo entered) and goes on, and otherwise ends the rule — a swap whose replacement a selector
+  chooses cannot be shown to have landed, so it ends the rule too — instead of spending on it or on a later step. A **paid** join whose account cannot be identified (a real claim store and a profile read are
   wired in, but no member id came) does nothing paid: no unlock, no submit, and it answers `failed-no-charge`
   with `reason: 'account-unknown'`, which the GUI and CLI word as "could not confirm the account; this attempt
   spent no coins", not as "no coins were charged". The reasons are one union (`types/join.ts`) shared by core
   and renderer. Claims whose challenge is no longer open are dropped when a successful, non-empty open list is
   read (`pruneClosedClaims`, after the pass or manual join): only this account's own keyed claims, only ones
   older than six hours (a list read a moment ago cannot know of a join under way), never on an unknown account,
-  never another account's or a bare one, and never a challenge whose unlock lock another process holds. A manual join or an auto-join pass that
+  never another account's or a bare one by that rule (age is the only way those go, above), and never a
+  challenge whose unlock lock another process holds. A manual join or an auto-join pass that
   finds this account's claim skips the price, balance and budget checks and only submits (`submitOnly`: the
   join re-reads the claim and refuses to unlock if it is gone); with no eligible photo it answers
   `charged-pending-submit` with `reason: 'no-photo'` only when the photo library was actually read and held
@@ -480,8 +488,13 @@ repeated six times is one that gets forgotten at one of them.
   failed on their first page: `readState.firstPageFailed` out of `getEligiblePhotos`, carried through
   `trace.readFailed` to `pickJoinPhoto`) is `unreadable`, answers plain `charged-pending-submit` (the
   ordinary Retry) and skips a free join; an unconfirmed claim's wording wins over "no photo". a per-process in-flight `Set` **plus** a
-  cross-process lockfile (`acquireUnlockLock`, real-fs platforms, TTL stale-recovery, fail-open) guard the
-  check→unlock→mark section; a corrupt/unreadable join-state **refuses to spend** (fail-safe, not fail-open);
+  cross-process lockfile (`acquireUnlockLock`, real-fs platforms, fail-open; Capacitor and the headless service
+  are single-process and take none) guard the
+  check→unlock→mark section, a submit that continues on a claim, and the forgetting of one. The lock file holds a
+  random owner token and is released only while it still holds it, so a lock that was taken over is never
+  deleted by its old owner; a held lock is touched every 20 s, so only the lock of a crashed owner goes stale
+  (60 s untouched), and a stale one is taken over atomically (renamed to a name of its own — only one process can
+  — then checked to be the one seen, and put back if it was a live one); a corrupt/unreadable join-state **refuses to spend** (fail-safe, not fail-open);
   the pass is cancellation-checked between candidates and before each spend, and each candidate is
   independently try/caught. Decision precedence in `VotingLogic.shouldJoinChallenge` (pure): a rule opt-in
   (a named profile, or an inline `autoJoin: true` on the rule) wins over the type-exclude veto; otherwise the

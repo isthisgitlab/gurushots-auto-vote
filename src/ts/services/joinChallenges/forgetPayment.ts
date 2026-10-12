@@ -39,7 +39,7 @@ const forgetUnconfirmedPayment = async (
     const lock = lockFor(deps, challengeId);
     if (!lock.ok) return { status: 'busy', challengeId };
     try {
-        const status = forgetClaim(deps.joinStateStore, challengeId, owner);
+        const status = forgetClaim(deps, challengeId, owner);
         if (status === 'forgotten') cat().info(`challenge ${safe}: the unconfirmed payment was forgotten`, null);
         return { status, challengeId };
     } finally {

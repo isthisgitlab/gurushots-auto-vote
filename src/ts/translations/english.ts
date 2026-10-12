@@ -545,23 +545,26 @@ export const app = {
     discoverUnconfirmed:
         'The payment for this challenge got no answer, so it may or may not have gone through. Retrying only submits your photo, so you are never charged twice. If the GuruShots website shows the coins were not taken, press "I wasn\'t charged", then join again.',
     discoverEarlierPayment:
-        'This challenge has a payment record from an older version of the app, from before accounts were told apart, so it is not known whether the coins were taken, or by which GuruShots account used on this device. Retrying only submits your photo, so you are never charged twice. If the GuruShots website shows the coins were not taken, press "I wasn\'t charged", then join again.',
+        'This challenge has a payment record from an older version of the app, from before accounts were told apart, so it is not known whether the coins were taken, or by which GuruShots account used on this device. Retrying only submits your photo, so you are never charged twice. The record cannot be forgotten here, because it may belong to another account: it clears by itself after 30 days, or when the account that paid joins the challenge.',
     discoverForgetPayment: "I wasn't charged",
     discoverForgetPaymentLabel: "I wasn't charged for {title}",
     discoverForgetTitle: 'Forget this payment?',
     discoverForgetBody:
-        'First check your coin history on the GuruShots website. Only continue if the coins for {title} were not taken: if they were, joining again charges you a second time.',
+        'First check your coin history on the GuruShots website. Only continue if the coins for {title} were not taken: if they were, joining again charges you a second time. Once forgotten, auto-join may also join it again, and pay for it, within its coin budget.',
     discoverForgetBalances:
-        "Before this payment you had {before} coins; GuruShots reports {now} now. If the difference is not the challenge's price, the payment probably did not go through. The app cannot tell: the coin history on the GuruShots website is what counts.",
+        'Coins before this payment: {before}. GuruShots reports {now} now. Other coin activity since then (rewards, other joins) changes the difference, so the app cannot tell whether the payment went through: the coin history on the GuruShots website is what counts.',
     discoverForgetBalanceBefore:
-        'Before this payment you had {before} coins. Compare that with your balance on the GuruShots website: the app cannot tell whether the payment went through.',
+        'Coins before this payment: {before}. Compare that with your balance on the GuruShots website: the app cannot tell whether the payment went through, and other coin activity since then changes the difference.',
     discoverForgetConfirm: "I wasn't charged — forget it",
+    discoverForgetWorking: 'Forgetting…',
     discoverForgetNothing:
         'There was nothing to forget: the payment is already confirmed, or the join has finished. Refresh the list.',
     discoverForgetAccountUnknown:
         'Could not confirm which account is logged in, so nothing was changed. Try again shortly, or log in again.',
-    discoverForgetOtherAccount:
-        'This record is from an older version of the app and may belong to another GuruShots account used on this device, so it can only be cleared from the account that paid, or once the challenge has ended. Nothing was changed.',
+    discoverForgetLegacyRecord:
+        'This record is from an older version of the app and may belong to another GuruShots account used on this device, so it cannot be forgotten here. It clears by itself after 30 days, or when the account that paid joins the challenge. Nothing was changed.',
+    discoverForgetUnreadable:
+        'The saved payment records could not be read, so nothing was changed. Restart the app and try again; if it keeps happening, the join-state file needs attention — check the log.',
     discoverForgetFailed: 'Could not forget the payment right now. Nothing was changed. Try again in a moment.',
     discoverAccountUnknown:
         'Could not confirm which account is logged in, so this attempt did nothing and spent no coins. Try again shortly, or log in again.',
@@ -586,7 +589,7 @@ export const app = {
     discoverUnavailable: 'This challenge is no longer open to join.',
     discoverNotStarted: 'This challenge has not started yet. You can join once it starts.',
     discoverPriceChanged: 'The cost changed to {coins} coins. Nothing was spent — press Join to confirm the new cost.',
-    discoverBusy: 'A join is already in progress.',
+    discoverBusy: 'A join is already in progress. Try again in a moment.',
     validationOutOfRange: 'Enter a value between {min} and {max}.',
     validationAtLeast: 'Enter a value of {min} or more.',
     autoFillBadge: 'auto-submit',

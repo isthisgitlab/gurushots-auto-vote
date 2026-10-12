@@ -31,7 +31,7 @@ test('a status says what it says, unless a reason makes it more exact', () => {
     });
 });
 
-test('a payment that is not known to have been taken offers "I wasn\'t charged" as well as the retry', () => {
+test('an unconfirmed payment offers "I wasn\'t charged" as well as the retry; an older version\'s record only the retry', () => {
     expect(outcomeMeta({ status: 'charged-pending-submit', reason: 'unconfirmed' })).toEqual({
         key: 'app.discoverUnconfirmed',
         variant: 'error',
@@ -42,7 +42,7 @@ test('a payment that is not known to have been taken offers "I wasn\'t charged" 
         key: 'app.discoverEarlierPayment',
         variant: 'error',
         retry: true,
-        forget: true,
+        forget: false,
     });
 });
 

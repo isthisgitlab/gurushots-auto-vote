@@ -60,8 +60,15 @@ type ActionEffects = {
 
 type DoneOutcome = { status: 'done' } & ActionEffects;
 
-// `spent`: the spend of a failed step may have gone through (it got no answer), so the run counts it conservatively.
-type NotDoneOutcome = { status: 'skipped' | 'failed' | 'deferred'; message: string; spent?: SpendKind };
+// `unclear`: the spend of the step got no answer, so it may have gone through and is never spent again; `spent` is
+// what the run counts against its limit for it (conservatively); `halt` ends the rule instead of resuming at the step.
+type NotDoneOutcome = {
+    status: 'skipped' | 'failed' | 'deferred';
+    message: string;
+    spent?: SpendKind;
+    unclear?: true;
+    halt?: true;
+};
 
 type ActionOutcome = DoneOutcome | NotDoneOutcome;
 
@@ -85,5 +92,6 @@ export type {
     ActionEffects,
     DoneOutcome,
     NotDoneOutcome,
+    ActionOutcome,
     ActionHandler,
 };

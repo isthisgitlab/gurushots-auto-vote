@@ -1051,7 +1051,7 @@ describe('forget-unconfirmed-payment', () => {
 
     test.each([
         'nothing-to-forget',
-        'other-account-possible',
+        'legacy-record',
         'busy',
         'account-unknown',
         'unreadable',
@@ -1138,7 +1138,7 @@ describe('join-challenge', () => {
         expect(result).toMatchObject({ success: true, status: 'joined', cost: 100 });
     });
 
-    test('the balance recorded before a payment that is not confirmed travels with the answer, and only then', async () => {
+    test('the balance the join recorded before a payment travels with the answer as it is', async () => {
         stubAuthGuardOk();
         stubStrategy({
             joinChallenge: jest
@@ -1156,6 +1156,7 @@ describe('join-challenge', () => {
             reason: 'unconfirmed',
             coinsBefore: 500,
         });
+        // Which answers carry one is decided where the join is made (performJoin), not here.
         expect(await buildHandlers()['join-challenge']({}, 5, true)).toMatchObject({ coinsBefore: undefined });
     });
 

@@ -88,7 +88,7 @@ function summarize(status: ScenarioStatus, challenge: Challenge): ScenarioSummar
         started: status.state !== null,
         lastError: status.state?.lastError?.message ?? null,
         lastErrorSpend:
-            status.state?.lastError?.kind === 'spend-unclear' ? (status.state.lastError.action ?? '') : null,
+            status.state?.lastError?.kind === 'spend-unclear' ? (status.state.lastError.action ?? null) : null,
         nextWakeAt: nextWakeAt({ scenario: status.scenario, state, challenge, now, timezone: status.timezone }),
     };
 }

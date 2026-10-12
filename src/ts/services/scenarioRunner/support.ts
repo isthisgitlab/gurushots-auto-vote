@@ -46,6 +46,16 @@ const skipped = (message: string): NotDoneOutcome => ({ status: 'skipped', messa
 const failed = (message: string): NotDoneOutcome => ({ status: 'failed', message });
 
 /**
+ * The end of a rule whose spend got no answer and cannot be shown to have taken effect: it is not spent again, and
+ * the rule stops rather than going on to spend on a later step.
+ */
+const unclearHalted = (actionType: SpendAction): NotDoneOutcome => ({
+    ...failed(`the ${SPEND[actionType].label} may have gone through earlier, so it is not repeated`),
+    unclear: true,
+    halt: true,
+});
+
+/**
  * True when any rule of the scenario compares a currency balance.
  */
 const usesBalance = (scenario: ScenarioDocument) => {
@@ -122,9 +132,10 @@ const lockedCurrencySpend = async (
     if (result.outcome === CURRENCY_OUTCOME.unclear) {
         return {
             ...failed(
-                `the ${SPEND[actionType].label} may have gone through (GuruShots gave no answer); it will be checked again next cycle`,
+                `the ${SPEND[actionType].label} may have gone through (GuruShots gave no answer); it will be checked again next cycle, not spent again`,
             ),
             spent: SPEND[actionType].limit,
+            unclear: true,
         };
     }
     const message = `${actionType} was refused (${result.outcome ?? 'no response'})`;
@@ -156,6 +167,7 @@ export {
     refreshLive,
     spendAllowed,
     lockedCurrencySpend,
+    unclearHalted,
     currencyDeps,
     selectContext,
     rememberedPhoto,

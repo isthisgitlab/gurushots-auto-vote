@@ -550,23 +550,26 @@ export const app = {
     discoverUnconfirmed:
         'Par šī izaicinājuma maksājumu netika saņemta atbilde, tāpēc nav zināms, vai tas izdevās. Atkārtojot tiek iesniegts tikai tavs foto, tāpēc monētas netiks ieturētas divreiz. Ja GuruShots vietnē redzams, ka monētas netika ieturētas, nospied „Monētas netika ieturētas”, tad pievienojies vēlreiz.',
     discoverEarlierPayment:
-        'Šim izaicinājumam ir maksājuma ieraksts no vecākas lietotnes versijas, kad konti vēl netika šķirti, tāpēc nav zināms, vai monētas tika ieturētas un kuram šajā ierīcē lietotajam GuruShots kontam. Atkārtojot tiek iesniegts tikai tavs foto, tāpēc monētas netiks ieturētas divreiz. Ja GuruShots vietnē redzams, ka monētas netika ieturētas, nospied „Monētas netika ieturētas”, tad pievienojies vēlreiz.',
+        'Šim izaicinājumam ir maksājuma ieraksts no vecākas lietotnes versijas, kurā konti vēl netika šķirti, tāpēc nav zināms, vai monētas tika ieturētas un kuram šajā ierīcē lietotajam GuruShots kontam tās tika ieturētas. Atkārtojot tiek iesniegts tikai tavs foto, tāpēc monētas netiks ieturētas divreiz. Šeit ierakstu aizmirst nevar, jo tas var piederēt citam kontam: tas pazudīs pats pēc 30 dienām vai tad, kad konts, kas maksāja, pievienosies izaicinājumam.',
     discoverForgetPayment: 'Monētas netika ieturētas',
     discoverForgetPaymentLabel: 'Monētas netika ieturētas: {title}',
     discoverForgetTitle: 'Aizmirst šo maksājumu?',
     discoverForgetBody:
-        'Vispirms pārbaudi monētu vēsturi GuruShots vietnē. Turpini tikai tad, ja monētas par „{title}” netika ieturētas: ja tās tika ieturētas, atkārtota pievienošanās tās ieturēs otrreiz.',
+        'Vispirms pārbaudi monētu vēsturi GuruShots vietnē. Turpini tikai tad, ja monētas par „{title}” netika ieturētas: ja tās tika ieturētas, atkārtota pievienošanās tās ieturēs otrreiz. Pēc aizmiršanas automātiskā pievienošanās to var pievienot atkārtoti un par to maksāt sava monētu budžeta ietvaros.',
     discoverForgetBalances:
-        'Pirms šī maksājuma tev bija {before} monētas; GuruShots tagad rāda {now}. Ja starpība nav izaicinājuma cena, maksājums, visticamāk, neizdevās. Lietotne to nevar noteikt: izšķiroša ir monētu vēsture GuruShots vietnē.',
+        'Monētas pirms šī maksājuma: {before}. GuruShots tagad rāda: {now}. Citas monētu darbības kopš tā laika (balvas, citas pievienošanās) maina starpību, tāpēc lietotne nevar noteikt, vai maksājums izdevās: izšķiroša ir monētu vēsture GuruShots vietnē.',
     discoverForgetBalanceBefore:
-        'Pirms šī maksājuma tev bija {before} monētas. Salīdzini to ar atlikumu GuruShots vietnē: lietotne nevar noteikt, vai maksājums izdevās.',
+        'Monētas pirms šī maksājuma: {before}. Salīdzini ar atlikumu GuruShots vietnē: lietotne nevar noteikt, vai maksājums izdevās, un citas monētu darbības kopš tā laika maina starpību.',
     discoverForgetConfirm: 'Monētas netika ieturētas — aizmirst',
+    discoverForgetWorking: 'Aizmirst…',
     discoverForgetNothing:
         'Nebija ko aizmirst: maksājums jau ir apstiprināts vai pievienošanās ir pabeigta. Atsvaidzini sarakstu.',
     discoverForgetAccountUnknown:
         'Neizdevās noskaidrot, kurā kontā esi pieteicies, tāpēc nekas netika mainīts. Mēģini vēlreiz pēc brīža vai piesakies vēlreiz.',
-    discoverForgetOtherAccount:
-        'Šis ieraksts ir no vecākas lietotnes versijas un var piederēt citam šajā ierīcē lietotam GuruShots kontam, tāpēc to var notīrīt tikai no konta, kas maksāja, vai kad izaicinājums būs beidzies. Nekas netika mainīts.',
+    discoverForgetLegacyRecord:
+        'Šis ieraksts ir no vecākas lietotnes versijas un var piederēt citam šajā ierīcē lietotam GuruShots kontam, tāpēc to šeit aizmirst nevar. Tas pazudīs pats pēc 30 dienām vai tad, kad konts, kas maksāja, pievienosies izaicinājumam. Nekas netika mainīts.',
+    discoverForgetUnreadable:
+        'Saglabātos maksājumu ierakstus neizdevās nolasīt, tāpēc nekas netika mainīts. Restartē lietotni un mēģini vēlreiz; ja tas atkārtojas, jāpārbauda pievienošanās stāvokļa fails — skati žurnālu.',
     discoverForgetFailed: 'Pašlaik neizdevās aizmirst maksājumu. Nekas netika mainīts. Mēģini vēlreiz pēc brīža.',
     discoverAccountUnknown:
         'Neizdevās noskaidrot, kurā kontā esi pieteicies, tāpēc šis mēģinājums neko nedarīja un monētas netērēja. Mēģini vēlreiz pēc brīža vai piesakies vēlreiz.',
@@ -593,7 +596,7 @@ export const app = {
     discoverNotStarted: 'Šis izaicinājums vēl nav sācies. Pievienoties varēs, kad tas sāksies.',
     discoverPriceChanged:
         'Cena mainījusies — tagad monētas: {coins}. Nekas netika iztērēts; nospied „Pievienoties”, lai apstiprinātu jauno cenu.',
-    discoverBusy: 'Pievienošanās jau notiek.',
+    discoverBusy: 'Pievienošanās jau notiek. Mēģini vēlreiz pēc brīža.',
     validationOutOfRange: 'Ievadi vērtību no {min} līdz {max}.',
     validationAtLeast: 'Ievadi vērtību, kas nav mazāka par {min}.',
     autoFillBadge: 'automātiskā iesniegšana',

@@ -831,20 +831,17 @@ describe('edge paths', () => {
             await screen.findByText('app.discoverForgetTitle');
         };
 
-        test.each(['unconfirmed', 'earlier-payment'])(
-            'a %s payment offers it, next to Retry submit',
-            async (reason) => {
-                window.api.joinChallenge = pendingWith(reason);
-                renderSection();
-                await screen.findByText('Paid One');
-                fireEvent.click(screen.getByText('app.discoverJoinPaid'));
-                const forget = await screen.findByText<HTMLButtonElement>('app.discoverForgetPayment');
-                expect(forget.disabled).toBe(false);
-                expect(screen.getByText('app.discoverRetrySubmit')).toBeTruthy();
-            },
-        );
+        test('an unconfirmed payment offers it, next to Retry submit', async () => {
+            window.api.joinChallenge = pendingWith('unconfirmed');
+            renderSection();
+            await screen.findByText('Paid One');
+            fireEvent.click(screen.getByText('app.discoverJoinPaid'));
+            const forget = await screen.findByText<HTMLButtonElement>('app.discoverForgetPayment');
+            expect(forget.disabled).toBe(false);
+            expect(screen.getByText('app.discoverRetrySubmit')).toBeTruthy();
+        });
 
-        test.each([undefined, 'no-photo'])(
+        test.each([undefined, 'no-photo', 'earlier-payment'])(
             'a payment known to have been taken (reason %s) does not',
             async (reason) => {
                 window.api.joinChallenge = pendingWith(reason);
@@ -936,7 +933,11 @@ describe('edge paths', () => {
             await openForgetDialog();
             fireEvent.click(screen.getByText('app.discoverForgetConfirm'));
             await waitFor(() => expect(screen.getByText<HTMLButtonElement>('app.cancel').disabled).toBe(true));
-            expect(screen.getByText<HTMLButtonElement>('app.discoverForgetConfirm').disabled).toBe(true);
+            // The button says what it is doing, and is marked busy for assistive technology.
+            const working = screen.getByText<HTMLButtonElement>('app.discoverForgetWorking');
+            expect(working.disabled).toBe(true);
+            expect(working.getAttribute('aria-busy')).toBe('true');
+            expect(screen.queryByText('app.discoverForgetConfirm')).toBeNull();
             // Neither can Escape dismiss it.
             fireEvent.keyDown(document, { key: 'Escape' });
             expect(screen.getByText('app.discoverForgetTitle')).toBeTruthy();
@@ -947,9 +948,9 @@ describe('edge paths', () => {
         test.each([
             ['nothing-to-forget', 'app.discoverForgetNothing'],
             ['account-unknown', 'app.discoverForgetAccountUnknown'],
-            ['other-account-possible', 'app.discoverForgetOtherAccount'],
+            ['legacy-record', 'app.discoverForgetLegacyRecord'],
             ['busy', 'app.discoverForgetFailed'],
-            ['unreadable', 'app.discoverForgetFailed'],
+            ['unreadable', 'app.discoverForgetUnreadable'],
         ])('an answer of %s keeps the dialog open and says so, changing nothing', async (error, key) => {
             window.api.forgetUnconfirmedPayment = forgetMock().mockResolvedValue(
                 invalid({ success: false, error, status: error }),
@@ -1045,17 +1046,38 @@ describe('edge paths', () => {
                 }
             });
 
-            test('a dialog closed before the balance arrives takes no part of it', async () => {
-                let arrive!: (value: Awaited<ReturnType<WindowApi['getBankroll']>>) => void;
-                window.api.joinChallenge = unconfirmedWithBalance(500);
-                window.api.getBankroll = jest
-                    .fn<ReturnType<WindowApi['getBankroll']>, []>()
-                    .mockImplementation(() => new Promise((resolve) => (arrive = resolve)));
-                await open();
-                fireEvent.click(screen.getByText('app.cancel'));
-                await waitFor(() => expect(screen.queryByText('app.discoverForgetTitle')).toBeNull());
-                await act(async () => arrive(invalid({ success: true, keys: 0, swaps: 0, fills: 0, coins: 400 })));
-                expect(screen.queryByText('app.discoverForgetBalances')).toBeNull();
+            test('a balance that arrives late for a dialog that was closed is not shown in the one opened after it', async () => {
+                withText();
+                try {
+                    const arrivals: Array<(value: Awaited<ReturnType<WindowApi['getBankroll']>>) => void> = [];
+                    window.api.joinChallenge = unconfirmedWithBalance(500);
+                    window.api.getBankroll = jest
+                        .fn<ReturnType<WindowApi['getBankroll']>, []>()
+                        .mockImplementation(() => new Promise((resolve) => arrivals.push(resolve)));
+                    const read = (coins: number) =>
+                        invalid<Awaited<ReturnType<WindowApi['getBankroll']>>>({
+                            success: true,
+                            keys: 0,
+                            swaps: 0,
+                            fills: 0,
+                            coins,
+                        });
+                    await open();
+                    fireEvent.click(screen.getByText('app.cancel'));
+                    await waitFor(() => expect(screen.queryByText('app.discoverForgetTitle')).toBeNull());
+                    // Opened again: a second read is out, and the first one arrives now, late.
+                    fireEvent.click(screen.getByText('app.discoverForgetPayment'));
+                    await screen.findByText('app.discoverForgetTitle');
+                    await waitFor(() => expect(arrivals).toHaveLength(2));
+                    await act(async () => arrivals[0](read(400)));
+                    expect(screen.getByText('Before 500')).toBeTruthy();
+                    expect(screen.queryByText('Before 500, now 400')).toBeNull();
+                    // Only the read made for this dialog is shown.
+                    await act(async () => arrivals[1](read(350)));
+                    expect(await screen.findByText('Before 500, now 350')).toBeTruthy();
+                } finally {
+                    mockTranslator.t.mockImplementation((key) => key);
+                }
             });
 
             test('with no balance recorded, nothing is shown and none is read', async () => {

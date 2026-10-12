@@ -8,7 +8,17 @@
 import * as currencyActions from '../currencyActions';
 import { submitNewEntryForAction, reflectNewEntry, reflectEntryFlag, getSlotsRemaining } from '../autoFill';
 import { selectEntry, entriesOf } from '../../scenarios/selectors';
-import type { ActedChallenge, ActionHandler, ActionType, ScenarioAction, SwapPhoto } from './types';
+import type {
+    ActedChallenge,
+    ActionHandler,
+    ActionOutcome,
+    ActionType,
+    RunnerContext,
+    ScenarioAction,
+    SpendAction,
+    SwapPhoto,
+} from './types';
+import type { ScenarioState } from '../../types/stores';
 import {
     BOOST_APPLICABLE,
     currencyDeps,
@@ -20,6 +30,7 @@ import {
     selectContext,
     skipped,
     spendAllowed,
+    unclearHalted,
 } from './support';
 
 const ACTIONS: { [K in ActionType]: ActionHandler<Extract<ScenarioAction, { type: K }>> } = {
@@ -177,4 +188,41 @@ const ACTIONS: { [K in ActionType]: ActionHandler<Extract<ScenarioAction, { type
     notify: async (action) => done({ notice: action.message }),
 };
 
-export { ACTIONS };
+/**
+ * Whether a spend that got no answer has positively taken effect on the live challenge: the boost is unlocked by a
+ * key, the exposure is full, the replacement photo is entered. Anything the live state cannot show — a swap whose
+ * replacement a selector chooses, a challenge that is gone — is not it.
+ */
+const spendLanded = async (
+    action: ScenarioAction & { type: SpendAction },
+    ctx: RunnerContext,
+    state: ScenarioState,
+): Promise<{ landed: boolean; remember: Record<string, string> }> => {
+    const none = { landed: false, remember: {} };
+    if (!(await refreshLive(ctx))) return none;
+    const { challenge } = ctx;
+    if (action.type === 'unlockBoost') return { ...none, landed: challenge.member?.boost?.state === 'AVAILABLE_KEY' };
+    if (action.type === 'fillExposure') {
+        return { ...none, landed: Number(challenge.member?.ranking?.exposure?.exposure_factor) >= 100 };
+    }
+    // Only a swap is left, whose replacement is known only when the step names it.
+    const photo = rememberedPhoto(action.with, state);
+    if (typeof photo !== 'string' || !entriesOf(challenge).some((entry) => String(entry.id) === photo)) return none;
+    return { landed: true, remember: action.rememberAdded ? { [action.rememberAdded]: photo } : {} };
+};
+
+/**
+ * The retry of a step whose spend got no answer. It never spends: it passes over the step when the live challenge
+ * shows the spend landed, and otherwise ends the rule, since the step cannot be repeated and the steps after it
+ * were meant to follow a spend that did happen.
+ */
+const settleUnclearSpend = async (
+    action: ScenarioAction & { type: SpendAction },
+    ctx: RunnerContext,
+    state: ScenarioState,
+): Promise<ActionOutcome> => {
+    const { landed, remember } = await spendLanded(action, ctx, state);
+    return landed ? done({ remember }) : unclearHalted(action.type);
+};
+
+export { ACTIONS, settleUnclearSpend };

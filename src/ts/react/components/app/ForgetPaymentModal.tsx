@@ -11,7 +11,8 @@ import type { OpenChallenge } from '../../../types/gurushots';
 const PROBLEM_TEXT: Record<string, string> = {
     'nothing-to-forget': 'app.discoverForgetNothing',
     'account-unknown': 'app.discoverForgetAccountUnknown',
-    'other-account-possible': 'app.discoverForgetOtherAccount',
+    'legacy-record': 'app.discoverForgetLegacyRecord',
+    unreadable: 'app.discoverForgetUnreadable',
 };
 
 /**
@@ -94,8 +95,9 @@ export function ForgetPaymentModal({
                             className="btn btn-warning btn-sm"
                             onClick={() => void forget(challenge)}
                             disabled={working}
+                            aria-busy={working}
                         >
-                            {t('app.discoverForgetConfirm')}
+                            {working ? t('app.discoverForgetWorking') : t('app.discoverForgetConfirm')}
                         </button>
                     </ModalActions>
                 </>

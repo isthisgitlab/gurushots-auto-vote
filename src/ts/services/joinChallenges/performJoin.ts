@@ -23,6 +23,7 @@
 import * as logger from '../../logger';
 import * as cancellation from '../../voting/cancellation';
 import type { Challenge } from '../../types/gurushots';
+import { sanitizeLogString } from '../../logger/sanitize';
 import { cat, inFlight, lockFor } from './shared';
 import type { Claim, JoinDeps, JoinOutcome, UnlockState } from './shared';
 import {
@@ -66,7 +67,7 @@ const unclearUnlock = (
     coinsBefore: number | null,
 ): JoinOutcome => {
     const tag = logger.challengeTag(challenge);
-    const flagged = markUnconfirmed(deps.joinStateStore, challenge?.id, owner);
+    const flagged = markUnconfirmed(deps, challenge?.id, owner);
     cat().error(
         `${tag}: coins_unlock got no usable answer — the charge may have gone through, keeping the claim`,
         null,
@@ -113,7 +114,7 @@ const claimAndUnlock = async (
     // Persist the claim BEFORE spending, so a crash the instant
     // after the charge can never let a later pass re-unlock. If
     // the claim cannot be recorded, do not spend at all.
-    if (!markUnlocked(deps.joinStateStore, id, owner, coinsBefore)) {
+    if (!markUnlocked(deps, id, owner, coinsBefore)) {
         cat().error(`${logger.challengeTag(challenge)}: could not record the unlock claim — not spending coins`, null);
         return { outcome: failedNoCharge() };
     }
@@ -131,7 +132,7 @@ const claimAndUnlock = async (
     if (!unlock || unlock.unclear) {
         return { outcome: unclearUnlock(challenge, deps, owner, needsCoins, coinsBefore) };
     }
-    clearUnlocked(deps.joinStateStore, markerKey(id, owner));
+    clearUnlocked(deps, markerKey(id, owner));
     cat().warning(`coins_unlock failed for ${logger.challengeTag(challenge)} — no coins charged`, null);
     return { outcome: failedNoCharge() };
 };
@@ -165,14 +166,17 @@ const unlockUnderLock = async (
  * may already hold it). A lock another process holds leaves the claim for the pruning that follows the challenge.
  */
 const clearClaim = (deps: JoinDeps, id: string | number, key: string, holdsLock: boolean): void => {
-    if (holdsLock) return clearUnlocked(deps.joinStateStore, key);
+    if (holdsLock) return clearUnlocked(deps, key);
     const lock = lockFor(deps, id);
     if (!lock.ok) {
-        cat().warning(`challenge ${id}: another process holds the unlock lock — the claim is left in place`, null);
+        cat().warning(
+            `challenge ${sanitizeLogString(id)}: another process holds the unlock lock — the claim is left in place`,
+            null,
+        );
         return;
     }
     try {
-        clearUnlocked(deps.joinStateStore, key);
+        clearUnlocked(deps, key);
     } finally {
         lock.release();
     }

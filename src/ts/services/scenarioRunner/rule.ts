@@ -14,10 +14,11 @@ import type {
     NotDoneOutcome,
     RunnerContext,
     ScenarioAction,
+    SpendAction,
     ValidatedRule,
 } from './types';
 import { log, nowSec } from './support';
-import { ACTIONS } from './actions';
+import { ACTIONS, settleUnclearSpend } from './actions';
 
 /** Notices kept for the host notifiers: the newest, within a day. */
 const OUTBOX_LIMIT = 20;
@@ -67,16 +68,29 @@ const stoppedAt = (
     },
 ): ScenarioState => {
     const { rule, index, action, result, message, at, committed } = stop;
-    const next: ScenarioState = {
-        ...state,
-        inFlight: committed || result.spent ? { ruleId: rule.id, actionIndex: index } : null,
-    };
+    // A rule that cannot go on after an unclear spend (halt) ends here, with nothing left to resume.
+    const resumes = !result.halt && (committed || result.spent);
+    const next: ScenarioState = { ...state, inFlight: resumes ? { ruleId: rule.id, actionIndex: index } : null };
     if (result.status !== 'deferred') {
-        const unclear = result.spent ? { kind: 'spend-unclear' as const, action: action.type } : {};
+        const unclear = result.unclear ? { kind: 'spend-unclear' as const, action: action.type } : {};
         next.lastError = { at, message, ...unclear };
     }
     return applyEffects(next, { spent: result.spent }, at);
 };
+
+/**
+ * Whether the step about to run is the retry of one whose spend got no answer (the state remembers which).
+ */
+const isUnclearRetry = (
+    start: ScenarioState,
+    ruleId: string,
+    firstStep: boolean,
+    action: ScenarioAction,
+): action is ScenarioAction & { type: SpendAction } =>
+    firstStep &&
+    start.inFlight?.ruleId === ruleId &&
+    start.lastError?.kind === 'spend-unclear' &&
+    start.lastError.action === action.type;
 
 /**
  * Execute one rule from `startIndex`. Returns the new state and whether the
@@ -96,8 +110,11 @@ const runRule = async (
     let skippedStep: { at: number; message: string } | null = null;
     for (let index = startIndex; index < rule.do.length; index++) {
         const action = rule.do[index];
-        // ACTIONS pairs each type with its handler; the union call needs the widened view.
-        const result = await (ACTIONS[action.type] as ActionHandler<ScenarioAction>)(action, ctx, state);
+        // A step whose spend got no answer is never spent again: its retry only looks at the live challenge.
+        const result = isUnclearRetry(startState, rule.id, index === startIndex, action)
+            ? await settleUnclearSpend(action, ctx, state)
+            : // ACTIONS pairs each type with its handler; the union call needs the widened view.
+              await (ACTIONS[action.type] as ActionHandler<ScenarioAction>)(action, ctx, state);
         const at = nowSec();
         if (result.status !== 'done') {
             const message = `${rule.label ?? rule.id} → ${action.type}: ${result.message}`;

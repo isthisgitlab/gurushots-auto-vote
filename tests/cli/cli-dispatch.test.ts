@@ -110,7 +110,7 @@ jest.mock('../../src/ts/cli/commands/actions', () => {
 jest.mock('../../src/ts/cli/commands/bankroll', () => ({ showBankroll: jest.fn() }));
 jest.mock('../../src/ts/cli/commands/join', () => ({
     showDiscover: jest.fn(),
-    joinChallengeCmd: jest.fn(),
+    joinChallengeCmd: jest.fn(async () => 0),
     forgetPaymentCmd: jest.fn(async () => 0),
 }));
 jest.mock('../../src/ts/cli/commands/photos', () => ({
@@ -430,6 +430,14 @@ describe('challenge-scoped actions', () => {
         const m = await run(['join', '--yes', '77']);
         expect(m.join.joinChallengeCmd).toHaveBeenCalledWith('77', { yes: true });
         expect(m.exitCodes).toEqual([0]);
+    });
+
+    test.each([
+        [0, 0],
+        [1, 1],
+    ])('join exits with what the command answers (%p): 1 when it did not join', async (answer, code) => {
+        const m = await run(['join', '77'], (mods) => mods.join.joinChallengeCmd.mockResolvedValue(answer));
+        expect(m.exitCodes).toEqual([code]);
     });
 
     test('join --max-coins names the most a confirmed join may cost', async () => {

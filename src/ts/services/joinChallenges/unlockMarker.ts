@@ -70,6 +70,8 @@ const paidOwnerUnknown = (deps: JoinDeps, owner: string | null): boolean =>
 
 // A claim this young is never pruned for a challenge missing from the list (see pruneClosedClaims).
 const CLAIM_PRUNE_MIN_AGE_MS = 6 * 60 * 60 * 1000;
+// A claim this old is dropped whoever's it is: no challenge lives that long.
+const CLAIM_MAX_AGE_MS = 30 * 24 * 60 * 60 * 1000;
 
 const isFiniteNumber = (value: unknown): value is number => typeof value === 'number' && Number.isFinite(value);
 
@@ -112,29 +114,56 @@ const paidByThisAccount = async (
     return !paidOwnerUnknown(deps, owner) && claimOf(deps.joinStateStore, challenge.id, owner) !== null;
 };
 
+// The claims file is one file for every challenge, so a change of it is read-modify-write of the whole: two processes
+// changing different challenges would drop one of the changes. It is changed only under this lock, held briefly.
+const STATE_LOCK_ID = 'joinstate';
+const STATE_LOCK_WAIT_MS = 500;
+const STATE_LOCK_STEP_MS = 10;
+
+const sleepSync = (ms: number): void => {
+    Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, ms);
+};
+
 /**
- * Reads the claims, lets `change` edit them and writes them back. Nothing is written when the file cannot be
- * read (an unreadable file read as empty would wipe every other claim on the next write); false then, and when
- * the write fails. `change` answers whether it changed anything. A store of none (mock mode) changes nothing and
- * succeeds. Failures are logged by challenge id only.
+ * The lock of the claims file, waited for a moment when another process holds it. Null when it could not be had.
  */
-const changeClaims = (
-    store: RawJsonStore | null | undefined,
-    what: string,
-    change: (state: Record<string, unknown>) => boolean,
-): boolean => {
+const acquireStateLock = (deps: JoinDeps): { release: () => void } | null => {
+    const deadline = Date.now() + STATE_LOCK_WAIT_MS;
+    for (;;) {
+        const lock = lockFor(deps, STATE_LOCK_ID);
+        if (lock.ok) return lock;
+        if (Date.now() >= deadline) return null;
+        sleepSync(STATE_LOCK_STEP_MS);
+    }
+};
+
+/**
+ * Reads the claims, lets `change` edit them and writes them back, under the claims-file lock. Nothing is written
+ * when the file cannot be read (an unreadable file read as empty would wipe every other claim on the next write)
+ * or the lock cannot be had in a moment: false then, and when the write fails. `change` answers whether it changed
+ * anything. A store of none (mock mode) changes nothing and succeeds. Failures are logged by challenge id only.
+ */
+const changeClaims = (deps: JoinDeps, what: string, change: (state: Record<string, unknown>) => boolean): boolean => {
+    const store = deps.joinStateStore;
     if (!store) return true;
-    const { state, ok } = readUnlockedState(store);
-    if (!ok) {
-        cat().warning(`could not ${what}: join-state is unreadable — nothing written`, null);
+    const lock = acquireStateLock(deps);
+    if (!lock) {
+        cat().warning(`could not ${what}: join-state is locked by another process — nothing written`, null);
         return false;
     }
     try {
+        const { state, ok } = readUnlockedState(store);
+        if (!ok) {
+            cat().warning(`could not ${what}: join-state is unreadable — nothing written`, null);
+            return false;
+        }
         if (change(state)) store.writeRaw(JSON.stringify(state));
         return true;
     } catch (error) {
         cat().warning(`could not ${what}: ${errorMessage(error) || error}`, null);
         return false;
+    } finally {
+        lock.release();
     }
 };
 
@@ -145,13 +174,8 @@ const idOfKey = (key: string) => key.slice(key.lastIndexOf(':') + 1);
 // — mock mode, which spends no real coins). Returns false when the file cannot be read or a real store
 // write fails: the caller MUST NOT spend coins it cannot record, or a crash /
 // retry could re-unlock and double-charge.
-const markUnlocked = (
-    store: RawJsonStore | null | undefined,
-    id: string | number,
-    owner: string | null,
-    coinsBefore: number | null,
-): boolean =>
-    changeClaims(store, `persist unlock marker for ${sanitizeLogString(id)}`, (state) => {
+const markUnlocked = (deps: JoinDeps, id: string | number, owner: string | null, coinsBefore: number | null): boolean =>
+    changeClaims(deps, `persist unlock marker for ${sanitizeLogString(id)}`, (state) => {
         state[markerKey(id, owner)] = {
             unlockedAt: Date.now(),
             ...(isFiniteNumber(coinsBefore) ? { coinsBefore } : {}),
@@ -164,65 +188,51 @@ const markUnlocked = (
  *
  * @returns whether the flag is on the claim now: a claim that could not be flagged reads as a confirmed one
  */
-const markUnconfirmed = (
-    store: RawJsonStore | null | undefined,
-    id: string | number,
-    owner: string | null,
-): boolean => {
+const markUnconfirmed = (deps: JoinDeps, id: string | number, owner: string | null): boolean => {
     let flagged = false;
-    changeClaims(store, `flag the unlock marker for ${sanitizeLogString(id)} as unconfirmed`, (state) => {
+    const done = changeClaims(deps, `flag the unlock marker for ${sanitizeLogString(id)} as unconfirmed`, (state) => {
         const claim = state[markerKey(id, owner)];
         if (!isPlainObject(claim)) return false;
         state[markerKey(id, owner)] = { ...claim, unconfirmed: true };
         flagged = true;
         return true;
     });
-    return flagged || !store;
+    return !deps.joinStateStore || (done && flagged);
 };
 
 /**
  * Removes one claim, by the key it is stored under. Never a claim that was not read as the one in use: a bare
  * one may be another account's protection against a second charge.
  */
-const clearUnlocked = (store: RawJsonStore | null | undefined, key: string): void => {
-    changeClaims(store, `clear unlock marker for ${sanitizeLogString(idOfKey(key))}`, (state) => {
+const clearUnlocked = (deps: JoinDeps, key: string): void => {
+    changeClaims(deps, `clear unlock marker for ${sanitizeLogString(idOfKey(key))}`, (state) => {
         if (!has(state, key)) return false;
         delete state[key];
         return true;
     });
 };
 
-type ForgetResult = 'forgotten' | 'nothing-to-forget' | 'other-account-possible' | 'unreadable';
-
-// Whether the store holds a claim keyed by an account other than this one: proof that more than one account has
-// paid on this device.
-const holdsOtherAccountClaim = (state: Record<string, unknown>, owner: string | null) =>
-    Object.keys(state).some((key) => key.includes(':') && !key.startsWith(`${owner}:`));
+type ForgetResult = 'forgotten' | 'nothing-to-forget' | 'legacy-record' | 'unreadable';
 
 /**
- * What the user may forget: this account's claim for the challenge when it is still unconfirmed, or a bare
- * one from before accounts were told apart. Never a confirmed claim (its coins are known to be taken), and never
- * a bare one while the account has its own claim for the challenge. A bare claim may be ANOTHER account's
- * protection against a second charge, so it goes only when the store holds no claim of any other account: with
- * one in it, more than one account has paid on this device, and the record can only be cleared by the account that
- * paid (or once the challenge has ended and the claim is pruned).
+ * What the user may forget: this account's claim for the challenge when it is still unconfirmed. Never a confirmed
+ * claim (its coins are known to be taken). A bare claim from before accounts were told apart is never forgotten
+ * either: it may be ANOTHER account's protection against a second charge, and nothing on this device can tell
+ * whose. It clears by itself (a paid submit that used it succeeds, or it passes CLAIM_MAX_AGE_MS).
  *
- * @returns 'forgotten', 'nothing-to-forget' (no claim, or only a confirmed one), 'other-account-possible' (a bare
- *   claim another account may own) or 'unreadable'
+ * @returns 'forgotten', 'nothing-to-forget' (no claim, or only a confirmed one), 'legacy-record' (a bare claim),
+ *   or 'unreadable'
  */
-const forgetClaim = (
-    store: RawJsonStore | null | undefined,
-    id: string | number,
-    owner: string | null,
-): ForgetResult => {
+const forgetClaim = (deps: JoinDeps, id: string | number, owner: string | null): ForgetResult => {
     let result: ForgetResult = 'nothing-to-forget';
-    const done = changeClaims(store, `forget the unlock marker for ${sanitizeLogString(id)}`, (state) => {
+    const done = changeClaims(deps, `forget the unlock marker for ${sanitizeLogString(id)}`, (state) => {
         const claim = findClaim(state, id, owner);
-        if (!claim || !(claim.unconfirmed || claim.legacy)) return false;
-        if (claim.legacy && holdsOtherAccountClaim(state, owner)) {
-            result = 'other-account-possible';
+        if (!claim) return false;
+        if (claim.legacy) {
+            result = 'legacy-record';
             return false;
         }
+        if (!claim.unconfirmed) return false;
         delete state[claim.key];
         result = 'forgotten';
         return true;
@@ -231,13 +241,14 @@ const forgetClaim = (
 };
 
 /**
- * Drops the claims of this account whose challenge is no longer open, so joinState.json does not grow for
- * ever. Only from a successful, non-empty open list (an empty one is never trusted, like the open-list memory
- * of the settings facade), and only the claims keyed by this account: the list is this account's, so a challenge
- * missing from it says nothing about another account's claim on it, and a bare claim from before accounts were
- * told apart may be another's too. An account that cannot be told prunes nothing. A claim younger than
- * CLAIM_PRUNE_MIN_AGE_MS is kept whatever the list says: it may belong to a join under way that the list,
- * read a moment earlier, could not have known about.
+ * Drops claims that have outlived their use, so joinState.json does not grow for ever:
+ *   - any claim, bare or of any account, older than CLAIM_MAX_AGE_MS: no challenge lives that long, and it ends the
+ *     keeping of other accounts' records (and balances) for good;
+ *   - this account's own claims whose challenge is no longer open, from a successful, non-empty open list (an
+ *     empty one is never trusted, like the open-list memory of the settings facade). The list is this account's, so
+ *     a challenge missing from it says nothing about another account's claim on it, nor about a bare claim.
+ * An account that cannot be told prunes by age only. A claim younger than CLAIM_PRUNE_MIN_AGE_MS is kept whatever
+ * the list says: it may belong to a join under way that the list, read a moment earlier, could not have known of.
  *
  * @param open - the open list the join code just read successfully
  */
@@ -250,22 +261,27 @@ const pruneClosedClaims = async (
     const openIds = new Set(open.flatMap((c) => (c?.id == null ? [] : [String(c.id)])));
     if (!store || openIds.size === 0 || Object.keys(readUnlocked(store)).length === 0) return;
     const owner = await markerOwner(token, deps);
-    if (paidOwnerUnknown(deps, owner)) return;
+    const ownerKnown = !paidOwnerUnknown(deps, owner);
     const now = Date.now();
-    const closed = (key: string, claim: unknown) => {
+    const age = (claim: unknown) => {
+        const at = isPlainObject(claim) ? claim.unlockedAt : undefined;
+        return isFiniteNumber(at) ? now - at : null;
+    };
+    const droppable = (key: string, claim: unknown) => {
+        const claimAge = age(claim);
+        if (claimAge === null) return false;
+        if (claimAge >= CLAIM_MAX_AGE_MS) return true;
         const sep = key.lastIndexOf(':');
         const own = owner === null ? sep === -1 : key.startsWith(`${owner}:`);
-        const at = isPlainObject(claim) ? claim.unlockedAt : undefined;
-        const old = isFiniteNumber(at) && now - at >= CLAIM_PRUNE_MIN_AGE_MS;
-        return own && old && !openIds.has(key.slice(sep + 1));
+        return ownerKnown && own && claimAge >= CLAIM_PRUNE_MIN_AGE_MS && !openIds.has(key.slice(sep + 1));
     };
     // A challenge whose unlock lock another process holds is mid-join: its claim is left alone.
     const held: Array<{ release: () => void }> = [];
     let dropped = 0;
     try {
-        const done = changeClaims(store, 'prune the unlock markers', (state) => {
+        const done = changeClaims(deps, 'prune the unlock markers', (state) => {
             const stale = Object.keys(state)
-                .filter((key) => closed(key, state[key]))
+                .filter((key) => droppable(key, state[key]))
                 .filter((key) => {
                     const lock = lockFor(deps, idOfKey(key));
                     if (lock.ok) held.push(lock);
@@ -276,7 +292,7 @@ const pruneClosedClaims = async (
             return stale.length > 0;
         });
         if (done && dropped > 0) {
-            cat().debug(`dropped ${dropped} unlock claim(s) of challenges that are no longer open`, null);
+            cat().debug(`dropped ${dropped} unlock claim(s) that are no longer needed`, null);
         }
     } finally {
         held.forEach((lock) => lock.release());

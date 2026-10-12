@@ -111,11 +111,10 @@ const runJoin: CommandHandler = async (argv) => {
         (maxText !== undefined && !Number.isSafeInteger(maxCoins)) ||
         positional.length > 1;
     if (wrong) return usageError('Wrong arguments', JOIN_USAGE);
-    await joinChallengeCmd(positional[0], {
+    return joinChallengeCmd(positional[0], {
         yes: flags.includes('--yes'),
         ...(maxCoins === undefined ? {} : { maxCoins }),
     });
-    return 0;
 };
 
 const FORGET_PAYMENT_USAGE = 'Usage: forget-payment <id>';

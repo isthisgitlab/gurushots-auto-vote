@@ -272,7 +272,7 @@ describe('Submit Only Chosen Photos on a join', () => {
         withSettings({ chosenPhotos: ['gone'], chosenPhotosOnly: true });
         const deps = makeDeps(eleven, {
             getEligiblePhotosWalk: jest.fn(async () => ({ items: eleven, truncated: false })),
-            joinStateStore: makeStore(JSON.stringify({ '1': { unlockedAt: 1 } })),
+            joinStateStore: makeStore(JSON.stringify({ '1': { unlockedAt: Date.now() } })),
         });
         const res = await performJoin(challenge(), 'tok', deps, 50);
         expect(res.status).toBe('joined');
@@ -284,7 +284,7 @@ describe('Submit Only Chosen Photos on a join', () => {
         withSettings({ chosenPhotos: ['gone'], chosenPhotosOnly: true });
         const deps = makeDeps(eleven, {
             getEligiblePhotosWalk: jest.fn(async () => ({ items: eleven, truncated: false })),
-            joinStateStore: makeStore(JSON.stringify({ '1': { unlockedAt: 1 } })),
+            joinStateStore: makeStore(JSON.stringify({ '1': { unlockedAt: Date.now() } })),
         });
         expect(await performJoin(challenge(), 'tok', deps, 0)).toEqual({ status: 'skipped-no-chosen', charged: 0 });
         expect(deps.submitToChallenge).not.toHaveBeenCalled();
@@ -332,7 +332,7 @@ describe('Submit Only Chosen Photos on a join', () => {
 });
 
 describe('a photo library that cannot be read is not an empty one (the real read, over a failing transport)', () => {
-    const owed = JSON.stringify({ 'member-1:1': { unlockedAt: 1 } });
+    const owed = JSON.stringify({ 'member-1:1': { unlockedAt: Date.now() } });
     const paidRetry = (items: unknown) => {
         makePostRequest.mockResolvedValue(items === null ? null : { items });
         return makeDeps(eleven, { getEligiblePhotos, joinStateStore: makeStore(owed) });

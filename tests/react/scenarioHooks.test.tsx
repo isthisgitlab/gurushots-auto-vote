@@ -142,7 +142,7 @@ describe('useScenarioStatus', () => {
 
     test.each([
         [{ message: 'x', kind: 'spend-unclear', action: 'unlockBoost' }, 'unlockBoost'],
-        [{ message: 'x', kind: 'spend-unclear' }, ''],
+        [{ message: 'x', kind: 'spend-unclear' }, null],
         [{ message: 'x' }, null],
     ])('a last problem %p reads as spend %p on the card', async (lastError, spend) => {
         jest.mocked(window.api.getScenarioStatus).mockResolvedValue(

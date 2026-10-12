@@ -635,33 +635,18 @@ describe('rule execution', () => {
         expect(state().lastError!.message).not.toContain('refused');
     });
 
-    test('a spend that got no answer counts toward the limit, so the scenario never goes over it', async () => {
+    test('a spend that got no answer counts toward the limit, and is never spent again', async () => {
         currencyActions.unlockBoostWithKey.mockResolvedValueOnce({ ok: false, outcome: 'unclear' });
         setup(single([{ type: 'unlockBoost' }]));
         settings.getScenario.mockReturnValue({ ...single([{ type: 'unlockBoost' }]), limits: { keys: 1 } });
         await run();
         expect(state().spent.keys).toBe(1);
+        // The boost is still locked, so the live challenge does not show the key went through: it is not repeated.
         await run();
         expect(currencyActions.unlockBoostWithKey).toHaveBeenCalledTimes(1);
-        expect(state().lastError!.message).toContain("scenario's keys limit of 1 is reached");
-    });
-
-    test("a spend that got no answer as a rule's first step commits the rule: a live skip next cycle is passed over to the later steps", async () => {
-        currencyActions.unlockBoostWithKey
-            .mockResolvedValueOnce({ ok: false, outcome: 'unclear' })
-            // The live re-check of the next cycle finds the boost already unlocked: a skip, not a failure.
-            .mockResolvedValueOnce({ ok: false, outcome: 'not-available' });
-        setup(single([{ type: 'unlockBoost' }, { type: 'boost', entry: { by: 'fewestVotes' } }]));
-        const c = challenge();
-        await run(c);
-        expect(state().inFlight).toEqual({ ruleId: 'r1', actionIndex: 0 });
-        expect(pass.api.applyBoostToEntry).not.toHaveBeenCalled();
-
-        await run(c);
-        expect(currencyActions.unlockBoostWithKey).toHaveBeenCalledTimes(2);
-        expect(pass.api.applyBoostToEntry).toHaveBeenCalledTimes(1);
+        expect(state().spent.keys).toBe(1);
         expect(state().inFlight).toBeNull();
-        expect(state().fired.r1).toBeDefined();
+        expect(state().lastError!.message).toContain('may have gone through earlier, so it is not repeated');
     });
 
     test('a spend that got no answer says so for the status line: its kind and action, not a skipped step', async () => {
@@ -671,7 +656,7 @@ describe('rule execution', () => {
         expect(state().lastError).toEqual({
             at: expect.any(Number),
             message:
-                'r1 → fillExposure: the exposure fill may have gone through (GuruShots gave no answer); it will be checked again next cycle',
+                'r1 → fillExposure: the exposure fill may have gone through (GuruShots gave no answer); it will be checked again next cycle, not spent again',
             kind: 'spend-unclear',
             action: 'fillExposure',
         });
@@ -680,6 +665,114 @@ describe('rule execution', () => {
         currencyActions.fillExposure.mockResolvedValueOnce({ ok: false, outcome: 'balance-unknown' });
         await run();
         expect(state().lastError).not.toHaveProperty('kind');
+    });
+
+    describe('the retry of a spend that got no answer never spends again', () => {
+        const unclear = { ok: false, outcome: 'unclear' } as const;
+
+        test('the live challenge shows the boost unlocked: the step is passed over and the rule goes on to the boost', async () => {
+            currencyActions.unlockBoostWithKey.mockResolvedValueOnce(unclear);
+            setup(single([{ type: 'unlockBoost' }, { type: 'boost', entry: { by: 'fewestVotes' } }]));
+            const c = challenge();
+            c.member.boost!.state = 'LOCKED';
+            await run(c);
+            expect(state().inFlight).toEqual({ ruleId: 'r1', actionIndex: 0 });
+            expect(pass.api.applyBoostToEntry).not.toHaveBeenCalled();
+
+            c.member.boost!.state = 'AVAILABLE_KEY';
+            await run(c);
+            expect(currencyActions.unlockBoostWithKey).toHaveBeenCalledTimes(1);
+            expect(pass.api.applyBoostToEntry).toHaveBeenCalledTimes(1);
+            expect(state().inFlight).toBeNull();
+            expect(state().fired.r1).toBeDefined();
+            expect(state().spent.keys).toBe(1);
+        });
+
+        test('a swap that did not land is not repeated, and the fill after it is not spent either', async () => {
+            currencyActions.previewSwap.mockResolvedValue(
+                invalid({ ok: true, candidate: { id: 'n1', member_id: 'm' } }),
+            );
+            currencyActions.swapEntry.mockResolvedValueOnce(unclear);
+            setup(
+                single(
+                    [{ type: 'swap', entry: { by: 'mostVotes' }, with: { memory: 'held' } }, { type: 'fillExposure' }],
+                    {},
+                    {
+                        limits: { swaps: 1 },
+                    },
+                ),
+            );
+            ledger.set(7, { ...initialState('Plan', 'main', NOW), memory: { held: 'n1' } });
+            const c = challenge();
+            await run(c);
+            expect(state().spent.swaps).toBe(1);
+            await run(c);
+            // n1 is not among the entries: it did not land, and nothing is spent on either step.
+            expect(currencyActions.swapEntry).toHaveBeenCalledTimes(1);
+            expect(currencyActions.fillExposure).not.toHaveBeenCalled();
+            expect(state().inFlight).toBeNull();
+            expect(state().spent.swaps).toBe(1);
+        });
+
+        test.each([
+            ['and what it brought in is remembered', { rememberAdded: 'added' }, { held: 'n1', added: 'n1' }],
+            ['and nothing is remembered that was not asked', {}, { held: 'n1' }],
+        ])('a swap that landed is passed over, %s', async (_name, extra, memory) => {
+            currencyActions.swapEntry.mockResolvedValueOnce(unclear);
+            setup(
+                single([
+                    { type: 'swap', entry: { by: 'mostVotes' }, with: { memory: 'held' }, ...extra },
+                    { type: 'fillExposure' },
+                ]),
+            );
+            ledger.set(7, { ...initialState('Plan', 'main', NOW), memory: { held: 'n1' } });
+            const c = challenge();
+            await run(c);
+            c.member.ranking.entries[0] = { id: 'n1', member_id: 'm' };
+            currencyActions.fillExposure.mockResolvedValueOnce(invalid({ ok: true }));
+            await run(c);
+            expect(currencyActions.swapEntry).toHaveBeenCalledTimes(1);
+            expect(currencyActions.fillExposure).toHaveBeenCalledTimes(1);
+            expect(state().memory).toEqual(memory);
+        });
+
+        test('a swap whose replacement a selector chooses cannot be shown to have landed: it stops, and is not repeated', async () => {
+            currencyActions.previewSwap.mockResolvedValue(
+                invalid({ ok: true, candidate: { id: 'n1', member_id: 'm' } }),
+            );
+            currencyActions.swapEntry.mockResolvedValueOnce(unclear);
+            setup(single([{ type: 'swap', entry: { by: 'mostVotes' }, with: 'best' }, { type: 'fillExposure' }]));
+            const c = challenge();
+            await run(c);
+            // Even with the candidate among the entries by now, the selector's choice is not known again.
+            c.member.ranking.entries[0] = { id: 'n1', member_id: 'm' };
+            await run(c);
+            expect(currencyActions.swapEntry).toHaveBeenCalledTimes(1);
+            expect(currencyActions.previewSwap).toHaveBeenCalledTimes(1);
+            expect(currencyActions.fillExposure).not.toHaveBeenCalled();
+            expect(state().inFlight).toBeNull();
+        });
+
+        test('a fill shows landed once the exposure is full, and a challenge that is gone stops the rule', async () => {
+            currencyActions.fillExposure.mockResolvedValueOnce(unclear);
+            setup(single([{ type: 'fillExposure' }, { type: 'unlockBoost' }]));
+            const c = challenge();
+            await run(c);
+            c.member.ranking.exposure = { exposure_factor: 100 };
+            currencyActions.unlockBoostWithKey.mockResolvedValueOnce(invalid({ ok: true }));
+            await run(c);
+            expect(currencyActions.fillExposure).toHaveBeenCalledTimes(1);
+            expect(currencyActions.unlockBoostWithKey).toHaveBeenCalledTimes(1);
+
+            ledger.remove(7);
+            currencyActions.fillExposure.mockResolvedValueOnce(unclear);
+            const d = challenge();
+            await run(d);
+            autoFill.refreshChallengeState.mockResolvedValueOnce('gone');
+            await run(d);
+            expect(currencyActions.fillExposure).toHaveBeenCalledTimes(2);
+            expect(state().inFlight).toBeNull();
+        });
     });
 
     test('a committed rule passes over a permanently skipped step and still reaches its goto', async () => {
