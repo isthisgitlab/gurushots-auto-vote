@@ -233,7 +233,8 @@ const render = (template: string, tokens: Record<string, string>) => {
     return html;
 };
 
-const main = async ({ rootDir = root, out = outDir, layoutFile = layoutPath } = {}) => {
+/** The markdown renderer: `renderPage` turns one page's source into HTML; `localImages` collects the repo images the rendered pages use. */
+const createMarkdownRenderer = async () => {
     const { Marked } = await import('marked');
     const { gfmHeadingId, resetHeadings } = await import('marked-gfm-heading-id');
 
@@ -241,7 +242,7 @@ const main = async ({ rootDir = root, out = outDir, layoutFile = layoutPath } = 
     // global) so the synchronous walkTokens hook resolves links against the
     // page currently being rendered without leaking state between pages.
     let activeSrcDir = '';
-    // Repo paths of the relative images the pages use, copied into the site below.
+    // Repo paths of the relative images the pages use, copied into the site afterwards.
     const localImages = new Set<string>();
     const marked = new Marked({ gfm: true });
     marked.use(gfmHeadingId());
@@ -266,6 +267,35 @@ const main = async ({ rootDir = root, out = outDir, layoutFile = layoutPath } = 
         },
     });
 
+    const renderPage = (markdown: string, srcDir: string) => {
+        activeSrcDir = srcDir;
+        // Reset the slugger so each page numbers its heading ids from scratch
+        // (otherwise repeated headings across pages collect -1/-2 suffixes).
+        resetHeadings();
+        // No async extension is registered, so parse returns synchronously; its
+        // declared type only widens to Promise for the `async: true` option.
+        return marked.parse(markdown) as string;
+    };
+
+    return { renderPage, localImages };
+};
+
+/** Copies the repo images the rendered pages reference into the site's image directory. */
+const copyLocalImages = (images: Iterable<string>, rootDir: string, out: string) => {
+    for (const image of images) {
+        const imageSrc = path.join(rootDir, image);
+        if (!fs.existsSync(imageSrc)) {
+            console.error(`✗ image not found: ${image}`);
+            process.exit(1);
+        }
+        fs.mkdirSync(path.dirname(path.join(out, IMAGE_DIR, image)), { recursive: true });
+        fs.copyFileSync(imageSrc, path.join(out, IMAGE_DIR, image));
+    }
+};
+
+const main = async ({ rootDir = root, out = outDir, layoutFile = layoutPath } = {}) => {
+    const { renderPage, localImages } = await createMarkdownRenderer();
+
     const logoSrc = path.join(rootDir, 'src', 'assets', 'logo.png');
     if (!fs.existsSync(logoSrc)) {
         console.error(`✗ logo not found: ${path.relative(rootDir, logoSrc)}`);
@@ -284,13 +314,7 @@ const main = async ({ rootDir = root, out = outDir, layoutFile = layoutPath } = 
             console.error(`✗ source not found: ${page.src}`);
             process.exit(1);
         }
-        activeSrcDir = srcDirOf(page.src);
-        // Reset the slugger so each page numbers its heading ids from scratch
-        // (otherwise repeated headings across pages collect -1/-2 suffixes).
-        resetHeadings();
-        // No async extension is registered, so parse returns synchronously; its
-        // declared type only widens to Promise for the `async: true` option.
-        const content = marked.parse(fs.readFileSync(srcPath, 'utf8')) as string;
+        const content = renderPage(fs.readFileSync(srcPath, 'utf8'), srcDirOf(page.src));
         const { footer, privacy } = LANGUAGES[page.lang];
         const html = render(layout, {
             lang: page.lang,
@@ -312,15 +336,7 @@ const main = async ({ rootDir = root, out = outDir, layoutFile = layoutPath } = 
     for (const [alt, badge] of Object.entries(BADGES)) {
         fs.writeFileSync(path.join(out, badgeHref(alt)), badgeSvg(badge), 'utf8');
     }
-    for (const image of localImages) {
-        const imageSrc = path.join(rootDir, image);
-        if (!fs.existsSync(imageSrc)) {
-            console.error(`✗ image not found: ${image}`);
-            process.exit(1);
-        }
-        fs.mkdirSync(path.dirname(path.join(out, IMAGE_DIR, image)), { recursive: true });
-        fs.copyFileSync(imageSrc, path.join(out, IMAGE_DIR, image));
-    }
+    copyLocalImages(localImages, rootDir, out);
 
     fs.copyFileSync(logoSrc, path.join(out, 'logo.png'));
     console.log(`✓ copied logo.png\n✓ rendered ${PAGES.length} page(s) to dist-site/ for v${version}`);

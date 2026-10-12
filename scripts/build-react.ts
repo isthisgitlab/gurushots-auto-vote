@@ -5,6 +5,7 @@ import type { BuildContext, BuildOptions } from 'esbuild';
 import path from 'node:path';
 import fs from 'node:fs';
 import { removeVisionWebAssets, stageVisionWebAssets } from './fetch-vision-model';
+import { NODE_BUILTINS, SHIM_BANNER } from './lib/browser-shims';
 import { runIfMain } from './lib/run-if-main';
 
 // Every remote image the renderer draws comes from the photo CDN (format/photoUrl.ts);
@@ -72,22 +73,25 @@ const entryPoints = {
 
 type EntryName = keyof typeof entryPoints;
 
-// Capacitor entry point. Capacitor copies dist/ wholesale into the
-// Android WebView's web assets and loads index.html at app start.
-// Electron loads its own src/html/*.html directly via loadFile() and
-// ignores this index.html, so emitting it does not affect desktop.
-// The bundle loaded here is capacitor-bundle.js, NOT app-bundle.js,
-// so the bridge can install before React mounts.
-const capacitorIndexHtml = `<!doctype html>
-<html lang="en">
+type RendererDocument = {
+    htmlAttrs: string;
+    viewport: string;
+    csp: string;
+    bundle: string;
+    themeColor?: string;
+};
+
+// A renderer page: the document head (viewport, CSP, styles, deferred bundle) and the safe-area-padded #root body.
+const rendererHtml = ({ htmlAttrs, viewport, csp, bundle, themeColor }: RendererDocument): string =>
+    `<!doctype html>
+<html ${htmlAttrs}>
     <head>
         <meta charset="UTF-8" />
-        <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover, maximum-scale=1.0, user-scalable=no" />
-        <meta name="theme-color" content="#960018" />
-        <meta http-equiv="Content-Security-Policy" content="${androidCsp}" />
+        <meta name="viewport" content="${viewport}" />${themeColor ? `\n        <meta name="theme-color" content="${themeColor}" />` : ''}
+        <meta http-equiv="Content-Security-Policy" content="${csp}" />
         <title>GuruShots Auto Vote</title>
         <link href="styles.css" rel="stylesheet" />
-        <script defer src="capacitor-bundle.js"></script>
+        <script defer src="${bundle}"></script>
     </head>
     <body class="min-h-screen bg-base-200 pt-[env(safe-area-inset-top)] pr-[env(safe-area-inset-right)] pb-[env(safe-area-inset-bottom)] pl-[env(safe-area-inset-left)]">
         <div id="root"></div>
@@ -95,24 +99,29 @@ const capacitorIndexHtml = `<!doctype html>
 </html>
 `;
 
+// Capacitor entry point. Capacitor copies dist/ wholesale into the
+// Android WebView's web assets and loads index.html at app start.
+// Electron loads its own src/html/*.html directly via loadFile() and
+// ignores this index.html, so emitting it does not affect desktop.
+// The bundle loaded here is capacitor-bundle.js, NOT app-bundle.js,
+// so the bridge can install before React mounts.
+const capacitorIndexHtml = rendererHtml({
+    htmlAttrs: 'lang="en"',
+    viewport: 'width=device-width, initial-scale=1.0, viewport-fit=cover, maximum-scale=1.0, user-scalable=no',
+    themeColor: '#960018',
+    csp: androidCsp,
+    bundle: 'capacitor-bundle.js',
+});
+
 // Web shell document, served at / by src/ts/web/server.ts. Same CSP as the
 // Electron pages: script-src 'self' keeps injected inline script from running
 // against the window.api surface.
-const webHtml = `<!doctype html>
-<html data-theme="light" lang="en">
-    <head>
-        <meta charset="UTF-8" />
-        <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-        <meta http-equiv="Content-Security-Policy" content="${baseCsp()}" />
-        <title>GuruShots Auto Vote</title>
-        <link href="styles.css" rel="stylesheet" />
-        <script defer src="web-bundle.js"></script>
-    </head>
-    <body class="min-h-screen bg-base-200 pt-[env(safe-area-inset-top)] pr-[env(safe-area-inset-right)] pb-[env(safe-area-inset-bottom)] pl-[env(safe-area-inset-left)]">
-        <div id="root"></div>
-    </body>
-</html>
-`;
+const webHtml = rendererHtml({
+    htmlAttrs: 'data-theme="light" lang="en"',
+    viewport: 'width=device-width, initial-scale=1.0',
+    csp: baseCsp(),
+    bundle: 'web-bundle.js',
+});
 
 // Headless background document. Loaded by AutoVoteService in a bare
 // WebView (no Capacitor). headless-flag.js sets the headless flag before the
@@ -165,43 +174,6 @@ const commonOptions: BuildOptions = {
     },
 };
 
-// All renderer bundles run in a browser-context (Electron WebView
-// or Capacitor WebView). They reach shared modules (runtime.ts,
-// settings.ts, ForegroundServiceController, etc.) that lazy-require
-// Node built-ins and electron — code paths the renderer never
-// reaches at runtime (it goes through window.api / Capacitor.Plugins),
-// but esbuild still tries to resolve at bundle time. Marking them
-// external + emitting an inert require shim keeps every bundle
-// green; the unreachable lazy requires become benign no-ops.
-const NODE_BUILTINS_BARE = [
-    'fs',
-    'path',
-    'os',
-    'crypto',
-    'stream',
-    'events',
-    'child_process',
-    'http',
-    'https',
-    'url',
-    'zlib',
-    'util',
-    'buffer',
-    'assert',
-    'net',
-    'tls',
-    'dns',
-    'querystring',
-    'string_decoder',
-    'tty',
-    'readline',
-    'sea',
-    'module',
-];
-// Externalize both bare and node:-prefixed forms — shared modules use the
-// node: prefix (preferred since Node 22) but esbuild matches externals on
-// exact specifier, so both spellings must be enumerated.
-const NODE_BUILTINS = [...NODE_BUILTINS_BARE, ...NODE_BUILTINS_BARE.map((m) => `node:${m}`)];
 // The CLI-only archive extractor is unreachable in renderer and WebView
 // runtimes; leave its Node package out of their bundles.
 const RENDERER_EXTERNALS = [
@@ -225,54 +197,6 @@ const CAPACITOR_EXTERNALS = [
     '@capacitor/preferences',
     '@capawesome-team/capacitor-android-foreground-service',
 ];
-// Two browser-shim banners. require() is faked because external
-// imports leave runtime require() calls that the WebView cannot
-// resolve. process is faked because logger.ts / runtime.ts read
-// process.type / process.versions / process.platform at module
-// load (before any isCapacitor() guard runs); without a stub the
-// bundle ReferenceErrors before React mounts.
-// Browser shims for Node globals that the bundled code touches at
-// module load before any isCapacitor() guard can run. The require
-// shim returns module-aware stubs (fs/path/os) with the small
-// surface area logger.ts / runtime.ts / settings.ts actually call —
-// each method either no-ops or returns a sensible neutral value
-// (false for existsSync, joined string for path.join, etc.) so
-// module init does not throw. All real fs work lives behind
-// runtime.isCapacitor() guards or try/catch wrappers, so these
-// stub methods are never reached by the actual app code on
-// Capacitor — they just keep module init green.
-const SHIM_BANNER = [
-    'var __nodeModuleShims = {',
-    '  fs: {',
-    '    existsSync: function(){ return false; },',
-    '    readFileSync: function(){ return ""; },',
-    '    writeFileSync: function(){},',
-    '    appendFileSync: function(){},',
-    '    mkdirSync: function(){},',
-    '    readdirSync: function(){ return []; },',
-    '    statSync: function(){ return { size: 0, mtime: new Date() }; },',
-    '    unlinkSync: function(){},',
-    '    watch: function(){ return { close: function(){} }; }',
-    '  },',
-    '  path: {',
-    '    join: function(){ return Array.prototype.join.call(arguments, "/"); },',
-    '    resolve: function(){ return Array.prototype.join.call(arguments, "/"); },',
-    '    dirname: function(p){ return String(p).split("/").slice(0,-1).join("/") || "/"; },',
-    '    basename: function(p){ return String(p).split("/").pop(); },',
-    '    extname: function(p){ var b = String(p).split("/").pop(); var i = b.lastIndexOf("."); return i < 0 ? "" : b.slice(i); },',
-    '    sep: "/"',
-    '  },',
-    '  os: {',
-    '    homedir: function(){ return "/"; },',
-    '    platform: function(){ return "android"; },',
-    '    tmpdir: function(){ return "/tmp"; }',
-    '  }',
-    '};',
-    'var require = (typeof require !== "undefined") ? require : function(name){ return __nodeModuleShims[name.replace(/^node:/, "")] || {}; };',
-    'var process = (typeof process !== "undefined") ? process : { env: {}, versions: {}, platform: "browser", type: "browser", pkg: undefined, argv: [], cwd: function(){ return "/"; }, on: function(){}, stdout: { isTTY: false, write: function(){} }, stderr: { isTTY: false, write: function(){} } };',
-    'var __dirname = (typeof __dirname !== "undefined") ? __dirname : "/";',
-    'var __filename = (typeof __filename !== "undefined") ? __filename : "/index.html";',
-].join('');
 const REQUIRE_SHIM = { js: SHIM_BANNER };
 const perEntryOptions: Record<EntryName, BuildOptions> = {
     // Electron entries: externalize Capacitor packages too. Their

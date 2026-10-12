@@ -38,10 +38,8 @@ const clearLeftoverToken = () => {
     }
 };
 
-/**
- * Everything that runs once Electron has finished initialization.
- */
-async function onReady() {
+/** Setup that needs no window: permissions, headers, presets, the leftover login, the log cleanup and the menu. */
+const prepareApp = () => {
     logger.withCategory('ui').info(`[App] UserData path: ${settings.getUserDataPath()}`, null);
 
     // Before any window exists: a page must never see Electron's grant-by-default.
@@ -61,7 +59,9 @@ async function onReady() {
     logger.cleanup();
 
     createApplicationMenu();
+};
 
+const registerPowerHandlers = () => {
     // Linux/macOS shutdown or reboot: never veto the OS with a dialog.
     powerMonitor.on('shutdown', bypassQuitGuard);
 
@@ -72,7 +72,10 @@ async function onReady() {
             logger.withCategory('boost').error(`Boost on sleep could not run: ${failureText(error)}`, null);
         });
     });
+};
 
+/** Opens the first window, running the startup update check before it (auto-login) or shortly after it (login window). */
+const openFirstWindow = async () => {
     // Check if we should auto-login and run update check before creating main window
     const userSettings = settings.loadSettings();
     const shouldAutoLogin = userSettings.token && userSettings.stayLoggedIn;
@@ -112,7 +115,9 @@ async function onReady() {
             void safeCheckForUpdates();
         }, 3000); // 3 second delay
     }
+};
 
+const registerLifecycleHandlers = () => {
     // On macOS, re-create a window when dock icon is clicked and no windows are open
     app.on('activate', () => {
         if (BrowserWindow.getAllWindows().length === 0) {
@@ -141,6 +146,16 @@ async function onReady() {
     process.on('exit', (code) => {
         logger.withCategory('ui').info(`Process exiting with code: ${code}`, null);
     });
+};
+
+/**
+ * Everything that runs once Electron has finished initialization.
+ */
+async function onReady() {
+    prepareApp();
+    registerPowerHandlers();
+    await openFirstWindow();
+    registerLifecycleHandlers();
 }
 
 export { onReady };

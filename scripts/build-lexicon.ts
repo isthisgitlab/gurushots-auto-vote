@@ -74,9 +74,6 @@ export interface ConceptsConfig {
     };
 }
 
-/** True for a parsed intermediate: every field is optional, so any JSON object qualifies. */
-export const isIntermediate = (value: unknown): value is Intermediate => isPlainObject(value);
-
 /** Provenance block fetch-embeddings writes into the intermediate. */
 interface EmbeddingsSource {
     url: string;
@@ -246,12 +243,14 @@ const main = ({
         );
         process.exit(1);
     }
-    const intermediate: unknown = JSON.parse(fs.readFileSync(embeddingsPath, 'utf8'));
+    const parsedEmbeddings: unknown = JSON.parse(fs.readFileSync(embeddingsPath, 'utf8'));
     const concepts: unknown = JSON.parse(fs.readFileSync(conceptsPath, 'utf8'));
-    if (!isIntermediate(intermediate)) {
+    if (!isPlainObject(parsedEmbeddings)) {
         console.error('❌ scripts/lexicon-embeddings.json is not a JSON object — run `pnpm fetch:embeddings`.');
         process.exit(1);
     }
+    // Every Intermediate field is optional, so any JSON object qualifies.
+    const intermediate = parsedEmbeddings as Intermediate;
     if (!isConceptsConfig(concepts)) {
         console.error('❌ scripts/lexicon-concepts.json must be a JSON object with a `concepts` list.');
         process.exit(1);

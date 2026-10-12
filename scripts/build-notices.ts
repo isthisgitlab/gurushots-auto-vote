@@ -199,108 +199,99 @@ const heading = (title: string) => [title, '-'.repeat(title.length), ''];
 
 const rule = (title: string) => ['='.repeat(8) + ` ${title} ` + '='.repeat(8), ''];
 
-const renderNotices = (inputs: NoticeInputs) => {
-    const { packages, licenses, readText } = inputs;
-    const usedTexts = new Set<string>(['Apache-2.0', 'PDDL-1.0']);
-    const out: string[] = [...NOTICE_HEADER];
-
-    out.push(...heading('1. GuruShotsAutoVote'), inputs.projectLicense, '');
-
-    out.push(
-        ...heading('2. Desktop shell'),
-        "The desktop app is built on Electron. Electron's license (MIT) and the license list of the",
-        'Chromium components it contains ship with the app as LICENSE.electron.txt and',
-        'LICENSES.chromium.html in its resources directory.',
-        '',
-    );
-
-    out.push(
+/** Section 3 lines plus the packages that ship libvips (section 4 lists them); records each license text it cites. */
+const renderNpmPackages = (
+    { packages, licenses }: NoticeInputs,
+    usedTexts: Set<string>,
+): { lines: string[]; libvips: string[] } => {
+    const lines: string[] = [
         ...heading(`3. npm packages (${packages.length})`),
         'Shipped in the desktop app, the CLI binaries and the Android app, or compiled into their bundles.',
         '',
-    );
+    ];
     const libvips: string[] = [];
     for (const { name, version } of packages) {
         const entry = lookupLicense(licenses, name);
         for (const id of entry.texts) usedTexts.add(id);
-        out.push(`${name} ${version}`, `  License: ${entry.license}`);
-        for (const line of entry.copyright) out.push(`  ${line}`);
-        if (entry.source) out.push(`  Source: ${entry.source.replace('{version}', version)}`);
-        out.push('');
+        lines.push(`${name} ${version}`, `  License: ${entry.license}`);
+        for (const line of entry.copyright) lines.push(`  ${line}`);
+        if (entry.source) lines.push(`  Source: ${entry.source.replace('{version}', version)}`);
+        lines.push('');
         if (entry.texts.includes('LGPL-3.0')) libvips.push(`${name} ${version}`);
     }
+    return { lines, libvips };
+};
 
-    out.push(
-        ...heading('4. Libraries under the GNU Lesser General Public License'),
-        'The packages below contain libvips and the libraries it is built from, licensed under the GNU',
-        'Lesser General Public License v3.0 or later. The complete texts of the LGPL-3.0 and of the',
-        'GPL-3.0 it refers to are in section 7; the source of each version is at the Source URL listed',
-        'with it in section 3.',
-        '',
-        'In the desktop app these libraries are separate files outside the application archive',
-        '(app.asar.unpacked/node_modules/@img/) and can be replaced by a compatible build. In the CLI',
-        'binaries they are part of the embedded runtime archive, which is extracted to the "vision"',
-        "directory of the CLI's data folder and checked against a digest embedded at build time; to use",
-        "a modified build of them, rebuild the CLI from this project's source.",
-        '',
-        ...libvips.map((entry) => `  ${entry}`),
-        '',
-    );
+const renderLgplSection = (libvips: string[]) => [
+    ...heading('4. Libraries under the GNU Lesser General Public License'),
+    'The packages below contain libvips and the libraries it is built from, licensed under the GNU',
+    'Lesser General Public License v3.0 or later. The complete texts of the LGPL-3.0 and of the',
+    'GPL-3.0 it refers to are in section 7; the source of each version is at the Source URL listed',
+    'with it in section 3.',
+    '',
+    'In the desktop app these libraries are separate files outside the application archive',
+    '(app.asar.unpacked/node_modules/@img/) and can be replaced by a compatible build. In the CLI',
+    'binaries they are part of the embedded runtime archive, which is extracted to the "vision"',
+    "directory of the CLI's data folder and checked against a digest embedded at build time; to use",
+    "a modified build of them, rebuild the CLI from this project's source.",
+    '',
+    ...libvips.map((entry) => `  ${entry}`),
+    '',
+];
 
-    const nodeText = readText('Node.js-LICENSE');
-    const onnxLicense = readText('onnxruntime-LICENSE');
-    const onnxNotices = readText('onnxruntime-ThirdPartyNotices');
-    out.push(
-        ...heading('5. Runtimes, models and data'),
-        '5.1 Node.js',
-        '',
-        `The CLI binaries (gurucli-*) embed the Node.js runtime, Copyright Node.js contributors. The`,
-        `LICENSE of Node.js v${NODE_LICENSE_VERSION} follows; it also lists the licenses of the third-party`,
-        'components bundled in Node.js.',
-        '',
-        ...rule('Node.js LICENSE'),
-        nodeText,
-        '',
-        '5.2 ONNX Runtime',
-        '',
-        `The local photo check runs on ONNX Runtime (onnxruntime-node ${inputs.onnxruntimeVersion} in the desktop app and the CLI,`,
-        'a development build of the onnxruntime-web 1.31 line as WebAssembly in the Android app),',
-        `Copyright (c) Microsoft Corporation, under the MIT license. The LICENSE and ThirdPartyNotices of`,
-        `ONNX Runtime ${ONNXRUNTIME_TEXTS_VERSION} follow.`,
-        '',
-        ...rule('ONNX Runtime LICENSE'),
-        onnxLicense,
-        '',
-        ...rule('ONNX Runtime ThirdPartyNotices'),
-        onnxNotices,
-        '',
-        '5.3 SigLIP vision model',
-        '',
-        visionModelNotice(REPOS).split('\n').slice(2).join('\n').trimEnd(),
-        '',
-        'License: Apache-2.0 (section 7). The model directory of each build carries the same LICENSE and NOTICE.',
-        '',
-        '5.4 GloVe word vectors',
-        '',
-        'The semantic lexicon (semantic-vectors.json) used to rank auto-fill photos contains quantized,',
-        'mean-centered and retrofitted derivatives of selected vectors of GloVe 6B (glove.6B.100d):',
-        'Pennington, J., Socher, R. and Manning, C. D. (2014), GloVe: Global Vectors for Word',
-        'Representation, https://nlp.stanford.edu/projects/glove/',
-        `Source: ${GLOVE_URL}`,
-        'License: Open Data Commons Public Domain Dedication and License v1.0 (PDDL-1.0, section 7).',
-        '',
-    );
+const renderRuntimesSection = ({ readText, onnxruntimeVersion }: NoticeInputs) => [
+    ...heading('5. Runtimes, models and data'),
+    '5.1 Node.js',
+    '',
+    `The CLI binaries (gurucli-*) embed the Node.js runtime, Copyright Node.js contributors. The`,
+    `LICENSE of Node.js v${NODE_LICENSE_VERSION} follows; it also lists the licenses of the third-party`,
+    'components bundled in Node.js.',
+    '',
+    ...rule('Node.js LICENSE'),
+    readText('Node.js-LICENSE'),
+    '',
+    '5.2 ONNX Runtime',
+    '',
+    `The local photo check runs on ONNX Runtime (onnxruntime-node ${onnxruntimeVersion} in the desktop app and the CLI,`,
+    'a development build of the onnxruntime-web 1.31 line as WebAssembly in the Android app),',
+    `Copyright (c) Microsoft Corporation, under the MIT license. The LICENSE and ThirdPartyNotices of`,
+    `ONNX Runtime ${ONNXRUNTIME_TEXTS_VERSION} follow.`,
+    '',
+    ...rule('ONNX Runtime LICENSE'),
+    readText('onnxruntime-LICENSE'),
+    '',
+    ...rule('ONNX Runtime ThirdPartyNotices'),
+    readText('onnxruntime-ThirdPartyNotices'),
+    '',
+    '5.3 SigLIP vision model',
+    '',
+    visionModelNotice(REPOS).split('\n').slice(2).join('\n').trimEnd(),
+    '',
+    'License: Apache-2.0 (section 7). The model directory of each build carries the same LICENSE and NOTICE.',
+    '',
+    '5.4 GloVe word vectors',
+    '',
+    'The semantic lexicon (semantic-vectors.json) used to rank auto-fill photos contains quantized,',
+    'mean-centered and retrofitted derivatives of selected vectors of GloVe 6B (glove.6B.100d):',
+    'Pennington, J., Socher, R. and Manning, C. D. (2014), GloVe: Global Vectors for Word',
+    'Representation, https://nlp.stanford.edu/projects/glove/',
+    `Source: ${GLOVE_URL}`,
+    'License: Open Data Commons Public Domain Dedication and License v1.0 (PDDL-1.0, section 7).',
+    '',
+];
 
-    out.push(
+/** Section 6 lines; records each component's license text. */
+const renderAndroidSection = (inputs: NoticeInputs, usedTexts: Set<string>) => {
+    const lines: string[] = [
         ...heading('6. Android native libraries'),
         'Compiled into the Android app (Gradle dependencies; Capacitor itself and its plugins are npm',
         'packages listed in section 3).',
         '',
-    );
+    ];
     for (const component of inputs.android) {
         const version = component.versionVariable ? inputs.androidVersions[component.versionVariable] : undefined;
         usedTexts.add(component.license);
-        out.push(
+        lines.push(
             `${component.name}${version ? ` ${version}` : ''}`,
             `  License: ${component.license}`,
             `  ${component.copyright}`,
@@ -308,9 +299,29 @@ const renderNotices = (inputs: NoticeInputs) => {
             '',
         );
     }
+    return lines;
+};
 
-    out.push(...heading('7. License texts'));
-    for (const id of [...usedTexts].sort()) out.push(...rule(id), readText(id), '');
+const renderNotices = (inputs: NoticeInputs) => {
+    const usedTexts = new Set<string>(['Apache-2.0', 'PDDL-1.0']);
+    const npm = renderNpmPackages(inputs, usedTexts);
+    const out: string[] = [
+        ...NOTICE_HEADER,
+        ...heading('1. GuruShotsAutoVote'),
+        inputs.projectLicense,
+        '',
+        ...heading('2. Desktop shell'),
+        "The desktop app is built on Electron. Electron's license (MIT) and the license list of the",
+        'Chromium components it contains ship with the app as LICENSE.electron.txt and',
+        'LICENSES.chromium.html in its resources directory.',
+        '',
+        ...npm.lines,
+        ...renderLgplSection(npm.libvips),
+        ...renderRuntimesSection(inputs),
+        ...renderAndroidSection(inputs, usedTexts),
+        ...heading('7. License texts'),
+    ];
+    for (const id of [...usedTexts].sort()) out.push(...rule(id), inputs.readText(id), '');
 
     return `${out.join('\n').replace(/\n+$/, '')}\n`;
 };

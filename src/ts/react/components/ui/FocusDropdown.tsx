@@ -1,7 +1,6 @@
 import { useId, useState } from 'react';
 
-import type { ComponentChildren } from 'preact';
-import type { TargetedFocusEvent, TargetedKeyboardEvent } from 'preact';
+import type { ComponentChildren, TargetedFocusEvent, TargetedKeyboardEvent } from 'preact';
 
 // DaisyUI's focus dropdown closes on blur, so Escape just drops focus. Attached to the wrapper, so it sees keys from
 // the trigger and every entry button inside.
