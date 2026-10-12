@@ -53,10 +53,9 @@ const read = (...segments: string[]) => fs.readFileSync(path.join(ROOT, ...segme
 /**
  * The problems with the release each vendored NOTICE was taken from: no android.json component covers the coordinate;
  * a covering component's version variable is undefined in android/variables.gradle or differs from the vendored
- * version; or, for a covering component with no version variable, the vendored version is not the one the release
- * ships (`shipped`, from android/release-runtime-versions.txt). Every component that covers the coordinate is checked,
- * as the generator renders the NOTICE under each of them. A coordinate the release does not ship has nothing to compare
- * against here; the test for the shipped artifacts reports it.
+ * version; or the vendored version is not the one the release ships (`shipped`, from
+ * android/release-runtime-versions.txt), whether or not a covering component has a version variable. A coordinate the
+ * release does not ship has nothing to compare against here; the test for the shipped artifacts reports it.
  */
 const mismatchedNoticeVersions = (
     vendored: Record<string, { version: string }>,
@@ -71,16 +70,33 @@ const mismatchedNoticeVersions = (
         );
         if (covering.length === 0) problems.push(`no component covers ${coordinate}`);
         for (const component of covering) {
-            if (component.versionVariable) {
-                const built = variables[component.versionVariable];
-                if (version !== built) {
-                    problems.push(`${coordinate} is vendored at ${version} but the build uses ${built}`);
-                }
-            } else if (shipped[coordinate] && shipped[coordinate] !== version) {
-                problems.push(`${coordinate} is vendored at ${version} but the release ships ${shipped[coordinate]}`);
-            }
+            if (!component.versionVariable) continue;
+            const built = variables[component.versionVariable];
+            if (version !== built) problems.push(`${coordinate} is vendored at ${version} but the build uses ${built}`);
+        }
+        if (covering.length > 0 && shipped[coordinate] && shipped[coordinate] !== version) {
+            problems.push(`${coordinate} is vendored at ${version} but the release ships ${shipped[coordinate]}`);
         }
     }
+    return problems;
+};
+
+/**
+ * The problems with a release runtime version list (`group:artifact:version` lines) held against the artifact list:
+ * a malformed line, a module listed more than once (at one version or two), a module that is not an artifact, or an
+ * artifact without a version.
+ */
+const versionListProblems = (lines: readonly string[], artifacts: readonly string[]) => {
+    const problems = lines
+        .filter((line) => !/^[\w.-]+:[\w.-]+:[\w.+-]+$/.test(line))
+        .map((line) => `malformed ${line}`);
+    const modules = lines.map((line) => line.split(':').slice(0, 2).join(':'));
+    for (const module of new Set(modules)) {
+        const versions = lines.filter((line) => line.startsWith(`${module}:`));
+        if (versions.length > 1) problems.push(`${module} is listed ${versions.length} times: ${versions.join(', ')}`);
+        if (!artifacts.includes(module)) problems.push(`${module} is not a shipped artifact`);
+    }
+    for (const artifact of artifacts) if (!modules.includes(artifact)) problems.push(`${artifact} has no version`);
     return problems;
 };
 
@@ -404,17 +420,43 @@ describe('the Android component list', () => {
     // android/release-runtime-versions.txt (scripts/android-runtime-artifacts.sh) is the release runtime classpath at the
     // versions the release resolves, group:artifact:version; the verification metadata lists the versions of every
     // configuration, so it cannot say what the APK ships.
-    const shippedVersions: Record<string, string> = {};
     const versionLines = read('android', 'release-runtime-versions.txt').split('\n').filter(Boolean);
+    const shippedVersions: Record<string, string> = {};
     for (const line of versionLines) {
         const [group, artifact, version] = line.split(':');
         shippedVersions[`${group}:${artifact}`] = version;
     }
 
     test('has a release runtime version list with one version for each shipped artifact', () => {
-        expect(versionLines.every((line) => /^[\w.-]+:[\w.-]+:[\w.+-]+$/.test(line))).toBe(true);
+        expect(versionListProblems(versionLines, runtimeArtifacts)).toEqual([]);
         expect(Object.keys(shippedVersions).sort()).toEqual(runtimeArtifacts);
-        expect(versionLines).toHaveLength(runtimeArtifacts.length);
+    });
+
+    test('reports a module listed at two versions, a stray module, a missing version and a malformed line', () => {
+        const artifacts = ['g:a', 'g:b'];
+        expect(versionListProblems(['g:a:1', 'g:b:2'], artifacts)).toEqual([]);
+        expect(versionListProblems(['g:a:1', 'g:a:2', 'g:b:2'], artifacts)).toEqual([
+            'g:a is listed 2 times: g:a:1, g:a:2',
+        ]);
+        expect(versionListProblems(['g:a:1', 'g:a:1', 'g:b:2'], artifacts)).toEqual([
+            'g:a is listed 2 times: g:a:1, g:a:1',
+        ]);
+        expect(versionListProblems(['g:a:1', 'g:b:2', 'g:c:3'], artifacts)).toEqual(['g:c is not a shipped artifact']);
+        expect(versionListProblems(['g:a:1'], artifacts)).toEqual(['g:b has no version']);
+        expect(versionListProblems(['g:a:1', 'g:b'], artifacts)).toEqual(['malformed g:b']);
+    });
+
+    test('builds each versioned component at the version the release ships, for every artifact it covers', () => {
+        for (const component of components) {
+            if (!component.versionVariable) continue;
+            const covered = Object.entries(shippedVersions).filter(([coordinate]) =>
+                component.coordinates.some((pattern) => coordinateMatches(pattern, coordinate)),
+            );
+            expect(covered.length).toBeGreaterThan(0);
+            for (const [coordinate, version] of covered) {
+                expect({ coordinate, version }).toEqual({ coordinate, version: variables[component.versionVariable] });
+            }
+        }
     });
 
     test('vendors only NOTICE files of artifacts the release APK still ships', () => {
@@ -450,7 +492,7 @@ describe('the Android component list', () => {
                 vendored,
                 components,
                 { cordovaVersion: '1.0', coreVersion: '2.0' },
-                { 'androidx.core:core': '2.0' },
+                { 'androidx.core:core': '2.0', 'org.apache.cordova:framework': '1.0' },
             ),
         ).toEqual(['no component covers z:w']);
         expect(
@@ -462,8 +504,19 @@ describe('the Android component list', () => {
             ),
         ).toEqual([
             'org.apache.cordova:framework is vendored at 1.0 but the build uses 1.1',
-            'androidx.core:core is vendored at 2.0 but the release ships 2.2',
             'androidx.core:core is vendored at 2.0 but the build uses 2.1',
+            'androidx.core:core is vendored at 2.0 but the release ships 2.2',
+            'no component covers z:w',
+        ]);
+        expect(
+            mismatchedNoticeVersions(
+                vendored,
+                components,
+                { cordovaVersion: '1.0', coreVersion: '2.0' },
+                { 'org.apache.cordova:framework': '1.1' },
+            ),
+        ).toEqual([
+            'org.apache.cordova:framework is vendored at 1.0 but the release ships 1.1',
             'no component covers z:w',
         ]);
         expect(mismatchedNoticeVersions(vendored, components, {}, {})).toEqual([
@@ -477,6 +530,16 @@ describe('the Android component list', () => {
         const script = read('scripts', 'android-runtime-artifacts.sh');
         expect(script).toContain('!component.variants.isEmpty() && component.variants.every {');
         expect(script).toContain('failures.add("${coordinate} resolves to no file');
+    });
+
+    test('refuses a version list that does not map one-to-one onto the artifact list', () => {
+        const script = read('scripts', 'android-runtime-artifacts.sh');
+        expect(script).toContain('do not map one-to-one onto its artifacts; nothing was written');
+        expect(script).toContain(
+            `unversioned=$(cut -d: -f1,2 "$new_versions" | LC_ALL=C sort | LC_ALL=C comm -3 - "$new_artifacts")`,
+        );
+        expect(script).toContain('if [ -n "$unversioned" ]; then');
+        expect(script).toContain(`awk -F: 'NR == FNR { listed[$0] = 1; next } ($1 ":" $2) in listed { print }'`);
     });
 
     test('keeps the runtime lists current: the Android CI job regenerates and diffs them, and so does the metadata script', () => {
