@@ -20,6 +20,7 @@ import {
     warnMissingCloseTime,
 } from './settingsResolution';
 import { performJoin } from './performJoin';
+import { paidByThisAccount } from './unlockMarker';
 
 /**
  * Mutable per-pass join state: the balance and budget kept locally accurate as
@@ -107,7 +108,7 @@ const earlyJoinsFor = async (
  */
 const toPassNowSec = (now: number): number => Math.floor((Number.isFinite(now) && now > 0 ? now : Date.now()) / 1000);
 
-const decideCandidateJoin = (challenge: Challenge, pass: JoinPassState) => {
+const decideCandidateJoin = (challenge: Challenge, pass: JoinPassState, alreadyPaid: boolean) => {
     const cfg = resolveCandidateConfig(challenge);
     // Join Early for Missions lifts the timing window while a mission wants
     // joins: these would join later anyway, the mission wants them now.
@@ -132,6 +133,7 @@ const decideCandidateJoin = (challenge: Challenge, pass: JoinPassState) => {
         joinWithinSec: joinEarly ? 0 : cfg.joinWithinSec,
         joinAfterPercentElapsed: joinEarly ? 0 : cfg.joinAfterPercentElapsed,
         nowSec: pass.nowSec,
+        alreadyPaid,
     });
 };
 
@@ -164,7 +166,8 @@ const joinCandidate = async (
     if (resolveJoinSetting('autoJoin', challenge) !== true) {
         return 'skipped:autojoin-off';
     }
-    const decision = decideCandidateJoin(challenge, pass);
+    const alreadyPaid = await paidByThisAccount(challenge, token, deps);
+    const decision = decideCandidateJoin(challenge, pass, alreadyPaid);
     if (!decision.join) {
         noteTimingRefusal(challenge, decision.reason, pass);
         return `skipped:${decision.reason}`;
@@ -173,7 +176,7 @@ const joinCandidate = async (
     // abort the rest of the pass — mirrors the per-challenge voting loop.
     let outcome;
     try {
-        outcome = await performJoin(challenge, token, deps, decision.needsCoins);
+        outcome = await performJoin(challenge, token, deps, decision.needsCoins, { submitOnly: alreadyPaid });
     } catch (error) {
         cat().warning(`join failed for ${logger.challengeTag(challenge)}: ${errorMessage(error) || error}`, null);
         return 'error';

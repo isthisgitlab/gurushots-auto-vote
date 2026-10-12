@@ -66,7 +66,14 @@ const showDiscover = async () => {
  * A join-challenge handler result, read loosely: its arms share no
  * discriminant, so each field is optional here.
  */
-type JoinOutcome = { success?: boolean; status?: string; cost?: number; coins?: number; error?: string };
+type JoinOutcome = {
+    success?: boolean;
+    status?: string;
+    cost?: number;
+    coins?: number;
+    error?: string;
+    reason?: string;
+};
 
 // Map a join outcome status to a user-facing line; null for an unknown status.
 const joinLine = (
@@ -85,6 +92,12 @@ const joinLine = (
         case 'balance-unknown':
             return { level: 'error', text: `Could not read your coin balance — not joining ${challengeId}.` };
         case 'charged-pending-submit':
+            if (result?.reason === 'no-photo') {
+                return {
+                    level: 'error',
+                    text: `Coins were already spent on ${challengeId}, but no photo qualifies for this challenge. Add an eligible photo (or adjust Chosen Photos), then re-run "join ${challengeId} --yes" — you will NOT be charged again.`,
+                };
+            }
             return {
                 level: 'error',
                 text: `Coins were charged for ${challengeId} but the join did not complete. Re-run "join ${challengeId} --yes" to retry the submit — you will NOT be charged again.`,

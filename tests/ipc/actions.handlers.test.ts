@@ -1083,6 +1083,21 @@ describe('join-challenge', () => {
         expect(strategy.joinChallenge).not.toHaveBeenCalled();
     });
 
+    test('the reason a paid retry could not finish travels with the answer, and is absent otherwise', async () => {
+        stubAuthGuardOk();
+        const strategy = stubStrategy({
+            joinChallenge: jest
+                .fn()
+                .mockResolvedValueOnce({ status: 'charged-pending-submit', cost: 100, reason: 'no-photo' })
+                .mockResolvedValueOnce({ status: 'charged-pending-submit', cost: 100 }),
+        });
+        const withReason = await buildHandlers()['join-challenge']({}, 5, false);
+        const without = await buildHandlers()['join-challenge']({}, 5, false);
+        expect(withReason).toMatchObject({ success: false, status: 'charged-pending-submit', reason: 'no-photo' });
+        expect(without).toMatchObject({ status: 'charged-pending-submit', reason: undefined });
+        expect(strategy.joinChallenge).toHaveBeenCalledTimes(2);
+    });
+
     test('the log names the cap that is enforced, a number or "none"', async () => {
         stubAuthGuardOk();
         stubStrategy({ joinChallenge: jest.fn().mockResolvedValue({ status: 'joined' }) });

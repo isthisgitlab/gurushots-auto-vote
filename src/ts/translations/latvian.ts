@@ -540,6 +540,9 @@ export const app = {
     discoverJoinLabel: 'Pievienoties izaicinājumam „{title}”',
     discoverJoinPaidLabel: 'Pievienoties (maksas) izaicinājumam „{title}”, monētas: {coins}',
     discoverJoining: 'Pievienojas…',
+    discoverChecking: 'Pārbauda…',
+    discoverPendingNoPhoto:
+        'Monētas jau ir iztērētas, bet šim izaicinājumam neder neviens foto. Pievieno derīgu foto (vai pielāgo izvēlētos foto) un nospied „Pievienoties”.',
     discoverRetrySubmit: 'Mēģināt iesniegt vēlreiz',
     discoverRetrySubmitLabel: 'Mēģināt vēlreiz iesniegt izaicinājumam „{title}”',
     discoverConfirmTitle: 'Pievienoties maksas izaicinājumam?',

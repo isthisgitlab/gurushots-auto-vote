@@ -4,7 +4,9 @@ import { useMemberChallenges } from '@/api/useMemberChallenges';
 import { useOpenChosenAnnotations } from '@/api/useOpenChosenAnnotations';
 import { useOnChosenPhotosCleared } from '@/api/chosenPhotosCleared';
 import { useDiscoverRows } from '@/hooks/useDiscoverRows';
-import { useRepricedRows } from '@/hooks/useRepricedRows';
+import { useDiscoverJoins } from '@/hooks/useDiscoverJoins';
+import type { JoinPhase } from '@/hooks/useDiscoverJoins';
+import { costOf } from '@/utils/discoverCost';
 import { Modal, ModalActions } from '@/components/ui/Modal';
 import { InlineLoader } from '@/components/ui/LoadingSpinner';
 import { StatusBadge } from '@/components/ui/StatusBadge';
@@ -15,13 +17,19 @@ import { ipcErrorText } from '@/api/ipcErrorText';
 import { PhotoChooserModal } from './PhotoChooserModal';
 
 import type { Bankroll, Challenge, OpenChallenge } from '../../../types/gurushots';
-import { errorMessage } from '../../../errorMessage';
 
 /**
  * What a join left behind for its row: the join-challenge result (either arm)
  * or the local stand-in when the call itself threw.
  */
-export type JoinOutcome = { success?: boolean; status?: string; cost?: number; coins?: number; error?: string };
+export type JoinOutcome = {
+    success?: boolean;
+    status?: string;
+    cost?: number;
+    coins?: number;
+    error?: string;
+    reason?: string;
+};
 
 // Map a join outcome status to a translated, colored inline message. Distinct
 // wording for the money-critical "charged but not joined" case, which also
@@ -47,21 +55,6 @@ const TEXT_CLASS = {
     warning: 'text-warning',
     error: 'text-error',
     neutral: 'text-base-content/60',
-};
-
-/**
- * The row to confirm when a join that was not meant to spend answered `needs-confirm` for a paid
- * row: the row at the cost the answer named (the listed cost when it named none). Null for any
- * other answer, which is the outcome of the join as it stands.
- */
-const rowToConfirm = (c: OpenChallenge, spendCoins: boolean, res: JoinOutcome): OpenChallenge | null => {
-    if (spendCoins || costOf(c) <= 0 || res.status !== 'needs-confirm') return null;
-    return { ...c, join_coins: typeof res.cost === 'number' && Number.isFinite(res.cost) ? res.cost : costOf(c) };
-};
-
-const costOf = (c: Challenge) => {
-    const n = Number(c?.join_coins);
-    return Number.isFinite(n) && n > 0 ? n : 0;
 };
 
 /** What names a row for assistive technology: its title, else its address. */
@@ -142,7 +135,7 @@ function JoinButton({
 }: {
     name: string;
     cost: number;
-    busy: boolean;
+    busy: JoinPhase | null;
     waiting: 'notStarted' | 'startingNow' | null;
     onClick: () => void;
 }) {
@@ -165,9 +158,13 @@ function JoinButton({
             className={`btn btn-sm ${paid ? 'btn-warning' : 'btn-primary'}`}
             aria-label={busy ? undefined : label}
             onClick={onClick}
-            disabled={busy || waiting !== null}
+            disabled={busy !== null || waiting !== null}
         >
-            {busy ? t('app.discoverJoining') : paid ? t('app.discoverJoinPaid') : t('app.discoverJoin')}
+            {busy
+                ? t(busy === 'asking' ? 'app.discoverChecking' : 'app.discoverJoining')
+                : paid
+                  ? t('app.discoverJoinPaid')
+                  : t('app.discoverJoin')}
         </button>
     );
 }
@@ -265,10 +262,11 @@ function RowOutcome({
     onRetry: () => void;
 }) {
     const { t } = useTranslation();
-    const meta: { key: string | null; variant: keyof typeof TEXT_CLASS } = OUTCOME[outcome.status as string] || {
-        key: null,
-        variant: 'error',
-    };
+    // Coins spent earlier, nothing eligible left to finish with: a photo is what is missing, not a retry.
+    const noPhoto = outcome.status === 'charged-pending-submit' && outcome.reason === 'no-photo';
+    const meta: { key: string | null; variant: keyof typeof TEXT_CLASS } = noPhoto
+        ? { key: 'app.discoverPendingNoPhoto', variant: 'error' }
+        : OUTCOME[outcome.status as string] || { key: null, variant: 'error' };
     return (
         // Announced when it appears: a problem interrupts (alert), a result or a note waits its turn (status).
         <div
@@ -278,7 +276,7 @@ function RowOutcome({
             {meta.key
                 ? interp(t(meta.key), { coins: outcome.cost ?? cost, have: outcome.coins })
                 : ipcErrorText(outcome.error, t) || t('app.discoverGenericError')}
-            {outcome.status === 'charged-pending-submit' && (
+            {outcome.status === 'charged-pending-submit' && !noPhoto && (
                 <button
                     className="btn btn-outline btn-sm ml-2"
                     aria-label={interp(t('app.discoverRetrySubmitLabel'), { title: name })}
@@ -304,7 +302,7 @@ function DiscoverRow({
 }: {
     c: OpenChallenge;
     outcome: JoinOutcome | undefined;
-    busy: boolean;
+    busy: JoinPhase | null;
     nowSec: number;
     onChoose: () => void;
     onJoin: () => void;
@@ -330,7 +328,9 @@ function DiscoverRow({
                 {waiting !== null && c.chosenEffectiveCount > 0 && (
                     <div className="text-xs text-base-content/60 mt-0.5">{t('app.discoverUpcomingChosenHint')}</div>
                 )}
-                {outcome && <RowOutcome outcome={outcome} cost={cost} name={name} busy={busy} onRetry={onRetry} />}
+                {outcome && (
+                    <RowOutcome outcome={outcome} cost={cost} name={name} busy={busy !== null} onRetry={onRetry} />
+                )}
             </div>
             <div className="flex items-center gap-2">
                 <button
@@ -393,72 +393,13 @@ export function DiscoverSection({
     // only the starting point, the settings-only read replaces it as soon as it answers.
     const chosen = useOpenChosenAnnotations(rows.map((c) => String(c.id)));
     useOnChosenPhotosCleared(() => void chosen.refetch());
-    const [confirm, setConfirm] = useState<OpenChallenge | null>(null); // challenge pending paid confirmation
     const [choosing, setChoosing] = useState<OpenChallenge | null>(null); // challenge whose photos are being chosen
-    const [busyIds, setBusyIds] = useState<ReadonlySet<Challenge['id']>>(new Set()); // joins in flight, by id
-    const [results, setResults] = useState<Record<string, JoinOutcome>>({}); // id -> outcome result
-    const { noteAnswer, withAnswerCost } = useRepricedRows(items);
-
-    const doJoin = useCallback(
-        async (challenge: OpenChallenge, spendCoins: boolean) => {
-            const id = challenge?.id;
-            setBusyIds((prev) => new Set(prev).add(id));
-            try {
-                // A paid join names the cost the user was shown: a price that rose since then is not consented to.
-                const res: JoinOutcome = spendCoins
-                    ? await ipc.joinChallenge(id, true, costOf(challenge))
-                    : await ipc.joinChallenge(id, false);
-                noteAnswer(id, res);
-                const toConfirm = rowToConfirm(challenge, spendCoins, res);
-                if (toConfirm) {
-                    // The price still has to be confirmed: nothing was spent, and nothing is left to submit.
-                    setConfirm(toConfirm);
-                    return res;
-                }
-                setResults((prev) => ({ ...prev, [id]: res }));
-                // Refetch on any outcome that changes what's joinable (joined,
-                // coins charged, or the challenge is gone) so a stale row/button
-                // doesn't linger. Refresh balances only when coins moved.
-                const gone =
-                    res?.success ||
-                    res?.status === 'charged-pending-submit' ||
-                    res?.status === 'unavailable' ||
-                    res?.status === 'needs-confirm';
-                if (gone) void refetch();
-                if (res?.success || res?.status === 'charged-pending-submit') onJoined();
-                return res;
-            } catch (err) {
-                setResults((prev) => ({
-                    ...prev,
-                    [id]: {
-                        status: 'failed-no-charge',
-                        error: errorMessage(err),
-                    },
-                }));
-                return { success: false };
-            } finally {
-                setBusyIds((prev) => new Set([...prev].filter((other) => other !== id)));
-            }
-        },
-        [refetch, onJoined, noteAnswer],
-    );
-
-    const onJoinClick = useCallback(
-        (challenge: OpenChallenge) => {
-            // Paid or free: ask without spending. A paid challenge whose coins were spent already (its
-            // submit failed) is submitted at once; one that is still to be paid answers with its cost.
-            void doJoin(challenge, false);
-        },
-        [doJoin],
-    );
-
-    const onConfirm = useCallback(async () => {
-        const challenge = confirm;
-        setConfirm(null);
-        // Only reachable from the modal's Spend button, which renders only
-        // while a challenge is pending confirmation.
-        await doJoin(challenge as OpenChallenge, true);
-    }, [confirm, doJoin]);
+    const { confirm, results, busy, withAnswerCost, ask, onConfirm, dismiss } = useDiscoverJoins({
+        items,
+        isLoggedIn,
+        refetch,
+        onJoined,
+    });
 
     if (!isLoggedIn) return null;
 
@@ -510,11 +451,11 @@ export function DiscoverSection({
                                     key={c.id}
                                     c={c}
                                     outcome={results[c.id]}
-                                    busy={busyIds.has(c.id)}
+                                    busy={busy.get(c.id) ?? null}
                                     nowSec={nowSec}
                                     onChoose={() => setChoosing(c)}
-                                    onJoin={() => onJoinClick(c)}
-                                    onRetry={() => void doJoin(c, true)}
+                                    onJoin={() => ask(c)}
+                                    onRetry={() => ask(c)}
                                 />
                             ))}
                         </ul>
@@ -524,7 +465,7 @@ export function DiscoverSection({
 
             {/* Paid-join confirmation: names the challenge, the cost, and the
                 current → resulting coin balance before any coins are spent. */}
-            <Modal isOpen={!!confirm} onClose={() => setConfirm(null)} title={t('app.discoverConfirmTitle')}>
+            <Modal isOpen={!!confirm} onClose={dismiss} title={t('app.discoverConfirmTitle')}>
                 {(() => {
                     if (!confirm) return null;
                     const cCost = costOf(confirm);
@@ -562,7 +503,7 @@ export function DiscoverSection({
                                 </p>
                             </div>
                             <ModalActions>
-                                <button className="btn btn-outline btn-sm" onClick={() => setConfirm(null)}>
+                                <button className="btn btn-outline btn-sm" onClick={dismiss}>
                                     {t('app.cancel')}
                                 </button>
                                 <button

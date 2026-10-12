@@ -276,6 +276,7 @@ const handleJoinChallenge = (async (
             cost: outcome?.cost,
             coins: outcome?.coins,
             challengeId: outcome?.challengeId,
+            reason: outcome?.reason,
         };
     } catch (error) {
         logger.withCategory('join').error('Error handling join-challenge request:', error);

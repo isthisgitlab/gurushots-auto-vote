@@ -37,7 +37,7 @@ export interface JoinDeps {
 /**
  * One join's result. `charged` is coins spent THIS call.
  */
-type JoinOutcome = { status: string; charged: number; imageId?: string };
+type JoinOutcome = { status: string; charged: number; imageId?: string; reason?: 'no-photo' };
 
 type UnlockState = { charged: number; alreadyUnlocked: boolean };
 
@@ -50,6 +50,8 @@ type JoinSingleResult = {
     cost: number;
     coins?: number;
     imageId?: string;
+    /** `no-photo`: coins were spent earlier, but no photo qualifies to finish the join with. */
+    reason?: 'no-photo';
 };
 
 // Shared across the manual handler and the automatic pass IN THIS PROCESS so the

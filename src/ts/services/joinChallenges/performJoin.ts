@@ -25,7 +25,15 @@ import * as cancellation from '../../voting/cancellation';
 import type { Challenge } from '../../types/gurushots';
 import { cat, inFlight } from './shared';
 import type { JoinDeps, JoinOutcome, UnlockState } from './shared';
-import { clearUnlocked, hasMarker, isUnlocked, markUnlocked, markerOwner, readUnlockedState } from './unlockMarker';
+import {
+    clearUnlocked,
+    hasMarker,
+    isUnlocked,
+    markUnlocked,
+    markerOwner,
+    paidOwnerUnknown,
+    readUnlockedState,
+} from './unlockMarker';
 import { pickJoinPhoto } from './photoPick';
 
 const failedNoCharge = (): JoinOutcome => ({ status: 'failed-no-charge', charged: 0 });
@@ -121,7 +129,9 @@ const submitJoin = async (
     }
     const submit = await deps.submitToChallenge(id, [imageId], token);
     if (submit?.ok) {
-        clearUnlocked(deps.joinStateStore, id, owner);
+        // Only the coins this join spent are its to clear: a free join must not delete a marker that is
+        // another account's (a bare one from before accounts were told apart), or its owner is charged twice.
+        if (needsCoins > 0 && coinsSpent) clearUnlocked(deps.joinStateStore, id, owner);
         cat().success(
             `joined ${logger.challengeTag(challenge)}${needsCoins > 0 ? ` (spent ${needsCoins} coins)` : ''}`,
             null,
@@ -175,6 +185,13 @@ const performJoin = async (
         // it — stranding paid coins behind a skipped pick would be worse than an
         // automatic photo.
         const owner = await markerOwner(token, deps);
+        if (needsCoins > 0 && paidOwnerUnknown(deps, owner)) {
+            cat().warning(
+                `${logger.challengeTag(challenge)}: the account could not be identified — not joining a paid challenge`,
+                null,
+            );
+            return failedNoCharge();
+        }
         let unlock = { charged: 0, alreadyUnlocked: isUnlocked(deps.joinStateStore, id, owner) };
         if (submitOnly && !unlock.alreadyUnlocked) {
             cat().warning(
@@ -191,7 +208,9 @@ const performJoin = async (
         const imageId = pick.id;
         if (!imageId) {
             // Coins spent earlier are still owed their join: not "no coins were charged", and the marker stays.
-            if (unlock.alreadyUnlocked && needsCoins > 0) return { status: 'charged-pending-submit', charged: 0 };
+            if (unlock.alreadyUnlocked && needsCoins > 0) {
+                return { status: 'charged-pending-submit', charged: 0, reason: 'no-photo' };
+            }
             return { status: pick.reason === 'no-chosen' ? 'skipped-no-chosen' : 'skipped-no-photo', charged: 0 };
         }
 

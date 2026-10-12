@@ -313,6 +313,38 @@ describe('holdQuitForOpenBoosts — the dialog', () => {
             expect(logger.cat.error).toHaveBeenCalledWith('Quit confirmation failed — quitting anyway:', err);
             await flush();
             expect(proceed).toHaveBeenCalledTimes(1);
+            // The quit that proceed re-issues is waved through: the bypass was set by the deferred confirm.
+            expect(setup().hold()).toBe(false);
+        });
+
+        test('a proceed that throws after the dialog threw is logged too, and still runs once', async () => {
+            guard.rememberChallenges([timed], false);
+            const failure = new Error('proceed failed');
+            const proceed = jest.fn(() => {
+                throw failure;
+            });
+            const sync = new Error('no dialog');
+            const dialog: { showMessageBox: ShowMessageBox } = {
+                showMessageBox: invalid(
+                    jest.fn(() => {
+                        throw sync;
+                    }),
+                ),
+            };
+            const event = { preventDefault: jest.fn() };
+            guard.holdQuitForOpenBoosts(event, {
+                autovoteRunning: true,
+                dialog,
+                parent: null,
+                t,
+                proceed,
+                now: NOW,
+                describeDeadlineActions: describe_,
+            });
+            await flush();
+            expect(proceed).toHaveBeenCalledTimes(1);
+            expect(logger.cat.error).toHaveBeenCalledWith('Quit confirmation failed — quitting anyway:', sync);
+            expect(logger.cat.error).toHaveBeenCalledWith('Quit could not be completed:', failure);
         });
 
         test('leaves no stuck prompt: once the bypass lapses, the next quit asks again', async () => {
@@ -332,22 +364,15 @@ describe('holdQuitForOpenBoosts — the dialog', () => {
         });
     });
 
-    test('a quit that was confirmed runs proceed once, and a proceed that throws is not taken for a broken dialog', async () => {
+    test('a quit that was confirmed runs proceed once; one that throws is logged, not left as an unhandled rejection', async () => {
         guard.rememberChallenges([timed], false);
+        const failure = new Error('proceed failed');
         const proceed = jest.fn(() => {
-            throw new Error('proceed failed');
+            throw failure;
         });
-        // The throw lands in the promise the guard does not await: keep it from failing the run, and count it.
-        const original = Promise.prototype.then;
-        const swallowed: unknown[] = [];
-        const spy = jest.spyOn(Promise.prototype, 'then').mockImplementation(function (
-            this: Promise<unknown>,
-            ...args
-        ) {
-            const derived = original.apply(this, args) as Promise<unknown>;
-            original.call(derived, undefined, (reason: unknown) => swallowed.push(reason));
-            return derived;
-        } as typeof Promise.prototype.then);
+        const unhandled: unknown[] = [];
+        const onUnhandled = (reason: unknown) => unhandled.push(reason);
+        process.on('unhandledRejection', onUnhandled);
         try {
             const confirmed = setup({ response: 1 });
             guard.holdQuitForOpenBoosts(confirmed.event, {
@@ -362,10 +387,12 @@ describe('holdQuitForOpenBoosts — the dialog', () => {
             await flush();
             await flush();
         } finally {
-            spy.mockRestore();
+            process.off('unhandledRejection', onUnhandled);
         }
-        expect(swallowed).toEqual([new Error('proceed failed')]);
         expect(proceed).toHaveBeenCalledTimes(1);
+        expect(unhandled).toEqual([]);
+        expect(logger.cat.error).toHaveBeenCalledWith('Quit could not be completed:', failure);
+        // A broken quit is not a broken dialog: the dialog's own failure message is not what is logged.
         expect(logger.cat.error).not.toHaveBeenCalledWith(
             'Quit confirmation failed — quitting anyway:',
             expect.anything(),

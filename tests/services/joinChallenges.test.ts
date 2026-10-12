@@ -86,13 +86,19 @@ const makeStore = () => {
     let s: string | null = null;
     return { readRaw: () => s, writeRaw: (d: string) => (s = d) };
 };
+type Endpoint<K extends keyof JoinDeps> = Extract<NonNullable<JoinDeps[K]>, (...args: never[]) => unknown>;
+const double = <K extends keyof JoinDeps>(impl: (...args: Parameters<Endpoint<K>>) => unknown) =>
+    jest.fn<ReturnType<Endpoint<K>>, Parameters<Endpoint<K>>>((...args) => invalid(impl(...args)));
+// Doubles of the reads most tests drive: the rows and balances carry only the fields a test reads.
+const openList = (rows: unknown[]) => double<'getMemberChallenges'>(async () => rows);
+const balance = (value: unknown) => double<'getBankroll'>(async () => value);
 // Partial doubles: the overrides stand in for whichever endpoints a test drives.
-const makeDeps = (over: Partial<Record<keyof JoinDeps, unknown>> = {}) =>
+const makeDeps = (over: Partial<JoinDeps> = {}) =>
     invalid<JoinDeps & { joinStateStore: RawJsonStore }>({
-        getMemberChallenges: jest.fn(async () => []),
-        getBankroll: jest.fn(async () => ({ coins: 1000 })),
-        coinsUnlock: jest.fn(async () => ({ ok: true })),
-        submitToChallenge: jest.fn(async () => ({ ok: true })),
+        getMemberChallenges: openList([]),
+        getBankroll: balance({ coins: 1000 }),
+        coinsUnlock: double<'coinsUnlock'>(async () => ({ ok: true })),
+        submitToChallenge: double<'submitToChallenge'>(async () => ({ ok: true })),
         getEligiblePhotos: jest.fn(),
         getImageData: jest.fn(),
         joinStateStore: makeStore(),
@@ -186,7 +192,7 @@ describe('performJoin — ordering & idempotency', () => {
     });
 
     test('unlock failure → failed-no-charge, no submit', async () => {
-        const deps = makeDeps({ coinsUnlock: jest.fn(async () => ({ ok: false })) });
+        const deps = makeDeps({ coinsUnlock: double<'coinsUnlock'>(async () => ({ ok: false })) });
         const res = await performJoin(invalid({ id: 3 }), 'tok', deps, 100);
         expect(res.status).toBe('failed-no-charge');
         expect(deps.submitToChallenge).not.toHaveBeenCalled();
@@ -210,7 +216,7 @@ describe('performJoin — ordering & idempotency', () => {
         const store = makeStore();
         const deps = makeDeps({
             joinStateStore: store,
-            coinsUnlock: jest.fn(async (id) => {
+            coinsUnlock: double<'coinsUnlock'>(async (id) => {
                 // The claim must already be on disk at the moment we spend.
                 expect((JSON.parse(store.readRaw()!) as UnlockMarkers)[String(id)]).toBeDefined();
                 return { ok: true };
@@ -351,7 +357,7 @@ describe('runJoinPass', () => {
     test('does nothing when the master is off AND there are no title rules', async () => {
         settings.getEffectiveSetting.mockImplementation((k) => (k === 'autoJoin' ? false : undefined));
         settings.getTitleRules.mockReturnValue([]);
-        const deps = makeDeps({ getMemberChallenges: jest.fn(async () => [{ id: 1, join_coins: 0, type: 'flash' }]) });
+        const deps = makeDeps({ getMemberChallenges: openList([{ id: 1, join_coins: 0, type: 'flash' }]) });
         const res = await runJoinPass('tok', Date.now(), deps);
         expect(res.ran).toBe(false);
         expect(deps.getMemberChallenges).not.toHaveBeenCalled();
@@ -362,7 +368,7 @@ describe('runJoinPass', () => {
         // A rule that only adds photo tags carries no profile that enables
         // autoJoin, so nothing arms the pass → it must not run.
         settings.getTitleRules.mockReturnValue([{ title: 'Tagged', mustIncludeTags: ['x'] }]);
-        const deps = makeDeps({ getMemberChallenges: jest.fn(async () => [{ id: 1, join_coins: 0, type: 'flash' }]) });
+        const deps = makeDeps({ getMemberChallenges: openList([{ id: 1, join_coins: 0, type: 'flash' }]) });
         const res = await runJoinPass('tok', Date.now(), deps);
         expect(res.ran).toBe(false);
         expect(deps.getMemberChallenges).not.toHaveBeenCalled();
@@ -377,7 +383,7 @@ describe('runJoinPass', () => {
         settings.getChallengeProfiles.mockReturnValue({ p: { autoJoin: true } });
         rulesGive((target) => (titleOf(target) === 'Joinable' ? { autoJoin: true } : {}));
         const deps = makeDeps({
-            getMemberChallenges: jest.fn(async () => [
+            getMemberChallenges: openList([
                 { id: 1, join_coins: 0, type: 'flash', title: 'Joinable' },
                 { id: 2, join_coins: 0, type: 'flash', title: 'Other' },
             ]),
@@ -394,7 +400,7 @@ describe('runJoinPass', () => {
         // rules must win over the master-on default (hasOwnProperty, not truthy).
         rulesGive((target) => (titleOf(target) === 'Excluded' ? { autoJoin: false } : {}));
         const deps = makeDeps({
-            getMemberChallenges: jest.fn(async () => [
+            getMemberChallenges: openList([
                 { id: 1, join_coins: 0, type: 'flash', title: 'Excluded' },
                 { id: 2, join_coins: 0, type: 'flash', title: 'Other' },
             ]),
@@ -409,7 +415,7 @@ describe('runJoinPass', () => {
         const CLOSE = Date.UTC(2026, 5, 15, 17, 10) / 1000;
         rulesGive((target) => (Number(target.close_time) === CLOSE ? { autoJoin: false } : {}));
         const deps = makeDeps({
-            getMemberChallenges: jest.fn(async () => [
+            getMemberChallenges: openList([
                 { id: 1, join_coins: 0, type: 'flash', title: 'Closes 17:10', close_time: CLOSE },
                 { id: 2, join_coins: 0, type: 'flash', title: 'Closes later', close_time: CLOSE + 600 },
             ]),
@@ -429,7 +435,7 @@ describe('runJoinPass', () => {
         settings.getTitleRules.mockImplementation(() => {
             throw new Error('corrupt settings');
         });
-        const deps = makeDeps({ getMemberChallenges: jest.fn(async () => [{ id: 1, join_coins: 0, type: 'flash' }]) });
+        const deps = makeDeps({ getMemberChallenges: openList([{ id: 1, join_coins: 0, type: 'flash' }]) });
         const res = await runJoinPass('tok', Date.now(), deps);
         expect(res.ran).toBe(false);
         expect(deps.getMemberChallenges).not.toHaveBeenCalled();
@@ -448,18 +454,117 @@ describe('runJoinPass', () => {
             return map[k];
         });
         const deps = makeDeps({
-            getMemberChallenges: jest.fn(async () => [
+            getMemberChallenges: openList([
                 { id: 1, join_coins: 0, type: 'flash' },
                 { id: 2, join_coins: 200, type: 'flash' },
                 { id: 3, join_coins: 200, type: 'flash' },
             ]),
-            getBankroll: jest.fn(async () => ({ coins: 1000 })),
+            getBankroll: balance({ coins: 1000 }),
         });
         const res = await runJoinPass('tok', Date.now(), deps);
         expect(res.joined).toBe(2); // free + first paid
         expect(deps.coinsUnlock).toHaveBeenCalledTimes(1);
         const statuses = res.results.map((r) => r.status);
         expect(statuses).toContain('skipped:over-cycle-budget');
+    });
+
+    describe('a paid challenge this account already paid for (an unlock marker): the pass only submits it', () => {
+        const A = 'a'.repeat(32);
+        const B = 'b'.repeat(32);
+        const memberIdentity = require('../../src/ts/services/autoFill/memberIdentity') as typeof memberIdentityModule;
+        beforeEach(() => {
+            memberIdentity.__resetMemberIdCache();
+            settings.getEffectiveSetting.mockImplementation((k) => {
+                const map: Record<string, unknown> = {
+                    autoJoin: true,
+                    autoJoinTypes: '',
+                    autoJoinMaxCoins: 150,
+                    autoJoinCycleCoinBudget: 300,
+                    fillWithoutTagMatch: true,
+                };
+                return map[k];
+            });
+        });
+        const file = (initial: Record<string, unknown>) => {
+            let raw: string | null = JSON.stringify(initial);
+            const writeRaw = jest.fn((data: string) => {
+                raw = data;
+            });
+            return { readRaw: () => raw, writeRaw, read: () => JSON.parse(raw ?? '{}') as Record<string, unknown> };
+        };
+        const passDeps = (
+            member: string | null,
+            store: ReturnType<typeof file>,
+            coins: number,
+            over: Partial<JoinDeps> = {},
+        ) =>
+            makeDeps({
+                getMemberChallenges: openList([{ id: 2, join_coins: 100, type: 'flash' }]),
+                getBankroll: balance({ coins }),
+                getCurrentMemberProfile:
+                    member === null ? undefined : jest.fn(async () => ({ id: member, userName: 'u' })),
+                joinStateStore: store,
+                ...over,
+            });
+
+        test('with a balance now below the cost (the charge lowered it) it is still submitted, and nothing is charged', async () => {
+            const store = file({ [`${A}:2`]: { unlockedAt: 1 } });
+            const deps = passDeps(A, store, 3);
+            const res = await runJoinPass('tok', Date.now(), deps);
+            expect(res.results).toEqual([{ id: 2, status: 'joined' }]);
+            expect(deps.coinsUnlock).not.toHaveBeenCalled();
+            expect(deps.submitToChallenge).toHaveBeenCalledTimes(1);
+            expect(store.read()).toEqual({});
+        });
+
+        test('the cost, the per-challenge cap and the cycle budget have no say', async () => {
+            settings.getEffectiveSetting.mockImplementation(
+                (k) => ({ autoJoin: true, autoJoinMaxCoins: 0, autoJoinCycleCoinBudget: 0 })[k as string],
+            );
+            const store = file({ '2': { unlockedAt: 1 } });
+            const deps = passDeps(A, store, 0);
+            expect((await runJoinPass('tok', Date.now(), deps)).results).toEqual([{ id: 2, status: 'joined' }]);
+        });
+
+        test('the same challenge for an account that has no marker keeps the refusal it always had', async () => {
+            const store = file({ [`${A}:2`]: { unlockedAt: 1 } });
+            const deps = passDeps(B, store, 3);
+            const res = await runJoinPass('tok', Date.now(), deps);
+            expect(res.results[0].status).toMatch(/^skipped:/);
+            expect(deps.coinsUnlock).not.toHaveBeenCalled();
+            expect(deps.submitToChallenge).not.toHaveBeenCalled();
+        });
+
+        test("a marker that vanishes between the pass's read and the join's own never turns into a charge", async () => {
+            const readRaw = jest
+                .fn<string | null, []>()
+                .mockReturnValueOnce(JSON.stringify({ [`${A}:2`]: { unlockedAt: 1 } }))
+                .mockReturnValue(null);
+            const deps = passDeps(A, invalid<ReturnType<typeof file>>({ readRaw, writeRaw: jest.fn() }), 500);
+            const res = await runJoinPass('tok', Date.now(), deps);
+            expect(res.results).toEqual([{ id: 2, status: 'failed-no-charge' }]);
+            expect(deps.coinsUnlock).not.toHaveBeenCalled();
+            expect(deps.submitToChallenge).not.toHaveBeenCalled();
+        });
+
+        test('an account that cannot be identified is not trusted with a marker: nothing paid, nothing submitted', async () => {
+            const store = file({ '2': { unlockedAt: 1 } });
+            const deps = passDeps(null, store, 3, { getCurrentMemberProfile: jest.fn(async () => null) });
+            const res = await runJoinPass('tok', Date.now(), deps);
+            expect(res.results[0].status).toMatch(/^skipped:|^failed-no-charge$/);
+            expect(deps.coinsUnlock).not.toHaveBeenCalled();
+            expect(deps.submitToChallenge).not.toHaveBeenCalled();
+        });
+
+        test('a free candidate is not looked up at all', async () => {
+            const readRaw = jest.fn(() => '{}');
+            const deps = passDeps(A, invalid<ReturnType<typeof file>>({ readRaw, writeRaw: jest.fn() }), 500, {
+                getMemberChallenges: openList([{ id: 2, join_coins: 0, type: 'flash' }]),
+            });
+            await runJoinPass('tok', Date.now(), deps);
+            // Only the join's own read.
+            expect(readRaw).toHaveBeenCalledTimes(1);
+        });
     });
 
     test('autoJoinExcludeTypes (raw string with spaces/case) excludes via the full pass wiring', async () => {
@@ -475,7 +580,7 @@ describe('runJoinPass', () => {
             return map[k];
         });
         const deps = makeDeps({
-            getMemberChallenges: jest.fn(async () => [
+            getMemberChallenges: openList([
                 { id: 1, join_coins: 0, type: 'flash' },
                 { id: 2, join_coins: 0, type: 'contest' },
             ]),
@@ -500,7 +605,7 @@ describe('runJoinPass', () => {
             return map[k];
         });
         const deps = makeDeps({
-            getMemberChallenges: jest.fn(async () => [
+            getMemberChallenges: openList([
                 { id: 1, join_coins: 0, type: 'flash' },
                 { id: 2, join_coins: 0, type: 'contest' },
             ]),
@@ -519,7 +624,7 @@ describe('runJoinPass', () => {
             .mockRejectedValueOnce(new Error('boom')) // first candidate blows up
             .mockResolvedValue({ ok: true }); // second joins fine
         const deps = makeDeps({
-            getMemberChallenges: jest.fn(async () => [
+            getMemberChallenges: openList([
                 { id: 1, join_coins: 0, type: 'flash' },
                 { id: 2, join_coins: 0, type: 'flash' },
             ]),
@@ -533,11 +638,11 @@ describe('runJoinPass', () => {
     test('getBankroll throwing → paid skipped, free still joins', async () => {
         settings.getEffectiveSetting.mockImplementation((k) => DEFAULT_SETTINGS[k]);
         const deps = makeDeps({
-            getMemberChallenges: jest.fn(async () => [
+            getMemberChallenges: openList([
                 { id: 1, join_coins: 0, type: 'flash' },
                 { id: 2, join_coins: 100, type: 'flash' },
             ]),
-            getBankroll: jest.fn(async () => {
+            getBankroll: double<'getBankroll'>(async () => {
                 throw new Error('network');
             }),
         });
@@ -558,11 +663,11 @@ describe('runJoinPass', () => {
             return map[k];
         });
         const deps = makeDeps({
-            getMemberChallenges: jest.fn(async () => [
+            getMemberChallenges: openList([
                 { id: 1, join_coins: 0, type: 'flash' },
                 { id: 2, join_coins: 100, type: 'flash' },
             ]),
-            getBankroll: jest.fn(async () => null),
+            getBankroll: double<'getBankroll'>(async () => null),
         });
         const res = await runJoinPass('tok', Date.now(), deps);
         expect(res.joined).toBe(1);
@@ -587,7 +692,7 @@ describe('runJoinPass — join window', () => {
     test('defers a candidate that is outside the window, spending nothing', async () => {
         withWindow(24);
         const deps = makeDeps({
-            getMemberChallenges: jest.fn(async () => [
+            getMemberChallenges: openList([
                 { id: 1, join_coins: 0, type: 'flash', title: 'Far', close_time: NOW_SEC + 48 * HOUR },
             ]),
         });
@@ -601,7 +706,7 @@ describe('runJoinPass — join window', () => {
     test('joins the same candidate once it is inside the window', async () => {
         withWindow(24);
         const deps = makeDeps({
-            getMemberChallenges: jest.fn(async () => [
+            getMemberChallenges: openList([
                 { id: 1, join_coins: 0, type: 'flash', title: 'Near', close_time: NOW_SEC + 5 * HOUR },
             ]),
         });
@@ -621,8 +726,8 @@ describe('runJoinPass — join window', () => {
         // `joinedTurbos`: the turbo states of the already-joined challenges.
         const farDeps = (joinedTurbos: string[] = []) =>
             makeDeps({
-                getMemberChallenges: jest.fn(async () => [far(1), far(2), far(3)]),
-                getActiveChallenges: jest.fn(async () => ({
+                getMemberChallenges: openList([far(1), far(2), far(3)]),
+                getActiveChallenges: double<'getActiveChallenges'>(async () => ({
                     challenges: joinedTurbos.map((state, i) => ({ id: 100 + i, member: { turbo: { state } } })),
                 })),
             });
@@ -664,11 +769,11 @@ describe('runJoinPass — join window', () => {
                 k === 'autoJoinWithinHoursOfEnd' ? 1 : k === 'missionJoinEarly' ? true : DEFAULT_SETTINGS[k],
             );
             const deps = makeDeps({
-                getMemberChallenges: jest.fn(async () => [
+                getMemberChallenges: openList([
                     far(1),
                     { ...far(2), title: 'Ends in two hours', close_time: NOW_SEC + 2 * HOUR },
                 ]),
-                getActiveChallenges: jest.fn(async () => ({ challenges: [] })),
+                getActiveChallenges: double<'getActiveChallenges'>(async () => ({ challenges: [] })),
             });
 
             const res = await runJoinPass('tok', NOW_MS, deps, { join: 0, fill: 0, turbo: 1, vote: 0 });
@@ -683,12 +788,12 @@ describe('runJoinPass — join window', () => {
         test('a turbo mission puts candidates without a close time after timed candidates', async () => {
             withJoinEarly(true);
             const deps = makeDeps({
-                getMemberChallenges: jest.fn(async () => [
+                getMemberChallenges: openList([
                     { ...far(1), close_time: undefined },
                     { ...far(2), close_time: NOW_SEC + 2 * HOUR },
                     { ...far(3), close_time: undefined },
                 ]),
-                getActiveChallenges: jest.fn(async () => ({ challenges: [] })),
+                getActiveChallenges: double<'getActiveChallenges'>(async () => ({ challenges: [] })),
             });
 
             const res = await runJoinPass('tok', NOW_MS, deps, { join: 0, fill: 0, turbo: 1, vote: 0 });
@@ -704,13 +809,13 @@ describe('runJoinPass — join window', () => {
                 k === 'autoJoinWithinHoursOfEnd' ? 1 : k === 'missionJoinEarly' ? true : DEFAULT_SETTINGS[k],
             );
             const deps = makeDeps({
-                getMemberChallenges: jest.fn(async () => [
+                getMemberChallenges: openList([
                     { ...far(1), close_time: NOW_SEC - 60 },
                     { ...far(2), close_time: undefined },
                     { ...far(3), close_time: 0 },
                     { ...far(4), close_time: NOW_SEC + 2 * HOUR },
                 ]),
-                getActiveChallenges: jest.fn(async () => ({ challenges: [] })),
+                getActiveChallenges: double<'getActiveChallenges'>(async () => ({ challenges: [] })),
             });
 
             const res = await runJoinPass('tok', NOW_MS, deps, { join: 0, fill: 0, turbo: 1, vote: 0 });
@@ -738,8 +843,8 @@ describe('runJoinPass — join window', () => {
                 k === 'autoJoinWithinHoursOfEnd' ? 1 : k === 'missionJoinEarly' ? true : DEFAULT_SETTINGS[k],
             );
             const deps = makeDeps({
-                getMemberChallenges: jest.fn(async () => [far(1), { ...far(2), close_time: NOW_SEC + 2 * HOUR }]),
-                getActiveChallenges: jest.fn(async () => ({
+                getMemberChallenges: openList([far(1), { ...far(2), close_time: NOW_SEC + 2 * HOUR }]),
+                getActiveChallenges: double<'getActiveChallenges'>(async () => ({
                     challenges: [
                         {
                             id: 100,
@@ -801,8 +906,8 @@ describe('runJoinPass — join window', () => {
             ];
             for (const { name, turbo, close, joins } of cases) {
                 const deps = makeDeps({
-                    getMemberChallenges: jest.fn(async () => [far(1)]),
-                    getActiveChallenges: jest.fn(async () => ({
+                    getMemberChallenges: openList([far(1)]),
+                    getActiveChallenges: double<'getActiveChallenges'>(async () => ({
                         challenges: [{ id: 100, close_time: close, member: { turbo } }],
                     })),
                 });
@@ -823,14 +928,14 @@ describe('runJoinPass — join window', () => {
                 k === 'autoJoinWithinHoursOfEnd' ? 1 : k === 'missionJoinEarly' ? true : DEFAULT_SETTINGS[k],
             );
             const deps = makeDeps({
-                getMemberChallenges: jest.fn(async () => [
+                getMemberChallenges: openList([
                     far(1),
                     { ...far(2), close_time: NOW_SEC + 2 * HOUR },
                     far(3),
                     far(4),
                     far(5),
                 ]),
-                getActiveChallenges: jest.fn(async () => ({
+                getActiveChallenges: double<'getActiveChallenges'>(async () => ({
                     challenges: [1, 2, 3, 4].map((id) => ({
                         id: 100 + id,
                         close_time: NOW_SEC + 48 * HOUR,
@@ -873,8 +978,8 @@ describe('runJoinPass — join window', () => {
         test('a joined challenge without turbo data holds no turbo to win', async () => {
             withJoinEarly(true);
             const deps = makeDeps({
-                getMemberChallenges: jest.fn(async () => [far(1), far(2)]),
-                getActiveChallenges: jest.fn(async () => ({
+                getMemberChallenges: openList([far(1), far(2)]),
+                getActiveChallenges: double<'getActiveChallenges'>(async () => ({
                     challenges: [null, { id: 1 }, { id: 2, member: {} }, { id: 3, member: { turbo: {} } }],
                 })),
             });
@@ -885,10 +990,10 @@ describe('runJoinPass — join window', () => {
         test('an unreadable active list, or none to read, never joins early for turbo', async () => {
             withJoinEarly(true);
             const failed = makeDeps({
-                getMemberChallenges: jest.fn(async () => [far(1)]),
-                getActiveChallenges: jest.fn(async () => ({ challenges: [], fetchFailed: true })),
+                getMemberChallenges: openList([far(1)]),
+                getActiveChallenges: double<'getActiveChallenges'>(async () => ({ challenges: [], fetchFailed: true })),
             });
-            const none = makeDeps({ getMemberChallenges: jest.fn(async () => [far(1)]) });
+            const none = makeDeps({ getMemberChallenges: openList([far(1)]) });
             for (const deps of [failed, none]) {
                 const res = await runJoinPass('tok', NOW_MS, deps, { join: 0, fill: 0, turbo: 2, vote: 0 });
                 expect(statuses(res)).toEqual(['skipped:too-early']);
@@ -925,7 +1030,7 @@ describe('runJoinPass — join window', () => {
         withWindow(24);
         const closeTime = NOW_SEC + 30 * HOUR;
         const candidate = { id: 1, join_coins: 0, type: 'flash', title: 'Later', close_time: closeTime };
-        const deps = makeDeps({ getMemberChallenges: jest.fn(async () => [candidate]) });
+        const deps = makeDeps({ getMemberChallenges: openList([candidate]) });
 
         const early = await runJoinPass('tok', NOW_MS, deps);
         expect(early.results[0].status).toBe('skipped:too-early');
@@ -941,7 +1046,7 @@ describe('runJoinPass — join window', () => {
         withWindow(0);
         rulesGive((target) => (titleOf(target) === 'abc' ? { autoJoinWithinHoursOfEnd: 24 } : {}));
         const deps = makeDeps({
-            getMemberChallenges: jest.fn(async () => [
+            getMemberChallenges: openList([
                 { id: 1, join_coins: 0, type: 'flash', title: 'abc', close_time: NOW_SEC + 48 * HOUR },
                 { id: 2, join_coins: 0, type: 'flash', title: 'other', close_time: NOW_SEC + 48 * HOUR },
             ]),
@@ -954,7 +1059,7 @@ describe('runJoinPass — join window', () => {
     test('a window of 0 keeps the historical join-on-sight behavior', async () => {
         withWindow(0);
         const deps = makeDeps({
-            getMemberChallenges: jest.fn(async () => [
+            getMemberChallenges: openList([
                 { id: 1, join_coins: 0, type: 'flash', title: 'Far', close_time: NOW_SEC + 90 * 86400 },
             ]),
         });
@@ -964,7 +1069,7 @@ describe('runJoinPass — join window', () => {
     test('a candidate with no close_time joins normally when no window is set', async () => {
         withWindow(0);
         const deps = makeDeps({
-            getMemberChallenges: jest.fn(async () => [{ id: 1, join_coins: 0, type: 'flash', title: 'NoTime' }]),
+            getMemberChallenges: openList([{ id: 1, join_coins: 0, type: 'flash', title: 'NoTime' }]),
         });
         expect((await runJoinPass('tok', NOW_MS, deps)).joined).toBe(1);
     });
@@ -972,7 +1077,7 @@ describe('runJoinPass — join window', () => {
     test('fail-closed: a missing close_time is deferred, not joined, while a window is set', async () => {
         withWindow(24);
         const deps = makeDeps({
-            getMemberChallenges: jest.fn(async () => [{ id: 1, join_coins: 0, type: 'flash', title: 'NoTime' }]),
+            getMemberChallenges: openList([{ id: 1, join_coins: 0, type: 'flash', title: 'NoTime' }]),
         });
         const res = await runJoinPass('tok', NOW_MS, deps);
         expect(res.joined).toBe(0);
@@ -984,7 +1089,7 @@ describe('runJoinPass — join window', () => {
         withWindow(24);
         const logger: LoggerMock = invalid(require('../../src/ts/logger'));
         const deps = makeDeps({
-            getMemberChallenges: jest.fn(async () => [
+            getMemberChallenges: openList([
                 { id: 1, join_coins: 0, type: 'flash', title: 'A' },
                 { id: 2, join_coins: 0, type: 'flash', title: 'B' },
             ]),
@@ -1002,7 +1107,7 @@ describe('runJoinPass — join window', () => {
     test('an already-closed candidate in the open list is refused', async () => {
         withWindow(24);
         const deps = makeDeps({
-            getMemberChallenges: jest.fn(async () => [
+            getMemberChallenges: openList([
                 { id: 1, join_coins: 0, type: 'flash', title: 'Dead', close_time: NOW_SEC - 60 },
             ]),
         });
@@ -1013,7 +1118,7 @@ describe('runJoinPass — join window', () => {
     test('the window also defers a paid candidate before any unlock', async () => {
         withWindow(24);
         const deps = makeDeps({
-            getMemberChallenges: jest.fn(async () => [
+            getMemberChallenges: openList([
                 { id: 1, join_coins: 100, type: 'flash', title: 'PaidFar', close_time: NOW_SEC + 48 * HOUR },
             ]),
         });
@@ -1025,7 +1130,7 @@ describe('runJoinPass — join window', () => {
     test('the manual single-join path ignores the window entirely', async () => {
         withWindow(24);
         const deps = makeDeps({
-            getMemberChallenges: jest.fn(async () => [
+            getMemberChallenges: openList([
                 { id: 7, join_coins: 0, type: 'flash', title: 'Far', close_time: NOW_SEC + 48 * HOUR },
             ]),
         });
@@ -1040,7 +1145,7 @@ describe('runJoinPass — inline rule arming', () => {
         settings.getTitleRules.mockReturnValue([{ title: 'Joinable', autoJoin: true }]);
         rulesGive((t) => (titleOf(t) === 'Joinable' ? { autoJoin: true } : {}));
         const deps = makeDeps({
-            getMemberChallenges: jest.fn(async () => [
+            getMemberChallenges: openList([
                 { id: 1, join_coins: 0, type: 'flash', title: 'Joinable' },
                 { id: 2, join_coins: 0, type: 'flash', title: 'Other' },
             ]),
@@ -1057,7 +1162,7 @@ describe('runJoinPass — inline rule arming', () => {
         settings.getChallengeProfiles.mockReturnValue({ p: { autoJoin: true } });
         rulesGive(() => ({ autoJoin: false }));
         const deps = makeDeps({
-            getMemberChallenges: jest.fn(async () => [{ id: 1, join_coins: 0, type: 'flash', title: 'X' }]),
+            getMemberChallenges: openList([{ id: 1, join_coins: 0, type: 'flash', title: 'X' }]),
         });
         const res = await runJoinPass('tok', Date.now(), deps);
         expect(res.ran).toBe(false);
@@ -1071,7 +1176,7 @@ describe('runJoinPass — inline rule arming', () => {
         rulesGive((t) => (titleOf(t) === 'Wanted' ? { autoJoin: true } : {}));
         settings.hasRuleJoinOptIn.mockImplementation((t) => titleOf(t) === 'Wanted');
         const deps = makeDeps({
-            getMemberChallenges: jest.fn(async () => [
+            getMemberChallenges: openList([
                 { id: 1, join_coins: 0, type: 'flash', title: 'Wanted' },
                 { id: 2, join_coins: 0, type: 'flash', title: 'Unwanted' },
             ]),
@@ -1087,7 +1192,7 @@ describe('runJoinPass — inline rule arming', () => {
         );
         rulesGive(() => ({ autoJoinWithinHoursOfEnd: 24 }));
         const deps = makeDeps({
-            getMemberChallenges: jest.fn(async () => [{ id: 1, join_coins: 0, type: 'flash', title: 'Timed' }]),
+            getMemberChallenges: openList([{ id: 1, join_coins: 0, type: 'flash', title: 'Timed' }]),
         });
         const res = await runJoinPass('tok', Date.now(), deps);
         expect(res.results[0].status).toBe('skipped:excluded-type');
@@ -1108,7 +1213,7 @@ describe('runJoinPass — challenge tags', () => {
         settings.getEffectiveSetting.mockImplementation((k) =>
             k === 'autoJoinChallengeTags' ? 'exhibition' : DEFAULT_SETTINGS[k],
         );
-        const deps = makeDeps({ getMemberChallenges: jest.fn(async () => candidates()) });
+        const deps = makeDeps({ getMemberChallenges: double<'getMemberChallenges'>(async () => candidates()) });
         const res = await runJoinPass('tok', Date.now(), deps);
         expect(res.results[0].status).toBe('skipped:tag-out-of-scope');
         expect(res.results[1].status).toBe('joined');
@@ -1118,7 +1223,7 @@ describe('runJoinPass — challenge tags', () => {
         settings.getEffectiveSetting.mockImplementation((k) =>
             k === 'autoJoinExcludeChallengeTags' ? 'comm' : DEFAULT_SETTINGS[k],
         );
-        const deps = makeDeps({ getMemberChallenges: jest.fn(async () => candidates()) });
+        const deps = makeDeps({ getMemberChallenges: double<'getMemberChallenges'>(async () => candidates()) });
         const res = await runJoinPass('tok', Date.now(), deps);
         expect(res.results[0].status).toBe('joined');
         expect(res.results[1].status).toBe('skipped:excluded-tag');
@@ -1132,7 +1237,7 @@ describe('runJoinPass — challenge tags', () => {
             seen.push(invalid(target));
             return null;
         });
-        const deps = makeDeps({ getMemberChallenges: jest.fn(async () => candidates()) });
+        const deps = makeDeps({ getMemberChallenges: double<'getMemberChallenges'>(async () => candidates()) });
         await runJoinPass('tok', Date.now(), deps);
         expect(seen.some((t) => Array.isArray(t?.tags) && t.tags.includes('Turbo'))).toBe(true);
     });
@@ -1143,7 +1248,7 @@ describe('runJoinPass — challenge tags', () => {
         const nowSec = nowMs / 1000;
         rulesGive((target) => ((target?.tags || []).includes('Exhibition') ? { autoJoinWithinHoursOfEnd: 24 } : {}));
         const deps = makeDeps({
-            getMemberChallenges: jest.fn(async () => [
+            getMemberChallenges: openList([
                 // Tagged Exhibition and far from closing -> deferred by the rule.
                 {
                     id: 2,
@@ -1173,7 +1278,7 @@ describe('runJoinPass — challenge tags', () => {
 describe('joinChallengeSingle — manual', () => {
     test('paid without spendCoins → needs-confirm, no spend', async () => {
         const deps = makeDeps({
-            getMemberChallenges: jest.fn(async () => [{ id: 2, join_coins: 100, type: 'flash' }]),
+            getMemberChallenges: openList([{ id: 2, join_coins: 100, type: 'flash' }]),
         });
         const res = await joinChallengeSingle(2, 'tok', deps, { spendCoins: false });
         expect(res).toMatchObject({ status: 'needs-confirm', cost: 100 });
@@ -1181,15 +1286,15 @@ describe('joinChallengeSingle — manual', () => {
     });
 
     test('unavailable when not in the open list', async () => {
-        const deps = makeDeps({ getMemberChallenges: jest.fn(async () => []) });
+        const deps = makeDeps({ getMemberChallenges: openList([]) });
         const res = await joinChallengeSingle(999, 'tok', deps, { spendCoins: true });
         expect(res.status).toBe('unavailable');
     });
 
     test('paid with spendCoins joins after affordability check', async () => {
         const deps = makeDeps({
-            getMemberChallenges: jest.fn(async () => [{ id: 2, join_coins: 100, type: 'flash' }]),
-            getBankroll: jest.fn(async () => ({ coins: 500 })),
+            getMemberChallenges: openList([{ id: 2, join_coins: 100, type: 'flash' }]),
+            getBankroll: balance({ coins: 500 }),
         });
         const res = await joinChallengeSingle(2, 'tok', deps, { spendCoins: true });
         expect(res.status).toBe('joined');
@@ -1199,8 +1304,8 @@ describe('joinChallengeSingle — manual', () => {
     describe('expectedCost — consent covers the price the user was shown', () => {
         const priced = (join_coins: number) =>
             makeDeps({
-                getMemberChallenges: jest.fn(async () => [{ id: 2, join_coins, type: 'flash' }]),
-                getBankroll: jest.fn(async () => ({ coins: 500 })),
+                getMemberChallenges: openList([{ id: 2, join_coins, type: 'flash' }]),
+                getBankroll: balance({ coins: 500 }),
             });
         const untouched = (deps: ReturnType<typeof makeDeps>) =>
             [deps.getBankroll, deps.coinsUnlock, deps.submitToChallenge].every(
@@ -1239,8 +1344,8 @@ describe('joinChallengeSingle — manual', () => {
             const MARKED = JSON.stringify({ '2': { unlockedAt: 1 } });
             const retrying = (marker: string | null, over: NonNullable<Parameters<typeof makeDeps>[0]> = {}) => {
                 const deps = makeDeps({
-                    getMemberChallenges: jest.fn(async () => [{ id: 2, join_coins: 100, type: 'flash' }]),
-                    getBankroll: jest.fn(async () => ({ coins: 500 })),
+                    getMemberChallenges: openList([{ id: 2, join_coins: 100, type: 'flash' }]),
+                    getBankroll: balance({ coins: 500 }),
                     joinStateStore: { readRaw: () => marker, writeRaw: jest.fn() },
                     ...over,
                 });
@@ -1257,7 +1362,7 @@ describe('joinChallengeSingle — manual', () => {
             });
 
             test('only submits with a balance too low to pay the cost again', async () => {
-                const deps = retrying(MARKED, { getBankroll: jest.fn(async () => ({ coins: 3 })) });
+                const deps = retrying(MARKED, { getBankroll: balance({ coins: 3 }) });
                 const res = await joinChallengeSingle(2, 'tok', deps, { spendCoins: true, expectedCost: 100 });
                 expect(res.status).toBe('joined');
                 expect(deps.coinsUnlock).not.toHaveBeenCalled();
@@ -1265,13 +1370,15 @@ describe('joinChallengeSingle — manual', () => {
             });
 
             test('a balance that cannot be read does not stop it either', async () => {
-                const deps = retrying(MARKED, { getBankroll: jest.fn(async () => null) });
+                const deps = retrying(MARKED, { getBankroll: double<'getBankroll'>(async () => null) });
                 expect((await joinChallengeSingle(2, 'tok', deps, { spendCoins: true })).status).toBe('joined');
                 expect(deps.coinsUnlock).not.toHaveBeenCalled();
             });
 
             test('a submit that fails again is reported as pending, still without a second charge', async () => {
-                const deps = retrying(MARKED, { submitToChallenge: jest.fn(async () => ({ ok: false, raw: null })) });
+                const deps = retrying(MARKED, {
+                    submitToChallenge: double<'submitToChallenge'>(async () => ({ ok: false, raw: null })),
+                });
                 const res = await joinChallengeSingle(2, 'tok', deps, { spendCoins: true });
                 expect(res.status).toBe('charged-pending-submit');
                 expect(deps.coinsUnlock).not.toHaveBeenCalled();
@@ -1285,7 +1392,7 @@ describe('joinChallengeSingle — manual', () => {
                     cost: 100,
                 });
                 expect(risen.coinsUnlock).not.toHaveBeenCalled();
-                const poor = retrying(null, { getBankroll: jest.fn(async () => ({ coins: 3 })) });
+                const poor = retrying(null, { getBankroll: balance({ coins: 3 }) });
                 expect((await joinChallengeSingle(2, 'tok', poor, { spendCoins: true })).status).toBe(
                     'skipped-unaffordable',
                 );
@@ -1318,14 +1425,17 @@ describe('joinChallengeSingle — manual', () => {
                 expect(unreadable.coinsUnlock).not.toHaveBeenCalled();
             });
 
-            test('a free challenge never looks at the marker on its own: only the join itself reads it (to check, and to clear)', async () => {
+            test('a free challenge never looks at the marker on its own: only the join itself reads it, and never clears it', async () => {
+                const writeRaw = jest.fn();
                 const readRaw = jest.fn(() => MARKED);
                 const deps = makeDeps({
-                    getMemberChallenges: jest.fn(async () => [{ id: 2, join_coins: 0, type: 'flash' }]),
-                    joinStateStore: { readRaw, writeRaw: jest.fn() },
+                    getMemberChallenges: openList([{ id: 2, join_coins: 0, type: 'flash' }]),
+                    joinStateStore: { readRaw, writeRaw },
                 });
                 expect((await joinChallengeSingle(2, 'tok', deps, { spendCoins: false })).status).toBe('joined');
-                expect(readRaw).toHaveBeenCalledTimes(2);
+                // The join reads once, to know whether coins were spent; a free join spent none and removes nothing.
+                expect(readRaw).toHaveBeenCalledTimes(1);
+                expect(writeRaw).not.toHaveBeenCalled();
             });
 
             test('without spendCoins (the CLI first call, the Discover ask) it submits at once, with nothing to ask or pay', async () => {
@@ -1339,7 +1449,7 @@ describe('joinChallengeSingle — manual', () => {
 
             describe('the marker is read twice: by the caller, then by the join', () => {
                 const flaky = (second: () => string | null) => {
-                    const readRaw = jest.fn().mockReturnValueOnce(MARKED).mockImplementation(second);
+                    const readRaw = jest.fn<string | null, []>().mockReturnValueOnce(MARKED).mockImplementation(second);
                     return { readRaw, deps: retrying(null, { joinStateStore: { readRaw, writeRaw: jest.fn() } }) };
                 };
 
@@ -1353,13 +1463,18 @@ describe('joinChallengeSingle — manual', () => {
                 });
 
                 test('the file became unreadable in between: the same', async () => {
-                    const { deps } = flaky(() => {
+                    const { readRaw, deps } = flaky(() => {
                         throw new Error('disk');
                     });
                     expect((await joinChallengeSingle(2, 'tok', deps, { spendCoins: true })).status).toBe(
                         'failed-no-charge',
                     );
                     expect(deps.coinsUnlock).not.toHaveBeenCalled();
+                    // Two reads: the caller's, and the join's own, which is the one that stopped it (a first read
+                    // that failed would never have got that far), and the photo was never even looked for.
+                    expect(readRaw).toHaveBeenCalledTimes(2);
+                    expect(photoPicker.pickPhotosForChallenge).not.toHaveBeenCalled();
+                    expect(deps.submitToChallenge).not.toHaveBeenCalled();
                 });
 
                 test('a join that was not a submit-only retry is unchanged: a missing marker means unlock, as ever', async () => {
@@ -1376,7 +1491,7 @@ describe('joinChallengeSingle — manual', () => {
                     const writeRaw = jest.fn();
                     const deps = retrying(MARKED, { joinStateStore: { readRaw: () => MARKED, writeRaw } });
                     const res = await joinChallengeSingle(2, 'tok', deps, { spendCoins: true });
-                    expect(res).toMatchObject({ status: 'charged-pending-submit', cost: 100 });
+                    expect(res).toMatchObject({ status: 'charged-pending-submit', cost: 100, reason: 'no-photo' });
                     expect(deps.submitToChallenge).not.toHaveBeenCalled();
                     expect(deps.coinsUnlock).not.toHaveBeenCalled();
                     expect(writeRaw).not.toHaveBeenCalled();
@@ -1435,8 +1550,8 @@ describe('unlock markers are kept per account', () => {
         over: NonNullable<Parameters<typeof makeDeps>[0]> = {},
     ) =>
         makeDeps({
-            getMemberChallenges: jest.fn(async () => [{ id: 2, join_coins: 100, type: 'flash' }]),
-            getBankroll: jest.fn(async () => ({ coins: 500 })),
+            getMemberChallenges: openList([{ id: 2, join_coins: 100, type: 'flash' }]),
+            getBankroll: balance({ coins: 500 }),
             getCurrentMemberProfile: member === null ? undefined : jest.fn(async () => ({ id: member, userName: 'u' })),
             joinStateStore: store,
             ...over,
@@ -1446,7 +1561,9 @@ describe('unlock markers are kept per account', () => {
 
     test("another account's marker does not make this account's join a submit-only retry: it pays, and keeps its own marker apart", async () => {
         const store = fileWith({ [`${A}:2`]: { unlockedAt: 1 } });
-        const deps = joiningAs(B, store, { submitToChallenge: jest.fn(async () => ({ ok: false, raw: null })) });
+        const deps = joiningAs(B, store, {
+            submitToChallenge: double<'submitToChallenge'>(async () => ({ ok: false, raw: null })),
+        });
         const res = await joinChallengeSingle(2, 'tok', deps, { spendCoins: true, expectedCost: 100 });
         // B is asked and charged as any first-time join; the submit failed, so B's own marker is left.
         expect(deps.coinsUnlock).toHaveBeenCalledTimes(1);
@@ -1485,44 +1602,128 @@ describe('unlock markers are kept per account', () => {
 
     test('a new claim is written under the account that makes it', async () => {
         const store = fileWith({});
-        const deps = joiningAs(A, store, { submitToChallenge: jest.fn(async () => ({ ok: false, raw: null })) });
+        const deps = joiningAs(A, store, {
+            submitToChallenge: double<'submitToChallenge'>(async () => ({ ok: false, raw: null })),
+        });
         await joinChallengeSingle(2, 'tok', deps, { spendCoins: true });
         expect(Object.keys(store.read())).toEqual([`${A}:2`]);
     });
 
     test('a failed unlock gives the claim back, and only its own', async () => {
         const store = fileWith({ [`${A}:2`]: { unlockedAt: 1 } });
-        const deps = joiningAs(B, store, { coinsUnlock: jest.fn(async () => ({ ok: false, raw: null })) });
+        const deps = joiningAs(B, store, {
+            coinsUnlock: double<'coinsUnlock'>(async () => ({ ok: false, raw: null })),
+        });
         expect((await joinChallengeSingle(2, 'tok', deps, { spendCoins: true })).status).toBe('failed-no-charge');
         expect(Object.keys(store.read())).toEqual([`${A}:2`]);
     });
 
-    describe('when the account cannot be told (no profile read, or it failed)', () => {
-        test.each([
-            ['no profile read is wired in', () => null],
-            ['the profile read fails', () => 'throws'],
-        ])(
-            "%s: any account's marker for the challenge is respected, so nothing is charged twice",
-            async (_name, kind) => {
-                const store = fileWith({ [`${A}:2`]: { unlockedAt: 1 } });
-                const deps = joiningAs(null, store);
-                if (kind() === 'throws') {
-                    deps.getCurrentMemberProfile = jest.fn(async () => {
-                        throw new Error('down');
-                    });
+    describe('a free join leaves markers alone, a paid one clears only its own', () => {
+        const free = (store: ReturnType<typeof fileWith>) =>
+            makeDeps({
+                getMemberChallenges: openList([{ id: 2, join_coins: 0, type: 'flash' }]),
+                getCurrentMemberProfile: jest.fn(async () => ({ id: B, userName: 'u' })),
+                joinStateStore: store,
+            });
+
+        test("another account's bare marker survives a free join of the same challenge", async () => {
+            // Left before accounts were told apart, by an account that paid and has its submit still to do.
+            const store = fileWith({ '2': { unlockedAt: 1 } });
+            expect((await joinChallengeSingle(2, 'tok', free(store), { spendCoins: false })).status).toBe('joined');
+            expect(Object.keys(store.read())).toEqual(['2']);
+            expect(store.writeRaw).not.toHaveBeenCalled();
+        });
+
+        test('and a keyed one too', async () => {
+            const store = fileWith({ [`${A}:2`]: { unlockedAt: 1 } });
+            await joinChallengeSingle(2, 'tok', free(store), { spendCoins: false });
+            expect(Object.keys(store.read())).toEqual([`${A}:2`]);
+        });
+
+        test('a paid join that finished with coins it spent (or found spent) removes the marker that held them', async () => {
+            const store = fileWith({ '2': { unlockedAt: 1 } });
+            const deps = joiningAs(B, store);
+            expect((await joinChallengeSingle(2, 'tok', deps, { spendCoins: true })).status).toBe('joined');
+            expect(store.read()).toEqual({});
+        });
+    });
+
+    describe('a paid join whose account cannot be identified does nothing paid', () => {
+        const unidentified = (kind: 'null' | 'throws', store: ReturnType<typeof fileWith>) =>
+            joiningAs(null, store, {
+                getCurrentMemberProfile:
+                    kind === 'null'
+                        ? jest.fn(async () => null)
+                        : jest.fn(async () => {
+                              throw new Error('down');
+                          }),
+            });
+
+        test.each([['null' as const], ['throws' as const]])(
+            'the profile read answering with %s: no unlock, no submit, no marker written or relied on, and "no coins were charged" is true',
+            async (kind) => {
+                for (const marker of [{}, { [`${A}:2`]: { unlockedAt: 1 } }, { '2': { unlockedAt: 1 } }]) {
+                    memberIdentity.__resetMemberIdCache();
+                    const store = fileWith(marker);
+                    const deps = unidentified(kind, store);
+                    const res = await joinChallengeSingle(2, 'tok', deps, { spendCoins: true, expectedCost: 100 });
+                    expect(res).toMatchObject({ status: 'failed-no-charge', cost: 100 });
+                    expect(deps.coinsUnlock).not.toHaveBeenCalled();
+                    expect(deps.submitToChallenge).not.toHaveBeenCalled();
+                    expect(deps.getBankroll).not.toHaveBeenCalled();
+                    expect(store.writeRaw).not.toHaveBeenCalled();
                 }
-                const res = await joinChallengeSingle(2, 'tok', deps, { spendCoins: true });
-                expect(res.status).toBe('joined');
-                expect(deps.coinsUnlock).not.toHaveBeenCalled();
             },
         );
 
-        test('a marker for another challenge does not count', async () => {
-            const store = fileWith({ [`${A}:9`]: { unlockedAt: 1 }, '19': { unlockedAt: 1 } });
-            const deps = joiningAs(null, store);
+        test('the join itself (the auto pass reaches it directly) refuses the same way', async () => {
+            const store = fileWith({});
+            const deps = unidentified('null', store);
+            expect(await performJoin(invalid({ id: 2 }), 'tok', deps, 100)).toEqual({
+                status: 'failed-no-charge',
+                charged: 0,
+            });
+            expect(deps.coinsUnlock).not.toHaveBeenCalled();
+            expect(store.writeRaw).not.toHaveBeenCalled();
+        });
+
+        test('a free join does not need to know the account', async () => {
+            const store = fileWith({});
+            const deps = unidentified('null', store);
+            deps.getMemberChallenges = openList([{ id: 2, join_coins: 0, type: 'flash' }]);
+            expect((await joinChallengeSingle(2, 'tok', deps, { spendCoins: false })).status).toBe('joined');
+        });
+
+        test('with no profile read wired in (the mock, a bare double) the account is not asked for: markers are bare', async () => {
+            const store = fileWith({});
+            const deps = joiningAs(null, store, {
+                submitToChallenge: double<'submitToChallenge'>(async () => ({ ok: false })),
+            });
+            const res = await joinChallengeSingle(2, 'tok', deps, { spendCoins: true });
+            expect(res.status).toBe('charged-pending-submit');
+            expect(Object.keys(store.read())).toEqual(['2']);
+        });
+
+        test('with no marker store (mock mode) a paid join works whoever it is', async () => {
+            const deps = joiningAs(null, fileWith({}), {
+                joinStateStore: null,
+                getCurrentMemberProfile: jest.fn(async () => null),
+            });
+            expect((await joinChallengeSingle(2, 'tok', deps, { spendCoins: true })).status).toBe('joined');
+            expect(deps.coinsUnlock).toHaveBeenCalledTimes(1);
+        });
+
+        test("markers that merely end in the challenge id are not that challenge's", async () => {
+            const store = fileWith({
+                [`${A}:12`]: { unlockedAt: 1 },
+                [`${A}:22`]: { unlockedAt: 1 },
+                '12': { unlockedAt: 1 },
+            });
+            const deps = joiningAs(A, store);
             expect((await joinChallengeSingle(2, 'tok', deps, { spendCoins: true, expectedCost: 40 })).status).toBe(
                 'needs-confirm',
             );
+            expect(deps.coinsUnlock).not.toHaveBeenCalled();
         });
     });
 });
@@ -1557,7 +1758,7 @@ describe('runJoinPass \u2014 join timing from class rules', () => {
         globalSetting({ autoJoinWithinHoursOfEnd: 1 });
         // The rule widens it to 6h, so this one joins.
         rulesGive((target) => (target?.max_photo_submits === 4 ? { autoJoinWithinHoursOfEnd: 6 } : {}));
-        const deps = makeDeps({ getMemberChallenges: jest.fn(async () => [candidate()]) });
+        const deps = makeDeps({ getMemberChallenges: openList([candidate()]) });
         const res = await runJoinPass('tok', NOW_MS, deps);
         expect(res.joined).toBe(1);
         expect(deps.submitToChallenge).toHaveBeenCalled();
@@ -1566,7 +1767,7 @@ describe('runJoinPass \u2014 join timing from class rules', () => {
     test('a class rule can also make the timing STRICTER than the global', async () => {
         globalSetting({ autoJoinWithinHoursOfEnd: 48 });
         rulesGive((target) => (target?.max_photo_submits === 4 ? { autoJoinWithinHoursOfEnd: 1 } : {}));
-        const deps = makeDeps({ getMemberChallenges: jest.fn(async () => [candidate()]) });
+        const deps = makeDeps({ getMemberChallenges: openList([candidate()]) });
         const res = await runJoinPass('tok', NOW_MS, deps);
         expect(res.joined).toBe(0);
         expect(res.results[0].status).toBe('skipped:too-early');
@@ -1578,7 +1779,7 @@ describe('runJoinPass \u2014 join timing from class rules', () => {
         globalSetting({ autoJoinWithinHoursOfEnd: 1 });
         // 83% elapsed clears a 75% anchor, so the candidate joins.
         rulesGive((target) => (target?.max_photo_submits === 4 ? { autoJoinAfterPercentElapsed: 75 } : {}));
-        const deps = makeDeps({ getMemberChallenges: jest.fn(async () => [candidate()]) });
+        const deps = makeDeps({ getMemberChallenges: openList([candidate()]) });
         const res = await runJoinPass('tok', NOW_MS, deps);
         expect(res.joined).toBe(1);
     });
@@ -1586,7 +1787,7 @@ describe('runJoinPass \u2014 join timing from class rules', () => {
     test('a percent rule defers a candidate that has not run long enough yet', async () => {
         globalSetting({ autoJoinWithinHoursOfEnd: 0 });
         rulesGive((target) => (target?.max_photo_submits === 4 ? { autoJoinAfterPercentElapsed: 90 } : {}));
-        const deps = makeDeps({ getMemberChallenges: jest.fn(async () => [candidate()]) });
+        const deps = makeDeps({ getMemberChallenges: openList([candidate()]) });
         const res = await runJoinPass('tok', NOW_MS, deps);
         expect(res.joined).toBe(0);
         expect(res.results[0].status).toBe('skipped:too-early');
@@ -1595,7 +1796,7 @@ describe('runJoinPass \u2014 join timing from class rules', () => {
     test('the same percent anchor defers a long challenge and joins a short one', async () => {
         globalSetting({ autoJoinWithinHoursOfEnd: 0, autoJoinAfterPercentElapsed: 75 });
         const deps = makeDeps({
-            getMemberChallenges: jest.fn(async () => [
+            getMemberChallenges: openList([
                 // 24h challenge, 20h in (83%) \u2014 joins.
                 candidate({ id: 1 }),
                 // 515.7h exhibition, 20h in (4%) \u2014 deferred, though it has the
@@ -1616,7 +1817,7 @@ describe('runJoinPass \u2014 join timing from class rules', () => {
     test('a candidate with no start_time is deferred, never joined early', async () => {
         globalSetting({ autoJoinWithinHoursOfEnd: 0, autoJoinAfterPercentElapsed: 75 });
         const deps = makeDeps({
-            getMemberChallenges: jest.fn(async () => [candidate({ start_time: undefined })]),
+            getMemberChallenges: openList([candidate({ start_time: undefined })]),
         });
         const res = await runJoinPass('tok', NOW_MS, deps);
         expect(res.joined).toBe(0);
@@ -1646,7 +1847,7 @@ describe('joinChallenges — edge paths', () => {
                 (target) => Array.isArray(target?.tags) && target.tags.includes('Exhibition'),
             );
             const deps = makeDeps({
-                getMemberChallenges: jest.fn(async () => [
+                getMemberChallenges: openList([
                     { id: 1, join_coins: 0, type: 'flash', tags: ['Exhibition'] },
                     { id: 2, join_coins: 0, type: 'flash', tags: [] },
                 ]),
@@ -1684,7 +1885,7 @@ describe('joinChallenges — edge paths', () => {
             settings.getEffectiveSetting.mockImplementation((k) =>
                 k === 'autoJoinWithinHoursOfEnd' ? 24 : DEFAULT_SETTINGS[k],
             );
-            const deps = makeDeps({ getMemberChallenges: jest.fn(async () => [null]) });
+            const deps = makeDeps({ getMemberChallenges: openList([null]) });
             const res = await runJoinPass('tok', 1_700_000_000_000, deps);
             expect(res.results).toEqual([{ id: undefined, status: 'skipped:close-time-unknown' }]);
             expect(warnings().some((m) => m.includes('no readable close_time') && m.endsWith('(none)'))).toBe(true);
@@ -1809,7 +2010,7 @@ describe('joinChallenges — edge paths', () => {
         });
 
         test('free join whose submit fails → failed-no-charge', async () => {
-            const deps = makeDeps({ submitToChallenge: jest.fn(async () => ({ ok: false })) });
+            const deps = makeDeps({ submitToChallenge: double<'submitToChallenge'>(async () => ({ ok: false })) });
             expect(await performJoin(invalid({ id: 9 }), 'tok', deps, 0)).toEqual({
                 status: 'failed-no-charge',
                 charged: 0,
@@ -1819,7 +2020,7 @@ describe('joinChallenges — edge paths', () => {
         test('a retried submit of an already-paid join that fails again stays pending, not re-charged', async () => {
             const deps = makeDeps({
                 joinStateStore: { readRaw: () => JSON.stringify({ 10: { unlockedAt: 1 } }), writeRaw: jest.fn() },
-                submitToChallenge: jest.fn(async () => null),
+                submitToChallenge: double<'submitToChallenge'>(async () => null),
             });
             expect(await performJoin(invalid({ id: 10 }), 'tok', deps, 100)).toEqual({
                 status: 'charged-pending-submit',
@@ -1866,7 +2067,7 @@ describe('joinChallenges — edge paths', () => {
         });
 
         test('a failed listing (null) is not "no open challenges": not run, and said so', async () => {
-            const deps = makeDeps({ getMemberChallenges: jest.fn(async () => null) });
+            const deps = makeDeps({ getMemberChallenges: double<'getMemberChallenges'>(async () => null) });
             expect(await runJoinPass('tok', Date.now(), deps)).toEqual({ ran: false, joined: 0, results: [] });
             expect(warnings()).toContain('could not list open challenges: the request failed');
             expect(deps.getBankroll).not.toHaveBeenCalled();
@@ -1874,7 +2075,7 @@ describe('joinChallenges — edge paths', () => {
 
         test('the pass only ever asks for open challenges, upcoming ones are never joined', async () => {
             const deps = makeDeps({
-                getMemberChallenges: jest.fn(async (_token: string, filter: string) =>
+                getMemberChallenges: double<'getMemberChallenges'>(async (_token, filter) =>
                     filter === 'open' ? [] : [{ id: 9, join_coins: 0, type: 'flash', status: 'upcoming' }],
                 ),
             });
@@ -1885,14 +2086,14 @@ describe('joinChallenges — edge paths', () => {
         });
 
         test('no open challenges → ran, nothing joined, no balance read', async () => {
-            const deps = makeDeps({ getMemberChallenges: jest.fn(async () => []) });
+            const deps = makeDeps({ getMemberChallenges: openList([]) });
             expect(await runJoinPass('tok', Date.now(), deps)).toEqual({ ran: true, joined: 0, results: [] });
             expect(deps.getBankroll).not.toHaveBeenCalled();
         });
 
         test('a non-Error thrown by the balance read is reported and paid joins are skipped', async () => {
             const deps = makeDeps({
-                getMemberChallenges: jest.fn(async () => [{ id: 1, join_coins: 100, type: 'flash' }]),
+                getMemberChallenges: openList([{ id: 1, join_coins: 100, type: 'flash' }]),
                 getBankroll: jest.fn().mockRejectedValue('bank down'),
             });
             const res = await runJoinPass('tok', Date.now(), deps);
@@ -1906,16 +2107,14 @@ describe('joinChallenges — edge paths', () => {
             );
             const closeSoon = Math.floor(Date.now() / 1000) + 600;
             const deps = makeDeps({
-                getMemberChallenges: jest.fn(async () => [
-                    { id: 1, join_coins: 0, type: 'flash', close_time: closeSoon },
-                ]),
+                getMemberChallenges: openList([{ id: 1, join_coins: 0, type: 'flash', close_time: closeSoon }]),
             });
             expect((await runJoinPass('tok', invalid(undefined), deps)).joined).toBe(1);
         });
 
         test('cancellation stops the pass before the next candidate', async () => {
             cancellation.isCancelled.mockReturnValue(true);
-            const deps = makeDeps({ getMemberChallenges: jest.fn(async () => [{ id: 1, join_coins: 0 }]) });
+            const deps = makeDeps({ getMemberChallenges: openList([{ id: 1, join_coins: 0 }]) });
             expect(await runJoinPass('tok', Date.now(), deps)).toEqual({ ran: true, joined: 0, results: [] });
             expect(warnings()).toContain('join pass cancelled by user');
         });
@@ -1924,11 +2123,11 @@ describe('joinChallenges — edge paths', () => {
             // Budget (300) covers both joins, so only the balance can stop the second.
             const bankroll = { coins: '150' };
             const deps = makeDeps({
-                getMemberChallenges: jest.fn(async () => [
+                getMemberChallenges: openList([
                     { id: 1, join_coins: 100, type: 'flash' },
                     { id: 2, join_coins: 100, type: 'flash' },
                 ]),
-                getBankroll: jest.fn(async () => bankroll),
+                getBankroll: double<'getBankroll'>(async () => bankroll),
             });
             const res = await runJoinPass('tok', Date.now(), deps);
             expect(res.results[0]).toEqual({ id: 1, status: 'joined' });
@@ -1939,7 +2138,7 @@ describe('joinChallenges — edge paths', () => {
 
         test('a candidate with no eligible photo is reported and not counted as joined', async () => {
             photoPicker.pickPhotosForChallenge.mockReturnValue([]);
-            const deps = makeDeps({ getMemberChallenges: jest.fn(async () => [{ id: 1, join_coins: 0 }]) });
+            const deps = makeDeps({ getMemberChallenges: openList([{ id: 1, join_coins: 0 }]) });
             expect(await runJoinPass('tok', Date.now(), deps)).toEqual({
                 ran: true,
                 joined: 0,
@@ -1951,7 +2150,7 @@ describe('joinChallenges — edge paths', () => {
             photoPicker.pickPhotosForChallenge.mockImplementationOnce(() => {
                 throw 'picker boom';
             });
-            const deps = makeDeps({ getMemberChallenges: jest.fn(async () => [{ id: 1, join_coins: 0 }]) });
+            const deps = makeDeps({ getMemberChallenges: openList([{ id: 1, join_coins: 0 }]) });
             const res = await runJoinPass('tok', Date.now(), deps);
             expect(res.results).toEqual([{ id: 1, status: 'error' }]);
             expect(warnings()).toContain('join failed for challenge 1: picker boom');
@@ -1959,7 +2158,7 @@ describe('joinChallenges — edge paths', () => {
     });
 
     describe('joinChallengeSingle — remaining outcomes', () => {
-        const paid = () => jest.fn(async () => [{ id: 2, join_coins: 100, type: 'flash' }]);
+        const paid = () => openList([{ id: 2, join_coins: 100, type: 'flash' }]);
 
         test('no token → not-authenticated without any API call', async () => {
             const deps = makeDeps();
@@ -1992,7 +2191,7 @@ describe('joinChallenges — edge paths', () => {
         });
 
         test('a failed listing (null) → fetch-failed, and the upcoming list is not asked about', async () => {
-            const deps = makeDeps({ getMemberChallenges: jest.fn(async () => null) });
+            const deps = makeDeps({ getMemberChallenges: double<'getMemberChallenges'>(async () => null) });
             expect((await joinChallengeSingle(2, 'tok', deps, { spendCoins: true })).status).toBe('fetch-failed');
             expect(deps.getMemberChallenges).toHaveBeenCalledTimes(1);
         });
@@ -2000,7 +2199,7 @@ describe('joinChallenges — edge paths', () => {
         describe('an id the live open list does not hold', () => {
             // Open and upcoming answer apart, as the server does.
             const lists = (upcoming: unknown) =>
-                jest.fn(async (_token: string, filter: string) => (filter === 'upcoming' ? upcoming : []));
+                double<'getMemberChallenges'>(async (_token, filter) => (filter === 'upcoming' ? upcoming : []));
             const spent = (deps: ReturnType<typeof makeDeps>) =>
                 [deps.coinsUnlock, deps.submitToChallenge].some((fn) => jest.mocked(fn).mock.calls.length > 0);
 
@@ -2033,7 +2232,7 @@ describe('joinChallenges — edge paths', () => {
             test('a failed or throwing upcoming call → unavailable, nothing spent', async () => {
                 // null: the request failed; the rest: the call threw (an Error, a bare string, nothing at all).
                 for (const upcoming of [null, new Error('503'), 'raw', undefined]) {
-                    const getMemberChallenges = jest.fn(async (_token: string, filter: string) => {
+                    const getMemberChallenges = jest.fn(async (_token, filter) => {
                         if (filter === 'open') return [];
                         if (upcoming !== null) throw upcoming;
                         return upcoming;
@@ -2061,7 +2260,10 @@ describe('joinChallenges — edge paths', () => {
         });
 
         test.each([[null], [{}], [{ coins: 'lots' }]])('bankroll %p → balance-unknown, no spend', async (bankroll) => {
-            const deps = makeDeps({ getMemberChallenges: paid(), getBankroll: jest.fn(async () => bankroll) });
+            const deps = makeDeps({
+                getMemberChallenges: paid(),
+                getBankroll: double<'getBankroll'>(async () => bankroll),
+            });
             expect(await joinChallengeSingle(2, 'tok', deps, { spendCoins: true })).toEqual({
                 status: 'balance-unknown',
                 challengeId: 2,
@@ -2071,7 +2273,7 @@ describe('joinChallenges — edge paths', () => {
         });
 
         test('not enough coins → skipped-unaffordable with the balance', async () => {
-            const deps = makeDeps({ getMemberChallenges: paid(), getBankroll: jest.fn(async () => ({ coins: 40 })) });
+            const deps = makeDeps({ getMemberChallenges: paid(), getBankroll: balance({ coins: 40 }) });
             expect(await joinChallengeSingle(2, 'tok', deps, { spendCoins: true })).toEqual({
                 status: 'skipped-unaffordable',
                 challengeId: 2,
@@ -2082,7 +2284,7 @@ describe('joinChallenges — edge paths', () => {
         });
 
         test('a free challenge joins without reading the balance', async () => {
-            const deps = makeDeps({ getMemberChallenges: jest.fn(async () => [{ id: 3, join_coins: 'free' }]) });
+            const deps = makeDeps({ getMemberChallenges: openList([{ id: 3, join_coins: 'free' }]) });
             expect(await joinChallengeSingle(3, 'tok', deps, { spendCoins: false })).toEqual({
                 status: 'joined',
                 challengeId: 3,

@@ -420,6 +420,16 @@ describe('join', () => {
         expect(msgs(level).some((m) => m.includes(text))).toBe(true);
     });
 
+    test('coins spent but no photo qualifies: the line says what is missing, not just to re-run', async () => {
+        handlers['join-challenge'].mockResolvedValue(
+            invalid({ status: 'charged-pending-submit', reason: 'no-photo', cost: 100 }),
+        );
+        await joinChallengeCmd('7');
+        expect(msgs('error')).toEqual([
+            'Coins were already spent on 7, but no photo qualifies for this challenge. Add an eligible photo (or adjust Chosen Photos), then re-run "join 7 --yes" — you will NOT be charged again.',
+        ]);
+    });
+
     test('an invalid-args refusal prints the invalid-id text, not the retry fallback', async () => {
         handlers['join-challenge'].mockResolvedValue(invalid({ success: false, error: 'invalid-args' }));
         await joinChallengeCmd('7');

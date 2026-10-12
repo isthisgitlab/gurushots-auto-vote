@@ -201,7 +201,12 @@ const holdQuitForOpenBoosts = (
     const options = quitDialogOptions(boosts, t, locale);
     const confirm = () => {
         bypassQuitGuard();
-        proceed();
+        try {
+            proceed();
+        } catch (error) {
+            // Runs from a promise nobody awaits: a throw here would be an unhandled rejection, and the quit would fail silently.
+            logger.withCategory('ui').error('Quit could not be completed:', error);
+        }
     };
     // A broken dialog must never make the app unquittable.
     const dialogFailed = (error: unknown) => {

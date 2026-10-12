@@ -411,13 +411,18 @@ repeated six times is one that gets forgotten at one of them.
 - **Paid-join money safety** (`services/joinChallenges/performJoin.ts`, with the unlock claim in `unlockMarker.ts` and the in-flight lock in `shared.ts`): the order is load-bearing — resolve an eligible
   photo **before** any `coins_unlock` (no photo ⇒ skip, no spend); persist the unlock claim
   (`joinState.json`) **before** the charge so a crash can never let a later pass re-unlock (idempotent
-  retry), and if the claim can't be written, don't spend. A claim is keyed `<member id>:<challenge id>`
-  (the account's member id, which survives a re-login; a token does not), so a marker one account left never
-  makes another account's join a submit-only retry; an unkeyed marker from before that stays in force for
-  whoever reads it, and when the account cannot be told any account's marker for the challenge counts. A
-  manual join that finds a marker skips the price and balance checks and only submits (`submitOnly`: the join
-  re-reads the marker and refuses to unlock if it is gone; no eligible photo then reports
-  `charged-pending-submit`, not "no coins charged"); a per-process in-flight `Set` **plus** a
+  retry), and if the claim can't be written, don't spend. Whose coins a claim holds is part of its key: a
+  new claim is always written as `<member id>:<challenge id>` (the member id survives a re-login; a token
+  does not), so one account's leftover claim never makes another account's join a submit-only retry. A
+  bare `<challenge id>` claim, from before accounts were told apart, is only ever read: it counts for
+  every account (it can only err towards not charging twice) and is removed by a paid join that finishes
+  with coins it spent or found spent — never by a free join. A **paid** join whose account cannot be
+  identified (a real claim store and a profile read are wired in, but no member id came) does nothing
+  paid: no unlock, no submit, and it answers `failed-no-charge`. A manual join or an auto-join pass that
+  finds this account's claim skips the price, balance and budget checks and only submits (`submitOnly`: the
+  join re-reads the claim and refuses to unlock if it is gone); with no eligible photo it answers
+  `charged-pending-submit` with `reason: 'no-photo'`, which the GUI and CLI word as a missing photo, not as
+  a retry; a per-process in-flight `Set` **plus** a
   cross-process lockfile (`acquireUnlockLock`, real-fs platforms, TTL stale-recovery, fail-open) guard the
   check→unlock→mark section; a corrupt/unreadable join-state **refuses to spend** (fail-safe, not fail-open);
   the pass is cancellation-checked between candidates and before each spend, and each candidate is

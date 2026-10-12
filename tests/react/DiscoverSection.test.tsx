@@ -319,6 +319,95 @@ describe('a paid row that was already charged', () => {
         }
     });
 
+    test('while a paid row is only being asked what it costs the button says "Checking…", not "Joining…"; a free row says "Joining…"', async () => {
+        const pending = new Promise<never>(() => undefined);
+        window.api.joinChallenge = joinMock().mockReturnValue(invalid(pending));
+        render(<DiscoverSection isLoggedIn bankroll={invalid({ coins: 500 })} onJoined={jest.fn()} />);
+        await screen.findByText('Paid One');
+        fireEvent.click(screen.getByText('app.discoverJoinPaid'));
+        expect(await screen.findByText('app.discoverChecking')).toBeTruthy();
+        expect(screen.queryByText('app.discoverJoining')).toBeNull();
+        fireEvent.click(screen.getByText('app.discoverJoin'));
+        expect(await screen.findByText('app.discoverJoining')).toBeTruthy();
+    });
+
+    test('a real, confirmed join says "Joining…"', async () => {
+        let release!: () => void;
+        window.api.joinChallenge = joinMock().mockImplementation(async (_id, spendCoins) => {
+            if (!spendCoins) return invalid(priceAsk(100));
+            await new Promise<void>((resolve) => (release = resolve));
+            return invalid({ success: true, status: 'joined' });
+        });
+        render(<DiscoverSection isLoggedIn bankroll={invalid({ coins: 500 })} onJoined={jest.fn()} />);
+        await screen.findByText('Paid One');
+        fireEvent.click(screen.getByText('app.discoverJoinPaid'));
+        fireEvent.click(await screen.findByText('app.discoverConfirmSpend'));
+        expect(await screen.findByText('app.discoverJoining')).toBeTruthy();
+        expect(screen.queryByText('app.discoverChecking')).toBeNull();
+        await act(async () => release());
+    });
+
+    describe('two paid rows asked at once', () => {
+        const paid = (id: number, title: string, join_coins: number) => ({ ...items[1], id, title, join_coins });
+        const twoPaid = invalid<OpenChallenge[]>([paid(11, 'Alpha', 100), paid(12, 'Beta', 200)]);
+
+        test('an answer that comes while a dialog is open does not swap what it asks to pay for, and its row is left alone', async () => {
+            window.api.getMemberChallenges = listMock().mockResolvedValue(invalid({ success: true, items: twoPaid }));
+            const release: Record<number, () => void> = {};
+            window.api.joinChallenge = joinMock().mockImplementation((id, spendCoins) =>
+                spendCoins
+                    ? Promise.resolve(invalid({ success: true, status: 'joined' }))
+                    : new Promise((resolve) => {
+                          release[Number(id)] = () => resolve(invalid(priceAsk(id === 11 ? 100 : 200)));
+                      }),
+            );
+            mockTranslator.t.mockImplementation((key) =>
+                key === 'app.discoverConfirmBody'
+                    ? 'Join {title} for {coins}'
+                    : key === 'app.discoverConfirmSpend'
+                      ? 'Spend {coins}'
+                      : key,
+            );
+            try {
+                render(<DiscoverSection isLoggedIn bankroll={invalid({ coins: 500 })} onJoined={jest.fn()} />);
+                await screen.findByText('Alpha');
+                const [first, second] = screen.getAllByText('app.discoverJoinPaid');
+                fireEvent.click(first);
+                fireEvent.click(second);
+                await waitFor(() => expect(Object.keys(release)).toHaveLength(2));
+                await act(async () => release[11]());
+                expect(await screen.findByText('Join Alpha for 100')).toBeTruthy();
+                // Beta's answer arrives with Alpha's dialog open.
+                await act(async () => release[12]());
+                expect(screen.getByText('Join Alpha for 100')).toBeTruthy();
+                expect(screen.queryByText('Join Beta for 200')).toBeNull();
+                fireEvent.click(screen.getByText('Spend 100'));
+                await waitFor(() => expect(window.api.joinChallenge).toHaveBeenLastCalledWith(11, true, 100));
+                // Beta's row says nothing, and still costs what it listed.
+                expect(screen.queryByText('app.discoverPriceChanged')).toBeNull();
+                expect(screen.getAllByText('app.discoverJoinPaid').length).toBeGreaterThan(0);
+            } finally {
+                mockTranslator.t.mockImplementation((key) => key);
+            }
+        });
+    });
+
+    test("a different account sees none of the previous one's outcomes or dialogs", async () => {
+        window.api.joinChallenge = joinMock().mockResolvedValue(
+            invalid({ success: false, status: 'charged-pending-submit' }),
+        );
+        const view = render(<DiscoverSection isLoggedIn bankroll={invalid({ coins: 500 })} onJoined={jest.fn()} />);
+        await screen.findByText('Paid One');
+        fireEvent.click(screen.getByText('app.discoverJoinPaid'));
+        await screen.findByText('app.discoverChargedPending');
+        // Logged out, and in again as someone else.
+        view.rerender(<DiscoverSection isLoggedIn={false} bankroll={null} onJoined={jest.fn()} />);
+        view.rerender(<DiscoverSection isLoggedIn bankroll={invalid({ coins: 500 })} onJoined={jest.fn()} />);
+        await screen.findByText('Paid One');
+        expect(screen.queryByText('app.discoverChargedPending')).toBeNull();
+        expect(screen.queryByText('app.discoverRetrySubmit')).toBeNull();
+    });
+
     test('a free row is joined as before, with no ask of its own', async () => {
         render(<DiscoverSection isLoggedIn bankroll={invalid({ coins: 500 })} onJoined={jest.fn()} />);
         await screen.findByText('Free One');
@@ -543,7 +632,7 @@ describe('edge paths', () => {
         await screen.findByText('app.discoverJoined');
     });
 
-    test('retry submit re-joins the charged challenge with spendCoins=true', async () => {
+    test('retry submit asks again without spending: a server that holds the marker submits, and that is the outcome', async () => {
         window.api.joinChallenge = spendLater({ status: 'charged-pending-submit', cost: 100 });
         const { onJoined } = renderSection();
         await screen.findByText('Paid One');
@@ -553,8 +642,42 @@ describe('edge paths', () => {
         jest.mocked(window.api.joinChallenge).mockResolvedValue(invalid({ success: true, status: 'joined' }));
         fireEvent.click(screen.getByText('app.discoverRetrySubmit'));
         await screen.findByText('app.discoverJoined');
-        expect(window.api.joinChallenge).toHaveBeenLastCalledWith(900002, true, 100);
+        expect(window.api.joinChallenge).toHaveBeenLastCalledWith(900002, false);
         expect(onJoined).toHaveBeenCalledTimes(2);
+    });
+
+    test('retry submit with no marker behind it (another account, a lookup that blipped) opens the price dialog, spending nothing', async () => {
+        window.api.joinChallenge = spendLater({ status: 'charged-pending-submit', cost: 100 });
+        renderSection();
+        await screen.findByText('Paid One');
+        fireEvent.click(screen.getByText('app.discoverJoinPaid'));
+        fireEvent.click(await screen.findByText('app.discoverConfirmSpend'));
+        await screen.findByText('app.discoverRetrySubmit');
+        const spent = () =>
+            jest.mocked(window.api.joinChallenge).mock.calls.filter(([, spend]) => spend === true).length;
+        expect(spent()).toBe(1);
+        // The server no longer holds the marker: it asks for the price instead of unlocking.
+        jest.mocked(window.api.joinChallenge).mockImplementation(async (_id, spendCoins) =>
+            invalid(spendCoins ? { success: true, status: 'joined' } : priceAsk(100)),
+        );
+        fireEvent.click(screen.getByText('app.discoverRetrySubmit'));
+        await screen.findByText('app.discoverConfirmTitle');
+        expect(spent()).toBe(1);
+        // The earlier "charged but not joined" line is gone: it would contradict the dialog.
+        expect(screen.queryByText('app.discoverChargedPending')).toBeNull();
+    });
+
+    test('coins already spent but no photo qualifies: it says so, and offers no retry that cannot work', async () => {
+        window.api.joinChallenge = joinMock().mockResolvedValue(
+            invalid({ success: false, status: 'charged-pending-submit', reason: 'no-photo' }),
+        );
+        renderSection();
+        await screen.findByText('Paid One');
+        fireEvent.click(screen.getByText('app.discoverJoinPaid'));
+        const note = await screen.findByText('app.discoverPendingNoPhoto');
+        expect(note.getAttribute('role')).toBe('alert');
+        expect(screen.queryByText('app.discoverChargedPending')).toBeNull();
+        expect(screen.queryByText('app.discoverRetrySubmit')).toBeNull();
     });
 
     test('the Retry submit button is named by its challenge', async () => {
@@ -584,7 +707,11 @@ describe('edge paths', () => {
         await screen.findByText('app.discoverConfirmTitle');
         fireEvent.click(document.querySelector('[role="dialog"] button[aria-label]')!);
         await waitFor(() => expect(screen.queryByText('app.discoverConfirmTitle')).toBeNull());
-        expect(window.api.joinChallenge).not.toHaveBeenCalledWith(900002, true, expect.anything());
+        // Both times only the ask went out, and none of the calls was one that spends.
+        expect(window.api.joinChallenge).toHaveBeenCalledTimes(2);
+        expect(jest.mocked(window.api.joinChallenge).mock.calls.every(([, spendCoins]) => spendCoins === false)).toBe(
+            true,
+        );
     });
 
     test('an unknown balance says so and still allows the spend; a url-only paid challenge is named by url', async () => {

@@ -535,6 +535,9 @@ export const app = {
     discoverJoinLabel: 'Join {title}',
     discoverJoinPaidLabel: 'Join (paid) {title}, {coins} coins',
     discoverJoining: 'Joining…',
+    discoverChecking: 'Checking…',
+    discoverPendingNoPhoto:
+        'Coins were already spent, but no photo qualifies for this challenge. Add an eligible photo (or adjust Chosen Photos), then press Join.',
     discoverRetrySubmit: 'Retry submit',
     discoverRetrySubmitLabel: 'Retry submit for {title}',
     discoverConfirmTitle: 'Join paid challenge?',

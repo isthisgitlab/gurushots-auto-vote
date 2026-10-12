@@ -55,17 +55,35 @@ const markerOwner = (token: string, deps: JoinDeps): Promise<string | null> =>
 
 // A marker is keyed `<member id>:<challenge id>`, so a challenge another account left a marker on is
 // not one this account has paid for. A marker from before accounts were told apart is keyed by the
-// challenge id alone: it stays in force for whoever reads it, which can only err towards not charging twice.
+// challenge id alone: it stays in force for whoever reads it, which can only err towards not charging
+// twice. Without a member id (no profile read wired in: the mock, tests) a marker is the bare id.
 const markerKey = (id: string | number, owner: string | null) => (owner ? `${owner}:${id}` : String(id));
 
 /**
- * Whether coins were already spent on this challenge by this account. An owner that cannot be told
- * counts any account's marker for the challenge: whose it is cannot be verified, so do not spend.
+ * Whether the account of a PAID join cannot be told although it should be: a real marker store and a
+ * profile read are wired in, but the member id did not come. Such a join does nothing paid — it could
+ * neither tell whose coins a marker holds nor write a marker that belongs to anyone.
  */
-const hasMarker = (state: Record<string, unknown>, id: string | number, owner: string | null) => {
-    if (has(state, String(id))) return true;
-    if (owner) return has(state, markerKey(id, owner));
-    return Object.keys(state).some((key) => key.endsWith(`:${id}`));
+const paidOwnerUnknown = (deps: JoinDeps, owner: string | null): boolean =>
+    owner === null && Boolean(deps.joinStateStore) && Boolean(deps.getCurrentMemberProfile);
+
+/** Whether coins were already spent on this challenge by this account (or, bare, by anyone before accounts were told apart). */
+const hasMarker = (state: Record<string, unknown>, id: string | number, owner: string | null) =>
+    has(state, String(id)) || (owner !== null && has(state, markerKey(id, owner)));
+
+/**
+ * Whether this account already paid for the (paid) candidate and only has its submit left: it must
+ * be finished whatever the balance or the budget now say, since the charge itself lowered them.
+ */
+const paidByThisAccount = async (
+    challenge: { id?: string | number; join_coins?: number },
+    token: string,
+    deps: JoinDeps,
+): Promise<boolean> => {
+    const cost = Number(challenge?.join_coins);
+    if (challenge?.id == null || !(cost > 0) || !deps.joinStateStore) return false;
+    const owner = await markerOwner(token, deps);
+    return !paidOwnerUnknown(deps, owner) && isUnlocked(deps.joinStateStore, challenge.id, owner);
 };
 
 const isUnlocked = (store: RawJsonStore | null | undefined, id: string | number, owner: string | null) =>
@@ -102,4 +120,13 @@ const clearUnlocked = (store: RawJsonStore | null | undefined, id: string | numb
     }
 };
 
-export { readUnlockedState, markerOwner, hasMarker, isUnlocked, markUnlocked, clearUnlocked };
+export {
+    readUnlockedState,
+    markerOwner,
+    paidOwnerUnknown,
+    paidByThisAccount,
+    hasMarker,
+    isUnlocked,
+    markUnlocked,
+    clearUnlocked,
+};

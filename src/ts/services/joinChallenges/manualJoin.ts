@@ -11,7 +11,7 @@ import { errorMessage } from '../../errorMessage';
 import { cat } from './shared';
 import type { JoinDeps, JoinSingleResult } from './shared';
 import { performJoin } from './performJoin';
-import { isUnlocked, markerOwner } from './unlockMarker';
+import { isUnlocked, markerOwner, paidOwnerUnknown } from './unlockMarker';
 
 /**
  * Live balance check for a confirmed paid manual join.
@@ -94,10 +94,18 @@ const joinChallengeSingle = async (
     const rawCost = Number(challenge.join_coins);
     const cost = Number.isFinite(rawCost) && rawCost > 0 ? rawCost : 0;
 
+    // A paid join of an account that cannot be identified does nothing paid: whose coins a marker holds
+    // is unknown, and no marker could be written for it.
+    const owner = cost > 0 ? await markerOwner(token, deps) : null;
+    if (cost > 0 && paidOwnerUnknown(deps, owner)) {
+        cat().warning(`challenge ${challengeId}: the account could not be identified — not joining`, null);
+        return { status: 'failed-no-charge', challengeId, cost };
+    }
+
     // Coins already spent (an unlock marker, left by a join whose submit failed) are not spent again:
     // the retry only submits, so neither consent to a price nor the balance has a say in it. An
     // unreadable marker file reads as "no marker" here, as in performJoin, whose paid path then refuses.
-    const retryOnly = cost > 0 && isUnlocked(deps.joinStateStore, challengeId, await markerOwner(token, deps));
+    const retryOnly = cost > 0 && isUnlocked(deps.joinStateStore, challengeId, owner);
 
     // Consent covers a price: a cost above the one the caller confirmed (`expectedCost`) needs a new
     // confirmation, with the live cost, and unlocks nothing.
@@ -112,7 +120,7 @@ const joinChallengeSingle = async (
 
     // An explicit click auto-picks even with Submit Only Chosen Photos on.
     const outcome = await performJoin(challenge, token, deps, cost, { manual: true, submitOnly: retryOnly });
-    return { status: outcome.status, challengeId, cost, imageId: outcome.imageId };
+    return { status: outcome.status, challengeId, cost, imageId: outcome.imageId, reason: outcome.reason };
 };
 
 export { joinChallengeSingle };

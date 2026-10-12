@@ -400,3 +400,24 @@ describe('join window (percent elapsed)', () => {
         expect(pct(99, at(24, 23.9)).join).toBe(true);
     });
 });
+
+describe('alreadyPaid (coins spent on it earlier; only the submit is left)', () => {
+    const paid = { challenge: { id: 1, type: 'flash', join_coins: 200 } };
+
+    test('skips the cost checks: no balance, no coin cap, no budget', () => {
+        const poor = { ...paid, bankroll: { coins: 3 }, maxCoins: 0, remainingBudget: 0 };
+        expect(call({ ...poor })).toMatchObject({ join: false });
+        expect(call({ ...poor, alreadyPaid: true })).toEqual({ join: true, needsCoins: 200, reason: 'already-paid' });
+        expect(call({ ...poor, bankroll: null, alreadyPaid: true }).join).toBe(true);
+    });
+
+    test('is judged by the scope and the timing window like any join', () => {
+        expect(call({ ...paid, includeTypes: ['contest'], alreadyPaid: true }).reason).toBe('out-of-scope');
+        const late = { ...paid, joinWithinSec: 3600, nowSec: 1000, alreadyPaid: true };
+        expect(call({ ...late, challenge: { ...paid.challenge, close_time: 900000 } }).join).toBe(false);
+    });
+
+    test('a free challenge is free, as ever', () => {
+        expect(call({ alreadyPaid: true })).toMatchObject({ join: true, reason: 'free', needsCoins: 0 });
+    });
+});
