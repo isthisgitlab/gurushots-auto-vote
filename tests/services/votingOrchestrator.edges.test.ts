@@ -226,7 +226,7 @@ describe('runBoost — availability and readiness', () => {
             expect(votingLogic.isBoostDueForMission).not.toHaveBeenCalled();
             expect(api.applyBoost).toHaveBeenCalledTimes(1);
             expect(missions.boost).toBe(0);
-            expect(messages('info').some((m) => m.includes('applied early'))).toBe(false);
+            expect(messages('info').some((m) => m.includes('due early'))).toBe(false);
         });
 
         test('a failed apply does not count', async () => {
