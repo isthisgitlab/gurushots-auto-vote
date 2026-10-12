@@ -569,7 +569,7 @@ yallist 5.0.0
   License: BlueOak-1.0.0
   Copyright Isaac Z. Schlueter
 
-zod 4.6.6
+zod 4.6.7
   License: MIT
   Copyright (c) 2025 Colin McDonnell
 
