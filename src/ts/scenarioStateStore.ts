@@ -8,8 +8,8 @@
  *   { "<challengeId>": {
  *       scenario, phase, phaseEnteredAt,        // unix seconds
  *       memory: { slot: photoId },
- *       fired: { ruleId: { at, day?, phase? } },
- *       inFlight: { ruleId, actionIndex } | null,
+ *       fired: { ruleId: { at, day?, phaseEnteredAt?, unclearHalt? } },   // unclearHalt: the spend it stopped after
+ *       inFlight: { ruleId, actionIndex, unclear? } | null,               // unclear: the spend that got no answer
  *       spent: { swaps, keys, fills },
  *       history: { photoId: [[unixSec, votes], …] },   // vote samples (scenarios/speed.ts)
  *       outbox: [{ id, at, message }],                // notices for the host notifiers
@@ -18,8 +18,8 @@
  *       updatedAt                               // ms, for pruning
  *   } }
  *
- * An unreadable file or a malformed record is reported as `corrupt` rather
- * than read as empty: the engine then halts that challenge until the user
+ * An unreadable file (an empty one included: a file written whole never is, so it was cut short) or a malformed
+ * record is reported as `corrupt` rather than read as empty: the engine then halts that challenge until the user
  * resets it, because silently restarting a plan from its first phase could
  * repeat spends. Mock mode uses createMemoryStateLedger() and never touches
  * the persisted file.
@@ -32,15 +32,26 @@
  * (refreshScenarioStateAsync) before it reads or resets scenario state.
  */
 
-import type { RawJsonStore, ScenarioState } from './types/stores';
+import type { RawJsonStore, ScenarioState, SpendAction } from './types/stores';
 import * as logger from './logger';
 import { createJsonStore } from './settings/storage';
 import { isPlainObject } from './plainObject';
 
-const scenarioStateStore = createJsonStore({ fileName: 'scenarioState.json', prefKey: 'gs_scenario_state' });
+const scenarioStateStore = createJsonStore({
+    fileName: 'scenarioState.json',
+    prefKey: 'gs_scenario_state',
+    atomic: true,
+});
 
 // Challenges run for days, not months; anything older is a finished challenge.
 const MAX_AGE_MS = 30 * 24 * 60 * 60 * 1000;
+
+const SPEND_ACTIONS: ReadonlySet<unknown> = new Set<SpendAction>(['swap', 'unlockBoost', 'fillExposure']);
+
+const isSpendAction = (value: unknown): value is SpendAction => SPEND_ACTIONS.has(value);
+
+const isFiredRecord = (value: unknown): boolean =>
+    isPlainObject(value) && (value.unclearHalt === undefined || isSpendAction(value.unclearHalt));
 
 const isStringMap = (value: unknown): boolean =>
     isPlainObject(value) && Object.values(value).every((v) => typeof v === 'string');
@@ -55,6 +66,7 @@ const isRecord = (r: unknown): r is ScenarioState =>
     Number.isFinite(r.phaseEnteredAt) &&
     isStringMap(r.memory) &&
     isPlainObject(r.fired) &&
+    Object.values(r.fired).every(isFiredRecord) &&
     isPlainObject(r.spent) &&
     (r.history === undefined || isPlainObject(r.history)) &&
     (r.outbox === undefined || Array.isArray(r.outbox)) &&
@@ -62,7 +74,7 @@ const isRecord = (r: unknown): r is ScenarioState =>
         (isPlainObject(r.inFlight) &&
             typeof r.inFlight.ruleId === 'string' &&
             Number.isInteger(r.inFlight.actionIndex) &&
-            (r.inFlight.unclear === undefined || typeof r.inFlight.unclear === 'string')));
+            (r.inFlight.unclear === undefined || isSpendAction(r.inFlight.unclear))));
 
 /**
  * A fresh record for a challenge entering `scenario` at its start phase.
@@ -98,7 +110,8 @@ const createStateLedger = (store: RawJsonStore) => {
         if (raw === lastRaw) return lastParsed as ParsedStateFile;
         let parsed: ParsedStateFile;
         try {
-            const value: unknown = JSON.parse(raw || '{}');
+            // No file is no state yet; a file with nothing in it was cut short, and is not read as "no state".
+            const value: unknown = raw === null ? {} : JSON.parse(raw);
             parsed = isPlainObject(value) ? { ok: true, map: value } : { ok: false, map: {} };
         } catch {
             parsed = { ok: false, map: {} };

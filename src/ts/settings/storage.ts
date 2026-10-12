@@ -16,7 +16,6 @@
 
 import * as fs from 'node:fs';
 import * as path from 'node:path';
-import { randomBytes } from 'node:crypto';
 import * as logger from '../logger';
 const { isSourceCode, getAppName } = logger;
 import * as runtime from '../runtime';
@@ -25,6 +24,7 @@ import type { App } from 'electron';
 import type { PreferencesPlugin } from '@capacitor/preferences';
 import type { AndroidHeadlessStore } from '../types/settings';
 import { errorMessage } from '../errorMessage';
+import { sweepStaleTemps, writeAtomicOwnerOnly } from './atomicWrite';
 
 /**
  * The Android headless-service bridge, read at call time (absent everywhere
@@ -107,31 +107,6 @@ const writeOwnerOnly = (filePath: string, data: string) => {
         }
     }
     fs.writeFileSync(filePath, data, { encoding: 'utf8', mode: 0o600 });
-};
-
-/**
- * Writes a JSON store's file so that a reader never sees it half written: the data goes to a temp file next to it
- * (mode 0o600) and is renamed over it, which replaces it atomically. The settings file is not written this way —
- * its inode is watched — and neither are the stores that did not ask for it (`atomic`): the claims file asks, because
- * a claim read by a process that does not hold the claims-file lock must never see an empty or cut-off file.
- */
-const writeAtomicOwnerOnly = (filePath: string, data: string) => {
-    const dir = path.dirname(filePath);
-    if (!fs.existsSync(dir)) {
-        fs.mkdirSync(dir, { recursive: true, mode: 0o700 });
-    }
-    const temp = `${filePath}.${process.pid}.${randomBytes(4).toString('hex')}.tmp`;
-    try {
-        fs.writeFileSync(temp, data, { encoding: 'utf8', mode: 0o600, flag: 'wx' });
-        fs.renameSync(temp, filePath);
-    } catch (err) {
-        try {
-            fs.unlinkSync(temp);
-        } catch {
-            // nothing was written, or it is already gone
-        }
-        throw err;
-    }
 };
 
 const storage = {
@@ -331,8 +306,15 @@ const createJsonStore = ({
     let initialized = false;
     let cachedJson: string | null = null;
     let chain = Promise.resolve();
+    let swept = false;
 
     const filePath = () => path.join(path.dirname(getSettingsPath()), fileName);
+    // The first read or write of an atomic store's file clears the temp files an earlier crash left beside it.
+    const sweepOnce = () => {
+        if (!atomic || swept) return;
+        swept = true;
+        sweepStaleTemps(filePath());
+    };
 
     return {
         /**
@@ -345,6 +327,7 @@ const createJsonStore = ({
             if (runtime.isCapacitor()) {
                 return cachedJson;
             }
+            sweepOnce();
             const p = filePath();
             if (!fs.existsSync(p)) return null;
             return fs.readFileSync(p, 'utf8');
@@ -367,6 +350,7 @@ const createJsonStore = ({
                     });
                 return;
             }
+            sweepOnce();
             (atomic ? writeAtomicOwnerOnly : writeOwnerOnly)(filePath(), data);
         },
         /** Hydrate the Capacitor cache once at boot. No-op elsewhere. */

@@ -440,7 +440,7 @@ repeated six times is one that gets forgotten at one of them.
   the GuruShots website, and nothing in the app decides on it. Every later attempt, manual or automatic, only
   submits on that claim (`submitOnly`), so nothing can pay again without asking, and it does so under the
   cross-process unlock lock with the claim read again under it (a claim gone by then submits nothing, a lock
-  another process holds answers `busy`); the removal of a claim after a successful submit takes the lock too; a submit that fails on an
+  another process holds answers `busy`); marking a claim joined after a successful submit takes the lock too; a submit that fails on an
   unconfirmed claim answers `unconfirmed` again, and on a bare claim `reason: 'earlier-payment'` (a payment
   record from before accounts were told apart, whose owner is unknown): both are worded for what is not known
   (the GUI and CLI say that a retry only submits the photo, so nobody is charged twice). **Forgetting**
@@ -451,9 +451,10 @@ repeated six times is one that gets forgotten at one of them.
   claim for the challenge only when it is still unconfirmed; never a claim known to have been charged. A
   bare claim from before accounts were told apart is **never** forgotten (`legacy-record`): it may be another
   account's protection against a second charge and nothing on the device can tell whose, so it clears by itself
-  — when a paid submit that used it succeeds, or after 30 days (any claim, bare or any account's, older than 30
-  days is pruned at the next open-list pruning, except this account's own claim of a challenge still in the list
-  just read; no challenge lives that long, and it ends the keeping of other accounts' records and balances). The
+  — after 30 days (any claim, bare or any account's, older than 30 days is pruned at the next open-list pruning,
+  except this account's own keyed claim of a challenge still in the list just read: a bare claim is never kept by
+  the list, since the list says nothing of whose it is; no challenge lives that long, and it ends the keeping of
+  other accounts' records and balances). The
   GUI offers no "I wasn't charged" for it, and its message tells the account that did not pay it can join on
   the GuruShots website meanwhile. A key with a colon is never read as a bare claim, and the IPC handler and
   the CLI take only a plain challenge id (digits), so a crafted id cannot name another account's record. It
@@ -466,13 +467,22 @@ repeated six times is one that gets forgotten at one of them.
   claim; `markUnlocked` then returns false and nothing is spent), and logs by challenge id only, never by the
   member id in a key. `markUnlocked` is a compare-and-set inside the locked change: it refuses when this
   account's or a bare claim for the challenge already exists, so two writers never overwrite each other's claim.
-  The file is written whole to a temporary file, owner-only, then renamed, and an empty file reads as unreadable.
-  Forgetting a claim whose file is locked answers `busy`. Spends of currency (keys, swaps, fills) that are unclear say so (`outcome: 'unclear'`,
+  The file is written whole to a temporary file (owner-only, flushed to disk, then renamed over the file, and its
+  directory flushed where that can be), so a reader never sees it cut off; the temp files a crash left beside it
+  (its own name pattern, untouched for a minute) are removed at the first read or write; an empty file reads as
+  unreadable. A successful paid submit does **not** delete the claim it used: the claim stays, marked `joinedAt`
+  (and no longer `unconfirmed`), because a process that read the open list before that join and then spent a
+  while picking a photo would otherwise find no claim under the lock and unlock the challenge a second time. A
+  joined claim is never forgettable, makes every later paid attempt refuse (`failed-no-charge`: no unlock, no
+  submit) wherever it is met (before the pick, under the unlock lock, under the submit lock), and is pruned like
+  any other, counted from its join. A refused unlock's claim is removed with one brief retry when the file's lock
+  is held (never when the file is unreadable), else flagged unconfirmed. Forgetting a claim whose file is locked
+  answers `busy`. Spends of currency (keys, swaps, fills) that are unclear say so (`outcome: 'unclear'`,
   never "rejected"); an unclear swap re-reads the live entries and records the swap in the swap-back ledger
   when it did land; and a scenario step whose spend is unclear counts toward the scenario's `spent` limit
   (conservatively, so a limit is never exceeded), is retried from the same step, and says it "may have gone
-  through" (the status line words it in the user's language from the stored `kind: 'spend-unclear'` and action,
-  not as a skipped step). Such a step as a rule's first commits the rule (`inFlight` at that index), so the
+  through" (the status line words it in the user's language from the marker on `inFlight` or the stopped rule's
+  `fired` record and the action, not as a skipped step). Such a step as a rule's first commits the rule (`inFlight` at that index), so the
   retry resumes there. The retry of such a step never spends again: it only looks at the live challenge, passes
   the step over when that positively shows it took effect (the boost unlocked by a key, the exposure full, the
   replacement photo entered) and goes on, and otherwise ends the rule — a swap whose replacement a selector
@@ -500,7 +510,9 @@ repeated six times is one that gets forgotten at one of them.
   random owner token and is released only while it still holds it, so a lock that was taken over is never
   deleted by its old owner; a held lock is touched every 20 s, so only the lock of a crashed owner goes stale
   (60 s untouched), and a stale one is taken over atomically (renamed to a name of its own — only one process can
-  — then checked to be the one seen, and put back if it was a live one); a corrupt/unreadable join-state **refuses to spend** (fail-safe, not fail-open);
+  — then checked to be the one seen, and put back with a hard link if it was a live one: a link fails rather than
+  replace a lock created meanwhile, and only where the filesystem has no hard links does a rename stand in, while
+  the place is empty); a corrupt/unreadable join-state **refuses to spend** (fail-safe, not fail-open);
   the pass is cancellation-checked between candidates and before each spend, and each candidate is
   independently try/caught. Decision precedence in `VotingLogic.shouldJoinChallenge` (pure): a rule opt-in
   (a named profile, or an inline `autoJoin: true` on the rule) wins over the type-exclude veto; otherwise the
@@ -704,7 +716,16 @@ caps (dependency-free, renderer-safe), and `scenarios/templates.ts` holds editab
   to another scenario, or names a phase the scenario no longer has.
 - **Runtime state** (`scenarioStateStore.ts`, per challenge: phase, memory, fired markers, in-flight action,
   spends, last action/error). An unreadable file or malformed record reads as **corrupt, never as a fresh
-  start** — the challenge halts until `scenario-reset`, because replaying a plan could repeat spends. Mock
+  start** (an empty file included: the file is written whole by temp file, flush and rename, so an empty one was cut
+  short, never "no state") — the challenge halts until `scenario-reset`, because replaying a plan could repeat
+  spends; every `fired` entry and every `unclear` / `unclearHalt` marker must be a plain record and a spend action to
+  be trusted. One process runs a challenge's rule steps at a time: the step takes the cross-process lock
+  `scenario-<id>` (the unlock lock's machinery) before it reads the state and spends, and a challenge whose lock
+  another process holds is skipped for that pass. A step that fails at the place of a marked step (the scenario
+  was edited) keeps the marker, so a revert never spends it again. The card's notice for a rule stopped after a
+  spend that got no answer says when that rule can run again by its repeat (the phase entered again, a reset, the
+  next day), names `scenario-reset --challenge=<id>` (the app has none) with its cost (it can spend the
+  unanswered action again and restarts the spend counter), and shows a later problem beside it. Mock
   mode uses the in-memory ledger. Android persists it through the native keyed bridge
   (`gs_scenario_state`); the app WebView `refreshAsync`es it before status reads, resets and each in-app
   pass, and when the native service is available only the background service advances scenarios

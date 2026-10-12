@@ -301,7 +301,7 @@ const handleForgetUnconfirmedPayment = (async (event: unknown, challengeId: stri
             .withCategory('join')
             .info(`▶️ Forget unconfirmed payment: Challenge=${sanitizeForLog(challengeId)}`, null);
         const guard = auth.requireAuthToken('forget payment');
-        if (!guard.ok) return guard.response;
+        if (!guard.ok) return { ...guard.response, status: 'not-authenticated' as const };
         const outcome = await apiFactory.getApiStrategy().forgetUnconfirmedPayment(challengeId, guard.token);
         return outcome.status === 'forgotten'
             ? { success: true as const, status: outcome.status }

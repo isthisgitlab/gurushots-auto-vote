@@ -76,6 +76,9 @@ export interface EntryAgeRecord {
 /** The entry-age ledger a voting pass reads and writes (entryAgeStore). */
 export type EntryAgeLedger = ReturnType<typeof import('../entryAgeStore').createEntryAgeLedger>;
 
+/** The scenario actions that spend currency. */
+export type SpendAction = 'swap' | 'unlockBoost' | 'fillExposure';
+
 /** A scenario rule that finished firing. */
 export interface ScenarioFiredRecord {
     at: number;
@@ -86,7 +89,7 @@ export interface ScenarioFiredRecord {
      * The action type of a spend that got no answer, after which the rule was stopped so that it is never spent
      * again: the rule stays held for the phase it stopped in (see repeatBlock).
      */
-    unclearHalt?: string;
+    unclearHalt?: SpendAction;
 }
 
 /** A challenge's runtime position in its scenario (scenarioStateStore record). */
@@ -100,7 +103,7 @@ export interface ScenarioState {
     /** rule id → when it fired */
     fired: Record<string, ScenarioFiredRecord>;
     /** `unclear`: the action type of the step at `actionIndex`, whose spend got no answer and is never spent again */
-    inFlight: { ruleId: string; actionIndex: number; unclear?: string } | null;
+    inFlight: { ruleId: string; actionIndex: number; unclear?: SpendAction } | null;
     /** currency spent, by kind (swaps / keys / fills) */
     spent: Record<string, number>;
     /** photo id → [[unixSec, votes], …] vote samples (scenarios/speed.ts) */

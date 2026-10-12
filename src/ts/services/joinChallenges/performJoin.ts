@@ -5,7 +5,8 @@
  *   1. Photo-first: resolve an eligible photo BEFORE any coins_unlock. No
  *      photo ⇒ skip the candidate, never spend.
  *   2. Idempotency: the unlock claim is persisted (joinStateStore) BEFORE
- *      coins_unlock is called, and only cleared on a successful submit. A crash
+ *      coins_unlock is called, and kept (marked joined) after a successful submit, so a process that read the open
+ *      list earlier finds it and never unlocks a joined challenge again. A crash
  *      the instant after the charge still leaves the claim on disk, so a later
  *      pass retries submit ONLY — it never re-unlocks (re-charges). If the claim
  *      cannot be written, no coins are spent.
@@ -30,6 +31,7 @@ import {
     claimOf,
     clearUnlocked,
     findClaim,
+    markJoined,
     markUnconfirmed,
     markUnlocked,
     markerKey,
@@ -41,6 +43,16 @@ import { pickJoinPhoto } from './photoPick';
 import type { JoinPick } from './photoPick';
 
 const failedNoCharge = (): JoinOutcome => ({ status: 'failed-no-charge', charged: 0 });
+
+/**
+ * A claim that is marked joined says the join it was for went through, so nothing may be unlocked or submitted on
+ * it: the open list this call started from was read before that join. Null when the claim is not that.
+ */
+const alreadyJoined = (challenge: Challenge, claim: Claim | null): JoinOutcome | null => {
+    if (!claim?.joined) return null;
+    cat().warning(`${logger.challengeTag(challenge)}: this account has already joined it — nothing is unlocked`, null);
+    return failedNoCharge();
+};
 
 // A pending submit, worded by what is known of the payment: an unconfirmed one (the unlock got no answer) says so,
 // a bare claim from before accounts were told apart is an earlier payment record whose owner is unknown, and any
@@ -82,18 +94,21 @@ const unclearUnlock = (
     return { status: 'charged-pending-submit', charged: 0, reason: 'unconfirmed', maybeCharged: needsCoins, ...before };
 };
 
-// How often the removal of the claim of a refused unlock is tried (each try already waits a moment for the lock).
-const CLEAR_ATTEMPTS = 3;
+// A claim file's lock that is held when a refused unlock's claim is removed is tried once more, briefly: the whole
+// removal waits on the calling thread, so it stays short.
+const CLEAR_RETRY_WAIT_MS = 100;
 
 /**
  * The unlock was refused, so its claim must go. When it cannot be removed (the claims file stays locked or
  * unwritable) it must not stay looking like a payment that is known to have been taken, which nothing could forget:
- * it is flagged unconfirmed instead, so the user can forget it.
+ * it is flagged unconfirmed instead, so the user can forget it. Only a lock held by another process is worth
+ * trying again; a file that cannot be read or written will not be any better a moment later.
  */
 const releaseRefusedClaim = (deps: JoinDeps, id: string | number, owner: string | null): void => {
-    for (let attempt = 0; attempt < CLEAR_ATTEMPTS; attempt++) {
-        if (clearUnlocked(deps, markerKey(id, owner))) return;
-    }
+    const key = markerKey(id, owner);
+    let cleared = clearUnlocked(deps, key);
+    if (cleared === 'locked') cleared = clearUnlocked(deps, key, CLEAR_RETRY_WAIT_MS);
+    if (cleared === 'done') return;
     const flagged = markUnconfirmed(deps, id, owner);
     cat().error(
         `challenge ${sanitizeLogString(id)}: the unlock was refused but its claim could not be removed — ${flagged ? 'it is flagged as unconfirmed, so it can be forgotten' : 'it could not be flagged either'}`,
@@ -127,7 +142,9 @@ const claimAndUnlock = async (
     }
     const existing = findClaim(state, id, owner);
     if (existing) {
-        return { charged: 0, alreadyUnlocked: true, claim: existing }; // another process already paid → retry submit only
+        const joined = alreadyJoined(challenge, existing);
+        // Another process already paid → retry submit only; unless it has joined, too.
+        return joined ? { outcome: joined } : { charged: 0, alreadyUnlocked: true, claim: existing };
     }
     if (cancellation.isCancelled()) return { outcome: failedNoCharge() };
     // Persist the claim BEFORE spending, so a crash the instant
@@ -142,7 +159,7 @@ const claimAndUnlock = async (
         return {
             charged: needsCoins,
             alreadyUnlocked: false,
-            claim: { key: markerKey(id, owner), unconfirmed: false, legacy: false, coinsBefore },
+            claim: { key: markerKey(id, owner), unconfirmed: false, legacy: false, joined: false, coinsBefore },
         };
     }
     // No usable answer (a timeout, a reset, a 5xx) is unclear: the charge may have gone through, and the unlock
@@ -181,24 +198,25 @@ const unlockUnderLock = async (
 };
 
 /**
- * Removes a claim after a join that used it, under the unlock lock like every other change of a claim (the caller
- * may already hold it). A lock another process holds leaves the claim for the pruning that follows the challenge.
+ * Marks a claim as joined after a join that used it, under the unlock lock like every other change of a claim (the
+ * caller may already hold it). A lock another process holds leaves the claim as it is, which still protects: it is
+ * pruned with its challenge.
  */
-const clearClaim = (deps: JoinDeps, id: string | number, key: string, holdsLock: boolean): void => {
+const markClaimJoined = (deps: JoinDeps, id: string | number, key: string, holdsLock: boolean): void => {
     if (holdsLock) {
-        clearUnlocked(deps, key);
+        markJoined(deps, key);
         return;
     }
     const lock = lockFor(deps, id);
     if (!lock.ok) {
         cat().warning(
-            `challenge ${sanitizeLogString(id)}: another process holds the unlock lock — the claim is left in place`,
+            `challenge ${sanitizeLogString(id)}: another process holds the unlock lock — the claim is left as it is`,
             null,
         );
         return;
     }
     try {
-        clearUnlocked(deps, key);
+        markJoined(deps, key);
     } finally {
         lock.release();
     }
@@ -231,8 +249,9 @@ const submitJoin = async (
     if (submit?.ok) {
         // Only the coins this join spent are its to clear: a free join must not delete a marker that is
         // another account's (a bare one from before accounts were told apart), or its owner is charged twice.
-        // A paid submit that succeeds proves this account held the unlock, so the claim it used goes, bare or not.
-        if (needsCoins > 0 && claim) clearClaim(deps, id, claim.key, holdsLock);
+        // A paid submit that succeeds proves this account held the unlock: the claim it used stays, marked joined,
+        // bare or not, for a process that read the open list before this join.
+        if (needsCoins > 0 && claim) markClaimJoined(deps, id, claim.key, holdsLock);
         cat().success(
             `joined ${logger.challengeTag(challenge)}${needsCoins > 0 ? ` (spent ${needsCoins} coins)` : ''}`,
             null,
@@ -273,14 +292,17 @@ const submitOnClaim = async (
             cat().warning(`${logger.challengeTag(challenge)}: the unlock marker is gone — not submitting`, null);
             return failedNoCharge();
         }
-        return await submitJoin(
-            challenge,
-            token,
-            deps,
-            needsCoins,
-            imageId,
-            { charged: 0, alreadyUnlocked: true, claim },
-            true,
+        return (
+            alreadyJoined(challenge, claim) ??
+            (await submitJoin(
+                challenge,
+                token,
+                deps,
+                needsCoins,
+                imageId,
+                { charged: 0, alreadyUnlocked: true, claim },
+                true,
+            ))
         );
     } finally {
         lock.release();
@@ -351,6 +373,8 @@ const performJoin = async (
             return { ...failedNoCharge(), reason: 'account-unknown' };
         }
         const claim = claimOf(deps.joinStateStore, id, owner);
+        const joined = needsCoins > 0 ? alreadyJoined(challenge, claim) : null;
+        if (joined) return joined;
         let unlock: UnlockState = { charged: 0, alreadyUnlocked: claim !== null, claim };
         if (submitOnly && !unlock.alreadyUnlocked) {
             cat().warning(

@@ -41,6 +41,9 @@ jest.mock('../../src/ts/runtime', () => ({
     isHeadlessService: jest.fn(() => false),
 }));
 jest.mock('../../src/ts/services/NativeAutovoteBridge', () => ({ isAvailable: jest.fn(() => false) }));
+jest.mock('../../src/ts/joinStateStore', () => ({
+    acquireUnlockLock: jest.fn((_id: string | number) => ({ ok: true, release: jest.fn() })),
+}));
 
 import loggerModule = require('../../src/ts/logger');
 const logger = jest.mocked(loggerModule);
@@ -50,6 +53,8 @@ import currencyActionsModule = require('../../src/ts/services/currencyActions');
 const currencyActions = jest.mocked(currencyActionsModule);
 import autoFillModule = require('../../src/ts/services/autoFill');
 const autoFill = jest.mocked(autoFillModule);
+import joinStateStoreModule = require('../../src/ts/joinStateStore');
+const joinStateStore = jest.mocked(joinStateStoreModule);
 import runtimeModule = require('../../src/ts/runtime');
 const runtime = jest.mocked(runtimeModule);
 import nativeAutovoteModule = require('../../src/ts/services/NativeAutovoteBridge');
@@ -220,6 +225,74 @@ describe('when nothing runs', () => {
             throw new Error('boom');
         });
         await expect(run()).resolves.toBeDefined();
+        expect(log.error).toHaveBeenCalledWith(expect.stringContaining('boom'), null);
+    });
+});
+
+describe('one process at a time per challenge', () => {
+    const lockWith = (ok: boolean) => {
+        const release = jest.fn();
+        joinStateStore.acquireUnlockLock.mockReturnValueOnce({ ok, release });
+        return release;
+    };
+
+    test('the step runs under a lock of its own for the challenge, released when it ends', async () => {
+        const release = lockWith(true);
+        currencyActions.fillExposure.mockResolvedValue(invalid({ ok: true }));
+        setup(single([{ type: 'fillExposure' }]));
+        await run();
+        expect(joinStateStore.acquireUnlockLock).toHaveBeenCalledWith('scenario-7');
+        expect(currencyActions.fillExposure).toHaveBeenCalledTimes(1);
+        expect(release).toHaveBeenCalledTimes(1);
+    });
+
+    test('while another process holds it, nothing runs and nothing is written this pass', async () => {
+        const release = lockWith(false);
+        setup(single([{ type: 'fillExposure' }]));
+        await run();
+        expect(currencyActions.fillExposure).not.toHaveBeenCalled();
+        expect(ledger.get(7).state).toBeNull();
+        expect(release).not.toHaveBeenCalled();
+        expect(log.debug).toHaveBeenCalledWith(
+            expect.stringContaining('another process is running its scenario'),
+            null,
+        );
+    });
+
+    test('two passes at once spend once: the second finds the lock held and skips the challenge', async () => {
+        const held = new Set<string>();
+        joinStateStore.acquireUnlockLock.mockImplementation((id) => {
+            const key = String(id);
+            if (held.has(key)) return { ok: false, release: () => {} };
+            held.add(key);
+            return { ok: true, release: () => held.delete(key) };
+        });
+        try {
+            let finish!: () => void;
+            currencyActions.fillExposure.mockImplementationOnce(
+                () => new Promise((resolve) => (finish = () => resolve(invalid({ ok: true })))),
+            );
+            setup(single([{ type: 'fillExposure' }]));
+            const first = run();
+            await Promise.resolve();
+            await run();
+            finish();
+            await first;
+            expect(currencyActions.fillExposure).toHaveBeenCalledTimes(1);
+            expect(held.size).toBe(0);
+        } finally {
+            joinStateStore.acquireUnlockLock.mockImplementation(() => ({ ok: true, release: jest.fn() }));
+        }
+    });
+
+    test('the lock is released when the step fails', async () => {
+        const release = lockWith(true);
+        setup(single([{ type: 'fillExposure' }]));
+        jest.spyOn(ledger, 'get').mockImplementationOnce(() => {
+            throw new Error('boom');
+        });
+        await run();
+        expect(release).toHaveBeenCalledTimes(1);
         expect(log.error).toHaveBeenCalledWith(expect.stringContaining('boom'), null);
     });
 });
@@ -820,6 +893,39 @@ describe('rule execution', () => {
             expect(currencyActions.unlockBoostWithKey).toHaveBeenCalledTimes(1);
             expect(pass.api.applyBoostToEntry).toHaveBeenCalledTimes(1);
             expect(state().inFlight).toBeNull();
+        });
+
+        test('a step of another type in its place that fails keeps the marker: reverted, the key is not spent again', async () => {
+            currencyActions.unlockBoostWithKey.mockResolvedValue(invalid({ ok: true }));
+            currencyActions.unlockBoostWithKey.mockResolvedValueOnce(unclear);
+            currencyActions.fillExposure.mockResolvedValueOnce({ ok: false, outcome: 'balance-unknown' });
+            const original = single([{ type: 'unlockBoost' }, { type: 'boost', entry: { by: 'fewestVotes' } }]);
+            setup(original);
+            const c = challenge();
+            c.member.boost!.state = 'LOCKED';
+            await run(c);
+            expect(state().inFlight).toEqual({ ruleId: 'r1', actionIndex: 0, unclear: 'unlockBoost' });
+            // The first step is edited into a fill, which fails: it is not the spend that got no answer, so the
+            // marker is not its to drop.
+            setup(single([{ type: 'fillExposure' }, { type: 'boost', entry: { by: 'fewestVotes' } }]));
+            await run(c);
+            expect(currencyActions.fillExposure).toHaveBeenCalledTimes(1);
+            expect(state().inFlight).toEqual({ ruleId: 'r1', actionIndex: 0, unclear: 'unlockBoost' });
+            // Reverted: the retry still only looks, and the key is not spent a second time.
+            setup(original);
+            c.member.boost!.state = 'AVAILABLE_KEY';
+            await run(c);
+            expect(currencyActions.unlockBoostWithKey).toHaveBeenCalledTimes(1);
+            expect(pass.api.applyBoostToEntry).toHaveBeenCalledTimes(1);
+            expect(state().inFlight).toBeNull();
+        });
+
+        test('a failure of another step of the rule does not carry a marker that was not on it', async () => {
+            currencyActions.fillExposure.mockResolvedValueOnce(invalid({ ok: true }));
+            currencyActions.unlockBoostWithKey.mockResolvedValueOnce({ ok: false, outcome: 'api-failed' });
+            setup(single([{ type: 'fillExposure' }, { type: 'unlockBoost' }]));
+            await run();
+            expect(state().inFlight).toEqual({ ruleId: 'r1', actionIndex: 1 });
         });
 
         test('a fill shows landed once the exposure is full, and a challenge that is gone stops the rule', async () => {

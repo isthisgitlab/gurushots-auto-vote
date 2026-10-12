@@ -89,15 +89,41 @@ const createLock = (lockPath: string, token: string): void => {
     }
 };
 
+const quietly = (attempt: () => void): void => {
+    try {
+        attempt();
+    } catch {
+        // best effort
+    }
+};
+
+/**
+ * Puts a live lock that was renamed away back where it was, without ever replacing a lock that was created there
+ * since: a hard link fails with EEXIST instead of overwriting. The moved file is then of no use (it is superseded
+ * by the newer lock, or is back) and goes. Where hard links are not available (FAT, some network filesystems) a
+ * rename is all there is, and it would replace a newer lock, so it is made only while the place is empty.
+ */
+const putBack = (grave: string, lockPath: string): void => {
+    try {
+        fs.linkSync(grave, lockPath);
+    } catch (caught) {
+        if (isErrnoCode(caught, 'EPERM') || isErrnoCode(caught, 'ENOTSUP')) {
+            if (tokenIn(lockPath) === null) quietly(() => fs.renameSync(grave, lockPath));
+            return;
+        }
+        if (!isErrnoCode(caught, 'EEXIST')) return; // the live lock stays under its other name
+    }
+    quietly(() => fs.unlinkSync(grave));
+};
+
 const isStale = (lock: { mtimeMs: number }): boolean => Date.now() - lock.mtimeMs > LOCK_TTL_MS;
 
 /**
  * Takes over a lock whose file has not been touched for the TTL. The stale file is renamed to a name of its own —
  * only one process can rename it — and what was renamed is looked at again, through one open file: it must still
  * be past the TTL and hold the token that was seen. If it is not (another process replaced the stale lock between
- * the look and the rename, so a live lock was moved), it is put back with a rename, but only while nothing has
- * taken the lock's place since; when something has, the moved file is left where it is (a leftover name is the
- * lesser harm: deleting it would delete a live lock) and the lock stays held.
+ * the look and the rename, so a live lock was moved), it is put back, never over a lock created in its place
+ * since (putBack), and the lock stays held.
  *
  * @returns whether the lock is free to create now
  */
@@ -117,14 +143,7 @@ const takeOverStale = (lockPath: string, token: string): boolean => {
         fs.unlinkSync(grave);
         return true;
     }
-    // A live lock was moved. Put it back, unless a lock has been created in its place meanwhile.
-    if (tokenIn(lockPath) === null) {
-        try {
-            fs.renameSync(grave, lockPath);
-        } catch {
-            // the live lock stays under its other name
-        }
-    }
+    putBack(grave, lockPath);
     return false;
 };
 

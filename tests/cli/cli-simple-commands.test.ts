@@ -617,7 +617,11 @@ describe('forget-payment', () => {
             'is from an older version of the app and may belong to another GuruShots account used on this device, so it cannot be forgotten here. It clears by itself, at the next check after 30 days, or when the account that paid joins the challenge.',
         ],
         ['nothing-to-forget', 'error', 'Nothing to forget for 7'],
-        ['busy', 'error', 'A join of 7 is in progress. Try again in a moment.'],
+        [
+            'busy',
+            'error',
+            'A join of 7 is in progress, or another process is using the saved payment records. Nothing was changed.',
+        ],
         ['account-unknown', 'error', 'Could not confirm which account is logged in, so nothing was changed'],
         ['not-authenticated', 'error', 'Not logged in'],
         [

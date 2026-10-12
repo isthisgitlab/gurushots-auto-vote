@@ -3,7 +3,7 @@
  */
 
 import type { Challenge, ChallengeMember, MemberRanking, RankingEntry } from '../../types/gurushots';
-import type { ScenarioState } from '../../types/stores';
+import type { ScenarioState, SpendAction } from '../../types/stores';
 import type { ScenarioStateLedger } from '../../types/votingPass';
 import type { CurrencyPassDeps } from '../currencyAuto';
 import type { ScenarioDocument } from '../../settings/scenarioSchema';
@@ -16,8 +16,6 @@ type ValidatedRule = ScenarioRule & { id: string };
 type ScenarioAction = ScenarioRule['do'][number];
 
 type ActionType = ScenarioAction['type'];
-
-type SpendAction = 'swap' | 'unlockBoost' | 'fillExposure';
 
 type SpendKind = 'swaps' | 'keys' | 'fills';
 
@@ -66,7 +64,7 @@ type NotDoneOutcome = {
     status: 'skipped' | 'failed' | 'deferred';
     message: string;
     spent?: SpendKind;
-    unclear?: true;
+    unclear?: SpendAction;
     halt?: true;
 };
 

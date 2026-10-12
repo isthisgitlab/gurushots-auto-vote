@@ -345,7 +345,10 @@ export const app = {
     scenarioStatusSpendUnclear:
         'GuruShots neatbildēja uz „{action}”, tāpēc tas, iespējams, tika izpildīts. Tas netiks tērēts atkārtoti: nākamajā ciklā tikai pārbaudīs, vai tas stājās spēkā.',
     scenarioStatusSpendStopped:
-        'GuruShots neatbildēja uz „{action}”, tāpēc tas, iespējams, tika izpildīts, un tā noteikums tika apturēts, lai to netērētu atkārtoti. Pārbaudi izaicinājumu: noteikums var darboties vēlreiz, kad pienāk tā atkārtošanās laiks, vai pēc scenārija stāvokļa atiestatīšanas.',
+        'GuruShots neatbildēja uz „{action}”, tāpēc tas, iespējams, tika izpildīts, un tā noteikums tika apturēts, lai to netērētu atkārtoti. Pārbaudi izaicinājumu. {again} Lai scenāriju sāktu no jauna, CLI palaid scenario-reset --challenge={id} (lietotnē atiestatīšanas nav): tas var vēlreiz iztērēt darbību, uz kuru nebija atbildes, un atsāk scenārija tēriņu skaitīšanu.',
+    scenarioStatusAgainPhase: 'Noteikums var darboties vēlreiz, kad fāze tiek sākta no jauna.',
+    scenarioStatusAgainReset: 'Noteikums var darboties vēlreiz tikai pēc atiestatīšanas.',
+    scenarioStatusAgainDay: 'Noteikums var darboties vēlreiz nākamajā dienā.',
     notifyOnScenario: 'Paziņojumi no scenārijiem',
     notifyOnScenarioDesc:
         'Rādīt ziņas, ko sūta tavu scenāriju paziņojumu soļi, un brīdinājumu, kad scenārijs apstājas, jo vajadzīga tava rīcība.',
@@ -552,7 +555,7 @@ export const app = {
     discoverUnconfirmed:
         'Par šī izaicinājuma maksājumu netika saņemta atbilde, tāpēc nav zināms, vai tas izdevās. Atkārtojot tiek iesniegts tikai tavs foto, tāpēc monētas netiks ieturētas divreiz. Ja GuruShots vietnē redzams, ka monētas netika ieturētas, nospied „Monētas netika ieturētas”, tad pievienojies vēlreiz.',
     discoverEarlierPayment:
-        'Šim izaicinājumam ir maksājuma ieraksts no vecākas lietotnes versijas, kurā konti vēl netika šķirti, tāpēc nav zināms, vai monētas tika ieturētas un kuram šajā ierīcē lietotajam GuruShots kontam tās tika ieturētas. „Mēģināt iesniegt vēlreiz” ir paredzēts kontam, kas maksāja: tas iesniedz tikai foto, tāpēc neviens netiek apmaksāts divreiz. Šeit ierakstu aizmirst nevar, jo tas var piederēt citam kontam: tas pazudīs pats nākamajā pārbaudē pēc 30 dienām vai tad, kad konts, kas maksāja, pievienosies izaicinājumam. Ja šis nav konts, kas maksāja, tu pa to laiku vari pievienoties izaicinājumam GuruShots vietnē.',
+        'Šim izaicinājumam ir maksājuma ieraksts no vecākas lietotnes versijas, kurā konti vēl netika šķirti, tāpēc nav zināms, vai monētas tika ieturētas un kuram šajā ierīcē lietotajam GuruShots kontam tās tika ieturētas. „Mēģināt iesniegt vēlreiz” ir paredzēts kontam, kas maksāja: tas iesniedz tikai foto, tāpēc nevienam monētas netiek ieturētas divreiz. Šeit ierakstu aizmirst nevar, jo tas var piederēt citam kontam: tas pazudīs pats nākamajā pārbaudē pēc 30 dienām vai tad, kad konts, kas maksāja, pievienosies izaicinājumam. Ja šis nav konts, kas maksāja, tu pa to laiku vari pievienoties izaicinājumam GuruShots vietnē.',
     discoverForgetPayment: 'Monētas netika ieturētas',
     discoverForgetPaymentLabel: 'Monētas netika ieturētas: {title}',
     discoverForgetTitle: 'Aizmirst šo maksājumu?',
@@ -571,9 +574,9 @@ export const app = {
     discoverForgetLegacyRecord:
         'Šis ieraksts ir no vecākas lietotnes versijas un var piederēt citam šajā ierīcē lietotam GuruShots kontam, tāpēc to šeit aizmirst nevar. Tas pazudīs pats nākamajā pārbaudē pēc 30 dienām vai tad, kad konts, kas maksāja, pievienosies izaicinājumam. Nekas netika mainīts.',
     discoverForgetBusy:
-        'Šī izaicinājuma pievienošanās notiek, vai saglabātos maksājumu ierakstus pašlaik izmanto cita lietotnes daļa. Nekas netika mainīts. Mēģini vēlreiz pēc brīža.',
+        'Pašlaik notiek pievienošanās šim izaicinājumam, vai saglabātos maksājumu ierakstus izmanto cita lietotnes daļa. Nekas netika mainīts. Mēģini vēlreiz pēc brīža.',
     discoverForgetNotAuthenticated:
-        'Neesi pieteicies, tāpēc nekas netika mainīts. Piesakies vēlreiz un mēģini vēlreiz.',
+        'Neesi pieteicies, tāpēc nekas netika mainīts. Piesakies no jauna un mēģini vēlreiz.',
     discoverForgetUnreadable:
         'Saglabātos maksājumu ierakstus neizdevās nolasīt, tāpēc nekas netika mainīts. Restartē lietotni un mēģini vēlreiz; ja tas atkārtojas, jāpārbauda pievienošanās stāvokļa fails — skati žurnālu.',
     discoverForgetFailed: 'Pašlaik neizdevās aizmirst maksājumu. Nekas netika mainīts. Mēģini vēlreiz pēc brīža.',

@@ -86,6 +86,7 @@ export function ForgetPaymentModal({
 
     const forget = async (target: OpenChallenge) => {
         setWorking(true);
+        setProblem(null);
         try {
             const answer = await ipc.callOrNull(() => ipc.forgetUnconfirmedPayment(target.id));
             if (answer?.success) {

@@ -118,7 +118,7 @@ describe('evaluateScenario', () => {
 
         describe('a rule stopped after a spend that got no answer', () => {
             const base = initialState('Plan', 'main', NOW - 60);
-            const halted = { ...firedRecord(base, NOW - 30, TZ), unclearHalt: 'swap' };
+            const halted = { ...firedRecord(base, NOW - 30, TZ), unclearHalt: 'swap' as const };
 
             test('an every-pass rule waits for its phase to be entered again', () => {
                 const doc = scenario([rule('r1', [yes])]);

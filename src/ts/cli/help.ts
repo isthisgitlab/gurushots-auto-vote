@@ -73,7 +73,8 @@ Commands:
   scenario-status --challenge=<id> - Where a challenge is in its scenario
   scenario-dry-run --challenge=<id> - What the scenario would do right now (spends nothing)
   scenario-simulate --challenge=<id> - A what-if timeline until the challenge closes (spends nothing)
-  scenario-reset --challenge=<id> - Forget a challenge's scenario progress (the plan restarts)
+  scenario-reset --challenge=<id> - Forget a challenge's scenario progress (the plan restarts). It can spend an action
+             that got no answer again, and it restarts the scenario's spend counter.
   scenario-vocabulary - List every condition, selector and action a scenario can use
              Assign one with: set-setting scenario "<name>" --challenge=<id> (or a challenge rule)
   help-settings - Show detailed settings help (includes profile details)

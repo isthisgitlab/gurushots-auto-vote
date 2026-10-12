@@ -94,6 +94,21 @@ describe('createStateLedger', () => {
         expect(invalid<() => CategoryLogger>(logger.withCategory)().error).toHaveBeenCalledTimes(1);
     });
 
+    test('a file with nothing in it was cut short: it is corrupt, never "no state" that the next write replaces', () => {
+        const store = rawStore('');
+        const ledger = createStateLedger(store);
+        expect(ledger.get(7)).toEqual({ corrupt: true, state: null });
+        expect(createStateLedger(rawStore('  \n')).get(7).corrupt).toBe(true);
+        expect(store.writeRaw).not.toHaveBeenCalled();
+    });
+
+    test.each(['swap', 'unlockBoost', 'fillExposure'])('a rule stopped after %s is read as stopped', (action) => {
+        const record = { ...state(), fired: { r: { at: 1, unclearHalt: action } }, updatedAt: Date.now() };
+        expect(createStateLedger(rawStore(JSON.stringify({ 7: record }))).get(7).state!.fired.r.unclearHalt).toBe(
+            action,
+        );
+    });
+
     test('a non-object file is corrupt', () => {
         expect(createStateLedger(rawStore('[1,2]')).get(7).corrupt).toBe(true);
     });
@@ -108,6 +123,16 @@ describe('createStateLedger', () => {
             { ...initialState('Plan', 'a', 1), inFlight: { ruleId: 'r', actionIndex: 1, unclear: 5 } },
         ],
         ['missing fired', { ...initialState('Plan', 'a', 1), fired: null }],
+        ['a fired entry that is null', { ...initialState('Plan', 'a', 1), fired: { r: null } }],
+        ['a fired entry that is not an object', { ...initialState('Plan', 'a', 1), fired: { r: 'x' } }],
+        [
+            'a stop after an action that is not a spend',
+            { ...initialState('Plan', 'a', 1), fired: { r: { at: 1, unclearHalt: 'boost' } } },
+        ],
+        [
+            'an inFlight marker that is not a spend',
+            { ...initialState('Plan', 'a', 1), inFlight: { ruleId: 'r', actionIndex: 1, unclear: 'boost' } },
+        ],
         ['bad history', { ...initialState('Plan', 'a', 1), history: [] }],
         ['bad outbox', { ...initialState('Plan', 'a', 1), outbox: {} }],
     ])('a malformed record (%s) is corrupt without affecting others', (label, record) => {
@@ -168,5 +193,27 @@ describe('module ledgers', () => {
     test('exposes the Capacitor hydrate and flush hooks', async () => {
         await expect(initializeScenarioStateAsync()).resolves.toBeUndefined();
         await expect(flushScenarioStateWrites()).resolves.toBeUndefined();
+    });
+});
+
+describe('the persisted file', () => {
+    test('is replaced whole on every write (a reader never sees a cut-off file)', () => {
+        const createJsonStore = jest.fn(() => ({
+            readRaw: () => null,
+            writeRaw: jest.fn(),
+            initializeAsync: jest.fn(),
+            refreshAsync: jest.fn(),
+            flushPendingWrites: jest.fn(),
+        }));
+        jest.isolateModules(() => {
+            jest.doMock('../src/ts/settings/storage', () => ({ createJsonStore }));
+            require('../src/ts/scenarioStateStore');
+        });
+        expect(createJsonStore).toHaveBeenCalledWith({
+            fileName: 'scenarioState.json',
+            prefKey: 'gs_scenario_state',
+            atomic: true,
+        });
+        jest.dontMock('../src/ts/settings/storage');
     });
 });

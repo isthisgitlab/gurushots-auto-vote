@@ -19,6 +19,11 @@ jest.mock('fs', () => ({
     chmodSync: jest.fn(),
     renameSync: jest.fn(),
     unlinkSync: jest.fn(),
+    openSync: jest.fn(() => 3),
+    writeSync: jest.fn(),
+    fsyncSync: jest.fn(),
+    closeSync: jest.fn(),
+    statSync: jest.fn(),
 }));
 
 // Mock path operations. Spread the real module first so less-common

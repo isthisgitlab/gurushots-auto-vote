@@ -99,6 +99,7 @@ const findClaim = (state: Record<string, unknown>, id: string | number, owner: s
         key: found,
         unconfirmed: isPlainObject(value) && value.unconfirmed === true,
         legacy: found !== key,
+        joined: isPlainObject(value) && isFiniteNumber(value.joinedAt),
         coinsBefore: isFiniteNumber(before) ? before : null,
     };
 };
@@ -138,8 +139,8 @@ const sleepSync = (ms: number): void => {
 /**
  * The lock of the claims file, waited for a moment when another process holds it. Null when it could not be had.
  */
-const acquireStateLock = (deps: JoinDeps): { release: () => void } | null => {
-    const deadline = Date.now() + STATE_LOCK_WAIT_MS;
+const acquireStateLock = (deps: JoinDeps, waitMs: number): { release: () => void } | null => {
+    const deadline = Date.now() + waitMs;
     for (;;) {
         const lock = lockFor(deps, STATE_LOCK_ID);
         if (lock.ok) return lock;
@@ -160,10 +161,15 @@ type Changed = 'done' | 'locked' | 'failed';
  * or the lock cannot be had in a moment. `change` answers whether it changed anything. A store of none (mock mode)
  * changes nothing and succeeds. Failures are logged by challenge id only.
  */
-const changeClaims = (deps: JoinDeps, what: string, change: (state: Record<string, unknown>) => boolean): Changed => {
+const changeClaims = (
+    deps: JoinDeps,
+    what: string,
+    change: (state: Record<string, unknown>) => boolean,
+    waitMs = STATE_LOCK_WAIT_MS,
+): Changed => {
     const store = deps.joinStateStore;
     if (!store) return 'done';
-    const lock = acquireStateLock(deps);
+    const lock = acquireStateLock(deps, waitMs);
     if (!lock) {
         cat().warning(`could not ${what}: join-state is locked by another process — nothing written`, null);
         return 'locked';
@@ -233,14 +239,34 @@ const markUnconfirmed = (deps: JoinDeps, id: string | number, owner: string | nu
  * Removes one claim, by the key it is stored under. Never a claim that was not read as the one in use: a bare
  * one may be another account's protection against a second charge.
  *
- * @returns whether the claim is gone (or was never there)
+ * @returns how the change ended: `done` means the claim is gone (or was never there)
  */
-const clearUnlocked = (deps: JoinDeps, key: string): boolean =>
-    changeClaims(deps, `clear unlock marker for ${sanitizeLogString(idOfKey(key))}`, (state) => {
-        if (!has(state, key)) return false;
-        delete state[key];
+const clearUnlocked = (deps: JoinDeps, key: string, waitMs?: number): Changed =>
+    changeClaims(
+        deps,
+        `clear unlock marker for ${sanitizeLogString(idOfKey(key))}`,
+        (state) => {
+            if (!has(state, key)) return false;
+            delete state[key];
+            return true;
+        },
+        waitMs,
+    );
+
+/**
+ * The join the claim was for succeeded: the claim stays, marked joined, so a process that read the open list
+ * before it (and then spent a while picking a photo) finds the proof under the lock and does not unlock again. It
+ * is never forgettable, and pruning removes it once its challenge has left the list.
+ */
+const markJoined = (deps: JoinDeps, key: string): void => {
+    changeClaims(deps, `mark the unlock marker for ${sanitizeLogString(idOfKey(key))} as joined`, (state) => {
+        const claim = state[key];
+        if (!isPlainObject(claim)) return false;
+        // `unconfirmed: undefined` is left out of the JSON: a join that went through has no payment left to doubt.
+        state[key] = { ...claim, unconfirmed: undefined, joinedAt: Date.now() };
         return true;
-    }) === 'done';
+    });
+};
 
 type ForgetResult = Extract<ForgetStatus, 'forgotten' | 'nothing-to-forget' | 'legacy-record' | 'busy' | 'unreadable'>;
 
@@ -273,13 +299,15 @@ const forgetClaim = (deps: JoinDeps, id: string | number, owner: string | null):
 
 /**
  * Drops claims that have outlived their use, so joinState.json does not grow for ever:
- *   - any claim, bare or of any account, older than CLAIM_MAX_AGE_MS (unless it is this account's own claim of a
- *     challenge in the list just read): no challenge lives that long, and it ends the keeping of other accounts'
- *     records (and balances) for good;
+ *   - any claim, bare or of any account, older than CLAIM_MAX_AGE_MS (unless it is this account's own keyed claim
+ *     of a challenge in the list just read): no challenge lives that long, and it ends the keeping of other
+ *     accounts' records (and balances) for good. A bare claim is never kept by the list: that this account can see
+ *     the challenge says nothing about whose the bare claim is;
  *   - this account's own claims whose challenge is no longer open, from a successful, non-empty open list (an
  *     empty one is never trusted, like the open-list memory of the settings facade). The list is this account's, so
  *     a challenge missing from it says nothing about another account's claim on it, nor about a bare claim.
- * An account that cannot be told prunes by age only. A claim younger than CLAIM_PRUNE_MIN_AGE_MS is kept whatever
+ * A claim's age counts from its join once it has joined. An account that cannot be told prunes by age only. A claim
+ * younger than CLAIM_PRUNE_MIN_AGE_MS is kept whatever
  * the list says: it may belong to a join under way that the list, read a moment earlier, could not have known of.
  *
  * @param open - the open list the join code just read successfully
@@ -296,7 +324,7 @@ const pruneClosedClaims = async (
     const ownerKnown = !paidOwnerUnknown(deps, owner);
     const now = Date.now();
     const age = (claim: unknown) => {
-        const at = isPlainObject(claim) ? claim.unlockedAt : undefined;
+        const at = isPlainObject(claim) ? (claim.joinedAt ?? claim.unlockedAt) : undefined;
         return isFiniteNumber(at) ? now - at : null;
     };
     const droppable = (key: string, claim: unknown) => {
@@ -305,8 +333,9 @@ const pruneClosedClaims = async (
         const sep = key.lastIndexOf(':');
         const own = owner === null ? sep === -1 : key.startsWith(`${owner}:`);
         const open = own && openIds.has(key.slice(sep + 1));
-        // Age alone never removes a claim of a challenge this account can still join: its claim is its protection.
-        if (claimAge >= CLAIM_MAX_AGE_MS) return !open;
+        // Age alone never removes this account's own keyed claim of a challenge it can still join: that is its
+        // protection. A bare claim has no such protection: the list says nothing about whose it is.
+        if (claimAge >= CLAIM_MAX_AGE_MS) return sep === -1 || !open;
         return ownerKnown && own && claimAge >= CLAIM_PRUNE_MIN_AGE_MS && !open;
     };
     // A challenge whose unlock lock another process holds is mid-join: its claim is left alone.
@@ -345,5 +374,6 @@ export {
     paidOwnerUnknown,
     paidByThisAccount,
     markUnlocked,
+    markJoined,
     clearUnlocked,
 };

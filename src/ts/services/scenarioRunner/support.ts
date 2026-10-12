@@ -53,7 +53,7 @@ const unclearHalted = (actionType: SpendAction): NotDoneOutcome => ({
     ...failed(
         `the ${SPEND[actionType].label} may have gone through earlier, so it is not repeated and the rule was stopped`,
     ),
-    unclear: true,
+    unclear: actionType,
     halt: true,
 });
 
@@ -137,7 +137,7 @@ const lockedCurrencySpend = async (
                 `the ${SPEND[actionType].label} may have gone through (GuruShots gave no answer); it will be checked again next cycle, not spent again`,
             ),
             spent: SPEND[actionType].limit,
-            unclear: true,
+            unclear: actionType,
         };
     }
     const message = `${actionType} was refused (${result.outcome ?? 'no response'})`;

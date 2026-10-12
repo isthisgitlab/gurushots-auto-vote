@@ -71,40 +71,100 @@ describe('createJsonStore', () => {
 
         describe('an atomic store replaces its file, never writing into it', () => {
             let atomic: ReturnType<typeof storageModule.createJsonStore>;
+            const TEMP = /joinState\.json\.\d+\.[0-9a-f]{8}\.tmp$/;
 
             beforeEach(() => {
                 const { createJsonStore } = require('../../src/ts/settings/storage') as typeof storageModule;
                 atomic = createJsonStore({ fileName: 'joinState.json', prefKey: 'gs_join_state', atomic: true });
                 fs.existsSync.mockReturnValue(true);
+                fs.readdirSync.mockReturnValue([]);
             });
 
-            test('the data goes to a temp file next to it (owner-only, exclusive) and is renamed over it', () => {
+            test('the data goes to a temp file next to it (owner-only, exclusive), is flushed to disk, and is renamed over it', () => {
                 atomic.writeRaw('{"a":3}');
-                const [temp, data, options] = fs.writeFileSync.mock.calls[0] as [string, string, object];
-                expect(temp).toMatch(/joinState\.json\.\d+\.[0-9a-f]{8}\.tmp$/);
-                expect(data).toBe('{"a":3}');
-                expect(options).toEqual({ encoding: 'utf8', mode: 0o600, flag: 'wx' });
+                const [temp, flag, mode] = fs.openSync.mock.calls[0] as unknown as [string, string, number];
+                expect(temp).toMatch(TEMP);
+                expect([flag, mode]).toEqual(['wx', 0o600]);
+                expect(fs.writeSync).toHaveBeenCalledWith(3, '{"a":3}');
+                expect(fs.fsyncSync).toHaveBeenCalledWith(3);
+                expect(fs.closeSync).toHaveBeenCalledWith(3);
                 expect(fs.renameSync).toHaveBeenCalledWith(temp, expect.stringMatching(/joinState\.json$/));
+                // The data is on disk before the rename makes it the file.
+                expect(fs.fsyncSync.mock.invocationCallOrder[0]).toBeLessThan(
+                    fs.renameSync.mock.invocationCallOrder[0],
+                );
                 // Nothing is ever written into the file itself, so a reader never sees it empty or cut off.
-                expect(fs.writeFileSync).toHaveBeenCalledTimes(1);
+                expect(fs.writeFileSync).not.toHaveBeenCalled();
                 expect(fs.chmodSync).not.toHaveBeenCalled();
             });
 
-            test('a failed write, or a failed rename, removes the temp file and fails the write', () => {
-                fs.writeFileSync.mockImplementationOnce(() => {
+            test('the directory is flushed after the rename, where there are directories to open', () => {
+                atomic.writeRaw('{}');
+                // The temp file's descriptor, then the directory's.
+                expect(fs.openSync).toHaveBeenLastCalledWith(expect.not.stringMatching(/joinState/), 'r');
+                expect(fs.fsyncSync).toHaveBeenCalledTimes(2);
+                expect(fs.fsyncSync.mock.invocationCallOrder[1]).toBeGreaterThan(
+                    fs.renameSync.mock.invocationCallOrder[0],
+                );
+            });
+
+            test('a directory that cannot be flushed does not fail the write', () => {
+                fs.openSync
+                    .mockImplementationOnce(() => 3)
+                    .mockImplementationOnce(() => {
+                        throw Object.assign(new Error('EISDIR'), { code: 'EISDIR' });
+                    });
+                expect(() => atomic.writeRaw('{}')).not.toThrow();
+                expect(fs.closeSync).toHaveBeenCalledTimes(1);
+            });
+
+            test('a directory that was opened is closed even when flushing it fails', () => {
+                fs.fsyncSync
+                    .mockImplementationOnce(() => undefined)
+                    .mockImplementationOnce(() => {
+                        throw new Error('EIO');
+                    });
+                expect(() => atomic.writeRaw('{}')).not.toThrow();
+                expect(fs.closeSync).toHaveBeenCalledTimes(2);
+            });
+
+            test('Windows cannot open a directory, so it does not try', () => {
+                const platform = Object.getOwnPropertyDescriptor(process, 'platform')!;
+                Object.defineProperty(process, 'platform', { value: 'win32' });
+                try {
+                    atomic.writeRaw('{}');
+                } finally {
+                    Object.defineProperty(process, 'platform', platform);
+                }
+                expect(fs.openSync).toHaveBeenCalledTimes(1);
+                expect(fs.renameSync).toHaveBeenCalledTimes(1);
+            });
+
+            test('a failed open, write, flush or rename removes the temp file and fails the write', () => {
+                fs.openSync.mockImplementationOnce(() => {
                     throw new Error('disk full');
                 });
                 expect(() => atomic.writeRaw('{}')).toThrow('disk full');
-                expect(fs.unlinkSync).toHaveBeenCalledTimes(1);
+                fs.writeSync.mockImplementationOnce(() => {
+                    throw new Error('ENOSPC');
+                });
+                expect(() => atomic.writeRaw('{}')).toThrow('ENOSPC');
+                // The descriptor is closed whatever happened to the write.
+                expect(fs.closeSync).toHaveBeenCalledTimes(1);
+                fs.fsyncSync.mockImplementationOnce(() => {
+                    throw new Error('EIO');
+                });
+                expect(() => atomic.writeRaw('{}')).toThrow('EIO');
                 fs.renameSync.mockImplementationOnce(() => {
                     throw new Error('EXDEV');
                 });
                 expect(() => atomic.writeRaw('{}')).toThrow('EXDEV');
-                expect(fs.unlinkSync).toHaveBeenCalledTimes(2);
+                expect(fs.unlinkSync).toHaveBeenCalledTimes(4);
+                expect(fs.unlinkSync).toHaveBeenCalledWith(expect.stringMatching(TEMP));
             });
 
             test('a temp file that is not there to remove does not hide the failure', () => {
-                fs.writeFileSync.mockImplementationOnce(() => {
+                fs.writeSync.mockImplementationOnce(() => {
                     throw new Error('disk full');
                 });
                 fs.unlinkSync.mockImplementationOnce(() => {
@@ -117,6 +177,65 @@ describe('createJsonStore', () => {
                 fs.existsSync.mockReturnValue(false);
                 atomic.writeRaw('{}');
                 expect(fs.mkdirSync).toHaveBeenCalledWith(expect.any(String), { recursive: true, mode: 0o700 });
+            });
+
+            describe('the temp files of a write that was cut short are cleared, once, by the first read or write', () => {
+                const AGE = 61_000;
+                const listing = (...names: string[]) => {
+                    fs.readdirSync.mockReturnValue(names as unknown as ReturnType<typeof fs.readdirSync>);
+                    fs.statSync.mockReturnValue({ mtimeMs: Date.now() - AGE } as ReturnType<typeof fs.statSync>);
+                };
+
+                test('only names of its own pattern, and only old ones', () => {
+                    listing(
+                        'joinState.json.4242.0a1b2c3d.tmp',
+                        'joinState.json',
+                        'joinState.json.4242.0a1b2c3d.tmp.bak',
+                        'joinState.json.abc.0a1b2c3d.tmp',
+                        'metadata.json.4242.0a1b2c3d.tmp',
+                        'joinState.jsonx.4242.0a1b2c3d.tmp',
+                    );
+                    atomic.readRaw();
+                    expect(fs.unlinkSync).toHaveBeenCalledTimes(1);
+                    expect(fs.unlinkSync).toHaveBeenCalledWith(
+                        expect.stringMatching(/joinState\.json\.4242\.0a1b2c3d\.tmp$/),
+                    );
+                });
+
+                test('a temp file of a write that may still be under way is left alone', () => {
+                    listing('joinState.json.4242.0a1b2c3d.tmp');
+                    fs.statSync.mockReturnValue({ mtimeMs: Date.now() - 5_000 } as ReturnType<typeof fs.statSync>);
+                    atomic.writeRaw('{}');
+                    expect(fs.unlinkSync).not.toHaveBeenCalled();
+                });
+
+                test('it happens once per store: the first write clears them, later reads and writes do not look again', () => {
+                    listing('joinState.json.4242.0a1b2c3d.tmp');
+                    atomic.writeRaw('{}');
+                    atomic.readRaw();
+                    atomic.writeRaw('{}');
+                    expect(fs.readdirSync).toHaveBeenCalledTimes(1);
+                });
+
+                test('a directory that cannot be listed, or a file that cannot be removed, does not fail the read', () => {
+                    fs.readdirSync.mockImplementationOnce(() => {
+                        throw new Error('EACCES');
+                    });
+                    expect(() => atomic.readRaw()).not.toThrow();
+                    const { createJsonStore } = require('../../src/ts/settings/storage') as typeof storageModule;
+                    const other = createJsonStore({ fileName: 'joinState.json', prefKey: 'k', atomic: true });
+                    listing('joinState.json.4242.0a1b2c3d.tmp');
+                    fs.unlinkSync.mockImplementationOnce(() => {
+                        throw new Error('EBUSY');
+                    });
+                    expect(() => other.readRaw()).not.toThrow();
+                });
+
+                test('a store that is not atomic never looks', () => {
+                    store.readRaw();
+                    store.writeRaw('{}');
+                    expect(fs.readdirSync).not.toHaveBeenCalled();
+                });
             });
         });
 

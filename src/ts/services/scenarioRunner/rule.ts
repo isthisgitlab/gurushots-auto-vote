@@ -63,7 +63,6 @@ const stoppedAt = (
     stop: {
         rule: ValidatedRule;
         index: number;
-        action: ScenarioAction;
         result: NotDoneOutcome;
         message: string;
         at: number;
@@ -71,13 +70,20 @@ const stoppedAt = (
         timezone: string;
     },
 ): ScenarioState => {
-    const { rule, index, action, result, message, at, committed, timezone } = stop;
+    const { rule, index, result, message, at, committed, timezone } = stop;
     const next: ScenarioState = { ...state, inFlight: null };
     if (result.halt) {
-        next.fired = { ...state.fired, [rule.id]: { ...firedRecord(state, at, timezone), unclearHalt: action.type } };
+        next.fired = {
+            ...state.fired,
+            [rule.id]: { ...firedRecord(state, at, timezone), unclearHalt: result.unclear },
+        };
     } else if (committed || result.spent) {
-        const unclear = result.unclear ? { unclear: action.type } : {};
-        next.inFlight = { ruleId: rule.id, actionIndex: index, ...unclear };
+        // A step of another type at the marked one's place (the scenario was edited) must not lose the marker: it is
+        // the only thing that keeps the step from being spent again once the edit is reverted.
+        const prior = state.inFlight;
+        const carried = prior?.ruleId === rule.id && prior.actionIndex === index ? prior.unclear : undefined;
+        const unclear = result.unclear ?? carried;
+        next.inFlight = { ruleId: rule.id, actionIndex: index, ...(unclear ? { unclear } : {}) };
     }
     if (result.status !== 'deferred') next.lastError = { at, message };
     return applyEffects(next, { spent: result.spent }, at);
@@ -128,7 +134,7 @@ const runRule = async (
                 ctx.ledger.set(ctx.challengeId, state);
                 continue;
             }
-            state = stoppedAt(state, { rule, index, action, result, message, at, committed, timezone: ctx.timezone });
+            state = stoppedAt(state, { rule, index, result, message, at, committed, timezone: ctx.timezone });
             ctx.ledger.set(ctx.challengeId, state);
             return { state, completed: false };
         }

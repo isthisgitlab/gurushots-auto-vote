@@ -258,7 +258,11 @@ const FORGET_LINES: Record<ForgetStatus, ForgetLine> = {
         text: (id) =>
             `The payment record for ${id} is from an older version of the app and may belong to another GuruShots account used on this device, so it cannot be forgotten here. It clears by itself, at the next check after 30 days, or when the account that paid joins the challenge. Nothing was changed.`,
     },
-    busy: { level: 'error', text: (id) => `A join of ${id} is in progress. Try again in a moment.` },
+    busy: {
+        level: 'error',
+        text: (id) =>
+            `A join of ${id} is in progress, or another process is using the saved payment records. Nothing was changed. Try again in a moment.`,
+    },
     'account-unknown': {
         level: 'error',
         text: () =>

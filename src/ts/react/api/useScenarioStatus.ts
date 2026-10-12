@@ -6,7 +6,8 @@ import * as ipc from './ipc';
 
 import type { Challenge } from '../../types/gurushots';
 import type { WindowApi } from '../../types/ipc';
-import type { ScenarioState } from '../../types/stores';
+import type { ScenarioState, SpendAction } from '../../types/stores';
+import type { ScenarioDocument } from '../../settings/scenarioSchema';
 
 /**
  * A challenge's scenario position as the card shows it.
@@ -20,9 +21,17 @@ export type ScenarioSummary = {
     lastError?: string | null;
     /**
      * A spend that got no answer, which the line words with the action's own label: the rule that will check on it
-     * (`stopped` false), or the rule that was stopped so that it is never spent again (`stopped` true).
+     * (`stopped` false), or the rule that was stopped so that it is never spent again (`stopped` true), when that
+     * rule can run again (`again`: the phase entered again, a reset, or the next day, by its repeat mode) and the
+     * challenge a reset is named for. `newerProblem`: a problem came after the stop, and is shown beside it.
      */
-    spendUnclear?: { action: string; stopped: boolean } | null;
+    spendUnclear?: {
+        action: SpendAction;
+        stopped: boolean;
+        again: 'phase' | 'reset' | 'day';
+        challengeId: Challenge['id'];
+        newerProblem: boolean;
+    } | null;
     nextWakeAt?: number | null;
 };
 
@@ -78,18 +87,35 @@ export function useScenarioStatus(
     return summary;
 }
 
+const AGAIN: Record<string, 'phase' | 'reset' | 'day'> = { once: 'reset', oncePerDay: 'day' };
+
 /**
  * The spend that got no answer which the card should say so about: the one being checked on (carried by the rule
- * in flight), else the one a rule was stopped after in the phase it is in now.
+ * in flight), else the one a rule was stopped after in the phase it is in now, with when that rule can run again.
  */
 const spendUnclearOf = (
-    state: Pick<ScenarioState, 'inFlight' | 'fired' | 'phaseEnteredAt'>,
+    state: Pick<ScenarioState, 'inFlight' | 'fired' | 'phaseEnteredAt' | 'lastError'>,
+    scenario: ScenarioDocument,
+    challengeId: Challenge['id'],
 ): ScenarioSummary['spendUnclear'] => {
-    if (state.inFlight?.unclear !== undefined) return { action: state.inFlight.unclear, stopped: false };
-    const [action] = Object.values(state.fired).flatMap((record) =>
-        record.unclearHalt !== undefined && record.phaseEnteredAt === state.phaseEnteredAt ? [record.unclearHalt] : [],
+    const base = { challengeId, again: 'phase' as const, newerProblem: false };
+    if (state.inFlight?.unclear !== undefined) return { ...base, action: state.inFlight.unclear, stopped: false };
+    const [stopped] = Object.entries(state.fired).flatMap(([ruleId, record]) =>
+        record.unclearHalt !== undefined && record.phaseEnteredAt === state.phaseEnteredAt
+            ? [{ ruleId, action: record.unclearHalt, at: record.at }]
+            : [],
     );
-    return action === undefined ? null : { action, stopped: true };
+    if (stopped === undefined) return null;
+    const rule = Object.values(scenario.phases)
+        .flatMap((phase) => phase.rules ?? [])
+        .find((candidate) => candidate.id === stopped.ruleId);
+    return {
+        ...base,
+        action: stopped.action,
+        stopped: true,
+        again: AGAIN[rule?.repeat ?? ''] ?? 'phase',
+        newerProblem: (state.lastError?.at ?? 0) > stopped.at,
+    };
 };
 
 /**
@@ -105,7 +131,7 @@ function summarize(status: ScenarioStatus, challenge: Challenge): ScenarioSummar
         phase: state.phase,
         started: status.state !== null,
         lastError: status.state?.lastError?.message ?? null,
-        spendUnclear: spendUnclearOf(state),
+        spendUnclear: spendUnclearOf(state, status.scenario, challenge.id),
         nextWakeAt: nextWakeAt({ scenario: status.scenario, state, challenge, now, timezone: status.timezone }),
     };
 }

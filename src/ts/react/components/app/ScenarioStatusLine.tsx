@@ -4,22 +4,42 @@ import { useTick } from '@/hooks/useTick';
 import { interp } from '@/utils/interp';
 import type * as useScenarioStatusModule from '@/api/useScenarioStatus';
 
+const AGAIN_KEY = {
+    phase: 'app.scenarioStatusAgainPhase',
+    reset: 'app.scenarioStatusAgainReset',
+    day: 'app.scenarioStatusAgainDay',
+} as const;
+
 type Summary = NonNullable<ReturnType<typeof useScenarioStatusModule.useScenarioStatus>>;
 
-// The one thing to say besides where the plan is: a spend that got no answer, else the last problem.
+// What to say besides where the plan is: a spend that got no answer (and, after a stop, a problem that came later),
+// else the last problem.
 function Notice({ status, compact }: { status: Summary; compact: boolean }) {
     const { t } = useTranslation();
     const { spendUnclear, lastError } = status;
-    const text = spendUnclear
+    const spend = spendUnclear
         ? interp(t(spendUnclear.stopped ? 'app.scenarioStatusSpendStopped' : 'app.scenarioStatusSpendUnclear'), {
               action: t(`app.sbAct_${spendUnclear.action}`),
+              again: t(AGAIN_KEY[spendUnclear.again]),
+              id: spendUnclear.challengeId,
           })
-        : lastError && interp(t('app.scenarioStatusProblem'), { message: lastError });
-    return text ? (
-        <div className={`text-warning ${compact ? 'line-clamp-2' : ''}`} role="status">
-            {text}
-        </div>
-    ) : null;
+        : null;
+    const problem =
+        lastError && (!spendUnclear || spendUnclear.newerProblem)
+            ? interp(t('app.scenarioStatusProblem'), { message: lastError })
+            : null;
+    return (
+        <>
+            {[spend, problem].map(
+                (text) =>
+                    text && (
+                        <div key={text} className={`text-warning ${compact ? 'line-clamp-2' : ''}`} role="status">
+                            {text}
+                        </div>
+                    ),
+            )}
+        </>
+    );
 }
 
 /**

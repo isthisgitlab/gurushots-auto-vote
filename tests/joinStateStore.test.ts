@@ -43,6 +43,12 @@ jest.mock('fs', () => ({
         mockFiles.delete(from);
         mockFiles.set(to, found);
     }),
+    linkSync: jest.fn((from: string, to: string) => {
+        const found = mockFiles.get(from);
+        if (!found) throw mockFsError('ENOENT');
+        if (mockFiles.has(to)) throw mockFsError('EEXIST');
+        mockFiles.set(to, found);
+    }),
     unlinkSync: jest.fn((file: string) => {
         if (!mockFiles.delete(file)) throw mockFsError('ENOENT');
     }),
@@ -233,6 +239,7 @@ describe('acquireUnlockLock', () => {
     describe('the takeover is atomic: of two processes finding the same stale lock only one gets it', () => {
         const realOpen = () => fs.openSync.getMockImplementation()!;
         const realRename = () => fs.renameSync.getMockImplementation()!;
+        const realLink = () => fs.linkSync.getMockImplementation()!;
         const grave = (name = '') =>
             [...mockFiles.keys()].filter((file) => file.includes('.stale-') && file.includes(name));
 
@@ -287,7 +294,7 @@ describe('acquireUnlockLock', () => {
             expect([...mockFiles.keys()]).toEqual([LOCK]);
         });
 
-        test('what was renamed is a live lock that replaced the stale one meanwhile: put back with a rename, and busy', () => {
+        test('what was renamed is a live lock that replaced the stale one meanwhile: put back with a link, and busy', () => {
             plant('crashed-owner', 61_000);
             fs.renameSync.mockImplementationOnce((from, to) => {
                 // Between the look and the rename the stale lock was replaced by a live one.
@@ -311,18 +318,69 @@ describe('acquireUnlockLock', () => {
             expect(grave()).toEqual([]);
         });
 
-        test('…and when another lock took its place meanwhile, the live one is left under its other name, never deleted', () => {
-            plant('crashed-owner', 61_000);
-            fs.renameSync.mockImplementationOnce((from, to) => {
-                mockFiles.set(LOCK, { content: 'live-token', mtimeMs: Date.now() });
-                realRename()(from, to);
-                mockFiles.set(LOCK, { content: 'newer-token', mtimeMs: Date.now() });
+        describe('the live lock that was moved is put back with a link, which never replaces a lock', () => {
+            // Between the look and the rename the stale lock was replaced by a live one.
+            const replacedByLive = () =>
+                fs.renameSync.mockImplementationOnce((from, to) => {
+                    mockFiles.set(LOCK, { content: 'live-token', mtimeMs: Date.now() });
+                    realRename()(from, to);
+                });
+
+            test('a lock created in its place in the moment before the put-back is not replaced, and the moved file goes', () => {
+                plant('crashed-owner', 61_000);
+                replacedByLive();
+                fs.linkSync.mockImplementationOnce((from, to) => {
+                    // The check for an empty place, if there were one, has passed: now a rival creates its lock.
+                    mockFiles.set(LOCK, { content: 'newer-token', mtimeMs: Date.now() });
+                    realLink()(from, to);
+                });
+                expect(joinState.acquireUnlockLock('c1').ok).toBe(false);
+                expect(lockFile()?.content).toBe('newer-token');
+                expect(grave()).toEqual([]);
             });
-            expect(joinState.acquireUnlockLock('c1').ok).toBe(false);
-            expect(lockFile()?.content).toBe('newer-token');
-            const left = grave();
-            expect(left).toHaveLength(1);
-            expect(mockFiles.get(left[0])?.content).toBe('live-token');
+
+            test('a filesystem without hard links gets a rename, while the place is empty', () => {
+                plant('crashed-owner', 61_000);
+                replacedByLive();
+                fs.linkSync.mockImplementationOnce(() => {
+                    throw mockFsError('EPERM');
+                });
+                expect(joinState.acquireUnlockLock('c1').ok).toBe(false);
+                expect(lockFile()?.content).toBe('live-token');
+                expect(grave()).toEqual([]);
+            });
+
+            test('…and none when a lock is there already: the moved file is left as it is', () => {
+                plant('crashed-owner', 61_000);
+                replacedByLive();
+                fs.linkSync.mockImplementationOnce(() => {
+                    mockFiles.set(LOCK, { content: 'newer-token', mtimeMs: Date.now() });
+                    throw mockFsError('ENOTSUP');
+                });
+                expect(joinState.acquireUnlockLock('c1').ok).toBe(false);
+                expect(lockFile()?.content).toBe('newer-token');
+                expect(grave()).toHaveLength(1);
+            });
+
+            test('a link that fails for another reason leaves the moved file where it is', () => {
+                plant('crashed-owner', 61_000);
+                replacedByLive();
+                fs.linkSync.mockImplementationOnce(() => {
+                    throw mockFsError('EIO');
+                });
+                expect(joinState.acquireUnlockLock('c1').ok).toBe(false);
+                expect(grave()).toHaveLength(1);
+            });
+
+            test('a moved file that cannot be removed after the put-back does not fail the lock', () => {
+                plant('crashed-owner', 61_000);
+                replacedByLive();
+                fs.unlinkSync.mockImplementationOnce(() => {
+                    throw mockFsError('EACCES');
+                });
+                expect(joinState.acquireUnlockLock('c1').ok).toBe(false);
+                expect(lockFile()?.content).toBe('live-token');
+            });
         });
 
         test('a rename that fails for a reason other than a lost race leaves the lock busy', () => {

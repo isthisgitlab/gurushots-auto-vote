@@ -1112,9 +1112,11 @@ describe('forget-unconfirmed-payment', () => {
     test('without a login it forgets nothing', async () => {
         stubAuthGuardFail();
         const strategy = stubStrategy({ forgetUnconfirmedPayment: jest.fn() });
+        // The status is what the dialog words as "log in again": the guard's reply alone would read as "try again".
         expect(await buildHandlers()['forget-unconfirmed-payment']({}, 5)).toEqual({
             success: false,
             error: 'No authentication token found',
+            status: 'not-authenticated',
         });
         expect(strategy.forgetUnconfirmedPayment).not.toHaveBeenCalled();
     });

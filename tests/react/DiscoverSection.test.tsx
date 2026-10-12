@@ -925,6 +925,21 @@ describe('edge paths', () => {
             expect(screen.getByText('app.discoverUnconfirmed')).toBeTruthy();
         });
 
+        test('a new attempt clears the problem of the last one while it is out', async () => {
+            let answer!: (value: Awaited<ReturnType<ForgetApi>>) => void;
+            window.api.forgetUnconfirmedPayment = forgetMock()
+                .mockRejectedValueOnce(new Error('ipc down'))
+                .mockImplementationOnce(() => new Promise((resolve) => (answer = resolve)));
+            await openForgetDialog();
+            fireEvent.click(screen.getByText('app.discoverForgetConfirm'));
+            await screen.findByText('app.discoverForgetFailed');
+            fireEvent.click(screen.getByText('app.discoverForgetConfirm'));
+            await screen.findByText('app.discoverForgetWorking');
+            expect(screen.queryByText('app.discoverForgetFailed')).toBeNull();
+            await act(async () => answer(invalid({ success: true, status: 'forgotten' })));
+            await waitFor(() => expect(screen.queryByText('app.discoverForgetTitle')).toBeNull());
+        });
+
         test('Cancel cannot be pressed while the call is out', async () => {
             let answer!: (value: Awaited<ReturnType<ForgetApi>>) => void;
             window.api.forgetUnconfirmedPayment = forgetMock().mockImplementation(

@@ -340,7 +340,10 @@ export const app = {
     scenarioStatusSpendUnclear:
         'GuruShots gave no answer to “{action}”, so it may have gone through. It will not be spent again: the next cycle only checks whether it took effect.',
     scenarioStatusSpendStopped:
-        'GuruShots gave no answer to “{action}”, so it may have gone through, and its rule was stopped so that it is not spent again. Check the challenge: the rule can run again when its repeat window comes round, or after the scenario state is reset.',
+        'GuruShots gave no answer to “{action}”, so it may have gone through, and its rule was stopped so that it is not spent again. Check the challenge. {again} To start the scenario over, run scenario-reset --challenge={id} in the CLI (the app has no reset): that may spend the unanswered action again, and it restarts the scenario’s spend counter.',
+    scenarioStatusAgainPhase: 'The rule can run again the next time the phase is entered.',
+    scenarioStatusAgainReset: 'The rule can run again only after a reset.',
+    scenarioStatusAgainDay: 'The rule can run again the next day.',
     notifyOnScenario: 'Notify from scenarios',
     notifyOnScenarioDesc:
         "Show the messages your scenarios' notify steps send, and a warning when a scenario stops because it needs you.",

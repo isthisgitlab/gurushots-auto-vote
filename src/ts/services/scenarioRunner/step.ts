@@ -14,6 +14,7 @@ import { evaluateScenario } from '../../scenarios/evaluate';
 import { entriesOf } from '../../scenarios/selectors';
 import { recordVoteSample } from '../../scenarios/speed';
 import { initialState } from '../../scenarioStateStore';
+import { acquireUnlockLock } from '../../joinStateStore';
 import type { Challenge } from '../../types/gurushots';
 import type { ScenarioState } from '../../types/stores';
 import type { PassContext } from '../votingOrchestrator';
@@ -45,6 +46,67 @@ const loadState = (ctx: RunnerContext, now: number): ScenarioState | null => {
         null,
     );
     return fresh;
+};
+
+/**
+ * Records a halt on the state: it needs the user, so it is also a notice (once per distinct halt).
+ */
+const noteHalt = (ctx: RunnerContext, state: ScenarioState, halted: string): void => {
+    if (state.lastError?.message === halted) return;
+    const at = nowSec();
+    ctx.ledger.set(
+        ctx.challengeId,
+        withNotice({ ...state, lastError: { at, message: halted } }, `Halted: ${halted}`, at),
+    );
+};
+
+/**
+ * Runs the rules of the challenge's scenario that are due, one after another, until none is or one stops.
+ *
+ * @param now - unix seconds
+ */
+const advance = async (ctx: RunnerContext, now: number): Promise<void> => {
+    const { challenge, challengeId, scenario, timezone } = ctx;
+    let state = loadState(ctx, now);
+    if (!state) return;
+    // One vote sample per pass feeds the speed conditions (scenarios/speed.ts).
+    state = { ...state, history: recordVoteSample(state.history, entriesOf(challenge), now) };
+    ctx.ledger.set(challengeId, state);
+
+    const firedThisPass: Set<string> = new Set();
+    const visited = new Set([state.phase]);
+    const needsBankroll = usesBalance(scenario);
+    for (;;) {
+        const bankroll = needsBankroll ? await ctx.pass.currency.strategy.getBankroll(ctx.pass.token) : null;
+        const decision = evaluateScenario({
+            scenario,
+            state,
+            challenge,
+            now: nowSec(),
+            timezone,
+            bankroll,
+            skipRuleIds: firedThisPass,
+        });
+        if (decision.halted) {
+            noteHalt(ctx, state, decision.halted);
+            log().error(`${logger.challengeTag(challenge)} scenario halted: ${decision.halted}`, null);
+            return;
+        }
+        if (!decision.fire) return;
+        firedThisPass.add(decision.fire.ruleId);
+        const outcome = await runRule(decision.fire, ctx, state);
+        state = outcome.state;
+        if (!outcome.completed) return;
+        if (!visited.has(state.phase)) {
+            visited.add(state.phase);
+        } else if (decision.fire.rule.do.some((action: ScenarioAction) => action.type === 'goto')) {
+            log().warning(
+                `${logger.challengeTag(challenge)} scenario "${scenario.name}" came back to phase ${state.phase} in one pass — continuing next pass`,
+                null,
+            );
+            return;
+        }
+    }
 };
 
 /**
@@ -81,54 +143,19 @@ const runScenarioStep = async (challenge: Challenge, now: number, pass: PassCont
             pass: scenarioPass,
             ledger: deps.ledger,
         };
-        let state = loadState(ctx, now);
-        if (!state) return;
-        // One vote sample per pass feeds the speed conditions (scenarios/speed.ts).
-        state = { ...state, history: recordVoteSample(state.history, entriesOf(challenge), now) };
-        ctx.ledger.set(challengeId, state);
-
-        const firedThisPass: Set<string> = new Set();
-        const visited = new Set([state.phase]);
-        const needsBankroll = usesBalance(scenario);
-        for (;;) {
-            const bankroll = needsBankroll ? await scenarioPass.currency.strategy.getBankroll(pass.token) : null;
-            const decision = evaluateScenario({
-                scenario,
-                state,
-                challenge,
-                now: nowSec(),
-                timezone,
-                bankroll,
-                skipRuleIds: firedThisPass,
-            });
-            if (decision.halted) {
-                if (state.lastError?.message !== decision.halted) {
-                    // A halt needs the user, so it is also a notice (once per distinct halt).
-                    const at = nowSec();
-                    state = withNotice(
-                        { ...state, lastError: { at, message: decision.halted } },
-                        `Halted: ${decision.halted}`,
-                        at,
-                    );
-                    ctx.ledger.set(challengeId, state);
-                }
-                log().error(`${logger.challengeTag(challenge)} scenario halted: ${decision.halted}`, null);
-                return;
-            }
-            if (!decision.fire) return;
-            firedThisPass.add(decision.fire.ruleId);
-            const outcome = await runRule(decision.fire, ctx, state);
-            state = outcome.state;
-            if (!outcome.completed) return;
-            if (!visited.has(state.phase)) {
-                visited.add(state.phase);
-            } else if (decision.fire.rule.do.some((action: ScenarioAction) => action.type === 'goto')) {
-                log().warning(
-                    `${logger.challengeTag(challenge)} scenario "${scenario.name}" came back to phase ${state.phase} in one pass — continuing next pass`,
-                    null,
-                );
-                return;
-            }
+        // The GUI and the CLI can run a pass at once: one rule step of a challenge runs at a time, or both would spend.
+        const lock = acquireUnlockLock(`scenario-${challengeId}`);
+        if (!lock.ok) {
+            log().debug(
+                `${logger.challengeTag(challenge)} another process is running its scenario — skipped this pass`,
+                null,
+            );
+            return;
+        }
+        try {
+            await advance(ctx, now);
+        } finally {
+            lock.release();
         }
     } catch (error) {
         log().error(`${logger.challengeTag(challenge)} scenario step failed: ${errorMessage(error) || error}`, null);

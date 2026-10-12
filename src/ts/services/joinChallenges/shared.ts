@@ -54,9 +54,10 @@ type JoinOutcome = {
  * A persisted unlock claim as one join reads it: where it is stored, whether its payment is unconfirmed (an
  * unlock that got no answer), and whether it is a bare one from before
  * accounts were told apart (whose coins it holds is unknown). `coinsBefore` is the balance the caller had just before
- * the unlock, kept for the user to compare with GuruShots; nothing decides on it.
+ * the unlock, kept for the user to compare with GuruShots; nothing decides on it. `joined`: the join it was for has
+ * succeeded; it stays as the proof of that, for a process that read the open list before, until pruning removes it.
  */
-type Claim = { key: string; unconfirmed: boolean; legacy: boolean; coinsBefore: number | null };
+type Claim = { key: string; unconfirmed: boolean; legacy: boolean; joined: boolean; coinsBefore: number | null };
 
 /**
  * The claim a join continues from (null: none), and the coins this call spent unlocking.

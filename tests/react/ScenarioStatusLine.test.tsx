@@ -3,7 +3,7 @@
  * problem; warnings for a missing scenario or unreadable progress.
  */
 
-import { render, screen } from './helpers/test-utils';
+import { cleanup, render, screen } from './helpers/test-utils';
 import { ScenarioStatusLine } from '@/components/app/ScenarioStatusLine';
 import type { ScenarioSummary } from '@/api/useScenarioStatus';
 import { mockTranslator } from './helpers/setup';
@@ -33,69 +33,74 @@ test('a running plan: phase, next check and last problem (detail)', () => {
     expect(screen.getByRole('status').textContent).toBe('app.scenarioStatusProblem');
 });
 
-test.each([
-    [false, 'app.scenarioStatusSpendUnclear', 'Not spent again: “Unlock the boost with a key”'],
-    [true, 'app.scenarioStatusSpendStopped', 'Rule stopped: “Unlock the boost with a key”'],
-])(
-    "a spend that got no answer is worded as that (stopped: %s), with the action's own label, not as a skipped step",
-    (stopped, key, text) => {
-        mockTranslator.t.mockImplementation((k) =>
-            k === key
-                ? text.replace('Unlock the boost with a key', '{action}')
-                : k === 'app.sbAct_unlockBoost'
-                  ? 'Unlock the boost with a key'
-                  : k,
-        );
-        try {
-            render(
-                <ScenarioStatusLine
-                    status={{
-                        name: 'Plan',
-                        phase: 'main',
-                        started: true,
-                        lastError: 'r1 → unlockBoost: …',
-                        spendUnclear: { action: 'unlockBoost', stopped },
-                        nextWakeAt: null,
-                    }}
-                />,
-            );
-            expect(screen.getByRole('status').textContent).toBe(text);
-        } finally {
-            mockTranslator.t.mockImplementation((k) => k);
-        }
+const unclear = (over: Partial<NonNullable<ScenarioSummary['spendUnclear']>> = {}): ScenarioSummary => ({
+    name: 'Plan',
+    phase: 'main',
+    started: true,
+    lastError: 'r1 → unlockBoost: …',
+    spendUnclear: {
+        action: 'unlockBoost',
+        stopped: false,
+        again: 'phase',
+        challengeId: 7,
+        newerProblem: false,
+        ...over,
     },
-);
+    nextWakeAt: null,
+});
+
+const WORDS: Record<string, string> = {
+    'app.scenarioStatusSpendUnclear': 'Not spent again: “{action}”',
+    'app.scenarioStatusSpendStopped': 'Rule stopped: “{action}”. {again} Reset: --challenge={id}',
+    'app.scenarioStatusAgainPhase': 'phase again',
+    'app.scenarioStatusAgainReset': 'reset only',
+    'app.scenarioStatusAgainDay': 'next day',
+    'app.sbAct_unlockBoost': 'Unlock the boost with a key',
+    'app.scenarioStatusProblem': 'Problem: {message}',
+};
+
+describe('with the card’s words', () => {
+    beforeEach(() => mockTranslator.t.mockImplementation((k) => WORDS[k] ?? k));
+    afterEach(() => mockTranslator.t.mockImplementation((k) => k));
+
+    test("a spend that got no answer is worded as that, with the action's own label, not as a skipped step", () => {
+        render(<ScenarioStatusLine status={unclear()} />);
+        expect(screen.getByRole('status').textContent).toBe('Not spent again: “Unlock the boost with a key”');
+    });
+
+    test.each([
+        ['phase', 'phase again'],
+        ['reset', 'reset only'],
+        ['day', 'next day'],
+    ] as const)(
+        'a rule stopped after one says when it can run again (%s) and names the reset for its challenge',
+        (again, words) => {
+            render(<ScenarioStatusLine status={unclear({ stopped: true, again })} />);
+            expect(screen.getByRole('status').textContent).toBe(
+                `Rule stopped: “Unlock the boost with a key”. ${words} Reset: --challenge=7`,
+            );
+        },
+    );
+
+    test('a problem that came after the stop is shown beside it; an older one is not', () => {
+        render(<ScenarioStatusLine status={unclear({ stopped: true, newerProblem: true })} />);
+        expect(screen.getAllByRole('status').map((line) => line.textContent)).toEqual([
+            expect.stringContaining('Rule stopped'),
+            'Problem: r1 → unlockBoost: …',
+        ]);
+        cleanup();
+        render(<ScenarioStatusLine status={unclear({ stopped: true })} />);
+        expect(screen.getAllByRole('status')).toHaveLength(1);
+    });
+});
 
 test('a spend that got no answer is shown even when an unrelated problem has replaced the last error', () => {
-    render(
-        <ScenarioStatusLine
-            status={{
-                name: 'Plan',
-                phase: 'main',
-                started: true,
-                lastError: null,
-                spendUnclear: { action: 'swap', stopped: false },
-                nextWakeAt: null,
-            }}
-        />,
-    );
+    render(<ScenarioStatusLine status={{ ...unclear({ action: 'swap' }), lastError: null }} />);
     expect(screen.getByRole('status').textContent).toBe('app.scenarioStatusSpendUnclear');
 });
 
 test('a spend that got no answer is clamped in the compact line', () => {
-    render(
-        <ScenarioStatusLine
-            status={{
-                name: 'Plan',
-                phase: 'main',
-                started: true,
-                lastError: null,
-                spendUnclear: { action: 'swap', stopped: true },
-                nextWakeAt: null,
-            }}
-            compact
-        />,
-    );
+    render(<ScenarioStatusLine status={{ ...unclear({ stopped: true }), lastError: null }} compact />);
     expect(screen.getByRole('status').className).toContain('line-clamp-2');
 });
 

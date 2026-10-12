@@ -140,46 +140,97 @@ describe('useScenarioStatus', () => {
         await waitFor(() => expect(window.api.getScenarioStatus).toHaveBeenCalledTimes(4));
     });
 
-    test.each([
-        [
-            'a step being checked on, carried by the rule in flight',
-            { inFlight: { ruleId: 'r', actionIndex: 1, unclear: 'unlockBoost' } },
-            { action: 'unlockBoost', stopped: false },
-        ],
-        [
-            'a rule stopped after one, in the phase it is in now',
-            { fired: { r: { at: NOW, phaseEnteredAt: NOW, unclearHalt: 'swap' } } },
-            { action: 'swap', stopped: true },
-        ],
-        [
-            'a rule stopped in an earlier entry of the phase',
-            { fired: { r: { at: NOW, phaseEnteredAt: NOW - 100, unclearHalt: 'swap' } } },
-            null,
-        ],
-        ['a rule that finished normally', { fired: { r: { at: NOW, phaseEnteredAt: NOW } } }, null],
-        ['a rule in flight with no marker', { inFlight: { ruleId: 'r', actionIndex: 1 } }, null],
-    ])('%s reads as the spend %p on the card', async (_name, extra, spend) => {
-        jest.mocked(window.api.getScenarioStatus).mockResolvedValue(
-            invalid({
-                success: true,
-                assigned: 'Plan',
-                scenario,
-                corrupt: false,
-                timezone: 'UTC',
-                state: {
-                    phase: 'main',
-                    phaseEnteredAt: NOW,
-                    fired: {},
-                    memory: {},
-                    lastError: { message: 'x' },
-                    inFlight: null,
-                    ...extra,
-                },
-            }),
-        );
-        render(<StatusProbe challenge={challenge()} />);
-        await waitFor(() => expect(out()).not.toBe('none'));
-        expect((JSON.parse(out()) as ScenarioSummary).spendUnclear ?? null).toEqual(spend);
+    describe('a spend that got no answer', () => {
+        const withRepeat = (repeat?: string) => ({
+            ...scenario,
+            phases: {
+                idle: {},
+                main: { rules: [{ id: 'r', ...(repeat ? { repeat } : {}), if: [], do: [] }] },
+            },
+        });
+        const note = (over: object) => ({ challengeId: 7, again: 'phase', newerProblem: false, ...over });
+        const halted = { r: { at: NOW, phaseEnteredAt: NOW, unclearHalt: 'swap' } };
+
+        test.each([
+            [
+                'a step being checked on, carried by the rule in flight',
+                { inFlight: { ruleId: 'r', actionIndex: 1, unclear: 'unlockBoost' } },
+                undefined,
+                note({ action: 'unlockBoost', stopped: false }),
+            ],
+            [
+                'a rule stopped after one, in the phase it is in now',
+                { fired: halted },
+                undefined,
+                note({ action: 'swap', stopped: true }),
+            ],
+            [
+                'a rule stopped in an earlier entry of the phase',
+                { fired: { r: { at: NOW, phaseEnteredAt: NOW - 100, unclearHalt: 'swap' } } },
+                undefined,
+                null,
+            ],
+            ['a rule that finished normally', { fired: { r: { at: NOW, phaseEnteredAt: NOW } } }, undefined, null],
+            ['a rule in flight with no marker', { inFlight: { ruleId: 'r', actionIndex: 1 } }, undefined, null],
+            [
+                'a once rule, which can run again only after a reset',
+                { fired: halted },
+                'once',
+                note({ action: 'swap', stopped: true, again: 'reset' }),
+            ],
+            [
+                'a once-a-day rule, which can run again the next day',
+                { fired: halted },
+                'oncePerDay',
+                note({ action: 'swap', stopped: true, again: 'day' }),
+            ],
+            [
+                'a once-per-phase rule, which can run again when the phase is entered again',
+                { fired: halted },
+                'oncePerPhase',
+                note({ action: 'swap', stopped: true }),
+            ],
+            [
+                'a stopped rule the scenario no longer has',
+                { fired: { gone: { at: NOW, phaseEnteredAt: NOW, unclearHalt: 'swap' } } },
+                'once',
+                note({ action: 'swap', stopped: true }),
+            ],
+            [
+                'a stop followed by a later problem',
+                { fired: halted, lastError: { at: NOW + 5, message: 'later' } },
+                undefined,
+                note({ action: 'swap', stopped: true, newerProblem: true }),
+            ],
+            [
+                'a stop with no problem after it',
+                { fired: halted, lastError: null },
+                undefined,
+                note({ action: 'swap', stopped: true }),
+            ],
+        ])('%s reads as the spend %p on the card', async (_name, extra, repeat, spend) => {
+            jest.mocked(window.api.getScenarioStatus).mockResolvedValue(
+                invalid({
+                    success: true,
+                    assigned: 'Plan',
+                    scenario: withRepeat(repeat),
+                    corrupt: false,
+                    timezone: 'UTC',
+                    state: {
+                        phase: 'main',
+                        phaseEnteredAt: NOW,
+                        fired: {},
+                        memory: {},
+                        lastError: { at: NOW, message: 'x' },
+                        inFlight: null,
+                        ...extra,
+                    },
+                }),
+            );
+            render(<StatusProbe challenge={challenge()} />);
+            await waitFor(() => expect(out()).not.toBe('none'));
+            expect((JSON.parse(out()) as ScenarioSummary).spendUnclear ?? null).toEqual(spend);
+        });
     });
 
     test('a challenge without entries, and a result that lands after unmount, are handled', async () => {
