@@ -148,16 +148,21 @@ const isBoostWindowOpen = (challenge: Challenge, now: number): boolean =>
 /**
  * True when a free boost should be applied now for a "Use a boost" mission: the
  * challenge is open, its boost is usable right now (never a LOCKED one, so no
- * key is spent), Auto-Apply Boost is on for it and the mission still needs one.
- * Only pulls the timing of shouldApplyBoost forward.
+ * key is spent), Auto-Apply Boost is on for it, the mission still needs one and
+ * the window setting of the kind of boost on offer is not 0 (off), as in
+ * shouldApplyBoost. Only pulls the timing of shouldApplyBoost forward.
  * @param now - Unix timestamp in seconds
  * @param boostNeed - boosts the mission still needs
  */
-const isBoostDueForMission = (challenge: Challenge, now: number, boostNeed: number): boolean =>
-    boostNeed > 0 &&
-    challenge.close_time > now &&
-    isBoostWindowOpen(challenge, now) &&
-    settings.getEffectiveSetting('autoBoost', challenge.id.toString());
+const isBoostDueForMission = (challenge: Challenge, now: number, boostNeed: number): boolean => {
+    if (boostNeed <= 0 || challenge.close_time <= now || !isBoostWindowOpen(challenge, now)) return false;
+    const challengeId = challenge.id.toString();
+    if (!settings.getEffectiveSetting('autoBoost', challengeId)) return false;
+    // The open window leaves two kinds: a running timer, else key-unlocked (as in shouldApplyBoost).
+    const timeout = challenge.member?.boost?.timeout;
+    const isTimerBased = challenge.member?.boost?.state === 'AVAILABLE' && typeof timeout === 'number' && timeout > 0;
+    return (isTimerBased ? getEffectiveBoostTime(challengeId) : getEffectiveKeyUnlockedBoostTime(challengeId)) > 0;
+};
 
 /**
  * Decides whether to play the Turbo mini-game on a challenge.

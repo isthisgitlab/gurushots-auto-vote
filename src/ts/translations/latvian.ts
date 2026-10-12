@@ -969,7 +969,7 @@ export const app = {
         'Kamēr aktīva misija „Use Fill”, lietotne izmanto uzpildes izaicinājumos, kuros redzamība ir zem 100 %, līdz misija izpildīta. Uzpilžu rezerve paliek neskarta. Pēc noklusējuma izslēgts.',
     missionUseBoosts: 'Izmantot Boost misijām',
     missionUseBoostsDesc:
-        'Kamēr aktīva misija „Use a boost”, lietotne izmanto jau pieejamu Boost, negaidot tā automātiskās izmantošanas laiku, līdz misija izpildīta. Atslēgas netiek tērētas. Jābūt ieslēgtam uzstādījumam „Automātiski izmantot Boost”. Pēc noklusējuma izslēgts.',
+        'Kamēr aktīva misija „Use a boost”, lietotne izmanto jau pieejamu Boost, negaidot tā automātiskās izmantošanas laiku, līdz misija izpildīta. Atslēgas netiek tērētas. Jābūt ieslēgtam uzstādījumam „Automātiski izmantot Boost”; Boost, kuram uzstādījums „Boost laiks” vai „Boost laiks (atbloķēts ar atslēgu)” ir 0 (izslēgts), netiek izmantots. Pēc noklusējuma izslēgts.',
     missionVote: 'Balsot misijām',
     missionVoteDesc:
         'Kamēr aktīva misija „Vote on photos”, lietotne balso katrā ciklā, negaidot jūsu redzamības slieksni — vēl nepieciešamās balsis tiek sadalītas pa jūsu izaicinājumiem, un katrā balso līdz 100 % redzamībai (arī beigu loga redzamības laikā); atlikums gaida nākamo ciklu. Flash izaicinājumi tiek izlaisti; „Tikai Boost režīms”, „Balsot tikai pēdējās minūtes laikā”, balsošanas pauze un „Tikai plānotā balsošana” joprojām darbojas. Pēc noklusējuma izslēgts.',

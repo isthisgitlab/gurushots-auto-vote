@@ -301,6 +301,31 @@ describe('isBoostDueForMission', () => {
         ).toBe(false);
     });
 
+    test('a timer boost is not due with boostTime 0 (off), a key-unlocked one still is', () => {
+        mockSettings({ boostTime: 0, emergencyFill: 0 });
+        const now = NOW();
+        expect(
+            VotingLogic.isBoostDueForMission(withBoost(now, { state: 'AVAILABLE', timeout: now + 36000 }), now, 1),
+        ).toBe(false);
+        expect(VotingLogic.isBoostDueForMission(withBoost(now, { state: 'AVAILABLE_KEY', timeout: 0 }), now, 1)).toBe(
+            true,
+        );
+    });
+
+    test('a key-unlocked boost is not due with keyUnlockedBoostTime 0 (off), a timer one still is', () => {
+        mockSettings({ keyUnlockedBoostTime: 0, emergencyFill: 0 });
+        const now = NOW();
+        expect(VotingLogic.isBoostDueForMission(withBoost(now, { state: 'AVAILABLE_KEY', timeout: 0 }), now, 1)).toBe(
+            false,
+        );
+        expect(VotingLogic.isBoostDueForMission(withBoost(now, { state: 'AVAILABLE', timeout: 0 }), now, 1)).toBe(
+            false,
+        );
+        expect(
+            VotingLogic.isBoostDueForMission(withBoost(now, { state: 'AVAILABLE', timeout: now + 36000 }), now, 1),
+        ).toBe(true);
+    });
+
     test('is not due when the mission needs no boost', () => {
         mockSettings();
         const now = NOW();
