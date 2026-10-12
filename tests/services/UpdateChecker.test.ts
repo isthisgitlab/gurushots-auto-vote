@@ -7,7 +7,7 @@
 import axiosModule = require('axios');
 const axios = jest.mocked(axiosModule);
 import type * as UpdateCheckerModule from '../../src/ts/services/UpdateChecker';
-const { checkForUpdates, compareSemver, pickAsset, getReleasesUrl, REPO_OWNER, REPO_NAME } =
+const { checkForUpdates, compareSemver, pickAsset, getReleaseAsset, getReleasesUrl, REPO_OWNER, REPO_NAME } =
     require('../../src/ts/services/UpdateChecker') as typeof UpdateCheckerModule;
 
 const LATEST_URL = `https://api.github.com/repos/${REPO_OWNER}/${REPO_NAME}/releases/latest`;
@@ -32,6 +32,19 @@ describe('UpdateChecker', () => {
             ['1.0.0-beta.2', '1.0.0-beta.1', 1],
             ['1.0.0-beta.1', '1.0.0-beta.2', -1],
             ['1.0.0-beta.1', '1.0.0-beta.1', 0],
+            // Pre-release identifiers: numbers compare as numbers, numbers rank below words, a prefix ranks below its extension.
+            ['1.0.0-beta.10', '1.0.0-beta.9', 1],
+            ['1.0.0-beta.9', '1.0.0-beta.10', -1],
+            ['1.0.0-rc.1', '1.0.0-beta.20', 1],
+            ['1.0.0-alpha', '1.0.0-beta', -1],
+            ['1.0.0-1', '1.0.0-alpha', -1],
+            ['1.0.0-alpha', '1.0.0-1', 1],
+            ['1.0.0-beta', '1.0.0-beta.1', -1],
+            ['1.0.0-beta.1', '1.0.0-beta', 1],
+            ['1.0.0-beta-2.1', '1.0.0-beta-1.5', 1],
+            ['1.0.0-99999999999999999999.1', '1.0.0-99999999999999999998.1', 1],
+            ['1.0.0+build.5', '1.0.0+build.2', 0],
+            ['1.0.0-beta.1+x', '1.0.0-beta.1', 0],
         ])('compare(%s, %s) === %d', (a, b, expected) => {
             expect(compareSemver(a, b)).toBe(expected);
         });
@@ -114,6 +127,40 @@ describe('UpdateChecker', () => {
                 releaseNotes: 'notes',
                 releaseDate: '2026-01-01T00:00:00Z',
             });
+        });
+
+        it('remembers the picked asset with its digest and release page, for that download url only', async () => {
+            axios.get.mockResolvedValue({
+                data: {
+                    tag_name: 'v2.0.0',
+                    html_url: 'html-url',
+                    assets: [{ name: 'app.apk', browser_download_url: 'apk-url', digest: 'sha256:abc' }],
+                },
+            });
+
+            await checkForUpdates({ currentVersion: '1.0.0', assetSuffix: '.apk' });
+
+            expect(getReleaseAsset('apk-url')).toEqual({
+                downloadUrl: 'apk-url',
+                digest: 'sha256:abc',
+                releaseUrl: 'html-url',
+            });
+            expect(getReleaseAsset('https://elsewhere/app.apk')).toBeNull();
+        });
+
+        it('remembers a missing digest and release page as null, and forgets the asset when a check picks none', async () => {
+            axios.get.mockResolvedValue({
+                data: {
+                    tag_name: 'v2.0.0',
+                    assets: [{ name: 'app.apk', browser_download_url: 'apk-url', digest: null }],
+                },
+            });
+            await checkForUpdates({ currentVersion: '1.0.0', assetSuffix: '.apk' });
+            expect(getReleaseAsset('apk-url')).toEqual({ downloadUrl: 'apk-url', digest: null, releaseUrl: null });
+
+            axios.get.mockResolvedValue({ data: { tag_name: 'v3.0.0', html_url: 'html-url', assets: [] } });
+            await checkForUpdates({ currentVersion: '1.0.0', assetSuffix: '.apk' });
+            expect(getReleaseAsset('apk-url')).toBeNull();
         });
 
         it('falls back to the html page, empty notes and null date when fields are missing', async () => {

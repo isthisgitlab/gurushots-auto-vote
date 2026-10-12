@@ -19,7 +19,7 @@ import { errorMessage } from '../errorMessage';
 /**
  * The subset of a GitHub release (REST `releases` payload) this module reads.
  */
-type GithubReleaseAsset = { name?: unknown; browser_download_url?: string };
+type GithubReleaseAsset = { name?: unknown; browser_download_url?: string; digest?: string | null };
 
 type GithubRelease = {
     tag_name?: string;
@@ -36,21 +36,41 @@ const REPO_NAME = 'gurushots-auto-vote';
 // Longest a release lookup may take; overridable per call through `opts.timeoutMs`.
 const DEFAULT_TIMEOUT_MS = 15_000;
 
+/** What the in-app installer needs to verify a downloaded asset and to send the user somewhere safe when it cannot. */
+type ReleaseAssetInfo = { downloadUrl: string; digest: string | null; releaseUrl: string | null };
+
+// The asset the latest check picked. The installer looks it up by download URL, so a URL that did not come from a
+// check never carries a digest.
+let latestAsset: ReleaseAssetInfo | null = null;
+
 const releasesLatestUrl = () => `https://api.github.com/repos/${REPO_OWNER}/${REPO_NAME}/releases/latest`;
 const releasesListUrl = (perPage: number) =>
     `https://api.github.com/repos/${REPO_OWNER}/${REPO_NAME}/releases?per_page=${perPage}`;
 
 /**
- * Compare two dotted-numeric versions optionally followed by -beta.N etc.
- * Returns -1, 0, or 1 in the usual way. Pre-release suffixes sort below
- * the same base version (1.0.0-beta.1 < 1.0.0).
+ * Compare two versions per SemVer 2.0: the dotted-numeric core first, then the pre-release identifiers
+ * (a release outranks any pre-release of the same core; numeric identifiers compare as numbers, so
+ * beta.10 > beta.9, and rank below alphanumeric ones; a shorter list ranks below a longer one it prefixes).
+ * Build metadata (+...) is ignored. Returns -1, 0, or 1.
  */
 const compareSemver = (a: string, b: string): -1 | 0 | 1 => {
     const parse = (v: string) => {
-        const cleaned = v.replace(/^v/, '');
-        const [base, pre] = cleaned.split('-', 2);
-        const parts = base.split('.').map((n) => parseInt(n, 10) || 0);
-        return { parts, pre: pre || null };
+        const [withoutBuild] = v.replace(/^v/, '').split('+', 1);
+        const dash = withoutBuild.indexOf('-');
+        const base = dash === -1 ? withoutBuild : withoutBuild.slice(0, dash);
+        const pre = dash === -1 ? null : withoutBuild.slice(dash + 1);
+        return { parts: base.split('.').map((n) => parseInt(n, 10) || 0), pre: pre === null ? null : pre.split('.') };
+    };
+    const compareIdentifier = (x: string, y: string): -1 | 0 | 1 => {
+        const xNumeric = /^\d+$/.test(x);
+        const yNumeric = /^\d+$/.test(y);
+        if (xNumeric && yNumeric) {
+            const xn = BigInt(x);
+            const yn = BigInt(y);
+            return xn === yn ? 0 : xn > yn ? 1 : -1;
+        }
+        if (xNumeric !== yNumeric) return xNumeric ? -1 : 1;
+        return x === y ? 0 : x > y ? 1 : -1;
     };
     const av = parse(a);
     const bv = parse(b);
@@ -59,10 +79,12 @@ const compareSemver = (a: string, b: string): -1 | 0 | 1 => {
         const bi = bv.parts[i] || 0;
         if (ai !== bi) return ai > bi ? 1 : -1;
     }
-    if (av.pre === bv.pre) return 0;
-    if (av.pre === null) return 1; // 1.0.0 > 1.0.0-beta
-    if (bv.pre === null) return -1;
-    return av.pre > bv.pre ? 1 : -1;
+    if (av.pre === null || bv.pre === null) return av.pre === bv.pre ? 0 : av.pre === null ? 1 : -1;
+    for (let i = 0; i < Math.min(av.pre.length, bv.pre.length); i++) {
+        const c = compareIdentifier(av.pre[i], bv.pre[i]);
+        if (c !== 0) return c;
+    }
+    return av.pre.length === bv.pre.length ? 0 : av.pre.length > bv.pre.length ? 1 : -1;
 };
 
 /**
@@ -139,6 +161,13 @@ const checkForUpdates = async ({
 
         const asset = assetSuffix ? pickAsset(release, assetSuffix) : null;
         const downloadUrl = asset?.browser_download_url || release.html_url || null;
+        latestAsset = asset?.browser_download_url
+            ? {
+                  downloadUrl: asset.browser_download_url,
+                  digest: asset.digest || null,
+                  releaseUrl: release.html_url || null,
+              }
+            : null;
 
         return {
             updateAvailable,
@@ -156,6 +185,10 @@ const checkForUpdates = async ({
     }
 };
 
+/** The digest and release page of the asset the latest check picked, when `downloadUrl` is that asset's URL. */
+const getReleaseAsset = (downloadUrl: string): ReleaseAssetInfo | null =>
+    latestAsset?.downloadUrl === downloadUrl ? latestAsset : null;
+
 const getReleasesUrl = () => `https://github.com/${REPO_OWNER}/${REPO_NAME}/releases/latest`;
 
-export { checkForUpdates, compareSemver, pickAsset, getReleasesUrl, REPO_OWNER, REPO_NAME };
+export { checkForUpdates, compareSemver, pickAsset, getReleaseAsset, getReleasesUrl, REPO_OWNER, REPO_NAME };

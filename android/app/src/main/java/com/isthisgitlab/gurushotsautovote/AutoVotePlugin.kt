@@ -1,17 +1,24 @@
 package com.isthisgitlab.gurushotsautovote
 
+import android.content.Context
 import android.content.Intent
+import android.os.Handler
+import android.os.Looper
+import android.util.Log
+import android.webkit.CookieManager
+import android.webkit.WebStorage
 import com.getcapacitor.JSObject
 import com.getcapacitor.Plugin
 import com.getcapacitor.PluginCall
 import com.getcapacitor.PluginMethod
 import com.getcapacitor.annotation.CapacitorPlugin
 import org.json.JSONObject
+import java.io.File
 
 /**
  * Capacitor plugin entry point for native background voting.
  *
- * Exposes start / stop / getStatus to JavaScript. The actual cycle
+ * Exposes start / stop / getStatus / wipeLocalData to JavaScript. The actual cycle
  * loop and HTTP work lives in AutoVoteService — this class is just the
  * thin bridge between window.api calls and the Service lifecycle.
  *
@@ -72,13 +79,55 @@ class AutoVotePlugin : Plugin() {
         call.resolve(ret)
     }
 
+    /**
+     * What the service last persisted (not the process's statics, which a restart loses): `running` is whether
+     * automation is enabled, so it holds across the system stopping the foreground service between alarms.
+     */
     @PluginMethod
     fun getStatus(call: PluginCall) {
+        val status = ServiceState.status(context)
         val ret = JSObject()
-        ret.put("running", AutoVoteService.isRunning)
-        ret.put("cycleCount", AutoVoteService.cycleCount)
-        ret.put("lastRunAt", AutoVoteService.lastRunAtMillis)
-        ret.put("lastError", AutoVoteService.lastError ?: "")
+        ret.put("running", status.running)
+        ret.put("cycleCount", status.cycleCount)
+        ret.put("lastRunAt", status.lastRunAt)
+        ret.put("lastError", status.lastError ?: "")
         call.resolve(ret)
+    }
+
+    /**
+     * Deletes everything the app holds on this device: stops the service and its alarm, forgets the service's state, the
+     * whole `CapacitorStorage` file (settings with the token, every side store, whatever else JS saved), the WebView's
+     * storage and cookies, and the downloaded updates. Resolves `ok`: whether all of it was removed.
+     */
+    @PluginMethod
+    fun wipeLocalData(call: PluginCall) {
+        val ctx = context
+        // First, so that nothing the service still has queued writes its state back after the clear.
+        AutoVoteService.isRunning = false
+        ctx.stopService(Intent(ctx, AutoVoteService::class.java))
+        AutoVoteService.cancelAlarm(ctx)
+        val updates = File(ctx.cacheDir, "updates")
+        // Every step runs, whether or not an earlier one failed.
+        val stateGone = ServiceState.clear(ctx)
+        val storageGone = ctx.getSharedPreferences(SideStores.PREFS_FILE, Context.MODE_PRIVATE).edit().clear().commit()
+        val updatesGone = !updates.exists() || updates.deleteRecursively()
+        val filesGone = stateGone and storageGone and updatesGone
+        // WebView storage is touched on the main thread, the one the WebView lives on.
+        Handler(Looper.getMainLooper()).post {
+            val webGone = try {
+                WebStorage.getInstance().deleteAllData()
+                CookieManager.getInstance().apply {
+                    removeAllCookies(null)
+                    flush()
+                }
+                true
+            } catch (t: Throwable) {
+                Log.w(AutoVoteService.TAG, "Could not clear the WebView storage (${t.javaClass.simpleName})")
+                false
+            }
+            val ret = JSObject()
+            ret.put("ok", filesGone and webGone)
+            call.resolve(ret)
+        }
     }
 }

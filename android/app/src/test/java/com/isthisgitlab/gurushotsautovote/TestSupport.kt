@@ -41,16 +41,19 @@ internal object TestSupport {
         builder: OkHttpClient.Builder = OkHttpClient.Builder(),
     ): OkHttpClient {
         if (extra != null) builder.addInterceptor(extra)
-        builder.addInterceptor { chain ->
-            val original = chain.request()
-            val target = original.url.newBuilder()
-                .scheme("http")
-                .host(server.hostName)
-                .port(server.port)
-                .build()
-            chain.proceed(original.newBuilder().url(target).build())
-        }
+        builder.addInterceptor(rerouting(server))
         return builder.build()
+    }
+
+    /** The interceptor [reroutingClient] adds: every call goes to [server] over plain HTTP. */
+    fun rerouting(server: MockWebServer) = Interceptor { chain ->
+        val original = chain.request()
+        val target = original.url.newBuilder()
+            .scheme("http")
+            .host(server.hostName)
+            .port(server.port)
+            .build()
+        chain.proceed(original.newBuilder().url(target).build())
     }
 
     /**

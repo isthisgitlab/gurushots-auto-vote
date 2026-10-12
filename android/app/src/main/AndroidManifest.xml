@@ -39,7 +39,11 @@
         <service
             android:name=".AutoVoteService"
             android:exported="false"
-            android:foregroundServiceType="dataSync" />
+            android:foregroundServiceType="specialUse">
+            <property
+                android:name="android.app.PROPERTY_SPECIAL_USE_FGS_SUBTYPE"
+                android:value="Periodic automated voting for the user's own GuruShots challenges: wakes on an alarm every few minutes, runs one cycle, and sleeps until the next. The app is distributed outside Google Play." />
+        </service>
         <receiver
             android:name=".AutoVoteAlarmReceiver"
             android:exported="false" />
@@ -49,10 +53,12 @@
     <uses-permission android:name="android.permission.INTERNET" />
     <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
 
-    <!-- Foreground service for the auto-vote scheduler. dataSync is the
-         Android 14+ service type that fits a periodic API client. -->
+    <!-- Foreground service for the auto-vote scheduler. specialUse (Android 14+)
+         has no run-time cap, unlike dataSync, which the system stops after about
+         six hours a day; the app is sideloaded, so Play's review of that type
+         does not apply. -->
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
-    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_DATA_SYNC" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_SPECIAL_USE" />
     <uses-permission android:name="android.permission.WAKE_LOCK" />
 
     <!-- Notifications (the foreground service requires a persistent

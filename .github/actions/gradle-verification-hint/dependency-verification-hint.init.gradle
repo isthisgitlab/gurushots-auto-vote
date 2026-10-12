@@ -1,0 +1,16 @@
+// Installed by the gradle-verification-hint action. A build that fails Gradle's dependency verification gets a CI
+// annotation saying what to do, since Gradle's own message does not.
+gradle.buildFinished { result ->
+    def messages = []
+    def collect
+    collect = { Throwable t ->
+        if (t == null) return
+        messages << String.valueOf(t.message)
+        if (t.metaClass.respondsTo(t, 'getCauses')) t.causes.each { collect(it) }
+        collect(t.cause)
+    }
+    collect(result.failure)
+    if (messages.any { it.contains('Dependency verification failed') }) {
+        println '::error title=Gradle dependency verification failed::An Android dependency changed or is new. Regenerate android/gradle/verification-metadata.xml with scripts/android-verification-metadata.sh and commit it.'
+    }
+}

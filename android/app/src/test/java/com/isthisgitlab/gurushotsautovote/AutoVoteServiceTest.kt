@@ -2,6 +2,7 @@ package com.isthisgitlab.gurushotsautovote
 
 import android.app.AlarmManager
 import android.app.Application
+import android.app.ForegroundServiceStartNotAllowedException
 import android.app.Notification
 import android.app.NotificationManager
 import android.app.PendingIntent
@@ -16,6 +17,7 @@ import android.os.Looper
 import android.webkit.ConsoleMessage
 import android.webkit.WebResourceError
 import android.webkit.WebResourceRequest
+import android.webkit.WebResourceResponse
 import android.webkit.WebView
 import androidx.test.core.app.ApplicationProvider
 import io.mockk.every
@@ -91,6 +93,7 @@ class AutoVoteServiceTest {
         AutoVoteService.cycleCount = 0
         AutoVoteService.lastRunAtMillis = 0L
         AutoVoteService.lastError = null
+        ServiceState.clear(app)
     }
 
     // ---------- helpers ----------
@@ -222,7 +225,8 @@ class AutoVoteServiceTest {
         assertNull(AutoVoteService.lastError)
         val shadowSvc = shadowOf(svc)
         assertEquals(AutoVoteService.NOTIFICATION_ID, shadowSvc.lastForegroundNotificationId)
-        assertEquals(ServiceInfo.FOREGROUND_SERVICE_TYPE_DATA_SYNC, svc.foregroundServiceType)
+        assertEquals(ServiceInfo.FOREGROUND_SERVICE_TYPE_SPECIAL_USE, svc.foregroundServiceType)
+        assertTrue(ServiceState.isEnabled(app))
         val notification = shadowSvc.lastForegroundNotification
         assertEquals("Auto-vote starting…", notification.extras.getCharSequence(Notification.EXTRA_TEXT).toString())
         assertEquals("GuruShots Auto Vote", notification.extras.getCharSequence(Notification.EXTRA_TITLE).toString())
@@ -258,6 +262,19 @@ class AutoVoteServiceTest {
         assertNull(shadowOf(svc).lastForegroundNotification.contentIntent)
     }
 
+    private fun request(url: String, mainFrame: Boolean = true, method: String = "GET") = mockk<WebResourceRequest> {
+        every { this@mockk.url } returns Uri.parse(url)
+        every { isForMainFrame } returns mainFrame
+        every { this@mockk.method } returns method
+    }
+
+    private fun assertForbidden(response: WebResourceResponse?) {
+        assertNotNull(response)
+        assertEquals(403, response!!.statusCode)
+        assertEquals("Forbidden", response.reasonPhrase)
+        assertEquals(-1, response.data.read())
+    }
+
     @Test
     fun headlessAssetLoaderServesPackagedPageOnlyOnItsHttpsOrigin() {
         val svc = newService()
@@ -265,14 +282,67 @@ class AutoVoteServiceTest {
         idle()
         val wv = svc.webView()!!
         val client = shadowOf(wv).webViewClient
-        val request = mockk<WebResourceRequest>()
 
-        assertNull(client.shouldInterceptRequest(wv, null as WebResourceRequest?))
-        every { request.url } returns Uri.parse(HEADLESS_URL)
-        assertNotNull(client.shouldInterceptRequest(wv, request))
+        val page = client.shouldInterceptRequest(wv, request(HEADLESS_URL))
+        assertNotNull(page)
+        assertEquals(200, page!!.statusCode)
+    }
 
-        every { request.url } returns Uri.parse("https://example.com/assets/public/headless.html")
-        assertNull(client.shouldInterceptRequest(wv, request))
+    @Test
+    fun headlessWebViewRefusesEveryRequestTheAssetLoaderDoesNotServe() {
+        val svc = newService()
+        svc.command(AutoVoteService.ACTION_START)
+        idle()
+        val wv = svc.webView()!!
+        val client = shadowOf(wv).webViewClient
+
+        assertForbidden(client.shouldInterceptRequest(wv, null as WebResourceRequest?))
+        assertForbidden(client.shouldInterceptRequest(wv, request("https://example.com/assets/public/headless.html")))
+        assertForbidden(client.shouldInterceptRequest(wv, request("https://api.gurushots.com/x", mainFrame = false)))
+        assertForbidden(client.shouldInterceptRequest(wv, request("http://appassets.androidplatform.net/assets/public/headless.html")))
+        // On the origin, but not a path the loader serves.
+        assertForbidden(client.shouldInterceptRequest(wv, request("https://appassets.androidplatform.net/elsewhere/x")))
+        assertForbidden(client.shouldInterceptRequest(wv, request("https://appassets.androidplatform.net/assets/public/none.html", mainFrame = false)))
+    }
+
+    @Test
+    fun headlessWebViewLetsOnlyGetFetchesOfThePhotoHostReachTheNetwork() {
+        val svc = newService()
+        svc.command(AutoVoteService.ACTION_START)
+        idle()
+        val wv = svc.webView()!!
+        val client = shadowOf(wv).webViewClient
+
+        // null: not intercepted, the WebView fetches it.
+        assertNull(client.shouldInterceptRequest(wv, request("https://photos.gurushots.com/photo/1.jpg?x=1", mainFrame = false)))
+        assertNull(client.shouldInterceptRequest(wv, request("https://photos.gurushots.com:443/photo/1.jpg", mainFrame = false)))
+        assertForbidden(client.shouldInterceptRequest(wv, request("https://photos.gurushots.com/photo/1.jpg", mainFrame = false, method = "POST")))
+        assertForbidden(client.shouldInterceptRequest(wv, request("http://photos.gurushots.com/photo/1.jpg", mainFrame = false)))
+        assertForbidden(client.shouldInterceptRequest(wv, request("https://photos.gurushots.com:8443/photo/1.jpg", mainFrame = false)))
+        assertForbidden(client.shouldInterceptRequest(wv, request("https://other.gurushots.com/photo/1.jpg", mainFrame = false)))
+        assertForbidden(client.shouldInterceptRequest(wv, request("https://photos.gurushots.com.evil.example/photo/1.jpg", mainFrame = false)))
+        assertForbidden(client.shouldInterceptRequest(wv, request("https://example.com/photo/1.jpg", mainFrame = false)))
+        // The photo host is not a place the page may navigate to.
+        assertTrue(client.shouldOverrideUrlLoading(wv, request("https://photos.gurushots.com/photo/1.jpg")))
+    }
+
+    @Test
+    fun headlessWebViewNavigatesOnlyWithinItsAssetOrigin() {
+        val svc = newService()
+        svc.command(AutoVoteService.ACTION_START)
+        idle()
+        val wv = svc.webView()!!
+        val client = shadowOf(wv).webViewClient
+
+        // false: let the WebView load it; true: it is cancelled.
+        assertFalse(client.shouldOverrideUrlLoading(wv, request(HEADLESS_URL)))
+        assertFalse(client.shouldOverrideUrlLoading(wv, request("https://appassets.androidplatform.net/assets/public/other.html")))
+        assertTrue(client.shouldOverrideUrlLoading(wv, null as WebResourceRequest?))
+        assertTrue(client.shouldOverrideUrlLoading(wv, request("https://example.com/")))
+        assertTrue(client.shouldOverrideUrlLoading(wv, request("https://appassets.androidplatform.net.evil.example/")))
+        assertTrue(client.shouldOverrideUrlLoading(wv, request("http://appassets.androidplatform.net/assets/public/headless.html")))
+        assertTrue(client.shouldOverrideUrlLoading(wv, request("file:///android_asset/public/headless.html")))
+        assertTrue(client.shouldOverrideUrlLoading(wv, request("intent://scan/#Intent;scheme=zxing;end")))
     }
 
     private fun sideStoreContext(): Context = ApplicationProvider.getApplicationContext()
@@ -355,26 +425,26 @@ class AutoVoteServiceTest {
         every { editor.remove(any()) } returns editor
         every { editor.commit() } returnsMany listOf(false, true)
         // Nothing was stored: the failed value is removed again.
-        every { prefs.getString("gs_auto_spends", null) } returns null
-        assertFalse(SideStores.write(ctx, "gs_auto_spends", "{\"7\":{\"fills\":1,\"at\":1}}"))
+        every { prefs.getString("gs_swap_backs", null) } returns null
+        assertFalse(SideStores.write(ctx, "gs_swap_backs", "{\"7\":{\"fills\":1,\"at\":1}}"))
         verifyOrder {
-            editor.putString("gs_auto_spends", "{\"7\":{\"fills\":1,\"at\":1}}")
+            editor.putString("gs_swap_backs", "{\"7\":{\"fills\":1,\"at\":1}}")
             editor.commit()
-            editor.remove("gs_auto_spends")
+            editor.remove("gs_swap_backs")
             editor.commit()
         }
         // Something was: it is put back.
         every { editor.commit() } returnsMany listOf(false, true)
-        every { prefs.getString("gs_auto_spends", null) } returns "{\"7\":{\"fills\":0,\"at\":1}}"
-        assertFalse(SideStores.write(ctx, "gs_auto_spends", "{\"7\":{\"fills\":1,\"at\":1}}"))
-        verify { editor.putString("gs_auto_spends", "{\"7\":{\"fills\":0,\"at\":1}}") }
+        every { prefs.getString("gs_swap_backs", null) } returns "{\"7\":{\"fills\":0,\"at\":1}}"
+        assertFalse(SideStores.write(ctx, "gs_swap_backs", "{\"7\":{\"fills\":1,\"at\":1}}"))
+        verify { editor.putString("gs_swap_backs", "{\"7\":{\"fills\":0,\"at\":1}}") }
     }
 
     @Test
     fun twoContextsChangingOneStoreFromTheSameReadSaveExactlyOne() {
         val ctx = sideStoreContext()
         repeat(40) { round ->
-            val key = "gs_auto_spends"
+            val key = "gs_swap_backs"
             SideStores.write(ctx, key, "{}")
             val saved = java.util.concurrent.atomic.AtomicInteger(0)
             val start = java.util.concurrent.CountDownLatch(1)
@@ -426,10 +496,13 @@ class AutoVoteServiceTest {
         assertEquals("{\"7\":1}", store.readKey("gs_scenario_resets"))
         assertFalse(store.writeKey("gs_scenario_resets", "invalid JSON"))
         assertEquals("{\"7\":1}", store.readKey("gs_scenario_resets"))
-        // The ledgers of the automatic currency spends are side stores too: the fills spent survive a restart.
-        assertTrue(store.writeKey("gs_auto_spends", "{\"7\":{\"fills\":1,\"at\":1}}"))
+        // The ledger of the automatic currency spends is a side store too (the fills spent survive a restart), changed
+        // by compare-and-set only: a plain write would replace what the other context saved.
+        assertFalse(store.writeKey("gs_auto_spends", "{\"7\":{\"fills\":1,\"at\":1}}"))
+        assertNull(store.readKey("gs_auto_spends"))
+        assertTrue(store.compareAndWriteKey("gs_auto_spends", null, "{\"7\":{\"fills\":1,\"at\":1}}"))
         assertEquals("{\"7\":{\"fills\":1,\"at\":1}}", store.readKey("gs_auto_spends"))
-        assertFalse(store.writeKey("gs_auto_spends", "invalid JSON"))
+        assertFalse(store.compareAndWriteKey("gs_auto_spends", "{\"7\":{\"fills\":1,\"at\":1}}", "invalid JSON"))
         assertEquals("{\"7\":{\"fills\":1,\"at\":1}}", store.readKey("gs_auto_spends"))
         assertTrue(store.writeKey("gs_swap_backs", "{\"7\":[]}"))
         assertEquals("{\"7\":[]}", store.readKey("gs_swap_backs"))
@@ -451,6 +524,7 @@ class AutoVoteServiceTest {
                 "Refusing to persist non-JSON lexicon diagnostics blob",
                 "Refusing to persist non-JSON scenario state blob",
                 "Refusing to persist non-JSON scenario resets blob",
+                "Refusing a plain write of auto-spend ledger blob: it is changed by compare-and-set only",
                 "Refusing to persist non-JSON auto-spend ledger blob",
                 "Refusing to persist non-JSON swap-back ledger blob",
                 "Refusing a plain write of join-state blob: it is changed by compare-and-set only",
@@ -521,13 +595,65 @@ class AutoVoteServiceTest {
     // ---------- cycles ----------
 
     @Test
-    fun runCycleIgnoredWhenNotRunning() {
+    fun aStaleAlarmEntersTheForegroundBeforeItStopsTheService() {
+        // The alarm fired after a STOP (or after a wipe): automation is not enabled.
         val svc = newService()
         assertEquals(Service.START_STICKY, svc.command(AutoVoteService.ACTION_RUN_CYCLE))
         idle()
+        // startForeground answered the start request, then the service left the foreground and stopped.
+        assertEquals(AutoVoteService.NOTIFICATION_ID, shadowOf(svc).lastForegroundNotificationId)
+        assertTrue(shadowOf(svc).isForegroundStopped)
+        assertTrue(shadowOf(svc).isStoppedBySelf)
+        assertFalse(AutoVoteService.isRunning)
         assertNull(svc.webView())
         assertNull(nextAlarm())
         assertNull(ShadowPowerManager.getLatestWakeLock())
+    }
+
+    @Test
+    fun aStaleAlarmStillStopsTheServiceWhenTheSystemRefusesTheForeground() {
+        val svc = newService()
+        shadowOf(svc).setThrowInStartForeground(ForegroundServiceStartNotAllowedException("background"))
+        svc.command(AutoVoteService.ACTION_RUN_CYCLE)
+        idle()
+        assertTrue(shadowOf(svc).isStoppedBySelf)
+        assertNull(nextAlarm())
+        assertFalse(ServiceState.isEnabled(app))
+    }
+
+    @Test
+    fun anAlarmAfterTheProcessWasKilledResumesFromThePersistedState() {
+        ServiceState.setEnabled(app, true)
+        ServiceState.record(app, 7, System.currentTimeMillis(), "no-token")
+        // The statics a fresh process starts from.
+        val svc = newService()
+        assertFalse(AutoVoteService.isRunning)
+
+        svc.command(AutoVoteService.ACTION_RUN_CYCLE)
+        idle()
+
+        assertTrue(AutoVoteService.isRunning)
+        assertEquals(7, AutoVoteService.cycleCount)
+        assertEquals("no-token", AutoVoteService.lastError)
+        assertTrue(AutoVoteService.lastRunAtMillis > 0)
+        // It entered the foreground, with the status it had, and went on to the cycle (the page is not loaded yet).
+        val text = shadowOf(svc).lastForegroundNotification.extras.getCharSequence(Notification.EXTRA_TEXT).toString()
+        assertTrue(text, text.matches(Regex("""Last error at \d\d:\d\d:\d\d: Not logged in — open the app and log in""")))
+        assertNotNull(svc.webView())
+        assertAlarmIn(3_000L)
+        assertFalse(shadowOf(svc).isStoppedBySelf)
+    }
+
+    @Test
+    fun aResumeThatHasRunNoCycleShowsTheStartingText() {
+        ServiceState.setEnabled(app, true)
+        val svc = newService()
+        svc.command(AutoVoteService.ACTION_RUN_CYCLE)
+        idle()
+        assertEquals(
+            "Auto-vote starting…",
+            shadowOf(svc).lastForegroundNotification.extras.getCharSequence(Notification.EXTRA_TEXT).toString(),
+        )
     }
 
     @Test
@@ -560,8 +686,9 @@ class AutoVoteServiceTest {
 
     @Test
     fun runCycleOnFreshInstanceRebuildsWebView() {
-        // The process was killed and the alarm re-created the service while
-        // the static running flag survived: the new instance has no WebView.
+        // The alarm re-created the service while the process (and its running flag) survived: the new instance has
+        // no WebView.
+        ServiceState.setEnabled(app, true)
         AutoVoteService.isRunning = true
         val svc = newService()
         runCycle(svc)
@@ -591,6 +718,12 @@ class AutoVoteServiceTest {
         assertTrue(AutoVoteService.lastRunAtMillis > 0)
         assertTrue(notificationText()!!.matches(Regex("""Last cycle at \d\d:\d\d:\d\d \(#1\)""")))
         assertAlarmIn(MINUTE)
+        // What the app window reads is persisted, not just the statics.
+        val saved = ServiceState.status(app)
+        assertTrue(saved.running)
+        assertEquals(1, saved.cycleCount)
+        assertEquals(AutoVoteService.lastRunAtMillis, saved.lastRunAt)
+        assertNull(saved.lastError)
 
         // A late second report (or the watchdog) for the same cycle is ignored.
         clearAlarms()
@@ -639,6 +772,7 @@ class AutoVoteServiceTest {
         svc.HeadlessBridge().onCycleComplete("""{"ok":false,"error":"no-token"}""")
         idle()
         assertEquals("no-token", AutoVoteService.lastError)
+        assertEquals("no-token", ServiceState.status(app).lastError)
         assertTrue(notificationText()!!.endsWith(": Not logged in — open the app and log in"))
 
         runCycle(svc)
@@ -728,6 +862,7 @@ class AutoVoteServiceTest {
         assertEquals(Service.START_NOT_STICKY, svc.command(AutoVoteService.ACTION_STOP))
 
         assertFalse(AutoVoteService.isRunning)
+        assertFalse(ServiceState.isEnabled(app))
         assertNull(nextAlarm())
         assertTrue(shadowOf(svc).isForegroundStopped)
         assertTrue(shadowOf(svc).isStoppedBySelf)
@@ -745,6 +880,9 @@ class AutoVoteServiceTest {
         shadowOf(Looper.getMainLooper()).idleFor(Duration.ofMinutes(3))
         assertEquals(2, AutoVoteService.cycleCount)
         assertNull(AutoVoteService.lastError)
+        // What was persisted while it ran stays what the window reads: the late report changes nothing there.
+        assertEquals(1, ServiceState.status(app).cycleCount)
+        assertFalse(ServiceState.status(app).running)
     }
 
     @Test
@@ -867,13 +1005,63 @@ class AutoVoteServiceTest {
         TestSupport.writeSettings(app, null)
         assertNull(store.read())
 
-        store.write("""{"token":"abc"}""")
+        assertTrue(store.write("""{"token":"abc"}"""))
         assertEquals("""{"token":"abc"}""", TestSupport.readSettings(app))
         assertEquals("""{"token":"abc"}""", store.read())
 
         // Non-JSON is refused so the token-bearing blob can't be corrupted.
-        store.write("{oops")
+        assertFalse(store.write("{oops"))
         assertEquals("""{"token":"abc"}""", TestSupport.readSettings(app))
+    }
+
+    @Test
+    fun theSettingsBlobMustBeOneJsonObjectWithinItsOwnCap() {
+        val store = newService().HeadlessStore()
+        ShadowLog.clear()
+        assertTrue(store.write("""{"token":"abc"}"""))
+        // Arrays, scalars and anything trailing are not settings.
+        for (bad in listOf("[1]", "42", "\"x\"", "null", """{"token":"abc"} trailing""", """{}{}""", "")) {
+            assertFalse(bad, store.write(bad))
+        }
+        assertEquals("""{"token":"abc"}""", TestSupport.readSettings(app))
+
+        // The cap is the settings one (2 MiB), not the side stores' (256 KiB).
+        val beyondSideStoreCap = """{"k":"${"x".repeat(SideStores.MAX_BYTES * 4)}"}"""
+        assertTrue(store.write(beyondSideStoreCap))
+        assertEquals(beyondSideStoreCap, TestSupport.readSettings(app))
+        val exactlyAtCap = """{"k":"${"x".repeat(SideStores.MAX_SETTINGS_BYTES - 8)}"}"""
+        assertEquals(SideStores.MAX_SETTINGS_BYTES, exactlyAtCap.toByteArray().size)
+        assertTrue(store.write(exactlyAtCap))
+        val overCap = """{"k":"${"x".repeat(SideStores.MAX_SETTINGS_BYTES - 7)}"}"""
+        assertFalse(store.write(overCap))
+        assertEquals(exactlyAtCap, TestSupport.readSettings(app))
+
+        // A refusal says which blob and why, never what it held.
+        val logged = ShadowLog.getLogsForTag(AutoVoteService.TAG).map { it.msg }
+        assertEquals("Refusing to persist oversized settings blob", logged.last())
+        assertTrue(logged.dropLast(1).all { it == "Refusing to persist non-JSON settings blob" })
+        assertTrue(logged.none { it.contains("trailing") || it.contains("token") })
+    }
+
+    @Test
+    fun aSettingsWriteThatCannotCommitIsRefusedAndTheOldBlobStays() {
+        val ctx = mockk<Context>()
+        val prefs = mockk<android.content.SharedPreferences>()
+        val editor = mockk<android.content.SharedPreferences.Editor>()
+        every { ctx.getSharedPreferences(SideStores.PREFS_FILE, Context.MODE_PRIVATE) } returns prefs
+        every { prefs.getString("gurushots-settings", null) } returns """{"token":"old"}"""
+        every { prefs.edit() } returns editor
+        every { editor.putString(any(), any()) } returns editor
+        every { editor.commit() } returnsMany listOf(false, true)
+
+        assertFalse(SideStores.writeSettings(ctx, """{"token":"new"}"""))
+
+        verifyOrder {
+            editor.putString("gurushots-settings", """{"token":"new"}""")
+            editor.commit()
+            editor.putString("gurushots-settings", """{"token":"old"}""")
+            editor.commit()
+        }
     }
 
     // ---------- HTTP bridge ----------
@@ -1056,5 +1244,161 @@ class AutoVoteServiceTest {
         svc.HeadlessHttp().request(10, "POST", "http://blocked.example/", "{}", "")
         idle()
         assertNull(svc.webView())
+    }
+
+    // ---------- foreground limits ----------
+
+    @Test
+    fun aStartTheSystemRefusesIsRecordedAndRetriedAtTheNextAlarm() {
+        settings("""{"checkFrequencyMin":4}""")
+        val svc = newService()
+        shadowOf(svc).setThrowInStartForeground(ForegroundServiceStartNotAllowedException("background"))
+
+        assertEquals(Service.START_STICKY, svc.command(AutoVoteService.ACTION_START))
+        idle()
+
+        assertFalse(AutoVoteService.isRunning)
+        assertEquals(AutoVoteService.ERROR_FGS_NOT_ALLOWED, AutoVoteService.lastError)
+        val saved = ServiceState.status(app)
+        // Automation stays enabled: the alarm tries again.
+        assertTrue(saved.running)
+        assertEquals(AutoVoteService.ERROR_FGS_NOT_ALLOWED, saved.lastError)
+        assertAlarmIn(4 * MINUTE)
+        assertTrue(shadowOf(svc).isStoppedBySelf)
+        assertNull(svc.webView())
+        assertTrue(
+            ShadowLog.getLogsForTag(AutoVoteService.TAG).any {
+                it.msg == "The system refused to start the foreground service (ForegroundServiceStartNotAllowedException)"
+            },
+        )
+    }
+
+    @Test
+    fun anAlarmCycleTheSystemRefusesTheForegroundForIsRecordedAndRescheduled() {
+        val svc = startedAndReady()
+        AutoVoteService.cycleCount = 2
+        shadowOf(svc).setThrowInStartForeground(IllegalStateException("not allowed"))
+
+        runCycle(svc)
+
+        assertFalse(AutoVoteService.isRunning)
+        assertEquals(AutoVoteService.ERROR_FGS_NOT_ALLOWED, ServiceState.status(app).lastError)
+        assertTrue(ServiceState.isEnabled(app))
+        assertAlarmIn(3 * MINUTE)
+        assertTrue(shadowOf(svc).isStoppedBySelf)
+        assertNull(ShadowPowerManager.getLatestWakeLock())
+        idle()
+        assertNull(svc.webView())
+    }
+
+    @Test
+    fun theForegroundTimeoutStopsTheServiceCleanlyAndLeavesTheNextAlarm() {
+        settings("""{"checkFrequencyMin":2}""")
+        val svc = startedAndReady()
+        runCycle(svc)
+        val wv = svc.webView()!!
+        val wakeLock = ShadowPowerManager.getLatestWakeLock()
+        assertTrue(wakeLock.isHeld)
+
+        svc.onTimeout(1, ServiceInfo.FOREGROUND_SERVICE_TYPE_SPECIAL_USE)
+        idle()
+
+        assertFalse(AutoVoteService.isRunning)
+        assertEquals(AutoVoteService.ERROR_FGS_TIMEOUT, AutoVoteService.lastError)
+        val saved = ServiceState.status(app)
+        assertTrue(saved.running)
+        assertEquals(AutoVoteService.ERROR_FGS_TIMEOUT, saved.lastError)
+        assertTrue(shadowOf(svc).isForegroundStopped)
+        assertTrue(shadowOf(svc).isStoppedBySelf)
+        assertFalse(wakeLock.isHeld)
+        assertTrue(shadowOf(wv).wasDestroyCalled())
+        assertNull(svc.webView())
+        assertAlarmIn(2 * MINUTE)
+        // The cycle watchdog is gone with it.
+        shadowOf(Looper.getMainLooper()).idleFor(Duration.ofMinutes(3))
+        assertEquals(0, AutoVoteService.cycleCount)
+
+        // The alarm brings a new instance back, and a STOP then ends it for good.
+        val next = newService()
+        next.command(AutoVoteService.ACTION_RUN_CYCLE)
+        idle()
+        assertTrue(AutoVoteService.isRunning)
+        assertNotNull(next.webView())
+        next.command(AutoVoteService.ACTION_STOP)
+        idle()
+        assertFalse(ServiceState.isEnabled(app))
+        assertNull(nextAlarm())
+    }
+
+    @Test
+    fun aStopAfterATimeoutCancelsTheWaitingAlarm() {
+        val svc = startedAndReady()
+        svc.onTimeout(1, ServiceInfo.FOREGROUND_SERVICE_TYPE_SPECIAL_USE)
+        idle()
+        assertNotNull(nextAlarm())
+
+        // The window's stop reaches a fresh instance: the alarm and the flag go.
+        newService().command(AutoVoteService.ACTION_STOP)
+        idle()
+
+        assertNull(nextAlarm())
+        assertFalse(ServiceState.isEnabled(app))
+        assertFalse(ServiceState.status(app).running)
+    }
+
+    @Test
+    fun destroyEndsTheInProcessRunningFlagButNotTheEnabledOne() {
+        val svc = startedAndReady()
+        assertTrue(AutoVoteService.isRunning)
+        svc.onDestroy()
+        assertFalse(AutoVoteService.isRunning)
+        assertTrue(ServiceState.isEnabled(app))
+    }
+
+    // ---------- notification language ----------
+
+    @Test
+    fun theNotificationFollowsTheAppLanguageSettingNotTheDeviceLocale() {
+        settings("""{"language":"lv"}""")
+        val svc = newService()
+        val nm = app.getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
+        val channel = nm.getNotificationChannel(AutoVoteService.CHANNEL_ID)
+        assertEquals("Automātiskā balsošana", channel.name.toString())
+        assertEquals("Pastāvīgs paziņojums, kamēr automātiskā balsošana darbojas fonā.", channel.description)
+
+        svc.command(AutoVoteService.ACTION_START)
+        idle()
+        val started = shadowOf(svc).lastForegroundNotification
+        assertEquals("Automātiskā balsošana sākas…", started.extras.getCharSequence(Notification.EXTRA_TEXT).toString())
+        assertEquals("GuruShots Auto Vote", started.extras.getCharSequence(Notification.EXTRA_TITLE).toString())
+        assertEquals("Apturēt", started.actions.single().title.toString())
+        shadowOf(svc.webView()!!).webViewClient.onPageFinished(svc.webView()!!, HEADLESS_URL)
+
+        runCycle(svc)
+        svc.HeadlessBridge().onCycleComplete("""{"ok":true,"nextDelayMs":$MINUTE}""")
+        idle()
+        assertTrue(notificationText()!!, notificationText()!!.matches(Regex("""Pēdējais cikls plkst\. \d\d:\d\d:\d\d \(nr\. 1\)""")))
+
+        runCycle(svc)
+        svc.HeadlessBridge().onCycleComplete("""{"ok":false,"error":"no-token"}""")
+        idle()
+        assertTrue(notificationText()!!.endsWith(": Pieteikšanās nav veikta — atver lietotni un piesakies"))
+
+        runCycle(svc)
+        shadowOf(Looper.getMainLooper()).idleFor(Duration.ofMillis(120_000))
+        assertTrue(notificationText()!!.matches(Regex("""Pēdējā kļūda plkst\. \d\d:\d\d:\d\d: Laiks beidzies — mēģināšu vēlreiz""")))
+
+        runCycle(svc)
+        svc.HeadlessBridge().onCycleComplete("""{"ok":false,"error":"HTTP 503"}""")
+        idle()
+        assertTrue(notificationText()!!.matches(Regex("""Pēdējā kļūda plkst\. \d\d:\d\d:\d\d: HTTP 503""")))
+    }
+
+    @Test
+    fun anUnknownLanguageSettingFallsBackToEnglish() {
+        settings("""{"language":"de"}""")
+        val svc = newService()
+        svc.command(AutoVoteService.ACTION_START)
+        assertEquals("Stop", shadowOf(svc).lastForegroundNotification.actions.single().title.toString())
     }
 }

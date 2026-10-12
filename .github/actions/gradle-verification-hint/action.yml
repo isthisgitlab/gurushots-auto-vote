@@ -1,0 +1,15 @@
+name: Gradle dependency verification hint
+description: Makes a failed Gradle dependency check say how to fix it. Gradle verifies every resolved artifact against android/gradle/verification-metadata.xml and reports a mismatch or a new dependency as a bare build error; this step requires the file and installs an init script that adds a CI annotation naming scripts/android-verification-metadata.sh. Run it before the first ./gradlew of a job.
+
+runs:
+    using: composite
+    steps:
+        - name: Require the dependency checksums and install the failure hint
+          shell: bash
+          run: |
+              if [ ! -s android/gradle/verification-metadata.xml ]; then
+                  echo "::error title=Gradle dependency verification::android/gradle/verification-metadata.xml is missing. Regenerate it with scripts/android-verification-metadata.sh and commit it."
+                  exit 1
+              fi
+              mkdir -p "$HOME/.gradle/init.d"
+              cp "$GITHUB_ACTION_PATH/dependency-verification-hint.init.gradle" "$HOME/.gradle/init.d/"

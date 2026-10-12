@@ -9,9 +9,11 @@
 
 /** Native `ApkInstaller` plugin (android/.../ApkInstallerPlugin.kt). */
 export interface ApkInstallerPlugin {
+    /** `digest` is the release asset's `sha256:<hex>` (empty when unknown: the plugin then refuses the download). */
     downloadAndInstall?(options: {
         url: string;
         version: string;
+        digest: string;
     }): Promise<{ success?: boolean; error?: string } | null>;
     addListener?(
         eventName: 'downloadProgress',

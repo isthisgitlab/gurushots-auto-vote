@@ -98,6 +98,11 @@ jobs:
               if: matrix.language == 'java-kotlin'
               run: pnpm exec cap sync android
 
+            # A failed dependency check (android/gradle/verification-metadata.xml) says how to regenerate it.
+            - name: Explain Gradle dependency verification failures
+              if: matrix.language == 'java-kotlin'
+              uses: ./.github/actions/gradle-verification-hint
+
             # Capacitor includes plugin Java sources as Gradle subprojects under
             # node_modules. Compile those dependencies before CodeQL starts so
             # the traced build analyzes only the app's own Kotlin/Java sources.

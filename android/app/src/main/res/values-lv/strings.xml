@@ -1,0 +1,11 @@
+<?xml version='1.0' encoding='utf-8'?>
+<resources>
+    <string name="notification_channel_name">Automātiskā balsošana</string>
+    <string name="notification_channel_description">Pastāvīgs paziņojums, kamēr automātiskā balsošana darbojas fonā.</string>
+    <string name="notification_stop">Apturēt</string>
+    <string name="notification_starting">Automātiskā balsošana sākas…</string>
+    <string name="notification_last_cycle">Pēdējais cikls plkst. %1$s (nr. %2$d)</string>
+    <string name="notification_last_error">Pēdējā kļūda plkst. %1$s: %2$s</string>
+    <string name="notification_error_no_token">Pieteikšanās nav veikta — atver lietotni un piesakies</string>
+    <string name="notification_error_cycle_timeout">Laiks beidzies — mēģināšu vēlreiz</string>
+</resources>

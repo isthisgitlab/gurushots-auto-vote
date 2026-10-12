@@ -1,18 +1,25 @@
 package com.isthisgitlab.gurushotsautovote
 
+import android.app.AlarmManager
 import android.app.Application
+import android.content.Context
+import android.os.Looper
+import android.webkit.WebStorage
 import androidx.test.core.app.ApplicationProvider
 import com.getcapacitor.Bridge
 import com.getcapacitor.JSObject
 import com.getcapacitor.PluginCall
 import io.mockk.every
 import io.mockk.mockk
+import io.mockk.mockkStatic
 import io.mockk.slot
+import io.mockk.unmockkStatic
 import io.mockk.verify
 import org.json.JSONObject
 import org.junit.After
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
+import org.junit.Assert.assertNull
 import org.junit.Assert.assertSame
 import org.junit.Assert.assertTrue
 import org.junit.Before
@@ -20,6 +27,8 @@ import org.junit.Test
 import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
 import org.robolectric.Shadows.shadowOf
+import org.robolectric.shadows.ShadowAlarmManager
+import java.io.File
 
 @RunWith(RobolectricTestRunner::class)
 class AutoVotePluginTest {
@@ -42,6 +51,7 @@ class AutoVotePluginTest {
         AutoVoteService.cycleCount = 0
         AutoVoteService.lastRunAtMillis = 0L
         AutoVoteService.lastError = null
+        ServiceState.clear(app)
     }
 
     private fun resolved(block: (PluginCall) -> Unit): JSObject {
@@ -72,15 +82,25 @@ class AutoVotePluginTest {
     }
 
     @Test
-    fun getStatusReportsServiceStateWithoutError() {
-        AutoVoteService.isRunning = true
-        AutoVoteService.cycleCount = 3
-        AutoVoteService.lastRunAtMillis = 1234L
-        AutoVoteService.lastError = null
+    fun getStatusReportsThePersistedStateNotTheProcessStatics() {
+        ServiceState.setEnabled(app, true)
+        ServiceState.record(app, 3, 1234L, null)
+        // The statics a restarted process starts from say nothing is running.
+        AutoVoteService.isRunning = false
+        AutoVoteService.cycleCount = 0
         val ret = resolved { plugin.getStatus(it) }
         assertTrue(ret.getBoolean("running"))
         assertEquals(3, ret.getInt("cycleCount"))
         assertEquals(1234L, ret.getLong("lastRunAt"))
+        assertEquals("", ret.getString("lastError"))
+    }
+
+    @Test
+    fun getStatusOfAFreshInstallIsNotRunning() {
+        val ret = resolved { plugin.getStatus(it) }
+        assertFalse(ret.getBoolean("running"))
+        assertEquals(0, ret.getInt("cycleCount"))
+        assertEquals(0L, ret.getLong("lastRunAt"))
         assertEquals("", ret.getString("lastError"))
     }
 
@@ -144,9 +164,84 @@ class AutoVotePluginTest {
 
     @Test
     fun getStatusReportsLastError() {
-        AutoVoteService.lastError = "no-token"
+        ServiceState.record(app, 0, 0L, "no-token")
         val ret = resolved { plugin.getStatus(it) }
         assertFalse(ret.getBoolean("running"))
         assertEquals("no-token", ret.getString("lastError"))
+    }
+
+    // ---------- wipeLocalData ----------
+
+    private fun alarms() = shadowOf(app.getSystemService(Context.ALARM_SERVICE) as AlarmManager).scheduledAlarms
+
+    private fun wiped(): JSObject {
+        val call = mockk<PluginCall>(relaxed = true)
+        val result = slot<JSObject>()
+        every { call.resolve(capture(result)) } returns Unit
+        plugin.wipeLocalData(call)
+        shadowOf(Looper.getMainLooper()).idle()
+        verify(exactly = 1) { call.resolve(any()) }
+        return result.captured
+    }
+
+    @Test
+    fun wipeLocalDataStopsTheServiceAndForgetsEverything() {
+        ShadowAlarmManager.setCanScheduleExactAlarms(true)
+        AutoVoteService.scheduleAlarm(app, 60_000L)
+        assertEquals(1, alarms().size)
+        ServiceState.setEnabled(app, true)
+        ServiceState.record(app, 5, 77L, "x")
+        AutoVoteService.isRunning = true
+        TestSupport.writeSettings(app, """{"token":"secret"}""")
+        val prefs = app.getSharedPreferences(SideStores.PREFS_FILE, Context.MODE_PRIVATE)
+        prefs.edit().putString("gs_join_state", "{}").putString("gs_scenario_state", "{}").putString("photoStats", "{}").commit()
+        val updates = File(app.cacheDir, "updates").apply { mkdirs() }
+        File(updates, "update.apk").writeText("apk")
+
+        val ret = wiped()
+
+        assertTrue(ret.getBoolean("ok"))
+        assertFalse(AutoVoteService.isRunning)
+        assertEquals(AutoVoteService::class.java.name, shadowOf(app).nextStoppedService.component!!.className)
+        assertTrue(alarms().isEmpty())
+        assertEquals(ServiceState.Status(false, 0, 0L, null), ServiceState.status(app))
+        assertTrue(prefs.all.isEmpty())
+        assertFalse(updates.exists())
+    }
+
+    @Test
+    fun wipeLocalDataOfAnEmptyAppSucceeds() {
+        assertFalse(File(app.cacheDir, "updates").exists())
+        assertTrue(wiped().getBoolean("ok"))
+    }
+
+    @Test
+    fun wipeLocalDataReportsNotOkWhenTheWebViewStorageCannotBeCleared() {
+        mockkStatic(WebStorage::class)
+        try {
+            every { WebStorage.getInstance() } throws RuntimeException("no WebView provider")
+            TestSupport.writeSettings(app, """{"token":"secret"}""")
+
+            assertFalse(wiped().getBoolean("ok"))
+
+            // The rest is still wiped.
+            assertNull(TestSupport.readSettings(app))
+        } finally {
+            unmockkStatic(WebStorage::class)
+        }
+    }
+
+    @Test
+    fun wipeLocalDataReportsNotOkWhenAFileSurvives() {
+        val updates = File(app.cacheDir, "updates").apply { mkdirs() }
+        val apk = File(updates, "update.apk").apply { writeText("apk") }
+        // A directory that cannot be listed cannot be emptied, so deleting it fails.
+        updates.setWritable(false)
+        try {
+            assertFalse(wiped().getBoolean("ok"))
+        } finally {
+            updates.setWritable(true)
+            apk.delete()
+        }
     }
 }

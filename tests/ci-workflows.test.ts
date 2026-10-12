@@ -90,6 +90,47 @@ describe('Gradle wrapper validation', () => {
     });
 });
 
+describe('Gradle dependency verification', () => {
+    const HINT = './.github/actions/gradle-verification-hint';
+    const codeql = load('.github/workflows/codeql.yml');
+
+    test.each([
+        ['build.yml', build],
+        ['test.yml', testWorkflow],
+        ['codeql.yml', codeql],
+    ])('%s explains a failed dependency check before every job that runs gradle', (_file, workflow) => {
+        const gradleJobs = Object.values(workflow.jobs).filter((job) =>
+            job.steps.some((step) => step.run?.includes('./gradlew')),
+        );
+        expect(gradleJobs.length).toBeGreaterThan(0);
+        for (const job of gradleJobs) {
+            const hint = job.steps.findIndex((step) => step.uses === HINT);
+            expect(hint).toBeGreaterThanOrEqual(0);
+            expect(hint).toBeLessThan(job.steps.findIndex((step) => step.run?.includes('./gradlew')));
+            const validation = job.steps.findIndex((step) =>
+                step.uses?.startsWith('gradle/actions/wrapper-validation@'),
+            );
+            // Where the wrapper is validated, the hint comes straight after it.
+            if (validation >= 0) expect(hint).toBe(validation + 1);
+        }
+    });
+
+    test('the hint names the regeneration script, and the checksums file it requires exists', () => {
+        const action = text('.github/actions/gradle-verification-hint/action.yml');
+        const init = text('.github/actions/gradle-verification-hint/dependency-verification-hint.init.gradle');
+        for (const content of [action, init]) {
+            expect(content).toContain('scripts/android-verification-metadata.sh');
+            expect(content).toContain('android/gradle/verification-metadata.xml');
+        }
+        expect(init).toContain('Dependency verification failed');
+        expect(fs.existsSync(path.join(root, 'scripts', 'android-verification-metadata.sh'))).toBe(true);
+        const metadata = text('android/gradle/verification-metadata.xml');
+        expect(metadata).toContain('<verify-metadata>true</verify-metadata>');
+        expect(metadata).toMatch(/aapt2-[\d.-]+-linux\.jar/);
+        expect(metadata).toMatch(/aapt2-[\d.-]+-osx\.jar/);
+    });
+});
+
 describe('Android signing', () => {
     const secretsIn = (job: Job) => JSON.stringify(job).match(/secrets\.[A-Z_]+/g) ?? [];
 

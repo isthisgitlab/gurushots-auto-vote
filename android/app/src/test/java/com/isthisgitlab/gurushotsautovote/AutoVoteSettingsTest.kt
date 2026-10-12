@@ -49,4 +49,16 @@ class AutoVoteSettingsTest {
         TestSupport.writeSettings(context, """{"token": "tok", "checkFrequencyMin": 5}""")
         assertEquals(AutoVoteSettings.Snapshot(normalIntervalSeconds = 300L), AutoVoteSettings.read(context))
     }
+
+    @Test
+    fun readsTheAppLanguageAndFallsBackToEnglishForAnythingElse() {
+        TestSupport.writeSettings(context, """{"language": "lv"}""")
+        assertEquals("lv", AutoVoteSettings.read(context).language)
+        TestSupport.writeSettings(context, """{"language": "en"}""")
+        assertEquals("en", AutoVoteSettings.read(context).language)
+        for (raw in listOf("""{"language": "de"}""", """{"language": ""}""", """{"language": 7}""", "{}", null)) {
+            TestSupport.writeSettings(context, raw)
+            assertEquals(raw, "en", AutoVoteSettings.read(context).language)
+        }
+    }
 }

@@ -9,10 +9,18 @@
  *
  * The native path emits `downloadProgress` listener events so a progress bar
  * can settle as the APK downloads; the browser fallback has no progress.
+ *
+ * The native plugin checks the download against the release asset's SHA-256
+ * digest. When it refuses or fails for any reason (wrong host, wrong content
+ * type, too large, digest mismatch or missing, network), the user is sent to
+ * the release page, never to the APK URL: the browser would fetch it
+ * unchecked.
  */
 
 import * as runtime from '../runtime';
 import * as logger from '../logger';
+import * as updateChecker from './UpdateChecker';
+import { errorMessage } from '../errorMessage';
 
 import type { CapacitorGlobals } from '../types/capacitor';
 
@@ -72,19 +80,31 @@ const downloadAndInstall = async ({
 
     const native = getNativeInstaller();
     if (native?.downloadAndInstall) {
+        const asset = updateChecker.getReleaseAsset(downloadUrl);
         let removeListener = null;
         try {
             if (onProgress && typeof native.addListener === 'function') {
                 const handle = await native.addListener('downloadProgress', (data) => onProgress(data));
                 removeListener = handle && typeof handle.remove === 'function' ? () => handle.remove() : null;
             }
-            const result = await native.downloadAndInstall({ url: downloadUrl, version: version || '' });
+            const result = await native.downloadAndInstall({
+                url: downloadUrl,
+                version: version || '',
+                digest: asset?.digest || '',
+            });
             return result?.success === false
                 ? { success: false, version, error: result.error || 'The installer reported a failure' }
                 : { success: true, version };
         } catch (err) {
-            logger.withCategory('update').error('Native APK install failed; falling back to browser', err);
-            // fall through to the browser fallback below
+            logger.withCategory('update').error('Native APK install failed; opening the release page', err);
+            const opened = openInBrowser(asset?.releaseUrl || updateChecker.getReleasesUrl(), version);
+            return opened.success
+                ? {
+                      success: false,
+                      version,
+                      error: `${errorMessage(err) || 'The APK could not be installed'}; the release page was opened instead`,
+                  }
+                : opened;
         } finally {
             if (removeListener) {
                 try {

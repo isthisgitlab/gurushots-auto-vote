@@ -9,6 +9,9 @@ import android.app.Service
 import android.content.Context
 import android.content.Intent
 import android.content.SharedPreferences
+import android.content.pm.ServiceInfo
+import android.content.res.Configuration
+import android.net.Uri
 import android.os.Build
 import android.os.Handler
 import android.os.IBinder
@@ -17,6 +20,8 @@ import android.os.PowerManager
 import android.util.Log
 import android.webkit.ConsoleMessage
 import android.webkit.WebChromeClient
+import android.webkit.WebResourceRequest
+import android.webkit.WebResourceResponse
 import android.webkit.WebView
 import android.webkit.WebViewClient
 import androidx.annotation.VisibleForTesting
@@ -33,6 +38,7 @@ import okhttp3.Response
 import org.json.JSONException
 import org.json.JSONObject
 import org.json.JSONTokener
+import java.io.ByteArrayInputStream
 import java.io.IOException
 import java.text.SimpleDateFormat
 import java.util.Date
@@ -67,6 +73,9 @@ class AutoVoteService : Service() {
         const val ACTION_RUN_CYCLE = "com.isthisgitlab.gurushotsautovote.RUN_CYCLE"
         const val NOTIFICATION_ID = 27782
         const val CHANNEL_ID = "autovote-foreground"
+        // Recorded as the last error when the service stopped itself for the system's sake and left an alarm to resume.
+        const val ERROR_FGS_TIMEOUT = "fgs-timeout"
+        const val ERROR_FGS_NOT_ALLOWED = "fgs-start-not-allowed"
 
         @Volatile var isRunning: Boolean = false
         @Volatile var cycleCount: Int = 0
@@ -84,8 +93,52 @@ class AutoVoteService : Service() {
         private const val MAX_DELAY_MS = 6L * 60L * 60L * 1000L
         // @capacitor/preferences store the JS settings module reads/writes (the side stores live in it too: SideStores).
         private const val PREFS_FILE = SideStores.PREFS_FILE
-        private const val SETTINGS_KEY = "gurushots-settings"
-        private const val HEADLESS_URL = "https://appassets.androidplatform.net/assets/public/headless.html"
+        private const val SETTINGS_KEY = SideStores.SETTINGS_KEY
+        // The one origin the headless WebView may load from or talk to: the asset loader's.
+        private const val ASSET_HOST = "appassets.androidplatform.net"
+        private const val HEADLESS_URL = "https://$ASSET_HOST/assets/public/headless.html"
+        // The vision verifier fetches entry photos from here (src/ts/services/visionVerifier.ts): the one other origin.
+        private const val PHOTO_HOST = "photos.gurushots.com"
+
+        private fun isPhotoFetch(url: Uri, method: String): Boolean =
+            url.scheme == "https" && url.host == PHOTO_HOST && (url.port == -1 || url.port == 443) && method == "GET"
+
+        private fun alarmIntent(context: Context): PendingIntent {
+            val intent = Intent(context, AutoVoteAlarmReceiver::class.java).apply {
+                action = ACTION_RUN_CYCLE
+            }
+            // minSdk is 26, so FLAG_IMMUTABLE (API 23) is always available.
+            val flags = PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
+            return PendingIntent.getBroadcast(context, 0, intent, flags)
+        }
+
+        internal fun cycleIntervalMs(context: Context): Long {
+            val configured = AutoVoteSettings.read(context).normalIntervalSeconds
+            return if (configured > 0) configured * 1000L else DEFAULT_CYCLE_INTERVAL_MS
+        }
+
+        internal fun scheduleAlarm(context: Context, delayMs: Long) {
+            val am = context.getSystemService(Context.ALARM_SERVICE) as AlarmManager
+            val triggerAt = System.currentTimeMillis() + delayMs.coerceAtLeast(1_000L)
+            try {
+                // setExactAndAllowWhileIdle is the only Android primitive that
+                // pierces Doze for sub-15-min cadence. Android 12+ requires
+                // SCHEDULE_EXACT_ALARM; without it, fall back to the inexact
+                // (best-effort) variant which does not throw.
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S && !am.canScheduleExactAlarms()) {
+                    am.setAndAllowWhileIdle(AlarmManager.RTC_WAKEUP, triggerAt, alarmIntent(context))
+                } else {
+                    am.setExactAndAllowWhileIdle(AlarmManager.RTC_WAKEUP, triggerAt, alarmIntent(context))
+                }
+            } catch (sec: SecurityException) {
+                am.setAndAllowWhileIdle(AlarmManager.RTC_WAKEUP, triggerAt, alarmIntent(context))
+            }
+        }
+
+        internal fun cancelAlarm(context: Context) {
+            val am = context.getSystemService(Context.ALARM_SERVICE) as AlarmManager
+            am.cancel(alarmIntent(context))
+        }
 
         // Test seam: JVM unit tests swap in a client whose interceptor reroutes
         // the (allow-listed) api.gurushots.com requests to a local MockWebServer.
@@ -150,14 +203,37 @@ class AutoVoteService : Service() {
         isRunning = true
         cycleCount = 0
         lastError = null
-        startForegroundNotification("Auto-vote starting…")
+        ServiceState.setEnabled(this, true)
+        ServiceState.record(this, cycleCount, lastRunAtMillis, lastError)
+        if (!enterForeground(localized().getString(R.string.notification_starting))) {
+            suspendUntilNextAlarm(ERROR_FGS_NOT_ALLOWED)
+            return
+        }
         mainHandler.post { ensureWebView() }
         scheduleNextAlarm(INITIAL_DELAY_MS)
     }
 
     private fun handleRunCycle() {
+        if (!ServiceState.isEnabled(this)) {
+            // A stale alarm: the one that fired after a STOP. The start request that brought it here still has to be
+            // answered with startForeground before the service may stop, or the system kills the app for not doing so.
+            Log.i(TAG, "RUN_CYCLE received but background voting is not enabled — stopping")
+            enterForeground(localized().getString(R.string.notification_starting))
+            stopForeground(STOP_FOREGROUND_REMOVE)
+            stopSelf()
+            return
+        }
         if (!isRunning) {
-            Log.i(TAG, "RUN_CYCLE received but service not in running state — ignoring")
+            // A new process (or instance): what the last one knew is in the persisted state.
+            val saved = ServiceState.status(this)
+            isRunning = true
+            cycleCount = saved.cycleCount
+            lastRunAtMillis = saved.lastRunAt
+            lastError = saved.lastError
+        }
+        val text = if (lastRunAtMillis > 0L) formatStatus() else localized().getString(R.string.notification_starting)
+        if (!enterForeground(text)) {
+            suspendUntilNextAlarm(ERROR_FGS_NOT_ALLOWED)
             return
         }
         mainHandler.post {
@@ -176,7 +252,7 @@ class AutoVoteService : Service() {
             mainHandler.postDelayed(cycleWatchdog, CYCLE_TIMEOUT_MS)
             Log.i(TAG, "Cycle ${cycleCount + 1} starting (JS)")
             // ensureWebView() above set it on this (main) thread, and it is only
-            // cleared on the main thread too (handleStop's posted block,
+            // cleared on the main thread too (releaseResources' posted block,
             // onDestroy), so it can't be null here.
             webView!!.evaluateJavascript(
                 "(function(){try{" +
@@ -197,8 +273,9 @@ class AutoVoteService : Service() {
             cycleWakeLock = null
             cycleCount += 1
             lastRunAtMillis = System.currentTimeMillis()
-            updateNotification(formatStatus())
             if (isRunning) {
+                ServiceState.record(this, cycleCount, lastRunAtMillis, lastError)
+                updateNotification(formatStatus())
                 val delay = if (nextDelayMs in 1_000L..MAX_DELAY_MS) nextDelayMs else cycleIntervalMs()
                 Log.i(TAG, "Cycle $cycleCount done; next in ${delay}ms")
                 scheduleNextAlarm(delay)
@@ -208,10 +285,38 @@ class AutoVoteService : Service() {
 
     private fun handleStop() {
         isRunning = false
+        ServiceState.setEnabled(this, false)
         mainHandler.removeCallbacks(cycleWatchdog)
         cancelPendingAlarm()
-        // Touch cycleWakeLock + webView only on the main thread — completeCycle
-        // also runs there, so the two can't race on these non-volatile fields.
+        releaseResources()
+        stopForeground(STOP_FOREGROUND_REMOVE)
+        stopSelf()
+    }
+
+    /**
+     * The system's limit on the foreground service was reached. The service stops cleanly and leaves the next alarm, so
+     * that automation resumes (the enabled flag stays set) rather than ending here.
+     */
+    override fun onTimeout(startId: Int, fgsType: Int) {
+        Log.w(TAG, "Foreground service timed out (type $fgsType) — stopping until the next alarm")
+        suspendUntilNextAlarm(ERROR_FGS_TIMEOUT)
+    }
+
+    /** Stops this instance for [error] without disabling automation: records it, and an alarm resumes it. */
+    private fun suspendUntilNextAlarm(error: String) {
+        lastError = error
+        ServiceState.record(this, cycleCount, lastRunAtMillis, error)
+        isRunning = false
+        mainHandler.removeCallbacks(cycleWatchdog)
+        releaseResources()
+        scheduleNextAlarm(cycleIntervalMs())
+        stopForeground(STOP_FOREGROUND_REMOVE)
+        stopSelf()
+    }
+
+    // Touch cycleWakeLock + webView only on the main thread — completeCycle
+    // also runs there, so the two can't race on these non-volatile fields.
+    private fun releaseResources() {
         mainHandler.post {
             cycleWakeLock?.let { if (it.isHeld) it.release() }
             cycleWakeLock = null
@@ -219,14 +324,13 @@ class AutoVoteService : Service() {
             webView = null
             pageReady = false
         }
-        stopForeground(STOP_FOREGROUND_REMOVE)
-        stopSelf()
     }
 
     override fun onDestroy() {
+        isRunning = false
         mainHandler.removeCallbacks(cycleWatchdog)
-        // onDestroy runs on the main thread (like completeCycle and handleStop's
-        // posted block), so these fields can be touched directly — no race, and
+        // onDestroy runs on the main thread (like completeCycle and releaseResources' posted
+        // block), so these fields can be touched directly — no race, and
         // no need to defer the WebView teardown to a later message.
         cycleWakeLock?.let { if (it.isHeld) it.release() }
         cycleWakeLock = null
@@ -265,10 +369,21 @@ class AutoVoteService : Service() {
             }
         }
         wv.webViewClient = object : WebViewClient() {
-            override fun shouldInterceptRequest(
-                view: WebView?,
-                request: android.webkit.WebResourceRequest?,
-            ): android.webkit.WebResourceResponse? = request?.url?.let(assetLoader::shouldInterceptRequest)
+            // The headless page never navigates: anything off the asset origin stays unloaded.
+            override fun shouldOverrideUrlLoading(view: WebView?, request: WebResourceRequest?): Boolean {
+                val url = request?.url
+                return !(url?.scheme == "https" && url.host == ASSET_HOST)
+            }
+
+            // Nothing leaves the asset loader (sub-frames included), except the photo fetches of the vision verifier:
+            // a request it does not serve (it answers a missing asset with an empty response) is refused, not sent on
+            // to the network.
+            override fun shouldInterceptRequest(view: WebView?, request: WebResourceRequest?): WebResourceResponse? {
+                val url = request?.url ?: return forbiddenResponse()
+                // null: the WebView fetches it itself.
+                if (isPhotoFetch(url, request.method)) return null
+                return assetLoader.shouldInterceptRequest(url)?.takeIf { it.data != null } ?: forbiddenResponse()
+            }
 
             override fun onPageFinished(view: WebView?, url: String?) {
                 // Only the headless document marks readiness — guards against a
@@ -403,18 +518,13 @@ class AutoVoteService : Service() {
         fun compareAndWriteKey(key: String, expected: String?, data: String): Boolean =
             SideStores.compareAndSet(this@AutoVoteService, key, expected, data).outcome == SideStores.Outcome.SAVED
 
+        /**
+         * Persists the settings blob. Answers whether it did: false for anything that is not one JSON object within
+         * [SideStores.MAX_SETTINGS_BYTES], or a commit that failed — a JS bug must not corrupt the blob the main app
+         * reads (the token included), and JS surfaces a refused write. The commit is synchronous.
+         */
         @android.webkit.JavascriptInterface
-        fun write(data: String) {
-            // Guard the shared settings store: only persist parseable JSON so a
-            // JS bug can't corrupt the blob the main app reads (incl. the token).
-            try {
-                JSONObject(data)
-            } catch (t: Throwable) {
-                Log.w(TAG, "Refusing to persist non-JSON settings blob")
-                return
-            }
-            getSharedPreferences(PREFS_FILE, Context.MODE_PRIVATE).edit().putString(SETTINGS_KEY, data).apply()
-        }
+        fun write(data: String): Boolean = SideStores.writeSettings(this@AutoVoteService, data)
     }
 
     /** Cycle-completion bridge — JS reports {ok, nextDelayMs, error} when a cycle finishes. */
@@ -439,54 +549,31 @@ class AutoVoteService : Service() {
 
     // ---------- AlarmManager ----------
 
-    private fun alarmIntent(): PendingIntent {
-        val intent = Intent(this, AutoVoteAlarmReceiver::class.java).apply {
-            action = ACTION_RUN_CYCLE
-        }
-        // minSdk is 24, so FLAG_IMMUTABLE (API 23) is always available.
-        val flags = PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
-        return PendingIntent.getBroadcast(this, 0, intent, flags)
-    }
+    private fun cycleIntervalMs(): Long = cycleIntervalMs(this)
 
-    private fun cycleIntervalMs(): Long {
-        val configured = AutoVoteSettings.read(this).normalIntervalSeconds
-        return if (configured > 0) configured * 1000L else DEFAULT_CYCLE_INTERVAL_MS
-    }
+    private fun scheduleNextAlarm(delayMs: Long) = scheduleAlarm(this, delayMs)
 
-    private fun scheduleNextAlarm(delayMs: Long) {
-        val am = getSystemService(Context.ALARM_SERVICE) as AlarmManager
-        val triggerAt = System.currentTimeMillis() + delayMs.coerceAtLeast(1_000L)
-        try {
-            // setExactAndAllowWhileIdle is the only Android primitive that
-            // pierces Doze for sub-15-min cadence. Android 12+ requires
-            // SCHEDULE_EXACT_ALARM; without it, fall back to the inexact
-            // (best-effort) variant which does not throw.
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S && !am.canScheduleExactAlarms()) {
-                am.setAndAllowWhileIdle(AlarmManager.RTC_WAKEUP, triggerAt, alarmIntent())
-            } else {
-                am.setExactAndAllowWhileIdle(AlarmManager.RTC_WAKEUP, triggerAt, alarmIntent())
-            }
-        } catch (sec: SecurityException) {
-            am.setAndAllowWhileIdle(AlarmManager.RTC_WAKEUP, triggerAt, alarmIntent())
-        }
-    }
-
-    private fun cancelPendingAlarm() {
-        val am = getSystemService(Context.ALARM_SERVICE) as AlarmManager
-        am.cancel(alarmIntent())
-    }
+    private fun cancelPendingAlarm() = cancelAlarm(this)
 
     // ---------- Notification ----------
+
+    /** This service's context in the app's own language (the `language` setting), not the device's. */
+    private fun localized(): Context {
+        val config = Configuration(resources.configuration)
+        config.setLocale(Locale.forLanguageTag(AutoVoteSettings.read(this).language))
+        return createConfigurationContext(config)
+    }
 
     private fun ensureNotificationChannel() {
         val nm = getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
         if (nm.getNotificationChannel(CHANNEL_ID) == null) {
+            val text = localized()
             val channel = NotificationChannel(
                 CHANNEL_ID,
-                "Auto-vote",
+                text.getString(R.string.notification_channel_name),
                 NotificationManager.IMPORTANCE_LOW,
             ).apply {
-                description = "Persistent notification while auto-vote is running in the background."
+                description = text.getString(R.string.notification_channel_description)
                 setShowBadge(false)
             }
             nm.createNotificationChannel(channel)
@@ -506,7 +593,7 @@ class AutoVoteService : Service() {
         val stopPi = PendingIntent.getService(this, 2, stopIntent, pendingFlags)
 
         return NotificationCompat.Builder(this, CHANNEL_ID)
-            .setContentTitle("GuruShots Auto Vote")
+            .setContentTitle(getString(R.string.app_name))
             .setContentText(text)
             .setSmallIcon(android.R.drawable.ic_menu_rotate)
             .setOngoing(true)
@@ -515,23 +602,29 @@ class AutoVoteService : Service() {
             .setContentIntent(openAppPi)
             .addAction(
                 android.R.drawable.ic_delete,
-                "Stop",
+                localized().getString(R.string.notification_stop),
                 stopPi,
             )
             .build()
     }
 
-    private fun startForegroundNotification(text: String) {
+    /**
+     * Enters the foreground with [text]; false when the system refuses (on Android 12+ that is
+     * ForegroundServiceStartNotAllowedException, an IllegalStateException; the caller then stops until the next alarm).
+     */
+    private fun enterForeground(text: String): Boolean {
         val notification = buildNotification(text)
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.UPSIDE_DOWN_CAKE) {
-            startForeground(
-                NOTIFICATION_ID,
-                notification,
-                android.content.pm.ServiceInfo.FOREGROUND_SERVICE_TYPE_DATA_SYNC,
-            )
-        } else {
-            startForeground(NOTIFICATION_ID, notification)
+        try {
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.UPSIDE_DOWN_CAKE) {
+                startForeground(NOTIFICATION_ID, notification, ServiceInfo.FOREGROUND_SERVICE_TYPE_SPECIAL_USE)
+            } else {
+                startForeground(NOTIFICATION_ID, notification)
+            }
+        } catch (e: IllegalStateException) {
+            Log.w(TAG, "The system refused to start the foreground service (${e.javaClass.simpleName})")
+            return false
         }
+        return true
     }
 
     private fun updateNotification(text: String) {
@@ -540,15 +633,16 @@ class AutoVoteService : Service() {
     }
 
     private fun formatStatus(): String {
+        val text = localized()
         val time = SimpleDateFormat("HH:mm:ss", Locale.getDefault()).format(Date())
-        val err = lastError ?: return "Last cycle at $time (#$cycleCount)"
+        val err = lastError ?: return text.getString(R.string.notification_last_cycle, time, cycleCount)
         // Map internal codes to something an end user can act on.
         val friendly = when (err) {
-            "no-token" -> "Not logged in — open the app and log in"
-            "cycle-timeout" -> "Timed out — will retry"
+            "no-token" -> text.getString(R.string.notification_error_no_token)
+            "cycle-timeout" -> text.getString(R.string.notification_error_cycle_timeout)
             else -> err
         }
-        return "Last error at $time: $friendly"
+        return text.getString(R.string.notification_last_error, time, friendly)
     }
 
     private fun acquireWakelock(): PowerManager.WakeLock? {
@@ -568,6 +662,9 @@ class AutoVoteService : Service() {
     }
 }
 
+private fun forbiddenResponse() =
+    WebResourceResponse("text/plain", "utf-8", 403, "Forbidden", emptyMap(), ByteArrayInputStream(ByteArray(0)))
+
 /**
  * The side stores that hold state across contexts: the background service (through its bridge) and the app window
  * (through the AutoVoteBackground plugin) write the same keys of the one `CapacitorStorage` SharedPreferences, in one
@@ -582,6 +679,12 @@ internal object SideStores {
 
     /** The most a store may hold: they are small ledgers, and a value past this is a bug or an attack. */
     const val MAX_BYTES = 256 * 1024
+
+    /** The settings blob (what `@capacitor/preferences` stores for the JS settings module). */
+    const val SETTINGS_KEY = "gurushots-settings"
+
+    /** The most the settings blob may hold: every challenge's overrides and profiles live in it, so it dwarfs a side store. */
+    const val MAX_SETTINGS_BYTES = 2 * 1024 * 1024
 
     // Lexicon diagnostics; the scenario state and the resets of it the app asks for; the fills spent (what
     // autoExposureFillMax counts against: a service that started from an empty one after every restart would spend
@@ -605,9 +708,9 @@ internal object SideStores {
 
     private fun prefs(context: Context) = context.getSharedPreferences(PREFS_FILE, Context.MODE_PRIVATE)
 
-    /** One JSON object and nothing after it, within the cap; refusals are logged under the store's literal name. */
-    private fun valid(name: String, data: String): Boolean {
-        if (data.toByteArray(Charsets.UTF_8).size > MAX_BYTES) {
+    /** One JSON object and nothing after it, within [maxBytes]; refusals are logged under the store's literal name. */
+    private fun valid(name: String, data: String, maxBytes: Int = MAX_BYTES): Boolean {
+        if (data.toByteArray(Charsets.UTF_8).size > maxBytes) {
             Log.w(AutoVoteService.TAG, "Refusing to persist oversized $name blob")
             return false
         }
@@ -634,8 +737,9 @@ internal object SideStores {
         return false
     }
 
-    // Stores that are changed only by `compareAndSet`: a plain write would replace what another context saved.
-    private val compareAndSetOnly = setOf("gs_join_state")
+    // Stores that are changed only by `compareAndSet`: a plain write would replace what another context saved (a spend
+    // or a claim that one context recorded and the other, writing from an older read, then lost).
+    private val compareAndSetOnly = setOf("gs_join_state", "gs_auto_spends")
 
     @Synchronized
     fun write(context: Context, key: String, data: String): Boolean {
@@ -647,6 +751,14 @@ internal object SideStores {
         if (!valid(name, data)) return false
         val prefs = prefs(context)
         return commit(prefs, key, prefs.getString(key, null), data)
+    }
+
+    /** Saves the settings blob like [write] does a side store: one bounded JSON object, committed synchronously. */
+    @Synchronized
+    fun writeSettings(context: Context, data: String): Boolean {
+        if (!valid("settings", data, MAX_SETTINGS_BYTES)) return false
+        val prefs = prefs(context)
+        return commit(prefs, SETTINGS_KEY, prefs.getString(SETTINGS_KEY, null), data)
     }
 
     /** @param expected what the caller read; null or empty: nothing was stored */
