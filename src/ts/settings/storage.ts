@@ -25,7 +25,7 @@ import type { PreferencesPlugin } from '@capacitor/preferences';
 import { errorMessage } from '../errorMessage';
 import { sweepStaleTemps, writeAtomicOwnerOnly } from './atomicWrite';
 import { createWriteBehind, headlessStore, readHeadlessKey, writeHeadlessKey } from './storeTransport';
-import type { ThroughResult } from './storeTransport';
+import type { ThroughResult } from '../types/stores';
 
 // Try to import electron, but don't fail if it's not available (CLI context)
 let electronApp: App | null | undefined = null;
@@ -366,7 +366,7 @@ const createJsonStore = ({
             try {
                 const { value } = await getCapacitorPreferences().get({ key: prefKey });
                 cachedJson = value;
-                writes.confirm();
+                writes.confirm(0);
             } catch (err) {
                 logger.withCategory('settings').error(`Capacitor ${prefKey} read failed:`, err);
                 cachedJson = null;
@@ -382,11 +382,12 @@ const createJsonStore = ({
          */
         refreshAsync: async () => {
             if (!runtime.isCapacitor() || runtime.isHeadlessService()) return;
-            await writes.drained();
+            const { at, done } = writes.drained();
+            await done;
             try {
                 const { value } = await getCapacitorPreferences().get({ key: prefKey });
                 cachedJson = value;
-                writes.confirm();
+                writes.confirm(at);
                 initialized = true;
             } catch (err) {
                 logger.withCategory('settings').error(`Capacitor ${prefKey} refresh failed:`, err);

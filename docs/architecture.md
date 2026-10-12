@@ -794,7 +794,7 @@ caps (dependency-free, renderer-safe), and `scenarios/templates.ts` holds editab
   **Not loaded** (`corrupt: 'unloaded'`, a third kind beside `file` and `record`): a store whose read failed holds
   nothing known, and is never read as empty — a plan restarted from nothing could spend again. In the app window the
   start-up read of `gs_scenario_state` or `gs_scenario_resets` can fail (`isCacheKnown`, `scenarioStateLoaded`); in the
-  headless service a read through the bridge that threw reads the same (`headlessReadFailed`; a missing key is null,
+  headless service a read through the bridge that threw reads the same (`headlessReadFailed`; a missing key answers the cache,
   a throw is a failure, and so is a strict store with no bridge). While it holds, `read()` answers unloaded: nothing is
   written, nothing is reset (`state-unloaded`), the plans of that process pause, and the card offers no reset. The card
   words it by who runs the plans: with the background service only this window lacks the progress and the service

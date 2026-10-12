@@ -4,6 +4,9 @@
  * here exists at runtime.
  */
 
+/** What `updateThrough` came to: saved, left alone because `update` declined (answered null), or not saved. */
+export type ThroughResult = 'saved' | 'aborted' | 'failed';
+
 /**
  * The raw-JSON transport a ledger sits on: settings/storage.ts
  * createJsonStore(), or an in-memory fake (mock mode, tests).
@@ -18,7 +21,7 @@ export interface RawJsonStore {
      * `aborted` (`update` answered null: it looked at the value it would overwrite, as it is when its turn comes, and
      * wrote nothing). Absent where a write is made before it returns.
      */
-    updateThrough?(update: (current: string | null) => string | null): Promise<'saved' | 'aborted' | 'failed'>;
+    updateThrough?(update: (current: string | null) => string | null): Promise<ThroughResult>;
 }
 
 /** One challenge's entry in metadata.json. */

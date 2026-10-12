@@ -3,7 +3,7 @@
  * keep one process's change from undoing another's (see scenarioStateStore.ts for the shape and the ledger over it).
  */
 
-import type { RawJsonStore, ScenarioEpoch, ScenarioState, SpendAction } from './types/stores';
+import type { RawJsonStore, ScenarioEpoch, ScenarioState, SpendAction, ThroughResult } from './types/stores';
 import * as logger from './logger';
 import * as runtime from './runtime';
 import { isPlainObject } from './plainObject';
@@ -206,7 +206,7 @@ const viewOf = (raw: string | null, asked: string | null): ParsedStateFile => {
 const through = async (
     target: RawJsonStore,
     update: (current: string | null) => string | null,
-): Promise<'saved' | 'aborted' | 'failed'> => {
+): Promise<ThroughResult> => {
     if (target.updateThrough) return target.updateThrough(update);
     const data = update(target.readRaw());
     if (data === null) return 'aborted';
@@ -335,6 +335,8 @@ const createResets = ({
         const view = read();
         if (view.unloaded) return 'unloaded';
         const asking = asRequests();
+        // A file that reads is left alone before any lock is wanted; one that reads by the time it is held, too.
+        if (onlyIfUnreadable && view.ok && !asking) return 'readable';
         if (view.ok && asking) return askFor(asking, ALL_KEY, onlyIfUnreadable);
         let result: ResetResult = 'not-saved';
         const ran = await underLockAsync(acquireLock, async () => {

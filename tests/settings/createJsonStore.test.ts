@@ -348,6 +348,25 @@ describe('createJsonStore', () => {
                 await expect(strict.flushPendingWrites()).resolves.toBeUndefined();
             });
 
+            test('is told to every flush that was waiting when the write failed, and not again to one that starts after', async () => {
+                const strict = strictStore();
+                let fail!: (error: Error) => void;
+                mockPrefSet.mockImplementationOnce(
+                    () =>
+                        new Promise<void>((_resolve, reject) => {
+                            fail = reject;
+                        }),
+                );
+                strict.writeRaw('{"x":1}');
+                const visibility = strict.flushPendingWrites();
+                const pagehide = strict.flushPendingWrites();
+                await Promise.resolve();
+                fail(new Error('disk full'));
+                await expect(visibility).rejects.toThrow('was not persisted');
+                await expect(pagehide).rejects.toThrow('was not persisted');
+                await expect(strict.flushPendingWrites()).resolves.toBeUndefined();
+            });
+
             test('is waited for until the queue is quiet, a write queued meanwhile included', async () => {
                 const strict = strictStore();
                 let release!: () => void;
@@ -523,20 +542,6 @@ describe('createJsonStore', () => {
             });
         });
 
-        test('a queued write whose cache has nothing by its turn puts down what it was queued with', async () => {
-            const { createWriteBehind } =
-                require('../../src/ts/settings/storeTransport') as typeof storeTransportModule;
-            const writes = createWriteBehind(
-                'gs_test_empty_cache',
-                false,
-                () => invalid({ set: mockPrefSet, get: mockPrefGet }),
-                { get: () => null, set: () => {} },
-            );
-            writes.queue('{"queued":1}');
-            await writes.flush();
-            expect(mockPrefSet).toHaveBeenCalledWith({ key: 'gs_test_empty_cache', value: '{"queued":1}' });
-        });
-
         describe('what a refresh reads while a write is queued', () => {
             const deferredGet = () => {
                 let answer!: (value: GetResult) => void;
@@ -553,6 +558,16 @@ describe('createJsonStore', () => {
                 return createJsonStore({ fileName: 'scenarioState.json', prefKey: 'gs_scenario_state', strict: true });
             };
             const inFlight = () => new Promise((resolve) => setTimeout(resolve, 0));
+            const holdOne = () => {
+                let release!: () => void;
+                mockPrefSet.mockImplementationOnce(
+                    () =>
+                        new Promise<void>((resolve) => {
+                            release = resolve;
+                        }),
+                );
+                return () => release();
+            };
 
             test('does not take the write’s value out of the cache: the read may predate it', async () => {
                 const strict = strictStore();
@@ -592,6 +607,67 @@ describe('createJsonStore', () => {
                 mockPrefGet.mockResolvedValueOnce({ value: '{"service":1}' });
                 await strict.refreshAsync();
                 expect(strict.readRaw()).toBe('{"service":1}');
+            });
+
+            test('two refreshes that overlap, with writes queued behind a slow one, never save an older stored value over the marker', async () => {
+                const strict = strictStore();
+                await strict.initializeAsync();
+                const first = deferredGet();
+                const firstRefresh = strict.refreshAsync();
+                await inFlight();
+                const release = holdOne();
+                strict.writeRaw('{"before":1}');
+                await inFlight();
+                strict.writeRaw('{"marker":1}');
+                // The second refresh starts after both writes; the first read, older than them, lands while the slow
+                // write is still out and the marker has not had its turn.
+                mockPrefGet.mockResolvedValueOnce({ value: '{"marker":1}' });
+                const secondRefresh = strict.refreshAsync();
+                first('{"older":1}');
+                await firstRefresh;
+                expect(strict.readRaw()).toBe('{"marker":1}');
+                release();
+                await secondRefresh;
+                await strict.flushPendingWrites();
+                expect(mockPrefSet).toHaveBeenLastCalledWith({ key: 'gs_scenario_state', value: '{"marker":1}' });
+                expect(strict.readRaw()).toBe('{"marker":1}');
+            });
+
+            test('a queued write puts down the latest value queued, not what a refresh put in the cache since', async () => {
+                const strict = strictStore();
+                await strict.initializeAsync();
+                const release = holdOne();
+                strict.writeRaw('{"marker":1}');
+                await inFlight();
+                strict.writeRaw('{"marker":2}');
+                mockPrefGet.mockResolvedValueOnce({ value: '{"older":1}' });
+                const refreshing = strict.refreshAsync();
+                release();
+                await refreshing;
+                await strict.flushPendingWrites();
+                expect(mockPrefSet).toHaveBeenLastCalledWith({ key: 'gs_scenario_state', value: '{"marker":2}' });
+            });
+
+            test('a failed queued write, then a write-through that saved, then a refresh: the read is taken again', async () => {
+                const strict = strictStore();
+                await strict.initializeAsync();
+                mockPrefSet.mockRejectedValueOnce(new Error('disk full'));
+                strict.writeRaw('{"marker":1}');
+                await expect(strict.flushPendingWrites()).rejects.toThrow('was not persisted');
+                await expect(strict.updateThrough((current) => current)).resolves.toBe('saved');
+                mockPrefGet.mockResolvedValueOnce({ value: '{"service":1}' });
+                await strict.refreshAsync();
+                expect(strict.readRaw()).toBe('{"service":1}');
+            });
+
+            test('a store that is not strict takes what a refresh reads over a queued write that did not persist', async () => {
+                await store.initializeAsync();
+                mockPrefSet.mockRejectedValueOnce(new Error('quota'));
+                store.writeRaw('{"x":1}');
+                await store.flushPendingWrites();
+                mockPrefGet.mockResolvedValueOnce({ value: '{"stored":1}' });
+                await store.refreshAsync();
+                expect(store.readRaw()).toBe('{"stored":1}');
             });
 
             test('leaves a write that was not saved out of the cache, whatever the read says', async () => {
@@ -764,6 +840,25 @@ describe('createJsonStore', () => {
                     readingBridge(() => '{"a":1}');
                     expect(strict.readRaw()).toBe('{"a":1}');
                     expect(headlessReadFailed('gs_scenario_state')).toBe(false);
+                });
+
+                test('is logged when it first fails, not on every read after it', () => {
+                    const strict = strictStore();
+                    const error = jest.fn();
+                    jest.mocked(logger.withCategory).mockReturnValue(invalid({ error }));
+                    readingBridge(() => {
+                        throw new Error('bridge down');
+                    });
+                    strict.readRaw();
+                    strict.readRaw();
+                    expect(error).toHaveBeenCalledTimes(1);
+                    readingBridge(() => '{}');
+                    strict.readRaw();
+                    readingBridge(() => {
+                        throw new Error('bridge down again');
+                    });
+                    strict.readRaw();
+                    expect(error).toHaveBeenCalledTimes(2);
                 });
 
                 test('is also a strict store with no bridge to read through, but not a store that is memory-only', () => {

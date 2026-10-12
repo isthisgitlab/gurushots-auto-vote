@@ -36,6 +36,7 @@ jest.mock('../src/ts/logger', () => {
 });
 
 import type * as scenarioStateStoreModule from '../src/ts/scenarioStateStore';
+import type { AndroidHeadlessStore } from '../src/ts/types/settings';
 
 const g = globalThis as typeof globalThis & {
     Capacitor?: { isNativePlatform: () => boolean; getPlatform: () => string };
@@ -210,7 +211,10 @@ describe('a start-up read that failed', () => {
 });
 
 describe('the background service', () => {
-    const h = globalThis as typeof globalThis & { __GS_HEADLESS__?: boolean; AndroidHeadlessStore?: unknown };
+    const h = globalThis as typeof globalThis & {
+        __GS_HEADLESS__?: boolean;
+        AndroidHeadlessStore?: AndroidHeadlessStore;
+    };
     const saved = new Map<string, string>();
     const bridge = (readThrows: string[] = []) => {
         const writeKey = jest.fn((key: string, data: string) => {

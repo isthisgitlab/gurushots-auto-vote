@@ -804,6 +804,16 @@ describe('a reset is saved before anything can read it', () => {
         expect(app.get(7).corrupt).toBe(false);
     });
 
+    test('of every challenge, asked for only while the file cannot be read, is not held up by a lock when the file reads', async () => {
+        delete g.Capacitor;
+        const file = rawStore(live);
+        const held = jest.fn((_id: string) => ({ ok: false, release: () => {} }));
+        const desktop = createStateLedger(file, held);
+        await expect(desktop.removeAll(true)).resolves.toBe('readable');
+        expect(held).not.toHaveBeenCalled();
+        expect(file.writeRaw).not.toHaveBeenCalled();
+    });
+
     test('of every challenge, asked for only while the file cannot be read, decides on the file as it is where the write is made', async () => {
         // The Android write waits for its turn, and the file reads again by then.
         const { store: main, meanwhile } = throughStore('{no');

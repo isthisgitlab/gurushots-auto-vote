@@ -6,6 +6,7 @@
 import * as logger from '../logger';
 import type { PreferencesPlugin } from '@capacitor/preferences';
 import type { AndroidHeadlessStore } from '../types/settings';
+import type { ThroughResult } from '../types/stores';
 
 /**
  * The Android headless-service bridge, read at call time (absent everywhere
@@ -36,7 +37,8 @@ export const readHeadlessKey = (prefKey: string, fallback: string | null, strict
         failedReads.delete(prefKey);
         return value;
     } catch (err) {
-        logger.withCategory('settings').error(`Headless ${prefKey} read failed:`, err);
+        // Said when it first fails, not on every read after it: the service reads the key many times a pass.
+        if (!failedReads.has(prefKey)) logger.withCategory('settings').error(`Headless ${prefKey} read failed:`, err);
         failedReads.add(prefKey);
         // aislop-ignore-next-line ai-slop/hidden-fallback -- logged via the settings logger; failedReads says it failed
         return fallback;
@@ -106,25 +108,24 @@ const createQueue = (prefKey: string) => {
     };
 };
 
-/** What `updateThrough` came to: saved, left alone because `update` declined (answered null), or not saved. */
-export type ThroughResult = 'saved' | 'aborted' | 'failed';
-
 /**
  * The ordered write-behind of one Capacitor key: writes apply in issue order, and one that fails is logged without
- * breaking the queue. Every write holds the whole value, and a queued write puts down the cache as it is on its turn:
- * the cache is always the latest intended value, so what a write built earlier held can never overwrite a later one.
+ * breaking the queue. Every write holds the whole value, and a queued write puts down `intended` on its turn, the
+ * latest value queued or written through: what a write built earlier held can never overwrite a later one, and a
+ * read (a refresh) never changes what is put down.
  *
  * `flush` waits until the queue is quiet, then a `strict` store's flush rejects (with the write's error as its cause)
- * when the latest queued write did not persist, if any was queued since the last flush: a failure that was reported is
- * not reported again by every flush after it.
+ * when the latest queued write did not persist, to every flush that was waiting when it failed; one that starts after
+ * the failure was reported does not report it again, unless another write was queued.
  *
  * `updateThrough` is for a write that must not show before it is saved: it waits its turn in the queue, makes the
  * value from the cache as it is then (`update` answers null to write nothing), and puts it in the cache only once
  * Preferences has it. When it fails the cache was never changed, so nothing read, applied or written since has seen
  * it, and it is not a queued write: a flush does not report it.
  *
- * `intended` is the text last queued or written through: a read that was in flight when it was, or one that came while
- * the latest queued write was unsaved, must not replace it.
+ * A read takes a snapshot first (`drained`) and gives it back to `confirm`: a write queued or written through since,
+ * or a strict store's queued write that did not persist, means the read may not hold what was written, and the cache
+ * keeps `intended`.
  *
  * @param cache - the store's cache (null: nothing is there)
  */
@@ -139,9 +140,9 @@ export const createWriteBehind = (
     let lastFailed = false;
     let issued = 0;
     let queued = 0;
-    let drainedAt = 0;
     let flushedAt = 0;
-    let intended: string | null = null;
+    // Only read once something was queued or written through, which is what sets it.
+    let intended = '';
     knownKeys.delete(prefKey);
     return {
         queue: (data: string) => {
@@ -149,7 +150,7 @@ export const createWriteBehind = (
             queued++;
             intended = data;
             knownKeys.add(prefKey);
-            latest = enqueue(() => preferences().set({ key: prefKey, value: cache.get() ?? data })).then((outcome) => {
+            latest = enqueue(() => preferences().set({ key: prefKey, value: intended })).then((outcome) => {
                 lastFailed = !outcome.ok;
                 return outcome;
             });
@@ -162,6 +163,7 @@ export const createWriteBehind = (
                 await preferences().set({ key: prefKey, value: data });
                 issued++;
                 intended = data;
+                lastFailed = false;
                 knownKeys.add(prefKey);
                 cache.set(data);
                 result = 'saved';
@@ -169,23 +171,20 @@ export const createWriteBehind = (
             return outcome.ok ? result : 'failed';
         },
         /**
-         * What hydrating or refreshing found in Preferences. A write queued while it was being read may postdate it, and
-         * a queued write that did not persist is not in it: the cache keeps the latest intended value.
+         * What hydrating or refreshing found in Preferences, with the snapshot it took before reading (0 for the first
+         * read).
          */
-        confirm: () => {
+        confirm: (at: number) => {
             knownKeys.add(prefKey);
-            if (issued !== drainedAt || lastFailed) cache.set(intended);
+            if (issued !== at || (strict && lastFailed)) cache.set(intended);
         },
-        drained: () => {
-            drainedAt = issued;
-            return drained();
-        },
+        drained: () => ({ at: issued, done: drained() }),
         flush: async () => {
-            const fresh = queued > flushedAt;
-            flushedAt = queued;
+            const reportedAt = flushedAt;
             await quiet();
             const outcome = await latest;
-            if (strict && fresh && !outcome.ok)
+            flushedAt = queued;
+            if (strict && queued > reportedAt && !outcome.ok)
                 throw new Error(`Capacitor ${prefKey} was not persisted`, { cause: outcome.error });
         },
     };

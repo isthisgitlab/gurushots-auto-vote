@@ -345,13 +345,13 @@ export const app = {
     scenarioStatusMissing:
         'Scenārijs „{name}” vairs nepastāv — nekas netiek izpildīts. Izvēlies citu izaicinājuma uzstādījumos.',
     scenarioStatusUnloaded:
-        'Scenārijs „{name}”: saglabāto progresu vēl nav izdevies ielādēt, tāpēc tā plāns ir apturēts. Lietotne mēģina vēlreiz; ja tas nemainās, atver lietotni no jauna. Nekas netiek atiestatīts.',
+        'Scenārijs „{name}”: saglabāto progresu vēl nav izdevies ielādēt, tāpēc tā plāns ir apturēts. Lietotne mēģina vēlreiz; ja progress joprojām netiek ielādēts, atver lietotni no jauna. Nekas netiek atiestatīts.',
     scenarioStatusUnloadedShort:
         'Scenārijs „{name}” ir apturēts: saglabāto progresu vēl nav izdevies ielādēt. Lietotne mēģina vēlreiz.',
     scenarioStatusUnloadedService:
-        'Scenārijs „{name}”: šim logam vēl nav izdevies ielādēt saglabāto progresu. Fona pakalpojums turpina izpildīt plānus; ja tas nemainās, atver lietotni no jauna. Nekas netiek atiestatīts.',
+        'Scenārijs „{name}”: šim logam vēl nav izdevies ielādēt scenāriju progresu. Ja fona pakalpojums darbojas, plānus izpilda pakalpojums no savas kopijas. Ja progress joprojām netiek ielādēts, atver lietotni no jauna. Nekas netiek atiestatīts.',
     scenarioStatusUnloadedServiceShort:
-        'Scenārijs „{name}”: šim logam vēl nav izdevies ielādēt saglabāto progresu. Fona pakalpojums turpina izpildīt plānus.',
+        'Scenārijs „{name}”: šim logam vēl nav izdevies ielādēt scenāriju progresu. Ja fona pakalpojums darbojas, plānus izpilda pakalpojums no savas kopijas.',
     scenarioStatusCorrupt:
         'Scenārijs „{name}”: scenāriju saglabāto progresu nevar nolasīt, tāpēc visu izaicinājumu plāni ir apturēti. Ja atiestatīsi visu izaicinājumu progresu, plāni sāksies no jauna.',
     scenarioStatusCorruptShort:
@@ -392,7 +392,7 @@ export const app = {
     scenarioResetAllBusy:
         'Saglabāto scenāriju progresu pašlaik atjaunina lietotne vai cits process. Nekas netika mainīts. Mēģini vēlreiz pēc brīža.',
     scenarioResetUnloaded:
-        'Saglabāto progresu vēl nav izdevies ielādēt, tāpēc nekas netika atiestatīts. Lietotne mēģina vēlreiz; ja tas nemainās, atver lietotni no jauna.',
+        'Saglabāto progresu vēl nav izdevies ielādēt, tāpēc nekas netika atiestatīts. Lietotne mēģina vēlreiz; ja progress joprojām netiek ielādēts, atver lietotni no jauna.',
     scenarioResetReadable:
         'Saglabāto progresu atkal var nolasīt, tāpēc nekas netika atiestatīts. Aizver šo logu, lai redzētu, kur ir plāni.',
     scenarioResetUnreadable:
