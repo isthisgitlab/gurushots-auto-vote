@@ -31,6 +31,7 @@ import * as os from 'node:os';
 import * as path from 'node:path';
 import type * as settingsWatcherModule from '../../src/ts/windows/settingsWatcher';
 import type * as atomicWriteModule from '../../src/ts/settings/atomicWrite';
+import { canWatchDirectory } from '../helpers/canWatchDirectory';
 import { invalid } from '../helpers/invalid';
 
 const { watchSettingsFile } = require('../../src/ts/windows/settingsWatcher') as typeof settingsWatcherModule;
@@ -41,38 +42,35 @@ const until = async (condition: () => boolean, ms = 4000) => {
     while (!condition() && Date.now() < deadline) await new Promise((resolve) => setTimeout(resolve, 25));
 };
 
-// A sandbox or a host out of watch handles cannot watch a directory (EMFILE, or ENOSPC on Linux's inotify), which Node
-// reports as an 'error' event on the watcher some moments after it was made: that is the host, not the watcher, so such a
-// start is not a failure of this test. The behaviour with the watch mocked is covered by settingsWatcher.test.ts.
-const isHostLimit = (error: unknown) => {
-    // Not instanceof Error: the error comes from Node's own realm, outside the test's.
-    const code = typeof error === 'object' && error !== null && 'code' in error ? error.code : undefined;
-    return code === 'EMFILE' || code === 'ENOSPC';
-};
+// A host that cannot watch a directory (a sandbox, or out of watch handles: EMFILE, or ENOSPC on Linux's inotify) cannot run
+// these tests: they are reported as skipped there, never as passed. On CI the runner must be able to watch, so it is an
+// error. The behaviour with the watch mocked is covered by settingsWatcher.test.ts.
+const canWatch = canWatchDirectory();
+if (!canWatch && process.env.CI) {
+    throw new Error(
+        'The CI runner must be able to watch a directory (fs.watch failed with EMFILE/ENOSPC or was denied).',
+    );
+}
+const maybeTest = canWatch ? test : test.skip;
 
 describe('watchSettingsFile over atomic saves (real directory)', () => {
     let root: string;
     let watcher: fs.FSWatcher | null;
     let failure: unknown;
 
-    /** Starts the watcher; false when the host cannot give it a watch (nothing to test then). */
-    const start = async (): Promise<boolean> => {
+    /** Starts the watcher; a failure to watch, whenever it is reported, fails the test. */
+    const start = async (): Promise<void> => {
         failure = null;
-        try {
-            watcher = watchSettingsFile({
-                getMainWindow: () => null,
-                getMainWindowCreatedTime: () => Date.now() - 60_000,
-            });
-        } catch (error) {
-            failure = error;
-        }
+        watcher = watchSettingsFile({
+            getMainWindow: () => null,
+            getMainWindowCreatedTime: () => Date.now() - 60_000,
+        });
         watcher?.on('error', (error) => {
             failure = error;
         });
         // The host's refusal arrives as an event, a moment after the watch was made.
         await new Promise((resolve) => setTimeout(resolve, 100));
-        if (failure && !isHostLimit(failure)) throw failure;
-        return !failure;
+        if (failure) throw failure;
     };
 
     beforeEach(async () => {
@@ -92,26 +90,28 @@ describe('watchSettingsFile over atomic saves (real directory)', () => {
         fs.rmSync(root, { recursive: true, force: true });
     });
 
-    test('keeps firing after every one of several atomic writes', async () => {
-        if (!(await start())) return;
+    maybeTest('keeps firing after every one of several atomic writes', async () => {
+        expect.assertions(6);
+        await start();
 
         for (const n of [1, 2, 3]) {
             mockLoad.mockReturnValue(invalid({ n }));
             writeAtomicOwnerOnly(mockPaths.settingsFile, JSON.stringify({ n }));
             await until(() => mockSend.mock.calls.length >= n || failure !== null);
-            if (failure && isHostLimit(failure)) return;
+            if (failure) throw failure;
             expect(mockSend).toHaveBeenCalledTimes(n);
             expect(mockSend).toHaveBeenLastCalledWith('settings-changed', { n, hasToken: false });
         }
     });
 
-    test('is not woken by the other files of the directory', async () => {
-        if (!(await start())) return;
+    maybeTest('is not woken by the other files of the directory', async () => {
+        expect.assertions(1);
+        await start();
 
         mockLoad.mockReturnValue(invalid({ n: 1 }));
         writeAtomicOwnerOnly(path.join(root, 'metadata.json'), '{}');
         await new Promise((resolve) => setTimeout(resolve, 900));
-        if (failure && isHostLimit(failure)) return;
+        if (failure) throw failure;
 
         expect(mockSend).not.toHaveBeenCalled();
     });
