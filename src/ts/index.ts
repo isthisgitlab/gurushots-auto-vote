@@ -11,7 +11,7 @@ import * as actionsIpc from './ipc/actions.handlers';
 import * as computationsIpc from './ipc/computations.handlers';
 import * as currencyIpc from './ipc/currency.handlers';
 import * as scenariosIpc from './ipc/scenarios.handlers';
-import { isTrustedSender } from './ipc/registerHandlers';
+import { isTrustedSender, isChannelAllowedForSender } from './ipc/registerHandlers';
 import { ensureExit, focusExistingWindow, clearTokenOnQuit } from './windows/lifecycle';
 import { bypassQuitGuard } from './windows/quitGuard';
 import { appState } from './index/state';
@@ -144,9 +144,14 @@ app.on('window-all-closed', () => {
 // are registered with ipcMain.on (a send, with no reply) and so bypassed it entirely — this
 // one swaps windows and the next clears the auth token. Nothing untrusted is loaded today,
 // so the exposure is theoretical, but there is no reason for these to be the exceptions.
+// The Logs window is held to its channel set here too (isChannelAllowedForSender).
 ipcMain.on('login-success', (event) => {
     if (!isTrustedSender(event)) {
         logger.withCategory('api').warning("Refused IPC 'login-success' from untrusted frame", null);
+        return;
+    }
+    if (!isChannelAllowedForSender(event, 'login-success')) {
+        logger.withCategory('api').warning("Refused IPC 'login-success' from the Logs window", null);
         return;
     }
     // A login window is swapped for the main window only after a login has stored its token, and
@@ -170,6 +175,10 @@ ipcMain.on('login-success', (event) => {
 ipcMain.on('logout', (event) => {
     if (!isTrustedSender(event)) {
         logger.withCategory('api').warning("Refused IPC 'logout' from untrusted frame", null);
+        return;
+    }
+    if (!isChannelAllowedForSender(event, 'logout')) {
+        logger.withCategory('api').warning("Refused IPC 'logout' from the Logs window", null);
         return;
     }
     if (!appState.mainWindow) return;

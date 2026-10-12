@@ -46,6 +46,7 @@ const BUNDLES = [
     { name: 'web', path: 'dist/web-bundle.js', label: 'web (browser tab, pnpm web)' },
     { name: 'headless', path: 'dist/headless-bundle.js', label: 'headless (Android background service)' },
     { name: 'preload', path: 'dist/preload-bundle.js', label: 'preload (Electron sandboxed preload)' },
+    { name: 'preloadLogs', path: 'dist/preloadLogs-bundle.js', label: 'preloadLogs (Logs window preload)' },
 ];
 
 const THRESHOLD_KB = Number.parseFloat(process.env.SIZE_DELTA_KB || '5');

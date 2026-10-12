@@ -225,7 +225,10 @@ jest.mock('../../src/ts/services/auth', () => ({ clearAuthToken: jest.fn(() => P
 for (const mod of ['log', 'update', 'misc', 'settings', 'voting', 'actions', 'computations', 'currency', 'scenarios']) {
     jest.mock(`../../src/ts/ipc/${mod}.handlers`, () => ({ register: jest.fn() }));
 }
-jest.mock('../../src/ts/ipc/registerHandlers', () => ({ isTrustedSender: jest.fn(() => true) }));
+jest.mock('../../src/ts/ipc/registerHandlers', () => ({
+    isTrustedSender: jest.fn(() => true),
+    isChannelAllowedForSender: jest.fn(() => true),
+}));
 jest.mock('../../src/ts/windows/lifecycle', () => ({
     ensureExit: jest.fn(),
     focusExistingWindow: jest.fn(),
@@ -869,6 +872,15 @@ describe('login-success IPC', () => {
         expect(mainWin()).toBeUndefined();
     });
 
+    it('refuses the Logs window', () => {
+        m.registerHandlers.isChannelAllowedForSender.mockReturnValueOnce(false);
+        const event = { fromLogs: true };
+        m.ipcMain.handlers['login-success'](event);
+        expect(m.registerHandlers.isChannelAllowedForSender).toHaveBeenCalledWith(event, 'login-success');
+        expect(m.cat.warning).toHaveBeenCalledWith("Refused IPC 'login-success' from the Logs window", null);
+        expect(mainWin()).toBeUndefined();
+    });
+
     it('closes the login window (if any) and opens the main window', () => {
         const login = loginWin()!;
         m.ipcMain.handlers['login-success']({});
@@ -918,6 +930,15 @@ describe('logout IPC', () => {
         m.registerHandlers.isTrustedSender.mockReturnValue(false);
         m.ipcMain.handlers.logout({});
         expect(m.cat.warning).toHaveBeenCalledWith("Refused IPC 'logout' from untrusted frame", null);
+        expect(m.auth.clearAuthToken).not.toHaveBeenCalled();
+    });
+
+    it('refuses the Logs window', () => {
+        m.registerHandlers.isChannelAllowedForSender.mockReturnValueOnce(false);
+        const event = { fromLogs: true };
+        m.ipcMain.handlers.logout(event);
+        expect(m.registerHandlers.isChannelAllowedForSender).toHaveBeenCalledWith(event, 'logout');
+        expect(m.cat.warning).toHaveBeenCalledWith("Refused IPC 'logout' from the Logs window", null);
         expect(m.auth.clearAuthToken).not.toHaveBeenCalled();
     });
 

@@ -21,7 +21,7 @@ import type * as loggerModule from '../../src/ts/logger';
 import type { IpcMainInvokeEvent } from 'electron';
 import { invalid } from '../helpers/invalid';
 
-const { isTrustedSender, registerHandlers } =
+const { isTrustedSender, isChannelAllowedForSender, registerHandlers, restrictToLogsChannels } =
     require('../../src/ts/ipc/registerHandlers') as typeof registerHandlersModule;
 
 type ChannelImpl = (event: IpcMainInvokeEvent, ...args: unknown[]) => unknown;
@@ -121,6 +121,73 @@ describe('registerHandlers applies the check to every channel', () => {
 
         expect(impl).toHaveBeenCalledWith(event, 'a', 'b');
         expect(result).toBe('ok');
+    });
+});
+
+describe('registerHandlers holds the Logs window to the Logs channel set', () => {
+    const logsSender = invalid<IpcMainInvokeEvent['sender']>({});
+    const frame = { url: 'file:///app/logs.html' };
+    const eventFrom = (sender: unknown) =>
+        invalid<IpcMainInvokeEvent>({
+            senderFrame: frame,
+            sender: Object.assign(sender as object, { mainFrame: frame }),
+        });
+
+    const setup = () => {
+        const channels = new Map<string, ChannelImpl>();
+        const impls = { 'get-log-backlog': jest.fn(async () => 'logs'), 'save-settings': jest.fn(async () => 'saved') };
+        registerHandlers(invalid({ handle: (channel: string, fn: ChannelImpl) => channels.set(channel, fn) }), impls);
+        restrictToLogsChannels(invalid(logsSender));
+        return { channels, impls };
+    };
+
+    test('a Logs-window call to a channel in the set reaches its handler', async () => {
+        const { channels, impls } = setup();
+        const event = eventFrom(logsSender);
+
+        expect(await channels.get('get-log-backlog')!(event)).toBe('logs');
+        expect(impls['get-log-backlog']).toHaveBeenCalledWith(event);
+    });
+
+    test('a Logs-window call outside the set gets the failure envelope, never the handler', async () => {
+        const { channels, impls } = setup();
+
+        const result = await channels.get('save-settings')!(eventFrom(logsSender), { language: 'lv' });
+
+        expect(impls['save-settings']).not.toHaveBeenCalled();
+        expect(result).toEqual({ success: false, error: 'Refused: channel not available to this window' });
+    });
+
+    test('another window and a direct call are not limited', async () => {
+        const { channels, impls } = setup();
+
+        expect(await channels.get('save-settings')!(eventFrom({}))).toBe('saved');
+        expect(await channels.get('save-settings')!(invalid(null))).toBe('saved');
+        expect(impls['save-settings']).toHaveBeenCalledTimes(2);
+    });
+
+    test('the same rule covers the send channels registered with ipcMain.on', () => {
+        setup();
+
+        expect(isChannelAllowedForSender(eventFrom(logsSender), 'login-success')).toBe(false);
+        expect(isChannelAllowedForSender(eventFrom(logsSender), 'logout')).toBe(false);
+        expect(isChannelAllowedForSender(eventFrom(logsSender), 'get-log-backlog')).toBe(true);
+        expect(isChannelAllowedForSender(eventFrom({}), 'logout')).toBe(true);
+        expect(isChannelAllowedForSender(undefined, 'logout')).toBe(true);
+    });
+
+    test('a refusal is logged with the channel', async () => {
+        const { channels } = setup();
+        const logger = jest.mocked(require('../../src/ts/logger') as typeof loggerModule);
+        const warning = jest.fn<void, [string, unknown]>();
+        const originalImpl = logger.withCategory.getMockImplementation();
+        logger.withCategory.mockImplementation(() => invalid({ warning }));
+        try {
+            await channels.get('save-settings')!(eventFrom(logsSender));
+            expect(warning).toHaveBeenCalledWith("Refused IPC 'save-settings' from the Logs window", null);
+        } finally {
+            logger.withCategory.mockImplementation(originalImpl);
+        }
     });
 });
 

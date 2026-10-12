@@ -44,8 +44,16 @@ import type * as scenarios_handlersModule from '../../src/ts/ipc/scenarios.handl
 import type * as misc_handlersModule from '../../src/ts/ipc/misc.handlers';
 import type * as update_handlersModule from '../../src/ts/ipc/update.handlers';
 
-const { invokeChannels, aliases, sendMethods, eventMethods, kebabToCamel, allInvokeChannels } =
-    require('../../src/ts/ipc/manifest') as typeof manifestModule;
+const {
+    invokeChannels,
+    aliases,
+    sendMethods,
+    eventMethods,
+    logsWindowInvokeChannels,
+    logsWindowEventMethods,
+    kebabToCamel,
+    allInvokeChannels,
+} = require('../../src/ts/ipc/manifest') as typeof manifestModule;
 
 const collectHandlerChannels = () => {
     const settingsHandlers = require('../../src/ts/ipc/settings.handlers') as typeof settings_handlersModule;
@@ -108,5 +116,17 @@ describe('ipc channel manifest', () => {
         for (const channel of Object.values(aliases)) {
             expect(handlerSet.has(channel)).toBe(true);
         }
+    });
+
+    test('the Logs window subset is exactly the log feed and the language read, all registered', () => {
+        expect([...logsWindowInvokeChannels].sort()).toEqual(
+            ['get-log-backlog', 'get-setting', 'log-error', 'start-log-stream', 'stop-log-stream'].sort(),
+        );
+        const handlerSet = new Set(collectHandlerChannels());
+        for (const channel of logsWindowInvokeChannels) expect(handlerSet.has(channel)).toBe(true);
+        expect(logsWindowEventMethods).toEqual({
+            onLogMessage: eventMethods.onLogMessage,
+            onSettingsChanged: eventMethods.onSettingsChanged,
+        });
     });
 });

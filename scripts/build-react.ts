@@ -66,6 +66,8 @@ const entryPoints = {
     // (src/ts/ipc/manifest.ts) must be BUNDLED into the preload file the
     // BrowserWindows load (dist/preload.js).
     preload: path.join(tsDir, 'preload.ts'),
+    // The Logs window's reduced preload (only the log-feed subset of the manifest).
+    preloadLogs: path.join(tsDir, 'preloadLogs.ts'),
 };
 
 type EntryName = keyof typeof entryPoints;
@@ -294,6 +296,7 @@ const perEntryOptions: Record<EntryName, BuildOptions> = {
     // the sandboxed preload require shim can resolve. No banner shim and
     // no browser aliasing needed; the manifest it pulls in is pure data.
     preload: { platform: 'node', format: 'cjs', external: ['electron'], banner: {} },
+    preloadLogs: { platform: 'node', format: 'cjs', external: ['electron'], banner: {} },
 };
 
 const prepareDist = async () => {

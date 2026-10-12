@@ -1,20 +1,23 @@
 /**
- * Shared ipcMain registration for the handler modules (log, misc, settings,
- * voting, actions, update). Each module exports buildHandlers(deps) →
- * {channel: impl}; this registers every entry.
+ * Shared ipcMain registration for the handler modules (actions, computations,
+ * currency, log, misc, scenarios, settings, update, voting). Each module exports
+ * buildHandlers(deps) → {channel: impl}; this registers every entry.
  *
  * Registration also adds a sender-frame check as defense-in-depth: the app
  * only ever loads its own file:// pages, so any invoke arriving from a
  * non-main frame or a non-file origin is refused. Nothing untrusted can
  * load, so the check never fires in practice — it exists so a future regression
  * that renders remote content doesn't inherit the full IPC surface.
- * Unit tests and the Capacitor bridge call buildHandlers() directly and are
- * unaffected.
+ * The Logs window is held to a smaller set per sender: its webContents is
+ * registered with restrictToLogsChannels() and may then invoke only the
+ * manifest's logsWindowInvokeChannels. Unit tests and the Capacitor bridge call
+ * buildHandlers() directly and are unaffected.
  */
 
 import * as logger from '../logger';
+import { logsWindowInvokeChannels } from './manifest';
 
-import type { IpcMain, IpcMainEvent, IpcMainInvokeEvent } from 'electron';
+import type { IpcMain, IpcMainEvent, IpcMainInvokeEvent, WebContents } from 'electron';
 
 /**
  * One handler as registered: `(event, ...args) => result`; `event` is null
@@ -84,6 +87,29 @@ const senderUrl = (event: IpcMainInvokeEvent): string => {
     }
 };
 
+// The webContents of windows limited to the Logs channel set. Weak, so a closed window drops out.
+const logsWindowSenders = new WeakSet<WebContents>();
+
+/**
+ * Limits every call from this window to the Logs channel set, whatever its preload exposes.
+ * @param webContents - the Logs window's, registered before its page loads
+ */
+const restrictToLogsChannels = (webContents: WebContents): void => {
+    logsWindowSenders.add(webContents);
+};
+
+/**
+ * @param event - Null/undefined on a direct invocation, which is not limited.
+ * @param channel - the channel being called (invoke or send)
+ */
+const isChannelAllowedForSender = (
+    event: IpcMainInvokeEvent | IpcMainEvent | null | undefined,
+    channel: string,
+): boolean =>
+    !event?.sender ||
+    !logsWindowSenders.has(event.sender) ||
+    (logsWindowInvokeChannels as readonly string[]).includes(channel);
+
 const registerHandlers = (ipcMain: IpcMain, handlers: Record<string, IpcHandler>) => {
     for (const [channel, impl] of Object.entries(handlers)) {
         ipcMain.handle(channel, (event, ...args: unknown[]) => {
@@ -93,12 +119,17 @@ const registerHandlers = (ipcMain: IpcMain, handlers: Record<string, IpcHandler>
                     .warning(`Refused IPC '${channel}' from untrusted frame ${senderUrl(event)}`, null);
                 return { success: false as const, error: 'Refused: untrusted sender' };
             }
+            if (!isChannelAllowedForSender(event, channel)) {
+                logger.withCategory('api').warning(`Refused IPC '${channel}' from the Logs window`, null);
+                return { success: false as const, error: 'Refused: channel not available to this window' };
+            }
             return invokeHandler(impl, event, args);
         });
     }
 };
 
-// isTrustedSender is exported so the handful of channels registered with ipcMain.on
-// (which carries no return value, so it cannot go through registerHandlers) can apply the
-// same origin check instead of silently having none.
-export { registerHandlers, invokeHandler, isTrustedSender };
+// isTrustedSender and isChannelAllowedForSender are exported so the handful of channels
+// registered with ipcMain.on (which carries no return value, so it cannot go through
+// registerHandlers) can apply the same origin and per-window checks instead of silently
+// having none.
+export { registerHandlers, invokeHandler, isTrustedSender, isChannelAllowedForSender, restrictToLogsChannels };

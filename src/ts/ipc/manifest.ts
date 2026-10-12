@@ -2,7 +2,8 @@
  * The window.api channel manifest — single source of truth for the surface
  * both platform shells expose to the renderer:
  *
- *   - Electron: preload.ts generates contextBridge methods from this list.
+ *   - Electron: preload.ts generates contextBridge methods from this list; the Logs
+ *     window's preloadLogs.ts generates only the logsWindow* subset.
  *   - Capacitor: bridge/capacitor.ts derives its in-process bridge from the
  *     same names (it implements a subset of channels plus its own update
  *     stubs, but aliases/sends/events come from here).
@@ -163,6 +164,25 @@ const eventMethods = {
     onSettingsChanged: 'settings-changed',
 } as const;
 
+// What the Logs window may use: the log feed, its own diagnostics line, and the one
+// settings read it makes (the UI language). Its preload (preloadLogs.ts) exposes only
+// this subset and the main process refuses every other channel from that window
+// (registerHandlers.ts), so a compromised Logs renderer reaches no spend, no settings
+// write and no other log channel. Every name must exist in the full manifest above
+// (tests/ipc/manifest.test.ts).
+const logsWindowInvokeChannels = [
+    'get-setting',
+    'log-error',
+    'get-log-backlog',
+    'start-log-stream',
+    'stop-log-stream',
+] as const satisfies readonly (typeof invokeChannels)[number][];
+
+const logsWindowEventMethods = {
+    onLogMessage: eventMethods.onLogMessage,
+    onSettingsChanged: eventMethods.onSettingsChanged,
+} as const satisfies Partial<typeof eventMethods>;
+
 // Shared kebab-case → camelCase (both shells must agree on this mapping).
 const kebabToCamel = (channel: string): string =>
     channel.replace(/-([a-z0-9])/g, (_: string, c: string) => c.toUpperCase());
@@ -171,4 +191,13 @@ const kebabToCamel = (channel: string): string =>
 // process must actually register handlers for.
 const allInvokeChannels = () => [...new Set([...invokeChannels, ...Object.values(aliases)])];
 
-export { invokeChannels, aliases, sendMethods, eventMethods, kebabToCamel, allInvokeChannels };
+export {
+    invokeChannels,
+    aliases,
+    sendMethods,
+    eventMethods,
+    logsWindowInvokeChannels,
+    logsWindowEventMethods,
+    kebabToCamel,
+    allInvokeChannels,
+};

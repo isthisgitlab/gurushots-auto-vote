@@ -42,7 +42,7 @@ const ROOT = realPath.join(__dirname, '..', '..');
 const DIST = realPath.join(ROOT, 'dist');
 const LEXICON = realPath.join(ROOT, 'src', 'assets', 'semantic-vectors.json');
 const NOTICES = realPath.join(ROOT, 'src', 'assets', 'THIRD_PARTY_NOTICES.txt');
-const ENTRY_NAMES = ['login', 'app', 'logs', 'capacitor', 'web', 'headless', 'preload'];
+const ENTRY_NAMES = ['login', 'app', 'logs', 'capacitor', 'web', 'headless', 'preload', 'preloadLogs'];
 
 const flush = async () => {
     for (let i = 0; i < 20; i++) {
@@ -155,7 +155,17 @@ describe('scripts/build-react.ts', () => {
             });
 
             expect(logged()).toContain('Building React bundles...');
-            expect(logged()).toContain('React build completed! (7 bundles)');
+            // The Logs window's reduced preload is built the same way.
+            expect(esbuild.build.mock.calls[7][0]).toMatchObject({
+                entryPoints: [expect.stringMatching(/preloadLogs\.ts$/)],
+                outfile: expect.stringMatching(/preloadLogs-bundle\.js$/),
+                platform: 'node',
+                format: 'cjs',
+                external: ['electron'],
+                banner: {},
+            });
+
+            expect(logged()).toContain('React build completed! (8 bundles)');
             expect(exitSpy).not.toHaveBeenCalled();
         });
 
@@ -191,7 +201,7 @@ describe('scripts/build-react.ts', () => {
             expect(opts.sourcemap).toBe(true);
             expect(opts.define!['process.env.NODE_ENV']).toBe('"development"');
             expect(logged()).toContain('Skipping logs');
-            expect(logged()).toContain('(6 bundles)');
+            expect(logged()).toContain('(7 bundles)');
         });
 
         test('warns when no entry point exists', async () => {
