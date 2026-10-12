@@ -78,6 +78,15 @@ describe('coinsUnlock', () => {
     });
 });
 
+describe('reads keep the default retry', () => {
+    test('getMemberChallenges and getBankroll pass no per-call options', async () => {
+        makePostRequest.mockResolvedValue({ items: [], bankroll: { challenges: [] } });
+        await getMemberChallenges(token);
+        await getBankroll(token);
+        expect(makePostRequest.mock.calls.map((call) => call.length)).toEqual([3, 3]);
+    });
+});
+
 describe('getBankroll', () => {
     test('normalizes the currency array to a flat balance', async () => {
         makePostRequest.mockResolvedValueOnce({

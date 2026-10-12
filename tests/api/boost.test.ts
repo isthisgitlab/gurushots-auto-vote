@@ -94,6 +94,7 @@ describe('boost', () => {
                     'content-type': 'application/x-www-form-urlencoded; charset=utf-8',
                 }),
                 'c_id=12345&image_id=entry3',
+                { retry: false },
             );
 
             expect(result).toEqual(mockResponse);
@@ -165,6 +166,7 @@ describe('boost', () => {
                 'https://api.gurushots.com/rest_mobile/boost_photo',
                 expect.anything(),
                 'c_id=12345&image_id=entry4',
+                { retry: false },
             );
         });
 
@@ -187,6 +189,7 @@ describe('boost', () => {
                 'https://api.gurushots.com/rest_mobile/boost_photo',
                 expect.anything(),
                 'c_id=12345&image_id=entry1',
+                { retry: false },
             );
         });
 
@@ -211,6 +214,7 @@ describe('boost', () => {
                 'https://api.gurushots.com/rest_mobile/boost_photo',
                 expect.anything(),
                 'c_id=12345&image_id=entry1',
+                { retry: false },
             );
         });
     });
@@ -230,6 +234,7 @@ describe('boost', () => {
                     'content-type': 'application/x-www-form-urlencoded; charset=utf-8',
                 }),
                 'c_id=67890&image_id=specific-image-123',
+                { retry: false },
             );
 
             expect(result).toEqual(mockResponse);
@@ -255,6 +260,7 @@ describe('boost', () => {
                 'https://api.gurushots.com/rest_mobile/boost_photo',
                 expect.anything(),
                 'c_id=12345&image_id=image-456',
+                { retry: false },
             );
         });
 
@@ -268,6 +274,7 @@ describe('boost', () => {
                 'https://api.gurushots.com/rest_mobile/boost_photo',
                 expect.anything(),
                 'c_id=challenge%26special&image_id=image%3Dspecial',
+                { retry: false },
             );
         });
 
@@ -281,6 +288,7 @@ describe('boost', () => {
                 'https://api.gurushots.com/rest_mobile/boost_photo',
                 expect.anything(),
                 expect.any(String),
+                { retry: false },
             );
         });
 
@@ -297,6 +305,7 @@ describe('boost', () => {
                     'content-type': 'application/x-www-form-urlencoded; charset=utf-8',
                 }),
                 expect.any(String),
+                { retry: false },
             );
         });
     });

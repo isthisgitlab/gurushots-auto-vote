@@ -79,7 +79,8 @@ const applyTurbo = async (challengeId: string | number, imageId: string, token: 
     requireValue(token, 'token');
     const headers = createWebHeaders(token);
     const data = `challenge_id=${encodeURIComponent(String(challengeId))}&image_id=${encodeURIComponent(imageId)}`;
-    const response = await makePostRequest<SuccessResponse>(ENDPOINTS.setTurbo, headers, data);
+    // One attempt: a Turbo is not known to be idempotent, so a retry after a timeout could consume a second one.
+    const response = await makePostRequest<SuccessResponse>(ENDPOINTS.setTurbo, headers, data, { retry: false });
     if (!response) {
         return { ok: false, raw: null };
     }

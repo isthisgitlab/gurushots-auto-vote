@@ -75,7 +75,14 @@ describe('applyBoost guards', () => {
 
         await expect(applyBoost(invalid(challenge), 'tok')).resolves.toEqual({ success: true });
 
-        expect(makePostRequest).toHaveBeenCalledWith(ENDPOINTS.boostPhoto, expect.any(Object), 'c_id=9&image_id=img-1');
+        expect(makePostRequest).toHaveBeenCalledWith(
+            ENDPOINTS.boostPhoto,
+            expect.any(Object),
+            'c_id=9&image_id=img-1',
+            {
+                retry: false,
+            },
+        );
         expect(entry.boosted).toBe(true);
     });
 
@@ -97,6 +104,8 @@ describe('applyBoostToEntry nullish ids', () => {
 
         await applyBoostToEntry(null, undefined, 'tok');
 
-        expect(makePostRequest).toHaveBeenCalledWith(ENDPOINTS.boostPhoto, expect.any(Object), 'c_id=&image_id=');
+        expect(makePostRequest).toHaveBeenCalledWith(ENDPOINTS.boostPhoto, expect.any(Object), 'c_id=&image_id=', {
+            retry: false,
+        });
     });
 });

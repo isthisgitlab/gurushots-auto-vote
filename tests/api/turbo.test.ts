@@ -132,6 +132,19 @@ describe('turbo', () => {
         });
     });
 
+    describe('retrying', () => {
+        test('the reads and the free battle picks keep the default retry; only the Turbo that is consumed is one attempt', async () => {
+            makePostRequest.mockResolvedValue({ success: true, images: [] });
+            await getChallengeTurbo('124113', mockToken);
+            await submitTurboSelection('124113', 'a1', mockToken);
+            await applyTurbo('124113', 'a1', mockToken);
+            const [battleSet, pick, apply] = makePostRequest.mock.calls;
+            expect(battleSet).toHaveLength(3);
+            expect(pick).toHaveLength(3);
+            expect(apply[3]).toEqual({ retry: false });
+        });
+    });
+
     describe('applyTurbo', () => {
         test('posts the entry image id and returns ok=true on success', async () => {
             makePostRequest.mockResolvedValueOnce({ success: true });
@@ -142,6 +155,7 @@ describe('turbo', () => {
                 'https://api.gurushots.com/rest/set_challenge_turbo',
                 expect.objectContaining({ 'x-token': mockToken }),
                 'challenge_id=125305&image_id=entry-1',
+                { retry: false },
             );
             expect(result).toEqual({ ok: true, raw: { success: true } });
         });

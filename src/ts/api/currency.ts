@@ -32,7 +32,8 @@ const toResult = (response: SuccessResponse | null): ActionResult =>
 const post = async (url: string, token: string, fields: Record<string, string>): Promise<ActionResult> => {
     const headers = createWebHeaders(token);
     const data = new URLSearchParams(fields).toString();
-    return toResult(await makePostRequest<SuccessResponse>(url, headers, data));
+    // One attempt: a spend is not known to be idempotent, so a retry after a timeout could spend twice.
+    return toResult(await makePostRequest<SuccessResponse>(url, headers, data, { retry: false }));
 };
 
 /**

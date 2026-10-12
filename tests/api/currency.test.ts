@@ -25,6 +25,18 @@ const lastCall = () => {
     return { url, headers, body };
 };
 
+describe('every spend is a single attempt: a retried timeout or 5xx could spend twice', () => {
+    test.each([
+        ['keyUnlock', () => keyUnlock(1, token)],
+        ['swapPhoto', () => swapPhoto(1, 'old', 'new', token)],
+        ['exposureAutofill', () => exposureAutofill(1, 'member-id', token)],
+    ])('%s', async (_name, spend) => {
+        makePostRequest.mockResolvedValueOnce({ success: true });
+        await spend();
+        expect(makePostRequest.mock.calls[0][3]).toEqual({ retry: false });
+    });
+});
+
 describe('keyUnlock', () => {
     test('posts c_id + EXPOSURE_BOOST usage with WEB headers', async () => {
         makePostRequest.mockResolvedValueOnce({ success: true });
