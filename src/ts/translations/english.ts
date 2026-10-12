@@ -415,9 +415,9 @@ export const app = {
     scenarioResetUnloaded:
         'The saved progress could not be loaded yet, so nothing was reset. The app retries; reopen the app if the progress still doesn’t load.',
     scenarioResetReadable:
-        'The saved progress can be read again, so nothing was reset. Close this window to see where the plans are.',
+        'The saved progress can be read again, so nothing was reset. Close this dialog to see where the plans are.',
     scenarioResetUnreadable:
-        'The saved progress cannot be read, so this challenge cannot be reset alone. Close this window and open it again to reset every challenge.',
+        'The saved progress cannot be read, so this challenge cannot be reset alone. Close this dialog and open it again to reset every challenge.',
     locksUnavailable:
         'The app cannot create its lock files in its data folder, so it cannot do this safely. Nothing was changed. Check the folder’s permissions and the free disk space (the log has the details), then try again.',
     scenarioResetFailed: 'Could not reset the scenario right now. Nothing was changed. Try again in a moment.',
@@ -1212,7 +1212,7 @@ export const app = {
     refresh: 'Refresh',
     challengeOverrideInfo: 'Settings configured here will override global defaults for this challenge only.',
     challengeOverridesLoadError:
-        "Couldn't load this challenge's saved settings, so they can't be edited now — saving would overwrite them. Close this window and open it again; if it keeps failing, check the error log.",
+        "Couldn't load this challenge's saved settings, so they can't be edited now — saving would overwrite them. Close this dialog and open it again; if it keeps failing, check the error log.",
     mockMode: 'Mock Mode',
     logout: 'Logout',
     status: 'Status',
@@ -1481,7 +1481,7 @@ export const about = {
     deleteFailed:
         "Not everything could be deleted. A file or store could not be removed. Close other programs that use the app's files, then try again.",
     deleteFailedAndroid:
-        "Not everything could be deleted. Some stored data or the background service's data could not be removed. Try again now, or close this dialog to restart the app first.",
+        "Not everything could be deleted. Some stored data or the background service's data could not be removed. Try again now.",
     deleteRestartsOnClose: 'Closing this dialog restarts the app.',
     deleteDone: 'All local data was deleted. The app restarts now; if it does not, close it and open it again.',
     deleteDoneWeb:

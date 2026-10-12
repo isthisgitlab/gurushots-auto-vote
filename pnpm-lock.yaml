@@ -205,8 +205,8 @@ importers:
         specifier: ^7.5.22
         version: 7.5.22
       zod:
-        specifier: ^4.6.6
-        version: 4.6.6
+        specifier: ^4.6.7
+        version: 4.6.7
     devDependencies:
       '@capacitor/cli':
         specifier: ^8.5.3
@@ -278,11 +278,11 @@ importers:
         specifier: ^2.2.1
         version: 2.2.1
       marked:
-        specifier: ^18.1.0
-        version: 18.1.0
+        specifier: ^18.1.1
+        version: 18.1.1
       marked-gfm-heading-id:
         specifier: ^4.1.4
-        version: 4.1.4(marked@18.1.0)
+        version: 4.1.4(marked@18.1.1)
       npm-check-updates:
         specifier: 23.1.1
         version: 23.1.1
@@ -3525,8 +3525,8 @@ packages:
     peerDependencies:
       marked: '>=13 <19'
 
-  marked@18.1.0:
-    resolution: {integrity: sha512-PamYXWWWg2nboG3oX5Ffzpy3EFZROqZJK9hSlMmUnekp7TxPs5DcT95vwd46m73/exfKCRVMtgXoPMI4FEJL6w==}
+  marked@18.1.1:
+    resolution: {integrity: sha512-zEGgrtUG8crk+TrMacJSVABU4DYDDkS8uqgU3ohrn/2fW9C2AEfUrO3m6IhpIpQpl7YcVpiXXC9cSMWDANT3dg==}
     engines: {node: '>= 20'}
     hasBin: true
 
@@ -4276,8 +4276,8 @@ packages:
     engines: {node: '>=16.20.0'}
     hasBin: true
 
-  unbash@5.0.0:
-    resolution: {integrity: sha512-RYNm/ISFtflWpIcXTPHHLJZ0mqzInav+L9ke9PcL+hHsSf9+Fd/syPb614Mlqs/O3AYgjnvxDOFl0a+zVqi1/w==}
+  unbash@5.1.0:
+    resolution: {integrity: sha512-YVGyy4XqoZ2AVgHjVdL9cchMSurlXFHWviORa8RiU/Bnol4ooW5Lpyur/5XmbgDdyCKxymmgsEQsLGBMIJ/Agg==}
     engines: {node: '>=14'}
 
   undici-types@7.24.6:
@@ -4471,8 +4471,8 @@ packages:
     resolution: {integrity: sha512-rVksvsnNCdJ/ohGc6xgPwyN8eheCxsiLM8mxuE/t/mOVqJewPuO1miLpTHQiRgTKCLexL4MeAFVagts7HmNZ2Q==}
     engines: {node: '>=10'}
 
-  zod@4.6.6:
-    resolution: {integrity: sha512-4UmzQUF5fxvfcYHlbjBmejU+w+hbDnWFx4aS8kBx7nPBHcO2SqPbpAG8snbdg+Xse4pRefR98hgjFgIMCI/UhA==}
+  zod@4.6.7:
+    resolution: {integrity: sha512-g8W2D2kU6a8untc053fX1uVBKzM7yqAxW/3zwk83+6RyF2+SKOuV+c0wBDhUwzV1PaGapmZH+rmcUzPf+3CGwg==}
 
 snapshots:
 
@@ -7623,9 +7623,9 @@ snapshots:
       smol-toml: 1.9.1
       strip-json-comments: 5.0.3
       tinyglobby: 0.2.17
-      unbash: 5.0.0
+      unbash: 5.1.0
       yaml: 2.9.1
-      zod: 4.6.6
+      zod: 4.6.7
 
   lazy-val@1.0.5: {}
 
@@ -7763,12 +7763,12 @@ snapshots:
     dependencies:
       semver: 7.8.5
 
-  marked-gfm-heading-id@4.1.4(marked@18.1.0):
+  marked-gfm-heading-id@4.1.4(marked@18.1.1):
     dependencies:
       github-slugger: 2.0.0
-      marked: 18.1.0
+      marked: 18.1.1
 
-  marked@18.1.0: {}
+  marked@18.1.1: {}
 
   matcher@4.0.0:
     dependencies:
@@ -8594,7 +8594,7 @@ snapshots:
       '@typescript/typescript-win32-arm64': 7.0.2
       '@typescript/typescript-win32-x64': 7.0.2
 
-  unbash@5.0.0: {}
+  unbash@5.1.0: {}
 
   undici-types@7.24.6: {}
 
@@ -8809,4 +8809,4 @@ snapshots:
 
   yocto-queue@0.1.0: {}
 
-  zod@4.6.6: {}
+  zod@4.6.7: {}

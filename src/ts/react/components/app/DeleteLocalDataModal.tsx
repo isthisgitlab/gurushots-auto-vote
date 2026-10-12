@@ -22,7 +22,7 @@ const isBusy = (error: unknown): error is Busy => typeof error === 'string' && O
  * and starts with focus on Cancel — Cancel is the first control and there is no close button, so nothing is
  * deleted by a stray Enter. While the delete runs the dialog cannot be dismissed. A refusal (a voting pass, a command-line
  * session or the desktop app is in the way) or a failure is worded for the user and stays on screen (a failure that left the
- * window's caches emptied reloads it when the dialog is closed, and a sentence under the outcome says so); on success the
+ * window's caches emptied reloads it when the dialog is closed, and the outcome alert carries a sentence that says so); on success the
  * shell relaunches the app, or, where it cannot (the web shell's server stops), the text says to start it again.
  */
 export function DeleteLocalDataModal({ isOpen, onClose }: { isOpen: boolean; onClose: () => void }) {

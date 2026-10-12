@@ -420,9 +420,9 @@ export const app = {
     scenarioResetUnloaded:
         'Saglabāto progresu vēl nav izdevies ielādēt, tāpēc nekas netika atiestatīts. Lietotne mēģina vēlreiz; ja progress joprojām netiek ielādēts, atver lietotni no jauna.',
     scenarioResetReadable:
-        'Saglabāto progresu atkal var nolasīt, tāpēc nekas netika atiestatīts. Aizver šo logu, lai redzētu, kur ir plāni.',
+        'Saglabāto progresu atkal var nolasīt, tāpēc nekas netika atiestatīts. Aizver šo dialoglodziņu, lai redzētu, kur ir plāni.',
     scenarioResetUnreadable:
-        'Saglabāto progresu nevar nolasīt, tāpēc šo izaicinājumu nevar atiestatīt atsevišķi. Aizver šo logu un atver to vēlreiz, lai atiestatītu visus izaicinājumus.',
+        'Saglabāto progresu nevar nolasīt, tāpēc šo izaicinājumu nevar atiestatīt atsevišķi. Aizver šo dialoglodziņu un atver to vēlreiz, lai atiestatītu visus izaicinājumus.',
     locksUnavailable:
         'Lietotne nevar izveidot savus bloķēšanas failus savā datu mapē, tāpēc šo darbību nevar droši veikt. Nekas netika mainīts. Pārbaudi mapes atļaujas un brīvo vietu diskā (sīkāk žurnālā) un mēģini vēlreiz.',
     scenarioResetFailed: 'Pašlaik neizdevās atiestatīt scenāriju. Nekas netika mainīts. Mēģini vēlreiz pēc brīža.',
@@ -1234,7 +1234,7 @@ export const app = {
     refresh: 'Atsvaidzināt',
     challengeOverrideInfo: 'Šeit norādītie uzstādījumi aizstās globālos noklusējumus tikai šim izaicinājumam.',
     challengeOverridesLoadError:
-        'Neizdevās ielādēt šī izaicinājuma saglabātos uzstādījumus, tāpēc tos tagad nevar labot — saglabāšana tos pārrakstītu. Aizver šo logu un atver to vēlreiz; ja kļūda atkārtojas, pārbaudi kļūdu žurnālu.',
+        'Neizdevās ielādēt šī izaicinājuma saglabātos uzstādījumus, tāpēc tos tagad nevar labot — saglabāšana tos pārrakstītu. Aizver šo dialoglodziņu un atver to vēlreiz; ja kļūda atkārtojas, pārbaudi kļūdu žurnālu.',
     mockMode: 'Testa režīms',
     logout: 'Iziet',
     status: 'Statuss',
@@ -1508,7 +1508,7 @@ export const about = {
     deleteFailed:
         'Ne viss tika izdzēsts. Kādu failu vai krātuvi neizdevās noņemt. Aizver citas programmas, kas izmanto lietotnes failus, un mēģini vēlreiz.',
     deleteFailedAndroid:
-        'Ne viss tika izdzēsts. Daļu saglabāto datu vai fona pakalpojuma datu neizdevās noņemt. Mēģini vēlreiz tūlīt vai aizver šo dialoglodziņu, lai lietotne vispirms tiktu palaista no jauna.',
+        'Ne viss tika izdzēsts. Daļu saglabāto datu vai fona pakalpojuma datu neizdevās noņemt. Mēģini vēlreiz tūlīt.',
     deleteRestartsOnClose: 'Kad aizvērsi šo dialoglodziņu, lietotne tiks palaista no jauna.',
     deleteDone:
         'Visi vietējie dati ir dzēsti. Lietotne tūlīt tiks palaista no jauna. Ja tas nenotiek, aizver to un atver vēlreiz.',
