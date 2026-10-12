@@ -17,7 +17,8 @@ test('renders nothing without a scenario', () => {
 
 test.each<[ScenarioSummary, string]>([
     [{ name: 'Gone', missing: true }, 'app.scenarioStatusMissing'],
-    [{ name: 'Plan', corrupt: true }, 'app.scenarioStatusCorrupt'],
+    [{ name: 'Plan', corrupt: 'file' }, 'app.scenarioStatusCorrupt'],
+    [{ name: 'Plan', corrupt: 'record' }, 'app.scenarioStatusCorruptRecord'],
 ])('warns for %p', (status, key) => {
     render(<ScenarioStatusLine status={status} />);
     expect(screen.getByRole('status').textContent).toContain(key);
@@ -117,11 +118,30 @@ describe('the reset button', () => {
         expect(onReset).toHaveBeenCalledTimes(1);
     });
 
-    test('is offered, for every challenge, when the progress cannot be read', () => {
+    test('is offered, for every challenge, when the whole file of progress cannot be read', () => {
         const onReset = jest.fn();
-        render(<ScenarioStatusLine status={{ name: 'Plan', corrupt: true }} onReset={onReset} />);
+        render(<ScenarioStatusLine status={{ name: 'Plan', corrupt: 'file' }} onReset={onReset} />);
         fireEvent.click(screen.getByText('app.scenarioResetAll'));
         expect(onReset).toHaveBeenCalledTimes(1);
+        expect(screen.queryByText('app.scenarioReset')).toBeNull();
+    });
+
+    test('is the reset of this challenge alone when only its record cannot be read', () => {
+        const onReset = jest.fn();
+        render(<ScenarioStatusLine status={{ name: 'Plan', corrupt: 'record' }} onReset={onReset} />);
+        fireEvent.click(screen.getByText('app.scenarioReset'));
+        expect(onReset).toHaveBeenCalledTimes(1);
+        expect(screen.queryByText('app.scenarioResetAll')).toBeNull();
+    });
+
+    test.each([
+        ['a stopped rule', stoppedStatus(), 'app.scenarioReset'],
+        ['unreadable progress', { name: 'Plan', corrupt: 'file' as const }, 'app.scenarioResetAll'],
+    ])('stays outside the live region that announces the notice (%s)', (_name, status, label) => {
+        render(<ScenarioStatusLine status={status} onReset={jest.fn()} />);
+        const button = screen.getByText(label);
+        expect(button.closest('[role="status"]')).toBeNull();
+        for (const region of screen.getAllByRole('status')) expect(region.contains(button)).toBe(false);
     });
 
     test.each([
@@ -138,7 +158,7 @@ describe('the reset button', () => {
         render(<ScenarioStatusLine status={stoppedStatus()} />);
         expect(screen.queryByText('app.scenarioReset')).toBeNull();
         cleanup();
-        render(<ScenarioStatusLine status={{ name: 'Plan', corrupt: true }} />);
+        render(<ScenarioStatusLine status={{ name: 'Plan', corrupt: 'file' }} />);
         expect(screen.queryByText('app.scenarioResetAll')).toBeNull();
     });
 
@@ -149,12 +169,31 @@ describe('the reset button', () => {
         render(<ScenarioStatusLine status={stoppedStatus()} />);
         expect(screen.getByRole('status').textContent).toBe('app.scenarioStatusSpendStopped');
         cleanup();
-        render(<ScenarioStatusLine status={{ name: 'Plan', corrupt: true }} compact />);
+        render(<ScenarioStatusLine status={{ name: 'Plan', corrupt: 'file' }} compact />);
         expect(screen.getByRole('status').textContent).toContain('app.scenarioStatusCorruptShort');
         cleanup();
-        render(<ScenarioStatusLine status={{ name: 'Plan', corrupt: true }} />);
+        render(<ScenarioStatusLine status={{ name: 'Plan', corrupt: 'file' }} />);
         expect(screen.getByRole('status').textContent).toContain('app.scenarioStatusCorrupt');
         expect(screen.getByRole('status').textContent).not.toContain('Short');
+        cleanup();
+        render(<ScenarioStatusLine status={{ name: 'Plan', corrupt: 'record' }} compact />);
+        expect(screen.getByRole('status').textContent).toContain('app.scenarioStatusCorruptRecordShort');
+    });
+
+    test('a short notice names the control that opens the card, by its own label', () => {
+        mockTranslator.t.mockImplementation((key) =>
+            key === 'app.details'
+                ? 'Details'
+                : key === 'app.scenarioStatusSpendStoppedShort'
+                  ? 'Press “{details}” for more.'
+                  : key,
+        );
+        try {
+            render(<ScenarioStatusLine status={stoppedStatus()} compact />);
+            expect(screen.getByRole('status').textContent).toBe('Press “Details” for more.');
+        } finally {
+            mockTranslator.t.mockImplementation((key) => key);
+        }
     });
 });
 

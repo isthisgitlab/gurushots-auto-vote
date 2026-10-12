@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react';
+import { signal } from '@preact/signals';
 import { nextWakeAt } from '../../scenarios/nextWake';
 import { startState } from '../../scenarios/evaluate';
 import { useLatestRef } from '../hooks/useLatestRef';
@@ -9,13 +10,24 @@ import type { WindowApi } from '../../types/ipc';
 import type { ScenarioState, SpendAction } from '../../types/stores';
 import type { ScenarioDocument } from '../../settings/scenarioSchema';
 
+// Bumped when scenario progress was reset (one challenge's or every challenge's): every card reads its status again.
+const scenarioResets = signal(0);
+
+/**
+ * Tells every card that scenario progress changed, so each reads its own status again.
+ */
+export const refreshScenarioStatuses = () => {
+    scenarioResets.value += 1;
+};
+
 /**
  * A challenge's scenario position as the card shows it.
  */
 export type ScenarioSummary = {
     name: string;
     missing?: true;
-    corrupt?: true;
+    /** The saved progress cannot be read: all of it (`file`), or this challenge's record (`record`). */
+    corrupt?: 'file' | 'record';
     phase?: string;
     started?: boolean;
     lastError?: string | null;
@@ -65,6 +77,8 @@ export function useScenarioStatus(
         Array.isArray(entries) ? entries.map((e) => `${e?.id}:${e?.votes}:${e?.rank}`).join(',') : '',
     ].join('|');
     const challengeRef = useLatestRef(challenge);
+    // Read while rendering, so a reset anywhere renders this card again.
+    const resets = scenarioResets.value;
 
     useEffect(() => {
         let cancelled = false;
@@ -82,7 +96,7 @@ export function useScenarioStatus(
         return () => {
             cancelled = true;
         };
-    }, [fingerprint, settingsVersion, passVersion, challengeRef]);
+    }, [fingerprint, settingsVersion, passVersion, resets, challengeRef]);
 
     return summary;
 }
@@ -130,7 +144,7 @@ const spendUnclearOf = (
  */
 function summarize(status: ScenarioStatus, challenge: Challenge): ScenarioSummary {
     if (!status.scenario) return { name: status.assigned, missing: true };
-    if (status.corrupt) return { name: status.scenario.name, corrupt: true };
+    if (status.corrupt) return { name: status.scenario.name, corrupt: status.corrupt };
     const now = Math.floor(Date.now() / 1000);
     const state = status.state ?? startState(status.scenario, now);
     return {

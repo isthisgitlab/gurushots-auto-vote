@@ -442,13 +442,50 @@ describe('acquireUnlockLock', () => {
         expect(warning).toHaveBeenCalledWith('cross-process lock unavailable for c9: EACCES', null);
     });
 
+    describe('the app’s own locks are not any challenge’s', () => {
+        test('a challenge’s lock and an internal one of the same name are different files, so no id can take the app’s', () => {
+            const challenge = joinState.acquireUnlockLock('scenariostate');
+            const internal = joinState.acquireUnlockLock('scenariostate', { internal: true });
+            expect(challenge.ok).toBe(true);
+            expect(internal.ok).toBe(true);
+            expect([...mockFiles.keys()].sort()).toEqual([
+                '/cfg/joinlock-scenariostate.lock',
+                '/cfg/statelock-scenariostate.lock',
+            ]);
+            // Each is held on its own: a second of the same kind is busy.
+            expect(joinState.acquireUnlockLock('scenariostate').ok).toBe(false);
+            expect(joinState.acquireUnlockLock('scenariostate', { internal: true }).ok).toBe(false);
+            challenge.release();
+            internal.release();
+        });
+
+        test('when a lock cannot be made at all, the challenge’s unlock lock fails open and the app’s own fail closed', () => {
+            const warning = jest.fn();
+            jest.mocked(logger.withCategory).mockReturnValue(invalid({ warning }));
+            const original = fs.openSync.getMockImplementation()!;
+            fs.openSync.mockImplementation(() => {
+                throw mockFsError('EACCES');
+            });
+            try {
+                expect(joinState.acquireUnlockLock('c1').ok).toBe(true);
+                expect(joinState.acquireUnlockLock('joinstate', { internal: true }).ok).toBe(false);
+                expect(joinState.acquireUnlockLock('scenario-7', { category: 'scenario', internal: true }).ok).toBe(
+                    false,
+                );
+                expect(warning).toHaveBeenCalledTimes(3);
+            } finally {
+                fs.openSync.mockImplementation(original);
+            }
+        });
+    });
+
     test('the failure is logged under the category of whoever took the lock', () => {
         const warning = jest.fn();
         jest.mocked(logger.withCategory).mockReturnValueOnce(invalid({ warning }));
         fs.openSync.mockImplementationOnce(() => {
             throw mockFsError('EACCES');
         });
-        expect(joinState.acquireUnlockLock('scenario-7', 'scenario').ok).toBe(true);
+        expect(joinState.acquireUnlockLock('scenario-7', { category: 'scenario' }).ok).toBe(true);
         expect(logger.withCategory).toHaveBeenCalledWith('scenario');
         expect(warning).toHaveBeenCalledWith('cross-process lock unavailable for scenario-7: EACCES', null);
     });

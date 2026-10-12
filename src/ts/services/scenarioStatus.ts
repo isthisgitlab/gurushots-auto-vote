@@ -39,7 +39,7 @@ const getScenarioStatus = (
     assigned: string;
     scenario: ScenarioDocument | null;
     state: ScenarioState | null;
-    corrupt: boolean;
+    corrupt: false | 'file' | 'record';
     timezone: string;
 } => {
     const id = String(challengeId);
@@ -64,7 +64,7 @@ const scenarioWakeInput = ({
 }: {
     scenario: ScenarioDocument | null;
     state: ScenarioState | null;
-    corrupt: boolean;
+    corrupt: false | 'file' | 'record';
     timezone: string;
 }) => (scenario && !corrupt ? { scenario, state, timezone } : null);
 

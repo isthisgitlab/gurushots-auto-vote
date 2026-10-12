@@ -24,6 +24,11 @@ import { runRule, withNotice } from './rule';
 
 const NO_LOCK = { ok: true, release: () => {} };
 
+const corruptText = (kind: 'file' | 'record', challengeId: string) =>
+    kind === 'file'
+        ? 'scenario state is unreadable — reset the progress of every challenge (scenario-reset --all, or the Reset button on a challenge card) to start the plans again'
+        : `scenario state of this challenge is unreadable — reset it (scenario-reset --challenge=${challengeId}, or the Reset button on its card) to start the plan again`;
+
 /**
  * The challenge's state for `scenario`, starting it (at the start phase) when
  * it has none or was running a different scenario. Null when unreadable.
@@ -31,24 +36,14 @@ const NO_LOCK = { ok: true, release: () => {} };
  * @param now - unix seconds
  */
 const loadState = (ctx: RunnerContext, now: number): ScenarioState | null => {
-    const { corrupt, state } = ctx.ledger.get(ctx.challengeId);
+    const { corrupt, state, epoch } = ctx.ledger.get(ctx.challengeId);
     if (corrupt) {
-        log().error(
-            `${logger.challengeTag(ctx.challenge)} scenario state is unreadable — reset the progress of every challenge (scenario-reset --all, or the Reset button on a challenge card) to start the plans again`,
-            null,
-        );
-        return null;
-    }
-    // A state that could not be written down earlier still is not: nothing runs on until it is.
-    if (ctx.ledger.hasUnsaved(ctx.challengeId)) {
-        log().warning(
-            `${logger.challengeTag(ctx.challenge)} scenario state could not be written yet — nothing runs this pass`,
-            null,
-        );
+        log().error(`${logger.challengeTag(ctx.challenge)} ${corruptText(corrupt, ctx.challengeId)}`, null);
         return null;
     }
     if (state && state.scenario.toLowerCase() === ctx.scenario.name.toLowerCase()) return state;
-    const fresh = initialState(ctx.scenario.name, ctx.scenario.start, now);
+    // Stamped with the resets it starts under, like any state read: a reset in between is not undone by it.
+    const fresh = { ...initialState(ctx.scenario.name, ctx.scenario.start, now), epoch };
     if (!ctx.ledger.set(ctx.challengeId, fresh)) return null;
     log().info(
         `${logger.challengeTag(ctx.challenge)} scenario "${ctx.scenario.name}" started in phase ${fresh.phase}`,

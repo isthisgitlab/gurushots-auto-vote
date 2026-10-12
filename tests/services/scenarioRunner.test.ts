@@ -55,6 +55,7 @@ const runtime = jest.mocked(runtimeModule);
 import nativeAutovoteModule = require('../../src/ts/services/NativeAutovoteBridge');
 const nativeAutovote = jest.mocked(nativeAutovoteModule);
 import type * as scenarioRunnerModule from '../../src/ts/services/scenarioRunner';
+import type * as ruleModule from '../../src/ts/services/scenarioRunner/rule';
 import type * as scenarioStateStoreModule from '../../src/ts/scenarioStateStore';
 import type { Challenge, ChallengeMember, MemberRanking, RankingEntry } from '../../src/ts/types/gurushots';
 import type { ScenarioDocument } from '../../src/ts/settings/scenarioSchema';
@@ -65,7 +66,8 @@ import type { SwapBackLedger } from '../../src/ts/services/currencyActions';
 import { invalid } from '../helpers/invalid';
 const { runScenarioStep, backgroundServiceOwnsScenarios } =
     require('../../src/ts/services/scenarioRunner') as typeof scenarioRunnerModule;
-const { createMemoryStateLedger, initialState } =
+const { runRule } = require('../../src/ts/services/scenarioRunner/rule') as typeof ruleModule;
+const { createMemoryStateLedger, createStateLedger, initialState } =
     require('../../src/ts/scenarioStateStore') as typeof scenarioStateStoreModule;
 
 type CategoryMock = {
@@ -204,9 +206,14 @@ describe('when nothing runs', () => {
     test('unreadable state halts the challenge without starting over', async () => {
         setup(single([{ type: 'fillExposure' }]));
         const broken = createMemoryStateLedger();
-        jest.spyOn(broken, 'get').mockReturnValue({ corrupt: true, state: null });
-        await runScenarioStep(challenge(), NOW, invalid({ ...pass, scenarios: { ledger: broken } }));
-        expect(log.error).toHaveBeenCalledWith(expect.stringContaining('unreadable'), null);
+        const epoch = { all: 0, gen: 0 };
+        for (const corrupt of ['file', 'record'] as const) {
+            jest.spyOn(broken, 'get').mockReturnValue({ corrupt, state: null, epoch });
+            await runScenarioStep(challenge(), NOW, invalid({ ...pass, scenarios: { ledger: broken } }));
+        }
+        // What is said names the reset that helps: every challenge's, or this challenge's.
+        expect(log.error).toHaveBeenCalledWith(expect.stringContaining('scenario-reset --all'), null);
+        expect(log.error).toHaveBeenCalledWith(expect.stringContaining('scenario-reset --challenge=7'), null);
         expect(currencyActions.fillExposure).not.toHaveBeenCalled();
     });
 
@@ -302,7 +309,8 @@ describe('one process at a time per challenge', () => {
 });
 
 describe('a state that cannot be written down is never run on', () => {
-    // The calls of ledger.set a pass makes: the start of the plan, the vote sample, then one per step.
+    // The calls of ledger.set a pass makes: the start of the plan, the vote sample, then for a spend its write-ahead
+    // marker and its result, and for any other step its result.
     const failAfter = (writes: number) => {
         const real = ledger.set.bind(ledger);
         let calls = 0;
@@ -323,8 +331,17 @@ describe('a state that cannot be written down is never run on', () => {
         expect(currencyActions.fillExposure).not.toHaveBeenCalled();
     });
 
-    test('a step that landed and could not be written down is the last of its rule: the next one could spend too', async () => {
+    test('a spend whose marker could not be written down first is not made', async () => {
         failAfter(2);
+        currencyActions.fillExposure.mockResolvedValue(invalid({ ok: true }));
+        setup(single([{ type: 'fillExposure' }]));
+        await run();
+        expect(currencyActions.fillExposure).not.toHaveBeenCalled();
+        expect(state().inFlight).toBeNull();
+    });
+
+    test('a step that landed and could not be written down is the last of its rule: the next one could spend too', async () => {
+        failAfter(3);
         currencyActions.fillExposure.mockResolvedValue(invalid({ ok: true }));
         currencyActions.unlockBoostWithKey.mockResolvedValue(invalid({ ok: true }));
         setup(single([{ type: 'fillExposure' }, { type: 'unlockBoost' }]));
@@ -334,7 +351,7 @@ describe('a state that cannot be written down is never run on', () => {
     });
 
     test('a rule that finished and could not be written down is not followed by another in the same pass', async () => {
-        failAfter(3);
+        failAfter(4);
         currencyActions.fillExposure.mockResolvedValue(invalid({ ok: true }));
         currencyActions.unlockBoostWithKey.mockResolvedValue(invalid({ ok: true }));
         setup(
@@ -346,21 +363,185 @@ describe('a state that cannot be written down is never run on', () => {
     });
 
     test('a skipped step of a committed rule that could not be written down ends the rule there', async () => {
-        failAfter(3);
+        failAfter(5);
         currencyActions.fillExposure.mockResolvedValue(invalid({ ok: true }));
         currencyActions.unlockBoostWithKey.mockResolvedValueOnce({ ok: false, outcome: 'no-balance' });
-        currencyActions.swapEntry.mockResolvedValue({ ok: true, outcome: 'ok' });
         setup(single([{ type: 'fillExposure' }, { type: 'unlockBoost' }, { type: 'fillExposure' }]));
         await run();
         expect(currencyActions.fillExposure).toHaveBeenCalledTimes(1);
+        expect(currencyActions.unlockBoostWithKey).toHaveBeenCalledTimes(1);
+    });
+});
+
+describe('a spend is written down before it is made, so that a result that is never written is not spent again', () => {
+    const unclear = { ok: false, outcome: 'unclear' } as const;
+
+    // Two processes over one file: each has its own ledger (and so its own memory), and neither knows what the other
+    // kept in memory.
+    const processes = () => {
+        let raw: string | null = null;
+        const store = {
+            readRaw: () => raw,
+            writeRaw: (data: string) => {
+                raw = data;
+            },
+        };
+        return { first: createStateLedger(store), second: createStateLedger(store) };
+    };
+    const runIn = async (inLedger: typeof ledger, c: Challenge, extra: object = {}) => {
+        await runScenarioStep(c, NOW, invalid({ ...pass, scenarios: { ledger: inLedger, ...extra } }));
+        return c;
+    };
+    const lockedBoost = () => {
+        const c = challenge();
+        c.member.boost!.state = 'LOCKED';
+        return c;
+    };
+
+    test('the marker is in the file while the spend is made, and gone once its result is written', async () => {
+        let during: unknown = null;
+        currencyActions.fillExposure.mockImplementationOnce(async () => {
+            during = state().inFlight;
+            return invalid({ ok: true });
+        });
+        setup(single([{ type: 'fillExposure' }, { type: 'fillExposure' }]));
+        await run();
+        expect(during).toEqual({ ruleId: 'r1', actionIndex: 0, pending: 'fillExposure' });
+        expect(state().inFlight).toBeNull();
     });
 
-    test('a state still waiting to be written from an earlier pass is not run on, with the reason logged', async () => {
-        jest.spyOn(ledger, 'hasUnsaved').mockReturnValue(true);
+    test('a step that spends nothing has no marker', async () => {
+        let during: unknown = 'not read';
+        pass.api.applyBoostToEntry.mockImplementationOnce(async () => {
+            during = state().inFlight;
+            return { success: true };
+        });
+        setup(single([{ type: 'boost', entry: { by: 'fewestVotes' } }]));
+        await run();
+        expect(during).toBeNull();
+    });
+
+    test('a refused spend leaves no marker behind: it was not made', async () => {
+        currencyActions.fillExposure.mockResolvedValueOnce({ ok: false, outcome: 'balance-unknown' });
         setup(single([{ type: 'fillExposure' }]));
         await run();
-        expect(currencyActions.fillExposure).not.toHaveBeenCalled();
-        expect(log.warning).toHaveBeenCalledWith(expect.stringContaining('could not be written yet'), null);
+        expect(state().inFlight).toBeNull();
+    });
+
+    test('a process that spent and could not write the result: the next one, in another process, does not spend again', async () => {
+        const { first, second } = processes();
+        currencyActions.unlockBoostWithKey.mockResolvedValue(invalid({ ok: true }));
+        setup(single([{ type: 'unlockBoost' }, { type: 'boost', entry: { by: 'fewestVotes' } }]));
+        // The start, the sample and the marker are written; the result is not (the lock was busy, the process died).
+        const real = first.set.bind(first);
+        let writes = 0;
+        jest.spyOn(first, 'set').mockImplementation((id, next) => (++writes <= 3 ? real(id, next) : false));
+        const c = lockedBoost();
+        await runIn(first, c);
+        expect(currencyActions.unlockBoostWithKey).toHaveBeenCalledTimes(1);
+        expect(second.get(7).state!.inFlight).toEqual({ ruleId: 'r1', actionIndex: 0, pending: 'unlockBoost' });
+
+        // The next process looks at the live challenge, which shows the key went through: it goes on, and spends nothing.
+        c.member.boost!.state = 'AVAILABLE_KEY';
+        await runIn(second, c);
+        expect(currencyActions.unlockBoostWithKey).toHaveBeenCalledTimes(1);
+        expect(pass.api.applyBoostToEntry).toHaveBeenCalledTimes(1);
+        expect(second.get(7).state!.fired.r1).toBeDefined();
+    });
+
+    test('…and when the live challenge does not show it, it stops that rule rather than spend: stopped, held for the phase', async () => {
+        const { first, second } = processes();
+        currencyActions.unlockBoostWithKey.mockResolvedValue(invalid({ ok: true }));
+        setup(single([{ type: 'unlockBoost' }]));
+        const real = first.set.bind(first);
+        let writes = 0;
+        jest.spyOn(first, 'set').mockImplementation((id, next) => (++writes <= 3 ? real(id, next) : false));
+        const c = lockedBoost();
+        await runIn(first, c);
+        c.member.boost!.state = 'LOCKED';
+        await runIn(second, c);
+        await runIn(second, c);
+        expect(currencyActions.unlockBoostWithKey).toHaveBeenCalledTimes(1);
+        expect(second.get(7).state!.fired.r1.unclearHalt).toBe('unlockBoost');
+        expect(second.get(7).state!.inFlight).toBeNull();
+    });
+
+    test('a marker left by a crash is read as a spend that got no answer: the same step, looked at, never repeated', async () => {
+        const c = lockedBoost();
+        setup(single([{ type: 'unlockBoost' }]));
+        ledger.set(7, {
+            ...initialState('Plan', 'main', NOW),
+            inFlight: { ruleId: 'r1', actionIndex: 0, pending: 'unlockBoost' },
+        });
+        await run(c);
+        expect(currencyActions.unlockBoostWithKey).not.toHaveBeenCalled();
+        expect(state().fired.r1.unclearHalt).toBe('unlockBoost');
+        expect(state().lastError!.message).toContain('may have gone through earlier, so it is not repeated');
+    });
+
+    test('a marker of a step the scenario has since changed to another is kept as a spend that got no answer', async () => {
+        setup(single([{ type: 'fillExposure' }]));
+        ledger.set(7, {
+            ...initialState('Plan', 'main', NOW),
+            inFlight: { ruleId: 'r1', actionIndex: 0, pending: 'unlockBoost' },
+        });
+        currencyActions.fillExposure.mockResolvedValueOnce(unclear);
+        await run();
+        // The fill got no answer either: it is the marker now, and the key's is not lost for it.
+        expect(state().inFlight).toEqual({
+            ruleId: 'r1',
+            actionIndex: 0,
+            unclear: 'fillExposure',
+            unclearAt: expect.any(Number),
+        });
+        // A refused fill, instead, leaves the older marker where it was.
+        ledger.set(7, {
+            ...initialState('Plan', 'main', NOW),
+            inFlight: { ruleId: 'r1', actionIndex: 0, pending: 'unlockBoost' },
+        });
+        currencyActions.fillExposure.mockResolvedValueOnce({ ok: false, outcome: 'balance-unknown' });
+        await run();
+        expect(state().inFlight).toEqual({
+            ruleId: 'r1',
+            actionIndex: 0,
+            unclear: 'unlockBoost',
+            unclearAt: expect.any(Number),
+        });
+    });
+});
+
+describe('a rule resumed past its first step without any marker (the state was edited by hand)', () => {
+    test('stops at the failing step, with the marker of where it stands', async () => {
+        currencyActions.unlockBoostWithKey.mockResolvedValueOnce({ ok: false, outcome: 'api-failed' });
+        const doc = single([{ type: 'fillExposure' }, { type: 'unlockBoost' }]);
+        setup(doc);
+        const state = { ...initialState('Plan', 'main', NOW), epoch: ledger.get(7).epoch };
+        const validated = { ...doc.phases.main.rules![0], id: 'r1' };
+        const outcome = await runRule(
+            { ruleId: 'r1', rule: invalid(validated), startIndex: 1 },
+            invalid({ challenge: challenge(), challengeId: '7', scenario: doc, timezone: 'UTC', pass, ledger }),
+            state,
+        );
+        expect(outcome.completed).toBe(false);
+        expect(outcome.state.inFlight).toEqual({ ruleId: 'r1', actionIndex: 1 });
+    });
+});
+
+describe('a reset made while a step runs is not undone by it', () => {
+    test.each([
+        ['of its challenge', () => ledger.remove(7)],
+        ['of every challenge', () => ledger.removeAll()],
+    ])('a reset %s', async (_name, reset) => {
+        currencyActions.fillExposure.mockImplementationOnce(async () => {
+            reset();
+            return invalid({ ok: true });
+        });
+        currencyActions.unlockBoostWithKey.mockResolvedValue(invalid({ ok: true }));
+        setup(single([{ type: 'fillExposure' }, { type: 'unlockBoost' }]));
+        await run();
+        // The step that was running stops at its first write: nothing more is spent, and nothing comes back.
+        expect(currencyActions.unlockBoostWithKey).not.toHaveBeenCalled();
+        expect(ledger.get(7).state).toBeNull();
     });
 });
 

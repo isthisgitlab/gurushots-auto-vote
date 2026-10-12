@@ -3,9 +3,9 @@
  * card-sized summary of where a challenge is in its scenario).
  */
 
-import { render, screen, waitFor } from './helpers/test-utils';
+import { act, render, screen, waitFor } from './helpers/test-utils';
 import { useScenarios } from '@/api/useScenarios';
-import { useScenarioStatus } from '@/api/useScenarioStatus';
+import { refreshScenarioStatuses, useScenarioStatus } from '@/api/useScenarioStatus';
 import type { ScenarioSummary } from '@/api/useScenarioStatus';
 import { invalid } from '../helpers/invalid';
 import type { Challenge } from '../../src/ts/types/gurushots';
@@ -89,11 +89,32 @@ describe('useScenarioStatus', () => {
                 success: true,
                 assigned: 'Plan',
                 scenario,
-                corrupt: true,
+                corrupt: 'file',
             }),
         );
         render(<StatusProbe challenge={challenge()} />);
-        await waitFor(() => expect(JSON.parse(out())).toEqual({ name: 'Plan', corrupt: true }));
+        await waitFor(() => expect(JSON.parse(out())).toEqual({ name: 'Plan', corrupt: 'file' }));
+    });
+
+    test('progress that is bad for this challenge alone is told from progress that is unreadable altogether', async () => {
+        jest.mocked(window.api.getScenarioStatus).mockResolvedValueOnce(
+            invalid({ success: true, assigned: 'Plan', scenario, corrupt: 'record' }),
+        );
+        render(<StatusProbe challenge={challenge()} />);
+        await waitFor(() => expect(JSON.parse(out())).toEqual({ name: 'Plan', corrupt: 'record' }));
+    });
+
+    test('a reset anywhere makes every card read its status again', async () => {
+        render(
+            <>
+                <StatusProbe challenge={challenge()} />
+                <StatusProbe challenge={invalid<Challenge>({ id: 8, close_time: NOW + 86400 })} />
+            </>,
+        );
+        await waitFor(() => expect(window.api.getScenarioStatus).toHaveBeenCalledTimes(2));
+        act(() => refreshScenarioStatuses());
+        await waitFor(() => expect(window.api.getScenarioStatus).toHaveBeenCalledTimes(4));
+        expect(window.api.getScenarioStatus).toHaveBeenCalledWith(8);
     });
 
     test('a plan not started yet is summarised from its start phase', async () => {

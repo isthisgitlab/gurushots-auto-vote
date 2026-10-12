@@ -95,7 +95,7 @@ beforeEach(() => {
 
 describe('a scenario whose progress can be reset from the card', () => {
     const scenario = { name: 'Plan', start: 'main', phases: { main: { rules: [{ id: 'r', if: [], do: [] }] } } };
-    const statusOf = (state: object | null, corrupt = false) =>
+    const statusOf = (state: object | null, corrupt: false | 'file' | 'record' = false) =>
         invalid({
             success: true,
             assigned: 'Plan',
@@ -130,7 +130,7 @@ describe('a scenario whose progress can be reset from the card', () => {
     });
 
     test('unreadable progress offers the reset of every challenge, and the dialog says that', async () => {
-        window.api.getScenarioStatus = jest.fn().mockResolvedValue(statusOf(null, true));
+        window.api.getScenarioStatus = jest.fn().mockResolvedValue(statusOf(null, 'file'));
         window.api.resetAllScenarioState = jest.fn().mockResolvedValue({ success: true });
         renderCard(makeChallenge());
         fireEvent.click(await screen.findByText('app.scenarioResetAll'));
@@ -138,6 +138,16 @@ describe('a scenario whose progress can be reset from the card', () => {
         fireEvent.click(screen.getByText('app.scenarioResetConfirm'));
         await waitFor(() => expect(window.api.resetAllScenarioState).toHaveBeenCalledTimes(1));
         expect(window.api.resetScenarioState).not.toHaveBeenCalled();
+    });
+
+    test('a bad record of this challenge alone is reset for this challenge alone', async () => {
+        window.api.getScenarioStatus = jest.fn().mockResolvedValue(statusOf(null, 'record'));
+        window.api.resetScenarioState = jest.fn().mockResolvedValue({ success: true });
+        renderCard(makeChallenge());
+        fireEvent.click(await screen.findByText('app.scenarioReset'));
+        expect(screen.getByText('app.scenarioResetBody')).toBeTruthy();
+        fireEvent.click(screen.getByText('app.scenarioResetConfirm'));
+        await waitFor(() => expect(window.api.resetScenarioState).toHaveBeenCalledWith(101));
     });
 
     test('cancelling resets nothing', async () => {

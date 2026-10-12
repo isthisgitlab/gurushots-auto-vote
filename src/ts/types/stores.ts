@@ -104,9 +104,17 @@ export interface ScenarioState {
     fired: Record<string, ScenarioFiredRecord>;
     /**
      * `unclear`: the action type of the step at `actionIndex`, whose spend got no answer and is never spent again;
-     * `unclearAt`: when (unix seconds)
+     * `unclearAt`: when (unix seconds); `pending`: the spend the step is about to make, written down BEFORE it is
+     * made, so that a step whose result was never written (a crash, a lock held) is found on the next run and
+     * treated like `unclear`: looked at, never spent again
      */
-    inFlight: { ruleId: string; actionIndex: number; unclear?: SpendAction; unclearAt?: number } | null;
+    inFlight: {
+        ruleId: string;
+        actionIndex: number;
+        unclear?: SpendAction;
+        unclearAt?: number;
+        pending?: SpendAction;
+    } | null;
     /** currency spent, by kind (swaps / keys / fills) */
     spent: Record<string, number>;
     /** photo id → [[unixSec, votes], …] vote samples (scenarios/speed.ts) */
@@ -117,4 +125,17 @@ export interface ScenarioState {
     lastError?: { at: number; message: string } | null;
     /** ms, for pruning */
     updatedAt?: number;
+    /** how many times this challenge's record was reset when the stored one was written (see ScenarioEpoch) */
+    gen?: number;
+    /**
+     * Not stored: the resets this state was read under. A write of a state read under older ones is refused, so a
+     * step that was running when its challenge (or every challenge) was reset cannot bring the old progress back.
+     */
+    epoch?: ScenarioEpoch;
+}
+
+/** The resets a state was read under: of every challenge (`all`) and of its own challenge (`gen`). */
+export interface ScenarioEpoch {
+    all: number;
+    gen: number;
 }

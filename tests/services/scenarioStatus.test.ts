@@ -88,7 +88,8 @@ describe('scenarioWakeInput / resolveScenarioWake', () => {
             state: null,
             timezone: 'UTC',
         });
-        expect(scenarioWakeInput({ scenario, state: null, corrupt: true, timezone: 'UTC' })).toBeNull();
+        expect(scenarioWakeInput({ scenario, state: null, corrupt: 'file', timezone: 'UTC' })).toBeNull();
+        expect(scenarioWakeInput({ scenario, state: null, corrupt: 'record', timezone: 'UTC' })).toBeNull();
         expect(scenarioWakeInput({ scenario: null, state: null, corrupt: false, timezone: 'UTC' })).toBeNull();
     });
 

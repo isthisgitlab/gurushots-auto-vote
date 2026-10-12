@@ -2109,6 +2109,20 @@ describe('unlock markers are kept per account', () => {
             expect(release).toHaveBeenCalledTimes(1);
         });
 
+        test('the claims file’s lock is one of the app’s own, a challenge’s is not: they are asked for apart', async () => {
+            const store = fileWith({ [`${A}:2`]: { unlockedAt: RECENT } });
+            const acquire = lockOf([]);
+            const deps = joiningAs(A, store, { acquireUnlockLock: acquire });
+            await joinChallengeSingle(2, 'tok', deps);
+            const asked = invalid<Array<[string | number, { internal: boolean }]>>(acquire.mock.calls);
+            const claimsFile = asked.filter(([id]) => id === 'joinstate');
+            const challenge = asked.filter(([id]) => id !== 'joinstate');
+            expect(claimsFile.length).toBeGreaterThan(0);
+            expect(challenge.length).toBeGreaterThan(0);
+            expect(claimsFile.every(([, options]) => options.internal)).toBe(true);
+            expect(challenge.every(([, options]) => !options.internal)).toBe(true);
+        });
+
         test('submitting and marking the claim joined happen under one lock, which is let go', async () => {
             const store = fileWith({ [`${A}:2`]: { unlockedAt: RECENT } });
             const acquire = lockOf([]);

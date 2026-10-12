@@ -85,10 +85,11 @@ const inFlight: Set<string> = new Set();
 const cat = () => logger.withCategory('join');
 
 /**
- * The cross-process unlock lock of one challenge (always granted where none is wired in: mock mode).
+ * The cross-process unlock lock of one challenge, or (`internal`) one of the app's own such as the claims file's
+ * (always granted where none is wired in: mock mode).
  */
-const lockFor = (deps: JoinDeps, id: string | number): { ok: boolean; release: () => void } =>
-    deps.acquireUnlockLock ? deps.acquireUnlockLock(id) : { ok: true, release: () => {} };
+const lockFor = (deps: JoinDeps, id: string | number, internal = false): { ok: boolean; release: () => void } =>
+    deps.acquireUnlockLock ? deps.acquireUnlockLock(id, { internal }) : { ok: true, release: () => {} };
 
 export { inFlight, cat, lockFor };
 export type { Claim, JoinOutcome, UnlockState, JoinSingleResult };

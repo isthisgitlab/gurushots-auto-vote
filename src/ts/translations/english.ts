@@ -332,9 +332,13 @@ export const app = {
     scenarioTemplateFailed: "The template copy wasn't saved.",
     scenarioStatusMissing: 'Scenario "{name}" no longer exists — nothing runs. Pick another in the challenge settings.',
     scenarioStatusCorrupt:
-        'Scenario "{name}": its saved progress cannot be read, so the plan is paused. Resetting the progress of every challenge starts the plans again.',
+        'Scenario "{name}": the saved progress of the scenarios cannot be read, so the plans of every challenge are paused. Resetting the progress of every challenge starts them again.',
     scenarioStatusCorruptShort:
-        'Scenario "{name}" is paused: its saved progress cannot be read. Open the challenge to reset it.',
+        'Scenario "{name}" is paused: the saved progress cannot be read. Press “{details}” to reset every challenge’s progress.',
+    scenarioStatusCorruptRecord:
+        'Scenario "{name}": the saved progress of this challenge cannot be read, so its plan is paused. Resetting it starts the plan again.',
+    scenarioStatusCorruptRecordShort:
+        'Scenario "{name}" is paused: this challenge’s saved progress cannot be read. Press “{details}” to reset it.',
     scenarioStatusPhase: 'phase {phase}',
     scenarioStatusNotStarted: 'starts in phase {phase} on the next run',
     scenarioStatusNext: 'next check in {time}',
@@ -344,7 +348,7 @@ export const app = {
     scenarioStatusSpendStopped:
         'GuruShots gave no answer to “{action}”, so it may have gone through, and its rule was stopped so that it is not spent again. Check the challenge. {again} To start the scenario over, use Reset scenario below or run scenario-reset --challenge={id} in the command line (CLI): that may spend the unanswered action again, and it restarts the scenario’s spend counter.',
     scenarioStatusSpendStoppedShort:
-        'GuruShots gave no answer to “{action}”: its rule was stopped so that it is not spent again. Open the challenge for details.',
+        'GuruShots gave no answer to “{action}”: its rule was stopped so that it is not spent again. Press “{details}” for more.',
     scenarioReset: 'Reset scenario…',
     scenarioResetAll: 'Reset every challenge’s progress…',
     scenarioResetTitle: 'Reset scenario progress',
@@ -355,7 +359,9 @@ export const app = {
     scenarioResetConfirm: 'Reset',
     scenarioResetWorking: 'Resetting…',
     scenarioResetBusy:
-        'Another process is running this challenge’s scenario, or using the saved progress. Nothing was changed. Try again in a moment.',
+        'This challenge’s scenario is being run, or the saved progress is being updated, right now (by the app or by another process). Nothing was changed. Try again in a moment.',
+    scenarioResetAllBusy:
+        'The saved scenario progress is being updated right now (by the app or by another process). Nothing was changed. Try again in a moment.',
     scenarioResetUnreadable:
         'The saved progress cannot be read, so this challenge cannot be reset alone. Close this window and open it again to reset every challenge.',
     scenarioResetFailed: 'Could not reset the scenario right now. Nothing was changed. Try again in a moment.',
@@ -568,7 +574,7 @@ export const app = {
     discoverUnconfirmed:
         'The payment for this challenge got no answer, so it may or may not have gone through. Retrying only submits your photo, so you are never charged twice. If the GuruShots website shows the coins were not taken, press "I wasn\'t charged", then join again.',
     discoverEarlierPayment:
-        'This challenge has a payment record from an older version of the app, from before accounts were told apart, so it is not known whether the coins were taken, or by which GuruShots account used on this device. Retry submit is for the account that paid: it only submits the photo, so nobody is charged twice. The record cannot be forgotten here, because it may belong to another account: it stops applying to other accounts once the account that paid joins the challenge, and otherwise clears by itself, at the next check after 30 days. If this is not the account that paid, you can join the challenge on the GuruShots website meanwhile.',
+        'This challenge has a payment record from an older version of the app, from before accounts were told apart, so it is not known whether the coins were taken, or by which GuruShots account used on this device. Retry submit is for the account that paid: it only submits the photo, so nobody is charged twice. The record cannot be forgotten here, because it may belong to another account: it stops applying to other accounts once the account that paid joins the challenge through this app, and otherwise clears by itself, at the next check after 30 days. If this is not the account that paid, you can join the challenge on the GuruShots website meanwhile.',
     discoverForgetPayment: "I wasn't charged",
     discoverForgetPaymentLabel: "I wasn't charged for {title}",
     discoverForgetTitle: 'Forget this payment?',
@@ -585,7 +591,7 @@ export const app = {
     discoverForgetAccountUnknown:
         'Could not confirm which account is logged in, so nothing was changed. Try again shortly, or log in again.',
     discoverForgetLegacyRecord:
-        'This record is from an older version of the app and may belong to another GuruShots account used on this device, so it cannot be forgotten here. It stops applying to other accounts once the account that paid joins the challenge, and otherwise clears by itself, at the next check after 30 days. Nothing was changed.',
+        'This record is from an older version of the app and may belong to another GuruShots account used on this device, so it cannot be forgotten here. It stops applying to other accounts once the account that paid joins the challenge through this app, and otherwise clears by itself, at the next check after 30 days. Nothing was changed.',
     discoverForgetBusy:
         'A join of this challenge is in progress, or another part of the app is using the saved payment records. Nothing was changed. Try again in a moment.',
     discoverForgetNotAuthenticated: 'You are not logged in, so nothing was changed. Log in again, then try once more.',

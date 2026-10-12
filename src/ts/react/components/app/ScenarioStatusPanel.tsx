@@ -1,33 +1,34 @@
 import { useState } from 'react';
 import { ScenarioStatusLine } from './ScenarioStatusLine';
 import { ScenarioResetModal } from './ScenarioResetModal';
+import { refreshScenarioStatuses } from '@/api/useScenarioStatus';
 import type * as useScenarioStatusModule from '@/api/useScenarioStatus';
 import type { Challenge } from '../../../types/gurushots';
 
 /**
  * A card's scenario status with the way to reset its progress: the status line, and the dialog its Reset button
- * opens (for every challenge when the saved progress cannot be read).
- *
- * @param onReset - the progress was reset: the card reads its status again
+ * opens. What the dialog resets is fixed when it opens (every challenge's progress when the saved progress cannot be
+ * read, else this challenge's), and every card reads its status again afterwards.
  */
 export function ScenarioStatusPanel({
     status,
     challenge,
-    onReset,
 }: {
     status: ReturnType<typeof useScenarioStatusModule.useScenarioStatus>;
-    challenge: Pick<Challenge, 'id' | 'title'>;
-    onReset: () => void;
+    challenge: Pick<Challenge, 'id' | 'title' | 'url'>;
 }) {
-    const [resetting, setResetting] = useState(false);
+    const [resetting, setResetting] = useState<'one' | 'all' | null>(null);
     return (
         <>
-            <ScenarioStatusLine status={status} onReset={() => setResetting(true)} />
+            <ScenarioStatusLine
+                status={status}
+                onReset={() => setResetting(status?.corrupt === 'file' ? 'all' : 'one')}
+            />
             <ScenarioResetModal
                 challenge={resetting ? challenge : null}
-                everyChallenge={Boolean(status?.corrupt)}
-                onClose={() => setResetting(false)}
-                onReset={onReset}
+                everyChallenge={resetting === 'all'}
+                onClose={() => setResetting(null)}
+                onChanged={refreshScenarioStatuses}
             />
         </>
     );

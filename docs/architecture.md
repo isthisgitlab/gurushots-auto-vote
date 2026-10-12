@@ -451,7 +451,7 @@ repeated six times is one that gets forgotten at one of them.
   claim for the challenge only when it is still unconfirmed; never a claim known to have been charged. A
   bare claim from before accounts were told apart is **never** forgotten (`legacy-record`): it may be another
   account's protection against a second charge and nothing on the device can tell whose, so it stops applying
-  to the other accounts when the account that paid joins (the join replaces it, in one change of the claims, by
+  to the other accounts when the account that paid joins through this app (the join replaces it, in one change of the claims, by
   that account's own joined claim), and otherwise clears after 30 days (any claim, bare or any account's, older than 30 days is pruned at the next open-list pruning,
   except this account's own keyed claim of a challenge still in the list just read: a bare claim is never kept by
   the list, since the list says nothing of whose it is; no challenge lives that long, and it ends the keeping of
@@ -514,7 +514,11 @@ repeated six times is one that gets forgotten at one of them.
   (60 s untouched), and a stale one is taken over atomically (renamed to a name of its own — only one process can
   — then checked to be the one seen, and put back with a hard link if it was a live one: a link fails rather than
   replace a lock created meanwhile, and only where the filesystem has no hard links does a rename stand in, while
-  the place is empty); a corrupt/unreadable join-state **refuses to spend** (fail-safe, not fail-open);
+  the place is empty). A challenge's lock (`joinlock-<id>.lock`) and the app's own (`statelock-<name>.lock`: the
+  claims file's, the scenario state file's, a challenge's scenario steps) are different files whatever their
+  names, so no id can name one of the app's. When a lock cannot be made at all (permissions, a full disk) the
+  challenge's fails open (a spend still needs its claim recorded first, by compare-and-set under the claims-file
+  lock) and the app's own fail closed, as busy: nothing guards what they guard but them. A corrupt/unreadable join-state **refuses to spend** (fail-safe, not fail-open);
   the pass is cancellation-checked between candidates and before each spend, and each candidate is
   independently try/caught. Decision precedence in `VotingLogic.shouldJoinChallenge` (pure): a rule opt-in
   (a named profile, or an inline `autoJoin: true` on the rule) wins over the type-exclude veto; otherwise the
@@ -729,11 +733,23 @@ caps (dependency-free, renderer-safe), and `scenarios/templates.ts` holds editab
   another process holds is skipped for that pass (the pass is given the lock, so mock mode, which has no other process and must never
   touch real files, has none). Every change of the file is read-modify-write of the whole, so it is made under a
   second cross-process lock (`scenariostate`, a bounded wait of half a second, the file read again under it);
-  when the lock cannot be had, or the write fails, the change is not made, the state is kept in memory for the next
-  try (the next read returns it, after trying to write it first), and the runner stops the rule there and runs
-  nothing for the challenge while a state waits, so a spend that landed is never repeated for want of a write. A
-  reset takes the challenge's step lock and answers `busy` when another process holds it or the file, never a
-  silent success. A step that fails at the place of a marked step (the scenario
+  when the lock cannot be had, or the write fails, the change is not made and the runner stops the rule there. A
+  read never writes, waits or takes a lock. **A spend is written down before it is made**: before every currency
+  spend (swap, unlock a boost, fill) the runner persists `inFlight.pending` for that step, and a spend whose marker
+  could not be written is not made. If the result of the spend is then never written (the lock was busy, the disk
+  failed, the process died, the one-shot CLI exited), the next run in any process finds the marker and treats it
+  like `unclear`: it looks at the live challenge, goes on only when that positively shows the spend landed, and
+  otherwise stops the rule; it never spends again. Nothing is kept in memory for that: the file is what protects a
+  spend. **Resets are counted**: the file keeps a count of resets of every challenge (`@all`) and each challenge's
+  record (a tombstone, for a challenge reset away) keeps its own; a state carries the counts it was read under
+  (`epoch`) and a write of a state read under older ones is refused, so a step that was running when its challenge,
+  or every challenge, was reset cannot bring the old progress back, in this process or another, and with no lock
+  to rely on (the Android service has none). The refused step stops, and says it was reset. A progress that cannot
+  be read is `file` (all of it: only the reset of every challenge, `reset-all-scenario-state`, clears it) or
+  `record` (this challenge's: its own reset does). A reset takes the challenge's step lock and answers `busy` when
+  that or the file's lock is held (by the app's own pass or by another process), never a silent success; the reset
+  of every challenge takes no step locks, the counts make them unnecessary. Every card reads its status again after
+  a reset (`refreshScenarioStatuses`). A step that fails at the place of a marked step (the scenario
   was edited) keeps the marker, so a revert never spends it again. The card's notice for a rule stopped after a
   spend that got no answer says when that rule can run again by its repeat (the phase entered again, a reset, the
   next day), points at the card's Reset button (a dialog that carries the cost: it can spend the unanswered action again and

@@ -32,7 +32,7 @@
  * (refreshScenarioStateAsync) before it reads or resets scenario state.
  */
 
-import type { RawJsonStore, ScenarioState, SpendAction } from './types/stores';
+import type { RawJsonStore, ScenarioEpoch, ScenarioState, SpendAction } from './types/stores';
 import * as logger from './logger';
 import { createJsonStore } from './settings/storage';
 import { isPlainObject } from './plainObject';
@@ -81,7 +81,12 @@ const isRecord = (r: unknown): r is ScenarioState =>
             typeof r.inFlight.ruleId === 'string' &&
             Number.isInteger(r.inFlight.actionIndex) &&
             (r.inFlight.unclear === undefined || isSpendAction(r.inFlight.unclear)) &&
-            (r.inFlight.unclearAt === undefined || Number.isFinite(r.inFlight.unclearAt))));
+            (r.inFlight.pending === undefined || isSpendAction(r.inFlight.pending)) &&
+            (r.inFlight.unclearAt === undefined || Number.isFinite(r.inFlight.unclearAt)))) &&
+    (r.gen === undefined || Number.isFinite(r.gen));
+
+// What a reset of one challenge leaves in its place: the record is gone, its count of resets is not.
+const isTombstone = (r: unknown): boolean => isPlainObject(r) && r.tombstone === true && Number.isFinite(r.gen);
 
 /**
  * A fresh record for a challenge entering `scenario` at its start phase.
@@ -105,14 +110,56 @@ type ParsedStateFile = { ok: boolean; map: Record<string, unknown> };
 /** A cross-process lock, as joinStateStore's acquireUnlockLock gives one. */
 type StateLock = { ok: boolean; release: () => void };
 
-/** How a reset ended: done, not done because another process holds a lock, or not done because the file is unreadable. */
+/** How a reset ended: done, not done because a lock is held, or not done because the file is unreadable. */
 type ResetResult = 'removed' | 'busy' | 'unreadable';
+
+/** What a change of the file came to: `refused` is a write of a state read before a reset. */
+type Mutation = 'done' | 'busy' | 'unreadable' | 'refused';
 
 // The state file is one file for every challenge, so a change of it is read-modify-write of the whole: two processes
 // running different challenges would drop each other's change (a fired rule, a spend counter, an unclear marker,
 // and with it the protection against repeating a landed spend). It is changed only under this lock, held briefly.
 const FILE_LOCK_ID = 'scenariostate';
 const FILE_LOCK_WAIT_MS = 500;
+// The file's count of resets of every challenge (a challenge id is never a key like it).
+const ALL_KEY = '@all';
+
+const countOf = (value: unknown): number => (typeof value === 'number' && Number.isFinite(value) ? value : 0);
+
+/**
+ * The resets a challenge's state is read under: of every challenge, and of this one. A tombstone keeps the count of
+ * a challenge whose record was reset away; a record that cannot be read has none.
+ */
+const epochOf = (map: Record<string, unknown>, key: string): ScenarioEpoch => {
+    const record = map[key];
+    return { all: countOf(map[ALL_KEY]), gen: isPlainObject(record) ? countOf(record.gen) : 0 };
+};
+
+// A count that is higher than the last one, and than any a clock-less earlier reset could have left.
+const nextCount = (previous: number): number => Math.max(previous + 1, Date.now());
+
+/**
+ * The state file's text as a map. No file is no state yet; a file with nothing in it was cut short, and is not read
+ * as "no state".
+ */
+const parseStateFile = (raw: string | null): ParsedStateFile => {
+    try {
+        const value: unknown = raw === null ? {} : JSON.parse(raw);
+        return isPlainObject(value) ? { ok: true, map: value } : { ok: false, map: {} };
+    } catch {
+        return { ok: false, map: {} };
+    }
+};
+
+// The map without the records of challenges that finished long ago (the count of resets of every challenge stays).
+const pruned = (map: Record<string, unknown>): Record<string, unknown> => {
+    const cutoff = Date.now() - MAX_AGE_MS;
+    return Object.fromEntries(
+        Object.entries(map).filter(
+            ([key, record]) => key === ALL_KEY || (isPlainObject(record) && (record.updatedAt as number) > cutoff),
+        ),
+    );
+};
 
 /**
  * The state file over a raw-JSON store: its parsed text (re-parsed only when the stored text changed: the engine and
@@ -130,29 +177,14 @@ const createStateFile = (store: RawJsonStore, acquireLock?: (id: string) => Stat
         const raw = store.readRaw();
         // lastParsed is set together with lastRaw, and readRaw never returns undefined.
         if (raw === lastRaw) return lastParsed as ParsedStateFile;
-        let parsed: ParsedStateFile;
-        try {
-            // No file is no state yet; a file with nothing in it was cut short, and is not read as "no state".
-            const value: unknown = raw === null ? {} : JSON.parse(raw);
-            parsed = isPlainObject(value) ? { ok: true, map: value } : { ok: false, map: {} };
-        } catch {
-            parsed = { ok: false, map: {} };
-        }
+        const parsed = parseStateFile(raw);
         if (!parsed.ok) logger.withCategory('scenario').error('scenario state file is unreadable', null);
         lastRaw = raw;
         lastParsed = parsed;
         return parsed;
     };
 
-    /** @param map */
-    const write = (map: Record<string, unknown>) => {
-        const cutoff = Date.now() - MAX_AGE_MS;
-        const pruned: Record<string, Record<string, unknown>> = {};
-        for (const [challengeId, record] of Object.entries(map)) {
-            if (isPlainObject(record) && (record.updatedAt as number) > cutoff) pruned[challengeId] = record;
-        }
-        store.writeRaw(JSON.stringify(pruned));
-    };
+    const write = (map: Record<string, unknown>) => store.writeRaw(JSON.stringify(pruned(map)));
 
     /**
      * Runs `change` under the file's lock, waited for a moment. False when the lock could not be had (nothing ran).
@@ -174,16 +206,18 @@ const createStateFile = (store: RawJsonStore, acquireLock?: (id: string) => Stat
     };
 
     /**
-     * Rewrites the file as `change` makes it from the file as it is now (read again under the lock). An unreadable
-     * file is never replaced by one challenge's change: that would wipe every challenge's progress.
+     * Rewrites the file as `change` makes it from the file as it is now (read again under the lock); `change`
+     * answers null to refuse. An unreadable file is never replaced by one challenge's change: that would wipe every
+     * challenge's progress.
      */
-    const mutate = (change: (map: Record<string, unknown>) => Record<string, unknown>): ResetResult | 'done' => {
-        let result: ResetResult | 'done' = 'unreadable';
+    const mutate = (change: (map: Record<string, unknown>) => Record<string, unknown> | null): Mutation => {
+        let result: Mutation = 'unreadable';
         const ran = underFileLock(() => {
             const { ok, map } = read();
             if (!ok) return;
-            write(change(map));
-            result = 'done';
+            const next = change(map);
+            if (next) write(next);
+            result = next ? 'done' : 'refused';
         });
         return ran ? result : 'busy';
     };
@@ -198,73 +232,82 @@ const createStateFile = (store: RawJsonStore, acquireLock?: (id: string) => Stat
  */
 const createStateLedger = (store: RawJsonStore, acquireLock?: (id: string) => StateLock) => {
     const { read, write, underFileLock, mutate } = createStateFile(store, acquireLock);
-    // States that could not be written, by challenge: kept so that the next pass goes on from them (a spend that
-    // landed is not spent again) and tries to write them first. While one is kept the runner spends nothing.
-    const unsaved = new Map<string, ScenarioState>();
 
     // Writes one challenge's state into the file as it is now; false when it could not be (see `set`).
-    const persist = (key: string, state: ScenarioState): boolean => {
-        let result: ResetResult | 'done' = 'unreadable';
+    const persist = (key: string, { epoch, ...state }: ScenarioState): boolean => {
+        const log = logger.withCategory('scenario');
+        let result: Mutation = 'unreadable';
         try {
-            result = mutate((map) => ({ ...map, [key]: { ...state, updatedAt: Date.now() } }));
+            result = mutate((map) => {
+                const current = epochOf(map, key);
+                // Read before a reset: its progress is not brought back.
+                if (epoch && (epoch.all !== current.all || epoch.gen !== current.gen)) return null;
+                return { ...map, [key]: { ...state, gen: current.gen, updatedAt: Date.now() } };
+            });
         } catch (error) {
-            logger.withCategory('scenario').error(`scenario state could not be written: ${errorMessage(error)}`, null);
+            log.error(`scenario state could not be written: ${errorMessage(error)}`, null);
         }
-        if (result === 'done') unsaved.delete(key);
+        if (result === 'refused')
+            log.warning(`scenario state of challenge ${key} was reset meanwhile — not written`, null);
         return result === 'done';
     };
 
     return {
         /**
-         * The state for one challenge: `{state: null}` when it has none yet,
-         * `{state}` when readable, `{corrupt: true}` when the file or this
-         * record cannot be trusted. A state that could not be written is returned as it is, after trying again.
+         * The state for one challenge: `{state: null}` when it has none yet, `{state}` when readable, and `corrupt`
+         * when it cannot be trusted: `'file'` (the whole file is unreadable: only a reset of every challenge
+         * clears it) or `'record'` (this challenge's record is bad: a reset of this challenge does). `epoch` is
+         * the resets the answer was read under; a state carries it, and is not written back across a reset.
+         * Reading never writes.
          */
-        get: (challengeId: string | number): { corrupt: boolean; state: ScenarioState | null } => {
+        get: (
+            challengeId: string | number,
+        ): { corrupt: false | 'file' | 'record'; state: ScenarioState | null; epoch: ScenarioEpoch } => {
             const key = String(challengeId);
-            const pending = unsaved.get(key);
-            if (pending && !persist(key, pending)) return { corrupt: false, state: structuredClone(pending) };
             const { ok, map } = read();
-            if (!ok) return { corrupt: true, state: null };
+            if (!ok) return { corrupt: 'file', state: null, epoch: { all: 0, gen: 0 } };
+            const epoch = epochOf(map, key);
             const record = map[key];
-            if (record === undefined) return { corrupt: false, state: null };
-            if (!isRecord(record)) return { corrupt: true, state: null };
-            return { corrupt: false, state: structuredClone(record) };
+            if (record === undefined || isTombstone(record)) return { corrupt: false, state: null, epoch };
+            if (!isRecord(record)) return { corrupt: 'record', state: null, epoch };
+            return { corrupt: false, state: { ...structuredClone(record), epoch }, epoch };
         },
 
         /**
          * Store the state for one challenge, under the file's lock. False when it could not be written (the lock
-         * is held, the file is unreadable or the write failed): the state is kept for the next try, and the caller
-         * must not go on to spend anything.
+         * is held, the file is unreadable, the write failed, or the state was read before a reset): the caller must
+         * not go on to spend anything.
          */
-        set: (challengeId: string | number, state: ScenarioState): boolean => {
-            const key = String(challengeId);
-            const saved = persist(key, state);
-            if (!saved) unsaved.set(key, state);
-            return saved;
-        },
-
-        /** Whether a state of this challenge is waiting to be written. */
-        hasUnsaved: (challengeId: string | number): boolean => unsaved.has(String(challengeId)),
+        set: (challengeId: string | number, state: ScenarioState): boolean => persist(String(challengeId), state),
 
         /**
-         * Forget one challenge's state (a reset). An unreadable file is left as it is: clearing it takes a reset
-         * of every challenge (removeAll).
+         * Forget one challenge's state (a reset), leaving a count of its resets that keeps a step that was running
+         * from bringing it back. An unreadable file is left as it is: clearing it takes a reset of every challenge
+         * (removeAll).
          */
         remove: (challengeId: string | number): ResetResult => {
             const key = String(challengeId);
-            const result = mutate(({ [key]: _gone, ...rest }) => rest);
-            if (result === 'done') unsaved.delete(key);
-            return result === 'done' ? 'removed' : result;
+            let result: ResetResult = 'unreadable';
+            const ran = underFileLock(() => {
+                const { ok, map } = read();
+                if (!ok) return;
+                const gen = nextCount(epochOf(map, key).gen);
+                write({ ...map, [key]: { tombstone: true, gen, updatedAt: Date.now() } });
+                result = 'removed';
+            });
+            return ran ? result : 'busy';
         },
 
         /**
-         * Forget every challenge's state, an unreadable file included.
+         * Forget every challenge's state, an unreadable file included, and count it: no step that was running
+         * writes its progress back.
          */
         removeAll: (): ResetResult => {
-            if (!underFileLock(() => write({}))) return 'busy';
-            unsaved.clear();
-            return 'removed';
+            const ran = underFileLock(() => {
+                const { ok, map } = read();
+                write({ [ALL_KEY]: nextCount(ok ? countOf(map[ALL_KEY]) : 0) });
+            });
+            return ran ? 'removed' : 'busy';
         },
     };
 };
@@ -280,14 +323,16 @@ const createMemoryStateLedger = () => {
     });
 };
 
-const scenarioStateLedger = createStateLedger(scenarioStateStore, (id) => acquireUnlockLock(id, 'scenario'));
+const scenarioStateLedger = createStateLedger(scenarioStateStore, (id) =>
+    acquireUnlockLock(id, { category: 'scenario', internal: true }),
+);
 
 /**
  * The cross-process lock of one challenge's scenario steps: one process runs a challenge's rule steps (or resets it)
  * at a time. Not granted twice, and never waited for.
  */
 const scenarioStepLock = (challengeId: string | number): StateLock =>
-    acquireUnlockLock(`scenario-${String(challengeId)}`, 'scenario');
+    acquireUnlockLock(`scenario-${String(challengeId)}`, { category: 'scenario', internal: true });
 
 // Process-wide in-memory ledger for mock mode, shared by the mock voting pass
 // and the scenario IPC handlers so a mock run is inspectable like a real one.

@@ -258,7 +258,6 @@ export function ChallengeCardDetail({
     bankroll,
     onVoteComplete,
     onCurrencySpent,
-    onScenarioReset,
 }: {
     challenge: Challenge;
     view: ChallengeCardView;
@@ -275,8 +274,6 @@ export function ChallengeCardDetail({
     bankroll: Bankroll | null;
     onVoteComplete: () => void;
     onCurrencySpent: () => void;
-    /** The scenario progress was reset: the card reads its status again. */
-    onScenarioReset: () => void;
 }) {
     const { t } = useTranslation();
     const { userProgress } = view;
@@ -347,7 +344,7 @@ export function ChallengeCardDetail({
             {/* Advisory timeline of the automation's upcoming deadline
                 actions (the compact tile shows only the next one). */}
             <DeadlineTimeline actions={deadlineActions} />
-            <ScenarioStatusPanel status={scenarioStatus} challenge={challenge} onReset={onScenarioReset} />
+            <ScenarioStatusPanel status={scenarioStatus} challenge={challenge} />
         </div>
     );
 }

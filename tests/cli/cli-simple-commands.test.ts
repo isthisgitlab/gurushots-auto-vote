@@ -482,7 +482,7 @@ describe('join', () => {
         );
         await joinChallengeCmd('7');
         expect(msgs('error')).toEqual([
-            `Challenge 7 has a payment record from an older version of the app, from before accounts were told apart, so it is not known whether the coins were taken, or by which GuruShots account used on this device. The join did not finish. ${RERUN} The record cannot be forgotten here, because it may belong to another account: it stops applying to other accounts once the account that paid joins the challenge, and otherwise clears by itself, at the next check after 30 days. If this is not the account that paid, you can join the challenge on the GuruShots website meanwhile.`,
+            `Challenge 7 has a payment record from an older version of the app, from before accounts were told apart, so it is not known whether the coins were taken, or by which GuruShots account used on this device. The join did not finish. ${RERUN} The record cannot be forgotten here, because it may belong to another account: it stops applying to other accounts once the account that paid joins the challenge through this app, and otherwise clears by itself, at the next check after 30 days. If this is not the account that paid, you can join the challenge on the GuruShots website meanwhile.`,
         ]);
         expect(msgs('error')[0]).not.toContain('forget-payment');
         expect(handlers['get-bankroll']).not.toHaveBeenCalled();
@@ -623,7 +623,7 @@ describe('forget-payment', () => {
         [
             'legacy-record',
             'error',
-            'is from an older version of the app and may belong to another GuruShots account used on this device, so it cannot be forgotten here. It stops applying to other accounts once the account that paid joins the challenge, and otherwise clears by itself, at the next check after 30 days.',
+            'is from an older version of the app and may belong to another GuruShots account used on this device, so it cannot be forgotten here. It stops applying to other accounts once the account that paid joins the challenge through this app, and otherwise clears by itself, at the next check after 30 days.',
         ],
         ['nothing-to-forget', 'error', 'Nothing to forget for 7'],
         [

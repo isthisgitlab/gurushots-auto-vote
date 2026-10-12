@@ -7,9 +7,9 @@ import * as ipc from '@/api/ipc';
 import type { Challenge } from '../../../types/gurushots';
 
 // The text of each answer that resets nothing; a call that failed outright reads as the general one.
-const PROBLEM_TEXT: Record<string, string> = {
-    busy: 'app.scenarioResetBusy',
-    'state-unreadable': 'app.scenarioResetUnreadable',
+const problemOf = (error: string | undefined, everyChallenge: boolean): string => {
+    if (error === 'busy') return everyChallenge ? 'app.scenarioResetAllBusy' : 'app.scenarioResetBusy';
+    return error === 'state-unreadable' ? 'app.scenarioResetUnreadable' : 'app.scenarioResetFailed';
 };
 
 /**
@@ -19,18 +19,19 @@ const PROBLEM_TEXT: Record<string, string> = {
  *
  * @param challenge - the card's challenge; null keeps the dialog closed
  * @param everyChallenge - the saved progress is unreadable: the reset is of every challenge
- * @param onReset - the progress is gone (the card reads its status again)
+ * @param onChanged - what the card shows is out of date (the progress is gone, or turned out to be unreadable): every
+ *   card reads its status again
  */
 export function ScenarioResetModal({
     challenge,
     everyChallenge,
     onClose,
-    onReset,
+    onChanged,
 }: {
-    challenge: Pick<Challenge, 'id' | 'title'> | null;
+    challenge: Pick<Challenge, 'id' | 'title' | 'url'> | null;
     everyChallenge: boolean;
     onClose: () => void;
-    onReset: () => void;
+    onChanged: () => void;
 }) {
     const { t } = useTranslation();
     const { working, problem, run } = useConfirmedAction(challenge);
@@ -40,8 +41,13 @@ export function ScenarioResetModal({
             const answer = await ipc.callOrNull(() =>
                 everyChallenge ? ipc.resetAllScenarioState() : ipc.resetScenarioState(target.id),
             );
-            if (!answer?.success) return PROBLEM_TEXT[answer?.error ?? ''] ?? 'app.scenarioResetFailed';
-            onReset();
+            const error = answer?.success ? undefined : answer?.error;
+            // The file turned out unreadable since the card read it: the card learns, and offers the right reset.
+            if (!answer?.success) {
+                if (error === 'state-unreadable') onChanged();
+                return problemOf(error, everyChallenge);
+            }
+            onChanged();
             onClose();
             return null;
         });
@@ -61,7 +67,7 @@ export function ScenarioResetModal({
                 <p>
                     {everyChallenge
                         ? t('app.scenarioResetAllBody')
-                        : interp(t('app.scenarioResetBody'), { title: challenge.title })}
+                        : interp(t('app.scenarioResetBody'), { title: challenge.title || challenge.url })}
                 </p>
             )}
         </ConfirmModal>

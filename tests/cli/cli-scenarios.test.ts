@@ -322,9 +322,13 @@ describe('scenario-status', () => {
         h['get-scenario-status'].mockResolvedValueOnce(status({ assigned: 'Gone', scenario: null }));
         await cmd.scenarioStatusCmd('7');
         expect(text('warning')).toContain('"Gone", which does not exist');
-        h['get-scenario-status'].mockResolvedValueOnce(status({ corrupt: true }));
+        h['get-scenario-status'].mockResolvedValueOnce(status({ corrupt: 'file' }));
         await expect(cmd.scenarioStatusCmd('7')).resolves.toBe(1);
         expect(text('error')).toContain('scenario-reset --all');
+        h['get-scenario-status'].mockResolvedValueOnce(status({ corrupt: 'record' }));
+        await expect(cmd.scenarioStatusCmd('7')).resolves.toBe(1);
+        expect(text('error')).toContain('This challenge’s saved scenario progress is unreadable');
+        expect(text('error')).toContain('scenario-reset --challenge=7');
         h['get-scenario-status'].mockResolvedValueOnce(status());
         await cmd.scenarioStatusCmd('7');
         expect(text()).toContain('Not started yet');

@@ -94,7 +94,7 @@ const unconfirmedText = (
 ) => {
     const rerun = `Re-run "join ${challengeId}": it only submits your photo, so you are never charged twice.`;
     if (reason === 'earlier-payment') {
-        return `Challenge ${challengeId} has a payment record from an older version of the app, from before accounts were told apart, so it is not known whether the coins were taken, or by which GuruShots account used on this device. The join did not finish. ${rerun} The record cannot be forgotten here, because it may belong to another account: it stops applying to other accounts once the account that paid joins the challenge, and otherwise clears by itself, at the next check after 30 days. If this is not the account that paid, you can join the challenge on the GuruShots website meanwhile.`;
+        return `Challenge ${challengeId} has a payment record from an older version of the app, from before accounts were told apart, so it is not known whether the coins were taken, or by which GuruShots account used on this device. The join did not finish. ${rerun} The record cannot be forgotten here, because it may belong to another account: it stops applying to other accounts once the account that paid joins the challenge through this app, and otherwise clears by itself, at the next check after 30 days. If this is not the account that paid, you can join the challenge on the GuruShots website meanwhile.`;
     }
     return `The payment for ${challengeId} got no answer, so it may or may not have gone through, and the join did not finish.${balanceHint(balances.before, balances.now)} ${rerun} If the GuruShots website shows the coins were not taken, run "forget-payment ${challengeId}" and join again.`;
 };
@@ -262,7 +262,7 @@ const FORGET_LINES: Record<ForgetStatus, ForgetLine> = {
     'legacy-record': {
         level: 'error',
         text: (id) =>
-            `The payment record for ${id} is from an older version of the app and may belong to another GuruShots account used on this device, so it cannot be forgotten here. It stops applying to other accounts once the account that paid joins the challenge, and otherwise clears by itself, at the next check after 30 days. Nothing was changed.`,
+            `The payment record for ${id} is from an older version of the app and may belong to another GuruShots account used on this device, so it cannot be forgotten here. It stops applying to other accounts once the account that paid joins the challenge through this app, and otherwise clears by itself, at the next check after 30 days. Nothing was changed.`,
     },
     busy: {
         level: 'error',

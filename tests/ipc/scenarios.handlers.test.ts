@@ -35,6 +35,7 @@ jest.mock('../../src/ts/logger', () => ({
 }));
 
 import type { ScenarioDocument } from '../../src/ts/settings/scenarioSchema';
+import type { ScenarioStateLedger } from '../../src/ts/types/votingPass';
 import { invalid } from '../helpers/invalid';
 
 import settingsModule = require('../../src/ts/settings');
@@ -216,7 +217,10 @@ describe('status and reset', () => {
 
     // The ledger and the lock the module mock hands out, with what each did.
     const mocked = scenarioStatus as typeof scenarioStatus & {
-        __ledger: { remove: jest.Mock<string, [string]>; removeAll: jest.Mock<string, []> };
+        __ledger: {
+            remove: jest.MockedFunction<ScenarioStateLedger['remove']>;
+            removeAll: jest.MockedFunction<ScenarioStateLedger['removeAll']>;
+        };
         __release: jest.Mock<void, []>;
     };
 
@@ -234,7 +238,7 @@ describe('status and reset', () => {
         expect(mocked.__release).not.toHaveBeenCalled();
     });
 
-    test.each([
+    test.each<['busy' | 'unreadable', string]>([
         ['busy', 'busy'],
         ['unreadable', 'state-unreadable'],
     ])('a ledger that answers %s is reported as %s, never as done, and the lock is let go', async (answer, error) => {
@@ -382,7 +386,7 @@ describe('simulate-scenario', () => {
             assigned: '',
             scenario: null,
             state: null,
-            corrupt: true,
+            corrupt: 'file',
             timezone: 'UTC',
         });
         settings.checkScenario.mockReturnValue({ ok: true, scenario: timed });

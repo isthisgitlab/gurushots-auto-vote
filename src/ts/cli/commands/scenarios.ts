@@ -200,7 +200,9 @@ const scenarioStatusCmd = async (challengeId: string) => {
     }
     if (status.corrupt) {
         ui().error(
-            'The saved scenario progress is unreadable. Reset the progress of every challenge (scenario-reset --all) to start the plans again.',
+            status.corrupt === 'file'
+                ? 'The saved scenario progress is unreadable. Reset the progress of every challenge (scenario-reset --all) to start the plans again.'
+                : `This challenge’s saved scenario progress is unreadable. Reset it (scenario-reset --challenge=${challengeId}) to start the plan again.`,
         );
         return 1;
     }
@@ -231,7 +233,10 @@ const RESET_COST =
     'Resetting can spend an action that got no answer again, and it restarts the scenario spend counter.';
 
 const RESET_BUSY =
-    'Another process is running this challenge’s scenario, or using the saved scenario progress. Nothing was changed. Try again in a moment.';
+    'This challenge’s scenario is being run, or the saved scenario progress is being updated, right now (by the app or by another process). Nothing was changed. Try again in a moment.';
+
+const RESET_ALL_BUSY =
+    'The saved scenario progress is being updated right now (by the app or by another process). Nothing was changed. Try again in a moment.';
 
 const scenarioResetCmd = async (challengeId: string) => {
     const result = await handlers()['reset-scenario-state'](null, challengeId);
@@ -255,7 +260,7 @@ const scenarioResetCmd = async (challengeId: string) => {
 const scenarioResetAllCmd = async () => {
     const result = await handlers()['reset-all-scenario-state']();
     if (!result.success && result.error === 'busy') {
-        ui().error(RESET_BUSY);
+        ui().error(RESET_ALL_BUSY);
         return 1;
     }
     if (!result.success) return reportFailure(result, 'Could not reset the scenarios');

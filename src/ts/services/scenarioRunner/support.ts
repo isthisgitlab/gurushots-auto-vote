@@ -16,6 +16,7 @@ import type {
     DoneOutcome,
     NotDoneOutcome,
     RunnerContext,
+    ScenarioAction,
     ScenarioRule,
     SpendAction,
     SpendKind,
@@ -38,6 +39,12 @@ const SPEND: Record<SpendAction, { action: 'swap' | 'key' | 'fill'; limit: Spend
     unlockBoost: { action: 'key', limit: 'keys', label: 'boost unlock' },
     fillExposure: { action: 'fill', limit: 'fills', label: 'exposure fill' },
 };
+
+/**
+ * Whether the action spends currency (and so gets the write-ahead marker and the "no answer" protocol).
+ */
+const isSpend = (action: ScenarioAction): action is ScenarioAction & { type: SpendAction } =>
+    Object.hasOwn(SPEND, action.type);
 
 const nowSec = () => Math.floor(Date.now() / 1000);
 
@@ -162,6 +169,7 @@ export {
     log,
     BOOST_APPLICABLE,
     nowSec,
+    isSpend,
     done,
     skipped,
     failed,

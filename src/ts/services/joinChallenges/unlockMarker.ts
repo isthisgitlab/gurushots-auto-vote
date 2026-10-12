@@ -136,7 +136,7 @@ const STATE_LOCK_WAIT_MS = 500;
  * The lock of the claims file, waited for a moment when another process holds it. Null when it could not be had.
  */
 const acquireStateLock = (deps: JoinDeps, waitMs: number): { release: () => void } | null =>
-    acquireWithin(() => lockFor(deps, STATE_LOCK_ID), waitMs);
+    acquireWithin(() => lockFor(deps, STATE_LOCK_ID, true), waitMs);
 
 /**
  * How a change of the claims file ended: `done` (written, or nothing to write), `locked` (the file's lock could not be

@@ -40,9 +40,11 @@ type UnlockLock = { ok: boolean; release: () => void };
 const NOT_HELD: UnlockLock = { ok: false, release: () => {} };
 const NO_LOCK: UnlockLock = { ok: true, release: () => {} };
 
-const lockPathFor = (id: string | number): string => {
+// A challenge's unlock lock and the app's own locks (the claims file's, the scenario state file's, a challenge's
+// scenario steps) are different files whatever their names: an id can never name one of the app's.
+const lockPathFor = (id: string | number, internal: boolean): string => {
     const safeId = String(id).replace(/[^A-Za-z0-9_-]/g, '_');
-    return path.join(path.dirname(getSettingsPath()), `joinlock-${safeId}.lock`);
+    return path.join(path.dirname(getSettingsPath()), `${internal ? 'statelock' : 'joinlock'}-${safeId}.lock`);
 };
 
 /**
@@ -174,22 +176,29 @@ const keepFresh = (lockPath: string, token: string): NodeJS.Timeout => {
 };
 
 /**
- * Acquire a cross-process lock for one challenge's unlock critical section (or, under any other id, for a shared
- * resource such as the claims file).
+ * Acquire a cross-process lock for one challenge's unlock critical section, or (`internal`) one of the app's own, for
+ * a shared file or a challenge's scenario steps.
  *
  * The lock file holds a random owner token: release removes the file only while it still holds that token, so a
  * lock another process took over after this one went stale is never deleted by this one. A held lock is touched
  * every third of the TTL, so only the lock of a crashed owner goes stale, and a stale one is taken over atomically.
  *
+ * When the lock cannot be made at all (permissions, a full disk) the challenge's unlock lock fails OPEN, which its
+ * claim already covers: no coins are spent without a claim recorded first, by compare-and-set under the claims-file
+ * lock. The app's own locks fail CLOSED, as busy: nothing guards what they guard but them.
+ *
  * @returns ok=false means another process
  *   holds it right now (caller should treat as busy). release() is always safe.
  */
-const acquireUnlockLock = (id: string | number, category: 'join' | 'scenario' = 'join'): UnlockLock => {
+const acquireUnlockLock = (
+    id: string | number,
+    { category = 'join', internal = false }: { category?: 'join' | 'scenario'; internal?: boolean } = {},
+): UnlockLock => {
     // Only the real-fs platforms (Electron/CLI) can run two processes against one
     // account; Capacitor/headless are single-process for a given surface.
     if (runtime.isCapacitor() || runtime.isHeadlessService()) return NO_LOCK;
 
-    const lockPath = lockPathFor(id);
+    const lockPath = lockPathFor(id, internal);
     const token = `${process.pid}-${randomBytes(8).toString('hex')}`;
     try {
         try {
@@ -214,15 +223,14 @@ const acquireUnlockLock = (id: string | number, category: 'join' | 'scenario' = 
         };
     } catch (caught) {
         if (isErrnoCode(caught, 'EEXIST')) return NOT_HELD;
-        // Lock infrastructure failed (permissions, etc.) — fail OPEN rather than
-        // block joins forever; the in-process Set + persisted claim still apply.
+        // Lock infrastructure failed (permissions, etc.): see above for which locks fail open.
         logger
             .withCategory(category)
             .warning(
                 `cross-process lock unavailable for ${sanitizeLogString(id)}: ${errorMessage(caught) || sanitizeLogString(caught)}`,
                 null,
             );
-        return NO_LOCK;
+        return internal ? NOT_HELD : NO_LOCK;
     }
 };
 

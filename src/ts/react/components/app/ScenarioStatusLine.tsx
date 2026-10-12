@@ -10,6 +10,13 @@ const AGAIN_KEY = {
     day: 'app.scenarioStatusAgainDay',
 } as const;
 
+// The notice for progress that cannot be read — the whole file, or this challenge's record — on the card and (short)
+// on the compact tile.
+const CORRUPT_KEY = {
+    file: ['app.scenarioStatusCorrupt', 'app.scenarioStatusCorruptShort'],
+    record: ['app.scenarioStatusCorruptRecord', 'app.scenarioStatusCorruptRecordShort'],
+} as const;
+
 type Summary = NonNullable<ReturnType<typeof useScenarioStatusModule.useScenarioStatus>>;
 
 function ResetButton({ label, onReset }: { label: string; onReset: () => void }) {
@@ -32,14 +39,19 @@ function Unavailable({
     onReset: (() => void) | undefined;
 }) {
     const { t } = useTranslation();
-    const corruptKey = compact ? 'app.scenarioStatusCorruptShort' : 'app.scenarioStatusCorrupt';
-    const key = status.missing ? 'app.scenarioStatusMissing' : corruptKey;
+    const corruptKeys = status.corrupt ? CORRUPT_KEY[status.corrupt] : null;
+    const key = corruptKeys ? corruptKeys[compact ? 1 : 0] : 'app.scenarioStatusMissing';
     return (
-        <div className="text-xs text-warning space-y-1" role="status">
-            <div>
-                <span aria-hidden="true">⚠</span> {interp(t(key), { name: status.name })}
+        <div className="text-xs text-warning space-y-1">
+            <div role="status">
+                <span aria-hidden="true">⚠</span> {interp(t(key), { name: status.name, details: t('app.details') })}
             </div>
-            {status.corrupt && onReset && <ResetButton label="app.scenarioResetAll" onReset={onReset} />}
+            {status.corrupt && onReset && (
+                <ResetButton
+                    label={status.corrupt === 'file' ? 'app.scenarioResetAll' : 'app.scenarioReset'}
+                    onReset={onReset}
+                />
+            )}
         </div>
     );
 }
@@ -56,6 +68,7 @@ function Notice({ status, compact }: { status: Summary; compact: boolean }) {
               action: t(`app.sbAct_${spendUnclear.action}`),
               again: t(AGAIN_KEY[spendUnclear.again]),
               id: spendUnclear.challengeId,
+              details: t('app.details'),
           })
         : null;
     const problem =
