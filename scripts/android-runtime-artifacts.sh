@@ -10,12 +10,37 @@
 # scripts/android-verification-metadata.sh runs it too, so a dependency change regenerates all of it in one go.
 #
 #   scripts/android-runtime-artifacts.sh
+#   scripts/android-runtime-artifacts.sh --check-versions <artifacts-file> <versions-file>
+#
+# The second form runs only the one-to-one check of a versions list against an artifacts list (no Gradle, nothing
+# written) and exits non-zero, naming the offending coordinates, when a module has no version or more than one.
 #
 # Needs: JDK 21 (JAVA_HOME or on PATH), the Android SDK (android/local.properties or ANDROID_HOME), a network or a Gradle
 # cache, and `cap sync android` already done (`pnpm build:prep && pnpm exec cap sync android`), as for any local Android
 # build. No Docker.
 
 set -euo pipefail
+
+# Succeeds when the versions list (group:artifact:version lines) holds exactly one line for each module of the artifacts
+# list (group:artifact lines); otherwise names the modules that have none or several on stderr and fails.
+check_versions() {
+    local unversioned
+    unversioned=$(comm -3 <(cut -d: -f1,2 "$2" | LC_ALL=C sort) <(LC_ALL=C sort "$1") | tr -d '\t')
+    if [ -n "$unversioned" ]; then
+        echo "The versions the release runtime classpath resolves do not map one-to-one onto its artifacts:" >&2
+        echo "$unversioned" | sed 's/^/    /' >&2
+        return 1
+    fi
+}
+
+if [ "${1:-}" = "--check-versions" ]; then
+    if [ "$#" -ne 3 ]; then
+        echo "usage: $0 --check-versions <artifacts-file> <versions-file>" >&2
+        exit 2
+    fi
+    check_versions "$2" "$3"
+    exit
+fi
 
 repo=$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)
 artifacts="$repo/android/release-runtime-artifacts.txt"
@@ -188,10 +213,8 @@ sed -nE 's/^NOTICE ([A-Za-z0-9_.-]+:[A-Za-z0-9_.-]+)$/\1/p' "$work/notices" | LC
 sed -nE 's/^VERSION ([A-Za-z0-9_.-]+:[A-Za-z0-9_.-]+:[A-Za-z0-9_.+-]+)$/\1/p' "$work/notices" |
     awk -F: 'NR == FNR { listed[$0] = 1; next } ($1 ":" $2) in listed { print }' "$new_artifacts" - |
     LC_ALL=C sort -u > "$new_versions"
-unversioned=$(cut -d: -f1,2 "$new_versions" | LC_ALL=C sort | LC_ALL=C comm -3 - "$new_artifacts")
-if [ -n "$unversioned" ]; then
-    echo "The versions the release runtime classpath resolves do not map one-to-one onto its artifacts; nothing was written:" >&2
-    echo "$unversioned" | sed 's/^/    /' >&2
+if ! check_versions "$new_artifacts" "$new_versions"; then
+    echo "Nothing was written." >&2
     exit 1
 fi
 

@@ -14,6 +14,7 @@ jest.unmock('node:fs');
 jest.unmock('path');
 jest.unmock('node:path');
 
+import { execFileSync } from 'node:child_process';
 import fsModule = require('node:fs');
 const fs = jest.mocked(fsModule);
 import os = require('node:os');
@@ -54,8 +55,10 @@ const read = (...segments: string[]) => fs.readFileSync(path.join(ROOT, ...segme
  * The problems with the release each vendored NOTICE was taken from: no android.json component covers the coordinate;
  * a covering component's version variable is undefined in android/variables.gradle or differs from the vendored
  * version; or the vendored version is not the one the release ships (`shipped`, from
- * android/release-runtime-versions.txt), whether or not a covering component has a version variable. A coordinate the
- * release does not ship has nothing to compare against here; the test for the shipped artifacts reports it.
+ * android/release-runtime-versions.txt), whether or not a covering component has a version variable. Every covering
+ * component is checked, not only the first, because the generator renders a vendored NOTICE under each component that
+ * covers its coordinate. A coordinate the release does not ship has nothing to compare against here; the test for the
+ * shipped artifacts reports it.
  */
 const mismatchedNoticeVersions = (
     vendored: Record<string, { version: string }>,
@@ -452,7 +455,10 @@ describe('the Android component list', () => {
             const covered = Object.entries(shippedVersions).filter(([coordinate]) =>
                 component.coordinates.some((pattern) => coordinateMatches(pattern, coordinate)),
             );
-            expect(covered.length).toBeGreaterThan(0);
+            expect({ name: component.name, covers: covered.length > 0 }).toEqual({
+                name: component.name,
+                covers: true,
+            });
             for (const [coordinate, version] of covered) {
                 expect({ coordinate, version }).toEqual({ coordinate, version: variables[component.versionVariable] });
             }
@@ -532,14 +538,57 @@ describe('the Android component list', () => {
         expect(script).toContain('failures.add("${coordinate} resolves to no file');
     });
 
-    test('refuses a version list that does not map one-to-one onto the artifact list', () => {
-        const script = read('scripts', 'android-runtime-artifacts.sh');
-        expect(script).toContain('do not map one-to-one onto its artifacts; nothing was written');
-        expect(script).toContain(
-            `unversioned=$(cut -d: -f1,2 "$new_versions" | LC_ALL=C sort | LC_ALL=C comm -3 - "$new_artifacts")`,
-        );
-        expect(script).toContain('if [ -n "$unversioned" ]; then');
-        expect(script).toContain(`awk -F: 'NR == FNR { listed[$0] = 1; next } ($1 ":" $2) in listed { print }'`);
+    describe("the script's --check-versions mode", () => {
+        const script = path.join(ROOT, 'scripts', 'android-runtime-artifacts.sh');
+        let directory: string;
+        beforeEach(() => {
+            directory = fs.mkdtempSync(path.join(os.tmpdir(), 'runtime-artifacts-'));
+        });
+        afterEach(() => fs.rmSync(directory, { recursive: true, force: true }));
+        const check = (artifacts: string[], versions: string[]) => {
+            const artifactsFile = path.join(directory, 'artifacts.txt');
+            const versionsFile = path.join(directory, 'versions.txt');
+            fs.writeFileSync(artifactsFile, artifacts.map((line) => `${line}\n`).join(''));
+            fs.writeFileSync(versionsFile, versions.map((line) => `${line}\n`).join(''));
+            try {
+                execFileSync('bash', [script, '--check-versions', artifactsFile, versionsFile], { stdio: 'pipe' });
+                return { status: 0, stderr: '' };
+            } catch (error) {
+                const failure = invalid<{ status: number; stderr: Buffer }>(error);
+                return { status: failure.status, stderr: failure.stderr.toString() };
+            }
+        };
+
+        test('accepts a version list with exactly one version for each artifact', () => {
+            expect(check(['g:a', 'g:b'], ['g:a:1', 'g:b:2.0+'])).toEqual({ status: 0, stderr: '' });
+        });
+
+        test('refuses a module listed at two versions, naming it', () => {
+            const result = check(['g:a', 'g:b'], ['g:a:1', 'g:a:2', 'g:b:3']);
+            expect(result.status).not.toBe(0);
+            expect(result.stderr).toContain('do not map one-to-one onto its artifacts');
+            expect(result.stderr).toContain('    g:a\n');
+            expect(result.stderr).not.toContain('g:b');
+        });
+
+        test('refuses a module without a version, naming it', () => {
+            const result = check(['g:a', 'g:b'], ['g:a:1']);
+            expect(result.status).not.toBe(0);
+            expect(result.stderr).toContain('    g:b\n');
+            expect(result.stderr).not.toContain('g:a');
+        });
+
+        test('refuses a version for a module that is not an artifact, naming it', () => {
+            const result = check(['g:a'], ['g:a:1', 'g:c:3']);
+            expect(result.status).not.toBe(0);
+            expect(result.stderr).toContain('    g:c\n');
+        });
+
+        test('the generating flow calls the same check and writes nothing when it fails', () => {
+            const text = read('scripts', 'android-runtime-artifacts.sh');
+            expect(text).toContain('if ! check_versions "$new_artifacts" "$new_versions"; then');
+            expect(text.indexOf('if ! check_versions')).toBeLessThan(text.indexOf('mv "$new_artifacts"'));
+        });
     });
 
     test('keeps the runtime lists current: the Android CI job regenerates and diffs them, and so does the metadata script', () => {
