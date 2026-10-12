@@ -214,7 +214,9 @@ const holdQuitForOpenBoosts = (
         shown =
             parent && !parent.isDestroyed() ? dialog.showMessageBox(parent, options) : dialog.showMessageBox(options);
     } catch (error) {
-        dialogFailed(error);
+        // Not inside the before-quit / close handler that just prevented the default: re-issuing the
+        // quit from there nests it in the event being cancelled.
+        setImmediate(() => dialogFailed(error));
         return true;
     }
     // Two-argument then: only a failed dialog lands in the error branch, so

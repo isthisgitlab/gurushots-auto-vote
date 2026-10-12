@@ -289,37 +289,87 @@ describe('holdQuitForOpenBoosts — the dialog', () => {
         expect(proceed).toHaveBeenCalledTimes(1);
     });
 
-    test('a dialog that throws at once quits anyway, runs proceed once, and leaves no stuck prompt behind', async () => {
-        guard.rememberChallenges([timed], false);
+    describe('a dialog that throws at once', () => {
         const err = new Error('no dialog');
-        const throwing = setup({
-            showMessageBox: invalid(
-                jest.fn(() => {
-                    throw err;
-                }),
-            ),
+        const throwing = () =>
+            setup({
+                showMessageBox: invalid(
+                    jest.fn(() => {
+                        throw err;
+                    }),
+                ),
+            });
+
+        test('quits anyway, after the quit handler has returned, and runs proceed once', async () => {
+            guard.rememberChallenges([timed], false);
+            const { event, proceed, hold } = throwing();
+            expect(hold()).toBe(true);
+            // Held, and not re-issued from inside the handler that just prevented the default.
+            expect(event.preventDefault).toHaveBeenCalledTimes(1);
+            expect(proceed).not.toHaveBeenCalled();
+            expect(logger.cat.error).not.toHaveBeenCalled();
+            await flush();
+            expect(proceed).toHaveBeenCalledTimes(1);
+            expect(logger.cat.error).toHaveBeenCalledWith('Quit confirmation failed — quitting anyway:', err);
+            await flush();
+            expect(proceed).toHaveBeenCalledTimes(1);
         });
-        expect(throwing.hold()).toBe(true);
-        await flush();
-        expect(throwing.event.preventDefault).toHaveBeenCalled();
-        expect(logger.cat.error).toHaveBeenCalledWith('Quit confirmation failed — quitting anyway:', err);
-        expect(throwing.proceed).toHaveBeenCalledTimes(1);
-        // The re-issued quit passes straight through, and the guard is not stuck: once it re-arms, it asks again.
-        expect(setup().hold()).toBe(false);
-        guard.resetQuitGuard();
-        guard.rememberChallenges([timed], false);
-        const next = setup({ showMessageBox: invalid(jest.fn(() => new Promise(() => {}))) });
-        expect(next.hold()).toBe(true);
-        expect(next.dialog.showMessageBox).toHaveBeenCalledTimes(1);
+
+        test('leaves no stuck prompt: once the bypass lapses, the next quit asks again', async () => {
+            // Not resetQuitGuard (which clears the prompt itself): the failure handling must.
+            jest.useFakeTimers({ doNotFake: ['setImmediate', 'nextTick'] });
+            try {
+                guard.rememberChallenges([timed], false);
+                throwing().hold();
+                await flush();
+                jest.advanceTimersByTime(guard.BYPASS_TTL_MS + 1);
+                const next = setup({ showMessageBox: invalid(jest.fn(() => new Promise(() => {}))) });
+                expect(next.hold()).toBe(true);
+                expect(next.dialog.showMessageBox).toHaveBeenCalledTimes(1);
+            } finally {
+                jest.useRealTimers();
+            }
+        });
     });
 
-    test('a failed dialog runs proceed once, not once per path', async () => {
+    test('a quit that was confirmed runs proceed once, and a proceed that throws is not taken for a broken dialog', async () => {
         guard.rememberChallenges([timed], false);
-        const rejecting = setup({ showMessageBox: invalid(jest.fn(() => Promise.reject(new Error('x')))) });
-        rejecting.hold();
-        await flush();
-        await flush();
-        expect(rejecting.proceed).toHaveBeenCalledTimes(1);
+        const proceed = jest.fn(() => {
+            throw new Error('proceed failed');
+        });
+        // The throw lands in the promise the guard does not await: keep it from failing the run, and count it.
+        const original = Promise.prototype.then;
+        const swallowed: unknown[] = [];
+        const spy = jest.spyOn(Promise.prototype, 'then').mockImplementation(function (
+            this: Promise<unknown>,
+            ...args
+        ) {
+            const derived = original.apply(this, args) as Promise<unknown>;
+            original.call(derived, undefined, (reason: unknown) => swallowed.push(reason));
+            return derived;
+        } as typeof Promise.prototype.then);
+        try {
+            const confirmed = setup({ response: 1 });
+            guard.holdQuitForOpenBoosts(confirmed.event, {
+                autovoteRunning: true,
+                dialog: confirmed.dialog,
+                parent: null,
+                t,
+                proceed,
+                now: NOW,
+                describeDeadlineActions: describe_,
+            });
+            await flush();
+            await flush();
+        } finally {
+            spy.mockRestore();
+        }
+        expect(swallowed).toEqual([new Error('proceed failed')]);
+        expect(proceed).toHaveBeenCalledTimes(1);
+        expect(logger.cat.error).not.toHaveBeenCalledWith(
+            'Quit confirmation failed — quitting anyway:',
+            expect.anything(),
+        );
     });
 });
 

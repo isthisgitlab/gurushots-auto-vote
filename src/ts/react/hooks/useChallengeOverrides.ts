@@ -215,8 +215,9 @@ const rereadTitleRules = async (
 };
 
 /**
- * The handler for a profile that was edited or deleted: when it is the one the rules matched, the
- * rules are read again for the challenge on screen (see rereadTitleRules). A reply is dropped once
+ * The handler for a profile that was edited or deleted: when it is the one the rules matched, or any
+ * profile while none matched (a rule may name one that is not stored yet), the rules are read again
+ * for the challenge on screen (see rereadTitleRules). A reply is dropped once
  * the dialog closed or showed another challenge, and carries the suppression the dialog holds when
  * the reply lands.
  */

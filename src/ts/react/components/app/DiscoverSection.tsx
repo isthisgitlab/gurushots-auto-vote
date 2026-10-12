@@ -49,6 +49,16 @@ const TEXT_CLASS = {
     neutral: 'text-base-content/60',
 };
 
+/**
+ * The row to confirm when a join that was not meant to spend answered `needs-confirm` for a paid
+ * row: the row at the cost the answer named (the listed cost when it named none). Null for any
+ * other answer, which is the outcome of the join as it stands.
+ */
+const rowToConfirm = (c: OpenChallenge, spendCoins: boolean, res: JoinOutcome): OpenChallenge | null => {
+    if (spendCoins || costOf(c) <= 0 || res.status !== 'needs-confirm') return null;
+    return { ...c, join_coins: typeof res.cost === 'number' && Number.isFinite(res.cost) ? res.cost : costOf(c) };
+};
+
 const costOf = (c: Challenge) => {
     const n = Number(c?.join_coins);
     return Number.isFinite(n) && n > 0 ? n : 0;
@@ -398,8 +408,14 @@ export function DiscoverSection({
                 const res: JoinOutcome = spendCoins
                     ? await ipc.joinChallenge(id, true, costOf(challenge))
                     : await ipc.joinChallenge(id, false);
-                setResults((prev) => ({ ...prev, [id]: res }));
                 noteAnswer(id, res);
+                const toConfirm = rowToConfirm(challenge, spendCoins, res);
+                if (toConfirm) {
+                    // The price still has to be confirmed: nothing was spent, and nothing is left to submit.
+                    setConfirm(toConfirm);
+                    return res;
+                }
+                setResults((prev) => ({ ...prev, [id]: res }));
                 // Refetch on any outcome that changes what's joinable (joined,
                 // coins charged, or the challenge is gone) so a stale row/button
                 // doesn't linger. Refresh balances only when coins moved.
@@ -429,11 +445,9 @@ export function DiscoverSection({
 
     const onJoinClick = useCallback(
         (challenge: OpenChallenge) => {
-            if (costOf(challenge) > 0) {
-                setConfirm(challenge);
-            } else {
-                void doJoin(challenge, false);
-            }
+            // Paid or free: ask without spending. A paid challenge whose coins were spent already (its
+            // submit failed) is submitted at once; one that is still to be paid answers with its cost.
+            void doJoin(challenge, false);
         },
         [doJoin],
     );

@@ -12,6 +12,13 @@ import { invalid } from '../helpers/invalid';
 import { app } from '../../src/ts/translations/english';
 import type { OpenChallenge } from '../../src/ts/types/gurushots';
 import type { WindowApi } from '../../src/ts/types/ipc';
+import type { JoinOutcome } from '@/components/app/DiscoverSection';
+
+type JoinApi = WindowApi['joinChallenge'];
+type ListApi = WindowApi['getMemberChallenges'];
+// Typed mocks of the two calls this file drives; what they answer is a partial fixture, so it goes through invalid().
+const joinMock = () => jest.fn<ReturnType<JoinApi>, Parameters<JoinApi>>();
+const listMock = () => jest.fn<ReturnType<ListApi>, Parameters<ListApi>>();
 
 const items = invalid<OpenChallenge[]>([
     {
@@ -37,8 +44,15 @@ const items = invalid<OpenChallenge[]>([
 beforeEach(() => {
     window.api = invalid({
         onSettingsChanged: undefined,
-        getMemberChallenges: jest.fn().mockResolvedValue({ success: true, items }),
-        joinChallenge: jest.fn().mockResolvedValue({ success: true, status: 'joined' }),
+        getMemberChallenges: listMock().mockResolvedValue(invalid({ success: true, items })),
+        // A paid row first asks without spending, and the server answers with its cost; a free row joins.
+        joinChallenge: joinMock().mockImplementation(async (id, spendCoins) =>
+            invalid(
+                id === 900002 && spendCoins === false
+                    ? { success: false, status: 'needs-confirm', cost: 100 }
+                    : { success: true, status: 'joined' },
+            ),
+        ),
     });
 });
 
@@ -68,7 +82,7 @@ test('the count badge is an image named with its count, not a bare number', asyn
 });
 
 test('the count badge is hidden when there are no open challenges', async () => {
-    window.api.getMemberChallenges = jest.fn().mockResolvedValue({ success: true, items: [] });
+    window.api.getMemberChallenges = listMock().mockResolvedValue(invalid({ success: true, items: [] }));
     render(<DiscoverSection isLoggedIn bankroll={invalid({ coins: 500 })} onJoined={jest.fn()} />);
     await screen.findByText('app.discoverEmpty');
     expect(screen.queryByText('0')).toBeNull();
@@ -89,9 +103,10 @@ test('paid join opens the confirm modal and only spends on confirm', async () =>
     await screen.findByText('Paid One');
     fireEvent.click(screen.getByText('app.discoverJoinPaid'));
 
-    // Modal appears; nothing charged yet.
+    // Modal appears once the server has named the cost; nothing is charged, and nothing was asked to be.
     await screen.findByText('app.discoverConfirmTitle');
-    expect(window.api.joinChallenge).not.toHaveBeenCalled();
+    expect(window.api.joinChallenge).toHaveBeenCalledTimes(1);
+    expect(window.api.joinChallenge).toHaveBeenCalledWith(900002, false);
 
     // Confirm → spends with spendCoins=true, naming the cost the modal showed (100): a price that rose since
     // then is not consented to.
@@ -99,8 +114,22 @@ test('paid join opens the confirm modal and only spends on confirm', async () =>
     await waitFor(() => expect(window.api.joinChallenge).toHaveBeenCalledWith(900002, true, 100));
 });
 
+// What the server answers a join that has to be confirmed first: its cost, and nothing is spent.
+const priceAsk = (cost?: unknown) => ({
+    success: false,
+    status: 'needs-confirm',
+    ...(cost === undefined ? {} : { cost }),
+});
+
+// A paid row's join: the ask answers with its cost, and the confirmed join answers `final`.
+const spendLater = (final: unknown, askedCost = 100) =>
+    joinMock().mockImplementation(async (_id, spendCoins) => invalid(spendCoins ? final : priceAsk(askedCost)));
+
 test('a price that rose after it was shown spends nothing: the row says so, and the list is read again', async () => {
-    window.api.joinChallenge = jest.fn().mockResolvedValue({ success: false, status: 'needs-confirm', cost: 150 });
+    // The ask names 100; by the time it is confirmed the price is 150.
+    window.api.joinChallenge = joinMock().mockImplementation(async (_id, spendCoins) =>
+        invalid(priceAsk(spendCoins ? 150 : 100)),
+    );
     mockTranslator.t.mockImplementation((key) => (key === 'app.discoverPriceChanged' ? 'Now {coins} coins' : key));
     try {
         render(<DiscoverSection isLoggedIn bankroll={invalid({ coins: 500 })} onJoined={jest.fn()} />);
@@ -109,7 +138,7 @@ test('a price that rose after it was shown spends nothing: the row says so, and 
         fireEvent.click(screen.getByText('app.discoverJoinPaid'));
         fireEvent.click(await screen.findByText('app.discoverConfirmSpend'));
         expect(await screen.findByText('Now 150 coins')).toBeTruthy();
-        expect(window.api.joinChallenge).toHaveBeenCalledWith(900002, true, 100);
+        expect(window.api.joinChallenge).toHaveBeenLastCalledWith(900002, true, 100);
         await waitFor(() => expect(jest.mocked(window.api.getMemberChallenges).mock.calls.length).toBe(reads + 1));
     } finally {
         mockTranslator.t.mockImplementation((key) => key);
@@ -118,7 +147,7 @@ test('a price that rose after it was shown spends nothing: the row says so, and 
 
 describe('what a join answered is announced', () => {
     const answerWith = async (res: Record<string, unknown>) => {
-        window.api.joinChallenge = jest.fn().mockResolvedValue(res);
+        window.api.joinChallenge = joinMock().mockResolvedValue(invalid(res));
         render(<DiscoverSection isLoggedIn bankroll={invalid({ coins: 500 })} onJoined={jest.fn()} />);
         await screen.findByText('Free One');
         fireEvent.click(screen.getByText('app.discoverJoin'));
@@ -150,24 +179,24 @@ describe('what a join answered is announced', () => {
 });
 
 describe('a price that rose', () => {
+    const confirmTexts = (key: string) =>
+        key === 'app.discoverConfirmBody'
+            ? 'Costs {coins}'
+            : key === 'app.discoverConfirmSpend'
+              ? 'Spend {coins}'
+              : key;
+
     test('the next confirmation, before the list is read again, shows and names the new cost', async () => {
         // The first read stays the only one that answers: the refetch after the price change never comes back.
-        const pending = new Promise(() => undefined);
-        window.api.getMemberChallenges = jest
-            .fn()
-            .mockResolvedValueOnce({ success: true, items })
-            .mockReturnValue(pending);
-        window.api.joinChallenge = jest
-            .fn()
-            .mockResolvedValueOnce({ success: false, status: 'needs-confirm', cost: 150 })
-            .mockResolvedValue({ success: true, status: 'joined' });
-        mockTranslator.t.mockImplementation((key) =>
-            key === 'app.discoverConfirmBody'
-                ? 'Costs {coins}'
-                : key === 'app.discoverConfirmSpend'
-                  ? 'Spend {coins}'
-                  : key,
+        window.api.getMemberChallenges = listMock()
+            .mockResolvedValueOnce(invalid({ success: true, items }))
+            .mockReturnValue(invalid(new Promise(() => undefined)));
+        let asked = 0;
+        window.api.joinChallenge = joinMock().mockImplementation(async (_id, spendCoins) =>
+            // Asked at 100, confirmed at 100 but now 150 (so repriced), asked again: 150.
+            invalid(spendCoins ? priceAsk(150) : priceAsk(asked++ === 0 ? 100 : 150)),
         );
+        mockTranslator.t.mockImplementation(confirmTexts);
         try {
             render(<DiscoverSection isLoggedIn bankroll={invalid({ coins: 500 })} onJoined={jest.fn()} />);
             await screen.findByText('Paid One');
@@ -186,15 +215,19 @@ describe('a price that rose', () => {
     });
 
     test('once the list is read again, the row goes by what the list says', async () => {
-        window.api.getMemberChallenges = jest
-            .fn()
-            .mockResolvedValueOnce({ success: true, items })
-            .mockResolvedValue({
-                success: true,
-                items: invalid<OpenChallenge[]>([items[0], { ...items[1], join_coins: 120 }]),
-            });
-        window.api.joinChallenge = jest.fn().mockResolvedValue({ success: false, status: 'needs-confirm', cost: 150 });
-        mockTranslator.t.mockImplementation((key) => (key === 'app.discoverConfirmSpend' ? 'Spend {coins}' : key));
+        window.api.getMemberChallenges = listMock()
+            .mockResolvedValueOnce(invalid({ success: true, items }))
+            .mockResolvedValue(
+                invalid({
+                    success: true,
+                    items: invalid<OpenChallenge[]>([items[0], { ...items[1], join_coins: 120 }]),
+                }),
+            );
+        let asked = 0;
+        window.api.joinChallenge = joinMock().mockImplementation(async (_id, spendCoins) =>
+            invalid(spendCoins ? priceAsk(150) : priceAsk(asked++ === 0 ? 100 : 120)),
+        );
+        mockTranslator.t.mockImplementation(confirmTexts);
         try {
             render(<DiscoverSection isLoggedIn bankroll={invalid({ coins: 500 })} onJoined={jest.fn()} />);
             await screen.findByText('Paid One');
@@ -211,29 +244,89 @@ describe('a price that rose', () => {
 });
 
 test.each([
-    ['no cost', { success: false, status: 'needs-confirm' }],
-    ['a null cost', { success: false, status: 'needs-confirm', cost: null }],
-    ['a cost that is no number', { success: false, status: 'needs-confirm', cost: '150' }],
-])('a needs-confirm answer with %s keeps the listed price', async (_name, answer) => {
-    window.api.getMemberChallenges = jest
-        .fn()
-        .mockResolvedValueOnce({ success: true, items })
-        .mockReturnValue(new Promise(() => undefined));
-    window.api.joinChallenge = jest.fn().mockResolvedValueOnce(answer).mockResolvedValue({ success: true });
-    mockTranslator.t.mockImplementation((key) => (key === 'app.discoverConfirmSpend' ? 'Spend {coins}' : key));
-    try {
-        render(<DiscoverSection isLoggedIn bankroll={invalid({ coins: 500 })} onJoined={jest.fn()} />);
+    ['no cost', invalid<JoinOutcome>(priceAsk())],
+    ['a null cost', invalid<JoinOutcome>(priceAsk(null))],
+    ['a cost that is no number', invalid<JoinOutcome>(priceAsk('150'))],
+])(
+    'an ask with %s keeps the listed price: the row does not turn free, and the confirmation names it',
+    async (_name, answer) => {
+        window.api.getMemberChallenges = listMock()
+            .mockResolvedValueOnce(invalid({ success: true, items }))
+            .mockReturnValue(invalid(new Promise(() => undefined)));
+        window.api.joinChallenge = joinMock()
+            .mockResolvedValueOnce(invalid(answer))
+            .mockResolvedValue(invalid({ success: true, status: 'joined' }));
+        mockTranslator.t.mockImplementation((key) => (key === 'app.discoverConfirmSpend' ? 'Spend {coins}' : key));
+        try {
+            render(<DiscoverSection isLoggedIn bankroll={invalid({ coins: 500 })} onJoined={jest.fn()} />);
+            await screen.findByText('Paid One');
+            fireEvent.click(screen.getByText('app.discoverJoinPaid'));
+            // A cost of 0 (what Number(null) would read) must not make the row look free or the modal price 0.
+            fireEvent.click(await screen.findByText('Spend 100'));
+            await waitFor(() => expect(window.api.joinChallenge).toHaveBeenLastCalledWith(900002, true, 100));
+            expect(screen.getAllByText('app.discoverJoinPaid')).toHaveLength(1);
+        } finally {
+            mockTranslator.t.mockImplementation((key) => key);
+        }
+    },
+);
+
+describe('a paid row that was already charged', () => {
+    test('Join does not ask to spend again: the server submits, and the outcome is shown', async () => {
+        // An unlock marker is left: the server retries the submit alone and answers joined.
+        window.api.joinChallenge = joinMock().mockResolvedValue(invalid({ success: true, status: 'joined' }));
+        const onJoined = jest.fn();
+        render(<DiscoverSection isLoggedIn bankroll={invalid({ coins: 5 })} onJoined={onJoined} />);
         await screen.findByText('Paid One');
         fireEvent.click(screen.getByText('app.discoverJoinPaid'));
-        fireEvent.click(await screen.findByText('Spend 100'));
-        await waitFor(() => expect(window.api.joinChallenge).toHaveBeenCalledTimes(1));
-        // A cost of 0 (what Number(null) would read) must not make the row look free.
-        expect(screen.getAllByText('app.discoverJoinPaid')).toHaveLength(1);
+        expect(await screen.findByText('app.discoverJoined')).toBeTruthy();
+        expect(screen.queryByText('app.discoverConfirmTitle')).toBeNull();
+        expect(window.api.joinChallenge).toHaveBeenCalledTimes(1);
+        expect(window.api.joinChallenge).toHaveBeenCalledWith(900002, false);
+        expect(onJoined).toHaveBeenCalled();
+    });
+
+    test('with a balance too low to pay again it still finishes: no modal that disables the button', async () => {
+        window.api.joinChallenge = joinMock().mockResolvedValue(invalid({ success: true, status: 'joined' }));
+        render(<DiscoverSection isLoggedIn bankroll={invalid({ coins: 0 })} onJoined={jest.fn()} />);
+        await screen.findByText('Paid One');
         fireEvent.click(screen.getByText('app.discoverJoinPaid'));
-        expect(await screen.findByText('Spend 100')).toBeTruthy();
-    } finally {
-        mockTranslator.t.mockImplementation((key) => key);
-    }
+        await screen.findByText('app.discoverJoined');
+        expect(screen.queryByText('app.discoverConfirmInsufficient')).toBeNull();
+    });
+
+    test('a paid row not charged yet opens the confirmation at the cost the server named', async () => {
+        window.api.joinChallenge = joinMock().mockImplementation(async (_id, spendCoins) =>
+            invalid(spendCoins ? { success: true, status: 'joined' } : priceAsk(120)),
+        );
+        mockTranslator.t.mockImplementation((key) =>
+            key === 'app.discoverConfirmBody'
+                ? 'Costs {coins}'
+                : key === 'app.discoverConfirmSpend'
+                  ? 'Spend {coins}'
+                  : key,
+        );
+        try {
+            render(<DiscoverSection isLoggedIn bankroll={invalid({ coins: 500 })} onJoined={jest.fn()} />);
+            await screen.findByText('Paid One');
+            fireEvent.click(screen.getByText('app.discoverJoinPaid'));
+            expect(await screen.findByText('Costs 120')).toBeTruthy();
+            expect(window.api.joinChallenge).toHaveBeenCalledTimes(1);
+            fireEvent.click(screen.getByText('Spend 120'));
+            await waitFor(() => expect(window.api.joinChallenge).toHaveBeenLastCalledWith(900002, true, 120));
+        } finally {
+            mockTranslator.t.mockImplementation((key) => key);
+        }
+    });
+
+    test('a free row is joined as before, with no ask of its own', async () => {
+        render(<DiscoverSection isLoggedIn bankroll={invalid({ coins: 500 })} onJoined={jest.fn()} />);
+        await screen.findByText('Free One');
+        fireEvent.click(screen.getByText('app.discoverJoin'));
+        await screen.findByText('app.discoverJoined');
+        expect(window.api.joinChallenge).toHaveBeenCalledTimes(1);
+        expect(window.api.joinChallenge).toHaveBeenCalledWith(900001, false);
+    });
 });
 
 describe('two joins at once', () => {
@@ -243,15 +336,13 @@ describe('two joins at once', () => {
     ]);
 
     test('each row is busy for its own join only, and finishing one leaves the other busy', async () => {
-        window.api.getMemberChallenges = jest.fn().mockResolvedValue({ success: true, items: twoFree });
+        window.api.getMemberChallenges = listMock().mockResolvedValue(invalid({ success: true, items: twoFree }));
         const release: Record<number, () => void> = {};
-        window.api.joinChallenge = invalid(
-            jest.fn(
-                (id: string | number) =>
-                    new Promise((resolve) => {
-                        release[Number(id)] = () => resolve({ success: false, status: 'busy' });
-                    }),
-            ),
+        window.api.joinChallenge = joinMock().mockImplementation(
+            (id) =>
+                new Promise((resolve) => {
+                    release[Number(id)] = () => resolve(invalid({ success: false, status: 'busy' }));
+                }),
         );
         mockTranslator.t.mockImplementation((key) =>
             key === 'app.discoverJoinLabel' ? 'Join {title}' : key === 'app.discoverJoining' ? 'Joining…' : key,
@@ -288,7 +379,9 @@ test('a free join sends no cost to confirm', async () => {
 });
 
 test('a statusless failure (auth expiry / handler error) still shows a message', async () => {
-    window.api.joinChallenge = jest.fn().mockResolvedValue({ success: false, error: 'No authentication token found' });
+    window.api.joinChallenge = joinMock().mockResolvedValue(
+        invalid({ success: false, error: 'No authentication token found' }),
+    );
     render(<DiscoverSection isLoggedIn bankroll={invalid({ coins: 500 })} onJoined={jest.fn()} />);
     await screen.findByText('Free One');
     fireEvent.click(screen.getByText('app.discoverJoin'));
@@ -305,11 +398,13 @@ test('confirm modal blocks the spend when the balance is short', async () => {
     await screen.findByText('app.discoverConfirmInsufficient');
     const spendBtn = screen.getByText<HTMLButtonElement>('app.discoverConfirmSpend');
     expect(spendBtn.disabled).toBe(true);
-    expect(window.api.joinChallenge).not.toHaveBeenCalled();
+    // Only the ask went out: nothing was asked to be spent.
+    expect(window.api.joinChallenge).toHaveBeenCalledTimes(1);
+    expect(window.api.joinChallenge).toHaveBeenCalledWith(900002, false);
 });
 
 test('charged-pending-submit shows the distinct message + retry action', async () => {
-    window.api.joinChallenge = jest.fn().mockResolvedValue({ status: 'charged-pending-submit', cost: 100 });
+    window.api.joinChallenge = spendLater({ status: 'charged-pending-submit', cost: 100 });
     render(<DiscoverSection isLoggedIn bankroll={invalid({ coins: 500 })} onJoined={jest.fn()} />);
     await screen.findByText('Paid One');
     fireEvent.click(screen.getByText('app.discoverJoinPaid'));
@@ -333,18 +428,18 @@ describe('edge paths', () => {
     });
 
     test('a failed list fetch shows the error badge and message; Refresh refetches', async () => {
-        window.api.getMemberChallenges = jest.fn().mockResolvedValue({ success: false, error: 'down' });
+        window.api.getMemberChallenges = listMock().mockResolvedValue(invalid({ success: false, error: 'down' }));
         renderSection();
         expect(await screen.findByText('app.discoverUnavailableList', { selector: 'p' })).toBeTruthy();
         expect(screen.getByTitle('app.discoverUnavailableList').textContent).toBe('!');
-        jest.mocked(window.api.getMemberChallenges).mockResolvedValue({ success: true, items });
+        jest.mocked(window.api.getMemberChallenges).mockResolvedValue(invalid({ success: true, items }));
         fireEvent.click(screen.getByText('app.discoverRefresh'));
         await screen.findByText('Free One');
         expect(window.api.getMemberChallenges).toHaveBeenCalledTimes(2);
     });
 
     test('the error badge of the collapsed section has a text name', async () => {
-        window.api.getMemberChallenges = jest.fn().mockResolvedValue({ success: false, error: 'down' });
+        window.api.getMemberChallenges = listMock().mockResolvedValue(invalid({ success: false, error: 'down' }));
         renderSection();
         expect(await screen.findByRole('img', { name: 'app.discoverUnavailableList' })).toBeTruthy();
     });
@@ -378,13 +473,15 @@ describe('edge paths', () => {
     });
 
     test('rows fall back from title to url to an untitled label', async () => {
-        window.api.getMemberChallenges = jest.fn().mockResolvedValue({
-            success: true,
-            items: [
-                { id: 1, url: 'just-url', chosenOwn: [], chosenOwnCount: 0, chosenEffectiveCount: 0 },
-                { id: 2, join_coins: 'x', chosenOwn: [], chosenOwnCount: 0, chosenEffectiveCount: 0 },
-            ],
-        });
+        window.api.getMemberChallenges = listMock().mockResolvedValue(
+            invalid({
+                success: true,
+                items: [
+                    { id: 1, url: 'just-url', chosenOwn: [], chosenOwnCount: 0, chosenEffectiveCount: 0 },
+                    { id: 2, join_coins: 'x', chosenOwn: [], chosenOwnCount: 0, chosenEffectiveCount: 0 },
+                ],
+            }),
+        );
         renderSection();
         expect(await screen.findByText('just-url')).toBeTruthy();
         expect(screen.getByText('app.discoverUntitled')).toBeTruthy();
@@ -403,7 +500,7 @@ describe('edge paths', () => {
     });
 
     test('an unavailable challenge refetches without touching balances', async () => {
-        window.api.joinChallenge = jest.fn().mockResolvedValue({ success: false, status: 'unavailable' });
+        window.api.joinChallenge = joinMock().mockResolvedValue(invalid({ success: false, status: 'unavailable' }));
         const { onJoined } = renderSection();
         await screen.findByText('Free One');
         fireEvent.click(screen.getByText('app.discoverJoin'));
@@ -413,20 +510,20 @@ describe('edge paths', () => {
     });
 
     test('a thrown join is reported as failed-no-charge; a statusless failure without text is generic', async () => {
-        window.api.joinChallenge = jest.fn().mockRejectedValue(new Error('ipc gone'));
+        window.api.joinChallenge = joinMock().mockRejectedValue(new Error('ipc gone'));
         renderSection();
         await screen.findByText('Free One');
         fireEvent.click(screen.getByText('app.discoverJoin'));
         expect(await screen.findByText('app.discoverFailedNoCharge')).toBeTruthy();
         expect(screen.getByText<HTMLButtonElement>('app.discoverJoin').disabled).toBe(false);
 
-        window.api.joinChallenge = jest.fn().mockResolvedValue({ success: false });
+        window.api.joinChallenge = joinMock().mockResolvedValue(invalid({ success: false }));
         fireEvent.click(screen.getByText('app.discoverJoin'));
         expect(await screen.findByText('app.discoverGenericError')).toBeTruthy();
     });
 
     test('an invalid-args failure shows the translated message, not the code', async () => {
-        window.api.joinChallenge = jest.fn().mockResolvedValue({ success: false, error: 'invalid-args' });
+        window.api.joinChallenge = joinMock().mockResolvedValue(invalid({ success: false, error: 'invalid-args' }));
         renderSection();
         await screen.findByText('Free One');
         fireEvent.click(screen.getByText('app.discoverJoin'));
@@ -436,7 +533,7 @@ describe('edge paths', () => {
 
     test('the join button reads Joining while in flight', async () => {
         let resolve: ((value: Awaited<ReturnType<WindowApi['joinChallenge']>>) => void) | undefined;
-        window.api.joinChallenge = jest.fn(() => new Promise((r) => (resolve = r)));
+        window.api.joinChallenge = joinMock().mockImplementation(() => new Promise((r) => (resolve = r)));
         renderSection();
         await screen.findByText('Free One');
         fireEvent.click(screen.getByText('app.discoverJoin'));
@@ -447,7 +544,7 @@ describe('edge paths', () => {
     });
 
     test('retry submit re-joins the charged challenge with spendCoins=true', async () => {
-        window.api.joinChallenge = jest.fn().mockResolvedValue({ status: 'charged-pending-submit', cost: 100 });
+        window.api.joinChallenge = spendLater({ status: 'charged-pending-submit', cost: 100 });
         const { onJoined } = renderSection();
         await screen.findByText('Paid One');
         fireEvent.click(screen.getByText('app.discoverJoinPaid'));
@@ -461,7 +558,7 @@ describe('edge paths', () => {
     });
 
     test('the Retry submit button is named by its challenge', async () => {
-        window.api.joinChallenge = jest.fn().mockResolvedValue({ status: 'charged-pending-submit', cost: 100 });
+        window.api.joinChallenge = spendLater({ status: 'charged-pending-submit', cost: 100 });
         mockTranslator.t.mockImplementation((key) =>
             key === 'app.discoverRetrySubmitLabel' ? 'Retry submit for {title}' : key,
         );
@@ -487,19 +584,29 @@ describe('edge paths', () => {
         await screen.findByText('app.discoverConfirmTitle');
         fireEvent.click(document.querySelector('[role="dialog"] button[aria-label]')!);
         await waitFor(() => expect(screen.queryByText('app.discoverConfirmTitle')).toBeNull());
-        expect(window.api.joinChallenge).not.toHaveBeenCalled();
+        expect(window.api.joinChallenge).not.toHaveBeenCalledWith(900002, true, expect.anything());
     });
 
     test('an unknown balance says so and still allows the spend; a url-only paid challenge is named by url', async () => {
-        window.api.getMemberChallenges = jest.fn().mockResolvedValue({
-            success: true,
-            items: [
-                { id: 5, url: 'paid-url', join_coins: 10, chosenOwn: [], chosenOwnCount: 0, chosenEffectiveCount: 0 },
-            ],
-        });
+        window.api.getMemberChallenges = listMock().mockResolvedValue(
+            invalid({
+                success: true,
+                items: [
+                    {
+                        id: 5,
+                        url: 'paid-url',
+                        join_coins: 10,
+                        chosenOwn: [],
+                        chosenOwnCount: 0,
+                        chosenEffectiveCount: 0,
+                    },
+                ],
+            }),
+        );
         mockTranslator.t.mockImplementation((key) =>
             key === 'app.discoverConfirmBody' ? 'join {title} for {coins}' : key,
         );
+        window.api.joinChallenge = spendLater({ success: true, status: 'joined' }, 10);
         try {
             renderSection({ bankroll: null });
             await screen.findByText('paid-url');
@@ -545,10 +652,15 @@ describe('chosen photos', () => {
         window.api = invalid({
             // The settings-only read subscribes to settings changes, as in the app.
             onSettingsChanged: mockApi.onSettingsChanged,
-            getSetting: jest.fn().mockResolvedValue(''),
+            getSetting: jest
+                .fn<ReturnType<WindowApi['getSetting']>, Parameters<WindowApi['getSetting']>>()
+                .mockResolvedValue(invalid('')),
             // The list is read once; the rows then follow the settings through the settings-only read.
-            getMemberChallenges: jest.fn(async () => ({ success: true, items: items })),
-            getOpenChosenAnnotations: jest.fn(async () => ({
+            getMemberChallenges: listMock().mockResolvedValue(invalid({ success: true, items })),
+            getOpenChosenAnnotations: jest.fn<
+                ReturnType<WindowApi['getOpenChosenAnnotations']>,
+                Parameters<WindowApi['getOpenChosenAnnotations']>
+            >(async () => ({
                 success: true,
                 annotations: Object.fromEntries(
                     annotated().map(({ id, chosenOwn, chosenOwnCount, chosenEffectiveCount }) => [
@@ -557,7 +669,7 @@ describe('chosen photos', () => {
                     ]),
                 ),
             })),
-            joinChallenge: jest.fn().mockResolvedValue({ success: true, status: 'joined' }),
+            joinChallenge: spendLater({ success: true, status: 'joined' }),
             setChallengeOverride: jest.fn(async (_key: string, id: string, value: string[]) => {
                 own[id] = value;
                 return true;
@@ -566,13 +678,15 @@ describe('chosen photos', () => {
                 delete own[id];
                 return true;
             }),
-            getLibraryPhotos: jest.fn().mockResolvedValue({
-                success: true,
-                photos: [{ id: PHOTO, labels: ['sea'], allowed: true, message: null, uploadDate: 1 }],
-                memberId: 'c'.repeat(32),
-                truncated: false,
-                allowedKnown: true,
-            }),
+            getLibraryPhotos: jest
+                .fn<ReturnType<WindowApi['getLibraryPhotos']>, Parameters<WindowApi['getLibraryPhotos']>>()
+                .mockResolvedValue({
+                    success: true,
+                    photos: [{ id: PHOTO, labels: ['sea'], allowed: true, message: null, uploadDate: 1 }],
+                    memberId: 'c'.repeat(32),
+                    truncated: false,
+                    allowedKnown: true,
+                }),
         });
     });
 
@@ -739,7 +853,7 @@ describe('chosen photos', () => {
             ],
         ])('%s keeps Save held', async (_name, annotations) => {
             const use = await open();
-            jest.mocked(window.api.getOpenChosenAnnotations).mockResolvedValue({ success: true, annotations });
+            jest.mocked(window.api.getOpenChosenAnnotations).mockResolvedValue(invalid({ success: true, annotations }));
             await releaseAndWaitForReread();
             await screen.findByRole('button', { name: /^app\.photoChooserTileLabel/ });
             expect(use.getAttribute('aria-disabled')).toBe('true');
@@ -919,8 +1033,10 @@ describe('chosen photos', () => {
 
     test('when the settings read fails, the rows keep what the list carried', async () => {
         const carried = { ...items[0], chosenOwn: [PHOTO], chosenOwnCount: 1, chosenEffectiveCount: 1 };
-        window.api.getMemberChallenges = jest.fn().mockResolvedValue({ success: true, items: [carried] });
-        jest.mocked(window.api.getOpenChosenAnnotations).mockResolvedValue({ success: false, error: 'invalid-args' });
+        window.api.getMemberChallenges = listMock().mockResolvedValue(invalid({ success: true, items: [carried] }));
+        jest.mocked(window.api.getOpenChosenAnnotations).mockResolvedValue(
+            invalid({ success: false, error: 'invalid-args' }),
+        );
         renderSection();
         expect(await screen.findByText('app.discoverChosenChip')).toBeTruthy();
         await waitFor(() => expect(window.api.getOpenChosenAnnotations).toHaveBeenCalled());
@@ -928,7 +1044,7 @@ describe('chosen photos', () => {
     });
 
     test('with no open challenges there is nothing to ask the settings about', async () => {
-        window.api.getMemberChallenges = jest.fn().mockResolvedValue({ success: true, items: [] });
+        window.api.getMemberChallenges = listMock().mockResolvedValue(invalid({ success: true, items: [] }));
         renderSection();
         await screen.findByText('app.discoverEmpty');
         expect(window.api.getOpenChosenAnnotations).not.toHaveBeenCalled();
@@ -939,7 +1055,9 @@ describe('chosen photos', () => {
         await screen.findByText('Free One');
         await waitFor(() => expect(window.api.getOpenChosenAnnotations).toHaveBeenCalledWith(['900001', '900002']));
         const third = { ...items[0], id: 900003, title: 'Third One', chosenOwn: [], chosenOwnCount: 0 };
-        window.api.getMemberChallenges = jest.fn().mockResolvedValue({ success: true, items: [items[0], third] });
+        window.api.getMemberChallenges = listMock().mockResolvedValue(
+            invalid({ success: true, items: [items[0], third] }),
+        );
         fireEvent.click(screen.getByText('app.discoverRefresh'));
         await screen.findByText('Third One');
         await waitFor(() => expect(window.api.getOpenChosenAnnotations).toHaveBeenLastCalledWith(['900001', '900003']));
